@@ -171,8 +171,25 @@ private const val FULL_MESSAGE_ID_LENGTH = 36
  */
 private const val MAIL_RESEND_RISK = "Do not re-send unless a duplicate message is acceptable"
 
+/** Set to `1` to get plain-ASCII output (non-ASCII becomes `?`) instead of UTF-8. */
+internal const val ASCII_OUTPUT_ENV = "AGENTHQ_CLI_ASCII"
+
+/**
+ * Wraps a raw stream so text is written as UTF-8 (or ASCII when [ASCII_OUTPUT_ENV] is `1`), not the
+ * platform default charset (Cp1252/Cp437 on Windows), which turns the middle dot and em dash into `?`.
+ */
+internal fun encodedStream(raw: java.io.OutputStream, getenv: (String) -> String?): java.io.PrintStream {
+    val charset = if (getenv(ASCII_OUTPUT_ENV)?.trim() == "1") Charsets.US_ASCII else Charsets.UTF_8
+    return java.io.PrintStream(raw, true, charset)
+}
+
 fun main(args: Array<String>) {
-    exitProcess(Cli.run(args, System.out, System.err))
+    val out = encodedStream(java.io.FileOutputStream(java.io.FileDescriptor.out), System::getenv)
+    val err = encodedStream(java.io.FileOutputStream(java.io.FileDescriptor.err), System::getenv)
+    val code = Cli.run(args, out, err, input = { System.`in`.bufferedReader(Charsets.UTF_8) })
+    out.flush()
+    err.flush()
+    exitProcess(code)
 }
 
 /**
