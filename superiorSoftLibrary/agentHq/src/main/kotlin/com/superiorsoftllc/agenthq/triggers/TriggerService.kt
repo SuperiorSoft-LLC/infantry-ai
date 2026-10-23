@@ -132,7 +132,9 @@ class TriggerService(
         require(request.coalesceMs >= 0) { "coalesceMs must be >= 0" }
         require(request.ceilingRuns >= 1) { "ceilingRuns must be >= 1" }
         require(request.ceilingWindowMs >= 1_000) { "ceilingWindowMs must be >= 1000" }
-        require(request.intervalMs == null || request.intervalMs >= 1_000) { "intervalMs must be >= 1000" }
+        require(request.intervalMs == null || request.intervalMs >= MIN_INTERVAL_MS) {
+            "a schedule interval must be at least 1 minute (intervalMs >= $MIN_INTERVAL_MS), got ${request.intervalMs}"
+        }
         val existing = request.id?.trim()?.takeIf { it.isNotEmpty() }?.let { id ->
             repo.get(id) ?: throw IllegalArgumentException("no trigger '${id.take(80)}'")
         }
@@ -477,6 +479,9 @@ class TriggerService(
     companion object {
         /** Event-id prefix of the single `duplicate` row kept per webhook delivery id. */
         const val DUPLICATE_EVENT_PREFIX = "dup-"
+
+        /** Floor for a schedule trigger's period: one minute. Rows saved before the floor keep their stored period. */
+        const val MIN_INTERVAL_MS = 60_000L
         private const val MIN_WEBHOOK_SECRET = 32
         private const val MAX_WEBHOOK_SECRET = 256
         private const val ARMED = "armed"
