@@ -108,6 +108,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import com.superiorsoftllc.agenthq.ui.model.AgentGroup
 import com.superiorsoftllc.agenthq.ui.model.parseHexColor
@@ -1480,6 +1481,7 @@ fun ChatLine(
         SpeakerRow({ UserAvatar() }) {
             Column {
                 Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Palette.Accent.copy(alpha = 0.12f), RoundedCornerShape(8.dp)).padding(8.dp)) {
+                    CardTimestamp(line.at)
                     if (said.isNotBlank() || images.isEmpty()) {
                         Text("> $said", color = Palette.Accent, fontFamily = Mono, fontSize = 12.sp)
                     }
@@ -1491,7 +1493,8 @@ fun ChatLine(
     }
     AgentSideRow(showAvatar, agentRole, agentId, agentRoleColor) {
         when (line.kind) {
-            LineKind.TEXT -> Box(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Palette.Raised, RoundedCornerShape(8.dp)).padding(8.dp)) {
+            LineKind.TEXT -> Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Palette.Raised, RoundedCornerShape(8.dp)).padding(8.dp)) {
+                CardTimestamp(line.at)
                 ChatBlocks(chatLineBlocks(line.kind, line.text).orEmpty())
             }
             LineKind.REASONING -> ReasoningBlock(listOf(line))
@@ -1505,6 +1508,22 @@ fun ChatLine(
             LineKind.USER -> Unit
         }
     }
+}
+
+/** Test tag on the quiet send/response time at the top-right of a chat card. */
+const val CARD_TIMESTAMP_TAG = "card-timestamp"
+
+/** Small muted time, right-aligned at the top of a chat card, so it never competes with the message. */
+@Composable
+private fun CardTimestamp(at: Long) {
+    Text(
+        activityTimestamp(at),
+        color = Palette.Muted.copy(alpha = 0.7f),
+        fontFamily = Mono,
+        fontSize = 9.sp,
+        textAlign = TextAlign.End,
+        modifier = Modifier.fillMaxWidth().testTag(CARD_TIMESTAMP_TAG),
+    )
 }
 
 private fun spansText(spans: List<ChatSpan>): AnnotatedString = buildAnnotatedString {
