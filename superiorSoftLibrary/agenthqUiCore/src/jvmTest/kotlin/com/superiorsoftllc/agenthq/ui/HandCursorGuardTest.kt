@@ -26,4 +26,16 @@ class HandCursorGuardTest {
             .flatMap { f -> f.readLines().withIndex().filter { forbidden.matches(it.value) }.map { "${f.name}:${it.index + 1}: ${it.value}" } }
         if (offenders.isNotEmpty()) fail("these imports bypass the M2-10 hand cursor (use the wrappers in Clickables.kt):\n" + offenders.joinToString("\n"))
     }
+
+    @Test
+    fun `the board's drag handle takes its grab cursor from the Clickables wrapper`() {
+        val ui = File("src/commonMain/kotlin/com/superiorsoftllc/agenthq/ui")
+        assertTrue(ui.isDirectory, "ui sources not found from ${File(".").absolutePath}")
+        val board = File(ui, "Board.kt").readText()
+        assertTrue(Regex("""\.dragHandleCursor\(enabled, dragging\)""").containsMatchIn(board), "the drag handle must use Modifier.dragHandleCursor")
+        // A cursor set by hand is one the semantics (and the tests reading them) cannot see.
+        val raw = ui.listFiles { f -> f.extension == "kt" }.orEmpty()
+            .filter { it.name !in setOf("Clickables.kt", "ResizeHandle.kt") && it.readText().contains("pointerHoverIcon") }
+        if (raw.isNotEmpty()) fail("set the cursor through Clickables.kt, not pointerHoverIcon: ${raw.joinToString { it.name }}")
+    }
 }

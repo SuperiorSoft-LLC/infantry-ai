@@ -129,3 +129,20 @@ fun RadioButton(
     selected = selected, onClick = onClick,
     modifier = modifier.handCursor(enabled && onClick != null), enabled = enabled,
 )
+
+/** The platform's grab cursor (an open hand over something that can be dragged): the hand on desktop, Android's grab. */
+expect val GrabIcon: PointerIcon
+
+/** The platform's grabbing cursor (while a drag is held): the move cross on desktop, Android's grabbing hand. */
+expect val GrabbingIcon: PointerIcon
+
+/**
+ * A drag handle's cursor: [GrabIcon] on hover, [GrabbingIcon] while [dragging]; declared in [HoverCursor] like the
+ * hand. A disabled handle keeps the default arrow. The board also applies it while a drag is held, so the grabbing
+ * cursor follows the pointer off the handle.
+ */
+fun Modifier.dragHandleCursor(enabled: Boolean = true, dragging: Boolean = false): Modifier {
+    if (!enabled) return this
+    val icon = if (dragging) GrabbingIcon else GrabIcon
+    return semantics { hoverCursor = icon }.pointerHoverIcon(icon, overrideDescendants = true)
+}
