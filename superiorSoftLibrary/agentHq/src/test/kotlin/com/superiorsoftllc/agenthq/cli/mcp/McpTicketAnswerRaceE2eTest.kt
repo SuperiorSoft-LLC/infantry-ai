@@ -170,7 +170,7 @@ class ContractAtLeastTest {
     fun comparesNumericallyAndTreatsUnknownAsOld() {
         val at = ::contractAtLeast
         assertTrue(at("1.87.0", REQUEST_ID_CONTRACT))
-        assertTrue(at("1.100.0", REQUEST_ID_CONTRACT), "1.100 is newer than 1.87, not older (no string compare)")
+        assertTrue(at("1.101.0", REQUEST_ID_CONTRACT), "1.100 is newer than 1.87, not older (no string compare)")
         assertTrue(at("2.0.0", REQUEST_ID_CONTRACT))
         assertTrue(!at("1.86.9", REQUEST_ID_CONTRACT), "a 1.86 daemon cannot echo a requestId")
         assertTrue(!at("1.9.0", REQUEST_ID_CONTRACT))

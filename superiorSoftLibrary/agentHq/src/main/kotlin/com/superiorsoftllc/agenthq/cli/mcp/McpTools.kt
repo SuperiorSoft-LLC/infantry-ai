@@ -5,6 +5,7 @@ import com.superiorsoftllc.agenthq.cli.BoardSummary
 import com.superiorsoftllc.agenthq.protocol.Ticket
 import com.superiorsoftllc.agenthq.cli.FrameStream
 import com.superiorsoftllc.agenthq.cli.HarnessCatalog
+import com.superiorsoftllc.agenthq.cli.HarnessInstallClient
 import com.superiorsoftllc.agenthq.daemon.RosterRow
 import com.superiorsoftllc.agenthq.orchestration.PodStatus
 import com.superiorsoftllc.agenthq.protocol.AgentProfile
@@ -71,6 +72,8 @@ internal class McpTools(
                     POD_STATE -> podState(stream, arguments)
                     BOARD -> board(stream, arguments)
                     LIST_HARNESSES -> listHarnesses(stream)
+                    HARNESS_STATUS -> harnessStatus(stream, arguments)
+                    HARNESS_INSTALL -> harnessInstall(stream, arguments)
                     McpWriteTools.SPAWN -> writes.spawn(stream, arguments)
                     McpWriteTools.PROMPT -> writes.prompt(stream, arguments)
                     McpWriteTools.MESSAGE -> writes.message(stream, arguments)
@@ -304,6 +307,28 @@ internal class McpTools(
         })
     }
 
+    /** HARNESS-INSTALL-1: the same `harness_install_status` read as `agenthq harness-status`, as JSON plus the printed table. */
+    private suspend fun harnessStatus(stream: FrameStream, arguments: JsonObject): ToolResult {
+        val check = (arguments["checkLatest"] as? JsonPrimitive)?.contentOrNull == "true"
+        val report = HarnessInstallClient.status(stream, check)
+        return ok(buildJsonObject {
+            put("report", json.encodeToJsonElement(com.superiorsoftllc.agenthq.protocol.HarnessInstallReport.serializer(), report))
+            put("text", StringBuilder().also { HarnessInstallClient.render(report, it) }.toString())
+        })
+    }
+
+    /** HARNESS-INSTALL-1: the same `harness_install` as `agenthq harness-install`; a failed harness makes the result an error. */
+    private suspend fun harnessInstall(stream: FrameStream, arguments: JsonObject): ToolResult {
+        val ids = (arguments["ids"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { s -> s.isNotEmpty() } }.orEmpty()
+        val update = (arguments["update"] as? JsonPrimitive)?.contentOrNull == "true"
+        val result = HarnessInstallClient.install(stream, ids, update)
+        val payload = buildJsonObject {
+            put("result", json.encodeToJsonElement(com.superiorsoftllc.agenthq.protocol.HarnessInstallResult.serializer(), result))
+            put("text", StringBuilder().also { HarnessInstallClient.render(result, it) }.toString())
+        }
+        return ToolResult(json.encodeToString(JsonObject.serializer(), payload), isError = HarnessInstallClient.failed(result))
+    }
+
     private suspend fun fetchSessions(stream: FrameStream): List<SessionRecord> =
         decodeSessions(stream.request(Envelope(Envelope.SESSIONS), Envelope.SESSIONS, "sessions", idempotent = true))
 
@@ -334,7 +359,11 @@ internal class McpTools(
 
         /** BUG-ASSIGN-1: the harnesses (= provider ids) a ticket may pin, and each one's models. */
         const val LIST_HARNESSES = "agenthq_list_harnesses"
-        val NAMES = setOf(LIST_SESSIONS, GET_SESSION, POD_STATE, BOARD, LIST_HARNESSES) + McpWriteTools.NAMES + McpMailTools.NAMES + McpTicketTools.NAMES + McpQuestionTools.NAMES + McpPipelineTools.NAMES
+
+        /** HARNESS-INSTALL-1: detect / install the harness CLIs (claude, opencode, pi) through npm, on a local or remote daemon. */
+        const val HARNESS_STATUS = "agenthq_harness_status"
+        const val HARNESS_INSTALL = "agenthq_harness_install"
+        val NAMES = setOf(LIST_SESSIONS, GET_SESSION, POD_STATE, BOARD, LIST_HARNESSES, HARNESS_STATUS, HARNESS_INSTALL) + McpWriteTools.NAMES + McpMailTools.NAMES + McpTicketTools.NAMES + McpQuestionTools.NAMES + McpPipelineTools.NAMES
 
         /** The one, fixed message a tool answers with when nothing is listening at the daemon address. */
         const val DAEMON_UNREACHABLE =
@@ -429,6 +458,42 @@ internal class McpTools(
             ) {
                 put("type", "object")
                 putJsonObject("properties") {}
+                put("additionalProperties", false)
+            })
+            add(tool(
+                HARNESS_STATUS,
+                "Which harness CLIs (claude, opencode, pi) are installed on the daemon's machine: state installed / missing / " +
+                    "outdated, the version, where it runs from, and whether npm is available. checkLatest=true asks npm for the " +
+                    "latest version too (slower). Install the missing ones with agenthq_harness_install.",
+            ) {
+                put("type", "object")
+                putJsonObject("properties") {
+                    putJsonObject("checkLatest") {
+                        put("type", "boolean")
+                        put("description", "Also ask npm for each CLI's latest version (default false).")
+                    }
+                }
+                put("additionalProperties", false)
+            })
+            add(tool(
+                HARNESS_INSTALL,
+                "npm-install harness CLIs on the daemon's machine, into AgentHQ's own prefix dir (no admin rights, no user data " +
+                    "touched; idempotent). ids: which ones (default: every missing one). update=true also refreshes outdated ones. " +
+                    "Needs Node/npm on that machine (the answer says so when it is missing). Sign-in is still the user's: each CLI keeps " +
+                    "its own login. Can take minutes.",
+            ) {
+                put("type", "object")
+                putJsonObject("properties") {
+                    putJsonObject("ids") {
+                        put("type", "array")
+                        putJsonObject("items") { put("type", "string") }
+                        put("description", "Harness ids to install, from: claude, opencode, pi. Default: all missing.")
+                    }
+                    putJsonObject("update") {
+                        put("type", "boolean")
+                        put("description", "Also update installed CLIs that are outdated (default false).")
+                    }
+                }
                 put("additionalProperties", false)
             })
             McpWriteTools.descriptors().forEach { add(it) }
