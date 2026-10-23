@@ -30,12 +30,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import com.superiorsoftllc.agenthq.ui.Palette
 import com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost
 
 /** The QR matrix of [text]: `true` is a dark module. Platform glue over ZXing's encoder; one encoder, so every client shows the same code. */
 expect fun qrMatrix(text: String): Array<BooleanArray>
+
+/** A platform modal over the app that holds the camera scanner; each platform owns its window API (none in commonMain). */
+@Composable
+expect fun ScannerModal(onDismissRequest: () -> Unit, content: @Composable () -> Unit)
 
 const val PAIR_SHOW_TAG = "pair-show-qr"
 const val PAIR_QR_TAG = "pair-qr"
@@ -158,7 +161,7 @@ fun PairDeviceSection(connectedUrl: String, token: String?, serverName: String?,
 
     val scanner = host.qrScanner
     if (scanning && scanner != null) {
-        Dialog(onDismissRequest = { scanning = false }) {
+        ScannerModal(onDismissRequest = { scanning = false }) {
             scanner(
                 { code -> scanning = false; accept(code) },
                 { scanning = false },
