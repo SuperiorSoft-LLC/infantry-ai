@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,6 +43,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.model.AppState
+import com.superiorsoftllc.agenthq.ui.model.ChartKind
+import com.superiorsoftllc.agenthq.ui.model.ChartScale
+import com.superiorsoftllc.agenthq.ui.model.ChartScaleSetting
+import com.superiorsoftllc.agenthq.ui.model.ChartScales
 import com.superiorsoftllc.agenthq.ui.model.StatsView
 import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
 import com.superiorsoftllc.agenthq.ui.net.Controller
@@ -60,6 +66,11 @@ const val STATS_AXIS_REQUESTS_TAG = "stats-axis-requests"
 const val STATS_CONTEXT_CHART_TAG = "stats-chart-context"
 const val STATS_BILLED_CHART_TAG = "stats-chart-billed"
 const val STATS_SOURCE_ROW_TAG_PREFIX = "stats-source-"
+const val STATS_OVER_SCALE_TAG_PREFIX = "stats-over-scale-"
+const val STATS_SCALE_CHIP_TAG_PREFIX = "stats-scale-"
+const val STATS_SCALE_RESET_TAG_PREFIX = "stats-scale-reset-"
+const val STATS_SCALE_CUSTOM_TAG_PREFIX = "stats-scale-custom-"
+const val STATS_LIMIT_PERCENT_TAG = "stats-context-limit-percent"
 
 /** How often the open tab asks again. Only while the pane is composed: leaving the tab stops the loop. */
 const val STATS_REFRESH_MS = 3_000L
@@ -89,7 +100,11 @@ fun StatsPane(state: AppState, controller: Controller) {
             else -> {
                 val stats = state.sessionStats[agent.id]
                 if (stats == null) Empty("Reading this session's record...")
-                else StatsBody(stats)
+                else {
+                    val host = com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost.current
+                    val scales = remember(host) { ChartScales(host::uiPref, host::saveUiPref) }
+                    StatsBody(stats, scales)
+                }
             }
         }
     }
@@ -102,7 +117,7 @@ private fun Empty(text: String) {
 
 /** The pane's content for one frame. Public so a test can paint a fake frame without a controller. */
 @Composable
-fun StatsBody(s: SessionStats) {
+fun StatsBody(s: SessionStats, scales: ChartScales = remember { ChartScales() }) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("SESSION", color = Palette.Muted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
@@ -133,7 +148,7 @@ fun StatsBody(s: SessionStats) {
         Gauge(s)
 
         Section("OVER THE SESSION")
-        Charts(s)
+        Charts(s, scales)
 
         Section("WHAT FILLED THE CONTEXT")
         Sources(s)
@@ -221,7 +236,7 @@ private fun Gauge(s: SessionStats) {
 }
 
 @Composable
-private fun Charts(s: SessionStats) {
+private fun Charts(s: SessionStats, scales: ChartScales) {
     val series = s.series.orEmpty()
     val timeAvailable = StatsView.hasTimeAxis(s)
     var byTime by remember { mutableStateOf(true) }
@@ -239,11 +254,18 @@ private fun Charts(s: SessionStats) {
             return@Column
         }
         Spacer(Modifier.height(8.dp))
-        Text("Context tokens", color = Palette.Text, fontSize = 11.sp)
-        LineChart(series, useTime, { it.contextTokens }, s.modelContextLimit, STATS_CONTEXT_CHART_TAG, "Context tokens per request")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Context tokens", color = Palette.Text, fontSize = 11.sp)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                StatsView.gaugePercent(s)?.let { "$it% of limit" } ?: "limit unknown", color = Palette.Muted, fontSize = 10.sp,
+                modifier = Modifier.testTag(STATS_LIMIT_PERCENT_TAG),
+            )
+        }
+        ScaleChart(s, series, useTime, ChartKind.CONTEXT, scales, { it.contextTokens }, s.modelContextLimit, STATS_CONTEXT_CHART_TAG, "Context tokens per request")
         Spacer(Modifier.height(10.dp))
         Text("Billed tokens, running total", color = Palette.Text, fontSize = 11.sp)
-        LineChart(series, useTime, { it.cumulativeBilledTokens }, null, STATS_BILLED_CHART_TAG, "Billed tokens running total")
+        ScaleChart(s, series, useTime, ChartKind.BILLED, scales, { it.cumulativeBilledTokens }, null, STATS_BILLED_CHART_TAG, "Billed tokens running total")
         Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
             val first = if (useTime) StatsView.clock(series.first().at) else "#1"
             val last = if (useTime) StatsView.clock(series.last().at) else "#${series.size}"
@@ -265,9 +287,84 @@ private fun AxisToggle(label: String, on: Boolean, tag: String, enabled: Boolean
     )
 }
 
+/** One chart with its scale control. The same code for every harness: only the session id picks the setting. */
 @Composable
-private fun LineChart(series: List<StatsPoint>, byTime: Boolean, value: (StatsPoint) -> Long, limit: Long?, tag: String, description: String) {
-    val maxValue = maxOf(series.maxOf(value), limit ?: 0L).coerceAtLeast(1L)
+private fun ScaleChart(
+    s: SessionStats, series: List<StatsPoint>, byTime: Boolean, kind: ChartKind, scales: ChartScales,
+    value: (StatsPoint) -> Long, limit: Long?, tag: String, description: String,
+) {
+    val setting = scales.get(s.sessionId, kind)
+    val axis = ChartScale.resolve(kind, setting, series.maxOf(value), limit)
+    ScaleControl(s.sessionId, kind, setting, scales, hasLimit = limit != null)
+    if (axis.overScale) {
+        Text(
+            "over scale: line clipped at ${StatsView.compact(axis.max)}", color = Palette.Danger, fontSize = 10.sp,
+            modifier = Modifier.testTag(STATS_OVER_SCALE_TAG_PREFIX + kind.key),
+        )
+    }
+    LineChart(series, byTime, value, if (ChartScale.limitInside(axis, limit)) limit else null, axis.max, tag, description)
+}
+
+@Composable
+private fun ScaleControl(sessionId: String, kind: ChartKind, setting: ChartScaleSetting, scales: ChartScales, hasLimit: Boolean) {
+    val effective = if (setting == ChartScaleSetting.Default) ChartScaleSetting.Fixed(kind.defaultMax) else setting
+    var customOpen by remember(sessionId, kind) { mutableStateOf(false) }
+    var customText by remember(sessionId, kind) { mutableStateOf("") }
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Scale", color = Palette.Muted, fontSize = 10.sp)
+        Spacer(Modifier.width(6.dp))
+        kind.presets.forEach { p ->
+            ScaleChip(StatsView.compact(p), effective == ChartScaleSetting.Fixed(p), STATS_SCALE_CHIP_TAG_PREFIX + kind.key + "-" + p, true) {
+                scales.set(sessionId, kind, ChartScaleSetting.Fixed(p))
+            }
+        }
+        if (kind == ChartKind.CONTEXT) {
+            ScaleChip("Model limit", effective == ChartScaleSetting.ModelLimit, STATS_SCALE_CHIP_TAG_PREFIX + kind.key + "-limit", hasLimit) {
+                scales.set(sessionId, kind, ChartScaleSetting.ModelLimit)
+            }
+        }
+        ScaleChip("Fit", effective == ChartScaleSetting.Fit, STATS_SCALE_CHIP_TAG_PREFIX + kind.key + "-fit", true) {
+            scales.set(sessionId, kind, ChartScaleSetting.Fit)
+        }
+        ScaleChip("Custom", customOpen, STATS_SCALE_CHIP_TAG_PREFIX + kind.key + "-custom", true) { customOpen = !customOpen }
+        ScaleChip("Reset to default", false, STATS_SCALE_RESET_TAG_PREFIX + kind.key, setting != ChartScaleSetting.Default) {
+            scales.reset(sessionId, kind); customOpen = false
+        }
+    }
+    if (customOpen) {
+        val parsed = ChartScale.parseTokens(customText)
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 4.dp)) {
+            Box(Modifier.width(110.dp).clip(RoundedCornerShape(4.dp)).border(1.dp, Palette.Border, RoundedCornerShape(4.dp)).padding(6.dp)) {
+                androidx.compose.foundation.text.BasicTextField(
+                    value = customText, onValueChange = { customText = it }, singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(color = Palette.Text, fontSize = 11.sp, fontFamily = Mono),
+                    cursorBrush = androidx.compose.ui.graphics.SolidColor(Palette.Text),
+                    modifier = Modifier.testTag(STATS_SCALE_CUSTOM_TAG_PREFIX + kind.key),
+                )
+                if (customText.isEmpty()) Text("e.g. 300k", color = Palette.Muted, fontSize = 11.sp)
+            }
+            Spacer(Modifier.width(6.dp))
+            ScaleChip("Set", false, STATS_SCALE_CUSTOM_TAG_PREFIX + kind.key + "-set", parsed != null) {
+                parsed?.let { scales.set(sessionId, kind, ChartScaleSetting.Fixed(it)); customOpen = false }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScaleChip(label: String, on: Boolean, tag: String, enabled: Boolean, onClick: () -> Unit) {
+    val color = when { !enabled -> Palette.Border; on -> Palette.Accent; else -> Palette.Muted }
+    Text(
+        label, color = color, fontSize = 10.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1,
+        modifier = Modifier.testTag(tag).padding(end = 4.dp).clip(RoundedCornerShape(4.dp))
+            .background(if (on) Palette.Border else Color.Transparent)
+            .let { if (enabled) it.clickable(onClick = onClick) else it }
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    )
+}
+
+@Composable
+private fun LineChart(series: List<StatsPoint>, byTime: Boolean, value: (StatsPoint) -> Long, limit: Long?, maxValue: Long, tag: String, description: String) {
     Row(Modifier.fillMaxWidth().height(110.dp)) {
         Column(Modifier.height(110.dp).width(44.dp), verticalArrangement = Arrangement.SpaceBetween) {
             Text(StatsView.compact(maxValue), color = Palette.Muted, fontSize = 9.sp)
@@ -289,8 +386,11 @@ private fun LineChart(series: List<StatsPoint>, byTime: Boolean, value: (StatsPo
                 if (i == 0) { line.moveTo(px, py); fill.moveTo(px, h); fill.lineTo(px, py) } else { line.lineTo(px, py); fill.lineTo(px, py) }
             }
             fill.lineTo(x(series.lastIndex, series.last()), h); fill.close()
-            drawPath(fill, Palette.Accent.copy(alpha = 0.15f))
-            drawPath(line, Palette.Accent, style = Stroke(width = 1.5f))
+            // Past the axis the line is clipped by the canvas, never rescaled; the "over scale" marker says so.
+            clipRect(0f, 0f, w, h) {
+                drawPath(fill, Palette.Accent.copy(alpha = 0.15f))
+                drawPath(line, Palette.Accent, style = Stroke(width = 1.5f))
+            }
             if (limit != null && limit > 0) {
                 val ly = y(limit)
                 drawLine(Palette.Muted, Offset(0f, ly), Offset(w, ly), 1f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f)))

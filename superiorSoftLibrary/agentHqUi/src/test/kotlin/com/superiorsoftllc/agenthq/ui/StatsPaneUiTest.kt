@@ -17,6 +17,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -269,5 +270,55 @@ class StatsPaneUiTest {
         } finally {
             scope.cancel()
         }
+    }
+
+    private fun statsOf(id: String, harness: String, last: Long, billed: Long = last + 10_000) = com.superiorsoftllc.agenthq.ui.protocol.SessionStats(
+        sessionId = id, harness = harness, lastContextTokens = last, modelContextLimit = 1_000_000,
+        series = listOf(
+            com.superiorsoftllc.agenthq.ui.protocol.StatsPoint(t0, 10_000, 10_000),
+            com.superiorsoftllc.agenthq.ui.protocol.StatsPoint(t0 + 1000, last, billed),
+        ),
+    )
+
+    @Test fun `chart scale - default shows the over scale marker, a per-session change stays in that session, reset restores the default`() = runDesktopComposeUiTest(760, 1100) {
+        val scales = com.superiorsoftllc.agenthq.ui.model.ChartScales()
+        var current by mutableStateOf("a")
+        setContent {
+            Box(Modifier.fillMaxSize().background(Palette.Bg)) {
+                androidx.compose.runtime.key(current) {
+                    StatsBody(if (current == "a") statsOf("a", "pi", 300_000) else statsOf("b", "opencode-go", 300_000), scales)
+                }
+            }
+        }
+        waitForIdle()
+        // Both sessions start on the shared 200K default; 300K is past it, so the marker shows.
+        onNodeWithTag(STATS_OVER_SCALE_TAG_PREFIX + "context").assertExists()
+        onNodeWithTag(STATS_LIMIT_PERCENT_TAG).assertTextEquals("30% of limit")
+        onNodeWithTag(STATS_SCALE_RESET_TAG_PREFIX + "context").assertHasNoClickAction()
+
+        // Session a picks 500K: the marker goes away.
+        onNodeWithTag(STATS_SCALE_CHIP_TAG_PREFIX + "context-500000").performClick()
+        waitForIdle()
+        onNodeWithTag(STATS_OVER_SCALE_TAG_PREFIX + "context").assertDoesNotExist()
+
+        // Session b never changed: still the default, still over scale.
+        current = "b"
+        waitForIdle()
+        onNodeWithTag(STATS_OVER_SCALE_TAG_PREFIX + "context").assertExists()
+
+        // Back on a: remembered; reset returns it to the default.
+        current = "a"
+        waitForIdle()
+        onNodeWithTag(STATS_OVER_SCALE_TAG_PREFIX + "context").assertDoesNotExist()
+        onNodeWithTag(STATS_SCALE_RESET_TAG_PREFIX + "context").performClick()
+        waitForIdle()
+        onNodeWithTag(STATS_OVER_SCALE_TAG_PREFIX + "context").assertExists()
+    }
+
+    @Test fun `chart scale - the billed chart is flagged over its own 2M default`() = runDesktopComposeUiTest(760, 1100) {
+        setContent { Box(Modifier.fillMaxSize().background(Palette.Bg)) { StatsBody(statsOf("a", "claude", 100_000, billed = 3_000_000)) } }
+        waitForIdle()
+        onNodeWithTag(STATS_OVER_SCALE_TAG_PREFIX + "billed").assertExists()
+        onNodeWithTag(STATS_OVER_SCALE_TAG_PREFIX + "context").assertDoesNotExist()
     }
 }
