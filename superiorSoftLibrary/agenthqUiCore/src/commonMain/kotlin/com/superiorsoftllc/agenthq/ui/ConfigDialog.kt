@@ -27,7 +27,10 @@ import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.model.AGENT_SCOPE_APPLIES_TO
 import com.superiorsoftllc.agenthq.ui.model.AgentScope
 import com.superiorsoftllc.agenthq.ui.model.CliLocationsSetting
+import com.superiorsoftllc.agenthq.ui.model.HarnessInstallSetting
 import com.superiorsoftllc.agenthq.ui.protocol.CliLocation
+import com.superiorsoftllc.agenthq.ui.protocol.HarnessInstallReport
+import com.superiorsoftllc.agenthq.ui.protocol.HarnessInstallStatus
 import com.superiorsoftllc.agenthq.ui.model.ToolApprovalSetting
 import com.superiorsoftllc.agenthq.ui.protocol.ToolApprovalInfo
 import com.superiorsoftllc.agenthq.ui.model.FLAGS_LIFETIME_NOTE
@@ -50,6 +53,12 @@ fun ConfigDialog(
     cliLocations: List<CliLocation>? = null,
     /** CLIPATH-1: save CLI `id`'s path; a null path clears it back to the default. */
     onCliLocation: ((id: String, path: String?) -> Unit)? = null,
+    /** HARNESS-INSTALL-1: the daemon's own check of its harness CLIs (null = older daemon: no install controls), the install state, and its log. */
+    harnessInstall: HarnessInstallReport? = null,
+    harnessInstallBusy: Boolean = false,
+    harnessInstallLog: List<String> = emptyList(),
+    onHarnessCheck: ((checkLatest: Boolean) -> Unit)? = null,
+    onHarnessInstall: ((ids: List<String>, update: Boolean) -> Unit)? = null,
     /** CLIPATH-1: a platform file picker (title -> chosen path, null = cancelled); null = no Browse button on this platform. */
     onBrowse: ((title: String) -> String?)? = null,
     /** BUG-PERM-1: the daemon's global Tool approval (null = not read yet / an older daemon). */
@@ -79,7 +88,10 @@ fun ConfigDialog(
                 // CLIPATH-1: daemon state too: the daemon validates and stores each path, and says where each CLI resolved.
                 if (onCliLocation != null) {
                     FlagSection(title = CliLocationsSetting.TITLE, applies = CliLocationsSetting.APPLIES_TO) {
-                        CliLocationsSection(cliLocations, onCliLocation, onBrowse)
+                        CliLocationsSection(cliLocations, onCliLocation, onBrowse, harnessInstall, harnessInstallBusy, onHarnessInstall)
+                        if (harnessInstall != null && onHarnessCheck != null && onHarnessInstall != null) {
+                            HarnessInstallControls(harnessInstall, harnessInstallBusy, harnessInstallLog, onHarnessCheck, onHarnessInstall)
+                        }
                     }
                 }
                 // BUG-PERM-1: daemon state: no harness can relay an approval prompt yet, so this decides what tools may run.
@@ -186,13 +198,16 @@ private fun CliLocationsSection(
     locations: List<CliLocation>?,
     onSave: (id: String, path: String?) -> Unit,
     onBrowse: ((title: String) -> String?)?,
+    harness: HarnessInstallReport?,
+    harnessBusy: Boolean,
+    onInstall: ((ids: List<String>, update: Boolean) -> Unit)?,
 ) {
     if (locations == null) {
         Text("Not read from the daemon", color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(CLI_LOCATIONS_PENDING_TAG))
         return
     }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        locations.forEach { location -> CliLocationRow(location, onSave, onBrowse) }
+        locations.forEach { location -> CliLocationRow(location, onSave, onBrowse, harness?.harnesses?.firstOrNull { it.id == location.id }, harnessBusy, onInstall) }
     }
 }
 
@@ -201,6 +216,9 @@ private fun CliLocationRow(
     location: CliLocation,
     onSave: (id: String, path: String?) -> Unit,
     onBrowse: ((title: String) -> String?)?,
+    check: HarnessInstallStatus?,
+    busy: Boolean,
+    onInstall: ((ids: List<String>, update: Boolean) -> Unit)?,
 ) {
     // Re-seeded whenever the daemon reports a different override, so a save or clear elsewhere shows here.
     var text by remember(location.id, location.override) { mutableStateOf(CliLocationsSetting.initialText(location)) }
@@ -212,6 +230,19 @@ private fun CliLocationRow(
             fontSize = 11.sp,
             modifier = Modifier.testTag(CLI_STATUS_TAG_PREFIX + location.id),
         )
+        if (check != null && check.id in HarnessInstallSetting.INSTALLABLE) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Text(HarnessInstallSetting.statusText(check), fontSize = 11.sp, modifier = Modifier.testTag(HARNESS_STATE_TAG_PREFIX + check.id))
+                val label = HarnessInstallSetting.action(check)
+                if (label != null && onInstall != null) {
+                    TextButton(
+                        onClick = { onInstall(listOf(check.id), HarnessInstallSetting.isUpdate(check)) },
+                        enabled = !busy,
+                        modifier = Modifier.testTag(HARNESS_INSTALL_TAG_PREFIX + check.id),
+                    ) { Text(label) }
+                }
+            }
+        }
         CliLocationsSetting.triedLines(location).forEach { tried ->
             Text("tried: $tried", color = Palette.Muted, fontSize = 10.sp)
         }
@@ -327,3 +358,39 @@ const val TOOL_APPROVAL_OPTION_TAG_PREFIX = "tool-approval-option-"
 
 const val KEEP_ALIVE_FIELD_TAG = "keep-alive-field"
 const val KEEP_ALIVE_OPTION_TAG_PREFIX = "keep-alive-option-"
+
+const val HARNESS_STATE_TAG_PREFIX = "harness-state-"
+const val HARNESS_INSTALL_TAG_PREFIX = "harness-install-"
+const val HARNESS_CHECK_TAG = "harness-check"
+const val HARNESS_INSTALL_ALL_TAG = "harness-install-all"
+const val HARNESS_LOG_TAG = "harness-log"
+
+/**
+ * HARNESS-INSTALL-1: check / install-all buttons, Node/npm guidance, and the last install's log. Everything runs on the
+ * DAEMON's machine; this only sends the request and shows the answer.
+ */
+@Composable
+private fun HarnessInstallControls(
+    report: HarnessInstallReport,
+    busy: Boolean,
+    log: List<String>,
+    onCheck: (checkLatest: Boolean) -> Unit,
+    onInstall: (ids: List<String>, update: Boolean) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Harness CLIs install on the machine the daemon runs on, into ${report.prefixDir}. Sign-in stays with each CLI.", color = Palette.Muted, fontSize = 10.sp)
+        report.guidance?.let { Text(it, color = Palette.Muted, fontSize = 11.sp) }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TextButton(onClick = { onCheck(true) }, enabled = !busy, modifier = Modifier.testTag(HARNESS_CHECK_TAG)) { Text("Check for updates") }
+            val needed = report.harnesses.filter { HarnessInstallSetting.action(it) != null }
+            TextButton(
+                onClick = { onInstall(emptyList(), true) },
+                enabled = !busy && needed.isNotEmpty() && report.npmPath != null,
+                modifier = Modifier.testTag(HARNESS_INSTALL_ALL_TAG),
+            ) { Text(if (busy) "Working..." else "Install / update all") }
+        }
+        if (log.isNotEmpty()) {
+            Text(log.joinToString("\n"), color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.testTag(HARNESS_LOG_TAG))
+        }
+    }
+}

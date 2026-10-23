@@ -334,7 +334,10 @@ object EventVocabulary {
     // payloads take optional `scope` / `sessionId` / `role`; new `memory_delete`, `memory_purge_role` (typed confirmation).
     // **1.99.0 (PIPE-2) is ADDITIVE**: the daemon PUSHES `pipeline_state` to every client after each `pipeline_config` /
     // `pipeline_record` / `pipeline_check` change (the PIPE-1 frames are otherwise unchanged); the UI draws it in the Git tab.
-    const val VERSION = "1.99.0"
+    // **1.100.0 (HARNESS-INSTALL-1) is ADDITIVE**: `harness_install_status` {checkLatest?} -> `harness_install_status`
+    // (`HarnessInstallReport`: per-harness installed / missing / outdated + versions) and `harness_install` {ids?, update?}
+    // -> `harness_install_result` (`HarnessInstallResult`: outcomes + npm log + the report after). npm into the app prefix.
+    const val VERSION = "1.100.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA

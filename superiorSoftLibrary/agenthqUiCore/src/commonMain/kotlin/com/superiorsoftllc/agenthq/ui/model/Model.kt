@@ -650,6 +650,10 @@ data class AppState(
     val keepAliveMinutes: Int? = null,
     /** CLIPATH-1 (1.73.0): where the daemon runs each CLI from, as its last `cli_locations` said. Null = not read yet. */
     val cliLocations: List<com.superiorsoftllc.agenthq.ui.protocol.CliLocation>? = null,
+    /** HARNESS-INSTALL-1 (1.100.0): the daemon's last harness check (null = not read / older daemon), whether an install is running, and its log. */
+    val harnessInstall: com.superiorsoftllc.agenthq.ui.protocol.HarnessInstallReport? = null,
+    val harnessInstallBusy: Boolean = false,
+    val harnessInstallLog: List<String> = emptyList(),
     /** BUG-PERM-1 (1.76.0): the global Tool approval, as the daemon's last `tool_approval` said. Null = not read yet. */
     val toolApproval: com.superiorsoftllc.agenthq.ui.protocol.ToolApprovalInfo? = null,
     /**
@@ -1247,6 +1251,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
             promptsLoading = if (promptRefusal) false else s.promptsLoading,
             skillError = if (skillRefusal) env.data else s.skillError,
             skillsLoading = if (skillRefusal) false else s.skillsLoading,
+            harnessInstallBusy = if (env.data.startsWith("harness_install")) false else s.harnessInstallBusy,
         ).withNotice(now, sessionSwitchRefusal ?: env.data, null, if (sessionSwitchRefusal != null) NoticeKind.ERROR else daemonErrorKind(env.data))
     } else {
         s.stream(env) { a, inOrder ->
@@ -1639,6 +1644,17 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     Envelope.CLI_LOCATIONS -> runCatching {
         json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.CliLocations.serializer(), env.data).tools
     }.getOrNull()?.let { s.copy(cliLocations = it) } ?: s
+
+    // HARNESS-INSTALL-1 (1.100.0): a check replaces the report; an install result carries the report after the run plus its log.
+    Envelope.HARNESS_INSTALL_STATUS -> runCatching {
+        json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.HarnessInstallReport.serializer(), env.data)
+    }.getOrNull()?.let { s.copy(harnessInstall = it, harnessInstallBusy = false) } ?: s
+    Envelope.HARNESS_INSTALL_RESULT -> runCatching {
+        json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.HarnessInstallResult.serializer(), env.data)
+    }.getOrNull()?.let { r ->
+        val lines = r.log + r.outcomes.map { o -> "${o.id}: ${o.result}" + (o.version?.let { " $it" } ?: "") + (o.message?.let { " - $it" } ?: "") }
+        s.copy(harnessInstall = r.report, harnessInstallBusy = false, harnessInstallLog = lines)
+    } ?: s
 
     // BUG-PERM-1 (1.76.0): replaced by each answer (a get, or this window's set).
     Envelope.TOOL_APPROVAL -> runCatching {

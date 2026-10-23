@@ -56,9 +56,9 @@ class TicketStartDaemonTest {
 
     @Test
     fun contractVersionIsPinned_1_32_0() = withDaemon { fixture, _ ->
-        assertTrue(fixture.client.of(Envelope.READY).single().data.contains("contract=1.99.0"))
-        assertEquals("1.99.0", EventVocabulary.VERSION)
-        assertEquals("1.99.0", fixture.health()["contract"]!!.jsonPrimitive.content)
+        assertTrue(fixture.client.of(Envelope.READY).single().data.contains("contract=1.100.0"))
+        assertEquals("1.100.0", EventVocabulary.VERSION)
+        assertEquals("1.100.0", fixture.health()["contract"]!!.jsonPrimitive.content)
     }
 
     // --- a. assignment --------------------------------------------------------------------------
