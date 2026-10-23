@@ -572,11 +572,13 @@ data class SessionStats(
     val series: List<StatsPoint>? = null,
     val topSources: List<ContextSource>? = null,
     val unattributedToolTokens: Long? = null,
+    /** Contract 1.113.0: running total of the cost the harness reported; null = the harness reports none. */
+    val costTotal: Double? = null,
 )
 
 /** STATS-1: one model request. [at] is null when the record gives no time. */
 @Serializable
-data class StatsPoint(val at: Long? = null, val contextTokens: Long, val cumulativeBilledTokens: Long)
+data class StatsPoint(val at: Long? = null, val contextTokens: Long, val cumulativeBilledTokens: Long, val cumulativeCost: Double? = null)
 
 /** STATS-1: one tool's share of the context; [tokensAdded] null when no single-tool step of it exists. */
 @Serializable

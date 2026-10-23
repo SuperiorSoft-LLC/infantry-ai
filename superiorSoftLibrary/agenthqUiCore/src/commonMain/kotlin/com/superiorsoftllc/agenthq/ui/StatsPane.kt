@@ -124,6 +124,10 @@ fun StatsBody(s: SessionStats) {
             { Tile("Models", StatsView.models(s), null, "models", Modifier.weight(1f)) },
             { SessionIdTile(s, Modifier.weight(1f)) },
         )
+        TileRow(
+            { Tile("Billed tokens", if (s.series.isNullOrEmpty()) StatsView.noUsage(s) else StatsView.compact(s.billedTokens), "all token classes, running total", "billed", Modifier.weight(1f)) },
+            { Tile("Cost", StatsView.cost(s), "as reported by the harness", "cost", Modifier.weight(1f)) },
+        )
 
         Section("CONTEXT WINDOW")
         Gauge(s)
@@ -209,7 +213,7 @@ private fun Gauge(s: SessionStats) {
             Spacer(Modifier.height(6.dp))
         }
         Text(
-            if (percent == null) "Size of the last request. This harness's record does not state the model's window."
+            if (percent == null) "Size of the last request. Limit unknown: no local catalog states this model's window."
             else "Size of the last request against the model's window.",
             color = Palette.Muted, fontSize = 10.sp,
         )
@@ -231,7 +235,7 @@ private fun Charts(s: SessionStats) {
         }
         if (series.isEmpty()) {
             Spacer(Modifier.height(8.dp))
-            Text(StatsView.NONE + "  this harness's record gives no per-request tokens.", color = Palette.Muted, fontSize = 11.sp)
+            Text(StatsView.noUsage(s), color = Palette.Muted, fontSize = 11.sp)
             return@Column
         }
         Spacer(Modifier.height(8.dp))

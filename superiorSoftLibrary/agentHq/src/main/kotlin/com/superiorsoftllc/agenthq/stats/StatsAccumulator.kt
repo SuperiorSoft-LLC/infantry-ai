@@ -39,8 +39,21 @@ internal class StatsAccumulator {
         if (!model.isNullOrBlank()) models += model
     }
 
-    /** One model request. [contextTokens] = input + cache read + cache write; [billedTokens] adds output. */
-    fun request(at: Long?, contextTokens: Long, billedTokens: Long) {
+    /** The model of the most recent non-empty request. */
+    var lastModel: String? = null
+        private set
+    private var cost = 0.0
+    private var anyCost = false
+
+    /** One model request, once per model call; an all-zero request is skipped (STATS-2). */
+    fun request(u: RequestUsage) {
+        if (u.isEmpty) return
+        if (!u.model.isNullOrBlank()) lastModel = u.model
+        u.cost?.let { cost += it; anyCost = true }
+        request(u.at, u.contextTokens, u.billedTokens, if (anyCost) cost else null)
+    }
+
+    private fun request(at: Long?, contextTokens: Long, billedTokens: Long, cumulativeCost: Double?) {
         val previous = series.lastOrNull()?.contextTokens
         if (previous != null && pending.isNotEmpty()) {
             val delta = contextTokens - previous
@@ -50,7 +63,7 @@ internal class StatsAccumulator {
         }
         pending.clear()
         billed += billedTokens
-        series += StatsPoint(at, contextTokens, billed)
+        series += StatsPoint(at, contextTokens, billed, cumulativeCost)
     }
 
     /** A tool call made by the most recent [request]. */
@@ -71,6 +84,7 @@ internal class StatsAccumulator {
         lastContextTokens = series.lastOrNull()?.contextTokens,
         modelContextLimit = modelContextLimit,
         billedTokens = billed,
+        costTotal = if (anyCost) cost else null,
         series = series.toList(),
         topSources = calls.entries
             .map { (tool, n) -> ContextSource(tool, n, added[tool]) }

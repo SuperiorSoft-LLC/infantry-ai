@@ -48,6 +48,8 @@ data class SessionStats(
      * without guessing, so it is reported here instead of being divided.
      */
     val unattributedToolTokens: Long? = null,
+    /** Contract 1.113.0: running total of the cost the harness REPORTED, null when it reports none (never computed). */
+    val costTotal: Double? = null,
 )
 
 @Serializable
@@ -56,6 +58,8 @@ data class StatsPoint(
     val at: Long? = null,
     val contextTokens: Long,
     val cumulativeBilledTokens: Long,
+    /** Contract 1.113.0: cumulative reported cost up to this request; null when the harness reports none. */
+    val cumulativeCost: Double? = null,
 )
 
 @Serializable
