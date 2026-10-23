@@ -88,6 +88,8 @@ fun ConfigDialog(
     secretActions: SecretActions? = null,
     /** PAIR-1: the connection to share and the callback for a scanned / pasted link; null hides "Pair a device". */
     pair: PairEntry? = null,
+    /** ROLE-EDIT-1: opens the role manager dialog; null hides the section. */
+    onOpenRoles: (() -> Unit)? = null,
 ) {
     AhqAlertDialog(
         onDismissRequest = onDismiss,
@@ -147,6 +149,12 @@ fun ConfigDialog(
                 if (secretActions != null && secrets != null) {
                     FlagSection(title = SECRETS_TITLE, applies = SECRETS_APPLIES_TO) {
                         SecretsSection(secrets, secretActions)
+                    }
+                }
+                // ROLE-EDIT-1: the role manager is its own dialog (shared modal), so it can move into a tab later.
+                if (onOpenRoles != null) {
+                    FlagSection(title = "Roles", applies = "Define and edit roles: notes, default provider and model, traits. Applies to new sessions.") {
+                        OutlinedButton(onClick = onOpenRoles, modifier = Modifier.testTag(ROLE_MANAGER_OPEN_TAG)) { Text("Manage roles") }
                     }
                 }
                 // PAIR-1: show this connection as a QR / link, or connect to another server from one.

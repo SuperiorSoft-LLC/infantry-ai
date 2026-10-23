@@ -233,6 +233,7 @@ fun App(
     val changeConnection = LocalPlatformHost.current.onChangeConnection
     val pairStore = LocalPlatformHost.current.savedServers
     var showConfig by remember { mutableStateOf(false) }
+    var showRoles by remember { mutableStateOf(false) }
     var showNewAgent by remember { mutableStateOf(false) }
     // SWAP-AGENT-1: the Switch agent picker, open for one session (the composer button, the header chip, `/harness`).
     var switchAsk by remember { mutableStateOf<SwitchAgentAsk?>(null) }
@@ -678,8 +679,10 @@ fun App(
                     clear = { n -> actionScope.launch { controller.clearSecret(n) } },
                     import = { n -> actionScope.launch { controller.importSecret(n) } },
                 ),
+                onOpenRoles = { showRoles = true },
             )
         }
+        if (showRoles) RoleManagerDialog(state, controller, onDismiss = { showRoles = false })
         if (showServers && switcher != null) {
             ServersDialog(
                 switcher,

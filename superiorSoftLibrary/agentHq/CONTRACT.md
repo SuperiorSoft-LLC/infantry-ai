@@ -104,6 +104,17 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+
+### What changed in 1.108.0 (ROLE-EDIT-1) — a role has a description, and a custom role can be deleted
+
+ADDITIVE; a 1.107.0 client keeps working. The `ready` frame reports `contract=1.108.0`.
+- **`Role` and `role_save` gain `description`** (one line, <= 200 chars; `role_save`: absent = keep, `""` = clear). Stored as a
+  `description:` front-matter key of the role file. It is for the role editor and is never sent to a session; the persona
+  stays the text every session of the role receives, and an edit reaches new sessions only.
+- **`role_delete`** (data = role id) removes the role's custom file. A custom override of a bundled role is reset: every client
+  gets the bundled definition as `role`. A pure custom role is removed: every client gets `role_removed` (data = role id).
+  Refused (`error`, nothing touched) for a bundled role with no override, an unknown id, or while a live session has the role.
+
 ### What changed in 1.107.0 (USER-PORTRAIT) — the owner's portrait, stored by the daemon
 
 ADDITIVE; no new frame. One new `settings_get` / `settings_set` key, `user.portrait`: a base64 string of a PNG or WebP at most

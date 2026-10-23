@@ -419,7 +419,7 @@ internal object Cli {
                 "issue" -> issue(stream, parsed, out, err, getenv)
                 "trait" -> trait(stream, parsed, out, err, input)
                 "skill" -> skill(stream, parsed, out, err)
-                "role" -> role(stream, parsed, out, err)
+                "role" -> role(stream, parsed, out, err, getenv, input)
                 "ask" -> ask(stream, parsed, out, err, getenv)
                 else -> {
                     // Unreachable: [run] rejects an unknown command before it connects.
@@ -3538,8 +3538,9 @@ internal object Cli {
      * The daemon refuses an unknown role or trait, a duplicate and more than 8, nothing written. A set is a
      * whole-list replace, so re-sending it after a drop is safe.
      */
-    private fun role(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable): Int = runBlocking {
+    private fun role(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable, getenv: (String) -> String?, input: () -> java.io.Reader): Int = runBlocking {
         checkContract(stream, err)
+        if (parsed.args.first() != "traits") return@runBlocking roleCatalog(stream, parsed, out, err, getenv, input)
         val roleId = parsed.args[1].trim()
         val answer = if (parsed.set == null && !parsed.clear) {
             stream.request(Envelope(Envelope.ROLE_TRAITS_GET, roleId), answerType = Envelope.ROLE_TRAITS, what = "role_traits_get", idempotent = true)
@@ -3560,6 +3561,66 @@ internal object Cli {
         }
         out.appendLine("${stored.roleId}: " + (stored.traitIds.joinToString(", ").ifEmpty { "no traits" }))
         0
+    }
+
+    /**
+     * ROLE-EDIT-1: `role list | show <id> | notes <id> --body <text|-> | describe <id> --body <text> | delete <id>`, on the
+     * `role_list` / `role_save` / `role_delete` frames. A caller inside a session (an agent) may list, show and change the
+     * notes or description of an existing role, and nothing else: `delete` is refused for it, as `agenthq_role_delete` is.
+     */
+    private suspend fun roleCatalog(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable, getenv: (String) -> String?, input: () -> java.io.Reader): Int {
+        val sub = parsed.args.first()
+        val id = parsed.args.getOrNull(1)?.trim().orEmpty()
+        val roles = json.decodeFromString(
+            kotlinx.serialization.builtins.ListSerializer(com.superiorsoftllc.agenthq.role.Role.serializer()),
+            stream.request(Envelope(Envelope.ROLE_LIST, ""), answerType = Envelope.ROLES, what = "role_list", idempotent = true).data,
+        )
+        if (sub == "list") {
+            roles.forEach { out.appendLine("${it.id}	${it.name}	${it.source.name.lowercase()}	${it.description}") }
+            return 0
+        }
+        val role = roles.firstOrNull { it.id == com.superiorsoftllc.agenthq.role.RoleIds.normalize(id) }
+        if (role == null) {
+            err.appendLine("error: unknown role '$id'")
+            return 1
+        }
+        when (sub) {
+            "show" -> {
+                out.appendLine("ID: ${role.id}")
+                out.appendLine("NAME: ${role.name}")
+                out.appendLine("SOURCE: ${role.source.name.lowercase()}")
+                out.appendLine("DESCRIPTION: ${role.description}")
+                out.appendLine()
+                out.appendLine(role.persona)
+            }
+            "notes", "describe" -> {
+                val text = if (parsed.body == "-") input().use { it.readText() } else parsed.body!!
+                val save = com.superiorsoftllc.agenthq.protocol.RoleSave(
+                    id = role.id,
+                    name = role.name,
+                    persona = if (sub == "notes") text else role.persona,
+                    description = if (sub == "describe") text.trim() else null,
+                )
+                stream.request(
+                    Envelope(Envelope.ROLE_SAVE, json.encodeToString(com.superiorsoftllc.agenthq.protocol.RoleSave.serializer(), save)),
+                    answerType = Envelope.ROLE, what = "role_save", idempotent = true,
+                )
+                out.appendLine("saved ${role.id} ($sub); it applies to new sessions, not running ones")
+            }
+            "delete" -> {
+                if (sessionOf(getenv) != null || !getenv("AGENTHQ_ROLE").isNullOrBlank()) {
+                    err.appendLine("error: role delete needs a non-agent caller: an agent may only change a role's notes and description")
+                    return 1
+                }
+                val reset = role.id in com.superiorsoftllc.agenthq.role.RoleIds.BUILT_IN
+                stream.request(
+                    Envelope(Envelope.ROLE_DELETE, role.id),
+                    answerType = if (reset) Envelope.ROLE else Envelope.ROLE_REMOVED, what = "role_delete", idempotent = false,
+                )
+                out.appendLine(if (reset) "reset ${role.id} to its bundled definition" else "deleted ${role.id}")
+            }
+        }
+        return 0
     }
 
     /** `a, b ,c` as `[a, b, c]`: trimmed, blanks dropped. */
@@ -3653,7 +3714,18 @@ internal object Cli {
     /** The usage error for a `role` invocation, or null. */
     private fun roleUsageError(parsed: ParsedArgs): String? {
         val args = parsed.args
-        if (args.firstOrNull() != "traits") return "role needs a subcommand: agenthq role traits <roleId> [--set a,b | --clear]"
+        val usage = "role needs a subcommand: agenthq role list | show <id> | notes <id> --body <text|-> | describe <id> --body <text> | delete <id> | traits <roleId> [--set a,b | --clear]"
+        when (args.firstOrNull()) {
+            "list" -> return null
+            "show", "delete" -> return if (args.getOrNull(1)?.isBlank() != false) "role ${args[0]} requires a role id" else null
+            "notes", "describe" -> return when {
+                args.getOrNull(1)?.isBlank() != false -> "role ${args[0]} requires a role id"
+                parsed.body == null -> "role ${args[0]} requires --body <text> (or --body - to read stdin)"
+                else -> null
+            }
+            "traits" -> Unit
+            else -> return usage
+        }
         return when {
             args.getOrNull(1)?.isBlank() != false -> "role traits requires a role id: agenthq role traits <roleId> [--set a,b | --clear]"
             parsed.set != null && parsed.clear -> "role traits takes --set or --clear, not both"

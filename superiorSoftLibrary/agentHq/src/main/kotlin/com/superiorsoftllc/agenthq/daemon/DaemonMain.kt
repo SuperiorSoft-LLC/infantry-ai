@@ -381,7 +381,7 @@ class AgentHqDaemon(
     val issues: IssueStore,
     /** EPIC-3: the epics, stored in [store] so an epic and its ordered storyIds outlive the daemon. */
     val epics: EpicStore,
-    /** IN-APP BUILD T2 (contract 1.33.0) + RUN-CMD-1 (1.94.0): saved commands from commands.json, editable; empty when absent or refused. */
+    /** IN-APP BUILD T2 (contract 1.33.0) + RUN-CMD-1 (1.108.0): saved commands from commands.json, editable; empty when absent or refused. */
     val commands: com.superiorsoftllc.agenthq.commands.CommandStore? = null,
     /** PORT-1: where [start] records the bound port (`<stateDir>/daemon.port`); null = recorded nowhere. */
     val portFile: File? = null,
@@ -2186,6 +2186,23 @@ private suspend fun handleConnection(
                     Envelope(Envelope.ERROR, "role_save failed: ${e.message ?: e::class.simpleName}")
                 }
 
+                // Contract 1.108.0 (ROLE-EDIT-1): a reset override is pushed as `role`, a removed custom role as `role_removed`.
+                Envelope.ROLE_DELETE -> try {
+                    val id = envelope.data.trim()
+                    val live = manager.list()
+                        .filter { it.state != SessionState.EXITED && it.state != SessionState.FAILED && it.state != SessionState.ORPHANED }
+                        .mapNotNull { it.role?.let(RoleIds::normalize) }.toSet()
+                    val remaining = roles.delete(id, live)
+                    val push = if (remaining != null) Envelope(Envelope.ROLE, json.encodeToString(Role.serializer(), remaining))
+                    else Envelope(Envelope.ROLE_REMOVED, id)
+                    for (client in clients) client.trySend(push)
+                    null
+                } catch (e: IllegalArgumentException) {
+                    Envelope(Envelope.ERROR, "role_delete refused: ${e.message ?: "invalid role"}")
+                } catch (e: Exception) {
+                    Envelope(Envelope.ERROR, "role_delete failed: ${e.message ?: e::class.simpleName}")
+                }
+
                 Envelope.COMMAND_CATALOG -> SlashCommands.catalog(envelope, manager, harnesses)
 
                 // Answered by [readyBurstWorker], off this loop (PERF-3).
@@ -2257,10 +2274,10 @@ private suspend fun handleConnection(
                     Envelope(Envelope.ERROR, "agent_list refused: ${e.message ?: "invalid request"}")
                 }
 
-                // IN-APP BUILD T2 (contract 1.33.0): id, name, cwd; argv + graceMillis since 1.94.0 (RUN-CMD-1).
+                // IN-APP BUILD T2 (contract 1.33.0): id, name, cwd; argv + graceMillis since 1.108.0 (RUN-CMD-1).
                 Envelope.COMMAND_LIST -> Envelope(Envelope.COMMANDS, commands.registry.specsJson())
 
-                // RUN-CMD-1 (contract 1.94.0): write commands.json, then push the new list to EVERY client (the
+                // RUN-CMD-1 (contract 1.108.0): write commands.json, then push the new list to EVERY client (the
                 // requester included). Never while that command's run is in flight; a refusal names the id only.
                 Envelope.COMMAND_SAVE, Envelope.COMMAND_DELETE -> {
                     val refusal = if (envelope.type == Envelope.COMMAND_SAVE) commands.save(envelope.data, runManager::unlessRunning)

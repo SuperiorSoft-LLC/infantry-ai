@@ -104,6 +104,9 @@ data class ConnectionInfo(
     /** ROLE-ICON-1: a daemon on contract >= 1.93.0 stores a role's icon; an older one refuses a `role_save` naming it. */
     val sendsRoleIcon: Boolean get() = contractAtLeast(contract, 1, 93)
 
+    /** ROLE-EDIT-1: a daemon on contract >= 1.108.0 stores a role description and answers `role_delete`; an older one refuses both. */
+    val sendsRoleEdit: Boolean get() = contractAtLeast(contract, 1, 108)
+
     /** Contract 1.47.0 (role-first S3): the daemon takes `agent_swap`; below it the Swap action is unavailable. */
     val swapsAgents: Boolean get() = contractAtLeast(contract, 1, 47)
     /** UX-HARNESS-2 (contract 1.83.0): the daemon takes `session_swap`, so a session with no agent can switch harness. */
@@ -1322,6 +1325,9 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
         val r = json.decodeFromString(Role.serializer(), env.data)
         s.copy(roles = if (s.roles.any { it.id == r.id }) s.roles.map { if (it.id == r.id) r else it } else s.roles + r)
     }
+
+    // Contract 1.108.0 (ROLE-EDIT-1): a deleted custom role is gone from every window; its binding and traits go with the pick.
+    Envelope.ROLE_REMOVED -> s.copy(roles = s.roles.filterNot { it.id == env.data.trim() })
 
     // Contract 1.40.0: the stored bindings, then each set pushed to every window (an unpinned one removes the entry).
     Envelope.ROLE_BINDINGS -> s.copy(roleBindings = json.decodeFromString(ListSerializer(RoleBinding.serializer()), env.data).associateBy { it.roleId })

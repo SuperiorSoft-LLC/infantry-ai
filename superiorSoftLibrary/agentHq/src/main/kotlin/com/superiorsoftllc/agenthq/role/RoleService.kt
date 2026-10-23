@@ -59,12 +59,20 @@ class RoleService(private val dir: File) {
         } ?: catalog.role(id)?.icon.orEmpty()
 
         // The exact shape CustomRoles.parse reads back; the name is quoted-free on purpose (the parser trims quotes).
+        // ROLE-EDIT-1: null keeps the stored description, "" clears it; one line, it lives in the front matter.
+        val description = request.description?.trim()?.also { raw ->
+            require(raw.length <= MAX_DESCRIPTION_LENGTH) { "description is longer than $MAX_DESCRIPTION_LENGTH characters" }
+            require(raw.none { it.isISOControl() }) { "description must be a single line" }
+        } ?: catalog.role(id)?.description.orEmpty()
+
         val iconLine = if (icon.isEmpty()) "" else "icon: $icon\n"
-        val text = "---\nname: $name\ncolor: $color\n$iconLine---\n$persona\n"
+        val descriptionLine = if (description.isEmpty()) "" else "description: $description\n"
+        val text = "---\nname: $name\ncolor: $color\n$iconLine$descriptionLine---\n$persona\n"
         // Parse it BEFORE touching the disk, so a definition the reader would reject is never written.
         val parsed = CustomRoles.parse(id, text)
         check(parsed.name == name) { "name '$name' would not read back unchanged" }
         check(parsed.icon == icon) { "icon '$icon' would not read back unchanged" }
+        check(parsed.description == description) { "description would not read back unchanged" }
 
         dir.mkdirs()
         val target = File(dir, id + CustomRoles.EXTENSION)
@@ -76,7 +84,28 @@ class RoleService(private val dir: File) {
         return catalog.role(id) ?: error("role '$id' was written to ${target.name} but did not load back")
     }
 
+    /**
+     * ROLE-EDIT-1: delete the custom role file of [rawId]. Refused (nothing touched) when [liveRoleIds] holds the role,
+     * and for a bundled role with no custom file (nothing to delete). Returns the role as the catalog now holds it: the
+     * bundled definition when a custom override was reset, null when a pure custom role was removed.
+     */
+    @Synchronized
+    fun delete(rawId: String, liveRoleIds: Set<String>): Role? {
+        val id = rawId.trim()
+        require(RoleIds.isValid(id)) { "'${id.take(40)}' is not a role id" }
+        val file = File(dir, id + CustomRoles.EXTENSION)
+        require(file.isFile) {
+            if (RoleBundle.catalog(null).role(id) != null) "role '$id' is built in and has no custom definition to delete"
+            else "unknown role '$id'"
+        }
+        require(id !in liveRoleIds) { "role '$id' has live sessions; end them first" }
+        Files.delete(file.toPath())
+        catalog = RoleBundle.catalog(dir)
+        return if (id in RoleIds.BUILT_IN || RoleBundle.catalog(null).role(id) != null) catalog.role(id) else null
+    }
+
     companion object {
+        const val MAX_DESCRIPTION_LENGTH = 200
         const val ENV = "AGENTHQ_ROLES_DIR"
         const val MAX_NAME_LENGTH = 60
         const val MAX_PERSONA_LENGTH = 20_000

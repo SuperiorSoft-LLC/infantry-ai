@@ -663,8 +663,14 @@ class Controller(
 
     /** Contract 1.12.0: create or override a role; the daemon pushes the stored role to every window. */
     /** ROLE-ICON-1: [icon] null keeps the stored icon, "" clears it; it reaches only a daemon on contract >= 1.93.0. */
-    suspend fun saveRole(id: String, name: String, color: String?, persona: String, icon: String? = null): CommandResult =
-        report(send(WireRequests.roleSave(RoleSave(id.trim(), name.trim(), color?.trim()?.takeIf { it.isNotEmpty() }, persona, icon?.trim()), _state.value.connection.sendsRoleIcon)))
+    suspend fun saveRole(id: String, name: String, color: String?, persona: String, icon: String? = null, description: String? = null): CommandResult =
+        report(send(WireRequests.roleSave(
+            RoleSave(id.trim(), name.trim(), color?.trim()?.takeIf { it.isNotEmpty() }, persona, icon?.trim(), description?.trim()),
+            _state.value.connection.sendsRoleIcon, _state.value.connection.sendsRoleEdit,
+        )))
+
+    /** ROLE-EDIT-1: delete a custom role, or reset a customised bundled one; the daemon refuses while a live session has it. */
+    suspend fun deleteRole(roleId: String): CommandResult = report(send(WireRequests.roleDelete(roleId)))
 
     /** Contract 1.4.0: create (no id) or edit a profile; the daemon answers `agent` with the stored profile. */
     suspend fun saveProfile(profile: AgentProfile): CommandResult = saveAgent(profile)
