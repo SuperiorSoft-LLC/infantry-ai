@@ -1493,7 +1493,7 @@ private fun SpeakerRow(avatar: @Composable () -> Unit, content: @Composable () -
 }
 
 /** Size of the agent's portrait on its chat lines, and of the indent its continuation lines keep. */
-private const val CHAT_AVATAR_SIZE = 22
+private const val CHAT_AVATAR_SIZE = 36
 
 /** True for every line kind the agent produces; only the human's own [LineKind.USER] echo is not. */
 private fun ChatItem.isAgentSide(): Boolean = this !is ChatItem.Line || line.kind != LineKind.USER
@@ -1539,7 +1539,7 @@ fun ChatLine(
     if (line.kind == LineKind.USER) {
         // IMG-2: the turn's `[image: ...]` lines show as thumbnails, not as text.
         val (said, images) = ChatImageLines.split(line.text)
-        SpeakerRow({ UserAvatar() }) {
+        SpeakerRow({ UserAvatar(CHAT_AVATAR_SIZE) }) {
             Column {
                 Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Palette.Accent.copy(alpha = 0.12f), RoundedCornerShape(8.dp)).padding(8.dp)) {
                     CardTimestamp(line.at)
