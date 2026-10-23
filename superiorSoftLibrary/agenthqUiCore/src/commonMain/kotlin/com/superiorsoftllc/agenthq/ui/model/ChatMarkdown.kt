@@ -1,16 +1,19 @@
 package com.superiorsoftllc.agenthq.ui.model
 
 /**
- * Chat formatting model: an assistant reply is parsed into display blocks by a pure function, so the
- * rendering rules are testable without a Compose runtime. The chat composable only maps blocks to widgets.
+ * Chat formatting model: assistant text (a plain string on the wire, whatever the harness) is parsed into display
+ * blocks by ONE pure function, so the rendering rules are testable without a Compose runtime and identical for every
+ * harness. The chat composable only maps blocks to widgets. No HTML is interpreted (it stays literal text), images are
+ * never fetched (they degrade to their alt text), and a link is only a [ChatSpan.Link] when its scheme is safe.
  */
 /**
- * An inline run inside a paragraph: plain [Text], [Bold] (`**...**`), [InlineCode] (`` `...` ``) or a
- * [Link] (`[label](url)`).
+ * An inline run: plain [Text], [Bold] (`**...**`), [Italic] (`*...*` / `_..._`), [InlineCode] (`` `...` ``) or a
+ * [Link] (`[label](url)`, only http/https/mailto; any other scheme degrades to the label as [Text]).
  */
 sealed interface ChatSpan {
     data class Text(val text: String) : ChatSpan
     data class Bold(val text: String) : ChatSpan
+    data class Italic(val text: String) : ChatSpan
     data class InlineCode(val text: String) : ChatSpan
     data class Link(val label: String, val url: String) : ChatSpan
 }
@@ -22,14 +25,39 @@ sealed interface ChatBlock {
     /** A fenced code block; [language] is the info string after the opening fence ("" when absent). */
     data class Code(val language: String, val body: String) : ChatBlock
 
-    /** A "-" bullet list; each entry is one item's text (leading marker stripped). */
-    data class BulletList(val items: List<String>) : ChatBlock
+    /** A bullet (`-`, `*`, `+`) or, when [ordered], numbered (`1.`) list; each entry is one item's text (marker stripped). */
+    data class BulletList(val items: List<String>, val ordered: Boolean = false) : ChatBlock
 
     /** An ATX heading (`# `, `## `, `### `); [level] is 1-3, deeper headings clamp to 3. */
-    data class Heading(val level: Int, val text: String) : ChatBlock
+    data class Heading(val level: Int, val text: String, val spans: List<ChatSpan> = parseChatInline(text)) : ChatBlock
+
+    /** A `>` quote; [text] is the quoted lines joined by newline, markers stripped. */
+    data class Quote(val text: String, val spans: List<ChatSpan> = parseChatInline(text)) : ChatBlock
+
+    /** A pipe table: [header] cells and [rows] of cells (each row padded/truncated to the header width). */
+    data class Table(val header: List<String>, val rows: List<List<String>>) : ChatBlock
+
+    /** A thematic break (`---`, `***`, `___`). */
+    data object Rule : ChatBlock
 }
 
-/** Parse a paragraph's inline markup (`**bold**`, `` `code` ``) into [ChatSpan]s. */
+/** Only these schemes are ever opened externally; everything else (javascript:, file:, data:, relative) is plain text. */
+fun isSafeChatUrl(url: String): Boolean {
+    val u = url.trim().lowercase()
+    return (u.startsWith("http://") && u.length > 7) || (u.startsWith("https://") && u.length > 8) || (u.startsWith("mailto:") && u.length > 7)
+}
+
+/** Index of the `)` closing a link target that starts at [from], skipping balanced inner parens; -1 if none. */
+private fun closingParen(text: String, from: Int): Int {
+    var depth = 0
+    for (k in from until text.length) when (text[k]) {
+        '(' -> depth++
+        ')' -> if (depth == 0) return k else depth--
+    }
+    return -1
+}
+
+/** Parse a paragraph's inline markup into [ChatSpan]s. */
 fun parseChatInline(text: String): List<ChatSpan> {
     val spans = ArrayList<ChatSpan>()
     val plain = StringBuilder()
@@ -42,7 +70,13 @@ fun parseChatInline(text: String): List<ChatSpan> {
         }
     }
 
+    fun literal() {
+        plain.append(text[i])
+        i++
+    }
+
     while (i < text.length) {
+        val c = text[i]
         when {
             text.startsWith("**", i) -> {
                 val end = text.indexOf("**", i + 2)
@@ -50,43 +84,47 @@ fun parseChatInline(text: String): List<ChatSpan> {
                     flushPlain()
                     spans += ChatSpan.Bold(text.substring(i + 2, end))
                     i = end + 2
-                } else {
-                    plain.append(text[i])
-                    i++
-                }
+                } else literal()
             }
-            text[i] == '`' -> {
+            c == '`' -> {
                 val end = text.indexOf('`', i + 1)
                 if (end > i + 1) {
                     flushPlain()
                     spans += ChatSpan.InlineCode(text.substring(i + 1, end))
                     i = end + 1
-                } else {
-                    plain.append(text[i])
-                    i++
-                }
+                } else literal()
             }
-            text[i] == '[' -> {
-                val labelEnd = text.indexOf(']', i + 1)
-                if (labelEnd > i + 1 && labelEnd + 1 < text.length && text[labelEnd + 1] == '(') {
-                    val urlEnd = text.indexOf(')', labelEnd + 2)
-                    if (urlEnd > labelEnd + 2) {
-                        flushPlain()
-                        spans += ChatSpan.Link(text.substring(i + 1, labelEnd), text.substring(labelEnd + 2, urlEnd))
-                        i = urlEnd + 1
-                    } else {
-                        plain.append(text[i])
-                        i++
-                    }
-                } else {
-                    plain.append(text[i])
-                    i++
-                }
+            c == '*' && i + 1 < text.length && !text[i + 1].isWhitespace() -> {
+                val end = text.indexOf('*', i + 1)
+                if (end > i + 1 && !text[end - 1].isWhitespace()) {
+                    flushPlain()
+                    spans += ChatSpan.Italic(text.substring(i + 1, end))
+                    i = end + 1
+                } else literal()
             }
-            else -> {
-                plain.append(text[i])
-                i++
+            c == '_' && (i == 0 || !text[i - 1].isLetterOrDigit()) && i + 1 < text.length && !text[i + 1].isWhitespace() -> {
+                val end = text.indexOf('_', i + 1)
+                if (end > i + 1 && !text[end - 1].isWhitespace() && (end + 1 == text.length || !text[end + 1].isLetterOrDigit())) {
+                    flushPlain()
+                    spans += ChatSpan.Italic(text.substring(i + 1, end))
+                    i = end + 1
+                } else literal()
             }
+            c == '[' || (c == '!' && i + 1 < text.length && text[i + 1] == '[') -> {
+                val image = c == '!'
+                val open = if (image) i + 1 else i
+                val labelEnd = text.indexOf(']', open + 1)
+                val urlEnd = if (labelEnd > open + 1 && labelEnd + 1 < text.length && text[labelEnd + 1] == '(') closingParen(text, labelEnd + 2) else -1
+                if (urlEnd > labelEnd + 2) {
+                    val label = text.substring(open + 1, labelEnd)
+                    val url = text.substring(labelEnd + 2, urlEnd).trim()
+                    flushPlain()
+                    // An image is never fetched: it shows its alt text. An unsafe link shows its label.
+                    spans += if (!image && isSafeChatUrl(url)) ChatSpan.Link(label, url) else ChatSpan.Text(label)
+                    i = urlEnd + 1
+                } else literal()
+            }
+            else -> literal()
         }
     }
     flushPlain()
@@ -97,11 +135,7 @@ fun parseChatInline(text: String): List<ChatSpan> {
 fun chatLineBlocks(kind: LineKind, text: String): List<ChatBlock>? =
     if (kind == LineKind.TEXT) parseChatMarkdown(text) else null
 
-/**
- * A leading ATX heading marker (`#`, `##`, `###`, ...) followed by a space becomes a heading: its
- * level is the marker count clamped to 3, and its text is the rest of the line trimmed. `#foo` (no
- * space) is not a heading.
- */
+/** A leading ATX heading marker followed by a space; level clamps to 3. `#foo` (no space) is not a heading. */
 private fun parseChatHeading(line: String): Pair<Int, String>? {
     val t = line.trimStart()
     var n = 0
@@ -112,11 +146,27 @@ private fun parseChatHeading(line: String): Pair<Int, String>? {
     return n.coerceAtMost(3) to text
 }
 
-/** Parse a reply into ordered [ChatBlock]s. */
+private val ORDERED_ITEM = Regex("^(\\d{1,9})[.)] +(.*)$")
+private val TABLE_SEPARATOR = Regex("^\\|?\\s*:?-+:?\\s*(\\|\\s*:?-+:?\\s*)*\\|?$")
+private val RULE = Regex("^(-{3,}|\\*{3,}|_{3,})$")
+
+private fun tableCells(line: String): List<String> =
+    line.trim().removePrefix("|").removeSuffix("|").split('|').map { it.trim() }
+
+private fun isTableStart(line: String, next: String?): Boolean =
+    next != null && line.contains('|') && next.contains('-') && TABLE_SEPARATOR.matches(next.trim()) && tableCells(line).size >= 2
+
+/** Bullet marker (`- `, `* `, `+ `) item text, or null. */
+private fun bulletItem(t: String): String? =
+    if (t.length >= 2 && (t[0] == '-' || t[0] == '*' || t[0] == '+') && t[1] == ' ') t.substring(2).trim() else null
+
+/** Parse a reply into ordered [ChatBlock]s. Plain text becomes one paragraph per blank-line-separated run. */
 fun parseChatMarkdown(text: String): List<ChatBlock> {
     val blocks = ArrayList<ChatBlock>()
     val prose = ArrayList<String>()
-    var bullets: ArrayList<String>? = null
+    val quote = ArrayList<String>()
+    var list: ArrayList<String>? = null
+    var listOrdered = false
     var code: ArrayList<String>? = null
     var language = ""
 
@@ -125,48 +175,68 @@ fun parseChatMarkdown(text: String): List<ChatBlock> {
         if (joined.isNotEmpty()) blocks += ChatBlock.Paragraph(joined)
         prose.clear()
     }
-
-    fun flushBullets() {
-        val open = bullets ?: return
-        blocks += ChatBlock.BulletList(open)
-        bullets = null
+    fun flushList() {
+        list?.let { blocks += ChatBlock.BulletList(it, listOrdered) }
+        list = null
     }
+    fun flushQuote() {
+        if (quote.isNotEmpty()) blocks += ChatBlock.Quote(quote.joinToString("\n").trim())
+        quote.clear()
+    }
+    fun flushAll() { flushProse(); flushList(); flushQuote() }
 
-    for (line in text.lines()) {
+    val lines = text.lines()
+    var idx = 0
+    while (idx < lines.size) {
+        val line = lines[idx]
+        val t = line.trimStart()
         val open = code
-        val heading = if (open == null) parseChatHeading(line) else null
-        when {
-            open == null && line.trimStart().startsWith("```") -> {
-                flushProse()
-                flushBullets()
-                language = line.trimStart().removePrefix("```").trim()
-                code = ArrayList()
-            }
-            open != null && line.trim() == "```" -> {
+        if (open != null) {
+            if (line.trim() == "```") {
                 blocks += ChatBlock.Code(language, open.joinToString("\n"))
                 code = null
-            }
-            open != null -> open += line
-            heading != null -> {
-                flushProse()
-                flushBullets()
-                blocks += ChatBlock.Heading(heading.first, heading.second)
-            }
-            line.trimStart().startsWith("- ") -> {
-                flushProse()
-                val items = bullets ?: ArrayList<String>().also { bullets = it }
-                items += line.trimStart().removePrefix("- ").trim()
-            }
-            else -> {
-                flushBullets()
-                prose += line
-            }
+            } else open += line
+            idx++
+            continue
         }
+        val heading = parseChatHeading(line)
+        val ordered = ORDERED_ITEM.matchEntire(t)
+        val bullet = bulletItem(t)
+        when {
+            t.startsWith("```") -> {
+                flushAll()
+                language = t.removePrefix("```").trim()
+                code = ArrayList()
+            }
+            heading != null -> { flushAll(); blocks += ChatBlock.Heading(heading.first, heading.second) }
+            RULE.matches(t.trim()) -> { flushAll(); blocks += ChatBlock.Rule }
+            isTableStart(line, lines.getOrNull(idx + 1)) -> {
+                flushAll()
+                val header = tableCells(line)
+                val rows = ArrayList<List<String>>()
+                idx += 2
+                while (idx < lines.size && lines[idx].isNotBlank() && lines[idx].contains('|')) {
+                    val cells = tableCells(lines[idx])
+                    rows += List(header.size) { cells.getOrElse(it) { "" } }
+                    idx++
+                }
+                blocks += ChatBlock.Table(header, rows)
+                continue
+            }
+            t.startsWith(">") -> { flushProse(); flushList(); quote += t.removePrefix(">").removePrefix(" ") }
+            ordered != null || bullet != null -> {
+                flushProse(); flushQuote()
+                val isOrdered = ordered != null
+                if (list != null && listOrdered != isOrdered) flushList()
+                val items = list ?: ArrayList<String>().also { list = it; listOrdered = isOrdered }
+                items += (ordered?.groupValues?.get(2) ?: bullet!!).trim()
+            }
+            line.isBlank() -> flushAll()
+            else -> { flushList(); flushQuote(); prose += line }
+        }
+        idx++
     }
     // A reply still streaming (or cut off) can end inside an open fence: show what we have as code.
-    code?.let { blocks += ChatBlock.Code(language, it.joinToString("\n")) } ?: run {
-        flushProse()
-        flushBullets()
-    }
+    code?.let { blocks += ChatBlock.Code(language, it.joinToString("\n")) } ?: flushAll()
     return blocks
 }
