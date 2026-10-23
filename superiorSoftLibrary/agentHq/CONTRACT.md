@@ -1172,7 +1172,7 @@ reports `contract=1.17.0` (it was `1.16.0`). Nothing else changed.
 **1.16.0 is additive (P9.5 H8): one optional field on `TriggerSave`.** The daemon's `ready` frame now
 reports `contract=1.16.0` (it was `1.15.0`). Nothing else changed.
 
-- `TriggerSave.intervalMs` (`Long?`, default `null`, must be `>= 1000` when given): the period of a
+- `TriggerSave.intervalMs` (`Long?`, default `null`, must be `>= 60000` (one minute) when given; the floor was `1000` before the owner's 2026-10-23 change, the wire unit is still ms and rows already stored keep their period; a smaller value is refused with "a schedule interval must be at least 1 minute"): the period of a
   `schedule` trigger. Each elapsed interval fires the trigger once, recorded as a `trigger_events` row
   with `source: "schedule"`, disposition `started` (or whatever its guard decides, as for a manual fire).
   A `schedule` trigger saved without `intervalMs` never fires.
