@@ -103,6 +103,9 @@ data class Envelope(
         const val ROLE_SAVE = "role_save"
         const val ROLE = "role"
         const val ROLES = "roles"
+        /** Contract 1.108.0 (ROLE-EDIT-1): `role_delete` (data = role id); a removed custom role is pushed as `role_removed`, a reset one as `role`. */
+        const val ROLE_DELETE = "role_delete"
+        const val ROLE_REMOVED = "role_removed"
 
         // Contract 1.40.0 (ROLE-1c): what a role runs on.
         const val ROLE_BINDING_LIST = "role_binding_list"
@@ -601,6 +604,8 @@ data class Role(
     val source: String = "BUILT_IN",
     /** Contract 1.93.0 (ROLE-ICON-1): the role's icon key; "" (and every older daemon) = none, paint the role's default. */
     val icon: String = "",
+    /** Contract 1.108.0 (ROLE-EDIT-1): a one-line description for the role editor; "" (and every older daemon) = none. */
+    val description: String = "",
 )
 
 /**
@@ -608,7 +613,15 @@ data class Role(
  * (1.93.0, null = keep, "" = clear) is sent only by [WireRequests.roleSave], and only to a daemon that knows it.
  */
 @Serializable
-data class RoleSave(val id: String, val name: String, val color: String? = null, val persona: String = "", val icon: String? = null)
+data class RoleSave(
+    val id: String,
+    val name: String,
+    val color: String? = null,
+    val persona: String = "",
+    val icon: String? = null,
+    /** Contract 1.108.0: null = keep, "" = clear; sent only to a daemon that knows it. */
+    val description: String? = null,
+)
 
 /** Contract 1.40.0: what a role runs on; a null field is "no pin" (the daemon default applies at spawn time). */
 @Serializable
@@ -1607,10 +1620,15 @@ object WireRequests {
      * would refuse the whole save) and when it is null (keep the stored icon), so an icon-less save is byte-for-byte
      * the pre-1.93.0 payload.
      */
-    fun roleSave(save: RoleSave, withIcon: Boolean): Envelope {
+    fun roleSave(save: RoleSave, withIcon: Boolean, withDescription: Boolean = false): Envelope {
         val full = Json { encodeDefaults = true }.encodeToJsonElement(RoleSave.serializer(), save) as JsonObject
-        return Envelope(Envelope.ROLE_SAVE, (if (withIcon && save.icon != null) full else JsonObject(full - "icon")).toString())
+        // ROLE-EDIT-1: `description` likewise only to a daemon on contract >= 1.108.0, and only when set (null = keep).
+        val noIcon = if (withIcon && save.icon != null) full else JsonObject(full - "icon")
+        return Envelope(Envelope.ROLE_SAVE, (if (withDescription && save.description != null) noIcon else JsonObject(noIcon - "description")).toString())
     }
+
+    /** ROLE-EDIT-1: delete a custom role (or reset a customised bundled one). */
+    fun roleDelete(roleId: String): Envelope = Envelope(Envelope.ROLE_DELETE, roleId.trim())
 
     fun agentSave(profile: AgentProfile, withEffort: Boolean): Envelope {
         val full = Json { encodeDefaults = true }.encodeToJsonElement(AgentProfile.serializer(), profile) as JsonObject

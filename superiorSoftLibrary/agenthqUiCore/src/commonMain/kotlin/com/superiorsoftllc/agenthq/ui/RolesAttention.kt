@@ -432,7 +432,7 @@ const val ROLE_EDITOR_ICON_DEFAULT = "default"
  * of [RoleIcons.KEYS]. Disabled against a daemon below contract 1.93.0, which would refuse a save naming an icon.
  */
 @Composable
-private fun RoleIconPicker(roleId: String, selected: String, enabled: Boolean, onPick: (String) -> Unit) {
+internal fun RoleIconPicker(roleId: String, selected: String, enabled: Boolean, onPick: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             if (enabled) "Icon" else "Icon (this daemon is older than contract 1.93.0 and cannot store one)",
