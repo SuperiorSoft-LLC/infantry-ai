@@ -195,6 +195,7 @@ fun main(args: Array<String>) {
  * agenthq ticket create --title "..." [--desc "..." | --desc-file <path> | --desc -] [--project <id>] [--role <id>] [--provider <id>] [--model <id>] [--image <file>]...   a new todo ticket; prints its id
  * agenthq ticket update <id> [--title ..] [--desc ..] [--role <id>] [--provider <id>] [--model <id>] [--image <file>]... [--remove-image <path>]...   edit one ticket
  * agenthq ticket move <id> <status>            move one ticket to a column (todo, in_progress, pending, done)
+ * agenthq ticket move <id> --before <id>|--top|--bottom   reorder inside its column (order = priority)
  * agenthq ticket start <id>                    start ticket work (never with a spawn): its role/provider/model, its own branch
  * agenthq harnesses                            the harnesses (provider ids) a ticket can pin, and each one's models
  * agenthq ticket link <id> <otherId> <type>   link one ticket to another (type: blocked_by, blocks, child_of, ...)
@@ -1072,11 +1073,11 @@ internal object Cli {
         checkContract(stream, err)
         val ticket = resolveTicket(stream, parsed.args[1].trim(), boardProjectOf(parsed, getenv), err) ?: return 1
         val fullId = ticket.id
-        val status = parsed.args[2].trim()
+        val status = parsed.args.getOrNull(2)?.trim()
         // BUG-MAIL-2: run inside an agent's session, the move names that session, which the daemon records as the
         // ticket's starter (its worker can then `agenthq send starter`). Typed by a person, there is none.
         val session = getenv(AccessPolicy.SESSION_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }
-        if (status.lowercase() == TicketStatus.IN_PROGRESS && ticket.status != TicketStatus.IN_PROGRESS) {
+        if (status?.lowercase() == TicketStatus.IN_PROGRESS && ticket.status != TicketStatus.IN_PROGRESS) {
             return when (val outcome = TicketStarter.start(stream, ticket, session)) {
                 is TicketStarter.Outcome.Started -> {
                     out.appendLine("moved $fullId -> ${outcome.ticket.status}")
@@ -1090,7 +1091,13 @@ internal object Cli {
                 is TicketStarter.Outcome.NotStarted -> reportNotStarted(outcome, out, err)
             }
         }
-        val move = TicketMove(id = fullId, status = status)
+        val position = if (parsed.before != null || parsed.top || parsed.bottom) {
+            val board = fetchBoard(stream, boardProjectOf(parsed, getenv), err) ?: return 1
+            placement(ticket, status, parsed, board, err) ?: return 1
+        } else {
+            null
+        }
+        val move = TicketMove(id = fullId, status = status, position = position)
         val answer = stream.request(
             Envelope(Envelope.TICKET_MOVE, json.encodeToString(TicketMove.serializer(), move), session),
             answerType = Envelope.TICKET,
@@ -1105,6 +1112,38 @@ internal object Cli {
         }
         out.appendLine("moved $fullId -> ${moved.status}")
         return 0
+    }
+
+    /**
+     * The position `ticket move --top|--bottom|--before` asks for, or null after printing why it cannot be had.
+     * The daemon takes the index in the column AFTER the ticket is lifted out, so a ticket moving down inside its
+     * own column lands one place above the target's current index.
+     */
+    private fun placement(ticket: Ticket, status: String?, parsed: ParsedArgs, board: List<Ticket>, err: Appendable): Int? {
+        if (parsed.top) return 0
+        if (parsed.bottom) return Int.MAX_VALUE
+        val target = when (val match = matchTicketPrefix(parsed.before!!.trim(), board)) {
+            is TicketPrefixMatch.Unique -> match.ticket
+            TicketPrefixMatch.None -> {
+                err.appendLine("error: no ticket ${parsed.before}")
+                return null
+            }
+            is TicketPrefixMatch.Ambiguous -> {
+                err.appendLine("error: ticket id '${parsed.before}' is ambiguous; use a longer id or the full id")
+                return null
+            }
+        }
+        if (target.id == ticket.id) {
+            err.appendLine("error: a ticket cannot be moved before itself")
+            return null
+        }
+        val column = status?.lowercase() ?: ticket.status
+        if (target.status != column) {
+            err.appendLine("error: ${target.id} is in ${target.status}, not $column: name the column or pick a ticket in it")
+            return null
+        }
+        val lifted = if (ticket.status == column && ticket.position < target.position) 1 else 0
+        return target.position - lifted
     }
 
     /**
@@ -3787,6 +3826,8 @@ internal object Cli {
                                   --desc is cut at its first line on Windows (the agenthq.cmd launcher drops the rest).
               ticket move <id|prefix> <status>   Move one ticket to a column (todo, in_progress, pending, done); a move to
                                   in_progress is a start (see ticket start): a refused or held one exits 1 with the reason
+              ticket move <id|prefix> [<status>] --before <id|prefix> | --top | --bottom   Reorder: ticket order is priority
+                                  (the board and `tickets` list a column in that order; new tickets go to the bottom)
               ticket start <id|prefix>       Start ticket work this way, never with a spawn: the worker runs the ticket's
                                   role, provider and model on its own ticket/<short-id>-<slug> branch; the ticket goes
                                   In Progress. A refused or held start exits 1 with the reason
@@ -3957,6 +3998,11 @@ internal object Cli {
         val endpointsFile: String? = null,
         val tokenFile: String? = null,
         val epic: String? = null,
+        /** `ticket move --before <id|prefix>`: put the ticket just above that one. */
+        val before: String? = null,
+        /** `ticket move --top` / `--bottom`: first or last place in its column. */
+        val top: Boolean = false,
+        val bottom: Boolean = false,
         // `mcp serve` guardrails (P11-B, docs/MCP.md).
         val mcpDepth: Int? = null,
         val maxDepth: Int? = null,
@@ -4060,6 +4106,9 @@ internal object Cli {
         var endpointsFile: String? = null
         var tokenFile: String? = null
         var epic: String? = null
+        var before: String? = null
+        var top = false
+        var bottom = false
         var mcpDepth: Int? = null
         var maxDepth: Int? = null
         var maxSpawns: Int? = null
@@ -4323,6 +4372,19 @@ internal object Cli {
                     timeout = args.getOrNull(++i) ?: return fail(err, "--timeout expects whole seconds")
                     i++
                 }
+                "--before" -> {
+                    before = flagValue(args, ++i)
+                        ?: return fail(err, "--before expects a ticket id or prefix (see: agenthq tickets)")
+                    i++
+                }
+                "--top" -> {
+                    top = true
+                    i++
+                }
+                "--bottom" -> {
+                    bottom = true
+                    i++
+                }
                 "--epic" -> {
                     epic = flagValue(args, ++i)
                         ?: return fail(err, "--epic expects an epic id or prefix (see: agenthq epics --project <id>)")
@@ -4401,6 +4463,9 @@ internal object Cli {
             descFile = descFile,
             descStdin = descStdin,
             epic = epic,
+            before = before,
+            top = top,
+            bottom = bottom,
             tokenFile = tokenFile,
             mcpDepth = mcpDepth,
             maxDepth = maxDepth,
@@ -4659,7 +4724,10 @@ internal object Cli {
             }
             "move" -> when {
                 blank(1) -> "ticket move requires a ticket id: agenthq ticket move <id|prefix> <status>"
-                blank(2) -> "ticket move requires a status: agenthq ticket move <id|prefix> <status>"
+                listOf(parsed.before != null, parsed.top, parsed.bottom).count { it } > 1 ->
+                    "ticket move takes one of --before, --top, --bottom"
+                args.size == 2 && (parsed.before != null || parsed.top || parsed.bottom) -> null
+                blank(2) -> "ticket move requires a status: agenthq ticket move <id|prefix> <status|--before <id>|--top|--bottom>"
                 args[2].trim() !in TicketStatus.ALL ->
                     "unknown status '${args[2]}'; expected one of ${TicketStatus.ALL.joinToString(", ")}"
                 else -> null

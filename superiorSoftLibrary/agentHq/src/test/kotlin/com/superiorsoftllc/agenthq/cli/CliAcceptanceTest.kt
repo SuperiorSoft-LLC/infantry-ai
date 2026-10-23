@@ -673,6 +673,30 @@ class CliAcceptanceTest {
         )
     }
 
+    /** Ticket order is priority: `ticket move` takes --top, --bottom and --before, and `tickets` lists the new order. */
+    @Test
+    fun ticketMoveReordersWithTopBottomAndBefore() {
+        val fixture = launch(StubScript.default())
+        fixture.client.await(Envelope.READY)
+        val ids = listOf("First", "Second", "Third").map { saveTicketTitled(fixture, it, """{"title":"$it"}""").id.takeLast(8) }
+        fun order() = ticketTitles(cli(fixture.port, "tickets", "--status", "todo").out)
+
+        assertEquals(listOf("First", "Second", "Third"), order(), "new tickets append to the bottom")
+        assertEquals(0, cli(fixture.port, "ticket", "move", ids[2], "--top").exit)
+        assertEquals(listOf("Third", "First", "Second"), order())
+        assertEquals(0, cli(fixture.port, "ticket", "move", ids[2], "--bottom").exit)
+        assertEquals(listOf("First", "Second", "Third"), order())
+        assertEquals(0, cli(fixture.port, "ticket", "move", ids[0], "--before", ids[2]).exit)
+        assertEquals(listOf("Second", "First", "Third"), order(), "moving down lands just above the target")
+        assertEquals(0, cli(fixture.port, "ticket", "move", ids[2], "todo", "--before", ids[1]).exit)
+        assertEquals(listOf("Third", "Second", "First"), order(), "moving up lands just above the target")
+
+        val self = cli(fixture.port, "ticket", "move", ids[0], "--before", ids[0])
+        assertEquals(1, self.exit, "before itself is refused: ${self.out}")
+        val two = cli(fixture.port, "ticket", "move", ids[0], "--top", "--bottom")
+        assertEquals(2, two.exit, "two placements are a usage error: ${two.err}")
+    }
+
     /** CLI-T4: an unknown status is a usage error (exit 2), refused before the daemon is asked to move anything. */
     @Test
     fun ticketMoveWithUnknownStatusIsAUsageError() {
