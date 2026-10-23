@@ -4,6 +4,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -17,7 +18,7 @@ class LogsFolderUiTest {
             setContent { ConfigDialog(UiFlagsDefault, onFlags = {}, onDismiss = {}, logs = LogsFolder("C:/AgentHQ/logs") { opened++; false }) }
             onNodeWithTag(LOGS_PATH_TAG).assertTextEquals("C:/AgentHQ/logs")
             onNodeWithTag(LOGS_OPEN_FAILED_TAG).assertDoesNotExist()
-            onNodeWithTag(LOGS_OPEN_TAG).performClick()
+            onNodeWithTag(LOGS_OPEN_TAG).performScrollTo().performClick()
             waitForIdle()
             onNodeWithTag(LOGS_OPEN_FAILED_TAG).assertExists() // the platform said it could not: the user is told
         }

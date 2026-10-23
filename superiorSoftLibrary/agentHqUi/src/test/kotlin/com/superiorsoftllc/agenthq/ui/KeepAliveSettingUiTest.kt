@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.superiorsoftllc.agenthq.daemon.AgentHqDaemon
 import com.superiorsoftllc.agenthq.mailbox.JsonMailStore
@@ -73,14 +74,14 @@ class KeepAliveSettingUiTest {
                 onNodeWithTag(KEEP_ALIVE_FIELD_TAG).assertTextContains(LifecycleSetting.label(30))
 
                 // Off: the daemon stores 0 and answers; the field shows the daemon's answer.
-                onNodeWithTag(KEEP_ALIVE_FIELD_TAG).performClick()
+                onNodeWithTag(KEEP_ALIVE_FIELD_TAG).performScrollTo().performClick()
                 onNodeWithTag(KEEP_ALIVE_OPTION_TAG_PREFIX + 0).performClick()
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.keepAliveMinutes == 0 }
                 assertEquals(0, stored.keepAliveMinutes(), "the change must be stored by the daemon")
                 onNodeWithTag(KEEP_ALIVE_FIELD_TAG).assertTextContains("Off (start a process per reply)")
 
                 // Back on with another window: the daemon stores that value too.
-                onNodeWithTag(KEEP_ALIVE_FIELD_TAG).performClick()
+                onNodeWithTag(KEEP_ALIVE_FIELD_TAG).performScrollTo().performClick()
                 onNodeWithTag(KEEP_ALIVE_OPTION_TAG_PREFIX + 120).performClick()
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.keepAliveMinutes == 120 }
                 assertEquals(120, stored.keepAliveMinutes())
