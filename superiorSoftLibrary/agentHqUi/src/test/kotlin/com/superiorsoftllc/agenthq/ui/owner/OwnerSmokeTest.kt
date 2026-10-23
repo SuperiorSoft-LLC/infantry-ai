@@ -256,11 +256,12 @@ class OwnerSmokeTest {
             put("task", "owner-smoke S6: a grandchild")
         })
         assertTrue(nested.isError && "spawn refused: depth limit" in nested.text, "the daemon refuses the helper's spawn: ${nested.text}")
-        // A server kills only what it spawned: the helper may not kill the PM, nor the PM itself.
+        // Kill scope (contract 1.114.0): a non-pm kills only what it spawned, so the helper may not kill the PM; and no
+        // session may kill itself, not even a pm whose project scope covers its own session.
         val byHelper = helperMcp.call(KILL, buildJsonObject { put("sessionId", rig.lead.sessionId) })
-        assertTrue(byHelper.isError && "was not spawned by this MCP server" in byHelper.text, "the helper's kill: ${byHelper.text}")
+        assertTrue(byHelper.isError && "was not spawned by this session" in byHelper.text, "the helper's kill: ${byHelper.text}")
         val byPm = pm.call(KILL, buildJsonObject { put("sessionId", rig.lead.sessionId) })
-        assertTrue(byPm.isError && "was not spawned by this MCP server" in byPm.text, "the PM's kill of itself: ${byPm.text}")
+        assertTrue(byPm.isError && "may not kill its own session" in byPm.text, "the PM's kill of itself: ${byPm.text}")
         assertNotEquals("EXITED", session(pm, rig.lead.sessionId).string("status"), "a refused kill leaves the PM running")
 
         // 3. The helper replies through its own MCP's mail, and the PM reads it from its inbox; then the helper's turn ends.

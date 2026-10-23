@@ -92,6 +92,42 @@ class SessionKillScopeTest {
     }
 
     @Test
+    fun aPmKillsItsOwnSpawnEvenOutsideItsProject() {
+        val fixture = launch()
+        val manager = fixture.daemon.manager
+        val pm = session(fixture, "pm", "alpha")
+        val helper = session(fixture, "backend", "beta", busy = true)
+        val stranger = session(fixture, "backend", "beta", busy = true)
+        manager.setSpawner(helper, pm)
+
+        val ok = cli(fixture, pm, "kill", helper, "--force")
+        assertEquals(0, ok.exit, ok.err)
+        assertFalse(manager.get(helper)!!.live, "the pm's own spawn is the pm's to kill, whatever its project")
+
+        val refused = cli(fixture, pm, "kill", stranger, "--force")
+        assertEquals(1, refused.exit, refused.out)
+        assertTrue(refused.err.contains("beta"), refused.err)
+        assertTrue(manager.get(stranger)!!.live, "another project's session the pm did not spawn stays refused")
+    }
+
+    @Test
+    fun noSessionKillsItselfNotEvenAPmWhoseProjectScopeCoversIt() {
+        val fixture = launch()
+        val manager = fixture.daemon.manager
+        val pm = session(fixture, "pm", "alpha", busy = true)
+
+        val refused = cli(fixture, pm, "kill", pm, "--force")
+        assertEquals(1, refused.exit, refused.out)
+        assertTrue(refused.err.contains("may not kill its own session"), refused.err)
+        assertTrue(manager.get(pm)!!.live, "a refused self-kill leaves the pm running")
+
+        val removed = cli(fixture, pm, "session", "rm", pm, "--force")
+        assertEquals(1, removed.exit, removed.out)
+        assertTrue(removed.err.contains("may not kill its own session"), removed.err)
+        assertNotNull(manager.get(pm))
+    }
+
+    @Test
     fun aWorkerKillsOnlyWhatItSpawnedAndTheRecordSurvivesAnMcpRestart() {
         val fixture = launch()
         val manager = fixture.daemon.manager
