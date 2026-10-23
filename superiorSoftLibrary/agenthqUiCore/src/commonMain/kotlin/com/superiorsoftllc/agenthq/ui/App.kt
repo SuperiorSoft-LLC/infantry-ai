@@ -60,6 +60,7 @@ import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
 import com.superiorsoftllc.agenthq.ui.net.ImageUploadOutcome
 import com.superiorsoftllc.agenthq.ui.protocol.ImageUploadWire
+import com.superiorsoftllc.agenthq.ui.pair.applyPairing
 import com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost
 import com.superiorsoftllc.agenthq.ui.shell.PickedImage
 import androidx.compose.runtime.collectAsState
@@ -224,6 +225,7 @@ fun App(
     var showConnect by remember { mutableStateOf(false) }
     // MOBILE-CONNCHIP-1: a host may route the connection chip to its own connect screen (Android).
     val changeConnection = LocalPlatformHost.current.onChangeConnection
+    val pairStore = LocalPlatformHost.current.savedServers
     var showConfig by remember { mutableStateOf(false) }
     var showNewAgent by remember { mutableStateOf(false) }
     // SWAP-AGENT-1: the Switch agent picker, open for one session (the composer button, the header chip, `/harness`).
@@ -632,6 +634,13 @@ fun App(
                 logs = logs,
                 updates = updates,
                 secrets = state.secrets,
+                pair = PairEntry(url, token.ifBlank { null }, null) { link ->
+                    // PAIR-1: save the server + token through the host's store, then connect with the bearer.
+                    applyPairing(link, pairStore) { u, t ->
+                        url = u; token = t.orEmpty(); showConfig = false
+                        controller.connect(u, t.orEmpty())
+                    }
+                },
                 secretActions = SecretActions(
                     set = { n, v -> actionScope.launch { controller.setSecret(n, v) } },
                     clear = { n -> actionScope.launch { controller.clearSecret(n) } },

@@ -37,10 +37,18 @@ kotlin {
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)
+            // PAIR-1: the QR encoder (and, on desktop, the decoder for "Open image").
+            implementation(libs.zxing.core)
         }
         androidMain.dependencies {
             implementation(libs.ktor.client.cio)
             implementation(libs.androidx.activity.compose)
+            // PAIR-1: QR encoder, plus the camera scan: CameraX frames to ML Kit's BUNDLED model (works without Google Play).
+            implementation(libs.zxing.core)
+            implementation(libs.mlkit.barcode)
+            implementation(libs.camerax.camera2)
+            implementation(libs.camerax.lifecycle)
+            implementation(libs.camerax.view)
         }
     }
 }

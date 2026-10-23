@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- PAIR-1: scanning a pairing QR. Optional: a device without a camera still pastes a link. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application>
         <!-- Rotation/resize must not recreate the activity: the controller owns a live WebSocket. -->
@@ -9,7 +12,16 @@
             android:name="com.superiorsoftllc.agenthq.ui.shell.AgentHqActivity"
             android:exported="true"
             android:label="AgentHQ"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode" />
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode">
+            <!-- PAIR-1: an agenthq://connect link opened from anywhere (a tapped link, a QR app, adb) offers to pair. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="agenthq" android:host="connect" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

@@ -39,6 +39,14 @@ import com.superiorsoftllc.agenthq.ui.model.FLAGS_LIFETIME_NOTE
 import com.superiorsoftllc.agenthq.ui.model.LifecycleSetting
 import com.superiorsoftllc.agenthq.ui.model.UiFlags
 
+/** PAIR-1: the connection "Pair a device" shares ([url], [token]) and what a link scanned or pasted there does. */
+class PairEntry(val url: String, val token: String?, val name: String?, val onLink: (com.superiorsoftllc.agenthq.ui.pair.PairingLink) -> Unit) {
+    companion object {
+        const val TITLE = "Pair a device"
+        const val APPLIES_TO = "This connection; a link carries the server address and its token."
+    }
+}
+
 /**
  * CONFIG: the configuration modal opened from the footer cog. Each flag is a Material 3 control, its SCOPE is
  * printed above it and its EFFECT under it. A change goes straight to [onFlags]; the flags live in the window,
@@ -74,6 +82,8 @@ fun ConfigDialog(
     /** SECRETS-1: the daemon keystore's state (null = not read yet / an older daemon); [secretActions] null hides the section. */
     secrets: SecretState? = null,
     secretActions: SecretActions? = null,
+    /** PAIR-1: the connection to share and the callback for a scanned / pasted link; null hides "Pair a device". */
+    pair: PairEntry? = null,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -118,6 +128,12 @@ fun ConfigDialog(
                 if (secretActions != null && secrets != null) {
                     FlagSection(title = SECRETS_TITLE, applies = SECRETS_APPLIES_TO) {
                         SecretsSection(secrets, secretActions)
+                    }
+                }
+                // PAIR-1: show this connection as a QR / link, or connect to another server from one.
+                if (pair != null) {
+                    FlagSection(title = PairEntry.TITLE, applies = PairEntry.APPLIES_TO) {
+                        com.superiorsoftllc.agenthq.ui.pair.PairDeviceSection(pair.url, pair.token, pair.name, pair.onLink)
                     }
                 }
                 // UPDATE-1: the check itself runs in the daemon side's updater; this only asks for it.

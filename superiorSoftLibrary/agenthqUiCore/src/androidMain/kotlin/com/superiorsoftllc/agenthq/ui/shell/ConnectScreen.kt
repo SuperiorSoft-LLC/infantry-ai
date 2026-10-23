@@ -34,7 +34,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.window.Dialog
 import com.superiorsoftllc.agenthq.ui.net.DaemonClient
+import com.superiorsoftllc.agenthq.ui.pair.CameraQrScanner
+import com.superiorsoftllc.agenthq.ui.pair.PairingHosts
+import com.superiorsoftllc.agenthq.ui.pair.PairingLink
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
@@ -86,7 +92,13 @@ private sealed interface Gate {
  * title-bar connection chip reopens the form (MOBILE-CONNCHIP-1, through [PlatformHost.onChangeConnection]).
  */
 @Composable
-fun AndroidConnectGate(store: ConnectionStore, extras: (String) -> String?) {
+fun AndroidConnectGate(
+    store: ConnectionStore,
+    extras: (String) -> String?,
+    /** PAIR-1: an `agenthq://connect` link the OS opened the app with; the user is asked before it replaces the connection. */
+    openedLink: String? = null,
+    onOpenedLinkHandled: () -> Unit = {},
+) {
     val initial = remember {
         when (val decision = launchDecision(extras, store)) {
             LaunchDecision.Setup -> Gate.Form()
@@ -100,7 +112,31 @@ fun AndroidConnectGate(store: ConnectionStore, extras: (String) -> String?) {
     var gate by remember { mutableStateOf<Gate>(initial) }
     var hadShell by remember { mutableStateOf(initial is Gate.Shell) }
 
+    val pairLink = openedLink?.let { (PairingLink.parse(it) as? PairingLink.Parsed.Ok)?.link }
+    val openedBad = openedLink != null && pairLink == null
+
     MaterialTheme(colorScheme = darkColorScheme()) {
+        if (openedLink != null) {
+            AlertDialog(
+                onDismissRequest = onOpenedLinkHandled,
+                title = { Text(if (pairLink != null) "Connect to this server?" else "Cannot use this link") },
+                text = {
+                    Text(
+                        if (pairLink != null) "${pairLink.name ?: PairingHosts.labelOf(pairLink.url)} at ${PairingHosts.labelOf(pairLink.url)}. " +
+                            "It replaces your saved connection and signs in with the token in the link."
+                        else "This is not a valid AgentHQ pairing link.",
+                    )
+                },
+                confirmButton = {
+                    if (pairLink != null) {
+                        TextButton(onClick = { onOpenedLinkHandled(); gate = Gate.Probing(pairLink.url, pairLink.token, save = true) }) { Text("Connect") }
+                    } else {
+                        TextButton(onClick = onOpenedLinkHandled) { Text("OK") }
+                    }
+                },
+                dismissButton = if (pairLink != null) ({ TextButton(onClick = onOpenedLinkHandled) { Text("Cancel") } }) else null,
+            )
+        }
         when (val g = gate) {
             is Gate.Form -> {
                 val saved = remember(g) { store.load() }
@@ -114,6 +150,7 @@ fun AndroidConnectGate(store: ConnectionStore, extras: (String) -> String?) {
                         val token = typedToken.trim().ifEmpty { saved?.token.orEmpty() }.ifEmpty { null }
                         gate = Gate.Probing(url.trim(), token, save = true)
                     },
+                    onLink = { link -> gate = Gate.Probing(link.url, link.token, save = true) },
                     onForget = if (saved != null) ({ store.clear(); gate = Gate.Form() }) else null,
                     onCancel = if (hadShell && saved != null) ({ gate = Gate.Probing(saved.url, saved.token, save = false) }) else null,
                 )
@@ -142,7 +179,7 @@ fun AndroidConnectGate(store: ConnectionStore, extras: (String) -> String?) {
                 val context = androidx.compose.ui.platform.LocalContext.current.applicationContext
                 val speaker = remember(context) { com.superiorsoftllc.agenthq.ui.voice.AndroidSpeaker(context) }
                 androidx.compose.runtime.DisposableEffect(speaker) { onDispose { speaker.shutdown() } }
-                val host = remember(g) { AndroidPlatformHost(g.settings, onChangeConnection = { gate = Gate.Form() }, speaker = speaker) }
+                val host = remember(g) { AndroidPlatformHost(g.settings, onChangeConnection = { gate = Gate.Form() }, speaker = speaker, savedServers = ConnectionSavedServers(store)) }
                 AgentHqShell(host)
             }
         }
@@ -157,6 +194,8 @@ fun ConnectForm(
     error: String?,
     busy: Boolean,
     onConnect: (url: String, token: String) -> Unit,
+    /** PAIR-1: a pairing link scanned or pasted here; null hides the scan and paste controls. */
+    onLink: ((PairingLink) -> Unit)? = null,
     onForget: (() -> Unit)? = null,
     onCancel: (() -> Unit)? = null,
 ) {
@@ -204,6 +243,7 @@ fun ConnectForm(
                 if (error != null) {
                     Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
                 }
+                if (onLink != null && !busy) PairingControls(onLink)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Button(onClick = ::submit, enabled = !busy) { Text("Connect") }
                     if (busy) {
@@ -221,6 +261,38 @@ fun ConnectForm(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+    }
+}
+
+/** PAIR-1: connect from a QR scanned with the camera, or from a pasted link. */
+@Composable
+private fun PairingControls(onLink: (PairingLink) -> Unit) {
+    var scanning by remember { mutableStateOf(false) }
+    var paste by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    fun accept(text: String) {
+        when (val parsed = PairingLink.parse(text)) {
+            is PairingLink.Parsed.Ok -> { error = null; onLink(parsed.link) }
+            is PairingLink.Parsed.Bad -> error = parsed.reason
+        }
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { scanning = true }, modifier = Modifier.fillMaxWidth()) { Text("Scan QR from another device") }
+        OutlinedTextField(
+            value = paste,
+            onValueChange = { paste = it; error = null },
+            label = { Text("Or paste an agenthq://connect link") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (paste.isNotBlank()) TextButton(onClick = { accept(paste) }) { Text("Connect with link") }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+    }
+    if (scanning) {
+        Dialog(onDismissRequest = { scanning = false }) {
+            CameraQrScanner(onCode = { scanning = false; accept(it) }, onClose = { scanning = false })
         }
     }
 }
