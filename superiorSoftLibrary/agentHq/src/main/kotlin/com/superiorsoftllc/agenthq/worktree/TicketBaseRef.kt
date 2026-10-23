@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.worktree
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 /**
  * BASE-1a: what a base ref is asked FOR -- the ticket's place on the board. [epicId] is carried now so BASE-1c
  * (a per-epic base overriding the project's) is one more layer in [TicketBaseRef.layered], not a new signature.
@@ -49,7 +51,7 @@ fun interface TicketBaseRef {
          * `AGENTHQ_BASE_BRANCH` when it is set and not blank (labelled with its name), else [orElse] (`HEAD`; the
          * daemon passes [NONE]), for every ticket.
          */
-        fun fromEnv(orElse: String = HEAD, getenv: (String) -> String? = System::getenv): TicketBaseRef =
+        fun fromEnv(orElse: String = HEAD, getenv: (String) -> String? = InfantryEnv::get): TicketBaseRef =
             layered({ getenv(ENV) }, fixed(orElse), label = { ENV })
 
         /**

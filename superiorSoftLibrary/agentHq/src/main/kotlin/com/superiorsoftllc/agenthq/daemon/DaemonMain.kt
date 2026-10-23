@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.daemon
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import com.superiorsoftllc.agenthq.attention.AttentionItem
 import com.superiorsoftllc.agenthq.attention.AttentionKind
 import com.superiorsoftllc.agenthq.attention.AttentionStore
@@ -494,14 +496,14 @@ class AgentHqDaemon(
                 com.superiorsoftllc.agenthq.provider.ProviderFactory.fromEnv(),
             runner: ProcessRunner = provider.transport()
                 ?: com.superiorsoftllc.agenthq.runner.RunnerFactory.fromFlag(),
-            repo: File? = System.getenv("AGENTHQ_REPO")?.takeIf { it.isNotBlank() }?.let { File(it) },
+            repo: File? = InfantryEnv.get("AGENTHQ_REPO")?.takeIf { it.isNotBlank() }?.let { File(it) },
              sessionStore: SessionStore = JsonSessionStore.default(),
              mailStore: MailStore = JsonMailStore.default(),
              store: AgentHqStore = SqlAgentHqStore.open(defaultDbPath()),
              /** E1-c (contract 1.62.0): IGNORED -- the story frames are shims over the ticket board. Kept so callers still compile. */
              @Suppress("UNUSED_PARAMETER") storyStore: com.superiorsoftllc.agenthq.stories.StoryStore? = null,
             /** Null (no `AGENTHQ_MAIL_BASE`) = `http://<agent-reachable host>:<the port actually chosen>` (PORT-1). */
-            mailBaseUrl: String? = System.getenv("AGENTHQ_MAIL_BASE")?.takeIf { it.isNotBlank() },
+            mailBaseUrl: String? = InfantryEnv.get("AGENTHQ_MAIL_BASE")?.takeIf { it.isNotBlank() },
             /**
              * The bearer token every route except `/health` requires. Defaults to the environment
              * (`AGENTHQ_TOKEN_FILE`, else `AGENTHQ_TOKEN`); null is loopback-only with no credential.

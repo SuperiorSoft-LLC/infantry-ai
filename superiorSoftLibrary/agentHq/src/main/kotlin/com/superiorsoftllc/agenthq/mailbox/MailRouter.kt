@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.mailbox
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import com.superiorsoftllc.agenthq.agents.AgentProfiles
 import com.superiorsoftllc.agenthq.agents.KnowledgeCounter
 import com.superiorsoftllc.agenthq.agents.SkillsSource
@@ -53,7 +55,7 @@ class MailRouter(
      * MAIL-FOOTER-1: no longer rendered (the footer prints CLI commands, not curl); kept so the
      * daemon's wiring and its callers do not change with the footer.
      */
-    private val mailBaseUrl: String = System.getenv("AGENTHQ_MAIL_BASE")?.takeIf { it.isNotBlank() }
+    private val mailBaseUrl: String = InfantryEnv.get("AGENTHQ_MAIL_BASE")?.takeIf { it.isNotBlank() }
         ?: "http://127.0.0.1:8787",
     /**
      * When true, the curl commands rendered into a delivered prompt send `Authorization: Bearer
@@ -369,7 +371,7 @@ class MailRouter(
      * shell. The reply carries the FULL message id, ready to paste; `read` takes the 8-char id.
      */
     private fun render(message: Message): String = buildString {
-        append("[agentHq mailbox] message ").append(message.id)
+        append("[Infantry AI mailbox] message ").append(message.id)
         append(" from ").append(message.from)
         append(" · thread ").append(message.threadId)
         if (message.subject.isNotBlank()) append(" · ").append(message.subject)

@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.executables
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import java.io.File
 
 /**
@@ -197,7 +199,7 @@ interface ExecutableEnvironment {
 /** The real machine. */
 object SystemExecutableEnvironment : ExecutableEnvironment {
     override val os: HostOs = HostOs.current()
-    override fun env(name: String): String? = System.getenv(name)
+    override fun env(name: String): String? = InfantryEnv.get(name)
     override fun home(): String? = System.getProperty("user.home")
     override fun exists(path: String): Boolean = File(path).exists()
     override fun isDirectory(path: String): Boolean = File(path).isDirectory

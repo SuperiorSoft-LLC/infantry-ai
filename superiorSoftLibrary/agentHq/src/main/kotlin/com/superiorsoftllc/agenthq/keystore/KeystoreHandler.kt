@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.keystore
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
@@ -30,7 +32,7 @@ class SecretState(val protection: String, val secrets: List<SecretRow>)
 class KeystoreHandler(
     private val keystore: Keystore,
     private val known: List<KnownSecret> = DEFAULT,
-    private val env: (String) -> String? = System::getenv,
+    private val env: (String) -> String? = InfantryEnv::get,
     private val push: (Envelope) -> Unit = {},
     private val json: Json = Json { ignoreUnknownKeys = false; encodeDefaults = true },
 ) {

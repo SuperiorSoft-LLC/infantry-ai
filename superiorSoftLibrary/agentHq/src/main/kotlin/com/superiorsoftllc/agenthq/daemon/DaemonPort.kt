@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.daemon
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import java.io.Closeable
 import java.io.File
 import java.net.InetSocketAddress
@@ -50,7 +52,7 @@ object DaemonPort {
         }
     }
 
-    fun strictFromEnv(env: (String) -> String? = System::getenv): Boolean =
+    fun strictFromEnv(env: (String) -> String? = InfantryEnv::get): Boolean =
         env(STRICT_ENV)?.trim()?.equals("true", ignoreCase = true) == true
 
     /**

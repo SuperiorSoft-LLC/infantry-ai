@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.provider
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 /**
  * Selects the agent provider from `AGENTHQ_PROVIDER` (default `opencode`, i.e. Phase 1 parity).
  *
@@ -27,7 +29,7 @@ object ProviderFactory {
             // BUG-M2-11b-2: opencode's persistent mode; whether it is used is `session.keepAliveMinutes`'s call (SessionHost).
             "opencode" to { OpenCodeProvider(sessionAdapter = com.superiorsoftllc.agenthq.opencode.OpenCodeServeAdapter()) },
             "claude" to { ClaudeCodeProvider(sessionAdapter = com.superiorsoftllc.agenthq.claude.ClaudeSessionAdapter()) },
-            "stub" to { StubProvider(delayMs = stubDelayMs(System.getenv(STUB_DELAY_ENV))) },
+            "stub" to { StubProvider(delayMs = stubDelayMs(InfantryEnv.get(STUB_DELAY_ENV))) },
         ),
     )
 
@@ -63,7 +65,7 @@ object ProviderFactory {
         "scripted" to "stub",
     )
 
-    fun fromEnv(): AgentProvider = fromFlag(System.getenv(ENV))
+    fun fromEnv(): AgentProvider = fromFlag(InfantryEnv.get(ENV))
 
     /** BUG-PERM-4: every name a spawn can resolve to a provider right now (built-ins, then registrations), aliases excluded. */
     internal fun ids(): List<String> = builders.keys.toList()
@@ -88,7 +90,7 @@ object ProviderFactory {
      * operator listed it here.
      */
     fun additionalFromEnv(default: AgentProvider): List<AgentProvider> =
-        additionalFromFlag(System.getenv(PROVIDERS_ENV), default)
+        additionalFromFlag(InfantryEnv.get(PROVIDERS_ENV), default)
 
     const val PROVIDERS_ENV = "AGENTHQ_PROVIDERS"
 

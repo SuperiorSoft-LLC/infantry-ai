@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.opencode
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import com.superiorsoftllc.agenthq.daemon.AgentHqMcp
 import com.superiorsoftllc.agenthq.harness.ToolApproval
 import com.superiorsoftllc.agenthq.prompts.Decision
@@ -126,7 +128,7 @@ object OpenCodePermissions {
      */
     fun runEnv(
         mode: ToolApproval,
-        existing: String? = System.getenv(CONFIG_CONTENT_ENV),
+        existing: String? = InfantryEnv.get(CONFIG_CONTENT_ENV),
         sessionEnv: Map<String, String> = emptyMap(),
     ): Map<String, String> =
         mapOf(CONFIG_CONTENT_ENV to withAgentHqMcp(mergeAllowAgentHq(if (mode == ToolApproval.ALLOW_EDITS) mergeAllowEdits(existing) else existing), sessionEnv))

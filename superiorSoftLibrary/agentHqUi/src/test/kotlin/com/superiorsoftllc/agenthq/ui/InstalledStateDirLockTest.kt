@@ -41,7 +41,7 @@ class InstalledStateDirLockTest {
         val java = File(System.getProperty("java.home"), "bin/java").absolutePath
         val builder = ProcessBuilder(java, "@${argFile.absolutePath}", "com.superiorsoftllc.agenthq.ui.AppMainKt")
         builder.environment().apply {
-            keys.filter { it.startsWith("AGENTHQ_", ignoreCase = true) }.forEach(::remove)
+            keys.filter { it.startsWith("AGENTHQ_", ignoreCase = true) || it.startsWith("INFANTRY_", ignoreCase = true) }.forEach(::remove)
             put(InstallProfile.STATE_DIR_ENV, stateDir.absolutePath)
             put(InstallProfile.PORT_ENV, port.toString())
             put("AGENTHQ_PROVIDER", "stub")
@@ -108,7 +108,7 @@ class InstalledStateDirLockTest {
                 "the holder received the refused launch's activation request: $holderSaid",
             )
             assertTrue(
-                "[agentHq-install] asked the running AgentHQ (port $firstPort) to show its window" in said,
+                "[agentHq-install] asked the running Infantry AI (port $firstPort) to show its window" in said,
                 "the refused launch says it signalled the holder: $said",
             )
             assertTrue(first.isAlive, "the first launch keeps running")

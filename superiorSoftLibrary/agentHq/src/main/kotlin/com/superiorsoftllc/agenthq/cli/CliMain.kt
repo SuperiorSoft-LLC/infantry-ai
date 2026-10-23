@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.cli
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import com.superiorsoftllc.agenthq.agents.KnowledgeLines
 import com.superiorsoftllc.agenthq.daemon.AccessConfigurationException
 import com.superiorsoftllc.agenthq.daemon.AccessPolicy
@@ -127,7 +129,7 @@ internal fun answerTimeoutMs(getenv: (String) -> String?): Long =
     getenv(ANSWER_TIMEOUT_ENV)?.trim()?.toLongOrNull()?.takeIf { it > 0 } ?: ANSWER_TIMEOUT_MS
 
 /** Error message when daemon is unreachable. */
-private const val DAEMON_UNREACHABLE_MSG = "AgentHQ daemon not running on %s:%d — start it with `agentHq daemon`"
+private const val DAEMON_UNREACHABLE_MSG = "Infantry AI daemon not running on %s:%d — start it with `infantry daemon`"
 
 /**
  * How long a command keeps waiting for its answer after an `error` frame showed up.
@@ -185,8 +187,8 @@ internal fun encodedStream(raw: java.io.OutputStream, getenv: (String) -> String
 }
 
 fun main(args: Array<String>) {
-    val out = encodedStream(java.io.FileOutputStream(java.io.FileDescriptor.out), System::getenv)
-    val err = encodedStream(java.io.FileOutputStream(java.io.FileDescriptor.err), System::getenv)
+    val out = encodedStream(java.io.FileOutputStream(java.io.FileDescriptor.out), InfantryEnv::get)
+    val err = encodedStream(java.io.FileOutputStream(java.io.FileDescriptor.err), InfantryEnv::get)
     val code = Cli.run(args, out, err, input = { System.`in`.bufferedReader(Charsets.UTF_8) })
     out.flush()
     err.flush()
@@ -194,7 +196,7 @@ fun main(args: Array<String>) {
 }
 
 /**
- * The AgentHQ CLI: the binary you type.
+ * The Infantry AI CLI: the binary you type.
  *
  * ```
  * agenthq submit "<goal>" [--project <id>]   create a pod, print the pod id
@@ -254,7 +256,7 @@ internal object Cli {
         args: Array<String>,
         out: Appendable,
         err: Appendable,
-        getenv: (String) -> String? = System::getenv,
+        getenv: (String) -> String? = InfantryEnv::get,
         input: () -> Reader = { System.`in`.bufferedReader() },
         /** Where `mcp serve` looks for its optional `.agenthq/mcp.json` (P11-C). */
         cwd: File = File(System.getProperty("user.dir") ?: "."),
@@ -570,7 +572,7 @@ internal object Cli {
     private fun askUsageError(parsed: ParsedArgs, getenv: (String) -> String?): String? {
         val shape = "agenthq ask --question \"...\" --option \"label|description\" [--option ...] [--multi] [--other] [--timeout <sec>]"
         if (callerSession(getenv) == null) {
-            return "ask needs the asking session in ${AccessPolicy.SESSION_ID_ENV} (set for every session AgentHQ spawns); " +
+            return "ask needs the asking session in ${AccessPolicy.SESSION_ID_ENV} (set for every session Infantry AI spawns); " +
                 "there is none, so there is no session to ask for"
         }
         if (parsed.args.isNotEmpty()) return "ask takes no positional arguments: $shape"
@@ -3809,7 +3811,7 @@ internal object Cli {
 
     /**
      * The installed app's state dir when the environment names one (`AGENTHQ_INSTALL_PORT` / `AGENTHQ_INSTALL_STATE_DIR`),
-     * else null: a dev shell with neither keeps the dev defaults. Default dir = `%LOCALAPPDATA%\SuperiorSoft\AgentHQ`.
+     * else null: a dev shell with neither keeps the dev defaults. Default dir = `%LOCALAPPDATA%\SuperiorSoft\Infantry AI`.
      */
     internal fun installedStateDir(getenv: (String) -> String?): File? {
         val dir = getenv("AGENTHQ_INSTALL_STATE_DIR")?.takeIf { it.isNotBlank() }
@@ -3884,9 +3886,9 @@ internal object Cli {
     /** The whole `--help`, grouped under headings (MAIL-FOOTER-1) so related commands sit together. */
     private fun usageText(): String =
         """
-            AgentHQ CLI - control the AgentHQ daemon
+            Infantry AI CLI - control the Infantry AI daemon (`infantry`; `agenthq` is an alias)
 
-            Usage: agenthq [connection options] <command> [args...]
+            Usage: infantry [connection options] <command> [args...]
 
             Tickets:
               tickets             List tickets from the daemon
@@ -4012,7 +4014,7 @@ internal object Cli {
               pods                List the sessions the daemon knows about
               runs <podId>        List a pod's runs with outcome and session id
               cancel <podId>      Cancel a pod gracefully (--force to kill the trees)
-              mcp serve           Serve AgentHQ tools (read + spawn/prompt/message/kill) as an MCP server on stdio
+              mcp serve           Serve Infantry AI tools (read + spawn/prompt/message/kill) as an MCP server on stdio
               mcp serve --max-depth <n> --max-spawns <n> [--allow-kill-any] [--mcp-depth <n>] [--lineage-dir <dir>]
                         [--project <id>]   defaults also read from ./.agenthq/mcp.json (flags win), see docs/MCP.md
                                   Write-tool guardrails (defaults 2 / 4 / own spawns only), see docs/MCP.md
