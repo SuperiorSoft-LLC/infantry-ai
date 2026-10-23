@@ -618,8 +618,13 @@ class AgentHqDaemon(
             // CLIPATH-1: every launch (harness, session adapter, model listing, git) resolves its executable through
             // this one resolver, which reads the user's Settings overrides from the store.
             val executableOverrides = com.superiorsoftllc.agenthq.executables.StoredExecutableOverrides(store)
-            val executableResolver = com.superiorsoftllc.agenthq.executables.ExecutableResolver(executableEnvironment, executableOverrides)
+            val harnessToolsDir = File(daemonConfigDir(), "harness-tools")
+            val executableResolver = com.superiorsoftllc.agenthq.executables.ExecutableResolver(executableEnvironment, executableOverrides, harnessToolsDir.path)
             val restoreExecutables = com.superiorsoftllc.agenthq.executables.CliExecutables.install(executableResolver)
+            // HARNESS-INSTALL-1: npm installs of the harness CLIs go to <AGENTHQ_HOME>/harness-tools; launches resolve them from there.
+            val harnessInstaller = com.superiorsoftllc.agenthq.harness.install.HarnessInstaller(
+                harnessToolsDir, executableResolver, executableEnvironment, executableOverrides,
+            )
             val cliLocations = com.superiorsoftllc.agenthq.executables.CliLocationService(
                 executableResolver, executableOverrides, tools = { cliTools(harnesses) },
             )
@@ -1122,6 +1127,7 @@ class AgentHqDaemon(
                             spawnGuard,
                             limits = limits,
                             cliLocations = cliLocations,
+                            harnessInstaller = harnessInstaller,
                             toolApproval = toolApproval,
                             pendingPrompts = pendingPrompts,
                             // IMG-1 (contract 1.83.0): uploads land in the project's own directory.
@@ -1640,6 +1646,8 @@ private suspend fun handleConnection(
     limits: LimitService = LimitService.NONE,
     /** CLIPATH-1 (contract 1.73.0): `cli_locations` / `cli_location_set`; null = this daemon serves neither. */
     cliLocations: com.superiorsoftllc.agenthq.executables.CliLocationService? = null,
+    /** HARNESS-INSTALL-1 (contract 1.100.0): `harness_install_status` / `harness_install`; null = this daemon serves neither. */
+    harnessInstaller: com.superiorsoftllc.agenthq.harness.install.HarnessInstaller? = null,
     /** BUG-PERM-1 (contract 1.76.0): `tool_approval` / `tool_approval_set`; null = served by neither. */
     toolApproval: com.superiorsoftllc.agenthq.session.ToolApprovalService? = null,
     /** PROMPT-1 (contract 1.77.0): open prompts replayed on connect, answered by `prompt_response`; null = none. */
@@ -2326,6 +2334,36 @@ private suspend fun handleConnection(
                 }
                 Envelope.TICKET_DELETE -> boardRequest(envelope.type) { board.delete(envelope.data).reply(direct) }
                 Envelope.TICKET_START_NEXT -> boardRequest(envelope.type) { board.startNext().reply(direct) }
+
+                // HARNESS-INSTALL-1 (1.100.0): detect / install the harness CLIs. Both run npm or `--version` children, so they are
+                // answered off the request loop, and only to the client that asked.
+                Envelope.HARNESS_INSTALL_STATUS, Envelope.HARNESS_INSTALL -> {
+                    session.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        outgoing.trySend(
+                            try {
+                                val service = harnessInstaller ?: throw IllegalArgumentException("this daemon has no harness installer")
+                                if (envelope.type == Envelope.HARNESS_INSTALL_STATUS) {
+                                    val request = com.superiorsoftllc.agenthq.protocol.HarnessInstallStatusRequest.decode(envelope.data)
+                                    Envelope(
+                                        Envelope.HARNESS_INSTALL_STATUS,
+                                        json.encodeToString(com.superiorsoftllc.agenthq.protocol.HarnessInstallReport.serializer(), service.status(request.checkLatest)),
+                                    )
+                                } else {
+                                    val request = com.superiorsoftllc.agenthq.protocol.HarnessInstallRequest.decode(envelope.data)
+                                    Envelope(
+                                        Envelope.HARNESS_INSTALL_RESULT,
+                                        json.encodeToString(com.superiorsoftllc.agenthq.protocol.HarnessInstallResult.serializer(), service.install(request.ids, request.update)),
+                                    )
+                                }
+                            } catch (e: IllegalArgumentException) {
+                                Envelope(Envelope.ERROR, "${envelope.type} refused: ${e.message ?: "invalid request"}")
+                            } catch (e: Exception) {
+                                Envelope(Envelope.ERROR, "${envelope.type} failed: ${e.message ?: e::class.simpleName}")
+                            },
+                        )
+                    }
+                    null
+                }
 
                 // CLIPATH-1 (1.73.0): where each CLI is launched from, and the user's override of it.
                 Envelope.CLI_LOCATION_SET -> try {

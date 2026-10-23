@@ -51,7 +51,7 @@ class ApprovalRulesWireTest {
 
     @Test
     fun theContractIs1_78_0() {
-        assertEquals("1.99.0", EventVocabulary.VERSION)
+        assertEquals("1.100.0", EventVocabulary.VERSION)
     }
 
     @Test
