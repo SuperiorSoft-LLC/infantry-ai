@@ -891,13 +891,15 @@ data class SessionRecord(
     val backgroundWork: BackgroundWorkView? = null,
     /** Jobs the agent registered through `agenthq bg run`; the wire state reads BUSY while any is present. */
     val bgJobs: List<BgJobView> = emptyList(),
+    /** Contract 1.112.0: a turn is in flight (state BUSY alone may be background work only); null from an older daemon. */
+    val turnActive: Boolean? = null,
     /** PIPELINE-WATCHDOG: what the daemon derived about this agent's pending work; null from an older daemon. */
     val watch: AgentWatchView? = null,
 ) {
     val resumable: Boolean
         get() = providerSessionId != null &&
             state != SessionState.STARTING &&
-            state != SessionState.BUSY &&
+            (turnActive?.not() ?: (state != SessionState.BUSY)) &&
             state != SessionState.WAITING_INPUT
 }
 

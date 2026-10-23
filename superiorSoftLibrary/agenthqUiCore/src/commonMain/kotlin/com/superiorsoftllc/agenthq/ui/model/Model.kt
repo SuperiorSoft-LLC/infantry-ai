@@ -1036,7 +1036,7 @@ fun activityTimestamp(at: Long, timeZone: TimeZone = TimeZone.currentSystemDefau
 fun promptBlocker(agent: AgentView): String? {
     val s = agent.session
     return when {
-        s.state in IN_FLIGHT -> "the agent is still answering; send your next message when this turn has finished (or kill it)"
+        turnInFlight(s) -> "the agent is still answering; send your next message when this turn has finished (or kill it)"
         // CMD-HARNESS-1: a bound-but-never-run session (what a harness switch cuts) takes its first turn, as the
         // daemon's `neverRun` rule does; only a session that ran without reporting an id has nothing to continue.
         s.providerSessionId == null && !(s.runCount == 0 && s.state == SessionState.IDLE) -> "nothing to continue: the provider never reported a session id for this agent; start a new one"
@@ -1067,7 +1067,14 @@ fun bgJobsText(session: SessionRecord): String? =
     session.bgJobs.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "running: ") { it.label }
 
 /** The agent has a run in flight: a message composed now must wait for it, and Interrupt can stop it. */
-fun isBusy(agent: AgentView): Boolean = isRunning(agent.session.state) && agent.session.backgroundWork == null && agent.session.bgJobs.isEmpty()
+fun isBusy(agent: AgentView): Boolean = turnInFlight(agent.session)
+
+/**
+ * A TURN is in flight (not just background work, which also reads state BUSY on the wire). Contract 1.112.0
+ * `turnActive` says so; an older daemon omits it and background work then counts as not busy.
+ */
+fun turnInFlight(s: SessionRecord): Boolean =
+    s.turnActive ?: (s.state in IN_FLIGHT && s.backgroundWork == null && s.bgJobs.isEmpty())
 
 /** Why Interrupt cannot be used on [agent] right now, or null when it can. Mirrors "a run is in flight". */
 fun interruptBlocker(agent: AgentView): String? =

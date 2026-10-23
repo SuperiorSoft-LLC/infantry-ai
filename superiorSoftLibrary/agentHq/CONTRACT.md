@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.111.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.112.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -2775,3 +2775,9 @@ The board used to run ONE agent per role; a second ticket of the same role queue
 - `project_config` request `{"projectId", "laneCaps"?}`: absent or empty `laneCaps` is a read; otherwise the entries are merged (a cap of 1 is the default and removes the entry; below 1 is refused as `project_config refused: ...`). Answered by the whole `project` frame, which is also PUSHED to every connected client when a cap changed.
 - Ticket start/queue: a `role:<role>` ticket takes an idle agent of the role; if all are busy and fewer than the cap are running, the daemon adds another agent of the role (a copy of the first, named `<name> 2`, `<name> 3`, ... with its own agent id; each ticket already gets its own worktree). `queued` is answered only at the cap. Lowering a cap never stops a running agent; queued tickets drain as runs end, and a clone left idle above the cap is removed when a run of its role ends (the role's first agent never is). A clone keeps the template's persona, provider and model, and an idle agent is always reused before a new clone is made.
 - CLI: `agenthq project config get <projectId>` / `project config set <projectId> <role> <n>`. MCP: `agenthq_project_config_get`, `agenthq_project_config_set` (`projectId`, `role`, `cap`).
+
+## 1.112.0 -- `turnActive` on the session record (additive)
+
+A session with no turn in flight but live background processes (`backgroundWork`, `bgJobs`) reads `state: BUSY` on the wire, for display. A client could not tell that from a turn generating, and refused the owner's message.
+
+- `SessionRecord.turnActive` (boolean): true only while a turn is in flight (`STARTING`, `BUSY`, `WAITING_INPUT`), computed before the display rewrite. `state: BUSY` with `turnActive: false` is "idle, background running": input is accepted at once. While `turnActive` is true a client queues the owner's message (`queue`), it is never refused. An older daemon omits the key; a client then falls back to treating background work as not busy.
