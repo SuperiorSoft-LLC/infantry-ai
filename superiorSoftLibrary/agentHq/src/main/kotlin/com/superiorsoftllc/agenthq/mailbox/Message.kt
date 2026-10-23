@@ -157,6 +157,8 @@ data class ThreadSummary(
     val kind: ThreadKind,
     /** Known participants: the pair's session ids for an agent-pair thread, else the senders/recipients. */
     val participants: List<String>,
+    /** The conversation this thread belongs to: a rolled-over pair thread shares its group (`pair:<a>|<b>`) with its predecessors. */
+    val group: String = id,
     val messageCount: Int,
     val lastAt: Long,
     /** True once the conversation ceiling was hit; further sends are refused visibly. */
@@ -268,6 +270,15 @@ object Threads {
         return "pair:$x|$y"
     }
 
+    private val rollSuffix = Regex(""":\d+$""")
+
+    /** Roll [n] of a pair thread: roll 1 is [base] itself, later rolls append `:<n>`. */
+    fun rolled(base: String, n: Int): String = if (n <= 1) base else "$base:$n"
+
+    /** The pair thread a rolled-over id belongs to; any other id is its own group. */
+    fun groupOf(threadId: String): String =
+        if (threadId.startsWith("pair:")) threadId.replace(rollSuffix, "") else threadId
+
     fun run(id: String): String = "run:$id"
 
     fun pod(id: String): String = "pod:$id"
@@ -284,7 +295,7 @@ object Threads {
 
     /** The two session ids of an agent-pair thread, or empty for any other kind. */
     fun pairMembers(threadId: String): List<String> =
-        if (threadId.startsWith("pair:")) threadId.removePrefix("pair:").split('|') else emptyList()
+        if (threadId.startsWith("pair:")) groupOf(threadId).removePrefix("pair:").split('|') else emptyList()
 
     /**
      * Normalise a caller-supplied thread id: a bare name becomes a `t:` (custom) thread, a qualified

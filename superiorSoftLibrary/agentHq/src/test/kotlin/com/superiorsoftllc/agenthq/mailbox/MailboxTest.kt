@@ -239,14 +239,26 @@ class MailboxTest {
     }
 
     @Test
+    fun new_message_on_a_full_pair_rolls_over_and_system_notices_never_hit_the_ceiling() {
+        val (mb, _) = mailbox(limits = MailLimits(maxPerThread = 3, perSenderPerWindow = 1000))
+        repeat(7) { assertTrue(mb.send(MailSendRequest(from = "system", to = "PM", body = "n$it")) is MailResult.Sent) }
+        val ids = mb.threads().map { it.id }.toSet()
+        assertEquals(setOf("pair:PM|system", "pair:PM|system:2", "pair:PM|system:3"), ids)
+        assertEquals(setOf("pair:PM|system"), mb.threads().map { it.group }.toSet())
+        assertEquals(listOf("PM", "system"), mb.threads().first().participants)
+    }
+
+    @Test
     fun thread_ceiling_refuses_and_tells_the_human_to_step_in() {
         val (mb, events) = mailbox(limits = MailLimits(maxPerThread = 2))
         assertTrue(mb.send(MailSendRequest(from = "A", to = "B", body = "1")) is MailResult.Sent)
         assertTrue(mb.send(MailSendRequest(from = "B", to = "A", body = "2")) is MailResult.Sent)
 
-        val third = mb.send(MailSendRequest(from = "A", to = "B", body = "3"))
+        val last = mb.thread(Threads.pair("A", "B")).last()
+        val third = mb.send(MailSendRequest(from = "A", to = "B", body = "3", replyTo = last.id))
         assertTrue(third is MailResult.Refused)
-        assertTrue((third as MailResult.Refused).reason.contains("conversation ceiling"))
+        assertTrue((third as MailResult.Refused).reason.contains("without replyTo"))
+        assertTrue(third.reason.contains("conversation ceiling"))
         assertTrue(events.any { it is MailEvent.CeilingReached })
         assertTrue(mb.threads().single().ceilingReached)
         // Still only two messages: the ceiling is real, not a silent truncation of the third.
