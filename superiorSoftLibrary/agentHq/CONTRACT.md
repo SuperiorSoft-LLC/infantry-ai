@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.107.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.109.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -2754,3 +2754,7 @@ The ticket's rule is that any protocol change found while building Phase 7 is a 
 - **Found:** Phase 7, when the token gate was added. `/health` stays open so a client can find a daemon and read its contract without a credential.
 - **Disclosure:** to any host that can reach the port, it reports the provider and runner ids and the counts `sessions`, `worktrees`, `pods` and `runsInFlight`. It discloses no paths, session ids, prompts or output.
 - **Decision:** accepted. The counts are not secrets, and the route refuses `Origin` like every other. A daemon whose port should not reveal even that is bound to loopback and reached through a tunnel (section 7.3).
+
+## 1.109.0 -- pair threads roll over (additive)
+
+A new (non-reply) message on a full implicit pair thread lands in `pair:<a>|<b>:<n>` (n >= 2) instead of being refused; replies and explicit thread ids still hit the 60-message ceiling. `ThreadSummary` gains `group` (the `pair:<a>|<b>` id shared by all rolls; defaults to `id`).

@@ -156,14 +156,22 @@ class Mailbox(
         }
         val replyTo = original?.id
         val recipient = original?.from ?: to
-        val threadId = original?.threadId ?: Threads.normalize(request.threadId) ?: Threads.pair(from, recipient)
+        val explicitThread = original?.threadId ?: Threads.normalize(request.threadId)
+        // A NEW message on the implicit pair thread rolls over to pair:<a>|<b>:<n> once the current one is
+        // full; a reply or an explicit thread id never does, so the loop guard below still holds.
+        val threadId = explicitThread ?: openPairThread(Threads.pair(from, recipient))
         val subject = request.subject.ifBlank { original?.let { "Re: ${it.subject}" } ?: "" }
 
         // Boundary 1 -- the per-conversation ceiling. Refuse visibly and tell the humans.
         val inThread = messages.values.count { it.threadId == threadId }
         if (inThread >= limits.maxPerThread) {
             val reason = "conversation ceiling reached: thread '$threadId' has $inThread messages " +
-                "(limit ${limits.maxPerThread}); stop and report to the human"
+                "(limit ${limits.maxPerThread}); stop and report to the human" +
+                if (original != null) {
+                    ". To continue, send a new message without replyTo (it starts a fresh thread)"
+                } else {
+                    ""
+                }
             events += MailEvent.CeilingReached(threadId, limits.maxPerThread)
             events += MailEvent.Refused(from, recipient, reason)
             return MailResult.Refused(reason) to events
@@ -372,6 +380,16 @@ class Mailbox(
 
     // --- internals ------------------------------------------------------------------------------
 
+    /** The newest rollover of [base] that still has room (the base thread itself is roll 1). */
+    private fun openPairThread(base: String): String {
+        var n = 1
+        while (true) {
+            val id = Threads.rolled(base, n)
+            if (messages.values.count { it.threadId == id } < limits.maxPerThread) return id
+            n++
+        }
+    }
+
     private fun summariesLocked(): List<ThreadSummary> {
         val byThread = messages.values.groupBy { it.threadId }
         return byThread.map { (id, msgs) ->
@@ -383,6 +401,7 @@ class Mailbox(
                 id = id,
                 kind = Threads.kindOf(id),
                 participants = participants,
+                group = Threads.groupOf(id),
                 messageCount = msgs.size,
                 lastAt = msgs.maxOf { it.sentAt },
                 ceilingReached = msgs.size >= limits.maxPerThread,
