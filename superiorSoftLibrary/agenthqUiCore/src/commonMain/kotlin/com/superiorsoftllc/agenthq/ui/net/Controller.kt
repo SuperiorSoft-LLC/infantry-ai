@@ -184,13 +184,15 @@ class Controller(
                             client.send(WireRequests.cliLocations())
                         }
                         // HARNESS-INSTALL-1: the daemon's own check of each harness CLI (1.100.0).
-                        if (contractAtLeast(contract, 1, 100)) {
+                        if (contractAtLeast(contract, 1, 102)) {
                             client.send(WireRequests.harnessInstallStatus())
                         }
                         // BUG-PERM-1: the global Tool approval, shown in the Configuration modal (1.76.0).
                         if (contractAtLeast(contract, ToolApprovalSetting.SINCE_MAJOR, ToolApprovalSetting.SINCE_MINOR)) {
                             client.send(WireRequests.toolApproval())
                         }
+                        // SECRETS-1: the keystore's set / not set state, shown in the Configuration modal (1.100.0).
+                        if (contractAtLeast(contract, 1, 102)) client.send(WireRequests.secretStatus())
                     }
                     // The sidebar shows the active project's workspaces, including the one chosen by default.
                     Envelope.PROJECTS -> _state.value.activeProjectId?.let { client.send(WireRequests.workspaceList(it)) }
@@ -395,16 +397,16 @@ class Controller(
      * client never inspects its own disk: the same call works from the desktop, Android and the browser.
      */
     suspend fun checkHarnesses(checkLatest: Boolean = false): CommandResult {
-        if (!contractAtLeast(_state.value.connection.contract, 1, 100)) {
-            return report(CommandResult.Refused("this daemon has no harness installer (needs contract 1.100.0)"))
+        if (!contractAtLeast(_state.value.connection.contract, 1, 102)) {
+            return report(CommandResult.Refused("this daemon has no harness installer (needs contract 1.102.0)"))
         }
         return report(send(WireRequests.harnessInstallStatus(checkLatest)))
     }
 
     /** HARNESS-INSTALL-1: ask the DAEMON to install ([update] = refresh outdated too) [ids] (empty = every missing one) on its own machine. */
     suspend fun installHarnesses(ids: List<String>, update: Boolean): CommandResult {
-        if (!contractAtLeast(_state.value.connection.contract, 1, 100)) {
-            return report(CommandResult.Refused("this daemon has no harness installer (needs contract 1.100.0)"))
+        if (!contractAtLeast(_state.value.connection.contract, 1, 102)) {
+            return report(CommandResult.Refused("this daemon has no harness installer (needs contract 1.102.0)"))
         }
         _state.value = _state.value.copy(harnessInstallBusy = true, harnessInstallLog = emptyList())
         return report(send(WireRequests.harnessInstall(ids, update))).also {
@@ -422,7 +424,7 @@ class Controller(
         }
         val result = report(send(WireRequests.cliLocationSet(id, path?.trim()?.takeIf { it.isNotEmpty() })))
         // The path decides default-managed vs user-managed, so the daemon re-checks the harness CLIs against it.
-        if (result is CommandResult.Sent && contractAtLeast(_state.value.connection.contract, 1, 100)) send(WireRequests.harnessInstallStatus())
+        if (result is CommandResult.Sent && contractAtLeast(_state.value.connection.contract, 1, 102)) send(WireRequests.harnessInstallStatus())
         return result
     }
 
@@ -463,6 +465,21 @@ class Controller(
             return report(CommandResult.Refused("this daemon has no Tool approval setting (needs contract 1.76.0)"))
         }
         return report(send(WireRequests.toolApprovalSet(mode)))
+    }
+
+    /** SECRETS-1: store [value] under [name] in the daemon's keystore (add or replace). The value is never kept here. */
+    suspend fun setSecret(name: String, value: String): CommandResult = secretFrame(WireRequests.secretSet(name, value))
+
+    suspend fun clearSecret(name: String): CommandResult = secretFrame(WireRequests.secretClear(name))
+
+    /** SECRETS-1: copy the older environment variable of [name] into the keystore (daemon side; no file is deleted). */
+    suspend fun importSecret(name: String): CommandResult = secretFrame(WireRequests.secretImport(name))
+
+    private suspend fun secretFrame(frame: Envelope): CommandResult {
+        if (!contractAtLeast(_state.value.connection.contract, 1, 102)) {
+            return report(CommandResult.Refused("this daemon has no keystore (needs contract 1.102.0)"))
+        }
+        return report(send(frame))
     }
 
     /** PICKER 2/2: the next spawn runs on [picked] (null = the daemon's defaults). No frame: `spawn` carries it in `new`. */

@@ -339,7 +339,9 @@ object EventVocabulary {
     // -> `harness_install_result` (`HarnessInstallResult`: outcomes + npm log + the report after). npm into the app prefix.
     // **1.101.0 (ISO-1) is ADDITIVE**: `mail_send` takes optional `allowCrossProject`; without it a session sender mailing a
     // session/agent of ANOTHER project is `mail_refused` naming both projects. Roles still resolve in the sender's project only.
-    const val VERSION = "1.101.0"
+    // **1.102.0 (SECRETS-1) is ADDITIVE**: the daemon-owned keystore. `secret_set` / `secret_clear` / `secret_import` / `secret_status`
+    // -> `secret_state` (set / not set and a masked tail; never a value). See CONTRACT.md.
+    const val VERSION = "1.102.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA

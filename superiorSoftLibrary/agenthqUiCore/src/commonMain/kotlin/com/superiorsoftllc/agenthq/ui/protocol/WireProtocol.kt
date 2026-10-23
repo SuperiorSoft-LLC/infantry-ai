@@ -141,7 +141,7 @@ data class Envelope(
         const val CLI_LOCATIONS = "cli_locations"
         const val CLI_LOCATION_SET = "cli_location_set"
 
-        // Contract 1.100.0 (HARNESS-INSTALL-1): the daemon detects / npm-installs the harness CLIs on ITS machine.
+        // Contract 1.102.0 (HARNESS-INSTALL-1): the daemon detects / npm-installs the harness CLIs on ITS machine.
         const val HARNESS_INSTALL_STATUS = "harness_install_status"
         const val HARNESS_INSTALL = "harness_install"
         const val HARNESS_INSTALL_RESULT = "harness_install_result"
@@ -150,6 +150,13 @@ data class Envelope(
         // `tool_approval_set` ({mode}; null clears) are both answered by `tool_approval` ([ToolApprovalInfo]).
         const val TOOL_APPROVAL = "tool_approval"
         const val TOOL_APPROVAL_SET = "tool_approval_set"
+        // Contract 1.102.0 (SECRETS-1): the daemon-owned keystore. `secret_set` ({name, value}), `secret_clear` ({name}),
+        // `secret_import` ({name}) and `secret_status` are answered by `secret_state` ([SecretState]); no value ever comes back.
+        const val SECRET_SET = "secret_set"
+        const val SECRET_CLEAR = "secret_clear"
+        const val SECRET_IMPORT = "secret_import"
+        const val SECRET_STATUS = "secret_status"
+        const val SECRET_STATE = "secret_state"
 
         // Contract 1.77.0 (PROMPT-1): a harness asks the owner mid-run. `prompt_request` (daemon -> every client,
         // [PromptRequestView], envelope sessionId = the asking session) opens a card; `prompt_response` (client ->
@@ -756,6 +763,21 @@ data class CliLocation(
 /** The `cli_locations` frame's data. */
 @Serializable
 data class CliLocations(val tools: List<CliLocation> = emptyList())
+
+/** Contract 1.102.0 (SECRETS-1): one keystore row. [tail] is a masked tail, never the value. */
+@Serializable
+data class SecretRow(
+    val name: String,
+    val label: String,
+    val set: Boolean = false,
+    val tail: String = "",
+    val importable: Boolean = false,
+    val overriddenByEnv: Boolean = false,
+)
+
+/** Contract 1.102.0 (SECRETS-1): the `secret_state` frame. */
+@Serializable
+data class SecretState(val protection: String = "", val secrets: List<SecretRow> = emptyList())
 
 /**
  * Contract 1.76.0 (BUG-PERM-1): the `tool_approval` frame. [mode] is the stored global value (null = none); [effective]
@@ -1739,11 +1761,11 @@ object WireRequests {
         JsonObject(mapOf("id" to JsonPrimitive(id), "path" to (path?.let(::JsonPrimitive) ?: kotlinx.serialization.json.JsonNull))).toString(),
     )
 
-    /** HARNESS-INSTALL-1 (1.100.0): a real server-side check of every harness CLI; [checkLatest] also asks npm for the newest version. */
+    /** HARNESS-INSTALL-1 (1.102.0): a real server-side check of every harness CLI; [checkLatest] also asks npm for the newest version. */
     fun harnessInstallStatus(checkLatest: Boolean = false): Envelope =
         Envelope(Envelope.HARNESS_INSTALL_STATUS, JsonObject(mapOf("checkLatest" to JsonPrimitive(checkLatest))).toString())
 
-    /** HARNESS-INSTALL-1 (1.100.0): install (or, with [update], refresh) [ids] on the daemon machine; empty = all missing. */
+    /** HARNESS-INSTALL-1 (1.102.0): install (or, with [update], refresh) [ids] on the daemon machine; empty = all missing. */
     fun harnessInstall(ids: List<String>, update: Boolean): Envelope = Envelope(
         Envelope.HARNESS_INSTALL,
         JsonObject(mapOf("ids" to kotlinx.serialization.json.JsonArray(ids.map(::JsonPrimitive)), "update" to JsonPrimitive(update))).toString(),
@@ -1763,6 +1785,19 @@ object WireRequests {
 
     /** BUG-PERM-1 (1.76.0): ask for the global Tool approval; the daemon answers `tool_approval`. */
     fun toolApproval(): Envelope = Envelope(Envelope.TOOL_APPROVAL)
+
+    /** Contract 1.102.0 (SECRETS-1): ask for the keystore's set / not set state. */
+    fun secretStatus(): Envelope = Envelope(Envelope.SECRET_STATUS, "{}")
+
+    /** Contract 1.102.0: store [value] as secret [name]. The value goes out once and is never read back. */
+    fun secretSet(name: String, value: String): Envelope = Envelope(
+        Envelope.SECRET_SET,
+        JsonObject(mapOf("name" to JsonPrimitive(name), "value" to JsonPrimitive(value))).toString(),
+    )
+
+    fun secretClear(name: String): Envelope = Envelope(Envelope.SECRET_CLEAR, JsonObject(mapOf("name" to JsonPrimitive(name))).toString())
+
+    fun secretImport(name: String): Envelope = Envelope(Envelope.SECRET_IMPORT, JsonObject(mapOf("name" to JsonPrimitive(name))).toString())
 
     /** BUG-PERM-1 (1.76.0): set the global Tool approval to [mode] (`deny` / `allowEdits` / `allowAll`). */
     fun toolApprovalSet(mode: String): Envelope = Envelope(
@@ -1984,7 +2019,7 @@ data class PromptResolvedView(val promptId: String, val resolvedBy: String = "",
 /** Encodes outgoing frames: defaults kept out, so an unanswered field is absent rather than null. */
 internal val wireJson = Json { encodeDefaults = false; explicitNulls = false }
 
-/** Contract 1.100.0 (HARNESS-INSTALL-1): one harness CLI's check. [state]: installed | missing | outdated | unknown | user-managed. */
+/** Contract 1.102.0 (HARNESS-INSTALL-1): one harness CLI's check. [state]: installed | missing | outdated | unknown | user-managed. */
 @Serializable
 data class HarnessInstallStatus(
     val id: String,

@@ -656,6 +656,8 @@ data class AppState(
     val harnessInstallLog: List<String> = emptyList(),
     /** BUG-PERM-1 (1.76.0): the global Tool approval, as the daemon's last `tool_approval` said. Null = not read yet. */
     val toolApproval: com.superiorsoftllc.agenthq.ui.protocol.ToolApprovalInfo? = null,
+    /** SECRETS-1 (1.100.0): the daemon keystore's last `secret_state` (set / not set and masked tails only). Null = not read yet. */
+    val secrets: com.superiorsoftllc.agenthq.ui.protocol.SecretState? = null,
     /**
      * PROMPT-2 (1.77.0): every prompt the daemon says is open, in arrival order. A `prompt_resolved` removes one,
      * whoever answered it; `ready` clears them all, because the daemon resends every still-open prompt after it.
@@ -1657,6 +1659,9 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     } ?: s
 
     // BUG-PERM-1 (1.76.0): replaced by each answer (a get, or this window's set).
+    Envelope.SECRET_STATE -> runCatching {
+        json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.SecretState.serializer(), env.data)
+    }.getOrNull()?.let { s.copy(secrets = it) } ?: s
     Envelope.TOOL_APPROVAL -> runCatching {
         json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.ToolApprovalInfo.serializer(), env.data)
     }.getOrNull()?.let { s.copy(toolApproval = it) } ?: s

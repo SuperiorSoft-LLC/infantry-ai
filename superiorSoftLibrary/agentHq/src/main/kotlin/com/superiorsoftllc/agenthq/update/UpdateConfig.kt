@@ -66,8 +66,8 @@ sealed interface UpdateSettings {
          * - [installed] false (a dev build) is ALWAYS disabled: a dev build never updates itself.
          * - The repo comes from [setting] (`AGENTHQ_UPDATE_REPO`), else `repo=` in [stateDir]`/update.properties` (the
          *   installed profile's own settings file, outside any tracked tree). A `token` key in that file is ignored:
-         *   the token lives in the environment or the OS credential store, never in a file.
-         * - The token: `AGENTHQ_UPDATE_TOKEN` from [env], else [credentialStore] (the OS credential store), read lazily
+         *   the token lives in the keystore, the environment or the OS credential store, never in a file.
+         * - The token: `AGENTHQ_UPDATE_TOKEN` from [env] (an override), else the daemon's [keystore] (`update-token`), else [credentialStore] (the OS credential store), read lazily
          *   on the first request, and only when the API is GitHub's own ([UpdateConfig.DEFAULT_API]).
          */
         fun resolve(
@@ -76,6 +76,7 @@ sealed interface UpdateSettings {
             stateDir: File?,
             setting: (String) -> String?,
             env: (String) -> String? = System::getenv,
+            keystore: () -> String? = { null },
             credentialStore: () -> String? = { GitCredentialStore.githubToken() },
         ): UpdateSettings {
             if (!installed) return Disabled("this is a dev build; dev builds never update themselves")
@@ -107,7 +108,7 @@ sealed interface UpdateSettings {
             // The OS credential store holds the owner's own GitHub login: only ever offer it to GitHub itself, never to an
             // API override (a fake server, a mirror). An explicit AGENTHQ_UPDATE_TOKEN goes wherever the owner points it.
             val stored: () -> String? = if (api == UpdateConfig.DEFAULT_API) credentialStore else { { null } }
-            return Enabled(UpdateConfig(repo, current, api) { env(TOKEN_ENV)?.takeIf { it.isNotBlank() } ?: stored() })
+            return Enabled(UpdateConfig(repo, current, api) { env(TOKEN_ENV)?.takeIf { it.isNotBlank() } ?: runCatching(keystore).getOrNull()?.takeIf { it.isNotBlank() } ?: stored() })
         }
     }
 }

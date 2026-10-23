@@ -555,6 +555,15 @@ data class Envelope(
         const val PIPELINE_RECORD = "pipeline_record"
         const val PIPELINE_CHECK = "pipeline_check"
         const val PIPELINE_STATE = "pipeline_state"
+        // SECRETS-1 (contract 1.100.0): the daemon-owned keystore. `secret_set` ({name, value}), `secret_clear` ({name}), `secret_import` ({name}:
+        // copy the older environment variable into the keystore) and `secret_status` ({}) are each answered by one `secret_state`
+        // ({protection, secrets:[{name, label, set, tail, importable, overriddenByEnv}]}), pushed to every client after a change.
+        // No frame ever carries a stored value back; a refusal never echoes the frame's data.
+        const val SECRET_SET = "secret_set"
+        const val SECRET_CLEAR = "secret_clear"
+        const val SECRET_IMPORT = "secret_import"
+        const val SECRET_STATUS = "secret_status"
+        const val SECRET_STATE = "secret_state"
         // P10-K6 (contract 1.54.0): the project's append-only issues log. `issue_open`
         // ({projectId, sessionId?, summary, location, ticketId?}), `issue_attempt` ({projectId, sessionId?, summary,
         // outcome?, location?, issue?}) and `issue_fix` ({projectId, sessionId?, summary, issue?}) are answered by an

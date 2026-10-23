@@ -627,6 +627,12 @@ fun App(
                 onBrowse = pickFile,
                 logs = logs,
                 updates = updates,
+                secrets = state.secrets,
+                secretActions = SecretActions(
+                    set = { n, v -> actionScope.launch { controller.setSecret(n, v) } },
+                    clear = { n -> actionScope.launch { controller.clearSecret(n) } },
+                    import = { n -> actionScope.launch { controller.importSecret(n) } },
+                ),
             )
         }
         if (showConnect) {

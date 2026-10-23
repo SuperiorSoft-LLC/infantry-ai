@@ -108,6 +108,8 @@ import com.superiorsoftllc.agenthq.stats.SessionStats
 import com.superiorsoftllc.agenthq.stats.SessionStatsRequest
 import com.superiorsoftllc.agenthq.stats.SessionStatsService
 import com.superiorsoftllc.agenthq.session.KillOutcome
+import com.superiorsoftllc.agenthq.keystore.Keystore
+import com.superiorsoftllc.agenthq.keystore.KeystoreHandler
 import com.superiorsoftllc.agenthq.session.stateDir
 import com.superiorsoftllc.agenthq.session.agentHqSetting
 import com.superiorsoftllc.agenthq.session.toWorktreeRef
@@ -788,6 +790,11 @@ class AgentHqDaemon(
                 author = { sessionId -> manager.get(sessionId)?.let { "${it.role ?: "agent"} (${it.agentId})" } },
                 push = { envelope -> for (client in clients) client.trySend(envelope) },
             )
+            // SECRETS-1: the daemon-owned keystore, in the state dir.
+            val keystoreFrames = KeystoreHandler(
+                keystore = Keystore(stateDir()),
+                push = { envelope -> for (client in clients) client.trySend(envelope) },
+            )
             // P10-K6: the issues log, over the same file. The declared session is the author AND the scope of the active
             // issue an attempt or a fix without an issue ref goes to.
             val issues = IssueStore(store as SqlAgentHqStore)
@@ -1105,6 +1112,7 @@ class AgentHqDaemon(
                             ),
                             decisionFrames,
                             pipelineFrames,
+                            keystoreFrames,
                             issueFrames,
                             stories,
                             storyBoard,
@@ -1620,6 +1628,7 @@ private suspend fun handleConnection(
     memoryFrames: MemoryHandler,
     decisionFrames: DecisionHandler,
     pipelineFrames: PipelineHandler,
+    keystoreFrames: KeystoreHandler,
     issueFrames: IssueHandler,
     stories: StoryHandler,
     storyBoard: BoardHandler,
@@ -2866,6 +2875,10 @@ private suspend fun handleConnection(
                 // PIPE-1 (additive; contract version not bumped): the optional project pipeline.
                 Envelope.PIPELINE_CONFIG, Envelope.PIPELINE_SHOW, Envelope.PIPELINE_RECORD,
                 Envelope.PIPELINE_CHECK -> pipelineFrames.answer(envelope)
+
+                // SECRETS-1 (contract 1.100.0): the keystore. Answered by `secret_state`; a value never travels back.
+                Envelope.SECRET_SET, Envelope.SECRET_CLEAR, Envelope.SECRET_IMPORT,
+                Envelope.SECRET_STATUS -> keystoreFrames.answer(envelope)
 
                 // P10-K6 (contract 1.54.0): the issues log. An open / attempt / fix is pushed to every client (no direct reply).
                 Envelope.ISSUE_OPEN, Envelope.ISSUE_ATTEMPT, Envelope.ISSUE_FIX,

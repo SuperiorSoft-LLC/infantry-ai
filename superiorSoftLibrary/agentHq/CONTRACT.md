@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.100.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.102.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -155,6 +155,23 @@ ADDITIVE; a 1.100.0 client keeps working. The `ready` frame reports `contract=1.
 - A role-name recipient resolves among the sessions of the SENDER's project only. None, or more than one, is an error
   (`no <role> agent in this project` / `multiple <role> agents in this project: ...`); it never falls back to another
   project, and `allowCrossProject` does not widen it (address the other project's agent by id).
+
+### What changed in 1.102.0 (SECRETS-1) — the daemon-owned keystore
+
+ADDITIVE; a 1.101.0 client keeps working (it never sends the new frames). The `ready` frame reports `contract=1.102.0`.
+
+- The daemon keeps secrets (the update token first) AES-256-GCM sealed in `<stateDir>/keystore.json`. The master key is
+  protected, in order, by: a mounted/env key (`AGENTHQ_KEYSTORE_KEY` or `AGENTHQ_KEYSTORE_KEY_FILE`, for headless, remote and
+  Docker daemons); the OS facility (Windows DPAPI, macOS Keychain, Linux Secret Service); else `<stateDir>/keystore.key`
+  with owner-only permissions (the documented fallback: encrypted, but only as safe as the state dir). Never plaintext.
+- `secret_set` `{name, value}`, `secret_clear` `{name}`, `secret_import` `{name}` (copy the older environment variable,
+  e.g. `AGENTHQ_UPDATE_TOKEN`, into the keystore; no file is ever deleted) and `secret_status` `{}` are each answered by one
+  `secret_state` `{protection: external-key|os|key-file, secrets:[{name, label, set, tail, importable, overriddenByEnv}]}`,
+  and a change is pushed to every client. `tail` is `••••` plus the last 4 characters of a value of 16+ characters, else `••••`.
+- **No frame ever returns a stored value**, and a refusal (`secret_set refused: ...`) never echoes the frame's data. The value
+  is not written to logs, transcripts, mail or crash reports.
+- Known names: `update-token` (env `AGENTHQ_UPDATE_TOKEN` still overrides it). Other names are refused.
+- Not covered: the Android release signing keystore (owner-held, CI secrets).
 
 ### What changed in 1.99.0 (PIPE-2) — the pipeline is pushed to clients and drawn in the Git tab
 

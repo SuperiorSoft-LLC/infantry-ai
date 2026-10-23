@@ -31,6 +31,8 @@ import com.superiorsoftllc.agenthq.ui.model.HarnessInstallSetting
 import com.superiorsoftllc.agenthq.ui.protocol.CliLocation
 import com.superiorsoftllc.agenthq.ui.protocol.HarnessInstallReport
 import com.superiorsoftllc.agenthq.ui.protocol.HarnessInstallStatus
+import com.superiorsoftllc.agenthq.ui.protocol.SecretRow
+import com.superiorsoftllc.agenthq.ui.protocol.SecretState
 import com.superiorsoftllc.agenthq.ui.model.ToolApprovalSetting
 import com.superiorsoftllc.agenthq.ui.protocol.ToolApprovalInfo
 import com.superiorsoftllc.agenthq.ui.model.FLAGS_LIFETIME_NOTE
@@ -69,6 +71,9 @@ fun ConfigDialog(
     logs: LogsFolder? = null,
     /** UPDATE-1: the installed app's version and "Check for updates"; null (dev, Android) hides the Updates section. */
     updates: UpdatesEntry? = null,
+    /** SECRETS-1: the daemon keystore's state (null = not read yet / an older daemon); [secretActions] null hides the section. */
+    secrets: SecretState? = null,
+    secretActions: SecretActions? = null,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -104,6 +109,12 @@ fun ConfigDialog(
                 if (logs != null) {
                     FlagSection(title = LogsFolder.TITLE, applies = LogsFolder.APPLIES_TO) {
                         LogsSection(logs)
+                    }
+                }
+                // SECRETS-1: the daemon owns the secrets; this only sends "set / clear / import" and shows set / not set.
+                if (secretActions != null && secrets != null) {
+                    FlagSection(title = SECRETS_TITLE, applies = SECRETS_APPLIES_TO) {
+                        SecretsSection(secrets, secretActions)
                     }
                 }
                 // UPDATE-1: the check itself runs in the daemon side's updater; this only asks for it.
@@ -298,6 +309,62 @@ private fun LogsSection(logs: LogsFolder) {
         if (failed) Text(LogsFolder.OPEN_FAILED, color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(LOGS_OPEN_FAILED_TAG))
     }
 }
+
+const val SECRETS_TITLE = "Secrets"
+const val SECRETS_APPLIES_TO = "Stored encrypted by the AgentHQ daemon. A saved secret is never shown again, only whether it is set"
+
+/** SECRETS-1: what the Secrets section can ask of the daemon. */
+class SecretActions(val set: (name: String, value: String) -> Unit, val clear: (name: String) -> Unit, val import: (name: String) -> Unit)
+
+/** The text a row shows: set (with its masked tail) or not set. Never a value. */
+fun secretStatusText(row: SecretRow): String = when {
+    row.overriddenByEnv -> "Set (the environment variable overrides it)"
+    row.set -> "Set ${row.tail}".trim()
+    else -> "Not set"
+}
+
+@Composable
+private fun SecretsSection(state: SecretState, actions: SecretActions) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        for (row in state.secrets) {
+            var draft by remember { mutableStateOf("") }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(row.label, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(secretStatusText(row), fontSize = 12.sp, modifier = Modifier.testTag("$SECRET_STATUS_TAG-${row.name}"))
+                OutlinedTextField(
+                    value = draft, onValueChange = { draft = it }, singleLine = true,
+                    label = { Text(if (row.set) "Replace with" else "Paste it here") },
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth().testTag("$SECRET_INPUT_TAG-${row.name}"),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = { actions.set(row.name, draft); draft = "" }, enabled = draft.isNotBlank(),
+                        modifier = Modifier.testTag("$SECRET_SAVE_TAG-${row.name}"),
+                    ) { Text(if (row.set) "Replace" else "Save") }
+                    if (row.set) OutlinedButton(onClick = { actions.clear(row.name) }, modifier = Modifier.testTag("$SECRET_DELETE_TAG-${row.name}")) { Text("Delete") }
+                    if (row.importable) OutlinedButton(onClick = { actions.import(row.name) }, modifier = Modifier.testTag("$SECRET_IMPORT_TAG-${row.name}")) {
+                        Text("Import from environment")
+                    }
+                }
+            }
+        }
+        Text("Protected by: ${protectionText(state.protection)}", color = Palette.Muted, fontSize = 11.sp)
+    }
+}
+
+private fun protectionText(wire: String): String = when (wire) {
+    "os" -> "the operating system's credential facility"
+    "external-key" -> "a key supplied to the daemon (AGENTHQ_KEYSTORE_KEY)"
+    "key-file" -> "a key file in the daemon's state folder (weaker: set AGENTHQ_KEYSTORE_KEY on a shared machine)"
+    else -> "unknown"
+}
+
+const val SECRET_STATUS_TAG = "secret-status"
+const val SECRET_INPUT_TAG = "secret-input"
+const val SECRET_SAVE_TAG = "secret-save"
+const val SECRET_DELETE_TAG = "secret-delete"
+const val SECRET_IMPORT_TAG = "secret-import"
 
 /** UPDATE-1: Configuration > Updates. [check] asks the installed app's updater to look for a newer release now. */
 class UpdatesEntry(val version: String, val check: () -> Unit) {
