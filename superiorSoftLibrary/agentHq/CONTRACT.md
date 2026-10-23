@@ -1938,6 +1938,7 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `usage` | one `RunUsage` (JSON), session-tagged and sequenced, when a run that reported usage ends (1.13.0) | daemon → client |
 | `session_project` | `{"sessionId","projectId"}`: bind an unbound session to a project; answered by a `session` push (1.61.0) | client → daemon |
 | `session_restart` | `{"sessionId","force"?}`: reboot a session in place as a never-run session (same id, role, harness, project, worktree); mid-turn refused unless `force`; answered by a `session` push (ROLE-NOTES-1, version PM-allocated) | client → daemon |
+| `assistant` | — (empty; ignored): open the installation-wide Assistant. Answered to the sender with the Assistant's `session` frame (one `SessionRecord`, `global` = true, tagged with its session id); the first request creates it (role `assistant`, no project, working directory `<stateDir>/assistant`) and every later request, from any client, answers the same session. Failure: `error` `assistant refused: ...` / `assistant failed: ...` (1.115.0) | client → daemon |
 | `limits` | — (request the plan-limit meters; 1.59.0) | client → daemon |
 | `limits` | list of `ProviderLimits` (JSON), the answer and a push after each `usage` (1.59.0) | daemon → client |
 | `providers` | — (request the list; 1.3.0) | client → daemon |
