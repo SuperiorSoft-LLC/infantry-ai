@@ -47,7 +47,29 @@ data class Project(
      * `project_base` (never `project_save`), which checks it resolves first. An older daemon omits the key.
      */
     val baseBranch: String = "",
+    /**
+     * Contract 1.111.0 (LANE-CAPS): the most agents of one role that may run at once in this project, by role id.
+     * A role not listed runs one agent (today's behaviour); there is no upper bound. Set only with `project_config`
+     * (never `project_save`). An older daemon omits the key, which a client reads as "every role: 1".
+     */
+    val laneCaps: Map<String, Int> = emptyMap(),
 )
+
+/**
+ * Contract 1.111.0 (LANE-CAPS): `project_config`, answered by the whole [Project] (`project` frame), which is also pushed
+ * to every connected client when a cap changes. [laneCaps] merges into the stored caps (a cap of 1 removes the entry:
+ * it is the default); empty or absent is a read. A cap below 1 is refused. Lowering a cap never stops a running agent:
+ * it only stops new ones from being added.
+ */
+@Serializable
+data class ProjectConfigRequest(
+    val projectId: String,
+    val laneCaps: Map<String, Int>? = null,
+) {
+    companion object {
+        fun decode(text: String): ProjectConfigRequest = StrictJson.decode(serializer(), text, "project_config payload")
+    }
+}
 
 /**
  * Contract 1.81.0 (BASE-1a): `project_base`, answered by the whole [Project] (`project` frame).

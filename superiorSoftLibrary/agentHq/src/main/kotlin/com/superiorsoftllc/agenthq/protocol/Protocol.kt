@@ -474,6 +474,8 @@ data class Envelope(
         const val PROJECTS = "projects"
         // BASE-1a (contract 1.81.0): read, set or clear a project's base branch; answered by `project`.
         const val PROJECT_BASE = "project_base"
+        // LANE-CAPS (contract 1.111.0): read or set the per-role agent caps of a project; answered (and pushed) as `project`.
+        const val PROJECT_CONFIG = "project_config"
         // CP-2 (contract 1.36.0): git over a project's own directory (`Project.directory`). Requests:
         // `project_git_status` (raw project id), `project_git_diff` and `project_git_log` (JSON). Answers:
         // `project_git` (branch, head, changed files), `project_git_patch` (one file's diff) and

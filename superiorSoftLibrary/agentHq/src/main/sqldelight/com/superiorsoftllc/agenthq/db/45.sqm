@@ -2,7 +2,7 @@
 -- the prompt mail it is still waiting to deliver. All nullable with no default: an existing trigger reads back with no
 -- project, never fired, its next due time recomputed from its interval (today's behaviour), and nothing pending.
 --
--- NEXT MIGRATION: 46.sqm
+-- NEXT MIGRATION: 47.sqm (taken by LANE-CAPS)
 
 ALTER TABLE triggers ADD COLUMN project_id TEXT;
 ALTER TABLE triggers ADD COLUMN last_fired_at INTEGER;

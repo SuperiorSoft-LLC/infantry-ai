@@ -1,0 +1,6 @@
+-- LANE-CAPS -- migration v46 -> v47: a project records how many agents of one role may run at once (JSON object role -> max).
+-- NOT NULL DEFAULT '{}' so every existing project reads back as "no caps": one agent per role, today's behaviour.
+--
+-- NEXT MIGRATION: 47.sqm
+
+ALTER TABLE projects ADD COLUMN lane_caps TEXT NOT NULL DEFAULT '{}';

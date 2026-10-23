@@ -1535,12 +1535,37 @@ internal object Cli {
      */
     private fun project(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable): Int = runBlocking {
         checkContract(stream, err)
+        if (parsed.args[0] == "config") return@runBlocking projectConfig(stream, parsed.args, out, err)
         val projectId = parsed.args[1].trim()
         when (parsed.args[0]) {
             "branches" -> projectBranches(stream, projectId, out, err)
             "rename" -> projectRename(stream, projectId, parsed.args[2], out, err)
             else -> projectBase(stream, projectId, parsed.args.getOrNull(2)?.trim(), parsed.clear, out, err)
         }
+    }
+
+    /**
+     * LANE-CAPS: `project config get <projectId>` prints each role's cap on concurrent agents; `project config set
+     * <projectId> <role> <n>` sets one (n >= 1; 1 is the default). Lowering a cap never stops a running agent.
+     */
+    private suspend fun projectConfig(stream: FrameStream, args: List<String>, out: Appendable, err: Appendable): Int {
+        val projectId = args[2].trim()
+        val caps = if (args[1] == "set") mapOf(args[3].trim() to args[4].trim().toInt()) else null
+        val payload = json.encodeToString(
+            com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest.serializer(),
+            com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest(projectId = projectId, laneCaps = caps),
+        )
+        val answer = stream.request(Envelope(Envelope.PROJECT_CONFIG, payload), Envelope.PROJECT, "project_config", idempotent = true)
+        val project = try {
+            json.decodeFromString(Project.serializer(), answer.data)
+        } catch (e: Exception) {
+            err.appendLine("error: malformed project answer from the daemon: ${e.message}")
+            return 1
+        }
+        out.appendLine("project ${project.id} lane caps (max concurrent agents per role; unlisted = 1):")
+        if (project.laneCaps.isEmpty()) out.appendLine("  (none set)")
+        for ((role, cap) in project.laneCaps) out.appendLine("  $role $cap")
+        return 0
     }
 
     private suspend fun projectBase(
@@ -4002,6 +4027,8 @@ internal object Cli {
               project rename <projectId> "<name>"   Rename a project; its id, tickets, sessions and mail are untouched
                                   read it, set it (refused unless it resolves where tickets are cut), or clear it
                                   (then AGENTHQ_BASE_BRANCH, else the start is refused). Tickets already started keep their base.
+              project config get <projectId>   Each role's cap on concurrent agents (LANE-CAPS; unlisted roles run 1)
+              project config set <projectId> <role> <n>   Set a role's cap (n >= 1); lowering never stops a running agent
               project branches <projectId>   The project repo's local branches; * marks the checked-out one
               image upload <projectId> <file> [--purpose chat|ticket]   Store a png/jpeg/gif/webp (max 10 MB) in
                                   the project's .agenthq/uploads/<purpose>/ (default ticket) and print its absolute
@@ -4833,8 +4860,14 @@ internal object Cli {
     /** BASE-1a: the usage error for a `project` invocation, or null when it is valid. */
     private fun projectUsageError(parsed: ParsedArgs): String? {
         val args = parsed.args
-        val usage = "agenthq project base <projectId> [<branch>|--clear] | branches <projectId> | rename <projectId> \"<name>\""
+        val usage = "agenthq project base <projectId> [<branch>|--clear] | branches <projectId> | rename <projectId> \"<name>\" | config get <projectId> | config set <projectId> <role> <n>"
         return when {
+            args.firstOrNull() == "config" -> when {
+                args.getOrNull(1) == "get" && args.size == 3 && args[2].isNotBlank() -> null
+                args.getOrNull(1) == "set" && args.size == 5 && args[2].isNotBlank() && args[3].isNotBlank() &&
+                    (args[4].trim().toIntOrNull() ?: 0) >= 1 -> null
+                else -> "project config takes get <projectId> or set <projectId> <role> <n >= 1>: $usage"
+            }
             args.firstOrNull() !in setOf("base", "branches", "rename") -> "project needs a subcommand: $usage"
             args.getOrNull(1)?.isBlank() != false -> "project ${args[0]} requires a project id: $usage"
             args[0] == "branches" && (args.size > 2 || parsed.clear) -> "project branches takes only a project id: $usage"

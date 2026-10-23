@@ -93,6 +93,30 @@ class ProjectStore(
         return updated
     }
 
+    /**
+     * LANE-CAPS: merge [caps] (role -> max agents) into project [id]'s caps. A cap below 1 is refused; 1 is the default,
+     * so it removes the entry. Nothing is written on a refusal.
+     */
+    @Synchronized
+    fun setLaneCaps(id: String, caps: Map<String, Int>): Project {
+        val existing = get(id)
+        val merged = existing.laneCaps.toMutableMap()
+        for ((role, cap) in caps) {
+            val key = role.trim()
+            require(key.isNotEmpty()) { "role is blank" }
+            require(cap >= 1) { "cap for role '${key.take(80)}' must be 1 or more, was $cap" }
+            if (cap == 1) merged.remove(key) else merged[key] = cap
+        }
+        val updated = existing.copy(laneCaps = merged.toSortedMap())
+        projects[existing.id] = updated
+        persist(updated)
+        return updated
+    }
+
+    /** LANE-CAPS: the most agents of [role] that may run at once in project [projectId] (1 when unset or unknown). */
+    @Synchronized
+    fun laneCapOf(projectId: String?, role: String): Int = projects[projectId?.trim().orEmpty()]?.laneCaps?.get(role) ?: 1
+
     /** BASE-1a: project [id]'s base branch, or null when it has none (or there is no such project). */
     @Synchronized
     fun baseBranchOf(id: String): String? = projects[id.trim()]?.baseBranch?.takeIf { it.isNotEmpty() }
