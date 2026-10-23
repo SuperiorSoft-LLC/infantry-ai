@@ -22,6 +22,8 @@ import java.io.File
 class ExecutableResolver(
     private val environment: ExecutableEnvironment,
     private val overrides: ExecutableOverrides = ExecutableOverrides.NONE,
+    /** HARNESS-INSTALL-1: the app's own npm prefix; what an install there left is listed first among each tool's default locations. */
+    private val harnessPrefix: String? = null,
 ) {
     /** Where [tool] resolves right now; never throws (an unreadable override store counts as no override). */
     fun resolve(tool: CliTool): Resolution {
@@ -44,7 +46,7 @@ class ExecutableResolver(
             if (problem(tool, fromEnv) == null) return Resolution(tool, fromEnv, Source.ENVIRONMENT, null, tried.toList(), null)
         }
 
-        for (candidate in tool.defaults(environment).distinct()) {
+        for (candidate in (HarnessPrefix.locations(environment, tool.id, harnessPrefix) + tool.defaults(environment)).distinct()) {
             tried += candidate
             if (problem(tool, candidate) == null) return Resolution(tool, candidate, Source.DEFAULT_LOCATION, null, tried.toList(), null)
         }

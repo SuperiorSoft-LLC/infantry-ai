@@ -141,6 +141,11 @@ data class Envelope(
         const val CLI_LOCATIONS = "cli_locations"
         const val CLI_LOCATION_SET = "cli_location_set"
 
+        // Contract 1.100.0 (HARNESS-INSTALL-1): the daemon detects / npm-installs the harness CLIs on ITS machine.
+        const val HARNESS_INSTALL_STATUS = "harness_install_status"
+        const val HARNESS_INSTALL = "harness_install"
+        const val HARNESS_INSTALL_RESULT = "harness_install_result"
+
         // Contract 1.76.0 (BUG-PERM-1): the global, harness-neutral Tool approval. `tool_approval` (no data) and
         // `tool_approval_set` ({mode}; null clears) are both answered by `tool_approval` ([ToolApprovalInfo]).
         const val TOOL_APPROVAL = "tool_approval"
@@ -1734,6 +1739,16 @@ object WireRequests {
         JsonObject(mapOf("id" to JsonPrimitive(id), "path" to (path?.let(::JsonPrimitive) ?: kotlinx.serialization.json.JsonNull))).toString(),
     )
 
+    /** HARNESS-INSTALL-1 (1.100.0): a real server-side check of every harness CLI; [checkLatest] also asks npm for the newest version. */
+    fun harnessInstallStatus(checkLatest: Boolean = false): Envelope =
+        Envelope(Envelope.HARNESS_INSTALL_STATUS, JsonObject(mapOf("checkLatest" to JsonPrimitive(checkLatest))).toString())
+
+    /** HARNESS-INSTALL-1 (1.100.0): install (or, with [update], refresh) [ids] on the daemon machine; empty = all missing. */
+    fun harnessInstall(ids: List<String>, update: Boolean): Envelope = Envelope(
+        Envelope.HARNESS_INSTALL,
+        JsonObject(mapOf("ids" to kotlinx.serialization.json.JsonArray(ids.map(::JsonPrimitive)), "update" to JsonPrimitive(update))).toString(),
+    )
+
     /** PROMPT-2 (1.77.0): answer the open prompt [r.promptId]; the daemon answers with a `prompt_resolved` push. */
     fun promptResponse(r: PromptResponseWire): Envelope =
         Envelope(Envelope.PROMPT_RESPONSE, wireJson.encodeToString(PromptResponseWire.serializer(), r))
@@ -1968,3 +1983,38 @@ data class PromptResolvedView(val promptId: String, val resolvedBy: String = "",
 
 /** Encodes outgoing frames: defaults kept out, so an unanswered field is absent rather than null. */
 internal val wireJson = Json { encodeDefaults = false; explicitNulls = false }
+
+/** Contract 1.100.0 (HARNESS-INSTALL-1): one harness CLI's check. [state]: installed | missing | outdated | unknown | user-managed. */
+@Serializable
+data class HarnessInstallStatus(
+    val id: String,
+    val label: String = "",
+    val npmPackage: String = "",
+    val state: String,
+    val installedVersion: String? = null,
+    val path: String? = null,
+    val managed: Boolean = false,
+    val wanted: String? = null,
+    val latest: String? = null,
+    val note: String? = null,
+)
+
+/** The `harness_install_status` frame's data; [npmPath] null = no Node/npm there and [guidance] says what to do. */
+@Serializable
+data class HarnessInstallReport(
+    val harnesses: List<HarnessInstallStatus> = emptyList(),
+    val prefixDir: String = "",
+    val npmPath: String? = null,
+    val guidance: String? = null,
+)
+
+@Serializable
+data class HarnessInstallOutcome(val id: String, val result: String, val version: String? = null, val message: String? = null)
+
+/** The `harness_install_result` frame's data: per-harness outcomes, the npm log and the status after the run. */
+@Serializable
+data class HarnessInstallResult(
+    val outcomes: List<HarnessInstallOutcome> = emptyList(),
+    val log: List<String> = emptyList(),
+    val report: HarnessInstallReport = HarnessInstallReport(),
+)
