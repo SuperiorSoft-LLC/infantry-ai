@@ -332,7 +332,8 @@ val headlessOs: String = System.getProperty("os.name").lowercase().let {
         else -> "linux"
     }
 }
-val headlessArch: String = System.getProperty("os.arch").let { if (it == "amd64" || it == "x86_64") "x64" else it }
+// Spelled as ServerArchive.hostPlatform() spells it, so the updater finds the archive for its own CPU (x64, arm64).
+val headlessArch: String = System.getProperty("os.arch").let { if (it == "amd64" || it == "x86_64") "x64" else if (it == "aarch64") "arm64" else it }
 val headlessBaseName = "InfantryAI-server-$headlessVersion-$headlessOs-$headlessArch"
 val headlessJdk = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) }
 

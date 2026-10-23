@@ -166,6 +166,13 @@ jobs:
           V='${{ needs.version.outputs.version }}'
           cd dl
           sha256sum InfantryAI-* > SHA256SUMS
+          # SERVER-UPDATE-5: the headless updater refuses an archive that has no SHA256SUMS line, so a release must carry
+          # every server archive AND list each one. (x64 Linux/Windows, arm64 macOS: the runners above; more arches later.)
+          for p in linux-x64 windows-x64 macos-arm64; do
+            f="$(ls InfantryAI-server-"$V"-"$p".* 2>/dev/null | head -n1)"
+            [ -n "$f" ] || { echo "release is missing the server archive for $p" >> /dev/stderr; exit 1; }
+            grep -qF "$f" SHA256SUMS || { echo "SHA256SUMS has no line for $f" >> /dev/stderr; exit 1; }
+          done
           base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
           assets="$(for f in InfantryAI-*; do
             jq -n --arg n "$f" --arg s "$(sha256sum "$f" | cut -d' ' -f1)" --argjson z "$(stat -c %s "$f")" --arg u "$base/$f" \
