@@ -130,8 +130,11 @@ with no project, never fired, and its next slot recomputed from its interval. No
   keeps a schedule's interval keeps its slot; a new interval restarts it from the save.
 - **`trigger_arm` also enables.** On a `disabled` trigger it sets `enabled=true` and `armed` (the UI's enable toggle);
   on `tripped` it re-arms as before; on `armed` / `running` it is refused (`… is armed, not tripped or disabled`).
-- Unchanged: `start_next` triggers, the `manual` / `ship` / `webhook` kinds, the coalescing window, the hourly ceiling
-  (a prompt fire counts as one start) and the one-minute interval floor (`intervalMs >= 60000`).
+- **The hourly ceiling counts session STARTS only.** A prompt fire that was mailed (or `deferred_busy`) started no
+  session and does not count; one that had to start a session does. Mail is bounded by one pending per trigger instead,
+  so any interval, a one-minute schedule included, runs all hour without tripping.
+- Unchanged: `start_next` triggers, the `manual` / `ship` / `webhook` kinds, the coalescing window and the one-minute
+  interval floor (`intervalMs >= 60000`).
 ### What changed in 1.104.0 (VOICE-1) — spoken attention alerts
 
 ADDITIVE; a 1.103.0 client ignores the push. The `ready` frame reports `contract=1.104.0`. No schema change: a spoken alert is

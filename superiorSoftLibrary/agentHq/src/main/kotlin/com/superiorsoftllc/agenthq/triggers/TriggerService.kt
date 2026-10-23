@@ -383,7 +383,8 @@ class TriggerService(
     /**
      * TRIGGER-NUDGE, on [launches]: deliver the prompt with NO lock held, then settle the run under the lock. The run
      * is over as soon as the mail is queued or the session started; only a refusal (no such role, a mail limit, ...)
-     * trips, never a busy target.
+     * trips, never a busy target. Only a STARTED session counts toward the hourly ceiling: a mailed (or deferred) fire
+     * refunds its start, so any interval -- one minute included -- runs all hour without tripping.
      */
     private fun launchNudge(trigger: TriggerView, run: TriggerRun, deliver: (TriggerNudge) -> PromptDelivery) {
         val delivery: PromptDelivery = try {
@@ -397,11 +398,14 @@ class TriggerService(
             when (delivery) {
                 is PromptDelivery.Mailed -> {
                     repo.setPendingMail(trigger.id, delivery.mailId)
+                    // Mail started no session: it does not count toward the starts-per-hour ceiling.
+                    guards[trigger.id]?.refundStart(run.runId)
                     complete(run.runId, TriggerOutcome.SUCCEEDED)
                     redispose(run, TriggerEventDisposition.MAILED)
                 }
                 is PromptDelivery.Started -> complete(run.runId, TriggerOutcome.SUCCEEDED)
                 is PromptDelivery.Busy -> {
+                    guards[trigger.id]?.refundStart(run.runId) // nothing was started either
                     complete(run.runId, TriggerOutcome.SUCCEEDED)
                     redispose(run, TriggerEventDisposition.DEFERRED_BUSY)
                 }

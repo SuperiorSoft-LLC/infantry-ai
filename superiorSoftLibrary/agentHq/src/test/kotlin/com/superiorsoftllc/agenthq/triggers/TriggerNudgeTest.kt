@@ -199,6 +199,37 @@ class TriggerNudgeTest {
     }
 
     @Test
+    fun `a one-minute schedule runs all hour without tripping - mail is not a start`() {
+        val service = service()
+        val t = service.save(nudgeSave(intervalMs = 60_000L)) // default ceiling: 6 starts per hour
+        repeat(90) { slot ->
+            now += 60_000L
+            service.pumpWindows()
+            settled(service, t.id, slot + 1)
+            pendingMail.clear() // the target read each nudge before the next slot
+        }
+        assertEquals(90, nudges.size, "90 one-minute slots, 90 nudges")
+        assertEquals("armed", service.list().single().state)
+        assertTrue(dispositions(service, t.id).all { it == "mailed" })
+    }
+
+    @Test
+    fun `a prompt fire that starts a session still counts toward the ceiling`() {
+        var n = 0
+        answer = { PromptDelivery.Started("s-${n++}") }
+        val service = service()
+        val t = service.save(nudgeSave(intervalMs = 60_000L).copy(ceilingRuns = 3))
+        repeat(3) {
+            service.fire(t.id)
+            awaitTrue { service.events(t.id).size == it + 1 && service.list().single().state == "armed" }
+            now += 1_000
+        }
+        service.fire(t.id)
+        awaitTrue { service.list().single().state == "tripped" }
+        assertEquals("refused_ceiling", dispositions(service, t.id).last())
+    }
+
+    @Test
     fun `a nudge caught mid hand-off by a restart comes back armed, not tripped`() {
         val first = service()
         val t = first.save(nudgeSave())

@@ -95,6 +95,19 @@ class TriggerGuard(
         return true
     }
 
+    /**
+     * TRIGGER-NUDGE: run [runId] started nothing (a prompt that was only MAILED), so it gives back the start it took
+     * against the hourly ceiling. The ceiling bounds session starts; mail is bounded by one pending per trigger.
+     * Call before [complete]. False when the run is unknown.
+     */
+    @Synchronized
+    fun refundStart(runId: String): Boolean {
+        val state = states.values.firstOrNull { runId in it.runs } ?: return false
+        if (state.starts.isEmpty()) return false
+        state.starts.removeLast()
+        return true
+    }
+
     @Synchronized
     fun arm(triggerId: String): Boolean {
         val state = states[triggerId] ?: return false
