@@ -39,7 +39,9 @@ internal class ProjectScope(
         fun callerOf(sessions: List<SessionRecord>, getenv: (String) -> String?): SessionRecord? =
             getenv(AccessPolicy.SESSION_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }?.let { id -> sessions.firstOrNull { it.id == id } }
 
-        fun isPrivileged(caller: SessionRecord?): Boolean = caller == null || caller.role?.lowercase() in PRIVILEGED_ROLES
+        /** No session id = the owner / CLI; a session id the daemon does not know is NOT privileged. */
+        fun isPrivileged(caller: SessionRecord?, hasSession: Boolean = caller != null): Boolean =
+            if (caller == null) !hasSession else caller.role?.lowercase() in PRIVILEGED_ROLES
 
         /** The caller's own project: the daemon's record first, then the env the daemon exports into the session. */
         private fun ownProject(caller: SessionRecord?, getenv: (String) -> String?): String? =
@@ -59,9 +61,9 @@ internal class ProjectScope(
             val own = ownProject(caller, getenv) ?: defaultProjectId?.trim()?.takeIf { it.isNotEmpty() }
             return when {
                 ask == ALL ->
-                    if (isPrivileged(caller)) ProjectScope(null)
+                    if (isPrivileged(caller, true)) ProjectScope(null)
                     else ProjectScope(own, "projectId='all' is for pm / owner callers; this session's role is '${caller?.role ?: "unknown"}'")
-                ask != null && ask != own && !isPrivileged(caller) ->
+                ask != null && ask != own && !isPrivileged(caller, true) ->
                     ProjectScope(own, "project '$ask' is not this session's project ('${own ?: "unknown"}'); only pm / owner callers may look at another project")
                 ask != null -> ProjectScope(ask)
                 else -> ProjectScope(own)
@@ -70,7 +72,7 @@ internal class ProjectScope(
 
         /** Why [caller] may not touch an object of [objectProject], or null when it may. Writes use this too. */
         fun foreignRefusal(what: String, objectProject: String?, caller: SessionRecord?, getenv: (String) -> String?): String? {
-            if (isPrivileged(caller) || getenv(AccessPolicy.SESSION_ID_ENV).isNullOrBlank()) return null
+            if (getenv(AccessPolicy.SESSION_ID_ENV).isNullOrBlank() || isPrivileged(caller, true)) return null
             val own = ownProject(caller, getenv) ?: return null
             if (objectProject == null || objectProject == own) return null
             return "$what belongs to project '$objectProject', not this session's project '$own'; only pm / owner callers may reach another project"

@@ -112,7 +112,7 @@ internal class McpTools(
         val all = fetchSessions(stream)
         val callerId = getenv("AGENTHQ_SESSION_ID")?.trim()?.takeIf { it.isNotEmpty() }
         val caller = all.firstOrNull { it.id == callerId }
-        if (callerId != null && !ProjectScope.isPrivileged(caller) && requested != null) {
+        if (callerId != null && !ProjectScope.isPrivileged(caller, true) && requested != null) {
             // Only the pm / owner roles may name another project or ask for "all"; the daemon's record says who this is.
             val refusal = ProjectScope.resolve(requested, all, getenv, defaultProjectId).refusal
             if (refusal != null) return ToolResult("$LIST_SESSIONS refused: $refusal", isError = true)

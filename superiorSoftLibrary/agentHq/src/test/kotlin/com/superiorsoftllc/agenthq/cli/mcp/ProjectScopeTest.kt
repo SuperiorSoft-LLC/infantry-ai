@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
 class ProjectScopeTest {
     private fun session(id: String, role: String, project: String) = SessionRecord(
         id = id, provider = "claude", workingDir = ".", spawnedAt = 0, lastHeartbeat = 0,
-        state = SessionState.RUNNING, role = role, projectId = project,
+        state = SessionState.IDLE, role = role, projectId = project,
     )
 
     private val sessions = listOf(session("s-fe", "frontend", "P1"), session("s-pm", "pm", "P1"), session("s-ow", "owner", "P2"))
@@ -48,6 +48,17 @@ class ProjectScopeTest {
         // An unknown session id is not privileged, whatever else the environment claims.
         val scope = ProjectScope.resolve("all", sessions, env("ghost", "P1"), null)
         assertTrue(scope.refusal != null)
+    }
+
+    @Test fun `an unknown session id is refused all, a foreign project and foreign objects`() {
+        val ghost = env("ghost", "P1")
+        assertNotNull(ProjectScope.resolve("all", sessions, ghost, null).refusal)
+        assertNotNull(ProjectScope.resolve("P2", sessions, ghost, null).refusal)
+        assertNull(ProjectScope.resolve("P1", sessions, ghost, null).refusal)
+        val caller = ProjectScope.callerOf(sessions, ghost)
+        assertNull(caller)
+        assertNotNull(ProjectScope.foreignRefusal("ticket abc", "P2", caller, ghost))
+        assertNull(ProjectScope.foreignRefusal("ticket abc", "P1", caller, ghost))
     }
 
     @Test fun `no session id keeps the owner CLI path unchanged`() {
