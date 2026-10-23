@@ -204,6 +204,8 @@ data class SessionRecord(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val runPhase: String? = null,
     /** Contract 1.114.0: the session that spawned this one (the `new` frame's origin); persisted, so a kill rule survives an app restart. Omitted when none. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val spawnerSessionId: String? = null,
+    /** Contract 1.115.0: the ONE installation-wide Assistant session (no project, role `assistant`, started by the `assistant` frame). Omitted when false. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val global: Boolean = false,
 ) {
     /**
      * Whether this session is LIVE (a run is in flight) or HISTORY (none is).

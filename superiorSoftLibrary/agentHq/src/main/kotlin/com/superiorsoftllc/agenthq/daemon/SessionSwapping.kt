@@ -32,6 +32,7 @@ fun swapSession(manager: SessionManager, request: SessionSwap, roleKnown: (Strin
     if (roleChanges && !role.isNullOrEmpty()) {
         require(RoleIds.PATTERN.matches(role) && roleKnown(role)) { "there is no role '${role.take(40)}'; pick another role" }
     }
+    require(!(roleChanges && before.global)) { "the Assistant's role is fixed; change its model, not its role" }
     require(!roleChanges || !before.live) { "a reply is still running; wait for it to finish or stop it, then switch" }
     manager.reharness(sessionId, provider, request.model, request.effort)
     val after = if (roleChanges) manager.rerole(sessionId, role) else manager.get(sessionId)!!

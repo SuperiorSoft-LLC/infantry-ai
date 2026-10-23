@@ -309,6 +309,14 @@ class Controller(
     suspend fun requestCommands(sessionId: String?, typed: String, provider: String? = null): CommandResult =
         send(WireRequests.commandCatalog(sessionId, typed, provider))
 
+    /**
+     * ASSISTANT-1 (contract 1.115.0): ask the daemon for the installation-wide Assistant. The daemon creates it on the first
+     * request and answers with its `session` frame (it then shows up as [AppState.assistant]); later asks answer the same one.
+     */
+    suspend fun openAssistant(): CommandResult =
+        if (!_state.value.connection.hasAssistant) report(CommandResult.Refused("this daemon is too old for the Assistant: update Infantry AI on the server (needs contract 1.115.0)"))
+        else send(Envelope(Envelope.ASSISTANT, ""))
+
     private suspend fun send(env: Envelope): CommandResult =
         if (!_state.value.connection.isLive) {
             CommandResult.Refused("not connected to a daemon (${_state.value.connection.state.name.lowercase()}) - nothing was sent")

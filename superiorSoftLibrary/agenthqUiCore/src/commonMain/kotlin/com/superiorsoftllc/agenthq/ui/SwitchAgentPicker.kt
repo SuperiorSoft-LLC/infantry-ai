@@ -40,6 +40,7 @@ const val SWITCH_AGENT_SHORTCUT = "Ctrl+Shift+N"
 const val SWITCH_AGENT_PICKER_TAG = "switch-agent-picker"
 const val SWITCH_ROLE_TAG_PREFIX = "switch-role:"
 const val SWITCH_ROLE_NONE_TAG = "switch-role-none"
+const val SWITCH_ROLE_FIXED_TAG = "switch-role-fixed"
 
 /** CMD-HARNESS-1 / SWAP-AGENT-1: the header's "<harness> · <model>" chip, and the picker's Apply, refusal and model line. */
 const val EXECUTOR_SWITCH_CHIP_TAG = "executor-switch-chip"
@@ -99,7 +100,12 @@ fun SwitchAgentPicker(
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Role", color = Palette.Muted, fontSize = 11.sp)
-            if (agentId != null) {
+            if (a.session.global) {
+                // ASSISTANT-1: the global Assistant keeps its role; only its model is free.
+                val shown = currentRole ?: "assistant"
+                RoleChip(shown, shown, currentRole?.let { state.role(it)?.icon }, RoleIconSite.SWITCH, Palette.Accent, Modifier.testTag(SWITCH_ROLE_TAG_PREFIX + shown))
+                Text("fixed: the Assistant always runs as $shown", color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(SWITCH_ROLE_FIXED_TAG))
+            } else if (agentId != null) {
                 val shown = currentRole ?: "none"
                 RoleChip(shown, shown, currentRole?.let { state.role(it)?.icon }, RoleIconSite.SWITCH, Palette.Accent, Modifier.testTag(SWITCH_ROLE_TAG_PREFIX + shown))
                 val name = state.profiles.firstOrNull { it.id == agentId }?.name ?: agentId

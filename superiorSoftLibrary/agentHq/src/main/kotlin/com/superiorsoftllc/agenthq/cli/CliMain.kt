@@ -4032,6 +4032,9 @@ internal object Cli {
         to.appendLine(usageText().lineSequence().dropWhile { it != "Mail:" }.takeWhile { it.isNotBlank() }.joinToString("\n"))
     }
 
+    /** ASSISTANT-1: the real `--help` text, so the Assistant's standing instructions are generated from it and stay current. */
+    fun helpText(): String = usageText()
+
     /** The whole `--help`, grouped under headings (MAIL-FOOTER-1) so related commands sit together. */
     private fun usageText(): String =
         """

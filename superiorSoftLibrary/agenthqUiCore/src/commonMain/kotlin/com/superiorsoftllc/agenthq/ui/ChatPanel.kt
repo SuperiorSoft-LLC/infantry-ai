@@ -341,7 +341,7 @@ fun ChatPanel(
         Box(Modifier.weight(1f).fillMaxWidth().testTag(transcriptTag)) {
             content {
                 androidx.compose.runtime.CompositionLocalProvider(LocalUserPortrait provides state.userPortrait) {
-                    OutputPane(agent, chat.spawnMode, roleColor = state.role(agent?.role)?.color, onStartSession = { chat.spawnMode = true; chat.focus.requestFocus() })
+                    OutputPane(agent, chat.spawnMode, roleColor = state.role(agent?.role)?.color, onStartSession = if (allowSpawn) ({ chat.spawnMode = true; chat.focus.requestFocus() }) else null)
                 }
             }
         }

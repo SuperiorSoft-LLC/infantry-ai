@@ -95,6 +95,8 @@ data class Envelope(
         const val AGENT_SWAPPED = "agent_swapped"
         // UX-HARNESS-2 (contract 1.83.0): one session with no agent onto another harness, in place; `session_swapped`
         // is pushed to every client.
+        /** Contract 1.115.0: ask for the installation-wide Assistant; the daemon answers with its `session` frame. */
+        const val ASSISTANT = "assistant"
         const val SESSION_SWAP = "session_swap"
         const val SESSION_SWAPPED = "session_swapped"
 
@@ -897,6 +899,8 @@ data class SessionRecord(
     val turnActive: Boolean? = null,
     /** PIPELINE-WATCHDOG: what the daemon derived about this agent's pending work; null from an older daemon. */
     val watch: AgentWatchView? = null,
+    /** Contract 1.115.0: the installation-wide Assistant session (no project); false from an older daemon. */
+    val global: Boolean = false,
 ) {
     val resumable: Boolean
         get() = providerSessionId != null &&

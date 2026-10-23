@@ -26,7 +26,7 @@ internal class ProjectScope(
 
     companion object {
         const val ALL = "all"
-        private val PRIVILEGED_ROLES = setOf("pm", "owner")
+        private val PRIVILEGED_ROLES = setOf("pm", "owner", "assistant")
 
         private val json = Json { ignoreUnknownKeys = true }
 

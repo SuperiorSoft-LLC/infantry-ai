@@ -587,6 +587,8 @@ class AgentHqDaemon(
             extraRoutes: io.ktor.server.routing.Route.() -> Unit = {},
             /** SERVER-UPDATE-3: this daemon's own update state; null reads it from the environment (archive / Docker / dev). */
             updates: com.superiorsoftllc.agenthq.update.ServerUpdateService? = null,
+            /** Contract 1.115.0 (ASSISTANT-1): where the global Assistant runs: a folder of its own under the app's data dir. */
+            assistantDir: File = File(stateDir(), "assistant"),
         ): AgentHqDaemon {
             val policy = AccessPolicy.of(host, token)
             // PORT-1: FIRST, because the mail base and every session's AGENTHQ_URL below carry the port.
@@ -663,10 +665,11 @@ class AgentHqDaemon(
                 traitExists = { store.traits.get(it) != null }, roleTraits = store.roleTraits::get, trait = store.traits::get,
                 requireKnownSkills = { ids -> com.superiorsoftllc.agenthq.settings.requireKnownSkills(store, ids, "skillIds") },
                 // ROLE-EDIT-1: a role's (possibly edited) instructions reach every session started for it after the save.
-                rolePersona = { roles.role(it)?.persona },
+                rolePersona = { id -> roles.role(id)?.persona.let { p -> if (id == AssistantService.ROLE) AssistantService.instructions(p) else p } },
             )
             // TRAITS-T4: the chokepoint's fallback, so a spawn path that resolves no instance itself still freezes one.
             manager.instanceFor = agents::instanceFor
+            manager.assistantDir = assistantDir
             val clients = CopyOnWriteArrayList<Channel<Envelope>>()
             // PROMPT-1: `prompts.timeoutSec` is read at every open; every request / resolution goes to every client.
             val pendingPrompts = com.superiorsoftllc.agenthq.prompts.PendingPrompts(
@@ -2268,6 +2271,17 @@ private suspend fun handleConnection(
                     Envelope(Envelope.ERROR, "agent_swap refused: ${e.message ?: "invalid swap"}")
                 } catch (e: Exception) {
                     Envelope(Envelope.ERROR, "agent_swap failed: ${e.message ?: e::class.simpleName}")
+                }
+
+                // Contract 1.115.0 (ASSISTANT-1): the installation-wide Assistant. Answers the sender with its `session` frame,
+                // creating the session on the first request; the creation itself reaches every client as a `session` push.
+                Envelope.ASSISTANT -> try {
+                    val assistant = AssistantService.ensure(manager, agents)
+                    Envelope(Envelope.SESSION, json.encodeToString(SessionRecordSerializer, assistant), assistant.id)
+                } catch (e: IllegalArgumentException) {
+                    Envelope(Envelope.ERROR, "assistant refused: ${e.message ?: "cannot start the assistant"}")
+                } catch (e: Exception) {
+                    Envelope(Envelope.ERROR, "assistant failed: ${e.message ?: e::class.simpleName}")
                 }
 
                 // UX-HARNESS-2 (contract 1.83.0): one session with no agent onto another harness, in place. Answered by the

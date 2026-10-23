@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.114.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.115.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,19 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+
+### What changed in 1.115.0 (ASSISTANT-1) — the global Assistant
+
+ADDITIVE; a 1.114.0 client keeps working. The `ready` frame reports `contract=1.115.0`.
+- **`assistant` frame** (client -> daemon, empty `data`): answered with the Assistant's `session` frame. The first request creates the one
+  Assistant of the installation (role `assistant`, no project, its own working directory `<stateDir>/assistant`, never the user's home); every
+  later request, from any client, answers the same session. A failure is an `error` (`assistant refused: ...` / `assistant failed: ...`).
+- **`SessionRecord.global`** (omitted when false): true for that session only. It belongs to no project, so a project switch never hides it.
+- **Role fixed, model free**: `session_swap` changes the Assistant's provider / model (persisted on the session) and refuses a role change
+  (`the Assistant's role is fixed`).
+- **Scope**: role `assistant` is privileged like `pm` / `owner` for MCP / CLI project scope (reads across every project). Kill: with no project of
+  its own it may kill any session.
+- **Standing instructions** are generated at spawn: the role persona, how Infantry AI is organised, and the daemon's real `--help` text.
 
 ### What changed in 1.114.0 (KILL-SCOPE-1) — kill by role and project; one-call kill + remove
 

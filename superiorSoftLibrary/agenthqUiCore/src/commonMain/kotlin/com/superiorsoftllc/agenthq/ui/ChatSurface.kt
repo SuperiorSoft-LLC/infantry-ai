@@ -305,7 +305,7 @@ fun TicketTag(a: AgentView, state: AppState, onOpen: (String) -> Unit, modifier:
 }
 
 @Composable
-internal fun OutputPane(a: AgentView?, spawnMode: Boolean, roleColor: String? = null, onStartSession: () -> Unit) {
+internal fun OutputPane(a: AgentView?, spawnMode: Boolean, roleColor: String? = null, onStartSession: (() -> Unit)?) {
     if (a == null) {
         Box(Modifier.fillMaxSize(), Alignment.Center) {
             if (spawnMode) return@Box
@@ -314,7 +314,7 @@ internal fun OutputPane(a: AgentView?, spawnMode: Boolean, roleColor: String? = 
                 Spacer(Modifier.height(10.dp))
                 Text("No live session. Start one to see its output here.", color = Palette.Muted, fontSize = 12.sp)
                 Spacer(Modifier.height(10.dp))
-                OutlinedButton(onClick = onStartSession) { Text("Start a session") }
+                if (onStartSession != null) OutlinedButton(onClick = onStartSession) { Text("Start a session") }
             }
         }
         return
@@ -325,11 +325,12 @@ internal fun OutputPane(a: AgentView?, spawnMode: Boolean, roleColor: String? = 
                 BrandEmblem(72.dp)
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    "Nothing on screen for this session yet.\nThe daemon replays a session's recent output only while the process that ran it is up; older history is not kept.",
+                    if (a.session.global) "Ask the Assistant anything about Infantry AI: how a screen works, why something failed, or tell it what to do (create a ticket, start an agent, change a setting)."
+                    else "Nothing on screen for this session yet.\nThe daemon replays a session's recent output only while the process that ran it is up; older history is not kept.",
                     color = Palette.Muted, fontSize = 12.sp,
                 )
                 Spacer(Modifier.height(10.dp))
-                OutlinedButton(onClick = onStartSession) { Text("Start a session") }
+                if (onStartSession != null) OutlinedButton(onClick = onStartSession) { Text("Start a session") }
             }
         }
         return
