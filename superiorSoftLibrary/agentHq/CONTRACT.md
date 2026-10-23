@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.106.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.107.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,9 +104,16 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+### What changed in 1.107.0 (USER-PORTRAIT) — the owner's portrait, stored by the daemon
+
+ADDITIVE; no new frame. One new `settings_get` / `settings_set` key, `user.portrait`: a base64 string of a PNG or WebP at most
+256 KB (clients downscale to ~256 px before saving), the picture every client shows for the human instead of the "Y" placeholder.
+`settings_set` of `""` clears it. Absent from `settings` frames while unset: clients then show their bundled default. A value that
+is not base64, not PNG/WebP, or over 256 KB is refused with an `error` frame.
+
 ### What changed in 1.106.0 (SCOPE-1) — MCP tools scoped to the caller's project
 
-ADDITIVE; no frame changes (the version moves 1.104.0 → 1.106.0; 1.105.0 is the triggers rework on another branch). The `agenthq mcp serve` tools
+ADDITIVE; no frame changes (the version moves 1.104.0 → 1.107.0; 1.105.0 is the triggers rework on another branch). The `agenthq mcp serve` tools
 `agenthq_board`, `agenthq_pod_state`, `agenthq_get_session`, `agenthq_ticket_get`, `agenthq_ticket_update`, `agenthq_ticket_move`,
 `agenthq_ticket_delete`, `agenthq_ticket_start` and `agenthq_ticket_create` (explicit `projectId`) now default to the CALLER'S OWN project.
 
@@ -114,7 +121,7 @@ ADDITIVE; no frame changes (the version moves 1.104.0 → 1.106.0; 1.105.0 is th
 - `projectId='all'` (no filter) and another project's id are for `pm` / `owner` callers only; any other role is refused, naming both projects.
 - A ticket or session of another project is refused for other roles, writes included.
 - Answers carry `projectId` and `scope` (`project:<id>` or `all`); with `all`, board lines are prefixed `[projectId]`.
-- A call with no session id (owner / CLI) is unchanged. Inbox/notes scoping is not part of 1.106.0.
+- A call with no session id (owner / CLI) is unchanged. Inbox/notes scoping is not part of 1.107.0.
 
 
 ### What changed in 1.105.0 (TRIGGER-NUDGE) — a recurring prompt to a role, as mail

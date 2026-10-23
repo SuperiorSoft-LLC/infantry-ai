@@ -1,0 +1,3 @@
+drawable/user_portrait.png: the default portrait of the human user (circular commander art on black).
+Supplied by the owner on 2026-10-23 (ticket 6a90e7e0, attached image), downscaled to 256x256 for the bundle.
+Not generated or modified by the app; the owner may replace it by uploading their own in Configuration > Your portrait.

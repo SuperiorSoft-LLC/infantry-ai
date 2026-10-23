@@ -147,6 +147,8 @@ import com.superiorsoftllc.agenthq.ui.model.ChatSpan
 import com.superiorsoftllc.agenthq.ui.model.ChatStatus
 import com.superiorsoftllc.agenthq.ui.model.OutputLine
 import com.superiorsoftllc.agenthq.ui.model.USER_AVATAR_ID
+import com.superiorsoftllc.agenthq.ui.model.UserPortrait
+import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
 import com.superiorsoftllc.agenthq.ui.model.avatarFor
 import com.superiorsoftllc.agenthq.ui.model.chatItems
 import com.superiorsoftllc.agenthq.ui.model.chatLineBlocks
@@ -486,7 +488,9 @@ fun App(
                     CenterTabBar(state, centerTab) { centerTab = it }
                     Box(Modifier.weight(1f).fillMaxWidth().testTag(CENTER_TRANSCRIPT_TAG)) {
                         when (centerTab) {
-                            CenterTab.OUTPUT -> OutputPane(selected, spawnMode, roleColor = state.role(selected?.role)?.color, onStartSession = { spawnMode = true; promptFocus.requestFocus() })
+                            CenterTab.OUTPUT -> androidx.compose.runtime.CompositionLocalProvider(LocalUserPortrait provides state.userPortrait) {
+                                OutputPane(selected, spawnMode, roleColor = state.role(selected?.role)?.color, onStartSession = { spawnMode = true; promptFocus.requestFocus() })
+                            }
                             CenterTab.PODS -> PodsPane(state, controller)
                             CenterTab.ROLES -> RolesPane(
                                 state, controller,
@@ -620,6 +624,7 @@ fun App(
             ConfigDialog(
                 flags, onFlags = { flags = it }, onDismiss = { showConfig = false },
                 keepAliveMinutes = state.keepAliveMinutes,
+                userPortrait = if (contractAtLeast(state.connection.contract, UserPortrait.SINCE_MAJOR, UserPortrait.SINCE_MINOR)) state.userPortrait to { png: ByteArray? -> actionScope.launch { controller.setUserPortrait(png) }; Unit } else null,
                 onKeepAliveMinutes = { minutes -> actionScope.launch { controller.setKeepAliveMinutes(minutes) } },
                 cliLocations = state.cliLocations,
                 onCliLocation = { id, path -> actionScope.launch { controller.setCliLocation(id, path) } },
@@ -1459,7 +1464,7 @@ fun ChatLine(
     if (line.kind == LineKind.USER) {
         // IMG-2: the turn's `[image: ...]` lines show as thumbnails, not as text.
         val (said, images) = ChatImageLines.split(line.text)
-        SpeakerRow({ AvatarBadge(avatarFor(USER_AVATAR_ID, "You")) }) {
+        SpeakerRow({ UserAvatar() }) {
             Column {
                 Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Palette.Accent.copy(alpha = 0.12f), RoundedCornerShape(8.dp)).padding(8.dp)) {
                     if (said.isNotBlank() || images.isEmpty()) {

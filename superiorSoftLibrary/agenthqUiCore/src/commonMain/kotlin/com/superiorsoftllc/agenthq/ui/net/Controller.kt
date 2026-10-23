@@ -7,6 +7,7 @@ import com.superiorsoftllc.agenthq.ui.model.HarnessPickerAsk
 import com.superiorsoftllc.agenthq.ui.model.CliLocationsSetting
 import com.superiorsoftllc.agenthq.ui.model.ToolApprovalSetting
 import com.superiorsoftllc.agenthq.ui.model.LifecycleSetting
+import com.superiorsoftllc.agenthq.ui.model.UserPortrait
 import kotlinx.serialization.json.JsonPrimitive
 import com.superiorsoftllc.agenthq.ui.model.withChangesBranch
 import com.superiorsoftllc.agenthq.ui.model.withChangesWorktree
@@ -187,6 +188,10 @@ class Controller(
                         // BUG-M2-11e: the one session-lifecycle setting, shown in the Configuration modal (1.68.0).
                         if (contractAtLeast(contract, LifecycleSetting.SINCE_MAJOR, LifecycleSetting.SINCE_MINOR)) {
                             client.send(WireRequests.settingsGet(LifecycleSetting.KEY))
+                        }
+                        // USER-PORTRAIT: the owner's picture (1.107.0); an unset key is an error on a single-key get, so ask for all.
+                        if (contractAtLeast(contract, UserPortrait.SINCE_MAJOR, UserPortrait.SINCE_MINOR)) {
+                            client.send(WireRequests.settingsGet(""))
                         }
                         // CLIPATH-1: where each CLI is launched from, shown in the Configuration modal (1.73.0).
                         if (contractAtLeast(contract, CliLocationsSetting.SINCE_MAJOR, CliLocationsSetting.SINCE_MINOR)) {
@@ -399,6 +404,17 @@ class Controller(
             return report(CommandResult.Refused("this daemon has no session lifecycle setting (needs contract 1.68.0)"))
         }
         return report(send(WireRequests.settingsSet(LifecycleSetting.KEY, JsonPrimitive(minutes))))
+    }
+
+    /**
+     * USER-PORTRAIT: store [png] (already downscaled) as the daemon's `user.portrait`; null resets to the bundled default.
+     * The shown portrait changes only when the daemon answers `settings`.
+     */
+    suspend fun setUserPortrait(png: ByteArray?): CommandResult {
+        if (!contractAtLeast(_state.value.connection.contract, UserPortrait.SINCE_MAJOR, UserPortrait.SINCE_MINOR)) {
+            return report(CommandResult.Refused("this daemon cannot store a portrait (needs contract 1.107.0)"))
+        }
+        return report(send(WireRequests.settingsSet(UserPortrait.KEY, JsonPrimitive(png?.let(UserPortrait::encode) ?: ""))))
     }
 
     /**

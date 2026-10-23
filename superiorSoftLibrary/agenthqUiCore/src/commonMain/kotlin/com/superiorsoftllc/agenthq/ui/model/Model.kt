@@ -648,6 +648,8 @@ data class AppState(
      * daemon older than contract 1.68.0, which has no such setting): the control says so instead of guessing a value.
      */
     val keepAliveMinutes: Int? = null,
+    /** USER-PORTRAIT (1.107.0): the daemon's `user.portrait` (base64 PNG); null = unset, the bundled default shows. */
+    val userPortrait: String? = null,
     /** CLIPATH-1 (1.73.0): where the daemon runs each CLI from, as its last `cli_locations` said. Null = not read yet. */
     val cliLocations: List<com.superiorsoftllc.agenthq.ui.protocol.CliLocation>? = null,
     /** HARNESS-INSTALL-1 (1.100.0): the daemon's last harness check (null = not read / older daemon), whether an install is running, and its log. */
@@ -1640,7 +1642,10 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
 
     // BUG-M2-11e: a `settings` answer (to this window's get/set, or another client's set) carries the lifecycle setting.
     // A frame without the key (a get of another key) leaves the known value alone.
-    Envelope.SETTINGS -> LifecycleSetting.fromSettingsFrame(env.data)?.let { s.copy(keepAliveMinutes = it) } ?: s
+    Envelope.SETTINGS -> {
+        val withKeepAlive = LifecycleSetting.fromSettingsFrame(env.data)?.let { s.copy(keepAliveMinutes = it) } ?: s
+        UserPortrait.fromSettingsFrame(env.data)?.let { withKeepAlive.copy(userPortrait = it.base64) } ?: withKeepAlive
+    }
 
     // CLIPATH-1 (1.73.0): the whole list, replaced by each answer (a get, or this window's set).
     Envelope.CLI_LOCATIONS -> runCatching {

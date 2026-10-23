@@ -37,6 +37,7 @@ import com.superiorsoftllc.agenthq.ui.model.ToolApprovalSetting
 import com.superiorsoftllc.agenthq.ui.protocol.ToolApprovalInfo
 import com.superiorsoftllc.agenthq.ui.model.FLAGS_LIFETIME_NOTE
 import com.superiorsoftllc.agenthq.ui.model.LifecycleSetting
+import com.superiorsoftllc.agenthq.ui.model.UserPortrait
 import com.superiorsoftllc.agenthq.ui.model.UiFlags
 
 /** PAIR-1: the connection "Pair a device" shares ([url], [token]) and what a link scanned or pasted there does. */
@@ -58,6 +59,8 @@ fun ConfigDialog(
     onFlags: (UiFlags) -> Unit,
     onDismiss: () -> Unit,
     keepAliveMinutes: Int? = null,
+    /** USER-PORTRAIT: the daemon's stored portrait (base64, null = default) and the save callback (null png = reset); null hides the section. */
+    userPortrait: Pair<String?, (ByteArray?) -> Unit>? = null,
     onKeepAliveMinutes: ((Int) -> Unit)? = null,
     /** CLIPATH-1: the daemon's CLI locations (null = not read yet / an older daemon); [onCliLocation] null hides the section. */
     cliLocations: List<CliLocation>? = null,
@@ -96,6 +99,11 @@ fun ConfigDialog(
                 }
                 FlagSection(title = "Spoken alerts", applies = com.superiorsoftllc.agenthq.ui.voice.VOICE_APPLIES_TO) {
                     com.superiorsoftllc.agenthq.ui.voice.VoiceSettingsSection(flags.voice) { onFlags(flags.copy(voice = it)) }
+                }
+                if (userPortrait != null) {
+                    FlagSection(title = UserPortrait.TITLE, applies = UserPortrait.APPLIES_TO) {
+                        UserPortraitSection(userPortrait.first, userPortrait.second)
+                    }
                 }
                 // BUG-M2-11e: daemon state, not a window flag: it is stored by the daemon and survives a restart.
                 if (onKeepAliveMinutes != null) {
@@ -442,6 +450,9 @@ private fun ToolApprovalDropdown(value: ToolApprovalInfo?, onPick: (String) -> U
 const val TOOL_APPROVAL_FIELD_TAG = "tool-approval-field"
 const val TOOL_APPROVAL_OPTION_TAG_PREFIX = "tool-approval-option-"
 
+const val PORTRAIT_CHANGE_TAG = "portrait-change"
+const val PORTRAIT_RESET_TAG = "portrait-reset"
+const val PORTRAIT_ERROR_TAG = "portrait-error"
 const val KEEP_ALIVE_FIELD_TAG = "keep-alive-field"
 const val KEEP_ALIVE_OPTION_TAG_PREFIX = "keep-alive-option-"
 
@@ -477,6 +488,47 @@ private fun HarnessInstallControls(
         }
         if (log.isNotEmpty()) {
             Text(log.joinToString("\n"), color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.testTag(HARNESS_LOG_TAG))
+        }
+    }
+}
+
+/**
+ * USER-PORTRAIT: the current portrait as a circle (the same crop chat uses), "Change portrait" (a png / jpeg / webp up to
+ * 5 MB, centre-cropped to a square and downscaled to 256 px before it is saved) and "Reset to default". A refused file
+ * says why, in words, and changes nothing.
+ */
+@Composable
+private fun UserPortraitSection(portrait: String?, onSave: (ByteArray?) -> Unit) {
+    val host = com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost.current
+    var error by remember { mutableStateOf<String?>(null) }
+    androidx.compose.foundation.layout.Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+    ) {
+        UserAvatar(size = 64, portrait = portrait)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                androidx.compose.material3.OutlinedButton(
+                    onClick = {
+                        val path = host.pickFile("Choose your portrait") ?: return@OutlinedButton
+                        val size = host.fileSize(path)
+                        val bytes = if (size != null && size > UserPortrait.MAX_PICK_BYTES) null else host.readBytes(path)
+                        val refusal = UserPortrait.refusal(bytes, size ?: bytes?.size?.toLong() ?: 0)
+                        val png = if (refusal == null) host.portraitPng(bytes!!, UserPortrait.SIDE) else null
+                        error = refusal ?: if (png == null) "That image could not be read." else null
+                        if (png != null) onSave(png)
+                    },
+                    enabled = host.canPickFiles,
+                    modifier = Modifier.testTag(PORTRAIT_CHANGE_TAG),
+                ) { Text("Change portrait") }
+                androidx.compose.material3.TextButton(
+                    onClick = { error = null; onSave(null) },
+                    enabled = portrait != null,
+                    modifier = Modifier.testTag(PORTRAIT_RESET_TAG),
+                ) { Text("Reset to default") }
+            }
+            if (!host.canPickFiles) Text("Choose a portrait from the desktop app; it shows here too.", color = Palette.Muted, fontSize = 11.sp)
+            error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.testTag(PORTRAIT_ERROR_TAG)) }
         }
     }
 }

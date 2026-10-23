@@ -75,6 +75,12 @@ interface PlatformHost {
     /** PAIR-1: a camera scanner (calls `onCode` with the decoded text, `onClose` on cancel); null = no camera here. */
     val qrScanner: (@androidx.compose.runtime.Composable (onCode: (String) -> Unit, onClose: () -> Unit) -> Unit)? get() = null
 
+    /**
+     * USER-PORTRAIT: [bytes] (PNG, JPEG or WebP) centre-cropped to a square and scaled to [side] px, as PNG; null when they
+     * cannot be decoded here (or this host cannot scale).
+     */
+    fun portraitPng(bytes: ByteArray, side: Int): ByteArray? = null
+
     /** PAIR-1: the text of the QR code in a picture's bytes, or null (none found, or this host cannot decode one). */
     fun decodeQrImage(bytes: ByteArray): String? = null
 }
