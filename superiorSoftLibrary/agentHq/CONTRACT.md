@@ -1904,6 +1904,8 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `roles` | list of `Role` (JSON), canonical ids first (1.12.0) | daemon → client |
 | `role_save` | one `RoleSave` (JSON, strict; 1.12.0) | client → daemon |
 | `role` | one `Role` (JSON), pushed to every client after a save (1.12.0) | daemon → client |
+| `role_delete` | a role id: remove its custom file; a customised bundled role is reset (answered by the `role` push, the bundled definition), a pure custom role is removed (answered by `role_removed`); refused (`error`) for a bundled role with no override, an unknown id, or while a live session has the role (1.108.0) | client → daemon |
+| `role_removed` | a role id: the custom role was deleted, pushed to every client (1.108.0) | daemon → client |
 | `trigger_save` / `trigger_fire` / `trigger_arm` / `trigger_disable` / `trigger_delete` / `trigger_list` / `trigger_events` | see "What changed in 1.14.0"; `projectId`, `trigger_arm` enabling, prompt-as-mail: 1.105.0 | client → daemon |
 | `trigger` / `triggers` / `trigger_events` | one `TriggerView` / a list / a list of `TriggerEventView` (1.14.0; `projectId` / `lastFiredAt` / `nextFireAt` and the `mailed` / `coalesced_pending` / `deferred_busy` dispositions, 1.105.0) | daemon → client |
 | `provider_states` | — (request every provider's limit state; 1.13.0) | client → daemon |

@@ -5,6 +5,7 @@ import com.superiorsoftllc.agenthq.protocol.CliLocationSet
 import com.superiorsoftllc.agenthq.protocol.CliLocations
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.EventVocabulary
+import com.superiorsoftllc.agenthq.update.SemVer
 import kotlinx.serialization.json.Json
 import java.io.File
 import java.nio.file.Files
@@ -43,8 +44,9 @@ class CliLocationsWireTest {
         json.decodeFromString(CliLocations.serializer(), fixture.client.await(Envelope.CLI_LOCATIONS, occurrence).data)
 
     @Test
-    fun theContractIs1_78_0() {
-        assertEquals("1.107.0", EventVocabulary.VERSION)
+    fun theContractIsAtLeast1_78_0() {
+        // A floor, not a pin: later additive bumps must not break this feature's wire test.
+        assertTrue(SemVer.parse(EventVocabulary.VERSION)!! >= SemVer.parse("1.78.0")!!, EventVocabulary.VERSION)
     }
 
     @Test

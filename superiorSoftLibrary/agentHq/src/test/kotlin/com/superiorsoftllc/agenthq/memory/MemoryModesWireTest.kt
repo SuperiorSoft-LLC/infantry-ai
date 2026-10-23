@@ -3,6 +3,7 @@ package com.superiorsoftllc.agenthq.memory
 import com.superiorsoftllc.agenthq.daemon.DaemonFixture
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.EventVocabulary
+import com.superiorsoftllc.agenthq.update.SemVer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -40,8 +41,9 @@ class MemoryModesWireTest {
     private fun DaemonFixture.save(payload: String) = send(Envelope.MEMORY_SAVE, payload)
 
     @Test
-    fun theContractIs1_51_0() {
-        assertEquals("1.107.0", EventVocabulary.VERSION)
+    fun theContractIsAtLeast1_51_0() {
+        // A floor, not a pin: later additive bumps must not break this feature's wire test.
+        assertTrue(SemVer.parse(EventVocabulary.VERSION)!! >= SemVer.parse("1.51.0")!!, EventVocabulary.VERSION)
     }
 
     @Test

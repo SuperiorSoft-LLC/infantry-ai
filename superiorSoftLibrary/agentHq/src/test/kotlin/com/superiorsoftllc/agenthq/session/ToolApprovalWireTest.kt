@@ -6,11 +6,13 @@ import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.EventVocabulary
 import com.superiorsoftllc.agenthq.protocol.ToolApprovalInfo
 import com.superiorsoftllc.agenthq.protocol.ToolApprovalSet
+import com.superiorsoftllc.agenthq.update.SemVer
 import kotlinx.serialization.json.Json
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * BUG-PERM-1 (contract 1.76.0) over the real daemon socket: `tool_approval_set` stores the global value, it is what the
@@ -32,8 +34,9 @@ class ToolApprovalWireTest {
         fixture.send(Envelope.TOOL_APPROVAL_SET, json.encodeToString(ToolApprovalSet.serializer(), ToolApprovalSet(mode)))
 
     @Test
-    fun theContractIs1_78_0() {
-        assertEquals("1.107.0", EventVocabulary.VERSION)
+    fun theContractIsAtLeast1_78_0() {
+        // A floor, not a pin: later additive bumps must not break this feature's wire test.
+        assertTrue(SemVer.parse(EventVocabulary.VERSION)!! >= SemVer.parse("1.78.0")!!, EventVocabulary.VERSION)
     }
 
     @Test

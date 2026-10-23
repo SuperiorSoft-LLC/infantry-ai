@@ -348,7 +348,8 @@ class ProjectBaseBranchDaemonTest {
             assertEquals("start_refused", refused.start?.reason)
             assertEquals(
                 "no base branch configured for project $p; set one with `agenthq project base $p <branch>`, an epic " +
-                    "base (`agenthq epic base <epicId> <branch>`) or the daemon's AGENTHQ_BASE_BRANCH",
+                    "base (`agenthq epic base <epicId> <branch>`) or the daemon's AGENTHQ_BASE_BRANCH" +
+                    " (a headless daemon also needs AGENTHQ_REPO=<git repo>)",
                 refused.start?.detail,
             )
             val stored = client.board().single { it.id == ticket.id }

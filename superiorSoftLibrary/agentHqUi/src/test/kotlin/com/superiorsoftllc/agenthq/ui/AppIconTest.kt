@@ -6,16 +6,17 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-/** APP-ICON-1: the window, taskbar and installer carry the AgentHQ "A" mark, not Compose's default Kotlin icon. */
+/** APP-ICON-1: the window, taskbar and installer carry the Infantry AI emblem, not Compose's default Kotlin icon. */
 class AppIconTest {
     @Test fun theWindowIconPainterLoadsTheAgentHqMark() {
         val painter = AppIcon.painter()
         assertNotNull(painter, "AppIcon.painter() must load ${AppIcon.RESOURCE} from the classpath")
-        assertEquals(256f, painter.intrinsicSize.width, "the window icon is the 256px AgentHQ mark")
-        // The mark's tile is Palette.Accent amber: sample the centre-left of the tile, away from the "A".
+        assertEquals(256f, painter.intrinsicSize.width, "the window icon is the 256px emblem")
+        // The emblem is drawn on a transparent canvas (icons/GenInfantryIcon.java): an empty corner, an opaque centre.
         val image = AppIcon.image()!!
-        val argb = image.getRGB(image.width / 8 + 4, image.height / 2)
-        assertEquals(0xFFF59E0B.toInt(), argb, "the icon tile must be the header logo's amber (Palette.Accent)")
+        assertEquals(0, image.getRGB(0, 0) ushr 24, "the icon's corner must be transparent")
+        val centre = image.getRGB(image.width / 2, image.height / 2) ushr 24
+        assertTrue(centre >= 0xC0, "the emblem must be opaque at its centre, alpha was $centre")
     }
 
     @Test fun theSharedWindowPassesTheIcon() {

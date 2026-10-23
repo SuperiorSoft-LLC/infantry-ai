@@ -6,6 +6,7 @@ import com.superiorsoftllc.agenthq.protocol.EventVocabulary
 import com.superiorsoftllc.agenthq.protocol.PromptRequest
 import com.superiorsoftllc.agenthq.protocol.PromptResolved
 import com.superiorsoftllc.agenthq.protocol.PromptResponse
+import com.superiorsoftllc.agenthq.update.SemVer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,8 +36,9 @@ class PromptWireTest {
         send(Envelope.PROMPT_RESPONSE, json.encodeToString(PromptResponse.serializer(), response))
 
     @Test
-    fun theContractIs1_79_0() {
-        assertEquals("1.107.0", EventVocabulary.VERSION)
+    fun theContractIsAtLeast1_79_0() {
+        // A floor, not a pin: later additive bumps must not break this feature's wire test.
+        assertTrue(SemVer.parse(EventVocabulary.VERSION)!! >= SemVer.parse("1.79.0")!!, EventVocabulary.VERSION)
     }
 
     @Test

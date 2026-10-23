@@ -3,12 +3,14 @@ package com.superiorsoftllc.agenthq.usage
 import com.superiorsoftllc.agenthq.daemon.DaemonFixture
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.EventVocabulary
+import com.superiorsoftllc.agenthq.update.SemVer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /** U1 (contract 1.59.0) over the real daemon socket: `limits` is answered with every source's windows, token-free. */
 class LimitsWireTest {
@@ -23,8 +25,9 @@ class LimitsWireTest {
     }
 
     @Test
-    fun theContractIs1_68_0() {
-        assertEquals("1.107.0", EventVocabulary.VERSION)
+    fun theContractIsAtLeast1_68_0() {
+        // A floor, not a pin: later additive bumps must not break this feature's wire test.
+        assertTrue(SemVer.parse(EventVocabulary.VERSION)!! >= SemVer.parse("1.68.0")!!, EventVocabulary.VERSION)
     }
 
     @Test

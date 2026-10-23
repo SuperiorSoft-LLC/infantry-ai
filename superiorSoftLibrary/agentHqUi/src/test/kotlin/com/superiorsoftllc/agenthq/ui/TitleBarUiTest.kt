@@ -50,7 +50,7 @@ class TitleBarUiTest {
     fun theBarCarriesNameLogoProjectSlotStatusAndWindowControls() {
         runDesktopComposeUiTest(1200, 60) {
             setContent { TitleBar(state, AgentScope.GLOBAL, onConnect = {}, onAttention = {}, chrome = FakeChrome()) }
-            onNodeWithText("AgentHQ").assertExists()
+            onNodeWithText("Infantry AI").assertExists()
             onNodeWithTag(TITLE_BAR_LOGO_TAG).assertExists()
             onNodeWithTag(TITLE_BAR_PROJECT_SLOT_TAG).assertExists()
             onNodeWithText("connected", substring = true).assertExists()
@@ -101,7 +101,7 @@ class TitleBarUiTest {
     fun withoutAWindowThereAreNoWindowControls() {
         runDesktopComposeUiTest(1200, 60) {
             setContent { TitleBar(state, AgentScope.GLOBAL, onConnect = {}, onAttention = {}, chrome = null) }
-            onNodeWithText("AgentHQ").assertExists()
+            onNodeWithText("Infantry AI").assertExists()
             onNodeWithTag(TITLE_BAR_MINIMIZE_TAG).assertDoesNotExist()
             onNodeWithTag(TITLE_BAR_MAXIMIZE_TAG).assertDoesNotExist()
             onNodeWithTag(TITLE_BAR_CLOSE_TAG).assertDoesNotExist()

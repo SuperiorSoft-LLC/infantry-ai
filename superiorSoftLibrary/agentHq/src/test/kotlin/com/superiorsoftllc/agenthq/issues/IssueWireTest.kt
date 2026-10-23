@@ -3,6 +3,7 @@ package com.superiorsoftllc.agenthq.issues
 import com.superiorsoftllc.agenthq.daemon.DaemonFixture
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.EventVocabulary
+import com.superiorsoftllc.agenthq.update.SemVer
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlin.test.AfterTest
@@ -35,8 +36,9 @@ class IssueWireTest {
     private fun decodeList(envelope: Envelope) = json.decodeFromString(ListSerializer(Issue.serializer()), envelope.data)
 
     @Test
-    fun theContractIs1_54_0() {
-        assertEquals("1.107.0", EventVocabulary.VERSION)
+    fun theContractIsAtLeast1_54_0() {
+        // A floor, not a pin: later additive bumps must not break this feature's wire test.
+        assertTrue(SemVer.parse(EventVocabulary.VERSION)!! >= SemVer.parse("1.54.0")!!, EventVocabulary.VERSION)
     }
 
     @Test
