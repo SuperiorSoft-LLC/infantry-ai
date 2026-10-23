@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.opencode
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import com.superiorsoftllc.agenthq.daemon.AgentHqMcp
 import com.superiorsoftllc.agenthq.harness.ToolApproval
 import com.superiorsoftllc.agenthq.provider.RunRequest
@@ -141,7 +143,7 @@ class OpenCodeServeAdapter(
             val port = portPicker()
             val command = listOf(executable(), "serve", "--port", port.toString(), "--hostname", "127.0.0.1")
             // BUG-PERM-5: the agenthq allow rides the inline config, merged into whatever the child would inherit.
-            val inherited = env[OpenCodePermissions.CONFIG_CONTENT_ENV] ?: System.getenv(OpenCodePermissions.CONFIG_CONTENT_ENV)
+            val inherited = env[OpenCodePermissions.CONFIG_CONTENT_ENV] ?: InfantryEnv.get(OpenCodePermissions.CONFIG_CONTENT_ENV)
             // PROMPT-4: in `ask` mode the gated permissions are `ask` too, so opencode emits permission.asked.
             val config = OpenCodePermissions.CONFIG_CONTENT_ENV to OpenCodePermissions.serveConfig(request.toolApproval, inherited, env) // MCP-1: + mcp.agenthq
             process = runner.start(ProcessSpec(command, request.workingDir, env + config + (PASSWORD_ENV to password)), object : ProcessListener {

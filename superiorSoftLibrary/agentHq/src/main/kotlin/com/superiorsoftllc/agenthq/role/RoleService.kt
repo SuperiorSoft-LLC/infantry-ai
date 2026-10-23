@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.role
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import com.superiorsoftllc.agenthq.protocol.RoleSave
 import com.superiorsoftllc.agenthq.session.stateDir
 import java.io.File
@@ -85,6 +87,6 @@ class RoleService(private val dir: File) {
 
         /** `AGENTHQ_ROLES_DIR`, else `roles/` inside the daemon's state directory. */
         fun defaultDir(): File =
-            System.getenv(ENV)?.takeIf { it.isNotBlank() }?.let(::File) ?: File(stateDir(), "roles")
+            InfantryEnv.get(ENV)?.takeIf { it.isNotBlank() }?.let(::File) ?: File(stateDir(), "roles")
     }
 }

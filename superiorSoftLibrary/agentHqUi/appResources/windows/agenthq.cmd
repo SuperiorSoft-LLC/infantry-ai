@@ -1,5 +1,5 @@
 @echo off
-rem AgentHQ CLI launcher shipped with the INSTALLED app (CLIPATH-2).
+rem Infantry AI CLI launcher shipped with the INSTALLED app (CLIPATH-2).
 rem jpackage layout: <install>\app\resources\agenthq.cmd (this file), <install>\app\*.jar (the app classpath,
 rem :agentHq included), <install>\runtime (the bundled runtime). The daemon puts this directory first on every
 rem session's PATH and exports it as AGENTHQ_BIN.

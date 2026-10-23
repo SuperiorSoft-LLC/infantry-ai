@@ -64,7 +64,7 @@ object OsVaults {
         override fun fetch() = run(listOf("secret-tool", "lookup", "service", "agenthq-keystore"), null)
 
         override fun store(value: String): Boolean = runCatching {
-            val p = ProcessBuilder("secret-tool", "store", "--label=AgentHQ keystore", "service", "agenthq-keystore").apply {
+            val p = ProcessBuilder("secret-tool", "store", "--label=Infantry AI keystore", "service", "agenthq-keystore").apply {
                 redirectError(ProcessBuilder.Redirect.DISCARD)
                 redirectOutput(ProcessBuilder.Redirect.DISCARD)
             }.start()

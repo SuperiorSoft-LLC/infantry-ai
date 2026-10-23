@@ -1,4 +1,4 @@
-AgentHQ server (headless daemon, no UI)
+Infantry AI server (headless daemon, no UI)
 =======================================
 
 One daemon; the Windows/Android apps and the `agenthq` CLI connect to it as thin clients.

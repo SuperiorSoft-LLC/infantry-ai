@@ -1,0 +1,17 @@
+#!/bin/sh
+# Infantry AI CLI launcher (`infantry`; same program as `agenthq`, kept as its alias) for Git Bash on Windows (CLIPATH-2): bash does not run `agenthq.cmd` for a bare `agenthq`.
+# BUG-CLI-2: this shim starts java itself and never goes through agenthq.cmd, because cmd.exe ends `%*` at the first LF:
+# a multi-line `--desc "a<LF>b"` became "a" and every later argument (`--port N`) was dropped silently. "$@" keeps each
+# argument whole. jpackage layout and java order are agenthq.cmd's: AGENTHQ_JAVA, the bundled runtime's java.exe,
+# JAVA_HOME, then java on PATH; it runs com.superiorsoftllc.agenthq.cli.CliMainKt on the app's classpath.
+here=$(cd "$(dirname "$0")" && pwd)
+app="$here/.."
+# java.exe is a native Windows program: hand it a Windows classpath (cygpath ships with Git Bash).
+cp="$app/*"
+if command -v cygpath >/dev/null 2>&1; then cp="$(cygpath -w "$app")\\*"; fi
+for java in "$AGENTHQ_JAVA" "$here/../../runtime/bin/java.exe" "${JAVA_HOME:+$JAVA_HOME/bin/java.exe}"; do
+  if [ -n "$java" ] && [ -f "$java" ]; then
+    exec "$java" -cp "$cp" com.superiorsoftllc.agenthq.cli.CliMainKt "$@"
+  fi
+done
+exec java -cp "$cp" com.superiorsoftllc.agenthq.cli.CliMainKt "$@"

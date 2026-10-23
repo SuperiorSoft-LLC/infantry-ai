@@ -65,7 +65,7 @@ class TicketContextComposerTest {
         )
 
         val expectedPrompt = "$instructions\n\n$ticketSection\n\n$linkedSection"
-        val agenthqSection = "You are running inside AgentHQ. Ticket: T-21. Project: test-project. AgentHQ tickets, agents, mail and project knowledge live in the AgentHQ daemon and are reached with the `agenthq` CLI, never through files. See superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md.\n" + TicketContextComposer.ticketMoveLine("T-21") + "\n" + com.superiorsoftllc.agenthq.context.TicketContextComposer.MCP_LINE
+        val agenthqSection = "You are running inside Infantry AI. Ticket: T-21. Project: test-project. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `agenthq` CLI, never through files. See superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md.\n" + TicketContextComposer.ticketMoveLine("T-21") + "\n" + com.superiorsoftllc.agenthq.context.TicketContextComposer.MCP_LINE
         assertEquals("$agenthqSection\n\n$teamSection\n\n$expectedPrompt", result.prompt)
         assertEquals(2, result.prompt.substringAfter("\n\n$agenthqSection").substringAfterLast("\n\n").lines().size, "one line per link, in input order")
         assertFalse(result.prompt.contains(linkedBody))
@@ -102,7 +102,7 @@ class TicketContextComposerTest {
         )
 
         val expectedTicketSection = ticketSection
-        val agenthqSection = "You are running inside AgentHQ. Ticket: Ticket title. Project: test-project. AgentHQ tickets, agents, mail and project knowledge live in the AgentHQ daemon and are reached with the `agenthq` CLI, never through files. See superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md.\n" + TicketContextComposer.ticketMoveLine("Ticket title") + "\n" + com.superiorsoftllc.agenthq.context.TicketContextComposer.MCP_LINE
+        val agenthqSection = "You are running inside Infantry AI. Ticket: Ticket title. Project: test-project. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `agenthq` CLI, never through files. See superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md.\n" + TicketContextComposer.ticketMoveLine("Ticket title") + "\n" + com.superiorsoftllc.agenthq.context.TicketContextComposer.MCP_LINE
         assertEquals("$agenthqSection\n\n$teamSection\n\n$expectedTicketSection", result.prompt)
         assertEquals(
             listOf(
@@ -243,7 +243,7 @@ class TicketContextComposerTest {
         )
 
         val coreSection = "Title\n\n"
-        val agenthqSection = "You are running inside AgentHQ. Ticket: Title. Project: test-project. AgentHQ tickets, agents, mail and project knowledge live in the AgentHQ daemon and are reached with the `agenthq` CLI, never through files. See superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md.\n" + TicketContextComposer.ticketMoveLine("Title") + "\n" + com.superiorsoftllc.agenthq.context.TicketContextComposer.MCP_LINE
+        val agenthqSection = "You are running inside Infantry AI. Ticket: Title. Project: test-project. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `agenthq` CLI, never through files. See superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md.\n" + TicketContextComposer.ticketMoveLine("Title") + "\n" + com.superiorsoftllc.agenthq.context.TicketContextComposer.MCP_LINE
         assertEquals("$agenthqSection\n\n$teamSection\n\n$coreSection", result.prompt)
         assertEquals(
             listOf(
@@ -303,7 +303,7 @@ class TicketContextComposerTest {
         val teamBlock = "Team (scoped to your project):\n" +
             "- agenthq agents --live: who is live in this project\n" +
             "- agenthq send <role|agentId> \"msg\": message a colleague (queued if they are busy)\n" +
-            "- agenthq_inbox / agenthq_read <id> (your AgentHQ MCP tools): your mail; " +
+            "- agenthq_inbox / agenthq_read <id> (your Infantry AI MCP tools): your mail; " +
             "fallback when they are not available: agenthq inbox / agenthq read <id>\n" +
             "- agenthq mail: every mail command (answer one with --reply-to <id>); agenthq --help: every command, grouped. " +
             "Start here: superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md, section 0\n" +

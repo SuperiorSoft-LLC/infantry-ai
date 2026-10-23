@@ -366,7 +366,7 @@ internal class McpTicketTools(
         fun descriptors() = buildJsonArray {
             add(tool(
                 CREATE,
-                "Create a ticket on the AgentHQ board (it lands in todo; nothing runs until $START starts it). " +
+                "Create a ticket on the Infantry AI board (it lands in todo; nothing runs until $START starts it). " +
                     "The description is stored verbatim, multi-line included. role / provider / model pin who runs " +
                     "it (agenthq_list_harnesses lists the provider ids and their models); the daemon refuses an " +
                     "unknown provider or a model that provider does not list. The answer says what was saved.",

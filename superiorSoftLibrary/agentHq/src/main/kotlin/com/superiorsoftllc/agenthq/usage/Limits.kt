@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.usage
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -243,13 +245,13 @@ object LocalCredentials {
     private val home: File get() = File(System.getProperty("user.home"))
 
     /** `$CLAUDE_CONFIG_DIR/.credentials.json`, else `~/.claude/.credentials.json` -> `claudeAiOauth.accessToken`. */
-    fun claudeAccessToken(env: (String) -> String? = System::getenv, userHome: File = home): String? {
+    fun claudeAccessToken(env: (String) -> String? = InfantryEnv::get, userHome: File = home): String? {
         val dir = env("CLAUDE_CONFIG_DIR")?.takeIf { it.isNotBlank() }?.let(::File) ?: File(userHome, ".claude")
         return jsonFile(File(dir, ".credentials.json"))?.obj("claudeAiOauth")?.str("accessToken")
     }
 
     /** `$XDG_DATA_HOME/opencode/auth.json`, else `~/.local/share/opencode/auth.json` -> `["opencode-go"].key`. */
-    fun openCodeGoKey(env: (String) -> String? = System::getenv, userHome: File = home): String? {
+    fun openCodeGoKey(env: (String) -> String? = InfantryEnv::get, userHome: File = home): String? {
         val dir = env("XDG_DATA_HOME")?.takeIf { it.isNotBlank() }?.let { File(it, "opencode") }
             ?: File(userHome, ".local/share/opencode")
         return jsonFile(File(dir, "auth.json"))?.obj("opencode-go")?.str("key")
@@ -310,10 +312,10 @@ class LimitService(
         /** No sources: answers an empty list, reads nothing. */
         val NONE = LimitService(emptyList(), liveEnabled = { false })
 
-        fun liveFromEnv(env: (String) -> String? = System::getenv): Boolean =
+        fun liveFromEnv(env: (String) -> String? = InfantryEnv::get): Boolean =
             env(LIVE_ENV)?.trim()?.lowercase() !in setOf("false", "0", "off", "no")
 
-        fun fromEnv(env: (String) -> String? = System::getenv, http: LimitHttp = JdkLimitHttp): LimitService =
+        fun fromEnv(env: (String) -> String? = InfantryEnv::get, http: LimitHttp = JdkLimitHttp): LimitService =
             LimitService(listOf(ClaudeOAuthUsageSource(http), OpenCodeGoUsageSource(http)), liveEnabled = { liveFromEnv(env) })
     }
 }

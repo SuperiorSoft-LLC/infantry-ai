@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.claude
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import com.superiorsoftllc.agenthq.harness.ToolApproval
 import com.superiorsoftllc.agenthq.session.agentHqSetting
 
@@ -21,7 +23,7 @@ object ClaudePermissionMode {
     fun forApproval(
         approval: ToolApproval,
         getProperty: (String) -> String? = System::getProperty,
-        getenv: (String) -> String? = System::getenv,
+        getenv: (String) -> String? = InfantryEnv::get,
     ): String? {
         agentHqSetting(LEGACY_ENV, getProperty, getenv)?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
         return when (approval) {

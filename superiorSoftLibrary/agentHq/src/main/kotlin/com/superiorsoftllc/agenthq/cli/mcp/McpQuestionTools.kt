@@ -26,7 +26,7 @@ internal class McpQuestionTools(private val getenv: (String) -> String?) {
 
     suspend fun ask(stream: FrameStream, arguments: JsonObject): ToolResult {
         val session = getenv(AccessPolicy.SESSION_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }
-            ?: return refused("$ASK needs the asking session in ${AccessPolicy.SESSION_ID_ENV} (set for every session AgentHQ spawns)")
+            ?: return refused("$ASK needs the asking session in ${AccessPolicy.SESSION_ID_ENV} (set for every session Infantry AI spawns)")
         val options = (arguments["options"] as? JsonArray)?.map { element ->
             val option = element as? JsonObject ?: return refused("$ASK: each option is {label, description}")
             PromptOption(

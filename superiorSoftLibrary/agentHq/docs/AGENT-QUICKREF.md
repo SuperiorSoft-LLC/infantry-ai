@@ -1,4 +1,4 @@
-# AgentHQ Quick Reference
+# Infantry AI Quick Reference
 
 ## 0. Start here (agents: read this first)
 
@@ -207,7 +207,7 @@ All routes under the daemon's HTTP server (see `MailHttp.kt:37-98`):
 - A message to a **busy** agent **QUEUES** and is delivered when that run ends (never a permanent failure). A message to an agent with **no session at all** is refused: `agent <id> has no running session — start it first`.
 - Mail is delivered via the WebSocket envelope (`[MAIL_SEND]`) **or** via the HTTP API (`POST /mail/send`).
 - A spawned agent gets `AGENTHQ_SESSION_ID` (its own `from`) and `AGENTHQ_MAIL_BASE` in its environment, so it can **initiate** a handoff to a colleague, not only answer a delivered one.
-- It also gets **who it runs as**: `AGENTHQ_ROLE` when the session has a role (a profile's, or a role-only spawn from the New agent modal) and `AGENTHQ_AGENT_ID` when an agent profile is bound (`AGENTHQ_PROJECT_ID` when it has a project). Its first turn repeats the same facts in one line after the persona: `You are running inside AgentHQ as role '<role>', agent id '<id>'. ...` (`firstTurn` in `agents/AgentProfiles.kt`).
+- It also gets **who it runs as**: `AGENTHQ_ROLE` when the session has a role (a profile's, or a role-only spawn from the New agent modal) and `AGENTHQ_AGENT_ID` when an agent profile is bound (`AGENTHQ_PROJECT_ID` when it has a project). Its first turn repeats the same facts in one line after the persona: `You are running inside Infantry AI as role '<role>', agent id '<id>'. ...` (`firstTurn` in `agents/AgentProfiles.kt`).
 - The delivered prompt carries the exact commands so an unattended handoff can be **delivered AND answered** with no human relaying anything.
 
 ## 5. Daemon connection
@@ -229,7 +229,7 @@ its colleagues and how to read its mail without being told. Mail is read with th
 Team (scoped to your project):
 - agenthq agents --live: who is live in this project
 - agenthq send <role|agentId> "msg": message a colleague (queued if they are busy)
-- agenthq_inbox / agenthq_read <id> (your AgentHQ MCP tools): your mail; fallback when they are not available: agenthq inbox / agenthq read <id>
+- agenthq_inbox / agenthq_read <id> (your Infantry AI MCP tools): your mail; fallback when they are not available: agenthq inbox / agenthq read <id>
 - agenthq mail: every mail command (answer one with --reply-to <id>); agenthq --help: every command, grouped. Start here: superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md, section 0
 - To ask the owner a choice, run `agenthq ask --question "..." --option "label|consequence" --recommend <label> --reason "..."` (repeat --option; --other, --default-after <min>). It returns a question id at once and does not wait: carry on with other work; the owner's pick arrives as mail (thread question:<id>).
 ```

@@ -30,7 +30,7 @@ class StateDirLockTest {
         val java = File(System.getProperty("java.home"), "bin/java").absolutePath
         val builder = ProcessBuilder(java, "@${argFile.absolutePath}", "com.superiorsoftllc.agenthq.daemon.DaemonMainKt")
         builder.environment().apply {
-            keys.filter { it.startsWith("AGENTHQ_", ignoreCase = true) }.forEach(::remove)
+            keys.filter { it.startsWith("AGENTHQ_", ignoreCase = true) || it.startsWith("INFANTRY_", ignoreCase = true) }.forEach(::remove)
             put("AGENTHQ_HOST", "127.0.0.1")
             put("AGENTHQ_PORT", "0")
             put("AGENTHQ_STATE_DIR", stateDir.absolutePath)

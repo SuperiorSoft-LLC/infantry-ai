@@ -22,7 +22,7 @@ class ReleaseAssetsTest {
     }
 
     private fun fakeMsi(version: String): File =
-        File(temp, "jpackage/AgentHQ-$version.msi").apply { parentFile.mkdirs(); writeBytes("fake installer $version".toByteArray()) }
+        File(temp, "jpackage/InfantryAI-$version.msi").apply { parentFile.mkdirs(); writeBytes("fake installer $version".toByteArray()) }
 
     private fun sha256(file: File): String =
         MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
@@ -32,7 +32,7 @@ class ReleaseAssetsTest {
         val out = File(temp, "release/1.0.7")
         val written = ReleaseAssets.write(fakeMsi("1.0.7"), out, "1.0.7", gitSha = "abc1234")
 
-        val msi = File(out, "AgentHQ-1.0.7.msi")
+        val msi = File(out, "InfantryAI-1.0.7.msi")
         assertTrue(msi.isFile, "the msi is copied into the release dir")
         val sums = File(out, "SHA256SUMS")
         assertEquals(sha256(msi), Updater.parseChecksum(sums.readText(), msi.name))

@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.claude
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
 import java.io.File
 
@@ -62,7 +64,7 @@ object ClaudeCommand {
     const val PERMISSION_PROMPT_STDIO = "stdio"
 
     fun model(): String? =
-        System.getenv("AGENTHQ_CLAUDE_MODEL")?.takeIf { it.isNotBlank() }
+        InfantryEnv.get("AGENTHQ_CLAUDE_MODEL")?.takeIf { it.isNotBlank() }
 
     /**
      * BUG-PERM-1: the `--permission-mode` for a run whose resolved Tool approval is [approval] ([ClaudePermissionMode]:
@@ -77,7 +79,7 @@ object ClaudeCommand {
      * newline is the separator, never a bare space).
      */
     fun mcpConfigs(): List<String> =
-        parseMcpConfigs(System.getenv("AGENTHQ_CLAUDE_MCP_CONFIG"))
+        parseMcpConfigs(InfantryEnv.get("AGENTHQ_CLAUDE_MCP_CONFIG"))
 
     /**
      * MCP-1: the `--mcp-config` values for a session whose env is [sessionEnv]: [userConfigs] (`AGENTHQ_CLAUDE_MCP_CONFIG`)
@@ -98,7 +100,7 @@ object ClaudeCommand {
             .filter { it.isNotEmpty() }
 
     fun strictMcp(): Boolean =
-        System.getenv("AGENTHQ_CLAUDE_STRICT_MCP")?.trim()?.lowercase() in setOf("1", "true", "yes")
+        InfantryEnv.get("AGENTHQ_CLAUDE_STRICT_MCP")?.trim()?.lowercase() in setOf("1", "true", "yes")
 
     /**
      * [model] is the session's own choice (contract 1.3.0); see [effectiveModel]. [executable] defaults

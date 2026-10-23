@@ -25,7 +25,7 @@ object ReleaseAssets {
         return version
     }
 
-    fun msiName(version: String) = "AgentHQ-$version.msi"
+    fun msiName(version: String) = "InfantryAI-$version.msi"
 
     /** One `sha256sum`-format line: `<64 lowercase hex><two spaces><file name>`, what [Updater.parseChecksum] reads. */
     fun sumsLine(sha256: String, fileName: String): String = "$sha256  $fileName"
@@ -43,7 +43,7 @@ object ReleaseAssets {
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    /** Copies [msi] into [outDir] as `AgentHQ-<version>.msi` and writes `SHA256SUMS` and a `RELEASE-NOTES.md` stub. */
+    /** Copies [msi] into [outDir] as `InfantryAI-<version>.msi` and writes `SHA256SUMS` and a `RELEASE-NOTES.md` stub. */
     fun write(msi: File, outDir: File, version: String, gitSha: String): Written {
         val v = requireVersion(version)
         require(msi.isFile) { "RELEASE-ASSETS-1: no installer at $msi; build it with packageReleaseMsi -PagenthqVersion=$v" }
@@ -58,7 +58,7 @@ object ReleaseAssets {
         val notes = File(outDir, NOTES_FILE).apply {
             writeText(
                 """
-                |# AgentHQ $v
+                |# Infantry AI $v
                 |
                 |Tag: `v$v` · Commit: `$gitSha`
                 |

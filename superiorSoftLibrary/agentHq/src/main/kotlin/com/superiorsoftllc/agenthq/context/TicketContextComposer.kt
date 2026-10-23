@@ -25,7 +25,7 @@ class TicketContextComposer(
         val switches = effective(input.includeLinkedOverride, input.includeSkillsOverride)
         val includeLinked = switches.includeLinkedTasksContext.value
         val sections = buildList {
-            add("agenthq" to "You are running inside AgentHQ. Ticket: ${input.ticketId}. Project: ${input.projectId ?: "none"}. AgentHQ tickets, agents, mail and project knowledge live in the AgentHQ daemon and are reached with the `agenthq` CLI, never through files. See superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md.\n" + ticketMoveLine(input.ticketId) + "\n" + MCP_LINE)
+            add("agenthq" to "You are running inside Infantry AI. Ticket: ${input.ticketId}. Project: ${input.projectId ?: "none"}. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `agenthq` CLI, never through files. See superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md.\n" + ticketMoveLine(input.ticketId) + "\n" + MCP_LINE)
             add("team" to ((input.reportTo?.let { TEAM_BLOCK + "\n" + reportToLine(it) } ?: TEAM_BLOCK) + "\n" + FINISH_LINE))
             input.instructions?.takeIf(String::isNotBlank)?.let { add("instructions" to it) }
             // The same persona -> identity -> task order [firstTurn] gives every other first turn.
@@ -95,10 +95,10 @@ class TicketContextComposer(
             "so your session shows Running while they work; `agenthq bg list|status|logs|stop <id>` manage them."
 
         /**
-         * MCP-1: every session the daemon spawns has AgentHQ's own MCP server, so the agent prefers its tools (no Tool
+         * MCP-1: every session the daemon spawns has Infantry AI's own MCP server, so the agent prefers its tools (no Tool
          * approval, no shell quoting); the CLI stays the fallback and covers what the tools do not (e.g. ticket move).
          */
-        const val MCP_LINE = "When the AgentHQ MCP tools are available (mcp__agenthq__* in Claude, agenthq_* in opencode), " +
+        const val MCP_LINE = "When the Infantry AI MCP tools are available (mcp__agenthq__* in Claude, agenthq_* in opencode), " +
             "prefer them over the CLI: agenthq_ticket_create / agenthq_ticket_update / agenthq_ticket_get for tickets " +
             "(the description goes in verbatim, multi-line included), agenthq_ticket_start to put an agent to work on a " +
             "ticket (it runs the ticket's role, provider and model on the ticket's own branch; agenthq_list_harnesses " +
@@ -153,7 +153,7 @@ class TicketContextComposer(
         const val TEAM_BLOCK = "Team (scoped to your project):\n" +
             "- agenthq agents --live: who is live in this project\n" +
             "- agenthq send <role|agentId> \"msg\": message a colleague (queued if they are busy)\n" +
-            "- agenthq_inbox / agenthq_read <id> (your AgentHQ MCP tools): your mail; " +
+            "- agenthq_inbox / agenthq_read <id> (your Infantry AI MCP tools): your mail; " +
             "fallback when they are not available: agenthq inbox / agenthq read <id>\n" +
             "- agenthq mail: every mail command (answer one with --reply-to <id>); agenthq --help: every command, grouped. " +
             "Start here: superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md, section 0\n" +

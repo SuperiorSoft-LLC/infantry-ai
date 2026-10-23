@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.daemon
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import com.superiorsoftllc.agenthq.session.SessionRecord
 import com.superiorsoftllc.agenthq.session.SessionState
 import java.util.concurrent.ConcurrentHashMap
@@ -129,7 +131,7 @@ class SpawnGuard(
         private val ENDED = setOf(SessionState.EXITED, SessionState.FAILED, SessionState.ORPHANED)
 
         /** [name] from [env] as a non-negative integer, else [default]; a malformed value is refused, never ignored. */
-        fun limitFromEnv(name: String, default: Int, env: (String) -> String? = System::getenv): Int {
+        fun limitFromEnv(name: String, default: Int, env: (String) -> String? = InfantryEnv::get): Int {
             val raw = env(name)?.trim()?.takeIf { it.isNotEmpty() } ?: return default
             return raw.toIntOrNull()?.takeIf { it >= 0 }
                 ?: throw IllegalArgumentException("$name must be a whole number of 0 or more, was '$raw'")

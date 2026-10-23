@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.keystore
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -48,7 +50,7 @@ data class SecretInfo(val name: String, val set: Boolean, val tail: String)
  */
 class Keystore(
     private val dir: File,
-    private val env: (String) -> String? = System::getenv,
+    private val env: (String) -> String? = InfantryEnv::get,
     private val vault: OsVault? = OsVaults.detect(dir),
 ) {
     private val json = Json { ignoreUnknownKeys = true }

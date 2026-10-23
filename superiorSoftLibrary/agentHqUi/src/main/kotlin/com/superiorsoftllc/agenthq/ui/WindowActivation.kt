@@ -82,9 +82,9 @@ object WindowActivation {
     fun notifyAlreadyRunning(port: Int?, dialog: (String) -> Unit = ::showDialog): String {
         val status = port?.let { request(it) }
         val asked = if (port != null && status != null) {
-            "[agentHq-install] asked the running AgentHQ (port $port) to show its window (HTTP $status)"
+            "[agentHq-install] asked the running Infantry AI (port $port) to show its window (HTTP $status)"
         } else {
-            "[agentHq-install] could not reach the running AgentHQ${port?.let { " on port $it" } ?: " (no port recorded yet)"}"
+            "[agentHq-install] could not reach the running Infantry AI${port?.let { " on port $it" } ?: " (no port recorded yet)"}"
         }
         if (status == HttpStatusCode.NoContent.value) return asked
         return if (GraphicsEnvironment.isHeadless()) {
@@ -95,8 +95,8 @@ object WindowActivation {
         }
     }
 
-    const val ALREADY_RUNNING = "AgentHQ is already running."
+    const val ALREADY_RUNNING = "Infantry AI is already running."
 
     private fun showDialog(message: String) =
-        JOptionPane.showMessageDialog(null, message, "AgentHQ", JOptionPane.INFORMATION_MESSAGE)
+        JOptionPane.showMessageDialog(null, message, "Infantry AI", JOptionPane.INFORMATION_MESSAGE)
 }

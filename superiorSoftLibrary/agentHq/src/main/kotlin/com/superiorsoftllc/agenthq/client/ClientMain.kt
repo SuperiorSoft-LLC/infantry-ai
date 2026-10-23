@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.client
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import com.superiorsoftllc.agenthq.protocol.AgentProfile
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.FinishedPayload
@@ -69,7 +71,7 @@ private val json = Json { ignoreUnknownKeys = true }
  * One-shot mode (args present) still sends the args as ONE prompt and exits on the daemon `exit`.
  */
 fun main(args: Array<String>) {
-    val url = System.getenv("AGENTHQ_WS_URL") ?: "ws://127.0.0.1:8787/ws"
+    val url = InfantryEnv.get("AGENTHQ_WS_URL") ?: "ws://127.0.0.1:8787/ws"
     val oneShotPrompt = args.joinToString(" ").trim()
     val closed = CountDownLatch(1)
 

@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.opencode
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import com.superiorsoftllc.agenthq.harness.ToolApproval
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
 import java.io.File
@@ -28,7 +30,7 @@ object OpenCodeCommand {
         com.superiorsoftllc.agenthq.executables.CliExecutables.require(com.superiorsoftllc.agenthq.executables.CliTools.OPENCODE)
 
     /** `AGENTHQ_OPENCODE_MODEL`, else [DEFAULT_MODEL]. A blank or "default" value is not a model id (BUG-G2). */
-    fun model(env: (String) -> String? = System::getenv): String =
+    fun model(env: (String) -> String? = InfantryEnv::get): String =
         env("AGENTHQ_OPENCODE_MODEL")?.let(::realModel) ?: DEFAULT_MODEL
 
     /** [value] trimmed, or null when it names no model: blank, or the display placeholder "default". */
@@ -60,7 +62,7 @@ object OpenCodeCommand {
      * The model a run names: the session's explicit choice (profile / ticket / spawn) first, then
      * `AGENTHQ_OPENCODE_MODEL`, then [DEFAULT_MODEL]. "default" is never passed through as an id.
      */
-    internal fun effectiveModel(requested: String?, env: (String) -> String? = System::getenv): String =
+    internal fun effectiveModel(requested: String?, env: (String) -> String? = InfantryEnv::get): String =
         realModel(requested) ?: model(env)
 
     /**

@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.daemon
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import com.superiorsoftllc.agenthq.session.agentHqSetting
 import java.io.File
 
@@ -53,7 +55,7 @@ object AgentHqBin {
      */
     fun childEnv(
         binDir: File?,
-        env: (String) -> String? = System::getenv,
+        env: (String) -> String? = InfantryEnv::get,
         javaHome: String? = System.getProperty("java.home"),
         pathSeparator: String = File.pathSeparator,
     ): Map<String, String> {

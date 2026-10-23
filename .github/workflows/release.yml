@@ -55,10 +55,10 @@ jobs:
           V='${{ needs.version.outputs.version }}'
           ./gradlew --no-daemon :superiorSoftLibrary:agentHqUi:createDistributable -PagenthqVersion="$V"
           mkdir -p out
-          app="$(ls -d superiorSoftLibrary/agentHqUi/build/compose/binaries/main/app/AgentHQ)"
-          (cd "$(dirname "$app")" && 7z a -tzip "$GITHUB_WORKSPACE/out/AgentHQ-$V-windows.zip" AgentHQ >/dev/null)
+          app="$(ls -d superiorSoftLibrary/agentHqUi/build/compose/binaries/main/app/InfantryAI)"
+          (cd "$(dirname "$app")" && 7z a -tzip "$GITHUB_WORKSPACE/out/InfantryAI-$V-windows.zip" InfantryAI >/dev/null)
           if ./gradlew --no-daemon :superiorSoftLibrary:agentHqUi:releaseAssets -PagenthqVersion="$V"; then
-            cp "superiorSoftLibrary/agentHqUi/build/release/$V/AgentHQ-$V.msi" out/
+            cp "superiorSoftLibrary/agentHqUi/build/release/$V/InfantryAI-$V.msi" out/
           else
             echo "::warning::MSI packaging failed unsigned on this runner; publishing the app-image zip only (the in-app updater needs the MSI)"
           fi
@@ -103,12 +103,12 @@ jobs:
             ./gradlew --no-daemon :superiorSoftLibrary:agentHqAndroid:assembleRelease -PagenthqVersion="$V"
             apk="$(ls superiorSoftLibrary/agentHqAndroid/build/outputs/apk/release/*.apk | head -n1)"
             case "$apk" in *unsigned*) echo "release APK came out unsigned"; exit 1;; esac
-            cp "$apk" "out/AgentHQ-$V.apk"
+            cp "$apk" "out/InfantryAI-$V.apk"
           else
             echo "::warning::No release keystore secrets; building a DEBUG-signed APK. Updates over an installed build need a stable key."
             ./gradlew --no-daemon :superiorSoftLibrary:agentHqAndroid:assembleDebug -PagenthqVersion="$V"
             apk="$(ls superiorSoftLibrary/agentHqAndroid/build/outputs/apk/debug/*.apk | head -n1)"
-            cp "$apk" "out/AgentHQ-$V-debug.apk"
+            cp "$apk" "out/InfantryAI-$V-debug.apk"
           fi
       - uses: actions/upload-artifact@v4
         with:
@@ -140,7 +140,7 @@ jobs:
           V='${{ needs.version.outputs.version }}'
           ./gradlew --no-daemon :superiorSoftLibrary:agentHq:headlessDist -PagenthqVersion="$V"
           mkdir -p out
-          cp superiorSoftLibrary/agentHq/build/distributions/AgentHQ-server-"$V"-* out/
+          cp superiorSoftLibrary/agentHq/build/distributions/InfantryAI-server-"$V"-* out/
       - uses: actions/upload-artifact@v4
         with:
           name: headless-${{ matrix.os }}
@@ -165,9 +165,9 @@ jobs:
           set -euo pipefail
           V='${{ needs.version.outputs.version }}'
           cd dl
-          sha256sum AgentHQ-* > SHA256SUMS
+          sha256sum InfantryAI-* > SHA256SUMS
           base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
-          assets="$(for f in AgentHQ-*; do
+          assets="$(for f in InfantryAI-*; do
             jq -n --arg n "$f" --arg s "$(sha256sum "$f" | cut -d' ' -f1)" --argjson z "$(stat -c %s "$f")" --arg u "$base/$f" \
               '{name:$n, sha256:$s, size:$z, url:$u}'
           done | jq -s .)"
@@ -180,10 +180,10 @@ jobs:
           set -euo pipefail
           cd dl
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" AgentHQ-* SHA256SUMS latest.json --clobber --repo "$GITHUB_REPOSITORY"
+            gh release upload "$GITHUB_REF_NAME" InfantryAI-* SHA256SUMS latest.json --clobber --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$GITHUB_REF_NAME" AgentHQ-* SHA256SUMS latest.json --repo "$GITHUB_REPOSITORY" \
-              --title "AgentHQ ${GITHUB_REF_NAME#v}" --generate-notes
+            gh release create "$GITHUB_REF_NAME" InfantryAI-* SHA256SUMS latest.json --repo "$GITHUB_REPOSITORY" \
+              --title "Infantry AI ${GITHUB_REF_NAME#v}" --generate-notes
           fi
 
   # DOCKER-1: builds and pushes the headless daemon image. DISABLED until the owner adds the repo secrets
@@ -195,7 +195,7 @@ jobs:
     permissions:
       contents: read
     env:
-      IMAGE: ${{ vars.DOCKER_IMAGE || 'infantryai/agenthq' }}   # pending rename (Infantry AI)
+      IMAGE: ${{ vars.DOCKER_IMAGE || 'infantryai/infantry-ai' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4

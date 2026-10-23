@@ -766,7 +766,7 @@ class Controller(
             return sendSwitch(HarnessSwitch.Plan(sessionId, agentId, picked.provider, picked.model))
         }
         if (roleChanges && !s.connection.swapsRoles) {
-            return report(CommandResult.Refused("This version of AgentHQ can't switch this session's role. Update AgentHQ, or start a new agent (Ctrl+N) with that role."))
+            return report(CommandResult.Refused("This version of Infantry AI can't switch this session's role. Update Infantry AI, or start a new agent (Ctrl+N) with that role."))
         }
         return sendSwitch(HarnessSwitch.Plan(sessionId, null, picked.provider, picked.model, role = if (roleChanges) wanted.orEmpty() else null))
     }
@@ -781,7 +781,7 @@ class Controller(
         }
         // UX-HARNESS-2: a session with no agent is switched in place; nothing is saved as an agent.
         if (!_state.value.connection.swapsSessions) {
-            return report(CommandResult.Refused("This version of AgentHQ can't switch this session's provider. Update AgentHQ, or start a new session on the provider you want."))
+            return report(CommandResult.Refused("This version of Infantry AI can't switch this session's provider. Update Infantry AI, or start a new session on the provider you want."))
         }
         _state.update { it.copy(pendingHarnessSwitch = it.pendingHarnessSwitch + (plan.sessionId to plan.harness), sessionSwitchError = null) }
         val r = report(send(WireRequests.sessionSwap(plan.sessionId, plan.harness.trim(), plan.model, plan.role)))

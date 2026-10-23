@@ -88,7 +88,7 @@ val agentHqJvmCaps: List<String> = project(":superiorSoftLibrary:agentHq").file(
 // `run` is registered by Compose Desktop after this script is evaluated, hence the lazy `matching`.
 tasks.matching { it.name == "run" }.configureEach {
     group = "application"
-    description = "Runs the AgentHQ desktop shell; connect to :superiorSoftLibrary:agentHq:runDaemon on ws://127.0.0.1:8787/ws."
+    description = "Runs the Infantry AI desktop shell; connect to :superiorSoftLibrary:agentHq:runDaemon on ws://127.0.0.1:8787/ws."
 }
 
 tasks.register("runUi") {
@@ -194,13 +194,13 @@ compose.desktop {
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi,
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe,
             )
-            packageName = "AgentHQ"
+            packageName = "InfantryAI"
             // INSTALL-1: the version comes from -PagenthqVersion (default 1.0.0), so an upgrade build needs no file edit:
             //   ./gradlew :superiorSoftLibrary:agentHqUi:packageMsi -PagenthqVersion=1.0.1
             // MSI needs MAJOR.MINOR.BUILD (each part numeric, MAJOR 1..255) and only upgrades over a LOWER version, so every
             // build the owner installs over an older one needs a higher number. Checked here, before jpackage spends minutes.
             packageVersion = agentHqPackageVersion
-            description = "AgentHQ desktop with its own daemon"
+            description = "Infantry AI desktop with its own daemon"
             vendor = "SuperiorSoft LLC"
             // CLIPATH-2: the installed app's `agenthq` CLI launchers (appResources/<os>/: agenthq.cmd + a Git Bash shim on
             // Windows, an sh script on macOS/Linux) land in $APPDIR/resources; InstalledCli pins that dir as AGENTHQ_BIN
@@ -213,11 +213,11 @@ compose.desktop {
             includeAllModules = true
             windows {
                 menu = true
-                menuGroup = "AgentHQ"
+                menuGroup = "Infantry AI"
                 shortcut = true
                 dirChooser = true
                 perUserInstall = true
-                // APP-ICON-1: the AgentHQ "A" mark for the installer and exe (else Compose packages its Kotlin icon).
+                // APP-ICON-1: the "A" mark for the installer and exe (else Compose packages its Kotlin icon).
                 iconFile.set(project.file("icons/agenthq.ico"))
                 // FIXED forever: changing it makes Windows treat a new version as a different product (no upgrade).
                 upgradeUuid = "6f1d3c2a-8b47-4e5a-9c1e-2a7b0d4f8e61"
@@ -348,7 +348,7 @@ tasks.register<JavaExec>("perfProfile") {
 
 // RELEASE-ASSETS-1: the assets UPDATE-1's Updater reads from a GitHub release, in one folder for the owner to upload:
 //   ./gradlew :superiorSoftLibrary:agentHqUi:releaseAssets -PagenthqVersion=1.0.N
-//   -> build/release/1.0.N/{AgentHQ-1.0.N.msi, SHA256SUMS, RELEASE-NOTES.md}
+//   -> build/release/1.0.N/{InfantryAI-1.0.N.msi, SHA256SUMS, RELEASE-NOTES.md}
 // The writing (copy, sha256sum-format SHA256SUMS, notes stub) is ReleaseAssets in :agentHq, unit-tested against the
 // Updater's own parser (ReleaseAssetsTest). This task NEVER pushes, tags or calls GitHub; publishing is manual
 // (docs/AGENTHQ-INSTALL.md, "Publishing a release").
@@ -358,7 +358,7 @@ val releaseAssets = tasks.register<JavaExec>("releaseAssets") {
     dependsOn("packageReleaseMsi")
     classpath = sourceSets["main"].runtimeClasspath
     mainClass.set("com.superiorsoftllc.agenthq.update.ReleaseAssetsKt")
-    val msi = layout.buildDirectory.file("compose/binaries/main-release/msi/AgentHQ-$agentHqPackageVersion.msi")
+    val msi = layout.buildDirectory.file("compose/binaries/main-release/msi/InfantryAI-$agentHqPackageVersion.msi")
     val out = layout.buildDirectory.dir("release/$agentHqPackageVersion")
     val gitSha = providers.exec {
         commandLine("git", "rev-parse", "--short", "HEAD")

@@ -46,7 +46,7 @@ sealed class UpdateFailure(val message: String) {
         "GitHub's rate limit was reached" + (resetAt?.let { " until " + DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()).format(it) } ?: "") + ". Try again later.",
     )
     class BadResponse(detail: String) : UpdateFailure("Unexpected answer from GitHub: $detail.")
-    class NoWindowsAsset(tag: String) : UpdateFailure("Release $tag has no Windows installer (AgentHQ-<version>.msi).")
+    class NoWindowsAsset(tag: String) : UpdateFailure("Release $tag has no Windows installer (InfantryAI-<version>.msi).")
     class BadAsset(detail: String) : UpdateFailure("The downloaded installer was refused: $detail.")
     class InstallFailed(detail: String) : UpdateFailure("Could not start the installer: $detail.")
 

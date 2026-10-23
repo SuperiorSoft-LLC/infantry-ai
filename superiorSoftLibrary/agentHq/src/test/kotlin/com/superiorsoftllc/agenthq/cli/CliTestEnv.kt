@@ -17,7 +17,7 @@ package com.superiorsoftllc.agenthq.cli
 internal object CliTestEnv {
     /** The operator's environment, minus every `AGENTHQ_*` setting. */
     private val clean: Map<String, String> =
-        System.getenv().filterKeys { !it.startsWith("AGENTHQ_", ignoreCase = true) }
+        System.getenv().filterKeys { !(it.startsWith("AGENTHQ_", ignoreCase = true) || it.startsWith("INFANTRY_", ignoreCase = true)) }
 
     /** The variables the CLI under test sees. */
     val vars: Map<String, String> get() = clean

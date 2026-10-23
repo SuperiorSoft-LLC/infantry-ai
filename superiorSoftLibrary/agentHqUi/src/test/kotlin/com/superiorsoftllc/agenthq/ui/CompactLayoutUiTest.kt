@@ -242,7 +242,7 @@ class CompactLayoutUiTest {
         pushAttention(controller)
         val key = mapOf(
             "logo" to onNodeWithTag("title-bar-logo"),
-            "title" to onNode(hasText("AgentHQ") and hasAnyAncestor(hasTestTag("title-bar"))),
+            "title" to onNode(hasText("Infantry AI") and hasAnyAncestor(hasTestTag("title-bar"))),
             "connection chip" to onNodeWithTag("title-bar-connection-chip"),
             "overflow" to onNodeWithTag("title-bar-overflow"),
         )

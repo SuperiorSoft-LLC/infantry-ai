@@ -44,7 +44,7 @@ object ToolApprovals {
         sessionOverride: ToolApproval?,
         setting: ToolApproval?,
         getProperty: (String) -> String? = System::getProperty,
-        getenv: (String) -> String? = System::getenv,
+        getenv: (String) -> String? = InfantryEnv::get,
     ): Resolution {
         sessionOverride?.let { return Resolution(it, "session") }
         setting?.let { return Resolution(it, "setting") }

@@ -265,9 +265,9 @@ class RemoteCliTest {
         // Port 1 has nothing listening, so the attempt itself fails. The warning must still come first.
         val result = runCli("pods", "--url", "ws://$lan:1/ws", "--token-file", tokenFile(freshToken()).path)
         assertTrue(result.err.contains("sent in cleartext"), "cleartext warning missing: ${result.err}")
-        // Per spec: exit 2 with exact message "AgentHQ daemon not running on <host>:<port> \u2014 start it with \u0060agentHq daemon\u0060"
+        // Per spec: exit 2 with exact message "Infantry AI daemon not running on <host>:<port> \u2014 start it with \u0060infantry daemon\u0060"
         assertEquals(2, result.exit, "expected exit 2 for unreachable daemon, got ${result.exit}: ${result.err}")
-        val expectedMsg = "error: AgentHQ daemon not running on $lan:1 \u2014 start it with \u0060agentHq daemon\u0060"
+        val expectedMsg = "error: Infantry AI daemon not running on $lan:1 \u2014 start it with \u0060infantry daemon\u0060"
         assertTrue(result.err.contains(expectedMsg), "exact message missing from err: ${result.err}")
     }
 

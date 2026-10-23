@@ -1,6 +1,6 @@
-# Headless AgentHQ daemon (no Compose UI). Build the context with Gradle, then build the image from it:
+# Headless Infantry AI daemon (no Compose UI). Build the context with Gradle, then build the image from it:
 #   ./gradlew :superiorSoftLibrary:agentHq:dockerContext
-#   docker build -t infantryai/agenthq:dev superiorSoftLibrary/agentHq/build/docker
+#   docker build -t infantryai/infantry-ai:dev superiorSoftLibrary/agentHq/build/docker
 # `dockerContext` copies this file next to the installDist output (agenthq/), so the image holds exactly what a droplet runs.
 # Harness CLIs (claude, opencode, ...) are not baked in: Node/npm is, so the built-in installer puts them in the volume
 # (`agenthq harness-install claude` -> /data/harness-tools). See README "Docker".
@@ -10,6 +10,7 @@ COPY agenthq /opt/agenthq
 RUN chmod +x /opt/agenthq/bin/agenthq
 
 FROM eclipse-temurin:21-jre
+LABEL org.opencontainers.image.title="Infantry AI" org.opencontainers.image.description="Infantry AI headless daemon (formerly AgentHQ)"
 # git: ticket starts cut worktrees. curl: health check.
 RUN apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates \
     && rm -rf /var/lib/apt/lists/* \

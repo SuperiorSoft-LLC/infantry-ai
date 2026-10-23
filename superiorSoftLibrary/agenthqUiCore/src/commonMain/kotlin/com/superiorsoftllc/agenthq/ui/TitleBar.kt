@@ -130,7 +130,7 @@ fun TitleBar(
         Row(drag.fillMaxHeight().padding(start = if (onTogglePanel != null) 6.dp else 12.dp, end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Logo()
             Spacer(Modifier.width(8.dp))
-            Text("AgentHQ", color = Palette.Accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text("Infantry AI", color = Palette.Accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
         if (compact) {
             // A narrow desktop window still moves by its bar: the free space is the drag area.
@@ -237,7 +237,7 @@ private fun TitleBarOverflow(
 }
 private val CloseHover = Color(0xFFC42B1C)
 
-/** The AgentHQ mark: an amber tile with a dark "A". */
+/** The Infantry AI mark: an amber tile with a dark "A". */
 @Composable
 private fun Logo() {
     Box(

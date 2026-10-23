@@ -112,8 +112,8 @@ class Updater(private val config: UpdateConfig, private val releases: GitHubRele
     }
 
     companion object {
-        /** INSTALL-1's artifact name: `AgentHQ-<MAJOR.MINOR.BUILD>.msi`. */
-        private val INSTALLER = Regex("""^AgentHQ-(\d+\.\d+\.\d+)\.msi$""", RegexOption.IGNORE_CASE)
+        /** INSTALL-1's artifact name: `InfantryAI-<MAJOR.MINOR.BUILD>.msi` (releases before the rename: `AgentHQ-...`). */
+        private val INSTALLER = Regex("""^(?:InfantryAI|AgentHQ)-(\d+\.\d+\.\d+)\.msi$""", RegexOption.IGNORE_CASE)
         private val SHA256 = Regex("""\b([0-9a-fA-F]{64})\b""")
         private val SUMS_FILES = setOf("sha256sums", "sha256sums.txt", "checksums.txt")
         const val MAX_INSTALLER_BYTES = 2L * 1024 * 1024 * 1024

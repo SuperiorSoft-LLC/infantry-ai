@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.daemon
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -179,7 +181,7 @@ class AccessPolicy private constructor(
          * The token from the environment: [TOKEN_FILE_ENV] (its trimmed contents), else [TOKEN_ENV].
          * Both at once is a configuration error, because which one a reader should trust is unclear.
          */
-        fun tokenFromEnvironment(getenv: (String) -> String? = System::getenv): String? {
+        fun tokenFromEnvironment(getenv: (String) -> String? = InfantryEnv::get): String? {
             val file = getenv(TOKEN_FILE_ENV)?.takeIf { it.isNotBlank() }
             val direct = getenv(TOKEN_ENV)?.takeIf { it.isNotBlank() }
             return when {

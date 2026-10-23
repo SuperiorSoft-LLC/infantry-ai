@@ -65,7 +65,7 @@ internal object HarnessInstallClient {
 
     const val SIGN_IN =
         "Sign-in is separate: each CLI keeps its own login (run `claude` once, `opencode auth login`, or set the provider's " +
-            "API-key environment variable). AgentHQ stores no key."
+            "API-key environment variable). Infantry AI stores no key."
 
     private val json = Json { ignoreUnknownKeys = true }
 }

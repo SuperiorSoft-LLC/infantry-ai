@@ -53,7 +53,7 @@ object SystemProcessRunner : HarnessProcessRunner {
 /**
  * HARNESS-INSTALL-1: installs and updates the harness CLIs (claude, opencode, pi) through npm, into the app's OWN
  * prefix dir ([prefixDir], `<AGENTHQ_HOME>/harness-tools`), so it needs no admin rights and never touches a global npm
- * prefix, the user's data or their own installs. Only Node/npm is required, and only for these CLIs, not for AgentHQ.
+ * prefix, the user's data or their own installs. Only Node/npm is required, and only for these CLIs, not for Infantry AI.
  *
  *  - DETECT: [status] resolves each CLI through the launch resolver and reads `--version`.
  *  - INSTALL: [install] runs `npm install -g --prefix <prefixDir> <package>@<version|latest>`, one at a time. Idempotent:
@@ -103,7 +103,7 @@ class HarnessInstaller(
         val outcomes = ArrayList<HarnessInstallOutcome>()
         for (s in targets) {
             if (s.state == "user-managed") {
-                outcomes += HarnessInstallOutcome(s.id, "skipped", s.installedVersion, "user-managed: a path is set in Settings, so AgentHQ never installs or updates it")
+                outcomes += HarnessInstallOutcome(s.id, "skipped", s.installedVersion, "user-managed: a path is set in Settings, so Infantry AI never installs or updates it")
                 continue
             }
             if (s.state != "missing" && !update) {
@@ -214,7 +214,7 @@ class HarnessInstaller(
         const val NODE_GUIDANCE =
             "Node.js / npm was not found, so the harness CLIs cannot be installed here. Install Node.js 20 or newer " +
                 "(https://nodejs.org, or `winget install OpenJS.NodeJS.LTS`, `brew install node`, `apt install nodejs npm`), " +
-                "then run the install again. Node is needed only for the harness CLIs, not for AgentHQ. " +
+                "then run the install again. Node is needed only for the harness CLIs, not for Infantry AI. " +
                 "If npm lives somewhere unusual, set its path in AGENTHQ_NPM_EXE."
 
         private val VERSION = Regex("""\d+\.\d+\.\d+(?:-[0-9A-Za-z.\-]+)?""")

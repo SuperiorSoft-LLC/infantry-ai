@@ -1,5 +1,5 @@
 @echo off
-rem AgentHQ headless daemon (no UI). Java: the bundled runtime\ first, then JAVA_HOME, then java on PATH (21+).
+rem Infantry AI headless daemon (no UI). Java: the bundled runtime\ first, then JAVA_HOME, then java on PATH (21+).
 rem Configure with AGENTHQ_* environment variables (README.txt next to bin\); extra JVM flags go in AGENTHQ_JAVA_OPTS.
 setlocal
 set "APP_HOME=%~dp0.."

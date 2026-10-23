@@ -77,7 +77,7 @@ fun renderSkills(attached: List<String>, library: List<SkillView>, budgets: Skil
         }
         if (shownIndex.isNotEmpty()) {
             add(
-                "Other skills in the AgentHQ daemon, one `name: description` line each. When a description matches your " +
+                "Other skills in the Infantry AI daemon, one `name: description` line each. When a description matches your " +
                     "work, run `agenthq skill show <name>` and follow it:",
             )
             addAll(shownIndex)

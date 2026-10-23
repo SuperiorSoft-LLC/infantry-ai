@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.role
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import java.io.File
 import java.nio.file.Files
 
@@ -14,13 +16,13 @@ fun main(args: Array<String>) {
     val customDir = args.firstOrNull()?.takeIf { it.isNotBlank() }?.let(::File)
     val catalog = RoleCatalog.load(customDir)
 
-    println("AgentHQ role catalog -- ${catalog.ids().size} roles" + (customDir?.let { " (custom dir: $it)" } ?: ""))
+    println("Infantry AI role catalog -- ${catalog.ids().size} roles" + (customDir?.let { " (custom dir: $it)" } ?: ""))
     for (role in catalog.all()) {
         val firstLine = role.persona.lineSequence().firstOrNull { it.isNotBlank() }?.take(64) ?: "(no persona)"
         println("  %-16s %-18s %-8s %-9s %s".format(role.id, role.name, role.color, role.source, firstLine))
     }
 
-    val dataDir = System.getenv("AGENTHQ_UI_DATA_DIR")?.takeIf { it.isNotBlank() }?.let(::File)
+    val dataDir = InfantryEnv.get("AGENTHQ_UI_DATA_DIR")?.takeIf { it.isNotBlank() }?.let(::File)
         ?: Files.createTempDirectory("agenthq-rolecatalog").toFile()
     val resolver = AvatarResolver.fromClasspath(AvatarOverrides(dataDir), catalog)
     println("avatar chain (client data dir: $dataDir)")

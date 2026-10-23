@@ -25,7 +25,7 @@ class KnowledgeTest {
     @Test
     fun anEmptyBaseGetsTheShortFormNamingTheWriteVerbs() {
         assertEquals(
-            "PROJECT KNOWLEDGE. Project p1 has an empty knowledge base in the AgentHQ daemon. Record what a later session " +
+            "PROJECT KNOWLEDGE. Project p1 has an empty knowledge base in the Infantry AI daemon. Record what a later session " +
                 "must not re-derive: `agenthq decision add` for a choice, `agenthq issue open|attempt|fix` for a bug, " +
                 "`agenthq memory save` for anything else.",
             renderKnowledge(" p1 ", KnowledgeCounts(0, 0, 0)),
@@ -132,7 +132,7 @@ class KnowledgeTest {
     private companion object {
         val FULL =
             "PROJECT KNOWLEDGE (this applies to your whole session, including after a context compaction). Project p1 keeps a " +
-                "shared knowledge base in the AgentHQ daemon: 4 notes, 2 active decisions, 1 open issues.\n" +
+                "shared knowledge base in the Infantry AI daemon: 4 notes, 2 active decisions, 1 open issues.\n" +
                 "Before you explore the code, and before you decide anything an earlier session may already have decided, run " +
                 "`agenthq knowledge`: it lists the active decisions, the open issues and the note index. Then walk down: " +
                 "`agenthq memory index --folder <folder>`, `agenthq memory search <term>`, `agenthq memory show <name>`, " +

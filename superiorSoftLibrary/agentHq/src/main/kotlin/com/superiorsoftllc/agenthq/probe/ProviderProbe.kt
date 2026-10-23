@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.probe
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import com.superiorsoftllc.agenthq.provider.ProviderFactory
 import com.superiorsoftllc.agenthq.provider.RunRequest
 import com.superiorsoftllc.agenthq.runner.ProcessListener
@@ -21,7 +23,7 @@ fun main(args: Array<String>) {
     val runner = RunnerFactory.fromFlag()
     val request = RunRequest(
         prompt = args.joinToString(" ").ifBlank { "Reply with exactly the single word: pong" },
-        resumeSessionId = System.getenv("AGENTHQ_RESUME")?.takeIf { it.isNotBlank() },
+        resumeSessionId = InfantryEnv.get("AGENTHQ_RESUME")?.takeIf { it.isNotBlank() },
     )
     val spec = provider.spec(request)
 

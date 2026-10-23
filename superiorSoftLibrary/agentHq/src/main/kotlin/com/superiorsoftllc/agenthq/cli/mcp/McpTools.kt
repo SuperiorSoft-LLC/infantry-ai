@@ -396,7 +396,7 @@ internal class McpTools(
 
         /** The one, fixed message a tool answers with when nothing is listening at the daemon address. */
         const val DAEMON_UNREACHABLE =
-            "AgentHQ daemon is not reachable. Start it with `agenthq daemon` (or check --url / --port), then retry."
+            "Infantry AI daemon is not reachable. Start it with `agenthq daemon` (or check --url / --port), then retry."
 
         const val DEFAULT_LINES = 50
         const val MAX_LINES = 200
@@ -410,7 +410,7 @@ internal class McpTools(
 
         /** `tools/list`: each tool's name, description and JSON Schema for its arguments. */
         fun descriptors(): JsonArray = buildJsonArray {
-            add(tool(LIST_SESSIONS, "List the SESSIONS (running or past agent runs, not saved profiles) the AgentHQ daemon knows: id, agentId, role, provider, model, projectId, status.") {
+            add(tool(LIST_SESSIONS, "List the SESSIONS (running or past agent runs, not saved profiles) the Infantry AI daemon knows: id, agentId, role, provider, model, projectId, status.") {
                 put("type", "object")
                 putJsonObject("properties") {
                     putJsonObject("projectId") {
@@ -506,7 +506,7 @@ internal class McpTools(
             })
             add(tool(
                 HARNESS_INSTALL,
-                "npm-install harness CLIs on the daemon's machine, into AgentHQ's own prefix dir (no admin rights, no user data " +
+                "npm-install harness CLIs on the daemon's machine, into Infantry AI's own prefix dir (no admin rights, no user data " +
                     "touched; idempotent). ids: which ones (default: every missing one). update=true also refreshes outdated ones. " +
                     "Needs Node/npm on that machine (the answer says so when it is missing). Sign-in is still the user's: each CLI keeps " +
                     "its own login. Can take minutes.",

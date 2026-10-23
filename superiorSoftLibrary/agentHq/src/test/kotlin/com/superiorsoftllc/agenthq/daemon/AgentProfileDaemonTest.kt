@@ -135,7 +135,7 @@ class AgentProfileDaemonTest {
         assertEquals("backend", session.role)
         assertEquals(
             "You are the backend agent.\n\n" +
-                "You are running inside AgentHQ as role 'backend', agent id 'backend'. " +
+                "You are running inside Infantry AI as role 'backend', agent id 'backend'. " +
                 "Your environment carries the same identity (AGENTHQ_ROLE, AGENTHQ_AGENT_ID, AGENTHQ_SESSION_ID).\n\n" +
                 "add an endpoint",
             second.requests.single().prompt,
@@ -197,10 +197,10 @@ class AgentProfileDaemonTest {
         assertEquals(
             // ROLE-EDIT-1: a profile with no instructions of its own falls back to its role's persona (the bundled qa.md).
             com.superiorsoftllc.agenthq.role.RoleCatalog.load().persona("qa")!! + "\n\n" +
-            "You are running inside AgentHQ as role 'qa', agent id 'qa'. " +
+            "You are running inside Infantry AI as role 'qa', agent id 'qa'. " +
                 "Your environment carries the same identity (AGENTHQ_ROLE, AGENTHQ_AGENT_ID, AGENTHQ_SESSION_ID).\n\n" +
                 // P10-K9: the spawn names project p1, whose knowledge base is empty, so it gets the empty form.
-                "PROJECT KNOWLEDGE. Project p1 has an empty knowledge base in the AgentHQ daemon. Record what a later " +
+                "PROJECT KNOWLEDGE. Project p1 has an empty knowledge base in the Infantry AI daemon. Record what a later " +
                 "session must not re-derive: `agenthq decision add` for a choice, `agenthq issue open|attempt|fix` for a " +
                 "bug, `agenthq memory save` for anything else.\n\n" +
                 // ROLE-NOTES-1: a role session always learns the scope how-to, even with no role notes yet.

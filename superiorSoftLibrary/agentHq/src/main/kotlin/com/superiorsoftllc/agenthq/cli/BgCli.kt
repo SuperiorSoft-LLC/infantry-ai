@@ -143,7 +143,7 @@ internal object BgCli {
         val stream = try {
             open()
         } catch (e: Exception) {
-            err.appendLine("error: AgentHQ daemon not running (${e.message ?: e.javaClass.simpleName}) -- start it with `agentHq daemon`")
+            err.appendLine("error: Infantry AI daemon not running (${e.message ?: e.javaClass.simpleName}) -- start it with `infantry daemon`")
             return 2
         }
         try {

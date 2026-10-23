@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import com.superiorsoftllc.agenthq.daemon.AgentHqBin
 import java.io.File
 
@@ -143,7 +145,7 @@ object InstallProfile {
      * (the dev daemon's) never reaches the installed sessions; they are told the installed daemon's own port.
      */
     fun properties(
-        env: (String) -> String? = System::getenv,
+        env: (String) -> String? = InfantryEnv::get,
         home: String = System.getProperty("user.home"),
         cliBin: File? = InstalledCli.binDir(),
         installDir: File? = installDir(),
@@ -163,7 +165,7 @@ object InstallProfile {
     }
 
     /** Pin [properties] as system properties. Call before the daemon is built. */
-    fun apply(env: (String) -> String? = System::getenv): Map<String, String> =
+    fun apply(env: (String) -> String? = InfantryEnv::get): Map<String, String> =
         properties(env).onEach { (k, v) -> System.setProperty(k, v) }
 
     private fun warn(line: String) = System.err.println("[agentHq-install] $line")

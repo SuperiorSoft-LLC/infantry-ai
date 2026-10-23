@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.usage
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import com.superiorsoftllc.agenthq.attention.AttentionKind
 import com.superiorsoftllc.agenthq.attention.AttentionStore
 import kotlinx.serialization.EncodeDefault
@@ -182,7 +184,7 @@ class OperatorBudget(
 
     companion object {
         /** `AGENTHQ_BUDGET_RUNS_PER_DAY` / `AGENTHQ_BUDGET_TOKENS_PER_DAY`; unset or invalid = no limit. */
-        fun fromEnv(env: (String) -> String? = System::getenv): OperatorBudget = OperatorBudget(
+        fun fromEnv(env: (String) -> String? = InfantryEnv::get): OperatorBudget = OperatorBudget(
             maxRunsPerDay = env("AGENTHQ_BUDGET_RUNS_PER_DAY")?.trim()?.toIntOrNull()?.takeIf { it >= 0 },
             maxTokensPerDay = env("AGENTHQ_BUDGET_TOKENS_PER_DAY")?.trim()?.toLongOrNull()?.takeIf { it >= 0 },
         )
