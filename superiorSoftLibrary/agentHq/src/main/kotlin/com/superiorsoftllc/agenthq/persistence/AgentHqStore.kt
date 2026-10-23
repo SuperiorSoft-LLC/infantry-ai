@@ -245,6 +245,9 @@ interface TriggerRepository {
     fun setWebhookSecret(triggerId: String, secret: String)
     fun webhookSecret(triggerId: String): String?
     fun deleteWebhookSecret(triggerId: String)
+    /** TRIGGER-NUDGE: the id of the trigger's prompt mail still waiting for its target, or null. Kept across [upsert]. */
+    fun pendingMail(triggerId: String): String?
+    fun setPendingMail(triggerId: String, mailId: String?)
 }
 
 /** The repositories plus the cross-table operations that must be atomic. */
@@ -832,7 +835,8 @@ class SqlAgentHqStore(val handle: AgentHQDatabaseHandle) : AgentHqStore {
     override val triggers: TriggerRepository = object : TriggerRepository {
         private val q = db.triggersQueries
 
-        override fun upsert(trigger: TriggerView, intervalMs: Long?) {
+        override fun upsert(trigger: TriggerView, intervalMs: Long?) = tx.transaction {
+            val pending = q.getTrigger(trigger.id).executeAsOneOrNull()?.pending_mail_id
             q.upsertTrigger(
                 id = trigger.id,
                 name = trigger.name,
@@ -849,8 +853,15 @@ class SqlAgentHqStore(val handle: AgentHQDatabaseHandle) : AgentHqStore {
                 tripped_reason = trigger.trippedReason,
                 interval_ms = intervalMs,
                 action_prompt = trigger.action.prompt,
+                project_id = trigger.projectId,
+                last_fired_at = trigger.lastFiredAt,
+                next_fire_at = trigger.nextFireAt,
+                pending_mail_id = pending,
             )
         }
+
+        override fun pendingMail(triggerId: String): String? = q.getTrigger(triggerId).executeAsOneOrNull()?.pending_mail_id
+        override fun setPendingMail(triggerId: String, mailId: String?) { q.setTriggerPendingMail(mailId, triggerId) }
 
         override fun get(id: String): TriggerView? = q.getTrigger(id).executeAsOneOrNull()?.toView()
         override fun all(): List<TriggerView> = q.getAllTriggers().executeAsList().map { it.toView() }
@@ -898,6 +909,9 @@ class SqlAgentHqStore(val handle: AgentHQDatabaseHandle) : AgentHqStore {
             trippedAt = tripped_at,
             trippedReason = tripped_reason,
             intervalMs = interval_ms,
+            projectId = project_id,
+            lastFiredAt = last_fired_at,
+            nextFireAt = next_fire_at,
         )
     }
 

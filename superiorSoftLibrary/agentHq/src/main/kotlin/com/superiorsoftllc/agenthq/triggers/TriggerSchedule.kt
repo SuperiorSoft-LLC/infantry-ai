@@ -17,6 +17,12 @@ enum class TriggerEventDisposition {
     NOTHING_TO_START,
     REFUSED_LAUNCH_GATE,
     WONT_FIX,
+    /** TRIGGER-NUDGE: a `prompt` action's mail was queued for its target (delivered when the target is at rest). */
+    MAILED,
+    /** TRIGGER-NUDGE: an earlier prompt mail of this trigger is still undelivered; this event adds nothing. */
+    COALESCED_PENDING,
+    /** TRIGGER-NUDGE: no target session to mail and every agent of the role busy elsewhere; the next slot tries again. Never a trip. */
+    DEFERRED_BUSY,
 }
 
 /** One in-memory event-history row; persistence adapters can store these without conflating runs. */

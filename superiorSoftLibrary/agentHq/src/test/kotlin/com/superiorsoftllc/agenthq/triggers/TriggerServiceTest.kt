@@ -54,6 +54,9 @@ class TriggerServiceTest {
         @Synchronized override fun setWebhookSecret(triggerId: String, secret: String) { webhookSecrets[triggerId] = secret }
         @Synchronized override fun webhookSecret(triggerId: String): String? = webhookSecrets[triggerId]
         @Synchronized override fun deleteWebhookSecret(triggerId: String) { webhookSecrets.remove(triggerId) }
+        private val pendingMails = HashMap<String, String>()
+        @Synchronized override fun pendingMail(triggerId: String): String? = pendingMails[triggerId]
+        @Synchronized override fun setPendingMail(triggerId: String, mailId: String?) { if (mailId == null) pendingMails.remove(triggerId) else pendingMails[triggerId] = mailId }
     }
 
     private class MemoryAttention : AttentionRepository {

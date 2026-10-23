@@ -116,6 +116,38 @@ ADDITIVE; no frame changes (the version moves 1.104.0 → 1.106.0; 1.105.0 is th
 - Answers carry `projectId` and `scope` (`project:<id>` or `all`); with `all`, board lines are prefixed `[projectId]`.
 - A call with no session id (owner / CLI) is unchanged. Inbox/notes scoping is not part of 1.106.0.
 
+
+### What changed in 1.105.0 (TRIGGER-NUDGE) — a recurring prompt to a role, as mail
+
+ADDITIVE; a 1.104.0 client keeps working (it ignores the new keys). The `ready` frame reports `contract=1.105.0`. Stored in
+`triggers.project_id` / `last_fired_at` / `next_fire_at` / `pending_mail_id` (`45.sqm`, schema v46); an older row reads back
+with no project, never fired, and its next slot recomputed from its interval. No new frame.
+
+- **`TriggerSave.projectId`** `string?`: the project a `prompt` action mails into; refused on any other action
+  (`trigger_save refused: projectId is only valid on action 'prompt'`).
+- **`TriggerView.projectId`** `string?`, **`lastFiredAt`** `long?` (the last ACCEPTED event: started or folded; null =
+  never), **`nextFireAt`** `long?` (a schedule's next slot; null = not timed).
+- **The `prompt` action is now MAIL.** Each fire mails the prompt (subject `Trigger: <name>`, from `trigger:<id>`, its own
+  thread `trigger:<id>:<ms>`) to the target's session in the trigger's project: for `role:<role>`, the project's
+  session of that role (the one in flight first, else the newest); for a profile id, that agent's session. The mailbox
+  queues it while the session is mid-turn and delivers it when the session comes to rest. Only when there is NO such
+  session is one started with the prompt as its first turn (in the trigger's project). The run is over once the mail is
+  queued or the session started: **a busy target never trips the trigger**.
+- **At most one pending per trigger.** While the trigger's last prompt mail is still `QUEUED`, a new event is recorded
+  as `coalesced_pending` and sends nothing. The pending mail id is persisted, so this holds across a restart.
+- **New dispositions** (`TriggerEventView.disposition`): `mailed` (the prompt mail was queued), `coalesced_pending`
+  (see above), `deferred_busy` (no session to mail and the role's agents are all at capacity elsewhere; nothing was sent,
+  the next slot tries again; never a trip).
+- **Restart.** `nextFireAt` is persisted. A slot that fell due while the daemon was down fires ONCE on the first pump
+  after boot (several missed slots fold into that one), then the schedule resumes one interval later. An edit that
+  keeps a schedule's interval keeps its slot; a new interval restarts it from the save.
+- **`trigger_arm` also enables.** On a `disabled` trigger it sets `enabled=true` and `armed` (the UI's enable toggle);
+  on `tripped` it re-arms as before; on `armed` / `running` it is refused (`… is armed, not tripped or disabled`).
+- **The hourly ceiling counts session STARTS only.** A prompt fire that was mailed (or `deferred_busy`) started no
+  session and does not count; one that had to start a session does. Mail is bounded by one pending per trigger instead,
+  so any interval, a one-minute schedule included, runs all hour without tripping.
+- Unchanged: `start_next` triggers, the `manual` / `ship` / `webhook` kinds, the coalescing window and the one-minute
+  interval floor (`intervalMs >= 60000`).
 ### What changed in 1.104.0 (VOICE-1) — spoken attention alerts
 
 ADDITIVE; a 1.103.0 client ignores the push. The `ready` frame reports `contract=1.104.0`. No schema change: a spoken alert is
@@ -1300,7 +1332,7 @@ client keeps working unchanged; it only sees a newer version string.
 | `trigger_save` (`TriggerSave`, strict JSON) | `trigger`, pushed to every client |
 | `trigger_list` | `triggers` (oldest first) |
 | `trigger_fire` (`"<triggerId>"`) | `trigger` to the sender (and pushed when its state changed) |
-| `trigger_arm` / `trigger_disable` (`"<triggerId>"`) | `trigger`, pushed to every client |
+| `trigger_arm` / `trigger_disable` (`"<triggerId>"`) | `trigger`, pushed to every client; since 1.105.0 `trigger_arm` also enables a `disabled` trigger |
 | `trigger_delete` (`"<triggerId>"`) | `triggers`, pushed to every client |
 | `trigger_events` (`"<triggerId>"`) | `trigger_events`: that trigger's `TriggerEventView` rows, oldest first |
 
@@ -1854,8 +1886,8 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `roles` | list of `Role` (JSON), canonical ids first (1.12.0) | daemon → client |
 | `role_save` | one `RoleSave` (JSON, strict; 1.12.0) | client → daemon |
 | `role` | one `Role` (JSON), pushed to every client after a save (1.12.0) | daemon → client |
-| `trigger_save` / `trigger_fire` / `trigger_arm` / `trigger_disable` / `trigger_delete` / `trigger_list` / `trigger_events` | see "What changed in 1.14.0" | client → daemon |
-| `trigger` / `triggers` / `trigger_events` | one `TriggerView` / a list / a list of `TriggerEventView` (1.14.0) | daemon → client |
+| `trigger_save` / `trigger_fire` / `trigger_arm` / `trigger_disable` / `trigger_delete` / `trigger_list` / `trigger_events` | see "What changed in 1.14.0"; `projectId`, `trigger_arm` enabling, prompt-as-mail: 1.105.0 | client → daemon |
+| `trigger` / `triggers` / `trigger_events` | one `TriggerView` / a list / a list of `TriggerEventView` (1.14.0; `projectId` / `lastFiredAt` / `nextFireAt` and the `mailed` / `coalesced_pending` / `deferred_busy` dispositions, 1.105.0) | daemon → client |
 | `provider_states` | — (request every provider's limit state; 1.13.0) | client → daemon |
 | `provider_states` | list of `ProviderState` (JSON), one per served provider (1.13.0) | daemon → client |
 | `provider_state` | one `ProviderState` (JSON), pushed when it changes (1.13.0) | daemon → client |

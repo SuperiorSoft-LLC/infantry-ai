@@ -962,6 +962,12 @@ class Controller(
         return report(send(Envelope(Envelope.TRIGGER_SAVE, body.toString())))
     }
 
+    /** TRIGGER-NUDGE (contract 1.105.0): save the trigger form as drafted -- any kind, action, interval and project. */
+    internal suspend fun saveTrigger(id: String?, draft: com.superiorsoftllc.agenthq.ui.TriggerDraft): CommandResult {
+        draft.problem()?.let { return report(CommandResult.Refused(it)) }
+        return report(send(Envelope(Envelope.TRIGGER_SAVE, draft.toSave(id).toString())))
+    }
+
     suspend fun fireTrigger(id: String): CommandResult = report(send(Envelope(Envelope.TRIGGER_FIRE, id)))
 
     /** Re-arm a tripped (or re-enable a disabled) trigger. This is the only way out of `tripped`. */

@@ -600,6 +600,30 @@ class SchemaMigrationTest {
         assertFailsWith<Exception> { exec(path, "UPDATE tickets SET weight = 6 WHERE id = 't-v44';") }
     }
 
+    /**
+     * TRIGGER-NUDGE: 45.sqm (v45 -> v46) adds the trigger's project, last/next fire and pending mail. A real v45 file
+     * holding a schedule trigger is opened through the factory: the old row reads back with all four NULL.
+     */
+    @Test
+    fun `a v45 file gains the trigger nudge columns and keeps its triggers`() {
+        val path = newDatabasePath()
+        JdbcSqliteDriver("jdbc:sqlite:$path").use { driver ->
+            AgentHQDatabase.Schema.migrate(driver, 1, 45)
+            driver.execute(null, "PRAGMA user_version = 45;", 0)
+        }
+        assertTrue(rows(path, "PRAGMA table_info(triggers);").none { it[1] == "next_fire_at" }, "a v45 file has no next_fire_at yet")
+        exec(path, "INSERT INTO triggers(id, name, kind, action_kind, enabled, state, coalesce_ms, ceiling_runs, ceiling_window_ms, created_at, interval_ms) " +
+            "VALUES ('trg-v45', 'Old', 'schedule', 'start_next', 1, 'armed', 0, 6, 3600000, 1, 1800000);")
+
+        AgentHQDatabaseFactory.open(path).close()
+
+        assertEquals(AgentHQDatabase.Schema.version.toString(), rows(path, "PRAGMA user_version;").single().single())
+        assertEquals(
+            listOf(listOf("trg-v45", "1800000", null, null, null, null)),
+            rows(path, "SELECT id, interval_ms, project_id, last_fired_at, next_fire_at, pending_mail_id FROM triggers;"),
+        )
+    }
+
     @Test
     fun `a v33 file gains the ticket skill columns and keeps its tickets`() {
         val path = newDatabasePath()

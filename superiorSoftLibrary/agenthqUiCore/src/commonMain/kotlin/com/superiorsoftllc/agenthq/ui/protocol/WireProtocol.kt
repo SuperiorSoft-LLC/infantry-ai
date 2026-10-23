@@ -480,6 +480,12 @@ data class TriggerView(
     val trippedReason: String? = null,
     /** Contract 1.17.0: for kind `schedule`, the period between due events in ms; null = not timed. */
     val intervalMs: Long? = null,
+    /** Contract 1.105.0: the project a `prompt` action mails into; null = none. */
+    val projectId: String? = null,
+    /** Contract 1.105.0: when the trigger last accepted an event; null = never. */
+    val lastFiredAt: Long? = null,
+    /** Contract 1.105.0: for kind `schedule`, when the next event is due; null = not timed. */
+    val nextFireAt: Long? = null,
 )
 
 /** Contract 1.14.0: one event row; [disposition] is lower snake case (`started`, `folded`, `nothing_to_start`, ...). */

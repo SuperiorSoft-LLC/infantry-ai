@@ -14,7 +14,13 @@ CREATE TABLE IF NOT EXISTS triggers (
     tripped_at INTEGER,
     tripped_reason TEXT,
     interval_ms INTEGER,
-    action_prompt TEXT
+    action_prompt TEXT,
+    -- TRIGGER-NUDGE (45.sqm): the project a `prompt` action mails into, the last accepted fire, the next schedule slot
+    -- (a slot in the past at boot fires once), and the prompt mail still queued for its target (at most one).
+    project_id TEXT,
+    last_fired_at INTEGER,
+    next_fire_at INTEGER,
+    pending_mail_id TEXT
 );
 
 -- Story 9.5: one row per trigger event, whatever happened to it. Not run events: runs keep their own log.
@@ -37,8 +43,11 @@ CREATE TABLE IF NOT EXISTS trigger_webhooks (
 CREATE INDEX IF NOT EXISTS index_trigger_events_on_trigger_received ON trigger_events(trigger_id, received_at);
 
 upsertTrigger:
-INSERT OR REPLACE INTO triggers(id, name, kind, action_kind, action_agent_id, enabled, state, coalesce_ms, ceiling_runs, ceiling_window_ms, created_at, tripped_at, tripped_reason, interval_ms, action_prompt)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO triggers(id, name, kind, action_kind, action_agent_id, enabled, state, coalesce_ms, ceiling_runs, ceiling_window_ms, created_at, tripped_at, tripped_reason, interval_ms, action_prompt, project_id, last_fired_at, next_fire_at, pending_mail_id)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+setTriggerPendingMail:
+UPDATE triggers SET pending_mail_id = ? WHERE id = ?;
 
 getTrigger:
 SELECT * FROM triggers WHERE id = ?;
