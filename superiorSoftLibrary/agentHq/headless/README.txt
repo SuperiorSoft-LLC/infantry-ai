@@ -11,6 +11,18 @@ Start
   With no AGENTHQ_HOST the daemon binds to 127.0.0.1 only (local clients). A non-loopback bind
   refuses to start without a token. Generate one with e.g. `openssl rand -hex 32`.
 
+Updates (the supervisor)
+  Run the server through the launcher instead of agenthq-server.*: ./bin/infantry (Windows: bin\infantry.cmd).
+  The first run copies this folder to <parent>/versions/<version>/ and writes <parent>/infantry, the stable entry point;
+  start it from there afterwards. Your data dir (AGENTHQ_STATE_DIR) is never touched.
+    infantry update [--check-only] [--yes]   check the latest release, verify its SHA256SUMS, install it, restart into it
+    infantry rollback                        switch back to the previous version (the last two are kept)
+  A client's Update button does the same (POST /update/apply). A new version that exits within 30 seconds of the switch
+  is rolled back automatically, once.
+  Release source: AGENTHQ_UPDATE_REPO=owner/repo (GitHub Releases) or AGENTHQ_UPDATE_DIR=<folder>. A private repo needs
+  AGENTHQ_UPDATE_TOKEN (or INFANTRY_UPDATE_TOKEN) in the environment; it is never written to a file.
+  Updates are checked only when you ask; nothing installs by itself. Docker images cannot update themselves: pull the new image.
+
 Settings (environment variables)
   AGENTHQ_PORT         port (default 8787; a taken port falls back to a free one unless AGENTHQ_PORT_STRICT=1)
   AGENTHQ_HOST         bind address (default 127.0.0.1)

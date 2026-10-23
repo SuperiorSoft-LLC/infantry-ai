@@ -73,7 +73,12 @@ class ServerUpdateService(
     private val dockerImage: String = DEFAULT_IMAGE,
     private val sourceFor: (UpdateConfig) -> UpdateSource = { UpdateSources.forConfig(it, kindFor(distribution)) },
     private val clock: () -> Long = System::currentTimeMillis,
+    /** SERVER-UPDATE-2: runs once a version is staged. Under the launcher supervisor it restarts the daemon into it; null = the next start picks it up. */
+    private val onStaged: ((String) -> Unit)? = null,
 ) {
+    /** True when staging a version restarts this daemon by itself (it runs under `bin/infantry`'s supervisor). */
+    val restartsAfterStaging: Boolean get() = onStaged != null
+
     private val lock = Any()
     private val working = AtomicBoolean(false)
     private var available: AvailableUpdate? = null
@@ -153,6 +158,7 @@ class ServerUpdateService(
             }
             runCatching { inst.stage(verified) }.onFailure { return fail("could not install: ${it.message}") }
             synchronized(lock) { staged = offer.latest.toString(); state = "staged"; error = null }
+            onStaged?.let { hook -> runCatching { hook(offer.latest.toString()) } }
             return ApplyResult.Staged(offer.latest.toString())
         } finally {
             temp.deleteRecursively()
@@ -180,6 +186,16 @@ class ServerUpdateService(
     }
 
     companion object {
+        /** The exit code `bin/infantry`'s supervisor treats as "start again" (BSD EX_TEMPFAIL). */
+        const val RESTART_EXIT_CODE = 75
+
+        private fun exitForRestart(@Suppress("UNUSED_PARAMETER") version: String) {
+            Thread {
+                Thread.sleep(1_500)
+                kotlin.system.exitProcess(RESTART_EXIT_CODE)
+            }.apply { isDaemon = true; name = "update-restart" }.start()
+        }
+
         const val DEFAULT_IMAGE = "infantryai/infantry-ai"
 
         /** Docker only reports; its image is linux, so a check looks for the linux x64 archive of the same release. */
@@ -203,6 +219,8 @@ class ServerUpdateService(
             setting: (String) -> String? = { agentHqSetting(it) },
             dockerEnvExists: () -> Boolean = { File("/.dockerenv").exists() },
             stateDir: File? = runCatching { stateDir() }.getOrNull(),
+            /** What a staged version triggers under the supervisor: exit 75 shortly after the reply left (the supervisor relaunches). */
+            restart: (String) -> Unit = ::exitForRestart,
         ): ServerUpdateService {
             val appHome = setting("AGENTHQ_APP_HOME")?.let(::File)?.takeIf { it.isDirectory }
             val distribution = when (setting("AGENTHQ_DISTRIBUTION")?.trim()?.lowercase()) {
@@ -233,6 +251,7 @@ class ServerUpdateService(
                 install = root?.let { ServerInstall(it) },
                 runningAgents = runningAgents,
                 dockerImage = setting("AGENTHQ_DOCKER_IMAGE")?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_IMAGE,
+                onStaged = if (distribution == Distribution.ARCHIVE && setting("AGENTHQ_SUPERVISED") == "1") restart else null,
             )
         }
     }

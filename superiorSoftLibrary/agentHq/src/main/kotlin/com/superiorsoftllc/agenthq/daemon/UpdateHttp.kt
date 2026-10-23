@@ -50,7 +50,7 @@ fun Route.updateRoutes(service: ServerUpdateService) {
             return@post
         }
         when (val result = withContext(Dispatchers.IO) { service.apply(request.confirm) }) {
-            is ApplyResult.Staged -> call.respond(HttpStatusCode.OK, UpdateApplyReply("staged", version = result.version))
+            is ApplyResult.Staged -> call.respond(HttpStatusCode.OK, UpdateApplyReply("staged", version = result.version, message = if (service.restartsAfterStaging) "restarting into ${result.version}" else "restart the daemon to run ${result.version}"))
             ApplyResult.NothingToApply -> call.respond(HttpStatusCode.Conflict, UpdateApplyReply("nothing_to_apply", message = "no newer version is known; check first"))
             is ApplyResult.AgentsRunning -> call.respond(HttpStatusCode.Conflict, UpdateApplyReply("agents_running", running = result.running, message = "${result.running} agents are working; send confirm=true to update anyway"))
             is ApplyResult.Unsupported -> call.respond(HttpStatusCode.Conflict, UpdateApplyReply("unsupported", message = result.instructions))
