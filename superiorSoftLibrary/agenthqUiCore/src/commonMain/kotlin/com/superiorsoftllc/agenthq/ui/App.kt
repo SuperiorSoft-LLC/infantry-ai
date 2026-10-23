@@ -599,6 +599,8 @@ fun App(
         diffTarget?.let { target ->
             ProjectDiffModal(state, controller, target, onTarget = { next -> diffTarget = next; if (next == null) root.requestFocus() })
         }
+        // VOICE-1: spoken attention alerts (and their toast) over every pane.
+        com.superiorsoftllc.agenthq.ui.voice.VoiceAlerts(controller.spoken, flags.voice, Modifier.align(Alignment.BottomStart))
         // ASK-1: an agent's question to the owner shows over every pane (and over the Board / diff modals).
         QuestionWindow(
             shown = state.shownQuestions,

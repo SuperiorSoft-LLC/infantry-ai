@@ -334,6 +334,8 @@ object EventVocabulary {
     // payloads take optional `scope` / `sessionId` / `role`; new `memory_delete`, `memory_purge_role` (typed confirmation).
     // **1.99.0 (PIPE-2) is ADDITIVE**: the daemon PUSHES `pipeline_state` to every client after each `pipeline_config` /
     // `pipeline_record` / `pipeline_check` change (the PIPE-1 frames are otherwise unchanged); the UI draws it in the Git tab.
+    // **1.104.0 (VOICE-1) is ADDITIVE**: `notify` ({say, level?, projectId?, ticketId?}) -> `spoken` pushed to every client
+    // (a SpokenNotice: id, at, say, level, projectId?, projectName?, ticketId?). Ephemeral: no table, no replay.
     // **1.100.0 (HARNESS-INSTALL-1) is ADDITIVE**: `harness_install_status` {checkLatest?} -> `harness_install_status`
     // (`HarnessInstallReport`: per-harness installed / missing / outdated + versions) and `harness_install` {ids?, update?}
     // -> `harness_install_result` (`HarnessInstallResult`: outcomes + npm log + the report after). npm into the app prefix.
@@ -343,7 +345,7 @@ object EventVocabulary {
     // -> `secret_state` (set / not set and a masked tail; never a value). See CONTRACT.md.
     // **1.103.0 (TICKET-WEIGHT) is ADDITIVE**: `ticket` / `ticket_save` carry an optional `weight` (1..5; 0 clears on save); `effectiveExecutor`
     // sources may be `weight`; the `tickets.weightExecutors` setting maps a weight to {provider, model} for a ticket that pins none.
-    const val VERSION = "1.103.0"
+    const val VERSION = "1.104.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA

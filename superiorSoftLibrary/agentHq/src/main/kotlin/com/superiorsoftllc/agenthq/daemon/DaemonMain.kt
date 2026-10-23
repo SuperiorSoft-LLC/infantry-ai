@@ -790,6 +790,11 @@ class AgentHqDaemon(
                 author = { sessionId -> manager.get(sessionId)?.let { "${it.role ?: "agent"} (${it.agentId})" } },
                 push = { envelope -> for (client in clients) client.trySend(envelope) },
             )
+            // VOICE-1: spoken attention alerts, pushed to every client; nothing is stored.
+            val notifyFrames = com.superiorsoftllc.agenthq.notify.NotifyHandler(
+                projectName = { id -> projectStore.get(id).name },
+                push = { envelope -> for (client in clients) client.trySend(envelope) },
+            )
             // SECRETS-1: the daemon-owned keystore, in the state dir.
             val keystoreFrames = KeystoreHandler(
                 keystore = Keystore(stateDir()),
@@ -1113,6 +1118,7 @@ class AgentHqDaemon(
                             ),
                             decisionFrames,
                             pipelineFrames,
+                            notifyFrames,
                             keystoreFrames,
                             issueFrames,
                             stories,
@@ -1629,6 +1635,7 @@ private suspend fun handleConnection(
     memoryFrames: MemoryHandler,
     decisionFrames: DecisionHandler,
     pipelineFrames: PipelineHandler,
+    notifyFrames: com.superiorsoftllc.agenthq.notify.NotifyHandler,
     keystoreFrames: KeystoreHandler,
     issueFrames: IssueHandler,
     stories: StoryHandler,
@@ -2876,6 +2883,7 @@ private suspend fun handleConnection(
                 // PIPE-1 (additive; contract version not bumped): the optional project pipeline.
                 Envelope.PIPELINE_CONFIG, Envelope.PIPELINE_SHOW, Envelope.PIPELINE_RECORD,
                 Envelope.PIPELINE_CHECK -> pipelineFrames.answer(envelope)
+                Envelope.NOTIFY -> notifyFrames.answer(envelope)
 
                 // SECRETS-1 (contract 1.100.0): the keystore. Answered by `secret_state`; a value never travels back.
                 Envelope.SECRET_SET, Envelope.SECRET_CLEAR, Envelope.SECRET_IMPORT,

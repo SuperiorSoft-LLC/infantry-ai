@@ -127,6 +127,11 @@ class Controller(
     private val _state = MutableStateFlow(AppState())
     val state: StateFlow<AppState> = _state.asStateFlow()
 
+    private val _spoken = kotlinx.coroutines.flow.MutableSharedFlow<com.superiorsoftllc.agenthq.ui.voice.SpokenNotice>(extraBufferCapacity = 32)
+
+    /** VOICE-1 (contract 1.104.0): every `spoken` push, in order. The shell decides what to say and show. */
+    val spoken: kotlinx.coroutines.flow.SharedFlow<com.superiorsoftllc.agenthq.ui.voice.SpokenNotice> = _spoken
+
     init {
         // BUG-FLAKE-4: UNDISPATCHED, so the link's CURRENT info is applied here, in the constructor, before the frame
         // collector below can reduce anything. Dispatched, the two raced: under load `ready` could be reduced first
@@ -161,6 +166,10 @@ class Controller(
                 _state.update { reduce(it, env, Clock.System.now().toEpochMilliseconds()) }
                 sendQueuedAtRest(before, _state.value)
                 answerImageUpload(env)
+                if (env.type == Envelope.SPOKEN) {
+                    runCatching { json.decodeFromString(com.superiorsoftllc.agenthq.ui.voice.SpokenNotice.serializer(), env.data) }
+                        .getOrNull()?.let { _spoken.tryEmit(it) }
+                }
                 when (env.type) {
                     // A mail event can change who is blocked; ask rather than guess.
                     Envelope.MAIL -> client.send(Envelope(Envelope.MAIL_WAITING))

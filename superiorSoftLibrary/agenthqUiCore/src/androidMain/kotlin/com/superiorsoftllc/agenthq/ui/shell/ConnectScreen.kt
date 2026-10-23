@@ -139,7 +139,10 @@ fun AndroidConnectGate(store: ConnectionStore, extras: (String) -> String?) {
                 }
             }
             is Gate.Shell -> key(g) {
-                val host = remember(g) { AndroidPlatformHost(g.settings, onChangeConnection = { gate = Gate.Form() }) }
+                val context = androidx.compose.ui.platform.LocalContext.current.applicationContext
+                val speaker = remember(context) { com.superiorsoftllc.agenthq.ui.voice.AndroidSpeaker(context) }
+                androidx.compose.runtime.DisposableEffect(speaker) { onDispose { speaker.shutdown() } }
+                val host = remember(g) { AndroidPlatformHost(g.settings, onChangeConnection = { gate = Gate.Form() }, speaker = speaker) }
                 AgentHqShell(host)
             }
         }

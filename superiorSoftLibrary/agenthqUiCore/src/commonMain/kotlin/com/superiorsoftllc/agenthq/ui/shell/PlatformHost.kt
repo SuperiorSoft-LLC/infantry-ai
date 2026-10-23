@@ -18,6 +18,12 @@ interface PlatformHost {
     /** The text of a file, or null when it cannot be read. Never throws. */
     fun readTextFile(path: String): String?
 
+    /** VOICE-1: the platform's text-to-speech, or null when it has none (alerts then only toast and beep). */
+    val speaker: com.superiorsoftllc.agenthq.ui.voice.Speaker? get() = null
+
+    /** VOICE-1: whether the app window has focus right now; true when the host cannot tell. */
+    fun windowFocused(): Boolean = true
+
     /** CLIPATH-1: whether [pickFile] can show a file picker on this platform (Settings > CLI locations' Browse). */
     val canPickFiles: Boolean get() = false
 
