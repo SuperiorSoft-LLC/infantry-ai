@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -480,7 +482,7 @@ fun App(
                     }
                     CenterHeader(selected, spawnMode, state, onOpenSwitch = { selected?.let { openSwitch(it.id) } }, onOpenTicket = { showBoard = true })
                     CenterTabBar(state, centerTab) { centerTab = it }
-                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                    Box(Modifier.weight(1f).fillMaxWidth().testTag(CENTER_TRANSCRIPT_TAG)) {
                         when (centerTab) {
                             CenterTab.OUTPUT -> OutputPane(selected, spawnMode, roleColor = state.role(selected?.role)?.color, onStartSession = { spawnMode = true; promptFocus.requestFocus() })
                             CenterTab.PODS -> PodsPane(state, controller)
@@ -660,6 +662,10 @@ const val SIDEBAR_SEARCH_TAG = "sidebar-search"
 
 /** MOBILE-LAYOUT-1: the centre column (CLI output, composer, centre tabs). */
 const val CENTER_PANE_TAG = "center-pane"
+/** MOBILE-TRANSCRIPT-1: the centre tab's content (the transcript on CLI), the space between the tabs and the composer. */
+const val CENTER_TRANSCRIPT_TAG = "center-transcript"
+/** MOBILE-TRANSCRIPT-1: the composer under it (prompt box and action row). */
+const val COMPOSER_TAG = "composer"
 /** MOBILE-LAYOUT-1: the compact window's back button (output -> agent list, right panel -> output). */
 const val COMPACT_BACK_TAG = "compact-back"
 /** MOBILE-LAYOUT-1: the compact output screen's button that opens the right panel. */
@@ -1538,7 +1544,7 @@ fun QueuedMessages(queue: List<QueuedPrompt>) {
 }
 
 @Composable
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 private fun PromptBox(
     value: String,
     onValue: (String) -> Unit,
@@ -1624,7 +1630,7 @@ private fun PromptBox(
     var slashIndex by remember { mutableStateOf(0) }
     LaunchedEffect(slashRows.map { it.replacement }) { slashIndex = 0 }
     val pickRow = { r: SlashSuggestion -> onValue(r.replacement) }
-    Column(Modifier.fillMaxWidth().background(Palette.Panel).dragAndDropTarget(shouldStartDragAndDrop = { true }, target = drop).padding(10.dp)) {
+    Column(Modifier.fillMaxWidth().background(Palette.Panel).dragAndDropTarget(shouldStartDragAndDrop = { true }, target = drop).padding(10.dp).testTag(COMPOSER_TAG)) {
         // PROMPT-2: the open session's prompt card, docked above the input until the daemon resolves it.
         if (!spawnMode && a != null) {
             PromptCard(
@@ -1695,7 +1701,11 @@ private fun PromptBox(
             minLines = 2, maxLines = 8, textStyle = TextStyle(fontFamily = Mono, fontSize = 13.sp),
         )
         Spacer(Modifier.height(6.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        // MOBILE-TRANSCRIPT-1: a FlowRow, not a Row. On a phone the buttons fill the width, and in a Row the Resume hint
+        // after them was measured a few pixels wide, wrapped a character per line and grew the composer over the whole
+        // column, leaving the transcript 0dp tall. Here a button or the hint that does not fit starts a new line, and the
+        // hint keeps to two lines whatever width it gets.
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             // UX-ICON-1: the action row is icons; each tooltip names the action and its shortcut.
             IconAction(
                 AhqIcons.Send,
@@ -1753,9 +1763,13 @@ private fun PromptBox(
                 }
                 InterruptButton(a, live, controller)
                 if (!a.session.resumable && !running) {
-                    Text(Controller.resumeBlocker(a.session), color = Palette.Muted, fontSize = 11.sp)
+                    Text(Controller.resumeBlocker(a.session), color = Palette.Muted, fontSize = 11.sp,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.align(Alignment.CenterVertically),
+                    )
                 } else if (a.session.resumable && value.isBlank()) {
-                    Text("Resume with empty box sends: \"${Controller.RESUME_DEFAULT_PROMPT}\"", color = Palette.Muted, fontSize = 11.sp)
+                    Text("Resume with empty box sends: \"${Controller.RESUME_DEFAULT_PROMPT}\"", color = Palette.Muted, fontSize = 11.sp,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.align(Alignment.CenterVertically),
+                    )
                 }
             }
             if (!live) Text("Not connected: commands are disabled.", color = Palette.Danger, fontSize = 11.sp)
