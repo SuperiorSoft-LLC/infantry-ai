@@ -11,14 +11,13 @@ internal const val MIN_TRIGGER_INTERVAL_MINUTES = 1L
 
 /** A schedule interval typed in whole minutes, at least [MIN_TRIGGER_INTERVAL_MINUTES]; null when it is not one. */
 internal fun parseIntervalMinutes(text: String): Long? =
-    text.trim().toLongOrNull()?.takeIf { it >= MIN_TRIGGER_INTERVAL_MINUTES && it <= MAX_INTERVAL_MINUTES }?.let { it * 60_000L }
-
-private const val MAX_INTERVAL_MINUTES = 60L * 24 * 366
+    text.trim().toLongOrNull()?.takeIf { it >= MIN_TRIGGER_INTERVAL_MINUTES && it <= Long.MAX_VALUE / 60_000L }?.let { it * 60_000L }
 
 /**
  * TRIGGER-NUDGE (contract 1.105.0): the trigger form's state, kept apart from the composable so its rules are tested.
  * [kind] is `manual` or `schedule`; [action] is `start_next` (the next ticket, optionally only [agentId]'s) or
- * `prompt` (mail [prompt] to [agentId] -- a `role:<role>` or a profile -- in [projectId]).
+ * `prompt` (mail [prompt] to [agentId] -- any `role:<role>` or a profile -- in [projectId]). Nothing is preset: the
+ * target, the interval (any whole number of minutes, at least one) and the prompt are the owner's to type or pick.
  *
  * An edit starts from the trigger as stored ([from]), so saving it never changes its kind or its interval unless the
  * owner changed them in the form.
@@ -30,7 +29,7 @@ internal data class TriggerDraft(
     val agentId: String? = null,
     val prompt: String = "",
     val projectId: String? = null,
-    val intervalMinutes: String = "30",
+    val intervalMinutes: String = "",
     val coalesceMinutes: String = "0",
     val ceiling: String = "6",
     val enabled: Boolean = true,
@@ -84,7 +83,7 @@ internal data class TriggerDraft(
                 agentId = existing.action.agentId?.takeIf { it.isNotBlank() },
                 prompt = existing.action.prompt.orEmpty(),
                 projectId = existing.projectId,
-                intervalMinutes = existing.intervalMs?.let { (it / 60_000L).coerceAtLeast(MIN_TRIGGER_INTERVAL_MINUTES).toString() } ?: "30",
+                intervalMinutes = existing.intervalMs?.let { (it / 60_000L).coerceAtLeast(MIN_TRIGGER_INTERVAL_MINUTES).toString() }.orEmpty(),
                 coalesceMinutes = msToMinutesText(existing.coalesceMs),
                 ceiling = existing.ceilingRuns.toString(),
                 enabled = existing.enabled,

@@ -48,6 +48,32 @@ class TriggerDraftTest {
     }
 
     @Test
+    fun anyRoleAnyIntervalAnyProject() {
+        val draft = TriggerDraft(
+            name = "qa sweep", kind = "schedule", intervalMinutes = "7", action = "prompt",
+            agentId = "role:qa", prompt = "re-run the flaky suite", projectId = "project-9",
+        )
+        assertNull(draft.problem())
+        val save = draft.toSave(null)
+        assertEquals(7 * 60_000L, save["intervalMs"]!!.jsonPrimitive.long)
+        assertEquals("project-9", save.text("projectId"))
+        assertEquals("role:qa", save["action"]!!.jsonObject.text("agentId"))
+        assertEquals(10_000L * 60_000L, parseIntervalMinutes("10000"), "no upper preset")
+        val toProfile = draft.copy(agentId = "agent-1234").toSave(null)
+        assertEquals("agent-1234", toProfile["action"]!!.jsonObject.text("agentId"), "a specific profile is a target too")
+    }
+
+    @Test
+    fun nothingIsPreset() {
+        val blank = TriggerDraft.from(null, activeProjectId = null)
+        assertEquals("", blank.intervalMinutes, "no default interval")
+        assertNull(blank.agentId, "no default target")
+        assertEquals("", blank.prompt)
+        assertEquals("The interval is a whole number of minutes, at least 1.", blank.copy(name = "n", kind = "schedule").problem())
+        assertEquals("Pick who receives the prompt.", blank.copy(name = "n", action = "prompt", prompt = "go").problem())
+    }
+
+    @Test
     fun aNewManualTriggerSendsWhatItAlwaysSent() {
         val save = TriggerDraft(name = "Pull next").toSave(null)
         assertEquals("manual", save.text("kind"))

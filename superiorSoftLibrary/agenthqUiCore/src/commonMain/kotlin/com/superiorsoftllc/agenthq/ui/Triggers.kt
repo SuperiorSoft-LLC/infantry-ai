@@ -56,7 +56,7 @@ internal fun triggerLanes(state: AppState): List<String> =
 internal fun triggerTarget(state: AppState, t: TriggerView): String =
     t.action.agentId?.takeIf { it.isNotBlank() }?.let { "next ticket assigned to ${assigneeLabel(state, it)}" } ?: "next startable ticket"
 
-/** One line: when it fires and what it does -- "every 30 min: mail role:pm in AgentHQ" / "manual: next startable ticket". */
+/** One line: when it fires and what it does -- "every 7 min: mail role:qa in AgentHQ: ..." / "manual: next startable ticket". */
 internal fun triggerSummary(state: AppState, t: TriggerView): String {
     val whenText = if (t.kind == "schedule") t.intervalMs?.let { "every ${humanDuration(it)}" } ?: "schedule (no interval)" else t.kind
     val what = if (t.action.kind == "prompt") {
@@ -85,7 +85,7 @@ internal fun TriggersPane(state: AppState, controller: Controller) {
         if (creating) TriggerForm(state, controller, onDone = { creating = false })
         if (state.triggers.isEmpty() && !creating) {
             Text(if (state.connection.isLive) "No trigger yet." else "Connect to a daemon to load its triggers.", color = Palette.Text)
-            Text("A trigger starts the next ticket from the board, or mails a prompt to a role (say the PM, every 30 minutes). Past its hourly ceiling, or after any failed run, it trips and waits for you to re-arm it.", color = Palette.Muted, fontSize = 11.sp)
+            Text("A trigger starts the next ticket from the board, or mails a prompt to any role or agent, by hand or every N minutes. Past its hourly ceiling, or after any failed run, it trips and waits for you to re-arm it.", color = Palette.Muted, fontSize = 11.sp)
         }
         state.triggers.forEach { t -> TriggerCard(t, state, controller) }
     }
@@ -203,7 +203,7 @@ private fun TriggerForm(state: AppState, controller: Controller, onDone: () -> U
             Text("Do", color = Palette.Muted, fontSize = 11.sp)
             Chip("start the next ticket", if (!draft.isPrompt) Palette.Accent else Palette.Muted, Modifier.clickable { draft = draft.copy(action = "start_next") })
             Chip("send a prompt", if (draft.isPrompt) Palette.Accent else Palette.Muted, Modifier.clickable {
-                draft = draft.copy(action = "prompt", agentId = draft.agentId ?: "role:pm", projectId = draft.projectId ?: state.activeProjectId)
+                draft = draft.copy(action = "prompt", projectId = draft.projectId ?: state.activeProjectId)
             })
         }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {

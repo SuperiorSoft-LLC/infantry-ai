@@ -169,6 +169,36 @@ class TriggerNudgeTest {
     }
 
     @Test
+    fun `any role and an odd interval - role qa every 7 minutes`() {
+        val service = service()
+        val t = service.save(
+            TriggerSave(
+                name = "qa sweep", kind = "schedule", intervalMs = 7 * 60_000L, coalesceMs = 0, projectId = "project-9",
+                action = TriggerAction(kind = "prompt", agentId = "role:qa", prompt = "re-run the flaky suite"),
+            ),
+        )
+        assertEquals(now + 7 * 60_000L, t.nextFireAt)
+        now += 7 * 60_000L - 1
+        service.pumpWindows()
+        assertTrue(nudges.isEmpty(), "not due a millisecond early")
+        now += 1
+        service.pumpWindows()
+        settled(service, t.id, 1)
+        assertEquals(TriggerNudge(t.id, "qa sweep", "project-9", "role:qa", "re-run the flaky suite"), nudges.single())
+        assertEquals(now + 7 * 60_000L, service.list().single().nextFireAt)
+
+        // The second slot, 7 minutes on, while the first mail still waits: coalesced; once delivered, the third mails.
+        now += 7 * 60_000L
+        service.pumpWindows()
+        assertEquals(listOf("mailed", "coalesced_pending"), dispositions(service, t.id))
+        pendingMail.clear()
+        now += 7 * 60_000L
+        service.pumpWindows()
+        settled(service, t.id, 3)
+        assertEquals(2, nudges.size)
+    }
+
+    @Test
     fun `a nudge caught mid hand-off by a restart comes back armed, not tripped`() {
         val first = service()
         val t = first.save(nudgeSave())
@@ -258,6 +288,25 @@ class TriggerNudgeTest {
         assertEquals("trigger:trg-1", mail.from)
         assertEquals("check the board", mail.body)
         assertEquals("trigger:trg-1:42", mail.threadId, "one thread per fire: an all-night trigger never hits the thread ceiling")
+    }
+
+    @Test
+    fun `any role resolves in the trigger's project - a qa nudge never reaches the pm`() {
+        val sent = mutableListOf<MailSendRequest>()
+        val qaNudge = TriggerNudge("trg-2", "qa sweep", "project-1", "role:qa", "re-run")
+        nudges(listOf(session("pm", "pm", "project-1", state = SessionState.BUSY), session("qa", "qa", "project-1")), sent).deliver(qaNudge)
+        assertEquals("agent-qa", sent.single().to)
+        val started = mutableListOf<String?>()
+        val none = nudges(listOf(session("pm", "pm", "project-1")), mutableListOf(), started).deliver(qaNudge)
+        assertEquals(PromptDelivery.Started("s-new"), none, "no qa session in the project: one is started, the pm is not mailed")
+    }
+
+    @Test
+    fun `a profile target is mailed through that agent's session`() {
+        val sent = mutableListOf<MailSendRequest>()
+        nudges(listOf(session("a", "fullstack", "project-1", agentId = "agent-1234")), sent)
+            .deliver(TriggerNudge("trg-3", "x", null, "agent-1234", "go"))
+        assertEquals("agent-1234", sent.single().to)
     }
 
     @Test
