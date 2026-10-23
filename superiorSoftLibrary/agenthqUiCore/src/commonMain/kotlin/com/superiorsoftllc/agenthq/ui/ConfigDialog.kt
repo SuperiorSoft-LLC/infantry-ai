@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -88,7 +89,7 @@ fun ConfigDialog(
     /** PAIR-1: the connection to share and the callback for a scanned / pasted link; null hides "Pair a device". */
     pair: PairEntry? = null,
 ) {
-    AlertDialog(
+    AhqAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Configuration", fontWeight = FontWeight.Bold) },
         text = {
@@ -96,6 +97,16 @@ fun ConfigDialog(
                 Text(FLAGS_LIFETIME_NOTE, color = Palette.Muted, fontSize = 11.sp)
                 FlagSection(title = "Agent scope", applies = AGENT_SCOPE_APPLIES_TO) {
                     AgentScopeDropdown(flags.agentScope) { onFlags(flags.copy(agentScope = it)) }
+                }
+                FlagSection(title = "Blur behind dialogs", applies = BLUR_APPLIES_TO) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        androidx.compose.material3.Switch(
+                            checked = flags.blurBehindDialogs,
+                            onCheckedChange = { onFlags(flags.copy(blurBehindDialogs = it)) },
+                            modifier = Modifier.testTag(BLUR_SWITCH_TAG),
+                        )
+                        Text(if (flags.blurBehindDialogs) "On" else "Off", fontSize = 12.sp)
+                    }
                 }
                 FlagSection(title = "Spoken alerts", applies = com.superiorsoftllc.agenthq.ui.voice.VOICE_APPLIES_TO) {
                     com.superiorsoftllc.agenthq.ui.voice.VoiceSettingsSection(flags.voice) { onFlags(flags.copy(voice = it)) }
@@ -532,3 +543,6 @@ private fun UserPortraitSection(portrait: String?, onSave: (ByteArray?) -> Unit)
         }
     }
 }
+
+const val BLUR_SWITCH_TAG = "blur-behind-dialogs-switch"
+const val BLUR_APPLIES_TO = "Applies to: every dialog. On blurs the window behind it; off dims it instead. Android before 12 always dims. Remembered across launches."

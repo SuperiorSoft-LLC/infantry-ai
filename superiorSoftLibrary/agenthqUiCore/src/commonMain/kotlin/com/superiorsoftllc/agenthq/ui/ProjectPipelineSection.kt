@@ -158,7 +158,7 @@ private fun StagesDialog(
 ) {
     var text by remember { mutableStateOf(initial) }
     val stages = parseStageNames(text)
-    AlertDialog(
+    AhqAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Pipeline stages", fontSize = 15.sp) },
         text = {

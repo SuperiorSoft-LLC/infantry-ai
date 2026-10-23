@@ -80,11 +80,11 @@ fun SidebarBoardButton(state: AppState, onOpen: () -> Unit, modifier: Modifier =
 @Composable
 fun BoardModal(state: AppState, controller: Controller, onOpenAgent: (String) -> Unit, onDismiss: () -> Unit) {
     val focus = remember { FocusRequester() }
-    Box(
+    // MODAL-BLUR: the backdrop blurs the app behind (or dims it when blur is off).
+    ModalBackdrop(
         // The scrim takes every tap outside the panel, so nothing under the modal reacts; a tap on it closes.
         // pointerInput, not clickable: a clickable parent would merge the whole board into one semantics node.
-        Modifier.fillMaxSize().background(Palette.Bg.copy(alpha = 0.72f))
-            .pointerInput(onDismiss) { detectTapGestures { onDismiss() } },
+        Modifier.pointerInput(onDismiss) { detectTapGestures { onDismiss() } },
     ) {
         Box(Modifier.fillMaxSize().padding(24.dp)) {
             Column(

@@ -31,6 +31,8 @@ data class UiFlags(
     val agentScope: AgentScope = AgentScope.PROJECT,
     /** VOICE-1: spoken attention alerts. */
     val voice: com.superiorsoftllc.agenthq.ui.voice.VoiceSettings = com.superiorsoftllc.agenthq.ui.voice.VoiceSettings(),
+    /** MODAL-BLUR: blur the app behind dialogs (default on); off keeps the dark scrim. Persisted by the host. */
+    val blurBehindDialogs: Boolean = true,
 )
 
 /** What the modal says each flag applies to, shown in the label rather than a tooltip. */

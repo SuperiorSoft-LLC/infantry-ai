@@ -117,7 +117,7 @@ fun AndroidConnectGate(
 
     MaterialTheme(colorScheme = darkColorScheme()) {
         if (openedLink != null) {
-            AlertDialog(
+            com.superiorsoftllc.agenthq.ui.AhqAlertDialog(
                 onDismissRequest = onOpenedLinkHandled,
                 title = { Text(if (pairLink != null) "Connect to this server?" else "Cannot use this link") },
                 text = {

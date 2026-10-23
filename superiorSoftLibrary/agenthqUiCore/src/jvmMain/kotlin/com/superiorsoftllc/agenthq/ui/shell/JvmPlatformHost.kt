@@ -30,6 +30,11 @@ class JvmPlatformHost(
 
     override val defaultDaemonUrl: String = "ws://127.0.0.1:${recordedPort() ?: DEFAULT_PORT}/ws"
     override fun setting(key: String): String? = env(key)
+
+    /** MODAL-BLUR: UI prefs live in the per-user Java preferences store (the registry on Windows), never in the daemon's state dir. */
+    private val prefs get() = java.util.prefs.Preferences.userRoot().node("com/superiorsoftllc/agenthq/ui")
+    override fun uiPref(key: String): String? = runCatching { prefs.get(key, null) }.getOrNull()
+    override fun saveUiPref(key: String, value: String) { runCatching { prefs.put(key, value); prefs.flush() } }
     override fun readTextFile(path: String): String? = runCatching { File(path).readText() }.getOrNull()
 
     /** CLIPATH-1: the native file dialog, when there is a display (never on a headless JVM). */

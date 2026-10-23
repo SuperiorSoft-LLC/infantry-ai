@@ -102,9 +102,11 @@ fun BoxScope.QuestionWindow(
         var other by remember { mutableStateOf("") }
         val focus = remember { FocusRequester() }
         LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+        RegisterModal()
+        val blurStyle = LocalModalBlur.current.blurStyle
         Box(
             // The scrim takes the clicks meant for the panes behind it: a question is answered, put off, or cancelled.
-            Modifier.fillMaxSize().background(Color(0x99000000)).clickable(onClick = {}).testTag(QUESTION_WINDOW_TAG)
+            Modifier.fillMaxSize().background(if (blurStyle) ModalScrimTint else Color(0x99000000)).clickable(onClick = {}).testTag(QUESTION_WINDOW_TAG)
                 .focusRequester(focus).focusable()
                 .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && e.key == Key.Escape) { onLater(); true } else false },
             contentAlignment = Alignment.Center,

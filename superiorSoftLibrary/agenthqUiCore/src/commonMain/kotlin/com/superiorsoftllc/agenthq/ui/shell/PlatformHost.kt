@@ -15,6 +15,15 @@ interface PlatformHost {
     /** A configuration value by key (an environment variable on desktop), or null when unset. */
     fun setting(key: String): String?
 
+    /** MODAL-BLUR: whether `Modifier.blur` renders here (Android below 12 does not); false falls back to the dark scrim. */
+    val supportsBlur: Boolean get() = true
+
+    /** A small UI preference the host remembers across launches, or null when unset / not persisted on this host. */
+    fun uiPref(key: String): String? = null
+
+    /** Remembers [value] under [key]; a host with nothing to persist to ignores it. */
+    fun saveUiPref(key: String, value: String) {}
+
     /** The text of a file, or null when it cannot be read. Never throws. */
     fun readTextFile(path: String): String?
 

@@ -241,7 +241,11 @@ fun App(
     // DIFF-MODAL: the changed file whose diff is open over the window; another project closes it.
     var diffTarget by remember { mutableStateOf<DiffTarget?>(null) }
     LaunchedEffect(state.activeProject?.id) { diffTarget = null }
-    var flags by remember { mutableStateOf(UiFlags()) }
+    // MODAL-BLUR: the one blur state every dialog reports into; the setting is remembered by the host.
+    val host = LocalPlatformHost.current
+    var flags by remember { mutableStateOf(UiFlags(blurBehindDialogs = host.uiPref(BLUR_PREF_KEY) != "off")) }
+    val modalBlur = remember { ModalBlurState(supported = host.supportsBlur) }
+    modalBlur.enabled = flags.blurBehindDialogs
     var url by remember { mutableStateOf(initialUrl) }
     var token by remember { mutableStateOf(initialToken.orEmpty()) }
     val searchFocus = remember { FocusRequester() }
@@ -404,13 +408,14 @@ fun App(
     AgentHqTheme {
       // M2-8: a Box so the Board modal overlay stacks over the window.
       // IMG-VIEW-1: chat images open full size over the whole window (the Board keeps its own host, above it).
+      androidx.compose.runtime.CompositionLocalProvider(LocalModalBlur provides modalBlur) {
       ImageViewerHost {
       Box(Modifier.fillMaxSize()) {
         Column(
             // BUG-PANEL-TOGGLE-1: the root Column is itself the focus target. A requester on a non-focusable node hands
             // focus to its first focusable child (the title bar's left panel toggle), which opened that toggle's tooltip
             // at launch. focusable() draws no indication, so focusing the root shows nothing.
-            Modifier.fillMaxSize().background(Palette.Bg).focusRequester(root).focusable().onPreviewKeyEvent(::key),
+            Modifier.fillMaxSize().modalBlur(modalBlur).background(Palette.Bg).focusRequester(root).focusable().onPreviewKeyEvent(::key),
         ) {
             TitleBar(
                 state, flags.agentScope, onConnect = { changeConnection?.invoke() ?: run { showConnect = true } }, onAttention = { showRightTab(RightTab.ATTENTION) },
@@ -622,7 +627,11 @@ fun App(
       }
         if (showConfig) {
             ConfigDialog(
-                flags, onFlags = { flags = it }, onDismiss = { showConfig = false },
+                flags,
+                onFlags = { next ->
+                    if (next.blurBehindDialogs != flags.blurBehindDialogs) host.saveUiPref(BLUR_PREF_KEY, if (next.blurBehindDialogs) "on" else "off")
+                    flags = next
+                }, onDismiss = { showConfig = false },
                 keepAliveMinutes = state.keepAliveMinutes,
                 userPortrait = if (contractAtLeast(state.connection.contract, UserPortrait.SINCE_MAJOR, UserPortrait.SINCE_MINOR)) state.userPortrait to { png: ByteArray? -> actionScope.launch { controller.setUserPortrait(png) }; Unit } else null,
                 onKeepAliveMinutes = { minutes -> actionScope.launch { controller.setKeepAliveMinutes(minutes) } },
@@ -660,8 +669,12 @@ fun App(
                 root.requestFocus()
             }
         }
+      }
     }
 }
+
+/** MODAL-BLUR: the host preference key for "Blur behind dialogs" ("on" / "off"; unset = on). */
+const val BLUR_PREF_KEY = "blurBehindDialogs"
 
 @Composable private fun VLine() = Box(Modifier.width(1.dp).fillMaxHeight().background(Palette.Border))
 
@@ -998,7 +1011,7 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
 private fun RemoveAgentDialog(a: AgentView, state: AppState, onDismiss: () -> Unit, onRemove: () -> Unit) {
     // Focus starts on the safe action (Cancel), so Enter never deletes by accident and Esc reaches the dialog.
     val cancelFocus = remember { FocusRequester() }
-    AlertDialog(
+    AhqAlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag(SESSION_REMOVE_DIALOG_TAG).onPreviewKeyEvent { e ->
             if (e.type == KeyEventType.KeyDown && e.key == Key.Escape) { onDismiss(); true } else false
@@ -1967,7 +1980,7 @@ private fun ConnectDialog(
 ) {
     var u by remember { mutableStateOf(url) }
     var t by remember { mutableStateOf(token) }
-    AlertDialog(
+    AhqAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Connect to a daemon") },
         text = {

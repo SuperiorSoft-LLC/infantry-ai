@@ -202,7 +202,7 @@ private fun NewProjectDialog(
         error = null
         scope.launch { error = onCreate(name); busy = false }
     }
-    AlertDialog(
+    AhqAlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag(NEW_PROJECT_DIALOG_TAG).onPreviewKeyEvent { e ->
             when {

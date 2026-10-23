@@ -20,6 +20,9 @@ class AndroidPlatformHost(
     override val qrScanner: (@androidx.compose.runtime.Composable (onCode: (String) -> Unit, onClose: () -> Unit) -> Unit)? =
         { onCode, onClose -> com.superiorsoftllc.agenthq.ui.pair.CameraQrScanner(onCode, onClose) }
 
+    /** MODAL-BLUR: Modifier.blur renders only on Android 12+ (API 31); older versions keep the dark scrim. */
+    override val supportsBlur: Boolean = android.os.Build.VERSION.SDK_INT >= 31
+
     override val defaultDaemonUrl: String = "ws://10.0.2.2:8787/ws"
     override fun setting(key: String): String? = settings[key]
     override fun readTextFile(path: String): String? = runCatching { File(path).readText() }.getOrNull()

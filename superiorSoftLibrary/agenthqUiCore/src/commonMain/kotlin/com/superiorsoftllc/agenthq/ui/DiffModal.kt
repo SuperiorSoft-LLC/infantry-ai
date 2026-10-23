@@ -92,7 +92,7 @@ fun DiffModal(
 ) {
     val focus = remember { FocusRequester() }
     val body = diffBody(patch)
-    Box(Modifier.fillMaxSize().background(Palette.Bg.copy(alpha = 0.72f)).pointerInput(onClose) { detectTapGestures { onClose() } }) {
+    ModalBackdrop(Modifier.pointerInput(onClose) { detectTapGestures { onClose() } }) {
         Box(Modifier.fillMaxSize().padding(24.dp)) {
             Column(
                 Modifier.fillMaxSize()

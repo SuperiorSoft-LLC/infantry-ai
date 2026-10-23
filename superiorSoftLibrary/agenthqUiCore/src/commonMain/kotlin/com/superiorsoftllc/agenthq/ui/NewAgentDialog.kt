@@ -77,7 +77,7 @@ fun NewAgentDialog(
     val cur = draft.copy(roles = state.roles, bindings = state.roleBindings, harnesses = state.providers, catalog = state.modelCatalog, executor = executor)
     val update: (NewAgentModalModel) -> Unit = { draft = it }
 
-    AlertDialog(
+    AhqAlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag(NEW_AGENT_DIALOG_TAG),
         title = { Text("New agent", fontWeight = FontWeight.Bold) },
