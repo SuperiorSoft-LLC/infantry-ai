@@ -1,0 +1,47 @@
+-- Story 9.7b: one row per ended run. The token columns are NULL when the run reported no usage:
+-- no signal is not zero. The row still exists so the operator budget can count the run.
+CREATE TABLE IF NOT EXISTS run_usage (
+    run_id TEXT NOT NULL PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    ended_at INTEGER NOT NULL,
+    input INTEGER,
+    output INTEGER,
+    reasoning INTEGER,
+    cache_read INTEGER,
+    cache_write INTEGER,
+    cost_usd REAL
+);
+
+CREATE INDEX IF NOT EXISTS index_run_usage_on_provider_ended_at ON run_usage(provider, ended_at);
+
+CREATE INDEX IF NOT EXISTS index_run_usage_on_session_id ON run_usage(session_id);
+
+-- Story 9.7b: the latest observed limit state per provider. 'unknown' is the honest default.
+CREATE TABLE IF NOT EXISTS provider_state (
+    provider TEXT NOT NULL PRIMARY KEY,
+    status TEXT NOT NULL CHECK (status IN ('unknown', 'stalled', 'exhausted')),
+    limit_window TEXT,
+    utilization REAL,
+    resets_at INTEGER,
+    observed_at INTEGER,
+    source TEXT NOT NULL
+);
+
+insertRunUsage:
+INSERT OR REPLACE INTO run_usage(run_id, session_id, provider, model, ended_at, input, output, reasoning, cache_read, cache_write, cost_usd)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+getRunUsageBySession:
+SELECT * FROM run_usage WHERE session_id = ? ORDER BY ended_at ASC, run_id ASC;
+
+getRunUsageSince:
+SELECT * FROM run_usage WHERE ended_at >= ? ORDER BY ended_at ASC, run_id ASC;
+
+upsertProviderState:
+INSERT OR REPLACE INTO provider_state(provider, status, limit_window, utilization, resets_at, observed_at, source)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+getAllProviderStates:
+SELECT * FROM provider_state ORDER BY provider ASC;

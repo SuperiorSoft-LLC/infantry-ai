@@ -1,0 +1,7 @@
+-- P9.5d -- migration v21 -> v22: a trigger's `prompt` action keeps its text across a restart.
+--
+-- Nullable: only a trigger whose action kind is `prompt` carries one; every existing row stays NULL.
+--
+-- NEXT MIGRATION: 22.sqm
+
+ALTER TABLE triggers ADD COLUMN action_prompt TEXT;

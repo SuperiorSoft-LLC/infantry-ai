@@ -1,0 +1,31 @@
+-- Story 9.5 wiring -- migration v11 -> v12: durable triggers and their event dispositions.
+--
+-- NEXT MIGRATION: 12.sqm
+
+CREATE TABLE triggers (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    action_kind TEXT NOT NULL,
+    action_agent_id TEXT,
+    enabled INTEGER NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('armed', 'running', 'tripped', 'disabled')),
+    coalesce_ms INTEGER NOT NULL,
+    ceiling_runs INTEGER NOT NULL,
+    ceiling_window_ms INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    tripped_at INTEGER,
+    tripped_reason TEXT
+);
+
+CREATE TABLE trigger_events (
+    event_id TEXT NOT NULL PRIMARY KEY,
+    trigger_id TEXT NOT NULL,
+    received_at INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    disposition TEXT NOT NULL,
+    delivery_id TEXT,
+    digest TEXT
+);
+
+CREATE INDEX index_trigger_events_on_trigger_received ON trigger_events(trigger_id, received_at);

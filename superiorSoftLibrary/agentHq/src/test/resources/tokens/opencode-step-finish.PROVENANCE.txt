@@ -1,0 +1,1 @@
+Captured 2026-10-10 with: opencode run --format json -m opencode/nemotron-3-ultra-free "Use your read tool to read the file .gitignore ... reply with only the number of lines" (2 step_finish lines; unedited real output).

@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS projects (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    goal TEXT NOT NULL DEFAULT '',
+    story_ids TEXT NOT NULL DEFAULT '[]',
+    created_at INTEGER NOT NULL
+);

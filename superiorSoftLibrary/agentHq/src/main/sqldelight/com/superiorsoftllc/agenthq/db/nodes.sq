@@ -1,0 +1,76 @@
+-- Phase 5 -- the pod DAG: nodes, edges between nodes, and the attempts (runs) that executed a node.
+--
+-- A run (runs.sq) is ONE process execution. A node is one named unit of work in a pod: a prompt, its
+-- dependencies and a retry budget. Each attempt of a node is a NEW run; node_attempts links them,
+-- so runs.sq is untouched. Edges are between stable node ids, so a retry never rewrites an edge.
+--
+-- `state` / `review_state` are TEXT stored by Kotlin enum NAME (NodeState / ReviewState), with no
+-- CHECK: SQLite cannot alter a CHECK without a table rebuild, so an evolving lifecycle vocabulary
+-- is not pinned in SQL. Longer cycles cannot be a CHECK; the Kotlin PodValidator rejects them
+-- before any write, and the DAG is immutable after submit.
+
+CREATE TABLE IF NOT EXISTS pod_nodes (
+    id TEXT NOT NULL PRIMARY KEY,
+    pod_id TEXT NOT NULL REFERENCES pods(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    spec_index INTEGER NOT NULL,
+    prompt TEXT NOT NULL,
+    state TEXT NOT NULL,
+    max_attempts INTEGER NOT NULL DEFAULT 1 CHECK (max_attempts >= 1),
+    attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+    review_state TEXT,
+    detail TEXT,
+    created_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    UNIQUE (pod_id, name)
+);
+
+CREATE INDEX IF NOT EXISTS index_pod_nodes_on_pod_id ON pod_nodes(pod_id);
+
+CREATE TABLE IF NOT EXISTS node_dependencies (
+    node_id TEXT NOT NULL REFERENCES pod_nodes(id) ON DELETE CASCADE,
+    depends_on TEXT NOT NULL REFERENCES pod_nodes(id) ON DELETE CASCADE,
+    PRIMARY KEY (node_id, depends_on),
+    CHECK (node_id <> depends_on)
+);
+
+CREATE INDEX IF NOT EXISTS index_node_dependencies_on_depends_on ON node_dependencies(depends_on);
+
+CREATE TABLE IF NOT EXISTS node_attempts (
+    run_id TEXT NOT NULL PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
+    node_id TEXT NOT NULL REFERENCES pod_nodes(id) ON DELETE CASCADE,
+    attempt INTEGER NOT NULL CHECK (attempt >= 1),
+    UNIQUE (node_id, attempt)
+);
+
+insertNode:
+INSERT INTO pod_nodes(id, pod_id, name, spec_index, prompt, state, max_attempts, attempts, review_state, detail, created_at, ended_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+getNodeById:
+SELECT * FROM pod_nodes WHERE id = ?;
+
+getNodesByPodId:
+SELECT * FROM pod_nodes WHERE pod_id = ? ORDER BY spec_index ASC;
+
+-- Only the mutable columns. id, pod_id, name, spec_index, prompt, max_attempts, created_at are
+-- immutable once the pod is submitted (the DAG is frozen at submit -- see §4.6).
+updateNode:
+UPDATE pod_nodes SET state = ?, attempts = ?, review_state = ?, detail = ?, ended_at = ? WHERE id = ?;
+
+insertDependency:
+INSERT INTO node_dependencies(node_id, depends_on) VALUES (?, ?);
+
+getDependenciesByPodId:
+SELECT d.node_id, d.depends_on FROM node_dependencies d
+JOIN pod_nodes n ON n.id = d.node_id
+WHERE n.pod_id = ?;
+
+insertAttempt:
+INSERT INTO node_attempts(run_id, node_id, attempt) VALUES (?, ?, ?);
+
+getAttemptsByNodeId:
+SELECT * FROM node_attempts WHERE node_id = ? ORDER BY attempt ASC;
+
+getReviewQueue:
+SELECT * FROM pod_nodes WHERE review_state = 'PENDING' ORDER BY ended_at ASC, spec_index ASC;

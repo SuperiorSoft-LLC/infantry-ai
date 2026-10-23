@@ -1,0 +1,31 @@
+-- Story 9.3 -- migration v6 -> v7: ticket executor/context state, settings and run outcomes.
+--
+-- NEXT MIGRATION: 7.sqm
+
+ALTER TABLE tickets ADD COLUMN agent_id TEXT;
+ALTER TABLE tickets ADD COLUMN provider TEXT;
+ALTER TABLE tickets ADD COLUMN model TEXT;
+ALTER TABLE tickets ADD COLUMN use_worktree INTEGER CHECK (use_worktree IS NULL OR use_worktree IN (0, 1));
+ALTER TABLE tickets ADD COLUMN worktree_branch TEXT;
+ALTER TABLE tickets ADD COLUMN include_linked_tasks_context INTEGER CHECK (include_linked_tasks_context IS NULL OR include_linked_tasks_context IN (0, 1));
+ALTER TABLE tickets ADD COLUMN queued_for TEXT;
+ALTER TABLE tickets ADD COLUMN queued_at INTEGER;
+ALTER TABLE tickets ADD COLUMN session_id TEXT;
+
+CREATE TABLE settings (
+    key TEXT NOT NULL PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE ticket_runs (
+    ticket_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    session_id TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    outcome TEXT,
+    detail TEXT,
+    PRIMARY KEY (ticket_id, session_id)
+);
+
+CREATE INDEX index_ticket_runs_on_ticket_id_started_at ON ticket_runs(ticket_id, started_at);

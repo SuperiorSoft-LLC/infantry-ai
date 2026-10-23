@@ -1,0 +1,5 @@
+-- Story 9.5 wiring (PHASE9 H13a) -- migration v12 -> v13: a schedule trigger's interval survives a restart.
+--
+-- NEXT MIGRATION: 13.sqm
+
+ALTER TABLE triggers ADD COLUMN interval_ms INTEGER;

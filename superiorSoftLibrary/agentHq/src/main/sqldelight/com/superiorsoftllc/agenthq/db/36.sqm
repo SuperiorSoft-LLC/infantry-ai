@@ -1,0 +1,12 @@
+-- E1-a -- migration v36 -> v37: the story -> ticket mapping (docs/EPIC-1-ONE-WORK-MODEL-PLAN.md, "Migration").
+-- One row per story the daemon's startup migration has turned into a ticket, written in the SAME transaction as
+-- that ticket's insert, so a crash mid-migration resumes without duplicates. Nothing is dropped: `epics.story_ids`
+-- and `projects.story_ids` stay. The table is exactly story_migration.sq's.
+--
+-- NEXT MIGRATION: 37.sqm (taken by BUG-MAIL-2: tickets.started_by)
+
+CREATE TABLE IF NOT EXISTS story_migration (
+    story_id TEXT NOT NULL PRIMARY KEY,
+    ticket_id TEXT NOT NULL,
+    migrated_at INTEGER NOT NULL
+);

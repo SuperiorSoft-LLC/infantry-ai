@@ -1,0 +1,7 @@
+-- IMG-3 -- migration v40 -> v41: a ticket carries image attachments, the relPaths `image_upload` answered
+-- (`.agenthq/uploads/ticket/<sha256>.<ext>`, relative to the ticket's project directory), as a JSON array.
+-- NOT NULL DEFAULT '[]' so every existing ticket reads back as "no images", never NULL. The column is exactly tickets.sq's.
+--
+-- NEXT MIGRATION: 41.sqm (taken by ASK-1: owner_questions)
+
+ALTER TABLE tickets ADD COLUMN images TEXT NOT NULL DEFAULT '[]';

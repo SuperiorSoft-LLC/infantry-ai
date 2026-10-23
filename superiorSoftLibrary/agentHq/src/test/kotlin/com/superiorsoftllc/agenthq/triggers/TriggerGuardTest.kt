@@ -1,0 +1,143 @@
+package com.superiorsoftllc.agenthq.triggers
+
+import com.superiorsoftllc.agenthq.attention.AttentionKind
+import com.superiorsoftllc.agenthq.attention.AttentionStore
+import com.superiorsoftllc.agenthq.attention.AttentionItem
+import com.superiorsoftllc.agenthq.persistence.AttentionRepository
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+import kotlin.test.assertNotNull
+
+class TriggerGuardTest {
+    private class FakeClock(var now: Long = 0) : TriggerClock {
+        override fun nowMillis(): Long = now
+    }
+
+    @Test
+    fun `hourly ceiling counts starts and refuses then trips at the limit`() {
+        val clock = FakeClock()
+        val starts = mutableListOf<TriggerRun>()
+        val trips = mutableListOf<TriggerTrip>()
+        val guard = TriggerGuard(
+            clock = clock,
+            launch = starts::add,
+            onTrip = trips::add,
+            coalesceMs = 0,
+        )
+
+        repeat(6) { index ->
+            assertEquals(TriggerFireResult.STARTED, guard.fire("event-$index"))
+            assertTrue(guard.complete(starts.last().runId, TriggerOutcome.SUCCEEDED))
+        }
+
+        assertEquals(TriggerFireResult.REFUSED_CEILING, guard.fire("event-6"))
+        assertEquals(6, starts.size)
+        assertEquals(TriggerState.TRIPPED, guard.state())
+        assertEquals(1, trips.size)
+        assertEquals(AttentionKind.CEILING, trips.single().attentionKind)
+        assertEquals(TriggerEventDisposition.REFUSED_CEILING, guard.dispositions.last().disposition)
+    }
+
+    @Test
+    fun `ceiling window expires at one hour and permits another start`() {
+        val clock = FakeClock()
+        val starts = mutableListOf<TriggerRun>()
+        val guard = TriggerGuard(clock = clock, launch = starts::add, coalesceMs = 0)
+
+        repeat(6) { index ->
+            assertEquals(TriggerFireResult.STARTED, guard.fire("event-$index"))
+            guard.complete(starts.last().runId, TriggerOutcome.SUCCEEDED)
+        }
+        clock.now = TriggerGuard.DEFAULT_CEILING_WINDOW_MS
+
+        assertEquals(TriggerFireResult.STARTED, guard.fire("event-6"))
+        assertEquals(7, starts.size)
+    }
+
+    @Test
+    fun `every non-success outcome trips once and never retries or starts later events`() {
+        TriggerOutcome.entries.filterNot { it == TriggerOutcome.SUCCEEDED }.forEach { outcome ->
+            val clock = FakeClock()
+            val starts = mutableListOf<TriggerRun>()
+            val trips = mutableListOf<TriggerTrip>()
+            val guard = TriggerGuard(clock = clock, launch = starts::add, onTrip = trips::add, coalesceMs = 0)
+
+            assertEquals(TriggerFireResult.STARTED, guard.fire("initial", "trigger-$outcome"))
+            val run = starts.single()
+            assertTrue(guard.complete(run.runId, outcome))
+
+            clock.now += 1_000_000
+            assertEquals(TriggerFireResult.SUPPRESSED_TRIPPED, guard.fire("later", "trigger-$outcome"))
+            assertFalse(guard.pump())
+            assertEquals(1, starts.size)
+            assertEquals(TriggerState.TRIPPED, guard.state("trigger-$outcome"))
+            assertEquals(1, trips.size)
+            assertEquals(outcome.name, trips.single().outcome)
+            assertEquals(TriggerEventDisposition.SUPPRESSED_TRIPPED, guard.dispositions.last().disposition)
+        }
+    }
+
+    @Test
+    fun `acknowledging attention does not arm trigger but explicit arm does`() {
+        val starts = mutableListOf<TriggerRun>()
+        val trips = mutableListOf<TriggerTrip>()
+        val guard = TriggerGuard(launch = starts::add, onTrip = trips::add, coalesceMs = 0)
+        guard.fire("first", "t")
+        guard.complete(starts.single().runId, TriggerOutcome.FAILED)
+        assertEquals(TriggerState.TRIPPED, guard.state("t"))
+        assertEquals(TriggerFireResult.SUPPRESSED_TRIPPED, guard.fire("still-tripped", "t"))
+
+        assertTrue(guard.arm("t"))
+        assertEquals(TriggerState.ARMED, guard.state("t"))
+        assertEquals(TriggerFireResult.STARTED, guard.fire("after-arm", "t"))
+        assertEquals(2, starts.size)
+    }
+
+    @Test
+    fun `events during a failed run are dropped and no follow up is launched`() {
+        val starts = mutableListOf<TriggerRun>()
+        val guard = TriggerGuard(launch = starts::add, coalesceMs = 0)
+        guard.fire("initial", "t")
+        guard.fire("queued", "t")
+
+        guard.complete(starts.single().runId, TriggerOutcome.FAILED)
+        assertFalse(guard.pump())
+        assertEquals(1, starts.size)
+        assertEquals(TriggerEventDisposition.DROPPED_AFTER_FAILURE, guard.dispositions.last().disposition)
+    }
+
+    @Test
+    fun `arming an unknown trigger returns false and leaves no state`() {
+        val guard = TriggerGuard(launch = {})
+        assertFalse(guard.arm("missing"))
+        assertNull(guard.stateOrNull("missing"))
+    }
+
+    @Test
+    fun `trip report persists and publishes attention`() {
+        var persisted: AttentionItem? = null
+        var pushed: AttentionItem? = null
+        val repository = object : AttentionRepository {
+            override fun insert(item: AttentionItem) { persisted = item }
+            override fun get(id: String): AttentionItem? = persisted?.takeIf { it.id == id }
+            override fun all(): List<AttentionItem> = listOfNotNull(persisted)
+            override fun acknowledge(id: String, at: Long): AttentionItem? = null
+            override fun openCount(): Long = if (persisted?.ackedAt == null && persisted != null) 1 else 0
+        }
+        val attention = AttentionStore(repository, clock = { 42L }, idFactory = { "attention-1" }).also {
+            it.eventSink = { pushed = it }
+        }
+        val trip = TriggerTrip("trigger-x", AttentionKind.TRIGGER_TRIPPED, "FAILED", "run failed")
+
+        trip.reportTo(attention)
+
+        assertEquals(persisted, pushed)
+        assertNotNull(persisted)
+        assertEquals(AttentionKind.TRIGGER_TRIPPED, persisted?.kind)
+        assertEquals("trigger-x", persisted?.triggerId)
+        assertEquals("FAILED", persisted?.outcome)
+    }
+}

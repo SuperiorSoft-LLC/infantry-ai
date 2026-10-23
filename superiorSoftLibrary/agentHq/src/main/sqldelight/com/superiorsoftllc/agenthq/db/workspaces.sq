@@ -1,0 +1,39 @@
+-- MVP PW-3: the WORKSPACE scopes.
+--
+-- WHAT A WORKSPACE IS: a stable id, the id of the project it belongs to, a name, and an optional
+-- checkout path. The daemon half lives in com.superiorsoftllc.agenthq.mvp.WorkspaceStore; the
+-- durable surface is com.superiorsoftllc.agenthq.mvp.SqlWorkspacePersistence.
+--
+-- `project_id` is a foreign key into `projects`: a workspace cannot outlive its project's row. The
+-- store already refuses a save into an unknown project, so the constraint only ever guards a
+-- write that bypasses the store.
+--
+-- `created_at` orders the listing: `list` answers in the order workspaces were created. It is set
+-- on insert and never touched by an edit.
+--
+-- NEXT MIGRATION: 15.sqm (this table's migration is 13.sqm)
+
+CREATE TABLE IF NOT EXISTS workspaces (
+    id TEXT NOT NULL PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    -- Optional checkout folder. NULL = no path; never an empty string (the store trims and drops blanks).
+    path TEXT,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS index_workspaces_on_project ON workspaces(project_id, created_at);
+
+-- Every workspace, in creation order (ties fall back to id so the order is total and stable).
+getAllWorkspaces:
+SELECT * FROM workspaces ORDER BY created_at ASC, id ASC;
+
+-- Upsert as TWO single-statement labels, for the same reason as projects.sq: SQLDelight keeps only
+-- the first statement of a label. `upsertWorkspace` in Kotlin runs the insert and, when it reports
+-- 0 affected rows (the id was already there), runs the update.
+insertWorkspaceIgnore:
+INSERT OR IGNORE INTO workspaces(id, project_id, name, path, created_at) VALUES (?, ?, ?, ?, ?);
+
+-- The edit half: overwrites everything but the id and created_at.
+updateWorkspace:
+UPDATE workspaces SET project_id = ?, name = ?, path = ? WHERE id = ?;

@@ -1,0 +1,23 @@
+-- CP-3 -- migration v19 -> v20: an agent profile belongs to exactly ONE project.
+--
+-- `project_id` names that project. NULL only survives where there was no project to assign (a database
+-- with no project row at all); the daemon treats NULL as "unassigned legacy", never as "every project".
+--
+-- BACKFILL (existing global agents), in this order:
+--   1. the project of the agent's most recently created ticket (the legacy, primary link);
+--   2. else the DEFAULT project: the oldest project (created_at, then id), the same order `project_list`
+--      answers in.
+--
+-- NEXT MIGRATION: 21.sqm
+
+ALTER TABLE agents ADD COLUMN project_id TEXT;
+
+UPDATE agents SET project_id = (
+    SELECT t.project_id FROM tickets t
+    WHERE t.agent_id = agents.id AND t.project_id IS NOT NULL AND t.project_id <> ''
+    ORDER BY t.created_at DESC, t.id DESC LIMIT 1
+) WHERE project_id IS NULL;
+
+UPDATE agents SET project_id = (
+    SELECT p.id FROM projects p ORDER BY p.created_at ASC, p.id ASC LIMIT 1
+) WHERE project_id IS NULL;

@@ -1,0 +1,129 @@
+-- P10-K6 -- the project ISSUES log (docs/AGENTHQ-PHASE10-KNOWLEDGE.md K-D8). See 32.sqm, which adds it to a v32 file.
+--
+-- `issues` holds one row per issue, numbered per project from 1 (shown as `I<number>`); `issue_events` holds its
+-- attempts and its fix, numbered per issue from 1 (`seq`). APPEND-ONLY IN THE DATABASE: the four triggers below abort
+-- any UPDATE or DELETE on either table, raw SQL included.
+--
+--  - Status is DERIVED, never stored (a stored flag would need an UPDATE): an issue is `fixed` once it has a `fix` event.
+--  - The partial unique index allows one fix per issue, and the BEFORE INSERT trigger refuses any event (attempt or a
+--    second fix) after it: a recurrence is a NEW issue, which precheck brings up next to the old one.
+--  - The CHECK ties `outcome` to `kind`: an attempt is worked / failed / partial, a fix has none.
+--  - `implicit` marks an issue opened by an attempt that had no issue to go to (projectmem L-008), so no attempt is lost.
+--  - The session's ACTIVE issue is derived by IssueStore from `opened_by_session` and the attempts' `session_id`
+--    (per session, not per project: docs section 2.11); the two session indexes serve that lookup.
+--
+-- NEXT MIGRATION: 33.sqm (this table's migration is 32.sqm)
+
+CREATE TABLE IF NOT EXISTS issues (
+    project_id TEXT NOT NULL,
+    number INTEGER NOT NULL CHECK (number >= 1),
+    summary TEXT NOT NULL,
+    location TEXT NOT NULL DEFAULT '',
+    ticket_id TEXT,
+    implicit INTEGER NOT NULL DEFAULT 0 CHECK (implicit IN (0, 1)),
+    opened_by_session TEXT,
+    opened_by_agent TEXT,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (project_id, number)
+);
+
+CREATE TABLE IF NOT EXISTS issue_events (
+    project_id TEXT NOT NULL,
+    issue_number INTEGER NOT NULL,
+    seq INTEGER NOT NULL CHECK (seq >= 1),
+    kind TEXT NOT NULL CHECK (kind IN ('attempt', 'fix')),
+    summary TEXT NOT NULL,
+    outcome TEXT CHECK (
+        (kind = 'attempt' AND outcome IN ('worked', 'failed', 'partial')) OR (kind = 'fix' AND outcome IS NULL)
+    ),
+    location TEXT,
+    session_id TEXT,
+    agent_id TEXT,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (project_id, issue_number, seq),
+    FOREIGN KEY (project_id, issue_number) REFERENCES issues(project_id, number)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS index_issue_events_one_fix
+    ON issue_events(project_id, issue_number) WHERE kind = 'fix';
+
+CREATE INDEX IF NOT EXISTS index_issue_events_on_session
+    ON issue_events(project_id, session_id);
+
+CREATE INDEX IF NOT EXISTS index_issues_on_session
+    ON issues(project_id, opened_by_session);
+
+CREATE TRIGGER IF NOT EXISTS issue_events_none_after_fix BEFORE INSERT ON issue_events
+BEGIN
+    SELECT RAISE(ABORT, 'issue is already fixed')
+    WHERE EXISTS (
+        SELECT 1 FROM issue_events
+        WHERE project_id = new.project_id AND issue_number = new.issue_number AND kind = 'fix'
+    );
+END;
+
+CREATE TRIGGER IF NOT EXISTS issues_append_only_update BEFORE UPDATE ON issues
+BEGIN
+    SELECT RAISE(ABORT, 'issues are append-only');
+END;
+
+CREATE TRIGGER IF NOT EXISTS issues_append_only_delete BEFORE DELETE ON issues
+BEGIN
+    SELECT RAISE(ABORT, 'issues are append-only');
+END;
+
+CREATE TRIGGER IF NOT EXISTS issue_events_append_only_update BEFORE UPDATE ON issue_events
+BEGIN
+    SELECT RAISE(ABORT, 'issue events are append-only');
+END;
+
+CREATE TRIGGER IF NOT EXISTS issue_events_append_only_delete BEFORE DELETE ON issue_events
+BEGIN
+    SELECT RAISE(ABORT, 'issue events are append-only');
+END;
+
+insertIssue:
+INSERT INTO issues(project_id, number, summary, location, ticket_id, implicit, opened_by_session, opened_by_agent, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+insertIssueEvent:
+INSERT INTO issue_events(project_id, issue_number, seq, kind, summary, outcome, location, session_id, agent_id, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- The next issue number is this plus one; 0 for a project with no issue yet.
+lastIssueNumber:
+SELECT COALESCE(MAX(number), 0) FROM issues WHERE project_id = ?;
+
+-- The next event seq of one issue is this plus one.
+lastIssueEventSeq:
+SELECT COALESCE(MAX(seq), 0) FROM issue_events WHERE project_id = ? AND issue_number = ?;
+
+-- The latest timestamps written to each table (IssueStore keeps created_at strictly increasing from them).
+lastIssueCreatedAt:
+SELECT COALESCE(MAX(created_at), 0) FROM issues;
+
+lastIssueEventCreatedAt:
+SELECT COALESCE(MAX(created_at), 0) FROM issue_events;
+
+getIssue:
+SELECT * FROM issues WHERE project_id = ? AND number = ?;
+
+getIssueEvents:
+SELECT * FROM issue_events WHERE project_id = ? AND issue_number = ? ORDER BY seq ASC;
+
+getProjectIssues:
+SELECT * FROM issues WHERE project_id = ? ORDER BY number ASC;
+
+getProjectIssueEvents:
+SELECT * FROM issue_events WHERE project_id = ? ORDER BY issue_number ASC, seq ASC;
+
+-- The issues one session opened, and when (one half of the active-issue lookup).
+sessionOpenedIssues:
+SELECT number, created_at FROM issues WHERE project_id = ? AND opened_by_session = ?;
+
+-- The issues one session named in an attempt, and when (the other half).
+sessionAttemptedIssues:
+SELECT issue_number, created_at FROM issue_events WHERE project_id = ? AND session_id = ? AND kind = 'attempt';
+
+fixedIssueNumbers:
+SELECT issue_number FROM issue_events WHERE project_id = ? AND kind = 'fix';

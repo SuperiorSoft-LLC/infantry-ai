@@ -1,0 +1,3 @@
+-- CLI-T3 patch (675e7c4c): a ticket names the epic it is filed under. Nullable: a ticket created before
+-- this column keeps null. The id is the full epic id; the CLI resolves a prefix against the project's epics.
+ALTER TABLE tickets ADD COLUMN epic_id TEXT;

@@ -1,0 +1,44 @@
+-- Phase 4.5 -- the `events` table: the durable log of what a run said, in the PUBLIC vocabulary.
+--
+-- SHAPED AGAINST THE FROZEN CONTRACT, NOT THE PROVIDER. Rows are the four provider-neutral frames
+-- of protocol/EventVocabulary.kt (CONTRACT.md, v1.0.0): text_delta, status, error, finished. Never
+-- OpenCode's raw step_start/text/step_finish nor Claude's system/assistant/result -- those are
+-- translated by EventNormalizer before anything is stored, so a replay from this table is exactly
+-- what a live client would have received, whichever CLI ran.
+--
+-- `payload` is the frame's `data` string as it goes on the wire: plain text for text_delta and
+-- error, the JSON of StatusPayload / FinishedPayload for status and finished. Storing the wire form
+-- (not exploded columns) means a payload gaining an optional field -- non-breaking per the
+-- contract's version rule -- needs no migration here.
+
+CREATE TABLE IF NOT EXISTS events (
+    -- Monotonic, never reused (AUTOINCREMENT): the replay order AND a client's resume cursor
+    -- ("give me everything after seq N").
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    -- CASCADE: an event cannot outlive its run, and a run's delete takes its log with it.
+    run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    -- The CHECK pins the vocabulary at the storage boundary: a raw provider frame type can never
+    -- land here by mistake. A future contract version that adds a frame type adds it here via .sqm.
+    type TEXT NOT NULL CHECK (type IN ('text_delta', 'status', 'error', 'finished')),
+    payload TEXT NOT NULL,
+    -- EventVocabulary.VERSION at write time, so a log written under 1.x stays interpretable after
+    -- a breaking 2.0 frame change.
+    vocabulary_version TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS index_events_on_run_id_seq ON events(run_id, seq);
+
+insertEvent:
+INSERT INTO events(run_id, type, payload, vocabulary_version, created_at)
+VALUES (?, ?, ?, ?, ?);
+
+lastInsertedSeq:
+SELECT last_insert_rowid();
+
+-- A run's log in order, from a resume cursor (pass 0 for the whole log).
+getEventsByRunIdAfter:
+SELECT * FROM events WHERE run_id = ? AND seq > ? ORDER BY seq ASC;
+
+countEventsByRunId:
+SELECT COUNT(*) FROM events WHERE run_id = ?;

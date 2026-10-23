@@ -1,0 +1,10 @@
+-- P10-K12 -- migration v34 -> v35: skill attachment on an agent profile, and the per-skill `attached_only` flag
+-- (docs/AGENTHQ-PHASE10-KNOWLEDGE.md K-D9). `agents.skill_ids` is a JSON array of skill ids in attach order (`[]` =
+-- none), the agent's "always-on toolkit"; `skills.attached_only` (0/1) hides a skill from every session it is not
+-- attached to. Existing agents attach nothing and existing skills stay visible, so nothing changes. The columns are
+-- exactly agents.sq's and skills.sq's.
+--
+-- NEXT MIGRATION: 35.sqm (taken by P10-K13: session_instances.skill_ids)
+
+ALTER TABLE agents ADD COLUMN skill_ids TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE skills ADD COLUMN attached_only INTEGER NOT NULL DEFAULT 0 CHECK (attached_only IN (0, 1));

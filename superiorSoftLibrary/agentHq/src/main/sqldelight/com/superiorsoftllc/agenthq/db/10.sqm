@@ -1,0 +1,31 @@
+-- Story 9.7b wiring -- migration v10 -> v11: observed run usage and provider limit state.
+--
+-- NEXT MIGRATION: 11.sqm
+
+CREATE TABLE run_usage (
+    run_id TEXT NOT NULL PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    ended_at INTEGER NOT NULL,
+    input INTEGER,
+    output INTEGER,
+    reasoning INTEGER,
+    cache_read INTEGER,
+    cache_write INTEGER,
+    cost_usd REAL
+);
+
+CREATE INDEX index_run_usage_on_provider_ended_at ON run_usage(provider, ended_at);
+
+CREATE INDEX index_run_usage_on_session_id ON run_usage(session_id);
+
+CREATE TABLE provider_state (
+    provider TEXT NOT NULL PRIMARY KEY,
+    status TEXT NOT NULL CHECK (status IN ('unknown', 'stalled', 'exhausted')),
+    limit_window TEXT,
+    utilization REAL,
+    resets_at INTEGER,
+    observed_at INTEGER,
+    source TEXT NOT NULL
+);

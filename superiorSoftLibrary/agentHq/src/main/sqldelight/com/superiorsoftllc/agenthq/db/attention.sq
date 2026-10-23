@@ -1,0 +1,36 @@
+-- Phase 9.4: operator attention history. It has no ticket/trigger foreign keys deliberately: the
+-- record remains useful after an associated ticket or trigger is removed. TRAITS-T6 (30.sqm) added 'unreported'.
+CREATE TABLE IF NOT EXISTS attention (
+    id TEXT NOT NULL PRIMARY KEY,
+    created_at INTEGER NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN (
+        'trigger_tripped', 'deadline', 'stalled', 'ceiling', 'launch_blocked',
+        'prerequisite_declined', 'queue_cleared', 'unreported'
+    )),
+    trigger_id TEXT,
+    ticket_id TEXT,
+    pod_id TEXT,
+    session_id TEXT,
+    outcome TEXT NOT NULL,
+    detail TEXT NOT NULL,
+    acked_at INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS index_attention_on_acknowledged_created_at
+    ON attention(acked_at, created_at, id);
+
+insertAttention:
+INSERT INTO attention(id, created_at, kind, trigger_id, ticket_id, pod_id, session_id, outcome, detail, acked_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+getAttentionById:
+SELECT * FROM attention WHERE id = ?;
+
+getAllAttention:
+SELECT * FROM attention ORDER BY created_at ASC, id ASC;
+
+acknowledgeAttention:
+UPDATE attention SET acked_at = COALESCE(acked_at, ?) WHERE id = ?;
+
+countOpenAttention:
+SELECT COUNT(*) FROM attention WHERE acked_at IS NULL;

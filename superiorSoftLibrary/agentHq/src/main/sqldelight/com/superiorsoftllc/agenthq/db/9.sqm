@@ -1,0 +1,22 @@
+-- Phase 9.4a -- migration v9 -> v10: durable attention rows.
+--
+-- NEXT MIGRATION: 10.sqm
+
+CREATE TABLE attention (
+    id TEXT NOT NULL PRIMARY KEY,
+    created_at INTEGER NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN (
+        'trigger_tripped', 'deadline', 'stalled', 'ceiling', 'launch_blocked',
+        'prerequisite_declined', 'queue_cleared'
+    )),
+    trigger_id TEXT,
+    ticket_id TEXT,
+    pod_id TEXT,
+    session_id TEXT,
+    outcome TEXT NOT NULL,
+    detail TEXT NOT NULL,
+    acked_at INTEGER
+);
+
+CREATE INDEX index_attention_on_acknowledged_created_at
+    ON attention(acked_at, created_at, id);

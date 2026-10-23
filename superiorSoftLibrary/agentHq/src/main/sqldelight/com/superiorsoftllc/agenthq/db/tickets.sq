@@ -1,0 +1,136 @@
+-- Phase 9, story 9.2 -- the BACKLOG: `tickets`, and the `ticket_links` between them.
+--
+-- WHAT A TICKET IS: a unit of planned work on the daemon's board (title, description, type), sitting in
+-- one column at one position. Columns, positions and the derived `pending` column are the daemon's to
+-- decide (com.superiorsoftllc.agenthq.backlog.TicketBoard); this layer stores what it is given.
+--
+-- `status` and `ticket_type` are TEXT validated by the daemon, deliberately with NO CHECK: a column
+-- added later (an `in_review` status, say) must not need a table rebuild.
+--
+-- `position` is 0 at the top of its column, and contiguous per column: the daemon renumbers a column
+-- whenever a ticket enters, leaves or moves inside it.
+
+CREATE TABLE IF NOT EXISTS tickets (
+    id TEXT NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL,
+    -- Free text (markdown in practice). Empty = none; never null, so a client never has to tell the two apart.
+    description TEXT NOT NULL DEFAULT '',
+    -- feature, bug, refactor, chore, docs, style, perf, test or security. Null = untyped.
+    ticket_type TEXT,
+    -- todo, in_progress, pending or done.
+    status TEXT NOT NULL,
+    position INTEGER NOT NULL CHECK (position >= 0),
+    -- 1 = closed as won't fix. Only ever 1 on a `done` ticket; reopening it clears the flag.
+    wont_fix INTEGER NOT NULL DEFAULT 0 CHECK (wont_fix IN (0, 1)),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    agent_id TEXT,
+    provider TEXT,
+    model TEXT,
+    use_worktree INTEGER CHECK (use_worktree IS NULL OR use_worktree IN (0, 1)),
+    worktree_branch TEXT,
+    include_linked_tasks_context INTEGER CHECK (include_linked_tasks_context IS NULL OR include_linked_tasks_context IN (0, 1)),
+    queued_for TEXT,
+    queued_at INTEGER,
+    session_id TEXT,
+    -- MVP Sprint-Zero: the project this ticket belongs to (added in 8.sqm); null = none.
+    project_id TEXT,
+    -- CLI-T3 patch (16.sqm): the epic (full id) this ticket is filed under; null = none.
+    epic_id TEXT,
+    -- BRANCH-PER-TASK 1/3 (17.sqm): the ticket's own branch and the commit it was cut from; NULL until a start cut them.
+    branch_name TEXT,
+    base_commit TEXT,
+    -- P10-K11 (33.sqm): the skills this ticket attaches (JSON array of ids), whether they merge with or replace the
+    -- agent's and the project's, and the skills-section switch (NULL inherits the project setting).
+    skill_ids TEXT NOT NULL DEFAULT '[]',
+    skills_mode TEXT NOT NULL DEFAULT 'merge' CHECK (skills_mode IN ('merge', 'replace')),
+    include_skills_context INTEGER CHECK (include_skills_context IS NULL OR include_skills_context IN (0, 1)),
+    -- BUG-MAIL-2 (37.sqm): the session that started this ticket, when a session did; NULL = the UI / no session.
+    started_by TEXT,
+    -- IMG-3 (40.sqm): the ticket's images, a JSON array of relPaths under its project's .agenthq/uploads/ticket/.
+    images TEXT NOT NULL DEFAULT '[]'
+);
+
+CREATE INDEX IF NOT EXISTS index_tickets_on_status ON tickets(status, position);
+
+-- One row per link, stored in ONE direction only: `blocked_by` (ticket_id waits for related_id),
+-- `child_of` (ticket_id sits under related_id), `relates_to` (symmetric, stored with the smaller id
+-- first), `duplicates` (ticket_id repeats related_id). The wire's reverse names (`blocks`, `depends_on`,
+-- `parent_of`, `duplicated_by`) are normalised to these before they reach this table.
+--
+-- Deleting either ticket deletes the link (ON DELETE CASCADE); a self-link is refused here as well as
+-- by the daemon, the same rule as node_dependencies.
+CREATE TABLE IF NOT EXISTS ticket_links (
+    ticket_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    related_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    type TEXT NOT NULL CHECK (type IN ('blocked_by', 'child_of', 'relates_to', 'duplicates')),
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (ticket_id, related_id, type),
+    CHECK (ticket_id <> related_id)
+);
+
+CREATE INDEX IF NOT EXISTS index_ticket_links_on_related_id ON ticket_links(related_id);
+
+insertTicket:
+INSERT INTO tickets(
+    id, title, description, ticket_type, status, position, wont_fix, agent_id, provider, model, use_worktree,
+    worktree_branch, include_linked_tasks_context, queued_for, queued_at, session_id, created_at, updated_at, project_id, epic_id,
+    branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images
+)
+VALUES (
+    :id, :title, :description, :ticket_type, :status, :position, :wont_fix, :agent_id, :provider, :model,
+    :use_worktree, :worktree_branch, :include_linked_tasks_context, :queued_for, :queued_at, :session_id,
+    :created_at, :updated_at, :project_id, :epic_id, :branch_name, :base_commit, :skill_ids, :skills_mode, :include_skills_context, :started_by, :images
+);
+
+-- Overwrites everything but id and created_at.
+updateTicket:
+UPDATE tickets SET
+    title = :title,
+    description = :description,
+    ticket_type = :ticket_type,
+    status = :status,
+    position = :position,
+    wont_fix = :wont_fix,
+    agent_id = :agent_id,
+    provider = :provider,
+    model = :model,
+    use_worktree = :use_worktree,
+    worktree_branch = :worktree_branch,
+    include_linked_tasks_context = :include_linked_tasks_context,
+    queued_for = :queued_for,
+    queued_at = :queued_at,
+    session_id = :session_id,
+    updated_at = :updated_at,
+    project_id = :project_id,
+    epic_id = :epic_id,
+    branch_name = :branch_name,
+    base_commit = :base_commit,
+    skill_ids = :skill_ids,
+    skills_mode = :skills_mode,
+    include_skills_context = :include_skills_context,
+    started_by = :started_by,
+    images = :images
+WHERE id = :id;
+
+getTicketById:
+SELECT * FROM tickets WHERE id = ?;
+
+getAllTickets:
+SELECT * FROM tickets ORDER BY status ASC, position ASC, id ASC;
+
+-- Cascades to every link that names the ticket, on either side.
+deleteTicket:
+DELETE FROM tickets WHERE id = ?;
+
+insertLink:
+INSERT INTO ticket_links(ticket_id, related_id, type, created_at) VALUES (?, ?, ?, ?);
+
+getLink:
+SELECT * FROM ticket_links WHERE ticket_id = ? AND related_id = ? AND type = ?;
+
+deleteLink:
+DELETE FROM ticket_links WHERE ticket_id = ? AND related_id = ? AND type = ?;
+
+getAllLinks:
+SELECT * FROM ticket_links ORDER BY created_at ASC, ticket_id ASC, related_id ASC, type ASC;

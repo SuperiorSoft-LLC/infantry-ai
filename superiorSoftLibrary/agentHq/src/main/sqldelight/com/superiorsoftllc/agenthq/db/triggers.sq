@@ -1,0 +1,74 @@
+-- Story 9.5: triggers. One row per trigger; its state is the daemon's (armed/running/tripped/disabled).
+CREATE TABLE IF NOT EXISTS triggers (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    action_kind TEXT NOT NULL,
+    action_agent_id TEXT,
+    enabled INTEGER NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('armed', 'running', 'tripped', 'disabled')),
+    coalesce_ms INTEGER NOT NULL,
+    ceiling_runs INTEGER NOT NULL,
+    ceiling_window_ms INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    tripped_at INTEGER,
+    tripped_reason TEXT,
+    interval_ms INTEGER,
+    action_prompt TEXT
+);
+
+-- Story 9.5: one row per trigger event, whatever happened to it. Not run events: runs keep their own log.
+CREATE TABLE IF NOT EXISTS trigger_events (
+    event_id TEXT NOT NULL PRIMARY KEY,
+    trigger_id TEXT NOT NULL,
+    received_at INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    disposition TEXT NOT NULL,
+    delivery_id TEXT,
+    digest TEXT
+);
+
+-- P9.6: the per-hook HMAC secret of a `webhook` trigger. Kept apart from `triggers` (see 22.sqm).
+CREATE TABLE IF NOT EXISTS trigger_webhooks (
+    trigger_id TEXT NOT NULL PRIMARY KEY,
+    secret TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS index_trigger_events_on_trigger_received ON trigger_events(trigger_id, received_at);
+
+upsertTrigger:
+INSERT OR REPLACE INTO triggers(id, name, kind, action_kind, action_agent_id, enabled, state, coalesce_ms, ceiling_runs, ceiling_window_ms, created_at, tripped_at, tripped_reason, interval_ms, action_prompt)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+getTrigger:
+SELECT * FROM triggers WHERE id = ?;
+
+getAllTriggers:
+SELECT * FROM triggers ORDER BY created_at ASC, id ASC;
+
+deleteTrigger:
+DELETE FROM triggers WHERE id = ?;
+
+insertTriggerEvent:
+INSERT OR REPLACE INTO trigger_events(event_id, trigger_id, received_at, source, disposition, delivery_id, digest)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+getTriggerEvents:
+SELECT * FROM trigger_events WHERE trigger_id = ? ORDER BY received_at ASC, event_id ASC;
+
+deleteTriggerEvents:
+DELETE FROM trigger_events WHERE trigger_id = ?;
+
+pruneTriggerEvents:
+DELETE FROM trigger_events WHERE trigger_id = ? AND event_id NOT IN (
+    SELECT event_id FROM trigger_events WHERE trigger_id = ? ORDER BY received_at DESC, event_id DESC LIMIT ?
+);
+
+setWebhookSecret:
+INSERT OR REPLACE INTO trigger_webhooks(trigger_id, secret) VALUES (?, ?);
+
+getWebhookSecret:
+SELECT secret FROM trigger_webhooks WHERE trigger_id = ?;
+
+deleteWebhookSecret:
+DELETE FROM trigger_webhooks WHERE trigger_id = ?;

@@ -1,0 +1,23 @@
+-- Durable outcomes for sessions handed out by the ticket board.
+CREATE TABLE IF NOT EXISTS ticket_runs (
+    ticket_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    session_id TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    outcome TEXT,
+    detail TEXT,
+    PRIMARY KEY (ticket_id, session_id)
+);
+
+CREATE INDEX IF NOT EXISTS index_ticket_runs_on_ticket_id_started_at ON ticket_runs(ticket_id, started_at);
+
+insertTicketRun:
+INSERT INTO ticket_runs(ticket_id, session_id, started_at, ended_at, outcome, detail)
+VALUES (:ticket_id, :session_id, :started_at, :ended_at, :outcome, :detail);
+
+finishTicketRun:
+UPDATE ticket_runs SET ended_at = :ended_at, outcome = :outcome, detail = :detail
+WHERE ticket_id = :ticket_id AND session_id = :session_id;
+
+getTicketRunsByTicketId:
+SELECT * FROM ticket_runs WHERE ticket_id = ? ORDER BY started_at ASC, session_id ASC;

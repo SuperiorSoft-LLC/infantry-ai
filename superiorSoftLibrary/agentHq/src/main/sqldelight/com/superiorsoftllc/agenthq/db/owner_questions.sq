@@ -1,0 +1,44 @@
+-- ASK-1 -- the `owner_questions` table: non-blocking questions an agent asks the owner. See 41.sqm.
+
+CREATE TABLE IF NOT EXISTS owner_questions (
+    id TEXT NOT NULL PRIMARY KEY,
+    project_id TEXT,
+    session_id TEXT NOT NULL,
+    agent_id TEXT,
+    role TEXT,
+    question TEXT NOT NULL,
+    options TEXT NOT NULL,
+    recommended TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    allow_other INTEGER NOT NULL DEFAULT 0,
+    default_after_min INTEGER,
+    state TEXT NOT NULL CHECK (state IN ('open', 'answered', 'auto', 'cancelled')),
+    answer TEXT,
+    other_text TEXT,
+    resolved_by TEXT,
+    created_at INTEGER NOT NULL,
+    resolved_at INTEGER,
+    overridden INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS index_owner_questions_on_state_created_at
+    ON owner_questions(state, created_at, id);
+
+insertOwnerQuestion:
+INSERT INTO owner_questions(id, project_id, session_id, agent_id, role, question, options, recommended, reason,
+    allow_other, default_after_min, state, answer, other_text, resolved_by, created_at, resolved_at, overridden)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+resolveOwnerQuestion:
+UPDATE owner_questions SET state = :state, answer = :answer, other_text = :otherText, resolved_by = :resolvedBy,
+    resolved_at = :resolvedAt, overridden = :overridden
+WHERE id = :id;
+
+getOwnerQuestionById:
+SELECT * FROM owner_questions WHERE id = ?;
+
+getAllOwnerQuestions:
+SELECT * FROM owner_questions ORDER BY created_at ASC, id ASC;
+
+getOwnerQuestionsByState:
+SELECT * FROM owner_questions WHERE state = ? ORDER BY created_at ASC, id ASC;

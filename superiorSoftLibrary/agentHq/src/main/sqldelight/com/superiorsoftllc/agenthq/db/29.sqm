@@ -1,0 +1,16 @@
+-- TRAITS-T4 -- migration v29 -> v30: `session_instances`, the frozen ROLE INSTANCE of a session
+-- (docs/AGENTHQ-ROLE-TRAITS.md section 3, D4). One row per session spawned for an agent or a role, written ONCE by
+-- SessionManager.startNew and never updated: the persona and the effective trait set (as TraitSnapshot copies, JSON)
+-- as they were at spawn. A later persona edit, role rebind or trait edit never reaches a started session. An anonymous
+-- session (pods) has no row. session_delete deletes the row with the record. Daemon-side only: not on the wire.
+--
+-- NEXT MIGRATION: 30.sqm (taken by TRAITS-T6: the attention CHECK rebuild)
+
+CREATE TABLE IF NOT EXISTS session_instances (
+    session_id TEXT NOT NULL PRIMARY KEY,
+    agent_id TEXT,
+    role TEXT,
+    instructions TEXT,
+    traits TEXT NOT NULL DEFAULT '[]',
+    created_at INTEGER NOT NULL
+);

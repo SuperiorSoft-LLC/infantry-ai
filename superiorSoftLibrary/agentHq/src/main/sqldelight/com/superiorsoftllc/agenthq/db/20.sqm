@@ -1,0 +1,15 @@
+-- ROLE-1a -- migration v20 -> v21: a ROLE owns its provider / model / effort.
+--
+-- One row per role id. All three binding columns are nullable: null = "no pin, the daemon default
+-- applies", resolved at spawn, never stored as a copy of today's default. The `agents` table is untouched
+-- (a profile stays a named instance); a later slice resolves SpawnOptions > profile > role binding > default.
+--
+-- NEXT MIGRATION: 21.sqm
+
+CREATE TABLE IF NOT EXISTS role_bindings (
+    role_id TEXT NOT NULL PRIMARY KEY,
+    provider TEXT,
+    model TEXT,
+    effort TEXT,
+    updated_at INTEGER NOT NULL
+);

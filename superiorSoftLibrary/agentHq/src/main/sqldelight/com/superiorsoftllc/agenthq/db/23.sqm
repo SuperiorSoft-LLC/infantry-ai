@@ -1,0 +1,15 @@
+-- P10-A -- migration v23 -> v24: the prompt library. Saved reusable prompts with tags.
+--
+-- `name` is UNIQUE (one daemon = one project, so unique per project): saving an existing name updates that
+-- row in place. `tags` is a JSON array of strings; the tag filter is applied by the PromptStore, not in SQL.
+--
+-- NEXT MIGRATION: 24.sqm (taken by P10-B, the skills library)
+
+CREATE TABLE IF NOT EXISTS prompts (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    body TEXT NOT NULL,
+    tags TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);

@@ -1,0 +1,14 @@
+{
+  "name": "claude",
+  "argv": ["${CLAUDE_EXE}", "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--model", "haiku", "--strict-mcp-config"],
+  "cwd": "${PROBE_CWD}",
+  "rawOut": "${PROBE_RAW}",
+  "bootIf": "o && o.type==='system' && o.subtype==='init'",
+  "exitTimeoutMs": 20000,
+  "steps": [
+    {"label": "turn1", "write": "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Reply with exactly: ONE\"}]}}", "until": "o && o.type==='result'", "timeoutMs": 120000},
+    {"label": "turn2", "write": "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Reply with exactly: TWO\"}]}}", "until": "o && o.type==='result'", "timeoutMs": 120000},
+    {"label": "turn3-interrupt", "write": "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Write the numbers 1 to 400, one per line, nothing else.\"}]}}", "also": [{"delayMs": 3500, "write": "{\"type\":\"control_request\",\"request_id\":\"int-1\",\"request\":{\"subtype\":\"interrupt\"}}"}], "until": "o && o.type==='result'", "timeoutMs": 120000},
+    {"label": "turn4-after-interrupt", "write": "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Reply with exactly: FOUR\"}]}}", "until": "o && o.type==='result'", "timeoutMs": 120000}
+  ]
+}

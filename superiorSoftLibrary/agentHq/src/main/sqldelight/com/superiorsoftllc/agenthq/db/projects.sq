@@ -1,0 +1,57 @@
+-- MVP Sprint-Zero, slice A2: the PROJECT scopes.
+--
+-- WHAT A PROJECT IS: a stable id, a name, its goal, and the ordered list of the stories inside it
+-- (the daemon half of that model lives in com.superiorsoftllc.agenthq.mvp.ProjectStore, the wire
+-- types in the frozen seam). A project's id is the MVP's join key -- a ticket names its project
+-- with it and a story names it too -- so a row's id is NEVER rewritten: only name, goal and
+-- story_ids change.
+--
+-- RETIRED (contract 1.29.0): `story_ids` used to hold the ordered JSON array of the now-gone
+-- `Project.storyIds`. The column stays (this dialect cannot DROP COLUMN -- see 15.sqm's
+-- neighbours, every one of them ADD COLUMN) but neither insert nor update below writes it any
+-- more: a fresh row gets the column's own SQL default and an edited row keeps whatever it already
+-- had. A story's order now lives on [com.superiorsoftllc.agenthq.epics.Epic.storyIds] instead.
+--
+-- `created_at` orders the listing: `project_list` answers in the order the projects were created.
+-- It is stamped on insert and never touched by an edit, so a rename cannot reorder the board.
+--
+-- NOTE FOR INTEGRATION (I0): the daemon's database migrates with numbered .sqm files, and that
+-- numbering belongs to I0. The migration that ADDS this table to an existing file is drafted,
+-- unnumbered, next to this file (projects-migration-draft.sql) so it can be dropped in as the
+-- next .sqm on the feature-agenthq-mvp integration.
+
+CREATE TABLE IF NOT EXISTS projects (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    -- Free text. Empty = no goal; never null, so a client never has to tell the two apart.
+    goal TEXT NOT NULL DEFAULT '',
+    -- JSON array of story ids, in project order. Empty array when the project holds no story.
+    story_ids TEXT NOT NULL DEFAULT '[]',
+    created_at INTEGER NOT NULL,
+    -- CP-2 (18.sqm): the absolute directory the project lives in; the daemon's git service is rooted
+    -- here. Empty = none configured, never NULL. Declared LAST so a fresh create and the ADD COLUMN
+    -- migration produce the same column order (SchemaMigrationTest compares them).
+    directory TEXT NOT NULL DEFAULT '',
+    -- BASE-1a (38.sqm): the branch a ticket start in this project cuts from. Empty = none set (the daemon's
+    -- AGENTHQ_BASE_BRANCH, else HEAD), never NULL. Declared LAST, after `directory`, for the same reason.
+    base_branch TEXT NOT NULL DEFAULT ''
+);
+
+-- Every project, in creation order (ties fall back to id so the order is total and stable).
+getAllProjects:
+SELECT * FROM projects ORDER BY created_at ASC, id ASC;
+
+-- Upsert as TWO single-statement labels, because SQLDelight keeps only the FIRST statement of a
+-- label and silently drops the rest (the module learned this the hard way on settings.sq, whose
+-- two-statement putSetting generated its INSERT only): `upsertProject` in Kotlin runs the insert
+-- and, when it reports 0 affected rows (the id was already there), runs the update.
+--
+-- The insert only lands for a new id, so `created_at` keeps the row's original value and an edit
+-- can never reorder the listing.
+insertProjectIgnore:
+INSERT OR IGNORE INTO projects(id, name, goal, created_at, directory, base_branch) VALUES (?, ?, ?, ?, ?, ?);
+
+-- The edit half: overwrites everything but the id and created_at (and the retired story_ids
+-- column, which neither this nor the insert above touches any more).
+updateProject:
+UPDATE projects SET name = ?, goal = ?, directory = ?, base_branch = ? WHERE id = ?;

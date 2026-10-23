@@ -1,0 +1,31 @@
+-- ASK-1 -- migration v41 -> v42: owner questions, the NON-BLOCKING "ask the owner" path (contract 1.96.0).
+-- One row per question an agent raised with `question_ask`: its options (JSON array of {label, description}), the one
+-- recommended label and why, and how it ended. `state`: open (waiting), answered (the owner picked, or overrode an
+-- auto-pick: overridden = 1), auto (`default_after_min` ran out and the daemon picked the recommended option), cancelled.
+-- Rows are never deleted: answered and cancelled questions are the history. The table is exactly owner_questions.sq's.
+--
+-- NEXT MIGRATION: 42.sqm
+
+CREATE TABLE IF NOT EXISTS owner_questions (
+    id TEXT NOT NULL PRIMARY KEY,
+    project_id TEXT,
+    session_id TEXT NOT NULL,
+    agent_id TEXT,
+    role TEXT,
+    question TEXT NOT NULL,
+    options TEXT NOT NULL,
+    recommended TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    allow_other INTEGER NOT NULL DEFAULT 0,
+    default_after_min INTEGER,
+    state TEXT NOT NULL CHECK (state IN ('open', 'answered', 'auto', 'cancelled')),
+    answer TEXT,
+    other_text TEXT,
+    resolved_by TEXT,
+    created_at INTEGER NOT NULL,
+    resolved_at INTEGER,
+    overridden INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS index_owner_questions_on_state_created_at
+    ON owner_questions(state, created_at, id);

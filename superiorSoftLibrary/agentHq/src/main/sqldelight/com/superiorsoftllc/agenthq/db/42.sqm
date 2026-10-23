@@ -1,0 +1,8 @@
+-- NOTES-1 -- migration v42 -> v43: role and session notes (contract 1.98.0).
+-- A memory note gains a scope: 'project' (shared by every role, owner_id ''), 'role' (owner_id = the role id, persists
+-- with the role) or 'session' (owner_id = the session id, purged with the session). Existing rows stay project notes.
+--
+-- NEXT MIGRATION: 43.sqm
+
+ALTER TABLE memory_notes ADD COLUMN scope TEXT NOT NULL DEFAULT 'project';
+ALTER TABLE memory_notes ADD COLUMN owner_id TEXT NOT NULL DEFAULT '';

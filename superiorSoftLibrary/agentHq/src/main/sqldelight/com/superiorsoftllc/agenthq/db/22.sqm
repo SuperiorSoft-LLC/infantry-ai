@@ -1,0 +1,11 @@
+-- P9.6 -- migration v22 -> v23: a webhook trigger keeps its per-hook HMAC secret across a restart.
+--
+-- A separate table, NOT a column on `triggers`: `upsertTrigger` is INSERT OR REPLACE, so a column there
+-- would be wiped by every state change. The secret never leaves this table: it is not part of TriggerView.
+--
+-- NEXT MIGRATION: 23.sqm
+
+CREATE TABLE IF NOT EXISTS trigger_webhooks (
+    trigger_id TEXT NOT NULL PRIMARY KEY,
+    secret TEXT NOT NULL
+);

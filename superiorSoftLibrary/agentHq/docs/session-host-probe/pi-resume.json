@@ -1,0 +1,13 @@
+{
+  "name": "pi-restart-resume",
+  "argv": ["node", "${PI_CLI}", "--mode", "rpc", "--model", "opencode-go/cat-jam-free", "--session", "${PI_SESSION}"],
+  "cwd": "${PROBE_CWD}",
+  "rawOut": "${PROBE_RAW}",
+  "exitTimeoutMs": 20000,
+  "steps": [
+    {"label": "resumed-turn", "write": "{\"id\":\"r1\",\"type\":\"prompt\",\"message\":\"List, comma-separated, every word I asked you to reply with exactly, earlier in this conversation. Nothing else.\"}", "until": "o && o.type==='agent_settled'", "timeoutMs": 150000},
+    {"label": "abort-turn", "write": "{\"id\":\"r2\",\"type\":\"prompt\",\"message\":\"Write a 1500-word essay on the history of bridges. Do not use any tools.\"}", "also": [{"delayMs": 1500, "write": "{\"id\":\"a2\",\"type\":\"abort\"}"}], "until": "o && o.type==='agent_settled'", "timeoutMs": 150000},
+    {"label": "after-abort", "write": "{\"id\":\"r3\",\"type\":\"prompt\",\"message\":\"Reply with exactly: SIX\"}", "until": "o && o.type==='agent_settled'", "timeoutMs": 150000},
+    {"label": "state", "write": "{\"id\":\"s2\",\"type\":\"get_state\"}", "until": "o && o.type==='response' && o.command==='get_state'", "timeoutMs": 30000}
+  ]
+}

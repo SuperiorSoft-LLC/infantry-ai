@@ -1,0 +1,16 @@
+-- P10-B -- migration v24 -> v25: the skills library. Saved reusable skills (name, description, body) with tags.
+--
+-- `name` is UNIQUE (one daemon = one project, so unique per project): saving an existing name updates that
+-- row in place. `tags` is a JSON array of strings; the tag filter is applied by the SkillStore, not in SQL.
+--
+-- NEXT MIGRATION: 26.sqm (25.sqm = agents.effort)
+
+CREATE TABLE IF NOT EXISTS skills (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL,
+    body TEXT NOT NULL,
+    tags TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);

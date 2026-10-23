@@ -1,0 +1,63 @@
+-- Phase 9, story 9.1 -- the `agents` table: agent PROFILES, the templates a session is spawned from.
+--
+-- WHAT A PROFILE IS: a name, a role and how its sessions run (provider, model, persona instructions).
+-- It is not a process and not a session: a spawn that names a profile starts a FRESH session from it,
+-- and that session copies what it needs (provider, model, agent id, role) onto its own record, so
+-- editing or deleting a profile never rewrites a session that already exists.
+--
+-- `provider` and `model` are nullable: null = the daemon's default provider / that provider's default
+-- model, resolved when a session is spawned, never stored as a copy of today's default.
+--
+-- Profile order (oldest first, then id) is the order role matching walks (story 9.3).
+
+CREATE TABLE IF NOT EXISTS agents (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    -- A canonical role id (`backend`, `qa`, ...): lowercase, validated by the daemon before it is stored.
+    role TEXT NOT NULL,
+    provider TEXT,
+    model TEXT,
+    -- Persona text put ahead of a spawned session's first prompt. Null = none.
+    instructions TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    -- CP-3: the ONE project this agent belongs to (declared LAST: it is an ADD COLUMN, see 18.sqm).
+    project_id TEXT,
+    -- Role-first S2: the profile's effort level; null = inherit (declared LAST: an ADD COLUMN, see 25.sqm).
+    effort TEXT,
+    -- TRAITS-T3: the trait ids this agent ADDS to its role's list, a JSON array (declared LAST: an ADD COLUMN, see 28.sqm).
+    trait_ids TEXT NOT NULL DEFAULT '[]',
+    -- P10-K12: the skill ids this agent attaches, a JSON array in attach order (declared LAST: an ADD COLUMN, see 34.sqm).
+    skill_ids TEXT NOT NULL DEFAULT '[]'
+);
+
+CREATE INDEX IF NOT EXISTS index_agents_on_role ON agents(role);
+
+-- Creates the profile, or overwrites the one with that id in place. created_at is written once:
+-- the INSERT is ignored for an existing id, and the UPDATE never touches created_at.
+-- TRAITS-T3: a NULL :traitIds keeps the stored list (a new row gets '[]'); '[]' clears it. P10-K12: :skillIds likewise.
+saveAgent {
+    INSERT OR IGNORE INTO agents(id, name, role, provider, model, instructions, created_at, updated_at, project_id, effort, trait_ids, skill_ids)
+    VALUES (:id, :name, :role, :provider, :model, :instructions, :at, :at, :projectId, :effort, COALESCE(:traitIds, '[]'), COALESCE(:skillIds, '[]'));
+    UPDATE agents SET
+        name = :name,
+        role = :role,
+        provider = :provider,
+        model = :model,
+        instructions = :instructions,
+        project_id = :projectId,
+        effort = :effort,
+        trait_ids = COALESCE(:traitIds, trait_ids),
+        skill_ids = COALESCE(:skillIds, skill_ids),
+        updated_at = :at
+    WHERE id = :id;
+}
+
+getAgentById:
+SELECT * FROM agents WHERE id = ?;
+
+getAllAgents:
+SELECT * FROM agents ORDER BY created_at ASC, id ASC;
+
+deleteAgent:
+DELETE FROM agents WHERE id = ?;

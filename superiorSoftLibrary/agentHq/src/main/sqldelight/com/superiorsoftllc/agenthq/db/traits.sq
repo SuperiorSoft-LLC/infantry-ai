@@ -1,0 +1,26 @@
+-- TRAITS-T1 -- the `traits` table: the trait library. See 26.sqm.
+
+CREATE TABLE IF NOT EXISTS traits (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    version INTEGER NOT NULL CHECK (version >= 1),
+    body TEXT NOT NULL,
+    check_spec TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+insertTrait:
+INSERT INTO traits(id, name, version, body, check_spec, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?);
+
+updateTrait:
+UPDATE traits SET name = :name, version = :version, body = :body, check_spec = :checkSpec, updated_at = :at WHERE id = :id;
+
+getTraitById:
+SELECT * FROM traits WHERE id = ?;
+
+getAllTraits:
+SELECT * FROM traits ORDER BY id ASC;
+
+deleteTrait:
+DELETE FROM traits WHERE id = ?;

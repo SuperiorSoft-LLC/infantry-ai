@@ -1,0 +1,15 @@
+{
+  "name": "pi",
+  "argv": ["node", "${PI_CLI}", "--mode", "rpc", "--model", "opencode-go/cat-jam-free"],
+  "cwd": "${PROBE_CWD}",
+  "rawOut": "${PROBE_RAW}",
+  "bootIf": "o && o.type==='session'",
+  "exitTimeoutMs": 20000,
+  "steps": [
+    {"label": "turn1", "write": "{\"id\":\"p1\",\"type\":\"prompt\",\"message\":\"Reply with exactly: ONE\"}", "until": "o && o.type==='agent_settled'", "timeoutMs": 150000},
+    {"label": "turn2", "write": "{\"id\":\"p2\",\"type\":\"prompt\",\"message\":\"Reply with exactly: TWO\"}", "until": "o && o.type==='agent_settled'", "timeoutMs": 150000},
+    {"label": "turn3-abort", "write": "{\"id\":\"p3\",\"type\":\"prompt\",\"message\":\"Write the numbers 1 to 400, one per line, nothing else.\"}", "also": [{"delayMs": 3500, "write": "{\"id\":\"a1\",\"type\":\"abort\"}"}], "until": "o && o.type==='agent_settled'", "timeoutMs": 150000},
+    {"label": "turn4-after-abort", "write": "{\"id\":\"p4\",\"type\":\"prompt\",\"message\":\"Reply with exactly: FOUR\"}", "until": "o && o.type==='agent_settled'", "timeoutMs": 150000},
+    {"label": "state", "write": "{\"id\":\"s1\",\"type\":\"get_state\"}", "until": "o && o.type==='response' && o.command==='get_state'", "timeoutMs": 30000}
+  ]
+}

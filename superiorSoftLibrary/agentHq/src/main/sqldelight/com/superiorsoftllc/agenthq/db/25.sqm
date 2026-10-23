@@ -1,0 +1,6 @@
+-- Role-first S2 -- migration v25 -> v26: `agents.effort`, the profile's effort level. Null = inherit
+-- (spawn choice, then the role binding, then the daemon default). Existing rows keep effort null.
+--
+-- NEXT MIGRATION: 27.sqm (26.sqm = traits)
+
+ALTER TABLE agents ADD COLUMN effort TEXT;

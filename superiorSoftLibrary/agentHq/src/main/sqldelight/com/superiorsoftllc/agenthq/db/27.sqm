@@ -1,0 +1,13 @@
+-- TRAITS-T2 -- migration v27 -> v28: a ROLE's trait list (docs/AGENTHQ-ROLE-TRAITS.md section 2, D2).
+--
+-- One row per role id, the `role_bindings` pattern (built-in and file roles cannot carry runtime fields). `trait_ids` is
+-- a JSON array of trait ids in the order the role lists them; RoleTraitHandler owns every rule (role exists, each trait
+-- exists, at most 8, no duplicates). `[]` is stored as a row with an empty array; a role with no row has no traits.
+--
+-- NEXT MIGRATION: 29.sqm (28.sqm = agents.trait_ids, TRAITS-T3)
+
+CREATE TABLE IF NOT EXISTS role_traits (
+    role_id TEXT NOT NULL PRIMARY KEY,
+    trait_ids TEXT NOT NULL DEFAULT '[]',
+    updated_at INTEGER NOT NULL
+);

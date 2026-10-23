@@ -1,0 +1,70 @@
+-- P10-K4 -- the project DECISIONS log (docs/AGENTHQ-PHASE10-KNOWLEDGE.md K-D7). See 31.sqm, which adds it to a v31 file.
+--
+-- One row per decision, numbered per project from 1 (shown as `D<number>`). APPEND-ONLY IN THE DATABASE: the two
+-- triggers below abort any UPDATE or DELETE, raw SQL included, so a decision is never edited or removed. A wrong one is
+-- corrected by a NEW decision that supersedes it.
+--
+--  - `supersedes` names an earlier decision of the SAME project: the BEFORE INSERT trigger aborts a row whose
+--    `supersedes` is not a number of its own project (a cross-project supersede, raw SQL included), and the CHECK keeps
+--    it pointing backwards. (A composite self foreign key would say the same, but SQLDelight 2.2.1 cannot compile a
+--    table that references itself.)
+--  - The partial unique index lets a decision be superseded at most once, backing DecisionStore's `already_superseded`.
+--    Chains are fine: D3 supersedes D1, then D7 supersedes D3.
+--  - "Active" (not superseded) is derived, never stored: a stored flag would need an UPDATE.
+--
+-- NEXT MIGRATION: 33.sqm (this table's migration is 31.sqm)
+
+CREATE TABLE IF NOT EXISTS decisions (
+    project_id TEXT NOT NULL,
+    number INTEGER NOT NULL CHECK (number >= 1),
+    -- One line, at most 200 chars, stating the decision (DecisionStore enforces the size).
+    summary TEXT NOT NULL,
+    -- Why; at most 16 000 chars; "" when none was given.
+    body TEXT NOT NULL DEFAULT '',
+    supersedes INTEGER CHECK (supersedes IS NULL OR (supersedes >= 1 AND supersedes < number)),
+    -- From the declared session (decision_add's sessionId); null when none was declared.
+    author_session_id TEXT,
+    author_agent_id TEXT,
+    author_role TEXT,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (project_id, number)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS index_decisions_on_supersedes
+    ON decisions(project_id, supersedes) WHERE supersedes IS NOT NULL;
+
+CREATE TRIGGER IF NOT EXISTS decisions_supersedes_same_project BEFORE INSERT ON decisions
+BEGIN
+    SELECT RAISE(ABORT, 'decisions supersede a decision of the same project')
+    WHERE new.supersedes IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM decisions WHERE project_id = new.project_id AND number = new.supersedes);
+END;
+
+CREATE TRIGGER IF NOT EXISTS decisions_append_only_update BEFORE UPDATE ON decisions
+BEGIN
+    SELECT RAISE(ABORT, 'decisions are append-only');
+END;
+
+CREATE TRIGGER IF NOT EXISTS decisions_append_only_delete BEFORE DELETE ON decisions
+BEGIN
+    SELECT RAISE(ABORT, 'decisions are append-only');
+END;
+
+insertDecision:
+INSERT INTO decisions(project_id, number, summary, body, supersedes, author_session_id, author_agent_id, author_role, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- The next number is this plus one; 0 for a project with no decision yet.
+lastDecisionNumber:
+SELECT COALESCE(MAX(number), 0) FROM decisions WHERE project_id = ?;
+
+getDecision:
+SELECT * FROM decisions WHERE project_id = ? AND number = ?;
+
+-- The decision that superseded (project_id, number), if any.
+getSuperseder:
+SELECT * FROM decisions WHERE project_id = ? AND supersedes = ?;
+
+-- Every decision of one project, superseded ones included, in number order.
+getProjectDecisions:
+SELECT * FROM decisions WHERE project_id = ? ORDER BY number ASC;

@@ -1,0 +1,17 @@
+-- E1-a: which ticket each migrated story became (see 36.sqm and stories/StoryMigration.kt). Written once per story,
+-- in the same transaction as the ticket insert; never updated. Old story ids resolve to tickets through it (E1-c).
+
+CREATE TABLE IF NOT EXISTS story_migration (
+    story_id TEXT NOT NULL PRIMARY KEY,
+    ticket_id TEXT NOT NULL,
+    migrated_at INTEGER NOT NULL
+);
+
+insertMapping:
+INSERT INTO story_migration(story_id, ticket_id, migrated_at) VALUES (?, ?, ?);
+
+ticketFor:
+SELECT ticket_id FROM story_migration WHERE story_id = ?;
+
+allMappings:
+SELECT * FROM story_migration ORDER BY migrated_at ASC, story_id ASC;

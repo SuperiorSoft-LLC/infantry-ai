@@ -1,0 +1,28 @@
+-- ROLE-1a -- the `role_bindings` table: which provider / model / effort a ROLE runs on.
+-- See 20.sqm. Rebinding overwrites the row in place; updated_at moves on every set.
+
+CREATE TABLE IF NOT EXISTS role_bindings (
+    role_id TEXT NOT NULL PRIMARY KEY,
+    provider TEXT,
+    model TEXT,
+    effort TEXT,
+    updated_at INTEGER NOT NULL
+);
+
+-- Creates the binding, or overwrites the one for that role in place.
+setRoleBinding {
+    INSERT OR IGNORE INTO role_bindings(role_id, provider, model, effort, updated_at)
+    VALUES (:roleId, :provider, :model, :effort, :at);
+    UPDATE role_bindings SET
+        provider = :provider,
+        model = :model,
+        effort = :effort,
+        updated_at = :at
+    WHERE role_id = :roleId;
+}
+
+getRoleBinding:
+SELECT * FROM role_bindings WHERE role_id = ?;
+
+getAllRoleBindings:
+SELECT * FROM role_bindings ORDER BY role_id ASC;

@@ -1,0 +1,11 @@
+{
+  "name": "claude-restart-resume",
+  "argv": ["${CLAUDE_EXE}", "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--model", "haiku", "--strict-mcp-config", "--resume", "${CLAUDE_SESSION}"],
+  "cwd": "${PROBE_CWD}",
+  "rawOut": "${PROBE_RAW}",
+  "bootIf": "o && o.type==='system' && o.subtype==='init'",
+  "exitTimeoutMs": 20000,
+  "steps": [
+    {"label": "resumed-turn", "write": "{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"List, comma-separated, every word I asked you to reply with exactly, earlier in this conversation. Nothing else.\"}]}}", "until": "o && o.type==='result'", "timeoutMs": 120000}
+  ]
+}

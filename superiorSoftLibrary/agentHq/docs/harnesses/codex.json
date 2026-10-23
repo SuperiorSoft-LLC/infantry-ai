@@ -1,0 +1,24 @@
+{
+  "id": "codex",
+  "name": "Codex CLI",
+  "command": "codex",
+  "args": ["exec", "--json", "--skip-git-repo-check", "{toolApproval}", ["--model", "{model}"], "-"],
+  "capabilities": ["MODEL_SELECTION", "TOOL_CALLS", "USAGE"],
+  "output": {
+    "format": "jsonl",
+    "map": [
+      {"match": {"type": "thread.started"}, "event": "session", "fields": {"id": "thread_id"}},
+      {"match": {"type": "item.completed", "item.type": "agent_message"}, "event": "text", "fields": {"text": "item.text"}},
+      {"match": {"type": "item.completed", "item.type": "reasoning"}, "event": "reasoning", "fields": {"text": "item.text"}},
+      {"match": {"type": "item.started", "item.type": "command_execution"}, "event": "tool", "fields": {"name": "item.type", "id": "item.id", "arguments": "item.command"}},
+      {"match": {"type": "item.completed", "item.type": "command_execution"}, "event": "tool_result", "fields": {"id": "item.id", "output": "item.aggregated_output"}},
+      {"match": {"type": "turn.completed"}, "event": "usage", "fields": {"input": "usage.input_tokens", "output": "usage.output_tokens"}},
+      {"match": {"type": "turn.failed"}, "event": "error", "fields": {"message": "error.message"}}
+    ]
+  },
+  "toolApproval": {
+    "deny": [],
+    "allowEdits": ["--sandbox", "workspace-write"],
+    "allowAll": ["--dangerously-bypass-approvals-and-sandbox"]
+  }
+}

@@ -1,0 +1,3 @@
+# CLIPATH-2: the shipped CLI launchers keep their native line endings on every checkout.
+*.cmd text eol=crlf
+agenthq text eol=lf

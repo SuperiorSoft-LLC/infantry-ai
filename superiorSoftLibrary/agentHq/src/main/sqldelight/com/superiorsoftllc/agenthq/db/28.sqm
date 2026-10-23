@@ -1,0 +1,7 @@
+-- TRAITS-T3 -- migration v28 -> v29: `agents.trait_ids`, the traits an agent ADDS to its role's list
+-- (docs/AGENTHQ-ROLE-TRAITS.md section 2). A JSON array of trait ids; existing rows get `[]` (no additions).
+-- AgentProfiles owns the rules (each trait exists, at most 8, no duplicates); TraitBindings.effective merges.
+--
+-- NEXT MIGRATION: 29.sqm (session_instances, TRAITS-T4)
+
+ALTER TABLE agents ADD COLUMN trait_ids TEXT NOT NULL DEFAULT '[]';

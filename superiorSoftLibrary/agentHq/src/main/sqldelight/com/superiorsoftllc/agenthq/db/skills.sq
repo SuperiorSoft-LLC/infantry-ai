@@ -1,0 +1,31 @@
+-- P10-B -- the `skills` table: the skills library. See 24.sqm.
+
+CREATE TABLE IF NOT EXISTS skills (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL,
+    body TEXT NOT NULL,
+    tags TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    -- P10-K12: 1 = hidden from every session the skill is not attached to (declared LAST: an ADD COLUMN, see 34.sqm).
+    attached_only INTEGER NOT NULL DEFAULT 0 CHECK (attached_only IN (0, 1))
+);
+
+insertSkill:
+INSERT INTO skills(id, name, description, body, tags, created_at, updated_at, attached_only) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+updateSkillByName:
+UPDATE skills SET description = :description, body = :body, tags = :tags, attached_only = :attachedOnly, updated_at = :at WHERE name = :name;
+
+getSkillById:
+SELECT * FROM skills WHERE id = ?;
+
+getSkillByName:
+SELECT * FROM skills WHERE name = ?;
+
+getAllSkills:
+SELECT * FROM skills ORDER BY name ASC, id ASC;
+
+deleteSkill:
+DELETE FROM skills WHERE id = ?;

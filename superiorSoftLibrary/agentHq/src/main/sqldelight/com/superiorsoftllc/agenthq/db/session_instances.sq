@@ -1,0 +1,22 @@
+-- TRAITS-T4 -- the `session_instances` table: one immutable row per agent/role session. See 29.sqm.
+-- P10-K13 (35.sqm) adds `skill_ids`, the effective skill ids frozen at spawn.
+-- Insert-only: a second insert for the same session keeps the first row (the instance is frozen at spawn).
+
+CREATE TABLE IF NOT EXISTS session_instances (
+    session_id TEXT NOT NULL PRIMARY KEY,
+    agent_id TEXT,
+    role TEXT,
+    instructions TEXT,
+    traits TEXT NOT NULL DEFAULT '[]',
+    created_at INTEGER NOT NULL,
+    skill_ids TEXT NOT NULL DEFAULT '[]'
+);
+
+insertSessionInstance:
+INSERT OR IGNORE INTO session_instances(session_id, agent_id, role, instructions, traits, created_at, skill_ids) VALUES (?, ?, ?, ?, ?, ?, ?);
+
+getSessionInstance:
+SELECT * FROM session_instances WHERE session_id = ?;
+
+deleteSessionInstance:
+DELETE FROM session_instances WHERE session_id = ?;

@@ -1,0 +1,82 @@
+package com.superiorsoftllc.agenthq.ui
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.superiorsoftllc.agenthq.ui.model.ChangesView
+import com.superiorsoftllc.agenthq.ui.model.badge
+import com.superiorsoftllc.agenthq.ui.model.display
+import com.superiorsoftllc.agenthq.ui.model.label
+import com.superiorsoftllc.agenthq.ui.model.splitExtension
+import com.superiorsoftllc.agenthq.ui.model.summary
+import com.superiorsoftllc.agenthq.ui.protocol.ChangeKind
+import com.superiorsoftllc.agenthq.ui.protocol.ChangedFile
+
+/**
+ * GIT VIEW: the changed files of one agent's worktree, staged and unstaged apart. Presentation only --
+ * every decision (unknown vs clean, the split, the ordering) is made by [ChangesView], which is tested.
+ */
+@Composable
+fun ChangesSection(view: ChangesView) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        when (view) {
+            // Unknown is stated as unknown. It is never drawn as "clean".
+            is ChangesView.Unknown -> Text("Changes unknown: ${view.reason}", color = Palette.Muted, fontSize = 11.sp)
+            ChangesView.Clean -> Text("Working tree clean. Nothing to commit.", color = Palette.Ok, fontSize = 11.sp)
+            is ChangesView.Files -> {
+                Text(view.summary(), color = Palette.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                FileGroup("Staged", view.staged)
+                FileGroup("Not staged", view.unstaged)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FileGroup(title: String, files: List<ChangedFile>) {
+    if (files.isEmpty()) return
+    Text("$title (${files.size})", color = Palette.Muted, fontSize = 10.sp)
+    files.forEach { f ->
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(f.status.badge(), color = kindColor(f.status), fontFamily = Mono, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(12.dp))
+            ChangedPathText(f.display(), Palette.Text)
+            Spacer(Modifier.width(2.dp))
+            Text(f.status.label(), color = Palette.Muted, fontSize = 9.sp, maxLines = 1, softWrap = false)
+        }
+    }
+}
+
+/**
+ * A changed path on one line: the stem is cut with an ellipsis, the extension always stays visible
+ * (`2026-10-10-koo….md`). The cell carries the full path as its text, so tests and screen readers get the whole
+ * path rather than the truncated drawing.
+ */
+@Composable
+internal fun RowScope.ChangedPathText(path: String, color: Color) {
+    val (stem, ext) = splitExtension(path)
+    Row(Modifier.weight(1f, fill = false).semantics { text = AnnotatedString(path) }) {
+        Text(stem, color = color, fontFamily = Mono, fontSize = 11.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+        Text(ext, color = color, fontFamily = Mono, fontSize = 11.sp, maxLines = 1, softWrap = false)
+    }
+}
+
+private fun kindColor(kind: ChangeKind): Color = when (kind) {
+    ChangeKind.ADDED, ChangeKind.UNTRACKED -> Palette.Ok
+    ChangeKind.DELETED, ChangeKind.CONFLICTED -> Palette.Danger
+    ChangeKind.MODIFIED, ChangeKind.RENAMED -> Palette.Accent
+}

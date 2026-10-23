@@ -1,0 +1,18 @@
+-- Phase 9, story 9.1 -- migration v4 -> v5: agents (agent profiles).
+--
+-- Must match agents.sq column for column (SchemaMigrationTest compares the schemas).
+--
+-- NEXT MIGRATION: 5.sqm (v5 -> v6), which makes Schema.version 6.
+
+CREATE TABLE agents (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL,
+    role TEXT NOT NULL,
+    provider TEXT,
+    model TEXT,
+    instructions TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX index_agents_on_role ON agents(role);

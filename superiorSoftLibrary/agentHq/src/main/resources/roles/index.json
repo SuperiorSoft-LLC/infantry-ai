@@ -1,0 +1,23 @@
+{
+  "_comment": "Bundled role catalog. Enumerable data, never a Kotlin when/sealed: swap this manifest and the set changes with no code change. Each entry names a persona markdown file loaded beside it. This manifest being absent or empty is legal; the product then falls back to the canonical id set and generated defaults.",
+  "version": 1,
+  "roles": [
+    { "id": "architect",      "name": "Architect",       "color": "#6366f1", "persona": "architect.md" },
+    { "id": "backend",        "name": "Backend",         "color": "#0ea5e9", "persona": "backend.md" },
+    { "id": "frontend",       "name": "Frontend",        "color": "#22c55e", "persona": "frontend.md" },
+    { "id": "fullstack",      "name": "Full-Stack",      "color": "#14b8a6", "persona": "fullstack.md" },
+    { "id": "qa",             "name": "QA",              "color": "#ef4444", "persona": "qa.md" },
+    { "id": "devops",         "name": "DevOps",          "color": "#f97316", "persona": "devops.md" },
+    { "id": "security",       "name": "Security",        "color": "#b91c1c", "persona": "security.md" },
+    { "id": "mobile",         "name": "Mobile",          "color": "#8b5cf6", "persona": "mobile.md" },
+    { "id": "pm",             "name": "PM",              "color": "#eab308", "persona": "pm.md" },
+    { "id": "marketing",      "name": "Marketing",       "color": "#ec4899", "persona": "marketing.md" },
+    { "id": "version-control", "name": "Version Control", "color": "#64748b", "persona": "version-control.md" },
+    { "id": "seo",            "name": "SEO",             "color": "#10b981", "persona": "seo.md" },
+    { "id": "localization",   "name": "Localization",    "color": "#06b6d4", "persona": "localization.md" },
+    { "id": "ideation",       "name": "Ideation",        "color": "#d946ef", "persona": "ideation.md" },
+    { "id": "automation",     "name": "Automation",      "color": "#6b7280", "persona": "automation.md" },
+    { "id": "assistant",      "name": "Assistant",       "color": "#f59e0b", "persona": "assistant.md" },
+    { "id": "custom",         "name": "Custom",          "color": "#94a3b8", "persona": "custom.md" }
+  ]
+}

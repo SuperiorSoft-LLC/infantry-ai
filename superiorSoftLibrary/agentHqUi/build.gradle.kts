@@ -1,0 +1,383 @@
+// Desktop window shell. Shared screens and daemon client live in :agenthqUiCore.
+import java.time.Duration
+
+plugins {
+    kotlin("jvm")
+    alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.composeMultiplatform)
+    // PKG-1: no Gradle `application` plugin. Compose Desktop's `application {}` (bottom of this file) owns `run`
+    // and the package tasks; both plugins register `run`, so they cannot coexist. Its entry (AppMainKt) is the dev
+    // window under `run`, so `run` behaves exactly as before.
+}
+
+kotlin {
+    jvmToolchain(21)
+}
+
+dependencies {
+    implementation(project(":superiorSoftLibrary:agenthqUiCore"))
+    implementation(compose.desktop.currentOs)
+    // UPDATE-1: the update dialog (UpdatePrompt.kt); the same material3 :agenthqUiCore already ships.
+    implementation(compose.material3)
+    // UI-REAL: the production desktop entry (RealDaemonMain) boots the REAL daemon in-process, so the
+    // daemon is a runtime dependency of the desktop, not only of the tests. ktor-server-core is needed on the
+    // compile classpath for EmbeddedServer.start; the engine and websocket modules arrive via :agentHq.
+    implementation(project(":superiorSoftLibrary:agentHq"))
+    implementation(libs.ktor.server.core)
+
+    testImplementation(project(":superiorSoftLibrary:agentHq"))
+    testImplementation(kotlin("test"))
+    // A real window test: drives the composed screens (click a tab, type, press a button) against the real daemon.
+    @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
+    testImplementation(compose.uiTest)
+    testImplementation(libs.kotlinx.coroutines.core)
+    // The integration test boots the real daemon in-process; its server types are `implementation` in :agentHq.
+    testImplementation(libs.ktor.server.core)
+    testImplementation(libs.ktor.server.cio)
+    testImplementation(libs.ktor.server.websockets)
+    testImplementation(libs.ktor.server.content.negotiation)
+    testImplementation(libs.ktor.serialization.kotlinx.json)
+}
+
+// Same pin as :agentHq (the catalog mixes Ktor 3.2.3 and 3.4.1; a mixed server never fires webSocket).
+// Needed here because the integration test boots the real daemon on this module's test classpath.
+configurations.all {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "io.ktor") {
+            useVersion(libs.versions.ktor.get())
+        }
+    }
+}
+
+// BUG-INSTALL-DUPJARS-1: these four JetBrains modules are redirects. Each desktop jar holds no classes (only
+// META-INF/MANIFEST.MF + a .kotlin_module) and depends on the real androidx module of the SAME jar name at another
+// version (e.g. org.jetbrains.compose.runtime:runtime-desktop-1.10.3.jar -> androidx.compose.runtime:runtime-desktop-1.10.5.jar).
+// The groups differ, so Gradle never sees a conflict and both jars landed in AgentHQ.cfg. Fix: each androidx module
+// also declares its stub's capability, so the pair conflicts and the androidx module is selected. Gradle rewires the
+// stub's dependents to it, so the androidx jar and its version are unchanged and only the empty stub jar drops out.
+// Not an exclude: for three of the four, the stub is the ONLY path to the real androidx jar.
+// Asserted by verifyNoDuplicateJars (below).
+val jetBrainsRedirectStubs = mapOf( // androidx module (real classes) -> JetBrains stub (empty jar)
+    "androidx.compose.runtime:runtime-desktop" to "org.jetbrains.compose.runtime:runtime-desktop",
+    "androidx.compose.runtime:runtime-saveable-desktop" to "org.jetbrains.compose.runtime:runtime-saveable-desktop",
+    "androidx.lifecycle:lifecycle-runtime-compose-desktop" to "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose-desktop",
+    "androidx.savedstate:savedstate-compose-desktop" to "org.jetbrains.androidx.savedstate:savedstate-compose-desktop",
+)
+dependencies.components {
+    jetBrainsRedirectStubs.forEach { (androidx, stub) ->
+        val (stubGroup, stubName) = stub.split(":")
+        withModule(androidx) {
+            val version = id.version
+            allVariants { withCapabilities { addCapability(stubGroup, stubName, version) } }
+        }
+    }
+}
+configurations.all {
+    jetBrainsRedirectStubs.values.forEach { stub ->
+        resolutionStrategy.capabilitiesResolution.withCapability(stub) {
+            select(candidates.first { (it.id as? org.gradle.api.artifacts.component.ModuleComponentIdentifier)?.group?.startsWith("androidx.") == true })
+            because("BUG-INSTALL-DUPJARS-1: $stub is an empty redirect jar; keep the androidx module it points to")
+        }
+    }
+}
+
+// PERF-2: the JVM heap caps shared with :agentHq's runDaemon, from one file: agentHq/jvm-caps.txt.
+val agentHqJvmCaps: List<String> = project(":superiorSoftLibrary:agentHq").file("jvm-caps.txt").readLines()
+    .map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
+
+// `run` is registered by Compose Desktop after this script is evaluated, hence the lazy `matching`.
+tasks.matching { it.name == "run" }.configureEach {
+    group = "application"
+    description = "Runs the AgentHQ desktop shell; connect to :superiorSoftLibrary:agentHq:runDaemon on ws://127.0.0.1:8787/ws."
+}
+
+tasks.register("runUi") {
+    group = "application"
+    description = "Alias for run."
+    dependsOn("run")
+}
+
+// UI-REAL: the desktop window against the REAL daemon (provider from AGENTHQ_PROVIDER, default opencode).
+// Run: ./gradlew :superiorSoftLibrary:agentHqUi:runRealDaemon   (state lives under ~/.agenthq, like the daemon's own run)
+tasks.register<JavaExec>("runRealDaemon") {
+    group = "application"
+    description = "Starts the AgentHQ daemon in-process (AGENTHQ_PROVIDER, default opencode) and opens the desktop UI on it."
+    mainClass.set("com.superiorsoftllc.agenthq.ui.RealDaemonMainKt")
+    classpath = sourceSets["main"].runtimeClasspath
+    // PORT-1: fixed ports per use. 8787 is the owner's daemon (runDaemon), 8788 this preview. An AGENTHQ_PORT
+    // set by the caller still wins; a taken port falls back to a free one and the window follows it.
+    if (System.getenv("AGENTHQ_PORT").isNullOrBlank()) environment("AGENTHQ_PORT", "8788")
+    jvmArgs(agentHqJvmCaps) // PERF-2
+    // BUG-BUILD-1: agents run the `agenthq` CLI/MCP from :agentHq's installDist (AgentHqBin), not this classpath.
+    // Refresh it on every preview so agents never run an older CLI than the daemon.
+    dependsOn(":superiorSoftLibrary:agentHq:installDist")
+}
+
+// Dev-only visual smoke: Compose Desktop against an in-process stub daemon with temporary state.
+tasks.register<JavaExec>("runSmoke") {
+    group = "application"
+    mainClass.set("com.superiorsoftllc.agenthq.ui.SmokeMainKt")
+    classpath = sourceSets["test"].runtimeClasspath
+    jvmArgs(agentHqJvmCaps) // PERF-2
+}
+
+// U2: the UI tests boot the real daemon in-process, and the client now asks for `limits` on connect. Keep the
+// daemon's plan-limit meters off so a test never reads real credentials or calls a provider (as :agentHq does).
+tasks.withType<Test>().configureEach {
+    environment("AGENTHQ_LIMITS_LIVE", "false")
+    // PERF-2: PackagedJvmCapsTest reads the packaged launcher's jvmArgs (the compose block below), lazily, '|'-separated (no flag contains '|').
+    val packagedJvmArgs = provider { compose.desktop.application.jvmArgs.joinToString("|") }
+    inputs.property("packagedJvmArgs", packagedJvmArgs)
+    jvmArgumentProviders += CommandLineArgumentProvider { listOf("-Dagenthq.packagedJvmArgs=${packagedJvmArgs.get()}") }
+}
+
+// E2E-OWNER-1: the owner-path smoke. It boots RealDaemonMainKt (as runRealDaemon does) as its own JVM, headless, from a
+// temp git layout (dirty main checkout + linked worktree), and drives it through the INSTALLED `agenthq` (installDist,
+// as AgentHqBin resolves it) over `mcp serve` and the CLI, with a recording stub harness. Temp dirs and ports only
+// (never ~/.agenthq, 8787 or 8788). Kept out of `test`; QA runs it as its own gate step, alone in a few minutes:
+//   ./gradlew :superiorSoftLibrary:agentHqUi:ownerSmoke
+// Each scenario's logs and stub recordings are kept under build/ownerSmoke/runs/<scenario>/.
+val ownerSmokeTests = "com.superiorsoftllc.agenthq.ui.owner.*"
+tasks.named<Test>("test") {
+    filter { excludeTestsMatching(ownerSmokeTests) }
+}
+tasks.register<Test>("ownerSmoke") {
+    group = "verification"
+    description = "E2E-OWNER-1: the owner's path end to end (real daemon JVM, installed agenthq over MCP and CLI, stub harness)."
+    val testRuntime = sourceSets["test"].runtimeClasspath
+    val daemonRuntime = sourceSets["main"].runtimeClasspath
+    testClassesDirs = sourceSets["test"].output.classesDirs
+    classpath = testRuntime
+    filter { includeTestsMatching(ownerSmokeTests) }
+    // BUG-BUILD-1: the agents' `agenthq` is the install; refresh it so the smoke never runs an older CLI than the daemon.
+    dependsOn(":superiorSoftLibrary:agentHq:installDist")
+    inputs.files(daemonRuntime).withPropertyName("daemonRuntime")
+    val work = layout.buildDirectory.dir("ownerSmoke").get().asFile
+    val daemonClasspathFile = File(work, "daemon-classpath.txt")
+    val testClasspathFile = File(work, "test-classpath.txt")
+    systemProperty("ownersmoke.install", project(":superiorSoftLibrary:agentHq").layout.buildDirectory.dir("install/agenthq").get().asFile.absolutePath)
+    systemProperty("ownersmoke.daemonClasspathFile", daemonClasspathFile.absolutePath)
+    systemProperty("ownersmoke.testClasspathFile", testClasspathFile.absolutePath)
+    systemProperty("ownersmoke.reportDir", File(work, "runs").absolutePath)
+    doFirst {
+        work.mkdirs()
+        // Files, not -D values: the classpaths are far longer than a Windows command line allows.
+        daemonClasspathFile.writeText(daemonRuntime.files.joinToString("\n") { it.absolutePath })
+        testClasspathFile.writeText(testRuntime.files.joinToString("\n") { it.absolutePath })
+    }
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+    timeout.set(Duration.ofMinutes(10))
+}
+
+// PKG-1: the INSTALLABLE production build (docs/AGENTHQ-INSTALL.md). Entry AppMainKt: under `run` it is the dev window
+// (MainKt, 8787); under the jpackage launcher (or -Dagenthq.installed=true) it pins its own state dir
+// (%LOCALAPPDATA%\SuperiorSoft\AgentHQ, outside the MSI's install dir: INSTALL-1) and port (8797) and starts the daemon
+// in-process, so the install never touches the dev daemon (8787), the dev preview (8788) or ~/.agenthq. The daemon ships on the same classpath (:agentHq is an
+// `implementation` dependency above), so there is no second launcher to keep in sync.
+// Build: ./gradlew :superiorSoftLibrary:agentHqUi:packageReleaseMsi   (or packageMsi / packageExe / packageReleaseExe)
+val agentHqPackageVersion: String = providers.gradleProperty("agenthqVersion").orNull?.trim()?.takeIf { it.isNotEmpty() } ?: "1.0.0"
+require(Regex("""(\d+)\.(\d+)\.(\d+)""").matchEntire(agentHqPackageVersion)?.groupValues?.let { (_, major, minor, build) ->
+    (major.toIntOrNull() ?: 0) in 1..255 && (minor.toIntOrNull() ?: 256) <= 255 && (build.toIntOrNull() ?: 65536) <= 65535
+} == true) { "INSTALL-1: -PagenthqVersion=$agentHqPackageVersion is not an MSI version (MAJOR.MINOR.BUILD, 1..255 . 0..255 . 0..65535)" }
+
+compose.desktop {
+    application {
+        mainClass = "com.superiorsoftllc.agenthq.ui.AppMainKt"
+        // UPDATE-1: the running version, compared with the latest GitHub release's tag (UpdateSettings.VERSION_PROPERTY).
+        jvmArgs += listOf("-Dagenthq.version=$agentHqPackageVersion")
+        // PERF-2: heap caps (GC stays G1) for the packaged launcher (jpackage java-options) and `run`; the installed app runs
+        // the daemon in this same JVM, so these cover both. Asserted by PackagedJvmCapsTest.
+        jvmArgs += agentHqJvmCaps
+        nativeDistributions {
+            targetFormats(
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi,
+                org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe,
+            )
+            packageName = "AgentHQ"
+            // INSTALL-1: the version comes from -PagenthqVersion (default 1.0.0), so an upgrade build needs no file edit:
+            //   ./gradlew :superiorSoftLibrary:agentHqUi:packageMsi -PagenthqVersion=1.0.1
+            // MSI needs MAJOR.MINOR.BUILD (each part numeric, MAJOR 1..255) and only upgrades over a LOWER version, so every
+            // build the owner installs over an older one needs a higher number. Checked here, before jpackage spends minutes.
+            packageVersion = agentHqPackageVersion
+            description = "AgentHQ desktop with its own daemon"
+            vendor = "SuperiorSoft LLC"
+            // CLIPATH-2: the installed app's `agenthq` CLI launchers (appResources/<os>/: agenthq.cmd + a Git Bash shim on
+            // Windows, an sh script on macOS/Linux) land in $APPDIR/resources; InstalledCli pins that dir as AGENTHQ_BIN
+            // so every session the installed daemon spawns can run `agenthq` (CliMainKt on the app's own classpath).
+            appResourcesRootDir.set(project.layout.projectDirectory.dir("appResources"))
+            // jlink: bundle the whole JDK module set. The daemon pulls Ktor CIO, SQLite (JDBC + native lib),
+            // java.net.http and process APIs; a hand-picked module list fails at RUNTIME on the first missing module,
+            // which only an installed run would reveal. Costs roughly 40-60 MB of installer size; trim later with
+            // `suggestRuntimeModules` once a real install has been exercised.
+            includeAllModules = true
+            windows {
+                menu = true
+                menuGroup = "AgentHQ"
+                shortcut = true
+                dirChooser = true
+                perUserInstall = true
+                // APP-ICON-1: the AgentHQ "A" mark for the installer and exe (else Compose packages its Kotlin icon).
+                iconFile.set(project.file("icons/agenthq.ico"))
+                // FIXED forever: changing it makes Windows treat a new version as a different product (no upgrade).
+                upgradeUuid = "6f1d3c2a-8b47-4e5a-9c1e-2a7b0d4f8e61"
+            }
+        }
+        buildTypes.release.proguard {
+            // ProGuard would strip reflective serializers and Ktor's service loaders; not worth the risk for now.
+            isEnabled.set(false)
+        }
+    }
+}
+
+// PKG-4: keep the native `java` launcher in the bundled runtime, so the installed `agenthq` CLI (appResources/) takes
+// its "bundled java" branch and runs on a machine with no JDK.
+//
+// Why a copy step and not a jlink flag: Compose 1.10.3 always passes `--strip-native-commands` to jlink. The switch
+// exists (AbstractJLinkTask.stripNativeCommands) but is Kotlin `internal`, so it has no DSL and no stable name from a
+// build script, and `freeArgs` can only ADD jlink arguments, never remove one. Instead, right after jlink writes the
+// image, copy `bin/java(.exe)` from the very JDK jlink ran from (the task's public `javaHome`): same build, so it
+// matches the image's libjvm. `--strip-native-commands` removes executables only; the shared library java needs
+// (bin\jli.dll on Windows, lib/libjli.* elsewhere) stays in the image, and the step fails the build if it does not.
+// Being a doLast of createRuntimeImage, the copy is part of that task's output: up-to-date checks and the build cache
+// carry it, and every package task (createDistributable, packageMsi/Exe, release variants) gets it.
+val keepJavaLauncherAction = "keepJavaLauncher"
+val javaLauncherName = if (System.getProperty("os.name").startsWith("Windows")) "java.exe" else "java"
+
+tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask>().configureEach {
+    doLast(keepJavaLauncherAction) {
+        val jlink = this as org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask
+        val source = File(jlink.javaHome.get(), "bin/$javaLauncherName")
+        check(source.isFile) { "PKG-4: no $javaLauncherName in the jlink JDK at ${source.parentFile}" }
+        val image = jlink.destinationDir.get().asFile
+        val target = File(image, "bin/$javaLauncherName")
+        source.copyTo(target, overwrite = true)
+        target.setExecutable(true, false)
+        val jli = listOf(File(image, "bin/jli.dll"), File(image, "lib/libjli.so"), File(image, "lib/libjli.dylib"))
+        check(jli.any { it.isFile }) { "PKG-4: the runtime image has no libjli next to $target; java cannot start" }
+        logger.lifecycle("PKG-4: kept the native java launcher in the runtime image: $target")
+    }
+}
+
+// PKG-4 acceptance, at configuration level (runs no jlink): every runtime-image task carries the copy step, and the
+// JDK it copies from really has the launcher. Wired into `check`.
+tasks.register("verifyRuntimeKeepsJava") {
+    group = "verification"
+    description = "PKG-4: proves the bundled runtime keeps bin/java(.exe) (createRuntimeImage copy step is wired)."
+    val jlinkTasks = tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask>()
+    val wiring: Provider<List<Triple<String, List<String>, File>>> = provider {
+        jlinkTasks.map { task ->
+            val actions = task.actions.map { (it as? org.gradle.api.Describable)?.displayName ?: it.toString() }
+            Triple(task.name, actions, File(task.javaHome.get(), "bin/$javaLauncherName"))
+        }
+    }
+    doLast {
+        val found = wiring.get()
+        check(found.isNotEmpty()) { "PKG-4: no Compose jlink task found; is compose.desktop.application still configured?" }
+        found.forEach { (name, actions, source) ->
+            check(actions.any { keepJavaLauncherAction in it }) {
+                "PKG-4: $name has no $keepJavaLauncherAction step; the runtime would ship without $javaLauncherName. Actions: $actions"
+            }
+            check(source.isFile) { "PKG-4: $name would copy from ${source.path}, which does not exist" }
+            logger.lifecycle("PKG-4: $name keeps $javaLauncherName (copied from $source)")
+        }
+    }
+}
+
+tasks.named("check") { dependsOn("verifyRuntimeKeepsJava") }
+
+// BUG-INSTALL-DUPJARS-1 acceptance: the packaged app's classpath (Compose packages main's runtimeClasspath) must carry
+// one jar per name. Two jars that differ only in version (runtime-desktop-1.10.3.jar + runtime-desktop-1.10.5.jar)
+// make which one loads depend on the launcher's classpath order. Key = the file name minus its "-<version>".
+tasks.register("verifyNoDuplicateJars") {
+    group = "verification"
+    description = "BUG-INSTALL-DUPJARS-1: fails if main's runtimeClasspath (the packaged classpath) carries two versions of one jar name."
+    val artifacts = configurations.named("runtimeClasspath").flatMap { it.incoming.artifacts.resolvedArtifacts }
+    doLast {
+        val byName = artifacts.get().mapNotNull { artifact ->
+            val id = artifact.id.componentIdentifier as? org.gradle.api.artifacts.component.ModuleComponentIdentifier ?: return@mapNotNull null
+            artifact.file.name.replace("-${id.version}", "") to "${id.group}:${id.module}:${id.version} (${artifact.file.name})"
+        }.groupBy({ it.first }, { it.second }).filterValues { it.size > 1 }
+        check(byName.isEmpty()) {
+            "BUG-INSTALL-DUPJARS-1: the packaged classpath carries ${byName.size} jar name(s) twice:\n" +
+                byName.entries.joinToString("\n") { (name, ids) -> "  $name <- ${ids.joinToString(", ")}" }
+        }
+        logger.lifecycle("BUG-INSTALL-DUPJARS-1: ${artifacts.get().size} runtime jars, every jar name once")
+    }
+}
+
+tasks.named("check") { dependsOn("verifyNoDuplicateJars") }
+
+// PERF-1: the repeatable memory/CPU/startup profile (docs/perf/agenthq-profile-<date>.md). It boots its OWN daemon JVM
+// (agentHq's installDist, as runDaemon runs it) and UI JVM (MainKt, as `run` runs it) in a temp AGENTHQ home on a free
+// port -- never ~/.agenthq, never 8787/8788 (PerfGuard asserts it) -- then drives 4 streaming stub agents and samples
+// both JVMs from the outside. Opens a real window for the run's length (~14 min with the default 10 min idle).
+//   ./gradlew :superiorSoftLibrary:agentHq:perfProfile [-PperfIdleMinutes=10] [-PperfNmt=true] [-PperfAgents=4] [-PperfLines=2000]
+tasks.register<JavaExec>("perfProfile") {
+    group = "verification"
+    description = "PERF-1: profiles the AgentHQ daemon and UI JVMs (startup, RSS/heap idle/load/after-idle, idle CPU) into docs/perf/."
+    val testRuntime = sourceSets["test"].runtimeClasspath
+    val uiRuntime = sourceSets["main"].runtimeClasspath
+    classpath = testRuntime
+    mainClass.set("com.superiorsoftllc.agenthq.ui.perf.PerfProfileMainKt")
+    // jcmd must come from the same JDK as the children: run on the module's toolchain JDK, which the children reuse.
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
+    dependsOn(":superiorSoftLibrary:agentHq:installDist")
+    val work = layout.buildDirectory.dir("perfProfile").get().asFile
+    val uiClasspathFile = File(work, "ui-classpath.txt")
+    val testClasspathFile = File(work, "test-classpath.txt")
+    systemProperty("perf.install", project(":superiorSoftLibrary:agentHq").layout.buildDirectory.dir("install/agenthq").get().asFile.absolutePath)
+    systemProperty("perf.uiClasspathFile", uiClasspathFile.absolutePath)
+    systemProperty("perf.testClasspathFile", testClasspathFile.absolutePath)
+    systemProperty("perf.docsDir", rootProject.layout.projectDirectory.dir("docs/perf").asFile.absolutePath)
+    systemProperty("perf.workDir", work.absolutePath)
+    // PERF-2: both child JVMs get the shipped caps, so the profile measures what the app runs with.
+    systemProperty("perf.jvmCaps", agentHqJvmCaps.joinToString("|"))
+    mapOf(
+        "perfIdleMinutes" to "perf.idleMinutes", "perfSettleSeconds" to "perf.settleSeconds", "perfCpuSeconds" to "perf.cpuSeconds",
+        "perfAgents" to "perf.agents", "perfStartupTrials" to "perf.startupTrials", "perfLines" to "perf.lines", "perfPaceMs" to "perf.paceMs", "perfNmt" to "perf.nmt",
+    ).forEach { (gradleProp, sysProp) -> providers.gradleProperty(gradleProp).orNull?.let { systemProperty(sysProp, it) } }
+    doFirst {
+        work.mkdirs()
+        // Files, not -D values: the classpaths are far longer than a Windows command line allows.
+        uiClasspathFile.writeText(uiRuntime.files.joinToString("\n") { it.absolutePath })
+        testClasspathFile.writeText(testRuntime.files.joinToString("\n") { it.absolutePath })
+    }
+    outputs.upToDateWhen { false }
+}
+
+// RELEASE-ASSETS-1: the assets UPDATE-1's Updater reads from a GitHub release, in one folder for the owner to upload:
+//   ./gradlew :superiorSoftLibrary:agentHqUi:releaseAssets -PagenthqVersion=1.0.N
+//   -> build/release/1.0.N/{AgentHQ-1.0.N.msi, SHA256SUMS, RELEASE-NOTES.md}
+// The writing (copy, sha256sum-format SHA256SUMS, notes stub) is ReleaseAssets in :agentHq, unit-tested against the
+// Updater's own parser (ReleaseAssetsTest). This task NEVER pushes, tags or calls GitHub; publishing is manual
+// (docs/AGENTHQ-INSTALL.md, "Publishing a release").
+val releaseAssets = tasks.register<JavaExec>("releaseAssets") {
+    group = "distribution"
+    description = "RELEASE-ASSETS-1: builds the release msi and writes build/release/<version>/ (msi, SHA256SUMS, RELEASE-NOTES.md). Needs -PagenthqVersion."
+    dependsOn("packageReleaseMsi")
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("com.superiorsoftllc.agenthq.update.ReleaseAssetsKt")
+    val msi = layout.buildDirectory.file("compose/binaries/main-release/msi/AgentHQ-$agentHqPackageVersion.msi")
+    val out = layout.buildDirectory.dir("release/$agentHqPackageVersion")
+    val gitSha = providers.exec {
+        commandLine("git", "rev-parse", "--short", "HEAD")
+        workingDir = rootProject.projectDir
+        isIgnoreExitValue = true
+    }.standardOutput.asText.map { it.trim().ifEmpty { "unknown" } }
+    argumentProviders += CommandLineArgumentProvider {
+        listOf(msi.get().asFile.absolutePath, out.get().asFile.absolutePath, agentHqPackageVersion, gitSha.get())
+    }
+    outputs.upToDateWhen { false }
+}
+
+// Refuse a MISSING -PagenthqVersion before packageReleaseMsi spends minutes: the INSTALL-1 check above falls back to
+// 1.0.0 when the property is absent, which is fine for a local package but never for a published release.
+// (An invalid value already fails at configuration, in the INSTALL-1 require.)
+gradle.taskGraph.whenReady {
+    if (hasTask(releaseAssets.get())) {
+        check(!providers.gradleProperty("agenthqVersion").orNull.isNullOrBlank()) {
+            "RELEASE-ASSETS-1: releaseAssets needs -PagenthqVersion=MAJOR.MINOR.BUILD (e.g. -PagenthqVersion=1.0.5); it never defaults"
+        }
+    }
+}

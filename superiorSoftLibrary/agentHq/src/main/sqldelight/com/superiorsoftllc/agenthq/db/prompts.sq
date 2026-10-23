@@ -1,0 +1,28 @@
+-- P10-A -- the `prompts` table: the prompt library. See 23.sqm.
+
+CREATE TABLE IF NOT EXISTS prompts (
+    id TEXT NOT NULL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    body TEXT NOT NULL,
+    tags TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+insertPrompt:
+INSERT INTO prompts(id, name, body, tags, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?);
+
+updatePromptByName:
+UPDATE prompts SET body = :body, tags = :tags, updated_at = :at WHERE name = :name;
+
+getPromptById:
+SELECT * FROM prompts WHERE id = ?;
+
+getPromptByName:
+SELECT * FROM prompts WHERE name = ?;
+
+getAllPrompts:
+SELECT * FROM prompts ORDER BY name ASC, id ASC;
+
+deletePrompt:
+DELETE FROM prompts WHERE id = ?;

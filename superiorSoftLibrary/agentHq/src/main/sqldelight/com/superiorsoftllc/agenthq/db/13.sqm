@@ -1,0 +1,13 @@
+-- MVP PW-3 -- migration v13 -> v14: workspaces survive a daemon restart.
+--
+-- NEXT MIGRATION: 14.sqm
+
+CREATE TABLE IF NOT EXISTS workspaces (
+    id TEXT NOT NULL PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    path TEXT,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS index_workspaces_on_project ON workspaces(project_id, created_at);

@@ -1,0 +1,7 @@
+-- CP-2 slice (a) -- migration v18 -> v19: a project records the directory it lives in, which the daemon's
+-- git service is rooted at. NOT NULL DEFAULT '' so every existing project reads back as "no directory
+-- configured" (the empty string), never NULL.
+--
+-- NEXT MIGRATION: 19.sqm
+
+ALTER TABLE projects ADD COLUMN directory TEXT NOT NULL DEFAULT '';

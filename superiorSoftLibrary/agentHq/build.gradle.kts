@@ -1,0 +1,298 @@
+// :superiorSoftLibrary:agentHq -- AgentHQ daemon + CLI. JVM ONLY.
+//
+// WHY JVM-ONLY AND NOT KMP: this module drives OS subprocesses, and the parked Pty4J path is
+// JVM+native. A KMP module here would drag JS/WASM/Android targets into the build for a server
+// that can only ever run on a JVM. Do NOT convert this to kotlin("multiplatform").
+//
+// Phase 0 verdict (agenthq-phase0-spike/FINDINGS.md): PIPES. PipedProcessRunner is the default;
+// PtyProcessRunner ships behind the same seam but is inert because Pty4J was deliberately NOT
+// added as a dependency.
+
+plugins {
+    kotlin("jvm")
+    alias(libs.plugins.kotlinSerialization)
+    alias(libs.plugins.sqldelight)
+    application
+}
+
+// SQLDelight 2.2.1, matching superiorSoftLibrary. The driver is the catalog's
+// `sqlite-driver` -- NOT `sqldelight-jdbc-driver`. jdbc-driver needs a SQLite
+// JDBC driver supplied separately (org.xerial:sqlite-jdbc) and that coordinate
+// is NOT in libs.versions.toml, so it would break the "no new dependency
+// beyond the catalog" constraint. sqlite-driver is a multiplatform artifact
+// whose JVM variant is what resolves here; consuming it from a kotlin("jvm")
+// module adds NO compilation targets to this module.
+sqldelight {
+    databases {
+        create("AgentHQDatabase") {
+            packageName.set("com.superiorsoftllc.agenthq.db")
+            srcDirs.setFrom("src/main/sqldelight")
+        }
+    }
+}
+
+kotlin {
+    jvmToolchain(21)
+}
+
+application {
+    // The CLI is the installDist main entry point so `installDist` produces a real `agenthq` binary.
+    mainClass.set("com.superiorsoftllc.agenthq.cli.CliMainKt")
+    // BUG-G2: the launchers are `bin/agenthq` (POSIX / Git Bash) and `bin/agenthq.bat`, so the name a
+    // prompt uses (`agenthq knowledge`) resolves on case-sensitive filesystems too. The daemon puts this
+    // bin dir on every spawned session's PATH (AgentHqBin).
+    applicationName = "agenthq"
+}
+
+dependencies {
+    // Everything here is already in the version catalog via :superiorSoftService -- no new
+    // coordinates are introduced.
+    implementation(libs.kotlinx.coroutines.core)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.ktor.server.core)
+    implementation(libs.ktor.server.cio)
+    implementation(libs.ktor.server.websockets)
+    implementation(libs.ktor.server.content.negotiation)
+    implementation(libs.ktor.serialization.kotlinx.json)
+
+    // Persistence story 1/3: the `runs` table. The catalog's `sqlite-driver`
+    // (app.cash.sqldelight:sqlite-driver, 2.2.1) -- NOT `sqldelight-jdbc-driver`, which would need
+    // org.xerial:sqlite-jdbc supplied separately and that coordinate is not in libs.versions.toml.
+    // sqlite-driver resolves the JVM variant here and adds no compilation targets.
+    implementation(libs.sqlite.driver)
+    // Phase 4.5: the rest of the SQLDelight JVM stack, all from the catalog. `runtime` and
+    // `jdbc-driver` already arrive transitively through sqlite-driver; they are declared so the
+    // module states what it compiles against instead of leaning on a transitive edge.
+    // primitive-adapters supplies IntColumnAdapter (pods.max_concurrency). It is a KMP artifact,
+    // but a kotlin("jvm") consumer resolves only its -jvm variant: no target is added here.
+    implementation(libs.sqldelight.runtime)
+    implementation(libs.sqldelight.jdbc.driver)
+    implementation(libs.primitive.adapters)
+
+    // BUG-INSTALL-SLF4J-1: Ktor and sqlite log through SLF4J, and with no provider SLF4J binds its NOP logger and
+    // drops every line. slf4j-simple writes to the System.err of each call (src/main/resources/simplelogger.properties),
+    // which the installed app routes to agenthq.log (agentHqUi InstallLogs.install), so the lines land in the one log
+    // file without a second sink. runtimeOnly flows to :agentHqUi's runtime through its implementation(project) edge,
+    // so the desktop (which runs this daemon in-process) gets the same one provider. Version = the slf4j-api Ktor
+    // resolves (2.0.17); a provider ahead of or behind the API is reported as a mismatch by SLF4J.
+    runtimeOnly("org.slf4j:slf4j-simple:2.0.17")
+
+    testImplementation(kotlin("test"))
+    // BUILD-VB-1: VerifyBaseTaskTest runs preflight/verify-base.gradle.kts in a throwaway build.
+    testImplementation(gradleTestKit())
+}
+
+// The catalog is inconsistent for Ktor: `ktor-server-cio` and `ktor-server-websockets` point at
+// `ktorClientCio` (3.2.3) while `ktor-server-core` / content-negotiation / websockets-core resolve
+// to `ktor` (3.4.1). Left mixed, `webSocket("/ws")` NEVER fires -- the 3.2.3 WebSockets plugin does
+// not invoke the 3.4.1 route, so the handshake succeeds and the session dies with 1006. Pin every
+// io.ktor module to the catalog's `ktor` version.
+configurations.all {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "io.ktor") {
+            useVersion(libs.versions.ktor.get())
+        }
+    }
+}
+
+// The CLI client is a second entry point in the same module; the `application` plugin can only
+// point at one main, so the client gets its own JavaExec task. It uses the JDK's own WebSocket
+// client, so it needs no extra dependency.
+fun agentHqTestTmp(project: Project): File {
+    val hash = Integer.toHexString(project.projectDir.absolutePath.hashCode())
+    return File(System.getProperty("java.io.tmpdir"), "agenthq-test-tmp/$hash")
+}
+
+tasks.register<JavaExec>("runClient") {
+    group = "application"
+    description = "Runs the AgentHQ CLI client against a running daemon."
+    mainClass.set("com.superiorsoftllc.agenthq.client.ClientMainKt")
+    classpath = sourceSets["main"].runtimeClasspath
+}
+
+// PERF-2: the JVM caps every AgentHQ daemon/UI launch shares (see jvm-caps.txt); agentHqUi reads the same file.
+val agentHqJvmCaps: List<String> = file("jvm-caps.txt").readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
+
+// Daemon entry point for development: `./gradlew :superiorSoftLibrary:agentHq:runDaemon`
+tasks.register<JavaExec>("runDaemon") {
+    group = "application"
+    description = "Runs the AgentHQ daemon."
+    mainClass.set("com.superiorsoftllc.agenthq.daemon.DaemonMainKt")
+    classpath = sourceSets["main"].runtimeClasspath
+    // BUG-G2: sessions run `agenthq ...`, so the CLI is installed first and its bin dir handed to the
+    // daemon, which prepends it to every spawned session's PATH.
+    dependsOn("installDist")
+    environment("AGENTHQ_BIN", layout.buildDirectory.dir("install/agenthq/bin").get().asFile.absolutePath)
+    // PERF-2: the same heap caps and GC as the installed app (jvm-caps.txt).
+    jvmArgs(agentHqJvmCaps)
+}
+
+// Phase 10a: dump the bundled role catalog and the avatar resolution chain, so the shipped data
+// (roles/index.json + the persona files) is verifiable without a UI. Pass a custom-role directory
+// with -Proles=<dir>.
+tasks.register<JavaExec>("roleCatalog") {
+    group = "application"
+    description = "Prints the AgentHQ role catalog and the avatar resolution chain (Phase 10a)."
+    mainClass.set("com.superiorsoftllc.agenthq.role.RoleCatalogProbeKt")
+    classpath = sourceSets["main"].runtimeClasspath
+    providers.gradleProperty("roles").orNull?.takeIf { it.isNotBlank() }?.let { args(it) }
+}
+
+// Phase 2 comparison harness: drive ONE prompt through the selected provider + runner and print a
+// compact summary (exit code, line counts, session id, elapsed). Same runner and same stdin-EOF
+// delivery for both CLIs, so opencode-vs-claude is an apples-to-apples comparison.
+tasks.register<JavaExec>("probeProvider") {
+    group = "application"
+    description = "One-shot probe of AGENTHQ_PROVIDER through AGENTHQ_RUNNER (Phase 0/2 comparison)."
+    mainClass.set("com.superiorsoftllc.agenthq.probe.ProviderProbeKt")
+    classpath = sourceSets["main"].runtimeClasspath
+}
+
+// VerifyMigrationTask proves a hand-written .sqm migration reproduces the .sq schema. It is
+// disabled repo-wide BY DESIGN (same line as superiorSoftLibrary/build.gradle.kts:97): the
+// `runs` table is brand new, there is no shipped v0 to migrate, and a false mismatch here would
+// fail a green test run for no product reason. Do NOT re-enable.
+tasks.withType<app.cash.sqldelight.gradle.VerifyMigrationTask>().configureEach {
+    enabled = false
+}
+
+// ---- Base-commit preflight ------------------------------------------------------------------
+// The verifyBase task is defined in preflight/verify-base.gradle.kts (BUILD-VB-1), shared with its test.
+apply(from = "preflight/verify-base.gradle.kts")
+
+// ---- Merge preflight (stale-branch guard) ---------------------------------------------------
+// verifyBase can only check the direction visible from inside a branch: that THIS checkout contains
+// its declared base. It cannot see the hazard that has actually bitten us three times — a branch
+// that is BEHIND the current feature-agenthq-mvp tip. Such a branch still merges (git combines both
+// sides), but its GREEN was measured on a tree that never contained mvp's later work, and it can
+// conflict on exactly the files it and mvp both touch (AgentProfiles.kt, for UX-7). AGENT-UX-12,
+// AGENT-UX-7 and AGENT-UX-13 were all cut from a base that had already moved.
+//
+// Run this BEFORE a merge, from the mvp checkout:
+//   ./gradlew :superiorSoftLibrary:agentHq:verifyMergeable -PmergeBranch=<branch>
+// It fails when <branch> does not contain the current feature-agenthq-mvp tip. Rebase the branch
+// onto the tip, re-gate, then merge. Override the tip ref with -PmvpRef=<ref>.
+val verifyMergeable by tasks.registering {
+    group = "verification"
+    description =
+        "Fails when the branch named by -PmergeBranch does not contain the current feature-agenthq-mvp tip."
+    val checkoutDir = projectDir
+    val mvpRef = (findProperty("mvpRef") as? String)?.trim()?.takeUnless { it.isEmpty() }
+        ?: "feature-agenthq-mvp"
+    val mergeBranch = (findProperty("mergeBranch") as? String)?.trim()
+    doLast {
+        fun git(vararg args: String): Pair<Int, String> {
+            val process = ProcessBuilder(listOf("git") + args.toList())
+                .directory(checkoutDir)
+                .redirectErrorStream(true)
+                .start()
+            val output = process.inputStream.bufferedReader().use { it.readText() }.trim()
+            return process.waitFor() to output
+        }
+
+        val branch = mergeBranch
+        if (branch.isNullOrEmpty()) {
+            throw GradleException(
+                "verifyMergeable: pass the branch to merge, " +
+                    "e.g. -PmergeBranch=feature-agenthq-ux13-agent-to-agent"
+            )
+        }
+
+        val (tipExit, tipSha) = git("rev-parse", "--verify", "--quiet", "$mvpRef^{commit}")
+        if (tipExit != 0) {
+            throw GradleException("verifyMergeable: tip ref '$mvpRef' does not exist in this repository.")
+        }
+        val (branchExit, branchSha) = git("rev-parse", "--verify", "--quiet", "$branch^{commit}")
+        if (branchExit != 0) {
+            throw GradleException("verifyMergeable: branch '$branch' does not exist in this repository.")
+        }
+
+        when (git("merge-base", "--is-ancestor", mvpRef, branch).first) {
+            0 -> println(
+                "verifyMergeable: OK. '$branch' ($branchSha) contains the current $mvpRef tip $tipSha."
+            )
+            1 -> throw GradleException(
+                "STALE BRANCH: '$branch' ($branchSha) does NOT contain the current $mvpRef tip $tipSha. " +
+                    "Rebase '$branch' onto $mvpRef, re-gate, then merge — merging now would trust a " +
+                    "GREEN measured on a tree without $mvpRef."
+            )
+            else -> throw GradleException("verifyMergeable: git merge-base failed for '$branch'.")
+        }
+    }
+}
+
+// Every compile path goes through the preflight, so a wrong base fails before any Kotlin is compiled.
+tasks.matching { it.name == "compileKotlin" || it.name == "compileTestKotlin" }.configureEach {
+    dependsOn("verifyBase")
+}
+
+// ---- SOAK-1: forward the `-Dagenthq.soak.*` knobs from the Gradle daemon into the test JVM ----
+//
+// The Gradle daemon's `-D` flags set the daemon's own JVM properties, not the test JVM's: the test
+// worker is a separate process and only sees what we forward here. Without this forwarding, the
+// SOAK-1 knobs in `SoakRunArchive.forCurrentRun()` and `CliAgentsLiveSoakTest.Companion.REPEAT`
+// silently keep their defaults and a CLI run like
+//   .\gradlew.bat :superiorSoftLibrary:agentHq:test -Dagenthq.soak.repeat=5
+// reports "5 iterations" only inside the daemon's logs, not in the test.
+//
+// Forwarding order: a `-D` (JVM system property on the daemon) wins over the same name in
+// `gradle.properties`, so a one-off run on the command line overrides any repo-wide default.
+val soakKnobs = listOf(
+    "agenthq.soak.pairs",
+    "agenthq.soak.run",
+    "agenthq.soak.repeat",
+    "agenthq.soak.archive",
+    "agenthq.soak.results",
+)
+// ContractFrameDocTest reads CONTRACT.md at run time, which Gradle cannot see as a test input. Declared
+// here so a doc-only change (say, a removed frame row) re-runs the test instead of being served
+// FROM-CACHE as the previous green result.
+tasks.register("cleanTestTmp") {
+    group = "build"
+    doLast { agentHqTestTmp(project).deleteRecursively() }
+}
+tasks.named("clean") { dependsOn("cleanTestTmp") }
+
+tasks.withType<Test>().configureEach {
+    inputs.file("CONTRACT.md")
+    // BUG-PERM-4: ToolApprovalMatrixTest loads the shipped sample descriptors, so editing one must re-run the tests.
+    inputs.dir("docs/harnesses")
+    // MAIL-FOOTER-1: AgentQuickRefCommandsTest parses every command in the quick reference; a doc edit must re-run it.
+    inputs.file("docs/AGENT-QUICKREF.md")
+    // U1: a daemon a test builds with the default limit meters must never read real credentials or call a provider.
+    environment("AGENTHQ_LIMITS_LIVE", "false")
+    // BUILD-VB-1: VerifyBaseTaskTest applies this exact script plugin to a throwaway TestKit build.
+    val verifyBaseScript = file("preflight/verify-base.gradle.kts")
+    inputs.file(verifyBaseScript)
+    systemProperty("agenthq.verifyBase.script", verifyBaseScript.absolutePath)
+    // A test JVM never sees the machine's real state dir (~/.agenthq): `agenthq remote on` there (network.properties,
+    // remote.token) would otherwise leak remote=true and a stored token into every fixture daemon and CLI.
+    val isolatedState = layout.buildDirectory.dir("test-state-dir").get().asFile
+    systemProperty("AGENTHQ_STATE_DIR", isolatedState.absolutePath)
+    // Test temp files (createTempFile SQLite DBs, zstd-jni's extracted libzstd-jni-*.dll) land in one per-project
+    // folder, not loose in the real TEMP where they piled up ~1 GB/day; wiped per run and by `cleanTestTmp`.
+    // It must stay OUTSIDE the repo: inside, git discovers the enclosing checkout for "not a repo" fixtures.
+    val testTmp = agentHqTestTmp(project)
+    jvmArgs("-Djava.io.tmpdir=${testTmp.absolutePath}")
+    doFirst {
+        isolatedState.deleteRecursively(); isolatedState.mkdirs()
+        testTmp.deleteRecursively(); testTmp.mkdirs()
+    }
+}
+
+tasks.withType<Test>().configureEach {
+    soakKnobs.forEach { knob ->
+        val fromCmd = System.getProperty(knob)?.takeUnless { it.isBlank() }
+        val fromGradleProps = providers.gradleProperty(knob).orNull?.takeUnless { it.isBlank() }
+        val value = fromCmd ?: fromGradleProps
+        if (value != null) systemProperty(knob, value)
+    }
+}
+
+// PERF-1: `./gradlew :superiorSoftLibrary:agentHq:perfProfile` -- the profile lives in agentHqUi (it needs the UI's
+// classpath and the window's Controller), so this is an alias. See agentHqUi/build.gradle.kts `perfProfile`.
+tasks.register("perfProfile") {
+    group = "verification"
+    description = "PERF-1: alias of :superiorSoftLibrary:agentHqUi:perfProfile (daemon + UI memory/CPU/startup profile)."
+    dependsOn(":superiorSoftLibrary:agentHqUi:perfProfile")
+}

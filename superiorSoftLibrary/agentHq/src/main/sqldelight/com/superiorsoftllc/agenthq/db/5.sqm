@@ -1,0 +1,30 @@
+-- Phase 9, story 9.2 -- migration v5 -> v6: tickets and ticket_links (the backlog).
+--
+-- Must match tickets.sq column for column (SchemaMigrationTest compares the schemas).
+--
+-- NEXT MIGRATION: 6.sqm (v6 -> v7), which makes Schema.version 7.
+
+CREATE TABLE tickets (
+    id TEXT NOT NULL PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    ticket_type TEXT,
+    status TEXT NOT NULL,
+    position INTEGER NOT NULL CHECK (position >= 0),
+    wont_fix INTEGER NOT NULL DEFAULT 0 CHECK (wont_fix IN (0, 1)),
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX index_tickets_on_status ON tickets(status, position);
+
+CREATE TABLE ticket_links (
+    ticket_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    related_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    type TEXT NOT NULL CHECK (type IN ('blocked_by', 'child_of', 'relates_to', 'duplicates')),
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (ticket_id, related_id, type),
+    CHECK (ticket_id <> related_id)
+);
+
+CREATE INDEX index_ticket_links_on_related_id ON ticket_links(related_id);

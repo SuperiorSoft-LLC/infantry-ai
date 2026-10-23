@@ -1,0 +1,294 @@
+package com.superiorsoftllc.agenthq.stats
+
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.longOrNull
+import java.io.File
+import java.sql.DriverManager
+import java.time.Instant
+import java.util.Properties
+import java.util.concurrent.ConcurrentHashMap
+
+/**
+ * STATS-1 (contract 1.92.0): builds [SessionStats] for one session from its harness's OWN local record.
+ *
+ * - `claude`:   `<home>/.claude/projects/<any>/<providerSessionId>.jsonl`
+ * - `pi`:       `<home>/.pi/agent/sessions/<any>/<timestamp>_<providerSessionId>.jsonl`
+ * - `omp`:      Oh My Pi, a Pi fork: the same layout and line shape under `<home>/.omp/agent/` (BUG-STATS-1)
+ * - `opencode`: `<home>/.local/share/opencode/opencode.db` (sqlite, opened READ-ONLY with a busy timeout)
+ *
+ * Read only: no harness file is ever written, no credential file is ever opened, nothing goes on the network.
+ * Files are streamed line by line (real Claude sessions run to tens of MB). The resolved path is cached per
+ * session, so a harness's session directories are scanned once, not on every request. Any failure (missing file,
+ * locked db, unexpected shape) yields the identity-only stats with every harness field null; it never throws.
+ *
+ * Context window: only from a LOCAL catalog that states it (Pi's `models-store.json`, OpenCode's cached
+ * `models.json`). Claude Code's record states none, so its limit is always null: never guessed from a model name.
+ */
+class SessionStatsService(private val home: File = File(System.getProperty("user.home") ?: ".")) {
+
+    /** How many times a session directory was scanned to resolve a path. Exposed for the cache test. */
+    @Volatile internal var resolveScans: Int = 0
+        private set
+
+    private val paths = ConcurrentHashMap<String, File>()
+    private val limitCache = ConcurrentHashMap<String, Pair<Long, Long?>>()
+
+    fun read(sessionId: String, harness: String, providerSessionId: String?, status: String?): SessionStats {
+        val base = SessionStats(sessionId = sessionId, harness = harness, providerSessionId = providerSessionId, status = status)
+        val psid = providerSessionId?.takeIf { SAFE_ID.matches(it) && ".." !in it } ?: return base
+        return try {
+            when (harness) {
+                CLAUDE -> resolve(harness, psid) { claudeFile(psid) }?.let { readClaude(it, base) }
+                PI -> resolve(harness, psid) { piFile(PI_ROOT, psid) }?.let { readPi(PI_ROOT, it, base) }
+                OMP -> resolve(harness, psid) { piFile(OMP_ROOT, psid) }?.let { readPi(OMP_ROOT, it, base) }
+                OPENCODE -> readOpenCode(psid, base)
+                else -> null
+            } ?: base
+        } catch (e: Exception) {
+            base
+        }
+    }
+
+    private fun resolve(harness: String, psid: String, scan: () -> File?): File? {
+        val key = "$harness:$psid"
+        paths[key]?.let { if (it.isFile) return it else paths.remove(key) }
+        resolveScans++
+        return scan()?.also { paths[key] = it }
+    }
+
+    // ------------------------------------------------------------------ Claude Code
+
+    private fun claudeFile(psid: String): File? =
+        File(home, ".claude/projects").listFiles { f -> f.isDirectory }
+            ?.map { File(it, "$psid.jsonl") }
+            ?.firstOrNull { it.isFile }
+
+    private fun readClaude(file: File, base: SessionStats): SessionStats {
+        val acc = StatsAccumulator()
+        val seenMessages = HashSet<String>()
+        val seenTools = HashSet<String>()
+        file.bufferedReader().useLines { lines ->
+            for (line in lines) {
+                if (line.isBlank()) continue
+                // Only user/assistant lines are parsed; the rest (attachments, snapshots) only lend a timestamp.
+                if ("\"user\"" !in line && "\"assistant\"" !in line) {
+                    TIMESTAMP.find(line)?.let { acc.seen(isoMillis(it.groupValues[1])) }
+                    continue
+                }
+                val o = parse(line) ?: continue
+                val at = isoMillis(o.str("timestamp"))
+                acc.seen(at)
+                val message = o["message"] as? JsonObject ?: continue
+                when (o.str("type")) {
+                    "user" -> if (o.bool("isMeta") != true && o.bool("isCompactSummary") != true && o.bool("isSidechain") != true &&
+                        isClaudePrompt(message["content"])
+                    ) acc.prompt()
+                    "assistant" -> {
+                        val id = message.str("id")
+                        if (id != null && seenMessages.add(id)) {
+                            acc.turn(message.str("model"))
+                            val u = message["usage"] as? JsonObject
+                            if (u != null) {
+                                val input = u.long("input_tokens"); val read = u.long("cache_read_input_tokens")
+                                val write = u.long("cache_creation_input_tokens"); val out = u.long("output_tokens")
+                                acc.request(at, input + read + write, input + read + write + out)
+                            }
+                        }
+                        (message["content"] as? JsonArray)?.forEach { block ->
+                            val b = block as? JsonObject ?: return@forEach
+                            if (b.str("type") == "tool_use") {
+                                val toolId = b.str("id")
+                                if (toolId == null || seenTools.add(toolId)) acc.tool(b.str("name") ?: "unknown")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return acc.build(base, null)
+    }
+
+    /** A real prompt: plain string content, or text blocks with no tool_result (that is a tool's answer). */
+    private fun isClaudePrompt(content: JsonElement?): Boolean = when (content) {
+        is JsonPrimitive -> content.isString
+        is JsonArray -> content.none { (it as? JsonObject)?.str("type") == "tool_result" } &&
+            content.any { (it as? JsonObject)?.str("type") == "text" }
+        else -> false
+    }
+
+    // ------------------------------------------------------------------ Pi
+
+    /** [root] is the harness's home dir: `.pi` for Pi, `.omp` for Oh My Pi (same layout and line shape). */
+    private fun piFile(root: String, psid: String): File? =
+        File(home, "$root/agent/sessions").listFiles { f -> f.isDirectory }
+            ?.asSequence()
+            ?.flatMap { dir -> dir.listFiles { f -> f.isFile && f.name.endsWith("_$psid.jsonl") }.orEmpty().asSequence() }
+            ?.firstOrNull()
+
+    private fun readPi(root: String, file: File, base: SessionStats): SessionStats {
+        val acc = StatsAccumulator()
+        var provider: String? = null
+        var model: String? = null
+        file.bufferedReader().useLines { lines ->
+            for (line in lines) {
+                if (line.isBlank()) continue
+                val o = parse(line) ?: continue
+                val lineAt = isoMillis(o.str("timestamp"))
+                acc.seen(lineAt)
+                when (o.str("type")) {
+                    "model_change" -> { provider = o.str("provider") ?: provider; model = o.str("modelId") ?: model }
+                    "message" -> {
+                        val m = o["message"] as? JsonObject ?: continue
+                        when (m.str("role")) {
+                            "user" -> acc.prompt()
+                            "assistant" -> {
+                                provider = m.str("provider") ?: provider
+                                model = m.str("model") ?: model
+                                acc.turn(m.str("model"))
+                                val u = m["usage"] as? JsonObject
+                                if (u != null) {
+                                    val input = u.long("input"); val read = u.long("cacheRead")
+                                    val write = u.long("cacheWrite"); val out = u.long("output")
+                                    acc.request(m.longOrNull("timestamp") ?: lineAt, input + read + write, input + read + write + out)
+                                }
+                                (m["content"] as? JsonArray)?.forEach { block ->
+                                    val b = block as? JsonObject ?: return@forEach
+                                    if (b.str("type") == "toolCall") acc.tool(b.str("name") ?: "unknown")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        val limit = catalogLimit(File(home, "$root/agent/models-store.json"), provider, model) { root, p, id ->
+            ((root[p] as? JsonObject)?.get("models") as? JsonArray)
+                ?.firstOrNull { (it as? JsonObject)?.str("id") == id }
+                ?.let { (it as JsonObject).longOrNull("contextWindow") }
+        }
+        return acc.build(base, limit)
+    }
+
+    // ------------------------------------------------------------------ OpenCode
+
+    private fun readOpenCode(psid: String, base: SessionStats): SessionStats? {
+        val db = File(home, ".local/share/opencode/opencode.db")
+        if (!db.isFile) return null
+        val props = Properties().apply {
+            setProperty("open_mode", SQLITE_OPEN_READONLY.toString())
+            setProperty("busy_timeout", BUSY_TIMEOUT_MS.toString())
+        }
+        val acc = StatsAccumulator()
+        var provider: String? = null
+        var model: String? = null
+        DriverManager.getConnection("jdbc:sqlite:${db.absolutePath}", props).use { c ->
+            c.prepareStatement("SELECT time_created, time_updated FROM session WHERE id = ?").use { st ->
+                st.setString(1, psid)
+                st.executeQuery().use { rs ->
+                    if (!rs.next()) return null
+                    acc.seen(rs.getLong(1)); acc.seen(rs.getLong(2))
+                }
+            }
+            c.prepareStatement("SELECT data FROM message WHERE session_id = ? ORDER BY time_created, id").use { st ->
+                st.setString(1, psid)
+                st.executeQuery().use { rs ->
+                    while (rs.next()) {
+                        val m = parse(rs.getString(1)) ?: continue
+                        when (m.str("role")) {
+                            "user" -> acc.prompt()
+                            "assistant" -> {
+                                acc.turn(m.str("modelID"))
+                                provider = m.str("providerID") ?: provider
+                                model = m.str("modelID") ?: model
+                            }
+                        }
+                    }
+                }
+            }
+            // A tool part belongs to the step whose step-finish follows it: buffer, then credit after that request.
+            val stepTools = ArrayList<String>()
+            c.prepareStatement("SELECT time_created, data FROM part WHERE session_id = ? ORDER BY time_created, id").use { st ->
+                st.setString(1, psid)
+                st.executeQuery().use { rs ->
+                    while (rs.next()) {
+                        val at = rs.getLong(1)
+                        val p = parse(rs.getString(2)) ?: continue
+                        when (p.str("type")) {
+                            "tool" -> stepTools += p.str("tool") ?: "unknown"
+                            "step-finish" -> {
+                                val t = p["tokens"] as? JsonObject ?: continue
+                                val cache = t["cache"] as? JsonObject
+                                val input = t.long("input"); val out = t.long("output")
+                                val read = cache?.long("read") ?: 0L; val write = cache?.long("write") ?: 0L
+                                acc.request(at, input + read + write, input + read + write + out)
+                                stepTools.forEach(acc::tool)
+                                stepTools.clear()
+                            }
+                        }
+                    }
+                }
+            }
+            stepTools.forEach(acc::tool)
+        }
+        val limit = catalogLimit(File(home, ".cache/opencode/models.json"), provider, model) { root, p, id ->
+            (((root[p] as? JsonObject)?.get("models") as? JsonObject)?.get(id) as? JsonObject)
+                ?.let { (it["limit"] as? JsonObject)?.longOrNull("context") }
+        }
+        return acc.build(base, limit)
+    }
+
+    // ------------------------------------------------------------------ helpers
+
+    /** A context window from a local catalog file, cached per (file, provider, model) until the file changes. */
+    private fun catalogLimit(file: File, provider: String?, model: String?, lookup: (JsonObject, String, String) -> Long?): Long? {
+        if (provider == null || model == null || !file.isFile) return null
+        val key = "${file.path}|$provider|$model"
+        val stamp = file.lastModified()
+        limitCache[key]?.let { (cachedStamp, value) -> if (cachedStamp == stamp) return value }
+        val value = try {
+            (file.bufferedReader().use { JSON.parseToJsonElement(it.readText()) } as? JsonObject)?.let { lookup(it, provider, model) }
+        } catch (e: Exception) {
+            null
+        }
+        limitCache[key] = stamp to value
+        return value
+    }
+
+    private fun parse(text: String?): JsonObject? = try {
+        text?.let { JSON.parseToJsonElement(it) as? JsonObject }
+    } catch (e: Exception) {
+        null
+    }
+
+    private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
+    private fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.booleanOrNull
+    private fun JsonObject.longOrNull(key: String): Long? = (this[key] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull
+    private fun JsonObject.long(key: String): Long = longOrNull(key) ?: 0L
+
+    private fun isoMillis(text: String?): Long? = try {
+        text?.let { Instant.parse(it).toEpochMilli() }
+    } catch (e: Exception) {
+        null
+    }
+
+    companion object {
+        const val CLAUDE = "claude"
+        const val PI = "pi"
+        const val OPENCODE = "opencode"
+        const val OMP = "omp"
+
+        private const val PI_ROOT = ".pi"
+        private const val OMP_ROOT = ".omp"
+
+        private const val SQLITE_OPEN_READONLY = 0x00000001
+        private const val BUSY_TIMEOUT_MS = 2_000
+        private val SAFE_ID = Regex("^[A-Za-z0-9._-]{1,200}$")
+        private val TIMESTAMP = Regex("\"timestamp\":\"([^\"]+)\"")
+        private val JSON = Json { ignoreUnknownKeys = true }
+    }
+}

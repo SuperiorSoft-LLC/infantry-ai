@@ -1,0 +1,20 @@
+-- TRAITS-T2 -- the `role_traits` table: the ordered trait ids a ROLE binds. See 27.sqm.
+-- A set overwrites the row in place; updated_at moves on every set.
+
+CREATE TABLE IF NOT EXISTS role_traits (
+    role_id TEXT NOT NULL PRIMARY KEY,
+    trait_ids TEXT NOT NULL DEFAULT '[]',
+    updated_at INTEGER NOT NULL
+);
+
+-- Creates the role's row, or overwrites it in place.
+setRoleTraits {
+    INSERT OR IGNORE INTO role_traits(role_id, trait_ids, updated_at) VALUES (:roleId, :traitIds, :at);
+    UPDATE role_traits SET trait_ids = :traitIds, updated_at = :at WHERE role_id = :roleId;
+}
+
+getRoleTraits:
+SELECT * FROM role_traits WHERE role_id = ?;
+
+getAllRoleTraits:
+SELECT * FROM role_traits ORDER BY role_id ASC;

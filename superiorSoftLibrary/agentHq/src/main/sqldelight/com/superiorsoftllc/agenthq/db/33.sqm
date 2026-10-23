@@ -1,0 +1,11 @@
+-- P10-K11 -- migration v33 -> v34: skill attachment on a ticket (docs/AGENTHQ-PHASE10-KNOWLEDGE.md K-D9).
+-- `skill_ids` is a JSON array of skill ids in attach order (`[]` = none), `skills_mode` says whether the ticket's ids
+-- MERGE with the agent's and the project's or REPLACE them, and `include_skills_context` is the ticket's switch for the
+-- skills section (NULL inherits the project setting, exactly like `include_linked_tasks_context`). Existing tickets get
+-- no skills, `merge` and NULL, so nothing they render changes. The columns are exactly tickets.sq's.
+--
+-- NEXT MIGRATION: 34.sqm (taken by P10-K12: agent skill attachment + skills.attached_only)
+
+ALTER TABLE tickets ADD COLUMN skill_ids TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE tickets ADD COLUMN skills_mode TEXT NOT NULL DEFAULT 'merge' CHECK (skills_mode IN ('merge', 'replace'));
+ALTER TABLE tickets ADD COLUMN include_skills_context INTEGER CHECK (include_skills_context IS NULL OR include_skills_context IN (0, 1));

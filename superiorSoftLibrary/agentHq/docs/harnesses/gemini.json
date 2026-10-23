@@ -1,0 +1,12 @@
+{
+  "id": "gemini",
+  "name": "Gemini CLI",
+  "command": "gemini",
+  "args": [["--model", "{model}"], ["-p", "{prompt}"]],
+  "capabilities": ["MODEL_SELECTION"],
+  "output": {"format": "text"},
+  "toolApproval": {
+    "allowEdits": ["--approval-mode", "auto_edit"],
+    "allowAll": ["--approval-mode", "yolo"]
+  }
+}
