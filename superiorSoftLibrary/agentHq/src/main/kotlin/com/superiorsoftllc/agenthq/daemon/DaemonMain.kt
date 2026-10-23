@@ -746,6 +746,7 @@ class AgentHqDaemon(
                 onConfigChanged = { project ->
                     val frame = Envelope(Envelope.PROJECT, json.encodeToString(com.superiorsoftllc.agenthq.protocol.Project.serializer(), project))
                     for (client in clients) client.trySend(frame)
+                    boardRef?.laneCapsChanged(project.id)
                 },
             )
             // INSTALL-CWD-1: the installed app runs each project's work in that project's own directory.
