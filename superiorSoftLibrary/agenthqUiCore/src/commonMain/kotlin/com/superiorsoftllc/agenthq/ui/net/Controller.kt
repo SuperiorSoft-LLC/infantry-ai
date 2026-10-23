@@ -900,6 +900,15 @@ class Controller(
         return report(send(Envelope(Envelope.TICKET_MOVE, body.toString())))
     }
 
+    /** Reorder inside the ticket's own column (no status): [position] 0 is the top. Ticket order is priority. */
+    suspend fun reorderTicket(id: String, position: Int): CommandResult {
+        val body = buildJsonObject {
+            put("id", id)
+            put("position", position)
+        }
+        return report(send(Envelope(Envelope.TICKET_MOVE, body.toString())))
+    }
+
     suspend fun deleteTicket(id: String): CommandResult = report(send(Envelope(Envelope.TICKET_DELETE, id)))
 
     /** Start the top startable todo ticket; the daemon answers `error` when nothing can start. */
