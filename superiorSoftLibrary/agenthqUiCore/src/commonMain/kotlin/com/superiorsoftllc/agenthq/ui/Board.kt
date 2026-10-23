@@ -23,13 +23,35 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.unit.round
+import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.zIndex
-import com.superiorsoftllc.agenthq.ui.model.TicketReorder
+import com.superiorsoftllc.agenthq.ui.model.BoardDrop
+import com.superiorsoftllc.agenthq.ui.model.DropPlan
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -90,6 +112,10 @@ const val TICKET_EPIC_PICKER_TAG = "ticket-epic-picker"
 const val TICKET_EPIC_OPTION_TAG_PREFIX = "ticket-epic-option-"
 /** M2-17: a card's clickable summary (+ ticket id), and its edit form's fields, Epic picker, Save and refusal line. */
 const val TICKET_CARD_TAG_PREFIX = "ticket-card-"
+/** A card's six-dot drag handle, the line a card that snapped back shows, and a board column (by status). */
+const val TICKET_HANDLE_TAG_PREFIX = "ticket-handle-"
+const val TICKET_DROP_NOTE_TAG_PREFIX = "ticket-drop-note-"
+const val BOARD_COLUMN_TAG_PREFIX = "board-column-"
 
 /**
  * MOBILE-LAYOUT-2: a column's width in a compact (below 600dp) window, where the columns scroll sideways instead of
@@ -182,8 +208,23 @@ fun BoardPane(state: AppState, controller: Controller, onOpenAgent: (String) -> 
     // An epic no longer listed falls back to every ticket rather than an empty board.
     val active: EpicFilter = (filter as? EpicFilter.Only)?.takeIf { f -> epics.none { it.id == f.epicId } }?.let { EpicFilter.All } ?: filter
     val shown = state.visibleTickets.count { active.matches(it) }
+    // The board's view of one column, top first: what a drop's slot is counted in.
+    val columnOf: (String) -> List<Ticket> = { status -> state.column(status).filter { active.matches(it) } }
+    val drag = remember { BoardDrag() }
+    val session = remember(controller) { BoardDropSession(controller.ticketMoves()) }
+    val currentColumnOf by rememberUpdatedState(columnOf)
+    // Every board change is read for a start's answer, in order, so a follow-up placement is never cancelled midway.
+    LaunchedEffect(session) { controller.state.collect { s -> session.observe(s.visibleTickets, currentColumnOf) } }
+    val hover by remember(state, active) { derivedStateOf { drag.hover(columnOf) } }
+    fun drop(t: Ticket, plan: DropPlan) { actionScope.launch { session.drop(plan, state.ticket(t.id) ?: t) } }
+    var origin by remember { mutableStateOf(Offset.Zero) }
     // IMG-4: a ticket's thumbnail opens full size over the whole board.
     ImageViewerHost {
+    Box(
+        Modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }
+            // The grabbing cursor follows the pointer off the handle for as long as the drag is held.
+            .then(if (drag.ticket != null) Modifier.dragHandleCursor(dragging = true) else Modifier),
+    ) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             LabelledDropdown(
@@ -224,20 +265,172 @@ fun BoardPane(state: AppState, controller: Controller, onOpenAgent: (String) -> 
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             TicketColumns.ALL.forEach { status ->
-                val tickets = state.column(status).filter { active.matches(it) }
+                val tickets = columnOf(status)
                 val (title, color) = columnTitle(status)
-                Column((if (compact) Modifier.width(BoardCompactColumnWidth) else Modifier.weight(1f)).fillMaxHeight().clip(RoundedCornerShape(6.dp)).background(Palette.Panel)) {
+                val target = hover?.takeIf { it.column == status }
+                val refused = target?.plan is DropPlan.NotAllowed
+                val shape = RoundedCornerShape(6.dp)
+                Column(
+                    (if (compact) Modifier.width(BoardCompactColumnWidth) else Modifier.weight(1f)).fillMaxHeight()
+                        .onGloballyPositioned { drag.columns[status] = it.boundsInRoot() }
+                        .clip(shape).background(Palette.Panel)
+                        // The column the pointer is over: the accent when it takes the card, the danger colour when not.
+                        .then(if (target != null) Modifier.border(2.dp, if (refused) Palette.Danger else Palette.Accent, shape) else Modifier)
+                        .testTag(BOARD_COLUMN_TAG_PREFIX + status),
+                ) {
                     Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(title.uppercase(), color = color, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        if (refused) Text("can't drop here", color = Palette.Danger, fontSize = 10.sp, modifier = Modifier.padding(end = 6.dp))
                         Chip("${tickets.size}", color)
                     }
-                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        ReorderableCards(tickets, live, controller) { t, handle -> TicketCard(t, state, controller, onOpenAgent, handle) }
+                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        // The drop indicator: a line in the gap at the slot the card would land in.
+                        val slot = target?.slot?.takeIf { target.plan !is DropPlan.NotAllowed && target.plan !is DropPlan.Stay }
+                        val others = tickets.filter { it.id != drag.ticket?.id }
+                        val lineAbove = slot?.let { others.getOrNull(it)?.id }
+                        val lineBelow = slot?.takeIf { it >= others.size }?.let { tickets.lastOrNull()?.id }
+                        if (slot != null && tickets.isEmpty()) DropLine(Modifier)
+                        tickets.forEachIndexed { index, t ->
+                            val handle = @Composable {
+                                DragHandle(t, live, drag, cardMoves(t, index, columnOf, ::drop)) {
+                                    val plan = drag.hover(columnOf)?.plan ?: DropPlan.Stay(t.id)
+                                    drag.end()
+                                    drop(t, plan)
+                                }
+                            }
+                            val look = Modifier
+                                // Unclipped: a card half scrolled out of its column still has its true centre.
+                                .onGloballyPositioned { drag.cards[t.id] = Rect(it.positionInRoot(), it.size.toSize()) }
+                                .dropLine(above = lineAbove == t.id, below = lineBelow == t.id)
+                                .then(if (drag.ticket?.id == t.id) Modifier.graphicsLayer { alpha = 0.4f } else Modifier)
+                            TicketCard(t, state, controller, onOpenAgent, look, handle, session.notes[t.id]) { session.dismiss(t.id) }
+                        }
                     }
                 }
             }
         }
     }
+    drag.ticket?.let { DragGhost(it, drag, origin) }
+    }
+    }
+}
+
+/**
+ * The one drag in flight on the board: the card, where the pointer is and what each column and card covers (all in
+ * root coordinates). It only follows the pointer; a drop's meaning is [BoardDrop.plan].
+ */
+private class BoardDrag {
+    var ticket by mutableStateOf<Ticket?>(null)
+        private set
+    var pointer by mutableStateOf(Offset.Zero)
+    /** The pointer's offset from the card's top-left when the drag began, so the ghost keeps the grab point. */
+    var grab = Offset.Zero
+        private set
+    val columns = mutableStateMapOf<String, Rect>()
+    val cards = mutableStateMapOf<String, Rect>()
+
+    fun begin(t: Ticket, at: Offset) {
+        grab = at - (cards[t.id]?.topLeft ?: at)
+        pointer = at
+        ticket = t
+    }
+
+    fun end() { ticket = null }
+
+    /** The column under the pointer, the slot in it and what a drop there means; null = not over a column. */
+    fun hover(columnOf: (String) -> List<Ticket>): DragHover? {
+        val t = ticket ?: return null
+        val column = columns.entries.firstOrNull { it.value.contains(pointer) }?.key ?: return null
+        val centers = columnOf(column).filter { it.id != t.id }.map { cards[it.id]?.center?.y ?: 0f }
+        val slot = BoardDrop.slotAt(centers, pointer.y)
+        return DragHover(column, slot, BoardDrop.plan(columnOf, t, column, slot))
+    }
+}
+
+private data class DragHover(val column: String, val slot: Int, val plan: DropPlan)
+
+/**
+ * The keyboard / screen-reader route to what a drag does, as the handle's custom actions: up, down, and to the end of
+ * each other column the card may go to (In Progress is a start).
+ */
+private fun cardMoves(t: Ticket, index: Int, columnOf: (String) -> List<Ticket>, drop: (Ticket, DropPlan) -> Unit): List<Pair<String, () -> Unit>> {
+    val size = columnOf(t.status).size
+    val moves = mutableListOf<Pair<String, () -> Unit>>()
+    if (index > 0) moves += "Move up" to { drop(t, BoardDrop.plan(columnOf, t, t.status, index - 1)) }
+    if (index < size - 1) moves += "Move down" to { drop(t, BoardDrop.plan(columnOf, t, t.status, index + 1)) }
+    TicketColumns.ALL.filter { it != t.status && BoardDrop.refusal(t.status, it) == null }.forEach { to ->
+        val label = if (to == TicketColumns.IN_PROGRESS) "Start (move to In progress)" else "Move to ${columnTitle(to).first}"
+        moves += label to { drop(t, BoardDrop.plan(columnOf, t, to, columnOf(to).size)) }
+    }
+    return moves
+}
+
+/** The drop indicator drawn in the gap above and/or below a card, outside its bounds so nothing reflows. */
+private fun Modifier.dropLine(above: Boolean, below: Boolean): Modifier = if (!above && !below) this else drawWithContent {
+    drawContent()
+    val thick = 3.dp.toPx()
+    val gap = 6.dp.toPx()
+    if (above) drawRect(Palette.Accent, Offset(0f, -(gap + thick) / 2), Size(size.width, thick))
+    if (below) drawRect(Palette.Accent, Offset(0f, size.height + (gap - thick) / 2), Size(size.width, thick))
+}
+
+/** The drop indicator alone, in a column with no card. */
+@Composable
+private fun DropLine(modifier: Modifier) {
+    Box(modifier.fillMaxWidth().height(3.dp).background(Palette.Accent))
+}
+
+/** The six-dot grip: the only place a card is picked up. Hover shows grab, a held drag grabbing. */
+@Composable
+private fun DragHandle(t: Ticket, enabled: Boolean, drag: BoardDrag, actions: List<Pair<String, () -> Unit>>, onDrop: () -> Unit) {
+    val current by rememberUpdatedState(t)
+    val dropped by rememberUpdatedState(onDrop)
+    val place = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    val dragging = drag.ticket?.id == t.id
+    Box(
+        Modifier.size(width = 16.dp, height = 22.dp)
+            .dragHandleCursor(enabled, dragging)
+            .semantics {
+                contentDescription = "Drag ${t.title}"
+                if (enabled) customActions = actions.map { (label, run) -> CustomAccessibilityAction(label) { run(); true } }
+            }
+            .testTag(TICKET_HANDLE_TAG_PREFIX + t.id)
+            .onGloballyPositioned { place[0] = it }
+            .pointerInput(t.id, enabled) {
+                if (!enabled) return@pointerInput
+                detectDragGestures(
+                    onDragStart = { at -> place[0]?.takeIf { it.isAttached }?.let { drag.begin(current, it.localToRoot(at)) } },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        place[0]?.takeIf { it.isAttached }?.let { drag.pointer = it.localToRoot(change.position) }
+                    },
+                    onDragEnd = { dropped() },
+                    onDragCancel = { drag.end() },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        val dot = if (enabled) Palette.Muted else Palette.Muted.copy(alpha = 0.4f)
+        Canvas(Modifier.size(width = 8.dp, height = 14.dp)) {
+            val r = 1.5.dp.toPx()
+            for (col in 0..1) for (row in 0..2) {
+                drawCircle(dot, r, Offset(r + col * (size.width - 2 * r), r + row * (size.height - 2 * r) / 2))
+            }
+        }
+    }
+}
+
+/** What follows the pointer while a card is dragged: the card's title at the card's width, where it was grabbed. */
+@Composable
+private fun DragGhost(t: Ticket, drag: BoardDrag, origin: Offset) {
+    val width = with(LocalDensity.current) { (drag.cards[t.id]?.width ?: 200f).toDp() }
+    val shape = RoundedCornerShape(6.dp)
+    Box(
+        Modifier.offset { (drag.pointer - drag.grab - origin).round() }
+            .zIndex(10f).width(width).graphicsLayer { alpha = 0.92f }
+            .clip(shape).background(Palette.Raised).border(1.dp, Palette.Accent, shape).padding(8.dp),
+    ) {
+        Text(t.title, color = Palette.Text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
     }
 }
 
@@ -258,17 +451,29 @@ internal fun ReportFlagChip(flag: ReportFlag?, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun TicketCard(t: Ticket, state: AppState, controller: Controller, onOpenAgent: (String) -> Unit, reorder: ReorderHandle) {
+private fun TicketCard(
+    t: Ticket,
+    state: AppState,
+    controller: Controller,
+    onOpenAgent: (String) -> Unit,
+    modifier: Modifier,
+    handle: @Composable () -> Unit,
+    dropNote: String?,
+    onDismissNote: () -> Unit,
+) {
     val actionScope = rememberCoroutineScope()
     var open by remember(t.id) { mutableStateOf(false) }
     val live = state.connection.isLive
     Column(
-        reorder.modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(8.dp),
+        modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+      Row(verticalAlignment = Alignment.Top) {
+      handle()
+      Spacer(Modifier.width(4.dp))
       // M2-17: the summary is what opens (and closes) the card's edit form; the form itself is not a click target.
       Column(
-        Modifier.fillMaxWidth()
+        Modifier.weight(1f)
             .clickable(role = Role.Button, onClickLabel = if (open) "Close the ticket" else "Edit the ticket") { open = !open }
             .testTag(TICKET_CARD_TAG_PREFIX + t.id),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -302,6 +507,15 @@ private fun TicketCard(t: Ticket, state: AppState, controller: Controller, onOpe
             Text("last run: ${outcome.lowercase().replace('_', ' ')}", color = if (run.outcome == null || run.outcome == "SUCCEEDED") Palette.Muted else Palette.Danger, fontSize = 10.sp)
         }
       }
+      }
+        // A drop that snapped back says why (a refused column, or the daemon's reason a start did not start).
+        dropNote?.let { note ->
+            LaunchedEffect(note) { delay(8_000); onDismissNote() }
+            Text(
+                note, color = Palette.Danger, fontSize = 10.sp, maxLines = 3,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag(TICKET_DROP_NOTE_TAG_PREFIX + t.id),
+            )
+        }
         if (open) {
             TicketEditForm(t, state, controller, onDone = { open = false })
             if (t.links.isNotEmpty()) Text(t.links.joinToString(", ") { "${it.type.replace('_', ' ')} ${it.ticketId.takeLast(8)}" }, color = Palette.Muted, fontSize = 10.sp)
@@ -319,9 +533,6 @@ private fun TicketCard(t: Ticket, state: AppState, controller: Controller, onOpe
                 TextButton(onClick = { onOpenAgent(sid) }) { Text("Agent", fontSize = 11.sp) }
             }
             Spacer(Modifier.weight(1f))
-            // Keyboard / screen-reader route to the same move the drag makes.
-            if (reorder.canMoveUp) CardButton("▲", live, "Move ${t.title} up") { reorder.move(-1) }
-            if (reorder.canMoveDown) CardButton("▼", live, "Move ${t.title} down") { reorder.move(1) }
             if (open) TextButton(onClick = { actionScope.launch { controller.deleteTicket(t.id) } }, enabled = live) { Text("Delete", color = Palette.Danger, fontSize = 11.sp) }
         }
     }
@@ -335,59 +546,6 @@ private fun CardButton(label: String, enabled: Boolean, description: String? = n
         enabled = enabled,
         modifier = if (description == null) Modifier else Modifier.semantics { contentDescription = description },
     ) { Text(label, fontSize = 11.sp) }
-}
-
-/** What one card needs to take part in its column's reordering. */
-internal class ReorderHandle(
-    val modifier: Modifier,
-    val canMoveUp: Boolean,
-    val canMoveDown: Boolean,
-    val move: suspend (Int) -> CommandResult,
-)
-
-/**
- * One board column's cards, top first, reorderable by long-press and drag (touch and mouse alike; a plain click still
- * opens the card). A drop sends one `ticket_move` position; the card snaps back until the daemon's answer reorders
- * the list, so the daemon stays the only owner of the order.
- */
-@Composable
-private fun ReorderableCards(tickets: List<Ticket>, live: Boolean, controller: Controller, card: @Composable (Ticket, ReorderHandle) -> Unit) {
-    val scope = rememberCoroutineScope()
-    var draggedId by remember { mutableStateOf<String?>(null) }
-    var offset by remember { mutableStateOf(0f) }
-    val tops = remember { mutableStateMapOf<String, Float>() }
-    val heights = remember { mutableStateMapOf<String, Float>() }
-    suspend fun send(id: String, slot: Int): CommandResult {
-        val position = TicketReorder.positionFor(tickets, id, slot) ?: return CommandResult.Sent
-        return controller.reorderTicket(id, position)
-    }
-    tickets.forEachIndexed { index, t ->
-        val dragging = draggedId == t.id
-        val handle = ReorderHandle(
-            modifier = Modifier
-                .onGloballyPositioned { tops[t.id] = it.positionInParent().y; heights[t.id] = it.size.height.toFloat() }
-                .then(if (dragging) Modifier.zIndex(1f).graphicsLayer { translationY = offset; alpha = 0.85f } else Modifier)
-                .pointerInput(t.id, live) {
-                    if (!live) return@pointerInput
-                    detectDragGesturesAfterLongPress(
-                        onDragStart = { draggedId = t.id; offset = 0f },
-                        onDrag = { change, amount -> change.consume(); offset += amount.y },
-                        onDragEnd = {
-                            val centers = tickets.map { (tops[it.id] ?: 0f) + (heights[it.id] ?: 0f) / 2 }
-                            val slot = TicketReorder.slotFor(centers, index, centers[index] + offset)
-                            draggedId = null
-                            offset = 0f
-                            scope.launch { send(t.id, slot) }
-                        },
-                        onDragCancel = { draggedId = null; offset = 0f },
-                    )
-                },
-            canMoveUp = index > 0,
-            canMoveDown = index < tickets.size - 1,
-            move = { delta -> send(t.id, index + delta) },
-        )
-        card(t, handle)
-    }
 }
 
 /** M2-17: what an edit sent, trimmed as the daemon stores it; it has landed once the ticket reads back the same. */

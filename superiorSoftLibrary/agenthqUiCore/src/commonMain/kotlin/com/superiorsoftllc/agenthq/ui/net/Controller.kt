@@ -915,13 +915,15 @@ class Controller(
 
     /**
      * Move a ticket to a column. Moving to `in_progress` hands it to its assigned agent: the daemon starts the
-     * session (or answers queued / held / refused, which the reducer turns into a notice).
+     * session (or answers queued / held / refused, which the reducer turns into a notice). [position] places it in
+     * the new column (0 = top); a hand-out to `in_progress` ignores it.
      */
-    suspend fun moveTicket(id: String, status: String, wontFix: Boolean? = null): CommandResult {
+    suspend fun moveTicket(id: String, status: String, wontFix: Boolean? = null, position: Int? = null): CommandResult {
         val body = buildJsonObject {
             put("id", id)
             put("status", status)
             if (wontFix != null) put("wontFix", wontFix)
+            if (position != null) put("position", position)
         }
         return report(send(Envelope(Envelope.TICKET_MOVE, body.toString())))
     }
