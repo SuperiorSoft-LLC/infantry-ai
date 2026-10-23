@@ -376,11 +376,20 @@ internal class McpWriteTools(
      * Contract 1.114.0: who may kill [session], or null when the caller may. No session id (the owner / CLI) or
      * `--allow-kill-any`: any session. A privileged role (pm): any session in its own project, whichever MCP process
      * spawned it. Every other role: the sessions it spawned, matched by the recorded spawner session id (so a spawn
-     * from before an app restart still counts) or by this server's own spawn list.
+     * from before an app restart still counts) or by this server's own spawn list. No session, privileged or not, may
+     * kill ITSELF: the pm's project scope covers its own session, but a self-kill ends the caller mid-turn. Its own
+     * spawns are checked before the pm's project rule, so a pm's helper with no project is still the pm's to kill.
      */
     internal fun killRefusal(session: SessionRecord, snapshot: List<SessionRecord>): String? {
         if (guardrails.allowKillAny) return null
         val callerId = getenv(AccessPolicy.SESSION_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        if (session.id == callerId) {
+            return "session ${session.id} is this session itself; an agent may not kill its own session. " +
+                "End your turn instead, or ask the owner to stop it."
+        }
+        // Its own spawns, whatever the role: a pm's no-ticket helper may carry no project, and the project rule must
+        // not take back what the spawn rule gives.
+        if (session.id in spawned || session.spawnerSessionId == callerId) return null
         val caller = ProjectScope.callerOf(snapshot, getenv)
         if (ProjectScope.isPrivileged(caller, true)) {
             // The project rule for kill is stricter than reading: even a pm reaches only its OWN project.
@@ -389,7 +398,6 @@ internal class McpWriteTools(
             return "session ${session.id} belongs to project '${session.projectId ?: "none"}', not this session's project '$own'; " +
                 "a pm may only kill sessions in its own project. Ask a pm of that project to do it."
         }
-        if (session.id in spawned || session.spawnerSessionId == callerId) return null
         return "session ${session.id} was not spawned by this session ($callerId); a ${caller?.role ?: "worker"} may only kill sessions it " +
             "spawned itself. Ask the pm to do it: agenthq send pm \"please remove session ${session.id}\""
     }
