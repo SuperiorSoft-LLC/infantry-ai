@@ -695,6 +695,23 @@ class CliAcceptanceTest {
         assertEquals(1, self.exit, "before itself is refused: ${self.out}")
         val two = cli(fixture.port, "ticket", "move", ids[0], "--top", "--bottom")
         assertEquals(2, two.exit, "two placements are a usage error: ${two.err}")
+
+        // BUG-REORDER (ticket-63df1aba): --after lands just below the target, --position at that index (0 = top).
+        assertEquals(0, cli(fixture.port, "ticket", "move", ids[2], "--after", ids[0]).exit)
+        assertEquals(listOf("Second", "First", "Third"), order(), "moving down lands just below the target")
+        assertEquals(0, cli(fixture.port, "ticket", "move", ids[0], "--after", ids[1]).exit)
+        assertEquals(listOf("Second", "First", "Third"), order(), "already just below it: nothing moves")
+        assertEquals(0, cli(fixture.port, "ticket", "move", ids[2], "--after", ids[1]).exit)
+        assertEquals(listOf("Second", "Third", "First"), order(), "moving up lands just below the target")
+        assertEquals(0, cli(fixture.port, "ticket", "move", ids[0], "--position", "0").exit)
+        assertEquals(listOf("First", "Second", "Third"), order())
+        assertEquals(0, cli(fixture.port, "ticket", "move", ids[0], "todo", "--position", "1").exit)
+        assertEquals(listOf("Second", "First", "Third"), order())
+        assertEquals(2, cli(fixture.port, "ticket", "move", ids[0], "--position", "-1").exit, "a negative position is a usage error")
+        assertEquals(2, cli(fixture.port, "ticket", "move", ids[0], "--position", "x").exit, "a non-number is a usage error")
+        assertEquals(2, cli(fixture.port, "ticket", "move", ids[0], "--after", ids[1], "--position", "0").exit)
+        assertEquals(1, cli(fixture.port, "ticket", "move", ids[0], "--after", ids[0]).exit, "after itself is refused")
+        assertEquals(listOf("Second", "First", "Third"), order(), "refusals move nothing")
     }
 
     /** CLI-T4: an unknown status is a usage error (exit 2), refused before the daemon is asked to move anything. */

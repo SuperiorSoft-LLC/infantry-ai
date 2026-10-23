@@ -215,7 +215,7 @@ fun main(args: Array<String>) {
  * agenthq ticket create --title "..." [--desc "..." | --desc-file <path> | --desc -] [--project <id>] [--role <id>] [--provider <id>] [--model <id>] [--image <file>]...   a new todo ticket; prints its id
  * agenthq ticket update <id> [--title ..] [--desc ..] [--role <id>] [--provider <id>] [--model <id>] [--image <file>]... [--remove-image <path>]...   edit one ticket
  * agenthq ticket move <id> <status>            move one ticket to a column (todo, in_progress, pending, done)
- * agenthq ticket move <id> --before <id>|--top|--bottom   reorder inside its column (order = priority)
+ * agenthq ticket move <id> --before <id>|--after <id>|--top|--bottom|--position <n>   reorder inside its column (order = priority)
  * agenthq ticket start <id>                    start ticket work (never with a spawn): its role/provider/model, its own branch
  * agenthq harnesses                            the harnesses (provider ids) a ticket can pin, and each one's models
  * agenthq harness-status [--check]            which harness CLIs (claude, opencode, pi) are installed / missing / outdated (--check asks npm for the latest)
@@ -1116,9 +1116,18 @@ internal object Cli {
                 is TicketStarter.Outcome.NotStarted -> reportNotStarted(outcome, out, err)
             }
         }
-        val position = if (parsed.before != null || parsed.top || parsed.bottom) {
-            val board = fetchBoard(stream, boardProjectOf(parsed, getenv), err) ?: return 1
-            placement(ticket, status, parsed, board, err) ?: return 1
+        val placement = parsed.placement()
+        val position = if (placement.named > 0) {
+            // --top/--bottom/--position need no board; --before/--after resolve their target on it.
+            val board = if (placement.before != null || placement.after != null) {
+                fetchBoard(stream, boardProjectOf(parsed, getenv), err) ?: return 1
+            } else {
+                emptyList()
+            }
+            placement.resolve(ticket, status, board).getOrElse {
+                err.appendLine("error: ${it.message}")
+                return 1
+            }
         } else {
             null
         }
@@ -1139,37 +1148,8 @@ internal object Cli {
         return 0
     }
 
-    /**
-     * The position `ticket move --top|--bottom|--before` asks for, or null after printing why it cannot be had.
-     * The daemon takes the index in the column AFTER the ticket is lifted out, so a ticket moving down inside its
-     * own column lands one place above the target's current index.
-     */
-    private fun placement(ticket: Ticket, status: String?, parsed: ParsedArgs, board: List<Ticket>, err: Appendable): Int? {
-        if (parsed.top) return 0
-        if (parsed.bottom) return Int.MAX_VALUE
-        val target = when (val match = matchTicketPrefix(parsed.before!!.trim(), board)) {
-            is TicketPrefixMatch.Unique -> match.ticket
-            TicketPrefixMatch.None -> {
-                err.appendLine("error: no ticket ${parsed.before}")
-                return null
-            }
-            is TicketPrefixMatch.Ambiguous -> {
-                err.appendLine("error: ticket id '${parsed.before}' is ambiguous; use a longer id or the full id")
-                return null
-            }
-        }
-        if (target.id == ticket.id) {
-            err.appendLine("error: a ticket cannot be moved before itself")
-            return null
-        }
-        val column = status?.lowercase() ?: ticket.status
-        if (target.status != column) {
-            err.appendLine("error: ${target.id} is in ${target.status}, not $column: name the column or pick a ticket in it")
-            return null
-        }
-        val lifted = if (ticket.status == column && ticket.position < target.position) 1 else 0
-        return target.position - lifted
-    }
+    /** `ticket move`'s placement flags, as the one [TicketPlacement] the MCP `agenthq_ticket_move` also uses. */
+    private fun ParsedArgs.placement() = TicketPlacement(top, bottom, before, after, position?.toIntOrNull())
 
     /**
      * BUG-ASSIGN-1: `ticket start <id|prefix>`: starts ONE ticket exactly as the board does when its card moves to In
@@ -4005,7 +3985,7 @@ internal object Cli {
                                   --desc is cut at its first line on Windows (the agenthq.cmd launcher drops the rest).
               ticket move <id|prefix> <status>   Move one ticket to a column (todo, in_progress, pending, done); a move to
                                   in_progress is a start (see ticket start): a refused or held one exits 1 with the reason
-              ticket move <id|prefix> [<status>] --before <id|prefix> | --top | --bottom   Reorder: ticket order is priority
+              ticket move <id|prefix> [<status>] --before <id|prefix> | --after <id|prefix> | --top | --bottom | --position <n>   Reorder: ticket order is priority
                                   (the board and `tickets` list a column in that order; new tickets go to the bottom)
               ticket start <id|prefix>       Start ticket work this way, never with a spawn: the worker runs the ticket's
                                   role, provider and model on its own ticket/<short-id>-<slug> branch; the ticket goes
@@ -4190,6 +4170,9 @@ internal object Cli {
         /** `ticket move --top` / `--bottom`: first or last place in its column. */
         val top: Boolean = false,
         val bottom: Boolean = false,
+        /** `ticket move --after <id|prefix>`: just below that one. `--position <n>`: index n of the column (0 = top). */
+        val after: String? = null,
+        val position: String? = null,
         // `mcp serve` guardrails (P11-B, docs/MCP.md).
         val mcpDepth: Int? = null,
         val maxDepth: Int? = null,
@@ -4303,6 +4286,8 @@ internal object Cli {
         var before: String? = null
         var top = false
         var bottom = false
+        var after: String? = null
+        var position: String? = null
         var mcpDepth: Int? = null
         var maxDepth: Int? = null
         var maxSpawns: Int? = null
@@ -4600,6 +4585,16 @@ internal object Cli {
                     top = true
                     i++
                 }
+                "--after" -> {
+                    after = flagValue(args, ++i)
+                        ?: return fail(err, "--after expects a ticket id or prefix (see: agenthq tickets)")
+                    i++
+                }
+                "--position" -> {
+                    position = flagValue(args, ++i)
+                        ?: return fail(err, "--position expects a whole number, 0 = the top of the column")
+                    i++
+                }
                 "--bottom" -> {
                     bottom = true
                     i++
@@ -4692,6 +4687,8 @@ internal object Cli {
             before = before,
             top = top,
             bottom = bottom,
+            after = after,
+            position = position,
             tokenFile = tokenFile,
             mcpDepth = mcpDepth,
             maxDepth = maxDepth,
@@ -4962,10 +4959,12 @@ internal object Cli {
             }
             "move" -> when {
                 blank(1) -> "ticket move requires a ticket id: agenthq ticket move <id|prefix> <status>"
-                listOf(parsed.before != null, parsed.top, parsed.bottom).count { it } > 1 ->
-                    "ticket move takes one of --before, --top, --bottom"
-                args.size == 2 && (parsed.before != null || parsed.top || parsed.bottom) -> null
-                blank(2) -> "ticket move requires a status: agenthq ticket move <id|prefix> <status|--before <id>|--top|--bottom>"
+                listOf(parsed.before != null, parsed.after != null, parsed.top, parsed.bottom, parsed.position != null).count { it } > 1 ->
+                    "ticket move takes one of --before, --after, --top, --bottom, --position"
+                parsed.position != null && (parsed.position.trim().toIntOrNull()?.takeIf { it >= 0 } == null) ->
+                    "--position expects a whole number, 0 = the top of the column; was '${parsed.position}'"
+                args.size == 2 && (parsed.before != null || parsed.after != null || parsed.top || parsed.bottom || parsed.position != null) -> null
+                blank(2) -> "ticket move requires a status: agenthq ticket move <id|prefix> <status|--before <id>|--after <id>|--top|--bottom|--position <n>>"
                 args[2].trim() !in TicketStatus.ALL ->
                     "unknown status '${args[2]}'; expected one of ${TicketStatus.ALL.joinToString(", ")}"
                 else -> null
