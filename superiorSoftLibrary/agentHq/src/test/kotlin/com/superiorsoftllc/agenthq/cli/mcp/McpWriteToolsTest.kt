@@ -218,9 +218,13 @@ class McpWriteToolsTest {
         fixture.send(Envelope(Envelope.NEW, """{"role":"qa"}"""))
         fixture.await(what = "a session not spawned through MCP") { fixture.daemon.manager.list().isNotEmpty() }
         val foreign = fixture.daemon.manager.list().single().id
+        fixture.send(Envelope(Envelope.NEW, """{"role":"backend"}"""))
+        fixture.await(what = "the calling worker") { fixture.daemon.manager.list().size == 2 }
+        val worker = fixture.daemon.manager.list().single { it.id != foreign }.id
 
-        val scoped = serve(fixture)
-        assertRefused(scoped.callTool("agenthq_kill", """{"sessionId":"$foreign"}"""), "not spawned by this MCP server")
+        // Contract 1.114.0: a worker (not pm / owner) may only kill what it spawned.
+        val scoped = serve(fixture, env = mapOf("AGENTHQ_SESSION_ID" to worker))
+        assertRefused(scoped.callTool("agenthq_kill", """{"sessionId":"$foreign"}"""), "was not spawned by this session")
 
         val anyKill = serve(fixture, "--allow-kill-any")
         assertEquals(foreign, payload(anyKill.callTool("agenthq_kill", """{"sessionId":"$foreign"}"""))["sessionId"]!!.jsonPrimitive.content)

@@ -202,6 +202,8 @@ data class SessionRecord(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val watch: AgentWatch? = null,
     /** The run phase worth naming beside [state]; only `compacting` today. Filled on the wire from the run tracker, never persisted. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val runPhase: String? = null,
+    /** Contract 1.114.0: the session that spawned this one (the `new` frame's origin); persisted, so a kill rule survives an app restart. Omitted when none. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val spawnerSessionId: String? = null,
 ) {
     /**
      * Whether this session is LIVE (a run is in flight) or HISTORY (none is).

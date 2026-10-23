@@ -227,8 +227,8 @@ class McpOrchestrationE2eTest {
         assertFalse(lastFinish.contains("SUCCEEDED"), "the killed turn did not finish normally: $lastFinish")
         payload(orchestrator.callTool("agenthq_spawn", """{"role":"qa"}"""))
 
-        // Kill scope holds across servers: the orchestrator did not spawn the worker (the lead did), so it may not kill it.
-        assertRefused(orchestrator.callTool("agenthq_kill", """{"sessionId":"$workerId"}"""), "not spawned by this MCP server")
+        // Kill scope (1.114.0) is by role and project, not by MCP process: the orchestrator is the owner path (no
+        // session id), which may kill any session; the scope refusals are covered by SessionKillScopeTest.
         assertTrue(second.isNotBlank())
     }
 

@@ -358,12 +358,7 @@ internal class McpWriteTools(
     suspend fun kill(stream: FrameStream, arguments: JsonObject): ToolResult {
         val snapshot = decodeSessions(stream.await(Envelope.SESSIONS))
         val session = resolveSession(snapshot, arguments) { return it }
-        if (!guardrails.allowKillAny && session.id !in spawned) {
-            return refused(
-                "agenthq_kill refused: session ${session.id} was not spawned by this MCP server. It may only kill " +
-                    "the sessions it spawned (start it with --allow-kill-any to kill any session).",
-            )
-        }
+        killRefusal(session, snapshot)?.let { return refused("$KILL refused: $it") }
         val force = (arguments["force"] as? JsonPrimitive)?.booleanOrNull == true
         val (errors, after) = fenced(stream, Envelope(Envelope.KILL, if (force) "${session.id} force" else session.id))
         errors.firstOrNull()?.let { return refused("agenthq_kill refused: $it") }
@@ -375,6 +370,28 @@ internal class McpWriteTools(
             put("live", now.live)
             now.killOutcome?.let { put("killOutcome", it.name) }
         })
+    }
+
+    /**
+     * Contract 1.114.0: who may kill [session], or null when the caller may. No session id (the owner / CLI) or
+     * `--allow-kill-any`: any session. A privileged role (pm): any session in its own project, whichever MCP process
+     * spawned it. Every other role: the sessions it spawned, matched by the recorded spawner session id (so a spawn
+     * from before an app restart still counts) or by this server's own spawn list.
+     */
+    internal fun killRefusal(session: SessionRecord, snapshot: List<SessionRecord>): String? {
+        if (guardrails.allowKillAny) return null
+        val callerId = getenv(AccessPolicy.SESSION_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val caller = ProjectScope.callerOf(snapshot, getenv)
+        if (ProjectScope.isPrivileged(caller, true)) {
+            // The project rule for kill is stricter than reading: even a pm reaches only its OWN project.
+            val own = caller?.projectId ?: getenv(AccessPolicy.PROJECT_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }
+            if (own == null || session.projectId == own) return null
+            return "session ${session.id} belongs to project '${session.projectId ?: "none"}', not this session's project '$own'; " +
+                "a pm may only kill sessions in its own project. Ask a pm of that project to do it."
+        }
+        if (session.id in spawned || session.spawnerSessionId == callerId) return null
+        return "session ${session.id} was not spawned by this session ($callerId); a ${caller?.role ?: "worker"} may only kill sessions it " +
+            "spawned itself. Ask the pm to do it: agenthq send pm \"please remove session ${session.id}\""
     }
 
     /** ROLE-NOTES-1: reboot a session in place (`session_restart`); a mid-turn session is refused unless `force`. */
@@ -400,7 +417,16 @@ internal class McpWriteTools(
     suspend fun removeSession(stream: FrameStream, arguments: JsonObject): ToolResult {
         val snapshot = decodeSessions(stream.await(Envelope.SESSIONS))
         val session = resolveSession(snapshot, arguments) { return it }
-        if (session.live) return refused("$REMOVE_SESSION refused: ${liveRefusal(session)}")
+        val force = (arguments["force"] as? JsonPrimitive)?.booleanOrNull == true
+        if (session.live) {
+            if (!force) return refused("$REMOVE_SESSION refused: ${liveRefusal(session)}")
+            killRefusal(session, snapshot)?.let { return refused("$REMOVE_SESSION refused: $it") }
+            val (killErrors, afterKill) = fenced(stream, Envelope(Envelope.KILL, "${session.id} force"))
+            killErrors.firstOrNull()?.let { return refused("$REMOVE_SESSION refused: the kill failed: $it") }
+            if (afterKill?.firstOrNull { it.id == session.id }?.live == true) {
+                return refused("$REMOVE_SESSION refused: session ${session.id} is still running after the kill; retry the same call")
+            }
+        }
         val (errors, after) = fenced(stream, Envelope(Envelope.SESSION_DELETE, session.id))
         errors.firstOrNull()?.let { return refused("$REMOVE_SESSION refused: ${it.removePrefix(DELETE_REFUSED)}") }
         if (after == null || after.any { it.id == session.id }) {
@@ -524,7 +550,8 @@ internal class McpWriteTools(
 
         /** SESSION-RM-1: the one refusal for removing a running session, shared by `agenthq session rm` and this tool. */
         internal fun liveRefusal(session: SessionRecord) =
-            "session ${session.id} is still running (${session.state}); kill it first, then remove it"
+            "session ${session.id} is still running (${session.state}); kill it first: call agenthq_session_remove with force=true " +
+                "(CLI: agenthq session rm ${session.id} --force) to kill and remove it in one step"
 
         private const val HUMAN_SENDER = "user"
         private const val OUTCOME_STARTED = "started"
@@ -589,8 +616,9 @@ internal class McpWriteTools(
             ))
             add(tool(
                 KILL,
-                "Kill a session (id or unique prefix). Only sessions this MCP server spawned, unless the server " +
-                    "was started with --allow-kill-any.",
+                "Kill a session (id or unique prefix). A pm (or the owner) may kill any session in its own project; " +
+                    "other roles only sessions they spawned. To kill AND remove a stuck session in one call, use " +
+                    "agenthq_session_remove with force=true.",
                 destructive = true,
                 properties = {
                     put("sessionId", prop("string", "Session id, or a unique prefix of one."))
@@ -601,12 +629,14 @@ internal class McpWriteTools(
             add(tool(
                 REMOVE_SESSION,
                 "Remove an ended (exited, failed or orphaned) session from the session list, which is what the " +
-                    "sidebar shows. Refused while the session is running: kill it first. Any ended session may be " +
+                    "sidebar shows. With force=true a running (BUSY / idle) session is killed first, then removed, in one call " +
+                    "(same scope rule as agenthq_kill). Without force a running session is refused. Any ended session may be " +
                     "removed, role agents included. Keeps the ticket, the runs history, the branch and worktree, " +
                     "and mail; the removed session can no longer be resumed.",
                 destructive = true,
                 properties = {
                     put("sessionId", prop("string", "Session id, or a unique prefix of one."))
+                    put("force", prop("boolean", "Kill the session first if it is running, then remove it."))
                 },
                 required = listOf("sessionId"),
             ))
@@ -614,7 +644,7 @@ internal class McpWriteTools(
                 RESTART_SESSION,
                 "Reboot a session in place: same id, role, harness, model, project and worktree, a fresh agent process " +
                     "whose first prompt is composed anew (role notes, project notes, identity). Refused while the session " +
-                    "is mid-turn unless force is true, which stops the turn first.",
+                    "is mid-turn unless force is true, which kills the running turn's process tree and restarts.",
                 destructive = true,
                 properties = {
                     put("sessionId", prop("string", "Session id, or a unique prefix of one."))
