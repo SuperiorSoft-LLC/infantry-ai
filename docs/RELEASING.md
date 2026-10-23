@@ -19,8 +19,18 @@ Android APK and publishes them to that tag's GitHub Release.
 | `AgentHQ-<v>-windows.zip` | Windows job, `createDistributable` app-image (also the fallback if MSI packaging fails on the runner; then the updater has nothing to install). |
 | `AgentHQ-<v>.apk` | Android job, signed `assembleRelease`, when the keystore secrets exist. |
 | `AgentHQ-<v>-debug.apk` | Android job fallback (`assembleDebug`) when they do not. **The debug key differs per build machine, so Android will refuse to update an installed app signed with another key.** Use a stable release key for anything users keep. |
+| `InfantryAI-server-<v>-<os>-<arch>.{zip\|tar.gz}` | Headless job (`headlessDist`): the daemon + CLI + a bundled Java runtime, one per OS (linux-x64, windows-x64 zip, macos-arm64). This is what `infantry update` downloads; the release job fails unless all three are present and listed in `SHA256SUMS`. |
 | `SHA256SUMS` | `sha256sum` of every asset above (the format the updater parses). |
 | `latest.json` | `{version, tag, published, assets:[{name, sha256, size, url}]}` for any other consumer (the Windows updater itself reads the GitHub Releases API plus `SHA256SUMS`). |
+
+## Headless server updates (SERVER-UPDATE-1..5)
+
+The headless server updates itself from the same Release, using the `InfantryAI-server-*` archive for its own OS and CPU
+(the legacy `AgentHQ-server-*` prefix is still accepted) and the same `SHA256SUMS`; an archive with no checksum line is
+refused. Installs under `<root>/versions/<v>/`, switches `<root>/current`, keeps the previous version for rollback, and
+never touches the data dir. `infantry update` / `infantry rollback`, or the Update button in Configuration > Server.
+Docker images cannot replace themselves: the daemon reports the newer release and the `docker pull` command. See
+`superiorSoftLibrary/agentHq/docs/UPDATES.md`. arm64 Linux/Windows archives are a later ticket.
 
 ## Owner setup (repository secrets, Settings > Secrets and variables > Actions)
 
@@ -38,7 +48,7 @@ date; offline, rate-limited or a missing release it shows a message and keeps ru
 ## Private repository limitation
 
 Release assets of a private repo cannot be downloaded anonymously. While the repo is private, the installed app needs a
-read token in the environment (`AGENTHQ_UPDATE_TOKEN`, never in a file; or Git Credential Manager's stored login).
+read token in the environment (`AGENTHQ_UPDATE_TOKEN` or `INFANTRY_UPDATE_TOKEN`, never in a file; or Git Credential Manager's stored login).
 End users cannot update from a private repo: it must be public (or assets hosted elsewhere) before shipping.
 
 ## Not verified without a real Actions run
