@@ -1408,10 +1408,20 @@ private fun ChatBlocks(blocks: List<ChatBlock>) {
         for (b in blocks) when (b) {
             is ChatBlock.Paragraph -> Text(spansText(b.spans), color = Palette.Text, fontFamily = Mono, fontSize = 12.sp)
             is ChatBlock.BulletList -> Column {
-                for (item in b.items) Text(spansText(parseChatInline(item)), color = Palette.Text, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
+                for ((n, item) in b.items.withIndex()) Text(spansText(listOf<ChatSpan>(ChatSpan.Text(if (b.ordered) "${n + 1}. " else "• ")) + parseChatInline(item)), color = Palette.Text, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
+            }
+            ChatBlock.Rule -> HorizontalDivider(color = Palette.Border)
+            is ChatBlock.Quote -> Row(Modifier.height(IntrinsicSize.Min)) {
+                Box(Modifier.width(3.dp).fillMaxHeight().background(Palette.Border))
+                Text(spansText(b.spans), color = Palette.Muted, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
+            }
+            is ChatBlock.Table -> Column(Modifier.horizontalScroll(rememberScrollState())) {
+                for ((r, row) in (listOf(b.header) + b.rows).withIndex()) Row {
+                    for (cell in row) Text(spansText(parseChatInline(cell)), color = Palette.Text, fontFamily = Mono, fontSize = 12.sp, fontWeight = if (r == 0) FontWeight.Bold else null, modifier = Modifier.width(140.dp).padding(end = 8.dp))
+                }
             }
             is ChatBlock.Heading -> Text(
-                b.text,
+                spansText(b.spans),
                 color = Palette.Text,
                 fontFamily = Mono,
                 fontWeight = FontWeight.Bold,
@@ -1577,6 +1587,7 @@ private fun spansText(spans: List<ChatSpan>): AnnotatedString = buildAnnotatedSt
     for (s in spans) when (s) {
         is ChatSpan.Text -> append(s.text)
         is ChatSpan.Bold -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(s.text) }
+        is ChatSpan.Italic -> withStyle(SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)) { append(s.text) }
         is ChatSpan.InlineCode -> withStyle(SpanStyle(background = Palette.Raised, color = Palette.Accent)) { append(s.text) }
         is ChatSpan.Link -> withStyle(SpanStyle(color = Palette.Info, textDecoration = TextDecoration.Underline)) { append(s.label) }
     }
