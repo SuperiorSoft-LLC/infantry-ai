@@ -24,7 +24,7 @@ class LimitsWireTest {
 
     @Test
     fun theContractIs1_68_0() {
-        assertEquals("1.104.0", EventVocabulary.VERSION)
+        assertEquals("1.105.0", EventVocabulary.VERSION)
     }
 
     @Test

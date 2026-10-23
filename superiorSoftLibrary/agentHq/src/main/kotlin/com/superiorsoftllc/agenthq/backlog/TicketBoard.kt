@@ -260,7 +260,7 @@ class TicketBoard(
      * branch to cut.
      */
     @Synchronized
-    fun startPromptUnattended(agentId: String, prompt: String): PromptLaunch {
+    fun startPromptUnattended(agentId: String, prompt: String, projectId: String? = null): PromptLaunch {
         val sessionManager = sessions ?: return PromptLaunch.Refused("ticket session manager is unavailable")
         val profiles = agents ?: return PromptLaunch.Refused("agent profiles are unavailable")
         val assignment = resolveAssignment(agentId, profiles, sessionManager)
@@ -273,8 +273,8 @@ class TicketBoard(
             // TRAITS-T4/T5: the instance is resolved first and passed in, so the stored row is what this turn rendered.
             // P10-K15: with the skill ids the row will freeze, so the turn renders exactly those.
             val instance = profiles.instanceFor(profile.id, profile.role)?.let { sessionManager.withSkills(it, null) }
-            // P10-K9: the session's own project (none for a trigger run today, so no section).
-            val first = firstTurn(instance, profile.role, profile.id, prompt, knowledge.section(null, profile.role), skills.section(instance))
+            // P10-K9: the session's own project (TRIGGER-NUDGE: the trigger's, when it names one).
+            val first = firstTurn(instance, profile.role, profile.id, prompt, knowledge.section(projectId, profile.role), skills.section(instance))
             val started = sessionManager.startNew(
                 prompt = first,
                 instance = instance,
@@ -286,7 +286,7 @@ class TicketBoard(
                 agentId = profile.id,
                 role = profile.role,
                 ticketId = null,
-                projectId = null,
+                projectId = projectId,
                 unattended = true,
                 launchOrigin = LaunchOrigin.UNATTENDED,
             )

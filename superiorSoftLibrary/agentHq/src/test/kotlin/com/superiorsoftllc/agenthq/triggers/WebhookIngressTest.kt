@@ -40,6 +40,8 @@ class WebhookIngressTest {
         @Synchronized override fun setWebhookSecret(triggerId: String, secret: String) { secrets[triggerId] = secret }
         @Synchronized override fun webhookSecret(triggerId: String): String? = secrets[triggerId]
         @Synchronized override fun deleteWebhookSecret(triggerId: String) { secrets.remove(triggerId) }
+        override fun pendingMail(triggerId: String): String? = null
+        override fun setPendingMail(triggerId: String, mailId: String?) {}
     }
 
     private class MemoryAttention : AttentionRepository {

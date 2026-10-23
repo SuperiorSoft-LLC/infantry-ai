@@ -113,7 +113,7 @@ class BoardUiTest {
                 onNodeWithText("Create trigger").performClick()
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.triggers.size == 1 }
                 waitUntil(timeoutMillis = 10_000) { onAllNodes(hasText("armed")).fetchSemanticsNodes().isNotEmpty() }
-                onNodeWithText("Fire").performClick()
+                onNodeWithText("Fire now").performClick()
                 onNodeWithText("Events").performClick()
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.triggerEvents.values.any { rows -> rows.any { it.disposition == "nothing_to_start" } } }
                 waitUntil(timeoutMillis = 10_000) { onAllNodes(hasText("nothing to start")).fetchSemanticsNodes().isNotEmpty() }

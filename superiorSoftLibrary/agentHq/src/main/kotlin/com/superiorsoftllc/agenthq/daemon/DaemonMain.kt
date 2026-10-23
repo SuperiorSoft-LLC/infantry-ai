@@ -82,6 +82,7 @@ import com.superiorsoftllc.agenthq.mailbox.MailSendRequest
 import com.superiorsoftllc.agenthq.session.isInSession
 import com.superiorsoftllc.agenthq.mailbox.Mailbox
 import com.superiorsoftllc.agenthq.mailbox.Message
+import com.superiorsoftllc.agenthq.mailbox.MessageState
 import com.superiorsoftllc.agenthq.mailbox.ThreadSummary
 import com.superiorsoftllc.agenthq.mailbox.WaitingOn
 import com.superiorsoftllc.agenthq.orchestration.Orchestrator
@@ -152,6 +153,7 @@ import com.superiorsoftllc.agenthq.protocol.RoleSave
 import com.superiorsoftllc.agenthq.protocol.TriggerEventView
 import com.superiorsoftllc.agenthq.protocol.TriggerSave
 import com.superiorsoftllc.agenthq.protocol.TriggerView
+import com.superiorsoftllc.agenthq.triggers.TriggerNudges
 import com.superiorsoftllc.agenthq.triggers.TriggerService
 import com.superiorsoftllc.agenthq.triggers.WebhookIngress
 import com.superiorsoftllc.agenthq.usage.GateDecision
@@ -874,13 +876,36 @@ class AgentHqDaemon(
                 onEpicChanged = { epicId -> epics.get(epicId)?.let { broadcastEpic(clients, it) } },
             )
             val storyBoard = BoardHandler(stories = { board.list().map { it.asStory() } })
+            // Phase 6: the mailbox. Messages are persisted BEFORE any delivery attempt, so a message
+            // to an offline agent is never lost, and the router hands queued messages to a session
+            // whenever that session comes to rest (see MailRouter's delivery policy). Built before the
+            // triggers (TRIGGER-NUDGE): a schedule's catch-up fire on boot mails through it.
+            val mailbox = Mailbox(mailStore)
+            // BUG-S3: mail to an agent swapped onto another harness opens a fresh session there (4.2, lazily).
+            val bindFreshSession = { agentId: String ->
+                bindSessionOnSpawn(manager, agents, SpawnOptions(agentId = agentId, projectId = agents.get(agentId)?.projectId), repo)
+            }
+            val mail = MailRouter(
+                manager, mailbox, agents, mailBase,
+                agentsSendToken = token != null, bindFreshSession = bindFreshSession,
+                knowledge = knowledge, skills = skillsSource, starterOf = board::starterOf,
+            )
             // Story 9.5: triggers -- stored, coalesced, tripped on any non-success, their starts unattended.
+            // TRIGGER-NUDGE (contract 1.105.0): a `prompt` action is mail to the target in the trigger's project.
+            val triggerNudges = TriggerNudges(
+                sessions = manager::list,
+                send = mail::send,
+                startSession = { agentId, prompt, projectId -> board.startPromptUnattended(agentId, prompt, projectId) },
+            )
             val triggers = TriggerService(
                 repo = store.triggers,
                 attention = attention,
                 startNext = { filter -> board.startNextUnattended(filter) },
                 startPrompt = { agentId, prompt -> board.startPromptUnattended(agentId, prompt) },
                 sessions = manager::get,
+                deliverPrompt = triggerNudges::deliver,
+                mailPending = { mailId -> mailbox.message(mailId)?.state == MessageState.QUEUED },
+                autoStart = false, // started below, after the mailbox and the sessions are loaded
             )
             triggers.eventSink = { view -> broadcastTrigger(clients, view) }
             // H12b: a committed move into done reaches the ship triggers, after the board commit has released.
@@ -894,19 +919,6 @@ class AgentHqDaemon(
             val clearedQueueMarks = board.clearQueueMarks()
             println("[agentHq] backlog queue marks cleared=$clearedQueueMarks (nothing starts on boot)")
 
-            // Phase 6: the mailbox. Messages are persisted BEFORE any delivery attempt, so a message
-            // to an offline agent is never lost, and the router hands queued messages to a session
-            // whenever that session comes to rest (see MailRouter's delivery policy).
-            val mailbox = Mailbox(mailStore)
-            // BUG-S3: mail to an agent swapped onto another harness opens a fresh session there (4.2, lazily).
-            val bindFreshSession = { agentId: String ->
-                bindSessionOnSpawn(manager, agents, SpawnOptions(agentId = agentId, projectId = agents.get(agentId)?.projectId), repo)
-            }
-            val mail = MailRouter(
-                manager, mailbox, agents, mailBase,
-                agentsSendToken = token != null, bindFreshSession = bindFreshSession,
-                knowledge = knowledge, skills = skillsSource, starterOf = board::starterOf,
-            )
             // ASK-1 (contract 1.97.0): non-blocking owner questions, stored, pushed to every client, answered by mail.
             val ownerQuestions = com.superiorsoftllc.agenthq.questions.OwnerQuestions(
                 repository = com.superiorsoftllc.agenthq.questions.OwnerQuestionRepository.forStore(store),
@@ -1042,6 +1054,8 @@ class AgentHqDaemon(
 
             // Deliver anything that was queued before the last shutdown to a session already at rest.
             mail.onStartup()
+            // TRIGGER-NUDGE: only now may a schedule fire (a slot missed while down fires on this first pump).
+            triggers.start()
             // Contract 1.11.0: this process's identity, taken AFTER reconciliation and recovery so a session
             // they touched (and that streamed nothing here) reads as older than the replay history.
             val identity = DaemonIdentity(UUID.randomUUID().toString(), System.currentTimeMillis())
