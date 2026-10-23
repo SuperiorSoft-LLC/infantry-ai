@@ -2,6 +2,7 @@ package com.superiorsoftllc.agenthq.cli.mcp
 
 import com.superiorsoftllc.agenthq.cli.FrameStream
 import com.superiorsoftllc.agenthq.cli.TicketImageFiles
+import com.superiorsoftllc.agenthq.cli.TicketPlacement
 import com.superiorsoftllc.agenthq.cli.TicketPrefixMatch
 import com.superiorsoftllc.agenthq.cli.TicketStarter
 import com.superiorsoftllc.agenthq.cli.matchTicketPrefix
@@ -110,17 +111,40 @@ internal class McpTicketTools(
      * MCP-MOVE-1: move ONE ticket to a status over `ticket_move` -- the frame `agenthq ticket move` sends -- so an agent
      * can finish its ticket (`done`) without the CLI. A move INTO in_progress is the board's start and goes through
      * [START] (guardrails, worker); `pending` is derived by the daemon and refused there. The session is named as origin.
+     *
+     * BUG-REORDER (ticket-63df1aba): ticket order is priority, and the move can place the ticket in its column with ONE
+     * of `before` / `after` (just above / below that ticket), `top`, `bottom` or `position` (0 = top) -- `agenthq ticket
+     * move --before|--after|--top|--bottom|--position`, through the same [TicketPlacement]. With a placement the status
+     * may be left out: the ticket is reordered where it is.
      */
     suspend fun move(stream: FrameStream, arguments: JsonObject): ToolResult {
         val requested = arguments.string("ticketId") ?: return refused("$MOVE needs a ticketId")
-        val status = arguments.string("status")?.lowercase() ?: return refused("$MOVE needs a status")
+        val rawPosition = arguments["position"]?.let { it as? JsonPrimitive }
+        val position = rawPosition?.let { p -> p.contentOrNull?.trim()?.toIntOrNull() ?: return refused("$MOVE: position must be a whole number, 0 = the top") }
+        val placement = TicketPlacement(arguments.flag("top"), arguments.flag("bottom"), arguments.string("before"), arguments.string("after"), position)
+        if (placement.named > 1) return refused("$MOVE takes one of before, after, top, bottom, position")
+        val status = arguments.string("status")?.lowercase()
+        if (status == null && placement.named == 0) return refused("$MOVE needs a status, or a place in the column (before, after, top, bottom or position)")
         if (status == TicketStatus.IN_PROGRESS) return refused("$MOVE refused: to start a ticket use $START")
         val ticket = findTicket(stream, requested, getenv).getOrElse { return refused("$MOVE refused: ${it.message ?: "no ticket '$requested'"}") }
+        val target = if (placement.named == 0) {
+            null
+        } else {
+            // --before/--after resolve their target on the whole board, like the ticket itself.
+            val board = try {
+                val answer = stream.request(Envelope(Envelope.TICKET_LIST, ""), answerType = Envelope.TICKETS, what = "ticket_list", idempotent = true)
+                json.decodeFromString(ListSerializer(Ticket.serializer()), answer.data)
+            } catch (e: Exception) {
+                return refused("$MOVE refused: ${e.message ?: e.javaClass.simpleName}")
+            }
+            placement.resolve(ticket, status, board).getOrElse { return refused("$MOVE refused: ${it.message}") }
+        }
         val session = getenv(AccessPolicy.SESSION_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }
+        val move = com.superiorsoftllc.agenthq.protocol.TicketMove(id = ticket.id, status = status, position = target)
         val answer = try {
             // NOT idempotent: a dropped request is reported, never re-sent blind.
             stream.request(
-                Envelope(Envelope.TICKET_MOVE, json.encodeToString(com.superiorsoftllc.agenthq.protocol.TicketMove.serializer(), com.superiorsoftllc.agenthq.protocol.TicketMove(id = ticket.id, status = status)), session),
+                Envelope(Envelope.TICKET_MOVE, json.encodeToString(com.superiorsoftllc.agenthq.protocol.TicketMove.serializer(), move), session),
                 answerType = Envelope.TICKET,
                 what = "ticket_move",
                 idempotent = false,
@@ -131,7 +155,8 @@ internal class McpTicketTools(
         val moved = runCatching { json.decodeFromString(Ticket.serializer(), answer.data) }
             .getOrElse { return refused("$MOVE: malformed ticket answer from the daemon: ${it.message}") }
         return ToolResult(json.encodeToString(JsonObject.serializer(), JsonObject(summary(moved) + buildJsonObject {
-            put("message", "Moved ticket ${shortTicketId(moved.id)} -> ${moved.status}")
+            put("position", moved.position)
+            put("message", "Moved ticket ${shortTicketId(moved.id)} -> ${moved.status}" + if (target != null) " at position ${moved.position}" else "")
         })))
     }
 
@@ -256,6 +281,10 @@ internal class McpTicketTools(
 
     private fun JsonObject.string(key: String): String? =
         (this[key] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** A boolean argument; `"true"` as a string counts, as `clear` reads it. Absent = false. */
+    private fun JsonObject.flag(key: String): Boolean =
+        (this[key] as? JsonPrimitive)?.let { it.booleanOrNull ?: (it.contentOrNull?.trim() == "true") } ?: false
 
     /**
      * IMG-3: the `images` argument, an array of path strings; null when absent (keep the stored ones), `[]` clears.
@@ -449,14 +478,28 @@ internal class McpTicketTools(
             })
             add(tool(
                 MOVE,
-                "Move ONE ticket to a status (full id or 8-char id), e.g. done when your work is finished, or todo. " +
-                    "Same as `agenthq ticket move`. To START a ticket use $START; pending is set by the daemon from " +
-                    "open prerequisites and is refused here. The answer reads back the stored ticket.",
+                "Move ONE ticket to a status (full id or 8-char id), e.g. done when your work is finished, or todo, " +
+                    "and/or reorder it: ticket order inside a column is priority (the board and `tickets` list it top " +
+                    "first). Give at most one of before / after (just above / below that ticket), top, bottom or " +
+                    "position (0 = top); with one of them the status may be left out and the ticket is reordered in " +
+                    "its own column. Same as `agenthq ticket move [status] --before|--after|--top|--bottom|--position`. " +
+                    "To START a ticket use $START; pending is " +
+                    "set by the daemon from open prerequisites and is refused here. The answer reads back the stored " +
+                    "ticket and its position (0 = top).",
                 readOnly = false,
-                required = listOf("ticketId", "status"),
+                required = listOf("ticketId"),
             ) {
                 put("ticketId", prop("Full ticket id, or its 8-char suffix."))
-                put("status", prop("Target status, e.g. done, todo, review."))
+                put("status", prop("Target status, e.g. done, todo. Optional when before, top or bottom is given."))
+                put("before", prop("Place the ticket just above this ticket (full id or 8-char suffix), which must be in the target column."))
+                put("after", prop("Place the ticket just below this ticket (full id or 8-char suffix), which must be in the target column."))
+                put("top", boolProp("Place the ticket at the top of the column (highest priority)."))
+                put("bottom", boolProp("Place the ticket at the bottom of the column."))
+                put("position", buildJsonObject {
+                    put("type", "integer")
+                    put("minimum", 0)
+                    put("description", "Place the ticket at this index of the column, 0 = the top (past the end = the bottom).")
+                })
             })
         }
 
