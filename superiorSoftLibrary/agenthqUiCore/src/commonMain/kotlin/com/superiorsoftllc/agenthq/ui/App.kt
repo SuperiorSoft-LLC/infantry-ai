@@ -46,6 +46,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.TooltipBox
@@ -62,6 +63,8 @@ import com.superiorsoftllc.agenthq.ui.net.ImageUploadOutcome
 import com.superiorsoftllc.agenthq.ui.protocol.ImageUploadWire
 import com.superiorsoftllc.agenthq.ui.pair.applyPairing
 import com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost
+import com.superiorsoftllc.agenthq.ui.shell.ServerChoice
+import com.superiorsoftllc.agenthq.ui.shell.ServerSwitcher
 import com.superiorsoftllc.agenthq.ui.shell.PickedImage
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -249,6 +252,17 @@ fun App(
     modalBlur.enabled = flags.blurBehindDialogs
     var url by remember { mutableStateOf(initialUrl) }
     var token by remember { mutableStateOf(initialToken.orEmpty()) }
+    // SWITCH-1: "This computer" + saved servers; a host with neither a local daemon nor a store has no switcher.
+    val platformHost = LocalPlatformHost.current
+    val switcher = remember(platformHost) {
+        if (platformHost.localServer == null && platformHost.savedServers == null) null
+        else ServerSwitcher(platformHost.savedServers, platformHost.localServer, platformHost.activeServer(), platformHost::setActiveServer)
+    }
+    var showServers by remember { mutableStateOf(false) }
+    var switchError by remember { mutableStateOf<String?>(null) }
+    fun switchTo(c: ServerChoice) {
+        switchError = switcher?.select(c) { u, t -> url = u; token = t.orEmpty(); controller.connect(u, t) }
+    }
     val searchFocus = remember { FocusRequester() }
     // PANEL-TOGGLE-1 (plan rule 6): Ctrl+K on a hidden sidebar shows it first; its search box is focused only once the
     // sidebar is composed again, because focusing a requester whose node is not attached throws.
@@ -422,6 +436,9 @@ fun App(
                 state, flags.agentScope, onConnect = { changeConnection?.invoke() ?: run { showConnect = true } }, onAttention = { showRightTab(RightTab.ATTENTION) },
                 projectSlot = { ProjectPicker(state, controller) },
                 onTogglePanel = controller::togglePanel,
+                serverSlot = {
+                    if (switcher != null) ServerSwitcherChip(switcher, onSelect = ::switchTo, onManage = { showServers = true })
+                },
             )
             // MOBILE-LAYOUT-1: below PanelLayout.COMPACT_BELOW_DP (600dp) the window shows ONE pane at full width, picked
             // by PanelLayout.compactScreen() from the same two panel flags; at or above it this is the 3-pane Row as before.
@@ -663,8 +680,22 @@ fun App(
                 ),
             )
         }
+        if (showServers && switcher != null) {
+            ServersDialog(
+                switcher,
+                onRemoved = { wasActive -> if (wasActive) switcher.active()?.let(::switchTo) },
+                onEdited = { c -> if (c.url == switcher.active()?.url) switchTo(c) },
+                onDismiss = { showServers = false },
+            )
+        }
+        switchError?.let { msg ->
+            AlertDialog(
+                onDismissRequest = { switchError = null }, title = { Text("Could not switch server") }, text = { Text(msg) },
+                confirmButton = { TextButton({ switchError = null }) { Text("OK") } },
+            )
+        }
         if (showConnect) {
-            ConnectDialog(url, token, state, { u, t -> url = u; token = t }, onDismiss = { showConnect = false }) {
+            ConnectDialog(url, token, state, controller::reconnectNow, { u, t -> url = u; token = t }, onDismiss = { showConnect = false }) {
                 showConnect = false
                 controller.connect(url, token)
                 root.requestFocus()
@@ -1994,7 +2025,7 @@ private fun StatusBar(state: AppState, onConfig: () -> Unit) {
 
 @Composable
 private fun ConnectDialog(
-    url: String, token: String, state: AppState,
+    url: String, token: String, state: AppState, onReconnect: () -> Unit,
     onChange: (String, String) -> Unit, onDismiss: () -> Unit, onConnect: () -> Unit,
 ) {
     var u by remember { mutableStateOf(url) }
@@ -2004,7 +2035,8 @@ private fun ConnectDialog(
         title = { Text("Connect to a daemon") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${state.connection.state.name.lowercase()}: ${state.connection.detail}", color = Palette.Muted, fontSize = 11.sp)
+                val now = rememberTickingNow(state.connection.state == ConnState.RECONNECTING)
+                Text(connectionStatusLine(state.connection, now) ?: "connected to ${state.connection.url}", color = Palette.Muted, fontSize = 11.sp)
                 OutlinedTextField(u, { u = it; onChange(u, t) }, label = { Text("ws:// or wss:// URL") }, singleLine = true)
                 OutlinedTextField(
                     t, { t = it; onChange(u, t) }, label = { Text("Bearer token (remote daemons)") }, singleLine = true,
@@ -2013,7 +2045,12 @@ private fun ConnectDialog(
             }
         },
         confirmButton = { Button(onClick = { onChange(u, t); onConnect() }) { Text("Connect") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onReconnect, modifier = Modifier.testTag(RECONNECT_NOW_TAG)) { Text("Reconnect now") }
+                TextButton(onClick = onDismiss) { Text("Close") }
+            }
+        },
     )
 }
 
