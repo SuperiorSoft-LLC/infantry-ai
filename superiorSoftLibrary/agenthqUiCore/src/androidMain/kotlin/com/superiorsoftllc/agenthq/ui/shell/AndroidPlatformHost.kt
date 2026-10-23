@@ -15,7 +15,12 @@ class AndroidPlatformHost(
     override val speaker: com.superiorsoftllc.agenthq.ui.voice.Speaker? = null,
     /** PAIR-1: the Android store (URL in prefs, token sealed by the Keystore); one slot, so it keeps the latest server. */
     override val savedServers: com.superiorsoftllc.agenthq.ui.pair.SavedServers? = null,
+    /** Per-device UI preferences (Stats chart scales); null = not persisted. */
+    private val uiPrefs: KeyValueStore? = null,
 ) : PlatformHost {
+    override fun uiPref(key: String): String? = uiPrefs?.get(key)
+    override fun saveUiPref(key: String, value: String) { uiPrefs?.put(key, value) }
+
     /** PAIR-1: the phone camera, CameraX into ML Kit's bundled model. */
     override val qrScanner: (@androidx.compose.runtime.Composable (onCode: (String) -> Unit, onClose: () -> Unit) -> Unit)? =
         { onCode, onClose -> com.superiorsoftllc.agenthq.ui.pair.CameraQrScanner(onCode, onClose) }
