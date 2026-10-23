@@ -371,7 +371,7 @@ class MailRouter(
      * shell. The reply carries the FULL message id, ready to paste; `read` takes the 8-char id.
      */
     private fun render(message: Message): String = buildString {
-        append("[Infantry AI mailbox] message ").append(message.id)
+        append("[Infantry AI COMMS] message ").append(message.id)
         append(" from ").append(message.from)
         append(" · thread ").append(message.threadId)
         if (message.subject.isNotBlank()) append(" · ").append(message.subject)

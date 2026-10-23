@@ -220,7 +220,7 @@ The minimal slice worth pulling forward (to build AgentHQ with a team *now*) is 
 retain** -- worktree per session, spawn in it, never auto-remove. Cleanup, collision retry and the
 socket frames are the hardening on top.
 
-## Mailbox (Phase 6)
+## COMMS (Phase 6)
 
 The phase that lets two agents **talk to each other** instead of a human relaying every step. It is
 designed against the two delivery failures this project actually hit: an agent that went *silent* as
@@ -289,7 +289,7 @@ later: the boundary is real, not cosmetic.
   a `CeilingReached` event tells the humans to step in -- **stop and report beats silent truncation**.
 
 **Answering a message (agent-facing).** A delivered message is a prompt handed to a *spawned CLI
-agent*, which cannot speak the daemon's WebSocket. So the daemon also exposes the mailbox over HTTP,
+agent*, which cannot speak the daemon's WebSocket. So the daemon also exposes COMMS over HTTP,
 and the delivered prompt prints the exact commands. The surface is small and REST-ish:
 
 | Method | Path | Body / query | Response |
@@ -326,9 +326,9 @@ file and the construction site, not `Mailbox`.
 - Ktor server (CIO) on `127.0.0.1:8787` (`AGENTHQ_HOST` and `AGENTHQ_PORT` change it), with a
   WebSocket endpoint at `/ws` and `GET /health` (`/health` reports the provider, runner, counts and
   contract version; it is the one route that never needs a token).
-- Phase 6 also serves the mailbox over HTTP (`/mail/send`, `/mail/read`, `/mail/inbox`,
+- Phase 6 also serves COMMS over HTTP (`/mail/send`, `/mail/read`, `/mail/inbox`,
   `/mail/outbox`, `/mail/thread/<id>`, `/mail/waiting`), so a spawned agent can answer a delivered
-  message with `curl` -- the agent-facing half of the mailbox.
+  message with `curl` -- the agent-facing half of COMMS.
 - On each prompt frame the daemon drives one run of the selected provider's CLI, writes the prompt to
   **stdin**, closes stdin, and streams stdout/stderr back over the socket **and** to the daemon's own
   stdout. Every line and every state change is tagged with its session id.
@@ -377,7 +377,7 @@ Client commands:
 /mail <to> <subj> :: <body>   send a message (agent-pair thread); `from` = this connection's session
 /need <to> <subj> :: <body>   same, flagged needs-input (asks for a reply)
 /inbox | /outbox       this session's received / sent messages
-/threads               list mailbox threads
+/threads               list COMMS threads
 /thread <id>           read a thread in order
 /read <msgId>          acknowledge a message (delivered -> read)
 /waiting               agents at rest that are blocked on an answer

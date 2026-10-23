@@ -1142,7 +1142,7 @@ class CliAcceptanceTest {
         // the rendered message (the stub echoes what its console received).
         val echoed = fixture.client.awaitAfter(0, "the pm's session to be handed the message") { frame ->
             frame.type == Envelope.TEXT_DELTA && frame.sessionId == pmSession &&
-                frame.data.contains("[Infantry AI mailbox]") && frame.data.contains("hi")
+                frame.data.contains("[Infantry AI COMMS]") && frame.data.contains("hi")
         }
         assertTrue(echoed.data.contains("hi"), "the pm's console received: ${echoed.data.take(200)}")
     }
@@ -1219,7 +1219,7 @@ class CliAcceptanceTest {
         assertEquals(0, sent.exit, "send starter must reach the pm in P1: out=${sent.out} err=${sent.err}")
         fixture.client.awaitAfter(0, "the pm's session to be handed the report") { frame ->
             frame.type == Envelope.TEXT_DELTA && frame.sessionId == pmSession &&
-                frame.data.contains("[Infantry AI mailbox]") && frame.data.contains("DONE design")
+                frame.data.contains("[Infantry AI COMMS]") && frame.data.contains("DONE design")
         }
 
         fixture.await(what = "the pm session to come to rest after the report") {
@@ -1257,7 +1257,7 @@ class CliAcceptanceTest {
         assertEquals(0, toNewAgent.exit, "the New Agent pm answers `send pm`: out=${toNewAgent.out} err=${toNewAgent.err}")
         fixture.client.awaitAfter(0, "the New Agent pm to be handed the message") { frame ->
             frame.type == Envelope.TEXT_DELTA && frame.sessionId == newAgentPm &&
-                frame.data.contains("[Infantry AI mailbox]") && frame.data.contains("second")
+                frame.data.contains("[Infantry AI COMMS]") && frame.data.contains("second")
         }
     }
 

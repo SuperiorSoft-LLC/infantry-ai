@@ -447,13 +447,13 @@ spawn with no profile does not get a row there.
 → {"messageId": "…", "from": "user", "to": "e059b476-…", "state": …}
 ```
 
-The mailbox wakes the session at rest and resumes it with the message as its next turn. Once that turn
+COMMS wakes the session at rest and resumes it with the message as its next turn. Once that turn
 finishes, read the reply:
 
 ```json
 {"name": "agenthq_get_session", "arguments": {"sessionId": "e059b476", "lines": 200}}
 → {"runCount": 2, "transcript": ["…", "triage the login bug", "scripted reply: on it",
-   "[finished] SUCCEEDED exit=0", "…", "[agentHq mailbox] message … from user …", "status report please",
+   "[finished] SUCCEEDED exit=0", "…", "[Infantry AI COMMS] message … from user …", "status report please",
    "scripted reply: on it", "[finished] SUCCEEDED exit=0"], …}
 ```
 

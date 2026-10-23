@@ -6,7 +6,7 @@
 
 AgentHQ runs a team of AI coding agents on your own machine. A small local daemon starts and supervises
 agent CLI sessions (Claude Code, pi, opencode, or any CLI you describe in a JSON file), gives each one its
-own git worktree, a ticket board, a mailbox to talk to the other agents, and shared project memory. A
+own git worktree, a ticket board, COMMS to talk to the other agents, and shared project memory. A
 desktop app shows every agent, what it is doing, and what it needs from you.
 
 - **Local first.** The daemon binds `127.0.0.1` by default. Your code and your provider credentials stay

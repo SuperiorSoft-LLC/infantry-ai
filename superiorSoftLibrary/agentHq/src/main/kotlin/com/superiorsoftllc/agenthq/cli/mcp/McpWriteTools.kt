@@ -576,7 +576,7 @@ internal class McpWriteTools(
             ))
             add(tool(
                 MESSAGE,
-                "Send Infantry AI mailbox mail to an agent id, a role (of the sender's project) or a session id.",
+                "Send Infantry AI COMMS mail to an agent id, a role (of the sender's project) or a session id.",
                 destructive = false,
                 properties = {
                     put("to", prop("string", "Recipient: agent id, role, or session id."))

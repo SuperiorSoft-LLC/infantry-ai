@@ -76,7 +76,7 @@ class MailRouterTest {
         assertEquals(MessageState.DELIVERED, h.mailbox.message(sent.message.id)!!.state)
         assertTrue(h.manager.get(agent.id)!!.runCount > runsBefore, "delivery starts a run on the recipient")
         assertTrue(
-            runner.processes.any { it.input.contains("[Infantry AI mailbox]") && it.input.contains("wake up") },
+            runner.processes.any { it.input.contains("[Infantry AI COMMS]") && it.input.contains("wake up") },
             "the message must reach the console as its prompt",
         )
     }
@@ -154,7 +154,7 @@ class MailRouterTest {
 
         assertEquals(MessageState.DELIVERED, h.mailbox.message(sent.message.id)!!.state)
         assertTrue(
-            runner.processes.any { it.input.contains("[Infantry AI mailbox]") && it.input.contains("wake up") },
+            runner.processes.any { it.input.contains("[Infantry AI COMMS]") && it.input.contains("wake up") },
             "the message must reach the console as its prompt",
         )
     }
@@ -183,7 +183,7 @@ class MailRouterTest {
 
         assertEquals(MessageState.DELIVERED, h.mailbox.message(sent.message.id)!!.state)
         assertTrue(
-            runner.processes.any { it.input.contains("[Infantry AI mailbox]") && it.input.contains("direct") },
+            runner.processes.any { it.input.contains("[Infantry AI COMMS]") && it.input.contains("direct") },
             "the message must reach the console as its prompt",
         )
     }
@@ -217,7 +217,7 @@ class MailRouterTest {
         assertEquals(MessageState.DELIVERED, h.mailbox.message(sent.message.id)!!.state)
         assertTrue(
             runner.processes.any {
-                it.input.contains("[Infantry AI mailbox]") && it.input.contains("handoff for you")
+                it.input.contains("[Infantry AI COMMS]") && it.input.contains("handoff for you")
             },
             "the deferred handoff must reach the agent's console once it is free",
         )
@@ -259,7 +259,7 @@ class MailRouterTest {
             ),
         ) as MailResult.Sent
 
-        val prompt = runner.processes.last { it.input.contains("[Infantry AI mailbox]") }.input.toString()
+        val prompt = runner.processes.last { it.input.contains("[Infantry AI COMMS]") }.input.toString()
         assertTrue(prompt.contains(sent.message.id), "the receiver must see the message id")
         assertTrue(prompt.contains("-- answer this message --"), prompt)
         // MAIL-FOOTER-1: CLI commands, ready to paste: the reply names the FULL id, read takes the 8-char one.
@@ -315,7 +315,7 @@ class MailRouterTest {
         assertEquals(MessageState.ANSWERED, h.mailbox.message(question.message.id)!!.state)
         assertTrue(h.router.waiting().isEmpty(), "the asker is no longer blocked once the answer lands")
         assertTrue(
-            runner.processes.any { it.input.contains("[Infantry AI mailbox]") && it.input.contains("/token/rotate") },
+            runner.processes.any { it.input.contains("[Infantry AI COMMS]") && it.input.contains("/token/rotate") },
             "the answer must reach the asker's console",
         )
     }
@@ -417,7 +417,7 @@ class MailRouterTest {
             assertEquals(MessageState.DELIVERED, h.mailbox.message(m.id)!!.state)
         }
         val deliveryCount = runner.processes.count {
-            it.input.contains("[Infantry AI mailbox]") && it.input.contains("exactly-once fan-out")
+            it.input.contains("[Infantry AI COMMS]") && it.input.contains("exactly-once fan-out")
         }
         assertEquals(
             sent.messages.size,
@@ -462,7 +462,7 @@ class MailRouterTest {
         // The handoff reached the backend console, carrying its checkpoint.
         assertTrue(
             runner.processes.any {
-                it.input.contains("[Infantry AI mailbox]") &&
+                it.input.contains("[Infantry AI COMMS]") &&
                     it.input.contains("token rotation") &&
                     it.input.contains("implement POST /token/rotate")
             },
@@ -489,7 +489,7 @@ class MailRouterTest {
         assertEquals(MessageState.ANSWERED, h.mailbox.message(handoff.message.id)!!.state)
         assertTrue(h.router.waiting().isEmpty(), "the frontend is no longer blocked")
         assertTrue(
-            runner.processes.any { it.input.contains("[Infantry AI mailbox]") && it.input.contains("Done: POST /token/rotate") },
+            runner.processes.any { it.input.contains("[Infantry AI COMMS]") && it.input.contains("Done: POST /token/rotate") },
             "the answer must reach the frontend agent",
         )
 
@@ -523,7 +523,7 @@ class MailRouterTest {
 
         assertEquals(MessageState.DELIVERED, h.mailbox.message(sent.message.id)!!.state)
         assertTrue(
-            runner.processes.any { it.input.contains("[Infantry AI mailbox]") && it.input.contains("need your input") },
+            runner.processes.any { it.input.contains("[Infantry AI COMMS]") && it.input.contains("need your input") },
             "the message must reach the pm agent's console",
         )
     }
@@ -569,7 +569,7 @@ class MailRouterTest {
 
         assertEquals(MessageState.DELIVERED, h.mailbox.message(sent.message.id)!!.state)
         val deliveryCount = runner.processes.count {
-            it.input.contains("[Infantry AI mailbox]") && it.input.contains("exactly once")
+            it.input.contains("[Infantry AI COMMS]") && it.input.contains("exactly once")
         }
         assertEquals(1, deliveryCount, "the prompt must reach the console exactly once, but it was delivered $deliveryCount times")
     }
@@ -594,7 +594,7 @@ class MailRouterTest {
 
         assertEquals(MessageState.DELIVERED, h.mailbox.message(sent.message.id)!!.state)
         val deliveryCount = runner.processes.count {
-            it.input.contains("[Infantry AI mailbox]") && it.input.contains("exactly once role")
+            it.input.contains("[Infantry AI COMMS]") && it.input.contains("exactly once role")
         }
         assertEquals(1, deliveryCount, "role-addressed prompt must reach the console exactly once, but it was delivered $deliveryCount times")
     }

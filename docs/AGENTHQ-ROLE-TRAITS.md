@@ -23,7 +23,7 @@ without the required report is marked **unreported** and raises an attention ite
   transcript is copied, and nothing flows back to the parent in v1.
 - **Injection:** one renderer. `firstTurn` becomes persona → identity → traits → task, and the ticket composer
   gets a `traits` source between `identity` and `ticket`. A session with no traits gets exactly today's text.
-- **REPORT BACK** is detected in the daemon's own mailbox: a mail in the session's outbox addressed to the
+- **REPORT BACK** is detected in the daemon's own COMMS: a mail in the session's outbox addressed to the
   check's `reportTo` role, with every required `label: value` line. It is checked when a run ends by itself, and
   only for unattended sessions. A miss sets `report.status = unreported` and sends ONE re-prompt (a `system`
   mail). If the report is still missing after that, an attention item `unreported` is raised.
@@ -169,7 +169,7 @@ session has no obligation, and `pending` from spawn.
 **On a miss:** the status becomes `unreported` (the Board flag). If the check allows a re-prompt, it is unused,
 and the run exited 0, the daemon sends ONE mail to the session from `system` (a non-session handle, like the
 CLI's `user`), subject `REPORT BACK missing`. It names the missing fields and the exact command (`agenthq send
-<reportTo>`, "do not reply to this message"); the mailbox queues it while the session is busy and delivers it at
+<reportTo>`, "do not reply to this message"); COMMS queues it while the session is busy and delivers it at
 rest, like any other mail. No attention item yet.
 One attention item `unreported` is raised (session, ticket, role, agent, run number, and the missing fields of
 the closest mail, if any) in three cases: the next run still leaves no report, the re-prompt is off, or the run

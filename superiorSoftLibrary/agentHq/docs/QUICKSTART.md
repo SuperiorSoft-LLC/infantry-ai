@@ -39,7 +39,7 @@ Set `AGENTHQ_PORT_STRICT=true` to keep the old fail-fast behaviour: the daemon e
 (`refusing to start: port 8788 in use (pid 1234) and AGENTHQ_PORT_STRICT=true forbids a fallback. ...`), before it
 opens its database.
 
-Two daemons on the SAME state dir share its database, sessions and mailbox: a fallback port does not isolate them.
+Two daemons on the SAME state dir share its database, sessions and COMMS: a fallback port does not isolate them.
 Give a second daemon its own `AGENTHQ_STATE_DIR`.
 
 ## 2. Environment variables and config dir
