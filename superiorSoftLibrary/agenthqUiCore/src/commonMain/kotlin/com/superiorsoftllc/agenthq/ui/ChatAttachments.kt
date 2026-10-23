@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -216,10 +219,30 @@ internal fun ChatSentImages(paths: List<String>) {
                     Text("image expired", color = Palette.Muted, fontSize = 9.sp, modifier = Modifier.align(Alignment.Center))
                 }
             } else {
-                Box(Modifier.testTag(CHAT_IMAGE_SENT_TAG_PREFIX + path)) { ImageThumb(path, null, path.substringAfterLast('/').substringAfterLast('\\'), SENT_DP) }
+                Box(Modifier.testTag(CHAT_IMAGE_SENT_TAG_PREFIX + path)) { SentImage(path, path.substringAfterLast('/').substringAfterLast('\\')) }
             }
         }
     }
+}
+
+/** A sent chat image [SENT_IMAGE_WIDTH_DP] wide at most, aspect kept, rounded; click opens it full size. */
+@Composable
+private fun SentImage(path: String, name: String) {
+    val bitmap = rememberImage(path, null)
+    val view = LocalImageViewer.current
+    if (bitmap == null) {
+        Box(Modifier.size(SENT_DP.dp).clip(RoundedCornerShape(8.dp)).background(Palette.Panel)) {
+            Text("img", color = Palette.Muted, fontSize = 9.sp, modifier = Modifier.align(Alignment.Center))
+        }
+        return
+    }
+    Image(
+        bitmap, contentDescription = "Image $name", contentScale = ContentScale.Fit,
+        modifier = Modifier.widthIn(max = SENT_IMAGE_WIDTH_DP.dp).heightIn(max = 320.dp)
+            .aspectRatio(bitmap.width.toFloat() / bitmap.height.coerceAtLeast(1)).clip(RoundedCornerShape(8.dp))
+            .background(Palette.Panel)
+            .clickable(role = Role.Button, onClickLabel = "Open the image full size") { view(bitmap, name) },
+    )
 }
 
 @Composable
@@ -240,3 +263,4 @@ private fun ImageThumb(path: String?, bytes: ByteArray?, name: String, sizeDp: I
 
 private const val CHIP_DP = 32
 private const val SENT_DP = 72
+private const val SENT_IMAGE_WIDTH_DP = 240

@@ -1577,15 +1577,23 @@ const val CARD_TIMESTAMP_TAG = "card-timestamp"
 /** Small muted time, right-aligned at the top of a chat card, so it never competes with the message. */
 @Composable
 private fun CardTimestamp(at: Long) {
-    Text(
-        activityTimestamp(at),
-        color = Palette.Muted.copy(alpha = 0.7f),
-        fontFamily = Mono,
-        fontSize = 9.sp,
-        textAlign = TextAlign.End,
-        modifier = Modifier.fillMaxWidth().testTag(CARD_TIMESTAMP_TAG),
-    )
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.material3.Icon(
+            AhqIcons.Radio, contentDescription = null, tint = Palette.Muted.copy(alpha = 0.7f),
+            modifier = Modifier.size(15.dp).testTag(CARD_COMMS_ICON_TAG),
+        )
+        Text(
+            activityTimestamp(at),
+            color = Palette.Muted.copy(alpha = 0.7f),
+            fontFamily = Mono,
+            fontSize = 9.sp,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f).testTag(CARD_TIMESTAMP_TAG),
+        )
+    }
 }
+
+const val CARD_COMMS_ICON_TAG = "card-comms-icon"
 
 private fun spansText(spans: List<ChatSpan>): AnnotatedString = buildAnnotatedString {
     for (s in spans) when (s) {
