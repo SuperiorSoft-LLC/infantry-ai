@@ -12,5 +12,7 @@ if exist "%APP_HOME%\runtime\bin\java.exe" (
 )
 rem Sessions run `agenthq ...`: the daemon puts this bin dir on their PATH.
 if not defined AGENTHQ_BIN set "AGENTHQ_BIN=%APP_HOME%\bin"
+rem The update routes find the install (VERSION file, versions\ folder) from here.
+if not defined AGENTHQ_APP_HOME set "AGENTHQ_APP_HOME=%APP_HOME%"
 "%JAVA%" -Xms32m -Xmx512m -Djava.awt.headless=true %AGENTHQ_JAVA_OPTS% -cp "%APP_HOME%\lib\*" com.superiorsoftllc.agenthq.daemon.DaemonMainKt %*
 exit /b %ERRORLEVEL%

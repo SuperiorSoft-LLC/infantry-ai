@@ -214,6 +214,7 @@ jobs:
         with:
           context: superiorSoftLibrary/agentHq/build/docker
           push: true
+          build-args: AGENTHQ_VERSION=${{ needs.version.outputs.version }}
           tags: |
             ${{ env.IMAGE }}:${{ needs.version.outputs.version }}
             ${{ env.IMAGE }}:latest
