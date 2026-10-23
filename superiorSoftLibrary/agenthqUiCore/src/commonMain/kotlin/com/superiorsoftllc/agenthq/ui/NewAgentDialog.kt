@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -94,7 +95,7 @@ fun NewAgentDialog(
                     Text("3. First task", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     OutlinedTextField(
                         cur.task, { update(cur.withTask(it)) }, placeholder = { Text("What should this agent do first?") },
-                        modifier = Modifier.fillMaxWidth().testTag(NEW_AGENT_TASK_TAG), minLines = 2, maxLines = 4,
+                        modifier = Modifier.fillMaxWidth().testTag(NEW_AGENT_TASK_TAG), minLines = 2, maxLines = 4, colors = visibleBorderFieldColors(),
                     )
                 }
             }
@@ -123,7 +124,7 @@ private fun RoleStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> Unit
         Text("1. Role", fontWeight = FontWeight.Bold, fontSize = 13.sp)
         OutlinedTextField(
             m.roleQuery, { update(m.withRoleQuery(it)) }, placeholder = { Text("Search roles...") }, singleLine = true,
-            modifier = Modifier.fillMaxWidth().testTag(NEW_AGENT_ROLE_SEARCH_TAG),
+            modifier = Modifier.fillMaxWidth().testTag(NEW_AGENT_ROLE_SEARCH_TAG), colors = visibleBorderFieldColors(),
         )
         val options = m.roleOptions
         when {
@@ -188,3 +189,9 @@ private fun ExecutorStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> 
         ExecutorPicker(m.executor, { update(m.withExecutor(it)) }, tags = NEW_AGENT_EXECUTOR_TAGS, textColor = AlertDialogDefaults.textContentColor)
     }
 }
+
+/** The theme's outline is the panel border colour, which vanishes on the dialog surface: give modal fields a visible rest border and an accent focus border. */
+@Composable
+internal fun visibleBorderFieldColors() = OutlinedTextFieldDefaults.colors(
+    unfocusedBorderColor = Palette.Muted, focusedBorderColor = Palette.Accent,
+)
