@@ -430,6 +430,7 @@ internal class McpWriteTools(
             subject = arguments.string("subject") ?: "",
             body = body,
             replyTo = arguments.string("replyTo"),
+            allowCrossProject = (arguments["allowCrossProject"] as? JsonPrimitive)?.booleanOrNull == true,
         )
         val answer = stream.requestLastOf(
             Envelope(Envelope.MAIL_SEND, json.encodeToString(MailSendRequest.serializer(), request), session),
@@ -582,6 +583,7 @@ internal class McpWriteTools(
                     put("body", prop("string", "The message."))
                     put("subject", prop("string", "Optional subject."))
                     put("replyTo", prop("string", "Optional message id this answers."))
+                    put("allowCrossProject", prop("boolean", "Send even though the recipient is in another project (refused by default)."))
                 },
                 required = listOf("to", "body"),
             ))

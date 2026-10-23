@@ -392,6 +392,13 @@ data class Envelope(
         const val CLI_LOCATIONS = "cli_locations"
         const val CLI_LOCATION_SET = "cli_location_set"
 
+        // Contract 1.100.0 -- HARNESS-INSTALL-1: the built-in harness installer. `harness_install_status` ({checkLatest?}) is
+        // answered by [HARNESS_INSTALL_STATUS] (`HarnessInstallReport`); `harness_install` ({ids?, update?}) by
+        // [HARNESS_INSTALL_RESULT] (`HarnessInstallResult`). A bad id is refused as an `error`.
+        const val HARNESS_INSTALL_STATUS = "harness_install_status"
+        const val HARNESS_INSTALL = "harness_install"
+        const val HARNESS_INSTALL_RESULT = "harness_install_result"
+
         // Contract 1.76.0 -- BUG-PERM-1: the global, harness-neutral Tool approval (deny / allowEdits / allowAll).
         // `tool_approval` (no data) and `tool_approval_set` ({mode?}; null/blank clears) are both answered by
         // [TOOL_APPROVAL] (`ToolApprovalInfo`); an unknown mode is refused as an `error`.

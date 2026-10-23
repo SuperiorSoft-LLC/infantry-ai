@@ -93,6 +93,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import com.superiorsoftllc.agenthq.ui.model.PickedModel
 import com.superiorsoftllc.agenthq.ui.model.NoticeKind
+import com.superiorsoftllc.agenthq.ui.model.localNotices
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -578,6 +579,11 @@ fun App(
             }
             StatusBar(state, onConfig = { showConfig = true })
         }
+        ToastHost(
+            state,
+            onOpen = { n -> n.projectId?.let { id -> actionScope.launch { controller.selectProject(id) } }; showBoard = true },
+            modifier = Modifier.align(Alignment.BottomEnd),
+        )
         if (showBoard) {
             // M2-8: the board is a near-full-screen modal opened from the sidebar; "Agent" on a card closes it on the chat.
             BoardModal(
@@ -611,6 +617,11 @@ fun App(
                 onKeepAliveMinutes = { minutes -> actionScope.launch { controller.setKeepAliveMinutes(minutes) } },
                 cliLocations = state.cliLocations,
                 onCliLocation = { id, path -> actionScope.launch { controller.setCliLocation(id, path) } },
+                harnessInstall = state.harnessInstall,
+                harnessInstallBusy = state.harnessInstallBusy,
+                harnessInstallLog = state.harnessInstallLog,
+                onHarnessCheck = { latest -> actionScope.launch { controller.checkHarnesses(latest) } },
+                onHarnessInstall = { ids, update -> actionScope.launch { controller.installHarnesses(ids, update) } },
                 toolApproval = state.toolApproval,
                 onToolApproval = { mode -> actionScope.launch { controller.setToolApproval(mode) } },
                 onBrowse = pickFile,
@@ -1466,7 +1477,7 @@ private fun spansText(spans: List<ChatSpan>): AnnotatedString = buildAnnotatedSt
 
 @Composable
 fun NoticeStrip(state: AppState) {
-    val n = state.notices.lastOrNull() ?: return
+    val n = state.localNotices().lastOrNull() ?: return
     var hidden by remember(n.at) { mutableStateOf(false) }
     LaunchedEffect(n.at) { delay(8_000); hidden = true }
     if (hidden) return

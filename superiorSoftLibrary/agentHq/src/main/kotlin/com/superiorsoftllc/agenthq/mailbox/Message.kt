@@ -198,6 +198,12 @@ data class MailSendRequest(
     val replyTo: String? = null,
     val checkpoint: Checkpoint? = null,
     val needsInput: Boolean = false,
+    /**
+     * Contract 1.100.0: explicit override of the cross-project guard. Without it a session sender mailing a session or
+     * agent of ANOTHER project is refused at send time; with it the message goes through. Role names are unaffected:
+     * they only ever resolve inside the sender's own project.
+     */
+    val allowCrossProject: Boolean = false,
 )
 
 /** A refused send, echoed to the sender so a limit is never a silent drop. */

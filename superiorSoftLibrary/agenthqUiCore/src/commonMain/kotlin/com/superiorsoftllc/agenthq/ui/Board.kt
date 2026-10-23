@@ -21,7 +21,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.zIndex
+import com.superiorsoftllc.agenthq.ui.model.TicketReorder
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -224,7 +232,7 @@ fun BoardPane(state: AppState, controller: Controller, onOpenAgent: (String) -> 
                         Chip("${tickets.size}", color)
                     }
                     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        tickets.forEach { t -> TicketCard(t, state, controller, onOpenAgent) }
+                        ReorderableCards(tickets, live, controller) { t, handle -> TicketCard(t, state, controller, onOpenAgent, handle) }
                     }
                 }
             }
@@ -250,12 +258,12 @@ internal fun ReportFlagChip(flag: ReportFlag?, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun TicketCard(t: Ticket, state: AppState, controller: Controller, onOpenAgent: (String) -> Unit) {
+private fun TicketCard(t: Ticket, state: AppState, controller: Controller, onOpenAgent: (String) -> Unit, reorder: ReorderHandle) {
     val actionScope = rememberCoroutineScope()
     var open by remember(t.id) { mutableStateOf(false) }
     val live = state.connection.isLive
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(8.dp),
+        reorder.modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
       // M2-17: the summary is what opens (and closes) the card's edit form; the form itself is not a click target.
@@ -311,15 +319,75 @@ private fun TicketCard(t: Ticket, state: AppState, controller: Controller, onOpe
                 TextButton(onClick = { onOpenAgent(sid) }) { Text("Agent", fontSize = 11.sp) }
             }
             Spacer(Modifier.weight(1f))
+            // Keyboard / screen-reader route to the same move the drag makes.
+            if (reorder.canMoveUp) CardButton("▲", live, "Move ${t.title} up") { reorder.move(-1) }
+            if (reorder.canMoveDown) CardButton("▼", live, "Move ${t.title} down") { reorder.move(1) }
             if (open) TextButton(onClick = { actionScope.launch { controller.deleteTicket(t.id) } }, enabled = live) { Text("Delete", color = Palette.Danger, fontSize = 11.sp) }
         }
     }
 }
 
 @Composable
-private fun CardButton(label: String, enabled: Boolean, action: suspend () -> CommandResult) {
+private fun CardButton(label: String, enabled: Boolean, description: String? = null, action: suspend () -> CommandResult) {
     val actionScope = rememberCoroutineScope()
-    TextButton(onClick = { actionScope.launch { action() } }, enabled = enabled) { Text(label, fontSize = 11.sp) }
+    TextButton(
+        onClick = { actionScope.launch { action() } },
+        enabled = enabled,
+        modifier = if (description == null) Modifier else Modifier.semantics { contentDescription = description },
+    ) { Text(label, fontSize = 11.sp) }
+}
+
+/** What one card needs to take part in its column's reordering. */
+internal class ReorderHandle(
+    val modifier: Modifier,
+    val canMoveUp: Boolean,
+    val canMoveDown: Boolean,
+    val move: suspend (Int) -> CommandResult,
+)
+
+/**
+ * One board column's cards, top first, reorderable by long-press and drag (touch and mouse alike; a plain click still
+ * opens the card). A drop sends one `ticket_move` position; the card snaps back until the daemon's answer reorders
+ * the list, so the daemon stays the only owner of the order.
+ */
+@Composable
+private fun ReorderableCards(tickets: List<Ticket>, live: Boolean, controller: Controller, card: @Composable (Ticket, ReorderHandle) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var draggedId by remember { mutableStateOf<String?>(null) }
+    var offset by remember { mutableStateOf(0f) }
+    val tops = remember { mutableStateMapOf<String, Float>() }
+    val heights = remember { mutableStateMapOf<String, Float>() }
+    suspend fun send(id: String, slot: Int): CommandResult {
+        val position = TicketReorder.positionFor(tickets, id, slot) ?: return CommandResult.Sent
+        return controller.reorderTicket(id, position)
+    }
+    tickets.forEachIndexed { index, t ->
+        val dragging = draggedId == t.id
+        val handle = ReorderHandle(
+            modifier = Modifier
+                .onGloballyPositioned { tops[t.id] = it.positionInParent().y; heights[t.id] = it.size.height.toFloat() }
+                .then(if (dragging) Modifier.zIndex(1f).graphicsLayer { translationY = offset; alpha = 0.85f } else Modifier)
+                .pointerInput(t.id, live) {
+                    if (!live) return@pointerInput
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { draggedId = t.id; offset = 0f },
+                        onDrag = { change, amount -> change.consume(); offset += amount.y },
+                        onDragEnd = {
+                            val centers = tickets.map { (tops[it.id] ?: 0f) + (heights[it.id] ?: 0f) / 2 }
+                            val slot = TicketReorder.slotFor(centers, index, centers[index] + offset)
+                            draggedId = null
+                            offset = 0f
+                            scope.launch { send(t.id, slot) }
+                        },
+                        onDragCancel = { draggedId = null; offset = 0f },
+                    )
+                },
+            canMoveUp = index > 0,
+            canMoveDown = index < tickets.size - 1,
+            move = { delta -> send(t.id, index + delta) },
+        )
+        card(t, handle)
+    }
 }
 
 /** M2-17: what an edit sent, trimmed as the daemon stores it; it has landed once the ticket reads back the same. */

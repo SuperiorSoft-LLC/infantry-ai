@@ -43,6 +43,15 @@ internal fun triggerStateColor(state: String): Color = when (state) {
     else -> Palette.Muted
 }
 
+private val BUILT_IN_TRIGGER_ROLES = listOf("pm", "qa", "version-control", "assistant")
+
+/**
+ * The `role:<role>` targets a trigger can aim at: the built-in roles (the PM, QA, ... run without a profile, so
+ * profiles alone would omit them), the daemon's role catalog and every role a visible profile has.
+ */
+internal fun triggerLanes(state: AppState): List<String> =
+    (BUILT_IN_TRIGGER_ROLES + state.roles.map { it.id } + state.visibleProfiles.map { it.role }).distinct().map { "role:$it" }
+
 /** "any ticket" / "tickets for <assignee>" -- what a `start_next` trigger picks from. */
 internal fun triggerTarget(state: AppState, t: TriggerView): String =
     t.action.agentId?.takeIf { it.isNotBlank() }?.let { "next ticket assigned to ${assigneeLabel(state, it)}" } ?: "next startable ticket"
@@ -84,7 +93,7 @@ private fun TriggerCard(t: TriggerView, state: AppState, controller: Controller)
         }
         Text(triggerTarget(state, t), color = Palette.Muted, fontSize = 11.sp)
         Text(
-            "window ${if (t.coalesceMs == 0L) "none (starts at once)" else "${t.coalesceMs / 1000}s"}  -  at most ${t.ceilingRuns} starts per ${t.ceilingWindowMs / 60_000} min",
+            "window ${if (t.coalesceMs == 0L) "none (starts at once)" else humanDuration(t.coalesceMs)}  -  at most ${t.ceilingRuns} starts per ${t.ceilingWindowMs / 60_000} min",
             color = Palette.Muted, fontSize = 10.sp,
         )
         if (t.state == "tripped") {
@@ -149,10 +158,10 @@ private fun TriggerForm(state: AppState, controller: Controller, onDone: () -> U
     var name by remember(existing?.id) { mutableStateOf(existing?.name.orEmpty()) }
     // null = any ticket, else a profile id or role:<role>
     var agentId by remember(existing?.id) { mutableStateOf(existing?.action?.agentId?.takeIf { it.isNotBlank() }) }
-    var coalesce by remember(existing?.id) { mutableStateOf((existing?.coalesceMs ?: 0L).toString()) }
+    var coalesce by remember(existing?.id) { mutableStateOf(msToMinutesText(existing?.coalesceMs ?: 0L)) }
     var ceiling by remember(existing?.id) { mutableStateOf((existing?.ceilingRuns ?: 6).toString()) }
-    val lanes = state.visibleProfiles.map { it.role }.distinct().map { "role:$it" }
-    val coalesceMs = coalesce.trim().toLongOrNull()?.takeIf { it >= 0 }
+    val lanes = triggerLanes(state)
+    val coalesceMs = minutesToMs(coalesce)
     val ceilingRuns = ceiling.trim().toIntOrNull()?.takeIf { it > 0 }
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Panel).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(if (existing == null) "New manual trigger" else "Edit ${existing.name}", color = Palette.Text, fontWeight = FontWeight.SemiBold)
@@ -165,7 +174,7 @@ private fun TriggerForm(state: AppState, controller: Controller, onDone: () -> U
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlinedTextField(
-                coalesce, { coalesce = it }, label = { Text("Coalesce window ms (0 = start at once)") }, singleLine = true,
+                coalesce, { coalesce = it }, label = { Text("Coalesce window, minutes (0 = start at once)") }, singleLine = true,
                 isError = coalesceMs == null, modifier = Modifier.weight(1f),
             )
             OutlinedTextField(

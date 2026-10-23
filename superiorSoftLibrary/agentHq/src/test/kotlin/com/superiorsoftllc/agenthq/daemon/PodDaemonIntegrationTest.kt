@@ -312,7 +312,7 @@ class PodDaemonIntegrationTest {
         fixture.client.await(Envelope.READY)
 
         val before = fixture.health()
-        assertEquals("1.99.0", EventVocabulary.VERSION)
+        assertEquals("1.101.0", EventVocabulary.VERSION)
         assertEquals(EventVocabulary.VERSION, before["contract"]!!.jsonPrimitive.content)
         // Every field 1.0.0 published is still there, under the same name.
         assertEquals("ok", before["status"]!!.jsonPrimitive.content)

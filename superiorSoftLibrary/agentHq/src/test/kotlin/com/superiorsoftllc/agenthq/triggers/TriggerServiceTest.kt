@@ -214,19 +214,19 @@ class TriggerServiceTest {
             pumpMs = 60_000, // drive schedule ticks deterministically
         )
         val saved = service.save(
-            TriggerSave(name = "coalesced schedule", kind = "schedule", intervalMs = 30_000, coalesceMs = 60_000),
+            TriggerSave(name = "coalesced schedule", kind = "schedule", intervalMs = 60_000, coalesceMs = 120_000),
         )
 
-        // The first two interval ticks arrive within one 60-second coalescing window.
-        now = 30_000
-        service.pumpWindows()
+        // The first two interval ticks arrive within one 120-second coalescing window.
         now = 60_000
+        service.pumpWindows()
+        now = 120_000
         service.pumpWindows()
         assertEquals(0, startCalls.get(), "no run starts while the coalescing window is open")
         assertEquals("folded", service.events(saved.id).last().disposition)
 
         // At the window boundary the pending schedule event is launched once.
-        now = 90_000
+        now = 180_000
         service.pumpWindows()
         awaitTrue { startCalls.get() == 1 }
 
@@ -235,6 +235,25 @@ class TriggerServiceTest {
         assertEquals(3, events.size, "each due schedule tick is recorded")
         assertEquals(listOf("started", "folded", "folded"), events.map { it.disposition })
         assertEquals(listOf("schedule", "schedule", "schedule"), events.map { it.source })
+        service.close()
+    }
+
+    @Test
+    fun `scheduleIntervalBelowOneMinuteIsRefused`() {
+        val service = TriggerService(
+            repo = MemoryTriggers(),
+            attention = AttentionStore(MemoryAttention()),
+            startNext = { null },
+            sessions = { null },
+            clock = { 0L },
+            pumpMs = 60_000,
+        )
+        val refused = kotlin.test.assertFailsWith<IllegalArgumentException> {
+            service.save(TriggerSave(name = "too fast", kind = "schedule", intervalMs = 59_999, coalesceMs = 0))
+        }
+        assertTrue(refused.message!!.contains("at least 1 minute"), "the refusal names the floor: ${refused.message}")
+        assertEquals(60_000L, service.save(TriggerSave(name = "one minute", kind = "schedule", intervalMs = 60_000, coalesceMs = 0)).intervalMs)
+        assertEquals(null, service.save(TriggerSave(name = "no period", kind = "schedule", coalesceMs = 0)).intervalMs)
         service.close()
     }
 

@@ -650,6 +650,10 @@ data class AppState(
     val keepAliveMinutes: Int? = null,
     /** CLIPATH-1 (1.73.0): where the daemon runs each CLI from, as its last `cli_locations` said. Null = not read yet. */
     val cliLocations: List<com.superiorsoftllc.agenthq.ui.protocol.CliLocation>? = null,
+    /** HARNESS-INSTALL-1 (1.100.0): the daemon's last harness check (null = not read / older daemon), whether an install is running, and its log. */
+    val harnessInstall: com.superiorsoftllc.agenthq.ui.protocol.HarnessInstallReport? = null,
+    val harnessInstallBusy: Boolean = false,
+    val harnessInstallLog: List<String> = emptyList(),
     /** BUG-PERM-1 (1.76.0): the global Tool approval, as the daemon's last `tool_approval` said. Null = not read yet. */
     val toolApproval: com.superiorsoftllc.agenthq.ui.protocol.ToolApprovalInfo? = null,
     /**
@@ -898,10 +902,26 @@ data class AppState(
  */
 enum class NoticeKind { OK, HEADS_UP, ERROR }
 
-data class Notice(val at: Long, val text: String, val sessionId: String? = null, val kind: NoticeKind = NoticeKind.OK) {
+data class Notice(
+    val at: Long,
+    val text: String,
+    val sessionId: String? = null,
+    val kind: NoticeKind = NoticeKind.OK,
+    /** The project the event happened in, or null for a notice that is not about one project. */
+    val projectId: String? = null,
+) {
     /** True for anything that is not a failure. */
     val info: Boolean get() = kind != NoticeKind.ERROR
+
+    /** True when this notice is about a project other than [activeProjectId]: it belongs in the global toast, not the chat. */
+    fun isCrossProject(activeProjectId: String?): Boolean = projectId != null && activeProjectId != null && projectId != activeProjectId
 }
+
+/** Notices for the current chat/project: everything that is not about another project. The strip shows these. */
+fun AppState.localNotices(): List<Notice> = notices.filterNot { it.isCrossProject(activeProjectId) }
+
+/** Notices about OTHER projects, oldest first: the global bottom-right toast host and its review list show these. */
+fun AppState.crossProjectNotices(): List<Notice> = notices.filter { it.isCrossProject(activeProjectId) }
 
 /**
  * NOTICE-COLOUR-1: a daemon `error` frame is a failure, except the refusals that only say the agent is mid-turn
@@ -1231,6 +1251,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
             promptsLoading = if (promptRefusal) false else s.promptsLoading,
             skillError = if (skillRefusal) env.data else s.skillError,
             skillsLoading = if (skillRefusal) false else s.skillsLoading,
+            harnessInstallBusy = if (env.data.startsWith("harness_install")) false else s.harnessInstallBusy,
         ).withNotice(now, sessionSwitchRefusal ?: env.data, null, if (sessionSwitchRefusal != null) NoticeKind.ERROR else daemonErrorKind(env.data))
     } else {
         s.stream(env) { a, inOrder ->
@@ -1362,10 +1383,14 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     }
     Envelope.TICKET -> {
         val t = json.decodeFromString(Ticket.serializer(), env.data)
-        val upserted = s.copy(tickets = if (s.tickets.any { it.id == t.id }) s.tickets.map { if (it.id == t.id) t else it } else s.tickets + t)
+        val before = s.tickets.firstOrNull { it.id == t.id }
+        val upserted = s.copy(tickets = if (before != null) s.tickets.map { if (it.id == t.id) t else it } else s.tickets + t)
+        // Another project's ticket appearing is a toast (project name + title); the current project's board shows its own.
+        val elsewhere = t.projectId != s.activeProjectId && s.activeProjectId != null && t.start == null
         // A start that did not start the ticket must be said: the card alone would just sit in its column.
         val start = t.start
-        if (start != null && !start.ok) upserted.withNotice(now, "start of \"${t.title.take(60)}\": ${start.reason}${start.detail?.let { " - $it" } ?: ""}", null, ticketStartKind(start))
+        if (before == null && elsewhere) upserted.withNotice(now, "ticket created: \"${t.title.take(60)}\"", null, NoticeKind.OK, t.projectId)
+        else if (start != null && !start.ok) upserted.withNotice(now, "start of \"${t.title.take(60)}\": ${start.reason}${start.detail?.let { " - $it" } ?: ""}", null, ticketStartKind(start))
         // BASE-1b: a start that cut a branch says what it was cut from (`cut from <ref> <sha8>`), as an info line.
         else if (start != null && start.reason == "started" && !start.detail.isNullOrBlank()) {
             val text = "started \"${t.title.take(60)}\": ${start.detail}"
@@ -1620,6 +1645,17 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
         json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.CliLocations.serializer(), env.data).tools
     }.getOrNull()?.let { s.copy(cliLocations = it) } ?: s
 
+    // HARNESS-INSTALL-1 (1.100.0): a check replaces the report; an install result carries the report after the run plus its log.
+    Envelope.HARNESS_INSTALL_STATUS -> runCatching {
+        json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.HarnessInstallReport.serializer(), env.data)
+    }.getOrNull()?.let { s.copy(harnessInstall = it, harnessInstallBusy = false) } ?: s
+    Envelope.HARNESS_INSTALL_RESULT -> runCatching {
+        json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.HarnessInstallResult.serializer(), env.data)
+    }.getOrNull()?.let { r ->
+        val lines = r.log + r.outcomes.map { o -> "${o.id}: ${o.result}" + (o.version?.let { " $it" } ?: "") + (o.message?.let { " - $it" } ?: "") }
+        s.copy(harnessInstall = r.report, harnessInstallBusy = false, harnessInstallLog = lines)
+    } ?: s
+
     // BUG-PERM-1 (1.76.0): replaced by each answer (a get, or this window's set).
     Envelope.TOOL_APPROVAL -> runCatching {
         json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.ToolApprovalInfo.serializer(), env.data)
@@ -1788,8 +1824,8 @@ private fun AppState.withAgent(sessionId: String?, f: (AgentView) -> AgentView):
     return copy(agents = agents + (a.id to f(a)))
 }
 
-fun AppState.withNotice(now: Long, text: String, sessionId: String?, kind: NoticeKind = NoticeKind.OK): AppState =
-    copy(notices = (notices + Notice(now, text, sessionId, kind)).takeLast(MAX_NOTICES))
+fun AppState.withNotice(now: Long, text: String, sessionId: String?, kind: NoticeKind = NoticeKind.OK, projectId: String? = null): AppState =
+    copy(notices = (notices + Notice(now, text, sessionId, kind, projectId)).takeLast(MAX_NOTICES))
 
 /**
  * Scope the shell to [projectId]; an id the daemon never listed leaves the active project

@@ -183,6 +183,10 @@ class Controller(
                         if (contractAtLeast(contract, CliLocationsSetting.SINCE_MAJOR, CliLocationsSetting.SINCE_MINOR)) {
                             client.send(WireRequests.cliLocations())
                         }
+                        // HARNESS-INSTALL-1: the daemon's own check of each harness CLI (1.100.0).
+                        if (contractAtLeast(contract, 1, 100)) {
+                            client.send(WireRequests.harnessInstallStatus())
+                        }
                         // BUG-PERM-1: the global Tool approval, shown in the Configuration modal (1.76.0).
                         if (contractAtLeast(contract, ToolApprovalSetting.SINCE_MAJOR, ToolApprovalSetting.SINCE_MINOR)) {
                             client.send(WireRequests.toolApproval())
@@ -387,6 +391,28 @@ class Controller(
     }
 
     /**
+     * HARNESS-INSTALL-1: ask the DAEMON to check its harness CLIs ([checkLatest] also asks npm for the newest version). The
+     * client never inspects its own disk: the same call works from the desktop, Android and the browser.
+     */
+    suspend fun checkHarnesses(checkLatest: Boolean = false): CommandResult {
+        if (!contractAtLeast(_state.value.connection.contract, 1, 100)) {
+            return report(CommandResult.Refused("this daemon has no harness installer (needs contract 1.100.0)"))
+        }
+        return report(send(WireRequests.harnessInstallStatus(checkLatest)))
+    }
+
+    /** HARNESS-INSTALL-1: ask the DAEMON to install ([update] = refresh outdated too) [ids] (empty = every missing one) on its own machine. */
+    suspend fun installHarnesses(ids: List<String>, update: Boolean): CommandResult {
+        if (!contractAtLeast(_state.value.connection.contract, 1, 100)) {
+            return report(CommandResult.Refused("this daemon has no harness installer (needs contract 1.100.0)"))
+        }
+        _state.value = _state.value.copy(harnessInstallBusy = true, harnessInstallLog = emptyList())
+        return report(send(WireRequests.harnessInstall(ids, update))).also {
+            if (it !is CommandResult.Sent) _state.value = _state.value.copy(harnessInstallBusy = false)
+        }
+    }
+
+    /**
      * CLIPATH-1: set CLI [id]'s executable to [path] (null/blank = clear back to the default location / PATH). The shown
      * row changes only when the daemon answers `cli_locations`; a refused path comes back as an `error` notice.
      */
@@ -394,7 +420,10 @@ class Controller(
         if (!contractAtLeast(_state.value.connection.contract, CliLocationsSetting.SINCE_MAJOR, CliLocationsSetting.SINCE_MINOR)) {
             return report(CommandResult.Refused("this daemon has no CLI locations setting (needs contract 1.73.0)"))
         }
-        return report(send(WireRequests.cliLocationSet(id, path?.trim()?.takeIf { it.isNotEmpty() })))
+        val result = report(send(WireRequests.cliLocationSet(id, path?.trim()?.takeIf { it.isNotEmpty() })))
+        // The path decides default-managed vs user-managed, so the daemon re-checks the harness CLIs against it.
+        if (result is CommandResult.Sent && contractAtLeast(_state.value.connection.contract, 1, 100)) send(WireRequests.harnessInstallStatus())
+        return result
     }
 
     /**
@@ -867,6 +896,15 @@ class Controller(
             put("id", id)
             put("status", status)
             if (wontFix != null) put("wontFix", wontFix)
+        }
+        return report(send(Envelope(Envelope.TICKET_MOVE, body.toString())))
+    }
+
+    /** Reorder inside the ticket's own column (no status): [position] 0 is the top. Ticket order is priority. */
+    suspend fun reorderTicket(id: String, position: Int): CommandResult {
+        val body = buildJsonObject {
+            put("id", id)
+            put("position", position)
         }
         return report(send(Envelope(Envelope.TICKET_MOVE, body.toString())))
     }

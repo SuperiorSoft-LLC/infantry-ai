@@ -212,8 +212,11 @@ fun main(args: Array<String>) {
  * agenthq ticket create --title "..." [--desc "..." | --desc-file <path> | --desc -] [--project <id>] [--role <id>] [--provider <id>] [--model <id>] [--image <file>]...   a new todo ticket; prints its id
  * agenthq ticket update <id> [--title ..] [--desc ..] [--role <id>] [--provider <id>] [--model <id>] [--image <file>]... [--remove-image <path>]...   edit one ticket
  * agenthq ticket move <id> <status>            move one ticket to a column (todo, in_progress, pending, done)
+ * agenthq ticket move <id> --before <id>|--top|--bottom   reorder inside its column (order = priority)
  * agenthq ticket start <id>                    start ticket work (never with a spawn): its role/provider/model, its own branch
  * agenthq harnesses                            the harnesses (provider ids) a ticket can pin, and each one's models
+ * agenthq harness-status [--check]            which harness CLIs (claude, opencode, pi) are installed / missing / outdated (--check asks npm for the latest)
+ * agenthq harness-install [id...] [--update]  npm-install the missing harness CLIs into the app prefix (--update refreshes outdated ones)
  * agenthq ticket link <id> <otherId> <type>   link one ticket to another (type: blocked_by, blocks, child_of, ...)
  * agenthq threads              my conversations: who else is in each, how many messages, when last
  * agenthq thread <id>          one conversation, message by message in thread order
@@ -390,6 +393,8 @@ internal object Cli {
                 "board" -> board(stream, parsed, out, err, getenv)
                 "ticket" -> ticket(stream, parsed, out, err, getenv)
                 "harnesses" -> harnesses(stream, out, err)
+                "harness-status" -> harnessStatus(stream, parsed, out, err)
+                "harness-install" -> harnessInstall(stream, parsed, out, err)
                 "agents" -> agents(stream, parsed, out, err, getenv)
                 "send" -> send(stream, parsed, out, err, getenv)
                 "inbox" -> inbox(stream, parsed, out, err, getenv)
@@ -721,7 +726,7 @@ internal object Cli {
                 "SESSIONS: ${records.size} (pod listing is not in contract ${EventVocabulary.VERSION})"
             )
             records.forEach { session ->
-                out.appendLine("  ${session.id.take(8)} ${if (session.runPhase == "compacting") "compacting" else session.state} started=${session.spawnedAt}")
+                out.appendLine("  ${session.id.take(8)} ${if (session.runPhase == "compacting") "compacting" else session.state} started=${session.spawnedAt}" + (session.projectId?.let { " project=$it" } ?: ""))
             }
             0
         }
@@ -1089,11 +1094,11 @@ internal object Cli {
         checkContract(stream, err)
         val ticket = resolveTicket(stream, parsed.args[1].trim(), boardProjectOf(parsed, getenv), err) ?: return 1
         val fullId = ticket.id
-        val status = parsed.args[2].trim()
+        val status = parsed.args.getOrNull(2)?.trim()
         // BUG-MAIL-2: run inside an agent's session, the move names that session, which the daemon records as the
         // ticket's starter (its worker can then `agenthq send starter`). Typed by a person, there is none.
         val session = getenv(AccessPolicy.SESSION_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }
-        if (status.lowercase() == TicketStatus.IN_PROGRESS && ticket.status != TicketStatus.IN_PROGRESS) {
+        if (status?.lowercase() == TicketStatus.IN_PROGRESS && ticket.status != TicketStatus.IN_PROGRESS) {
             return when (val outcome = TicketStarter.start(stream, ticket, session)) {
                 is TicketStarter.Outcome.Started -> {
                     out.appendLine("moved $fullId -> ${outcome.ticket.status}")
@@ -1107,7 +1112,13 @@ internal object Cli {
                 is TicketStarter.Outcome.NotStarted -> reportNotStarted(outcome, out, err)
             }
         }
-        val move = TicketMove(id = fullId, status = status)
+        val position = if (parsed.before != null || parsed.top || parsed.bottom) {
+            val board = fetchBoard(stream, boardProjectOf(parsed, getenv), err) ?: return 1
+            placement(ticket, status, parsed, board, err) ?: return 1
+        } else {
+            null
+        }
+        val move = TicketMove(id = fullId, status = status, position = position)
         val answer = stream.request(
             Envelope(Envelope.TICKET_MOVE, json.encodeToString(TicketMove.serializer(), move), session),
             answerType = Envelope.TICKET,
@@ -1122,6 +1133,38 @@ internal object Cli {
         }
         out.appendLine("moved $fullId -> ${moved.status}")
         return 0
+    }
+
+    /**
+     * The position `ticket move --top|--bottom|--before` asks for, or null after printing why it cannot be had.
+     * The daemon takes the index in the column AFTER the ticket is lifted out, so a ticket moving down inside its
+     * own column lands one place above the target's current index.
+     */
+    private fun placement(ticket: Ticket, status: String?, parsed: ParsedArgs, board: List<Ticket>, err: Appendable): Int? {
+        if (parsed.top) return 0
+        if (parsed.bottom) return Int.MAX_VALUE
+        val target = when (val match = matchTicketPrefix(parsed.before!!.trim(), board)) {
+            is TicketPrefixMatch.Unique -> match.ticket
+            TicketPrefixMatch.None -> {
+                err.appendLine("error: no ticket ${parsed.before}")
+                return null
+            }
+            is TicketPrefixMatch.Ambiguous -> {
+                err.appendLine("error: ticket id '${parsed.before}' is ambiguous; use a longer id or the full id")
+                return null
+            }
+        }
+        if (target.id == ticket.id) {
+            err.appendLine("error: a ticket cannot be moved before itself")
+            return null
+        }
+        val column = status?.lowercase() ?: ticket.status
+        if (target.status != column) {
+            err.appendLine("error: ${target.id} is in ${target.status}, not $column: name the column or pick a ticket in it")
+            return null
+        }
+        val lifted = if (ticket.status == column && ticket.position < target.position) 1 else 0
+        return target.position - lifted
     }
 
     /**
@@ -1206,6 +1249,21 @@ internal object Cli {
         out.appendLine("  model:    ${worker.model ?: "(the harness's default)"}")
         out.appendLine("  branch:   ${worker.worktreeBranch ?: ticket.branch ?: "-"}")
         out.appendLine("  worktree: ${worker.worktreePath ?: worker.workingDir}")
+    }
+
+    /** HARNESS-INSTALL-1: `harness-status [--check]`: which harness CLIs are installed / missing / outdated. */
+    private fun harnessStatus(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable): Int = runBlocking {
+        checkContract(stream, err)
+        HarnessInstallClient.render(HarnessInstallClient.status(stream, parsed.check), out)
+        0
+    }
+
+    /** HARNESS-INSTALL-1: `harness-install [id...] [--update]`: npm-install into the app prefix; exit 1 when any one failed. */
+    private fun harnessInstall(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable): Int = runBlocking {
+        checkContract(stream, err)
+        val result = HarnessInstallClient.install(stream, parsed.args.map { it.trim() }, parsed.update)
+        HarnessInstallClient.render(result, out)
+        if (HarnessInstallClient.failed(result)) 1 else 0
     }
 
     /**
@@ -1941,6 +1999,7 @@ internal object Cli {
             to = to,
             body = body,
             replyTo = replyTo,
+            allowCrossProject = parsed.crossProject,
         )
         // NOT idempotent: if the connection dropped after the daemon received this, a second copy
         // would be a SECOND message (and a second debit against the thread's ceiling). The drop is
@@ -3804,6 +3863,8 @@ internal object Cli {
                                   --desc is cut at its first line on Windows (the agenthq.cmd launcher drops the rest).
               ticket move <id|prefix> <status>   Move one ticket to a column (todo, in_progress, pending, done); a move to
                                   in_progress is a start (see ticket start): a refused or held one exits 1 with the reason
+              ticket move <id|prefix> [<status>] --before <id|prefix> | --top | --bottom   Reorder: ticket order is priority
+                                  (the board and `tickets` list a column in that order; new tickets go to the bottom)
               ticket start <id|prefix>       Start ticket work this way, never with a spawn: the worker runs the ticket's
                                   role, provider and model on its own ticket/<short-id>-<slug> branch; the ticket goes
                                   In Progress. A refused or held start exits 1 with the reason
@@ -3812,6 +3873,7 @@ internal object Cli {
                                   and token. Takes effect on the next daemon restart.
               bg run [--name L] -- CMD  Run CMD as a registered background job (session reads Running); bg list|status|logs|stop ID
               harnesses           The harnesses (provider ids) a ticket can pin, and each one's models
+              harness-status      Which harness CLIs are installed / missing / outdated; harness-install [id...] [--update] installs them via npm
               epics --project <id> List that project's epics, with each one's goal and story count
               epic show <id|prefix> [--project <id>]   One epic: its title, then its tickets as ID | STATUS | TITLE | AGENT
               epic create --title <t> [--desc <d>] [--project <id>]   Save an epic; prints its id
@@ -3955,6 +4017,9 @@ internal object Cli {
         val addressGiven: Boolean = false,
         val force: Boolean = false,
         val live: Boolean = false,
+        /** HARNESS-INSTALL-1: `--update` (harness-install refreshes outdated CLIs) / `--check` (harness-status asks npm for the latest). */
+        val update: Boolean = false,
+        val check: Boolean = false,
         val profiles: Boolean = false,
         val project: String? = null,
         val status: String? = null,
@@ -3966,6 +4031,8 @@ internal object Cli {
         val descStdin: Boolean = false,
         val replyTo: String? = null,
         val unread: Boolean = false,
+        /** Contract 1.100.0: `send --cross-project` overrides the cross-project guard. */
+        val crossProject: Boolean = false,
         val help: Boolean = false,
         /** BUG-CLI-4: `--version` (or the `version` command) prints the CLI's and the daemon's contract. */
         val version: Boolean = false,
@@ -3974,6 +4041,11 @@ internal object Cli {
         val endpointsFile: String? = null,
         val tokenFile: String? = null,
         val epic: String? = null,
+        /** `ticket move --before <id|prefix>`: put the ticket just above that one. */
+        val before: String? = null,
+        /** `ticket move --top` / `--bottom`: first or last place in its column. */
+        val top: Boolean = false,
+        val bottom: Boolean = false,
         // `mcp serve` guardrails (P11-B, docs/MCP.md).
         val mcpDepth: Int? = null,
         val maxDepth: Int? = null,
@@ -4059,6 +4131,8 @@ internal object Cli {
         var addressGiven = false
         var force = false
         var live = false
+        var update = false
+        var check = false
         var profiles = false
         var project: String? = null
         var status: String? = null
@@ -4070,6 +4144,7 @@ internal object Cli {
         var descSources = 0
         var replyTo: String? = null
         var unread = false
+        var crossProject = false
         var help = false
         var version = false
         var url: String? = null
@@ -4077,6 +4152,9 @@ internal object Cli {
         var endpointsFile: String? = null
         var tokenFile: String? = null
         var epic: String? = null
+        var before: String? = null
+        var top = false
+        var bottom = false
         var mcpDepth: Int? = null
         var maxDepth: Int? = null
         var maxSpawns: Int? = null
@@ -4151,6 +4229,14 @@ internal object Cli {
                 }
                 "--force" -> {
                     force = true
+                    i++
+                }
+                "--update" -> {
+                    update = true
+                    i++
+                }
+                "--check" -> {
+                    check = true
                     i++
                 }
                 "--live" -> {
@@ -4340,6 +4426,19 @@ internal object Cli {
                     timeout = args.getOrNull(++i) ?: return fail(err, "--timeout expects whole seconds")
                     i++
                 }
+                "--before" -> {
+                    before = flagValue(args, ++i)
+                        ?: return fail(err, "--before expects a ticket id or prefix (see: agenthq tickets)")
+                    i++
+                }
+                "--top" -> {
+                    top = true
+                    i++
+                }
+                "--bottom" -> {
+                    bottom = true
+                    i++
+                }
                 "--epic" -> {
                     epic = flagValue(args, ++i)
                         ?: return fail(err, "--epic expects an epic id or prefix (see: agenthq epics --project <id>)")
@@ -4352,6 +4451,10 @@ internal object Cli {
                 }
                 "--unread" -> {
                     unread = true
+                    i++
+                }
+                "--cross-project" -> {
+                    crossProject = true
                     i++
                 }
                 "--mcp-depth" -> {
@@ -4403,11 +4506,14 @@ internal object Cli {
             addressGiven = addressGiven,
             force = force,
             live = live,
+            update = update,
+            check = check,
             profiles = profiles,
             project = project,
             status = status,
             replyTo = replyTo,
             unread = unread,
+            crossProject = crossProject,
             help = help,
             version = version,
             url = url,
@@ -4418,6 +4524,9 @@ internal object Cli {
             descFile = descFile,
             descStdin = descStdin,
             epic = epic,
+            before = before,
+            top = top,
+            bottom = bottom,
             tokenFile = tokenFile,
             mcpDepth = mcpDepth,
             maxDepth = maxDepth,
@@ -4545,6 +4654,8 @@ internal object Cli {
         }
         "ticket" -> ticketUsageError(parsed)
         "harnesses" -> if (parsed.args.isNotEmpty()) "harnesses takes no arguments: agenthq harnesses" else null
+        "harness-status" -> if (parsed.args.isNotEmpty()) "harness-status takes no arguments: agenthq harness-status [--check]" else null
+        "harness-install" -> null
         "epic" -> epicUsageError(parsed, getenv)
         "project" -> projectUsageError(parsed)
         "image" -> imageUsageError(parsed)
@@ -4676,7 +4787,10 @@ internal object Cli {
             }
             "move" -> when {
                 blank(1) -> "ticket move requires a ticket id: agenthq ticket move <id|prefix> <status>"
-                blank(2) -> "ticket move requires a status: agenthq ticket move <id|prefix> <status>"
+                listOf(parsed.before != null, parsed.top, parsed.bottom).count { it } > 1 ->
+                    "ticket move takes one of --before, --top, --bottom"
+                args.size == 2 && (parsed.before != null || parsed.top || parsed.bottom) -> null
+                blank(2) -> "ticket move requires a status: agenthq ticket move <id|prefix> <status|--before <id>|--top|--bottom>"
                 args[2].trim() !in TicketStatus.ALL ->
                     "unknown status '${args[2]}'; expected one of ${TicketStatus.ALL.joinToString(", ")}"
                 else -> null
@@ -4717,7 +4831,7 @@ internal object Cli {
     private val COMMANDS = setOf(
         "submit", "watch", "pods", "runs", "logs", "cancel", "tickets", "board", "ticket", "agents", "send", "inbox",
         "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "issue",
-        "trait", "skill", "role", "ask", "harnesses", "image", "session", "remote", "bg",
+        "trait", "skill", "role", "ask", "harnesses", "harness-status", "harness-install", "image", "session", "remote", "bg",
     )
 
     /** `agenthq remote on|off|status`: edits `<stateDir>/network.properties`; takes effect on the next daemon restart. */
@@ -4998,7 +5112,7 @@ internal class FrameStream private constructor(
      * A read or a cancel may (the answer is the same either way). A submit may NOT: the first copy may
      * already have created the pod, so a second copy would create another one.
      */
-    suspend fun request(envelope: Envelope, answerType: String, what: String, idempotent: Boolean): Envelope {
+    suspend fun request(envelope: Envelope, answerType: String, what: String, idempotent: Boolean, timeoutMs: Long = target.answerTimeoutMs): Envelope {
         // BUG-MCP-RACE-1: a backlog answer has the same TYPE as every other ticket's push, so matching by type took a
         // started ticket's `ticket` push as a ticket_save's answer. From contract 1.87.0 the request carries an id the
         // daemon echoes on its direct answer only; an older daemon cannot echo it, so it keeps the type match.
@@ -5006,7 +5120,7 @@ internal class FrameStream private constructor(
         send(sent)
         var sentAt = generation
         var lastError: String? = null
-        val deadline = System.currentTimeMillis() + target.answerTimeoutMs
+        val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
             if (generation != sentAt) {
                 if (!idempotent) {
@@ -5035,7 +5149,7 @@ internal class FrameStream private constructor(
                 Envelope.ERROR -> if (id == null || frame.requestId == null || frame.requestId == id) lastError = frame.data
             }
         }
-        error(lastError ?: "no answer to $what within ${target.answerTimeoutMs}ms")
+        error(lastError ?: "no answer to $what within ${timeoutMs}ms")
     }
 
     /**
