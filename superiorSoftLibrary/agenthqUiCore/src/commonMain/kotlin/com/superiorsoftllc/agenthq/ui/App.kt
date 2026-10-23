@@ -1224,6 +1224,8 @@ private fun OutputPane(a: AgentView?, spawnMode: Boolean, roleColor: String? = n
         Box(Modifier.fillMaxSize(), Alignment.Center) {
             if (spawnMode) return@Box
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                BrandEmblem(72.dp)
+                Spacer(Modifier.height(10.dp))
                 Text("No live session. Start one to see its output here.", color = Palette.Muted, fontSize = 12.sp)
                 Spacer(Modifier.height(10.dp))
                 OutlinedButton(onClick = onStartSession) { Text("Start a session") }
@@ -1234,6 +1236,8 @@ private fun OutputPane(a: AgentView?, spawnMode: Boolean, roleColor: String? = n
     if (a.output.isEmpty() && a.chatStatus(Clock.System.now().toEpochMilliseconds()) == null) {
         Box(Modifier.fillMaxSize(), Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                BrandEmblem(72.dp)
+                Spacer(Modifier.height(10.dp))
                 Text(
                     "Nothing on screen for this session yet.\nThe daemon replays a session's recent output only while the process that ran it is up; older history is not kept.",
                     color = Palette.Muted, fontSize = 12.sp,

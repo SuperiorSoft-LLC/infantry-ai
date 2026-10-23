@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/branding/infantry-ai-emblem.png" alt="Infantry AI emblem" width="220"></p>
+
 # Infantry AI
 
 Infantry AI (formerly AgentHQ) is a daemon, CLI and desktop/Android UI for running and supervising teams of coding agents

@@ -237,15 +237,10 @@ private fun TitleBarOverflow(
 }
 private val CloseHover = Color(0xFFC42B1C)
 
-/** The Infantry AI mark: an amber tile with a dark "A". */
+/** The Infantry AI emblem. */
 @Composable
 private fun Logo() {
-    Box(
-        Modifier.size(18.dp).clip(RoundedCornerShape(4.dp)).background(Palette.Accent).testTag(TITLE_BAR_LOGO_TAG),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text("A", color = Color(0xFF1A1200), fontWeight = FontWeight.Black, fontSize = 12.sp, lineHeight = 12.sp)
-    }
+    BrandEmblem(22.dp, Modifier.testTag(TITLE_BAR_LOGO_TAG))
 }
 
 /**
