@@ -64,6 +64,7 @@ const val NEW_PROJECT_LABEL = "New project"
 const val NEW_PROJECT_ICON_TAG = "title-bar-new-project-icon"
 const val NEW_PROJECT_DIALOG_TAG = "new-project-dialog"
 const val NEW_PROJECT_NAME_TAG = "new-project-name"
+const val NEW_PROJECT_DIRECTORY_TAG = "new-project-directory"
 const val NEW_PROJECT_CREATE_TAG = "new-project-create"
 const val NEW_PROJECT_CANCEL_TAG = "new-project-cancel"
 
@@ -133,15 +134,15 @@ fun ProjectPicker(state: AppState, controller: Controller) {
 
     if (editing && current != null) NewProjectDialog(
         live, onDismiss = { editing = false }, title = "Edit Project", confirmLabel = "Save", initialName = current.name,
-    ) { name ->
+    ) { name, _ ->
         when (val r = controller.renameProject(current.id, name)) {
             is CommandResult.Refused -> r.reason
             else -> { editing = false; null }
         }
     }
 
-    if (creating) NewProjectDialog(live, onDismiss = { creating = false }) { name ->
-        when (val r = controller.createProject(name)) {
+    if (creating) NewProjectDialog(live, onDismiss = { creating = false }, askDirectory = true) { name, directory ->
+        when (val r = controller.createProject(name, directory)) {
             is CommandResult.Refused -> r.reason
             else -> { creating = false; null }
         }
@@ -188,19 +189,21 @@ private fun NewProjectDialog(
     title: String = "New Project",
     confirmLabel: String = "Create",
     initialName: String = "",
-    onCreate: suspend (String) -> String?,
+    askDirectory: Boolean = false,
+    onCreate: suspend (String, String) -> String?,
 ) {
     val scope = rememberCoroutineScope()
     var name by remember { mutableStateOf(initialName) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    var directory by remember { mutableStateOf("") }
     val nameFocus = remember { FocusRequester() }
     val canCreate = live && name.isNotBlank() && !busy
     fun create() {
         if (!canCreate) return
         busy = true
         error = null
-        scope.launch { error = onCreate(name); busy = false }
+        scope.launch { error = onCreate(name, directory); busy = false }
     }
     AhqAlertDialog(
         onDismissRequest = onDismiss,
@@ -220,6 +223,11 @@ private fun NewProjectDialog(
                 OutlinedTextField(
                     name, { name = it; error = null }, label = { Text("Project name") }, singleLine = true, enabled = live,
                     modifier = Modifier.fillMaxWidth().focusRequester(nameFocus).testTag(NEW_PROJECT_NAME_TAG),
+                )
+                if (askDirectory) OutlinedTextField(
+                    directory, { directory = it; error = null }, label = { Text("Directory / repo (optional)") }, singleLine = true, enabled = live,
+                    supportingText = { Text("Path on the daemon machine; tickets cannot start without one.", fontSize = 10.sp) },
+                    modifier = Modifier.fillMaxWidth().testTag(NEW_PROJECT_DIRECTORY_TAG),
                 )
                 if (!live) Text("Connect to a daemon to create a project.", color = Palette.Muted, fontSize = 11.sp)
                 error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }

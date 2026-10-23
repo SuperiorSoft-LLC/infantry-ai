@@ -482,7 +482,7 @@ internal fun AttentionPane(state: AppState, controller: Controller) {
             if (state.questions.isNotEmpty()) return
             Text("Nothing needs your attention.", color = Palette.Text)
             Text(
-                "Unattended runs that stall or pass their deadline, tripped triggers and conversation ceilings are recorded here, durably.",
+                "Failed sessions, unattended runs that stall or pass their deadline, tripped triggers and conversation ceilings are recorded here, durably.",
                 color = Palette.Muted, fontSize = 11.sp,
             )
             return

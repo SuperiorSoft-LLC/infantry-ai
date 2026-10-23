@@ -30,3 +30,10 @@ or installs them for you with `./bin/agenthq harness-install claude` (needs Node
 
 Security: the token grants command execution through agents. Do not expose the raw port to the
 internet; put a TLS reverse proxy (it must pass WebSocket upgrades) or a VPN/SSH tunnel in front.
+
+Starting tickets headlessly
+  A ticket start cuts a worktree from a git repo, so the daemon needs two settings:
+    AGENTHQ_REPO=<path of a git repository on this machine>   (or give each project a directory)
+    AGENTHQ_BASE_BRANCH=main                                   (the branch new ticket branches are cut from)
+  Without them a Start is refused ("no base branch configured ..." / "this project has no directory configured").
+  A ticket also needs a role: set one with `agenthq ticket update <id> --role <role id>`.

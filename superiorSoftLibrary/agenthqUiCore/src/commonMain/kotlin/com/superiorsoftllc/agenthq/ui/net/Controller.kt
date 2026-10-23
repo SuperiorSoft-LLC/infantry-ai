@@ -214,7 +214,12 @@ class Controller(
                     Envelope.PROJECT -> {
                         val name = pendingCreatedProject
                         val made = _state.value.projects.firstOrNull { p -> p.name == name && before.projects.none { it.id == p.id } }
-                        if (name != null && made != null) { pendingCreatedProject = null; selectProject(made.id) }
+                        if (name != null && made != null) {
+                            pendingCreatedProject = null
+                            val dir = pendingCreatedDirectory; pendingCreatedDirectory = ""
+                            selectProject(made.id)
+                            if (dir.isNotEmpty()) saveProjectDirectory(made.id, dir)
+                        }
                     }
                     // The snapshot after `ready` says which sessions exist now: fill what the drop missed.
                     Envelope.SESSIONS -> if (resyncPending) {
@@ -1027,14 +1032,16 @@ class Controller(
     /** Create a project (`project_save`); the daemon answers a `project` frame, or an `error` that names the refusal. */
     /** M2-7: the name of a project [createProject] asked for, selected when its `project` frame arrives. */
     private var pendingCreatedProject: String? = null
+    private var pendingCreatedDirectory: String = ""
 
     /**
      * M2-7 (New Project modal): create a project (the same `project_save` as [saveProject]) and, once the daemon
      * answers with the new project, select it (the same [selectProject] the picker uses).
      */
-    suspend fun createProject(name: String): CommandResult {
+    suspend fun createProject(name: String, directory: String = ""): CommandResult {
         if (name.isBlank()) return report(CommandResult.Refused("a project needs a name"))
         pendingCreatedProject = name.trim()
+        pendingCreatedDirectory = directory.trim()
         val r = saveProject(name)
         if (r !is CommandResult.Sent) pendingCreatedProject = null
         return r

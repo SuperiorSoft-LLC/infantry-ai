@@ -39,8 +39,24 @@ class ReportBackMonitor(
     fun onSessionEvent(event: SessionEvent) {
         if (event !is SessionEvent.Exit) return
         if (event.killOutcome != null) return // an operator kill is never checked (D9)
+        if (event.code != null && event.code != 0) {
+            runCatching { raiseFailure(event) }
+                .onFailure { System.err.println("[agentHq] session-failed attention failed for ${event.sessionId}: ${it.message}") }
+        }
         runCatching { check(event) }
             .onFailure { System.err.println("[agentHq] report-back check failed for ${event.sessionId}: ${it.message}") }
+    }
+
+    /** A failed run is a thing a human should see, whether or not the session owed a report. */
+    private fun raiseFailure(event: SessionEvent.Exit) {
+        val session = sessions.get(event.sessionId) ?: return
+        attention.raise(
+            kind = AttentionKind.SESSION_FAILED,
+            ticketId = session.ticketId,
+            sessionId = session.id,
+            outcome = "exit_${event.code}",
+            detail = "Session ${session.id.take(8)} ended with exit code ${event.code}.",
+        )
     }
 
     private fun check(event: SessionEvent.Exit) {
