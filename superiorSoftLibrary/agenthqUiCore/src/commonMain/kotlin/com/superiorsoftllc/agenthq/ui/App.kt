@@ -225,12 +225,7 @@ fun App(
     var rightTab by remember { mutableStateOf(RightTab.CHANGES) }
     var rightPanelWidth by remember { mutableStateOf(RightPanelWidth.DEFAULT) } // in-memory only: no UI-prefs store exists yet
     var sidebarWidth by remember { mutableStateOf(SidebarWidth.DEFAULT) } // M2-9: in-memory only, not persisted (owner's call)
-    var spawnMode by remember { mutableStateOf(false) }
-    var prompt by remember { mutableStateOf("") }
-    // IMG-2: images the daemon already stored for the next message (their chips), an upload in flight, a refusal.
-    var attachments by remember { mutableStateOf(listOf<ChatAttachment>()) }
-    val attachBusy = attachments.any { it.path == null }
-    var attachError by remember { mutableStateOf<String?>(null) }
+
     var showConnect by remember { mutableStateOf(false) }
     // MOBILE-CONNCHIP-1: a host may route the connection chip to its own connect screen (Android).
     val changeConnection = LocalPlatformHost.current.onChangeConnection
@@ -238,13 +233,8 @@ fun App(
     var showConfig by remember { mutableStateOf(false) }
     var showRoles by remember { mutableStateOf(false) }
     var showNewAgent by remember { mutableStateOf(false) }
-    // SWAP-AGENT-1: the Switch agent picker, open for one session (the composer button, the header chip, `/harness`).
-    var switchAsk by remember { mutableStateOf<SwitchAgentAsk?>(null) }
-    fun openSwitch(sessionId: String, harness: String? = null) {
-        spawnMode = false
-        switchAsk = SwitchAgentAsk(sessionId, harness, (switchAsk?.seq ?: 0) + 1)
-    }
-    LaunchedEffect(state.harnessPickerAsk) { state.harnessPickerAsk?.let { openSwitch(it.sessionId, it.harness) } }
+    // CHAT-PANEL-1: the main window's chat state (draft, attachments, New agent mode, Switch picker); one per window, as before.
+    val chat = remember { ChatPanelState() }
     var showBoard by remember { mutableStateOf(false) }
     // DIFF-MODAL: the changed file whose diff is open over the window; another project closes it.
     var diffTarget by remember { mutableStateOf<DiffTarget?>(null) }
@@ -294,7 +284,6 @@ fun App(
         if (state.panels.compactWindow) controller.showCompactScreen(CompactScreen.RIGHT) else controller.revealPanel(PanelSide.RIGHT)
         rightTab = tab
     }
-    val promptFocus = remember { FocusRequester() }
     val root = remember { FocusRequester() }
 
     DisposableEffect(controller) {
@@ -320,76 +309,8 @@ fun App(
         if (visible.isEmpty()) return
         val i = visible.indexOfFirst { it.id == state.selectedId }
         controller.select(visible[(if (i < 0) 0 else (i + delta).mod(visible.size))].id)
-        spawnMode = false
+        chat.spawnMode = false
     }
-
-    /** ATTACH-INLINE-1: the composer's text changed; a tag deleted from it releases its attachment. */
-    fun editPrompt(text: String) {
-        prompt = text
-        attachments = ComposerTags.prune(text, attachments)
-    }
-
-    /**
-     * IMG-2 / ATTACH-INLINE-1: give each picked file a tag NOW (the box inserts the returned tokens at its caret), then
-     * upload it into the project the message goes to: an image as purpose `chat`, any other file as purpose `file`.
-     * Over the limit (images 10 MB, other files 20 MB) or refused by the daemon: an inline error, and no tag.
-     */
-    fun attach(picked: List<PickedImage>): String {
-        if (picked.isEmpty()) return ""
-        val projectId = (if (spawnMode) null else selected?.session?.projectId?.takeIf { it.isNotBlank() }) ?: state.activeProjectId
-        attachError = null
-        val tagged = mutableListOf<Pair<ChatAttachment, PickedImage>>()
-        for (file in picked) {
-            val limit = if (file.isImage) ImageUploadWire.MAX_BYTES else CHAT_FILE_MAX_BYTES
-            if (file.size > limit) { attachError = "${file.fileName}: the file is over the ${limit / (1024 * 1024)} MB limit"; continue }
-            val token = ComposerTags.nextToken(prompt + tagged.joinToString("") { it.first.token.toString() }, attachments)
-                ?: run { attachError = "${file.fileName}: too many attachments in one message"; null } ?: continue
-            val a = ChatAttachment(token, file.fileName, file.isImage, file.bytes)
-            attachments = attachments + a
-            tagged += a to file
-        }
-        if (tagged.isNotEmpty()) actionScope.launch {
-            for ((a, file) in tagged) {
-                val r = if (file.isImage) controller.uploadChatImage(projectId, file.fileName, file.mimeType, file.bytes)
-                else controller.uploadChatFile(projectId, file.fileName, file.mimeType, file.bytes)
-                when (r) {
-                    // A tag deleted while it uploaded stays released: its file is simply never referenced.
-                    is ImageUploadOutcome.Stored -> attachments = attachments.map { if (it.token == a.token) it.stored(r.image.path) else it }
-                    is ImageUploadOutcome.Refused -> {
-                        attachError = "${file.fileName}: ${r.reason}"
-                        editPrompt(ComposerTags.strip(prompt, a.token))
-                    }
-                }
-            }
-        }
-        return tagged.joinToString("") { it.first.token.toString() }
-    }
-
-    fun submit() {
-        val typed = prompt.trim()
-        // ATTACH-INLINE-1: each tag becomes its `[image: …]` / `[file: …]` reference where it stands; a `/command` line
-        // never carries them (it is not a prompt).
-        val text = if (isSlashCommand(ComposerTags.strip(typed))) ComposerTags.strip(typed).trim() else ComposerTags.toPrompt(typed, attachments)
-        actionScope.launch {
-            val harness = if (spawnMode || selected == null) null else HarnessSwitch.parse(text)
-            val r: CommandResult = when {
-                // CMD-HARNESS-1: a client command, never a prompt: it swaps the agent's harness.
-                harness != null -> controller.switchHarness(selected!!.id, harness)
-                spawnMode || selected == null -> controller.spawn(text)
-                selected.session.resumable && selected.session.state in ENDED_STATES ->
-                    controller.resume(selected.id, text)
-                isBusy(selected) -> controller.queueMessage(selected.id, text)
-                else -> controller.prompt(selected.id, text)
-            }
-            if (r is CommandResult.Sent || r is CommandResult.Queued) {
-                editPrompt("")
-                attachError = null
-                // A `/model` or `/effort` in the New agent box only sets the next spawn's selection: stay in the spawn box.
-                if (!(spawnMode && isSlashCommand(text))) spawnMode = false
-            }
-        }
-    }
-
     fun key(e: KeyEvent): Boolean {
         if (e.type != KeyEventType.KeyDown) return false
         return when {
@@ -406,12 +327,10 @@ fun App(
                 state.orderedAgents.firstOrNull { needsInput(it, state.waiting, state.openPrompts, state.openQuestionSessions) && it.id != state.selectedId }?.let { controller.select(it.id) }
                 true
             }
-            e.isCtrlPressed && e.isShiftPressed && e.key == Key.N -> { selected?.let { openSwitch(it.id) }; true }
-            e.isCtrlPressed && e.key == Key.N -> { spawnMode = !spawnMode; promptFocus.requestFocus(); true }
+            e.isCtrlPressed && e.isShiftPressed && e.key == Key.N -> { selected?.let { chat.openSwitch(it.id) }; true }
+            e.isCtrlPressed && e.key == Key.N -> { chat.spawnMode = !chat.spawnMode; chat.focus.requestFocus(); true }
             e.isCtrlPressed && e.key == Key.R -> {
-                selected?.let { a -> actionScope.launch {
-                    if (controller.resume(a.id, ComposerTags.toPrompt(prompt, attachments).trim()) is CommandResult.Sent) editPrompt("")
-                } }
+                selected?.let { a -> chat.resume(controller, actionScope, a) }
                 true
             }
             e.isCtrlPressed && e.key == Key.One -> { centerTab = CenterTab.OUTPUT; true }
@@ -426,7 +345,7 @@ fun App(
             e.isCtrlPressed && e.key == Key.Seven -> { showRightTab(RightTab.USAGE); true }
             e.isCtrlPressed && e.key == Key.L -> { showConnect = true; true }
             e.isCtrlPressed && e.key == Key.Comma -> { showConfig = true; true }
-            e.isCtrlPressed && e.key == Key.Slash -> { promptFocus.requestFocus(); true }
+            e.isCtrlPressed && e.key == Key.Slash -> { chat.focus.requestFocus(); true }
             else -> false
         }
     }
@@ -467,8 +386,8 @@ fun App(
                 Sidebar(
                     state, visible, query, { query = it }, roleFilter, { roleFilter = it },
                     searchFocus,
-                    onSelect = { controller.select(it); spawnMode = false; if (compact) controller.showCompactScreen(CompactScreen.OUTPUT) },
-                    onNew = { spawnMode = false; showNewAgent = true; if (compact) controller.showCompactScreen(CompactScreen.OUTPUT) },
+                    onSelect = { controller.select(it); chat.spawnMode = false; if (compact) controller.showCompactScreen(CompactScreen.OUTPUT) },
+                    onNew = { chat.spawnMode = false; showNewAgent = true; if (compact) controller.showCompactScreen(CompactScreen.OUTPUT) },
                     onRemove = { id -> actionScope.launch { controller.removeSession(id) } },
                     onAssign = { id, projectId -> actionScope.launch { controller.assignSessionProject(id, projectId) } },
                     projects = { ProjectsSidebar(state) },
@@ -496,8 +415,8 @@ fun App(
                         RightTab.REVIEW -> ReviewPane(state, controller)
                         RightTab.ATTENTION -> AttentionPane(state, controller)
                         RightTab.USAGE -> UsagePane(state, selected, controller)
-                        RightTab.PROMPTS -> PromptsPane(state, controller, onInsert = { prompt = insertIntoPrompt(prompt, it); promptFocus.requestFocus() })
-                        RightTab.SKILLS -> SkillsPane(state, controller, onInsert = { prompt = insertIntoPrompt(prompt, it); promptFocus.requestFocus() })
+                        RightTab.PROMPTS -> PromptsPane(state, controller, onInsert = { chat.insert(it) })
+                        RightTab.SKILLS -> SkillsPane(state, controller, onInsert = { chat.insert(it) })
                     }
                 }
             }
@@ -518,32 +437,32 @@ fun App(
                             onOpenRight = { controller.showCompactScreen(CompactScreen.RIGHT) },
                         )
                     }
-                    CenterHeader(selected, spawnMode, state, onOpenSwitch = { selected?.let { openSwitch(it.id) } }, onOpenTicket = { showBoard = true })
-                    CenterTabBar(state, centerTab) { centerTab = it }
-                    Box(Modifier.weight(1f).fillMaxWidth().testTag(CENTER_TRANSCRIPT_TAG)) {
-                        when (centerTab) {
-                            CenterTab.OUTPUT -> androidx.compose.runtime.CompositionLocalProvider(LocalUserPortrait provides state.userPortrait) {
-                                OutputPane(selected, spawnMode, roleColor = state.role(selected?.role)?.color, onStartSession = { spawnMode = true; promptFocus.requestFocus() })
+                    // CHAT-PANEL-1: the main window is one host of the shared ChatPanel; the tab strip and the other tabs are its slots.
+                    ChatPanel(
+                        selected?.id, controller, Modifier.weight(1f).fillMaxWidth(), chat = chat,
+                        onOpenTicket = { showBoard = true },
+                        beforeContent = { CenterTabBar(state, centerTab) { centerTab = it } },
+                        content = { transcript ->
+                            when (centerTab) {
+                                CenterTab.OUTPUT -> transcript()
+                                CenterTab.PODS -> PodsPane(state, controller)
+                                CenterTab.ROLES -> RolesPane(
+                                    state, controller,
+                                    onSessionStarted = { centerTab = CenterTab.OUTPUT; chat.spawnMode = false },
+                                    onOpenAgent = { controller.select(it); centerTab = CenterTab.OUTPUT; chat.spawnMode = false },
+                                )
+                                CenterTab.PROFILES -> ProfilesPane(state, controller, onSessionStarted = { centerTab = CenterTab.OUTPUT; chat.spawnMode = false })
+                                CenterTab.TRIGGERS -> TriggersPane(state, controller)
+                                CenterTab.EPICS -> EpicsPane(state, controller)
+                                CenterTab.MEMORY -> MemoryPane(state, controller)
+                                CenterTab.RUN -> RunPane(state, controller)
+                                CenterTab.GIT -> ProjectGitPane(state, controller)
+                                CenterTab.STATS -> StatsPane(state, controller)
                             }
-                            CenterTab.PODS -> PodsPane(state, controller)
-                            CenterTab.ROLES -> RolesPane(
-                                state, controller,
-                                onSessionStarted = { centerTab = CenterTab.OUTPUT; spawnMode = false },
-                                onOpenAgent = { controller.select(it); centerTab = CenterTab.OUTPUT; spawnMode = false },
-                            )
-                            CenterTab.PROFILES -> ProfilesPane(state, controller, onSessionStarted = { centerTab = CenterTab.OUTPUT; spawnMode = false })
-                            CenterTab.TRIGGERS -> TriggersPane(state, controller)
-                            CenterTab.EPICS -> EpicsPane(state, controller)
-                            CenterTab.MEMORY -> MemoryPane(state, controller)
-                            CenterTab.RUN -> RunPane(state, controller)
-                            CenterTab.GIT -> ProjectGitPane(state, controller)
-                            CenterTab.STATS -> StatsPane(state, controller)
-                        }
-                    }
-                    NoticeStrip(state)
-                    // CP-1b: every time New agent opens (and on reconnect while open), re-read the model catalog.
-                    LaunchedEffect(spawnMode || showNewAgent || switchAsk != null, state.connection.isLive) {
-                        if ((spawnMode || showNewAgent || switchAsk != null) && state.connection.isLive) controller.refreshModelCatalog()
+                        },
+                    )
+                    LaunchedEffect(showNewAgent, state.connection.isLive) {
+                        if (showNewAgent && state.connection.isLive) controller.refreshModelCatalog()
                     }
                     if (showNewAgent) {
                         NewAgentDialog(
@@ -557,39 +476,6 @@ fun App(
                             onDismiss = { showNewAgent = false },
                         )
                     }
-                    if (spawnMode && state.roles.isNotEmpty()) {
-                        // ROLE-1c: the role a new agent spawns as. Its binding is the DEFAULT below; the picker still overrides it for this spawn.
-                        SpawnRoleRow(state, controller)
-                    }
-                    if (spawnMode && state.modelCatalog.isNotEmpty()) {
-                        // PICKER 2/2: which provider+model the new agent runs on (from the `models` frame; none picked = daemon defaults).
-                        // PICKER-ALL-2: the shared Harness -> Provider -> Model picker; untouched, the stored pick is left as is.
-                        // The picker bounds its own lists; no outer scroll, so a row is never clipped under a second scroller.
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                            SeededExecutorPicker(
-                                state.providers, state.modelCatalog, state.pickedModel, key = spawnMode, tags = CONFIG_EXECUTOR_TAGS,
-                                onPick = { controller.pickModel(it) },
-                            )
-                        }
-                    }
-                    // SWAP-AGENT-1: the one Switch agent picker, inline above the composer like the New agent rows.
-                    switchAsk?.takeIf { !spawnMode && selected?.id == it.sessionId }?.let { ask ->
-                        val target = selected!!
-                        SwitchAgentPicker(
-                            state, target, ask,
-                            onApply = { role, picked -> controller.switchAgent(target.id, role, picked) },
-                            onClose = { switchAsk = null },
-                        )
-                    }
-                    PromptBox(
-                        prompt, ::editPrompt, ::submit, promptFocus, spawnMode, selected, controller,
-                        onSpawnToggle = { spawnMode = !spawnMode },
-                        onSwitchAgent = { selected?.let { if (switchAsk?.sessionId == it.id) switchAsk = null else openSwitch(it.id) } },
-                        attachments = attachments, attachBusy = attachBusy, attachError = attachError,
-                        onAttach = ::attach,
-                        onRemoveAttachment = { path -> attachments.firstOrNull { it.path == path }?.let { a -> editPrompt(ComposerTags.strip(prompt, a.token)) } },
-                        wire = { ComposerTags.toPrompt(it, attachments) },
-                    )
                 }
               }
               if (!compact && panels.rightShown) {
@@ -631,7 +517,7 @@ fun App(
             BoardModal(
                 state, controller,
                 onOpenAgent = {
-                    controller.select(it); centerTab = CenterTab.OUTPUT; spawnMode = false; showBoard = false
+                    controller.select(it); centerTab = CenterTab.OUTPUT; chat.spawnMode = false; showBoard = false
                     // MOBILE-LAYOUT-2: a compact window opens the Board from the list; "Agent" lands on the output.
                     if (state.panels.compactWindow) controller.showCompactScreen(CompactScreen.OUTPUT)
                 },
@@ -1056,7 +942,7 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
  * button on an ended session. Its destructive Remove button is the only path to [onRemove].
  */
 @Composable
-private fun RemoveAgentDialog(a: AgentView, state: AppState, onDismiss: () -> Unit, onRemove: () -> Unit) {
+internal fun RemoveAgentDialog(a: AgentView, state: AppState, onDismiss: () -> Unit, onRemove: () -> Unit) {
     // Focus starts on the safe action (Cancel), so Enter never deletes by accident and Esc reaches the dialog.
     val cancelFocus = remember { FocusRequester() }
     AhqAlertDialog(
@@ -1082,121 +968,6 @@ private fun RemoveAgentDialog(a: AgentView, state: AppState, onDismiss: () -> Un
     )
 }
 
-/** M2-3: the session header's title (the role's display name) and its secondary id line. */
-const val AGENT_HEADER_TITLE_TAG = "agent-header-title"
-const val AGENT_HEADER_ID_TAG = "agent-header-id"
-
-/** UX-HEADER-WRAP-1: the width the header's title column always keeps, however many chips sit to its right. */
-val HEADER_TITLE_MIN_WIDTH = 160.dp
-
-@Composable
-fun CenterHeader(
-    a: AgentView?,
-    spawnMode: Boolean,
-    state: AppState,
-    /** SWAP-AGENT-1: the executor chip opens the Switch agent picker; null (tests of the header alone) hides the chip. */
-    onOpenSwitch: (() -> Unit)? = null,
-    onOpenTicket: (String) -> Unit = {},
-) {
-    // UX-HEADER-WRAP-1: the right-hand chips are measured before the weighted title column, so at a narrow window
-    // they used to take every pixel and the title wrapped one letter per line. They are capped so the title column
-    // always keeps HEADER_TITLE_MIN_WIDTH; anything that does not fit is ellipsized or clipped, never wrapped.
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-    val chipsMax = (maxWidth - 24.dp - 44.dp - HEADER_TITLE_MIN_WIDTH).coerceAtLeast(0.dp)
-    Row(Modifier.fillMaxWidth().background(Palette.Panel).padding(12.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (a == null || spawnMode) {
-            Text(if (spawnMode) "New agent: type its task below and press Enter" else "No agent selected", color = Palette.Muted)
-            return@Row
-        }
-        AgentAvatar(a, state, 34)
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(state.agentTitle(a), fontWeight = FontWeight.SemiBold, color = Palette.Text, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag(AGENT_HEADER_TITLE_TAG))
-                state.agentSecondaryId(a)?.let { Spacer(Modifier.width(6.dp)); Text(it, color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp, maxLines = 1, modifier = Modifier.testTag(AGENT_HEADER_ID_TAG)) }
-                a.role?.let { Spacer(Modifier.width(8.dp)); Chip(it, Palette.Accent) }
-                Spacer(Modifier.width(8.dp))
-                val waiting = needsInput(a, state.waiting, state.openPrompts, state.openQuestionSessions)
-                Chip(if (waiting) "needs input" else a.stateText, stateColor(a.session.state, waiting))
-                // TRAITS-T9: the REPORT BACK flag, in the session view header.
-                reportFlagOf(a.session.report)?.let { Spacer(Modifier.width(8.dp)); ReportFlagChip(it, Modifier.testTag("agent-report-flag")) }
-            }
-            TicketTag(a, state, onOpenTicket, Modifier.testTag(AGENT_HEADER_TICKET_TAG))
-            Text(a.lastActivity, color = Palette.Muted, fontSize = 11.sp, maxLines = 1)
-            // BRANCH-PER-TASK 2/3: the branch of the started ticket this agent runs; nothing when it holds none.
-            state.ticketBranchFor(a.id)?.branchLine()?.let { Text(it, color = Palette.Info, fontFamily = Mono, fontSize = 11.sp, maxLines = 1, modifier = Modifier.testTag("agent-ticket-branch")) }
-        }
-        Row(Modifier.widthIn(max = chipsMax), verticalAlignment = Alignment.CenterVertically) {
-        ExecutorChips(state.sessionExecutor(a))
-        if (onOpenSwitch != null) {
-            Chip(state.sessionExecutor(a).switchChipText(), Palette.Info, modifier = Modifier.testTag(EXECUTOR_SWITCH_CHIP_TAG).clickable { onOpenSwitch() })
-            Spacer(Modifier.width(6.dp))
-        }
-        Chip("runs ${a.session.runCount}")
-        // Contract 1.13.0: what this session's runs reported using; nothing at all when none reported.
-        a.usageTotals?.let { t -> Spacer(Modifier.width(6.dp)); Chip("${compact(t.input)} in / ${compact(t.output)} out", Palette.Info) }
-        }
-    }
-    }
-    HorizontalDivider(color = Palette.Border)
-}
-
-/** M2-3b: the session header's harness / provider / model chips; tags for UI tests. */
-const val AGENT_HEADER_HARNESS_TAG = "agent-header-harness"
-const val AGENT_HEADER_PROVIDER_TAG = "agent-header-provider"
-const val AGENT_HEADER_MODEL_TAG = "agent-header-model"
-const val AGENT_HEADER_MODEL_CHIP_TAG = "agent-header-model-chip"
-
-/**
- * M2-3b: one chip per known part of what the session runs on; an unknown part has no chip at all. The model chip
- * shows a shortened id and gives the full id in a hover tooltip and to screen readers.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun ExecutorChips(e: SessionExecutor) {
-    e.harness?.let { Chip(it, textModifier = Modifier.testTag(AGENT_HEADER_HARNESS_TAG)); Spacer(Modifier.width(6.dp)) }
-    e.provider?.let { Chip(it, Palette.Accent, textModifier = Modifier.testTag(AGENT_HEADER_PROVIDER_TAG)); Spacer(Modifier.width(6.dp)) }
-    val short = e.shortModel
-    val full = e.fullModel
-    if (short != null && full != null) {
-        TooltipBox(
-            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-            tooltip = { PlainTooltip { Text(full, fontFamily = Mono, fontSize = 11.sp) } },
-            state = rememberTooltipState(),
-        ) {
-            Chip(
-                short, Palette.Ok,
-                modifier = Modifier.testTag(AGENT_HEADER_MODEL_CHIP_TAG).semantics { contentDescription = full },
-                textModifier = Modifier.testTag(AGENT_HEADER_MODEL_TAG),
-            )
-        }
-        Spacer(Modifier.width(6.dp))
-    }
-}
-
-const val AGENT_HEADER_TICKET_TAG = "agent-header-ticket"
-
-/**
- * A worker's ticket tag: short ticket id + truncated title (full title on hover), click opens the board. Nothing for
- * a session with no ticket. The title is resolved from the board; a ticket not (yet) on the board shows its id alone.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TicketTag(a: AgentView, state: AppState, onOpen: (String) -> Unit, modifier: Modifier = Modifier) {
-    val id = a.session.ticketId?.takeIf { it.isNotBlank() } ?: return
-    val title = state.ticket(id)?.title
-    val full = ticketTagFull(id, title)
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-        tooltip = { PlainTooltip { Text(full, fontSize = 11.sp) } },
-        state = rememberTooltipState(),
-    ) {
-        Text(
-            ticketTagLabel(id, title), color = Palette.Info, fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis,
-            modifier = modifier.clickable { onOpen(id) }.semantics { contentDescription = full },
-        )
-    }
-}
 
 const val CENTER_TAB_BAR_TAG = "center-tab-bar"
 
@@ -1234,702 +1005,6 @@ private fun TabBar(tabs: List<Pair<String, Boolean>>, hPad: androidx.compose.ui.
     HorizontalDivider(color = Palette.Border)
 }
 
-@Composable
-private fun OutputPane(a: AgentView?, spawnMode: Boolean, roleColor: String? = null, onStartSession: () -> Unit) {
-    if (a == null) {
-        Box(Modifier.fillMaxSize(), Alignment.Center) {
-            if (spawnMode) return@Box
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                BrandEmblem(72.dp)
-                Spacer(Modifier.height(10.dp))
-                Text("No live session. Start one to see its output here.", color = Palette.Muted, fontSize = 12.sp)
-                Spacer(Modifier.height(10.dp))
-                OutlinedButton(onClick = onStartSession) { Text("Start a session") }
-            }
-        }
-        return
-    }
-    if (a.output.isEmpty() && a.chatStatus(Clock.System.now().toEpochMilliseconds()) == null) {
-        Box(Modifier.fillMaxSize(), Alignment.Center) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                BrandEmblem(72.dp)
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    "Nothing on screen for this session yet.\nThe daemon replays a session's recent output only while the process that ran it is up; older history is not kept.",
-                    color = Palette.Muted, fontSize = 12.sp,
-                )
-                Spacer(Modifier.height(10.dp))
-                OutlinedButton(onClick = onStartSession) { Text("Start a session") }
-            }
-        }
-        return
-    }
-    AgentChat(a, roleColor = roleColor)
-}
-
-/** Test tag on the transient status row under the transcript (or in place of the empty state). */
-const val CHAT_STATUS_TAG = "chat-status"
-
-/** Test tag on the Interrupt control beside the prompt box. */
-const val INTERRUPT_BUTTON_TAG = "interrupt-button"
-/** UX-ICON-1: the sidebar's New agent link (icon plus label). */
-const val SIDEBAR_NEW_AGENT_TAG = "sidebar-new-agent"
-/** The New agent action's name and shortcut, shared by the composer icon and the sidebar link. */
-const val NEW_AGENT_LABEL = "New agent"
-const val NEW_AGENT_SHORTCUT = "Ctrl+N"
-
-/** SESSION-RM-1: the composer trash button on an ended session (it removes the agent from the list). */
-const val REMOVE_AGENT_LABEL = "Remove agent"
-
-/** A session whose run is over for good: nothing left to kill, only to resume or remove. */
-val ENDED_STATES = setOf(SessionState.EXITED, SessionState.FAILED, SessionState.ORPHANED)
-
-/** Test tag on the list of messages waiting for a busy agent. */
-const val QUEUED_MESSAGES_TAG = "queued-messages"
-
-/** UI-ACT-2: test tag on the collapsible Activity box above the chat input. */
-const val ACTIVITY_BOX_TAG = "activity-box"
-
-/** UI-ACT-2: test tag on each activity line's label inside the box. */
-const val ACTIVITY_LINE_TAG = "activity-line"
-
-/**
- * The chat transcript for one agent, plus [AgentView.chatStatus] when the latest turn has no answer yet.
- * The status row sits under the last line and is absent once [AgentView.chatStatus] is null.
- */
-@Composable
-fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().toEpochMilliseconds() }, roleColor: String? = null) {
-    val list = rememberLazyListState()
-    // The elapsed label must age on its own: no status frame may arrive for seconds while the agent
-    // works, so a one-second ticker keeps "Thinking... 3s" counting with the transcript otherwise still.
-    // [nowProvider] is the clock (injectable so a UI test can drive it with the Compose frame clock).
-    var now by remember { mutableStateOf(nowProvider()) }
-    LaunchedEffect(agent.id) { while (true) { delay(1_000); now = nowProvider() } }
-    val rows = chatItems(agent.output)
-    val status = agent.chatStatus(now)
-    // Keyed on the status PRESENCE, not its value: the ticker changes it every second, and that must
-    // not restart the scroll effect.
-    LaunchedEffect(agent.id, rows.size, agent.output.lastOrNull()?.text?.length, status != null) {
-        val last = rows.size + (if (status != null) 1 else 0) - 1
-        if (last >= 0) list.requestScrollToItem(last)
-    }
-    val name = agent.session.worktreeBranch ?: agent.id.take(8)
-    Column(Modifier.fillMaxSize()) {
-        SelectionContainer(Modifier.weight(1f)) {
-            LazyColumn(Modifier.fillMaxSize().padding(horizontal = 14.dp), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 10.dp)) {
-                items(rows.size) { i ->
-                    // M2-2: the agent's portrait opens each run of agent-side lines, like a chat.
-                    val showAvatar = startsAgentRun(rows, i)
-                    when (val row = rows[i]) {
-                        is ChatItem.Line -> ChatLine(row.line, agent.id, name, agent.role, roleColor, showAvatar)
-                        is ChatItem.Reasoning -> AgentSideRow(showAvatar, agent.role, agent.id, roleColor) { ReasoningBlock(row.lines) }
-                    }
-                }
-                // The live status row is agent-side too: it opens a run only when no agent line precedes it.
-                if (status != null) item {
-                    AgentSideRow(startsAgentRun(rows, rows.size), agent.role, agent.id, roleColor) { ChatStatusRow(status) }
-                }
-            }
-        }
-        ActivityBox(agent)
-    }
-}
-
-/**
- * UI-ACT-2: the selected session's tool activity, newest first, above the chat input. Collapsible; it
- * starts expanded while the session is running and collapsed once it is idle.
- */
-@Composable
-fun ActivityBox(agent: AgentView) {
-    val entries = agent.activityLog
-    if (entries.isEmpty()) return
-    // UI-ACT-2: starts expanded while the session is running and collapsed once it is idle; the user
-    // can still toggle it. Keyed on the agent so switching sessions re-reads that session's run state.
-    var expanded by remember(agent.id) { mutableStateOf(isRunning(agent.session.state)) }
-    Column(Modifier.fillMaxWidth().background(Palette.Panel).testTag(ACTIVITY_BOX_TAG)) {
-        Text(
-            "Activity (${entries.size})",
-            color = Palette.Muted,
-            fontFamily = Mono,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(horizontal = 14.dp, vertical = 6.dp),
-        )
-        if (expanded) {
-            // Newest first, capped at ~160dp, scrollable, monospace.
-            Column(Modifier.fillMaxWidth().heightIn(max = 160.dp).verticalScroll(rememberScrollState())) {
-                entries.asReversed().forEach { e ->
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 1.dp)) {
-                        Text(activityTimestamp(e.at), color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp)
-                        Spacer(Modifier.width(8.dp))
-                        Text(e.label, color = Palette.Text, fontFamily = Mono, fontSize = 11.sp, modifier = Modifier.testTag(ACTIVITY_LINE_TAG))
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** Pulsing dot plus the status label. Cleared by the caller when [status] is no longer due. */
-@Composable
-fun ChatStatusRow(status: ChatStatus) {
-    val pulse = rememberInfiniteTransition(label = "chatStatus")
-    val alpha by pulse.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
-        label = "chatStatusPulse",
-    )
-    Row(Modifier.testTag(CHAT_STATUS_TAG).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(8.dp).alpha(alpha).clip(CircleShape).background(Palette.Accent))
-        Spacer(Modifier.width(8.dp))
-        Text(chatStatusLabel(status), color = Palette.Muted, fontFamily = Mono, fontSize = 12.sp)
-        status.elapsedSuffix()?.let { Text(it, color = Palette.Muted, fontFamily = Mono, fontSize = 12.sp) }
-        // AGENT-UX-12: a run past the stale threshold is shown as STALLED, in a distinct colour, so a
-        // silent run can never be mistaken for one that is producing activity.
-        (status as? ChatStatus.Thinking)?.stalledFor?.let {
-            Text("  no new activity for $it", color = Palette.Danger, fontFamily = Mono, fontSize = 12.sp)
-        }
-    }
-}
-
-private fun chatStatusLabel(status: ChatStatus): String = when (status) {
-    // AGENT-UX-12: when a tool is running, say WHAT it is doing ("Running bash: ls -la src"), not just
-    // "Thinking...". Falls back to the plain label before any tool call.
-    is ChatStatus.Thinking -> if (status.compacting) COMPACTING_LABEL else status.activity?.let { "Running $it" } ?: "Thinking..."
-    ChatStatus.Failure -> "Failed"
-    ChatStatus.Stopped -> "Stopped"
-}
-
-/** How long the agent has been working, shown beside the label: " 3s", or null when not yet known. */
-private fun ChatStatus.elapsedSuffix(): String? = (this as? ChatStatus.Thinking)?.elapsed?.takeIf { it.isNotBlank() }?.let { " $it" }
-
-/** Renders parsed assistant markdown; re-parsed by the caller on every streamed update. */
-@Composable
-private fun ChatBlocks(blocks: List<ChatBlock>) {
-    val clip = LocalClipboardManager.current
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        for (b in blocks) when (b) {
-            is ChatBlock.Paragraph -> Text(spansText(b.spans), color = Palette.Text, fontFamily = Mono, fontSize = 12.sp)
-            is ChatBlock.BulletList -> Column {
-                for ((n, item) in b.items.withIndex()) Text(spansText(listOf<ChatSpan>(ChatSpan.Text(if (b.ordered) "${n + 1}. " else "• ")) + parseChatInline(item)), color = Palette.Text, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
-            }
-            ChatBlock.Rule -> HorizontalDivider(color = Palette.Border)
-            is ChatBlock.Quote -> Row(Modifier.height(IntrinsicSize.Min)) {
-                Box(Modifier.width(3.dp).fillMaxHeight().background(Palette.Border))
-                Text(spansText(b.spans), color = Palette.Muted, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
-            }
-            is ChatBlock.Table -> Column(Modifier.horizontalScroll(rememberScrollState())) {
-                for ((r, row) in (listOf(b.header) + b.rows).withIndex()) Row {
-                    for (cell in row) Text(spansText(parseChatInline(cell)), color = Palette.Text, fontFamily = Mono, fontSize = 12.sp, fontWeight = if (r == 0) FontWeight.Bold else null, modifier = Modifier.width(140.dp).padding(end = 8.dp))
-                }
-            }
-            is ChatBlock.Heading -> Text(
-                spansText(b.spans),
-                color = Palette.Text,
-                fontFamily = Mono,
-                fontWeight = FontWeight.Bold,
-                fontSize = when (b.level) {
-                    1 -> 18.sp
-                    2 -> 16.sp
-                    else -> 14.sp
-                },
-            )
-            is ChatBlock.Code -> Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).border(1.dp, Palette.Border, RoundedCornerShape(6.dp)).padding(8.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(b.language, color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { clip.setText(AnnotatedString(b.body)) }) { Text("Copy", fontSize = 11.sp) }
-                }
-                Text(b.body, color = Palette.Text, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.horizontalScroll(rememberScrollState()))
-            }
-        }
-    }
-}
-
-/** Test tag on the collapsible "Thinking" header of a reasoning block. */
-const val REASONING_HEADER_TAG = "reasoning-header"
-
-/**
- * A run of consecutive reasoning lines as one block, collapsed by default. The header reads
- * "Thinking (n)" where n is how many lines the block holds; clicking it toggles the block. Expanded,
- * the lines are muted plain text -- no markdown, unlike the answer, because reasoning is the model's
- * own working, not the reply.
- */
-@Composable
-fun ReasoningBlock(lines: List<OutputLine>) {
-    var expanded by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-        Text(
-            "Thinking (${lines.size})",
-            color = Palette.Muted,
-            fontFamily = Mono,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.testTag(REASONING_HEADER_TAG).clickable { expanded = !expanded },
-        )
-        if (expanded) {
-            Text(
-                lines.joinToString("\n") { it.text },
-                color = Palette.Muted,
-                fontFamily = Mono,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(start = 8.dp, top = 2.dp),
-            )
-        }
-    }
-}
-
-/** Test tag on the row of every chat message that carries a speaker avatar. */
-const val SPEAKER_ROW_TAG = "speaker-row"
-
-/** One chat message: its speaker's avatar on the left, the message body filling the rest of the row. */
-@Composable
-private fun SpeakerRow(avatar: @Composable () -> Unit, content: @Composable () -> Unit) {
-    Row(Modifier.fillMaxWidth().testTag(SPEAKER_ROW_TAG), verticalAlignment = Alignment.Top) {
-        avatar()
-        Spacer(Modifier.width(8.dp))
-        Box(Modifier.weight(1f)) { content() }
-    }
-}
-
-/** Size of the agent's portrait on its chat lines, and of the indent its continuation lines keep. */
-private const val CHAT_AVATAR_SIZE = 36
-
-/** True for every line kind the agent produces; only the human's own [LineKind.USER] echo is not. */
-private fun ChatItem.isAgentSide(): Boolean = this !is ChatItem.Line || line.kind != LineKind.USER
-
-/**
- * M2-2: whether the agent-side item at [index] opens a run and so carries the agent's portrait. A run
- * is a stretch of consecutive agent-side items; a USER line ends it. [index] == rows.size asks about
- * the live status row that follows the transcript.
- */
-internal fun startsAgentRun(rows: List<ChatItem>, index: Int): Boolean {
-    if (index < rows.size && !rows[index].isAgentSide()) return false
-    return index == 0 || !rows[index - 1].isAgentSide()
-}
-
-/**
- * One agent-side chat row: the agent's [AgentAvatar] on the left when [showAvatar] (the row opens a
- * run), otherwise an empty gap of the same width so the whole run keeps one left indent.
- */
-@Composable
-fun AgentSideRow(showAvatar: Boolean, agentRole: String?, agentId: String, agentRoleColor: String?, content: @Composable () -> Unit) {
-    SpeakerRow({
-        if (showAvatar) AgentAvatar(agentRole, agentId, CHAT_AVATAR_SIZE, agentRoleColor)
-        else Spacer(Modifier.width(CHAT_AVATAR_SIZE.dp))
-    }, content)
-}
-
-/**
- * One transcript line as the chat shows it: an agent's markdown, the user's own echo, or a plain
- * status/error/finished/log marker. The user's echo carries the human's disc from [USER_AVATAR_ID];
- * every other kind is agent-side and sits in an [AgentSideRow] -- with the agent's [AgentAvatar] (its
- * role's portrait, the same one the agents list shows) when [showAvatar], or just its indent when the
- * line continues a run. [agentName] labels the speaker; it never picks the avatar.
- */
-@Composable
-fun ChatLine(
-    line: OutputLine,
-    agentId: String,
-    agentName: String,
-    agentRole: String? = null,
-    agentRoleColor: String? = null,
-    showAvatar: Boolean = true,
-) {
-    if (line.kind == LineKind.USER) {
-        // IMG-2: the turn's `[image: ...]` lines show as thumbnails, not as text.
-        val (said, images) = ChatImageLines.split(line.text)
-        SpeakerRow({ UserAvatar(CHAT_AVATAR_SIZE) }) {
-            Column {
-                Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Palette.Accent.copy(alpha = 0.12f), RoundedCornerShape(8.dp)).padding(8.dp)) {
-                    CardTimestamp(line.at)
-                    if (said.isNotBlank() || images.isEmpty()) {
-                        Text("> $said", color = Palette.Accent, fontFamily = Mono, fontSize = 12.sp)
-                    }
-                    ChatSentImages(images)
-                }
-            }
-        }
-        return
-    }
-    AgentSideRow(showAvatar, agentRole, agentId, agentRoleColor) {
-        when (line.kind) {
-            LineKind.TEXT -> Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Palette.Raised, RoundedCornerShape(8.dp)).padding(8.dp)) {
-                CardTimestamp(line.at)
-                ChatBlocks(chatLineBlocks(line.kind, line.text).orEmpty())
-            }
-            LineKind.REASONING -> ReasoningBlock(listOf(line))
-            LineKind.STATUS -> Text("· ${line.text}", color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp)
-            LineKind.ERROR -> Text("! ${line.text}", color = Palette.Danger, fontFamily = Mono, fontSize = 12.sp)
-            LineKind.FINISHED -> Text("— ${line.text}", color = Palette.Info, fontFamily = Mono, fontSize = 11.sp, modifier = Modifier.padding(vertical = 4.dp))
-            // UI-LOG-1: stderr and process-exit log lines -- muted monospace.
-            LineKind.LOG -> Text(line.text, color = Palette.Muted, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.padding(vertical = 2.dp))
-            // UX-WRITE-1: a file write is a change box, inline in the turn where it happened.
-            LineKind.WRITE -> ChangeBoxLine(line.text)
-            LineKind.USER -> Unit
-        }
-    }
-}
-
-/** Test tag on the quiet send/response time at the top-right of a chat card. */
-const val CARD_TIMESTAMP_TAG = "card-timestamp"
-
-/** Small muted time, right-aligned at the top of a chat card, so it never competes with the message. */
-@Composable
-private fun CardTimestamp(at: Long) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        androidx.compose.material3.Icon(
-            AhqIcons.Radio, contentDescription = null, tint = Palette.Muted.copy(alpha = 0.7f),
-            modifier = Modifier.size(15.dp).testTag(CARD_COMMS_ICON_TAG),
-        )
-        Text(
-            activityTimestamp(at),
-            color = Palette.Muted.copy(alpha = 0.7f),
-            fontFamily = Mono,
-            fontSize = 9.sp,
-            textAlign = TextAlign.End,
-            modifier = Modifier.weight(1f).testTag(CARD_TIMESTAMP_TAG),
-        )
-    }
-}
-
-const val CARD_COMMS_ICON_TAG = "card-comms-icon"
-
-private fun spansText(spans: List<ChatSpan>): AnnotatedString = buildAnnotatedString {
-    for (s in spans) when (s) {
-        is ChatSpan.Text -> append(s.text)
-        is ChatSpan.Bold -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(s.text) }
-        is ChatSpan.Italic -> withStyle(SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)) { append(s.text) }
-        is ChatSpan.InlineCode -> withStyle(SpanStyle(background = Palette.Raised, color = Palette.Accent)) { append(s.text) }
-        is ChatSpan.Link -> if (isSafeChatUrl(s.url)) {
-            // Opens through the platform LocalUriHandler; the parser only ever yields http/https/mailto, re-checked here.
-            withLink(LinkAnnotation.Url(s.url, TextLinkStyles(SpanStyle(color = Palette.Info, textDecoration = TextDecoration.Underline)))) { append(s.label) }
-        } else append(s.label)
-    }
-}
-
-@Composable
-fun NoticeStrip(state: AppState) {
-    val n = state.localNotices().lastOrNull() ?: return
-    var hidden by remember(n.at) { mutableStateOf(false) }
-    LaunchedEffect(n.at) { delay(8_000); hidden = true }
-    if (hidden) return
-    // NOTICE-COLOUR-1: the notice's own kind picks the colour; red only for a real failure.
-    val colour = noticeColour(n.kind)
-    Row(
-        Modifier.fillMaxWidth().height(IntrinsicSize.Min).background(colour.copy(alpha = 0.12f).compositeOver(Palette.Panel)).testTag(NOTICE_TAG),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.width(3.dp).fillMaxHeight().background(colour))
-        Text(n.text, color = colour, fontSize = 12.sp, modifier = Modifier.weight(1f).padding(12.dp, 6.dp))
-    }
-}
-
-/** NOTICE-COLOUR-1: routine is the theme's success green, a heads-up its amber, and only an error is red. */
-fun noticeColour(kind: NoticeKind): Color = when (kind) {
-    NoticeKind.OK -> Palette.Ok
-    NoticeKind.HEADS_UP -> Palette.Accent
-    NoticeKind.ERROR -> Palette.Danger
-}
-
-/**
- * The Interrupt control: stops the CURRENT turn of [agent] and leaves the session at rest with the same id and
- * conversation. Enabled only while the agent is busy and the link is live; the UI does not assume the outcome,
- * the busy-to-idle change appears when the daemon's session frame reports it.
- */
-@Composable
-fun InterruptButton(agent: AgentView, live: Boolean, controller: Controller) {
-    val actionScope = rememberCoroutineScope()
-    val busy = isBusy(agent)
-    IconAction(
-        AhqIcons.Stop, "Interrupt",
-        onClick = { actionScope.launch { controller.interrupt(agent.id) } },
-        enabled = live && busy,
-        modifier = Modifier.testTag(INTERRUPT_BUTTON_TAG),
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
-    )
-}
-
-/** The messages held for a busy agent, in send order, each marked as waiting. Empty queue renders nothing. */
-@Composable
-fun QueuedMessages(queue: List<QueuedPrompt>) {
-    if (queue.isEmpty()) return
-    Column(Modifier.fillMaxWidth().testTag(QUEUED_MESSAGES_TAG).padding(bottom = 6.dp)) {
-        Text("Queued (${queue.size}), waiting for the current turn:", color = Palette.Muted, fontSize = 11.sp)
-        queue.forEachIndexed { i, q ->
-            Text("${i + 1}. ${q.text}", color = Palette.Muted, fontFamily = Mono, fontSize = 12.sp)
-        }
-    }
-}
-
-@Composable
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
-private fun PromptBox(
-    value: String,
-    onValue: (String) -> Unit,
-    onSubmit: () -> Unit,
-    focus: FocusRequester,
-    spawnMode: Boolean,
-    a: AgentView?,
-    controller: Controller,
-    onSpawnToggle: () -> Unit,
-    /** SWAP-AGENT-1: in a session, the composer's agent button opens the Switch agent picker instead of New agent. */
-    onSwitchAgent: () -> Unit = {},
-    attachments: List<ChatAttachment> = emptyList(),
-    attachBusy: Boolean = false,
-    attachError: String? = null,
-    /** ATTACH-INLINE-1: tag and upload these files; answers the tokens to insert at the caret ("" = none taken). */
-    onAttach: (List<PickedImage>) -> String = { "" },
-    onRemoveAttachment: (String) -> Unit = {},
-    /** ATTACH-INLINE-1: the box's text as a PROMPT (its tags turned into references), for Resume. */
-    wire: (String) -> String = { it },
-) {
-    val actionScope = rememberCoroutineScope()
-    val host = LocalPlatformHost.current
-    val snapshot = controller.state.collectAsState().value
-    val live = snapshot.connection.isLive
-    // COMPOSER-NEWLINE-1: the box keeps its own caret so Shift+Enter can break the line exactly there. A value set
-    // from outside (cleared after a send, a slash row picked) wins and puts the caret at its end.
-    var field by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
-    val shown = if (field.text == value) field else TextFieldValue(value, TextRange(value.length))
-    // ATTACH-INLINE-1: picked, pasted or dropped files become tags at the caret (replacing any selection).
-    val insertPicked by rememberUpdatedState { picked: List<PickedImage> ->
-        val tokens = onAttach(picked)
-        if (tokens.isNotEmpty()) {
-            val text = shown.text.replaceRange(shown.selection.min, shown.selection.max, tokens)
-            field = TextFieldValue(text, TextRange(shown.selection.min + tokens.length))
-            onValue(text)
-        }
-    }
-    val pick = {
-        if (live && host.canPickFiles) host.pickFile(ATTACH_FILE_LABEL)?.let { path ->
-            val name = path.substringAfterLast('/').substringAfterLast('\\')
-            // An oversize file is refused by its size, never read into memory.
-            val size = host.fileSize(path)
-            val bytes = if (size != null && size > CHAT_FILE_MAX_BYTES) ByteArray(0) else host.readBytes(path)
-            if (bytes != null) insertPicked(listOf(PickedImage(name, PickedImage.mimeOf(name), bytes, size ?: bytes.size.toLong())))
-        }
-    }
-    // IMG-2: a file dropped anywhere on the composer is attached like a picked one (ATTACH-INLINE-1: any type).
-    val drop = remember(host) {
-        object : DragAndDropTarget {
-            override fun onDrop(event: DragAndDropEvent): Boolean {
-                val picked = host.droppedFiles(event)
-                if (picked.isEmpty()) return false
-                insertPicked(picked)
-                return true
-            }
-        }
-    }
-    // Contract 1.11.0 chat: the same rule the daemon applies, shown before the human hits Send. A BUSY agent is not
-    // a blocker: the message is queued for its next turn instead (see Controller.queueMessage).
-    val blocker = if (spawnMode || a == null || isBusy(a)) null else promptBlocker(a)
-    val queue = if (spawnMode || a == null) emptyList() else snapshot.queuedFor(a.id)
-    // CP-4(c): a leading "/" in the box asks the daemon for that harness's commands and lists them. A live agent's box
-    // uses its own provider; the New agent box (no session) uses the provider picked for the new agent.
-    val slashSession = if (spawnMode || a == null) null else a.id
-    val slashProvider = if (slashSession == null) snapshot.pickedModel?.provider else null
-    val typedCommand = slashTyped(value)
-    LaunchedEffect(typedCommand, slashSession, slashProvider, live) {
-        if (typedCommand != null && live) controller.requestCommands(slashSession, typedCommand, slashProvider)
-    }
-    // The /model list comes from the `models` frame: fetch it the first time a command is typed.
-    val wantsCatalog = typedCommand != null && live && snapshot.modelCatalog.isEmpty()
-    LaunchedEffect(wantsCatalog) { if (wantsCatalog) controller.refreshModelCatalog() }
-    // CMD-HARNESS-1: `/harness` is the window's own command (an agent's box only): its values are the `providers` frame.
-    val harnessRows = if (slashSession == null) null else HarnessSwitch.suggestions(snapshot, value, a?.session?.provider)
-    val offersHarness = slashSession != null && typedCommand != null && typedCommand.none { it.isWhitespace() } &&
-        HarnessSwitch.COMMAND.startsWith(typedCommand, ignoreCase = true)
-    val answerRows = harnessRows
-        ?: (slashSuggestions(snapshot, slashSession, value, slashProvider) + if (offersHarness) listOf(HarnessSwitch.commandRow()) else emptyList())
-    // Esc closes the list until the text changes; Up/Down move the highlight, which restarts at the top for new rows.
-    var dismissedFor by remember { mutableStateOf<String?>(null) }
-    val slashRows = if (dismissedFor == value) emptyList() else answerRows
-    val slashTitle = if (harnessRows != null) HarnessSwitch.HEADER else slashHeader(snapshot, slashSession, value, slashProvider)
-    var slashIndex by remember { mutableStateOf(0) }
-    LaunchedEffect(slashRows.map { it.replacement }) { slashIndex = 0 }
-    val pickRow = { r: SlashSuggestion -> onValue(r.replacement) }
-    Column(Modifier.fillMaxWidth().background(Palette.Panel).dragAndDropTarget(shouldStartDragAndDrop = { true }, target = drop).padding(10.dp).testTag(COMPOSER_TAG)) {
-        // PROMPT-2: the open session's prompt card, docked above the input until the daemon resolves it.
-        if (!spawnMode && a != null) {
-            PromptCard(
-                snapshot.promptsFor(a.id), com.superiorsoftllc.agenthq.ui.model.PromptCards.offersAllowAlways(snapshot.connection.contract),
-                onAnswer = { r -> actionScope.launch { controller.answerPrompt(r) } },
-                onDismiss = controller::dismissPrompt,
-            )
-        }
-        QueuedMessages(queue)
-        ChatAttachmentChips(attachments, attachBusy, attachError, onRemoveAttachment)
-        SlashSuggestions(slashTitle, slashRows, slashIndex, onPick = { onValue(it) })
-        // ATTACH-INLINE-1: each tag's one character is drawn as its pill "📎 name".
-        val tags = remember(attachments) { ComposerTags.transformation(attachments, SpanStyle(color = Palette.Accent, background = Palette.Raised)) }
-        OutlinedTextField(
-            value = shown,
-            onValueChange = { next -> field = next; if (next.text != value) onValue(next.text) },
-            visualTransformation = tags,
-            // ATTACH-INLINE-1: the paperclip sits in the box, next to the text; paste (Ctrl+V) and drop attach too.
-            trailingIcon = {
-                IconAction(
-                    AhqIcons.AttachFile, ATTACH_FILE_LABEL, onClick = pick, shortcut = ATTACH_FILE_SHORTCUT,
-                    enabled = live && host.canPickFiles, style = IconActionStyle.TEXT,
-                    modifier = Modifier.testTag(CHAT_IMAGE_ATTACH_TAG),
-                )
-            },
-            placeholder = {
-                Text(
-                    when {
-                        spawnMode || a == null -> "Task for a NEW agent. Enter to spawn, Shift+Enter for a new line"
-                        isBusy(a) -> "Agent is busy. Enter to queue: sent as its next turn when this one ends"
-                        blocker != null -> "Waiting: $blocker"
-                        else -> "Message ${a.session.worktreeBranch ?: a.id.take(8)}. Enter to send"
-                    },
-                    color = Palette.Muted,
-                )
-            },
-            modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag(PROMPT_BOX_TAG).onPreviewKeyEvent { e ->
-                if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                val listOpen = slashRows.isNotEmpty()
-                when {
-                    listOpen && e.key == Key.DirectionDown -> { slashIndex = moveSlashSelection(slashIndex, 1, slashRows.size); true }
-                    listOpen && e.key == Key.DirectionUp -> { slashIndex = moveSlashSelection(slashIndex, -1, slashRows.size); true }
-                    listOpen && e.key == Key.Escape -> { dismissedFor = value; true }
-                    // Tab always belongs to the list while it is open; Enter picks unless the row is already in the box.
-                    listOpen && e.key == Key.Tab -> { slashPick(slashRows, slashIndex, value)?.let(pickRow); true }
-                    // CMD-MODEL-1: a filter narrowed to one value: Enter picks it and sends the line in one go.
-                    listOpen && e.key == Key.Enter && !e.isShiftPressed && !e.isCtrlPressed && slashSubmitOnEnter(slashRows, value) != null ->
-                        { onValue(slashSubmitOnEnter(slashRows, value)!!.replacement); onSubmit(); true }
-                    listOpen && e.key == Key.Enter && !e.isShiftPressed && !e.isCtrlPressed && slashPick(slashRows, slashIndex, value) != null ->
-                        { pickRow(slashPick(slashRows, slashIndex, value)!!); true }
-                    // COMPOSER-NEWLINE-1: Shift+Enter is a new line at the caret (replacing any selection), never a send.
-                    e.key == Key.Enter && e.isShiftPressed && !e.isCtrlPressed -> {
-                        val text = shown.text.replaceRange(shown.selection.min, shown.selection.max, "\n")
-                        field = TextFieldValue(text, TextRange(shown.selection.min + 1))
-                        onValue(text)
-                        true
-                    }
-                    e.key == Key.Enter && !e.isShiftPressed && !e.isCtrlPressed -> { onSubmit(); true }
-                    // ATTACH-INLINE-1: Ctrl+Shift+A is the paperclip.
-                    e.isCtrlPressed && e.isShiftPressed && e.key == Key.A -> { pick(); true }
-                    // IMG-2: Ctrl+V with a file or an image on the clipboard attaches it (a tag at the caret);
-                    // anything else pastes as text.
-                    e.isCtrlPressed && !e.isShiftPressed && e.key == Key.V -> host.clipboardFile()?.let { insertPicked(listOf(it)); true } ?: false
-                    else -> false
-                }
-            },
-            // Grows with its content up to 8 lines, then scrolls.
-            minLines = 2, maxLines = 8, textStyle = TextStyle(fontFamily = Mono, fontSize = 13.sp),
-        )
-        Spacer(Modifier.height(6.dp))
-        // MOBILE-TRANSCRIPT-1: a FlowRow, not a Row. On a phone the buttons fill the width, and in a Row the Resume hint
-        // after them was measured a few pixels wide, wrapped a character per line and grew the composer over the whole
-        // column, leaving the transcript 0dp tall. Here a button or the hint that does not fit starts a new line, and the
-        // hint keeps to two lines whatever width it gets.
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            // UX-ICON-1: the action row is icons; each tooltip names the action and its shortcut.
-            IconAction(
-                AhqIcons.Send,
-                when {
-                    spawnMode || a == null -> "Spawn"
-                    isBusy(a) -> "Queue"
-                    else -> "Send"
-                },
-                onSubmit, shortcut = "Enter", enabled = live && (value.isNotBlank() || attachments.isNotEmpty()) && !attachBusy && blocker == null,
-                style = IconActionStyle.FILLED,
-            )
-            if (a != null && !spawnMode) {
-                IconAction(AhqIcons.SwapHoriz, SWITCH_AGENT_LABEL, onSwitchAgent, shortcut = SWITCH_AGENT_SHORTCUT)
-            } else {
-                IconAction(
-                    if (spawnMode) AhqIcons.Close else AhqIcons.PersonAdd,
-                    if (spawnMode) "Cancel new agent" else NEW_AGENT_LABEL,
-                    onSpawnToggle, shortcut = NEW_AGENT_SHORTCUT,
-                )
-            }
-            if (a != null && !spawnMode) {
-                val canResume = live && a.session.resumable
-                IconAction(AhqIcons.PlayArrow, "Resume", onClick = {
-                    actionScope.launch {
-                        if (controller.resume(a.id, wire(value).trim()) is CommandResult.Sent) onValue("")
-                    }
-                }, shortcut = "Ctrl+R", enabled = canResume)
-                val running = a.session.state in setOf(SessionState.STARTING, SessionState.BUSY, SessionState.WAITING_INPUT)
-                IconAction(
-                    AhqIcons.Cancel, "Kill",
-                    onClick = { actionScope.launch { controller.kill(a.id) } }, shortcut = "Ctrl+Shift+K", enabled = live && running,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
-                )
-                // SESSION-RM-1: on an ended session there is nothing left to force-kill, so the same trash button
-                // removes it from the list (after the card menu's confirm). A running or idle one keeps Force kill.
-                if (a.session.state in ENDED_STATES) {
-                    var confirmingRemove by remember(a.id) { mutableStateOf(false) }
-                    IconAction(
-                        AhqIcons.DeleteForever, REMOVE_AGENT_LABEL,
-                        onClick = { confirmingRemove = true }, enabled = live,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
-                    )
-                    if (confirmingRemove) {
-                        RemoveAgentDialog(
-                            a, snapshot, onDismiss = { confirmingRemove = false },
-                            onRemove = { confirmingRemove = false; actionScope.launch { controller.removeSession(a.id) } },
-                        )
-                    }
-                } else {
-                    IconAction(
-                        AhqIcons.DeleteForever, "Force kill",
-                        onClick = { actionScope.launch { controller.kill(a.id, force = true) } }, shortcut = "Ctrl+Alt+K", enabled = live && running,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
-                    )
-                }
-                InterruptButton(a, live, controller)
-                if (!a.session.resumable && !running) {
-                    Text(Controller.resumeBlocker(a.session), color = Palette.Muted, fontSize = 11.sp,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.align(Alignment.CenterVertically),
-                    )
-                } else if (a.session.resumable && value.isBlank()) {
-                    Text("Resume with empty box sends: \"${Controller.RESUME_DEFAULT_PROMPT}\"", color = Palette.Muted, fontSize = 11.sp,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.align(Alignment.CenterVertically),
-                    )
-                }
-            }
-            if (!live) Text("Not connected: commands are disabled.", color = Palette.Danger, fontSize = 11.sp)
-        }
-    }
-}
-
-/** The one-line strip that shows the latest notice: a refused `/command`, or what a `/command` did. */
-const val NOTICE_TAG = "notice-strip"
-const val SLASH_LIST_TAG = "slash-suggestions"
-const val SLASH_ITEM_TAG_PREFIX = "slash-item:"
-const val SLASH_HEADER_TAG = "slash-header"
-const val SLASH_NO_MATCH_TAG = "slash-no-match"
-
-/** CP-4(c): the commands (or the values of one) matching what the human typed after "/"; a click puts the pick in the box. */
-@Composable
-private fun SlashSuggestions(header: String?, rows: List<SlashSuggestion>, highlighted: Int, onPick: (String) -> Unit) {
-    if (rows.isEmpty()) return
-    Column(Modifier.fillMaxWidth().testTag(SLASH_LIST_TAG).padding(bottom = 6.dp).background(Palette.Raised)) {
-        // CMD-MODEL-1: whose models these are, e.g. "claude models".
-        if (header != null) {
-            Text(
-                header, color = Palette.Muted, fontSize = 11.sp,
-                modifier = Modifier.testTag(SLASH_HEADER_TAG).padding(horizontal = 10.dp, vertical = 4.dp),
-            )
-        }
-        rows.forEachIndexed { i, r ->
-            Row(
-                Modifier.fillMaxWidth().testTag(if (r.selectable) SLASH_ITEM_TAG_PREFIX + r.replacement else SLASH_NO_MATCH_TAG)
-                    .background(if (i == highlighted && r.selectable) Palette.Border else Palette.Raised)
-                    .semantics { selected = i == highlighted && r.selectable }
-                    .then(if (r.selectable) Modifier.clickable { onPick(r.replacement) } else Modifier)
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(r.label, color = Palette.Text, fontFamily = Mono, fontSize = 12.sp)
-                Text(r.detail, color = Palette.Muted, fontSize = 11.sp)
-            }
-        }
-    }
-}
 
 @Composable
 private fun ReviewPane(state: AppState, controller: Controller) {
@@ -2098,28 +1173,3 @@ private fun ConnectDialog(
     )
 }
 
-const val SPAWN_ROLE_TAG_PREFIX = "spawn-role:"
-const val SPAWN_ROLE_DEFAULT_TAG = "spawn-role-default"
-
-/** The New agent box's role row: pick the role to spawn as and see what its binding makes the default (pick another model to override). */
-@Composable
-private fun SpawnRoleRow(state: AppState, controller: Controller) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Role", color = Palette.Muted, fontSize = 11.sp)
-            Chip("none", if (state.spawnRole == null) Palette.Accent else Palette.Muted, Modifier.clickable { controller.pickSpawnRole(null) })
-            state.roles.forEach { r ->
-                Chip(r.id, if (state.spawnRole == r.id) Palette.Accent else Palette.Muted, Modifier.testTag(SPAWN_ROLE_TAG_PREFIX + r.id).clickable { controller.pickSpawnRole(r.id) })
-            }
-        }
-        state.spawnRole?.let { role ->
-            val chosen = state.pickedModel
-            val bound = state.roleBindings[role]
-            val overridden = bound != null && chosen != PickedModel.fromBinding(bound)
-            Text(
-                "Default for $role: ${bindingSummary(bound)}" + if (overridden) "  (overridden for this spawn: ${chosen?.let { it.provider + " / " + (it.model ?: "default") } ?: "daemon default"})" else "",
-                color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(SPAWN_ROLE_DEFAULT_TAG),
-            )
-        }
-    }
-}
