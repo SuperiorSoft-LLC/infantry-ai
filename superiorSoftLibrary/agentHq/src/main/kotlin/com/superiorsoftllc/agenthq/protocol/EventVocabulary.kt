@@ -349,7 +349,9 @@ object EventVocabulary {
     // `prompt` action is mail to the target in the trigger's project (queued while busy, one pending per trigger, never a
     // trip); dispositions `mailed` / `coalesced_pending` / `deferred_busy`; `trigger_arm` enables a disabled trigger; a
     // schedule slot missed while down fires once on boot (45.sqm, schema v46).
-    const val VERSION = "1.105.0"
+    // **1.106.0 (SCOPE-1) is ADDITIVE**: MCP board / ticket_get / ticket_update / ticket_move / ticket_delete / get_session / pod_state default to the
+    // CALLER'S project; `projectId=all` (pm / owner) is explicit; a foreign project is refused for other roles. Answers carry projectId + scope. No frame changes.
+    const val VERSION = "1.106.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA
