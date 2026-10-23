@@ -29,6 +29,7 @@ class ChatAvatarUiTest {
             onNodeWithContentDescription("qa avatar").assertExists()
             onNodeWithText("SM").assertDoesNotExist()
             onNodeWithContentDescription("your portrait").assertExists()
+            onAllNodesWithTag(CARD_COMMS_ICON_TAG).assertCountEquals(2)
         }
     }
 }

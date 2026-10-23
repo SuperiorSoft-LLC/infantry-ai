@@ -338,6 +338,16 @@ object AhqIcons {
     /** PANEL-TOGGLE-1: a window frame with its RIGHT column filled (the side panel toggle). Drawn here, not Material. */
     val PanelRight: ImageVector by lazy { icon("PanelRight", autoMirror = false) { panelFrame(); rect(15f, 6f, 19f, 18f) } }
 
+    /** COMMS: a walkie-talkie (antenna, outlined body, speaker slots). Drawn here, not Material. */
+    val Radio: ImageVector by lazy {
+        icon("Radio", autoMirror = false) {
+            rect(8f, 1f, 10f, 6f)
+            rect(6f, 6f, 18f, 8f); rect(6f, 20f, 18f, 22f)
+            rect(6f, 8f, 8f, 20f); rect(16f, 8f, 18f, 20f)
+            rect(10f, 10f, 14f, 11.5f); rect(10f, 13f, 14f, 14.5f); rect(10f, 16f, 14f, 17.5f)
+        }
+    }
+
     /** A 2dp frame from (3,4) to (21,20), as four bars (non-zero fill: each bar is its own clockwise rectangle). */
     private fun PathBuilder.panelFrame() {
         rect(3f, 4f, 21f, 6f)

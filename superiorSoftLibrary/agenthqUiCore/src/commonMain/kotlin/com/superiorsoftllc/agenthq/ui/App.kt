@@ -1493,7 +1493,7 @@ private fun SpeakerRow(avatar: @Composable () -> Unit, content: @Composable () -
 }
 
 /** Size of the agent's portrait on its chat lines, and of the indent its continuation lines keep. */
-private const val CHAT_AVATAR_SIZE = 22
+private const val CHAT_AVATAR_SIZE = 36
 
 /** True for every line kind the agent produces; only the human's own [LineKind.USER] echo is not. */
 private fun ChatItem.isAgentSide(): Boolean = this !is ChatItem.Line || line.kind != LineKind.USER
@@ -1539,7 +1539,7 @@ fun ChatLine(
     if (line.kind == LineKind.USER) {
         // IMG-2: the turn's `[image: ...]` lines show as thumbnails, not as text.
         val (said, images) = ChatImageLines.split(line.text)
-        SpeakerRow({ UserAvatar() }) {
+        SpeakerRow({ UserAvatar(CHAT_AVATAR_SIZE) }) {
             Column {
                 Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Palette.Accent.copy(alpha = 0.12f), RoundedCornerShape(8.dp)).padding(8.dp)) {
                     CardTimestamp(line.at)
@@ -1577,15 +1577,23 @@ const val CARD_TIMESTAMP_TAG = "card-timestamp"
 /** Small muted time, right-aligned at the top of a chat card, so it never competes with the message. */
 @Composable
 private fun CardTimestamp(at: Long) {
-    Text(
-        activityTimestamp(at),
-        color = Palette.Muted.copy(alpha = 0.7f),
-        fontFamily = Mono,
-        fontSize = 9.sp,
-        textAlign = TextAlign.End,
-        modifier = Modifier.fillMaxWidth().testTag(CARD_TIMESTAMP_TAG),
-    )
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        androidx.compose.material3.Icon(
+            AhqIcons.Radio, contentDescription = null, tint = Palette.Muted.copy(alpha = 0.7f),
+            modifier = Modifier.size(15.dp).testTag(CARD_COMMS_ICON_TAG),
+        )
+        Text(
+            activityTimestamp(at),
+            color = Palette.Muted.copy(alpha = 0.7f),
+            fontFamily = Mono,
+            fontSize = 9.sp,
+            textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f).testTag(CARD_TIMESTAMP_TAG),
+        )
+    }
 }
+
+const val CARD_COMMS_ICON_TAG = "card-comms-icon"
 
 private fun spansText(spans: List<ChatSpan>): AnnotatedString = buildAnnotatedString {
     for (s in spans) when (s) {
