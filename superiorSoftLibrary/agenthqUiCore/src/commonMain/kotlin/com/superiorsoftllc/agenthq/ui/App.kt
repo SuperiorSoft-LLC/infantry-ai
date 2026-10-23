@@ -125,6 +125,10 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.TextLinkStyles
+import com.superiorsoftllc.agenthq.ui.model.isSafeChatUrl
 import com.superiorsoftllc.agenthq.ui.model.AgentScope
 import com.superiorsoftllc.agenthq.ui.model.SlashSuggestion
 import com.superiorsoftllc.agenthq.ui.model.isSlashCommand
@@ -1589,7 +1593,10 @@ private fun spansText(spans: List<ChatSpan>): AnnotatedString = buildAnnotatedSt
         is ChatSpan.Bold -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(s.text) }
         is ChatSpan.Italic -> withStyle(SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)) { append(s.text) }
         is ChatSpan.InlineCode -> withStyle(SpanStyle(background = Palette.Raised, color = Palette.Accent)) { append(s.text) }
-        is ChatSpan.Link -> withStyle(SpanStyle(color = Palette.Info, textDecoration = TextDecoration.Underline)) { append(s.label) }
+        is ChatSpan.Link -> if (isSafeChatUrl(s.url)) {
+            // Opens through the platform LocalUriHandler; the parser only ever yields http/https/mailto, re-checked here.
+            withLink(LinkAnnotation.Url(s.url, TextLinkStyles(SpanStyle(color = Palette.Info, textDecoration = TextDecoration.Underline)))) { append(s.label) }
+        } else append(s.label)
     }
 }
 
