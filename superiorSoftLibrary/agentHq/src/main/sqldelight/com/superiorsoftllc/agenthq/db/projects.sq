@@ -34,7 +34,9 @@ CREATE TABLE IF NOT EXISTS projects (
     directory TEXT NOT NULL DEFAULT '',
     -- BASE-1a (38.sqm): the branch a ticket start in this project cuts from. Empty = none set (the daemon's
     -- AGENTHQ_BASE_BRANCH, else HEAD), never NULL. Declared LAST, after `directory`, for the same reason.
-    base_branch TEXT NOT NULL DEFAULT ''
+    base_branch TEXT NOT NULL DEFAULT '',
+    -- LANE-CAPS (46.sqm): JSON object role -> max concurrent agents; absent role = 1. Declared LAST.
+    lane_caps TEXT NOT NULL DEFAULT '{}'
 );
 
 -- Every project, in creation order (ties fall back to id so the order is total and stable).
@@ -49,9 +51,9 @@ SELECT * FROM projects ORDER BY created_at ASC, id ASC;
 -- The insert only lands for a new id, so `created_at` keeps the row's original value and an edit
 -- can never reorder the listing.
 insertProjectIgnore:
-INSERT OR IGNORE INTO projects(id, name, goal, created_at, directory, base_branch) VALUES (?, ?, ?, ?, ?, ?);
+INSERT OR IGNORE INTO projects(id, name, goal, created_at, directory, base_branch, lane_caps) VALUES (?, ?, ?, ?, ?, ?, ?);
 
 -- The edit half: overwrites everything but the id and created_at (and the retired story_ids
 -- column, which neither this nor the insert above touches any more).
 updateProject:
-UPDATE projects SET name = ?, goal = ?, directory = ?, base_branch = ? WHERE id = ?;
+UPDATE projects SET name = ?, goal = ?, directory = ?, base_branch = ?, lane_caps = ? WHERE id = ?;

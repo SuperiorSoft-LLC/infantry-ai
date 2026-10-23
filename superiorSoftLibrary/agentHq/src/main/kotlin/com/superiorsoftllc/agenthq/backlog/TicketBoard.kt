@@ -137,6 +137,8 @@ class TicketBoard(
     private val exitBehavior: () -> String = { "leave" },
     /** TICKET-WEIGHT: the weight -> executor mapping, read at every start and view. */
     private val weightExecutors: () -> WeightExecutors = { WeightExecutors.DEFAULT },
+    /** LANE-CAPS: the most agents of a role that may run at once in a project (1 = one per role, today's behaviour). */
+    private val laneCap: (projectId: String?, role: String) -> Int = { _, _ -> 1 },
 ) {
     @Volatile
     private var queueDrainEnabled = true
@@ -902,6 +904,7 @@ class TicketBoard(
             }
             if (matching.isEmpty()) return AssignmentResolution(refusal = "no agent profile has role '$role'")
             val profile = matching.firstOrNull { candidate -> active.none { it.agentId == candidate.id } }
+                ?: extraAgent(matching, active, role, profiles, projectId)
                 ?: return AssignmentResolution(queueLane = assigned, busy = true)
             return AssignmentResolution(profile = profile, queueLane = assigned)
         }
@@ -911,6 +914,30 @@ class TicketBoard(
             AssignmentResolution(queueLane = profile.id, busy = true)
         } else {
             AssignmentResolution(profile = profile, queueLane = profile.id)
+        }
+    }
+
+    /**
+     * LANE-CAPS: every agent of [role] is busy; when fewer than the project's cap are running, add one more agent of the
+     * role (a copy of the first, named "<name> <n>", with its own id) so the ticket starts instead of queueing. Null at the
+     * cap (the ticket queues) or when the save is refused. Lowering the cap never stops a running agent.
+     */
+    private fun extraAgent(
+        matching: List<AgentProfile>,
+        active: List<SessionRecord>,
+        role: String,
+        profiles: AgentProfiles,
+        projectId: String?,
+    ): AgentProfile? {
+        val running = matching.count { candidate -> active.any { it.agentId == candidate.id } }
+        if (running >= laneCap(projectId, role)) return null
+        val template = matching.first()
+        val taken = profiles.list().map { it.name }.toSet()
+        val name = generateSequence(2) { it + 1 }.map { "${template.name} $it" }.first { it !in taken }
+        return try {
+            profiles.save(template.copy(id = null, name = name))
+        } catch (_: IllegalArgumentException) {
+            null
         }
     }
 
@@ -1000,6 +1027,28 @@ class TicketBoard(
             }.map { it.id }
         }
         candidates.firstOrNull()?.let { handOut(it, HandOutOrigin.QUEUE_DRAIN) }
+        if (role != null) pruneIdleClones(role)
+    }
+
+    /**
+     * LANE-CAPS: a clone ("<name> 2", added by [extraAgent]) that is idle while the role has more agents than the cap of its
+     * project allows is removed. The role's first agent is never removed, and nothing running is touched.
+     */
+    private fun pruneIdleClones(role: String) {
+        val profiles = agents ?: return
+        val sessionManager = sessions ?: return
+        val matching = profiles.list().filter { it.role == role }
+        val original = matching.firstOrNull() ?: return
+        val cap = maxOf(1, laneCap(original.projectId, role))
+        val active = sessionManager.list().filter { it.state in ACTIVE_STATES }
+        val clone = Regex("^" + Regex.escape(original.name) + " \\d+$")
+        var excess = matching.size - cap
+        for (candidate in matching.drop(1).reversed()) {
+            if (excess <= 0) break
+            val id = candidate.id ?: continue
+            if (!clone.matches(candidate.name) || active.any { it.agentId == id }) continue
+            runCatching { profiles.delete(id) }.onSuccess { excess-- }
+        }
     }
 
     /** Link two tickets (idempotent: an existing link changes nothing). Answered with `ticketId`'s ticket. */

@@ -1,5 +1,8 @@
 package com.superiorsoftllc.agenthq.mvp
 
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
 import com.superiorsoftllc.agenthq.db.AgentHQDatabase
 import com.superiorsoftllc.agenthq.protocol.Project
 
@@ -82,6 +85,7 @@ class SqlProjectPersistence(
                 goal = row.goal,
                 directory = row.directory,
                 baseBranch = row.base_branch,
+                laneCaps = runCatching { Json.decodeFromString<Map<String, Int>>(row.lane_caps) }.getOrDefault(emptyMap()),
             )
         }
 
@@ -94,6 +98,7 @@ class SqlProjectPersistence(
             created_at = now,
             directory = project.directory,
             base_branch = project.baseBranch,
+            lane_caps = Json.encodeToString(project.laneCaps),
         ).value
         // The insert reports how many rows it actually wrote: 1 for a create, 0 when the id was
         // already there -- and SQLDelight drops every statement after the first in a label, so the
@@ -104,6 +109,7 @@ class SqlProjectPersistence(
                 goal = project.goal,
                 directory = project.directory,
                 base_branch = project.baseBranch,
+                lane_caps = Json.encodeToString(project.laneCaps),
                 id = project.id,
             )
         }

@@ -251,7 +251,7 @@ class McpOrchestrationE2eTest {
             "agenthq_inbox", "agenthq_read", // MAIL-MCP-1
             "agenthq_ask", // ASK-1
             "agenthq_pipeline", "agenthq_pipeline_record", // PIPE-1
-            "agenthq_role_list", "agenthq_role_get", "agenthq_role_update", "agenthq_role_create", "agenthq_role_delete", // ROLE-EDIT-1
+            "agenthq_role_list", "agenthq_role_get", "agenthq_role_update", "agenthq_role_create", "agenthq_role_delete", "agenthq_project_config_get", "agenthq_project_config_set", // ROLE-EDIT-1, LANE-CAPS
         )
     }
 }

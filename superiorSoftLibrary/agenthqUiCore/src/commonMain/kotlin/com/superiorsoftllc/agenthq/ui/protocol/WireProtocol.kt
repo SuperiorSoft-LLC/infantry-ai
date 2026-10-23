@@ -208,6 +208,7 @@ data class Envelope(
         const val PROJECTS = "projects"
         // Contract 1.81.0 (BASE-1a): read, set or clear a project's base branch; answered by `project`.
         const val PROJECT_BASE = "project_base"
+        const val PROJECT_CONFIG = "project_config"
         const val WORKSPACE_LIST = "workspace_list"
         const val WORKSPACE_SAVE = "workspace_save"
         const val WORKSPACE = "workspace"
@@ -1116,7 +1117,13 @@ data class Project(
     val directory: String = "",
     /** Contract 1.81.0 (BASE-1a): the branch the project's ticket starts cut from; `""` = none (the daemon's default). */
     val baseBranch: String = "",
+    /** Contract 1.111.0 (LANE-CAPS): the most agents of a role that run at once, by role id; a role not listed runs 1. */
+    val laneCaps: Map<String, Int> = emptyMap(),
 )
+
+/** Contract 1.111.0 (LANE-CAPS) `project_config`, answered by `project`: [laneCaps] merges into the stored caps; null reads. */
+@Serializable
+data class ProjectConfigRequest(val projectId: String, val laneCaps: Map<String, Int>? = null)
 
 /**
  * Contract 1.81.0 (BASE-1a) `project_base`, answered by `project`: [branch] sets the project's base branch (refused with
@@ -1674,6 +1681,14 @@ object WireRequests {
     fun projectSetDirectory(projectId: String, directory: String): Envelope = Envelope(
         Envelope.PROJECT_SAVE,
         json.encodeToString(ProjectSave.serializer(), ProjectSave(id = projectId, directory = directory)),
+    )
+
+    /** `project_config` (contract 1.111.0): set [projectId]'s cap of concurrent [role] agents to [cap]. */
+    fun projectConfig(projectId: String, role: String, cap: Int): Envelope = Envelope(
+        Envelope.PROJECT_CONFIG,
+        Json { encodeDefaults = false; explicitNulls = false }.encodeToString(
+            ProjectConfigRequest.serializer(), ProjectConfigRequest(projectId, mapOf(role to cap)),
+        ),
     )
 
     /** `project_base` (contract 1.81.0): set [projectId]'s base branch to [branch], or clear it when [branch] is null. */

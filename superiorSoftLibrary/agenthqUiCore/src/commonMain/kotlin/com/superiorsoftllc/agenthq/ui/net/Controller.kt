@@ -1196,6 +1196,17 @@ class Controller(
         return report(send(WireRequests.projectBase(projectId, name)))
     }
 
+    /**
+     * LANE-CAPS: set how many agents of [role] may run at once in [projectId] (`project_config`, contract 1.111.0); 1 is the
+     * default. The daemon answers (and pushes) the whole `project`. Lowering never stops a running agent.
+     */
+    suspend fun setLaneCap(projectId: String, role: String, cap: Int): CommandResult {
+        if (!contractAtLeast(_state.value.connection.contract, 1, 111)) return report(CommandResult.Refused("This daemon cannot set agent caps (needs contract 1.111.0)."))
+        if (_state.value.projects.none { it.id == projectId }) return report(CommandResult.Refused("unknown project"))
+        if (cap < 1) return report(CommandResult.Refused("a cap is 1 or more"))
+        return report(send(WireRequests.projectConfig(projectId, role, cap)))
+    }
+
     /** True when the connected daemon speaks contract 1.81.0 or later (`project_base`). */
     fun supportsProjectBase(): Boolean = contractAtLeast(_state.value.connection.contract, 1, 81)
 

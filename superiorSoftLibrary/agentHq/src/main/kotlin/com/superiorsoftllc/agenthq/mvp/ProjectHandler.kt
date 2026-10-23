@@ -3,6 +3,7 @@ package com.superiorsoftllc.agenthq.mvp
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.Project
 import com.superiorsoftllc.agenthq.protocol.ProjectBaseRequest
+import com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest
 import com.superiorsoftllc.agenthq.protocol.ProjectSave
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -35,6 +36,8 @@ class ProjectHandler(
      * has no repository to check against, and refuses every set (a read and a clear still answer).
      */
     private val baseCheck: ProjectBaseCheck? = null,
+    /** LANE-CAPS: told the whole project after a `project_config` changed it, so the daemon can push it to every client. */
+    private val onConfigChanged: (Project) -> Unit = {},
 ) {
     /** CP-3: the DEFAULT project (the oldest, the order `project_list` answers in), or null when there is none. */
     fun defaultProjectId(): String? = store.list().firstOrNull()?.id
@@ -87,6 +90,14 @@ class ProjectHandler(
                 else -> store.get(request.projectId)
             }
             projectEnvelope(project)
+        }
+
+        // LANE-CAPS (contract 1.111.0): read or merge the per-role agent caps.
+        Envelope.PROJECT_CONFIG -> projectRequest(envelope.type) {
+            val request = ProjectConfigRequest.decode(envelope.data)
+            val caps = request.laneCaps
+            if (caps.isNullOrEmpty()) projectEnvelope(store.get(request.projectId))
+            else projectEnvelope(store.setLaneCaps(request.projectId, caps).also(onConfigChanged))
         }
 
         else -> null

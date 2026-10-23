@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.110.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.111.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -2766,3 +2766,12 @@ Three authenticated HTTP routes (bearer token like every route but `/health`): `
 - `ServerUpdateStatus`: `version`, `contract`, `distribution` (`archive` | `docker` | `dev`), `canSelfUpdate`, `enabled`, `disabledReason`, `state` (`idle` | `checking` | `available` | `downloading` | `staged` | `error`), `available {version, notes}`, `lastChecked` (epoch ms), `error`, `instructions`, `runningAgents`, `staged`. `/update/status` reads memory only; `/update/check` asks the release source (GitHub or a local releases folder) and answers the same body.
 - `POST /update/apply` takes `{"confirm": false}` and answers `UpdateApplyReply {result, version?, running?, message?}`: 200 `staged` (the verified archive is unpacked and made current; the restart is separate), 409 `agents_running` (resend with `confirm: true`), 409 `unsupported` (Docker or a dev run; `message` carries the manual instructions, e.g. the `docker pull`), 409 `nothing_to_apply`, 502 `failed`.
 - A client compares its own version and contract with `version` / `contract` to warn on a mismatch. The update token is read from `AGENTHQ_UPDATE_TOKEN` / `INFANTRY_UPDATE_TOKEN` (or the keystore / credential store) and never appears in any reply.
+
+## 1.111.0 -- per-project agent caps per role, LANE-CAPS (additive)
+
+The board used to run ONE agent per role; a second ticket of the same role queued. Now each project stores, per role, the most agents that may run at once.
+
+- `Project.laneCaps` (`{role: max}`, default `{}`): a role not listed runs 1 (today's behaviour). No upper bound in the daemon. Stored with the project (migration 46); an older daemon omits the key.
+- `project_config` request `{"projectId", "laneCaps"?}`: absent or empty `laneCaps` is a read; otherwise the entries are merged (a cap of 1 is the default and removes the entry; below 1 is refused as `project_config refused: ...`). Answered by the whole `project` frame, which is also PUSHED to every connected client when a cap changed.
+- Ticket start/queue: a `role:<role>` ticket takes an idle agent of the role; if all are busy and fewer than the cap are running, the daemon adds another agent of the role (a copy of the first, named `<name> 2`, `<name> 3`, ... with its own agent id; each ticket already gets its own worktree). `queued` is answered only at the cap. Lowering a cap never stops a running agent; queued tickets drain as runs end, and a clone left idle above the cap is removed when a run of its role ends (the role's first agent never is). A clone keeps the template's persona, provider and model, and an idle agent is always reused before a new clone is made.
+- CLI: `agenthq project config get <projectId>` / `project config set <projectId> <role> <n>`. MCP: `agenthq_project_config_get`, `agenthq_project_config_set` (`projectId`, `role`, `cap`).

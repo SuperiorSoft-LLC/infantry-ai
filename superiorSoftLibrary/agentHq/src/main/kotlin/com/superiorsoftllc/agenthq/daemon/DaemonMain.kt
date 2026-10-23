@@ -740,7 +740,14 @@ class AgentHqDaemon(
                 com.superiorsoftllc.agenthq.worktree.TicketBranches(),
                 cutRepo = { project -> boardRef?.cutRepo(project.id) },
             )
-            val projects = ProjectHandler(projectStore, baseCheck = baseCheck)
+            val projects = ProjectHandler(
+                projectStore,
+                baseCheck = baseCheck,
+                onConfigChanged = { project ->
+                    val frame = Envelope(Envelope.PROJECT, json.encodeToString(com.superiorsoftllc.agenthq.protocol.Project.serializer(), project))
+                    for (client in clients) client.trySend(frame)
+                },
+            )
             // INSTALL-CWD-1: the installed app runs each project's work in that project's own directory.
             if (projectDirs && repo == null) {
                 manager.projectFolders = com.superiorsoftllc.agenthq.session.ProjectFolders(
@@ -861,6 +868,7 @@ class AgentHqDaemon(
                 knowledge = knowledge, skills = skillsSource,
                 exitBehavior = settings::ticketExitBehavior,
                 weightExecutors = settings::weightExecutors,
+                laneCap = projectStore::laneCapOf,
                 // BUG-ASSIGN-1: a refused role lists the catalog's ids (custom roles included; the fallback persona not).
                 roleIds = { roles.all().map { it.id }.filter { it != RoleIds.CUSTOM } },
                 // IMG-3: a ticket's images live under its project's directory (.agenthq/uploads/ticket/).
@@ -2889,7 +2897,8 @@ private suspend fun handleConnection(
 
                 Envelope.PROJECT_SAVE, Envelope.PROJECT_GET, Envelope.PROJECT_LIST,
                 // BASE-1a (contract 1.81.0): read, set or clear a project's base branch.
-                Envelope.PROJECT_BASE -> projects.answer(envelope)
+                Envelope.PROJECT_BASE,
+                Envelope.PROJECT_CONFIG -> projects.answer(envelope)
 
                 // IMG-1 (contract 1.83.0): store an image under the project's `.agenthq/uploads/`, answer its path.
                 Envelope.IMAGE_UPLOAD -> imageUploads?.answer(envelope)

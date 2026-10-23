@@ -196,14 +196,28 @@ class ProjectPickerUiTest {
             createProject(controller, "Alpha")
             val id = controller.idOf("Alpha")
             onNodeWithTag("title-bar-edit-project").performClick()
-            onNodeWithTag("new-project-dialog").assertExists()
+            onNodeWithTag("project-config-dialog").assertExists()
             onNodeWithTag("new-project-name").assertTextContains("Alpha", substring = true)
             onNodeWithTag("new-project-name").performTextReplacement("Renamed")
             onNodeWithTag("new-project-create").performClick()
             waitUntil(timeoutMillis = 10_000) { controller.state.value.projects.any { it.id == id && it.name == "Renamed" } }
-            waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag("new-project-dialog").fetchSemanticsNodes().isEmpty() }
+            waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag("project-config-dialog").fetchSemanticsNodes().isEmpty() }
             assertEquals(1, controller.state.value.projects.size, "a rename adds no project")
             onNodeWithTag("title-bar-project-picker").assertTextContains("Renamed", substring = true)
+        }
+    }
+
+    @Test
+    fun `the Lanes tab raises a role's cap and the daemon stores it`() {
+        withApp { controller ->
+            createProject(controller, "Alpha")
+            val id = controller.idOf("Alpha")
+            onNodeWithTag("title-bar-edit-project").performClick()
+            onNodeWithTag("project-config-tab-lanes").performClick()
+            onNodeWithTag("project-config-cap-backend").assertTextContains("1")
+            onNodeWithTag("project-config-cap-plus-backend").performClick()
+            waitUntil(timeoutMillis = 10_000) { controller.state.value.projects.any { it.id == id && it.laneCaps["backend"] == 2 } }
+            onNodeWithTag("project-config-cap-backend").assertTextContains("2")
         }
     }
 }

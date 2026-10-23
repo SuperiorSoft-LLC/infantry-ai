@@ -482,6 +482,8 @@ data class ProjectView(
     val directory: String = "",
     /** BASE-1b (contract 1.81.0): the branch new ticket starts in this project cut from; `""` = the daemon's default. */
     val baseBranch: String = "",
+    /** LANE-CAPS (contract 1.111.0): most concurrent agents per role id; a role not listed runs 1. */
+    val laneCaps: Map<String, Int> = emptyMap(),
 )
 
 /**
@@ -1435,7 +1437,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     // chosen yet; the current active project is kept while it is still in the list.
     Envelope.PROJECTS -> {
         val views = json.decodeFromString(ListSerializer(Project.serializer()), env.data)
-            .map { ProjectView(it.id, it.name, it.goal, it.directory, it.baseBranch) }
+            .map { ProjectView(it.id, it.name, it.goal, it.directory, it.baseBranch, it.laneCaps) }
         val active = s.activeProjectId?.takeIf { id -> views.any { it.id == id } } ?: views.firstOrNull()?.id
         s.copy(projects = views, activeProjectId = active)
     }
@@ -1479,7 +1481,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     // The daemon's answer to project_save / workspace_save: ONE stored row, upserted by id (a create appends,
     // a re-send of a known id replaces it), so a new project or workspace appears without a re-list.
     Envelope.PROJECT -> {
-        val p = json.decodeFromString(Project.serializer(), env.data).let { ProjectView(it.id, it.name, it.goal, it.directory, it.baseBranch) }
+        val p = json.decodeFromString(Project.serializer(), env.data).let { ProjectView(it.id, it.name, it.goal, it.directory, it.baseBranch, it.laneCaps) }
         val known = s.projects.any { it.id == p.id }
         s.copy(
             projects = if (known) s.projects.map { if (it.id == p.id) p else it } else s.projects + p,

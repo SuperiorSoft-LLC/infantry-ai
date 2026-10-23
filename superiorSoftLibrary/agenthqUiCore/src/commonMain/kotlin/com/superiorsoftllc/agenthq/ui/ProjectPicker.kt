@@ -1,6 +1,13 @@
 package com.superiorsoftllc.agenthq.ui
 
 import androidx.compose.foundation.background
+import com.superiorsoftllc.agenthq.ui.model.ProjectView
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Button
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -70,7 +77,14 @@ const val NEW_PROJECT_CANCEL_TAG = "new-project-cancel"
 
 /** Edit project: the title bar's pencil beside "+" opens the same dialog prefilled with the current project's name. */
 const val EDIT_PROJECT_BUTTON_TAG = "title-bar-edit-project"
-const val EDIT_PROJECT_LABEL = "Rename project"
+const val EDIT_PROJECT_LABEL = "Project Configurations"
+const val PROJECT_CONFIG_DIALOG_TAG = "project-config-dialog"
+const val PROJECT_CONFIG_TAB_GENERAL_TAG = "project-config-tab-general"
+const val PROJECT_CONFIG_TAB_LANES_TAG = "project-config-tab-lanes"
+const val PROJECT_CONFIG_CAP_TAG_PREFIX = "project-config-cap-"
+
+/** The summed caps above which the Lanes / Roles tab shows its soft warning (no hard limit: projects and machines vary). */
+const val LANE_CAPS_WARN_TOTAL = 8
 
 /**
  * M2-7: the title bar's project controls. A drop-down names the current project and lists every project
@@ -132,14 +146,7 @@ fun ProjectPicker(state: AppState, controller: Controller) {
         EditProjectBox(enabled = live && current != null) { editing = true }
     }
 
-    if (editing && current != null) NewProjectDialog(
-        live, onDismiss = { editing = false }, title = "Edit Project", confirmLabel = "Save", initialName = current.name,
-    ) { name, _ ->
-        when (val r = controller.renameProject(current.id, name)) {
-            is CommandResult.Refused -> r.reason
-            else -> { editing = false; null }
-        }
-    }
+    if (editing && current != null) ProjectConfigDialog(state, controller, current, live, onDismiss = { editing = false })
 
     if (creating) NewProjectDialog(live, onDismiss = { creating = false }, askDirectory = true) { name, directory ->
         when (val r = controller.createProject(name, directory)) {
@@ -244,4 +251,135 @@ private fun NewProjectDialog(
             TextButton(onClick = onDismiss, modifier = Modifier.testTag(NEW_PROJECT_CANCEL_TAG)) { Text("Cancel", color = Palette.Text) }
         },
     )
+}
+
+/** The tabs of the Project Configurations dialog; more (themes, ...) slot in here. */
+private enum class ProjectConfigTab(val label: String, val tag: String) {
+    General("General", PROJECT_CONFIG_TAB_GENERAL_TAG),
+    Lanes("Lanes / Roles", PROJECT_CONFIG_TAB_LANES_TAG),
+}
+
+/**
+ * Project Configurations (replaces Rename Project): a tabbed dialog on the shared blurred modal. General renames the
+ * project; Lanes / Roles sets, per role, the most agents that run at once (default 1, no upper limit). A cap change is
+ * applied at once (the daemon pushes the project back); lowering it never stops a running agent.
+ */
+@Composable
+private fun ProjectConfigDialog(state: AppState, controller: Controller, project: ProjectView, live: Boolean, onDismiss: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    var tab by remember { mutableStateOf(ProjectConfigTab.General) }
+    var name by remember { mutableStateOf(project.name) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    val canSave = live && name.isNotBlank() && !busy
+    fun save() {
+        if (!canSave) return
+        busy = true
+        error = null
+        scope.launch {
+            when (val r = controller.renameProject(project.id, name)) {
+                is CommandResult.Refused -> error = r.reason
+                else -> onDismiss()
+            }
+            busy = false
+        }
+    }
+    AhqAlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.testTag(PROJECT_CONFIG_DIALOG_TAG).onPreviewKeyEvent { e ->
+            if (e.type == KeyEventType.KeyDown && e.key == Key.Escape) { onDismiss(); true } else false
+        },
+        containerColor = Palette.Panel,
+        title = { Text(EDIT_PROJECT_LABEL, color = Palette.Text) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.widthIn(min = 360.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    ProjectConfigTab.entries.forEach { t ->
+                        val selected = t == tab
+                        Text(
+                            t.label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (selected) Palette.Accent else Palette.Muted,
+                            modifier = Modifier.clickable(role = Role.Tab, onClickLabel = t.label) { tab = t }
+                                .padding(vertical = 4.dp).testTag(t.tag),
+                        )
+                    }
+                }
+                when (tab) {
+                    ProjectConfigTab.General -> {
+                        val focus = remember { FocusRequester() }
+                        LaunchedEffect(Unit) { focus.requestFocus() }
+                        OutlinedTextField(
+                            name, { name = it; error = null }, label = { Text("Project name") }, singleLine = true, enabled = live,
+                            modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag(NEW_PROJECT_NAME_TAG),
+                        )
+                        if (!live) Text("Connect to a daemon to change the project.", color = Palette.Muted, fontSize = 11.sp)
+                        error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
+                    }
+                    ProjectConfigTab.Lanes -> LanesTab(state, controller, project, live)
+                }
+            }
+        },
+        confirmButton = {
+            if (tab == ProjectConfigTab.General) Button(
+                onClick = ::save, enabled = canSave,
+                colors = ButtonDefaults.buttonColors(containerColor = Palette.Accent, contentColor = Color(0xFF1A1200)),
+                modifier = Modifier.testTag(NEW_PROJECT_CREATE_TAG),
+            ) { Text("Save") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.testTag(NEW_PROJECT_CANCEL_TAG)) {
+                Text(if (tab == ProjectConfigTab.General) "Cancel" else "Close", color = Palette.Text)
+            }
+        },
+    )
+}
+
+/** Per role: the most agents that run at once. A role with no entry runs 1; the project frame the daemon pushes back updates the numbers. */
+@Composable
+private fun LanesTab(state: AppState, controller: Controller, project: ProjectView, live: Boolean) {
+    val scope = rememberCoroutineScope()
+    var error by remember { mutableStateOf<String?>(null) }
+    val roleIds = (state.roles.map { it.id } + project.laneCaps.keys).distinct()
+    val names = state.roles.associate { it.id to it.name }
+    val total = roleIds.sumOf { project.laneCaps[it] ?: 1 }
+    Text(
+        "Most agents of a role that run at once. 1 keeps today's behaviour: a second ticket of the role waits. " +
+            "Lowering a number never stops a running agent.",
+        color = Palette.Muted, fontSize = 11.sp,
+    )
+    Column(Modifier.heightIn(max = 280.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        roleIds.forEach { id ->
+            val cap = project.laneCaps[id] ?: 1
+            fun set(n: Int) {
+                error = null
+                scope.launch { (controller.setLaneCap(project.id, id, n) as? CommandResult.Refused)?.let { error = it.reason } }
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(names[id] ?: id, color = Palette.Text, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                CapStep("-", enabled = live && cap > 1, tag = "project-config-cap-minus-$id") { set(cap - 1) }
+                Text(
+                    cap.toString(), color = Palette.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+                    modifier = Modifier.widthIn(min = 32.dp).testTag(PROJECT_CONFIG_CAP_TAG_PREFIX + id),
+                )
+                CapStep("+", enabled = live, tag = "project-config-cap-plus-$id") { set(cap + 1) }
+            }
+        }
+    }
+    if (total > LANE_CAPS_WARN_TOTAL) {
+        Text(
+            "$total agents may run at once. That is a lot of RAM and provider usage; check both before you start many tickets.",
+            color = Palette.Danger, fontSize = 11.sp,
+        )
+    }
+    error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
+}
+
+@Composable
+private fun CapStep(label: String, enabled: Boolean, tag: String, onClick: () -> Unit) {
+    val tint = if (enabled) Palette.Accent else Palette.Border
+    Box(
+        Modifier.testTag(tag).size(26.dp).clip(RoundedCornerShape(5.dp)).border(1.dp, tint, RoundedCornerShape(5.dp))
+            .clickable(enabled = enabled, role = Role.Button, onClickLabel = label, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) { Text(label, color = tint, fontSize = 14.sp) }
 }
