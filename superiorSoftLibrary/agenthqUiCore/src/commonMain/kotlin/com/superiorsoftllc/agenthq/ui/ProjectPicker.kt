@@ -67,6 +67,10 @@ const val NEW_PROJECT_NAME_TAG = "new-project-name"
 const val NEW_PROJECT_CREATE_TAG = "new-project-create"
 const val NEW_PROJECT_CANCEL_TAG = "new-project-cancel"
 
+/** Edit project: the title bar's pencil beside "+" opens the same dialog prefilled with the current project's name. */
+const val EDIT_PROJECT_BUTTON_TAG = "title-bar-edit-project"
+const val EDIT_PROJECT_LABEL = "Rename project"
+
 /**
  * M2-7: the title bar's project controls. A drop-down names the current project and lists every project
  * (picking one is the same [Controller.selectProject] the sidebar list used to call); the square "+" box beside
@@ -78,6 +82,7 @@ fun ProjectPicker(state: AppState, controller: Controller) {
     val live = state.connection.isLive
     var open by remember { mutableStateOf(false) }
     var creating by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
     val current = state.activeProject
 
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -122,6 +127,17 @@ fun ProjectPicker(state: AppState, controller: Controller) {
         }
         Spacer(Modifier.width(6.dp))
         NewProjectBox(enabled = live) { creating = true }
+        Spacer(Modifier.width(6.dp))
+        EditProjectBox(enabled = live && current != null) { editing = true }
+    }
+
+    if (editing && current != null) NewProjectDialog(
+        live, onDismiss = { editing = false }, title = "Edit Project", confirmLabel = "Save", initialName = current.name,
+    ) { name ->
+        when (val r = controller.renameProject(current.id, name)) {
+            is CommandResult.Refused -> r.reason
+            else -> { editing = false; null }
+        }
     }
 
     if (creating) NewProjectDialog(live, onDismiss = { creating = false }) { name ->
@@ -149,14 +165,33 @@ private fun NewProjectBox(enabled: Boolean, onClick: () -> Unit) {
     }
 }
 
+@Composable
+private fun EditProjectBox(enabled: Boolean, onClick: () -> Unit) {
+    val tint = if (enabled) Palette.Accent else Palette.Border
+    IconActionTooltipBox(EDIT_PROJECT_LABEL, modifier = Modifier.size(PROJECT_CONTROL_HEIGHT).testTag(EDIT_PROJECT_BUTTON_TAG)) { m ->
+        Box(
+            m.clip(RoundedCornerShape(5.dp)).border(1.5.dp, tint, RoundedCornerShape(5.dp))
+                .clickable(enabled = enabled, role = Role.Button, onClickLabel = EDIT_PROJECT_LABEL, onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) { Text("✎", color = tint, fontSize = 13.sp) }
+    }
+}
+
 /**
- * The New Project modal: a name, Create (off until there is a name and a live link) and Cancel. [onCreate]
+ * The New Project modal (also the Edit Project modal: [title], [confirmLabel] and [initialName] prefill it): a name, Create (off until there is a name and a live link) and Cancel. [onCreate]
  * answers null on success, or the refusal to show inline.
  */
 @Composable
-private fun NewProjectDialog(live: Boolean, onDismiss: () -> Unit, onCreate: suspend (String) -> String?) {
+private fun NewProjectDialog(
+    live: Boolean,
+    onDismiss: () -> Unit,
+    title: String = "New Project",
+    confirmLabel: String = "Create",
+    initialName: String = "",
+    onCreate: suspend (String) -> String?,
+) {
     val scope = rememberCoroutineScope()
-    var name by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(initialName) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     val nameFocus = remember { FocusRequester() }
@@ -178,7 +213,7 @@ private fun NewProjectDialog(live: Boolean, onDismiss: () -> Unit, onCreate: sus
             }
         },
         containerColor = Palette.Panel,
-        title = { Text("New Project", color = Palette.Text) },
+        title = { Text(title, color = Palette.Text) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 LaunchedEffect(Unit) { nameFocus.requestFocus() }
@@ -195,7 +230,7 @@ private fun NewProjectDialog(live: Boolean, onDismiss: () -> Unit, onCreate: sus
                 onClick = ::create, enabled = canCreate,
                 colors = ButtonDefaults.buttonColors(containerColor = Palette.Accent, contentColor = Color(0xFF1A1200)),
                 modifier = Modifier.testTag(NEW_PROJECT_CREATE_TAG),
-            ) { Text("Create") }
+            ) { Text(confirmLabel) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss, modifier = Modifier.testTag(NEW_PROJECT_CANCEL_TAG)) { Text("Cancel", color = Palette.Text) }

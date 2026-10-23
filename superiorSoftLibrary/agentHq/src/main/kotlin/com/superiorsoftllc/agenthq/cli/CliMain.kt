@@ -1456,6 +1456,7 @@ internal object Cli {
         val projectId = parsed.args[1].trim()
         when (parsed.args[0]) {
             "branches" -> projectBranches(stream, projectId, out, err)
+            "rename" -> projectRename(stream, projectId, parsed.args[2], out, err)
             else -> projectBase(stream, projectId, parsed.args.getOrNull(2)?.trim(), parsed.clear, out, err)
         }
     }
@@ -1488,6 +1489,23 @@ internal object Cli {
                 else -> "base (none): $fallback"
             },
         )
+        return 0
+    }
+
+    /** `project rename <id> <name>`: an edit `project_save` carrying only the id and the new name; the id never changes. */
+    private suspend fun projectRename(stream: FrameStream, projectId: String, name: String, out: Appendable, err: Appendable): Int {
+        val payload = json.encodeToString(
+            com.superiorsoftllc.agenthq.protocol.ProjectSave.serializer(),
+            com.superiorsoftllc.agenthq.protocol.ProjectSave(id = projectId, name = name),
+        )
+        val answer = stream.request(Envelope(Envelope.PROJECT_SAVE, payload), Envelope.PROJECT, "project_save", idempotent = true)
+        val project = try {
+            json.decodeFromString(Project.serializer(), answer.data)
+        } catch (e: Exception) {
+            err.appendLine("error: malformed project answer from the daemon: ${e.message}")
+            return 1
+        }
+        out.appendLine("project ${project.id} renamed to ${project.name}")
         return 0
     }
 
@@ -3653,6 +3671,7 @@ internal object Cli {
             ?: endpoint?.url
             ?: typed.takeIf { parsed.addressGiven }
             ?: getenv(AgentHqBin.URL_ENV)?.takeIf { it.isNotBlank() }
+            ?: installedUrl(getenv)
             ?: typed
         val url = normaliseUrl(rawUrl)
         val (token, source) = when {
@@ -3660,7 +3679,7 @@ internal object Cli {
             endpoint != null -> endpoint.tokenFile
                 ?.let { AccessPolicy.readTokenFile(File(it)) to "endpoint '${endpoint.name}'" }
                 ?: (null to "endpoint '${endpoint.name}', which names no token file")
-            else -> environmentToken(getenv)
+            else -> environmentToken(getenv, installedStateDir(getenv))
         }
         return Target(url = url, token = token, tokenSource = source, answerTimeoutMs = answerTimeoutMs(getenv))
     }
@@ -3669,11 +3688,34 @@ internal object Cli {
     internal fun targetUrl(args: Array<String>, getenv: (String) -> String?): String? =
         parseArgs(args, StringBuilder())?.let { resolveTarget(it, getenv).url }
 
-    private fun environmentToken(getenv: (String) -> String?): Pair<String?, String> {
+    /**
+     * The installed app's state dir when the environment names one (`AGENTHQ_INSTALL_PORT` / `AGENTHQ_INSTALL_STATE_DIR`),
+     * else null: a dev shell with neither keeps the dev defaults. Default dir = `%LOCALAPPDATA%\SuperiorSoft\AgentHQ`.
+     */
+    internal fun installedStateDir(getenv: (String) -> String?): File? {
+        val dir = getenv("AGENTHQ_INSTALL_STATE_DIR")?.takeIf { it.isNotBlank() }
+        val port = getenv("AGENTHQ_INSTALL_PORT")?.takeIf { it.isNotBlank() }
+        if (dir == null && port == null) return null
+        if (dir != null) return File(dir).absoluteFile
+        val base = getenv("LOCALAPPDATA")?.takeIf { it.isNotBlank() }
+            ?: File(System.getProperty("user.home"), "AppData/Local").path
+        return File(File(base, "SuperiorSoft"), "AgentHQ").absoluteFile
+    }
+
+    /** The installed daemon's address: `AGENTHQ_INSTALL_PORT` (default 8797, the installed app's own default). */
+    internal fun installedUrl(getenv: (String) -> String?): String? {
+        installedStateDir(getenv) ?: return null
+        val port = getenv("AGENTHQ_INSTALL_PORT")?.trim()?.toIntOrNull()?.takeIf { it in 1..65535 } ?: 8797
+        return "ws://127.0.0.1:$port/ws"
+    }
+
+    private fun environmentToken(getenv: (String) -> String?, installDir: File? = null): Pair<String?, String> {
         // tokenFromEnvironment refuses BOTH variables set at once, so the CLI and the daemon agree on that.
         val envToken = AccessPolicy.tokenFromEnvironment(getenv)
         // Remote access on: the token the daemon generated is picked up automatically on this machine.
-        val token = envToken ?: RemoteAccess.clientToken(getenv)
+        val token = envToken
+            ?: installDir?.let { d -> if (RemoteAccess.load(d).remote) RemoteAccess.storedToken(d) else null }
+            ?: RemoteAccess.clientToken(getenv)
         val source = when {
             getenv(AccessPolicy.TOKEN_FILE_ENV)?.isNotBlank() == true -> AccessPolicy.TOKEN_FILE_ENV
             envToken != null -> AccessPolicy.TOKEN_ENV
@@ -3761,6 +3803,7 @@ internal object Cli {
               stories --epic <id|prefix> --project <id>   The same rows as tickets --epic
               stories --status <column>      A ticket column; the old `doing` reads as in_progress
               project base <projectId> [<branch>|--clear]   The branch new ticket starts in the project cut from:
+              project rename <projectId> "<name>"   Rename a project; its id, tickets, sessions and mail are untouched
                                   read it, set it (refused unless it resolves where tickets are cut), or clear it
                                   (then AGENTHQ_BASE_BRANCH, else the start is refused). Tickets already started keep their base.
               project branches <projectId>   The project repo's local branches; * marks the checked-out one
@@ -4520,11 +4563,15 @@ internal object Cli {
     /** BASE-1a: the usage error for a `project` invocation, or null when it is valid. */
     private fun projectUsageError(parsed: ParsedArgs): String? {
         val args = parsed.args
-        val usage = "agenthq project base <projectId> [<branch>|--clear] | branches <projectId>"
+        val usage = "agenthq project base <projectId> [<branch>|--clear] | branches <projectId> | rename <projectId> \"<name>\""
         return when {
-            args.firstOrNull() !in setOf("base", "branches") -> "project needs a subcommand: $usage"
+            args.firstOrNull() !in setOf("base", "branches", "rename") -> "project needs a subcommand: $usage"
             args.getOrNull(1)?.isBlank() != false -> "project ${args[0]} requires a project id: $usage"
             args[0] == "branches" && (args.size > 2 || parsed.clear) -> "project branches takes only a project id: $usage"
+            args[0] == "rename" -> when {
+                parsed.clear || args.size != 3 || args[2].isBlank() -> "project rename takes a project id and one non-blank name: $usage"
+                else -> null
+            }
             args.size > 3 -> "project base takes one branch: $usage"
             parsed.clear && args.size == 3 -> "project base takes a branch or --clear, not both: $usage"
             args.size == 3 && args[2].isBlank() -> "project base: the branch is blank (use --clear to remove it): $usage"

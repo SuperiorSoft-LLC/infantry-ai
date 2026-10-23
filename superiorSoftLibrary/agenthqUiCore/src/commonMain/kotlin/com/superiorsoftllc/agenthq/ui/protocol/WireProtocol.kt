@@ -1607,6 +1607,12 @@ object WireRequests {
         json.encodeToString(ProjectSave.serializer(), ProjectSave(name = name, goal = goal)),
     )
 
+    /** `project_save` for an EDIT of [projectId]: only the name changes; the id (and so everything keyed by it) stays. */
+    fun projectRename(projectId: String, name: String): Envelope = Envelope(
+        Envelope.PROJECT_SAVE,
+        json.encodeToString(ProjectSave.serializer(), ProjectSave(id = projectId, name = name)),
+    )
+
     /** Encodes EVERY field (a `staged = false` or a cleared `""` directory is meaning, not noise). */
     private val full = Json { encodeDefaults = true }
 

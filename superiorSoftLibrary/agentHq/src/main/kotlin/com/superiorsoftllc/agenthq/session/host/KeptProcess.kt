@@ -20,12 +20,17 @@ data class KeptProcess(
     val startedAt: Long? = null,
     /** The adapter's label, for the reap line. */
     val label: String,
+    /** The [com.superiorsoftllc.agenthq.daemon.InstanceId] of the state dir that kept it; null (older file) = never reaped. */
+    val ownerId: String? = null,
 )
 
 /** What lifecycle bookkeeping needs from the OS. Injected so a test can stage a reused pid. */
 interface ProcessTable {
     /** The start instant (epoch millis) of the LIVE process [pid]; null when it is gone or the OS will not say. */
     fun startInstant(pid: Long): Long?
+
+    /** True when [pid]'s parent is alive: another owner still holds it, so it is no dead predecessor's orphan. */
+    fun hasLiveParent(pid: Long): Boolean = false
 
     /**
      * Tree-kill [pid]. Called only after the caller matched [startedAt]; an implementation re-checks it on the handle it
@@ -36,6 +41,10 @@ interface ProcessTable {
 
 /** The real one: [ProcessHandle], which also works for a process this JVM did not start (a dead daemon's child). */
 object OsProcessTable : ProcessTable {
+    // A parent the OS cannot name counts as "no live parent" only when the process itself is gone; otherwise doubt = true.
+    override fun hasLiveParent(pid: Long): Boolean =
+        ProcessHandle.of(pid).map { h -> h.parent().map { it.isAlive }.orElse(false) }.orElse(true)
+
     override fun startInstant(pid: Long): Long? =
         ProcessHandle.of(pid).filter { it.isAlive }.flatMap { it.info().startInstant() }.map { it.toEpochMilli() }.orElse(null)
 

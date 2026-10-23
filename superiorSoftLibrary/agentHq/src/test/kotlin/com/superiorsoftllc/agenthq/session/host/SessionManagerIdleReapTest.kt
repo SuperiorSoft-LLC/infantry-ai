@@ -19,6 +19,8 @@ import kotlin.test.assertTrue
  * start reaps a leftover kept process only when pid AND start instant match.
  */
 class SessionManagerIdleReapTest {
+    private companion object { const val OWNER = "owner-1" }
+
     private val adapter = FakeHarnessAdapter(autoComplete = true)
     private val events: MutableList<SessionEvent> = Collections.synchronizedList(mutableListOf())
     private val runner = CountingRunner()
@@ -34,6 +36,7 @@ class SessionManagerIdleReapTest {
         lifecyclePolicy = { LifecyclePolicy(keepAlive) },
         lineRunner = runner,
         processTable = table,
+        instanceId = OWNER,
         idleSweepMs = 0,
     ).also { it.eventSink = { e -> events += e } }
 
@@ -50,7 +53,7 @@ class SessionManagerIdleReapTest {
     fun idleStop_sendsNoExit_leavesTheRecordIdleWithNoProcess_andTheNextPromptResumes() {
         val manager = manager(FakeProcessTable(1000L to 777L))
         val session = manager.startNew("one", model = "m1")
-        assertEquals(KeptProcess(1000L, 777L, FakeHarnessAdapter.ID), onDisk(session.id).keptProcess, "persisted while it lives")
+        assertEquals(KeptProcess(1000L, 777L, FakeHarnessAdapter.ID, OWNER), onDisk(session.id).keptProcess, "persisted while it lives")
 
         now += 30 * 60_000L
         assertEquals(listOf(session.id), manager.stopIdleNow())
@@ -72,7 +75,7 @@ class SessionManagerIdleReapTest {
 
     @Test
     fun reaping_killsAKeptProcessWhosePidAndStartInstantMatch_andTheRecordComesBackIdleAndResumable() {
-        JsonSessionStore(storeFile).saveAll(listOf(record("a", SessionState.IDLE, KeptProcess(4242L, 1_000L, "opencode"))))
+        JsonSessionStore(storeFile).saveAll(listOf(record("a", SessionState.IDLE, KeptProcess(4242L, 1_000L, "opencode", OWNER))))
         val table = FakeProcessTable(4242L to 1_000L)
 
         val report = manager(table).let { m -> m.loadAndReconcile().also { assertTrue(m.get("a")!!.resumable) } }
@@ -88,7 +91,7 @@ class SessionManagerIdleReapTest {
 
     @Test
     fun reaping_leavesAReusedPidAlone() {
-        JsonSessionStore(storeFile).saveAll(listOf(record("a", SessionState.IDLE, KeptProcess(4242L, 1_000L, "opencode"))))
+        JsonSessionStore(storeFile).saveAll(listOf(record("a", SessionState.IDLE, KeptProcess(4242L, 1_000L, "opencode", OWNER))))
         // Same pid, another start instant: the OS gave 4242 to an unrelated process since.
         val table = FakeProcessTable(4242L to 2_000L)
 
@@ -102,7 +105,7 @@ class SessionManagerIdleReapTest {
 
     @Test
     fun reaping_aKeptProcessCaughtMidTurn_comesBackIdle_notOrphaned() {
-        JsonSessionStore(storeFile).saveAll(listOf(record("a", SessionState.BUSY, KeptProcess(4242L, 1_000L, "opencode"), childPid = 4242L)))
+        JsonSessionStore(storeFile).saveAll(listOf(record("a", SessionState.BUSY, KeptProcess(4242L, 1_000L, "opencode", OWNER), childPid = 4242L)))
         val table = FakeProcessTable(4242L to 1_000L)
 
         manager(table).loadAndReconcile()
@@ -115,8 +118,8 @@ class SessionManagerIdleReapTest {
     fun reaping_neverKillsWithoutARecordedStartInstant_orAProcessThatIsGone() {
         JsonSessionStore(storeFile).saveAll(
             listOf(
-                record("unknown", SessionState.IDLE, KeptProcess(4242L, null, "opencode")),
-                record("gone", SessionState.IDLE, KeptProcess(5151L, 3_000L, "opencode")),
+                record("unknown", SessionState.IDLE, KeptProcess(4242L, null, "opencode", OWNER)),
+                record("gone", SessionState.IDLE, KeptProcess(5151L, 3_000L, "opencode", OWNER)),
             ),
         )
         val table = FakeProcessTable(4242L to 1_000L)
@@ -126,5 +129,33 @@ class SessionManagerIdleReapTest {
         assertEquals(emptyList(), table.killed, "nothing proves 4242 is ours; 5151 is not running")
         assertNull(onDisk("unknown").keptProcess)
         assertNull(onDisk("gone").keptProcess)
+    }
+
+    private fun killedFor(kept: KeptProcess, table: FakeProcessTable): List<Long> {
+        JsonSessionStore(storeFile).saveAll(listOf(record("a", SessionState.IDLE, kept)))
+        manager(table).loadAndReconcile()
+        return table.killed.toList()
+    }
+
+    @Test
+    fun reaping_leavesAForeignOwnersProcessAlone() {
+        assertEquals(emptyList(), killedFor(KeptProcess(4242L, 1_000L, "opencode", "someone-else"), FakeProcessTable(4242L to 1_000L)))
+    }
+
+    @Test
+    fun reaping_leavesAnUnownedPreUpgradeEntryAlone() {
+        assertEquals(emptyList(), killedFor(KeptProcess(4242L, 1_000L, "opencode"), FakeProcessTable(4242L to 1_000L)))
+    }
+
+    @Test
+    fun reaping_leavesAProcessWithALiveParentAlone() {
+        val table = FakeProcessTable(4242L to 1_000L).also { it.withLiveParent += 4242L }
+        assertEquals(emptyList(), killedFor(KeptProcess(4242L, 1_000L, "opencode", OWNER), table))
+    }
+
+    @Test
+    fun oldKeptProcessJsonWithoutAnOwnerStillLoads() {
+        val kept = kotlinx.serialization.json.Json.decodeFromString(KeptProcess.serializer(), """{"pid":7,"startedAt":9,"label":"x"}""")
+        assertEquals(KeptProcess(7L, 9L, "x", null), kept)
     }
 }

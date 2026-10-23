@@ -157,6 +157,11 @@ class FakeProcessTable(vararg live: Pair<Long, Long>) : ProcessTable {
 
     override fun startInstant(pid: Long): Long? = started[pid]
 
+    /** Pids a test stages as having a live parent (owned by some other, still-running process). */
+    val withLiveParent: MutableSet<Long> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    override fun hasLiveParent(pid: Long): Boolean = pid in withLiveParent
+
     override fun killTree(pid: Long, startedAt: Long) {
         killed += pid
         started.remove(pid)

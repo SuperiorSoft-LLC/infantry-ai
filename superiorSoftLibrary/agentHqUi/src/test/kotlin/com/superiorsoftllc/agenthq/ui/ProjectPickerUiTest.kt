@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.superiorsoftllc.agenthq.daemon.AgentHqDaemon
 import com.superiorsoftllc.agenthq.mailbox.JsonMailStore
@@ -187,5 +188,22 @@ class ProjectPickerUiTest {
         val file = File(path).apply { parentFile.mkdirs() }
         ImageIO.write(out, "png", file)
         println("M2-7 screenshot: ${file.absolutePath}")
+    }
+
+    @Test
+    fun `the pencil opens the dialog prefilled and Save renames the project under the same id`() {
+        withApp { controller ->
+            createProject(controller, "Alpha")
+            val id = controller.idOf("Alpha")
+            onNodeWithTag("title-bar-edit-project").performClick()
+            onNodeWithTag("new-project-dialog").assertExists()
+            onNodeWithTag("new-project-name").assertTextContains("Alpha", substring = true)
+            onNodeWithTag("new-project-name").performTextReplacement("Renamed")
+            onNodeWithTag("new-project-create").performClick()
+            waitUntil(timeoutMillis = 10_000) { controller.state.value.projects.any { it.id == id && it.name == "Renamed" } }
+            waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag("new-project-dialog").fetchSemanticsNodes().isEmpty() }
+            assertEquals(1, controller.state.value.projects.size, "a rename adds no project")
+            onNodeWithTag("title-bar-project-picker").assertTextContains("Renamed", substring = true)
+        }
     }
 }

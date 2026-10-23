@@ -949,6 +949,13 @@ class Controller(
         return r
     }
 
+    /** Rename project [projectId] (an edit `project_save`); the daemon answers the updated `project` frame, or a refusal. */
+    suspend fun renameProject(projectId: String, name: String): CommandResult {
+        if (name.isBlank()) return report(CommandResult.Refused("a project needs a name"))
+        if (_state.value.projects.none { it.id == projectId }) return report(CommandResult.Refused("unknown project"))
+        return report(send(WireRequests.projectRename(projectId, name.trim())))
+    }
+
     suspend fun saveProject(name: String, goal: String? = null): CommandResult {
         if (name.isBlank()) return report(CommandResult.Refused("a project needs a name"))
         return report(send(WireRequests.projectSave(name.trim(), goal?.trim()?.takeIf { it.isNotEmpty() })))

@@ -117,6 +117,8 @@ class SessionManager(
     private val processTable: ProcessTable = OsProcessTable,
     /** BUG-M2-11f: how often the host's idle sweep runs; 0 = only when a test or the setting asks. */
     idleSweepMs: Long = 30_000,
+    /** BUG-REAP-OWNER: this state dir's id, stamped on every kept process and required to match before one is reaped. Null = never reap. */
+    private val instanceId: String? = null,
 ) {
     val providerId: String get() = provider.id
 
@@ -441,6 +443,11 @@ class SessionManager(
      * and neither is a record with no start instant. True = killed.
      */
     private fun reap(sessionId: String, kept: KeptProcess): Boolean {
+        // BUG-REAP-OWNER: only a process THIS state dir kept. A copied or foreign sessions.json, or an older file with no
+        // owner, names processes some other live daemon owns; and a live parent means it is not a dead predecessor's orphan.
+        val me = instanceId ?: return false
+        if (kept.ownerId != me) return false
+        if (runCatching { processTable.hasLiveParent(kept.pid) }.getOrDefault(true)) return false
         val recorded = kept.startedAt ?: return false
         val actual = runCatching { processTable.startInstant(kept.pid) }.getOrNull() ?: return false
         if (actual != recorded) return false
@@ -1211,7 +1218,7 @@ class SessionManager(
         }
 
         override fun keptProcess(sessionId: String, kept: KeptProcess) {
-            update(sessionId) { it.copy(keptProcess = kept) }
+            update(sessionId) { it.copy(keptProcess = kept.copy(ownerId = instanceId)) }
         }
 
         override fun keptProcessEnded(sessionId: String, pid: Long) {
