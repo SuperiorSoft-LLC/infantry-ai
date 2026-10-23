@@ -65,12 +65,24 @@ class ProjectScopedAgentsTest {
         assertEquals("A", aDev.projectId)
         assertEquals("B", bDev.projectId)
 
-        for (to in listOf("a-dev", aDev.id, "pm")) {
-            val sent = rig.router.send(MailSendRequest(from = bDev.id, to = to, body = "cross")) as MailResult.Sent
-            val state = rig.mailbox.message(sent.message.id)!!.state
-            assertEquals(MessageState.UNDELIVERABLE, state, "B must not reach '$to'")
+        for (to in listOf("a-dev", aDev.id)) {
+            val refused = rig.router.send(MailSendRequest(from = bDev.id, to = to, body = "cross")) as MailResult.Refused
+            assertTrue("project B" in refused.reason && "project A" in refused.reason, "names both projects: ${refused.reason}")
         }
+        // A role resolves only inside the sender's project; B has no pm, so it is an error, never A's pm.
+        val sent = rig.router.send(MailSendRequest(from = bDev.id, to = "pm", body = "cross")) as MailResult.Sent
+        assertEquals(MessageState.UNDELIVERABLE, rig.mailbox.message(sent.message.id)!!.state)
+        assertTrue("no pm agent in this project" in rig.mailbox.message(sent.message.id)!!.failureReason.orEmpty())
         assertEquals(0, rig.runner.processes.size, "nothing may have been delivered to A")
+    }
+
+    @Test
+    fun allowCrossProject_overrides_the_guard() {
+        val rig = Rig()
+        val aDev = bindSessionOnSpawn(rig.manager, rig.agents, SpawnOptions(agentId = "a-dev"), null)!!
+        val bDev = bindSessionOnSpawn(rig.manager, rig.agents, SpawnOptions(agentId = "b-dev"), null)!!
+        val sent = rig.router.send(MailSendRequest(from = bDev.id, to = aDev.id, body = "ok", allowCrossProject = true)) as MailResult.Sent
+        assertTrue(rig.mailbox.message(sent.message.id)!!.state != MessageState.UNDELIVERABLE)
     }
 
     @Test

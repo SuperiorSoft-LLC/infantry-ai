@@ -334,7 +334,9 @@ object EventVocabulary {
     // payloads take optional `scope` / `sessionId` / `role`; new `memory_delete`, `memory_purge_role` (typed confirmation).
     // **1.99.0 (PIPE-2) is ADDITIVE**: the daemon PUSHES `pipeline_state` to every client after each `pipeline_config` /
     // `pipeline_record` / `pipeline_check` change (the PIPE-1 frames are otherwise unchanged); the UI draws it in the Git tab.
-    const val VERSION = "1.99.0"
+    // **1.100.0 (ISO-1) is ADDITIVE**: `mail_send` takes optional `allowCrossProject`; without it a session sender mailing a
+    // session/agent of ANOTHER project is `mail_refused` naming both projects. Roles still resolve in the sender's project only.
+    const val VERSION = "1.100.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA

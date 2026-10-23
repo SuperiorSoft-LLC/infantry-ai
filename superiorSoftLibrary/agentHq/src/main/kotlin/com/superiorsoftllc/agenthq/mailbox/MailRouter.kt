@@ -98,13 +98,39 @@ class MailRouter(
      * mailbox before this returns, so the pump can only ever be a bonus, never a precondition.
      */
     fun send(request: MailSendRequest): MailResult {
+        crossProjectRefusal(request)?.let { return MailResult.Refused(it) }
         val result = mailbox.send(addressStarter(request))
         if (result is MailResult.Sent) {
+            if (request.allowCrossProject) crossAllowed.add(result.message.id)
             // Pump by the ORIGINAL recipient address (session id, agent id, or role name), because
             // that is how the message is keyed in the mailbox. `deliver` resolves it to a session.
             pump(result.message.to)
         }
         return result
+    }
+
+    /**
+     * Messages sent with `allowCrossProject`, so delivery's CP-3 check lets them through. In memory: a restart
+     * between send and delivery of a still-queued override message makes it UNDELIVERABLE (visible, resend it).
+     */
+    private val crossAllowed = ConcurrentHashMap.newKeySet<String>()
+
+    /**
+     * Send-time cross-project guard: a SESSION sender addressing a session or agent id of another project is refused
+     * naming both projects, unless it passes `allowCrossProject` or the pair is a worker and its starter. Senders
+     * without a session (owner, user, system) and role names are not affected (roles resolve in the sender's project).
+     */
+    private fun crossProjectRefusal(request: MailSendRequest): String? {
+        if (request.allowCrossProject || request.from.isBlank() || request.to == TicketContextComposer.STARTER) return null
+        val sender = manager.get(request.from) ?: return null
+        val senderProject = sender.projectId?.takeIf { it.isNotBlank() } ?: return null
+        val target = manager.get(request.to)
+        val targetProject = (target?.projectId ?: agentProfiles.get(request.to)?.projectId)?.takeIf { it.isNotBlank() } ?: return null
+        if (targetProject == senderProject) return null
+        val targetId = target?.id ?: request.to
+        if (starterOf(request.from) == targetId || starterOf(targetId) == request.from) return null
+        return "cross-project mail refused: sender '${request.from}' is in project $senderProject but recipient " +
+            "'${request.to}' is in project $targetProject; pass allowCrossProject (--cross-project) to send anyway"
     }
 
     /**
@@ -170,7 +196,7 @@ class MailRouter(
 
     override fun deliver(message: Message): DeliveryOutcome {
         // Resolve agent profile ID to live session ID
-        val resolution = resolveRecipient(message.to, message.from)
+        val resolution = resolveRecipient(message.to, message.from, message.id in crossAllowed)
         if (resolution == null) {
             return DeliveryOutcome.Failed("unknown recipient session '${message.to}'")
         }
@@ -243,11 +269,11 @@ class MailRouter(
      * - If it's a role name (e.g. "pm"), resolve among the sessions of the sender's project (BUG-MAIL-2).
      * - If it's unknown entirely, return null.
      */
-    private fun resolveRecipient(recipient: String, senderId: String? = null): RecipientResolution? {
+    private fun resolveRecipient(recipient: String, senderId: String? = null, allowCross: Boolean = false): RecipientResolution? {
         // CP-3: mail never crosses projects. When the sender is bound to a project, a recipient bound to a
         // DIFFERENT one is unreachable, however it is addressed (session id or agent profile id).
         val senderProject = senderId?.let { manager.get(it)?.projectId }?.takeIf { it.isNotBlank() }
-        fun foreign(project: String?) = senderProject != null && !project.isNullOrBlank() && project != senderProject
+        fun foreign(project: String?) = !allowCross && senderProject != null && !project.isNullOrBlank() && project != senderProject
 
         // BUG-MAIL-2: `starter` is the session that started the sender's ticket, wherever it is.
         val senderStarter = senderId?.let(starterOf)

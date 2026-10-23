@@ -104,6 +104,20 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+### What changed in 1.100.0 (ISO-1) — cross-project mail is refused unless overridden
+
+ADDITIVE; a 1.99.0 client keeps working. The `ready` frame reports `contract=1.100.0`.
+- `mail_send` (`MailSendRequest`) takes an optional `allowCrossProject` (default false; CLI `agenthq send --cross-project`,
+  MCP `agenthq_message {allowCrossProject:true}`). When the sender is a SESSION bound to a project and the recipient (a
+  session id or an agent id) is bound to a DIFFERENT one, the daemon answers `mail_refused` with a reason naming both
+  projects, and nothing is stored. With the flag the message is sent and delivered.
+- Exempt without the flag: senders that are not sessions (`user`, `owner`, `system`), and a worker mailing the session that
+  started its ticket (or the reverse), as before. An override message that is still queued when the daemon restarts is
+  undeliverable (visible; resend it).
+- A role-name recipient resolves among the sessions of the SENDER's project only. None, or more than one, is an error
+  (`no <role> agent in this project` / `multiple <role> agents in this project: ...`); it never falls back to another
+  project, and `allowCrossProject` does not widen it (address the other project's agent by id).
+
 ### What changed in 1.99.0 (PIPE-2) — the pipeline is pushed to clients and drawn in the Git tab
 
 ADDITIVE; a 1.98.0 client keeps working (it ignores the push). The `ready` frame reports `contract=1.99.0`.

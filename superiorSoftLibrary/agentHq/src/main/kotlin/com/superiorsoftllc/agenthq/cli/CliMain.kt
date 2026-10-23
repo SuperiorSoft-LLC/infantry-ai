@@ -1924,6 +1924,7 @@ internal object Cli {
             to = to,
             body = body,
             replyTo = replyTo,
+            allowCrossProject = parsed.crossProject,
         )
         // NOT idempotent: if the connection dropped after the daemon received this, a second copy
         // would be a SECOND message (and a second debit against the thread's ceiling). The drop is
@@ -3949,6 +3950,8 @@ internal object Cli {
         val descStdin: Boolean = false,
         val replyTo: String? = null,
         val unread: Boolean = false,
+        /** Contract 1.100.0: `send --cross-project` overrides the cross-project guard. */
+        val crossProject: Boolean = false,
         val help: Boolean = false,
         /** BUG-CLI-4: `--version` (or the `version` command) prints the CLI's and the daemon's contract. */
         val version: Boolean = false,
@@ -4053,6 +4056,7 @@ internal object Cli {
         var descSources = 0
         var replyTo: String? = null
         var unread = false
+        var crossProject = false
         var help = false
         var version = false
         var url: String? = null
@@ -4337,6 +4341,10 @@ internal object Cli {
                     unread = true
                     i++
                 }
+                "--cross-project" -> {
+                    crossProject = true
+                    i++
+                }
                 "--mcp-depth" -> {
                     mcpDepth = flagValue(args, ++i)?.toIntOrNull()?.takeIf { it >= 0 }
                         ?: return fail(err, "--mcp-depth expects a whole number >= 0")
@@ -4391,6 +4399,7 @@ internal object Cli {
             status = status,
             replyTo = replyTo,
             unread = unread,
+            crossProject = crossProject,
             help = help,
             version = version,
             url = url,
