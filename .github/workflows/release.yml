@@ -84,7 +84,11 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
-      - uses: android-actions/setup-android@v3
+      # The ubuntu runner already ships an Android SDK (ANDROID_HOME); setup-android's default `tools` package no longer exists in
+      # cmdline-tools 16. Accept licenses and let AGP download the platform/build-tools it needs.
+      - name: Accept Android SDK licenses
+        shell: bash
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
       - uses: gradle/actions/setup-gradle@v4
       - name: Build APK (signed if the keystore secrets exist, else debug)
         shell: bash
