@@ -46,6 +46,12 @@ data class TriggerSave(
      * it is never echoed in a [TriggerView], an event or a log line. Refused on any other kind.
      */
     val webhookSecret: String? = null,
+    /**
+     * Contract 1.105.0 (TRIGGER-NUDGE): the project a `prompt` action mails into; the target role resolves among that
+     * project's sessions. Null = no project (the prompt starts a ticketless session, as before 1.105.0). Refused on
+     * an action other than `prompt`.
+     */
+    val projectId: String? = null,
 ) {
     companion object {
         fun decode(text: String): TriggerSave = StrictJson.decode(serializer(), text, "trigger_save payload")
@@ -73,13 +79,21 @@ data class TriggerView(
     val trippedReason: String? = null,
     /** Contract 1.16.0: for kind `schedule`, the stored period in ms; null = not timed (or never due). */
     val intervalMs: Long? = null,
+    /** Contract 1.105.0: the project a `prompt` action mails into; null = none. */
+    val projectId: String? = null,
+    /** Contract 1.105.0: when the trigger last ACCEPTED an event (started, folded, or mailed); null = never. */
+    val lastFiredAt: Long? = null,
+    /** Contract 1.105.0: for kind `schedule`, when the next event is due; null = not timed. Persisted: a slot already past at boot fires once. */
+    val nextFireAt: Long? = null,
 )
 
 /**
  * Contract 1.14.0: one durable event row (`trigger_events`): every event gets one, oldest first, the last
  * 500 per trigger kept. [disposition] is lower snake case: `started`, `folded`, `followup_folded`,
  * `dropped_after_failure`, `refused_ceiling`, `suppressed_tripped`, `suppressed_disabled`, `duplicate`,
- * `missed`, `nothing_to_start`, `refused_launch_gate`, `wont_fix`.
+ * `missed`, `nothing_to_start`, `refused_launch_gate`, `wont_fix`; since 1.105.0 `mailed` (a `prompt` action's mail was
+ * queued for its target) and `coalesced_pending` (an earlier prompt mail of this trigger is still undelivered, so this
+ * event adds nothing).
  */
 @Serializable
 data class TriggerEventView(

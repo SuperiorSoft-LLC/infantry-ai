@@ -18,6 +18,20 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
+/** TRIGGER-NUDGE: one `prompt` action fire, as the daemon delivers it. */
+data class TriggerNudge(val triggerId: String, val triggerName: String, val projectId: String?, val agentId: String, val prompt: String)
+
+/** TRIGGER-NUDGE: what delivering a [TriggerNudge] did. */
+sealed interface PromptDelivery {
+    /** Queued as mail [mailId] for a session of the target (delivered when it is at rest). */
+    data class Mailed(val mailId: String) : PromptDelivery
+    /** No session of the target existed, so one was started with the prompt as its first turn. */
+    data class Started(val sessionId: String) : PromptDelivery
+    /** No session to mail and none could be started because the target is busy elsewhere. Never a trip. */
+    data class Busy(val detail: String) : PromptDelivery
+    data class Refused(val detail: String) : PromptDelivery
+}
+
 /**
  * Story 9.5 wiring (contract 1.14.0): the daemon's triggers, durable and on the wire.
  *
@@ -41,9 +55,22 @@ class TriggerService(
     private val sessions: (String) -> SessionRecord?,
     /** P9.5d: the `prompt` action's launch. The default refuses, so a service built without one cannot pretend to serve it. */
     private val startPrompt: (agentId: String, prompt: String) -> PromptLaunch = { _, _ -> PromptLaunch.Refused("prompt actions are not wired") },
+    /**
+     * TRIGGER-NUDGE (contract 1.105.0): the `prompt` action's delivery as MAIL into the trigger's project. When set it
+     * replaces [startPrompt]: a run is over once the mail is queued (or a session started), so a busy target can never
+     * trip the trigger. Null keeps the pre-1.105.0 behaviour (a fresh session per fire, refused when busy).
+     */
+    private val deliverPrompt: ((TriggerNudge) -> PromptDelivery)? = null,
+    /** TRIGGER-NUDGE: true while the mail with this id is still waiting for its recipient (queued, not delivered). */
+    private val mailPending: (String) -> Boolean = { false },
     private val clock: () -> Long = System::currentTimeMillis,
     private val idFactory: () -> String = { UUID.randomUUID().toString() },
-    pumpMs: Long = 1_000,
+    private val pumpMs: Long = 1_000,
+    /**
+     * TRIGGER-NUDGE: false = the pump waits for [start]. The daemon starts it only once the mailbox and the sessions are
+     * loaded, so a catch-up fire on boot mails a session that exists into a mailbox that remembers its queue.
+     */
+    autoStart: Boolean = true,
 ) {
     /** Pushes a trigger after every change (save, fire, run end, trip, arm, disable). */
     @Volatile
@@ -58,6 +85,7 @@ class TriggerService(
     private val intervals = HashMap<String, Long>() // schedule triggerId -> period in ms (persisted in triggers.interval_ms, restored on start)
     private val nextDueAt = HashMap<String, Long>() // schedule triggerId -> when the next event is due
     @Volatile private var closing = false
+    private val started = java.util.concurrent.atomic.AtomicBoolean(false) // declared before init, which may call start()
 
     private val launches = Executors.newSingleThreadExecutor { r -> Thread(r, "agenthq-trigger-launch").also { it.isDaemon = true } }
     private val pump = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "agenthq-trigger-pump").also { it.isDaemon = true } }
@@ -65,16 +93,28 @@ class TriggerService(
     init {
         // H13a: a schedule's period outlives the daemon. Restored first, so the next due time is one interval after
         // this start, the same rule save() applies.
+        // TRIGGER-NUDGE: the next due time is persisted too. A slot that fell due while the daemon was down is still
+        // in the past, so the pump's first tick fires it ONCE (and the schedule resumes one interval after that); a row
+        // stored before 1.105.0 has none and keeps the old rule.
         val startedAt = clock()
         for ((id, interval) in repo.intervals()) {
             intervals[id] = interval
-            nextDueAt[id] = startedAt + interval
+            val row = repo.get(id)
+            nextDueAt[id] = row?.nextFireAt ?: (startedAt + interval)
+            if (row != null && row.nextFireAt == null) repo.upsert(row.copy(nextFireAt = nextDueAt[id]), interval)
         }
         // PHASE9-SPEC 5.5: a run in flight when the last daemon stopped ended unobserved: that is a failure.
+        // TRIGGER-NUDGE: except a prompt-as-mail run, which only ever spans one hand-off to the mailbox: whether or not that
+        // mail was queued, the next slot nudges again, so tripping it would silence a recurring nudge for nothing.
         for (t in repo.all().filter { it.state == RUNNING }) {
-            tripStored(t, "daemon restarted mid-run")
+            if (t.action.kind == "prompt" && deliverPrompt != null) store(t.copy(state = ARMED)) else tripStored(t, "daemon restarted mid-run")
         }
-        pump.scheduleWithFixedDelay(::pumpWindows, pumpMs, pumpMs, TimeUnit.MILLISECONDS)
+        if (autoStart) start()
+    }
+
+    /** Start the pump (schedules and coalescing windows). Idempotent. */
+    fun start() {
+        if (started.compareAndSet(false, true)) pump.scheduleWithFixedDelay(::pumpWindows, pumpMs, pumpMs, TimeUnit.MILLISECONDS)
     }
 
     fun list(): List<TriggerView> = repo.all()
@@ -129,6 +169,8 @@ class TriggerService(
         require(name.length <= 100) { "name is longer than 100 characters" }
         require(request.kind == "manual" || request.kind == "schedule" || request.kind == "ship" || request.kind == "webhook") { "kind '${request.kind.take(40)}' is not served yet (served: manual, schedule, ship, webhook)" }
         validateAction(request.action)
+        val projectId = request.projectId?.trim()?.takeIf { it.isNotEmpty() }
+        require(projectId == null || request.action.kind == "prompt") { "projectId is only valid on action 'prompt'" }
         require(request.coalesceMs >= 0) { "coalesceMs must be >= 0" }
         require(request.ceilingRuns >= 1) { "ceilingRuns must be >= 1" }
         require(request.ceilingWindowMs >= 1_000) { "ceilingWindowMs must be >= 1000" }
@@ -164,21 +206,27 @@ class TriggerService(
             trippedAt = existing?.trippedAt?.takeIf { state == TRIPPED },
             trippedReason = existing?.trippedReason?.takeIf { state == TRIPPED },
             intervalMs = request.intervalMs.takeIf { request.kind == "schedule" },
+            projectId = projectId,
+            lastFiredAt = existing?.lastFiredAt,
         )
         // New settings take effect on a fresh guard -- unless a run is in flight, which keeps its own.
         if (runTriggers.values.none { it == view.id }) guards.remove(view.id)
         val interval = request.intervalMs
         if (view.kind == "schedule" && interval != null) {
+            // An edit that keeps the period keeps the slot it was counting down to (a rename must not push it back).
+            val keep = existing?.takeIf { it.kind == "schedule" && it.intervalMs == interval }?.let { nextDueAt[it.id] }
             intervals[view.id] = interval
-            nextDueAt[view.id] = clock() + interval
+            nextDueAt[view.id] = keep ?: (clock() + interval)
         } else {
             intervals.remove(view.id)
             nextDueAt.remove(view.id)
         }
+        // A trigger that stops mailing forgets the mail it was waiting on.
+        if (view.action.kind != "prompt" && existing != null) repo.setPendingMail(view.id, null)
         // The secret is written before the push, so a client told about a webhook trigger can never reach a
         // hook that has no secret yet; it is dropped when the trigger stops being a webhook.
         if (view.kind == "webhook") secret?.let { repo.setWebhookSecret(view.id, it) } else repo.deleteWebhookSecret(view.id)
-        return store(view)
+        return store(view.copy(nextFireAt = nextDueAt[view.id]))
     }
 
     /**
@@ -197,6 +245,14 @@ class TriggerService(
         val eventId = idFactory()
         if (!t.enabled || t.state == DISABLED) return t.also { record(eventId, t.id, TriggerEventDisposition.SUPPRESSED_DISABLED, source, deliveryId = deliveryId, digest = digest) }
         if (t.state == TRIPPED) return t.also { record(eventId, t.id, TriggerEventDisposition.SUPPRESSED_TRIPPED, source, deliveryId = deliveryId, digest = digest) }
+        // TRIGGER-NUDGE: at most one undelivered prompt mail per trigger. While it waits, a new event adds nothing.
+        if (t.action.kind == "prompt" && deliverPrompt != null) {
+            val pending = repo.pendingMail(t.id)
+            if (pending != null) {
+                if (mailPending(pending)) return t.also { record(eventId, t.id, TriggerEventDisposition.COALESCED_PENDING, source, deliveryId = deliveryId, digest = digest) }
+                repo.setPendingMail(t.id, null)
+            }
+        }
         val result = guardFor(t).fire(eventId, t.id)
         val disposition = dispositionOverrides.remove(eventId) ?: when (result) {
             TriggerFireResult.STARTED -> TriggerEventDisposition.STARTED
@@ -207,16 +263,22 @@ class TriggerService(
             TriggerFireResult.SUPPRESSED_DISABLED -> TriggerEventDisposition.SUPPRESSED_DISABLED
         }
         record(eventId, t.id, disposition, source, deliveryId = deliveryId, digest = digest)
+        if (result == TriggerFireResult.STARTED || result == TriggerFireResult.FOLDED || result == TriggerFireResult.FOLLOWUP_FOLDED) {
+            repo.get(t.id)?.let { store(it.copy(lastFiredAt = clock())) }
+        }
         return sync(t.id)
     }
 
-    /** Re-arm a TRIPPED trigger: the explicit, separate act. Acknowledging its attention item does not do it. */
+    /**
+     * Re-arm a TRIPPED trigger: the explicit, separate act. Acknowledging its attention item does not do it. Since
+     * 1.105.0 it also ENABLES a DISABLED trigger (the UI's enable toggle); an armed or running one is refused.
+     */
     @Synchronized
     fun arm(triggerId: String): TriggerView {
         val t = repo.get(triggerId.trim()) ?: throw IllegalArgumentException("no trigger '${triggerId.take(80)}'")
-        require(t.state == TRIPPED) { "trigger '${t.id}' is ${t.state}, not tripped" }
+        require(t.state == TRIPPED || t.state == DISABLED) { "trigger '${t.id}' is ${t.state}, not tripped or disabled" }
         guards.remove(t.id)
-        return store(t.copy(state = ARMED, trippedAt = null, trippedReason = null))
+        return store(t.copy(enabled = true, state = ARMED, trippedAt = null, trippedReason = null))
     }
 
     @Synchronized
@@ -318,6 +380,36 @@ class TriggerService(
         }
     }
 
+    /**
+     * TRIGGER-NUDGE, on [launches]: deliver the prompt with NO lock held, then settle the run under the lock. The run
+     * is over as soon as the mail is queued or the session started; only a refusal (no such role, a mail limit, ...)
+     * trips, never a busy target.
+     */
+    private fun launchNudge(trigger: TriggerView, run: TriggerRun, deliver: (TriggerNudge) -> PromptDelivery) {
+        val delivery: PromptDelivery = try {
+            deliver(TriggerNudge(trigger.id, trigger.name, trigger.projectId, trigger.action.agentId.orEmpty(), trigger.action.prompt.orEmpty()))
+        } catch (e: Exception) {
+            System.err.println("[agentHq] trigger ${trigger.id} prompt delivery failed: ${e.message}")
+            PromptDelivery.Refused("prompt delivery failed: ${e.message}")
+        }
+        synchronized(this) {
+            if (closing) return
+            when (delivery) {
+                is PromptDelivery.Mailed -> {
+                    repo.setPendingMail(trigger.id, delivery.mailId)
+                    complete(run.runId, TriggerOutcome.SUCCEEDED)
+                    redispose(run, TriggerEventDisposition.MAILED)
+                }
+                is PromptDelivery.Started -> complete(run.runId, TriggerOutcome.SUCCEEDED)
+                is PromptDelivery.Busy -> {
+                    complete(run.runId, TriggerOutcome.SUCCEEDED)
+                    redispose(run, TriggerEventDisposition.DEFERRED_BUSY)
+                }
+                is PromptDelivery.Refused -> finishRefused(run, delivery.detail)
+            }
+        }
+    }
+
     /** On [launches]: run the action with NO lock held, then record what happened under the lock. */
     private fun launch(triggerId: String, run: TriggerRun) {
         // BUG-TriggerDaemonFlake: first wait for the call that released this run (fire, the pump, or a
@@ -328,7 +420,10 @@ class TriggerService(
         // and dropping the lock orders the hand-out after those commits; the action still runs with NO lock.
         synchronized(this) { if (closing) return }
         val trigger = repo.get(triggerId) ?: return
-        if (trigger.action.kind == "prompt") return launchPrompt(trigger, run)
+        if (trigger.action.kind == "prompt") {
+            val deliver = deliverPrompt ?: return launchPrompt(trigger, run)
+            return launchNudge(trigger, run, deliver)
+        }
         val answer: TicketAnswer? = try {
             startNext(trigger.action.agentId)
         } catch (e: Exception) {
@@ -444,6 +539,7 @@ class TriggerService(
             if (now < due) continue
             val interval = intervals[id] ?: continue
             nextDueAt[id] = now + interval
+            repo.get(id)?.let { store(it.copy(nextFireAt = now + interval)) }
             runCatching { fire(id, source = "schedule") }
                 .onFailure { System.err.println("[agentHq] schedule fire for $id failed: ${it.message}") }
         }
