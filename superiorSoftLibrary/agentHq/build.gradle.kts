@@ -296,3 +296,15 @@ tasks.register("perfProfile") {
     description = "PERF-1: alias of :superiorSoftLibrary:agentHqUi:perfProfile (daemon + UI memory/CPU/startup profile)."
     dependsOn(":superiorSoftLibrary:agentHqUi:perfProfile")
 }
+
+// DOCKER-1: the build context for the headless daemon image: `agenthq/` (installDist) + the Dockerfile. Nothing is pushed.
+//   ./gradlew :superiorSoftLibrary:agentHq:dockerContext
+//   docker build -t infantryai/agenthq:dev superiorSoftLibrary/agentHq/build/docker
+tasks.register<Sync>("dockerContext") {
+    group = "distribution"
+    description = "DOCKER-1: assembles the Docker build context (installDist + docker/Dockerfile) in build/docker."
+    dependsOn("installDist")
+    from(layout.buildDirectory.dir("install/agenthq")) { into("agenthq") }
+    from(rootProject.layout.projectDirectory.file("docker/Dockerfile"))
+    into(layout.buildDirectory.dir("docker"))
+}
