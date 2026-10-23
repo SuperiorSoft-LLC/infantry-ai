@@ -80,9 +80,23 @@ object StatsView {
     }
 
     /** "234,310 / 200,000"; a missing side is [NONE]. */
-    fun gaugeLabel(s: SessionStats): String = "${grouped(s.lastContextTokens)} / ${grouped(s.modelContextLimit)}"
+    fun gaugeLabel(s: SessionStats): String = "${grouped(s.lastContextTokens)} / ${s.modelContextLimit?.let { grouped(it) } ?: "limit unknown"}"
 
     fun gaugePercentLabel(s: SessionStats): String = gaugePercent(s)?.let { "$it%" } ?: NONE
+
+    /** The same words for every harness when its record gave no per-request tokens. */
+    fun noUsage(s: SessionStats): String = "no usage data for ${s.harness}"
+
+    /** Cost the harness itself reported, running total; never computed. "cost not reported" when it reports none. */
+    fun cost(s: SessionStats): String = s.costTotal?.let { "$" + formatCost(it) } ?: "cost not reported"
+
+    /** "limit unknown" when no catalog states the model's window. */
+    fun limit(s: SessionStats): String = s.modelContextLimit?.takeIf { it > 0 }?.let { grouped(it) } ?: "limit unknown"
+
+    internal fun formatCost(v: Double): String {
+        val cents = (v * 10_000).roundToLong()
+        return "${cents / 10_000}.${(cents % 10_000).toString().padStart(4, '0')}"
+    }
 
     /** True when every point carries a time, so the chart can use a time axis. */
     fun hasTimeAxis(s: SessionStats): Boolean = !s.series.isNullOrEmpty() && s.series.all { it.at != null }

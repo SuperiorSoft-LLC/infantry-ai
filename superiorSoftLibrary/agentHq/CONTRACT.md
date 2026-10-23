@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.112.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.113.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -2781,3 +2781,16 @@ The board used to run ONE agent per role; a second ticket of the same role queue
 A session with no turn in flight but live background processes (`backgroundWork`, `bgJobs`) reads `state: BUSY` on the wire, for display. A client could not tell that from a turn generating, and refused the owner's message.
 
 - `SessionRecord.turnActive` (boolean): true only while a turn is in flight (`STARTING`, `BUSY`, `WAITING_INPUT`), computed before the display rewrite. `state: BUSY` with `turnActive: false` is "idle, background running": input is accepted at once. While `turnActive` is true a client queues the owner's message (`queue`), it is never refused. An older daemon omits the key; a client then falls back to treating background work as not busy.
+
+## 1.113.0 -- one usage definition for every harness, cost on `session_stats` (additive)
+
+`session_stats` (1.92.0) now means the same thing for every harness (claude, pi, omp, opencode and its variants such as `opencode-go`, and any future one). Each harness has a small adapter (`UsageAdapters`) that turns its own record into ONE `RequestUsage {at, model, input, output, cacheRead, cacheWrite, cost?}`; only that record is folded into the stats, so the charts and numbers are directly comparable.
+
+- **Request** = one model call, counted once, never per streamed update (Claude: one per `message.id`; Pi: one per assistant message; OpenCode: one per `step-finish`). A call that reports no tokens at all (aborted, synthetic) is skipped, for every harness: it is not a request and adds no flat point.
+- **Context tokens** of a request = `input + cacheRead + cacheWrite` (what the model saw). The Stats "Context tokens" chart and `lastContextTokens` are this, per request.
+- **Billed tokens, running total** (`billedTokens`, `StatsPoint.cumulativeBilledTokens`) = the cumulative sum of `input + cacheRead + cacheWrite + output` over the requests. Reasoning is never added.
+- **Cost**: `StatsPoint.cumulativeCost` and `SessionStats.costTotal` (both new, nullable, default null) are the running total of the cost the HARNESS reported (Pi `usage.cost.total`, OpenCode `step-finish.cost`). Nothing is computed from a price table. null = the harness reports none (Claude): the UI shows "cost not reported". A reported 0 is 0.
+- **Context limit** (`modelContextLimit`): from the model, by its local catalog (Pi `models-store.json`, OpenCode `models.json`); Claude, which states none, resolves the model id in those catalogs too. Not found = null, shown as "limit unknown"; never guessed from a name.
+- **What filled the context** is derived identically (growth between requests, credited to the one tool of a step); tool names are shown as the harness reports them.
+- No usage at all (no `series`): the UI says "no usage data for <harness>", never zeros or a flat line.
+- A harness id that begins `opencode-` reads OpenCode's database.

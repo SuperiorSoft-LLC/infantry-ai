@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
 import java.io.File
 import java.sql.DriverManager
@@ -47,7 +48,8 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
                 PI -> resolve(harness, psid) { piFile(PI_ROOT, psid) }?.let { readPi(PI_ROOT, it, base) }
                 OMP -> resolve(harness, psid) { piFile(OMP_ROOT, psid) }?.let { readPi(OMP_ROOT, it, base) }
                 OPENCODE -> readOpenCode(psid, base)
-                else -> null
+                // A harness id that is an OpenCode variant (`opencode-go`, ...) shares OpenCode's record.
+                else -> if (harness.startsWith("$OPENCODE-")) readOpenCode(psid, base) else null
             } ?: base
         } catch (e: Exception) {
             base
@@ -94,9 +96,7 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
                             acc.turn(message.str("model"))
                             val u = message["usage"] as? JsonObject
                             if (u != null) {
-                                val input = u.long("input_tokens"); val read = u.long("cache_read_input_tokens")
-                                val write = u.long("cache_creation_input_tokens"); val out = u.long("output_tokens")
-                                acc.request(at, input + read + write, input + read + write + out)
+                                acc.request(UsageAdapters.claude(u, at, message.str("model")))
                             }
                         }
                         (message["content"] as? JsonArray)?.forEach { block ->
@@ -110,7 +110,7 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
                 }
             }
         }
-        return acc.build(base, null)
+        return acc.build(base, anyCatalogLimit(acc.lastModel))
     }
 
     /** A real prompt: plain string content, or text blocks with no tool_result (that is a tool's answer). */
@@ -152,9 +152,7 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
                                 acc.turn(m.str("model"))
                                 val u = m["usage"] as? JsonObject
                                 if (u != null) {
-                                    val input = u.long("input"); val read = u.long("cacheRead")
-                                    val write = u.long("cacheWrite"); val out = u.long("output")
-                                    acc.request(m.longOrNull("timestamp") ?: lineAt, input + read + write, input + read + write + out)
+                                    acc.request(UsageAdapters.pi(u, m.longOrNull("timestamp") ?: lineAt, m.str("model")))
                                 }
                                 (m["content"] as? JsonArray)?.forEach { block ->
                                     val b = block as? JsonObject ?: return@forEach
@@ -171,7 +169,7 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
                 ?.firstOrNull { (it as? JsonObject)?.str("id") == id }
                 ?.let { (it as JsonObject).longOrNull("contextWindow") }
         }
-        return acc.build(base, limit)
+        return acc.build(base, limit ?: anyCatalogLimit(model))
     }
 
     // ------------------------------------------------------------------ OpenCode
@@ -222,10 +220,7 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
                             "tool" -> stepTools += p.str("tool") ?: "unknown"
                             "step-finish" -> {
                                 val t = p["tokens"] as? JsonObject ?: continue
-                                val cache = t["cache"] as? JsonObject
-                                val input = t.long("input"); val out = t.long("output")
-                                val read = cache?.long("read") ?: 0L; val write = cache?.long("write") ?: 0L
-                                acc.request(at, input + read + write, input + read + write + out)
+                                acc.request(UsageAdapters.openCode(t, p.doubleOrNull("cost"), at, model))
                                 stepTools.forEach(acc::tool)
                                 stepTools.clear()
                             }
@@ -239,10 +234,39 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
             (((root[p] as? JsonObject)?.get("models") as? JsonObject)?.get(id) as? JsonObject)
                 ?.let { (it["limit"] as? JsonObject)?.longOrNull("context") }
         }
-        return acc.build(base, limit)
+        return acc.build(base, limit ?: anyCatalogLimit(model))
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /**
+     * STATS-2: the window of [model] by id alone, from the local Pi then OpenCode catalogs, whichever provider lists it.
+     * Lets Claude (whose record states none) have the same limit line as the others; null when no catalog lists the
+     * model, never guessed from its name.
+     */
+    private fun anyCatalogLimit(model: String?): Long? {
+        if (model.isNullOrBlank()) return null
+        val key = "any|$model"
+        val files = listOf(File(home, "$PI_ROOT/agent/models-store.json"), File(home, ".cache/opencode/models.json"))
+        val stamp = files.sumOf { if (it.isFile) it.lastModified() else 0L }
+        limitCache[key]?.let { (cachedStamp, value) -> if (cachedStamp == stamp) return value }
+        val value = files.firstNotNullOfOrNull { f ->
+            try {
+                if (!f.isFile) null else (f.bufferedReader().use { JSON.parseToJsonElement(it.readText()) } as? JsonObject)?.values?.firstNotNullOfOrNull { prov ->
+                    when (val models = (prov as? JsonObject)?.get("models")) {
+                        is JsonArray -> models.firstOrNull { (it as? JsonObject)?.str("id") == model }
+                            ?.let { (it as JsonObject).longOrNull("contextWindow") }
+                        is JsonObject -> ((models[model] as? JsonObject)?.get("limit") as? JsonObject)?.longOrNull("context")
+                        else -> null
+                    }
+                }
+            } catch (e: Exception) {
+                null
+            }
+        }
+        limitCache[key] = stamp to value
+        return value
+    }
 
     /** A context window from a local catalog file, cached per (file, provider, model) until the file changes. */
     private fun catalogLimit(file: File, provider: String?, model: String?, lookup: (JsonObject, String, String) -> Long?): Long? {
@@ -268,6 +292,7 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
     private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
     private fun JsonObject.bool(key: String): Boolean? = (this[key] as? JsonPrimitive)?.booleanOrNull
     private fun JsonObject.longOrNull(key: String): Long? = (this[key] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull
+    private fun JsonObject.doubleOrNull(key: String): Double? = (this[key] as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull
     private fun JsonObject.long(key: String): Long = longOrNull(key) ?: 0L
 
     private fun isoMillis(text: String?): Long? = try {

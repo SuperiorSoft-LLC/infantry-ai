@@ -165,7 +165,7 @@ class SessionStatsReadersTest {
         assertEquals(1350L, s.lastContextTokens)
         assertEquals(131072L, s.modelContextLimit)
         assertEquals(2380L, s.billedTokens)
-        assertEquals(listOf(StatsPoint(t0 + 2000, 1000, 1020), StatsPoint(t0 + 4000, 1350, 2380)), s.series)
+        assertEquals(listOf(StatsPoint(t0 + 2000, 1000, 1020, 0.0), StatsPoint(t0 + 4000, 1350, 2380, 0.0)), s.series)
         assertEquals(listOf(ContextSource("read", 1, 350)), s.topSources)
         assertEquals(0L, s.unattributedToolTokens)
     }
@@ -256,7 +256,7 @@ class SessionStatsReadersTest {
         assertEquals(200_000L, s.modelContextLimit)
         assertEquals(1905L, s.billedTokens)
         assertEquals(
-            listOf(StatsPoint(1_001_200, 500, 510), StatsPoint(1_002_000, 660, 1190), StatsPoint(1_005_000, 710, 1905)),
+            listOf(StatsPoint(1_001_200, 500, 510, 0.0), StatsPoint(1_002_000, 660, 1190, 0.0), StatsPoint(1_005_000, 710, 1905, 0.0)),
             s.series,
         )
         assertEquals(listOf(ContextSource("bash", 1, 160)), s.topSources)
