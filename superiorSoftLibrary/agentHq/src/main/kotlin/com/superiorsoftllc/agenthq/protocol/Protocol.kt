@@ -165,6 +165,13 @@ data class Envelope(
         const val KILL = "kill"
 
         /**
+         * Contract 1.115.0: the installation-wide Assistant. A client sends it (empty `data`) and the daemon answers with the
+         * Assistant's `session` frame, creating the session (role `assistant`, no project, its own working directory) on the
+         * first request; later requests answer the same session. Its model is changed with `session_swap`, which keeps the role.
+         */
+        const val ASSISTANT = "assistant"
+
+        /**
          * Interrupt the session's CURRENT turn: stop its run and return the session to rest (IDLE) with
          * the same session id, provider conversation and transcript. Unlike [KILL], the session survives.
          * `data` is the session id. Refused with [ERROR] when no run is in flight.

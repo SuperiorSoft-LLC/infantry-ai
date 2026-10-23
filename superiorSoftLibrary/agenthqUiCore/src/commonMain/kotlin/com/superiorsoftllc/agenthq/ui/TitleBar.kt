@@ -109,6 +109,8 @@ fun TitleBar(
     onTogglePanel: ((PanelSide) -> Unit)? = null,
     /** SWITCH-1: the server dropdown, shown before the connection chip; empty = none (a bar shown on its own). */
     serverSlot: @Composable () -> Unit = {},
+    /** ASSISTANT-1: the Assistant's portrait, the LAST member of the team strip (and a button before the overflow in a compact bar); empty = none. */
+    assistantSlot: @Composable () -> Unit = {},
 ) {
     // The empty areas move the window (desktop drag) and a double-click there toggles maximize, like a native bar.
     val drag = if (chrome == null) Modifier else chrome.dragArea.pointerInput(chrome) {
@@ -135,6 +137,7 @@ fun TitleBar(
         if (compact) {
             // A narrow desktop window still moves by its bar: the free space is the drag area.
             Spacer(drag.weight(1f).fillMaxHeight().testTag(TITLE_BAR_DRAG_TAG))
+            assistantSlot()
             TitleBarOverflow(state, onConnect, onAttention, projectSlot, onTogglePanel)
             Spacer(Modifier.width(6.dp))
         } else {
@@ -151,6 +154,8 @@ fun TitleBar(
                         AgentAvatar(a, state, 22)
                     }
                 }
+                // ASSISTANT-1: the Assistant is the LAST portrait of the team.
+                assistantSlot()
             }
             // Contract 1.9.0: open attention is a durable signal from the daemon, so it is always in view.
             if (state.attentionOpenCount > 0) {

@@ -235,6 +235,9 @@ fun App(
     var showNewAgent by remember { mutableStateOf(false) }
     // CHAT-PANEL-1: the main window's chat state (draft, attachments, New agent mode, Switch picker); one per window, as before.
     val chat = remember { ChatPanelState() }
+    // ASSISTANT-1: the Assistant popup (open / expanded / width) and its chat state; both live in the window so a close keeps them.
+    val assistantPanel = remember { AssistantPanelState() }
+    val assistantChat = rememberChatPanelState(state.assistant?.id)
     var showBoard by remember { mutableStateOf(false) }
     // DIFF-MODAL: the changed file whose diff is open over the window; another project closes it.
     var diffTarget by remember { mutableStateOf<DiffTarget?>(null) }
@@ -368,6 +371,15 @@ fun App(
                 onTogglePanel = controller::togglePanel,
                 serverSlot = {
                     if (switcher != null) ServerSwitcherChip(switcher, onSelect = ::switchTo, onManage = { showServers = true })
+                },
+                // ASSISTANT-1: the last member of the team strip; a tap toggles the popup (the daemon makes the session on the first open).
+                assistantSlot = {
+                    if (state.connection.hasAssistant || state.assistant != null) {
+                        AssistantEntry(
+                            assistantPanel.open,
+                            state.assistant?.let { needsInput(it, state.waiting, state.openPrompts, state.openQuestionSessions) } == true,
+                        ) { assistantPanel.toggle() }
+                    }
                 },
             )
             // MOBILE-LAYOUT-1: below PanelLayout.COMPACT_BELOW_DP (600dp) the window shows ONE pane at full width, picked
@@ -506,6 +518,15 @@ fun App(
             }
             }
             StatusBar(state, serverMismatch, onConfig = { showConfig = true })
+        }
+        // ASSISTANT-1: the global Assistant's popup, docked top right under the title bar (a full-screen sheet when compact). The
+        // window owns its state, so closing it keeps the draft, the width and the model; it is one more host of ChatPanel.
+        if (assistantPanel.open) {
+            val compactWindow = state.panels.compactWindow
+            AssistantPopup(
+                state, controller, assistantPanel, assistantChat, compact = compactWindow,
+                modifier = Modifier.align(Alignment.TopEnd).then(if (compactWindow) Modifier else Modifier.padding(top = TITLE_BAR_HEIGHT + 1.dp, bottom = 28.dp)),
+            )
         }
         ToastHost(
             state,

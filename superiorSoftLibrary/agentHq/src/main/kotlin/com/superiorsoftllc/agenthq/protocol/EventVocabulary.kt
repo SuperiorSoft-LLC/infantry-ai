@@ -354,7 +354,8 @@ object EventVocabulary {
     // **1.107.0 (USER-PORTRAIT) is ADDITIVE**: the setting `user.portrait` (base64 PNG, <= 256 KB, absent = the bundled default).
     // **1.113.0 (STATS-2) is ADDITIVE**: one harness-neutral usage definition for `session_stats`; `StatsPoint.cumulativeCost` and `SessionStats.costTotal` (reported cost, null = none). See CONTRACT.md.
     // **1.114.0 (KILL-SCOPE-1) is ADDITIVE**: kill scope by role + project, `session rm --force`, `agenthq kill`, `SessionRecord.spawnerSessionId`. See CONTRACT.md.
-    const val VERSION = "1.114.0"
+    // **1.115.0 (ASSISTANT-1) is ADDITIVE**: the `assistant` frame, `SessionRecord.global`, role `assistant` is privileged across projects. See CONTRACT.md.
+    const val VERSION = "1.115.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA

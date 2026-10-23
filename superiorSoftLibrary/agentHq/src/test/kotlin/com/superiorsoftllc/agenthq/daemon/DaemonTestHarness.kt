@@ -282,6 +282,8 @@ class DaemonFixture private constructor(
             workingDir: File = File(stateDir, "workdir").apply { mkdirs() },
             /** INSTALL-CWD-1: the installed app's project folders; off so the operator's AGENTHQ_PROJECT_DIRS never leaks in. */
             projectDirs: Boolean = false,
+            /** ASSISTANT-1: the global Assistant's folder, inside the fixture's temp state dir. */
+            assistantDir: File = File(stateDir, "assistant"),
             /** BUG-REGRESS-1: the ref a ticket start cuts from; `HEAD`, so the operator's `AGENTHQ_BASE_BRANCH` never leaks in. */
             baseRef: com.superiorsoftllc.agenthq.worktree.TicketBaseRef =
                 com.superiorsoftllc.agenthq.worktree.TicketBaseRef.fixed(com.superiorsoftllc.agenthq.worktree.TicketBaseRef.HEAD),
@@ -333,6 +335,7 @@ class DaemonFixture private constructor(
                 portFile = portFile,
                 workingDir = workingDir,
                 projectDirs = projectDirs,
+                assistantDir = assistantDir,
                 baseRef = baseRef,
                 clock = clock,
                 chatImageTicker = chatImageTicker,

@@ -204,6 +204,10 @@ class SessionManager(
     @Volatile
     var instanceFor: ((agentId: String?, role: String?) -> RoleInstance?)? = null
 
+    /** Contract 1.115.0: the global Assistant's working directory (under the app's data dir); null = none configured, which refuses the `assistant` frame. */
+    @Volatile
+    var assistantDir: java.io.File? = null
+
     /**
      * P10-K13 (docs/AGENTHQ-PHASE10-KNOWLEDGE.md K-D11): the effective skill ids a spawn for [agentId] on [ticketId]
      * would freeze NOW (the daemon installs [com.superiorsoftllc.agenthq.agents.SkillAttachment.effective] over the live
@@ -525,6 +529,8 @@ class SessionManager(
          * Null = resolved through [instanceFor] when the spawn names an agent or a role; an anonymous spawn has none.
          */
         instance: RoleInstance? = null,
+        /** Contract 1.115.0: create the installation-wide Assistant; set on the FIRST `session` frame, so no client ever sees it as an ordinary agent. */
+        global: Boolean = false,
     ): SessionRecord {
         val chosen = resolveProvider(providerId).provider
         val sessionModel = spawnModel(model)
@@ -566,6 +572,7 @@ class SessionManager(
                     contextSources = contextSources.orEmpty(),
                     projectId = projectId,
                     unattended = unattended,
+                    global = global,
                     isProcessAlive = false,
                 )
                 freezeInstance(id, now, agentId, role, instance, ticketId)
@@ -598,6 +605,7 @@ class SessionManager(
             contextSources = contextSources.orEmpty(),
             projectId = projectId,
             unattended = unattended,
+            global = global,
             isProcessAlive = false,
         )
         // P10-K13: frozen BEFORE the record is visible, so nobody who can see the session sees it without its instance.

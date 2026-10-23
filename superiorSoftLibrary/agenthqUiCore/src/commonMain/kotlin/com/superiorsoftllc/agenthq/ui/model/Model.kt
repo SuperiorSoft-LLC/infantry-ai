@@ -107,6 +107,9 @@ data class ConnectionInfo(
     /** ROLE-EDIT-1: a daemon on contract >= 1.108.0 stores a role description and answers `role_delete`; an older one refuses both. */
     val sendsRoleEdit: Boolean get() = contractAtLeast(contract, 1, 108)
 
+    /** ASSISTANT-1 (contract 1.115.0): the daemon has the global Assistant (`assistant` frame, `SessionRecord.global`). */
+    val hasAssistant: Boolean get() = contractAtLeast(contract, 1, 115)
+
     /** Contract 1.47.0 (role-first S3): the daemon takes `agent_swap`; below it the Swap action is unavailable. */
     val swapsAgents: Boolean get() = contractAtLeast(contract, 1, 47)
     /** UX-HARNESS-2 (contract 1.83.0): the daemon takes `session_swap`, so a session with no agent can switch harness. */
@@ -843,7 +846,10 @@ data class AppState(
 
     /** Newest first: the agent you just spawned is at the top, like a chat list. */
     val orderedAgents: List<AgentView>
-        get() = agents.values.sortedByDescending { it.session.spawnedAt }
+        get() = agents.values.filter { !it.session.global }.sortedByDescending { it.session.spawnedAt }
+
+    /** ASSISTANT-1: the one installation-wide Assistant, once the daemon has made it. Never in the agent list, never auto-selected. */
+    val assistant: AgentView? get() = agents.values.firstOrNull { it.session.global }
 
     val selected: AgentView? get() = selectedId?.let { agents[it] }
 
