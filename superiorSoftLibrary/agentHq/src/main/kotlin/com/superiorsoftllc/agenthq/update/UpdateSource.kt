@@ -16,17 +16,21 @@ interface UpdateSource {
  * offered when it is newer than [currentVersion] AND a SHA-256 for it is listed in `SHA256SUMS` next to it. The copy
  * to a fresh temp dir is verified again against that hash, so a half-written or tampered file is refused.
  */
-class LocalDirSource(private val dir: File, private val currentVersion: SemVer) : UpdateSource {
+class LocalDirSource(
+    private val dir: File,
+    private val currentVersion: SemVer,
+    private val kind: AssetKind = AssetKind.WindowsInstaller,
+) : UpdateSource {
 
     private data class Candidate(val version: SemVer, val msi: File)
 
     override fun check(): UpdateCheck {
         if (!dir.isDirectory) return UpdateCheck.Failed(UpdateFailure.BadResponse("the releases folder $dir does not exist"))
         val best = (listOf(dir) + (dir.listFiles { f -> f.isDirectory }?.toList() ?: emptyList()))
-            .flatMap { d -> d.listFiles { f -> f.isFile && INSTALLER.matches(f.name) }?.toList() ?: emptyList() }
-            .mapNotNull { f -> SemVer.parse(INSTALLER.matchEntire(f.name)!!.groupValues[1])?.let { Candidate(it, f) } }
+            .flatMap { d -> d.listFiles { f -> f.isFile }?.toList() ?: emptyList() }
+            .mapNotNull { f -> kind.versionOf(f.name)?.let { Candidate(it, f) } }
             .maxByOrNull { it.version }
-            ?: return UpdateCheck.Failed(UpdateFailure.NoWindowsAsset("in $dir"))
+            ?: return UpdateCheck.Failed(kind.missing("in $dir"))
         if (best.version <= currentVersion) return UpdateCheck.UpToDate(currentVersion, best.version)
         val sums = File(best.msi.parentFile, ReleaseAssets.SUMS_FILE).takeIf { it.isFile }
             ?: return UpdateCheck.Failed(UpdateFailure.BadAsset("${best.msi.name} has no ${ReleaseAssets.SUMS_FILE} next to it"))
@@ -57,14 +61,10 @@ class LocalDirSource(private val dir: File, private val currentVersion: SemVer) 
         }
         return Fetched.Ok(VerifiedInstaller(update, target, actual, checksumVerified = true))
     }
-
-    companion object {
-        private val INSTALLER = Regex("""^(?:InfantryAI|AgentHQ)-(\d+\.\d+\.\d+)\.msi$""", RegexOption.IGNORE_CASE)
-    }
 }
 
 /** UPDATE-4: picks the source for a resolved config: a local releases folder ([LocalDirSource]), else GitHub Releases ([Updater]). */
 object UpdateSources {
-    fun forConfig(config: UpdateConfig): UpdateSource =
-        config.localDir?.let { LocalDirSource(it, config.currentVersion) } ?: Updater(config)
+    fun forConfig(config: UpdateConfig, kind: AssetKind = AssetKind.WindowsInstaller): UpdateSource =
+        config.localDir?.let { LocalDirSource(it, config.currentVersion, kind) } ?: Updater(config, kind = kind)
 }
