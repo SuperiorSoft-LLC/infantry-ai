@@ -308,3 +308,93 @@ tasks.register<Sync>("dockerContext") {
     from(rootProject.layout.projectDirectory.file("docker/Dockerfile"))
     into(layout.buildDirectory.dir("docker"))
 }
+
+// HEADLESS-DIST-1: the downloadable server, no Docker and no Java install needed. The archive is installDist (lib/ and the
+// `agenthq` CLI) + bin/agenthq-server.{sh,bat} (the daemon) + runtime/ (a jlink JRE for THIS build machine's OS/arch) +
+// README.txt. Release CI builds it once per OS (release.yml `headless`).
+//   ./gradlew :superiorSoftLibrary:agentHq:headlessDist   -> build/distributions/AgentHQ-server-<version>-<os>-<arch>.{zip|tar.gz}
+val headlessVersion: String = providers.gradleProperty("agenthqVersion").getOrElse("dev")
+val headlessOs: String = System.getProperty("os.name").lowercase().let {
+    when {
+        it.startsWith("windows") -> "windows"
+        it.startsWith("mac") -> "macos"
+        else -> "linux"
+    }
+}
+val headlessArch: String = System.getProperty("os.arch").let { if (it == "amd64" || it == "x86_64") "x64" else it }
+val headlessBaseName = "AgentHQ-server-$headlessVersion-$headlessOs-$headlessArch"
+val headlessJdk = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) }
+
+val headlessRuntime = tasks.register<Exec>("headlessRuntime") {
+    group = "distribution"
+    description = "HEADLESS-DIST-1: a trimmed Java 21 runtime (jlink) for the headless server archive."
+    val out = layout.buildDirectory.dir("headless/runtime")
+    outputs.dir(out)
+    doFirst {
+        delete(out)
+        val jlink = headlessJdk.get().metadata.installationPath.file(if (headlessOs == "windows") "bin/jlink.exe" else "bin/jlink")
+        // java.se covers everything the daemon and its libraries use; jdk.unsupported (Ktor/coroutines), jdk.crypto.ec (TLS),
+        // jdk.zipfs and jdk.charsets are outside it.
+        commandLine(
+            jlink.asFile.absolutePath,
+            "--add-modules", "java.se,jdk.unsupported,jdk.crypto.ec,jdk.zipfs,jdk.charsets,jdk.localedata",
+            "--strip-debug", "--no-header-files", "--no-man-pages", "--compress=zip-6",
+            "--output", out.get().asFile.absolutePath,
+        )
+    }
+}
+
+val headlessContents: CopySpec = copySpec {
+    into(headlessBaseName)
+    from(tasks.named("installDist")) {
+        // The CLI launchers honour JAVA_HOME only: point an unset JAVA_HOME at the bundled runtime.
+        filesMatching("bin/agenthq") {
+            filter { line ->
+                if (line.startsWith("if [ -n \"\$JAVA_HOME\" ]")) {
+                    "if [ -z \"\$JAVA_HOME\" ] && [ -x \"\$APP_HOME/runtime/bin/java\" ] ; then JAVA_HOME=\$APP_HOME/runtime ; fi\n$line"
+                } else line
+            }
+        }
+        filesMatching("bin/agenthq.bat") {
+            filter { line ->
+                if (line.startsWith("if defined JAVA_HOME goto")) {
+                    """if not defined JAVA_HOME if exist "%APP_HOME%\runtime\bin\java.exe" set "JAVA_HOME=%APP_HOME%\runtime"""" + "\r\n" + line
+                } else line
+            }
+        }
+    }
+    from(headlessRuntime) { into("runtime") }
+    from("headless") {
+        include("agenthq-server.sh", "agenthq-server.bat")
+        into("bin")
+    }
+    from("headless/README.txt")
+    eachFile {
+        if (path.endsWith(".sh") || path.endsWith("/bin/agenthq") || path.contains("/runtime/bin/") || path.contains("/runtime/lib/jspawnhelper")) {
+            permissions { unix("rwxr-xr-x") }
+        }
+    }
+}
+
+tasks.register<Zip>("headlessDistZip") {
+    group = "distribution"
+    description = "HEADLESS-DIST-1: the headless server as a zip (Windows)."
+    archiveFileName.set("$headlessBaseName.zip")
+    destinationDirectory.set(layout.buildDirectory.dir("distributions"))
+    with(headlessContents)
+}
+
+tasks.register<Tar>("headlessDistTar") {
+    group = "distribution"
+    description = "HEADLESS-DIST-1: the headless server as a tar.gz (Linux/macOS, keeps the executable bits)."
+    archiveFileName.set("$headlessBaseName.tar.gz")
+    compression = Compression.GZIP
+    destinationDirectory.set(layout.buildDirectory.dir("distributions"))
+    with(headlessContents)
+}
+
+tasks.register("headlessDist") {
+    group = "distribution"
+    description = "HEADLESS-DIST-1: the headless server archive for this OS (zip on Windows, tar.gz elsewhere)."
+    dependsOn(if (headlessOs == "windows") "headlessDistZip" else "headlessDistTar")
+}
