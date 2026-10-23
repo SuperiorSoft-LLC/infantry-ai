@@ -235,7 +235,7 @@ class TicketBoard(
             val s = load()
             boardOrder(s.rows.values)
                 .filter { it.status == TicketStatus.TODO && s.holding(it.id).isEmpty() }
-                .filter { agentFilter == null || it.agentId == agentFilter }
+                .filter { matchesTriggerAgent(it.agentId, agentFilter) }
                 .map { it.id }
         }
         var last: TicketAnswer? = null
@@ -1351,6 +1351,13 @@ class TicketBoard(
             provider = provider,
             model = model,
         )
+    }
+
+    /** A `role:<role>` trigger also takes todo tickets assigned to a profile id whose role is that role. */
+    private fun matchesTriggerAgent(ticketAgentId: String?, filter: String?): Boolean {
+        if (filter == null || ticketAgentId == filter) return true
+        if (!filter.startsWith("role:") || ticketAgentId == null) return false
+        return agents?.get(ticketAgentId)?.role == filter.removePrefix("role:")
     }
 
     private fun normalizeRoleAgentId(agentId: String): String =

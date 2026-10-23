@@ -705,6 +705,27 @@ class TicketBoardTest {
         assertEquals("\"x\"", real.settings.get("probe")?.value)
     }
 
+    @Test
+    fun aRoleTriggerStartsATodoTicketAssignedToAProfileOfThatRole() {
+        val store = openStore()
+        val runner = ScriptedRunner(autoExit = false)
+        val manager = SessionManager(FakeAgentProvider(), runner, tempSessionStore(), killGraceMs = 50, defaultWorkingDir = dir)
+        val profiles = AgentProfiles(store.agents, manager)
+        val worker = profiles.save(AgentProfile(name = "Backend", role = "backend"))
+        val ids = ('a'..'z').map { it.toString() }.iterator()
+        val prompting = object : com.superiorsoftllc.agenthq.context.TicketContext {
+            override fun compose(input: com.superiorsoftllc.agenthq.context.ContextInput) =
+                com.superiorsoftllc.agenthq.context.ComposedContext("Ship ${input.title}.", emptyList())
+            override fun effective(override: Boolean?, skillsOverride: Boolean?): com.superiorsoftllc.agenthq.protocol.EffectiveContext? = null
+        }
+        val board = TicketBoard(store, idFactory = { ids.next() }, context = prompting, agents = profiles, sessions = manager)
+        board.save(TicketSave(title = "Add login", agentId = worker.id))
+
+        assertNull(board.startNextUnattended("role:frontend"), "another role's trigger must skip it")
+        assertEquals("started", board.startNextUnattended("role:backend")?.ticket?.start?.reason)
+        board.close()
+    }
+
     // --- BUG-E2E-2: a finished run decides the ticket's column ------------------------------------------
 
     /** Starts one ticket on a scripted session, ends that session with [exitCode], and answers the ticket afterwards. */
