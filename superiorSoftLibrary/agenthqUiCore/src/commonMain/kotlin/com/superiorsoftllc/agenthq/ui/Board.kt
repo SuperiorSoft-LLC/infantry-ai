@@ -240,14 +240,22 @@ fun BoardPane(state: AppState, controller: Controller, onOpenAgent: (String) -> 
             ) { key -> filter = when (key) { "all" -> EpicFilter.All; "none" -> EpicFilter.NoEpic; else -> EpicFilter.Only(key) } }
             Spacer(Modifier.width(8.dp))
             Text(
-                if (active == EpicFilter.All) "${state.visibleTickets.size} tickets" else "$shown of ${state.visibleTickets.size} tickets",
-                color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f),
+                ticketCountLabel(shown, state.visibleTickets.size, active == EpicFilter.All),
+                color = Palette.Muted, fontSize = 11.sp, maxLines = 1, softWrap = false, modifier = Modifier.weight(1f),
             )
             OutlinedButton(onClick = { actionScope.launch { controller.startNextTicket() } }, enabled = state.connection.isLive && state.column(TicketColumns.TODO).isNotEmpty()) {
                 Text("Start next", fontSize = 12.sp)
             }
             Spacer(Modifier.width(6.dp))
             Button(onClick = { creating = !creating }, enabled = state.connection.isLive) { Text(if (creating) "Close" else "+ New ticket", fontSize = 12.sp) }
+        }
+        // Tickets with no project are not in a selected project's view; say so rather than look like an empty board.
+        val unassigned = if (state.activeProjectId == null) 0 else state.tickets.count { it.projectId == null }
+        if (unassigned > 0) {
+            Text(
+                "$unassigned unassigned ticket${if (unassigned == 1) "" else "s"} (no project) not shown; deselect the project to see all.",
+                color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 10.dp),
+            )
         }
         if (creating) TicketForm(state, controller, initialEpicId = (active as? EpicFilter.Only)?.epicId, onDone = { creating = false })
         if (state.visibleTickets.isEmpty() && !creating) {
@@ -303,7 +311,10 @@ fun BoardPane(state: AppState, controller: Controller, onOpenAgent: (String) -> 
                                 .onGloballyPositioned { drag.cards[t.id] = Rect(it.positionInRoot(), it.size.toSize()) }
                                 .dropLine(above = lineAbove == t.id, below = lineBelow == t.id)
                                 .then(if (drag.ticket?.id == t.id) Modifier.graphicsLayer { alpha = 0.4f } else Modifier)
-                            TicketCard(t, state, controller, onOpenAgent, look, handle, session.notes[t.id]) { session.dismiss(t.id) }
+                            TicketCard(
+                                t, state, controller, onOpenAgent, look, handle, session.notes[t.id], { session.dismiss(t.id) },
+                                onStart = { drop(t, DropPlan.Start(t.id, state.column(TicketColumns.IN_PROGRESS).size)) },
+                            )
                         }
                     }
                 }
@@ -460,6 +471,7 @@ private fun TicketCard(
     handle: @Composable () -> Unit,
     dropNote: String?,
     onDismissNote: () -> Unit,
+    onStart: () -> Unit,
 ) {
     val actionScope = rememberCoroutineScope()
     var open by remember(t.id) { mutableStateOf(false) }
@@ -510,7 +522,8 @@ private fun TicketCard(
       }
         // A drop that snapped back says why (a refused column, or the daemon's reason a start did not start).
         dropNote?.let { note ->
-            LaunchedEffect(note) { delay(8_000); onDismissNote() }
+            // A refusal for want of a role opens the edit form, where the role is picked.
+            LaunchedEffect(note) { if (note.contains("no role")) open = true; delay(8_000); onDismissNote() }
             Text(
                 note, color = Palette.Danger, fontSize = 10.sp, maxLines = 3,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag(TICKET_DROP_NOTE_TAG_PREFIX + t.id),
@@ -522,7 +535,7 @@ private fun TicketCard(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
             when (t.status) {
-                TicketColumns.TODO -> CardButton("Start", live) { controller.moveTicket(t.id, TicketColumns.IN_PROGRESS) }
+                TicketColumns.TODO -> CardButton("Start", live) { onStart(); CommandResult.Sent }
                 TicketColumns.IN_PROGRESS -> {
                     CardButton("Done", live) { controller.moveTicket(t.id, TicketColumns.DONE) }
                     CardButton("Back", live) { controller.moveTicket(t.id, TicketColumns.TODO) }
@@ -733,4 +746,10 @@ private fun TicketForm(state: AppState, controller: Controller, initialEpicId: S
             TextButton(onClick = onDone) { Text("Cancel") }
         }
     }
+}
+
+/** "1 ticket" / "2 tickets", or "1 of 2 tickets" under an epic filter. */
+internal fun ticketCountLabel(shown: Int, total: Int, all: Boolean): String {
+    val noun = if (total == 1) "ticket" else "tickets"
+    return if (all) "$total $noun" else "$shown of $total $noun"
 }

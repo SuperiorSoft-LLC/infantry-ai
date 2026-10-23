@@ -32,7 +32,10 @@ enum class AttentionKind(val wireName: String) {
     @SerialName("queue_cleared") QUEUE_CLEARED("queue_cleared"),
 
     /** TRAITS-T6 (contract 1.52.0, 30.sqm): an unattended session ended without its REPORT BACK mail. */
-    @SerialName("unreported") UNREPORTED("unreported");
+    @SerialName("unreported") UNREPORTED("unreported"),
+
+    /** A session run ended with a non-zero exit (not an operator kill): shown on every client. */
+    @SerialName("session_failed") SESSION_FAILED("session_failed");
 
     companion object {
         fun fromWireName(value: String): AttentionKind =
