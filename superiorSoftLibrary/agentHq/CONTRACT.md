@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.99.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.100.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,9 +104,44 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
-### What changed in 1.100.0 (ISO-1) — cross-project mail is refused unless overridden
 
-ADDITIVE; a 1.99.0 client keeps working. The `ready` frame reports `contract=1.100.0`.
+### What changed in 1.100.0 (HARNESS-INSTALL-1) — a built-in installer for the harness CLIs (claude, opencode, pi)
+
+ADDITIVE; a 1.99.0 client keeps working and a 1.99.0 daemon simply has no installer. The daemon used to assume the harness
+CLIs were installed. Now a client (the CLI, an MCP agent, a remote client) can detect and install them on THAT daemon's
+machine, local or remote, through two frames:
+
+- **`harness_install_status`** `{checkLatest?}` (empty data = defaults) → answered by `harness_install_status`, a
+  `HarnessInstallReport {harnesses:[HarnessInstallStatus], prefixDir, npmPath?, guidance?}`. Per harness: `state`
+  (`installed` | `missing` | `outdated` | `unknown` = found but `--version` unreadable), `installedVersion`, `path`,
+  `managed` (it lives in the app's own prefix), `wanted` (the pin, else null), `latest` (only when `checkLatest`: it
+  runs `npm view`, so it is slower). `npmPath` null means Node/npm was not found and `guidance` says how to get it.
+- **`harness_install`** `{ids?, update?}` → answered by `harness_install_result`, a `HarnessInstallResult {outcomes, log, report}`.
+  `ids` empty = every missing harness (plus every outdated one with `update`); naming an id acts on exactly that one.
+  Each outcome is `installed` | `updated` | `skipped` | `failed` (+ `version`, `message`). A failed install is an outcome,
+  not an `error`; an unknown id is an `error` `harness_install refused: ...`. It can take minutes: clients wait for it
+  (the CLI and MCP tool allow 15 minutes). Runs are serialised on the daemon.
+
+Both answers go only to the requesting client. CLI: `agenthq harness-status [--check]`, `agenthq harness-install [id...]
+[--update]` (exit 1 when any harness failed). MCP: `agenthq_harness_status`, `agenthq_harness_install`.
+
+**How it installs.** `npm install -g --prefix <AGENTHQ_HOME>/harness-tools <package>@<version|latest>` with packages
+`@anthropic-ai/claude-code`, `opencode-ai`, `@earendil-works/pi-coding-agent`. The prefix is the app's own, so no admin
+rights are needed and no global npm prefix, user file or existing install is touched. The launch resolver lists that
+prefix FIRST among a tool's default locations (a Settings override or `AGENTHQ_<TOOL>_EXE` still beats it). Installs are
+idempotent: an installed CLI is skipped without running npm unless `update` is set. Node/npm is required only for these
+CLIs, never to build or run AgentHQ; npm is found via `AGENTHQ_NPM_EXE`, next to node's install locations, then PATH.
+
+**Pinned or latest?** Latest by default: these CLIs follow fast-moving provider APIs and a stale pin stops working.
+A pin is opt-in per harness with the environment variable `AGENTHQ_<ID>_VERSION` on the daemon (e.g.
+`AGENTHQ_CLAUDE_VERSION=2.0.0`); a pinned CLI at any other version is `outdated`, and `update` installs exactly the pin.
+
+**Credentials.** The installer never handles any. Sign-in stays with each CLI (`claude` first-run login, `opencode auth
+login`, `pi`, or the provider's API-key environment variable, set by the user); AgentHQ stores no key and passes none to npm.
+
+### What changed in 1.101.0 (ISO-1) — cross-project mail is refused unless overridden
+
+ADDITIVE; a 1.100.0 client keeps working. The `ready` frame reports `contract=1.101.0`.
 - `mail_send` (`MailSendRequest`) takes an optional `allowCrossProject` (default false; CLI `agenthq send --cross-project`,
   MCP `agenthq_message {allowCrossProject:true}`). When the sender is a SESSION bound to a project and the recipient (a
   session id or an agent id) is bound to a DIFFERENT one, the daemon answers `mail_refused` with a reason naming both
@@ -1186,7 +1221,7 @@ reports `contract=1.17.0` (it was `1.16.0`). Nothing else changed.
 **1.16.0 is additive (P9.5 H8): one optional field on `TriggerSave`.** The daemon's `ready` frame now
 reports `contract=1.16.0` (it was `1.15.0`). Nothing else changed.
 
-- `TriggerSave.intervalMs` (`Long?`, default `null`, must be `>= 1000` when given): the period of a
+- `TriggerSave.intervalMs` (`Long?`, default `null`, must be `>= 60000` (one minute) when given; the floor was `1000` before the owner's 2026-10-23 change, the wire unit is still ms and rows already stored keep their period; a smaller value is refused with "a schedule interval must be at least 1 minute"): the period of a
   `schedule` trigger. Each elapsed interval fires the trigger once, recorded as a `trigger_events` row
   with `source: "schedule"`, disposition `started` (or whatever its guard decides, as for a manual fire).
   A `schedule` trigger saved without `intervalMs` never fires.
@@ -1894,6 +1929,9 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `project_git_checkout_result` | one `ProjectGitCheckoutResult` `{projectId, branch, create, switched, code, reason, previous?, current?, dirtyCount, worktreePath?}`; a switch that happened is followed by a `project_git` push to every client (1.74.0) | daemon → client |
 | `cli_locations` | — (request, no data) / one `CliLocations` `{tools:[CliLocation{id, label, path?, source?, override?, tried[], reason?}]}` (reply), built-ins first (`claude`, `opencode`, `pi`, `git`) then descriptor harnesses (since 1.73.0) | client → daemon (request), daemon → client (reply) |
 | `cli_location_set` | `{id, path?}`: stores `path` as that CLI's override, or clears it when `path` is null or blank (since 1.73.0); answered by `cli_locations`; a bad path or unknown id is an `error` `"cli_location_set refused: ..."` | client → daemon |
+| `harness_install_status` | `{checkLatest?}` (or empty): detect harness CLIs (since 1.100.0); answered by `harness_install_status` `HarnessInstallReport` | client → daemon, daemon → client |
+| `harness_install` | `{ids?, update?}`: npm-install harness CLIs into the app prefix (since 1.100.0); answered by `harness_install_result` `HarnessInstallResult`; unknown id is an `error` `"harness_install refused: ..."` | client → daemon |
+| `harness_install_result` | `{outcomes, log, report}` the answer to `harness_install` (since 1.100.0) | daemon → client |
 | `tool_approval` | — (request, no data) / one `ToolApprovalInfo` `{mode?, effective, source, choices[]}` (reply): the global Tool approval and what a run without a session override gets (since 1.76.0) | client → daemon (request), daemon → client (reply) |
 | `tool_approval_set` | `{mode?}`: stores the global Tool approval (`deny` / `allowEdits` / `allowAll`), or clears it when `mode` is null or blank (since 1.76.0); answered by `tool_approval`; an unknown mode is an `error` `"tool_approval_set refused: ..."` | client → daemon |
 | `prompt_request` | one `PromptRequest` `{promptId, sessionId, kind, createdAt, tool?, input?, question?, options[], multiSelect, allowOther}`: a harness asks the owner (pushed when opened, and replayed after the connect burst while open; since 1.77.0) | daemon → client |

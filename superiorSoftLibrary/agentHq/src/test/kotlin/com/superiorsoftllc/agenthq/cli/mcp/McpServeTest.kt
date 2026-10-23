@@ -144,6 +144,7 @@ class McpServeTest {
             listOf(
                 "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_board",
                 "agenthq_list_harnesses", // BUG-ASSIGN-1
+                "agenthq_harness_status", "agenthq_harness_install", // HARNESS-INSTALL-1
                 "agenthq_spawn", "agenthq_prompt", "agenthq_message", "agenthq_kill", "agenthq_session_remove", "agenthq_session_restart",
                 "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_ticket_get", // MCP-1
                 "agenthq_ticket_start", // BUG-ASSIGN-1
