@@ -12,6 +12,9 @@ fi
 # Sessions run `agenthq ...`: the daemon puts this bin dir on their PATH.
 AGENTHQ_BIN="${AGENTHQ_BIN:-$APP_HOME/bin}"
 export AGENTHQ_BIN
+# The update routes find the install (VERSION file, versions/ folder) from here.
+AGENTHQ_APP_HOME="${AGENTHQ_APP_HOME:-$APP_HOME}"
+export AGENTHQ_APP_HOME
 # shellcheck disable=SC2086
 exec "$JAVA" -Xms32m -Xmx512m -Djava.awt.headless=true $AGENTHQ_JAVA_OPTS \
     -cp "$APP_HOME/lib/*" com.superiorsoftllc.agenthq.daemon.DaemonMainKt "$@"

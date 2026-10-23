@@ -23,7 +23,10 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 COPY --from=stage /opt/agenthq /opt/agenthq
 
-ENV AGENTHQ_HOST=0.0.0.0 \
+ARG AGENTHQ_VERSION=dev
+ENV AGENTHQ_VERSION=$AGENTHQ_VERSION \
+    AGENTHQ_DISTRIBUTION=docker \
+    AGENTHQ_HOST=0.0.0.0 \
     AGENTHQ_PORT=8787 \
     AGENTHQ_STATE_DIR=/data \
     AGENTHQ_HOME=/data \

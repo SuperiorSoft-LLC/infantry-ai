@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.109.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.110.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -2758,3 +2758,11 @@ The ticket's rule is that any protocol change found while building Phase 7 is a 
 ## 1.109.0 -- pair threads roll over (additive)
 
 A new (non-reply) message on a full implicit pair thread lands in `pair:<a>|<b>:<n>` (n >= 2) instead of being refused; replies and explicit thread ids still hit the 60-message ceiling. `ThreadSummary` gains `group` (the `pair:<a>|<b>` id shared by all rolls; defaults to `id`).
+
+## 1.110.0 -- headless daemon updates (additive)
+
+Three authenticated HTTP routes (bearer token like every route but `/health`): `GET /update/status`, `POST /update/check`, `POST /update/apply`.
+
+- `ServerUpdateStatus`: `version`, `contract`, `distribution` (`archive` | `docker` | `dev`), `canSelfUpdate`, `enabled`, `disabledReason`, `state` (`idle` | `checking` | `available` | `downloading` | `staged` | `error`), `available {version, notes}`, `lastChecked` (epoch ms), `error`, `instructions`, `runningAgents`, `staged`. `/update/status` reads memory only; `/update/check` asks the release source (GitHub or a local releases folder) and answers the same body.
+- `POST /update/apply` takes `{"confirm": false}` and answers `UpdateApplyReply {result, version?, running?, message?}`: 200 `staged` (the verified archive is unpacked and made current; the restart is separate), 409 `agents_running` (resend with `confirm: true`), 409 `unsupported` (Docker or a dev run; `message` carries the manual instructions, e.g. the `docker pull`), 409 `nothing_to_apply`, 502 `failed`.
+- A client compares its own version and contract with `version` / `contract` to warn on a mismatch. The update token is read from `AGENTHQ_UPDATE_TOKEN` / `INFANTRY_UPDATE_TOKEN` (or the keystore / credential store) and never appears in any reply.

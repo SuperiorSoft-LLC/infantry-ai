@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.daemon
 
+import com.superiorsoftllc.agenthq.session.isBusy
 import com.superiorsoftllc.agenthq.session.InfantryEnv
 
 import com.superiorsoftllc.agenthq.attention.AttentionItem
@@ -584,6 +585,8 @@ class AgentHqDaemon(
              * other route. The daemon knows nothing about them (the installed desktop app adds its window activation).
              */
             extraRoutes: io.ktor.server.routing.Route.() -> Unit = {},
+            /** SERVER-UPDATE-3: this daemon's own update state; null reads it from the environment (archive / Docker / dev). */
+            updates: com.superiorsoftllc.agenthq.update.ServerUpdateService? = null,
         ): AgentHqDaemon {
             val policy = AccessPolicy.of(host, token)
             // PORT-1: FIRST, because the mail base and every session's AGENTHQ_URL below carry the port.
@@ -1096,6 +1099,12 @@ class AgentHqDaemon(
                     get("/attention") { call.respond(attention.list()) }
                     // Phase 6 agent-facing mail API: how a spawned CLI agent answers a delivered message.
                     mailRoutes(mail, mailbox)
+                    // SERVER-UPDATE-3 (1.110.0): status / check / apply for the headless daemon's own updates.
+                    updateRoutes(
+                        updates ?: com.superiorsoftllc.agenthq.update.ServerUpdateService.fromEnvironment(
+                            runningAgents = { manager.list().count { it.isBusy() } },
+                        ),
+                    )
                     // P9.6: signature-admitted webhook ingress (exempt from the bearer in AccessPolicy, signed per hook).
                     hookRoutes(WebhookIngress(triggers))
                     extraRoutes()
