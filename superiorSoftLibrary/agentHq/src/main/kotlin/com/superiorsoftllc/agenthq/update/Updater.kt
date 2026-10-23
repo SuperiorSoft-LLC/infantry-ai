@@ -31,7 +31,11 @@ data class VerifiedInstaller(val update: AvailableUpdate, val file: File, val sh
  * tag with the running version, and download + verify the matching Windows installer. Handing the installer to Windows
  * is [MsiHandoff]'s job.
  */
-class Updater(private val config: UpdateConfig, private val releases: GitHubReleases = GitHubReleases()) : UpdateSource {
+class Updater(
+    private val config: UpdateConfig,
+    private val releases: GitHubReleases = GitHubReleases(),
+    private val kind: AssetKind = AssetKind.WindowsInstaller,
+) : UpdateSource {
 
     override fun check(): UpdateCheck {
         val release = when (val got = releases.latest(config)) {
@@ -41,7 +45,7 @@ class Updater(private val config: UpdateConfig, private val releases: GitHubRele
         val latest = SemVer.parse(release.tagName)
             ?: return UpdateCheck.Failed(UpdateFailure.BadResponse("the latest tag '${release.tagName}' is not a version"))
         if (release.draft || release.prerelease || latest <= config.currentVersion) return UpdateCheck.UpToDate(config.currentVersion, latest)
-        val installer = installerAsset(release.assets, latest) ?: return UpdateCheck.Failed(UpdateFailure.NoWindowsAsset(release.tagName))
+        val installer = kind.pick(release.assets, latest) ?: return UpdateCheck.Failed(kind.missing(release.tagName))
         return UpdateCheck.Available(AvailableUpdate(config.currentVersion, latest, release, installer, checksumAsset(release.assets, installer)))
     }
 
