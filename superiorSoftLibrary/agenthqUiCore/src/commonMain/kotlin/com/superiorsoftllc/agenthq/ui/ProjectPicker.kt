@@ -3,8 +3,6 @@ package com.superiorsoftllc.agenthq.ui
 import androidx.compose.foundation.background
 import com.superiorsoftllc.agenthq.ui.model.ProjectView
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.Button
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.heightIn
