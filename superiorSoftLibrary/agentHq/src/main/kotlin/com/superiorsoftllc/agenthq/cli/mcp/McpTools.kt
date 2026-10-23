@@ -38,7 +38,7 @@ import kotlinx.serialization.json.putJsonObject
 internal class McpTools(
     private val connect: () -> FrameStream,
     guardrails: McpGuardrails = McpGuardrails(),
-    getenv: (String) -> String? = { null },
+    private val getenv: (String) -> String? = { null },
     /** P11-C: the `projectId` used by `agenthq_spawn` / `agenthq_pod_state` when a call passes none. */
     private val defaultProjectId: String? = null,
 ) {
@@ -67,7 +67,7 @@ internal class McpTools(
         return try {
             runBlocking {
                 when (name) {
-                    LIST_SESSIONS -> listSessions(stream)
+                    LIST_SESSIONS -> listSessions(stream, arguments)
                     GET_SESSION -> getSession(stream, arguments)
                     POD_STATE -> podState(stream, arguments)
                     BOARD -> board(stream, arguments)
@@ -101,8 +101,18 @@ internal class McpTools(
         }
     }
 
-    private suspend fun listSessions(stream: FrameStream): ToolResult {
-        val sessions = fetchSessions(stream)
+    private suspend fun listSessions(stream: FrameStream, arguments: JsonObject): ToolResult {
+        // A SESSION caller (AGENTHQ_SESSION_ID) sees its OWN project by default; explicit "all" lists every project and an
+        // explicit id lists that project. Owner/user callers (no session id) are unaffected: all projects.
+        val requested = (arguments["projectId"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+        val all = fetchSessions(stream)
+        val callerId = getenv("AGENTHQ_SESSION_ID")?.trim()?.takeIf { it.isNotEmpty() }
+        val scope = when {
+            requested == "all" -> null
+            requested != null -> requested
+            else -> callerId?.let { id -> all.firstOrNull { it.id == id }?.projectId }
+        }
+        val sessions = all.filter { scope == null || it.projectId == scope }
         return ok(buildJsonObject {
             put("sessions", JsonArray(sessions.map { summary(it) }))
         })
@@ -339,6 +349,7 @@ internal class McpTools(
         put("role", session.role)
         put("provider", session.provider)
         put("model", session.model)
+        session.projectId?.let { put("projectId", it) }
         put("status", if (session.runPhase == "compacting") "compacting" else session.state.name)
         session.lastAction?.let { put("lastAction", it) }
         session.lastOutputAt?.let { put("lastOutputAt", it) }
@@ -378,9 +389,14 @@ internal class McpTools(
 
         /** `tools/list`: each tool's name, description and JSON Schema for its arguments. */
         fun descriptors(): JsonArray = buildJsonArray {
-            add(tool(LIST_SESSIONS, "List the SESSIONS (running or past agent runs, not saved profiles) the AgentHQ daemon knows: id, agentId, role, provider, model, status.") {
+            add(tool(LIST_SESSIONS, "List the SESSIONS (running or past agent runs, not saved profiles) the AgentHQ daemon knows: id, agentId, role, provider, model, projectId, status.") {
                 put("type", "object")
-                putJsonObject("properties") {}
+                putJsonObject("properties") {
+                    putJsonObject("projectId") {
+                        put("type", "string")
+                        put("description", "Only this project's sessions. Omitted: a session caller's own project (everyone else: all). \"all\" lists every project.")
+                    }
+                }
                 put("additionalProperties", false)
             })
             add(tool(
