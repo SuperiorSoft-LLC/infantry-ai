@@ -1,5 +1,5 @@
 #!/bin/sh
-# AgentHQ CLI launcher for Git Bash on Windows (CLIPATH-2): bash does not run `agenthq.cmd` for a bare `agenthq`.
+# Infantry AI CLI launcher for Git Bash on Windows (CLIPATH-2): bash does not run `agenthq.cmd` for a bare `agenthq`.
 # BUG-CLI-2: this shim starts java itself and never goes through agenthq.cmd, because cmd.exe ends `%*` at the first LF:
 # a multi-line `--desc "a<LF>b"` became "a" and every later argument (`--port N`) was dropped silently. "$@" keeps each
 # argument whole. jpackage layout and java order are agenthq.cmd's: AGENTHQ_JAVA, the bundled runtime's java.exe,

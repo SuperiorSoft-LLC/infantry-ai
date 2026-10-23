@@ -59,7 +59,7 @@ class LocalDirSource(private val dir: File, private val currentVersion: SemVer) 
     }
 
     companion object {
-        private val INSTALLER = Regex("""^AgentHQ-(\d+\.\d+\.\d+)\.msi$""", RegexOption.IGNORE_CASE)
+        private val INSTALLER = Regex("""^(?:InfantryAI|AgentHQ)-(\d+\.\d+\.\d+)\.msi$""", RegexOption.IGNORE_CASE)
     }
 }
 

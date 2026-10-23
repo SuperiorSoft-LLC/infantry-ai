@@ -11,7 +11,7 @@ import java.io.File
  * app again. The caller exits right after [start] returns true.
  *
  * The data survives because it is not in the install dir: the installed profile keeps it in
- * `%LOCALAPPDATA%\SuperiorSoft\AgentHQ` (INSTALL-1), which no uninstall or upgrade touches.
+ * `%LOCALAPPDATA%\SuperiorSoft\Infantry AI` (INSTALL-1), which no uninstall or upgrade touches.
  */
 object MsiHandoff {
     const val SCRIPT_NAME = "apply.cmd"
@@ -27,7 +27,7 @@ object MsiHandoff {
     fun script(pid: Long, msi: File, installDir: File?, relaunch: File?, log: File): String = buildString {
         fun q(f: File) = "\"" + f.absolutePath + "\""
         appendLine("@echo off")
-        appendLine("rem AgentHQ UPDATE-1: wait for AgentHQ (pid $pid) to exit, install the new version, start it again.")
+        appendLine("rem Infantry AI UPDATE-1: wait for Infantry AI (pid $pid) to exit, install the new version, start it again.")
         appendLine("set /a tries=0")
         appendLine(":wait")
         appendLine("tasklist /FI \"PID eq $pid\" /NH 2>nul | find \" $pid \" >nul")
@@ -57,7 +57,7 @@ object MsiHandoff {
         script.writeText(script(pid, installer.file, installDir, relaunch, File(dir, LOG_NAME)).replace("\n", "\r\n"))
         // `start` gives the script its own console process, so it outlives this JVM. `cmd.exe /c` explicitly: `start` on
         // a bare .cmd runs it under `cmd /K`, which would leave the console window open after the update.
-        ProcessBuilder("cmd.exe", "/c", "start", "\"AgentHQ update\"", "/min", "cmd.exe", "/c", script.absolutePath)
+        ProcessBuilder("cmd.exe", "/c", "start", "\"Infantry AI update\"", "/min", "cmd.exe", "/c", script.absolutePath)
             .directory(dir)
             .redirectOutput(ProcessBuilder.Redirect.DISCARD)
             .redirectError(ProcessBuilder.Redirect.DISCARD)

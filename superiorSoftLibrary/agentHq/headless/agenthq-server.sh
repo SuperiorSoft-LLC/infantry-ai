@@ -1,5 +1,5 @@
 #!/bin/sh
-# AgentHQ headless daemon (no UI). Java: the bundled runtime/ first, then JAVA_HOME, then `java` on PATH (21+).
+# Infantry AI headless daemon (no UI). Java: the bundled runtime/ first, then JAVA_HOME, then `java` on PATH (21+).
 # Configure with AGENTHQ_* environment variables (README.txt next to bin/); extra JVM flags go in AGENTHQ_JAVA_OPTS.
 APP_HOME=$(cd "$(dirname "$0")/.." && pwd -P) || exit 1
 if [ -x "$APP_HOME/runtime/bin/java" ]; then

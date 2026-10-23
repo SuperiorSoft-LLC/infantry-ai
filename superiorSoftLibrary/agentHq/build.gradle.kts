@@ -44,6 +44,17 @@ application {
     applicationName = "agenthq"
 }
 
+// Infantry AI: `infantry` is the product-name launcher; `agenthq` stays (agents, scripts and prompts still call it).
+// Same script and classpath, copied next to the generated ones.
+tasks.named<CreateStartScripts>("startScripts") {
+    doLast {
+        listOf("agenthq", "agenthq.bat").forEach { n ->
+            val src = File(outputDir, n)
+            if (src.isFile) src.copyTo(File(outputDir, n.replace("agenthq", "infantry")), overwrite = true)
+        }
+    }
+}
+
 dependencies {
     // Everything here is already in the version catalog via :superiorSoftService -- no new
     // coordinates are introduced.
@@ -299,7 +310,7 @@ tasks.register("perfProfile") {
 
 // DOCKER-1: the build context for the headless daemon image: `agenthq/` (installDist) + the Dockerfile. Nothing is pushed.
 //   ./gradlew :superiorSoftLibrary:agentHq:dockerContext
-//   docker build -t infantryai/agenthq:dev superiorSoftLibrary/agentHq/build/docker
+//   docker build -t infantryai/infantry-ai:dev superiorSoftLibrary/agentHq/build/docker
 tasks.register<Sync>("dockerContext") {
     group = "distribution"
     description = "DOCKER-1: assembles the Docker build context (installDist + docker/Dockerfile) in build/docker."
@@ -312,7 +323,7 @@ tasks.register<Sync>("dockerContext") {
 // HEADLESS-DIST-1: the downloadable server, no Docker and no Java install needed. The archive is installDist (lib/ and the
 // `agenthq` CLI) + bin/agenthq-server.{sh,bat} (the daemon) + runtime/ (a jlink JRE for THIS build machine's OS/arch) +
 // README.txt. Release CI builds it once per OS (release.yml `headless`).
-//   ./gradlew :superiorSoftLibrary:agentHq:headlessDist   -> build/distributions/AgentHQ-server-<version>-<os>-<arch>.{zip|tar.gz}
+//   ./gradlew :superiorSoftLibrary:agentHq:headlessDist   -> build/distributions/InfantryAI-server-<version>-<os>-<arch>.{zip|tar.gz}
 val headlessVersion: String = providers.gradleProperty("agenthqVersion").getOrElse("dev")
 val headlessOs: String = System.getProperty("os.name").lowercase().let {
     when {
@@ -322,7 +333,7 @@ val headlessOs: String = System.getProperty("os.name").lowercase().let {
     }
 }
 val headlessArch: String = System.getProperty("os.arch").let { if (it == "amd64" || it == "x86_64") "x64" else it }
-val headlessBaseName = "AgentHQ-server-$headlessVersion-$headlessOs-$headlessArch"
+val headlessBaseName = "InfantryAI-server-$headlessVersion-$headlessOs-$headlessArch"
 val headlessJdk = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) }
 
 val headlessRuntime = tasks.register<Exec>("headlessRuntime") {

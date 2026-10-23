@@ -1,5 +1,5 @@
 #!/bin/sh
-# AgentHQ CLI launcher shipped with the INSTALLED app (CLIPATH-2).
+# Infantry AI CLI launcher shipped with the INSTALLED app (CLIPATH-2).
 # jpackage layout: <app>/resources/agenthq (this file), <app>/*.jar (the app classpath, :agentHq included), and the
 # bundled runtime at ../../runtime (Linux: lib/runtime) or ../../runtime/Contents/Home (macOS: Contents/runtime).
 # The daemon puts this directory first on every session's PATH and exports it as AGENTHQ_BIN.

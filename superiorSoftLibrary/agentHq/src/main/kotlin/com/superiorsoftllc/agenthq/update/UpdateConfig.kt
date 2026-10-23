@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.update
 
+import com.superiorsoftllc.agenthq.session.InfantryEnv
+
 import java.io.File
 import java.util.Properties
 import java.util.concurrent.TimeUnit
@@ -75,7 +77,7 @@ sealed interface UpdateSettings {
             version: String?,
             stateDir: File?,
             setting: (String) -> String?,
-            env: (String) -> String? = System::getenv,
+            env: (String) -> String? = InfantryEnv::get,
             keystore: () -> String? = { null },
             credentialStore: () -> String? = { GitCredentialStore.githubToken() },
         ): UpdateSettings {
