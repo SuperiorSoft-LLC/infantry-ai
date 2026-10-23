@@ -34,7 +34,7 @@ class DecisionWireTest {
 
     @Test
     fun theContractIs1_54_0() {
-        assertEquals("1.106.0", EventVocabulary.VERSION)
+        assertEquals("1.107.0", EventVocabulary.VERSION)
     }
 
     @Test

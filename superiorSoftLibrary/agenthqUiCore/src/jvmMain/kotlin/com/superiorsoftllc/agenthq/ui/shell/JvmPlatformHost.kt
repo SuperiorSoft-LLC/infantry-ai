@@ -64,6 +64,19 @@ class JvmPlatformHost(
     /** PAIR-1: "Open image": ZXing decodes the QR in a picture. */
     override fun decodeQrImage(bytes: ByteArray): String? = com.superiorsoftllc.agenthq.ui.pair.QrImageDecoder.decode(bytes)
 
+    /** USER-PORTRAIT: Skia decodes PNG, JPEG and WebP alike; the square centre crop is drawn at [side] px. */
+    override fun portraitPng(bytes: ByteArray, side: Int): ByteArray? = runCatching {
+        val image = org.jetbrains.skia.Image.makeFromEncoded(bytes)
+        val edge = minOf(image.width, image.height)
+        val src = org.jetbrains.skia.Rect.makeXYWH(((image.width - edge) / 2).toFloat(), ((image.height - edge) / 2).toFloat(), edge.toFloat(), edge.toFloat())
+        val surface = org.jetbrains.skia.Surface.makeRasterN32Premul(side, side)
+        surface.canvas.drawImageRect(
+            image, src, org.jetbrains.skia.Rect.makeWH(side.toFloat(), side.toFloat()),
+            org.jetbrains.skia.SamplingMode.DEFAULT, null, true,
+        )
+        surface.makeImageSnapshot().encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG)?.bytes
+    }.getOrNull()
+
     override fun readBytes(path: String): ByteArray? = runCatching { File(path).takeIf { it.isFile }?.readBytes() }.getOrNull()
 
     override fun fileExists(path: String): Boolean? = runCatching { File(path).isFile }.getOrNull()

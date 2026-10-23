@@ -24,11 +24,11 @@ class ChatAvatarUiTest {
                 }
             }
             // One avatar per message: the agent's role portrait (M2-1: its role, never its name "SM")
-            // and the human's own disc ("You" -> a single initial).
+            // and the human's own portrait (USER-PORTRAIT: the bundled default, not a "Y" placeholder).
             onAllNodesWithTag(AVATAR_TAG).assertCountEquals(2)
             onNodeWithContentDescription("qa avatar").assertExists()
             onNodeWithText("SM").assertDoesNotExist()
-            onNodeWithText("Y").assertExists()
+            onNodeWithContentDescription("your portrait").assertExists()
         }
     }
 }

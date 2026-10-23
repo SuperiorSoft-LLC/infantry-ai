@@ -42,8 +42,30 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
             QUESTIONS_MAX_PER_HOUR to JsonPrimitive(questionsMaxPerHour()),
             TICKET_EXIT_BEHAVIOR to JsonPrimitive(ticketExitBehavior()),
             TICKET_WEIGHT_EXECUTORS to weightExecutors().toJson(),
-        ),
+        ) + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
     )
+
+    /** USER-PORTRAIT (1.107.0): the stored base64 portrait, or null while unset (clients then show their bundled default). */
+    fun userPortrait(): String? = store.settings.get(USER_PORTRAIT)?.value
+        ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.getOrNull() }
+        ?.takeIf { it.isNotEmpty() }
+
+    private fun requireUserPortrait(value: JsonElement): String {
+        val text = (value as? JsonPrimitive)?.takeIf { it.isString }?.content
+            ?: throw IllegalArgumentException("setting '$USER_PORTRAIT' must be a base64 string (\"\" clears it)")
+        if (text.isEmpty()) return text
+        val bytes = try {
+            java.util.Base64.getDecoder().decode(text)
+        } catch (e: IllegalArgumentException) {
+            throw IllegalArgumentException("setting '$USER_PORTRAIT' is not valid base64")
+        }
+        try {
+            com.superiorsoftllc.agenthq.role.AvatarUploads.validate(bytes)
+        } catch (e: com.superiorsoftllc.agenthq.role.InvalidAvatarException) {
+            throw IllegalArgumentException("setting '$USER_PORTRAIT': ${e.message}")
+        }
+        return text
+    }
 
     /** TICKET-WEIGHT: the weight -> executor mapping, read at every start; an unreadable stored value falls back to the default. */
     fun weightExecutors(): WeightExecutors {
@@ -80,6 +102,7 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
             } catch (e: IllegalArgumentException) {
                 throw IllegalArgumentException("setting '$TICKET_WEIGHT_EXECUTORS' ${e.message}")
             }
+            USER_PORTRAIT -> JsonPrimitive(requireUserPortrait(value))
             else -> throw IllegalArgumentException("unknown setting '$key'")
         }
         store.settings.put(
@@ -199,6 +222,8 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
         const val INCLUDE_SKILLS_CONTEXT = "context.includeSkillsContext"
         const val SKILL_IDS = "context.skillIds"
         const val KEEP_ALIVE_MINUTES = "session.keepAliveMinutes"
+        /** USER-PORTRAIT: base64 PNG/WebP (<= 256 KB) of the human's portrait; "" clears it. */
+        const val USER_PORTRAIT = "user.portrait"
         const val PROMPTS_TIMEOUT_SEC = "prompts.timeoutSec"
         const val DEFAULT_PROMPT_TIMEOUT_SEC = 600
         const val CHAT_IMAGE_RETENTION_DAYS = "images.chatImageRetentionDays"
