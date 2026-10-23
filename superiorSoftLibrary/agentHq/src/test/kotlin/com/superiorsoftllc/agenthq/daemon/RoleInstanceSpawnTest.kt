@@ -288,7 +288,7 @@ class RoleInstanceSpawnTest {
     private companion object {
         const val PERSONA = "You are the backend agent."
         const val IDENTITY =
-            "You are running inside AgentHQ as role 'backend', agent id 'backend'. " +
+            "You are running inside Infantry AI as role 'backend', agent id 'backend'. " +
                 "Your environment carries the same identity (AGENTHQ_ROLE, AGENTHQ_AGENT_ID, AGENTHQ_SESSION_ID)."
 
         /** Role list first (`report-back`), then the agent's additions (`tdd`; its duplicate `report-back` dropped). */

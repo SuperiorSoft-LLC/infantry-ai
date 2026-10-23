@@ -7,7 +7,7 @@
          restored backup could not decrypt it anyway; backing it up only spreads ciphertext. -->
     <application
         android:allowBackup="false"
-        android:label="AgentHQ"
+        android:label="Infantry AI"
         android:theme="@style/Theme.AgentHq"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">

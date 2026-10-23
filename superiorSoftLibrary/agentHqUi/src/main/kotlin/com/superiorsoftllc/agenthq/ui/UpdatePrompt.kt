@@ -56,7 +56,7 @@ fun UpdatePrompt(service: UpdateService) {
             AlertDialog(
                 onDismissRequest = { if (!busy) service.dismiss() },
                 modifier = Modifier.testTag(UPDATE_DIALOG_TAG),
-                title = { Text("AgentHQ ${update.latest} is available", fontWeight = FontWeight.Bold) },
+                title = { Text("Infantry AI ${update.latest} is available", fontWeight = FontWeight.Bold) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Text("You are running ${update.current}.", color = Palette.Muted, fontSize = 12.sp)
@@ -65,7 +65,7 @@ fun UpdatePrompt(service: UpdateService) {
                         }
                         when (state) {
                             is UpdateState.Downloading -> Text("Downloading and verifying ${update.installer.name}…", color = Palette.Info, fontSize = 12.sp)
-                            is UpdateState.Restarting -> Text("Installing; AgentHQ restarts on its own. Your data stays where it is.", color = Palette.Ok, fontSize = 12.sp)
+                            is UpdateState.Restarting -> Text("Installing; Infantry AI restarts on its own. Your data stays where it is.", color = Palette.Ok, fontSize = 12.sp)
                             else -> Unit
                         }
                     }
@@ -91,17 +91,17 @@ fun UpdatePrompt(service: UpdateService) {
                 onDismissRequest = { confirming = null },
                 modifier = Modifier.testTag(UPDATE_RUNNING_TAG),
                 title = { Text(prompt.message ?: "", fontWeight = FontWeight.Bold) },
-                text = { Text("Installing closes AgentHQ and stops them.", fontSize = 12.sp, color = Palette.Muted) },
+                text = { Text("Installing closes Infantry AI and stops them.", fontSize = 12.sp, color = Palette.Muted) },
                 confirmButton = { TextButton(onClick = { confirming = null }, modifier = Modifier.testTag(UPDATE_CANCEL_TAG)) { Text("Cancel", fontWeight = FontWeight.Bold) } },
                 dismissButton = { TextButton(onClick = { confirming = null; service.update() }, modifier = Modifier.testTag(UPDATE_ANYWAY_TAG)) { Text("Update anyway") } },
             )
         }
         when (val s = state) {
             is UpdateState.Checking -> if (s.manual) UpdateCard("Checking for updates…", dismiss = null)
-            is UpdateState.UpToDate -> UpdateCard("AgentHQ ${s.current} is up to date.", dismiss = { service.dismiss() })
+            is UpdateState.UpToDate -> UpdateCard("Infantry AI ${s.current} is up to date.", dismiss = { service.dismiss() })
             is UpdateState.Message -> UpdateCard(s.text, dismiss = { service.dismiss() })
             is UpdateState.Available -> if (toast && !dialogOpen) {
-                UpdateCard("AgentHQ ${s.update.latest} is available.", dismiss = { service.dismissToast() }, action = "View" to { service.openDialog() })
+                UpdateCard("Infantry AI ${s.update.latest} is available.", dismiss = { service.dismissToast() }, action = "View" to { service.openDialog() })
             }
             else -> Unit
         }

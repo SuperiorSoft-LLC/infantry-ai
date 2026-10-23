@@ -124,7 +124,7 @@ fun AndroidConnectGate(
                     Text(
                         if (pairLink != null) "${pairLink.name ?: PairingHosts.labelOf(pairLink.url)} at ${PairingHosts.labelOf(pairLink.url)}. " +
                             "It replaces your saved connection and signs in with the token in the link."
-                        else "This is not a valid AgentHQ pairing link.",
+                        else "This is not a valid Infantry AI pairing link.",
                     )
                 },
                 confirmButton = {
@@ -212,7 +212,7 @@ fun ConnectForm(
                 Modifier.widthIn(max = 480.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("Connect to AgentHQ", style = MaterialTheme.typography.headlineSmall)
+                Text("Connect to Infantry AI", style = MaterialTheme.typography.headlineSmall)
                 Text(
                     "Enter your daemon's WebSocket URL and bearer token. Over Tailscale, use the machine's tailnet " +
                         "address, for example ws://100.64.0.1:8787/ws.",

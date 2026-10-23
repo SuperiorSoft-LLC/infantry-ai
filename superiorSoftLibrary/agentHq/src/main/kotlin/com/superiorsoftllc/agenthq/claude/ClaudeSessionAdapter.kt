@@ -191,7 +191,7 @@ class ClaudeSessionAdapter(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        deny("AgentHQ could not relay this request: ${e.message ?: e.javaClass.simpleName}")
+                        deny("Infantry AI could not relay this request: ${e.message ?: e.javaClass.simpleName}")
                     }
                     write(controlResponseLine(id, response))
                 } finally {

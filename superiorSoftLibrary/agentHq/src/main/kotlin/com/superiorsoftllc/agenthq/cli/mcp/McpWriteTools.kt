@@ -415,7 +415,7 @@ internal class McpWriteTools(
     }
 
     /**
-     * Mail through the AgentHQ mailbox, exactly as `agenthq send` does it: the sender is the session named by
+     * Mail through the Infantry AI mailbox, exactly as `agenthq send` does it: the sender is the session named by
      * `AGENTHQ_SESSION_ID` (the daemon exports it into every spawned agent), else the human handle `user`;
      * the answer is the LAST `mail`/`mail_refused` frame before the `mail_outbox` fence.
      */
@@ -540,7 +540,7 @@ internal class McpWriteTools(
         fun descriptors() = buildJsonArray {
             add(tool(
                 SPAWN,
-                "Spawn an AgentHQ session for a role and/or an agent profile, optionally sending it a first task, " +
+                "Spawn an Infantry AI session for a role and/or an agent profile, optionally sending it a first task, " +
                     "OUTSIDE the board: it runs in the project folder and leaves every ticket untouched. Never use it " +
                     "for ticket work: start ticket work with ${McpTicketTools.START} (or pass ticketId here, which does " +
                     "the same), so the worker runs the ticket's role, provider and model on its own ticket branch and " +
@@ -576,7 +576,7 @@ internal class McpWriteTools(
             ))
             add(tool(
                 MESSAGE,
-                "Send AgentHQ mailbox mail to an agent id, a role (of the sender's project) or a session id.",
+                "Send Infantry AI mailbox mail to an agent id, a role (of the sender's project) or a session id.",
                 destructive = false,
                 properties = {
                     put("to", prop("string", "Recipient: agent id, role, or session id."))

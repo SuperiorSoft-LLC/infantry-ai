@@ -188,7 +188,7 @@ class KnowledgeFirstTurnTest {
         const val PROJECT = "proj-kn"
         const val PERSONA = "You are the backend agent."
         const val IDENTITY =
-            "You are running inside AgentHQ as role 'backend', agent id 'backend'. " +
+            "You are running inside Infantry AI as role 'backend', agent id 'backend'. " +
                 "Your environment carries the same identity (AGENTHQ_ROLE, AGENTHQ_AGENT_ID, AGENTHQ_SESSION_ID)."
         const val TRAITS_BLOCK = "Standing rules bound to your role (they apply to this whole session):\n\n## TDD (tdd v1)\nred first"
         /** ROLE-NOTES-1: the non-ticket first turns add the role-notes line for a role with no notes yet. */

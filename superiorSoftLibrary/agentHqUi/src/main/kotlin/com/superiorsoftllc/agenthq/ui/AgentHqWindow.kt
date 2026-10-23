@@ -40,7 +40,7 @@ import java.awt.Toolkit
 internal val MIN_SIZE = Dimension(900, 560)
 
 /**
- * M2-6: the AgentHQ desktop window, undecorated: no white OS title bar, the app's dark [TitleBar] is the
+ * M2-6: the Infantry AI desktop window, undecorated: no white OS title bar, the app's dark [TitleBar] is the
  * title bar. It gets the window actions through [LocalWindowChrome], moves the window when its empty area is
  * dragged, and the window is resized from its edges by [ResizeHandles] (an undecorated AWT frame has no native
  * resize border on Windows, so `resizable = true` alone would leave it fixed-size).
@@ -48,9 +48,9 @@ internal val MIN_SIZE = Dimension(900, 560)
 @Composable
 fun ApplicationScope.AgentHqWindow(onCloseRequest: () -> Unit, content: @Composable () -> Unit) {
     val state = rememberWindowState(size = DpSize(1400.dp, 860.dp))
-    // APP-ICON-1: the AgentHQ "A" mark on the title bar's taskbar entry and Alt-Tab, not the runtime default.
+    // APP-ICON-1: the Infantry AI "A" mark on the title bar's taskbar entry and Alt-Tab, not the runtime default.
     val icon = remember { AppIcon.painter() }
-    Window(onCloseRequest = onCloseRequest, icon = icon, state = state, title = "AgentHQ", undecorated = true, resizable = true) {
+    Window(onCloseRequest = onCloseRequest, icon = icon, state = state, title = "Infantry AI", undecorated = true, resizable = true) {
         val frame = window
         LaunchedEffect(frame) { frame.minimumSize = MIN_SIZE }
         // INSTALL-REFOCUS-1: what a refused second launch's activation brings forward (only the installed app routes it).

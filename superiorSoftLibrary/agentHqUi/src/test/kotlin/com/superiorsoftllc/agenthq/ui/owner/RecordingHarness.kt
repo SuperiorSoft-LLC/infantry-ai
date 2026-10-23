@@ -47,7 +47,7 @@ object RecordingHarness {
     private const val HOLD_MS = 240_000L
     private const val PROMPT_WAIT_MS = 5_000L
 
-    /** `You are running inside AgentHQ. Ticket: <id>. Project: ...` (TicketContextComposer's first line). */
+    /** `You are running inside Infantry AI. Ticket: <id>. Project: ...` (TicketContextComposer's first line). */
     private val TICKET = Regex("""Ticket: ([^\s.]+)\.""")
 
     @JvmStatic

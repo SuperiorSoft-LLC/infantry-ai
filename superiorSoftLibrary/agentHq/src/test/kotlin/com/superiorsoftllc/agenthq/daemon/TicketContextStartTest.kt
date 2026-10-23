@@ -45,7 +45,7 @@ class TicketContextStartTest {
             fixture.client.moveTicket(ticket.id, TicketStatus.IN_PROGRESS)
 
             val prompt = gated.prompts.singleOrNull() ?: error("no prompt reached the provider; got ${gated.prompts}")
-            val agenthqPrefix = "You are running inside AgentHQ. Ticket: ${ticket.id}. Project: proj-k0. AgentHQ tickets, agents, mail and project knowledge live in the AgentHQ daemon and are reached with the `agenthq` CLI, never through files. See superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md."
+            val agenthqPrefix = "You are running inside Infantry AI. Ticket: ${ticket.id}. Project: proj-k0. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `agenthq` CLI, never through files. See superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md."
             assertTrue(prompt.startsWith(agenthqPrefix), "agenthq section goes first: ${prompt.take(120)}")
             assertTrue(prompt.contains(instructions), "the persona is included: ${prompt.take(120)}")
             assertTrue(prompt.contains(title), "the title is verbatim")
@@ -82,7 +82,7 @@ class TicketContextStartTest {
 
             val prompt = gated.prompts.singleOrNull() ?: error("no prompt reached the provider; got ${gated.prompts}")
             assertTrue(
-                prompt.startsWith("You are running inside AgentHQ. Ticket: ${ticket.id}. Project: none. "),
+                prompt.startsWith("You are running inside Infantry AI. Ticket: ${ticket.id}. Project: none. "),
                 "a projectless ticket says none: ${prompt.take(120)}",
             )
         } finally {

@@ -40,7 +40,7 @@ class SkillsTest {
                 SKILLS_HEADER,
                 "Attached to you (always available; follow a skill whenever its description applies to your work):",
                 "### Skill: tdd\nUse when writing code.\nRED first.\nThen GREEN.",
-                "Other skills in the AgentHQ daemon, one `name: description` line each. When a description matches your " +
+                "Other skills in the Infantry AI daemon, one `name: description` line each. When a description matches your " +
                     "work, run `agenthq skill show <name>` and follow it:",
                 "- alpha: Use when a. Two lines.",
                 "- zeta: Use when z.",

@@ -409,6 +409,6 @@ fun identityLine(role: String?, agentId: String?): String? {
     )
     if (facts.isEmpty()) return null
     val variables = facts.map { it.second } + AccessPolicy.SESSION_ID_ENV
-    return "You are running inside AgentHQ as ${facts.joinToString(", ") { it.first }}. " +
+    return "You are running inside Infantry AI as ${facts.joinToString(", ") { it.first }}. " +
         "Your environment carries the same identity (${variables.joinToString(", ")})."
 }

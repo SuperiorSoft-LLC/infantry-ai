@@ -34,7 +34,7 @@ class PairingLink(val url: String, val token: String?, val name: String? = null)
 
         fun parse(text: String): Parsed {
             val clean = text.trim()
-            if (!clean.startsWith(PREFIX, ignoreCase = true)) return Parsed.Bad("Not an AgentHQ pairing link.")
+            if (!clean.startsWith(PREFIX, ignoreCase = true)) return Parsed.Bad("Not an Infantry AI pairing link.")
             val params = HashMap<String, String>()
             for (part in clean.substring(PREFIX.length).substringBefore('#').split('&')) {
                 if (part.isEmpty()) continue

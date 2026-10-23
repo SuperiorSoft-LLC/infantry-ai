@@ -455,7 +455,7 @@ class DaemonIntegrationTest {
         }
         assertEquals(
             LineKind.USER to "You clean data.\n\n" +
-                "You are running inside AgentHQ as role 'data-wrangler', agent id '${profile.id}'. " +
+                "You are running inside Infantry AI as role 'data-wrangler', agent id '${profile.id}'. " +
                 "Your environment carries the same identity (AGENTHQ_ROLE, AGENTHQ_AGENT_ID, AGENTHQ_SESSION_ID).\n\n" +
                 "tidy this table",
             started.selected!!.output.first().let { it.kind to it.text },

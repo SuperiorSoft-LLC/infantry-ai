@@ -14,7 +14,7 @@ import java.io.BufferedReader
 import java.io.Flushable
 
 /**
- * `agenthq mcp serve`: AgentHQ as an MCP server over stdio (Phase 11, slice P11-A).
+ * `agenthq mcp serve`: Infantry AI as an MCP server over stdio (Phase 11, slice P11-A).
  *
  * TRANSPORT. MCP's stdio transport: one JSON-RPC 2.0 message per line on stdin, one per line on stdout.
  * Stdout carries the protocol and NOTHING else -- a stray log line there is a parse error on the client
@@ -105,7 +105,7 @@ internal class McpServer(
             })
             put(
                 "instructions",
-                "AgentHQ daemon: list sessions, inspect one session's status and transcript, summarise the " +
+                "Infantry AI daemon: list sessions, inspect one session's status and transcript, summarise the " +
                     "agents/roles of the pod; spawn, prompt and kill sessions and send mailbox mail, within this " +
                     "server's depth, concurrency and kill-scope guardrails; create, update and read board tickets. " +
                     "To put an agent to work on a ticket, pin its role / provider / model (agenthq_list_harnesses " +
@@ -125,7 +125,7 @@ internal class McpServer(
     companion object {
         const val SERVER_NAME = "agenthq"
 
-        /** The daemon contract this server speaks; AgentHQ has no separate product version string. */
+        /** The daemon contract this server speaks; Infantry AI has no separate product version string. */
         val SERVER_VERSION: String = EventVocabulary.VERSION
 
         /** Newest first: an unknown requested version is answered with the newest we speak. */

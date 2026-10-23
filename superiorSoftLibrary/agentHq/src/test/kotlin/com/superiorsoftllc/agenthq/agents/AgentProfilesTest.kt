@@ -406,7 +406,7 @@ class AgentProfilesTest {
         )
         // BUG-808ce596: a spawn with a role (and agent) but no persona still opens with who it runs as.
         assertEquals(
-            "You are running inside AgentHQ as role 'qa', agent id 'qa'. " +
+            "You are running inside Infantry AI as role 'qa', agent id 'qa'. " +
                 "Your environment carries the same identity (AGENTHQ_ROLE, AGENTHQ_AGENT_ID, AGENTHQ_SESSION_ID).\n\n" +
                 "add an endpoint",
             ResolvedSpawn(agentId = "qa", role = "qa").firstPrompt("add an endpoint"),

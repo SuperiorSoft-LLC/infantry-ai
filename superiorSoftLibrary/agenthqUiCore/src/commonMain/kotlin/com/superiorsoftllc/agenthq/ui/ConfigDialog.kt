@@ -330,7 +330,7 @@ private fun LogsSection(logs: LogsFolder) {
 }
 
 const val SECRETS_TITLE = "Secrets"
-const val SECRETS_APPLIES_TO = "Stored encrypted by the AgentHQ daemon. A saved secret is never shown again, only whether it is set"
+const val SECRETS_APPLIES_TO = "Stored encrypted by the Infantry AI daemon. A saved secret is never shown again, only whether it is set"
 
 /** SECRETS-1: what the Secrets section can ask of the daemon. */
 class SecretActions(val set: (name: String, value: String) -> Unit, val clear: (name: String) -> Unit, val import: (name: String) -> Unit)
@@ -389,7 +389,7 @@ const val SECRET_IMPORT_TAG = "secret-import"
 class UpdatesEntry(val version: String, val check: () -> Unit) {
     companion object {
         const val TITLE = "Updates"
-        const val APPLIES_TO = "New AgentHQ releases on GitHub. Also checked at every start"
+        const val APPLIES_TO = "New Infantry AI releases on GitHub. Also checked at every start"
     }
 }
 

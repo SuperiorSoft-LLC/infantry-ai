@@ -80,14 +80,14 @@ private val NL = 10.toChar().toString()
 fun renderKnowledge(projectId: String?, counts: KnowledgeCounts): String? {
     val project = projectId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
     if (counts.isEmpty) {
-        return "PROJECT KNOWLEDGE. Project $project has an empty knowledge base in the AgentHQ daemon. " +
+        return "PROJECT KNOWLEDGE. Project $project has an empty knowledge base in the Infantry AI daemon. " +
             "Record what a later session must not re-derive: `agenthq decision add` for a choice, " +
             "`agenthq issue open|attempt|fix` for a bug, `agenthq memory save` for anything else."
     }
     if (counts.digest != null) return renderInjected(project, counts, counts.digest)
     return listOf(
         "PROJECT KNOWLEDGE (this applies to your whole session, including after a context compaction). " +
-            "Project $project keeps a shared knowledge base in the AgentHQ daemon: ${counts.notes} notes, " +
+            "Project $project keeps a shared knowledge base in the Infantry AI daemon: ${counts.notes} notes, " +
             "${counts.activeDecisions} active decisions, ${counts.openIssues} open issues.",
         "Before you explore the code, and before you decide anything an earlier session may already have decided, " +
             "run `agenthq knowledge`: it lists the active decisions, the open issues and the note index. Then walk down: " +
@@ -159,7 +159,7 @@ private const val MORE_HINT = "run `agenthq knowledge`"
 
 /**
  * BUG-G2e-1: read before the digest's first entry. A harness can add recalled memory of its own to the turn (QA-G2e: a
- * user-global opencode plugin prepended a `<memory>` block restating a SUPERSEDED decision), which AgentHQ can neither
+ * user-global opencode plugin prepended a `<memory>` block restating a SUPERSEDED decision), which Infantry AI can neither
  * see nor reorder, so the digest itself says it wins over that recall.
  */
 internal const val DIGEST_AUTHORITY =
@@ -197,7 +197,7 @@ private fun String.isHeading(): Boolean = this == "ACTIVE DECISIONS" || this == 
 
 private fun renderInjected(project: String, counts: KnowledgeCounts, digest: KnowledgeDigest): String = listOf(
     "PROJECT KNOWLEDGE (this applies to your whole session, including after a context compaction). " +
-        "Project $project keeps a shared knowledge base in the AgentHQ daemon: ${counts.notes} notes, " +
+        "Project $project keeps a shared knowledge base in the Infantry AI daemon: ${counts.notes} notes, " +
         "${counts.activeDecisions} active decisions, ${counts.openIssues} open issues. " +
         "Its digest is below: you do not need to fetch it before you start.",
     DIGEST_AUTHORITY,

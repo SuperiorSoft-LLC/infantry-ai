@@ -259,10 +259,10 @@ class RoleSpawnIdentityTest {
         /** ROLE-EDIT-1: a role-only spawn now carries its role's persona (the bundled qa.md) ahead of the identity. */
         val QA_PERSONA: String = com.superiorsoftllc.agenthq.role.RoleCatalog.load().persona("qa")!!
         const val ROLE_ONLY_IDENTITY =
-            "You are running inside AgentHQ as role 'qa'. " +
+            "You are running inside Infantry AI as role 'qa'. " +
                 "Your environment carries the same identity (AGENTHQ_ROLE, AGENTHQ_SESSION_ID)."
         const val PROFILE_IDENTITY =
-            "You are running inside AgentHQ as role 'backend', agent id 'backend'. " +
+            "You are running inside Infantry AI as role 'backend', agent id 'backend'. " +
                 "Your environment carries the same identity (AGENTHQ_ROLE, AGENTHQ_AGENT_ID, AGENTHQ_SESSION_ID)."
     }
 }

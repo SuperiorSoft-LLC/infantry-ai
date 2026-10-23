@@ -65,7 +65,7 @@ fun showableLink(rawUrl: String, token: String?, name: String?): PairingLink.Res
     if (token.isNullOrBlank() && PairingLink.isLoopbackUrl(rawUrl)) {
         PairingLink.Result.Refused(
             "This server only accepts connections from this machine, so another device cannot reach it. " +
-                "Turn on remote access (run `agenthq remote on`, then restart AgentHQ) and it will show a code here.",
+                "Turn on remote access (run `agenthq remote on`, then restart Infantry AI) and it will show a code here.",
         )
     } else {
         PairingLink.forShow(rawUrl, token, name)

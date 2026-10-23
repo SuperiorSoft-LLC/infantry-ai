@@ -102,7 +102,7 @@ internal class McpMailTools(private val getenv: (String) -> String?) {
                 put("name", INBOX)
                 put(
                     "description",
-                    "List the AgentHQ mailbox mail addressed to you (this session, or the human handle outside one): " +
+                    "List the Infantry AI mailbox mail addressed to you (this session, or the human handle outside one): " +
                         "id, from, subject, state, read, and a one-line preview, oldest first. Read one in full with $READ.",
                 )
                 put("inputSchema", buildJsonObject {
