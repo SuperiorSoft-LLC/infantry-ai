@@ -80,6 +80,18 @@ class ConnectionStore(private val plain: KeyValueStore, private val secure: KeyV
     }
 }
 
+/** PAIR-1: [ConnectionStore] as the shared [com.superiorsoftllc.agenthq.ui.pair.SavedServers]; one slot, the latest server wins. */
+class ConnectionSavedServers(private val store: ConnectionStore) : com.superiorsoftllc.agenthq.ui.pair.SavedServers {
+    override fun list(): List<com.superiorsoftllc.agenthq.ui.pair.SavedServer> =
+        listOfNotNull(store.load()?.let { com.superiorsoftllc.agenthq.ui.pair.SavedServer(com.superiorsoftllc.agenthq.ui.pair.PairingHosts.labelOf(it.url), it.url, it.token) })
+
+    override fun save(server: com.superiorsoftllc.agenthq.ui.pair.SavedServer) = store.save(server.url, server.token)
+
+    override fun remove(url: String) {
+        if (store.load()?.url == url) store.clear()
+    }
+}
+
 /** MOBILE-CONNECT-1: what the activity shows first. */
 sealed interface LaunchDecision {
     /** Nothing saved and no Intent extras: the connect screen. */

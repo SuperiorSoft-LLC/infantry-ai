@@ -13,7 +13,13 @@ class AndroidPlatformHost(
     override val onChangeConnection: (() -> Unit)? = null,
     /** VOICE-1: Android TextToSpeech, built by the entry point that has a Context; null = toast only. */
     override val speaker: com.superiorsoftllc.agenthq.ui.voice.Speaker? = null,
+    /** PAIR-1: the Android store (URL in prefs, token sealed by the Keystore); one slot, so it keeps the latest server. */
+    override val savedServers: com.superiorsoftllc.agenthq.ui.pair.SavedServers? = null,
 ) : PlatformHost {
+    /** PAIR-1: the phone camera, CameraX into ML Kit's bundled model. */
+    override val qrScanner: (@androidx.compose.runtime.Composable (onCode: (String) -> Unit, onClose: () -> Unit) -> Unit)? =
+        { onCode, onClose -> com.superiorsoftllc.agenthq.ui.pair.CameraQrScanner(onCode, onClose) }
+
     override val defaultDaemonUrl: String = "ws://10.0.2.2:8787/ws"
     override fun setting(key: String): String? = settings[key]
     override fun readTextFile(path: String): String? = runCatching { File(path).readText() }.getOrNull()

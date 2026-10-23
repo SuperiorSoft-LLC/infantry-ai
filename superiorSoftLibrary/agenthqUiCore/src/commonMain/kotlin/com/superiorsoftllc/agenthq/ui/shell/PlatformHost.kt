@@ -65,6 +65,18 @@ interface PlatformHost {
      * (Android: back to its own ConnectScreen). Null keeps the dialog (desktop).
      */
     val onChangeConnection: (() -> Unit)? get() = null
+
+    /** PAIR-1: where a paired server and its token are kept (sealed); null = this host keeps none. */
+    val savedServers: com.superiorsoftllc.agenthq.ui.pair.SavedServers? get() = null
+
+    /** PAIR-1: this machine's own IPv4/IPv6 addresses, for a pairing link when the server is on loopback. Empty = unknown. */
+    fun localAddresses(): List<String> = emptyList()
+
+    /** PAIR-1: a camera scanner (calls `onCode` with the decoded text, `onClose` on cancel); null = no camera here. */
+    val qrScanner: (@androidx.compose.runtime.Composable (onCode: (String) -> Unit, onClose: () -> Unit) -> Unit)? get() = null
+
+    /** PAIR-1: the text of the QR code in a picture's bytes, or null (none found, or this host cannot decode one). */
+    fun decodeQrImage(bytes: ByteArray): String? = null
 }
 
 /**

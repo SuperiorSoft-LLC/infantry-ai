@@ -8,6 +8,7 @@ import com.superiorsoftllc.agenthq.daemon.RemoteAccess
 import com.superiorsoftllc.agenthq.daemon.StateDirLock
 import com.superiorsoftllc.agenthq.provider.ProviderFactory
 import com.superiorsoftllc.agenthq.session.agentHqSetting
+import com.superiorsoftllc.agenthq.session.stateDir
 import com.superiorsoftllc.agenthq.ui.shell.AgentHqShell
 import com.superiorsoftllc.agenthq.ui.shell.PlatformHost
 import com.superiorsoftllc.agenthq.ui.shell.ShellKeys
@@ -80,7 +81,7 @@ fun runRealDaemonUi(
         } else {
             application {
                 AgentHqWindow(onCloseRequest = ::exitApplication) {
-                    AgentHqShell(PinnedDaemonHost(defaultPlatformHost(), wsUrl, logsDir, updater))
+                    AgentHqShell(PinnedDaemonHost(defaultPlatformHost(), wsUrl, logsDir, updater, servers = KeystoreSavedServers(stateDir())))
                     if (updater != null) UpdatePrompt(updater)
                 }
             }
@@ -129,7 +130,11 @@ internal class PinnedDaemonHost(
     updater: UpdateService? = null,
     /** The token this machine can read itself (the stored remote.token while remote access is on), else null. */
     private val storedToken: () -> String? = { RemoteAccess.clientToken() },
+    /** PAIR-1: where a paired server and its sealed token are kept; null = none (tests). */
+    servers: com.superiorsoftllc.agenthq.ui.pair.SavedServers? = null,
 ) : PlatformHost by base {
+    override val savedServers: com.superiorsoftllc.agenthq.ui.pair.SavedServers? = servers
+
     override val defaultDaemonUrl: String = wsUrl
 
     override fun setting(key: String): String? = when (key) {
