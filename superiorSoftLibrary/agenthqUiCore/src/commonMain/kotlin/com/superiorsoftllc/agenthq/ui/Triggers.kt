@@ -43,6 +43,15 @@ internal fun triggerStateColor(state: String): Color = when (state) {
     else -> Palette.Muted
 }
 
+private val BUILT_IN_TRIGGER_ROLES = listOf("pm", "qa", "version-control", "assistant")
+
+/**
+ * The `role:<role>` targets a trigger can aim at: the built-in roles (the PM, QA, ... run without a profile, so
+ * profiles alone would omit them), the daemon's role catalog and every role a visible profile has.
+ */
+internal fun triggerLanes(state: AppState): List<String> =
+    (BUILT_IN_TRIGGER_ROLES + state.roles.map { it.id } + state.visibleProfiles.map { it.role }).distinct().map { "role:$it" }
+
 /** "any ticket" / "tickets for <assignee>" -- what a `start_next` trigger picks from. */
 internal fun triggerTarget(state: AppState, t: TriggerView): String =
     t.action.agentId?.takeIf { it.isNotBlank() }?.let { "next ticket assigned to ${assigneeLabel(state, it)}" } ?: "next startable ticket"
@@ -151,7 +160,7 @@ private fun TriggerForm(state: AppState, controller: Controller, onDone: () -> U
     var agentId by remember(existing?.id) { mutableStateOf(existing?.action?.agentId?.takeIf { it.isNotBlank() }) }
     var coalesce by remember(existing?.id) { mutableStateOf((existing?.coalesceMs ?: 0L).toString()) }
     var ceiling by remember(existing?.id) { mutableStateOf((existing?.ceilingRuns ?: 6).toString()) }
-    val lanes = state.visibleProfiles.map { it.role }.distinct().map { "role:$it" }
+    val lanes = triggerLanes(state)
     val coalesceMs = coalesce.trim().toLongOrNull()?.takeIf { it >= 0 }
     val ceilingRuns = ceiling.trim().toIntOrNull()?.takeIf { it > 0 }
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Panel).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
