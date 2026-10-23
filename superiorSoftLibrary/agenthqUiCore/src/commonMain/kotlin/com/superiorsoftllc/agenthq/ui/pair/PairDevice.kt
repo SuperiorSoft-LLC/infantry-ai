@@ -161,6 +161,7 @@ fun PairDeviceSection(connectedUrl: String, token: String?, serverName: String?,
 
     val scanner = host.qrScanner
     if (scanning && scanner != null) {
+        com.superiorsoftllc.agenthq.ui.RegisterModal()
         ScannerModal(onDismissRequest = { scanning = false }) {
             scanner(
                 { code -> scanning = false; accept(code) },
