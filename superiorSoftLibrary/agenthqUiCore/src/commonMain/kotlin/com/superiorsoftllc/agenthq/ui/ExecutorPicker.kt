@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -97,7 +98,7 @@ fun ExecutorPicker(
             OutlinedTextField(
                 ex.model.orEmpty(), { onChange(ex.withModel(it)) }, singleLine = true,
                 placeholder = { Text(ex.freeTextDefault?.let { "Model (default: $it)" } ?: "Model (harness default)") },
-                modifier = Modifier.fillMaxWidth().testTag(tags.freeText),
+                modifier = Modifier.fillMaxWidth().testTag(tags.freeText), colors = visibleBorderFieldColors(),
             )
             return@Column
         }

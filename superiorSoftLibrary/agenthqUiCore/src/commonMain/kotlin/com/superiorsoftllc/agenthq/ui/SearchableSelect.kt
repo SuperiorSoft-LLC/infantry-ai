@@ -86,7 +86,7 @@ fun <T> SearchableSelect(
             return@Column
         }
         OutlinedTextField(
-            query, onQueryChange, placeholder = { Text(placeholder) }, singleLine = true,
+            query, onQueryChange, placeholder = { Text(placeholder) }, singleLine = true, colors = visibleBorderFieldColors(),
             modifier = Modifier.fillMaxWidth().testTag(searchTag).onPreviewKeyEvent { e ->
                 if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (e.key) {
