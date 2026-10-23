@@ -23,6 +23,8 @@ data class Role(
      * key and never interprets it, so a client that does not know a key falls back to that same default.
      */
     val icon: String = "",
+    /** ROLE-EDIT-1 (contract 1.108.0): a one-line description for the role editor; blank = none. Never sent to a session. */
+    val description: String = "",
 )
 
 /** Where a [Role] came from, which is what decides whether it is replaceable. */

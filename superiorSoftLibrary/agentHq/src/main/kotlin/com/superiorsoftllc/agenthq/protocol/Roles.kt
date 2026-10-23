@@ -20,6 +20,8 @@ data class RoleSave(
     val persona: String = "",
     /** ROLE-ICON-1 (contract 1.93.0): the icon key. Absent/null = keep the role's current icon; "" = clear it (client default). */
     val icon: String? = null,
+    /** ROLE-EDIT-1 (contract 1.108.0): one-line description. Absent/null = keep the stored one; "" = clear it. */
+    val description: String? = null,
 ) {
     companion object {
         fun decode(text: String): RoleSave = StrictJson.decode(serializer(), text, "role_save payload")

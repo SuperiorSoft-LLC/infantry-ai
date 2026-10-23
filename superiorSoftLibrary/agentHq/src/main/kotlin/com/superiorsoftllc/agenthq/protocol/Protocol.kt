@@ -176,11 +176,11 @@ data class Envelope(
         /** client -> daemon, empty data: request the saved commands; answered by [COMMANDS]. */
         const val COMMAND_LIST = "command_list"
         /**
-         * daemon -> client: list of `CommandSpec` `{id, name, cwd, argv, graceMillis}` (argv + graceMillis since 1.94.0).
+         * daemon -> client: list of `CommandSpec` `{id, name, cwd, argv, graceMillis}` (argv + graceMillis since 1.108.0).
          * Also pushed to EVERY client after a [COMMAND_SAVE] / [COMMAND_DELETE].
          */
         const val COMMANDS = "commands"
-        // RUN-CMD-1 (contract 1.94.0, additive): edit the saved commands from a client; the daemon writes commands.json.
+        // RUN-CMD-1 (contract 1.108.0, additive): edit the saved commands from a client; the daemon writes commands.json.
         /** client -> daemon: `{id, name?, argv: [...], cwd?: relative|null, graceMillis?}`, upsert by id; answered by [COMMANDS]. */
         const val COMMAND_SAVE = "command_save"
         /** client -> daemon: `{"id": "<id>"}`; answered by [COMMANDS]. Both refuse with [ERROR] `command_<op> refused: ...`. */
@@ -254,6 +254,12 @@ data class Envelope(
         const val ROLE_SAVE = "role_save"
         const val ROLE = "role"
         const val ROLES = "roles"
+
+        // Contract 1.108.0 (ROLE-EDIT-1): `role_delete` (data = role id). A custom override of a bundled role is reset
+        // (answered by the pushed `role`, now the bundled definition); a pure custom role is removed (answered by the
+        // pushed `role_removed`, data = role id). Refused for a bundled role with no override and while a live session has it.
+        const val ROLE_DELETE = "role_delete"
+        const val ROLE_REMOVED = "role_removed"
 
         // Contract 1.40.0 (ROLE-1c): what a role runs on. `role_binding_list` -> `role_bindings`; `role_binding_get`
         // (data = role id) -> `role_binding`; `role_binding_set` -> `role_binding`, pushed to all.
