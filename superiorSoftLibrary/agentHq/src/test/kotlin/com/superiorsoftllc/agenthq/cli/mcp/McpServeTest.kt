@@ -183,6 +183,7 @@ class McpServeTest {
         val sessions = payload(served.callTool("agenthq_list_sessions"))["sessions"]!!.jsonArray
         val row = sessions.single().jsonObject
         assertEquals(sessionId, row["id"]!!.jsonPrimitive.content)
+        assertEquals(sessionId, row["sessionId"]!!.jsonPrimitive.content, "sessionId mirrors id: $row")
         assertEquals("be-1", row["agentId"]!!.jsonPrimitive.content)
         assertEquals("backend", row["role"]!!.jsonPrimitive.content)
         assertEquals(fixture.daemon.manager.get(sessionId)!!.provider, row["provider"]!!.jsonPrimitive.content)
@@ -192,6 +193,7 @@ class McpServeTest {
         // agenthq_get_session: status plus the replayed transcript, which holds the stub's real text.
         val session = payload(served.callTool("agenthq_get_session", """{"sessionId":"${sessionId.take(8)}"}"""))
         assertEquals(sessionId, session["id"]!!.jsonPrimitive.content, "a unique prefix resolves: $session")
+        assertEquals(sessionId, session["sessionId"]!!.jsonPrimitive.content, "sessionId mirrors id: $session")
         val transcript = session["transcript"]!!.jsonArray.map { it.jsonPrimitive.content }
         assertTrue(
             transcript.any { it.contains("[stub] daemon is running without a provider CLI.") },

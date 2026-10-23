@@ -345,6 +345,7 @@ internal class McpTools(
 
     private fun summary(session: SessionRecord): JsonObject = buildJsonObject {
         put("id", session.id)
+        put("sessionId", session.id) // same value as "id": the key every tool takes as input
         put("agentId", session.agentId)
         put("role", session.role)
         put("provider", session.provider)
