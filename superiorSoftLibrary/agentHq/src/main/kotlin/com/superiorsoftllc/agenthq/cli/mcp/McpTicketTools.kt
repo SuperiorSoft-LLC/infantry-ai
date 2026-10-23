@@ -101,6 +101,35 @@ internal class McpTicketTools(
     }
 
     /**
+     * MCP-MOVE-1: move ONE ticket to a status over `ticket_move` -- the frame `agenthq ticket move` sends -- so an agent
+     * can finish its ticket (`done`) without the CLI. A move INTO in_progress is the board's start and goes through
+     * [START] (guardrails, worker); `pending` is derived by the daemon and refused there. The session is named as origin.
+     */
+    suspend fun move(stream: FrameStream, arguments: JsonObject): ToolResult {
+        val requested = arguments.string("ticketId") ?: return refused("$MOVE needs a ticketId")
+        val status = arguments.string("status")?.lowercase() ?: return refused("$MOVE needs a status")
+        if (status == TicketStatus.IN_PROGRESS) return refused("$MOVE refused: to start a ticket use $START")
+        val ticket = findTicket(stream, requested).getOrElse { return refused("$MOVE refused: ${it.message ?: "no ticket '$requested'"}") }
+        val session = getenv(AccessPolicy.SESSION_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }
+        val answer = try {
+            // NOT idempotent: a dropped request is reported, never re-sent blind.
+            stream.request(
+                Envelope(Envelope.TICKET_MOVE, json.encodeToString(com.superiorsoftllc.agenthq.protocol.TicketMove.serializer(), com.superiorsoftllc.agenthq.protocol.TicketMove(id = ticket.id, status = status)), session),
+                answerType = Envelope.TICKET,
+                what = "ticket_move",
+                idempotent = false,
+            )
+        } catch (e: Exception) {
+            return refused("$MOVE refused: ${e.message ?: e.javaClass.simpleName}")
+        }
+        val moved = runCatching { json.decodeFromString(Ticket.serializer(), answer.data) }
+            .getOrElse { return refused("$MOVE: malformed ticket answer from the daemon: ${it.message}") }
+        return ToolResult(json.encodeToString(JsonObject.serializer(), JsonObject(summary(moved) + buildJsonObject {
+            put("message", "Moved ticket ${shortTicketId(moved.id)} -> ${moved.status}")
+        })))
+    }
+
+    /**
      * MCP-DEL-1: delete ONE ticket over `ticket_delete` -- the frame the CLI's `ticket delete` sends -- after resolving
      * the id exactly like [update] (a full id, or the 8-char suffix). An unknown or ambiguous id is refused before any
      * frame is sent. A ticket IN PROGRESS is refused HERE, MCP-side: its live worker holds it, so the agent must stop
@@ -262,7 +291,9 @@ internal class McpTicketTools(
         const val EPIC_BASE = "agenthq_epic_base"
         /** MCP-DEL-1: delete ONE ticket (refused while it is in progress). */
         const val DELETE = "agenthq_ticket_delete"
-        val NAMES = listOf(CREATE, UPDATE, GET, START, EPIC_BASE, DELETE)
+        /** MCP-MOVE-1: move ONE ticket to a status (done, todo, ...); a start goes through [START]. */
+        const val MOVE = "agenthq_ticket_move"
+        val NAMES = listOf(CREATE, UPDATE, GET, START, EPIC_BASE, DELETE, MOVE)
 
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false; explicitNulls = false }
 
@@ -390,6 +421,17 @@ internal class McpTicketTools(
                 required = listOf("ticketId"),
             ) {
                 put("ticketId", prop("Full ticket id, or its 8-char suffix."))
+            })
+            add(tool(
+                MOVE,
+                "Move ONE ticket to a status (full id or 8-char id), e.g. done when your work is finished, or todo. " +
+                    "Same as `agenthq ticket move`. To START a ticket use $START; pending is set by the daemon from " +
+                    "open prerequisites and is refused here. The answer reads back the stored ticket.",
+                readOnly = false,
+                required = listOf("ticketId", "status"),
+            ) {
+                put("ticketId", prop("Full ticket id, or its 8-char suffix."))
+                put("status", prop("Target status, e.g. done, todo, review."))
             })
         }
 

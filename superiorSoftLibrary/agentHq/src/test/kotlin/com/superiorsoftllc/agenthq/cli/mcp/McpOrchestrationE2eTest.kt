@@ -247,6 +247,7 @@ class McpOrchestrationE2eTest {
             "agenthq_harness_status", "agenthq_harness_install", // HARNESS-INSTALL-1
             "agenthq_epic_base", // BASE-1c
             "agenthq_ticket_delete", // MCP-DEL-1
+            "agenthq_ticket_move", // MCP-MOVE-1
             "agenthq_inbox", "agenthq_read", // MAIL-MCP-1
             "agenthq_ask", // ASK-1
             "agenthq_pipeline", "agenthq_pipeline_record", // PIPE-1
