@@ -11,6 +11,8 @@ class AndroidPlatformHost(
     private val settings: LayeredSettings,
     /** MOBILE-CONNCHIP-1: the title-bar connection chip's action (the gate reopens its ConnectScreen); null = dialog. */
     override val onChangeConnection: (() -> Unit)? = null,
+    /** VOICE-1: Android TextToSpeech, built by the entry point that has a Context; null = toast only. */
+    override val speaker: com.superiorsoftllc.agenthq.ui.voice.Speaker? = null,
 ) : PlatformHost {
     override val defaultDaemonUrl: String = "ws://10.0.2.2:8787/ws"
     override fun setting(key: String): String? = settings[key]

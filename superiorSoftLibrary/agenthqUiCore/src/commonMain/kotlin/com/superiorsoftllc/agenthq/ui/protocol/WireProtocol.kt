@@ -225,6 +225,9 @@ data class Envelope(
         const val PIPELINE_CONFIG = "pipeline_config"
         const val PIPELINE_STATE = "pipeline_state"
 
+        // Contract 1.104.0 (VOICE-1): the daemon PUSHES `spoken` (one SpokenNotice) to every client when an agent sends `notify`.
+        const val SPOKEN = "spoken"
+
         // Contract 1.65.0 (BRANCH-VIEW-1): local branches and one branch's changes since its merge-base with a base.
         // `project_git_branches` -> `project_git_branch_list`, `project_git_branch_changes` ->
         // `project_git_branch_diffstat`, `project_git_branch_diff` -> `project_git_patch` (carrying `branch`).

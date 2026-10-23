@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.103.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.104.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,17 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+### What changed in 1.104.0 (VOICE-1) — spoken attention alerts
+
+ADDITIVE; a 1.103.0 client ignores the push. The `ready` frame reports `contract=1.104.0`. No schema change: a spoken alert is
+ephemeral (not stored, not replayed to a client that connects later).
+
+- `notify` (client → daemon): `{say, level?, projectId?, ticketId?}`. `say` is the short text an agent wrote (whitespace and
+  control characters collapsed, capped at 200 characters); `level` is `info` (default), `needs-owner` or `urgent`. A blank
+  `say` or an unknown `level` is answered by `error` (`notify refused: …`); otherwise there is no direct reply.
+- `spoken` (daemon → every client, the requester included): one `SpokenNotice`
+  `{id, at, say, level, projectId?, projectName?, ticketId?}`. Clients speak `projectName` first, then `say`, and nothing else.
+- CLI: `agenthq notify --say "<short text>" [--level info|needs-owner|urgent]` (project from `--project` / `AGENTHQ_PROJECT_ID`).
 ### What changed in 1.103.0 (TICKET-WEIGHT) — ticket weights pick the executor
 
 ADDITIVE; a 1.102.0 client keeps working (it ignores the new keys). The `ready` frame reports `contract=1.103.0`. Stored in
@@ -1917,6 +1928,8 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `memory_notes` | list of `{name, description, folder}` in name order, body withheld (1.21.0, `folder` 1.51.0) | daemon → client |
 | `decision_item` | one `Decision` `{projectId, number, ref, summary, body, supersedes?, supersededBy?, authorSessionId?, authorAgentId?, authorRole?, createdAt}`; pushed to every client after an add (1.53.0) | daemon → clients |
 | `pipeline_config` | `{projectId, stages?, exclusiveCheck?, clear?}`: set a project's ordered stage names (stage names are data), or `clear` to remove the pipeline; answered by `pipeline_state` (additive, PIPE-1) | client → daemon |
+| `notify` | `{say, level?, projectId?, ticketId?}`: raise a spoken attention alert; pushed to every client as `spoken` (additive, VOICE-1) | client → daemon |
+| `spoken` | one `SpokenNotice` `{id, at, say, level, projectId?, projectName?, ticketId?}`; ephemeral push to every client (additive, VOICE-1) | daemon → clients |
 | `pipeline_show` | `{projectId}`; answered by `pipeline_state`, `configured:false` for a project with no pipeline (the default) | client → daemon |
 | `pipeline_record` | `{projectId, commit, stage, evidence?, sessionId?}`: move a commit to a configured stage; refused `no_pipeline` / `unknown_stage`; answered by `pipeline_state` | client → daemon |
 | `pipeline_check` | `{projectId, action: start\|ping\|finish, scope?, commit?, what?, sessionId?}`: the running check; with `exclusiveCheck` a second start in one scope is refused `check_running`; answered by `pipeline_state` | client → daemon |

@@ -27,7 +27,11 @@ enum class AgentScope(val label: String, val effect: String) {
 }
 
 /** The flag values the window holds. Presentation state only: nothing here is written to disk. */
-data class UiFlags(val agentScope: AgentScope = AgentScope.PROJECT)
+data class UiFlags(
+    val agentScope: AgentScope = AgentScope.PROJECT,
+    /** VOICE-1: spoken attention alerts. */
+    val voice: com.superiorsoftllc.agenthq.ui.voice.VoiceSettings = com.superiorsoftllc.agenthq.ui.voice.VoiceSettings(),
+)
 
 /** What the modal says each flag applies to, shown in the label rather than a tooltip. */
 const val AGENT_SCOPE_APPLIES_TO = "Applies to: the sidebar agent list and the top-bar avatars. Agents with no project are listed under every project. Header counters, the roster and the board are not affected."

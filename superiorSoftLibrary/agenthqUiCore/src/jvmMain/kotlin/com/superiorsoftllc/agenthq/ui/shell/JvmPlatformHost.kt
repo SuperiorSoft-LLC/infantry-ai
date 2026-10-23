@@ -21,6 +21,13 @@ class JvmPlatformHost(
     private val env: (String) -> String? = System::getenv,
     private val home: String? = System.getProperty("user.home"),
 ) : PlatformHost {
+    /** VOICE-1: the OS text-to-speech through a short-lived helper process; no new dependency. */
+    override val speaker: com.superiorsoftllc.agenthq.ui.voice.Speaker = com.superiorsoftllc.agenthq.ui.voice.JvmSpeaker()
+
+    /** VOICE-1: whether one of this JVM's windows is the active (focused) one. */
+    override fun windowFocused(): Boolean =
+        runCatching { java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().activeWindow != null }.getOrDefault(true)
+
     override val defaultDaemonUrl: String = "ws://127.0.0.1:${recordedPort() ?: DEFAULT_PORT}/ws"
     override fun setting(key: String): String? = env(key)
     override fun readTextFile(path: String): String? = runCatching { File(path).readText() }.getOrNull()

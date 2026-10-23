@@ -413,6 +413,7 @@ internal object Cli {
                 "memory" -> memory(stream, parsed, out, err, getenv, input)
                 "decision" -> decision(stream, parsed, out, err, getenv, input)
                 "pipeline" -> pipeline(stream, parsed, out, err, getenv)
+                "notify" -> notify(stream, parsed, out, err, getenv)
                 "issue" -> issue(stream, parsed, out, err, getenv)
                 "trait" -> trait(stream, parsed, out, err, input)
                 "skill" -> skill(stream, parsed, out, err)
@@ -3103,6 +3104,39 @@ internal object Cli {
         }
     }
 
+    /**
+     * VOICE-1 `notify`: raise a spoken attention alert. `agenthq notify --say "<short text>" [--level info|needs-owner|urgent]`
+     * (the text may also be given bare). Only this short text is spoken; the project (--project / AGENTHQ_PROJECT_ID) is
+     * named first by the client. The daemon pushes a `spoken` frame to every client; there is no reply to wait for.
+     */
+    private fun notify(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable, getenv: (String) -> String?): Int = runBlocking {
+        checkContract(stream, err)
+        val text = parsed.say ?: parsed.args.joinToString(" ")
+        val req = com.superiorsoftllc.agenthq.notify.NotifyRequest(
+            say = text,
+            level = parsed.level ?: com.superiorsoftllc.agenthq.notify.NotifyLevel.INFO,
+            projectId = projectIdOf(parsed, getenv),
+            ticketId = getenv("AGENTHQ_TICKET_ID")?.trim()?.takeIf { it.isNotEmpty() },
+        )
+        val answer = stream.request(
+            Envelope(Envelope.NOTIFY, json.encodeToString(com.superiorsoftllc.agenthq.notify.NotifyRequest.serializer(), req)),
+            answerType = Envelope.SPOKEN, what = Envelope.NOTIFY, idempotent = false,
+        )
+        out.appendLine("notified: ${answer.data.let { runCatching { json.decodeFromString(com.superiorsoftllc.agenthq.notify.SpokenNotice.serializer(), it).say }.getOrDefault(text) }}")
+        0
+    }
+
+    private fun notifyUsageError(parsed: ParsedArgs): String? {
+        val text = parsed.say ?: parsed.args.joinToString(" ")
+        val level = parsed.level
+        return when {
+            text.isBlank() -> "usage: agenthq notify --say \"<short text>\" [--level info|needs-owner|urgent]"
+            level != null && level !in com.superiorsoftllc.agenthq.notify.NotifyLevel.ALL ->
+                "--level must be one of ${com.superiorsoftllc.agenthq.notify.NotifyLevel.ALL.joinToString(", ")}"
+            else -> null
+        }
+    }
+
     private fun pipelineUsageError(parsed: ParsedArgs, getenv: (String) -> String?): String? {
         val args = parsed.args
         val usage = "pipeline [show] | configure <stage>... [--exclusive] | clear | record <commit> <stage> [--body <evidence>] | " +
@@ -4065,6 +4099,9 @@ internal object Cli {
         val folder: String? = null,
         // NOTES-1: `memory ... --scope project|role|session [--role <id>]`.
         val scope: String? = null,
+        /** VOICE-1: `notify --say <text> [--level info|needs-owner|urgent]`. */
+        val say: String? = null,
+        val level: String? = null,
         val append: Boolean = false,
         val exclusive: Boolean = false,
         val edit: Boolean = false,
@@ -4172,6 +4209,8 @@ internal object Cli {
         var lineageDir: String? = null
         var folder: String? = null
         var scope: String? = null
+        var say: String? = null
+        var level: String? = null
         var append = false
         var exclusive = false
         var edit = false
@@ -4366,6 +4405,14 @@ internal object Cli {
                     folder = flagValue(args, ++i) ?: return fail(err, "--folder expects a folder")
                     i++
                 }
+                "--say" -> {
+                    say = flagValue(args, ++i) ?: return fail(err, "--say expects the text to speak")
+                    i++
+                }
+                "--level" -> {
+                    level = flagValue(args, ++i) ?: return fail(err, "--level expects info, needs-owner or urgent")
+                    i++
+                }
                 "--scope" -> {
                     scope = flagValue(args, ++i) ?: return fail(err, "--scope expects project, role or session")
                     i++
@@ -4552,6 +4599,8 @@ internal object Cli {
             lineageDir = lineageDir,
             folder = folder,
             scope = scope,
+            say = say,
+            level = level,
             append = append,
             exclusive = exclusive,
             edit = edit,
@@ -4682,6 +4731,7 @@ internal object Cli {
         "memory" -> memoryUsageError(parsed, getenv)
         "decision" -> decisionUsageError(parsed, getenv)
         "pipeline" -> pipelineUsageError(parsed, getenv)
+        "notify" -> notifyUsageError(parsed)
         "issue" -> issueUsageError(parsed, getenv)
         "trait" -> traitUsageError(parsed)
         "skill" -> skillUsageError(parsed)
@@ -4848,7 +4898,7 @@ internal object Cli {
     /** The commands this CLI answers to. Kept next to the [when] above so the two cannot drift. */
     private val COMMANDS = setOf(
         "submit", "watch", "pods", "runs", "logs", "cancel", "tickets", "board", "ticket", "agents", "send", "inbox",
-        "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "issue",
+        "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
         "trait", "skill", "role", "ask", "harnesses", "harness-status", "harness-install", "image", "session", "remote", "bg",
     )
 

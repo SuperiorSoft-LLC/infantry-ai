@@ -555,6 +555,10 @@ data class Envelope(
         const val PIPELINE_RECORD = "pipeline_record"
         const val PIPELINE_CHECK = "pipeline_check"
         const val PIPELINE_STATE = "pipeline_state"
+        // VOICE-1 (contract 1.104.0): `notify` ({say, level?, projectId?, ticketId?}) raises a SPOKEN attention alert; the daemon
+        // pushes `spoken` (one SpokenNotice) to every client, the requester included, and a refusal answers `error`.
+        const val NOTIFY = "notify"
+        const val SPOKEN = "spoken"
         // SECRETS-1 (contract 1.100.0): the daemon-owned keystore. `secret_set` ({name, value}), `secret_clear` ({name}), `secret_import` ({name}:
         // copy the older environment variable into the keystore) and `secret_status` ({}) are each answered by one `secret_state`
         // ({protection, secrets:[{name, label, set, tail, importable, overriddenByEnv}]}), pushed to every client after a change.

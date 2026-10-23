@@ -33,7 +33,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * TICKET-WEIGHT (contract 1.103.0): the `weight` field's persistence and migration, the weight -> {provider, model}
+ * TICKET-WEIGHT (contract 1.104.0): the `weight` field's persistence and migration, the weight -> {provider, model}
  * mapping setting, and its precedence at ticket start (an explicit pin always wins).
  */
 class TicketWeightTest {

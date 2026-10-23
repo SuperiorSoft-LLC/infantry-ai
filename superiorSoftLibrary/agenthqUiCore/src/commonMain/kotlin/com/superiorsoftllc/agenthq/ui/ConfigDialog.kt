@@ -84,6 +84,9 @@ fun ConfigDialog(
                 FlagSection(title = "Agent scope", applies = AGENT_SCOPE_APPLIES_TO) {
                     AgentScopeDropdown(flags.agentScope) { onFlags(flags.copy(agentScope = it)) }
                 }
+                FlagSection(title = "Spoken alerts", applies = com.superiorsoftllc.agenthq.ui.voice.VOICE_APPLIES_TO) {
+                    com.superiorsoftllc.agenthq.ui.voice.VoiceSettingsSection(flags.voice) { onFlags(flags.copy(voice = it)) }
+                }
                 // BUG-M2-11e: daemon state, not a window flag: it is stored by the daemon and survives a restart.
                 if (onKeepAliveMinutes != null) {
                     FlagSection(title = LifecycleSetting.TITLE, applies = LifecycleSetting.APPLIES_TO) {
