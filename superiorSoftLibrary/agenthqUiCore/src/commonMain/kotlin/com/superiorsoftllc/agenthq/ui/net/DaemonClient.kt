@@ -15,7 +15,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -52,10 +53,24 @@ open class DaemonClient(private val scope: CoroutineScope) {
     private val sendMutex = Mutex()
     private var job: Job? = null
 
+    /** SWITCH-1: wakes a sleeping backoff so "Reconnect now" retries at once. */
+    private val wake = Channel<Unit>(Channel.CONFLATED)
+    private var lastUrl: String? = null
+    private var lastToken: String? = null
+
     fun connect(url: String, token: String?) {
         disconnect()
+        lastUrl = url
+        lastToken = token
         _info.value = ConnectionInfo(state = ConnState.CONNECTING, url = url, detail = "opening $url")
         job = scope.launch { run(url, token?.trim()?.takeIf { it.isNotEmpty() }) }
+    }
+
+    /** SWITCH-1: retry now: skips a backoff wait, or starts over from REFUSED / FAILED / IDLE with the same target. */
+    fun reconnectNow() {
+        val url = lastUrl ?: return
+        val state = _info.value.state
+        if (state == ConnState.RECONNECTING && job?.isActive == true) wake.trySend(Unit) else if (!live.value) connect(url, lastToken)
     }
 
     fun disconnect() {
@@ -102,20 +117,15 @@ open class DaemonClient(private val scope: CoroutineScope) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
-                val code = refusalStatus(e)
-                if (code == 401 || code == 403) {
-                    live.value = false
-                    socket.value = null
-                    _info.value = _info.value.copy(
-                        state = ConnState.REFUSED,
-                        detail = "daemon refused the connection (HTTP $code): check the bearer token",
-                    )
-                    return
-                }
                 live.value = false
                 socket.value = null
-                val root = generateSequence(e) { it.cause }.last()
-                backoff(attempt, "${root::class.simpleName}: ${root.message ?: "no route to daemon"}")
+                when (val failure = ReconnectPolicy.classify(refusalStatus(e), generateSequence(e) { it.cause }.last())) {
+                    is ReconnectPolicy.Failure.Terminal -> {
+                        _info.value = _info.value.copy(state = ConnState.REFUSED, detail = failure.reason, retryAtMillis = null)
+                        return
+                    }
+                    is ReconnectPolicy.Failure.Retry -> backoff(attempt, failure.reason)
+                }
             }
         }
     }
@@ -149,8 +159,10 @@ open class DaemonClient(private val scope: CoroutineScope) {
     }
 
     private suspend fun backoff(attempt: Int, reason: String) {
-        _info.value = _info.value.copy(state = ConnState.RECONNECTING, attempt = attempt, detail = reason)
-        delay(minOf(15_000L, 500L * (1L shl minOf(attempt, 5))))
+        val wait = ReconnectPolicy.delayMillis(attempt)
+        _info.value = _info.value.copy(state = ConnState.RECONNECTING, attempt = attempt, detail = reason, retryAtMillis = kotlinx.datetime.Clock.System.now().toEpochMilliseconds() + wait)
+        wake.tryReceive()
+        withTimeoutOrNull(wait) { wake.receive() }
     }
 
     private fun refusalStatus(error: Throwable): Int? =

@@ -10,6 +10,8 @@ import com.superiorsoftllc.agenthq.provider.ProviderFactory
 import com.superiorsoftllc.agenthq.session.agentHqSetting
 import com.superiorsoftllc.agenthq.session.stateDir
 import com.superiorsoftllc.agenthq.ui.shell.AgentHqShell
+import com.superiorsoftllc.agenthq.ui.shell.LocalEndpoint
+import com.superiorsoftllc.agenthq.ui.shell.LocalServer
 import com.superiorsoftllc.agenthq.ui.shell.PlatformHost
 import com.superiorsoftllc.agenthq.ui.shell.ShellKeys
 import com.superiorsoftllc.agenthq.ui.shell.defaultPlatformHost
@@ -48,46 +50,86 @@ fun runRealDaemonUi(
     stateLock: StateDirLock.Held? = null,
     updates: ((exit: () -> Unit, runningAgents: () -> Int) -> UpdateService)? = null,
 ) {
-    val daemon = try {
-        // INSTALL-REFOCUS-1: the installed app (it holds the state-dir lock) answers a refused second launch's activation.
-        if (stateLock != null) AgentHqDaemon.fromEnv(WindowActivation.route) else AgentHqDaemon.fromEnv()
-    } catch (refused: AccessConfigurationException) {
-        System.err.println("[agentHq-ui] refusing to start the daemon: ${refused.message}")
-        exitProcess(2)
-    } catch (refused: PortInUseException) {
-        System.err.println("[agentHq-ui] refusing to start the daemon: ${refused.message}")
-        exitProcess(2)
-    }
-    val wsUrl = RealDaemonLaunch.start(daemon)
-    stateLock?.recordPort(daemon.port)
-    println("[agentHq-ui] daemon provider=${daemon.providerId} at $wsUrl")
+    val headless = RealDaemonLaunch.headless { agentHqSetting(it) }
+    val servers = KeystoreSavedServers(stateDir())
+    val activeServer = ActiveServerFile(stateDir())
+    val local = InProcessDaemon(stateLock)
+    // SWITCH-1: the window opens on the remote server last picked (the installed thin client of a headless / Docker
+    // server) WITHOUT starting this machine's daemon; "This computer" starts it on demand. Headless always runs it.
+    val remote = if (headless) null else activeServer.read()?.let { url -> servers.list().firstOrNull { it.url == url } }
+    val wsUrl = if (remote == null) (local.start()?.url ?: exitProcess(2)) else ""
+    if (remote != null) println("[agentHq-ui] opening on remote server '${remote.name}' (${remote.url}); this computer's daemon is not started")
 
-    val stopped = AtomicBoolean(false)
-    fun stopDaemon() {
-        if (!stopped.compareAndSet(false, true)) return
-        daemon.server.stop(gracePeriodMillis = 0, timeoutMillis = 500)
-        daemon.close()
-        stateLock?.release()
-    }
-    val updater = updates?.invoke({ stopDaemon(); exitProcess(0) }, { daemon.manager.list().count { it.isBusy() } })
+    val updater = updates?.invoke({ local.stop(); exitProcess(0) }, local::runningAgents)
     // UPDATE-1: on start, off the UI thread; a failure is a dismissable card, never a blocked window.
     updater?.check(manual = false)
 
     try {
-        if (RealDaemonLaunch.headless { agentHqSetting(it) }) {
+        if (headless) {
             // E2E-OWNER-1: the owner-path smoke boots this exact entry without a window; closing stdin stops it.
             println("[agentHq-ui] headless: no window; the daemon stops when stdin closes")
             RealDaemonLaunch.awaitStdinEof()
         } else {
             application {
                 AgentHqWindow(onCloseRequest = ::exitApplication) {
-                    AgentHqShell(PinnedDaemonHost(defaultPlatformHost(), wsUrl, logsDir, updater, servers = KeystoreSavedServers(stateDir())))
+                    AgentHqShell(PinnedDaemonHost(defaultPlatformHost(), wsUrl, logsDir, updater, servers = servers, remote = remote, local = local, activeFile = activeServer))
                     if (updater != null) UpdatePrompt(updater)
                 }
             }
         }
     } finally {
-        stopDaemon()
+        local.stop()
+    }
+}
+
+/** SWITCH-1: the in-process daemon behind "This computer"; started once, on demand, and stopped when the app exits. */
+internal class InProcessDaemon(private val stateLock: StateDirLock.Held?) : LocalServer {
+    private var daemon: AgentHqDaemon? = null
+    private var wsUrl: String? = null
+
+    @Synchronized
+    override fun start(): LocalEndpoint? {
+        wsUrl?.let { return LocalEndpoint(it, RemoteAccess.clientToken()) }
+        val started = try {
+            // INSTALL-REFOCUS-1: the installed app (it holds the state-dir lock) answers a refused second launch's activation.
+            if (stateLock != null) AgentHqDaemon.fromEnv(WindowActivation.route) else AgentHqDaemon.fromEnv()
+        } catch (refused: AccessConfigurationException) {
+            System.err.println("[agentHq-ui] refusing to start the daemon: ${refused.message}")
+            return null
+        } catch (refused: PortInUseException) {
+            System.err.println("[agentHq-ui] refusing to start the daemon: ${refused.message}")
+            return null
+        }
+        val url = RealDaemonLaunch.start(started)
+        stateLock?.recordPort(started.port)
+        println("[agentHq-ui] daemon provider=${started.providerId} at $url")
+        daemon = started
+        wsUrl = url
+        return LocalEndpoint(url, RemoteAccess.clientToken())
+    }
+
+    fun runningAgents(): Int = daemon?.manager?.list()?.count { it.isBusy() } ?: 0
+
+    @Synchronized
+    override fun stop() {
+        daemon?.let {
+            it.server.stop(gracePeriodMillis = 0, timeoutMillis = 500)
+            it.close()
+        }
+        daemon = null
+        wsUrl = null
+        stateLock?.release()
+    }
+}
+
+/** SWITCH-1: which saved server the window opens on, a URL in `<stateDir>/active-server.txt` (no secret); absent = this computer. */
+internal class ActiveServerFile(dir: File) {
+    private val file = File(dir, "active-server.txt")
+
+    fun read(): String? = runCatching { file.takeIf { it.isFile }?.readText(Charsets.UTF_8)?.trim()?.ifEmpty { null } }.getOrNull()
+
+    fun write(url: String?) {
+        runCatching { if (url == null) file.delete() else { file.parentFile?.mkdirs(); file.writeText(url, Charsets.UTF_8) } }
     }
 }
 
@@ -132,15 +174,27 @@ internal class PinnedDaemonHost(
     private val storedToken: () -> String? = { RemoteAccess.clientToken() },
     /** PAIR-1: where a paired server and its sealed token are kept; null = none (tests). */
     servers: com.superiorsoftllc.agenthq.ui.pair.SavedServers? = null,
+    /** SWITCH-1: the saved server the window opens on instead of the local daemon; its URL and token replace [wsUrl]. */
+    private val remote: com.superiorsoftllc.agenthq.ui.pair.SavedServer? = null,
+    /** SWITCH-1: this machine's daemon, started on demand by "This computer". */
+    local: LocalServer? = null,
+    private val activeFile: ActiveServerFile? = null,
 ) : PlatformHost by base {
+    override val localServer: LocalServer? = local
+
+    override fun activeServer(): String? = remote?.url
+
+    override fun setActiveServer(url: String?) { activeFile?.write(url) }
+
     override val savedServers: com.superiorsoftllc.agenthq.ui.pair.SavedServers? = servers
 
-    override val defaultDaemonUrl: String = wsUrl
+    override val defaultDaemonUrl: String = remote?.url ?: wsUrl
 
     override fun setting(key: String): String? = when (key) {
-        ShellKeys.WS_URL -> wsUrl
-        // The window never asks for a token it can read: an explicit setting wins, else the stored one.
-        ShellKeys.TOKEN -> base.setting(key)?.takeIf { it.isNotBlank() } ?: storedToken()
+        ShellKeys.WS_URL -> remote?.url ?: wsUrl
+        // A remote server's token is the one sealed for it, never this machine's own.
+        ShellKeys.TOKEN -> if (remote != null) remote.token else base.setting(key)?.takeIf { it.isNotBlank() } ?: storedToken()
+        ShellKeys.TOKEN_FILE -> if (remote != null) null else base.setting(key)
         else -> base.setting(key)
     }
 

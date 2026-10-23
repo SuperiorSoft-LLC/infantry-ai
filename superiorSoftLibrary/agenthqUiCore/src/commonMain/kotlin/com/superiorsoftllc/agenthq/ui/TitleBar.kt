@@ -107,6 +107,8 @@ fun TitleBar(
     projectSlot: @Composable () -> Unit = {},
     /** PANEL-TOGGLE-1: hides/shows one side panel; null = no toggle button (a bar shown on its own, e.g. in a test). */
     onTogglePanel: ((PanelSide) -> Unit)? = null,
+    /** SWITCH-1: the server dropdown, shown before the connection chip; empty = none (a bar shown on its own). */
+    serverSlot: @Composable () -> Unit = {},
 ) {
     // The empty areas move the window (desktop drag) and a double-click there toggles maximize, like a native bar.
     val drag = if (chrome == null) Modifier else chrome.dragArea.pointerInput(chrome) {
@@ -160,6 +162,7 @@ fun TitleBar(
                 Spacer(Modifier.width(8.dp))
             }
         }
+        serverSlot()
         ConnChip(state, onConnect, showUrl = !compact)
         if (chrome == null) {
             Spacer(Modifier.width(12.dp))
@@ -331,10 +334,11 @@ private fun CloseGlyph() {
 @Composable
 private fun ConnChip(state: AppState, onClick: () -> Unit, showUrl: Boolean = true) {
     val c = state.connection
+    val now = rememberTickingNow(c.state == ConnState.RECONNECTING)
     val (label, color) = when (c.state) {
         ConnState.CONNECTED -> "connected" to Palette.Ok
         ConnState.CONNECTING -> "connecting..." to Palette.Info
-        ConnState.RECONNECTING -> "reconnecting (try ${c.attempt})" to Palette.Accent
+        ConnState.RECONNECTING -> "reconnecting (try ${c.attempt}${retryCountdownSeconds(c, now)?.let { ", ${it}s" } ?: ""})" to Palette.Accent
         ConnState.REFUSED -> "refused" to Palette.Danger
         ConnState.FAILED -> "failed" to Palette.Danger
         ConnState.IDLE -> "not connected" to Palette.Muted

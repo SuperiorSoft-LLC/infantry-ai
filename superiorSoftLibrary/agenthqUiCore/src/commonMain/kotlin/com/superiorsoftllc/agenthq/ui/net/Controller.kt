@@ -267,6 +267,9 @@ class Controller(
 
     fun disconnect() = client.disconnect()
 
+    /** SWITCH-1: the "Reconnect now" button. */
+    fun reconnectNow() = client.reconnectNow()
+
     fun select(id: String?) = _state.update { it.copy(selectedId = id) }
 
     /** PANEL-TOGGLE-1: the title-bar toggle for one side panel (hide it if shown, show it if hidden). */

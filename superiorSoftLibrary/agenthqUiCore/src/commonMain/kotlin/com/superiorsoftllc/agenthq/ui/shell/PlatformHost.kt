@@ -78,6 +78,18 @@ interface PlatformHost {
     /** PAIR-1: where a paired server and its token are kept (sealed); null = this host keeps none. */
     val savedServers: com.superiorsoftllc.agenthq.ui.pair.SavedServers? get() = null
 
+    /**
+     * SWITCH-1: this machine's own daemon, started and stopped on demand, or null when the host has none (Android, a
+     * browser: they only reach remote servers). Non-null adds the "This computer" entry to the server switcher.
+     */
+    val localServer: LocalServer? get() = null
+
+    /** SWITCH-1: the URL of the saved server the user last picked; null = this computer. */
+    fun activeServer(): String? = null
+
+    /** SWITCH-1: remembers the pick ([url] null = this computer) so the next launch opens the same server. */
+    fun setActiveServer(url: String?) {}
+
     /** PAIR-1: this machine's own IPv4/IPv6 addresses, for a pairing link when the server is on loopback. Empty = unknown. */
     fun localAddresses(): List<String> = emptyList()
 
@@ -92,6 +104,15 @@ interface PlatformHost {
 
     /** PAIR-1: the text of the QR code in a picture's bytes, or null (none found, or this host cannot decode one). */
     fun decodeQrImage(bytes: ByteArray): String? = null
+}
+
+/** SWITCH-1: where the local daemon listens, and the token this machine can read for it (null = none needed). */
+class LocalEndpoint(val url: String, val token: String?)
+
+/** SWITCH-1: a daemon this process runs for "This computer". [start] returns its endpoint (null = it would not start); idempotent. */
+interface LocalServer {
+    fun start(): LocalEndpoint?
+    fun stop()
 }
 
 /**

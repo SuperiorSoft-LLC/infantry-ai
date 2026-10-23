@@ -75,6 +75,8 @@ data class ConnectionInfo(
     /** Human-readable reason for any state that is not CONNECTED. Never blank for a failure. */
     val detail: String = "",
     val attempt: Int = 0,
+    /** SWITCH-1: epoch millis the next automatic retry fires (RECONNECTING only), for the countdown. */
+    val retryAtMillis: Long? = null,
     /** Contract version the daemon announced in `ready`, e.g. "1.2.0". */
     val contract: String? = null,
     val daemonProvider: String? = null,
