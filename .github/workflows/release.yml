@@ -1,0 +1,152 @@
+# RELEASE-AUTO-1: pushing a tag v<MAJOR.MINOR.BUILD> builds the Windows MSI (+ app-image zip) and the Android APK,
+# then publishes them with SHA256SUMS and latest.json to that tag's GitHub Release. See docs/RELEASING.md.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx3g
+  JAVA_VERSION: '21'
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        name: Tag must equal agenthqVersion in gradle.properties
+        shell: bash
+        run: |
+          set -euo pipefail
+          declared="$(sed -n 's/^agenthqVersion=\(.*\)$/\1/p' gradle.properties | tr -d '[:space:]')"
+          tag="${GITHUB_REF_NAME#v}"
+          [[ "$declared" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "gradle.properties agenthqVersion='$declared' is not MAJOR.MINOR.BUILD"; exit 1; }
+          [[ "$declared" == "$tag" ]] || { echo "tag $GITHUB_REF_NAME does not match agenthqVersion=$declared"; exit 1; }
+          echo "version=$declared" >> "$GITHUB_OUTPUT"
+
+  windows:
+    needs: version
+    runs-on: windows-2022   # pinned: ships WiX 3.x, which jpackage needs for MSI
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build MSI and app-image
+        shell: bash
+        run: |
+          set -euo pipefail
+          V='${{ needs.version.outputs.version }}'
+          ./gradlew --no-daemon :superiorSoftLibrary:agentHqUi:createDistributable -PagenthqVersion="$V"
+          mkdir -p out
+          app="$(ls -d superiorSoftLibrary/agentHqUi/build/compose/binaries/main/app/AgentHQ)"
+          (cd "$(dirname "$app")" && 7z a -tzip "$GITHUB_WORKSPACE/out/AgentHQ-$V-windows.zip" AgentHQ >/dev/null)
+          if ./gradlew --no-daemon :superiorSoftLibrary:agentHqUi:releaseAssets -PagenthqVersion="$V"; then
+            cp "superiorSoftLibrary/agentHqUi/build/release/$V/AgentHQ-$V.msi" out/
+          else
+            echo "::warning::MSI packaging failed unsigned on this runner; publishing the app-image zip only (the in-app updater needs the MSI)"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: out/*
+          if-no-files-found: error
+
+  android:
+    needs: version
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      KEYSTORE_B64: ${{ secrets.AGENTHQ_ANDROID_RELEASE_KEYSTORE_BASE64 }}
+      AGENTHQ_ANDROID_RELEASE_STORE_PASSWORD: ${{ secrets.AGENTHQ_ANDROID_RELEASE_STORE_PASSWORD }}
+      AGENTHQ_ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.AGENTHQ_ANDROID_RELEASE_KEY_ALIAS }}
+      AGENTHQ_ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.AGENTHQ_ANDROID_RELEASE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build APK (signed if the keystore secrets exist, else debug)
+        shell: bash
+        run: |
+          set -euo pipefail
+          V='${{ needs.version.outputs.version }}'
+          mkdir -p out
+          if [ -n "${KEYSTORE_B64:-}" ] && [ -n "${AGENTHQ_ANDROID_RELEASE_STORE_PASSWORD:-}" ] \
+             && [ -n "${AGENTHQ_ANDROID_RELEASE_KEY_ALIAS:-}" ] && [ -n "${AGENTHQ_ANDROID_RELEASE_KEY_PASSWORD:-}" ]; then
+            printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            export AGENTHQ_ANDROID_RELEASE_STORE_FILE="$RUNNER_TEMP/release.keystore"
+            ./gradlew --no-daemon :superiorSoftLibrary:agentHqAndroid:assembleRelease -PagenthqVersion="$V"
+            apk="$(ls superiorSoftLibrary/agentHqAndroid/build/outputs/apk/release/*.apk | head -n1)"
+            case "$apk" in *unsigned*) echo "release APK came out unsigned"; exit 1;; esac
+            cp "$apk" "out/AgentHQ-$V.apk"
+          else
+            echo "::warning::No release keystore secrets; building a DEBUG-signed APK. Updates over an installed build need a stable key."
+            ./gradlew --no-daemon :superiorSoftLibrary:agentHqAndroid:assembleDebug -PagenthqVersion="$V"
+            apk="$(ls superiorSoftLibrary/agentHqAndroid/build/outputs/apk/debug/*.apk | head -n1)"
+            cp "$apk" "out/AgentHQ-$V-debug.apk"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: out/*
+          if-no-files-found: error
+
+  release:
+    needs: [version, windows, android]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dl
+          merge-multiple: true
+      - name: SHA256SUMS and latest.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          V='${{ needs.version.outputs.version }}'
+          cd dl
+          sha256sum AgentHQ-* > SHA256SUMS
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          assets="$(for f in AgentHQ-*; do
+            jq -n --arg n "$f" --arg s "$(sha256sum "$f" | cut -d' ' -f1)" --argjson z "$(stat -c %s "$f")" --arg u "$base/$f" \
+              '{name:$n, sha256:$s, size:$z, url:$u}'
+          done | jq -s .)"
+          jq -n --arg v "$V" --arg t "$GITHUB_REF_NAME" --arg d "$(date -u +%FT%TZ)" --argjson a "$assets" \
+            '{version:$v, tag:$t, published:$d, assets:$a}' > latest.json
+          cat latest.json
+      - name: Create or update the GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dl
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" AgentHQ-* SHA256SUMS latest.json --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$GITHUB_REF_NAME" AgentHQ-* SHA256SUMS latest.json --repo "$GITHUB_REPOSITORY" \
+              --title "AgentHQ ${GITHUB_REF_NAME#v}" --generate-notes
+          fi

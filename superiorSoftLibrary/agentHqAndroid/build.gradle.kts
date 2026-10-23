@@ -47,7 +47,9 @@ if (!releaseSigningResolved) {
 val agentHqVersionName: String =
     providers.gradleProperty("agenthqVersion").orNull?.trim()?.takeIf { it.isNotEmpty() } ?: "1.0.0"
 val agentHqVersionCode: Int =
-    providers.gradleProperty("agenthqVersionCode").orNull?.trim()?.toIntOrNull() ?: 1
+    providers.gradleProperty("agenthqVersionCode").orNull?.trim()?.toIntOrNull()
+        // RELEASE-AUTO-1: monotonic code derived from MAJOR.MINOR.BUILD, so a bumped version always upgrades.
+        ?: agentHqVersionName.split(".").map { it.toIntOrNull() ?: 0 }.let { p -> p.getOrElse(0) { 0 } * 1_000_000 + p.getOrElse(1) { 0 } * 10_000 + p.getOrElse(2) { 0 } }
 
 configure<com.android.build.api.dsl.ApplicationExtension> {
     namespace = "com.superiorsoftllc.agenthq.android"
