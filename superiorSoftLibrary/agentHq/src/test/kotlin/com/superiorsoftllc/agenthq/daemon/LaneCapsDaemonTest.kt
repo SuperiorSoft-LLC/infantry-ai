@@ -92,6 +92,28 @@ class LaneCapsDaemonTest {
     }
 
     @Test
+    fun raisingTheCapStartsQueuedTickets() = launch().use {
+        val p = createProject()
+        assertTrue(start("A", p).start!!.ok)
+        assertEquals("queued", start("B", p).start!!.reason)
+        assertEquals("queued", start("C", p).start!!.reason)
+        send(Envelope.PROJECT_CONFIG, """{"projectId":"$p","laneCaps":{"backend":3}}""")
+        await(what = "both queued tickets start") { activeAgents().size == 3 }
+    }
+
+    @Test
+    fun loweringTheCapPrunesIdleClonesAtOnce() = launch().use {
+        val p = createProject()
+        send(Envelope.PROJECT_CONFIG, """{"projectId":"$p","laneCaps":{"backend":3}}""")
+        projectWith(mapOf("backend" to 3))
+        val sessions = (0 until 3).map { start("T$it", p).sessionId!! }
+        sessions.forEach { send(Envelope.KILL, "$it force") }
+        await(what = "runs ended") { daemon.manager.list().none { it.state in com.superiorsoftllc.agenthq.session.SessionState.entries.filter { it.name in setOf("STARTING", "BUSY", "WAITING_INPUT") } } }
+        send(Envelope.PROJECT_CONFIG, """{"projectId":"$p","laneCaps":{"backend":1}}""")
+        await(what = "clones pruned right after lowering") { daemon.agents.list().count { it.role == "backend" } == 1 }
+    }
+
+    @Test
     fun theCapSurvivesADaemonRestart() {
         val state = Files.createTempDirectory("agenthq-lanecaps-restart").toFile()
         val first = launch(state)

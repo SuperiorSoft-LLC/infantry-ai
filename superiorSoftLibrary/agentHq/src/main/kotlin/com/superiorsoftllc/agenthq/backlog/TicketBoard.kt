@@ -1031,6 +1031,32 @@ class TicketBoard(
     }
 
     /**
+     * LANE-CAPS follow-up: a project's caps changed. Queued tickets of each role are started (board order) while the role
+     * has room under its new cap, then idle clones above a lowered cap are pruned.
+     */
+    @Synchronized
+    fun laneCapsChanged(projectId: String) {
+        if (queueDrainEnabled) {
+            val queued = store.transaction {
+                val snapshot = load()
+                boardOrder(snapshot.rows.values).filter { ticket ->
+                    ticket.status == TicketStatus.TODO && ticket.projectId == projectId &&
+                        ticket.queuedFor?.startsWith("role:") == true && snapshot.holding(ticket.id).isEmpty()
+                }.map { it.id }
+            }
+            val refusedRoles = mutableSetOf<String?>()
+            for (id in queued) {
+                val lane = store.transaction { store.tickets.get(id)?.queuedFor }
+                if (lane in refusedRoles) continue
+                val answer = runCatching { handOut(id, HandOutOrigin.QUEUE_DRAIN) }.getOrNull()
+                if (answer?.ticket?.start?.ok != true) refusedRoles += lane
+            }
+        }
+        val roles = agents?.list().orEmpty().filter { it.projectId == projectId }.map { it.role }.distinct()
+        roles.forEach { pruneIdleClones(it) }
+    }
+
+    /**
      * LANE-CAPS: a clone ("<name> 2", added by [extraAgent]) that is idle while the role has more agents than the cap of its
      * project allows is removed. The role's first agent is never removed, and nothing running is touched.
      */
