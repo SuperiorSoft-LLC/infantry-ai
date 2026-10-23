@@ -381,3 +381,6 @@ gradle.taskGraph.whenReady {
         }
     }
 }
+
+// PACKAGING-GUARD-1: branch/sha print, dirty/branch refusal, BUILD-INFO and sha-named outputs (see the script).
+apply(from = rootProject.file("gradle/packaging-guard.gradle.kts"))
