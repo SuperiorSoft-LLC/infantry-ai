@@ -35,6 +35,40 @@ class ServerInstall(val root: File, private val keep: Int = 2) {
         return dir
     }
 
+    /**
+     * First run from a freshly unpacked archive: copy [appHome] (which stays where it is) to `versions/<version>`, make it
+     * current, and put the stable launcher stubs (`infantry`, `infantry.cmd`, which only read `current`) in [root].
+     */
+    fun adopt(appHome: File, version: String): File {
+        val dir = dirOf(version)
+        if (!dir.isDirectory) {
+            versions.mkdirs()
+            val scratch = Files.createTempDirectory(versions.toPath(), ".adopt-").toFile()
+            try {
+                val target = File(scratch, "app")
+                val from = appHome.toPath()
+                Files.walk(from).use { paths ->
+                    paths.forEach { p ->
+                        val to = target.toPath().resolve(from.relativize(p).toString())
+                        if (Files.isDirectory(p)) Files.createDirectories(to) else Files.copy(p, to, StandardCopyOption.COPY_ATTRIBUTES)
+                    }
+                }
+                requireServerLayout(target)
+                Files.move(target.toPath(), dir.toPath(), StandardCopyOption.ATOMIC_MOVE)
+            } finally {
+                scratch.deleteRecursively()
+            }
+        }
+        activate(version)
+        for (stub in listOf("infantry", "infantry.cmd")) {
+            val src = File(dir, "bin/$stub").takeIf { it.isFile } ?: continue
+            val tmp = File(root, "$stub.tmp")
+            Files.copy(src.toPath(), tmp.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES)
+            Files.move(tmp.toPath(), File(root, stub).toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
+        return dir
+    }
+
     /** Switch `current` back to `previous`. Returns the version now current, or null when there is nothing to go back to. */
     fun rollback(): String? {
         val back = previous()?.takeIf { dirOf(it).isDirectory } ?: return null

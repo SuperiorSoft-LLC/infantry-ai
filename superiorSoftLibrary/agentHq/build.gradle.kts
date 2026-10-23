@@ -376,14 +376,14 @@ val headlessContents: CopySpec = copySpec {
     }
     from(headlessRuntime) { into("runtime") }
     from("headless") {
-        include("agenthq-server.sh", "agenthq-server.bat")
+        include("agenthq-server.sh", "agenthq-server.bat", "infantry", "infantry.cmd")
         into("bin")
     }
     from("headless/README.txt")
     // The running version, read by the daemon's update routes (ServerUpdateService.fromEnvironment).
     from(resources.text.fromString(headlessVersion)) { rename { "VERSION" } }
     eachFile {
-        if (path.endsWith(".sh") || path.endsWith("/bin/agenthq") || path.contains("/runtime/bin/") || path.contains("/runtime/lib/jspawnhelper")) {
+        if (path.endsWith(".sh") || path.endsWith("/bin/agenthq") || path.endsWith("/bin/infantry") || path.contains("/runtime/bin/") || path.contains("/runtime/lib/jspawnhelper")) {
             permissions { unix("rwxr-xr-x") }
         }
     }
