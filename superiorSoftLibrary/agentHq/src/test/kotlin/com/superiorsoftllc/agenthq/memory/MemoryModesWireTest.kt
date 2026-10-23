@@ -41,7 +41,7 @@ class MemoryModesWireTest {
 
     @Test
     fun theContractIs1_51_0() {
-        assertEquals("1.104.0", EventVocabulary.VERSION)
+        assertEquals("1.106.0", EventVocabulary.VERSION)
     }
 
     @Test

@@ -345,7 +345,9 @@ object EventVocabulary {
     // -> `secret_state` (set / not set and a masked tail; never a value). See CONTRACT.md.
     // **1.103.0 (TICKET-WEIGHT) is ADDITIVE**: `ticket` / `ticket_save` carry an optional `weight` (1..5; 0 clears on save); `effectiveExecutor`
     // sources may be `weight`; the `tickets.weightExecutors` setting maps a weight to {provider, model} for a ticket that pins none.
-    const val VERSION = "1.104.0"
+    // **1.106.0 (SCOPE-1) is ADDITIVE**: MCP board / ticket_get / ticket_update / ticket_move / ticket_delete / get_session / pod_state default to the
+    // CALLER'S project; `projectId=all` (pm / owner) is explicit; a foreign project is refused for other roles. Answers carry projectId + scope. No frame changes.
+    const val VERSION = "1.106.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA

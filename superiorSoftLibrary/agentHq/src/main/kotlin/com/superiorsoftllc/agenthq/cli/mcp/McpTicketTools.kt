@@ -45,6 +45,10 @@ internal class McpTicketTools(
     suspend fun create(stream: FrameStream, arguments: JsonObject): ToolResult {
         val title = arguments.string("title") ?: return refused("$CREATE needs a title")
         val projectId = projectOf(arguments)
+        if (arguments.string("projectId") != null) {
+            val caller = ProjectScope.callerOf(ProjectScope.sessionsOf(stream), getenv)
+            ProjectScope.foreignRefusal("the target project", projectId, caller, getenv)?.let { return refused("$CREATE refused: $it") }
+        }
         // IMG-AGENT-1: local files are checked, then uploaded (purpose ticket), before the ticket is saved.
         val images = arguments.images(CREATE) { return it }?.let { attach(stream, projectId, it, CREATE) { r -> return r } }
         val save = TicketSave(
@@ -69,7 +73,7 @@ internal class McpTicketTools(
         if (replace != null && (add != null || remove != null)) {
             return refused("$UPDATE refused: give images (the full list) or addImages / removeImages, not both")
         }
-        val existing = findTicket(stream, requested).getOrElse { return refused(it.message ?: "no ticket '$requested'") }
+        val existing = findTicket(stream, requested, getenv).getOrElse { return refused(it.message ?: "no ticket '$requested'") }
         val fullId = existing.id
         // IMG-AGENT-1: images replaces the list; addImages / removeImages edit the stored one. Every local file is
         // checked, and every removal must name an attached image, before anything is uploaded or saved.
@@ -99,7 +103,7 @@ internal class McpTicketTools(
 
     suspend fun get(stream: FrameStream, arguments: JsonObject): ToolResult {
         val requested = arguments.string("ticketId") ?: return refused("$GET needs a ticketId")
-        return findTicket(stream, requested).fold({ ok(it) }, { refused(it.message ?: "no ticket '$requested'") })
+        return findTicket(stream, requested, getenv).fold({ ok(it) }, { refused(it.message ?: "no ticket '$requested'") })
     }
 
     /**
@@ -111,7 +115,7 @@ internal class McpTicketTools(
         val requested = arguments.string("ticketId") ?: return refused("$MOVE needs a ticketId")
         val status = arguments.string("status")?.lowercase() ?: return refused("$MOVE needs a status")
         if (status == TicketStatus.IN_PROGRESS) return refused("$MOVE refused: to start a ticket use $START")
-        val ticket = findTicket(stream, requested).getOrElse { return refused("$MOVE refused: ${it.message ?: "no ticket '$requested'"}") }
+        val ticket = findTicket(stream, requested, getenv).getOrElse { return refused("$MOVE refused: ${it.message ?: "no ticket '$requested'"}") }
         val session = getenv(AccessPolicy.SESSION_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }
         val answer = try {
             // NOT idempotent: a dropped request is reported, never re-sent blind.
@@ -140,7 +144,7 @@ internal class McpTicketTools(
      */
     suspend fun delete(stream: FrameStream, arguments: JsonObject): ToolResult {
         val requested = arguments.string("ticketId") ?: return refused("$DELETE needs a ticketId")
-        val ticket = findTicket(stream, requested).getOrElse { return refused("$DELETE refused: ${it.message ?: "no ticket '$requested'"}") }
+        val ticket = findTicket(stream, requested, getenv).getOrElse { return refused("$DELETE refused: ${it.message ?: "no ticket '$requested'"}") }
         val short = shortTicketId(ticket.id)
         if (ticket.status == TicketStatus.IN_PROGRESS) {
             return refused(
@@ -311,7 +315,16 @@ internal class McpTicketTools(
          * board: a full id must resolve whatever project it is filed under. No match, or several, is the failure, worded
          * for the agent; a daemon that cannot be read throws, like every other request.
          */
-        internal suspend fun findTicket(stream: FrameStream, requested: String): Result<Ticket> {
+        internal suspend fun findTicket(stream: FrameStream, requested: String, getenv: ((String) -> String?)? = null): Result<Ticket> {
+            val found = findTicketUnscoped(stream, requested)
+            val ticket = found.getOrNull() ?: return found
+            if (getenv == null) return found
+            val caller = ProjectScope.callerOf(ProjectScope.sessionsOf(stream), getenv)
+            val refusal = ProjectScope.foreignRefusal("ticket ${shortTicketId(ticket.id)}", ticket.projectId, caller, getenv)
+            return if (refusal == null) found else Result.failure(IllegalStateException(refusal))
+        }
+
+        private suspend fun findTicketUnscoped(stream: FrameStream, requested: String): Result<Ticket> {
             val answer = stream.request(Envelope(Envelope.TICKET_LIST, ""), answerType = Envelope.TICKETS, what = "ticket_list", idempotent = true)
             val board = json.decodeFromString(ListSerializer(Ticket.serializer()), answer.data)
             return when (val match = matchTicketPrefix(requested, board)) {

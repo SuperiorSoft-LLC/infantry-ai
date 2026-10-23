@@ -102,16 +102,25 @@ internal class McpTools(
         }
     }
 
+    private fun requestedProject(arguments: JsonObject): String? =
+        (arguments["projectId"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+
     private suspend fun listSessions(stream: FrameStream, arguments: JsonObject): ToolResult {
         // A SESSION caller (AGENTHQ_SESSION_ID) sees its OWN project by default; explicit "all" lists every project and an
         // explicit id lists that project. Owner/user callers (no session id) are unaffected: all projects.
-        val requested = (arguments["projectId"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+        val requested = requestedProject(arguments)
         val all = fetchSessions(stream)
         val callerId = getenv("AGENTHQ_SESSION_ID")?.trim()?.takeIf { it.isNotEmpty() }
+        val caller = all.firstOrNull { it.id == callerId }
+        if (callerId != null && !ProjectScope.isPrivileged(caller) && requested != null) {
+            // Only the pm / owner roles may name another project or ask for "all"; the daemon's record says who this is.
+            val refusal = ProjectScope.resolve(requested, all, getenv, defaultProjectId).refusal
+            if (refusal != null) return ToolResult("$LIST_SESSIONS refused: $refusal", isError = true)
+        }
         val scope = when {
             requested == "all" -> null
             requested != null -> requested
-            else -> callerId?.let { id -> all.firstOrNull { it.id == id }?.projectId }
+            else -> callerId?.let { caller?.projectId }
         }
         val sessions = all.filter { scope == null || it.projectId == scope }
         return ok(buildJsonObject {
@@ -145,6 +154,8 @@ internal class McpTools(
                 isError = true,
             )
         }
+        ProjectScope.foreignRefusal("session ${session.id}", session.projectId, ProjectScope.callerOf(snapshot, getenv), getenv)
+            ?.let { return ToolResult("$GET_SESSION refused: $it", isError = true) }
 
         if ((arguments["brief"] as? JsonPrimitive)?.contentOrNull == "true") {
             return ok(buildJsonObject {
@@ -217,15 +228,17 @@ internal class McpTools(
      * (see the CLI's `pods`), so a specific pod is only shown by id.
      */
     private suspend fun podState(stream: FrameStream, arguments: JsonObject): ToolResult {
-        val projectId = (arguments["projectId"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
-            ?: defaultProjectId
+        val sessionsAll = fetchSessions(stream)
+        val scope = ProjectScope.resolve(requestedProject(arguments), sessionsAll, getenv, defaultProjectId)
+        scope.refusal?.let { return ToolResult("$POD_STATE refused: $it", isError = true) }
+        val projectId = scope.projectId
         val podId = (arguments["podId"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
 
         val profiles = json.decodeFromString(
             ListSerializer(AgentProfile.serializer()),
             stream.request(Envelope(Envelope.AGENT_LIST, ""), Envelope.AGENTS, "agent_list", idempotent = true).data,
         )
-        val sessions = fetchSessions(stream)
+        val sessions = sessionsAll.filter { projectId == null || it.projectId == projectId }
         val roster = projectId?.let { project ->
             json.decodeFromString(
                 ListSerializer(RosterRow.serializer()),
@@ -245,6 +258,8 @@ internal class McpTools(
         }
 
         return ok(buildJsonObject {
+            put("scope", scope.label)
+            projectId?.let { put("projectId", it) }
             putJsonObject("agents") {
                 put("total", profiles.size)
                 putJsonObject("byRole") {
@@ -281,14 +296,18 @@ internal class McpTools(
 
     /** One-call board summary: [BoardSummary]'s lines over the project's tickets and the daemon's sessions. */
     private suspend fun board(stream: FrameStream, arguments: JsonObject): ToolResult {
-        val projectId = (arguments["projectId"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() } ?: defaultProjectId
+        val sessions = fetchSessions(stream)
+        val scope = ProjectScope.resolve(requestedProject(arguments), sessions, getenv, defaultProjectId)
+        scope.refusal?.let { return ToolResult("$BOARD refused: $it", isError = true) }
         val tickets = json.decodeFromString(
             ListSerializer(Ticket.serializer()),
-            stream.request(Envelope(Envelope.TICKET_LIST, projectId ?: ""), Envelope.TICKETS, "ticket_list", idempotent = true).data,
+            stream.request(Envelope(Envelope.TICKET_LIST, scope.projectId ?: ""), Envelope.TICKETS, "ticket_list", idempotent = true).data,
         )
-        val sessions = fetchSessions(stream)
         val lines = BoardSummary.render(tickets, sessions, System.currentTimeMillis(), BoardSummary.gitCommitOf(sessions))
+            .map { line -> if (scope.projectId == null) tickets.firstOrNull { line.startsWith("  " + it.id.take(8)) }?.let { "  [${it.projectId}] ${line.trimStart()}" } ?: line else line }
         return ok(buildJsonObject {
+            scope.projectId?.let { put("projectId", it) }
+            put("scope", scope.label)
             put("board", buildJsonArray { lines.forEach { add(JsonPrimitive(it)) } })
         })
     }
@@ -396,7 +415,7 @@ internal class McpTools(
                 putJsonObject("properties") {
                     putJsonObject("projectId") {
                         put("type", "string")
-                        put("description", "Only this project's sessions. Omitted: a session caller's own project (everyone else: all). \"all\" lists every project.")
+                        put("description", "Only this project's sessions. Omitted: a session caller's own project (everyone else: all). \"all\" lists every project (pm / owner callers only).")
                     }
                 }
                 put("additionalProperties", false)
@@ -435,7 +454,7 @@ internal class McpTools(
                 putJsonObject("properties") {
                     putJsonObject("projectId") {
                         put("type", "string")
-                        put("description", "Include this project's live roster (running agents, not profiles: agent, role, BUSY/IDLE/OFFLINE). Default: the server's --project / .agenthq/mcp.json projectId.")
+                        put("description", "Include this project's live roster (running agents, not profiles: agent, role, BUSY/IDLE/OFFLINE). Default: the caller's own project; \"all\" (pm / owner callers only) covers every project.")
                     }
                     putJsonObject("podId") {
                         put("type", "string")
@@ -454,7 +473,7 @@ internal class McpTools(
                 putJsonObject("properties") {
                     putJsonObject("projectId") {
                         put("type", "string")
-                        put("description", "Project to summarise. Default: the server's project.")
+                        put("description", "Project whose tickets to summarise. Default: the caller's own project; \"all\" (pm / owner callers only) covers every project, each line prefixed [projectId].")
                     }
                 }
                 put("additionalProperties", false)

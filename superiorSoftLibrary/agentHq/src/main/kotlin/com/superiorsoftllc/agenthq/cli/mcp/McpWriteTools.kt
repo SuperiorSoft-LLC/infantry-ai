@@ -203,7 +203,7 @@ internal class McpWriteTools(
         val requested = arguments.string("ticketId") ?: return refused("$tool needs a ticketId")
         // The daemon pushes a `sessions` snapshot on every new connection: consumed FIRST, so no later answer is taken for it.
         val snapshot = decodeSessions(stream.await(Envelope.SESSIONS))
-        val ticket = McpTicketTools.findTicket(stream, requested).getOrElse { return refused("$tool refused: ${it.message}") }
+        val ticket = McpTicketTools.findTicket(stream, requested, getenv).getOrElse { return refused("$tool refused: ${it.message}") }
         if (tool == SPAWN) disagreement(ticket, arguments)?.let { return refused(it) }
 
         val childDepth = guardrails.depth + 1
