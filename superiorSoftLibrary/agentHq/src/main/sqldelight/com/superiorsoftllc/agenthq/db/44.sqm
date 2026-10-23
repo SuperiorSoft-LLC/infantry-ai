@@ -1,0 +1,6 @@
+-- TICKET-WEIGHT -- migration v44 -> v45: a ticket may carry a weight (1..5), used to pick its executor when it pins none.
+-- Nullable with no default, so every existing ticket stays unweighted (current behaviour). The column is exactly tickets.sq's.
+--
+-- NEXT MIGRATION: 45.sqm
+
+ALTER TABLE tickets ADD COLUMN weight INTEGER CHECK (weight IS NULL OR weight BETWEEN 1 AND 5);

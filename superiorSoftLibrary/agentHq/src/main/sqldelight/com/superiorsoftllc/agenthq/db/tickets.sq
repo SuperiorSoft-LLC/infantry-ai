@@ -48,7 +48,9 @@ CREATE TABLE IF NOT EXISTS tickets (
     -- BUG-MAIL-2 (37.sqm): the session that started this ticket, when a session did; NULL = the UI / no session.
     started_by TEXT,
     -- IMG-3 (40.sqm): the ticket's images, a JSON array of relPaths under its project's .agenthq/uploads/ticket/.
-    images TEXT NOT NULL DEFAULT '[]'
+    images TEXT NOT NULL DEFAULT '[]',
+    -- TICKET-WEIGHT (44.sqm): 1..5, picks the executor when the ticket pins none; NULL = unweighted.
+    weight INTEGER CHECK (weight IS NULL OR weight BETWEEN 1 AND 5)
 );
 
 CREATE INDEX IF NOT EXISTS index_tickets_on_status ON tickets(status, position);
@@ -75,12 +77,12 @@ insertTicket:
 INSERT INTO tickets(
     id, title, description, ticket_type, status, position, wont_fix, agent_id, provider, model, use_worktree,
     worktree_branch, include_linked_tasks_context, queued_for, queued_at, session_id, created_at, updated_at, project_id, epic_id,
-    branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images
+    branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight
 )
 VALUES (
     :id, :title, :description, :ticket_type, :status, :position, :wont_fix, :agent_id, :provider, :model,
     :use_worktree, :worktree_branch, :include_linked_tasks_context, :queued_for, :queued_at, :session_id,
-    :created_at, :updated_at, :project_id, :epic_id, :branch_name, :base_commit, :skill_ids, :skills_mode, :include_skills_context, :started_by, :images
+    :created_at, :updated_at, :project_id, :epic_id, :branch_name, :base_commit, :skill_ids, :skills_mode, :include_skills_context, :started_by, :images, :weight
 );
 
 -- Overwrites everything but id and created_at.
@@ -110,7 +112,8 @@ UPDATE tickets SET
     skills_mode = :skills_mode,
     include_skills_context = :include_skills_context,
     started_by = :started_by,
-    images = :images
+    images = :images,
+    weight = :weight
 WHERE id = :id;
 
 getTicketById:

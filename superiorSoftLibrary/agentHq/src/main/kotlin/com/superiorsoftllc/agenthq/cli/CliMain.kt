@@ -13,6 +13,7 @@ import com.superiorsoftllc.agenthq.orchestration.PodSubmitRequest
 import com.superiorsoftllc.agenthq.protocol.AgentProfile
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.EventVocabulary
+import com.superiorsoftllc.agenthq.protocol.TicketWeight
 import com.superiorsoftllc.agenthq.protocol.FinishedPayload
 import com.superiorsoftllc.agenthq.protocol.PromptAnswer
 import com.superiorsoftllc.agenthq.protocol.REQUEST_ID_CONTRACT
@@ -1351,6 +1352,7 @@ internal object Cli {
                 agentId = roleAgentId(parsed.role),
                 provider = parsed.provider?.trim(),
                 model = parsed.model?.trim(),
+                weight = parsed.weight,
                 images = images,
             ),
         )
@@ -1412,6 +1414,7 @@ internal object Cli {
                 agentId = roleAgentId(parsed.role),
                 provider = parsed.provider?.trim(),
                 model = parsed.model?.trim(),
+                weight = parsed.weight,
                 images = images,
             ),
         )
@@ -1435,6 +1438,7 @@ internal object Cli {
             if (parsed.role != null) add("role ${ticket.agentId?.removePrefix("role:") ?: "-"}")
             if (parsed.provider != null) add("provider ${ticket.provider ?: "-"}")
             if (parsed.model != null) add("model ${ticket.model ?: "-"}")
+            if (parsed.weight != null) add("weight ${ticket.weight ?: "-"}")
             if (images != null) add("${ticket.images.size} image(s)")
         }
         out.appendLine("updated ${shortTicketId(ticket.id)} (saved: ${saved.joinToString(", ")})")
@@ -1794,6 +1798,11 @@ internal object Cli {
         // BUG-ASSIGN-1: the harness and model the ticket pins, so an agent sees that its change was saved.
         out.appendLine("PROVIDER: ${ticket.provider ?: "-"}")
         out.appendLine("MODEL: ${ticket.model ?: "-"}")
+        // TICKET-WEIGHT: the weight, and which provider / model will run and why (source: ticket, profile, role, weight or default).
+        out.appendLine("WEIGHT: ${ticket.weight ?: "-"}")
+        ticket.effectiveExecutor?.let { e ->
+            out.appendLine("EFFECTIVE: ${e.provider?.value ?: "-"} (${e.provider?.source ?: "-"}) / ${e.model?.value ?: "-"} (${e.model?.source ?: "-"})")
+        }
         out.appendLine("PROJECT: ${ticket.projectId ?: "-"}")
         out.appendLine("EPIC: ${ticket.epicId ?: "-"}")
         out.appendLine("BRANCH: ${ticket.branch ?: "-"}")
@@ -3852,8 +3861,8 @@ internal object Cli {
               tickets --status <column>      Only that column: todo, in_progress, pending, done
               tickets --epic <id|prefix> --project <id>   Only that epic's tickets, in board order
               ticket show <id|prefix>        One ticket in full: title, status, agent, links, description
-              ticket create --title <t> [--desc <d> | --desc-file <path> | --desc -] [--project <id>] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--image <file>]...   Save a todo ticket; prints its id
-              ticket update <id|prefix> [--title <t>] [--desc <d> | --desc-file <path> | --desc -] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--image <file>]... [--remove-image <path>]...   Edit a ticket; flags left out keep their value
+              ticket create --title <t> [--desc <d> | --desc-file <path> | --desc -] [--project <id>] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5] [--image <file>]...   Save a todo ticket; prints its id
+              ticket update <id|prefix> [--title <t>] [--desc <d> | --desc-file <path> | --desc -] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5|0] [--image <file>]... [--remove-image <path>]...   Edit a ticket; flags left out keep their value
                                   --image (repeatable) attaches a png/jpeg/gif/webp file (max 10 MB), uploaded to the
                                   project's .agenthq/uploads/ticket/; on update it is ADDED to the stored images.
                                   --remove-image (repeatable) drops an attached image, named by the path `ticket show`
@@ -4082,6 +4091,7 @@ internal object Cli {
         val role: String? = null,
         val provider: String? = null,
         val model: String? = null,
+        val weight: Int? = null,
         // `ask` (PROMPT-5).
         val question: String? = null,
         val options: List<String> = emptyList(),
@@ -4184,6 +4194,7 @@ internal object Cli {
         var role: String? = null
         var provider: String? = null
         var model: String? = null
+        var weight: Int? = null
         var question: String? = null
         val options = mutableListOf<String>()
         val images = mutableListOf<String>()
@@ -4392,6 +4403,12 @@ internal object Cli {
                     model = flagValue(args, ++i) ?: return fail(err, "--model expects a model id the provider lists")
                     i++
                 }
+                // TICKET-WEIGHT: 1..5 sets, 0 clears.
+                "--weight" -> {
+                    weight = flagValue(args, ++i)?.toIntOrNull()?.takeIf { it in 0..TicketWeight.MAX }
+                        ?: return fail(err, "--weight expects ${TicketWeight.MIN}..${TicketWeight.MAX} (0 clears it)")
+                    i++
+                }
                 // PROMPT-5: `ask`. Question and option text are taken RAW, like --summary.
                 "--question" -> {
                     question = args.getOrNull(++i) ?: return fail(err, "--question expects the question text")
@@ -4557,6 +4574,7 @@ internal object Cli {
             role = role,
             provider = provider,
             model = model,
+            weight = weight,
             question = question,
             options = options.toList(),
             images = images.toList(),
@@ -4770,9 +4788,9 @@ internal object Cli {
             "update" -> when {
                 blank(1) -> "ticket update requires a ticket id: agenthq ticket update <id|prefix> [--title ...] [--desc ...] [--role <id>] [--provider <id>] [--model <id>] [--epic <id|prefix>]"
                 parsed.title == null && parsed.description == null && parsed.role == null &&
-                    parsed.provider == null && parsed.model == null && parsed.epic == null &&
+                    parsed.provider == null && parsed.model == null && parsed.weight == null && parsed.epic == null &&
                     parsed.images.isEmpty() && parsed.removeImages.isEmpty() ->
-                    "ticket update needs something to change: --title, --desc, --role, --provider, --model, --epic, --image or --remove-image"
+                    "ticket update needs something to change: --title, --desc, --role, --provider, --model, --weight, --epic, --image or --remove-image"
                 parsed.title?.isBlank() == true -> "ticket update --title cannot be blank"
                 else -> roleUsageError(parsed.role)
             }

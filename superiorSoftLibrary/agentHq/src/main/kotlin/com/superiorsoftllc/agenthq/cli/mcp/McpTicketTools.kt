@@ -54,6 +54,7 @@ internal class McpTicketTools(
             agentId = roleAgentId(arguments.string("role")),
             provider = arguments.string("provider"),
             model = arguments.string("model"),
+            weight = arguments.weight(),
             images = images,
         )
         val ticket = save(stream, save, CREATE) { return it }
@@ -89,6 +90,7 @@ internal class McpTicketTools(
             agentId = roleAgentId(arguments.string("role")),
             provider = arguments.string("provider"),
             model = arguments.string("model"),
+            weight = arguments.weight(),
             images = images,
         )
         val ticket = save(stream, save, UPDATE) { return it }
@@ -206,6 +208,7 @@ internal class McpTicketTools(
             if (save.agentId != null && ticket.agentId != null) add("role" to "role ${role ?: ticket.agentId}")
             if (save.provider != null && ticket.provider != null) add("provider" to "provider ${ticket.provider}")
             if (save.model != null && ticket.model != null) add("model" to "model ${ticket.model}")
+            if (save.weight != null) add("weight" to "weight ${ticket.weight ?: "cleared"}")
             if (save.images != null) add("images" to "${ticket.images.size} image(s)")
         }
         val short = shortTicketId(ticket.id)
@@ -278,6 +281,8 @@ internal class McpTicketTools(
     }
 
     /** A text field kept exactly as given (newlines, indentation, trailing spaces); null only when absent. */
+    private fun JsonObject.weight(): Int? = (this["weight"] as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toIntOrNull()
+
     private fun JsonObject.verbatim(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
 
     companion object {
@@ -335,6 +340,11 @@ internal class McpTicketTools(
             put("role", TicketStarter.roleOf(ticket))
             put("provider", ticket.provider)
             put("model", ticket.model)
+            put("weight", ticket.weight)
+            put("effectiveProvider", ticket.effectiveExecutor?.provider?.value)
+            put("effectiveProviderSource", ticket.effectiveExecutor?.provider?.source)
+            put("effectiveModel", ticket.effectiveExecutor?.model?.value)
+            put("effectiveModelSource", ticket.effectiveExecutor?.model?.source)
             put("branch", ticket.branch)
             put("sessionId", ticket.sessionId)
             put("images", buildJsonArray { ticket.images.forEach { add(JsonPrimitive(it)) } })
@@ -356,6 +366,7 @@ internal class McpTicketTools(
                 put("role", prop("Role that runs it (stored as role:<id>), e.g. backend."))
                 put("provider", prop("Harness (provider id) that runs it, e.g. claude or opencode: see agenthq_list_harnesses."))
                 put("model", prop("Model pin, one of that harness's models: see agenthq_list_harnesses."))
+                put("weight", JsonObject(mapOf("type" to JsonPrimitive("integer"), "description" to JsonPrimitive("Ticket weight 1 (light) to 5 (heavy); 0 clears it on update. A weighted ticket with no role/provider/model pin starts on the project's weight mapping (setting tickets.weightExecutors); an explicit pin always wins."))))
                 put("images", pathsProp("Images to attach: local image file paths (png, jpeg, gif or webp, at most 10 MB each; each is uploaded to the project's .agenthq/uploads/ticket/), or paths already stored there. A missing, oversized or non-image file refuses the call and nothing is saved. The board shows them as attachments and the started worker's brief lists them."))
             })
             add(tool(
@@ -372,6 +383,7 @@ internal class McpTicketTools(
                 put("role", prop("Role that runs it (stored as role:<id>)."))
                 put("provider", prop("Harness (provider id) pin: see agenthq_list_harnesses."))
                 put("model", prop("Model pin, one of that harness's models: see agenthq_list_harnesses."))
+                put("weight", JsonObject(mapOf("type" to JsonPrimitive("integer"), "description" to JsonPrimitive("Ticket weight 1 (light) to 5 (heavy); 0 clears it on update. A weighted ticket with no role/provider/model pin starts on the project's weight mapping (setting tickets.weightExecutors); an explicit pin always wins."))))
                 put("images", pathsProp("The ticket's full image list, replacing the stored one ([] removes all): local image files (uploaded, as for $CREATE) or paths already under the project's .agenthq/uploads/ticket/. Not with addImages / removeImages. A removed image's file is deleted once no ticket references it."))
                 put("addImages", pathsProp("Images to ADD to the stored list: local image files (png, jpeg, gif or webp, at most 10 MB each) or stored paths."))
                 put("removeImages", pathsProp("Images to REMOVE from the stored list, each named by its stored path (as $GET answers it), its file name, or the original local file. Naming an image the ticket does not have refuses the call."))

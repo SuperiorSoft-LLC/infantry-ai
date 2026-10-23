@@ -194,7 +194,21 @@ data class Ticket(
      * started worker's brief lists each one's absolute path under "Attached images". Empty from an older daemon.
      */
     val images: List<String> = emptyList(),
+    /**
+     * TICKET-WEIGHT (contract 1.103.0): 1..[TicketWeight.MAX], or null = unweighted (the default). A weighted ticket
+     * with no executor pin of its own is started on the project's weight mapping (`tickets.weightExecutors`); the
+     * source of the chosen provider / model is then `weight` in [effectiveExecutor].
+     */
+    val weight: Int? = null,
 )
+
+/** TICKET-WEIGHT: the weight scale; 1 = lightest. On `ticket_save`, [CLEAR] removes a ticket's weight. */
+object TicketWeight {
+    const val MIN = 1
+    const val MAX = 5
+    const val CLEAR = 0
+    val RANGE = MIN..MAX
+}
 
 /** P10-K11: the two values of [Ticket.skillsMode] / [TicketSave.skillsMode]. */
 object SkillsMode {
@@ -338,6 +352,8 @@ data class TicketSave(
      * disk once no ticket references it.
      */
     val images: List<String>? = null,
+    /** TICKET-WEIGHT (contract 1.103.0): 1..5 sets the weight, [TicketWeight.CLEAR] (0) removes it, absent or null keeps it. */
+    val weight: Int? = null,
 ) {
     companion object {
         fun decode(text: String): TicketSave = StrictJson.decode(serializer(), text, "ticket_save payload")

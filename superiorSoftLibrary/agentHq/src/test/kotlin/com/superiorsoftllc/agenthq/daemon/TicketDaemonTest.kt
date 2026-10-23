@@ -89,6 +89,8 @@ class TicketDaemonTest {
                 "skillIds", "skillsMode", "includeSkillsContext",
                 // IMG-3 (contract 1.85.0): the image attachments a ticket carries (empty when none).
                 "images",
+                // TICKET-WEIGHT (contract 1.103.0): the weight, null when unweighted.
+                "weight",
             ),
             json.parseToJsonElement(frame.data).jsonObject.keys,
         )

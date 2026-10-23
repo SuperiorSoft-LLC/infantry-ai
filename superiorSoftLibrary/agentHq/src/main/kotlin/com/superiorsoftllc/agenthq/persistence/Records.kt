@@ -203,6 +203,8 @@ data class TicketRow(
     val startedBy: String? = null,
     /** IMG-3: the ticket's images, relPaths under its project's `.agenthq/uploads/ticket/`, in attach order; empty = none. */
     val images: List<String> = emptyList(),
+    /** TICKET-WEIGHT: 1..5, or null = unweighted. */
+    val weight: Int? = null,
 ) {
     init {
         require(position >= 0) { "position must be >= 0, was $position" }

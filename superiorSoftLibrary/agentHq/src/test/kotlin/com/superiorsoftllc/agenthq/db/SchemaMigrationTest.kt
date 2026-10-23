@@ -577,6 +577,29 @@ class SchemaMigrationTest {
         assertEquals(listOf(listOf("t-v40", "Old", "[]")), rows(path, "SELECT id, title, images FROM tickets;"))
     }
 
+    /**
+     * TICKET-WEIGHT: 44.sqm (v44 -> v45) adds `tickets.weight`. A real v44 file holding a ticket is opened through the
+     * factory: the old row reads back NULL (unweighted), the CHECK refuses a weight outside 1..5, and 1..5 are accepted.
+     */
+    @Test
+    fun `a v44 file gains ticket weight and keeps its tickets unweighted`() {
+        val path = newDatabasePath()
+        JdbcSqliteDriver("jdbc:sqlite:$path").use { driver ->
+            AgentHQDatabase.Schema.migrate(driver, 1, 44)
+            driver.execute(null, "PRAGMA user_version = 44;", 0)
+        }
+        assertTrue(rows(path, "PRAGMA table_info(tickets);").none { it[1] == "weight" }, "a v44 file has no weight yet")
+        exec(path, "INSERT INTO tickets(id, title, status, position, created_at, updated_at) VALUES ('t-v44', 'Old', 'todo', 0, 1, 2);")
+
+        AgentHQDatabaseFactory.open(path).close()
+
+        assertEquals(AgentHQDatabase.Schema.version.toString(), rows(path, "PRAGMA user_version;").single().single())
+        assertEquals(listOf(listOf("t-v44", "Old", null)), rows(path, "SELECT id, title, weight FROM tickets;"))
+        exec(path, "UPDATE tickets SET weight = 5 WHERE id = 't-v44';")
+        assertEquals(listOf(listOf("5")), rows(path, "SELECT weight FROM tickets;"))
+        assertFailsWith<Exception> { exec(path, "UPDATE tickets SET weight = 6 WHERE id = 't-v44';") }
+    }
+
     @Test
     fun `a v33 file gains the ticket skill columns and keeps its tickets`() {
         val path = newDatabasePath()

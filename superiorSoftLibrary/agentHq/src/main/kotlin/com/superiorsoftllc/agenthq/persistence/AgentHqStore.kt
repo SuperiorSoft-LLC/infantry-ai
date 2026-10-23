@@ -631,6 +631,7 @@ class SqlAgentHqStore(val handle: AgentHQDatabaseHandle) : AgentHqStore {
                 include_skills_context = ticket.includeSkillsContext?.let { if (it) 1L else 0L },
                 started_by = ticket.startedBy,
                 images = kotlinx.serialization.json.Json.encodeToString(TRAIT_IDS_JSON, ticket.images),
+                weight = ticket.weight?.toLong(),
                 created_at = ticket.createdAt,
                 updated_at = ticket.updatedAt,
             )
@@ -662,6 +663,7 @@ class SqlAgentHqStore(val handle: AgentHQDatabaseHandle) : AgentHqStore {
                 include_skills_context = ticket.includeSkillsContext?.let { if (it) 1L else 0L },
                 started_by = ticket.startedBy,
                 images = kotlinx.serialization.json.Json.encodeToString(TRAIT_IDS_JSON, ticket.images),
+                weight = ticket.weight?.toLong(),
                 updated_at = ticket.updatedAt,
                 id = ticket.id,
             )
@@ -1049,6 +1051,7 @@ private fun Tickets.toRow() = TicketRow(
     includeSkillsContext = include_skills_context?.let { it != 0L },
     startedBy = started_by,
     images = kotlinx.serialization.json.Json.decodeFromString(TRAIT_IDS_JSON, images),
+    weight = weight?.toInt(),
 )
 
 private fun Settings.toRecord() = SettingRow(key = key, value = value_, updatedAt = updated_at)

@@ -33,7 +33,7 @@ class ToolApprovalWireTest {
 
     @Test
     fun theContractIs1_78_0() {
-        assertEquals("1.102.0", EventVocabulary.VERSION)
+        assertEquals("1.103.0", EventVocabulary.VERSION)
     }
 
     @Test

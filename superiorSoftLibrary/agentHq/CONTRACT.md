@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.102.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.103.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,21 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+### What changed in 1.103.0 (TICKET-WEIGHT) — ticket weights pick the executor
+
+ADDITIVE; a 1.102.0 client keeps working (it ignores the new keys). The `ready` frame reports `contract=1.103.0`. Stored in
+`tickets.weight` (`44.sqm`, schema v45); an older store reads back every ticket unweighted (`weight` absent).
+
+- **`Ticket.weight`** `int?`: 1 (light) .. 5 (heavy), or absent = unweighted (current behaviour).
+- **`TicketSave.weight`** `int?`: 1..5 sets, `0` clears, absent or null keeps it. Anything else is refused.
+- **Setting `tickets.weightExecutors`**: JSON object keyed `"1"`..`"5"`, each `{provider, model}` (either may be null, not both).
+  Defaults: 1-2 `claude/claude-haiku-5-5`, 3 `claude/claude-sonnet-5-5`, 4-5 `claude/claude-opus-5-5`. Keys left out keep the default.
+- **Precedence at `ticket_start`**: the mapping applies ONLY when the ticket has a weight, pins no provider and no model, and its
+  profile / role binding pins neither. An explicit role, provider or model always wins.
+- **Why**: `effectiveExecutor.provider|model.source` is `weight` when the mapping chose it, and a start's `detail` reads
+  `weight <n>: <provider>/<model> from tickets.weightExecutors`.
+- CLI: `ticket create|update --weight 1-5` (`0` clears); `ticket show` prints `WEIGHT:` and `EFFECTIVE:`. MCP: `agenthq_ticket_create` /
+  `agenthq_ticket_update` take `weight`; `agenthq_ticket_get` returns `weight` and the effective provider / model with their sources.
 
 ### What changed in 1.100.0 (HARNESS-INSTALL-1) — a built-in installer for the harness CLIs (claude, opencode, pi)
 

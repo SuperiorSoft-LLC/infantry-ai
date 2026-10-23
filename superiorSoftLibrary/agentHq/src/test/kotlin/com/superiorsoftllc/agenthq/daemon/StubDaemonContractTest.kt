@@ -61,10 +61,10 @@ class StubDaemonContractTest {
     @Test
     fun readyFrameReportsContract132() = withDaemon(StubScript.default()) { client ->
         val ready = client.await(Envelope.READY)
-        assertEquals("1.102.0", EventVocabulary.VERSION, "the published contract version must be 1.102.0")
+        assertEquals("1.103.0", EventVocabulary.VERSION, "the published contract version must be 1.103.0")
         assertTrue(
-            ready.data.contains("contract=1.102.0"),
-            "the READY frame must report contract 1.102.0, got '${ready.data}'",
+            ready.data.contains("contract=1.103.0"),
+            "the READY frame must report contract 1.103.0, got '${ready.data}'",
         )
     }
 
@@ -73,10 +73,10 @@ class StubDaemonContractTest {
         // 1. Connect: the daemon announces itself AND publishes the contract version.
         val ready = client.await(Envelope.READY)
         assertTrue(
-            ready.data.contains("contract=1.102.0"),
+            ready.data.contains("contract=1.103.0"),
             "the contract version must be published on connect, got '${ready.data}'",
         )
-        assertEquals("1.102.0", EventVocabulary.VERSION)
+        assertEquals("1.103.0", EventVocabulary.VERSION)
         assertTrue(ready.data.contains("provider=stub"), "ready must name the provider: ${ready.data}")
 
         // 2. Spawn a session with a prompt.

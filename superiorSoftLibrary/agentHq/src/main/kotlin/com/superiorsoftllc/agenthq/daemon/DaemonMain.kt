@@ -848,6 +848,7 @@ class AgentHqDaemon(
                 baseRef = TicketBaseRef.epicFirst(epics::baseBranchOf, TicketBaseRef.projectFirst(projectStore::baseBranchOf, baseRef)),
                 knowledge = knowledge, skills = skillsSource,
                 exitBehavior = settings::ticketExitBehavior,
+                weightExecutors = settings::weightExecutors,
                 // BUG-ASSIGN-1: a refused role lists the catalog's ids (custom roles included; the fallback persona not).
                 roleIds = { roles.all().map { it.id }.filter { it != RoleIds.CUSTOM } },
                 // IMG-3: a ticket's images live under its project's directory (.agenthq/uploads/ticket/).

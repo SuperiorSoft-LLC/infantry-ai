@@ -21,6 +21,7 @@ import com.superiorsoftllc.agenthq.protocol.AgentProfile
 import com.superiorsoftllc.agenthq.protocol.EffectiveExecutor
 import com.superiorsoftllc.agenthq.protocol.ExecutorOverrides
 import com.superiorsoftllc.agenthq.protocol.ExecutorField
+import com.superiorsoftllc.agenthq.protocol.TicketWeight
 import com.superiorsoftllc.agenthq.protocol.FinishedPayload
 import com.superiorsoftllc.agenthq.protocol.Ticket
 import com.superiorsoftllc.agenthq.protocol.TicketLink
@@ -134,6 +135,8 @@ class TicketBoard(
     private val images: TicketImages = TicketImages.NONE,
     /** `tickets.exitBehavior`, read at every run end: `leave` (default) keeps a cleanly finished ticket in_progress; `done` moves it. */
     private val exitBehavior: () -> String = { "leave" },
+    /** TICKET-WEIGHT: the weight -> executor mapping, read at every start and view. */
+    private val weightExecutors: () -> WeightExecutors = { WeightExecutors.DEFAULT },
 ) {
     @Volatile
     private var queueDrainEnabled = true
@@ -437,6 +440,12 @@ class TicketBoard(
         val includeSkillsContext = request.includeSkillsContext ?: existing?.includeSkillsContext
         // IMG-3: absent or null keeps the stored images, `[]` clears them; every path must be the project's ticket upload.
         val imagePaths = request.images?.let { images.normalize(projectId, it) } ?: existing?.images.orEmpty()
+        // TICKET-WEIGHT: absent or null keeps the weight, 0 clears it, 1..5 sets it.
+        val weight = when (request.weight) {
+            null -> existing?.weight
+            TicketWeight.CLEAR -> null
+            else -> request.weight.also { require(it in TicketWeight.RANGE) { "weight must be ${TicketWeight.RANGE} (or ${TicketWeight.CLEAR} to clear), was $it" } }
+        }
         validateExecutorPins(agentId, provider, model)
 
         var primary = editing ?: ""
@@ -465,6 +474,7 @@ class TicketBoard(
                         projectId = projectId,
                         epicId = epicId,
                         images = imagePaths,
+                        weight = weight,
                     ),
                 )
             } else {
@@ -485,6 +495,7 @@ class TicketBoard(
                     skillsMode = skillsMode,
                     includeSkillsContext = includeSkillsContext,
                     images = imagePaths,
+                    weight = weight,
                     queuedFor = if (agentId != row.agentId) null else row.queuedFor,
                     queuedAt = if (agentId != row.agentId) null else row.queuedAt,
                 )
@@ -669,7 +680,10 @@ class TicketBoard(
         val profile = assignment.profile ?: return refusedStart(initialTicket, "no profile resolved for ticket")
 
         // ROLE-1b: ticket pins > profile > the role's binding > daemon default (one resolver, shared with spawn).
-        val executor = profiles.executorFor(profile, row.provider, row.model, null)
+        val bound = profiles.executorFor(profile, row.provider, row.model, null)
+        // TICKET-WEIGHT: a weighted ticket that pins nothing (and whose profile / role binding pins nothing) runs on the weight's executor.
+        val byWeight = weightChoice(row, bound.provider, bound.model)
+        val executor = if (byWeight == null) bound else profiles.executorFor(profile, byWeight.provider, byWeight.model, null)
         val providerId = executor.provider
         val model = executor.model
         try {
@@ -779,7 +793,8 @@ class TicketBoard(
             throw e
         }
         // BUG-REGRESS-1: what the branch was cut from, then any launch warning (TicketStarter reads them apart).
-        val detail = listOfNotNull(cutNote, launchWarning?.let { TicketStart.LAUNCH_WARNING + it }).joinToString("; ").ifEmpty { null }
+        val weightNote = byWeight?.let { "weight ${row.weight}: ${providerId ?: "default provider"}/${model ?: "default model"} from ${WeightExecutors.SETTING}" }
+        val detail = listOfNotNull(cutNote, weightNote, launchWarning?.let { TicketStart.LAUNCH_WARNING + it }).joinToString("; ").ifEmpty { null }
         return startAnswer(id, TicketStart(ok = true, reason = "started", detail = detail), outcome)
     }
 
@@ -1293,6 +1308,7 @@ class TicketBoard(
                 skillsMode = row.skillsMode,
                 includeSkillsContext = row.includeSkillsContext,
                 images = row.images,
+                weight = row.weight,
                 queuedFor = row.queuedFor,
                 queuedAt = row.queuedAt,
                 sessionId = row.sessionId,
@@ -1312,6 +1328,10 @@ class TicketBoard(
         }
     }
 
+    /** TICKET-WEIGHT: the mapping's choice for [row] when [WeightExecutors.applies] (nothing else pins an executor), else null. */
+    private fun weightChoice(row: TicketRow, boundProvider: String?, boundModel: String?): WeightExecutor? =
+        if (WeightExecutors.applies(row.weight, row.provider, row.model, boundProvider, boundModel)) weightExecutors().forWeight(row.weight) else null
+
     private fun effectiveExecutor(row: TicketRow): EffectiveExecutor? {
         val assigned = row.agentId ?: return null
         val isRole = assigned.startsWith("role:")
@@ -1322,8 +1342,10 @@ class TicketBoard(
         // ROLE-1d: the role's binding comes from the one resolver (executorFor), never a second path.
         val bound = (profile ?: roleId?.let { AgentProfile(name = it, role = it) })
             ?.let { agents?.executorFor(it, row.provider, row.model, null) }
+        val byWeight = weightChoice(row, profileProvider ?: bound?.provider, profile?.model ?: bound?.model)
         val provider = when {
             row.provider != null -> ExecutorField(row.provider, "ticket")
+            byWeight?.provider != null -> ExecutorField(byWeight.provider, "weight")
             profileProvider != null -> ExecutorField(profileProvider, "profile")
             bound?.provider != null -> ExecutorField(bound.provider, "role")
             isRole -> ExecutorField(null, "role")
@@ -1335,6 +1357,7 @@ class TicketBoard(
             (row.provider == null || row.provider == profileProviderOrDefault)
         val model = when {
             row.model != null -> ExecutorField(row.model, "ticket")
+            byWeight?.model != null -> ExecutorField(byWeight.model, "weight")
             profileModelApplies -> ExecutorField(profile!!.model, "profile")
             bound?.model != null -> ExecutorField(bound.model, "role")
             isRole && row.provider == null && profile?.model == null && profileProvider == null ->

@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.settings
 
+import com.superiorsoftllc.agenthq.backlog.WeightExecutors
 import com.superiorsoftllc.agenthq.persistence.AgentHqStore
 import com.superiorsoftllc.agenthq.persistence.SettingRow
 import kotlinx.serialization.json.Json
@@ -40,8 +41,15 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
             QUESTIONS_MAX_OPEN_PER_AGENT to JsonPrimitive(questionsMaxOpenPerAgent()),
             QUESTIONS_MAX_PER_HOUR to JsonPrimitive(questionsMaxPerHour()),
             TICKET_EXIT_BEHAVIOR to JsonPrimitive(ticketExitBehavior()),
+            TICKET_WEIGHT_EXECUTORS to weightExecutors().toJson(),
         ),
     )
+
+    /** TICKET-WEIGHT: the weight -> executor mapping, read at every start; an unreadable stored value falls back to the default. */
+    fun weightExecutors(): WeightExecutors {
+        val stored = store.settings.get(TICKET_WEIGHT_EXECUTORS)?.value ?: return WeightExecutors.DEFAULT
+        return runCatching { WeightExecutors.parse(Json.parseToJsonElement(stored)) }.getOrDefault(WeightExecutors.DEFAULT)
+    }
 
     /** `leave` (default) or `done`: what a clean worker exit does to its in_progress ticket; read at every run end. */
     fun ticketExitBehavior(): String {
@@ -67,6 +75,11 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
             CHAT_IMAGE_RETENTION_DAYS -> JsonPrimitive(requireChatImageRetentionDays(value))
             QUESTIONS_MAX_OPEN_PER_AGENT, QUESTIONS_MAX_PER_HOUR -> JsonPrimitive(requireQuestionLimit(key, value))
             TICKET_EXIT_BEHAVIOR -> JsonPrimitive(requireExitBehavior(value))
+            TICKET_WEIGHT_EXECUTORS -> try {
+                WeightExecutors.parse(value).toJson()
+            } catch (e: IllegalArgumentException) {
+                throw IllegalArgumentException("setting '$TICKET_WEIGHT_EXECUTORS' ${e.message}")
+            }
             else -> throw IllegalArgumentException("unknown setting '$key'")
         }
         store.settings.put(
@@ -198,6 +211,8 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
         const val DEFAULT_QUESTIONS_MAX_PER_HOUR = 6
         /** What a clean worker exit does to its ticket: `leave` it in_progress (default) or move it to `done`. */
         const val TICKET_EXIT_BEHAVIOR = "tickets.exitBehavior"
+        /** TICKET-WEIGHT: JSON object weight ("1".."5") -> {provider, model}; see [WeightExecutors]. */
+        const val TICKET_WEIGHT_EXECUTORS = WeightExecutors.SETTING
         const val EXIT_LEAVE = "leave"
         const val EXIT_DONE = "done"
         private val EXIT_BEHAVIORS = listOf(EXIT_LEAVE, EXIT_DONE)
