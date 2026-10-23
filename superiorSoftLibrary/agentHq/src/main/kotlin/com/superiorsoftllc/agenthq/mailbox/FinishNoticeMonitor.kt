@@ -19,6 +19,10 @@ import java.util.concurrent.TimeUnit
  *  - A clean finish is SUPPRESSED when the worker already mailed the starter since the last notice: its own mail is
  *    richer, and a second one would only confuse.
  *  - Deduped per session run, so one finish gives one mail.
+ *  - A turn that ended with exit code 0 and the ticket still open is NOT a failure when the worker is only waiting: a
+ *    background process or `bg` job is running, it mailed the starter since the last notice (a plan awaiting a go), or
+ *    the daemon itself started under [RESUME_GRACE_MS] ago (sessions resumed after a restart). Non-zero exits always notify.
+ *  - Failure notices are collapsed to one per ticket per [REPEAT_WINDOW_MS].
  */
 class FinishNoticeMonitor(
     private val sessions: SessionManager,
@@ -31,6 +35,8 @@ class FinishNoticeMonitor(
     private val tail = ConcurrentHashMap<String, ArrayDeque<String>>()
     private val lastNoticed = ConcurrentHashMap<String, Int>()
     private val lastNoticeAt = ConcurrentHashMap<String, Long>()
+    private val lastFailureNoticeAt = ConcurrentHashMap<String, Long>()
+    private val startedAt = clock()
 
     fun onSessionEvent(event: SessionEvent) {
         when (event) {
@@ -60,7 +66,20 @@ class FinishNoticeMonitor(
         val failure = failed || !done
         val since = lastNoticeAt[session.id] ?: session.spawnedAt
         lastNoticeAt[session.id] = clock()
-        if (!failure && mailbox.outbox(session.id).any { it.sentAt >= since && it.to == starter }) return
+        val mailedStarter = mailbox.outbox(session.id).any { it.sentAt >= since && it.to == starter }
+        if (!failure && mailedStarter) return
+        if (failure && !failed) {
+            // A clean exit with the ticket still open: only a worker that is not waiting on anything is a failure.
+            val waiting = session.backgroundWork != null || session.bgJobs.isNotEmpty() ||
+                mailedStarter || clock() - startedAt < RESUME_GRACE_MS
+            if (waiting) return
+        }
+        if (failure) {
+            val now = clock()
+            val prev = lastFailureNoticeAt[ticket.id]
+            if (prev != null && now - prev < REPEAT_WINDOW_MS) return
+            lastFailureNoticeAt[ticket.id] = now
+        }
         val lines = tail[session.id]?.let { q -> synchronized(q) { q.toList() } }.orEmpty()
         val branch = ticket.branch ?: session.worktreeBranch
         val commit = (session.worktreePath ?: session.repoRoot)?.let { commitOf(File(it)) }
@@ -97,6 +116,8 @@ class FinishNoticeMonitor(
         const val SYSTEM = "system"
         private const val TAIL_LINES = 12
         private const val OUTPUT_LINES = 6
+        const val RESUME_GRACE_MS = 5 * 60_000L
+        const val REPEAT_WINDOW_MS = 15 * 60_000L
 
         /** The short sha of HEAD in [dir], or null when it is not a git checkout or git does not answer in 5 s. */
         fun gitHead(dir: File): String? = runCatching {
