@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.113.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.114.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,17 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+
+### What changed in 1.114.0 (KILL-SCOPE-1) — kill by role and project; one-call kill + remove
+
+ADDITIVE; a 1.113.0 client keeps working. The `ready` frame reports `contract=1.114.0`.
+- **`SessionRecord.spawnerSessionId`** (omitted when none): the session that spawned this one, recorded by the daemon and persisted.
+- **Kill scope** (`agenthq_kill`, `agenthq kill`, `agenthq session rm --force`, `agenthq_session_remove force=true`): the owner (no session id)
+  and `--allow-kill-any` may kill any session; a `pm` any session in ITS OWN project (another project is refused); every other role only the
+  sessions it spawned (matched by `spawnerSessionId`, so it survives an app / MCP-server restart).
+- **`agenthq_session_remove`** gains `force` (default false): kill a running session, then remove it. CLI: `agenthq session rm <id|prefix> --force`;
+  new `agenthq kill <id|prefix> [--force]`. Refusals name the exact next call.
+- **`session_restart` with force** now kills the running turn's process tree at once before restarting.
 
 ### What changed in 1.108.0 (ROLE-EDIT-1) — a role has a description, and a custom role can be deleted
 

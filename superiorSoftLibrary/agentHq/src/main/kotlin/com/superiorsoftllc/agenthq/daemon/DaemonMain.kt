@@ -987,7 +987,7 @@ class AgentHqDaemon(
                 sessions = manager::get, maxPerPod = podSpawnCap, maxDepth = podSpawnDepth,
                 pendingOf = orchestrator::pendingNodes,
             )
-            orchestrator.sessionStartedSink = { _, sessionId, parent -> spawnGuard.record(sessionId, parent) }
+            orchestrator.sessionStartedSink = { _, sessionId, parent -> spawnGuard.record(sessionId, parent); manager.setSpawner(sessionId, parent) }
             println("[agentHq] pod spawn cap=$podSpawnCap depth=$podSpawnDepth (session-originated spawns only)")
 
             mailbox.load()
@@ -1974,7 +1974,7 @@ private suspend fun handleConnection(
                                         effort = resolved.effort,
                                         // BUG-PERM-1: the spawn's own Tool approval; an unknown value refuses the spawn.
                                         toolApproval = com.superiorsoftllc.agenthq.harness.ToolApproval.parseStrict(spawn?.toolApproval),
-                                    ).also { if (placement != null) spawnGuard.record(it.id, origin) }
+                                    ).also { if (placement != null) spawnGuard.record(it.id, origin); manager.setSpawner(it.id, origin) }
                                 }
                                 active = created.id
                                 worktrees.status(created.id)?.let { outgoing.trySend(worktreeEnvelope(it)) }
@@ -2032,7 +2032,7 @@ private suspend fun handleConnection(
                             // BIND AT CREATION: a console opened as a profile is addressable at once.
                             spawnGuard.admit(origin) { placement ->
                                 bindSessionOnSpawn(manager, agents, options, repo)
-                                    ?.also { if (placement != null) spawnGuard.record(it.id, origin) }
+                                    ?.also { if (placement != null) spawnGuard.record(it.id, origin); manager.setSpawner(it.id, origin) }
                             }?.let { active = it.id }
                             null
                         } catch (e: IllegalArgumentException) {

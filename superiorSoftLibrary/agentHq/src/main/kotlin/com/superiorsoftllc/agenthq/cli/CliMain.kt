@@ -205,7 +205,8 @@ fun main(args: Array<String>) {
  * agenthq runs <podId>        list a pod's runs with their outcome
  * agenthq logs <sessionId>    a run's stdout / stderr, as it is produced
  * agenthq cancel <podId>      cancel a pod gracefully
- * agenthq session rm <id>    remove an ended session from the session list (refused while it runs)
+ * agenthq session rm <id> [--force]   remove a session from the session list; --force kills a running one first
+ * agenthq kill <id> [--force]          kill a session (pm / owner: any in their project; others: their own spawns)
  * agenthq epics --project <id> list that project's epics
  * agenthq stories               the story board (--project / --status to narrow)
  * agenthq send <to> "message"   message an agent (by id or role); --reply-to answers one
@@ -410,7 +411,8 @@ internal object Cli {
                 "epic" -> epic(stream, parsed, out, err, getenv)
                 "project" -> project(stream, parsed, out, err)
                 "image" -> image(stream, parsed, out, err)
-                "session" -> session(stream, parsed, out, err)
+                "session" -> session(stream, parsed, out, err, getenv)
+                "kill" -> kill(stream, parsed, out, err, getenv)
                 "knowledge" -> knowledge(stream, parsed, out, err, getenv)
                 "memory" -> memory(stream, parsed, out, err, getenv, input)
                 "decision" -> decision(stream, parsed, out, err, getenv, input)
@@ -872,7 +874,53 @@ internal object Cli {
         return 1
     }
 
-    private fun session(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable): Int =
+    /** Contract 1.114.0: the scope rule `agenthq_kill` uses, evaluated for the CLI caller. */
+    private fun killScopeRefusal(session: SessionRecord, snapshot: List<SessionRecord>, getenv: (String) -> String?): String? =
+        McpWriteTools(McpGuardrails(), getenv).killRefusal(session, snapshot)
+
+    /** Sends `kill` and waits for the session list that follows it; returns the session afterwards, or null with [err] written. */
+    private suspend fun killAndWait(stream: FrameStream, session: SessionRecord, force: Boolean, err: Appendable): SessionRecord? {
+        stream.send(Envelope(Envelope.KILL, if (force) "${session.id} force" else session.id))
+        stream.send(Envelope(Envelope.SESSIONS))
+        val deadline = System.currentTimeMillis() + SESSION_RM_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            val frame = stream.next(SESSION_RM_POLL_MS) ?: continue
+            when {
+                frame.type == Envelope.ERROR && frame.sessionId == null -> { err.appendLine("error: kill failed: ${frame.data}"); return null }
+                frame.type == Envelope.SESSIONS ->
+                    json.decodeFromString(ListSerializer(SessionRecord.serializer()), frame.data).firstOrNull { it.id == session.id }
+                        ?.let { if (!it.live) return it }
+            }
+        }
+        err.appendLine("error: session ${session.id} is still running after the kill; retry with --force")
+        return null
+    }
+
+    private suspend fun resolveSessionArg(stream: FrameStream, requested: String, err: Appendable): Pair<SessionRecord, List<SessionRecord>>? {
+        val snapshot = json.decodeFromString(
+            ListSerializer(SessionRecord.serializer()),
+            stream.request(Envelope(Envelope.SESSIONS), answerType = Envelope.SESSIONS, what = "sessions", idempotent = true).data,
+        )
+        val matches = snapshot.filter { it.id == requested }.ifEmpty { snapshot.filter { it.id.startsWith(requested) } }
+        return when (matches.size) {
+            1 -> matches.single() to snapshot
+            0 -> { err.appendLine("error: no session '$requested' on this daemon"); null }
+            else -> { err.appendLine("error: session id '$requested' is ambiguous: ${matches.joinToString(", ") { it.id }}"); null }
+        }
+    }
+
+    /** `kill <id|prefix> [--force]`: end a session (it stays in the list; `session rm` removes it). */
+    private fun kill(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable, getenv: (String) -> String?): Int =
+        runBlocking {
+            checkContract(stream, err)
+            val (session, snapshot) = resolveSessionArg(stream, parsed.args[0], err) ?: return@runBlocking 1
+            killScopeRefusal(session, snapshot, getenv)?.let { err.appendLine("error: kill refused: $it"); return@runBlocking 1 }
+            val after = killAndWait(stream, session, parsed.force, err) ?: return@runBlocking 1
+            out.appendLine("killed ${session.id} (${after.state}); remove it with: agenthq session rm ${session.id}")
+            0
+        }
+
+    private fun session(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable, getenv: (String) -> String? = { null }): Int =
         runBlocking {
             val requested = parsed.args[1]
             checkContract(stream, err)
@@ -891,8 +939,12 @@ internal object Cli {
                 }
             }
             if (session.live) {
-                err.appendLine("error: ${McpWriteTools.liveRefusal(session)}")
-                return@runBlocking 1
+                if (!parsed.force) {
+                    err.appendLine("error: ${McpWriteTools.liveRefusal(session)}")
+                    return@runBlocking 1
+                }
+                killScopeRefusal(session, snapshot, getenv)?.let { err.appendLine("error: session rm refused: $it"); return@runBlocking 1 }
+                killAndWait(stream, session, true, err) ?: return@runBlocking 1
             }
             stream.send(Envelope(Envelope.SESSION_DELETE, session.id))
             stream.send(Envelope(Envelope.SESSIONS))
@@ -4827,7 +4879,8 @@ internal object Cli {
         "epic" -> epicUsageError(parsed, getenv)
         "project" -> projectUsageError(parsed)
         "image" -> imageUsageError(parsed)
-        "session" -> if (parsed.args.size != 2 || parsed.args[0] !in listOf("rm", "restart")) "usage: agenthq session rm|restart <sessionId|prefix> [--force]" else null
+        "kill" -> if (parsed.args.size != 1) "usage: agenthq kill <sessionId|prefix> [--force]" else null
+        "session" -> if (parsed.args.size != 2 || parsed.args[0] !in listOf("rm", "restart")) "usage: agenthq session rm|restart <sessionId|prefix> [--force] (rm --force kills a running session first)" else null
         "knowledge" -> knowledgeUsageError(parsed, getenv)
         "memory" -> memoryUsageError(parsed, getenv)
         "decision" -> decisionUsageError(parsed, getenv)
@@ -5006,7 +5059,7 @@ internal object Cli {
     private val COMMANDS = setOf(
         "submit", "watch", "pods", "runs", "logs", "cancel", "tickets", "board", "ticket", "agents", "send", "inbox",
         "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
-        "trait", "skill", "role", "ask", "harnesses", "harness-status", "harness-install", "image", "session", "remote", "bg",
+        "trait", "skill", "role", "ask", "harnesses", "harness-status", "harness-install", "image", "session", "remote", "bg", "kill",
     )
 
     /** `agenthq remote on|off|status`: edits `<stateDir>/network.properties`; takes effect on the next daemon restart. */

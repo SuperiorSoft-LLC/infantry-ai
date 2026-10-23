@@ -766,7 +766,8 @@ class SessionManager(
         require(!busy || force) {
             "session '$sessionId' is mid-turn (state=${session.state}); wait for the reply to finish, or confirm with force to stop it first"
         }
-        if (busy) killRun(sessionId, force = false)
+        // force means the turn is stuck: kill the process tree at once rather than waiting out the grace period.
+        if (busy) killRun(sessionId, force = true)
         host.stop(sessionId)
         val next = resolveInstance(session.agentId, session.role)?.let { withSkills(it.copy(agentId = session.agentId, role = session.role), session.ticketId) }
         instances.delete(sessionId)
@@ -808,6 +809,13 @@ class SessionManager(
         val current = session.projectId?.takeIf { it.isNotBlank() }
         require(current == null || current == wanted) { "session '$sessionId' is already bound to project '$current'" }
         return changeSetting(sessionId) { it.copy(projectId = wanted) }
+    }
+
+    /** Contract 1.114.0: record which session spawned [sessionId]; a no-op for a blank or unknown id. */
+    fun setSpawner(sessionId: String, spawnerId: String?) {
+        val spawner = spawnerId?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        if (!sessions.containsKey(sessionId)) return
+        changeSetting(sessionId) { it.copy(spawnerSessionId = spawner) }
     }
 
     /** Apply [transform], persist, and tell listeners: a setting changes no state, so [update] would stay silent. */
