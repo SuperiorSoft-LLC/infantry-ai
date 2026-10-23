@@ -217,7 +217,7 @@ compose.desktop {
                 shortcut = true
                 dirChooser = true
                 perUserInstall = true
-                // APP-ICON-1: the "A" mark for the installer and exe (else Compose packages its Kotlin icon).
+                // APP-ICON-1: the Infantry AI emblem for the installer and exe (else Compose packages its Kotlin icon).
                 iconFile.set(project.file("icons/agenthq.ico"))
                 // FIXED forever: changing it makes Windows treat a new version as a different product (no upgrade).
                 upgradeUuid = "6f1d3c2a-8b47-4e5a-9c1e-2a7b0d4f8e61"
