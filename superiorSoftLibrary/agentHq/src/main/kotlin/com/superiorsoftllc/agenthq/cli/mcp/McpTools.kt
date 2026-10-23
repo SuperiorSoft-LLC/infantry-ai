@@ -38,7 +38,7 @@ import kotlinx.serialization.json.putJsonObject
 internal class McpTools(
     private val connect: () -> FrameStream,
     guardrails: McpGuardrails = McpGuardrails(),
-    getenv: (String) -> String? = { null },
+    private val getenv: (String) -> String? = { null },
     /** P11-C: the `projectId` used by `agenthq_spawn` / `agenthq_pod_state` when a call passes none. */
     private val defaultProjectId: String? = null,
 ) {
@@ -102,9 +102,17 @@ internal class McpTools(
     }
 
     private suspend fun listSessions(stream: FrameStream, arguments: JsonObject): ToolResult {
-        // Optional filter; "all" or no value keeps today's behaviour (every project) until PM approves a scoped default.
-        val projectId = (arguments["projectId"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() && it != "all" }
-        val sessions = fetchSessions(stream).filter { projectId == null || it.projectId == projectId }
+        // A SESSION caller (AGENTHQ_SESSION_ID) sees its OWN project by default; explicit "all" lists every project and an
+        // explicit id lists that project. Owner/user callers (no session id) are unaffected: all projects.
+        val requested = (arguments["projectId"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+        val all = fetchSessions(stream)
+        val callerId = getenv("AGENTHQ_SESSION_ID")?.trim()?.takeIf { it.isNotEmpty() }
+        val scope = when {
+            requested == "all" -> null
+            requested != null -> requested
+            else -> callerId?.let { id -> all.firstOrNull { it.id == id }?.projectId }
+        }
+        val sessions = all.filter { scope == null || it.projectId == scope }
         return ok(buildJsonObject {
             put("sessions", JsonArray(sessions.map { summary(it) }))
         })
@@ -386,7 +394,7 @@ internal class McpTools(
                 putJsonObject("properties") {
                     putJsonObject("projectId") {
                         put("type", "string")
-                        put("description", "Only this project's sessions; \"all\" or omitted lists every project.")
+                        put("description", "Only this project's sessions. Omitted: a session caller's own project (everyone else: all). \"all\" lists every project.")
                     }
                 }
                 put("additionalProperties", false)

@@ -143,7 +143,7 @@ login`, `pi`, or the provider's API-key environment variable, set by the user); 
 
 ADDITIVE; a 1.100.0 client keeps working. The `ready` frame reports `contract=1.101.0`.
 - ISO-2 (no wire change, so no bump): the MCP `agenthq_list_sessions` summary adds `projectId` per session and takes an optional
-  `projectId` filter (`all`/omitted = every project); the CLI `pods` session lines print `project=<id>`. The `sessions` frame already carried `projectId`.
+  `projectId` filter. DEFAULT: a session caller (AGENTHQ_SESSION_ID) sees only its OWN project; `projectId:"all"` lists every project; owner/user callers see all. The CLI `pods` session lines print `project=<id>`. The `sessions` frame already carried `projectId`.
 - `mail_send` (`MailSendRequest`) takes an optional `allowCrossProject` (default false; CLI `agenthq send --cross-project`,
   MCP `agenthq_message {allowCrossProject:true}`). When the sender is a SESSION bound to a project and the recipient (a
   session id or an agent id) is bound to a DIFFERENT one, the daemon answers `mail_refused` with a reason naming both
