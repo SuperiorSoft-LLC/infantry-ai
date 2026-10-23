@@ -37,7 +37,7 @@ class MailRouterAuthRenderTest {
         manager.eventSink = { event -> router.onSessionEvent(event) }
         val agent = manager.startNew("bootstrap")
         router.send(MailSendRequest(from = "human", to = agent.id, body = "wake up"))
-        return runner.processes.last { it.input.contains("[Infantry AI mailbox]") }.input.toString()
+        return runner.processes.last { it.input.contains("[Infantry AI COMMS]") }.input.toString()
     }
 
     @Test

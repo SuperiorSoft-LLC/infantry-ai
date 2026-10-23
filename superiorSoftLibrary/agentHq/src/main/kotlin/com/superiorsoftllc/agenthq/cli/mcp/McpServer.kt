@@ -106,7 +106,7 @@ internal class McpServer(
             put(
                 "instructions",
                 "Infantry AI daemon: list sessions, inspect one session's status and transcript, summarise the " +
-                    "agents/roles of the pod; spawn, prompt and kill sessions and send mailbox mail, within this " +
+                    "agents/roles of the pod; spawn, prompt and kill sessions and send COMMS mail, within this " +
                     "server's depth, concurrency and kill-scope guardrails; create, update and read board tickets. " +
                     "To put an agent to work on a ticket, pin its role / provider / model (agenthq_list_harnesses " +
                     "lists the harnesses and their models), then start it with agenthq_ticket_start: the worker " +

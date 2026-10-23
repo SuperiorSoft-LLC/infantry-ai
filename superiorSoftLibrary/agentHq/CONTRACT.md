@@ -158,7 +158,7 @@ with no project, never fired, and its next slot recomputed from its interval. No
   never), **`nextFireAt`** `long?` (a schedule's next slot; null = not timed).
 - **The `prompt` action is now MAIL.** Each fire mails the prompt (subject `Trigger: <name>`, from `trigger:<id>`, its own
   thread `trigger:<id>:<ms>`) to the target's session in the trigger's project: for `role:<role>`, the project's
-  session of that role (the one in flight first, else the newest); for a profile id, that agent's session. The mailbox
+  session of that role (the one in flight first, else the newest); for a profile id, that agent's session. COMMS
   queues it while the session is mid-turn and delivers it when the session comes to rest. Only when there is NO such
   session is one started with the prompt as its first turn (in the trigger's project). The run is over once the mail is
   queued or the session started: **a busy target never trips the trigger**.
@@ -293,7 +293,7 @@ The `ready` frame reports `contract=1.97.0`. Schema: `41.sqm` adds the `owner_qu
 
 An agent asks the owner to choose WITHOUT waiting: `question_ask` (CLI `agenthq ask --recommend <label> --reason ..`, MCP
 `agenthq_ask`) stores the question and is answered at once with `question_asked {questionId}`. The owner's pick reaches
-the asking agent as mailbox mail from `owner` in thread `question:<id>` (subject `Answer to question <id>: <label>`),
+the asking agent as COMMS mail from `owner` in thread `question:<id>` (subject `Answer to question <id>: <label>`),
 addressed to the asker's agent id (its session id when it has no agent), so it resumes on its own. PROMPT-5's blocking
 `prompt_ask` and the harness prompts (PROMPT-1..6) are unchanged.
 
@@ -2319,7 +2319,7 @@ duplicate transcript, and their content is provider-specific — the very thing 
 Both streams are derived from the *same* lifecycle event, so they can never disagree: `text_delta`
 is a translation of the matching `stdout` line, never a second source of truth.
 
-### 2.4 The mailbox (Phase 6)
+### 2.4 COMMS (Phase 6)
 
 Agent-to-agent messaging rides the same socket. A message reaches an agent by **resuming its
 session with the message as the next prompt** — delivery and "the console came back" are the same
