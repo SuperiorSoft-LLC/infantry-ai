@@ -182,8 +182,16 @@ class ChangesWorktreeRealDaemonUiTest {
             onNodeWithTag("changes-base").assertTextEquals("vs main")
             onNodeWithTag("changes-uncommitted").assertTextEquals("1 uncommitted")
 
-            // 3. Working tree lists the modified file; History lists the two commits by subject.
+            // 3. The changes list names the feature file; History lists the two commits by subject.
+            // BUG-CHANGES-WRONG-BRANCH (a7cbcd3): a linked worktree's inner picker defaults to its own branch vs the base,
+            // so the list is the branch's committed diff, a separate daemon answer from the worktree status waited on
+            // above. Wait for that answer (feature vs main, naming feature.txt), then for the row drawn from it.
             onNodeWithTag("changes-mode-working-tree").performClick()
+            waitUntil(timeoutMillis = daemonWaitMs) {
+                c.state.value.projectGitBranchChanges[project.id]?.takeIf { it.available && it.branch == "feature" && it.base == "main" }
+                    ?.changes?.any { it.path == "feature.txt" } == true
+            }
+            waitUntil(timeoutMillis = daemonWaitMs) { onAllNodes(hasTestTag("branch-change-row-feature.txt")).fetchSemanticsNodes().isNotEmpty() }
             onNodeWithText("feature.txt", substring = true).assertExists()
             onNodeWithText("main-only.txt", substring = true).assertDoesNotExist()
             onNodeWithTag("changes-mode-history").performClick()
