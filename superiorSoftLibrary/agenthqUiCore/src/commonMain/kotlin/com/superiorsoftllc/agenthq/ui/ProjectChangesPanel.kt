@@ -44,7 +44,9 @@ import com.superiorsoftllc.agenthq.ui.model.HistoryView
 import com.superiorsoftllc.agenthq.ui.model.ProjectView
 import com.superiorsoftllc.agenthq.ui.model.badge
 import com.superiorsoftllc.agenthq.ui.model.branchChangesView
+import com.superiorsoftllc.agenthq.ui.model.aheadHint
 import com.superiorsoftllc.agenthq.ui.model.changesBranch
+import com.superiorsoftllc.agenthq.ui.model.changesShownBranch
 import com.superiorsoftllc.agenthq.ui.model.changesWorktree
 import com.superiorsoftllc.agenthq.ui.model.changesWorktreeStatus
 import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
@@ -193,8 +195,9 @@ fun ProjectChangesPanel(
     val branchesSupported = contractAtLeast(state.connection.contract, 1, 65)
     val worktreesSupported = contractAtLeast(state.connection.contract, 1, 88)
     val active = state.activeProject
-    val branch = state.changesBranch
     val worktree = if (worktreesSupported) state.changesWorktree else null
+    // BUG-CHANGES-WRONG-BRANCH: from 1.88.0 the inner picker follows the worktree the header shows.
+    val branch = if (worktreesSupported) state.changesShownBranch else state.changesBranch
     var mode by remember { mutableStateOf(ChangesMode.WORKING_TREE) }
 
     // Before 1.88.0: the project directory's working tree, polled only while it is the one shown (a branch's changes
@@ -280,7 +283,10 @@ fun ProjectChangesPanel(
         when (mode) {
             ChangesMode.WORKING_TREE -> {
                 BranchSelect(state, controller, active, branch, branchesSupported)
-                if (branch == null) WorkingTreeChanges(worktreeChangesView(status), worktree, openDiff, onOpenDiff)
+                if (branch == null) {
+                    aheadHint(status)?.let { Text(it, color = Palette.Muted, fontSize = 11.sp) }
+                    WorkingTreeChanges(worktreeChangesView(status), worktree, openDiff, onOpenDiff)
+                }
                 else BranchChanges(state, active, branch, openDiff, onOpenDiff)
             }
             ChangesMode.HISTORY -> WorktreeHistory(status)

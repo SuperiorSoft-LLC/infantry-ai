@@ -782,6 +782,8 @@ data class AppState(
     val worktreeStatus: Map<String, ProjectGitWorktreeStatus> = emptyMap(),
     /** UX-CHANGES-1: the worktree the user picked in the Changes header ([changesWorktree]). UI-side only. */
     val changesWorktreePick: ChangesWorktreePick? = null,
+    /** BUG-CHANGES-WRONG-BRANCH: the inner picker's choice, keyed on the worktree it was made for ([changesShownBranch]). */
+    val changesViewPick: ChangesViewPick? = null,
     /** The project the shell is scoped to: UI-side selection, like [selectedId] is for a session. */
     val activeProjectId: String? = null,
 ) {
@@ -1864,6 +1866,7 @@ fun AppState.selectProject(projectId: String): AppState =
             activeProjectId = projectId,
             // BRANCH-VIEW-2: a different project starts on its working tree.
             changesBranchPick = changesBranchPick?.takeIf { it.projectId == projectId },
+            changesViewPick = changesViewPick?.takeIf { it.projectId == projectId },
         )
     } else this
 

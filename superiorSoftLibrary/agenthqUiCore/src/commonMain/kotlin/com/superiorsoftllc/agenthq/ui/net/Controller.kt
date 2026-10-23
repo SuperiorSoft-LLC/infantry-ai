@@ -10,6 +10,7 @@ import com.superiorsoftllc.agenthq.ui.model.LifecycleSetting
 import com.superiorsoftllc.agenthq.ui.model.UserPortrait
 import kotlinx.serialization.json.JsonPrimitive
 import com.superiorsoftllc.agenthq.ui.model.withChangesBranch
+import com.superiorsoftllc.agenthq.ui.model.withChangesView
 import com.superiorsoftllc.agenthq.ui.model.withChangesWorktree
 import com.superiorsoftllc.agenthq.ui.model.followWorkerBranch
 import com.superiorsoftllc.agenthq.ui.model.QueueSend
@@ -1212,7 +1213,7 @@ class Controller(
 
     /** BRANCH-VIEW-2: show [branch] in [projectId]'s Changes panel (null = the working tree). UI-side only. */
     fun selectChangesBranch(projectId: String, branch: String?) {
-        _state.update { it.withChangesBranch(projectId, branch) }
+        _state.update { if (contractAtLeast(it.connection.contract, 1, 88)) it.withChangesView(projectId, branch) else it.withChangesBranch(projectId, branch) }
     }
 
     /** True when the connected daemon speaks contract 1.65.0 or later (the branch view frames). */
