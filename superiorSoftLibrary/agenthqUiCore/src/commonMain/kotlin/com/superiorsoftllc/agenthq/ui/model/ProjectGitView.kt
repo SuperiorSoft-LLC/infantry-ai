@@ -6,6 +6,7 @@ import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitBranchDiffstat
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitHistory
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitPatch
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitStatus
+import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitWorktreeStatus
 import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
@@ -88,6 +89,39 @@ val AppState.changesBranch: String?
 /** Show [branch] in [projectId]'s Changes panel; null goes back to the working tree. */
 fun AppState.withChangesBranch(projectId: String, branch: String?): AppState =
     copy(changesBranchPick = branch?.let { ChangesBranchPick(projectId, it) })
+
+/**
+ * BUG-CHANGES-WRONG-BRANCH: the user's explicit choice in the inner picker, for ONE worktree of ONE project. A null
+ * [branch] is an explicit "Working tree". It applies only while [worktree] is the worktree the header shows, so a
+ * choice made for one worker can never leak onto another.
+ */
+data class ChangesViewPick(val projectId: String, val worktree: String, val branch: String?)
+
+/**
+ * The branch the inner picker shows from 1.88.0 on (null = the working tree). The explicit pick for the shown worktree
+ * wins; otherwise a linked worktree (a worker's) shows its own branch vs the base, so its committed work is visible,
+ * and the shared checkout shows its working tree.
+ */
+val AppState.changesShownBranch: String?
+    get() {
+        val projectId = activeProjectId ?: return null
+        val path = changesWorktree ?: return null
+        changesViewPick?.takeIf { it.projectId == projectId && it.worktree == path }?.let { return it.branch }
+        val w = projectWorktrees[projectId]?.worktrees?.firstOrNull { it.path == path } ?: return null
+        return w.branch?.takeIf { !w.main && !w.bare && !w.detached }
+    }
+
+/** Record the inner picker's choice for the worktree the header shows; null is the working tree. */
+fun AppState.withChangesView(projectId: String, branch: String?): AppState {
+    val path = changesWorktree ?: return withChangesBranch(projectId, branch)
+    return copy(changesViewPick = ChangesViewPick(projectId, path, branch))
+}
+
+/** "3 commits ahead; see Compare/History" when the working tree is empty but the branch is ahead of its base; else null. */
+fun aheadHint(status: ProjectGitWorktreeStatus?): String? {
+    val ahead = status?.takeIf { it.available && it.changes.isEmpty() }?.ahead?.takeIf { it > 0 } ?: return null
+    return "$ahead ${if (ahead == 1) "commit" else "commits"} ahead; see Compare/History"
+}
 
 /**
  * TASK-BRANCH-FOLLOW: the branch the selected session is on when it is an in-progress ticket's worker, as a pick for
