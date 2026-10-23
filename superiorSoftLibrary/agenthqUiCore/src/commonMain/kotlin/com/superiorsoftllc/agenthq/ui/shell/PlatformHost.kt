@@ -48,6 +48,9 @@ interface PlatformHost {
     /** UPDATE-1: Configuration > Updates (the installed desktop app only); null hides the section. */
     val updates: com.superiorsoftllc.agenthq.ui.UpdatesEntry? get() = null
 
+    /** SERVER-UPDATE-4: this app's own version, compared with the server's; null when the host cannot tell (then only the contract is compared). */
+    val appVersion: String? get() = updates?.version
+
     /** IMG-4: the bytes of the file at [path], or null when it cannot be read here. Never throws. */
     fun readBytes(path: String): ByteArray? = null
 

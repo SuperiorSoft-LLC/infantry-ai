@@ -258,6 +258,13 @@ fun App(
         if (platformHost.localServer == null && platformHost.savedServers == null) null
         else ServerSwitcher(platformHost.savedServers, platformHost.localServer, platformHost.activeServer(), platformHost::setActiveServer)
     }
+    // SERVER-UPDATE-4: the connected daemon's version and updater, over the same host and token as the socket.
+    val serverUpdate = remember(url, token) {
+        com.superiorsoftllc.agenthq.ui.model.ServerUpdateState(com.superiorsoftllc.agenthq.ui.net.HttpServerUpdateApi(url, token.ifBlank { null }), actionScope)
+    }
+    val serverView by serverUpdate.view.collectAsState()
+    LaunchedEffect(serverUpdate, state.connection.isLive) { if (state.connection.isLive) serverUpdate.onReconnected() }
+    val serverMismatch = com.superiorsoftllc.agenthq.ui.model.ServerVersionCheck.mismatch(host.appVersion, serverView.status?.version, state.connection.contract)
     var showServers by remember { mutableStateOf(false) }
     var switchError by remember { mutableStateOf<String?>(null) }
     fun switchTo(c: ServerChoice) {
@@ -608,7 +615,7 @@ fun App(
             }
             }
             }
-            StatusBar(state, onConfig = { showConfig = true })
+            StatusBar(state, serverMismatch, onConfig = { showConfig = true })
         }
         ToastHost(
             state,
@@ -665,6 +672,8 @@ fun App(
                 onBrowse = pickFile,
                 logs = logs,
                 updates = updates,
+                serverUpdate = serverUpdate,
+                serverMismatch = serverMismatch,
                 secrets = state.secrets,
                 pair = PairEntry(url, token.ifBlank { null }, null) { link ->
                     // PAIR-1: save the server + token through the host's store, then connect with the bearer.
@@ -681,6 +690,7 @@ fun App(
                 onOpenRoles = { showRoles = true },
             )
         }
+        ServerUpdateConfirm(serverUpdate)
         if (showRoles) RoleManagerDialog(state, controller, onDismiss = { showRoles = false })
         if (showServers && switcher != null) {
             ServersDialog(
@@ -2004,7 +2014,7 @@ private fun nodeColor(s: String) = when (s) {
 }
 
 @Composable
-private fun StatusBar(state: AppState, onConfig: () -> Unit) {
+private fun StatusBar(state: AppState, serverMismatch: String?, onConfig: () -> Unit) {
     val c = state.connection
     var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(Unit) { while (true) { delay(1000); now = Clock.System.now().toEpochMilliseconds() } }
@@ -2017,6 +2027,8 @@ private fun StatusBar(state: AppState, onConfig: () -> Unit) {
         )
         c.lastFrameAt?.let { Text("   last frame ${ago(it, now)} ago", color = Palette.Muted, fontSize = 11.sp) }
         if (c.isLive && c.contract?.substringBefore('.') != "1") Text("   unexpected contract version", color = Palette.Danger, fontSize = 11.sp)
+        // SERVER-UPDATE-4: client and server differ by more than a patch; the full text is in Configuration > Server.
+        if (c.isLive && serverMismatch != null) Text("   version mismatch (see Configuration)", color = Palette.Accent, fontSize = 11.sp, modifier = Modifier.testTag(SERVER_MISMATCH_TAG))
         Spacer(Modifier.weight(1f))
         Text("^K search  Alt+↑↓ agents  ^J needs input  ^N new  ^R resume  ^5 roles  ^6 attention  ^L connection  ^, config", color = Palette.Muted, fontSize = 10.sp)
         // The footer cog, bottom-right. It opens the configuration modal (flags).
