@@ -90,6 +90,9 @@ fun ConfigDialog(
     pair: PairEntry? = null,
     /** ROLE-EDIT-1: opens the role manager dialog; null hides the section. */
     onOpenRoles: (() -> Unit)? = null,
+    /** SERVER-UPDATE-4: the connected server's version and update state, and the client/server mismatch warning; null hides the section. */
+    serverUpdate: com.superiorsoftllc.agenthq.ui.model.ServerUpdateState? = null,
+    serverMismatch: String? = null,
 ) {
     AhqAlertDialog(
         onDismissRequest = onDismiss,
@@ -161,6 +164,12 @@ fun ConfigDialog(
                 if (pair != null) {
                     FlagSection(title = PairEntry.TITLE, applies = PairEntry.APPLIES_TO) {
                         com.superiorsoftllc.agenthq.ui.pair.PairDeviceSection(pair.url, pair.token, pair.name, pair.onLink)
+                    }
+                }
+                // SERVER-UPDATE-4: the daemon's own version and updater, over the existing connection.
+                if (serverUpdate != null) {
+                    FlagSection(title = ServerUpdateEntry.TITLE, applies = ServerUpdateEntry.APPLIES_TO) {
+                        ServerUpdateSection(serverUpdate, serverMismatch)
                     }
                 }
                 // UPDATE-1: the check itself runs in the daemon side's updater; this only asks for it.
