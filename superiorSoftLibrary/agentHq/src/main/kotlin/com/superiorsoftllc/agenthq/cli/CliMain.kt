@@ -704,7 +704,7 @@ internal object Cli {
                 "SESSIONS: ${records.size} (pod listing is not in contract ${EventVocabulary.VERSION})"
             )
             records.forEach { session ->
-                out.appendLine("  ${session.id.take(8)} ${if (session.runPhase == "compacting") "compacting" else session.state} started=${session.spawnedAt}")
+                out.appendLine("  ${session.id.take(8)} ${if (session.runPhase == "compacting") "compacting" else session.state} started=${session.spawnedAt}" + (session.projectId?.let { " project=$it" } ?: ""))
             }
             0
         }

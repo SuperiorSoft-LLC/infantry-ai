@@ -66,7 +66,7 @@ internal class McpTools(
         return try {
             runBlocking {
                 when (name) {
-                    LIST_SESSIONS -> listSessions(stream)
+                    LIST_SESSIONS -> listSessions(stream, arguments)
                     GET_SESSION -> getSession(stream, arguments)
                     POD_STATE -> podState(stream, arguments)
                     BOARD -> board(stream, arguments)
@@ -98,8 +98,10 @@ internal class McpTools(
         }
     }
 
-    private suspend fun listSessions(stream: FrameStream): ToolResult {
-        val sessions = fetchSessions(stream)
+    private suspend fun listSessions(stream: FrameStream, arguments: JsonObject): ToolResult {
+        // Optional filter; "all" or no value keeps today's behaviour (every project) until PM approves a scoped default.
+        val projectId = (arguments["projectId"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() && it != "all" }
+        val sessions = fetchSessions(stream).filter { projectId == null || it.projectId == projectId }
         return ok(buildJsonObject {
             put("sessions", JsonArray(sessions.map { summary(it) }))
         })
@@ -314,6 +316,7 @@ internal class McpTools(
         put("role", session.role)
         put("provider", session.provider)
         put("model", session.model)
+        session.projectId?.let { put("projectId", it) }
         put("status", if (session.runPhase == "compacting") "compacting" else session.state.name)
         session.lastAction?.let { put("lastAction", it) }
         session.lastOutputAt?.let { put("lastOutputAt", it) }
@@ -349,9 +352,14 @@ internal class McpTools(
 
         /** `tools/list`: each tool's name, description and JSON Schema for its arguments. */
         fun descriptors(): JsonArray = buildJsonArray {
-            add(tool(LIST_SESSIONS, "List the SESSIONS (running or past agent runs, not saved profiles) the AgentHQ daemon knows: id, agentId, role, provider, model, status.") {
+            add(tool(LIST_SESSIONS, "List the SESSIONS (running or past agent runs, not saved profiles) the AgentHQ daemon knows: id, agentId, role, provider, model, projectId, status.") {
                 put("type", "object")
-                putJsonObject("properties") {}
+                putJsonObject("properties") {
+                    putJsonObject("projectId") {
+                        put("type", "string")
+                        put("description", "Only this project's sessions; \"all\" or omitted lists every project.")
+                    }
+                }
                 put("additionalProperties", false)
             })
             add(tool(

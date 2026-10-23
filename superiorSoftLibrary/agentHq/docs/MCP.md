@@ -40,7 +40,7 @@ A refused token returns `isError: true` with the CLI's own refusal message.
 
 | Tool | Arguments | Returns |
 |---|---|---|
-| `agenthq_list_sessions` | — | `{sessions: [{id, agentId, role, provider, model, status, lastAction?, lastOutputAt?, lastEventAt?, backgroundWork?}]}` (the activity fields are absent until the session has produced an event) |
+| `agenthq_list_sessions` | `projectId?` (filter; `all`/omitted = every project) | `{sessions: [{id, agentId, role, provider, model, projectId?, status, lastAction?, lastOutputAt?, lastEventAt?, backgroundWork?}]}` (the activity fields are absent until the session has produced an event) |
 | `agenthq_get_session` | `sessionId` (id or unique prefix, required), `lines` (1–200, default 50), `brief` (true = no transcript: state, `liveState`, `activity`, `ticketId`) | the summary fields + `runCount`, `lastExitCode`, `lastError`, `projectId`, `ticketId`, `transcript` (last `lines` lines), `transcriptTruncated`, optional `transcriptNote` |
 | `agenthq_board` | `projectId` (optional) | `{board: [line]}`: tickets by column (todo, in_progress, pending, done), one line each: id, title, worker role + session id + live state (busy / idle / running background process), last action, last output age, `branch@commit`. Same text as `agenthq board` |
 | `agenthq_pod_state` | `projectId`, `podId` (both optional) | `{agents: {total, byRole: {role: [{id, name, model}]}}, sessions: {total, live, byStatus}, roster?, pod?}` |
