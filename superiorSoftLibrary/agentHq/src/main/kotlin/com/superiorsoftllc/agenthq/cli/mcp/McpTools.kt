@@ -87,6 +87,7 @@ internal class McpTools(
                     McpTicketTools.GET -> tickets.get(stream, arguments)
                     McpTicketTools.EPIC_BASE -> tickets.epicBase(stream, arguments)
                     McpTicketTools.DELETE -> tickets.delete(stream, arguments)
+                    McpTicketTools.MOVE -> tickets.move(stream, arguments)
                     McpTicketTools.START -> writes.startTicket(stream, arguments, McpTicketTools.START)
                     else -> ToolResult("Unknown tool: $name", isError = true)
                 }
