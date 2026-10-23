@@ -104,4 +104,10 @@ class BoardTriggersModelTest {
         assertEquals(setOf("t2"), s.triggerEvents.keys)
         assertEquals(emptySet(), feed(triggers(trigger("t1")), from = s).triggerEvents.keys)
     }
+
+    @Test fun `the trigger target lanes include the built-in roles even with no profiles, without duplicates`() {
+        assertEquals(listOf("role:pm", "role:qa", "role:version-control", "role:assistant"), triggerLanes(AppState()))
+        val withCatalog = AppState(roles = listOf(com.superiorsoftllc.agenthq.ui.protocol.Role("pm", "PM", "#000"), com.superiorsoftllc.agenthq.ui.protocol.Role("backend", "Backend", "#111")))
+        assertEquals(listOf("role:pm", "role:qa", "role:version-control", "role:assistant", "role:backend"), triggerLanes(withCatalog))
+    }
 }
