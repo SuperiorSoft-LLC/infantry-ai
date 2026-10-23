@@ -266,6 +266,8 @@ object SessionRecordSerializer : KSerializer<SessionRecord> {
         val baseObj = base as? JsonObject ?: error("Expected JsonObject for SessionRecord, got $base")
         val extended = baseObj.toMutableMap().apply {
             put("live", JsonPrimitive(value.live))
+            // Contract 1.112.0: whether a TURN is in flight, before the display-only BUSY rewrite below.
+            put("turnActive", JsonPrimitive(value.isBusy()))
             if (value.state == SessionState.BUSY) RunPhaseOverlay.phaseOf(value.id)?.let { put("runPhase", JsonPrimitive(it)) }
             // Background work counts as running: an at-rest session with live processes reads BUSY on the wire.
             if ((value.backgroundWork != null || value.bgJobs.isNotEmpty()) && value.state == SessionState.IDLE) put("state", JsonPrimitive(SessionState.BUSY.name))

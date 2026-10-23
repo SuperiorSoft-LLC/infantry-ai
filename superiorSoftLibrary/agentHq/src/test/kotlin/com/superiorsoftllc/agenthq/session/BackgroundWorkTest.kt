@@ -54,5 +54,10 @@ class BackgroundWorkTest {
         assertEquals("BUSY", json.getValue("state").jsonPrimitive.content)
         val idleJson = Json.parseToJsonElement(Json.encodeToString(SessionRecordSerializer, idle)).jsonObject
         assertEquals("IDLE", idleJson.getValue("state").jsonPrimitive.content)
+        // Contract 1.112.0: turnActive tells "idle, background running" from a turn generating.
+        assertEquals("false", json.getValue("turnActive").jsonPrimitive.content)
+        assertEquals("false", idleJson.getValue("turnActive").jsonPrimitive.content)
+        val turn = Json.parseToJsonElement(Json.encodeToString(SessionRecordSerializer, busy.copy(state = SessionState.BUSY))).jsonObject
+        assertEquals("true", turn.getValue("turnActive").jsonPrimitive.content)
     }
 }

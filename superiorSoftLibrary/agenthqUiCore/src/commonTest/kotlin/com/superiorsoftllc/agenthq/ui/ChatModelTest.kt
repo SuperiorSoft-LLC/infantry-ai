@@ -158,6 +158,20 @@ class ChatModelTest {
         assertEquals("a", reduce(refused, session(rec("c")), 100).selectedId)
     }
 
+    @Test fun `an ended turn with background work accepts input and an active turn queues it`() {
+        val bg = com.superiorsoftllc.agenthq.ui.protocol.BackgroundWorkView(300, "sleep 300", 5)
+        val ended = rec("ended", SessionState.BUSY).copy(turnActive = false, backgroundWork = bg)
+        val generating = rec("gen", SessionState.BUSY).copy(turnActive = true, bgJobs = listOf(com.superiorsoftllc.agenthq.ui.protocol.BgJobView("j", "gate", 1, 1)))
+        val old = rec("old", SessionState.BUSY).copy(backgroundWork = bg)
+        val s = feed(ready(), sessions(ended, generating, old))
+        assertNull(promptBlocker(s.agents.getValue("ended")), "background work alone never refuses the owner")
+        assertFalse(com.superiorsoftllc.agenthq.ui.model.isBusy(s.agents.getValue("ended")))
+        assertTrue(ended.resumable)
+        assertTrue(com.superiorsoftllc.agenthq.ui.model.isBusy(s.agents.getValue("gen")), "a generating turn queues even with bg jobs")
+        assertNotNull(promptBlocker(s.agents.getValue("gen")))
+        assertNull(promptBlocker(s.agents.getValue("old")), "an older daemon: background work is not busy")
+    }
+
     @Test fun `a message is refused while the agent is answering or has nothing to continue`() {
         val ranNoId = rec("fresh", SessionState.IDLE, psid = null).copy(runCount = 1)
         val s = feed(ready(), sessions(rec("busy", SessionState.BUSY), ranNoId, rec("bound", SessionState.IDLE, psid = null), rec("idle"), rec("failed", SessionState.FAILED)))
