@@ -26,7 +26,7 @@ class ChatIndicatorHarnessNeutralTest {
             region("model/Model.kt", "sealed interface ChatStatus", "data class AgentActivity("),
             region("model/Model.kt", "data class RunActivityView(", "\n}"),
             region("model/Model.kt", "fun chatStatusOf(", "const val STALE_AFTER_MS"),
-            region("App.kt", "fun ChatStatusRow(", "/** Renders parsed assistant markdown"),
+            region("ChatSurface.kt", "fun ChatStatusRow(", "/** Renders parsed assistant markdown"),
         ).joinToString("\n")
         // Comments may cite history; only code counts.
         val codeOnly = code.lineSequence().map { it.substringBefore("//") }.filterNot { it.trimStart().startsWith("*") || it.trimStart().startsWith("/**") }.joinToString("\n")
