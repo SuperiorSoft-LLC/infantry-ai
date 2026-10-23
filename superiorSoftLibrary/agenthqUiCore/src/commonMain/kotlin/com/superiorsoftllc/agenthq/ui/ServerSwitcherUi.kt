@@ -31,7 +31,7 @@ import com.superiorsoftllc.agenthq.ui.model.ConnectionInfo
 import com.superiorsoftllc.agenthq.ui.shell.ServerChoice
 import com.superiorsoftllc.agenthq.ui.shell.ServerSwitcher
 import kotlinx.coroutines.delay
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 
 const val SERVER_SWITCHER_TAG = "server-switcher"
 const val SERVER_SWITCHER_ITEM_TAG_PREFIX = "server-switcher-item:"

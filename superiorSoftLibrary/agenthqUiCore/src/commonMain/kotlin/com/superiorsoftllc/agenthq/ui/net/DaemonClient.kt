@@ -160,7 +160,7 @@ open class DaemonClient(private val scope: CoroutineScope) {
 
     private suspend fun backoff(attempt: Int, reason: String) {
         val wait = ReconnectPolicy.delayMillis(attempt)
-        _info.value = _info.value.copy(state = ConnState.RECONNECTING, attempt = attempt, detail = reason, retryAtMillis = kotlinx.datetime.Clock.System.now().toEpochMilliseconds() + wait)
+        _info.value = _info.value.copy(state = ConnState.RECONNECTING, attempt = attempt, detail = reason, retryAtMillis = kotlin.time.Clock.System.now().toEpochMilliseconds() + wait)
         wake.tryReceive()
         withTimeoutOrNull(wait) { wake.receive() }
     }
