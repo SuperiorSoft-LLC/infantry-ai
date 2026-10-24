@@ -41,6 +41,8 @@ data class Envelope(
         const val KILL = "kill"
         /** AGENT-UX-11: remove a session's durable record. See `agentHq`'s `Protocol.SESSION_DELETE`. */
         const val SESSION_DELETE = "session_delete"
+        /** RESTART-UI: `{"sessionId","force"?}`; reboots the session in place. See `agentHq`'s `Protocol.SESSION_RESTART`. */
+        const val SESSION_RESTART = "session_restart"
         /** BUG-M2-15b (contract 1.61.0): bind an unbound session to a project. See `agentHq`'s `Protocol.SESSION_PROJECT`. */
         const val SESSION_PROJECT = "session_project"
         const val RESUME = "resume"

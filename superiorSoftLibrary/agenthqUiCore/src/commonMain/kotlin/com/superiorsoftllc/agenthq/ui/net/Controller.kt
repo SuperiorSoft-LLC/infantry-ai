@@ -49,6 +49,7 @@ import com.superiorsoftllc.agenthq.ui.model.withTicketList
 import com.superiorsoftllc.agenthq.ui.model.withUserLine
 import com.superiorsoftllc.agenthq.ui.protocol.AgentProfile
 import com.superiorsoftllc.agenthq.ui.protocol.Envelope
+import com.superiorsoftllc.agenthq.ui.restartPlan
 import com.superiorsoftllc.agenthq.ui.protocol.ImageStored
 import com.superiorsoftllc.agenthq.ui.protocol.ImageUploadWire
 import kotlinx.coroutines.CompletableDeferred
@@ -1504,6 +1505,18 @@ class Controller(
      * a session that only reads BUSY because of leftover background processes (a Gradle daemon) has that process tree
      * ended too. A refusal (the kill or the delete) is shown as a notice; the daemon's own `error` frame names why.
      */
+    /**
+     * RESTART-UI: reboot [sessionId] in place (`session_restart`). A mid-turn session, or one with open background work,
+     * is refused here unless [confirmed] (the user saw the mid-turn / background-work confirm); a confirmed one is sent
+     * with `force`. An idle session restarts without force.
+     */
+    suspend fun restartSession(sessionId: String, confirmed: Boolean = false): CommandResult {
+        val agent = _state.value.agents[sessionId] ?: return CommandResult.Refused("unknown session '$sessionId'")
+        val force = restartPlan(agent).needsForce
+        if (force && !confirmed) return CommandResult.Refused("session is mid-turn or has open background work: confirm the forced restart first")
+        return report(send(Envelope(Envelope.SESSION_RESTART, buildJsonObject { put("sessionId", sessionId); if (force) put("force", "true") }.toString())))
+    }
+
     suspend fun removeSession(sessionId: String): CommandResult {
         val running = _state.value.agents[sessionId]?.session?.state in setOf(
             SessionState.STARTING,

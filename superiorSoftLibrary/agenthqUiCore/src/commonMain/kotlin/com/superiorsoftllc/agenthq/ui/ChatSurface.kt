@@ -944,6 +944,14 @@ internal fun PromptBox(
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
                     )
                 }
+                var confirmingRestart by remember(a.id) { mutableStateOf(false) }
+                IconAction(AhqIcons.Refresh, RESTART_SESSION_LABEL, onClick = { confirmingRestart = true }, enabled = live)
+                if (confirmingRestart) {
+                    RestartSessionDialog(
+                        a, snapshot, onDismiss = { confirmingRestart = false },
+                        onRestart = { confirmingRestart = false; actionScope.launch { controller.restartSession(a.id, confirmed = true) } },
+                    )
+                }
                 InterruptButton(a, live, controller)
                 if (!a.session.resumable && !running) {
                     Text(Controller.resumeBlocker(a.session), color = Palette.Muted, fontSize = 11.sp,
