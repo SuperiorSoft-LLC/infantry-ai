@@ -32,4 +32,20 @@ class ChatAvatarUiTest {
             onAllNodesWithTag(CARD_COMMS_ICON_TAG).assertCountEquals(2)
         }
     }
+
+    @Test
+    fun ownerMessageHasNoPromptPrefixAndKeepsTypedGreaterThan() {
+        runDesktopComposeUiTest(900, 600) {
+            setContent {
+                Column {
+                    ChatLine(OutputLine(LineKind.USER, "hi there", 0), agentId = "a", agentName = "A")
+                    ChatLine(OutputLine(LineKind.USER, "> quoted", 0), agentId = "a", agentName = "A")
+                }
+            }
+            onNodeWithText("hi there").assertExists()
+            onNodeWithText("> hi there", substring = true).assertDoesNotExist()
+            onNodeWithText("> quoted").assertExists()
+            onAllNodesWithTag(CARD_TITLE_TAG).assertCountEquals(2)
+        }
+    }
 }

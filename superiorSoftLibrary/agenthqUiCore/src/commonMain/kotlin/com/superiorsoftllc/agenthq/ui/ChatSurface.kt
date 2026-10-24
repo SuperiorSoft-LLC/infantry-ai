@@ -615,10 +615,9 @@ fun ChatLine(
         SpeakerRow({ OriginAvatar(line.origin, CHAT_AVATAR_SIZE) }) {
             Column {
                 OriginLabel(line.origin)
-                Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Palette.Accent.copy(alpha = 0.12f), RoundedCornerShape(8.dp)).padding(8.dp)) {
-                    CardTimestamp(line.at)
+                CommsCard(commsCardStyle(line.origin), line.at) {
                     if (said.isNotBlank() || images.isEmpty()) {
-                        Text("> $said", color = Palette.Accent, fontFamily = Mono, fontSize = 12.sp)
+                        Text(said, color = Palette.Accent, fontFamily = Mono, fontSize = 12.sp)
                     }
                     ChatSentImages(images)
                 }
@@ -628,8 +627,7 @@ fun ChatLine(
     }
     AgentSideRow(showAvatar, agentRole, agentId, agentRoleColor) {
         when (line.kind) {
-            LineKind.TEXT -> Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Palette.Raised, RoundedCornerShape(8.dp)).padding(8.dp)) {
-                CardTimestamp(line.at)
+            LineKind.TEXT -> CommsCard(AgentReplyCardStyle, line.at) {
                 ChatBlocks(chatLineBlocks(line.kind, line.text).orEmpty())
             }
             LineKind.REASONING -> ReasoningBlock(listOf(line))
@@ -648,22 +646,42 @@ fun ChatLine(
 /** Test tag on the quiet send/response time at the top-right of a chat card. */
 const val CARD_TIMESTAMP_TAG = "card-timestamp"
 
-/** Small muted time, right-aligned at the top of a chat card, so it never competes with the message. */
+/** Test tag on the card header's title. */
+const val CARD_TITLE_TAG = "card-title"
+
+/**
+ * A chat card: a light header band (icon, bold title, muted time on one line) over the body, all tinted from
+ * [style]'s tone. Compact: one text line of header plus small padding; the body has the normal padding.
+ */
 @Composable
-private fun CardTimestamp(at: Long) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        androidx.compose.material3.Icon(
-            AhqIcons.Radio, contentDescription = null, tint = Palette.Muted.copy(alpha = 0.7f),
-            modifier = Modifier.size(15.dp).testTag(CARD_COMMS_ICON_TAG),
-        )
-        Text(
-            activityTimestamp(at),
-            color = Palette.Muted.copy(alpha = 0.7f),
-            fontFamily = Mono,
-            fontSize = 9.sp,
-            textAlign = TextAlign.End,
-            modifier = Modifier.weight(1f).testTag(CARD_TIMESTAMP_TAG),
-        )
+private fun CommsCard(style: CommsCardStyle, at: Long, body: @Composable () -> Unit) {
+    val shape = RoundedCornerShape(8.dp)
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(shape).background(style.tone.body)) {
+        Row(
+            Modifier.fillMaxWidth().background(style.tone.header).padding(horizontal = 8.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (style.showIcon) {
+                androidx.compose.material3.Icon(
+                    AhqIcons.Radio, contentDescription = null, tint = Palette.Text,
+                    modifier = Modifier.size(16.dp).testTag(CARD_COMMS_ICON_TAG),
+                )
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(
+                style.title, color = Palette.Text, fontWeight = FontWeight.Bold, fontSize = 11.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false).testTag(CARD_TITLE_TAG),
+            )
+            if (style.showTime) {
+                Text(
+                    activityTimestamp(at), color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp,
+                    maxLines = 1, softWrap = false, textAlign = TextAlign.End,
+                    modifier = Modifier.weight(1f).padding(start = 8.dp).testTag(CARD_TIMESTAMP_TAG),
+                )
+            }
+        }
+        Column(Modifier.fillMaxWidth().padding(8.dp)) { body() }
     }
 }
 
