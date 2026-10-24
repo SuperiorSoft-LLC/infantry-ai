@@ -226,7 +226,7 @@ class ProjectBaseBranchRealDaemonUiTest {
             // What the window says.
             // BUG-BASE-087: the note names the setting that chose the base.
             val note = "started \"Cut me from develop\": cut from develop ${d1.take(8)} (project base)"
-            waitUntil(timeoutMillis = 10_000) { c.state.value.notices.any { it.text == note && it.info } }
+            waitUntil(timeoutMillis = 10_000) { c.state.value.toasts.any { it.body == note } }
             waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("cut from develop ${d1.take(8)}", substring = true)).fetchSemanticsNodes().isNotEmpty() }
             assertEquals(TicketColumns.IN_PROGRESS == ticket.status || TicketColumns.DONE == ticket.status, true, "the ticket started: ${ticket.status}")
         }

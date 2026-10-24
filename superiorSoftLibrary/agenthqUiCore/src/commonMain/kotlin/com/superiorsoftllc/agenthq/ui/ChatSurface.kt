@@ -98,7 +98,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import com.superiorsoftllc.agenthq.ui.model.PickedModel
 import com.superiorsoftllc.agenthq.ui.model.NoticeKind
-import com.superiorsoftllc.agenthq.ui.model.localNotices
+import com.superiorsoftllc.agenthq.ui.model.noticesForSession
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -668,8 +668,8 @@ internal fun spansText(spans: List<ChatSpan>): AnnotatedString = buildAnnotatedS
 }
 
 @Composable
-fun NoticeStrip(state: AppState) {
-    val n = state.localNotices().lastOrNull() ?: return
+fun NoticeStrip(state: AppState, sessionId: String? = null) {
+    val n = state.noticesForSession(sessionId).lastOrNull() ?: return
     var hidden by remember(n.at) { mutableStateOf(false) }
     LaunchedEffect(n.at) { delay(8_000); hidden = true }
     if (hidden) return

@@ -29,14 +29,14 @@ class NoticeColourUiTest {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
     private fun ticketFrame(start: TicketStart) =
-        Envelope(Envelope.TICKET, json.encodeToString(Ticket.serializer(), Ticket("t1", "Ship it", status = "in_progress", start = start)))
+        Envelope(Envelope.TICKET, json.encodeToString(Ticket.serializer(), Ticket("t1", "Ship it", status = "in_progress", sessionId = "s1", start = start)))
 
     /** Renders [frame]'s notice and answers the colour it is drawn in (the strip is written as a PNG for the record). */
     private fun stripColour(name: String, frame: Envelope): Color {
         val state = reduce(AppState(), frame, 1)
         var colour = Color.Unspecified
         runDesktopComposeUiTest(600, 80) {
-            setContent { AgentHqTheme { NoticeStrip(state) } }
+            setContent { AgentHqTheme { NoticeStrip(state, "s1") } }
             val image = onNodeWithTag(NOTICE_TAG).captureToImage().toAwtImage()
             File("build/notice-colour").apply { mkdirs() }.let { ImageIO.write(image, "png", File(it, "$name.png")) }
             // The most saturated pixel is the notice's own colour (its text and edge), never the dark panel.

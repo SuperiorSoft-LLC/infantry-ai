@@ -345,7 +345,7 @@ fun ChatPanel(
                 }
             }
         }
-        NoticeStrip(state)
+        NoticeStrip(state, agent?.id)
         if (chat.spawnMode && state.roles.isNotEmpty()) {
             // ROLE-1c: the role a new agent spawns as. Its binding is the DEFAULT below; the picker still overrides it for this spawn.
             SpawnRoleRow(state, controller)

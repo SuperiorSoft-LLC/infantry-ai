@@ -550,7 +550,10 @@ fun App(
         }
         ToastHost(
             state,
-            onOpen = { n -> n.projectId?.let { id -> actionScope.launch { controller.selectProject(id) } }; showBoard = true },
+            onOpen = { n ->
+                n.projectId?.let { id -> actionScope.launch { controller.selectProject(id) } }
+                if (n.sessionId != null && state.agents.containsKey(n.sessionId)) controller.select(n.sessionId) else showBoard = true
+            },
             modifier = Modifier.align(Alignment.BottomEnd),
         )
         if (showBoard) {
