@@ -594,6 +594,8 @@ data class AppState(
     val selectedId: String? = null,
     /** Frames the daemon refused or reported that belong to no session ("unknown pod", "resume failed"). */
     val notices: List<Notice> = emptyList(),
+    /** Global bottom-right toasts, oldest first; the host draws the newest few. */
+    val toasts: List<ToastEvent> = emptyList(),
     /**
      * Set while a spawn this window sent has not produced its session yet: the session ids that already
      * existed. The first session frame naming any OTHER id is the spawned one, and it is selected.
@@ -1437,7 +1439,9 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
         else if (start != null && start.reason == "started" && !start.detail.isNullOrBlank()) {
             val text = "started \"${t.title.take(60)}\": ${start.detail}"
             // The answer and the board push can both carry the same start: say it once.
-            if (s.notices.lastOrNull()?.text == text) upserted else upserted.withNotice(now, text, null, ticketStartKind(start))
+            // The toast is the global signal; the inline line is the owning session's record only (typed ticket.sessionId, never a global notice).
+            val toasted = upserted.withToast(ToastEvent("started-${t.id}-${start.detail}", now, ticketStartKind(start).toToastKind(), "Ticket started", text, t.id, t.sessionId, t.projectId))
+            if (t.sessionId == null || s.notices.lastOrNull()?.text == text) toasted else toasted.withNotice(now, text, t.sessionId, ticketStartKind(start))
         } else upserted
     }
 

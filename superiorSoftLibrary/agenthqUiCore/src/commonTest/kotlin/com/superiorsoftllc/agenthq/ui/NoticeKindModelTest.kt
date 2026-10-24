@@ -19,7 +19,7 @@ class NoticeKindModelTest {
     private fun kindOf(env: Envelope) = reduce(AppState(), env, 1).notices.single().kind
 
     private fun startKind(start: TicketStart) =
-        kindOf(Envelope(Envelope.TICKET, json.encodeToString(Ticket.serializer(), Ticket("t1", "T", status = "in_progress", start = start))))
+        kindOf(Envelope(Envelope.TICKET, json.encodeToString(Ticket.serializer(), Ticket("t1", "T", status = "in_progress", sessionId = "s1", start = start))))
 
     @Test fun `a notice is routine unless its raiser says otherwise`() {
         assertEquals(NoticeKind.OK, Notice(1, "x").kind)
