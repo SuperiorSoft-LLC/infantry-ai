@@ -1,5 +1,5 @@
 #!/bin/sh
-# Bulk QA gate: runs every test stage uncached, one Gradle at a time, in a throwaway worktree.
+# Bulk QA gate: runs every test stage (test tasks forced, never cached), one Gradle at a time, in a throwaway worktree.
 # Usage: scripts/agenthq-gate.sh <commit-or-branch>   (see docs/GATE.md)
 # Env: GATE_MIN_FREE_GB (default 5), GATE_LOCK (lock dir), GATE_KEEP=1 keeps the worktree.
 
@@ -75,8 +75,10 @@ SUMMARY=""; FAILED=0; FAILNAMES=""
 stage() { # name gradle-task project-dir
   name=$1; task=$2; dir=$3
   if ! check_disk; then SUMMARY="$SUMMARY $name=ABORT(disk)"; FAILED=1; return; fi
-  note "stage $name: gradlew $task --rerun-tasks --no-daemon"
-  (cd "$WT" && ./gradlew "$task" --rerun-tasks --no-daemon --console=plain) > "$OUT/$name.log" 2>&1
+  # TEST-SPEED-2: --rerun forces THIS test task to execute (never up-to-date, never FROM-CACHE), so every test really
+  # runs; compilation is reused (build cache, then up-to-date) instead of recompiling all modules once per stage.
+  note "stage $name: gradlew $task --rerun --no-daemon"
+  (cd "$WT" && ./gradlew "$task" --rerun --no-daemon --console=plain) > "$OUT/$name.log" 2>&1
   rc=$?
   set -- $(tally "$dir")
   names=$(failing "$dir" | tr '\n' ',' | sed 's/,$//')
