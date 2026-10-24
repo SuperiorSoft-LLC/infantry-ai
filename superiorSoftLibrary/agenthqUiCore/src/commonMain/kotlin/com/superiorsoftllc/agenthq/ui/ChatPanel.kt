@@ -346,7 +346,13 @@ fun ChatPanel(
                     OutputPane(agent, chat.spawnMode, roleColor = state.role(agent?.role)?.color, onStartSession = if (allowSpawn) ({ chat.spawnMode = true; chat.focus.requestFocus() }) else null)
                 }
             }
-            if (agent != null && !chat.spawnMode) TodoOverlay(agent.id, agent.todos, isRunning(agent.session.state), todoMemory) { todoMemory = it }
+            if (agent != null && !chat.spawnMode) {
+                // One top-right slot: the reasoning button on top, the to-do card under it (hidden while the panel is open).
+                val reasoning = remember(agent.output) { com.superiorsoftllc.agenthq.ui.model.reasoningLines(agent.output) }
+                var reasoningOpen by remember(agent.id) { mutableStateOf(false) }
+                if (!reasoningOpen) TodoOverlay(agent.id, agent.todos, isRunning(agent.session.state), todoMemory, topInset = if (reasoning.isEmpty()) 0.dp else REASONING_BUTTON_SLOT) { todoMemory = it }
+                ReasoningSlot(reasoning, reasoningOpen) { reasoningOpen = it }
+            }
         }
         NoticeStrip(state, agent?.id)
         if (chat.spawnMode && state.roles.isNotEmpty()) {

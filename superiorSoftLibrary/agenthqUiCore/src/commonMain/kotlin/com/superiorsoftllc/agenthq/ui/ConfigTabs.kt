@@ -1,5 +1,8 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.ui.model.REASONING_APPLIES_TO
+import com.superiorsoftllc.agenthq.ui.model.REASONING_TITLE
+
 import com.superiorsoftllc.agenthq.ui.model.AGENT_SCOPE_APPLIES_TO
 import com.superiorsoftllc.agenthq.ui.model.CHAT_MARKDOWN_APPLIES_TO
 import com.superiorsoftllc.agenthq.ui.model.CHAT_MARKDOWN_TITLE
@@ -39,6 +42,7 @@ enum class ConfigEntry(val tab: ConfigTab, val title: String, val applies: Strin
     BLUR(ConfigTab.APPEARANCE, BLUR_TITLE, BLUR_APPLIES_TO, listOf("dialog", "scrim", "modal")),
     USER_PORTRAIT(ConfigTab.APPEARANCE, UserPortrait.TITLE, UserPortrait.APPLIES_TO, listOf("avatar", "picture", "photo")),
     MARKDOWN_ENGINE(ConfigTab.APPEARANCE, CHAT_MARKDOWN_TITLE, CHAT_MARKDOWN_APPLIES_TO, listOf("markdown", "table", "chat", "format", "renderer")),
+    REASONING(ConfigTab.APPEARANCE, REASONING_TITLE, REASONING_APPLIES_TO, listOf("reasoning", "thinking", "thought", "panel", "inline")),
     AGENT_SCOPE(ConfigTab.GENERAL, AGENT_SCOPE_TITLE, AGENT_SCOPE_APPLIES_TO, listOf("project", "sidebar", "global")),
     PROGRESS_STALE(ConfigTab.GENERAL, PROGRESS_STALE_TITLE, PROGRESS_STALE_APPLIES_TO, listOf("progress", "stale", "minutes")),
     LIFECYCLE(ConfigTab.GENERAL, LifecycleSetting.TITLE, LifecycleSetting.APPLIES_TO, listOf("keep alive", "idle", "timeout")),

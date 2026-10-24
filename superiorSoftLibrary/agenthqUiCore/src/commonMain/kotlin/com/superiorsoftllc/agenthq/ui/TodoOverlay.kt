@@ -55,6 +55,8 @@ fun BoxScope.TodoOverlay(
     list: AgentTodoList?,
     running: Boolean,
     memory: TodoCollapseMemory,
+    /** Room kept free above the card for the slot's first row (the reasoning button). */
+    topInset: Dp = 0.dp,
     onMemory: (TodoCollapseMemory) -> Unit,
 ) {
     if (!todoCardVisible(list, running) || list == null) return
@@ -69,7 +71,7 @@ fun BoxScope.TodoOverlay(
                 onMemory(memory.toggled(sessionId, narrow))
             }
         }
-        Box(Modifier.align(Alignment.TopEnd).padding(8.dp)) {
+        Box(Modifier.align(Alignment.TopEnd).padding(start = 8.dp, end = 8.dp, bottom = 8.dp, top = 8.dp + topInset)) {
             val toggle = { onMemory(memory.toggled(sessionId, narrow)) }
             if (collapsed) TodoPill(list, toggle) else TodoCard(list, maxListHeight = listCap, onToggle = toggle)
         }
