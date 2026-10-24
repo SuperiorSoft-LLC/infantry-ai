@@ -835,7 +835,11 @@ class SqlAgentHqStore(val handle: AgentHQDatabaseHandle) : AgentHqStore {
     override val triggers: TriggerRepository = object : TriggerRepository {
         private val q = db.triggersQueries
 
-        override fun upsert(trigger: TriggerView, intervalMs: Long?) = tx.transaction {
+        // Ticket a8a6fd98: read-then-write (it keeps the row's pending mail id), so the write lock is taken first (see
+        // [writeTransaction]). As a deferred transaction it failed at once with SQLITE_BUSY while the board committed
+        // the same run's end on its own thread: the session's exit lost the trigger's `running -> armed`, and the
+        // exception killed the session thread before the later event arms ran.
+        override fun upsert(trigger: TriggerView, intervalMs: Long?): Unit = writeTransaction {
             val pending = q.getTrigger(trigger.id).executeAsOneOrNull()?.pending_mail_id
             q.upsertTrigger(
                 id = trigger.id,
@@ -858,6 +862,7 @@ class SqlAgentHqStore(val handle: AgentHQDatabaseHandle) : AgentHqStore {
                 next_fire_at = trigger.nextFireAt,
                 pending_mail_id = pending,
             )
+            Unit
         }
 
         override fun pendingMail(triggerId: String): String? = q.getTrigger(triggerId).executeAsOneOrNull()?.pending_mail_id
