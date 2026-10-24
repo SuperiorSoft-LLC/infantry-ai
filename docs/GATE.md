@@ -29,10 +29,27 @@ GATE PASS <sha> agentHq=ok(812 tests,0 fail,0 err) uiCore=ok(...) agentHqUi=ok(.
 GATE FAIL <sha> ... agentHqUi=FAIL(300 tests,2 fail,0 err) failing: [agentHqUi: pkg.Class.testName,...] logs=...
 ```
 
-Exit code is 0 only on PASS. A stage with zero tests counts as FAIL. Failing stages do not stop later stages, so one run reports everything.
+Exit code is 0 only on PASS. A stage with zero tests counts as FAIL. Two stage verdicts are not test failures:
+`EXTERNAL_STOP` (someone ran `gradlew --stop` and killed the stage's Gradle; re-run the gate) and `REFUSED_BUSY`
+(another build holds the stage's test lock, see below). Failing stages do not stop later stages, so one run reports everything.
 
 ## Rules
 
 - One Gradle at a time, machine-wide: do not start other Gradle builds while the gate runs, and check nobody else is mid-build before you start.
 - Do not run two gates; the lock refuses it.
+- Never run `gradlew --stop`. It stops every Gradle 9 daemon on the machine, including the single-use one of a
+  `--no-daemon` build in another worktree, so it kills whatever gate or test run is in flight
+  ("Gradle build daemon has been stopped: stop command received"). Use `--no-daemon` instead, or stop only your own
+  daemon by PID.
+
+## Running a test suite safely outside the gate
+
+- Take `$TEMP/agenthq-gate.lock` first (the same `mkdir` lock the gate uses, PID in `pid`), check free RAM > 4 GB,
+  and release the lock when done.
+- One test run per build dir. `:agentHq` and `:agentHqUi` hold an exclusive file lock on `build/test-run.lock` for
+  the whole build whenever a test task is in the graph (`gradle/test-run-lock.gradle.kts`). A second build in the
+  same dir fails at once with `TEST RUN REFUSED: another Gradle build is running ... tests in <dir> (pid N, since T)`.
+  Without it, the second run wipes `build/test-results/test/binary` under the first, which then fails with
+  `NoSuchFileException ... in-progress-results-generic*.bin`. Wait for the holder, or use your own worktree.
+- `cleanTest` is not needed: `--rerun-tasks` (or `--rerun`) on a single run is reliable.
 - Do not edit tests to make the gate pass.

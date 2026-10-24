@@ -81,6 +81,14 @@ stage() { # name gradle-task project-dir
   set -- $(tally "$dir")
   names=$(failing "$dir" | tr '\n' ',' | sed 's/,$//')
   if [ $rc -eq 0 ] && [ "$3" -eq 0 ] && [ "$4" -eq 0 ] && [ "$1" -gt 0 ]; then verdict=ok; else verdict=FAIL; FAILED=1; fi
+  # Not a test failure: say who broke the run, so nobody chases a flaky test that never ran.
+  if [ $rc -ne 0 ]; then
+    if grep -q 'stop command received' "$OUT/$name.log"; then
+      verdict=EXTERNAL_STOP; note "stage $name: killed by a 'gradlew --stop' from another session (not a test failure); re-run the gate"
+    elif grep -q 'TEST RUN REFUSED' "$OUT/$name.log"; then
+      verdict=REFUSED_BUSY; note "stage $name: another Gradle build holds this build dir's test lock"
+    fi
+  fi
   [ -n "$names" ] && FAILNAMES="$FAILNAMES [$name: $names]"
   note "stage $name: rc=$rc tests=$1 skipped=$2 failures=$3 errors=$4 $verdict"
   SUMMARY="$SUMMARY $name=$verdict($1 tests,$3 fail,$4 err)"
