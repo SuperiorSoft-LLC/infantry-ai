@@ -14,6 +14,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,24 +51,26 @@ val TICKET_EXECUTOR_TAGS = ExecutorPickerTags(
  * project's lane) still shows as a selected chip, so opening an edit never hides what the ticket holds.
  */
 @Composable
-internal fun TicketAssigneePicker(state: AppState, assignee: String?, onPick: (String?) -> Unit) {
+internal fun TicketAssigneePicker(state: AppState, assignee: String?, focus: FocusRequester? = null, onPick: (String?) -> Unit) {
     val lanes = state.visibleProfiles.map { it.role }.distinct().map { "role:$it" }
     val profiles = state.visibleProfiles.mapNotNull { p -> p.id?.let { it to p.name } }
     val known = lanes.toSet() + profiles.map { it.first }
+    // The focus target is the first role lane (what a no-role ticket needs), else the "unassigned" chip.
+    val focusFirst = { if (focus != null) Modifier.focusRequester(focus) else Modifier }
     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("Assignee", color = Palette.Muted, fontSize = 11.sp)
-        AssigneeChip("unassigned", "unassigned", "", assignee, onPick)
+        AssigneeChip("unassigned", "unassigned", "", assignee, onPick, extra = if (lanes.isEmpty()) focusFirst() else Modifier)
         assignee?.takeIf { it.isNotEmpty() && it !in known }?.let { AssigneeChip(it, it, it, assignee, onPick) }
-        lanes.forEach { AssigneeChip(it, it, it, assignee, onPick, laneRole = it.removePrefix("role:"), state = state) }
+        lanes.forEachIndexed { i, it -> AssigneeChip(it, it, it, assignee, onPick, laneRole = it.removePrefix("role:"), state = state, extra = if (i == 0) focusFirst() else Modifier) }
         profiles.forEach { (id, name) -> AssigneeChip(name, id, id, assignee, onPick) }
     }
 }
 
 /** ROLE-ICON-1: a role lane (`role:<id>`, [laneRole]) carries that role's icon; unassigned and profiles do not. */
 @Composable
-private fun AssigneeChip(label: String, key: String, value: String?, selected: String?, onPick: (String?) -> Unit, laneRole: String? = null, state: AppState? = null) {
+private fun AssigneeChip(label: String, key: String, value: String?, selected: String?, onPick: (String?) -> Unit, laneRole: String? = null, state: AppState? = null, extra: Modifier = Modifier) {
     val color = if (selected == value) Palette.Accent else Palette.Muted
-    val modifier = Modifier.testTag(TICKET_ASSIGNEE_TAG_PREFIX + key).clickable { onPick(value) }
+    val modifier = extra.testTag(TICKET_ASSIGNEE_TAG_PREFIX + key).clickable { onPick(value) }
     if (laneRole != null && state != null) {
         RoleChip(label, laneRole, state.role(laneRole)?.icon, RoleIconSite.ASSIGNEE, color, modifier)
     } else {
