@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.126.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.127.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,10 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+
+### What changed in 1.127.0 (TODO-OVERLAY-1, ticket-8bea1a4d) - the agent's own to-do list
+
+Additive; `contract=1.127.0`. `status.todos` (`[{text, status: pending|in_progress|done, activeText?}]`) is set on the status frame of a to-do tool call (claude `TodoWrite`, opencode `todowrite`) and is the FULL list: a client REPLACES its list, an empty list clears it. Only these items are sent, never other tool arguments. Omitted otherwise; an older daemon never sends it. Replay: it rides the sequenced status frame like any other.
 
 ### What changed in 1.126.0 (EXPERIMENTS-1, ticket-c62a975a) - experiment switches and A/B session measures
 

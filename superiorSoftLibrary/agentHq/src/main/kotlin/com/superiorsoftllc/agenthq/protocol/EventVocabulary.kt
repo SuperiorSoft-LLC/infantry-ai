@@ -365,7 +365,7 @@ object EventVocabulary {
     // Origin still checked); a SAME-ORIGIN browser is admitted on `/ws` only with the bearer, which it may send as the
     // `agenthq.bearer.<base64url token>` subprotocol (the daemon answers `agenthq`); setting `AGENTHQ_WEB_HOSTS`. See CONTRACT.md.
     // **1.123.0 (PROGRESS-COUNTDOWN, ticket 564d0e01) is ADDITIVE**: `SessionProgress` labelStartedAt / estimateSource / lastOutputAt, `ProgressReport` estimateMs and op `output`; the meter always counts down. See CONTRACT.md.
-    const val VERSION = "1.126.0"
+    const val VERSION = "1.127.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA
@@ -468,6 +468,13 @@ data class StatusPayload(
      * never sent. Omitted when null, so every other status frame is byte-for-byte what 1.79.0 published.
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val write: FileWrite? = null,
+    /**
+     * Contract 1.127.0 (TODO-OVERLAY-1): the agent's own to-do list, set on the status frame of a to-do tool call (claude
+     * `TodoWrite`, opencode `todowrite`). It is the FULL list, so a client REPLACES its list; an empty list clears it. Only
+     * the items (text, status, activeText) are sent, never other tool arguments. Omitted when null, so every other status
+     * frame is byte-for-byte what 1.126.0 published.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val todos: List<com.superiorsoftllc.agenthq.protocol.todo.TodoItemPayload>? = null,
     /**
      * Contract 1.95.0 (1c24fdc4): the run's harness-neutral activity ([RunActivity]: `thinking`, `tool_running`, ...),
      * sent whenever its phase or label changes. A UI's working indicator reads this and nothing harness-specific.

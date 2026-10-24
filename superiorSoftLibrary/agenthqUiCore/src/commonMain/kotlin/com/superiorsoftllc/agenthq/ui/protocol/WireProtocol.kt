@@ -1127,6 +1127,8 @@ data class StatusPayload(
     val activity: String? = null,
     /** Contract 1.80.0 (UX-WRITE-1): what a file-writing tool call wrote, or null for every other status. */
     val write: FileWrite? = null,
+    /** Contract 1.127.0 (TODO-OVERLAY-1): the agent's whole to-do list (REPLACES the client's), or null on every other status. */
+    val todos: List<TodoItemPayload>? = null,
     /** Contract 1.95.0 (1c24fdc4): the run's harness-neutral activity, sent when its phase or label changes. */
     val runActivity: RunActivityPayload? = null,
 )
@@ -1136,6 +1138,10 @@ data class StatusPayload(
  * `waiting_for_input`, `finished`, `error`; kept as a string so a phase added later decodes instead of failing the
  * whole frame. [label] names the tool call while `tool_running`. Times are the daemon's clock (epoch ms).
  */
+/** Contract 1.127.0: one to-do item; [status] is `pending`, `in_progress` or `done`, [activeText] the present-tense form or null. */
+@Serializable
+data class TodoItemPayload(val text: String, val status: String, val activeText: String? = null)
+
 @Serializable
 data class RunActivityPayload(
     val state: String,

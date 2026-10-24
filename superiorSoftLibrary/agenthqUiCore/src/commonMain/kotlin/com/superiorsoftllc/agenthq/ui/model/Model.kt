@@ -259,6 +259,8 @@ data class AgentView(
     val activityLog: List<AgentActivity> = emptyList(),
     /** Contract 1.95.0 (1c24fdc4): the daemon's latest run activity, or null from a daemon that predates it. */
     val runActivity: RunActivityView? = null,
+    /** Contract 1.127.0 (TODO-OVERLAY-1): the agent's latest to-do list; every update replaces it. */
+    val todos: AgentTodoList? = null,
 ) {
     val id: String get() = session.id
 
@@ -1262,7 +1264,9 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
         val withRun = if (inOrder && p.runActivity != null) {
             withActivity.copy(runActivity = RunActivityView(p.runActivity.state, p.runActivity.label, now))
         } else withActivity
-        if (inOrder) withRun.copy(statusDetail = p.detail) else withRun
+        // Contract 1.127.0 (TODO-OVERLAY-1): a to-do call carries the FULL list, so the newest in-order one replaces it.
+        val withTodos = if (inOrder && p.todos != null) withRun.copy(todos = AgentTodoList.of(p.todos, now)) else withRun
+        if (inOrder) withTodos.copy(statusDetail = p.detail) else withTodos
     }
 
     Envelope.ERROR -> requeueRefused(s, env) ?: if (env.sessionId == null) {

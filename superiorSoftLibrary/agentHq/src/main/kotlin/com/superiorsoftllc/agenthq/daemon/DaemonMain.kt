@@ -1450,7 +1450,7 @@ private fun broadcast(
                         Envelope.STATUS,
                         json.encodeToString(
                             StatusPayload.serializer(),
-                            StatusPayload(SessionState.BUSY, tool = line.name, activity = line.activity, write = line.write, runActivity = moved),
+                            StatusPayload(SessionState.BUSY, tool = line.name, activity = line.activity, write = line.write, todos = line.todos, runActivity = moved),
                         ),
                         event.sessionId,
                     )
