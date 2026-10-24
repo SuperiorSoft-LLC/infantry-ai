@@ -418,6 +418,8 @@ val webBundleDir = project(":superiorSoftLibrary:agentHqWeb").layout.buildDirect
 val headlessContents: CopySpec = copySpec {
     into(headlessBaseName)
     from(tasks.named("installDist")) {
+        // bin/infantry here is the plain startScripts copy; the supervisor launcher from headless/ (below) is the one to ship.
+        exclude("bin/infantry")
         // The CLI launchers honour JAVA_HOME only: point an unset JAVA_HOME at the bundled runtime.
         filesMatching("bin/agenthq") {
             filter { line ->
