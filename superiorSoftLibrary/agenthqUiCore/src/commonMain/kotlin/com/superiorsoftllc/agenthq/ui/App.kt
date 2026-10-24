@@ -951,7 +951,7 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
                 .semantics { contentDescription = "Agent actions" }
                 .testTag("session-menu-${a.id}"),
             contentAlignment = Alignment.Center,
-        ) { Text("⋯", color = if (live) Palette.Muted else Palette.Border, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+        ) { androidx.compose.material3.Icon(AhqIcons.MoreHoriz, contentDescription = null, tint = if (live) Palette.Muted else Palette.Border, modifier = Modifier.size(14.dp)) }
         DropdownMenu(
             expanded = menuOpen, onDismissRequest = { menuOpen = false },
             modifier = Modifier.background(Palette.Raised).testTag("session-menu-popup-${a.id}"),

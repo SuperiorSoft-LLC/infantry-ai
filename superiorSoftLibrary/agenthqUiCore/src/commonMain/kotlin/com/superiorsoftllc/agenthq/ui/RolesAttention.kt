@@ -377,7 +377,7 @@ private fun RoleRowMenu(r: Role, live: Boolean, onEdit: () -> Unit) {
                 .semantics { contentDescription = "Role actions" }
                 .testTag(ROLE_ROW_MENU_TAG_PREFIX + r.id),
             contentAlignment = Alignment.Center,
-        ) { Text("⋯", color = if (live) Palette.Muted else Palette.Border, fontSize = 14.sp, fontWeight = FontWeight.Bold) }
+        ) { androidx.compose.material3.Icon(AhqIcons.MoreHoriz, contentDescription = null, tint = if (live) Palette.Muted else Palette.Border, modifier = Modifier.size(14.dp)) }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, modifier = Modifier.background(Palette.Raised)) {
             DropdownMenuItem(
                 text = { Text("Edit role", color = Palette.Text, fontSize = 12.sp) },

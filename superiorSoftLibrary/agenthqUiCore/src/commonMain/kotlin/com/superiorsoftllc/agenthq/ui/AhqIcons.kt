@@ -338,6 +338,9 @@ object AhqIcons {
     /** PANEL-TOGGLE-1: a window frame with its RIGHT column filled (the side panel toggle). Drawn here, not Material. */
     val PanelRight: ImageVector by lazy { icon("PanelRight", autoMirror = false) { panelFrame(); rect(15f, 6f, 19f, 18f) } }
 
+    /** Three horizontal dots (the overflow "More" button). Drawn here: the U+22EF glyph is tofu in the web canvas font. */
+    val MoreHoriz: ImageVector by lazy { icon("MoreHoriz", autoMirror = false) { rect(4f, 10.5f, 7f, 13.5f); rect(10.5f, 10.5f, 13.5f, 13.5f); rect(17f, 10.5f, 20f, 13.5f) } }
+
     /** COMMS: a walkie-talkie (antenna, outlined body, speaker slots). Drawn here, not Material. */
     val Radio: ImageVector by lazy {
         icon("Radio", autoMirror = false) {

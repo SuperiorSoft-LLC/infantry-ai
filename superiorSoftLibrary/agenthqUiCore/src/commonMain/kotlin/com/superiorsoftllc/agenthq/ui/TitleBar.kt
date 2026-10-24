@@ -211,7 +211,7 @@ private fun TitleBarOverflow(
             Box(
                 m.clip(RoundedCornerShape(5.dp)).clickable(role = Role.Button, onClickLabel = "More", onClick = { open = true }),
                 contentAlignment = Alignment.Center,
-            ) { Text("\u22EF", color = Palette.Text, fontSize = 16.sp, fontWeight = FontWeight.Bold) }
+            ) { Icon(AhqIcons.MoreHoriz, contentDescription = null, tint = Palette.Text, modifier = Modifier.size(18.dp)) }
         }
         DropdownMenu(
             expanded = open, onDismissRequest = { open = false },

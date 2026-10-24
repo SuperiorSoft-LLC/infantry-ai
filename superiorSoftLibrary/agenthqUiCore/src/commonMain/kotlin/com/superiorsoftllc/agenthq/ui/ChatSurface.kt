@@ -254,7 +254,7 @@ fun CenterHeader(
             // BRANCH-PER-TASK 2/3: the branch of the started ticket this agent runs; nothing when it holds none.
             state.ticketBranchFor(a.id)?.branchLine()?.let { Text(it, color = Palette.Info, fontFamily = Mono, fontSize = 11.sp, maxLines = 1, modifier = Modifier.testTag("agent-ticket-branch")) }
         }
-        if (!narrow) Row(Modifier.widthIn(max = chipsMax), verticalAlignment = Alignment.CenterVertically) { chips() }
+        if (!narrow) FlowRow(Modifier.widthIn(max = chipsMax), itemVerticalAlignment = Alignment.CenterVertically) { chips() } // wraps, never clipped to an empty box (QA F3)
     }
     // A phone-width header: the chips get their own row under the title and wrap onto more lines, never clipped.
     if (narrow && a != null && !spawnMode) {
