@@ -412,3 +412,6 @@ tasks.register("headlessDist") {
     description = "HEADLESS-DIST-1: the headless server archive for this OS (zip on Windows, tar.gz elsewhere)."
     dependsOn(if (headlessOs == "windows") "headlessDistZip" else "headlessDistTar")
 }
+
+// GATE-LOCK-1: one test run per build dir (see the script).
+apply(from = rootProject.file("gradle/test-run-lock.gradle.kts"))
