@@ -8,6 +8,7 @@
 </p>
 
 <p align="center">
+  <a href="#features">Features</a> ·
   <a href="#quickstart">Quickstart</a> ·
   <a href="#headless-server">Server setup</a> ·
   <a href="#faq">FAQ</a> ·
@@ -27,13 +28,47 @@ on your machine or on your own server: your code, keys and agent output never pa
 > **Status: early preview.** The app is used daily by its own team, but it is not 1.0. Read
 > [Roadmap and known issues](#roadmap-and-known-issues) before you rely on it.
 
+> ### Live updates are coming shortly
+> Live updates (new versions delivered to the app as they ship) will be available shortly. Today the Windows app and the
+> headless server check GitHub Releases and update on request (see [Updates](#updates)); Android and Docker are updated by hand.
+
 <p align="center"><img src="assets/branding/infantry-ai-icon-512.png" alt="Infantry AI app icon" width="120"></p>
 
-<!-- SCREENSHOTS: replace with real captures of the board, an agent session and the Android app when available.
-     Suggested paths: assets/screenshots/board.png, assets/screenshots/session.png, assets/screenshots/android.png -->
+<!-- SCREENSHOTS: none committed yet. Add real captures (board, session, Android) under assets/screenshots/ and link them here; do not use mock-ups. -->
+
+## Features
+
+- **Multi-harness agents**: Claude Code, opencode and pi out of the box, plus any CLI you describe in a JSON file. Pick the
+  provider and model per ticket or per role.
+- **Board and tickets**: To Do, In Progress, Pending, Done. Each ticket has a role, a type and a weight, and runs on its own git
+  branch and worktree so agents never collide. Pending is set by the daemon while a blocking ticket is still open.
+- **Routing by weight**: give a ticket a weight from 1 to 5 and the daemon picks the provider and model mapped to that weight
+  (setting `tickets.weightExecutors`), unless the ticket or its role already pins one. Richer routing rules are planned.
+- **Question panel**: an agent that needs a decision asks you (`agenthq ask`) without blocking. You see the question with its
+  options and the agent's recommended pick, answer once, and the answer reaches the agent as mail.
+- **Mail, progress and project knowledge**: agents message each other and you, report live progress, and share decisions,
+  issues and notes kept in the daemon.
+- **Web client**: a browser UI served by the daemon itself (see [Web](#web)).
+- **Android and Windows desktop apps**: watch agents, answer questions and move tickets from your desk or your phone.
+- **Headless daemon**: the same daemon with no UI, as a plain archive or a Docker image, for a home server or a VM.
+- **Yours**: no Infantry AI cloud; code, keys and agent output stay on your hardware.
+
+## Try it free with opencode
+
+You can see the whole loop without a paid subscription by using opencode with one of its free models:
+
+1. Install opencode from the app (`infantry harness-install opencode`, needs Node 20+) or by hand, and check it with
+   `infantry harness-status`.
+2. Create a project pointing at a small git repository and a base branch.
+3. Create a ticket with a simple task (for example "add a README section"), give it a role, set its provider to **opencode**
+   and choose a free model from the model list (`opencode models` shows what your install offers; availability of free
+   models is decided by opencode, not by Infantry AI).
+4. Press **Start**, watch the session, answer any question the agent raises in the question panel, then review and merge the
+   branch.
 
 ## Contents
 
+- [Features](#features) and [Try it free with opencode](#try-it-free-with-opencode)
 - [The clients](#the-clients)
 - [Quickstart](#quickstart)
 - [Headless server](#headless-server) (Docker or plain archive)
