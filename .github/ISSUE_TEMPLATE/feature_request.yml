@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest an improvement or a new feature.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check the README's "Roadmap and known issues" first: it may already be planned.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: How you picture it working. Mockups welcome.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Ticket board
+        - Agents / sessions
+        - Mail and knowledge
+        - Windows app
+        - Android app
+        - Web client
+        - Headless server / Docker
+        - CLI
+        - Updates / install
+        - Documentation
+        - Other

@@ -1,0 +1,84 @@
+name: Bug report
+description: Something does not work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Security problems do not go here**: follow SECURITY.md instead.
+        Search the existing issues first; if one matches, add your details there.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Configuration > About in the app, or the output of `infantry version`.
+      placeholder: "1.0.1+20261023.1432.e85b223"
+    validations:
+      required: true
+  - type: dropdown
+    id: client
+    attributes:
+      label: Where does it happen?
+      multiple: true
+      options:
+        - Windows app
+        - Android app
+        - Headless server (archive)
+        - Headless server (Docker)
+        - CLI (infantry / agenthq)
+        - Updater / installer
+        - Pairing (QR / link)
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Windows 11 23H2 / Android 14 / Ubuntu 24.04 ..."
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: Agent provider and model (if relevant)
+      placeholder: "claude / claude-sonnet ..., opencode, pi, custom descriptor"
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: Error text, screenshots, and roughly when it happened.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Attach `agenthq.log` (Configuration > Logs > Open logs folder), plus `agenthq.1.log` if you restarted since.
+        Logs can contain project paths, prompts and agent output: read them and remove anything private first.
+        Never paste a token, a key or a pairing link.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched the existing issues.
+          required: true
+        - label: I removed tokens, keys and private data from everything above.
+          required: true
