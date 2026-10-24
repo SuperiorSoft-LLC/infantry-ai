@@ -112,6 +112,9 @@ data class ConnectionInfo(
     /** ASSISTANT-1 (contract 1.115.0): the daemon has the global Assistant (`assistant` frame, `SessionRecord.global`). */
     val hasAssistant: Boolean get() = contractAtLeast(contract, 1, 115)
 
+    /** BASICS-KILL-1 (contract 1.118.0): the daemon stores `Project.autoRemoveDoneWorkers`. */
+    val autoRemovesDoneWorkers: Boolean get() = contractAtLeast(contract, 1, 118)
+
     /** Contract 1.47.0 (role-first S3): the daemon takes `agent_swap`; below it the Swap action is unavailable. */
     val swapsAgents: Boolean get() = contractAtLeast(contract, 1, 47)
     /** UX-HARNESS-2 (contract 1.83.0): the daemon takes `session_swap`, so a session with no agent can switch harness. */
@@ -489,6 +492,8 @@ data class ProjectView(
     val baseBranch: String = "",
     /** LANE-CAPS (contract 1.111.0): most concurrent agents per role id; a role not listed runs 1. */
     val laneCaps: Map<String, Int> = emptyMap(),
+    /** BASICS-KILL-1 (contract 1.118.0): a done ticket's worker session is ended and removed. */
+    val autoRemoveDoneWorkers: Boolean = false,
 )
 
 /**
@@ -1454,7 +1459,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     // chosen yet; the current active project is kept while it is still in the list.
     Envelope.PROJECTS -> {
         val views = json.decodeFromString(ListSerializer(Project.serializer()), env.data)
-            .map { ProjectView(it.id, it.name, it.goal, it.directory, it.baseBranch, it.laneCaps) }
+            .map { ProjectView(it.id, it.name, it.goal, it.directory, it.baseBranch, it.laneCaps, it.autoRemoveDoneWorkers) }
         val active = s.activeProjectId?.takeIf { id -> views.any { it.id == id } } ?: views.firstOrNull()?.id
         s.copy(projects = views, activeProjectId = active)
     }
@@ -1498,7 +1503,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     // The daemon's answer to project_save / workspace_save: ONE stored row, upserted by id (a create appends,
     // a re-send of a known id replaces it), so a new project or workspace appears without a re-list.
     Envelope.PROJECT -> {
-        val p = json.decodeFromString(Project.serializer(), env.data).let { ProjectView(it.id, it.name, it.goal, it.directory, it.baseBranch, it.laneCaps) }
+        val p = json.decodeFromString(Project.serializer(), env.data).let { ProjectView(it.id, it.name, it.goal, it.directory, it.baseBranch, it.laneCaps, it.autoRemoveDoneWorkers) }
         val known = s.projects.any { it.id == p.id }
         s.copy(
             projects = if (known) s.projects.map { if (it.id == p.id) p else it } else s.projects + p,

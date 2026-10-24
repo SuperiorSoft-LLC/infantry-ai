@@ -123,11 +123,11 @@ class SessionDeleteModelTest {
             while (controller.state.value.agents.size < 2 && known.passed) runBlocking { delay(10) }
 
             assertTrue(runBlocking { controller.removeSession("busy") } is CommandResult.Sent)
-            val killFirst = runBlocking { link.sentOf(Envelope.KILL) }.any { it.data == "busy" }
-            assertTrue(killFirst, "a running session must be killed before it can be deleted")
+            val killFirst = runBlocking { link.sentOf(Envelope.KILL) }.any { it.data == "busy force" }
+            assertTrue(killFirst, "a running session must be killed (forced: the user confirmed) before it can be deleted")
             val order = runBlocking {
                 val all = link.sent()
-                all.indexOfFirst { it.type == Envelope.KILL && it.data == "busy" } <
+                all.indexOfFirst { it.type == Envelope.KILL && it.data == "busy force" } <
                     all.indexOfFirst { it.type == Envelope.SESSION_DELETE && it.data == "busy" }
             }
             assertTrue(order, "kill must be sent before session_delete for the running session")

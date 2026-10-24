@@ -933,7 +933,21 @@ class AgentHqDaemon(
             )
             triggers.eventSink = { view -> broadcastTrigger(clients, view) }
             // H12b: a committed move into done reaches the ship triggers, after the board commit has released.
-            board.transitionSink = { ticketId, status -> triggers.onTicketTransition(ticketId, status) }
+            // BASICS-KILL-1 (contract 1.118.0): a project with autoRemoveDoneWorkers ends and removes a done ticket's worker.
+            val doneWorkerReaper = DoneWorkerReaper(
+                manager = manager,
+                enabled = projectStore::autoRemovesDoneWorkers,
+                ticketOf = { ticketId -> runCatching { board.get(ticketId) }.getOrNull()?.let { it.sessionId to it.projectId } },
+                executor = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "agenthq-done-worker-reaper").also { it.isDaemon = true } },
+                onRemoved = {
+                    val pushed = Envelope(Envelope.SESSIONS, json.encodeToString(JsonArray(manager.list().map { json.encodeToJsonElement(SessionRecordSerializer, it) })))
+                    for (client in clients) client.trySend(pushed)
+                },
+            )
+            board.transitionSink = { ticketId, status ->
+                triggers.onTicketTransition(ticketId, status)
+                doneWorkerReaper.onTicketTransition(ticketId, status)
+            }
             // E1-a: fold the story board into the ticket board, once; idempotent, resumes after a crash. A failure is
             // logged and the daemon still starts (the next start retries the stories not yet mapped).
             storyMigrationFile?.let { file ->
@@ -1039,6 +1053,8 @@ class AgentHqDaemon(
                 // can start the session's next run.
                 reportBack.onSessionEvent(event)
                 finishNotice.onSessionEvent(event)
+                // BASICS-KILL-1: after everything else has seen the turn's end; the reap itself runs on its own thread.
+                doneWorkerReaper.onSessionEvent(event)
             }
 
             println("[agentHq] provider=${provider.id} runner=${runner.id} stateDir=${stateDir()}")

@@ -872,7 +872,7 @@ internal object Cli {
     /** `session restart <id> [--force]`: reboot a session in place; a mid-turn session is refused unless `--force`. */
     private suspend fun sessionRestart(stream: FrameStream, requested: String, force: Boolean, out: Appendable, err: Appendable): Int {
         val snapshot = json.decodeFromString(
-            ListSerializer(SessionRecord.serializer()),
+            com.superiorsoftllc.agenthq.session.SessionListWire,
             stream.request(Envelope(Envelope.SESSIONS), answerType = Envelope.SESSIONS, what = "sessions", idempotent = true).data,
         )
         val matches = snapshot.filter { it.id == requested }.ifEmpty { snapshot.filter { it.id.startsWith(requested) } }
@@ -919,7 +919,7 @@ internal object Cli {
             when {
                 frame.type == Envelope.ERROR && frame.sessionId == null -> { err.appendLine("error: kill failed: ${frame.data}"); return null }
                 frame.type == Envelope.SESSIONS ->
-                    json.decodeFromString(ListSerializer(SessionRecord.serializer()), frame.data).firstOrNull { it.id == session.id }
+                    json.decodeFromString(com.superiorsoftllc.agenthq.session.SessionListWire, frame.data).firstOrNull { it.id == session.id }
                         ?.let { if (!it.live) return it }
             }
         }
@@ -929,7 +929,7 @@ internal object Cli {
 
     private suspend fun resolveSessionArg(stream: FrameStream, requested: String, err: Appendable): Pair<SessionRecord, List<SessionRecord>>? {
         val snapshot = json.decodeFromString(
-            ListSerializer(SessionRecord.serializer()),
+            com.superiorsoftllc.agenthq.session.SessionListWire,
             stream.request(Envelope(Envelope.SESSIONS), answerType = Envelope.SESSIONS, what = "sessions", idempotent = true).data,
         )
         val matches = snapshot.filter { it.id == requested }.ifEmpty { snapshot.filter { it.id.startsWith(requested) } }
@@ -957,7 +957,7 @@ internal object Cli {
             checkContract(stream, err)
             if (parsed.args[0] == "restart") return@runBlocking sessionRestart(stream, requested, parsed.force, out, err)
             val snapshot = json.decodeFromString(
-                ListSerializer(SessionRecord.serializer()),
+                com.superiorsoftllc.agenthq.session.SessionListWire,
                 stream.request(Envelope(Envelope.SESSIONS), answerType = Envelope.SESSIONS, what = "sessions", idempotent = true).data,
             )
             val matches = snapshot.filter { it.id == requested }.ifEmpty { snapshot.filter { it.id.startsWith(requested) } }
@@ -988,7 +988,7 @@ internal object Cli {
                         return@runBlocking 1
                     }
                     frame.type == Envelope.SESSIONS -> {
-                        val after = json.decodeFromString(ListSerializer(SessionRecord.serializer()), frame.data)
+                        val after = json.decodeFromString(com.superiorsoftllc.agenthq.session.SessionListWire, frame.data)
                         // An earlier push from another client's change may still name it: wait for the next list.
                         if (after.none { it.id == session.id }) {
                             out.appendLine("removed ${session.id} (${session.state}${session.ticketId?.let { ", $it" } ?: ""})")
@@ -1613,10 +1613,11 @@ internal object Cli {
      */
     private suspend fun projectConfig(stream: FrameStream, args: List<String>, out: Appendable, err: Appendable): Int {
         val projectId = args[2].trim()
-        val caps = if (args[1] == "set") mapOf(args[3].trim() to args[4].trim().toInt()) else null
+        val autoRemove = if (args[1] == "set" && args[3].trim() == AUTO_REMOVE_SETTING) onOff(args[4]) else null
+        val caps = if (args[1] == "set" && autoRemove == null) mapOf(args[3].trim() to args[4].trim().toInt()) else null
         val payload = json.encodeToString(
             com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest.serializer(),
-            com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest(projectId = projectId, laneCaps = caps),
+            com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest(projectId = projectId, laneCaps = caps, autoRemoveDoneWorkers = autoRemove),
         )
         val answer = stream.request(Envelope(Envelope.PROJECT_CONFIG, payload), Envelope.PROJECT, "project_config", idempotent = true)
         val project = try {
@@ -1628,7 +1629,17 @@ internal object Cli {
         out.appendLine("project ${project.id} lane caps (max concurrent agents per role; unlisted = 1):")
         if (project.laneCaps.isEmpty()) out.appendLine("  (none set)")
         for ((role, cap) in project.laneCaps) out.appendLine("  $role $cap")
+        out.appendLine("$AUTO_REMOVE_SETTING: ${if (project.autoRemoveDoneWorkers) "on" else "off"} (a done ticket's worker session is ended and removed)")
         return 0
+    }
+
+    /** BASICS-KILL-1 (1.118.0): the `project config set` key for [Project.autoRemoveDoneWorkers]. */
+    private const val AUTO_REMOVE_SETTING = "auto-remove-done-workers"
+
+    private fun onOff(value: String): Boolean? = when (value.trim().lowercase()) {
+        "on", "true" -> true
+        "off", "false" -> false
+        else -> null
     }
 
     private suspend fun projectBase(
@@ -4100,6 +4111,7 @@ internal object Cli {
                                   (then AGENTHQ_BASE_BRANCH, else the start is refused). Tickets already started keep their base.
               project config get <projectId>   Each role's cap on concurrent agents (LANE-CAPS; unlisted roles run 1)
               project config set <projectId> <role> <n>   Set a role's cap (n >= 1); lowering never stops a running agent
+              project config set <projectId> auto-remove-done-workers on|off   End and remove a done ticket's worker session (default off)
               project branches <projectId>   The project repo's local branches; * marks the checked-out one
               image upload <projectId> <file> [--purpose chat|ticket]   Store a png/jpeg/gif/webp (max 10 MB) in
                                   the project's .agenthq/uploads/<purpose>/ (default ticket) and print its absolute
@@ -4949,10 +4961,12 @@ internal object Cli {
     /** BASE-1a: the usage error for a `project` invocation, or null when it is valid. */
     private fun projectUsageError(parsed: ParsedArgs): String? {
         val args = parsed.args
-        val usage = "agenthq project base <projectId> [<branch>|--clear] | branches <projectId> | rename <projectId> \"<name>\" | config get <projectId> | config set <projectId> <role> <n>"
+        val usage = "agenthq project base <projectId> [<branch>|--clear] | branches <projectId> | rename <projectId> \"<name>\" | config get <projectId> | config set <projectId> <role> <n> | config set <projectId> $AUTO_REMOVE_SETTING on|off"
         return when {
             args.firstOrNull() == "config" -> when {
                 args.getOrNull(1) == "get" && args.size == 3 && args[2].isNotBlank() -> null
+                args.getOrNull(1) == "set" && args.size == 5 && args[2].isNotBlank() && args[3].trim() == AUTO_REMOVE_SETTING ->
+                    if (onOff(args[4]) != null) null else "project config set <projectId> $AUTO_REMOVE_SETTING takes on or off: $usage"
                 args.getOrNull(1) == "set" && args.size == 5 && args[2].isNotBlank() && args[3].isNotBlank() &&
                     (args[4].trim().toIntOrNull() ?: 0) >= 1 -> null
                 else -> "project config takes get <projectId> or set <projectId> <role> <n >= 1>: $usage"

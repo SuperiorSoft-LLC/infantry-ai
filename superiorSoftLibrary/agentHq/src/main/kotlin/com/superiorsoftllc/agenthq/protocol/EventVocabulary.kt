@@ -356,7 +356,8 @@ object EventVocabulary {
     // **1.114.0 (KILL-SCOPE-1) is ADDITIVE**: kill scope by role + project, `session rm --force`, `agenthq kill`, `SessionRecord.spawnerSessionId`. See CONTRACT.md.
     // **1.115.0 (ASSISTANT-1) is ADDITIVE**: the `assistant` frame, `SessionRecord.global`, role `assistant` is privileged across projects. See CONTRACT.md.
     // **1.117.0 (PROGRESS-1, ticket-1371d44b) is ADDITIVE**: `SessionRecord.progress`, the `progress` request frame, `agenthq progress` / `agenthq run` / `agenthq_progress`. See CONTRACT.md.
-    const val VERSION = "1.117.0"
+    // **1.118.0 (BASICS-KILL-1) is ADDITIVE**: `Project.autoRemoveDoneWorkers` + `project_config` key; stale BUSY removable; one session per ticket. See CONTRACT.md.
+    const val VERSION = "1.118.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA

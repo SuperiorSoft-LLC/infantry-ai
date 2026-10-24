@@ -1150,11 +1150,18 @@ data class Project(
     val baseBranch: String = "",
     /** Contract 1.111.0 (LANE-CAPS): the most agents of a role that run at once, by role id; a role not listed runs 1. */
     val laneCaps: Map<String, Int> = emptyMap(),
+    /** Contract 1.118.0 (BASICS-KILL-1): a done ticket's worker session is ended and removed; false from an older daemon. */
+    val autoRemoveDoneWorkers: Boolean = false,
 )
 
 /** Contract 1.111.0 (LANE-CAPS) `project_config`, answered by `project`: [laneCaps] merges into the stored caps; null reads. */
 @Serializable
-data class ProjectConfigRequest(val projectId: String, val laneCaps: Map<String, Int>? = null)
+data class ProjectConfigRequest(
+    val projectId: String,
+    val laneCaps: Map<String, Int>? = null,
+    /** Contract 1.118.0: set `Project.autoRemoveDoneWorkers`; null = unchanged. */
+    val autoRemoveDoneWorkers: Boolean? = null,
+)
 
 /**
  * Contract 1.81.0 (BASE-1a) `project_base`, answered by `project`: [branch] sets the project's base branch (refused with
@@ -1719,6 +1726,14 @@ object WireRequests {
         Envelope.PROJECT_CONFIG,
         Json { encodeDefaults = false; explicitNulls = false }.encodeToString(
             ProjectConfigRequest.serializer(), ProjectConfigRequest(projectId, mapOf(role to cap)),
+        ),
+    )
+
+    /** `project_config` (contract 1.118.0): turn [projectId]'s auto-removal of done tickets' worker sessions on or off. */
+    fun projectAutoRemove(projectId: String, on: Boolean): Envelope = Envelope(
+        Envelope.PROJECT_CONFIG,
+        Json { encodeDefaults = false; explicitNulls = false }.encodeToString(
+            ProjectConfigRequest.serializer(), ProjectConfigRequest(projectId, autoRemoveDoneWorkers = on),
         ),
     )
 
