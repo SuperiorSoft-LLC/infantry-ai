@@ -137,13 +137,22 @@ class InstallProjectDirDaemonTest {
         }
     }
 
-    /** The dev daemon (setting off) is unchanged: a spawn still runs in the daemon's own directory. */
+    /** SESSION-CWD-1: the dev daemon (setting off) runs a session naming a project in that project's directory. */
     @Test
-    fun withProjectDirsOffASpawnStillRunsInTheDaemonsDirectory() {
-        val r = newGitRepo("agenthq-install-cwd-dev").also { cleanups += { it.deleteRecursively() } }
+    fun withProjectDirsOffASpawnNamingAProjectRunsInItsDirectory() {
+        val r = Files.createTempDirectory("agenthq-session-cwd-nogit").toFile().also { cleanups += { it.deleteRecursively() } }
         launch(projectDirs = false).run {
             val p = createProject("P", r)
             send(Envelope(Envelope.NEW, """{"agentId":"p1","projectId":"$p"}"""))
+            assertEquals(r.canonicalPath, File(awaitSession().workingDir).canonicalPath)
+        }
+    }
+
+    /** No project named = today's behaviour: the daemon's own directory. */
+    @Test
+    fun withProjectDirsOffASpawnNamingNoProjectStillRunsInTheDaemonsDirectory() {
+        launch(projectDirs = false).run {
+            send(Envelope(Envelope.NEW, """{"agentId":"p1"}"""))
             assertEquals(File(stateDir, "launcher-cwd").canonicalPath, File(awaitSession().workingDir).canonicalPath)
         }
     }

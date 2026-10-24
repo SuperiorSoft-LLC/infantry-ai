@@ -190,6 +190,13 @@ class SessionManager(
      */
     var projectFolders: ProjectFolders? = null
 
+    /**
+     * SESSION-CWD-1: the dev daemon's lookup (used only when [projectFolders] is null). A session that NAMES a project
+     * with an existing directory runs there instead of in the daemon's own directory; no project, a project without
+     * a directory or an unknown one keep [defaultWorkingDir].
+     */
+    var namedProjectFolders: ProjectFolders? = null
+
     /** What the launch gate says about starting a run on [providerId] (null = the default provider) now. */
     fun launchCheck(providerId: String?, origin: LaunchOrigin, ticketId: String? = null): GateDecision {
         val provider = resolveProvider(providerId).provider.id
@@ -619,7 +626,11 @@ class SessionManager(
         }
         // INSTALL-CWD-1: resolved BEFORE anything exists, so a project with no directory leaves nothing behind.
         val workingDir = workingDir
-            ?: if (preWorktree == null && repo == null) projectFolders?.require(projectId) else null
+            ?: if (preWorktree == null && repo == null) {
+                projectFolders?.require(projectId)
+                    ?: projectId?.takeIf { it.isNotBlank() }
+                        ?.let { namedProjectFolders?.find(it) }?.takeIf { it.isDirectory }
+            } else null
         val id = idFactory()
         val now = clock()
         toolApproval?.let { toolApprovalOverrides[id] = it }

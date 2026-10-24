@@ -821,6 +821,12 @@ class AgentHqDaemon(
                     defaultProjectId = { projectStore.list().firstOrNull()?.id },
                 )
             }
+            // SESSION-CWD-1: the dev daemon too runs a session that names a project in that project's directory.
+            if (manager.projectFolders == null) {
+                manager.namedProjectFolders = com.superiorsoftllc.agenthq.session.ProjectFolders(
+                    directoryOf = { id -> runCatching { projectStore.get(id).directory }.getOrNull() },
+                )
+            }
             // CP-2: git over each project's own directory (`Project.directory`), read through the same
             // `git` CLI seam the worktree manager uses; the store answers which directory that is.
             val projectGit = ProjectGitHandler(
