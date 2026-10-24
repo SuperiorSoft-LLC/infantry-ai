@@ -24,6 +24,13 @@ class JvmPlatformHost(
     /** VOICE-1: the OS text-to-speech through a short-lived helper process; no new dependency. */
     override val speaker: com.superiorsoftllc.agenthq.ui.voice.Speaker = com.superiorsoftllc.agenthq.ui.voice.JvmSpeaker()
 
+    /** The incoming-comms sound: JLayer decodes the mp3, javax.sound plays it. */
+    override val soundPlayer: com.superiorsoftllc.agenthq.ui.sound.SoundPlayer = com.superiorsoftllc.agenthq.ui.sound.JvmSoundPlayer()
+
+    /** The owner's own sound, copied under `~/.agenthq/ui` (beside the daemon's state), never read from its original path. */
+    override val customSoundStore: com.superiorsoftllc.agenthq.ui.sound.CustomSoundStore =
+        com.superiorsoftllc.agenthq.ui.sound.FileCustomSoundStore(File(home ?: ".", ".agenthq/ui/incoming-comms-custom.mp3"))
+
     /** VOICE-1: whether one of this JVM's windows is the active (focused) one. */
     override fun windowFocused(): Boolean =
         runCatching { java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().activeWindow != null }.getOrDefault(true)

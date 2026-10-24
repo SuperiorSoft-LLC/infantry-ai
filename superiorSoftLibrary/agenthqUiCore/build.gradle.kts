@@ -42,6 +42,8 @@ kotlin {
             implementation(libs.ktor.client.cio)
             // PAIR-1: the QR encoder (and, on desktop, the decoder for "Open image").
             implementation(libs.zxing.core)
+            // The mp3 decoder of the incoming-comms sound (LGPL, ~100 KB); isolated in JvmSoundPlayer.
+            implementation(libs.jlayer)
         }
         wasmJsMain.dependencies {
             implementation(libs.ktor.client.js)

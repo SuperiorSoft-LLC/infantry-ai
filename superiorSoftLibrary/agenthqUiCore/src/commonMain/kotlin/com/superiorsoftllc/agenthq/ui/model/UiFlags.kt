@@ -31,6 +31,8 @@ data class UiFlags(
     val agentScope: AgentScope = AgentScope.PROJECT,
     /** VOICE-1: spoken attention alerts. */
     val voice: com.superiorsoftllc.agenthq.ui.voice.VoiceSettings = com.superiorsoftllc.agenthq.ui.voice.VoiceSettings(),
+    /** The incoming-comms sound (on by default, volume, optional own mp3). Persisted by the host. */
+    val commsSound: com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundSettings = com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundSettings(),
     /** MODAL-BLUR: blur the app behind dialogs (default on); off keeps the dark scrim. Persisted by the host. */
     val blurBehindDialogs: Boolean = true,
     /** Contract 1.117.0: a running progress bar turns amber with "no update for N min" after this many minutes. Persisted by the host. */

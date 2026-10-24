@@ -30,6 +30,22 @@ interface PlatformHost {
     /** VOICE-1: the platform's text-to-speech, or null when it has none (alerts then only toast and beep). */
     val speaker: com.superiorsoftllc.agenthq.ui.voice.Speaker? get() = null
 
+    /** The platform's mp3 player for the incoming-comms sound, or null when it has none (the sound is then silent). */
+    val soundPlayer: com.superiorsoftllc.agenthq.ui.sound.SoundPlayer? get() = null
+
+    /** Where the owner's own incoming-comms sound is kept as a copy; null = this host cannot keep one (no override offered). */
+    val customSoundStore: com.superiorsoftllc.agenthq.ui.sound.CustomSoundStore? get() = null
+
+    /** Whether [pickSound] can ask the owner for an mp3 here. */
+    val canPickSound: Boolean get() = canPickFiles
+
+    /** Asks for an mp3 (at most 5 MB) and hands it to [onPicked]; null = cancelled, too big or unreadable. May answer later (Android). */
+    fun pickSound(onPicked: (PickedImage?) -> Unit) {
+        val path = pickFile("Choose an mp3")
+        val ok = path != null && (fileSize(path) ?: Long.MAX_VALUE) <= MAX_SOUND_BYTES
+        onPicked(if (ok) readBytes(path!!)?.let { PickedImage(path.replace('\\', '/').substringAfterLast('/'), "audio/mpeg", it) } else null)
+    }
+
     /** VOICE-PLUGIN-1: the installable voice plugins of this machine (Configuration > Plugins); null = no section. */
     val voicePlugins: com.superiorsoftllc.agenthq.ui.voice.plugin.VoicePlugins? get() = null
 
@@ -117,6 +133,9 @@ interface PlatformHost {
     /** PAIR-1: the text of the QR code in a picture's bytes, or null (none found, or this host cannot decode one). */
     fun decodeQrImage(bytes: ByteArray): String? = null
 }
+
+/** The largest custom incoming-comms sound accepted. */
+const val MAX_SOUND_BYTES = 5L * 1024 * 1024
 
 /** SWITCH-1: where the local daemon listens, and the token this machine can read for it (null = none needed). */
 class LocalEndpoint(val url: String, val token: String?)

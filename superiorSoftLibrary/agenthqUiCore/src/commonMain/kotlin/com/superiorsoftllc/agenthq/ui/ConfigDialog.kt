@@ -134,6 +134,7 @@ fun ConfigDialog(
         if (onToolApproval != null) add(ConfigEntry.TOOL_APPROVAL)
         if (onOpenRoles != null) add(ConfigEntry.ROLES)
         add(ConfigEntry.VOICE)
+        add(ConfigEntry.INCOMING_SOUND)
         if (voicePlugins != null) add(ConfigEntry.PLUGINS)
         if (secretActions != null && secrets != null) add(ConfigEntry.SECRETS)
         if (pair != null) add(ConfigEntry.PAIR)
@@ -231,6 +232,9 @@ fun ConfigDialog(
                             }
                             if (shows(ConfigEntry.VOICE)) FlagSection(ConfigEntry.VOICE, highlight) {
                                 com.superiorsoftllc.agenthq.ui.voice.VoiceSettingsSection(flags.voice) { onFlags(flags.copy(voice = it)) }
+                            }
+                            if (shows(ConfigEntry.INCOMING_SOUND)) FlagSection(ConfigEntry.INCOMING_SOUND, highlight) {
+                                com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundSection(flags.commsSound) { onFlags(flags.copy(commsSound = it)) }
                             }
                             if (shows(ConfigEntry.PLUGINS) && voicePlugins != null) FlagSection(ConfigEntry.PLUGINS, highlight) {
                                 com.superiorsoftllc.agenthq.ui.voice.plugin.PluginsSection(voicePlugins)
