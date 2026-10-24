@@ -60,7 +60,7 @@ object EventNormalizer {
         data class Reasoning(val text: String) : Line
         data class Status(val label: String) : Line
         /** Contract 1.25.0: a provider tool call, so a UI can name the tool a run is using now. */
-        data class Tool(val name: String, val activity: String? = null, val write: FileWrite? = null, val todos: List<com.superiorsoftllc.agenthq.protocol.todo.TodoItemPayload>? = null) : Line
+        data class Tool(val name: String, val activity: String? = null, val write: FileWrite? = null, val todos: List<com.superiorsoftllc.agenthq.protocol.todo.TodoItemPayload>? = null, val waitSeconds: Long? = null) : Line
         /**
          * Contract 1.95.0 (1c24fdc4): a tool call ENDED (its result came back). Carries nothing a UI renders; it is
          * what lets the daemon's [RunActivityTracker] move a run from `tool_running` back to `thinking`.
@@ -148,7 +148,7 @@ object EventNormalizer {
 
             // 1.95.0: pi reports a tool's real execution start and end on their own records.
             "tool_execution_start" -> (obj["toolName"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf(String::isNotBlank)?.let { name ->
-                listOf(Line.Tool(name, (obj["args"] as? JsonObject)?.let { toolActivityOf(JsonObject(mapOf("input" to it))) }))
+                listOf(Line.Tool(name, (obj["args"] as? JsonObject)?.let { toolActivityOf(JsonObject(mapOf("input" to it))) }, waitSeconds = waitSecondsOf(name, obj["args"] as? JsonObject, claudeTimeoutMs = false)))
             } ?: emptyList()
             "tool_execution_end" -> listOf(Line.ToolEnd)
 
@@ -259,6 +259,18 @@ object EventNormalizer {
         nonBlank(part, "tool")?.let { return it }
         nonBlank(part, "name")?.let { return it }
         return nonBlank(obj, "tool")
+    }
+
+    /**
+     * The seconds a shell tool call only waits (`sleep N` ...), read from its own `command` / `timeout` /
+     * `run_in_background` arguments by [SleepHint]; null for anything else. claude's `timeout` is in ms, pi's in seconds.
+     */
+    private fun waitSecondsOf(name: String, input: JsonObject?, claudeTimeoutMs: Boolean): Long? {
+        input ?: return null
+        val command = (input["command"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        val background = (input["run_in_background"] as? JsonPrimitive)?.content == "true"
+        val timeout = (input["timeout"] as? JsonPrimitive)?.content?.toDoubleOrNull()?.let { if (claudeTimeoutMs) it / 1000 else it }?.toLong()
+        return com.superiorsoftllc.agenthq.session.SleepHint.parse(name, command, background, timeout)
     }
 
     /**
@@ -436,7 +448,7 @@ object EventNormalizer {
                     ?.takeIf { it.isNotBlank() }
                     ?.let { name ->
                         flushText()
-                        lines += Line.Tool(name, toolActivityOf(block), fileWriteOf(name, block), todoListOf(name, block))
+                        lines += Line.Tool(name, toolActivityOf(block), fileWriteOf(name, block), todoListOf(name, block), waitSecondsOf(name, block["input"] as? JsonObject, claudeTimeoutMs = true))
                     }
 
                 else -> Unit

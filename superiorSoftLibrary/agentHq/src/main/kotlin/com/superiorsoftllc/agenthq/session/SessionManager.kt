@@ -375,6 +375,32 @@ class SessionManager(
         return record
     }
 
+    /**
+     * An agent `sleep N` seen in its tool call: shown as an indeterminate "waiting" job whose time estimate is the sleep, so
+     * the 1.123.0 countdown counts it down (`estimateSource` = `sleep`, no new wire field). The agent's own progress report
+     * wins: nothing is shown over a job it reported, and [clearWait] removes only a wait this set. No such session = null.
+     */
+    fun setWait(sessionId: String, hint: WaitHint): SessionRecord? {
+        val current = sessions[sessionId] ?: return null
+        if (current.state in setOf(SessionState.EXITED, SessionState.ORPHANED, SessionState.FAILED)) return current
+        val p = current.progress
+        if (p != null && p.state == SessionProgress.RUNNING && p.estimateSource != SessionProgress.SOURCE_SLEEP) return current
+        return update(sessionId) {
+            it.copy(progress = SessionProgress(
+                mode = "indeterminate", label = SessionProgress.WAIT_LABEL, startedAt = hint.startedAt, updatedAt = hint.startedAt,
+                labelStartedAt = hint.startedAt, estimateMs = hint.seconds * 1000, estimateSource = SessionProgress.SOURCE_SLEEP,
+                estimated = true, lastOutputAt = hint.startedAt,
+            ))
+        }
+    }
+
+    /** The tool call returned (or the turn moved on): drop a wait [setWait] put there; any other progress is left alone. */
+    fun clearWait(sessionId: String): SessionRecord? {
+        val current = sessions[sessionId] ?: return null
+        if (current.progress?.estimateSource != SessionProgress.SOURCE_SLEEP) return current
+        return update(sessionId) { if (it.progress?.estimateSource == SessionProgress.SOURCE_SLEEP) it.copy(progress = null) else it }
+    }
+
     /** PROGRESS-S5: past durations for the opt-in estimated mode. The daemon sets a file-backed one in its state dir. */
     @Volatile var progressEstimates: ProgressEstimates = InMemoryProgressEstimates()
 

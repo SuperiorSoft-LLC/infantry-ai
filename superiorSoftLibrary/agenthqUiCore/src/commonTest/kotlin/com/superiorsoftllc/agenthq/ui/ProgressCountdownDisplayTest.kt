@@ -45,3 +45,25 @@ class ProgressCountdownDisplayTest {
         assertEquals(0.25f, d.fraction)
     }
 }
+
+class ProgressSleepWaitLabelTest {
+    private fun wait(now: Long) = progressDisplay(
+        ProgressView(mode = "indeterminate", label = "waiting", startedAt = 0, updatedAt = 0, labelStartedAt = 0, estimateMs = 120_000, estimateSource = "sleep"),
+        now,
+    )
+
+    @Test
+    fun countsDownAsWaiting() {
+        assertEquals("waiting 2m", wait(0).headline)
+        assertEquals("waiting 1m 20s", wait(40_000).headline)
+        assertEquals("waiting 1m 20s", wait(40_500).headline)
+        assertEquals("waiting 1m 19s", wait(41_000).headline)
+        assertEquals("", wait(40_000).detail)
+    }
+
+    @Test
+    fun neverGoesNegativeOrOver() {
+        assertEquals("waiting", wait(120_000).headline)
+        assertEquals("waiting", wait(500_000).headline)
+    }
+}
