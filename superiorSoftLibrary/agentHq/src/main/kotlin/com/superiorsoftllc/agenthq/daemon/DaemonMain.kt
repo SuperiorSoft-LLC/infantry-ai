@@ -968,6 +968,8 @@ class AgentHqDaemon(
                 routingRefused = { ticketId, _, detail ->
                     attention.raise(kind = AttentionKind.LAUNCH_BLOCKED, ticketId = ticketId, outcome = "routing_refused", detail = detail)
                 },
+                // NOGIT-1: a project's own directory decides where its start runs / cuts, also with project folders off.
+                projectDirectory = { id -> id?.let { runCatching { projectStore.get(it).directory }.getOrNull() } },
                 // BUG-ASSIGN-1: a refused role lists the catalog's ids (custom roles included; the fallback persona not).
                 roleIds = { roles.all().map { it.id }.filter { it != RoleIds.CUSTOM } },
                 // IMG-3: a ticket's images live under its project's directory (.agenthq/uploads/ticket/).

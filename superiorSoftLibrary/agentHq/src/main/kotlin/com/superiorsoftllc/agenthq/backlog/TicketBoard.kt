@@ -153,6 +153,12 @@ class TicketBoard(
      * An agent's or the daemon's start beyond the allowance is refused with the reason; a human move only warns.
      */
     private val pacing: (providerId: String?, model: String?) -> PacingVerdict = { _, _ -> PacingVerdict.Allow() },
+    /**
+     * NOGIT-1: a project's own stored directory (blank / unknown = null). With no AGENTHQ_REPO and project folders
+     * off (a dev or headless daemon), a start still works in THAT folder: a folder that is not a git checkout gets
+     * no branch and no worktree, and the daemon's own checkout is never used for it.
+     */
+    private val projectDirectory: (projectId: String?) -> String? = { null },
 ) {
     /** ROUTING-1: the (ticket, reason) pairs already reported through [routingRefused]. */
     private val reportedRoutingRefusals = java.util.Collections.synchronizedSet(HashSet<String>())
@@ -653,12 +659,15 @@ class TicketBoard(
         // INSTALL-CWD-1: with project folders on (the installed app), the project's own directory is the folder, and a
         // project with none is refused here: never the daemon's cwd.
         val projectFolder: File? = if (repo == null) {
-            sessionManager.projectFolders?.let { folders ->
+            val folders = sessionManager.projectFolders
+            if (folders != null) {
                 try {
                     folders.require(row.projectId)
                 } catch (e: IllegalArgumentException) {
                     return refusedStart(initialTicket, e.message ?: "project has no directory")
                 }
+            } else {
+                projectDir(row.projectId)
             }
         } else {
             null
@@ -667,7 +676,15 @@ class TicketBoard(
             ?: if (row.useWorktree == null) cutRepo(row.projectId) else null
         val requestedWorktree = row.useWorktree ?: (worktreeRepo != null)
         if (requestedWorktree && worktreeRepo == null) {
-            return refusedStart(initialTicket, "no repo configured")
+            return refusedStart(
+                initialTicket,
+                if (projectFolder != null && gitRootOf(projectFolder) == null) {
+                    "project folder ${projectFolder.absolutePath} is not a git repository, so a worktree cannot be cut; " +
+                        "clear the ticket's worktree setting to run in the folder"
+                } else {
+                    "no repo configured"
+                },
+            )
         }
         // BUG-WT-1: an explicit useWorktree=false runs the worker in the project folder itself (the repo, or the
         // daemon's own directory). Over a git checkout it would commit straight onto whatever branch is checked
@@ -754,6 +771,9 @@ class TicketBoard(
             // BUG-BASE-087: nothing configured is refused, not cut from whatever the main checkout has checked out.
             // A ticket that already holds its branch reuses it and needs no base.
             if (row.branch == null && baseChoice.ref.isBlank()) {
+                if (branches.resolveBase(root, "HEAD") == null) {
+                    return refusedStart(initialTicket, "repository ${root.absolutePath} has no commits yet; make a first commit, then set a base branch")
+                }
                 return refusedStart(initialTicket, noBaseReason(row.projectId))
             }
             val request = TicketBranchRequest(
@@ -923,9 +943,15 @@ class TicketBoard(
     fun cutRepo(projectId: String? = null): File? {
         repo?.let { return it }
         val folders = sessions?.projectFolders
-            ?: return sessions?.defaultWorkingDir?.let(::gitRootOf)
-        return folders.find(projectId)?.let(::gitRootOf)
+        if (folders != null) return folders.find(projectId)?.let(::gitRootOf)
+        // NOGIT-1: the project's own directory decides; the daemon's checkout is only the fallback for a project with none.
+        // TODO: gitRootOf walks UP, so a non-git folder nested under any parent repo still counts as that repo's checkout.
+        projectDir(projectId)?.let { return gitRootOf(it) }
+        return sessions?.defaultWorkingDir?.let(::gitRootOf)
     }
+
+    private fun projectDir(projectId: String?): File? =
+        projectDirectory(projectId)?.takeIf { it.isNotBlank() }?.let { File(it).absoluteFile }?.takeIf { it.isDirectory }
 
     private fun TicketWorktree.asRecord(at: Long) = WorktreeRecord(
         sessionId = "", // the session that runs in it names itself when it is created

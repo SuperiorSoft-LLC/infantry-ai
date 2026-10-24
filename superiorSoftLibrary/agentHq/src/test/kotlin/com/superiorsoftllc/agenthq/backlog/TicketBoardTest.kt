@@ -6,7 +6,9 @@ import com.superiorsoftllc.agenthq.mailbox.ScriptedRunner
 import com.superiorsoftllc.agenthq.mailbox.tempSessionStore
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
 import com.superiorsoftllc.agenthq.persistence.TicketLinkRow
+import com.superiorsoftllc.agenthq.mvp.ProjectBaseCheck
 import com.superiorsoftllc.agenthq.protocol.AgentProfile
+import com.superiorsoftllc.agenthq.protocol.Project
 import com.superiorsoftllc.agenthq.protocol.Ticket
 import com.superiorsoftllc.agenthq.protocol.TicketLink
 import com.superiorsoftllc.agenthq.protocol.TicketLinkRequest
@@ -20,6 +22,7 @@ import com.superiorsoftllc.agenthq.protocol.TicketStatus.TODO
 import com.superiorsoftllc.agenthq.session.SessionEvent
 import com.superiorsoftllc.agenthq.session.SessionManager
 import com.superiorsoftllc.agenthq.usage.GateDecision
+import com.superiorsoftllc.agenthq.worktree.TicketBaseRef
 import com.superiorsoftllc.agenthq.worktree.TicketBranches
 import com.superiorsoftllc.agenthq.worktree.newGitRepo
 import com.superiorsoftllc.agenthq.worktree.testGit
@@ -888,6 +891,103 @@ class TicketBoardTest {
             val answer = board.move(id, IN_PROGRESS).ticket
             assertEquals("started", answer.start?.reason)
             assertEquals(folder.absolutePath, manager.get(answer.sessionId!!)!!.workingDir)
+        } finally {
+            folder.deleteRecursively()
+        }
+    }
+
+    // --- NOGIT-1: a project folder that is not a git repo runs in place, whatever checkout the daemon is in -----
+
+    private fun projectDirBoard(
+        daemonDir: File,
+        projectDir: File,
+        useWorktree: Boolean? = null,
+        baseRef: TicketBaseRef = TicketBaseRef.fixed(TicketBaseRef.HEAD),
+    ): Triple<TicketBoard, SessionManager, String> {
+        val store = openStore()
+        val manager = SessionManager(
+            FakeAgentProvider(),
+            ScriptedRunner(autoExit = false),
+            tempSessionStore(),
+            killGraceMs = 50,
+            defaultWorkingDir = daemonDir,
+        )
+        val profiles = AgentProfiles(store.agents, manager)
+        val worker = profiles.save(AgentProfile(name = "Backend", role = "backend"))
+        val ids = ('a'..'z').map { it.toString() }.iterator()
+        val board = TicketBoard(
+            store, idFactory = { ids.next() }, agents = profiles, sessions = manager, baseRef = baseRef,
+            projectDirectory = { projectDir.path },
+        )
+        val ticket = board.save(
+            TicketSave(title = "Add login", agentId = worker.id, projectId = "project-x", useWorktree = useWorktree),
+        ).ticket
+        return Triple(board, manager, ticket.id)
+    }
+
+    @Test
+    fun aNonGitProjectDirectoryRunsInPlaceEvenWhenTheDaemonIsInAGitCheckout() {
+        val daemonRepo = newGitRepo("agenthq-nogit-daemon")
+        val folder = Files.createTempDirectory("agenthq-nogit-plain").toFile()
+        try {
+            val (board, manager, id) = projectDirBoard(daemonRepo, folder)
+            val answer = board.move(id, IN_PROGRESS).ticket
+            assertEquals("started", answer.start?.reason, "the start succeeds: ${answer.start}")
+            assertNull(answer.branch, "no branch is cut for a folder with no git repo")
+            val session = manager.get(answer.sessionId!!)!!
+            assertEquals(folder.absolutePath, File(session.workingDir).absolutePath, "the worker runs in the project folder")
+            assertNull(session.worktreePath, "no worktree")
+            assertFalse(File(daemonRepo, ".worktrees").exists(), "nothing is cut in the daemon's checkout")
+            val branchList = testGit().run(daemonRepo, listOf("branch", "--list")).stdout.lines().count { it.isNotBlank() }
+            assertEquals(1, branchList, "the daemon's repo gained no branch")
+        } finally {
+            daemonRepo.deleteRecursively()
+            folder.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun useWorktreeTrueOnANonGitProjectFolderNamesTheNonGitFolder() {
+        val folder = Files.createTempDirectory("agenthq-nogit-wt").toFile()
+        try {
+            val (board, _, id) = projectDirBoard(folder, folder, useWorktree = true)
+            val answer = board.move(id, IN_PROGRESS).ticket
+            assertEquals("start_refused", answer.start?.reason)
+            assertTrue(answer.start!!.detail!!.contains("is not a git repository"), "one clear reason: ${answer.start}")
+        } finally {
+            folder.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun aGitRepoWithNoCommitsIsRefusedWithAHaveNoCommitsReason() {
+        val repo = Files.createTempDirectory("agenthq-nogit-empty").toFile()
+        try {
+            testGit().run(repo, listOf("init"))
+            val (board, _, id) = projectDirBoard(repo, repo, baseRef = TicketBaseRef.fixed(TicketBaseRef.NONE))
+            val answer = board.move(id, IN_PROGRESS).ticket
+            assertEquals("start_refused", answer.start?.reason)
+            assertTrue(answer.start!!.detail!!.contains("no commits yet"), "names the cause: ${answer.start}")
+            val check = ProjectBaseCheck(TicketBranches()) { repo }
+            val failure = assertFailsWith<IllegalArgumentException> {
+                check.check(Project(id = "project-x", name = "x", directory = repo.path), "main")
+            }
+            assertTrue(failure.message!!.contains("no commits yet"), failure.message)
+        } finally {
+            repo.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun aBaseBranchOnANonGitProjectSaysBaseBranchesDoNotApply() {
+        val folder = Files.createTempDirectory("agenthq-nogit-base").toFile()
+        try {
+            val check = ProjectBaseCheck(TicketBranches()) { null }
+            val failure = assertFailsWith<IllegalArgumentException> {
+                check.check(Project(id = "project-x", name = "x", directory = folder.path), "main")
+            }
+            assertTrue(failure.message!!.contains("is not a git repository"), failure.message)
+            assertFalse(failure.message!!.contains("AGENTHQ_REPO"), "no misleading advice: ${failure.message}")
         } finally {
             folder.deleteRecursively()
         }

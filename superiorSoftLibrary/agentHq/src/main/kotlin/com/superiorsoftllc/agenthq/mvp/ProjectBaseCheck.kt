@@ -24,8 +24,12 @@ class ProjectBaseCheck(
         val name = checkName(branch)
         val repo = cutRepo(project)
             ?: throw IllegalArgumentException(
-                "ticket starts cut in no git repository (set AGENTHQ_REPO, or run the daemon in a checkout), " +
-                    "so there is nothing to resolve '$name' in",
+                if (project.directory.isNotEmpty() && branches.commonDir(File(project.directory)) == null) {
+                    "project directory '${project.directory}' is not a git repository, so base branches do not apply: its tickets run in the folder with no branch"
+                } else {
+                    "ticket starts cut in no git repository (set AGENTHQ_REPO, or run the daemon in a checkout), " +
+                        "so there is nothing to resolve '$name' in"
+                },
             )
         val repoCommon = branches.commonDir(repo)
             ?: throw IllegalArgumentException("the repository ticket starts cut in is not a git repository: ${repo.path}")
@@ -39,7 +43,13 @@ class ProjectBaseCheck(
             }
         }
         return branches.resolveBase(repo, name)
-            ?: throw IllegalArgumentException("base branch '$name' does not resolve to a commit in ${repo.path}")
+            ?: throw IllegalArgumentException(
+                if (branches.resolveBase(repo, "HEAD") == null) {
+                    "repository ${repo.path} has no commits yet; make a first commit, then set a base branch"
+                } else {
+                    "base branch '$name' does not resolve to a commit in ${repo.path}"
+                },
+            )
     }
 
     companion object {
