@@ -1109,7 +1109,10 @@ class AgentHqDaemon(
                 config = com.superiorsoftllc.agenthq.session.WatchdogConfig.fromEnv(),
             ).start()
             manager.eventSink = { event ->
-                broadcast(clients, event, streamSequencer, runActivity) { id -> manager.toolApprovalFor(id).mode }
+                broadcast(clients, event, streamSequencer, runActivity, { id, seconds ->
+                    // A `sleep N` in a tool call becomes a "waiting" countdown; the call returning (or the agent moving on) ends it.
+                    if (seconds != null) manager.setWait(id, com.superiorsoftllc.agenthq.session.WaitHint(seconds, System.currentTimeMillis())) else manager.clearWait(id)
+                }) { id -> manager.toolApprovalFor(id).mode }
                 // PROMPT-1: a turn's end or a terminal session resolves its open prompts (deny / no answer).
                 pendingPrompts.onSessionEvent(event)
                 mail.onSessionEvent(event)
@@ -1393,6 +1396,8 @@ private fun broadcast(
     sequencer: SessionFrameSequencer,
     /** Contract 1.95.0 (1c24fdc4): the run activity each event moves; a change rides a `status` frame. */
     runActivity: com.superiorsoftllc.agenthq.protocol.RunActivityTracker,
+    /** A sleep wait seen in a tool call (seconds), or null when it ended; see SleepHint. */
+    onWait: (sessionId: String, seconds: Long?) -> Unit = { _, _ -> },
     /** BUG-PERM-1: the Tool approval a session runs under, named by its denial notice. */
     toolApprovalFor: (sessionId: String) -> com.superiorsoftllc.agenthq.harness.ToolApproval = { com.superiorsoftllc.agenthq.harness.ToolApproval.DENY },
 ) {
@@ -1425,6 +1430,11 @@ private fun broadcast(
                 // 1.95.0: the line moves the run activity first; a tool call carries the change on its own status
                 // frame, any other line on a bare `status` frame after its own.
                 val moved = runActivity.line(event.sessionId, line)
+                when (line) {
+                    is EventNormalizer.Line.Tool -> onWait(event.sessionId, line.waitSeconds)
+                    EventNormalizer.Line.ToolEnd, is EventNormalizer.Line.Text, is EventNormalizer.Line.Reasoning -> onWait(event.sessionId, null)
+                    else -> Unit
+                }
                 com.superiorsoftllc.agenthq.session.SessionActivityLog.output(
                     event.sessionId,
                     when (line) {

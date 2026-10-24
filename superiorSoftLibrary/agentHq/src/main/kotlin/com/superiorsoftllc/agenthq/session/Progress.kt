@@ -63,6 +63,9 @@ data class SessionProgress(
         const val FAILED = "failed"
         const val SOURCE_WORKER = "worker"
         const val SOURCE_LEARNED = "learned"
+        /** An agent `sleep N` read from its own tool call ([WaitHint]); the countdown reads "waiting 1m 20s". */
+        const val SOURCE_SLEEP = "sleep"
+        const val WAIT_LABEL = "waiting"
         val MODES = setOf("percent", "steps", "bytes", "count", "indeterminate")
     }
 }

@@ -40,7 +40,8 @@ fun progressDisplay(p: ProgressView, now: Long, staleMin: Int = PROGRESS_STALE_D
     val fraction = if (shownPercent == null) {
         if (running) null else 1f
     } else (shownPercent / 100.0).toFloat().coerceIn(0f, 1f)
-    val head = buildList {
+    val waiting = if (running && p.estimateSource == "sleep") waitingText(eta) else null
+    val head = waiting ?: buildList {
         shownPercent?.takeIf { eta?.overMs == null }?.let { add("${it.roundToInt()}%") }
         eta?.let { progressCountdown(it) }?.let { add(it) }
         when (p.mode) {
@@ -58,7 +59,7 @@ fun progressDisplay(p: ProgressView, now: Long, staleMin: Int = PROGRESS_STALE_D
         }
     }.joinToString(" · ").ifEmpty { p.label ?: "working" }
     val detail = buildList {
-        if (head != p.label) p.label?.let { add(it) }
+        if (waiting == null && head != p.label) p.label?.let { add(it) }
         if (p.mode == "bytes" && running) p.bytesPerSec?.let { add(formatBytes(it.toLong()) + "/s") }
         // No number and no estimate: alive/stuck signal only; never a bare elapsed timer.
         if (running && eta?.noEstimate == true) add("last output ${formatElapsed(now - (p.lastOutputAt ?: p.updatedAt))} ago")
@@ -122,4 +123,12 @@ fun formatElapsed(ms: Long): String {
         s < 3600 -> "${s / 60}m ${(s % 60).toString().padStart(2, '0')}s"
         else -> "${s / 3600}h ${((s % 3600) / 60).toString().padStart(2, '0')}m"
     }
+}
+
+/** An agent `sleep N` read from its tool call: "waiting 1m 20s", counting down; just "waiting" once the time is up. */
+fun waitingText(eta: ProgressEta?): String {
+    val s = ((eta?.remainingMs ?: 0L) / 1000 + if ((eta?.remainingMs ?: 0L) % 1000 > 0) 1 else 0).coerceAtLeast(0)
+    if (s <= 0) return "waiting"
+    val h = s / 3600; val m = (s % 3600) / 60; val sec = s % 60
+    return "waiting " + listOfNotNull(h.takeIf { it > 0 }?.let { "${it}h" }, m.takeIf { it > 0 }?.let { "${it}m" }, sec.takeIf { it > 0 }?.let { "${it}s" }).joinToString(" ")
 }
