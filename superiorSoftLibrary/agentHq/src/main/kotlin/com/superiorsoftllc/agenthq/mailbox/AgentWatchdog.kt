@@ -22,10 +22,11 @@ import java.util.concurrent.TimeUnit
  * ladder: nudge mails (at most one per interval, capped), then ONE batched mail to the PM role (which wakes an idle PM
  * through the router's pump, the same path any mail takes), then one attention item for the owner. A QUIET agent (busy, but
  * silent) is only reported to the PM, once. Nothing happens to an agent with nothing pending. State lives in memory: a daemon
- * restart starts the ladder again.
+ * restart starts the ladder again. Per project it is opt-in ([isEnabledFor], default off in the daemon): an off project's
+ * sessions are shown IDLE and nothing is sent or raised for them.
  *
  * A pending item is a mail addressed to the session (by id, agent id or role) since it was spawned, from anyone but
- * `system` (so a nudge never makes more work), that is not answered and that the session has not mailed past.
+ * `system` or a `trigger:` sender (so a nudge never makes more work and never bounces), that is not answered and that the session has not mailed past.
  */
 class AgentWatchdog(
     private val sessions: SessionManager,
@@ -36,6 +37,8 @@ class AgentWatchdog(
     private val clock: () -> Long = System::currentTimeMillis,
     /** The role that is told first. */
     private val pmRole: String = "pm",
+    /** Per-project opt-in, read at every tick (a flip needs no restart). A project that is off gets no watchdog action at all. */
+    private val isEnabledFor: (projectId: String?) -> Boolean = { true },
 ) {
     private class Episode(val key: String) {
         var nudges = 0
@@ -67,7 +70,9 @@ class AgentWatchdog(
     @Synchronized
     fun tick() {
         val now = clock()
-        val verdicts = sessions.list().map { evaluate(it, now) }
+        val verdicts = sessions.list().map {
+            if (isEnabledFor(it.projectId)) evaluate(it, now) else Verdict(it, AgentWatch(WatchState.IDLE.name, null, null, it.lastHeartbeat), null)
+        }
         episodes.keys.retainAll(verdicts.filter { it.key != null }.map { it.session.id }.toSet())
 
         val toPm = ArrayList<String>()
@@ -175,7 +180,7 @@ class AgentWatchdog(
         val addresses = listOfNotNull(s.id, s.agentId, s.role).toSet()
         val sent = mailbox.outbox(s.id)
         val item = addresses.flatMap { mailbox.inbox(it) }.distinctBy { it.id }
-            .filter { it.from != SYSTEM && it.sentAt >= s.spawnedAt && now - it.sentAt <= config.maxPendingAgeMs }
+            .filter { it.from != SYSTEM && !it.from.startsWith(TRIGGER_PREFIX) && it.sentAt >= s.spawnedAt && now - it.sentAt <= config.maxPendingAgeMs }
             .filter { it.state != MessageState.ANSWERED && it.state != MessageState.UNDELIVERABLE }
             .filter { m -> sent.none { it.sentAt > m.sentAt } }
             .minByOrNull { it.sentAt } ?: return null
@@ -184,6 +189,9 @@ class AgentWatchdog(
 
     companion object {
         const val SYSTEM = "system"
+
+        /** A trigger's mail cannot be answered (a reply bounces), so it is never a pending item. */
+        const val TRIGGER_PREFIX = "trigger:"
         const val NUDGE_SUBJECT = "WATCHDOG nudge"
         const val PM_SUBJECT = "WATCHDOG stalled agents"
         private const val PM_PENDING = -1L

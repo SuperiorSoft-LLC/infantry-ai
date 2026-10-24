@@ -1267,6 +1267,8 @@ data class Project(
     val laneCaps: Map<String, Int> = emptyMap(),
     /** Contract 1.118.0 (BASICS-KILL-1): a done ticket's worker session is ended and removed; false from an older daemon. */
     val autoRemoveDoneWorkers: Boolean = false,
+    /** Contract 1.126.0 (EXPERIMENTS-1): named project switches, key to `on`; a key not listed is off. */
+    val experiments: Map<String, String> = emptyMap(),
 )
 
 /** Contract 1.111.0 (LANE-CAPS) `project_config`, answered by `project`: [laneCaps] merges into the stored caps; null reads. */
@@ -1276,6 +1278,8 @@ data class ProjectConfigRequest(
     val laneCaps: Map<String, Int>? = null,
     /** Contract 1.118.0: set `Project.autoRemoveDoneWorkers`; null = unchanged. */
     val autoRemoveDoneWorkers: Boolean? = null,
+    /** Contract 1.126.0: switches merged into `Project.experiments` (`on`/`off`); null = unchanged. */
+    val experiments: Map<String, String>? = null,
 )
 
 /**
@@ -1849,6 +1853,14 @@ object WireRequests {
         Envelope.PROJECT_CONFIG,
         Json { encodeDefaults = false; explicitNulls = false }.encodeToString(
             ProjectConfigRequest.serializer(), ProjectConfigRequest(projectId, autoRemoveDoneWorkers = on),
+        ),
+    )
+
+    /** `project_config` (contract 1.126.0): switch [key] of [projectId] on or off. */
+    fun projectSwitch(projectId: String, key: String, on: Boolean): Envelope = Envelope(
+        Envelope.PROJECT_CONFIG,
+        Json { encodeDefaults = false; explicitNulls = false }.encodeToString(
+            ProjectConfigRequest.serializer(), ProjectConfigRequest(projectId, experiments = mapOf(key to if (on) "on" else "off")),
         ),
     )
 
