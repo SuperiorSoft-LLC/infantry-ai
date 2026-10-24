@@ -13,7 +13,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * BASICS-KILL-1 (contract 1.116.0): `Project.autoRemoveDoneWorkers`, over a real daemon and WebSocket. A ticket moved to
+ * BASICS-KILL-1 (contract 1.118.0): `Project.autoRemoveDoneWorkers`, over a real daemon and WebSocket. A ticket moved to
  * done while its worker is mid-turn keeps the worker until that turn ends, then the session is gone; with the setting
  * off (the default) the finished worker stays listed. The setting survives a daemon restart (migration 47).
  */

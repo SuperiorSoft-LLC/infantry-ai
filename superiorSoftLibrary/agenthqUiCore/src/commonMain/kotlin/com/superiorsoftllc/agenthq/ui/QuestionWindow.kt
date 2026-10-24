@@ -90,7 +90,7 @@ fun BoxScope.QuestionWindow(
         if (waiting > 0) {
             Text(
                 "? $waiting ${if (waiting == 1) "question" else "questions"} waiting",
-                color = Color(0xFF1A1200), fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                color = Palette.OnAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).clip(RoundedCornerShape(16.dp))
                     .background(Palette.Accent).clickable(role = Role.Button, onClickLabel = "Show the questions", onClick = onShow)
                     .padding(horizontal = 12.dp, vertical = 6.dp).testTag(QUESTION_PILL_TAG),
@@ -138,7 +138,7 @@ fun BoxScope.QuestionWindow(
                             Text(o.label, color = Palette.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                             if (recommended) {
                                 Text(
-                                    "Recommended", color = Color(0xFF1A1200), fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                                    "Recommended", color = Palette.OnAccent, fontSize = 10.sp, fontWeight = FontWeight.Bold,
                                     modifier = Modifier.clip(RoundedCornerShape(4.dp)).background(Palette.Accent)
                                         .padding(horizontal = 6.dp, vertical = 2.dp).testTag(QUESTION_RECOMMENDED_TAG_PREFIX + i),
                                 )

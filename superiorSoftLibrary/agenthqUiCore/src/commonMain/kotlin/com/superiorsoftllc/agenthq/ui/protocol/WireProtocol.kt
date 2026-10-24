@@ -901,6 +901,8 @@ data class SessionRecord(
     val watch: AgentWatchView? = null,
     /** Contract 1.115.0: the installation-wide Assistant session (no project); false from an older daemon. */
     val global: Boolean = false,
+    /** Contract 1.117.0: the agent's own report on its long job; null = none, or an older daemon. */
+    val progress: ProgressView? = null,
 ) {
     val resumable: Boolean
         get() = providerSessionId != null &&
@@ -917,6 +919,27 @@ data class AgentWatchView(
     val pending: String? = null,
     val lastActivityAt: Long = 0,
     val nudges: Int = 0,
+)
+
+/**
+ * Contract 1.117.0: the daemon's `SessionProgress`, the agent's MEASUREMENT of its long job (never an estimate). [mode] and
+ * [state] stay wire strings so a newer daemon's value decodes; [percent] is null for `indeterminate`.
+ */
+@Serializable
+data class ProgressView(
+    val mode: String,
+    val state: String = "running",
+    val percent: Double? = null,
+    val label: String? = null,
+    val steps: List<String> = emptyList(),
+    val stepsTotal: Int? = null,
+    val stepsDone: Int? = null,
+    val step: String? = null,
+    val done: Long? = null,
+    val total: Long? = null,
+    val bytesPerSec: Double? = null,
+    val startedAt: Long = 0,
+    val updatedAt: Long = 0,
 )
 
 @Serializable
@@ -1127,7 +1150,7 @@ data class Project(
     val baseBranch: String = "",
     /** Contract 1.111.0 (LANE-CAPS): the most agents of a role that run at once, by role id; a role not listed runs 1. */
     val laneCaps: Map<String, Int> = emptyMap(),
-    /** Contract 1.116.0 (BASICS-KILL-1): a done ticket's worker session is ended and removed; false from an older daemon. */
+    /** Contract 1.118.0 (BASICS-KILL-1): a done ticket's worker session is ended and removed; false from an older daemon. */
     val autoRemoveDoneWorkers: Boolean = false,
 )
 
@@ -1136,7 +1159,7 @@ data class Project(
 data class ProjectConfigRequest(
     val projectId: String,
     val laneCaps: Map<String, Int>? = null,
-    /** Contract 1.116.0: set `Project.autoRemoveDoneWorkers`; null = unchanged. */
+    /** Contract 1.118.0: set `Project.autoRemoveDoneWorkers`; null = unchanged. */
     val autoRemoveDoneWorkers: Boolean? = null,
 )
 
@@ -1706,7 +1729,7 @@ object WireRequests {
         ),
     )
 
-    /** `project_config` (contract 1.116.0): turn [projectId]'s auto-removal of done tickets' worker sessions on or off. */
+    /** `project_config` (contract 1.118.0): turn [projectId]'s auto-removal of done tickets' worker sessions on or off. */
     fun projectAutoRemove(projectId: String, on: Boolean): Envelope = Envelope(
         Envelope.PROJECT_CONFIG,
         Json { encodeDefaults = false; explicitNulls = false }.encodeToString(

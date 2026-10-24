@@ -92,6 +92,15 @@ the same frames (`mail_inbox`, `mail_read`). The identity is the same as for `ag
 `agenthq_read` refuses an unknown or ambiguous id, a message that failed delivery, and one that has not reached a
 console yet, exactly as `agenthq read` does. Reading a message twice returns it unchanged.
 
+### Reporting progress (PROGRESS-1, contract 1.117.0)
+
+`agenthq_progress {mode, ...}` is the MCP form of `agenthq progress`: the caller's own long-job progress, shown as a
+live bar on its card. `mode` is `plan` (`steps` names or `count`), `step` (`step` = the one completed), `count` /
+`bytes` (`done`, `total`), `percent` (`percent`), `status` (indeterminate, `label`), `done`, `fail` (`label` = reason),
+`clear` or `get`. It answers one readable line. Outside a session it reports nothing and says so (not an error).
+`agenthq_list_sessions` / `agenthq_get_session` carry `progress` (raw) and `progressLine`; the brief `activity` and the
+board line end with it. See `docs/PROGRESS.md` for the CLI, the `##infantry` markers and `agenthq run`.
+
 ### Asking the owner (ASK-1, contract 1.97.0)
 
 `agenthq_ask` is the MCP form of `agenthq ask --recommend`: the same `question_ask` frame, the same rules. It is

@@ -110,8 +110,8 @@ data class ConnectionInfo(
     /** ASSISTANT-1 (contract 1.115.0): the daemon has the global Assistant (`assistant` frame, `SessionRecord.global`). */
     val hasAssistant: Boolean get() = contractAtLeast(contract, 1, 115)
 
-    /** BASICS-KILL-1 (contract 1.116.0): the daemon stores `Project.autoRemoveDoneWorkers`. */
-    val autoRemovesDoneWorkers: Boolean get() = contractAtLeast(contract, 1, 116)
+    /** BASICS-KILL-1 (contract 1.118.0): the daemon stores `Project.autoRemoveDoneWorkers`. */
+    val autoRemovesDoneWorkers: Boolean get() = contractAtLeast(contract, 1, 118)
 
     /** Contract 1.47.0 (role-first S3): the daemon takes `agent_swap`; below it the Swap action is unavailable. */
     val swapsAgents: Boolean get() = contractAtLeast(contract, 1, 47)
@@ -490,7 +490,7 @@ data class ProjectView(
     val baseBranch: String = "",
     /** LANE-CAPS (contract 1.111.0): most concurrent agents per role id; a role not listed runs 1. */
     val laneCaps: Map<String, Int> = emptyMap(),
-    /** BASICS-KILL-1 (contract 1.116.0): a done ticket's worker session is ended and removed. */
+    /** BASICS-KILL-1 (contract 1.118.0): a done ticket's worker session is ended and removed. */
     val autoRemoveDoneWorkers: Boolean = false,
 )
 

@@ -1216,9 +1216,9 @@ class Controller(
         return report(send(WireRequests.projectConfig(projectId, role, cap)))
     }
 
-    /** BASICS-KILL-1: turn [projectId]'s auto-removal of done tickets' worker sessions on or off (`project_config`, 1.116.0). */
+    /** BASICS-KILL-1: turn [projectId]'s auto-removal of done tickets' worker sessions on or off (`project_config`, 1.118.0). */
     suspend fun setAutoRemoveDoneWorkers(projectId: String, on: Boolean): CommandResult {
-        if (!_state.value.connection.autoRemovesDoneWorkers) return report(CommandResult.Refused("This daemon cannot remove done workers (needs contract 1.116.0)."))
+        if (!_state.value.connection.autoRemovesDoneWorkers) return report(CommandResult.Refused("This daemon cannot remove done workers (needs contract 1.118.0)."))
         if (_state.value.projects.none { it.id == projectId }) return report(CommandResult.Refused("unknown project"))
         return report(send(WireRequests.projectAutoRemove(projectId, on)))
     }

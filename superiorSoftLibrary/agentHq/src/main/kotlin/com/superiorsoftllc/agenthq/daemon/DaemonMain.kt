@@ -926,7 +926,7 @@ class AgentHqDaemon(
             )
             triggers.eventSink = { view -> broadcastTrigger(clients, view) }
             // H12b: a committed move into done reaches the ship triggers, after the board commit has released.
-            // BASICS-KILL-1 (contract 1.116.0): a project with autoRemoveDoneWorkers ends and removes a done ticket's worker.
+            // BASICS-KILL-1 (contract 1.118.0): a project with autoRemoveDoneWorkers ends and removes a done ticket's worker.
             val doneWorkerReaper = DoneWorkerReaper(
                 manager = manager,
                 enabled = projectStore::autoRemovesDoneWorkers,
@@ -2701,6 +2701,22 @@ private suspend fun handleConnection(
                     )
                 } catch (e: Exception) {
                     Envelope(Envelope.ERROR, "bg_job refused: ${e.message ?: e::class.simpleName}")
+                }
+
+                // Contract 1.117.0: an agent's progress report on its own session. Validated by the reducer; the record
+                // change reaches every client as a `session` push, and the answer is the session's current progress.
+                Envelope.PROGRESS -> try {
+                    val req = json.decodeFromString(com.superiorsoftllc.agenthq.session.ProgressReport.serializer(), envelope.data)
+                    val sid = envelope.sessionId?.trim()?.takeIf { it.isNotEmpty() }
+                        ?: throw IllegalArgumentException("expects the frame's sessionId (AGENTHQ_SESSION_ID)")
+                    val record = manager.reportProgress(sid, req) ?: throw IllegalArgumentException("no session '${sid.take(80)}'")
+                    Envelope(
+                        Envelope.PROGRESS,
+                        record.progress?.let { json.encodeToString(com.superiorsoftllc.agenthq.session.SessionProgress.serializer(), it) } ?: "null",
+                        sid,
+                    )
+                } catch (e: Exception) {
+                    Envelope(Envelope.ERROR, "progress refused: ${e.message ?: e::class.simpleName}")
                 }
 
                 Envelope.SESSION_RESTART -> try {

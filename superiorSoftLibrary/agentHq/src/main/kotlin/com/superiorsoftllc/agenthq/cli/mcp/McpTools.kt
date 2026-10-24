@@ -57,6 +57,9 @@ internal class McpTools(
     /** ASK-1: `agenthq_ask`, the non-blocking owner question, over the CLI's own `question_ask` frame. */
     private val questions = McpQuestionTools(getenv)
 
+    /** Contract 1.117.0: `agenthq_progress`, the caller's own progress report, over the CLI's `progress` frame. */
+    private val progress = McpProgressTools(getenv)
+
     /** ROLE-EDIT-1: the role catalog (`agenthq_role_*`); an agent caller may only edit persona and description. */
     private val roles = McpRoleTools(getenv)
     private val projectConfig = McpProjectConfigTools()
@@ -90,6 +93,7 @@ internal class McpTools(
                     McpPipelineTools.SHOW -> pipeline.show(stream, arguments)
                     McpPipelineTools.RECORD -> pipeline.record(stream, arguments)
                     McpQuestionTools.ASK -> questions.ask(stream, arguments)
+                    McpProgressTools.PROGRESS -> progress.progress(stream, arguments)
                     McpRoleTools.LIST -> roles.list(stream)
                     McpRoleTools.GET -> roles.get(stream, arguments)
                     McpRoleTools.UPDATE -> roles.update(stream, arguments)
@@ -388,6 +392,11 @@ internal class McpTools(
         session.lastOutputAt?.let { put("lastOutputAt", it) }
         session.lastEventAt?.let { put("lastEventAt", it) }
         session.backgroundWork?.let { put("backgroundWork", it.label) }
+        // Contract 1.117.0: the agent's own progress report, raw (for a monitor) and as one readable line.
+        session.progress?.let { p ->
+            put("progress", Json.encodeToJsonElement(com.superiorsoftllc.agenthq.session.SessionProgress.serializer(), p))
+            put("progressLine", com.superiorsoftllc.agenthq.session.ProgressReducer.line(p, System.currentTimeMillis()))
+        }
     }
 
     private fun ok(payload: JsonObject) = ToolResult(json.encodeToString(JsonObject.serializer(), payload))
@@ -404,7 +413,7 @@ internal class McpTools(
         /** HARNESS-INSTALL-1: detect / install the harness CLIs (claude, opencode, pi) through npm, on a local or remote daemon. */
         const val HARNESS_STATUS = "agenthq_harness_status"
         const val HARNESS_INSTALL = "agenthq_harness_install"
-        val NAMES = setOf(LIST_SESSIONS, GET_SESSION, POD_STATE, BOARD, LIST_HARNESSES, HARNESS_STATUS, HARNESS_INSTALL) + McpWriteTools.NAMES + McpMailTools.NAMES + McpTicketTools.NAMES + McpQuestionTools.NAMES + McpPipelineTools.NAMES + McpRoleTools.NAMES + McpProjectConfigTools.NAMES
+        val NAMES = setOf(LIST_SESSIONS, GET_SESSION, POD_STATE, BOARD, LIST_HARNESSES, HARNESS_STATUS, HARNESS_INSTALL) + McpWriteTools.NAMES + McpMailTools.NAMES + McpTicketTools.NAMES + McpQuestionTools.NAMES + McpProgressTools.NAMES + McpPipelineTools.NAMES + McpRoleTools.NAMES + McpProjectConfigTools.NAMES
 
         /** The one, fixed message a tool answers with when nothing is listening at the daemon address. */
         const val DAEMON_UNREACHABLE =
@@ -544,6 +553,7 @@ internal class McpTools(
             McpRoleTools.descriptors().forEach { add(it) }
             McpProjectConfigTools.descriptors().forEach { add(it) }
             McpQuestionTools.descriptors().forEach { add(it) }
+            McpProgressTools.descriptors().forEach { add(it) }
         }
 
         private fun tool(

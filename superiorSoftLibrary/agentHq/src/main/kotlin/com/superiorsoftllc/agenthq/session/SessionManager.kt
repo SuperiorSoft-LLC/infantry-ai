@@ -329,6 +329,17 @@ class SessionManager(
         return true
     }
 
+    /**
+     * Contract 1.117.0: fold one progress [report] into [sessionId]'s [SessionRecord.progress]; the change reaches every
+     * client as a `session` push. Null when there is no such session; throws [IllegalArgumentException] for a bad report.
+     */
+    fun reportProgress(sessionId: String, report: ProgressReport): SessionRecord? {
+        val current = sessions[sessionId] ?: return null
+        if (report.op == "get") return current
+        ProgressReducer.apply(current.progress, report, clock()) // validate outside the lock, so a bad report changes nothing
+        return update(sessionId) { it.copy(progress = ProgressReducer.apply(it.progress, report, clock())) }
+    }
+
     /** The wrapper's command ended: drop the job. */
     fun bgJobDone(sessionId: String, jobId: String) {
         update(sessionId) { r -> if (r.bgJobs.none { it.id == jobId }) r else r.copy(bgJobs = r.bgJobs.filter { it.id != jobId }) }
@@ -394,7 +405,7 @@ class SessionManager(
             val kept = loadedRecord.keptProcess
             val reaped = kept != null && reap(loadedRecord.id, kept)
             // Background work is derived, never trusted from disk: its wire state read BUSY, so the real one is IDLE.
-            val persisted = loadedRecord.copy(keptProcess = null, backgroundWork = null, bgJobs = emptyList(), watch = null).let {
+            val persisted = loadedRecord.copy(keptProcess = null, backgroundWork = null, bgJobs = emptyList(), watch = null, progress = null).let {
                 if ((loadedRecord.backgroundWork != null || loadedRecord.bgJobs.isNotEmpty()) && it.state == SessionState.BUSY && it.childPid == null) it.copy(state = SessionState.IDLE) else it
             }
             val midRun = persisted.state == SessionState.STARTING ||
@@ -950,6 +961,12 @@ class SessionManager(
     private fun finishHosted(sessionId: String, end: TurnEnd, exitCode: Int?, processExited: Boolean, reason: String?) {
         val run = runs[sessionId] ?: return
         if (!runs.remove(sessionId, run)) return
+        // 1.117.0: a turn that ended with no progress report in it drops the old report, unless a registered
+        // background job (`agenthq bg run`) is still running the measured work.
+        update(sessionId) { r ->
+            val p = r.progress
+            if (p == null || p.updatedAt >= run.startedAt || r.bgJobs.isNotEmpty()) r else r.copy(progress = null)
+        }
         when {
             run.interruptRequested.get() || end == TurnEnd.INTERRUPTED -> settleInterrupted(sessionId, exitCode)
             run.killRequested.get() -> settle(sessionId, run, exitCode, processExited = false)
@@ -1348,7 +1365,10 @@ class SessionManager(
     @Synchronized
     private fun update(sessionId: String, transform: (SessionRecord) -> SessionRecord): SessionRecord? {
         val current = sessions[sessionId] ?: return null
-        val next = transform(current)
+        // 1.117.0: a session that ended (killed, orphaned) has no job left to measure.
+        val next = transform(current).let {
+            if (it.progress != null && (it.state == SessionState.EXITED || it.state == SessionState.ORPHANED)) it.copy(progress = null) else it
+        }
         if (next == current) return current
         // live is a computed property based on state and isProcessAlive; no need to copy it.
         // But we need to force persist when the computed live value changes.
@@ -1371,7 +1391,8 @@ class SessionManager(
         // M2-12: a turn is BUSY from its start, so the first output no longer changes the state; the provider session
         // id it carries (what resume and the interrupt snapshot need) must still reach clients as its own status.
         val backgroundChanged = next.backgroundWork != current.backgroundWork || next.bgJobs.map { it.id } != current.bgJobs.map { it.id }
-        if (stateChanged || identityChanged || backgroundChanged) eventSink?.invoke(SessionEvent.Status(next))
+        val progressChanged = next.progress != current.progress
+        if (stateChanged || identityChanged || backgroundChanged || progressChanged) eventSink?.invoke(SessionEvent.Status(next))
         return next
     }
 

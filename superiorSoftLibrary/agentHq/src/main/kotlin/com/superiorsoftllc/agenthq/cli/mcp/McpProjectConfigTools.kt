@@ -25,7 +25,7 @@ internal class McpProjectConfigTools {
 
     suspend fun set(stream: FrameStream, arguments: JsonObject): ToolResult {
         val projectId = arguments.string("projectId") ?: return refused("$SET needs a projectId")
-        // BASICS-KILL-1 (1.116.0): autoRemoveDoneWorkers alone is a valid change; a role and a cap still go together.
+        // BASICS-KILL-1 (1.118.0): autoRemoveDoneWorkers alone is a valid change; a role and a cap still go together.
         val autoRaw = arguments.string("autoRemoveDoneWorkers")?.trim()?.lowercase()
         val autoRemove = when (autoRaw) {
             null, "" -> null

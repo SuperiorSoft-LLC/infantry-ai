@@ -241,7 +241,7 @@ private fun NewProjectDialog(
         confirmButton = {
             Button(
                 onClick = ::create, enabled = canCreate,
-                colors = ButtonDefaults.buttonColors(containerColor = Palette.Accent, contentColor = Color(0xFF1A1200)),
+                colors = ButtonDefaults.buttonColors(containerColor = Palette.Accent, contentColor = Palette.OnAccent),
                 modifier = Modifier.testTag(NEW_PROJECT_CREATE_TAG),
             ) { Text(confirmLabel) }
         },
@@ -320,7 +320,7 @@ private fun ProjectConfigDialog(state: AppState, controller: Controller, project
         confirmButton = {
             if (tab == ProjectConfigTab.General) Button(
                 onClick = ::save, enabled = canSave,
-                colors = ButtonDefaults.buttonColors(containerColor = Palette.Accent, contentColor = Color(0xFF1A1200)),
+                colors = ButtonDefaults.buttonColors(containerColor = Palette.Accent, contentColor = Palette.OnAccent),
                 modifier = Modifier.testTag(NEW_PROJECT_CREATE_TAG),
             ) { Text("Save") }
         },
@@ -369,7 +369,7 @@ private fun LanesTab(state: AppState, controller: Controller, project: ProjectVi
             color = Palette.Danger, fontSize = 11.sp,
         )
     }
-    // BASICS-KILL-1 (contract 1.116.0): finished workers leave the session list by themselves.
+    // BASICS-KILL-1 (contract 1.118.0): finished workers leave the session list by themselves.
     if (state.connection.autoRemovesDoneWorkers) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             androidx.compose.material3.Checkbox(

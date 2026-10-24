@@ -113,7 +113,7 @@ class ProjectStore(
         return updated
     }
 
-    /** BASICS-KILL-1 (contract 1.116.0): turn project [id]'s auto-removal of done tickets' worker sessions on or off. */
+    /** BASICS-KILL-1 (contract 1.118.0): turn project [id]'s auto-removal of done tickets' worker sessions on or off. */
     @Synchronized
     fun setAutoRemoveDoneWorkers(id: String, on: Boolean): Project {
         val existing = get(id)

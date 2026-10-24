@@ -8,7 +8,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executor
 
 /**
- * BASICS-KILL-1 (contract 1.116.0, `Project.autoRemoveDoneWorkers`): a ticket moved to done ends its worker session and
+ * BASICS-KILL-1 (contract 1.118.0, `Project.autoRemoveDoneWorkers`): a ticket moved to done ends its worker session and
  * removes it from the session list, so nobody babysits finished workers.
  *
  * WHEN: never mid-turn. A worker usually moves its own ticket to done and then mails its starter in the same turn, so a
