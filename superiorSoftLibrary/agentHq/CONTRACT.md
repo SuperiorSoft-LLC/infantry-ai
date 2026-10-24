@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.128.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.129.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -3025,3 +3025,7 @@ A session with no turn in flight but live background processes (`backgroundWork`
 - **What filled the context** is derived identically (growth between requests, credited to the one tool of a step); tool names are shown as the harness reports them.
 - No usage at all (no `series`): the UI says "no usage data for <harness>", never zeros or a flat line.
 - A harness id that begins `opencode-` reads OpenCode's database.
+
+### What changed in 1.129.0 (ASK-OTHER) — "Other" is on by default for owner questions
+
+ADDITIVE; no new wire field (`question_answer.otherText` and `OwnerQuestion.allowOther`/`otherText` already carried free text since 1.97.0). `question_ask.allowOther` now DEFAULTS to `true` (absent = the owner may type an own answer; send `false` to keep a question option-only; MCP `agenthq_ask.allowOther`, CLI `ask --recommend ... --no-other`). An old client that sends `allowOther` explicitly is unchanged; an old UI ignores the Other row. The answer mail for a typed answer reads `Custom answer from the owner: <text>` (subject `Custom answer to question <id>: ...`), never `Chosen option`. The inline panel shows an "Other…" row at the end of the options: a multi-line field, Enter sends, Shift+Enter newline, Esc back to the options. `ready` reports `contract=1.129.0`.

@@ -39,7 +39,7 @@ internal class McpQuestionTools(private val getenv: (String) -> String?) {
             options = options,
             recommended = arguments.string("recommended") ?: return refused("$ASK needs recommended (one option's label)"),
             reason = arguments.string("reason") ?: return refused("$ASK needs a reason for the recommendation"),
-            allowOther = (arguments["allowOther"] as? JsonPrimitive)?.booleanOrNull == true,
+            allowOther = (arguments["allowOther"] as? JsonPrimitive)?.booleanOrNull != false,
             defaultAfterMin = (arguments["defaultAfterMin"] as? JsonPrimitive)?.intOrNull,
         )
         val answer = try {
@@ -76,7 +76,7 @@ internal class McpQuestionTools(private val getenv: (String) -> String?) {
                     "USE THIS when a decision has 2-4 real options and the owner's preference matters (design, priority, destructive or irreversible choices); the owner wants it used for those. Do NOT use it for trivia or anything already decided. Ask the owner to choose, WITHOUT waiting. Give 2-8 options (label + one-line consequence), exactly one " +
                         "recommended option and why. Returns a questionId at once: carry on with other work; the owner's pick " +
                         "arrives as mail in thread question:<id>. Optional defaultAfterMin auto-picks your recommendation if " +
-                        "the owner has not answered by then (off unless set). Rate limited per agent.",
+                        "the owner has not answered by then (off unless set). The owner may answer with their own text instead of an option: that mail reads \"Custom answer from the owner: <text>\" and is NOT one of your options. Rate limited per agent.",
                 )
                 put("inputSchema", buildJsonObject {
                     put("type", "object")
@@ -112,8 +112,8 @@ internal class McpQuestionTools(private val getenv: (String) -> String?) {
                         })
                         put("allowOther", buildJsonObject {
                             put("type", "boolean")
-                            put("default", false)
-                            put("description", "Let the owner type an answer of their own.")
+                            put("default", true)
+                            put("description", "The owner can always answer with their own text (\"Other\"); set false ONLY for a question that must stay option-only.")
                         })
                         put("defaultAfterMin", buildJsonObject {
                             put("type", "integer")

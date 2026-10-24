@@ -73,10 +73,33 @@ class QuestionWindowUiTest {
         val state = stateWithQuestion()
         val sent = mutableListOf<QuestionAnswerWire>()
         setContent { QuestionPanel(state.shownQuestionsFor("s1"), { sent += it }, {}, {}) }
+        onNodeWithTag(QUESTION_OTHER_FIELD_TAG).assertDoesNotExist()
+        onNodeWithTag(QUESTION_OTHER_ROW_TAG).performClick()
+        waitForIdle()
         onNodeWithTag(QUESTION_OTHER_FIELD_TAG).performTextInput("  mysql  ")
         onNodeWithTag(QUESTION_SEND_OTHER_TAG).performClick()
         waitForIdle()
         assertEquals(listOf(QuestionAnswerWire("q1", otherText = "mysql")), sent)
+    }
+
+    @Test fun `Cancel in the other field goes back to the options and sends nothing`() = runDesktopComposeUiTest(900, 700) {
+        val state = stateWithQuestion()
+        val sent = mutableListOf<QuestionAnswerWire>()
+        setContent { QuestionPanel(state.shownQuestionsFor("s1"), { sent += it }, {}, {}) }
+        onNodeWithTag(QUESTION_OTHER_ROW_TAG).performClick()
+        waitForIdle()
+        onNodeWithTag(QUESTION_OTHER_FIELD_TAG).performTextInput("x")
+        onNodeWithTag(QUESTION_OTHER_CANCEL_TAG).performClick()
+        waitForIdle()
+        onNodeWithTag(QUESTION_OTHER_FIELD_TAG).assertDoesNotExist()
+        onNodeWithTag(QUESTION_OTHER_ROW_TAG).assertExists()
+        assertTrue(sent.isEmpty())
+    }
+
+    @Test fun `a question that opted out has no Other row`() = runDesktopComposeUiTest(900, 700) {
+        val state = reduce(AppState(), Envelope(Envelope.QUESTIONS, "[" + openJson.replace("\"allowOther\":true", "\"allowOther\":false") + "]"), 1)
+        setContent { QuestionPanel(state.shownQuestionsFor("s1"), {}, {}, {}) }
+        onNodeWithTag(QUESTION_OTHER_ROW_TAG).assertDoesNotExist()
     }
 
     @Test fun `Later hides the panel, the pill brings it back, and Cancel sends the id`() = runDesktopComposeUiTest(900, 700) {

@@ -312,15 +312,17 @@ class OwnerQuestions(
 
         /** Subject and body of the mail that tells the asker the pick. [replacedAuto] = the auto-pick an override replaces. */
         fun answerMail(question: OwnerQuestion, replacedAuto: OwnerQuestion?): Pair<String, String> {
-            val choice = question.answer ?: "other"
-            val subject = "Answer to question ${question.id}: ${choice.take(80)}"
+            val custom = question.answer == null && question.otherText != null
+            val choice = question.answer ?: question.otherText.orEmpty()
+            val subject = (if (custom) "Custom answer" else "Answer") + " to question ${question.id}: ${choice.take(80)}"
             val body = buildString {
                 appendLine("Question ${question.id}: ${question.question}")
                 question.answer?.let { label ->
                     val description = question.options.firstOrNull { it.label == label }?.description.orEmpty()
                     appendLine("Chosen option: $label" + if (description.isNotEmpty()) " ($description)" else "")
                 }
-                question.otherText?.let { appendLine("Owner's answer: $it") }
+                question.otherText?.let { appendLine(if (custom) "Custom answer from the owner: $it" else "Owner's answer: $it") }
+                if (custom) appendLine("This is the owner's OWN text, not one of your options; do not read it as a chosen option.")
                 when {
                     question.state == QuestionStates.AUTO -> appendLine(
                         "auto-selected after ${question.defaultAfterMin} min, owner did not answer (your recommended option). " +

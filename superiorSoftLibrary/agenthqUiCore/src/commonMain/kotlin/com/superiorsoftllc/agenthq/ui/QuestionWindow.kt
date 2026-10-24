@@ -35,6 +35,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -55,6 +56,9 @@ const val QUESTION_OPTION_TAG_PREFIX = "question-option-"
 /** + the option's index: the "Recommended" badge, present on the recommended option only. */
 const val QUESTION_RECOMMENDED_TAG_PREFIX = "question-recommended-"
 const val QUESTION_OTHER_FIELD_TAG = "question-other-field"
+/** The "Other…" row at the end of the options: opens the own-answer field. */
+const val QUESTION_OTHER_ROW_TAG = "question-other-row"
+const val QUESTION_OTHER_CANCEL_TAG = "question-other-cancel"
 const val QUESTION_SEND_OTHER_TAG = "question-send-other"
 const val QUESTION_LATER_TAG = "question-later"
 const val QUESTION_CANCEL_TAG = "question-cancel"
@@ -110,11 +114,14 @@ fun QuestionPanel(
         val q = current ?: last ?: return@AnimatedVisibility
         key(q.id) {
             var other by remember { mutableStateOf("") }
+            var otherOpen by remember { mutableStateOf(false) }
             var otherFocused by remember { mutableStateOf(false) }
             val focus = remember { FocusRequester() }
+            val otherFocus = remember { FocusRequester() }
+            LaunchedEffect(otherOpen) { runCatching { if (otherOpen) otherFocus.requestFocus() else focus.requestFocus() } }
             LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
             fun send() {
-                if (otherFocused && other.isNotBlank()) onAnswer(QuestionAnswerWire(q.id, otherText = other.trim()))
+                if (otherOpen) { if (other.isNotBlank()) onAnswer(QuestionAnswerWire(q.id, otherText = other.trim())) }
                 else q.options.firstOrNull { it.label == q.recommended }?.let { onAnswer(QuestionAnswerWire(q.id, answer = it.label)) }
             }
             val shape = RoundedCornerShape(10.dp)
@@ -126,7 +133,8 @@ fun QuestionPanel(
                         if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                         val digit: Int = if (otherFocused) -1 else QUESTION_DIGIT_KEYS.indexOf(e.key)
                         when {
-                            e.key == Key.Escape -> { onLater(); true }
+                            e.key == Key.Escape -> { if (otherOpen) otherOpen = false else onLater(); true }
+                            e.key == Key.Enter && otherOpen && e.isShiftPressed -> false
                             e.key == Key.Enter -> { send(); true }
                             digit in q.options.indices -> { onAnswer(QuestionAnswerWire(q.id, answer = q.options[digit].label)); true }
                             else -> false
@@ -170,17 +178,12 @@ fun QuestionPanel(
                     Text("If you do not answer, the recommended option is picked after $it min (you can still change it).", color = Palette.Muted, fontSize = 11.sp)
                 }
                 if (q.allowOther) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(
-                            value = other, onValueChange = { other = it }, singleLine = true,
-                            label = { Text("Your own answer", fontSize = 11.sp) },
-                            modifier = Modifier.weight(1f).onFocusChanged { otherFocused = it.isFocused }.testTag(QUESTION_OTHER_FIELD_TAG),
-                        )
-                        Button(
-                            onClick = { onAnswer(QuestionAnswerWire(q.id, otherText = other.trim())) }, enabled = other.isNotBlank(),
-                            modifier = Modifier.testTag(QUESTION_SEND_OTHER_TAG),
-                        ) { Text("Send", fontSize = 12.sp) }
-                    }
+                    OtherAnswer(
+                        open = otherOpen, text = other, onText = { other = it },
+                        onOpen = { otherOpen = true }, onClose = { otherOpen = false },
+                        onSend = { if (other.isNotBlank()) onAnswer(QuestionAnswerWire(q.id, otherText = other.trim())) },
+                        fieldModifier = Modifier.focusRequester(otherFocus).onFocusChanged { otherFocused = it.isFocused },
+                    )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TextButton(onClick = { onCancel(q.id) }, modifier = Modifier.testTag(QUESTION_CANCEL_TAG)) {
@@ -253,6 +256,47 @@ fun QuestionHistory(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * ASK-OTHER: the "Other…" row at the end of a question's options. Closed it is one row; open it is a multi-line field
+ * with Send and Cancel (Enter sends, Shift+Enter is a newline, Esc closes: the panel's key handler does those).
+ */
+@Composable
+private fun OtherAnswer(
+    open: Boolean,
+    text: String,
+    onText: (String) -> Unit,
+    onOpen: () -> Unit,
+    onClose: () -> Unit,
+    onSend: () -> Unit,
+    fieldModifier: Modifier,
+) {
+    val shape = RoundedCornerShape(6.dp)
+    if (!open) {
+        Text(
+            "Other…", color = Palette.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.fillMaxWidth().clip(shape).background(Palette.Raised).border(1.dp, Palette.Border, shape)
+                .clickable(role = Role.Button, onClickLabel = "Type your own answer", onClick = onOpen)
+                .testTag(QUESTION_OTHER_ROW_TAG).padding(10.dp),
+        )
+        return
+    }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        OutlinedTextField(
+            value = text, onValueChange = onText, singleLine = false, minLines = 2, maxLines = 6,
+            label = { Text("Your own answer (Enter sends, Shift+Enter new line, Esc cancels)", fontSize = 11.sp) },
+            modifier = Modifier.fillMaxWidth().then(fieldModifier).testTag(QUESTION_OTHER_FIELD_TAG),
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(onClick = onSend, enabled = text.isNotBlank(), modifier = Modifier.testTag(QUESTION_SEND_OTHER_TAG)) {
+                Text("Send", fontSize = 12.sp)
+            }
+            OutlinedButton(onClick = onClose, modifier = Modifier.testTag(QUESTION_OTHER_CANCEL_TAG)) {
+                Text("Cancel", color = Palette.Text, fontSize = 12.sp)
             }
         }
     }

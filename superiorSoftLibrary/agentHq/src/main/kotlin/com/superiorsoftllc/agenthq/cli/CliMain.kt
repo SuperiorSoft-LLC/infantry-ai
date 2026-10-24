@@ -585,7 +585,7 @@ internal object Cli {
         options = askRequest(parsed).options,
         recommended = parsed.recommend.orEmpty(),
         reason = parsed.reason.orEmpty(),
-        allowOther = parsed.other,
+        allowOther = !parsed.noOther,
         defaultAfterMin = parsed.defaultAfter?.trim()?.toIntOrNull(),
     )
 
@@ -4223,7 +4223,7 @@ internal object Cli {
                                              prints {"answers":[...],"otherText":...}. Exit 0 answered,
                                              3 no answer / timeout, 2 usage error or refused
               ask --question <q> --option "label|consequence" [--option ...] --recommend <label> --reason <why>
-                  [--other] [--default-after <min>]
+                  [--no-other] [--default-after <min>]   (the owner may always type an own answer; --no-other forbids it)
                                              Ask the owner WITHOUT waiting (preferred): prints {"questionId":..}
                                              at once; the pick arrives as mail in thread question:<id>.
                                              Exit 0 asked, 2 usage error / refused / rate limited
@@ -4416,6 +4416,7 @@ internal object Cli {
         val options: List<String> = emptyList(),
         val multi: Boolean = false,
         val other: Boolean = false,
+        val noOther: Boolean = false,
         val timeout: String? = null,
         /** ASK-1: `ask --recommend <label> --reason ".." [--default-after <min>]` (raw text, like --question). */
         val recommend: String? = null,
@@ -4526,6 +4527,7 @@ internal object Cli {
         val removeImages = mutableListOf<String>()
         var multi = false
         var other = false
+        var noOther = false
         var timeout: String? = null
         var recommend: String? = null
         var reason: String? = null
@@ -4756,6 +4758,10 @@ internal object Cli {
                     multi = true
                     i++
                 }
+                "--no-other" -> {
+                    noOther = true
+                    i++
+                }
                 "--other" -> {
                     other = true
                     i++
@@ -4933,6 +4939,7 @@ internal object Cli {
             removeImages = removeImages.toList(),
             multi = multi,
             other = other,
+            noOther = noOther,
             timeout = timeout,
             recommend = recommend,
             reason = reason,

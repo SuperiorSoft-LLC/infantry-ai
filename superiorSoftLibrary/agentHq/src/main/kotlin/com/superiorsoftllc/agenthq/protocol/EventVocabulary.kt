@@ -366,7 +366,7 @@ object EventVocabulary {
     // `agenthq.bearer.<base64url token>` subprotocol (the daemon answers `agenthq`); setting `AGENTHQ_WEB_HOSTS`. See CONTRACT.md.
     // **1.123.0 (PROGRESS-COUNTDOWN, ticket 564d0e01) is ADDITIVE**: `SessionProgress` labelStartedAt / estimateSource / lastOutputAt, `ProgressReport` estimateMs and op `output`; the meter always counts down. See CONTRACT.md.
     // **1.128.0 (ROUTING-1, ticket-a5969342) is ADDITIVE**: `Project.routingRules` + `project_config.routingRules`, `EffectiveExecutor.rule`, source `rule`. See CONTRACT.md.
-    const val VERSION = "1.128.0"
+    const val VERSION = "1.129.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA

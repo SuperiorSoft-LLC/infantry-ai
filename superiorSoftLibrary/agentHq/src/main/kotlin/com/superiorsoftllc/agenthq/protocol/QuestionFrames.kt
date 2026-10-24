@@ -36,7 +36,8 @@ data class QuestionAsk(
     val options: List<PromptOption>,
     val recommended: String,
     val reason: String,
-    val allowOther: Boolean = false,
+    /** 1.129.0: true (default) = the owner may type an answer of their own ("Other"); false = options only. */
+    val allowOther: Boolean = true,
     val defaultAfterMin: Int? = null,
 ) {
     companion object {
