@@ -129,6 +129,9 @@ tasks.register<JavaExec>("runSmoke") {
 // daemon's plan-limit meters off so a test never reads real credentials or calls a provider (as :agentHq does).
 tasks.withType<Test>().configureEach {
     environment("AGENTHQ_LIMITS_LIVE", "false")
+    // TEST-SPEED-4: no modal blur in the test windows (JvmPlatformHost.supportsBlur). The tests render on the CPU, where
+    // blurring the whole window cost ~150 ms a frame under every open modal; the dark scrim draws in a few ms.
+    systemProperty("agenthq.ui.blur", "off") // ModalBlurRenderUiTest turns it back on for itself and renders the blur
     // PERF-2: PackagedJvmCapsTest reads the packaged launcher's jvmArgs (the compose block below), lazily, '|'-separated (no flag contains '|').
     // BUILD-STAMP-1: the stamp's VALUE changes per commit (per minute when packaging); the test only checks it is there, so the
     // input carries a fixed placeholder and the tests stay cacheable.
@@ -148,7 +151,46 @@ tasks.withType<Test>().configureEach {
 val ownerSmokeTests = "com.superiorsoftllc.agenthq.ui.owner.*"
 tasks.named<Test>("test") {
     filter { excludeTestsMatching(ownerSmokeTests) }
+    // TEST-SPEED-1: parallel test-class forks (was 1 fork, fully serial). Fewer than :agentHq because each UI fork boots a
+    // daemon AND a Compose window. ownerSmoke stays a single fork. Override: -Pagenthq.uiTestForks=1.
+    maxParallelForks = providers.gradleProperty("agenthq.uiTestForks").map { it.toInt() }.getOrElse(2)
+    maxHeapSize = "2g"
 }
+// TEST-SPEED-3: two tiers split by class name; `test` still runs both. `testFast` is ~30 s of plain unit tests,
+// `testSlow` the ~390 s of Compose windows over a real daemon. Same fork count as `test`; ownerSmoke is in neither.
+val slowUiTestPatterns = listOf("*UiTest", "*E2ETest", "*E2eTest", "*IntegrationTest")
+val uiUnitTest = tasks.named<Test>("test")
+fun Test.uiTier(desc: String, slow: Boolean) {
+    group = "verification"
+    description = desc
+    testClassesDirs = uiUnitTest.get().testClassesDirs
+    classpath = uiUnitTest.get().classpath
+    maxParallelForks = uiUnitTest.get().maxParallelForks
+    maxHeapSize = "2g"
+    filter {
+        excludeTestsMatching(ownerSmokeTests)
+        slowUiTestPatterns.forEach { if (slow) includeTestsMatching(it) else excludeTestsMatching(it) }
+    }
+}
+// TEST-SPEED-1: per-fork tmpdir and state dir for the parallel UI test tasks, as :agentHq does: the same TestForkAgent
+// (built by :agentHq) moves each fork into <testTmp>/fork-<pid> and <test-state-dir>/fork-<pid>. ownerSmoke (one fork,
+// its own temp layout) is left as it was. The tmp root sits OUTSIDE the repo, like :agentHq's (git fixtures).
+val uiTestTmp = File(System.getProperty("java.io.tmpdir"), "agenthq-test-tmp/" + Integer.toHexString(projectDir.absolutePath.hashCode()))
+val uiTestState = layout.buildDirectory.dir("test-state-dir").get().asFile
+val forkAgentJar = project(":superiorSoftLibrary:agentHq").layout.buildDirectory.file("testForkAgent/agenthq-test-fork-agent.jar")
+tasks.withType<Test>().matching { it.name in setOf("test", "testFast", "testSlow") }.configureEach {
+    dependsOn(":superiorSoftLibrary:agentHq:testForkAgentJar")
+    inputs.file(forkAgentJar).withPropertyName("testForkAgent").withNormalizer(ClasspathNormalizer::class.java)
+    systemProperty("AGENTHQ_STATE_DIR", uiTestState.absolutePath)
+    jvmArgs("-Djava.io.tmpdir=${uiTestTmp.absolutePath}")
+    jvmArgumentProviders += CommandLineArgumentProvider { listOf("-javaagent:${forkAgentJar.get().asFile.absolutePath}") }
+    doFirst {
+        uiTestState.deleteRecursively(); uiTestState.mkdirs()
+        uiTestTmp.deleteRecursively(); uiTestTmp.mkdirs()
+    }
+}
+tasks.register<Test>("testFast") { uiTier("TEST-SPEED-3: the fast UI tier (classes NOT matched by slowUiTestPatterns).", slow = false) }
+tasks.register<Test>("testSlow") { uiTier("TEST-SPEED-3: the slow UI tier (classes matched by slowUiTestPatterns).", slow = true) }
 tasks.register<Test>("ownerSmoke") {
     group = "verification"
     description = "E2E-OWNER-1: the owner's path end to end (real daemon JVM, installed agenthq over MCP and CLI, stub harness)."

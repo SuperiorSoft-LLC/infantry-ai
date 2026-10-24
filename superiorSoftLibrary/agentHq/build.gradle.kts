@@ -258,6 +258,16 @@ val soakKnobs = listOf(
     "agenthq.soak.archive",
     "agenthq.soak.results",
 )
+// TEST-SPEED-1: a -javaagent that moves each parallel test fork into its own tmpdir and state dir (see TestForkAgent).
+val testForkAgent: SourceSet = sourceSets.create("testForkAgent")
+val testForkAgentJar = tasks.register<Jar>("testForkAgentJar") {
+    archiveFileName.set("agenthq-test-fork-agent.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("testForkAgent"))
+    from(testForkAgent.output)
+    manifest { attributes("Premain-Class" to "com.superiorsoftllc.agenthq.testfork.TestForkAgent") }
+}
+tasks.named<JavaCompile>(testForkAgent.compileJavaTaskName) { options.release.set(21) }
+
 // ContractFrameDocTest reads CONTRACT.md at run time, which Gradle cannot see as a test input. Declared
 // here so a doc-only change (say, a removed frame row) re-runs the test instead of being served
 // FROM-CACHE as the previous green result.
@@ -292,6 +302,16 @@ tasks.withType<Test>().configureEach {
         isolatedState.deleteRecursively(); isolatedState.mkdirs()
         testTmp.deleteRecursively(); testTmp.mkdirs()
     }
+    // TEST-SPEED-1: the suite was fully serial (1 fork, ~13 min for ~780 s of tests on a 16-core host). Forks run test
+    // CLASSES in parallel; a class still runs its own tests in order. Each fork gets its own <testTmp>/fork-<pid> and
+    // <test-state-dir>/fork-<pid> from TestForkAgent (all forks share one command line, so the agent picks the folder
+    // inside the fork; JDK createTempFile still uses the shared parent, unique names). Fixture daemons bind ephemeral ports.
+    // The heap cap keeps 4 forks inside the host RAM budget (one fork peaks ~800 MB). Override: -Pagenthq.testForks=1.
+    val agentJar = testForkAgentJar.flatMap { it.archiveFile }
+    inputs.file(agentJar).withPropertyName("testForkAgent").withNormalizer(ClasspathNormalizer::class.java)
+    jvmArgumentProviders += CommandLineArgumentProvider { listOf("-javaagent:${agentJar.get().asFile.absolutePath}") }
+    maxParallelForks = providers.gradleProperty("agenthq.testForks").map { it.toInt() }.getOrElse(4)
+    maxHeapSize = "2g"
 }
 
 tasks.withType<Test>().configureEach {
@@ -301,6 +321,34 @@ tasks.withType<Test>().configureEach {
         val value = fromCmd ?: fromGradleProps
         if (value != null) systemProperty(knob, value)
     }
+}
+
+// TEST-SPEED-3: two tiers split by class name. `test` still runs BOTH (the gate is unchanged); `testFast` is the quick
+// inner loop (~240 s of tests, unit-level), `testSlow` is the rest (~550 s: real git, CLI processes, fixture daemons,
+// E2E/soak/live). Every class is in exactly one tier: the slow patterns are an include list for one and an exclude list
+// for the other. A new slow class joins `testSlow` by its name (suffix or package) or by adding a pattern here.
+val slowTestPatterns = listOf(
+    "*E2eTest", "*E2ETest", "*SoakTest", "*LiveTest", "*DaemonTest", "*AcceptanceTest", "*IntegrationTest",
+    "com.superiorsoftllc.agenthq.cli.*",
+    "com.superiorsoftllc.agenthq.projectgit.*",
+    "com.superiorsoftllc.agenthq.worktree.*",
+    "*.VerifyBaseTaskTest",
+    "*.ToolApprovalMatrixTest",
+)
+val unitTest = tasks.named<Test>("test")
+tasks.register<Test>("testFast") {
+    group = "verification"
+    description = "TEST-SPEED-3: the fast tier (every test class NOT matched by slowTestPatterns)."
+    testClassesDirs = unitTest.get().testClassesDirs
+    classpath = unitTest.get().classpath
+    filter { slowTestPatterns.forEach { excludeTestsMatching(it) } }
+}
+tasks.register<Test>("testSlow") {
+    group = "verification"
+    description = "TEST-SPEED-3: the slow tier (test classes matched by slowTestPatterns)."
+    testClassesDirs = unitTest.get().testClassesDirs
+    classpath = unitTest.get().classpath
+    filter { slowTestPatterns.forEach { includeTestsMatching(it) } }
 }
 
 // PERF-1: `./gradlew :superiorSoftLibrary:agentHq:perfProfile` -- the profile lives in agentHqUi (it needs the UI's
