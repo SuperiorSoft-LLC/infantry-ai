@@ -60,10 +60,38 @@ internal class PiStreamTranslator : HarnessTranslator {
     private var inputTokens = 0L
     private var outputTokens = 0L
 
+    /**
+     * Pi streams thinking as arbitrary-sized `thinking_delta`s (often mid-word). Every other harness hands the daemon
+     * a whole block as one reasoning event, and a consumer shows each reasoning event as its own line, so the
+     * deltas are joined here, verbatim, and emitted as ONE `Reasoning` when the thinking block ends (the next
+     * event that is not a `thinking_delta`).
+     */
+    private val thinking = StringBuilder()
+
+    private fun flushThinking(): List<HarnessEvent> {
+        if (thinking.isEmpty()) return emptyList()
+        val text = thinking.toString()
+        thinking.setLength(0)
+        return listOf(HarnessEvent.Reasoning(text))
+    }
+
+    private fun thinkingDelta(obj: JsonObject): String? {
+        if (obj.string("type") != "message_update") return null
+        val update = obj["assistantMessageEvent"] as? JsonObject ?: return null
+        if (update.string("type") != "thinking_delta") return null
+        return update.string("delta")?.takeIf { it.isNotEmpty() }
+    }
+
     override fun translate(line: String): List<HarnessEvent> {
         val trimmed = line.trim()
         if (trimmed.isEmpty()) return emptyList()
         val obj = runCatching { json.parseToJsonElement(trimmed) as? JsonObject }.getOrNull() ?: return emptyList()
+        thinkingDelta(obj)?.let { thinking.append(it); return emptyList() }
+        val pending = flushThinking()
+        return pending + translateObject(obj)
+    }
+
+    private fun translateObject(obj: JsonObject): List<HarnessEvent> {
         return when (obj.string("type")) {
             "session" -> sessionEvents(obj)
             "message_update" -> updateEvents(obj)
@@ -97,7 +125,6 @@ internal class PiStreamTranslator : HarnessTranslator {
         val update = obj["assistantMessageEvent"] as? JsonObject ?: return emptyList()
         return when (update.string("type")) {
             "text_delta" -> update.string("delta")?.takeIf { it.isNotEmpty() }?.let { listOf(HarnessEvent.TextDelta(it)) }.orEmpty()
-            "thinking_delta" -> update.string("delta")?.takeIf { it.isNotEmpty() }?.let { listOf(HarnessEvent.Reasoning(it)) }.orEmpty()
             "toolcall_end" -> {
                 val call = update["toolCall"] as? JsonObject
                 val name = call?.string("name")?.takeIf { it.isNotBlank() }

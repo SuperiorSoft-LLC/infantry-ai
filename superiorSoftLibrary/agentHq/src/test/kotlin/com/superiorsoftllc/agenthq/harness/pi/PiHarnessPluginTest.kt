@@ -228,6 +228,20 @@ class PiHarnessPluginTest {
         assertEquals(HarnessEvent.Usage(431, 2), run(listOf(SESSION, line, SETTLED)).filterIsInstance<HarnessEvent.Usage>().single())
     }
 
+    // A thinking block streamed mid-word is ONE reasoning event: deltas verbatim, real newlines kept.
+    @Test
+    fun thinkingDeltasSplitMidWordJoinIntoOneReasoningEvent() {
+        fun d(s: String) = update("""{"type":"thinking_delta","contentIndex":0,"delta":"$s"}""")
+        val lines = listOf(SESSION, d("I"), d("'m w"), d("ondering if there"), d("'s a path m"), d("ismatch.\nNext line"),
+            update("""{"type":"thinking_end","contentIndex":0}"""), update("""{"type":"text_delta","contentIndex":1,"delta":"Hi"}"""),
+            d("more"), assistantEnd("stop"), SETTLED)
+        val events = run(lines)
+        assertEquals(
+            listOf(HarnessEvent.Reasoning("I'm wondering if there's a path mismatch.\nNext line"), HarnessEvent.TextDelta("Hi"), HarnessEvent.Reasoning("more")),
+            events.filter { it is HarnessEvent.Reasoning || it is HarnessEvent.TextDelta },
+        )
+    }
+
     // ---- what is NOT an event --------------------------------------------------------------------
 
     @Test
