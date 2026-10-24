@@ -417,6 +417,7 @@ internal object Cli {
                 "harnesses" -> harnesses(stream, out, err)
                 "harness-status" -> harnessStatus(stream, parsed, out, err)
                 "harness-install" -> harnessInstall(stream, parsed, out, err)
+                "processes" -> processes(stream, parsed, out, err)
                 "agents" -> agents(stream, parsed, out, err, getenv)
                 "send" -> send(stream, parsed, out, err, getenv)
                 "inbox" -> inbox(stream, parsed, out, err, getenv)
@@ -1323,6 +1324,15 @@ internal object Cli {
         checkContract(stream, err)
         HarnessInstallClient.render(HarnessInstallClient.status(stream, parsed.check), out)
         0
+    }
+
+    /** ROGUE-1 (contract 1.120.0): `processes [--all]` lists; `processes reap <pid>|--all` reaps. Exit 1 when a reap is refused. */
+    private fun processes(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable): Int = runBlocking {
+        checkContract(stream, err)
+        val req = ProcessesCli.requestFor(parsed.args, parsed.all)
+        val answer = ProcessesCli.request(stream, req)
+        out.append(ProcessesCli.render(answer, showAll = parsed.all && req.op == "list"))
+        if (answer.refused != null) 1 else 0
     }
 
     /** HARNESS-INSTALL-1: `harness-install [id...] [--update]`: npm-install into the app prefix; exit 1 when any one failed. */
@@ -4097,6 +4107,10 @@ internal object Cli {
               run [--label L] [--reader R] -- CMD   Run CMD with its output and exit code unchanged; progress done on exit 0, failed otherwise
                                   Harmless outside Infantry AI: no session or daemon = no report, exit 0 (run keeps CMD's code)
               harnesses           The harnesses (provider ids) a ticket can pin, and each one's models
+              processes [--all]   Rogue background processes (Gradle/Kotlin daemons, node, JVMs) left by ended or idle sessions,
+                                  with MB, age and owner session; --all adds healthy ones and heavy processes that are not ours
+              processes reap <pid> | --all   Kill one process (or every rogue one) that a session of this daemon started;
+                                  anything else is refused. Setting processes.autoReap (default off) reaps rogue ones on a timer
               harness-status      Which harness CLIs are installed / missing / outdated; harness-install [id...] [--update] installs them via npm
               epics --project <id> List that project's epics, with each one's goal and story count
               epic show <id|prefix> [--project <id>]   One epic: its title, then its tickets as ID | STATUS | TITLE | AGENT
@@ -4924,6 +4938,7 @@ internal object Cli {
         "harnesses" -> if (parsed.args.isNotEmpty()) "harnesses takes no arguments: agenthq harnesses" else null
         "harness-status" -> if (parsed.args.isNotEmpty()) "harness-status takes no arguments: agenthq harness-status [--check]" else null
         "harness-install" -> null
+        "processes" -> ProcessesCli.usageError(parsed.args, parsed.all)
         "epic" -> epicUsageError(parsed, getenv)
         "project" -> projectUsageError(parsed)
         "image" -> imageUsageError(parsed)
@@ -5112,6 +5127,7 @@ internal object Cli {
         "submit", "watch", "pods", "runs", "logs", "cancel", "tickets", "board", "ticket", "agents", "send", "inbox",
         "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
         "trait", "skill", "role", "ask", "harnesses", "harness-status", "harness-install", "image", "session", "remote", "bg", "kill",
+        "processes",
     )
 
     /** `agenthq remote on|off|status`: edits `<stateDir>/network.properties`; takes effect on the next daemon restart. */

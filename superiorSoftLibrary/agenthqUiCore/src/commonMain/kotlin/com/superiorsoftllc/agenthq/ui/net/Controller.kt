@@ -7,6 +7,7 @@ import com.superiorsoftllc.agenthq.ui.model.HarnessPickerAsk
 import com.superiorsoftllc.agenthq.ui.model.CliLocationsSetting
 import com.superiorsoftllc.agenthq.ui.model.ToolApprovalSetting
 import com.superiorsoftllc.agenthq.ui.model.LifecycleSetting
+import com.superiorsoftllc.agenthq.ui.model.ProcessWatchView
 import com.superiorsoftllc.agenthq.ui.model.UserPortrait
 import kotlinx.serialization.json.JsonPrimitive
 import com.superiorsoftllc.agenthq.ui.model.withChangesBranch
@@ -210,6 +211,10 @@ class Controller(
                         }
                         // SECRETS-1: the keystore's set / not set state, shown in the Configuration modal (1.100.0).
                         if (contractAtLeast(contract, 1, 102)) client.send(WireRequests.secretStatus())
+                        // ROGUE-1: the rogue process detector's first report, for the status-bar badge (1.120.0).
+                        if (contractAtLeast(contract, ProcessWatchView.SINCE_MAJOR, ProcessWatchView.SINCE_MINOR)) {
+                            client.send(WireRequests.processes())
+                        }
                     }
                     // The sidebar shows the active project's workspaces, including the one chosen by default.
                     Envelope.PROJECTS -> _state.value.activeProjectId?.let { client.send(WireRequests.workspaceList(it)) }
@@ -429,6 +434,26 @@ class Controller(
      * USER-PORTRAIT: store [png] (already downscaled) as the daemon's `user.portrait`; null resets to the bundled default.
      * The shown portrait changes only when the daemon answers `settings`.
      */
+    private fun hasProcessWatch(): Boolean =
+        contractAtLeast(_state.value.connection.contract, ProcessWatchView.SINCE_MAJOR, ProcessWatchView.SINCE_MINOR)
+
+    /** ROGUE-1 (1.120.0): ask for a fresh process report. Silent: the badge polls it, and an older daemon is never asked. */
+    suspend fun refreshProcesses(): CommandResult =
+        if (!hasProcessWatch()) CommandResult.Refused("this daemon has no process detector (contract 1.120.0)")
+        else send(WireRequests.processes())
+
+    /** ROGUE-1: reap one process ([pid]) or, with null, every rogue one. The daemon refuses anything its sessions did not start. */
+    suspend fun reapProcesses(pid: Long?): CommandResult {
+        if (!hasProcessWatch()) return report(CommandResult.Refused("this daemon has no process detector (contract 1.120.0)"))
+        return report(send(if (pid == null) WireRequests.processes("reap_rogue") else WireRequests.processes("reap", pid)))
+    }
+
+    /** ROGUE-1: the daemon's `processes.autoReap` (default off). Shown changed only when the daemon answers `settings`. */
+    suspend fun setProcessAutoReap(on: Boolean): CommandResult {
+        if (!hasProcessWatch()) return report(CommandResult.Refused("this daemon has no process detector (contract 1.120.0)"))
+        return report(send(WireRequests.settingsSet(ProcessWatchView.AUTO_REAP_KEY, JsonPrimitive(on))))
+    }
+
     suspend fun setUserPortrait(png: ByteArray?): CommandResult {
         if (!contractAtLeast(_state.value.connection.contract, UserPortrait.SINCE_MAJOR, UserPortrait.SINCE_MINOR)) {
             return report(CommandResult.Refused("this daemon cannot store a portrait (needs contract 1.107.0)"))

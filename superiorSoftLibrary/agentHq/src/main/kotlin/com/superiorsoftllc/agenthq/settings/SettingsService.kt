@@ -42,6 +42,10 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
             QUESTIONS_MAX_PER_HOUR to JsonPrimitive(questionsMaxPerHour()),
             TICKET_EXIT_BEHAVIOR to JsonPrimitive(ticketExitBehavior()),
             TICKET_WEIGHT_EXECUTORS to weightExecutors().toJson(),
+            PROCESSES_AUTO_REAP to JsonPrimitive(processWatchConfig().autoReap),
+            PROCESSES_IDLE_MINUTES to JsonPrimitive(processWatchConfig().idleMinutes),
+            PROCESSES_HEAVY_MB to JsonPrimitive(processWatchConfig().heavyMb),
+            PROCESSES_FLOOR_MB to JsonPrimitive(processWatchConfig().floorMb),
         ) + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
     )
 
@@ -103,6 +107,9 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
                 throw IllegalArgumentException("setting '$TICKET_WEIGHT_EXECUTORS' ${e.message}")
             }
             USER_PORTRAIT -> JsonPrimitive(requireUserPortrait(value))
+            PROCESSES_AUTO_REAP -> JsonPrimitive(requireBoolean(key, value))
+            PROCESSES_IDLE_MINUTES -> JsonPrimitive(requireIntIn(key, value, PROCESSES_IDLE_RANGE))
+            PROCESSES_HEAVY_MB, PROCESSES_FLOOR_MB -> JsonPrimitive(requireIntIn(key, value, PROCESSES_MB_RANGE))
             else -> throw IllegalArgumentException("unknown setting '$key'")
         }
         store.settings.put(
@@ -147,6 +154,30 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
 
     /** ASK-1: read at every `question_ask`, never cached; an unreadable stored value falls back to the default. */
     fun questionsMaxPerHour(): Int = storedQuestionLimit(QUESTIONS_MAX_PER_HOUR, DEFAULT_QUESTIONS_MAX_PER_HOUR)
+
+    /** ROGUE-1 (1.120.0): the rogue process detector's settings, read on every timer pass; a bad stored value falls back. */
+    fun processWatchConfig(): com.superiorsoftllc.agenthq.session.ProcessWatchConfig {
+        val d = com.superiorsoftllc.agenthq.session.ProcessWatchConfig()
+        fun int(key: String, range: IntRange, default: Int): Int {
+            val stored = store.settings.get(key)?.value ?: return default
+            val parsed = runCatching { (Json.parseToJsonElement(stored) as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull }.getOrNull()
+            return parsed?.takeIf { it in range } ?: default
+        }
+        val autoReap = store.settings.get(PROCESSES_AUTO_REAP)?.value
+            ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonPrimitive)?.booleanOrNull }.getOrNull() } ?: d.autoReap
+        return com.superiorsoftllc.agenthq.session.ProcessWatchConfig(
+            idleMinutes = int(PROCESSES_IDLE_MINUTES, PROCESSES_IDLE_RANGE, d.idleMinutes),
+            heavyMb = int(PROCESSES_HEAVY_MB, PROCESSES_MB_RANGE, d.heavyMb.toInt()).toLong(),
+            floorMb = int(PROCESSES_FLOOR_MB, PROCESSES_MB_RANGE, d.floorMb.toInt()).toLong(),
+            autoReap = autoReap,
+        )
+    }
+
+    private fun requireIntIn(key: String, value: JsonElement, range: IntRange): Int {
+        val v = (value as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toIntOrNull()
+        require(v != null && v in range) { "setting '$key' must be a JSON integer in $range" }
+        return v
+    }
 
     private fun storedQuestionLimit(key: String, default: Int): Int {
         val stored = store.settings.get(key)?.value ?: return default
@@ -241,6 +272,13 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
         const val EXIT_LEAVE = "leave"
         const val EXIT_DONE = "done"
         private val EXIT_BEHAVIORS = listOf(EXIT_LEAVE, EXIT_DONE)
+        /** ROGUE-1 (1.120.0): the rogue process detector (auto-reap is opt-in, default false). */
+        const val PROCESSES_AUTO_REAP = "processes.autoReap"
+        const val PROCESSES_IDLE_MINUTES = "processes.idleMinutes"
+        const val PROCESSES_HEAVY_MB = "processes.heavyMb"
+        const val PROCESSES_FLOOR_MB = "processes.floorMb"
+        private val PROCESSES_IDLE_RANGE = 1..1440
+        private val PROCESSES_MB_RANGE = 0..1_048_576
         private val QUESTION_LIMIT_RANGE = 1..100
         private val PROMPT_TIMEOUT_RANGE = 1..86_400
         private val KEEP_ALIVE_RANGE = 0..LifecyclePolicy.MAX_KEEP_ALIVE_MINUTES

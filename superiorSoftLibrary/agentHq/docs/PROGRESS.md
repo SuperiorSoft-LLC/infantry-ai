@@ -2,7 +2,8 @@
 
 An agent reports how far along its long job is; the app shows it as a live bar on the agent's card, its session
 header and its running ticket's board card, and the PM reads it in `agenthq_list_sessions` / `agenthq_get_session`
-without reading the transcript. The number is always the agent's MEASUREMENT. Nothing is estimated.
+without reading the transcript. The number is the agent's MEASUREMENT. Nothing is estimated unless the agent opts in
+(`--estimate`, last section), and then the bar says so.
 
 ## Pick a mode that fits the job
 
@@ -35,7 +36,7 @@ Grammar (one line, optional leading whitespace, case-sensitive):
 ##infantry step [name...]
 ##infantry bytes <done> <total|?> [label...]
 ##infantry count <done> <total|?> [label...]
-##infantry status <label...>
+##infantry status [--estimate] <label...>      (##infantry estimate <label...> is the same as status --estimate)
 ##infantry done [label...]  |  ##infantry fail [reason...]  |  ##infantry clear
 ```
 
@@ -66,3 +67,23 @@ at most one numeric update every 250 ms (a plan, step, done or fail always goes 
 Stored on the session in the daemon's memory. Cleared when the session ends, when a turn ends with no report made
 during it (unless an `agenthq bg run` job is still registered), and on a daemon restart. A client shows the bar amber
 with "no update for N min" when `updatedAt` is older than its stale setting.
+
+## Estimated mode (opt-in, last resort)
+
+When nothing can be measured but the same job has run before, `--estimate` turns an indeterminate bar into a guess
+from history: `agenthq run --estimate --label "gate" -- ./scripts/agenthq-gate.sh HEAD`, or
+`agenthq progress status "gate" --estimate` (or `agenthq progress estimate "gate"`); MCP `agenthq_progress` mode
+`status` with `estimate: true`; with `progress --watch`, `--estimate` needs `--label`. The daemon keeps, per project and label, the durations of the last 5 runs
+that ended `done` (never a failed one) and predicts their median. The bar is drawn HATCHED and reads
+"~12 min left (estimated)" (past the prediction: "over the usual 12 min (estimated)"); it never fills completely on a
+guess. The first run of a label has no history and shows as plain indeterminate. Any measured report (plan/step,
+count, bytes, percent) or a plain `status` replaces the estimate, so `--estimate` with `--reader gradle` loses it at the
+first task line. Prefer checkpoints or a counter: estimate only when nothing else works.
+
+## The gate script
+
+`scripts/agenthq-gate.sh` declares its four stages as `##infantry plan` / `##infantry step` lines and, after the last
+stage, reports the test totals (`##infantry count <passed> <total> tests passed (N failed)`) then `done` / `fail`.
+Under `agenthq run` (which sets `AGENTHQ_PROGRESS_PIPE=1` on the command it wraps) those lines are the report; run on
+its own with `agenthq` on PATH, the script sends the same reports through `agenthq progress`; with neither, they are
+plain lines. If you pipe a script like this through `progress --watch` instead, set `AGENTHQ_PROGRESS_PIPE=1` on it.

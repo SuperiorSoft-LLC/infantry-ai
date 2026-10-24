@@ -1,11 +1,20 @@
 #!/bin/sh
-# Bulk QA gate: runs every test stage uncached, one Gradle at a time, in a throwaway worktree.
-# Usage: scripts/agenthq-gate.sh <commit-or-branch>   (see docs/GATE.md)
+# Bulk QA gate: runs every test stage (test tasks forced, never cached), one Gradle at a time, in a throwaway worktree.
+# Usage: scripts/agenthq-gate.sh [--full] <commit-or-branch>   (see docs/GATE.md)
+#   --full: the promotion run. Nothing from the build cache (--no-build-cache): every module compiles fresh, once.
 # Env: GATE_MIN_FREE_GB (default 5), GATE_LOCK (lock dir), GATE_KEEP=1 keeps the worktree.
+# Progress (Infantry AI, docs/PROGRESS.md): the stages are declared as `##infantry plan/step` marker lines, read when the
+# gate runs under `agenthq run` (which sets AGENTHQ_PROGRESS_PIPE=1). Otherwise, when `agenthq` is on PATH, the same
+# reports go out through `agenthq progress`. The test totals are reported once, as a count, after the last stage.
+# Outside Infantry AI all of this is inert: the markers are plain lines and `agenthq progress` does nothing.
 
 set -u
+FULL=""
+if [ "${1:-}" = "--full" ]; then FULL=1; shift; fi
 REF="${1:-}"
-[ -n "$REF" ] || { echo "usage: $0 <commit-or-branch>" >&2; exit 2; }
+[ -n "$REF" ] || { echo "usage: $0 [--full] <commit-or-branch>" >&2; exit 2; }
+# TEST-SPEED-2: tests are always forced (--rerun). Only --full also bypasses the build cache for compilation.
+CACHE_FLAG=""; [ -n "$FULL" ] && CACHE_FLAG="--no-build-cache"
 
 REPO=$(git rev-parse --show-toplevel) || exit 2
 TMPROOT="${TEMP:-${TMP:-/tmp}}"
@@ -56,7 +65,7 @@ STATUS="$OUT/status.log"
 note() { echo "$(date '+%H:%M:%S') $*" | tee -a "$STATUS"; }
 
 git -C "$REPO" worktree add --detach "$WT" "$SHA" >/dev/null 2>&1 || { echo "worktree add failed" >&2; exit 2; }
-note "gate $REF = $SHA; worktree $WT; logs $OUT"
+note "gate $REF = $SHA${FULL:+ (FULL: --no-build-cache)}; worktree $WT; logs $OUT"
 
 # count tests from the JUnit XML a stage produced: "tests failures errors skipped|failing names"
 tally() {
@@ -71,19 +80,47 @@ failing() {
   done | sort -u
 }
 
-SUMMARY=""; FAILED=0; FAILNAMES=""
+# --- progress: a marker line always; a direct report only when nothing reads the markers and the CLI exists ---
+STAGES="agentHq uiCore agentHqUi ownerSmoke"
+direct_progress() { [ -z "${AGENTHQ_PROGRESS_PIPE:-}" ] && command -v agenthq >/dev/null 2>&1; }
+progress() { # verb args... (CLI form)
+  direct_progress && agenthq progress "$@" >/dev/null 2>&1 || true
+}
+progress_plan() {
+  echo "##infantry plan $(echo $STAGES | tr ' ' '|')"
+  # shellcheck disable=SC2086
+  progress plan $STAGES --label "gate $(echo "$SHA" | cut -c1-8)"
+}
+progress_step() { echo "##infantry step $1"; progress step "$1"; }
+progress_count() { echo "##infantry count $1 $2 $3"; progress count "$1" "$2" "$3"; }
+progress_end() { echo "##infantry $1 $2"; progress "$1" "$2"; }
+
+SUMMARY=""; FAILED=0; FAILNAMES=""; TOTAL_TESTS=0; TOTAL_BAD=0
+progress_plan
 stage() { # name gradle-task project-dir
   name=$1; task=$2; dir=$3
   if ! check_disk; then SUMMARY="$SUMMARY $name=ABORT(disk)"; FAILED=1; return; fi
-  note "stage $name: gradlew $task --rerun-tasks --no-daemon"
-  (cd "$WT" && ./gradlew "$task" --rerun-tasks --no-daemon --console=plain) > "$OUT/$name.log" 2>&1
+  # TEST-SPEED-2: --rerun forces THIS test task to execute (never up-to-date, never FROM-CACHE), so every test really
+  # runs; compilation is reused (build cache, then up-to-date) instead of recompiling all modules once per stage.
+  note "stage $name: gradlew $task --rerun --no-daemon $CACHE_FLAG"
+  (cd "$WT" && ./gradlew "$task" --rerun --no-daemon $CACHE_FLAG --console=plain) > "$OUT/$name.log" 2>&1
   rc=$?
   set -- $(tally "$dir")
   names=$(failing "$dir" | tr '\n' ',' | sed 's/,$//')
   if [ $rc -eq 0 ] && [ "$3" -eq 0 ] && [ "$4" -eq 0 ] && [ "$1" -gt 0 ]; then verdict=ok; else verdict=FAIL; FAILED=1; fi
+  # Not a test failure: say who broke the run, so nobody chases a flaky test that never ran.
+  if [ $rc -ne 0 ]; then
+    if grep -q 'stop command received' "$OUT/$name.log"; then
+      verdict=EXTERNAL_STOP; note "stage $name: killed by a 'gradlew --stop' from another session (not a test failure); re-run the gate"
+    elif grep -q 'TEST RUN REFUSED' "$OUT/$name.log"; then
+      verdict=REFUSED_BUSY; note "stage $name: another Gradle build holds this build dir's test lock"
+    fi
+  fi
   [ -n "$names" ] && FAILNAMES="$FAILNAMES [$name: $names]"
   note "stage $name: rc=$rc tests=$1 skipped=$2 failures=$3 errors=$4 $verdict"
   SUMMARY="$SUMMARY $name=$verdict($1 tests,$3 fail,$4 err)"
+  TOTAL_TESTS=$((TOTAL_TESTS + $1)); TOTAL_BAD=$((TOTAL_BAD + $3 + $4))
+  progress_step "$name"
   sync; sleep 2   # let file handles from the finished JVM release before the next stage
 }
 
@@ -93,5 +130,7 @@ stage agentHqUi     :superiorSoftLibrary:agentHqUi:test          superiorSoftLib
 stage ownerSmoke    :superiorSoftLibrary:agentHqUi:ownerSmoke    superiorSoftLibrary/agentHqUi/build/test-results/ownerSmoke
 
 if [ $FAILED -eq 0 ]; then R=PASS; else R=FAIL; fi
-echo "GATE $R $SHA:$SUMMARY${FAILNAMES:+ failing:$FAILNAMES} logs=$OUT"
+progress_count $((TOTAL_TESTS - TOTAL_BAD)) "$TOTAL_TESTS" "tests passed ($TOTAL_BAD failed)"
+if [ $FAILED -eq 0 ]; then progress_end done "gate PASS"; else progress_end fail "gate FAIL"; fi
+echo "GATE $R $SHA${FULL:+ (full)}:$SUMMARY${FAILNAMES:+ failing:$FAILNAMES} logs=$OUT"
 [ $FAILED -eq 0 ]

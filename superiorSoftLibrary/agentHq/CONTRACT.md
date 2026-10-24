@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.118.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.120.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -105,6 +105,27 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
 
+### What changed in 1.120.0 (ROGUE-1) — the rogue background process detector
+
+ADDITIVE; a 1.118.0 client keeps working. The `ready` frame reports `contract=1.120.0`.
+- **Process ledger.** Every 10 s the daemon walks the OS process tree under each session's harness process (kept or running) and
+  under every process it already recorded, and records each process by pid AND OS start instant with its owner session
+  (`process-ledger.json` in the state dir, stamped with the state dir's instance id). A process whose parent exited (a Gradle daemon
+  after `gradlew` ends) stays attributed. Only a ledger process can ever be reaped; the daemon, its ancestors and anything run by the
+  app's own runtime are never recorded.
+- **Rogue** = a ledger process whose owner session was removed or ended (EXITED / FAILED / ORPHANED), or whose owner is idle (no
+  turn, no bg job, no output for `processes.idleMinutes`) while it holds at least `processes.heavyMb`. A live session's own harness
+  process is never rogue by idleness and is refused by `reap` (kill the session instead).
+- **`processes`** request `ProcessesRequest {op: list|reap|reap_rogue, pid?}` → `processes` answer
+  `ProcessesAnswer {report: ProcessReport, reaped: [TrackedProcess], refused?}`. `ProcessReport {freeMb?, totalMb?, floorMb,
+  underPressure, autoReap, tracked: [TrackedProcess], unattributed: [TrackedProcess]}`; `TrackedProcess {pid, command, sessionId?,
+  startedAt?, memoryMb?, rogue, reason?}`. `unattributed` lists heavy runtimes (java, node, docker, WSL...) the ledger cannot prove are
+  ours: shown, never reaped. A reap re-checks the start instant before a tree kill. A bad op is `error` `processes refused: ...`.
+- **`process_pressure`** push (a `ProcessReport`) to every client when free RAM drops under `processes.floorMb`, at most once per 10 min.
+- **Settings** `processes.autoReap` (bool, default false: reap rogue processes every minute), `processes.idleMinutes` (1..1440,
+  default 30), `processes.heavyMb` (default 500), `processes.floorMb` (default 4096).
+- CLI `agenthq processes [--all]`, `agenthq processes reap <pid> | --all`; MCP `agenthq_processes` / `agenthq_processes_reap`.
+
 ### What changed in 1.118.0 (BASICS-KILL-1) — sessions can always be ended and removed
 
 ADDITIVE; a 1.117.0 client keeps working. The `ready` frame reports `contract=1.118.0`.
@@ -154,6 +175,12 @@ ADDITIVE; a 1.115.0 client keeps working (the new key is ignored on decode). The
   same report. HARMLESS outside Infantry AI: with no `AGENTHQ_SESSION_ID` or no reachable daemon every progress command exits 0 and prints
   nothing; `run` / `--watch` still pass the output through unchanged and keep the command's exit code. See `docs/PROGRESS.md` for the marker
   grammar (`##infantry progress 40 compile`), the readers and the coalescing rules.
+- **Opt-in estimate (S5, ticket-680e0b39; additive keys, same version):** a `status` report may carry `estimate: true`
+  (`agenthq progress status "x" --estimate` / `agenthq progress estimate "x"`, `agenthq run --estimate`, `##infantry status --estimate x` /
+  `##infantry estimate x`, MCP `estimate`; a label is required, `progress refused` otherwise). The progress then
+  carries `estimated: true` and, once a run of the same label in the same project finished `done`, `estimateMs` (the median of the last 5
+  such durations, kept by the daemon in `progress-estimates.json` beside its state). Both keys are omitted otherwise; any other report drops
+  them. A client draws an estimated bar HATCHED with "~12 min left (estimated)", never as a measurement. Never the default.
 
 ### What changed in 1.115.0 (ASSISTANT-1) — the global Assistant
 
@@ -2055,6 +2082,8 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `memory_list` (scoped) | `{projectId, scope?, sessionId?, role?}` (a payload starting with `{`); answered by `memory_notes` (1.98.0) | client → daemon |
 | `memory_delete` | `{projectId, name, scope?, sessionId?, role?}`; answered by that scope's `memory_notes` index (1.98.0) | client → daemon |
 | `memory_purge_role` | `{role, confirm}`, `confirm` must equal `role`; deletes the role's notes in every project (1.98.0) | client → daemon |
+| `processes` | `ProcessesRequest` `{op: list\|reap\|reap_rogue, pid?}` → `ProcessesAnswer` `{report, reaped, refused?}`: list / reap the processes this daemon's sessions started (1.120.0) | client → daemon, daemon → client |
+| `process_pressure` | a `ProcessReport`, pushed when free RAM drops under `processes.floorMb`, at most once per 10 min (1.120.0) | daemon → client |
 | `bg_job` | `{op: beat|done|list, job?, jobId?}` with the frame sessionId; `beat` registers or heartbeats a `BgJob` (`agenthq bg run`), answered by a `bg_job` list of the session's jobs; additive, no version bump | client → daemon, daemon → client |
 | `decision_add` | `{projectId, sessionId?, summary, body?, supersedes?}` (strict); answered by a `decision_item` pushed to every client; refusals `decision_not_found`, `already_superseded`, `session_not_found` code first (1.53.0) | client → daemon |
 | `decision_list` | `{projectId, includeSuperseded = false}`; answered by `decisions` (1.53.0) | client → daemon |
