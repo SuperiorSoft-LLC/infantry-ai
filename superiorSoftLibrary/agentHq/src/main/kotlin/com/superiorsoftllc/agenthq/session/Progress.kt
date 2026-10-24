@@ -35,6 +35,14 @@ data class SessionProgress(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val total: Long? = null,
     /** `bytes`: smoothed transfer speed, derived by the daemon from successive reports. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val bytesPerSec: Double? = null,
+    /**
+     * PROGRESS-S5, opt-in only (`--estimate`): true on an `indeterminate` job whose agent asked for an estimate. The
+     * job has no measurement; a client may show [estimateMs] as "~12 min left (estimated)" on a hatched bar, never as
+     * [percent]. Omitted otherwise. Any measured report (percent, steps, bytes, count) drops it: a measurement wins.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val estimated: Boolean? = null,
+    /** PROGRESS-S5: how long this label's past runs in the project took (median of the last few), in ms; null = no history yet. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val estimateMs: Long? = null,
     /** When this job began (the first report since the last finished one). */
     val startedAt: Long,
     /** The newest report; a client reads "no update for N min" against it. */
@@ -54,6 +62,7 @@ data class SessionProgress(
  * "the current one"), `bytes` / `count` (done, total, label), `status` (label: indeterminate), `done`, `fail` (label =
  * the reason), `clear`, or `get` (no change, answers the current value).
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class ProgressReport(
     val op: String,
@@ -64,6 +73,8 @@ data class ProgressReport(
     val step: String? = null,
     val done: Long? = null,
     val total: Long? = null,
+    /** PROGRESS-S5: on `status`, opt in to an estimate from past runs of the same label (never the default). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val estimate: Boolean? = null,
 )
 
 /** The pure rule that folds a [ProgressReport] into the current [SessionProgress]. No clock, no I/O. */
@@ -91,9 +102,18 @@ object ProgressReducer {
                     label = label ?: running?.label, startedAt = startedAt, updatedAt = now,
                 )
             }
-            "status" -> SessionProgress(
-                mode = "indeterminate", label = label ?: running?.label, startedAt = startedAt, updatedAt = now,
-            )
+            "status" -> {
+                // PROGRESS-S5: an estimated job stays estimated across its own status updates; the daemon fills estimateMs.
+                val keep = running?.takeIf { it.mode == "indeterminate" && it.estimated == true }
+                val estimated = report.estimate == true || keep != null
+                val nextLabel = label ?: running?.label
+                if (report.estimate == true) require(nextLabel != null) { "an estimate needs a label (past runs are remembered by it)" }
+                SessionProgress(
+                    mode = "indeterminate", label = nextLabel, startedAt = startedAt, updatedAt = now,
+                    estimated = if (estimated) true else null,
+                    estimateMs = keep?.takeIf { it.label == nextLabel }?.estimateMs,
+                )
+            }
             "plan" -> {
                 val names = report.steps.map { it.trim().take(MAX_STEP) }.filter { it.isNotEmpty() }.take(MAX_STEPS)
                 val total = if (names.isNotEmpty()) names.size else requireNotNull(report.count?.takeIf { it > 0 }) {
@@ -177,11 +197,26 @@ object ProgressReducer {
             "bytes" -> parts += "${bytes(p.done ?: 0)}${p.total?.let { "/" + bytes(it) } ?: ""}" +
                 (p.bytesPerSec?.let { ", ${bytes(it.toLong())}/s" } ?: "")
             "count" -> parts += "${p.done ?: 0}${p.total?.let { "/$it" } ?: ""}"
-            "indeterminate" -> parts += "elapsed ${duration(now - p.startedAt)}"
+            "indeterminate" -> {
+                parts += "elapsed ${duration(now - p.startedAt)}"
+                if (p.state == SessionProgress.RUNNING) estimateText(p, now)?.let { parts += it }
+            }
         }
         p.label?.let { parts += "- $it" }
         parts += "(updated ${duration(now - p.updatedAt)} ago)"
         return parts.joinToString(" ")
+    }
+
+    /**
+     * PROGRESS-S5: "~12 min left (estimated)" for an estimated running job; "over the usual N min (estimated)" past it;
+     * "no estimate yet" before the label has a finished run. Null when the job did not opt in.
+     */
+    fun estimateText(p: SessionProgress, now: Long): String? {
+        if (p.estimated != true) return null
+        val expected = p.estimateMs ?: return "no estimate yet (first run)"
+        val left = expected - (now - p.startedAt)
+        val minutes = { ms: Long -> ((ms + 59_999) / 60_000).coerceAtLeast(1) }
+        return if (left > 0) "~${minutes(left)} min left (estimated)" else "over the usual ${minutes(expected)} min (estimated)"
     }
 
     fun bytes(n: Long): String = when {

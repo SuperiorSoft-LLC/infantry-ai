@@ -16,6 +16,8 @@ data class ProgressDisplay(
     val headline: String,
     val detail: String,
     val tone: ProgressTone,
+    /** PROGRESS-S5: the fill is a guess from past runs, not a measurement; the bar draws it hatched. */
+    val estimated: Boolean = false,
 )
 
 /** Default "no update for N min" threshold, in minutes; the Configuration dialog changes it. */
@@ -32,7 +34,12 @@ fun progressDisplay(p: ProgressView, now: Long, staleMin: Int = PROGRESS_STALE_D
         quietMs > staleMin.coerceAtLeast(1) * 60_000L -> ProgressTone.Stale
         else -> ProgressTone.Running
     }
-    val fraction = if (p.mode == "indeterminate" || p.percent == null) {
+    val elapsed = (now - p.startedAt).coerceAtLeast(0)
+    // PROGRESS-S5: only an opted-in, still-running indeterminate job with a history is drawn as an estimate.
+    val estimate = p.estimateMs?.takeIf { p.mode == "indeterminate" && p.estimated == true && running && it > 0 }
+    val fraction = if (estimate != null) {
+        (elapsed.toDouble() / estimate).toFloat().coerceIn(0f, 0.99f)
+    } else if (p.mode == "indeterminate" || p.percent == null) {
         if (running) null else 1f
     } else (p.percent / 100.0).toFloat().coerceIn(0f, 1f)
     val head = buildList {
@@ -46,6 +53,10 @@ fun progressDisplay(p: ProgressView, now: Long, staleMin: Int = PROGRESS_STALE_D
             "bytes" -> add(formatBytes(p.done ?: 0) + (p.total?.let { " / " + formatBytes(it) } ?: ""))
             "count" -> add("${p.done ?: 0}" + (p.total?.let { " / $it" } ?: ""))
         }
+        if (estimate != null) {
+            val left = estimate - elapsed
+            add(if (left > 0) "~${minutesUp(left)} min left (estimated)" else "over the usual ${minutesUp(estimate)} min (estimated)")
+        }
         when (p.state) {
             "done" -> add("done")
             "failed" -> add("failed")
@@ -54,11 +65,14 @@ fun progressDisplay(p: ProgressView, now: Long, staleMin: Int = PROGRESS_STALE_D
     val detail = buildList {
         if (head != p.label) p.label?.let { add(it) }
         if (p.mode == "bytes" && running) p.bytesPerSec?.let { add(formatBytes(it.toLong()) + "/s") }
-        if (running) add(formatElapsed(now - p.startedAt))
+        if (running && p.mode == "indeterminate" && p.estimated == true && estimate == null) add("no estimate yet")
+        if (running) add(formatElapsed(elapsed))
         if (tone == ProgressTone.Stale) add("no update for ${quietMs / 60_000} min")
     }.joinToString(" · ")
-    return ProgressDisplay(fraction, head, detail, tone)
+    return ProgressDisplay(fraction, head, detail, tone, estimated = estimate != null)
 }
+
+private fun minutesUp(ms: Long): Long = ((ms + 59_999) / 60_000).coerceAtLeast(1)
 
 fun formatBytes(n: Long): String = when {
     n >= 1L shl 30 -> oneDecimal(n / (1L shl 30).toDouble()) + " GB"

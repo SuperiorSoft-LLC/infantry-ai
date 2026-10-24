@@ -103,6 +103,30 @@ class SessionProgressLifecycleTest {
         assertNull(m.get(s.id)!!.progress)
     }
 
+    @Test fun `an estimated job reads its label's history and a done one adds to it, a failed one does not`() {
+        val m = manager()
+        val history = InMemoryProgressEstimates()
+        m.progressEstimates = history
+        val s = m.startNew("go")
+        val first = m.reportProgress(s.id, ProgressReport("status", label = "gate", estimate = true))!!.progress!!
+        assertEquals(true, first.estimated)
+        assertNull(first.estimateMs, "no history yet")
+        now += 600_000
+        m.reportProgress(s.id, ProgressReport("done"))
+        assertEquals(600_000, history.estimate(null, "gate"))
+        m.reportProgress(s.id, ProgressReport("done"))
+        assertEquals(600_000, history.estimate(null, "gate"), "a second done of a finished job is not a second run")
+        val second = m.reportProgress(s.id, ProgressReport("status", label = "gate", estimate = true))!!.progress!!
+        assertEquals(600_000, second.estimateMs)
+        now += 60_000
+        m.reportProgress(s.id, ProgressReport("fail", label = "exit 1"))
+        assertEquals(600_000, history.estimate(null, "gate"), "a failure is not a duration")
+        m.reportProgress(s.id, ProgressReport("status", label = "plain"))
+        now += 1_000
+        m.reportProgress(s.id, ProgressReport("done"))
+        assertNull(history.estimate(null, "plain"), "a job that did not opt in is never recorded")
+    }
+
     @Test fun `a daemon start clears every persisted report, orphaned or not`() {
         val p = SessionProgress(mode = "percent", percent = 5.0, startedAt = 1, updatedAt = 1)
         fun rec(id: String, state: SessionState, pid: Long?) = SessionRecord(

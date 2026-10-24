@@ -129,6 +129,34 @@ class ProgressReducerTest {
         assertNull(apply(null, ProgressReport("get")))
     }
 
+    @Test fun `estimate is opt-in, sticks across status updates and a measurement drops it`() {
+        assertNull(apply(null, ProgressReport("status", label = "gate"))!!.estimated, "never the default")
+        val e = apply(null, ProgressReport("status", label = "gate", estimate = true), 0)!!
+        assertEquals(true, e.estimated)
+        assertEquals("indeterminate", e.mode)
+        assertNull(e.percent, "an estimate is never a percent")
+        val withHistory = e.copy(estimateMs = 600_000)
+        val again = apply(withHistory, ProgressReport("status"), 1_000)!!
+        assertEquals(true, again.estimated)
+        assertEquals(600_000, again.estimateMs, "the same label keeps its estimate")
+        assertNull(apply(withHistory, ProgressReport("status", label = "other"))!!.estimateMs, "a new label asks again")
+        val measured = apply(withHistory, ProgressReport("count", done = 1, total = 4))!!
+        assertNull(measured.estimated)
+        assertNull(measured.estimateMs)
+        assertFailsWith<IllegalArgumentException> { apply(null, ProgressReport("status", estimate = true)) }
+        assertEquals(true, apply(withHistory, ProgressReport("done"))!!.estimated, "done keeps the flag so the run is recorded")
+    }
+
+    @Test fun `estimate text`() {
+        val p = SessionProgress(mode = "indeterminate", label = "gate", estimated = true, estimateMs = 12 * 60_000L, startedAt = 0, updatedAt = 0)
+        assertEquals("~12 min left (estimated)", ProgressReducer.estimateText(p, 0))
+        assertEquals("~1 min left (estimated)", ProgressReducer.estimateText(p, 11 * 60_000L + 30_000))
+        assertEquals("over the usual 12 min (estimated)", ProgressReducer.estimateText(p, 13 * 60_000L))
+        assertEquals("no estimate yet (first run)", ProgressReducer.estimateText(p.copy(estimateMs = null), 0))
+        assertNull(ProgressReducer.estimateText(p.copy(estimated = null), 0))
+        assertTrue(ProgressReducer.line(p, 2 * 60_000L).contains("~10 min left (estimated)"), ProgressReducer.line(p, 2 * 60_000L))
+    }
+
     @Test fun `line and formatting`() {
         val p = apply(null, ProgressReport("plan", steps = listOf("a", "b", "c", "d", "e"), label = "gate"), 0)!!
             .let { apply(apply(it, ProgressReport("step"), 0)!!, ProgressReport("step"), 0)!! }

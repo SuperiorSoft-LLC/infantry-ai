@@ -10,6 +10,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -63,7 +64,7 @@ internal class McpProgressTools(private val getenv: (String) -> String?) {
                 total = (a["total"] as? JsonPrimitive)?.longOrNull,
                 label = label,
             )
-            "status" -> ProgressReport("status", label = label)
+            "status" -> ProgressReport("status", label = label, estimate = if ((a["estimate"] as? JsonPrimitive)?.booleanOrNull == true) true else null)
             "done", "fail", "clear", "get" -> ProgressReport(mode, label = label)
             else -> throw IllegalArgumentException("unknown mode '${mode.take(40)}' (${MODES.joinToString(", ")})")
         }
@@ -108,6 +109,10 @@ internal class McpProgressTools(private val getenv: (String) -> String?) {
                         put("step", buildJsonObject { put("type", "string"); put("description", "mode step: the step that just completed (omit = the current one).") })
                         put("done", buildJsonObject { put("type", "integer"); put("description", "mode bytes / count: units done.") })
                         put("total", buildJsonObject { put("type", "integer"); put("description", "mode bytes / count: the total (omit = unknown).") })
+                        put("estimate", buildJsonObject {
+                            put("type", "boolean")
+                            put("description", "mode status: show '~N min left (estimated)' from past runs of this label. Last resort only, when nothing can be measured.")
+                        })
                     })
                     put("required", buildJsonArray { add(JsonPrimitive("mode")) })
                     put("additionalProperties", false)

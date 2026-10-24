@@ -69,6 +69,30 @@ class ProgressDisplayModelTest {
         assertEquals("working", progressDisplay(ProgressView(mode = "indeterminate"), now = 0).headline)
     }
 
+    @Test fun `an opted-in estimate reads as minutes left on a hatched bar, never as a percent`() {
+        val p = ProgressView(mode = "indeterminate", label = "gate", estimated = true, estimateMs = 12 * min, startedAt = 0, updatedAt = 3 * min)
+        val d = progressDisplay(p, now = 3 * min, staleMin = 30)
+        assertTrue(d.estimated)
+        assertEquals(0.25f, d.fraction)
+        assertEquals("~9 min left (estimated)", d.headline)
+        assertTrue(!d.headline.contains("%"), d.headline)
+        assertEquals("gate · 3m 00s", d.detail)
+        val over = progressDisplay(p, now = 20 * min, staleMin = 30)
+        assertEquals(0.99f, over.fraction, "an overrun never reads as complete")
+        assertEquals("over the usual 12 min (estimated)", over.headline)
+        val first = progressDisplay(p.copy(estimateMs = null), now = 42_000)
+        assertNull(first.fraction, "no history: a shimmer, no number")
+        assertEquals(false, first.estimated)
+        assertEquals("gate", first.headline)
+        assertEquals("no estimate yet · 42s", first.detail)
+        val plain = progressDisplay(p.copy(estimated = null), now = 3 * min, staleMin = 30)
+        assertNull(plain.fraction, "an estimateMs without the opt-in is ignored")
+        assertEquals(false, plain.estimated)
+        val done = progressDisplay(p.copy(state = "done"), now = 3 * min)
+        assertEquals(false, done.estimated, "a finished job is full and solid")
+        assertEquals(1f, done.fraction)
+    }
+
     @Test fun `the session record decodes progress and an older daemon's record has none`() {
         val json = Json { ignoreUnknownKeys = true }
         val base = """"id":"s","provider":"p","workingDir":".","spawnedAt":0,"lastHeartbeat":0,"state":"IDLE""""

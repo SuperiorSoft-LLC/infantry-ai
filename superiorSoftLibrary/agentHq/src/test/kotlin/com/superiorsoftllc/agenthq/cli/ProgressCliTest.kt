@@ -31,13 +31,15 @@ class ProgressCliTest {
         assertEquals(ProgressReport("done"), p("##infantry done"))
         assertEquals(ProgressReport("fail", label = "exit 1"), p("##infantry fail exit 1"))
         assertEquals(ProgressReport("clear"), p("##infantry clear"))
+        assertEquals(ProgressReport("status", label = "gate", estimate = true), p("##infantry estimate gate"))
+        assertEquals(ProgressReport("status", label = "gate", estimate = true), p("##infantry status --estimate gate"))
     }
 
     @Test fun `unparsable markers are ignored`() {
         for (line in listOf(
             "", "hello", "##infantry", "##infantryprogress 4", "##infantry nope 3", "##infantry progress", "##infantry progress abc",
             "##infantry progress NaN", "##infantry plan", "##infantry plan 0", "##infantry plan | |", "##infantry bytes x 3",
-            "##infantry count 3 many", "##infantry status", "echo ##infantry progress 4",
+            "##infantry count 3 many", "##infantry status", "##infantry estimate", "echo ##infantry progress 4",
         )) assertNull(ProgressMarkers.parse(line), "'$line' must be ignored")
     }
 
@@ -48,6 +50,13 @@ class ProgressCliTest {
         assertEquals(ProgressReport("step", step = "a"), ProgressCli.parseCommand(listOf("step", "a")))
         assertEquals(ProgressReport("count", done = 1, total = 2, label = "tests"), ProgressCli.parseCommand(listOf("count", "1", "2", "tests")))
         assertEquals(ProgressReport("get"), ProgressCli.parseCommand(listOf("show")))
+        assertEquals(ProgressReport("status", label = "full gate", estimate = true), ProgressCli.parseCommand(listOf("estimate", "full", "gate")))
+        assertNull(ProgressCli.parseCommand(listOf("estimate")), "an estimate needs its label")
+        assertEquals(ProgressReport("status", label = "g", estimate = true), ProgressCli.parseCommand(listOf("status", "g", "--estimate")))
+        assertNull(ProgressCli.parseCommand(listOf("status", "--estimate")))
+        assertEquals(true, ProgressCli.parseStreamOptions(listOf("--estimate", "--label", "g", "--", "x"), allowCommand = true).estimate)
+        assertEquals(false, ProgressCli.parseStreamOptions(listOf("--label", "g", "--", "x"), allowCommand = true).estimate, "never the default")
+        assertTrue(ProgressCli.parseStreamOptions(listOf("--estimate"), allowCommand = false).bad!!.contains("--label"))
         assertNull(ProgressCli.parseCommand(listOf("plan")))
         assertNull(ProgressCli.parseCommand(listOf("clear", "x")))
         assertNull(ProgressCli.parseCommand(listOf("bogus")))

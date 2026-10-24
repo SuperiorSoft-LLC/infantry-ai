@@ -154,6 +154,12 @@ ADDITIVE; a 1.115.0 client keeps working (the new key is ignored on decode). The
   same report. HARMLESS outside Infantry AI: with no `AGENTHQ_SESSION_ID` or no reachable daemon every progress command exits 0 and prints
   nothing; `run` / `--watch` still pass the output through unchanged and keep the command's exit code. See `docs/PROGRESS.md` for the marker
   grammar (`##infantry progress 40 compile`), the readers and the coalescing rules.
+- **Opt-in estimate (S5, ticket-680e0b39; additive keys, same version):** a `status` report may carry `estimate: true`
+  (`agenthq progress status "x" --estimate` / `agenthq progress estimate "x"`, `agenthq run --estimate`, `##infantry status --estimate x` /
+  `##infantry estimate x`, MCP `estimate`; a label is required, `progress refused` otherwise). The progress then
+  carries `estimated: true` and, once a run of the same label in the same project finished `done`, `estimateMs` (the median of the last 5
+  such durations, kept by the daemon in `progress-estimates.json` beside its state). Both keys are omitted otherwise; any other report drops
+  them. A client draws an estimated bar HATCHED with "~12 min left (estimated)", never as a measurement. Never the default.
 
 ### What changed in 1.115.0 (ASSISTANT-1) — the global Assistant
 
