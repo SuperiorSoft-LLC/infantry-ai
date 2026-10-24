@@ -901,6 +901,8 @@ data class SessionRecord(
     val watch: AgentWatchView? = null,
     /** Contract 1.115.0: the installation-wide Assistant session (no project); false from an older daemon. */
     val global: Boolean = false,
+    /** Contract 1.117.0: the agent's own report on its long job; null = none, or an older daemon. */
+    val progress: ProgressView? = null,
 ) {
     val resumable: Boolean
         get() = providerSessionId != null &&
@@ -917,6 +919,27 @@ data class AgentWatchView(
     val pending: String? = null,
     val lastActivityAt: Long = 0,
     val nudges: Int = 0,
+)
+
+/**
+ * Contract 1.117.0: the daemon's `SessionProgress`, the agent's MEASUREMENT of its long job (never an estimate). [mode] and
+ * [state] stay wire strings so a newer daemon's value decodes; [percent] is null for `indeterminate`.
+ */
+@Serializable
+data class ProgressView(
+    val mode: String,
+    val state: String = "running",
+    val percent: Double? = null,
+    val label: String? = null,
+    val steps: List<String> = emptyList(),
+    val stepsTotal: Int? = null,
+    val stepsDone: Int? = null,
+    val step: String? = null,
+    val done: Long? = null,
+    val total: Long? = null,
+    val bytesPerSec: Double? = null,
+    val startedAt: Long = 0,
+    val updatedAt: Long = 0,
 )
 
 @Serializable

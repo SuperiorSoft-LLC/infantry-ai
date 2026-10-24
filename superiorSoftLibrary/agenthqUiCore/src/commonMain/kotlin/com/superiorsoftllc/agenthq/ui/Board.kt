@@ -514,6 +514,8 @@ private fun TicketCard(
         }
         // BRANCH-PER-TASK 2/3: read-only; a ticket that never started has no branch line at all.
         t.branchLine()?.let { Text(it, color = Palette.Info, fontFamily = Mono, fontSize = 10.sp, maxLines = 1, modifier = Modifier.testTag("ticket-branch-${t.id}")) }
+        // Contract 1.117.0: the running ticket's worker reports how far along its job is.
+        if (t.status == TicketColumns.IN_PROGRESS) t.sessionId?.let { state.agents[it] }?.session?.progress?.let { ProgressMeter(it, "ticket-${t.id}") }
         t.lastRun?.let { run ->
             val outcome = run.outcome ?: "running"
             Text("last run: ${outcome.lowercase().replace('_', ' ')}", color = if (run.outcome == null || run.outcome == "SUCCEEDED") Palette.Muted else Palette.Danger, fontSize = 10.sp)

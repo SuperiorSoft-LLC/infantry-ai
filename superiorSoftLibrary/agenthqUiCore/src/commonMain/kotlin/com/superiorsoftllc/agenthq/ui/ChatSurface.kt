@@ -228,6 +228,8 @@ fun CenterHeader(
                 reportFlagOf(a.session.report)?.let { Spacer(Modifier.width(8.dp)); ReportFlagChip(it, Modifier.testTag("agent-report-flag")) }
             }
             TicketTag(a, state, onOpenTicket, Modifier.testTag(AGENT_HEADER_TICKET_TAG))
+            // Contract 1.117.0: the agent's own progress report on its long job.
+            a.session.progress?.let { ProgressMeter(it, "header-${a.id}", Modifier.padding(vertical = 2.dp).widthIn(max = 480.dp)) }
             Text(a.lastActivity, color = Palette.Muted, fontSize = 11.sp, maxLines = 1)
             // BRANCH-PER-TASK 2/3: the branch of the started ticket this agent runs; nothing when it holds none.
             state.ticketBranchFor(a.id)?.branchLine()?.let { Text(it, color = Palette.Info, fontFamily = Mono, fontSize = 11.sp, maxLines = 1, modifier = Modifier.testTag("agent-ticket-branch")) }
