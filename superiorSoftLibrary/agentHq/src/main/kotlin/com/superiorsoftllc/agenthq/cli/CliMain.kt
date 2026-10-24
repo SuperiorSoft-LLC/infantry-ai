@@ -441,6 +441,7 @@ internal object Cli {
                 "skill" -> skill(stream, parsed, out, err)
                 "role" -> role(stream, parsed, out, err, getenv, input)
                 "ask" -> ask(stream, parsed, out, err, getenv)
+                "usage" -> runBlocking { UsageCli.run(stream, parsed.args, out) }
                 else -> {
                     // Unreachable: [run] rejects an unknown command before it connects.
                     err.appendLine("error: unknown command '$command'")
@@ -4097,6 +4098,8 @@ internal object Cli {
               run [--label L] [--reader R] -- CMD   Run CMD with its output and exit code unchanged; progress done on exit 0, failed otherwise
                                   Harmless outside Infantry AI: no session or daemon = no report, exit 0 (run keeps CMD's code)
               harnesses           The harnesses (provider ids) a ticket can pin, and each one's models
+              usage [show]        Plan usage per meter (claude, opencode-go, ...): percent used, reset, pace, and how many
+                                  ticket workers the pacing rule allows (<60%: 3, <80%: 2, else 1) vs how many run; read-only
               harness-status      Which harness CLIs are installed / missing / outdated; harness-install [id...] [--update] installs them via npm
               epics --project <id> List that project's epics, with each one's goal and story count
               epic show <id|prefix> [--project <id>]   One epic: its title, then its tickets as ID | STATUS | TITLE | AGENT
@@ -4939,6 +4942,7 @@ internal object Cli {
         "skill" -> skillUsageError(parsed)
         "role" -> roleUsageError(parsed)
         "ask" -> askUsageError(parsed, getenv)
+        "usage" -> UsageCli.usageError(parsed.args)
         else -> null
     }
 
@@ -5111,7 +5115,7 @@ internal object Cli {
     private val COMMANDS = setOf(
         "submit", "watch", "pods", "runs", "logs", "cancel", "tickets", "board", "ticket", "agents", "send", "inbox",
         "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
-        "trait", "skill", "role", "ask", "harnesses", "harness-status", "harness-install", "image", "session", "remote", "bg", "kill",
+        "trait", "skill", "role", "ask", "harnesses", "harness-status", "harness-install", "image", "session", "remote", "bg", "kill", "usage",
     )
 
     /** `agenthq remote on|off|status`: edits `<stateDir>/network.properties`; takes effect on the next daemon restart. */

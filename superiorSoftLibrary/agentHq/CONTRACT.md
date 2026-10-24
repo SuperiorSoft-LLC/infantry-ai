@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.118.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.119.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,18 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+
+### What changed in 1.119.0 (USAGE-PACE S1, ticket-2d954bda) — read plan usage and the pacing allowance
+
+ADDITIVE and read-only; a 1.118.0 client keeps working. The `ready` frame reports `contract=1.119.0`.
+- **`usage_get`** (client -> daemon, empty `data`) is answered by **`usage_report`**, a `UsageReport`
+  `{meters: [MeterUsage], rule: PacingRule, observedAt}`. A meter is the plan a run spends, not its harness: `claude`
+  (the Claude subscription, also spent by pi / opencode running an `anthropic/...` model), `opencode-go`, else the
+  harness id. Each `MeterUsage` carries `percent` (the highest window), `window`, `resetsAt`, `paceDelta` (points vs an
+  even burn), `source` (`live` | `none`), `windows`, `reason`, `allowance` (what the rule allows; null = no limit),
+  `running` (live in_progress ticket workers on the meter) and `canStart`. Unknown usage FAILS OPEN (no allowance, a
+  `warning`). The rule is the fixed default `<60%: 3, <80%: 2, else 1`; nothing is enforced in 1.119.0.
+- `agenthq usage [show]` and the MCP tool `agenthq_usage` (read-only) print the same report.
 
 ### What changed in 1.118.0 (BASICS-KILL-1) — sessions can always be ended and removed
 
@@ -1999,6 +2011,8 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `assistant` | — (empty; ignored): open the installation-wide Assistant. Answered to the sender with the Assistant's `session` frame (one `SessionRecord`, `global` = true, tagged with its session id); the first request creates it (role `assistant`, no project, working directory `<stateDir>/assistant`) and every later request, from any client, answers the same session. Failure: `error` `assistant refused: ...` / `assistant failed: ...` (1.115.0) | client → daemon |
 | `limits` | — (request the plan-limit meters; 1.59.0) | client → daemon |
 | `limits` | list of `ProviderLimits` (JSON), the answer and a push after each `usage` (1.59.0) | daemon → client |
+| `usage_get` | — (empty): request the plan meters and pacing allowance (1.119.0) | client → daemon |
+| `usage_report` | `UsageReport` (JSON) `{meters, rule, observedAt}`, answering `usage_get` (1.119.0) | daemon → client |
 | `providers` | — (request the list; 1.3.0) | client → daemon |
 | `providers` | list of `ProviderInfo` (JSON), the default first (1.3.0) | daemon → client |
 | `agent_save` | one `AgentProfile` (JSON): no `id`, or one nobody has, creates; a known `id` overwrites (1.4.0); `traitIds` absent/null keeps the stored list, `[]` clears it (1.50.0); `skillIds` likewise, unknown ids refused (1.56.0) | client → daemon |
