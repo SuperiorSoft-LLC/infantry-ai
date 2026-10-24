@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.118.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.123.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -257,6 +257,34 @@ ephemeral (not stored, not replayed to a client that connects later).
 - `spoken` (daemon → every client, the requester included): one `SpokenNotice`
   `{id, at, say, level, projectId?, projectName?, ticketId?}`. Clients speak `projectName` first, then `say`, and nothing else.
 - CLI: `agenthq notify --say "<short text>" [--level info|needs-owner|urgent]` (project from `--project` / `AGENTHQ_PROJECT_ID`).
+### What changed in 1.123.0 (ROUTING-1) — per-project task routing rules pick a ticket's executor
+
+ADDITIVE; a 1.118.0 client keeps working (it never sends `routingRules` and ignores the new keys). The `ready` frame reports
+`contract=1.123.0`. Stored in `projects.routing_rules` (`48.sqm`, schema v49); an older store reads back every project with no rules.
+
+- **`Project.routingRules`** `[RoutingRule]`, in order; empty (default) = no rules, today's resolution unchanged.
+- **`RoutingRule`** `{name, weights?: [int], ticketTypes?: [string], role?, provider, model, effort?, setRole?}`.
+  MATCH: `weights` (1..5; empty = any weight, unweighted included), `ticketTypes` (the ticket types; empty = any), `role` (the
+  ticket's role; absent = any). A rule matches when every present match field does. RESULT: `provider` + `model` (both
+  required), `effort` (optional), `setRole`: the role a ticket with NO role of its own is started as (never replaces one).
+- **`project_config.routingRules`** REPLACES the whole list (`[]` clears it; absent = unchanged). Refused (`project_config
+  refused: rule '<name>': ...`, nothing written) when: a name is blank, longer than 60 or repeated; more than 32 rules; a
+  weight is outside 1..5; a type or role is unknown; the provider does not resolve, the model is not one its harness lists
+  or the effort is unknown (the check a profile save uses); a model naming Opus is not exactly provider `pi` with model
+  `anthropic/claude-opus-5-5`; the LAST rule is not a default row (no match field); or a default row is not last.
+- **Precedence at `ticket_start`**: a ticket that pins its own provider or model never goes through the rules. Otherwise, in
+  a project with rules, the FIRST matching rule decides provider / model / effort; it beats the profile / role binding and
+  `tickets.weightExecutors` (which then no longer applies in that project). A project with no rules is unchanged.
+- **No fallback**: the rule's executor is checked again at start (provider resolves, model listed, Opus line). A refusal
+  answers `start.reason = "start_refused"` with `detail` `rule '<name>': <provider>/<model> refused: <why>; ...`, leaves the
+  ticket in `todo`, and raises ONE attention item (`launch_blocked`, outcome `routing_refused`) per ticket and reason. No
+  other rule, the default row or another harness is ever tried.
+- **Why**: `effectiveExecutor.provider|model.source` is `rule` and the new `effectiveExecutor.rule` names the rule; a start's
+  `detail` reads `rule '<name>': <provider>/<model>`.
+- CLI: `project routing <projectId> [--file <rules.json> | --clear]`; `ticket show` prints `EFFECTIVE: ... via rule '<name>'`
+  and flags an unweighted ticket. MCP: `agenthq_project_config_set` takes `routingRules` (a JSON array as text),
+  `agenthq_project_config_get` returns them; `agenthq_ticket_get` returns `effectiveRule`.
+
 ### What changed in 1.103.0 (TICKET-WEIGHT) — ticket weights pick the executor
 
 ADDITIVE; a 1.102.0 client keeps working (it ignores the new keys). The `ready` frame reports `contract=1.103.0`. Stored in
@@ -2107,7 +2135,7 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `project_git_history` | one `ProjectGitHistory` `{projectId, available, reason, commits[{hash,shortHash,author,timestamp,subject}], truncated}`, newest first (1.36.0) | daemon → client |
 | `project_base` | `ProjectBaseRequest` `{projectId, branch?, clear?}` (1.81.0); answered by `project`; a refusal is an `error` `"project_base refused: ..."` | client → daemon |
 | `epic_base` | `EpicBaseRequest` `{epicId, branch?, clear?}` (1.82.0); answered by `epic`; a refusal is an `error` `"epic_base refused: ..."` | client → daemon |
-| `project_config` | `ProjectConfigRequest` `{projectId, laneCaps?, autoRemoveDoneWorkers?}` (LANE-CAPS, 1.111.0; `autoRemoveDoneWorkers` 1.118.0 sets `Project.autoRemoveDoneWorkers`, absent = unchanged): absent or empty `laneCaps` (and no `autoRemoveDoneWorkers`) reads the project, otherwise the `{role: max}` entries are MERGED into `Project.laneCaps` (a cap of 1 is the default and removes the entry); answered by the whole `project` frame, also pushed to every client when a cap changed; a cap below 1, an unknown project or a malformed payload is an `error` `"project_config refused: ..."` | client → daemon |
+| `project_config` | `ProjectConfigRequest` `{projectId, laneCaps?, autoRemoveDoneWorkers?, routingRules?}` (LANE-CAPS, 1.111.0; `autoRemoveDoneWorkers` 1.118.0 sets `Project.autoRemoveDoneWorkers`, absent = unchanged; `routingRules` 1.123.0 REPLACES `Project.routingRules`, see ROUTING-1): absent or empty `laneCaps` (and no `autoRemoveDoneWorkers` or `routingRules`) reads the project, otherwise the `{role: max}` entries are MERGED into `Project.laneCaps` (a cap of 1 is the default and removes the entry); answered by the whole `project` frame, also pushed to every client when a cap changed; a cap below 1, an unknown project or a malformed payload is an `error` `"project_config refused: ..."` | client → daemon |
 | `image_upload` | `ImageUpload` `{projectId, purpose, fileName, mimeType, base64}` (1.83.0): `purpose` `chat`\|`ticket`\|`file` (required; `file` 1.89.0: any type, at most 20 MB, no magic-byte check); otherwise png/jpeg/gif/webp by magic bytes, at most 10 MB, stored at `<Project.directory>/.agenthq/uploads/<purpose>/<sha256>.<ext>`; answered by `image`; a refusal is an `error` `"image_upload refused: ..."` and writes nothing | client → daemon |
 | `image` | `ImageStored` `{path, relPath, sha256, bytes, mimeType}` (1.83.0): where an `image_upload` is stored; the same bytes answer the same `path` | daemon → client |
 | `session_swap` | `SessionSwap` `{sessionId, provider, model?, effort?}` (strict, 1.84.0); a session with no agent onto another harness, in place; answered by the `session_swapped` push to every client; a refusal is an `error` `"session_swap refused: ..."` | client → daemon |

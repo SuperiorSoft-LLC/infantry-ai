@@ -60,6 +60,37 @@ data class Project(
      * `project_config`. An older daemon omits the key, which a client reads as false.
      */
     val autoRemoveDoneWorkers: Boolean = false,
+    /**
+     * Contract 1.123.0 (ROUTING-1): the project's task routing rules, in order; the FIRST rule that matches a ticket picks
+     * its executor at start (see [RoutingRule]). Empty (default) = no rules: today's resolution (ticket pin > profile /
+     * role binding > `tickets.weightExecutors` > default). A non-empty list always ends with a match-all default row.
+     * Set only with `project_config` (the whole list is replaced). An older daemon omits the key (= no rules).
+     */
+    val routingRules: List<RoutingRule> = emptyList(),
+)
+
+/**
+ * Contract 1.123.0 (ROUTING-1): one task routing rule. MATCH fields ([weights], [ticketTypes], [role]) are each optional;
+ * an empty / absent one matches anything, and a rule matches a ticket when every present one does. A rule with no match
+ * field is the default row (it matches every ticket, an unweighted one included), and it must be the last one.
+ * RESULT: [provider] and [model] (both required, validated against the harness list when saved and again at start),
+ * [effort] (optional), and [setRole], the role a ticket with NO role of its own runs as (it never replaces one).
+ * A ticket that pins its own provider or model never goes through the rules.
+ */
+@Serializable
+data class RoutingRule(
+    val name: String,
+    /** Weights 1..5 this rule matches, e.g. `[4,5]`; empty = any weight, unweighted included. */
+    val weights: List<Int> = emptyList(),
+    /** Ticket types ([TicketType.ALL]) this rule matches; empty = any type, untyped included. */
+    val ticketTypes: List<String> = emptyList(),
+    /** The ticket's role this rule matches; null = any role (a ticket with no role included). */
+    val role: String? = null,
+    val provider: String,
+    val model: String,
+    val effort: String? = null,
+    /** The role a ticket with no role is started as; null = none (such a ticket is then refused as today). */
+    val setRole: String? = null,
 )
 
 /**
@@ -74,6 +105,8 @@ data class ProjectConfigRequest(
     val laneCaps: Map<String, Int>? = null,
     /** Contract 1.118.0: set [Project.autoRemoveDoneWorkers]; absent = unchanged. */
     val autoRemoveDoneWorkers: Boolean? = null,
+    /** Contract 1.123.0 (ROUTING-1): REPLACE [Project.routingRules] with this list (empty clears every rule); absent = unchanged. */
+    val routingRules: List<RoutingRule>? = null,
 ) {
     companion object {
         fun decode(text: String): ProjectConfigRequest = StrictJson.decode(serializer(), text, "project_config payload")

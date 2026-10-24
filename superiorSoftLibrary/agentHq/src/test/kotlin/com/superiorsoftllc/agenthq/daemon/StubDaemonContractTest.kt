@@ -61,7 +61,7 @@ class StubDaemonContractTest {
     @Test
     fun readyFrameReportsContract132() = withDaemon(StubScript.default()) { client ->
         val ready = client.await(Envelope.READY)
-        assertEquals("1.118.0", EventVocabulary.VERSION, "the published contract version must be 1.118.0")
+        assertEquals("1.123.0", EventVocabulary.VERSION, "the published contract version must be 1.123.0")
         assertTrue(
             ready.data.contains("contract=${EventVocabulary.VERSION}"),
             "the READY frame must report contract ${EventVocabulary.VERSION}, got '${ready.data}'",

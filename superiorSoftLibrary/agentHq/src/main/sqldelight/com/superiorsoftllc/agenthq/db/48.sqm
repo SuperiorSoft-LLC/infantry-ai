@@ -1,0 +1,6 @@
+-- ROUTING-1 -- migration v48 -> v49: a project's task routing rules (contract 1.123.0), a JSON array of RoutingRule.
+-- NOT NULL DEFAULT '[]' so every existing project reads back with no rules: today's executor resolution.
+--
+-- NEXT MIGRATION: 49.sqm
+
+ALTER TABLE projects ADD COLUMN routing_rules TEXT NOT NULL DEFAULT '[]';

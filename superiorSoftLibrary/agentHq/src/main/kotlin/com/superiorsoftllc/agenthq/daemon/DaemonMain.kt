@@ -760,6 +760,15 @@ class AgentHqDaemon(
                     for (client in clients) client.trySend(frame)
                     boardRef?.laneCapsChanged(project.id)
                 },
+                // ROUTING-1 (contract 1.123.0): a rule list is checked with the one executor check a profile save uses
+                // (provider resolves, model listed by its harness, effort known) and the role catalog.
+                routingValidator = { rules ->
+                    com.superiorsoftllc.agenthq.backlog.RoutingRules.validate(
+                        rules,
+                        checkExecutor = { provider, model, effort -> agents.validateExecutor(provider, model, effort) },
+                        roleKnown = { roles.role(it) != null },
+                    )
+                },
             )
             // INSTALL-CWD-1: the installed app runs each project's work in that project's own directory.
             if (projectDirs && repo == null) {
@@ -882,6 +891,11 @@ class AgentHqDaemon(
                 exitBehavior = settings::ticketExitBehavior,
                 weightExecutors = settings::weightExecutors,
                 laneCap = projectStore::laneCapOf,
+                // ROUTING-1: the project's routing rules pick a start's executor; a refused rule parks the ticket and is raised.
+                routingRules = projectStore::routingRulesOf,
+                routingRefused = { ticketId, _, detail ->
+                    attention.raise(kind = AttentionKind.LAUNCH_BLOCKED, ticketId = ticketId, outcome = "routing_refused", detail = detail)
+                },
                 // BUG-ASSIGN-1: a refused role lists the catalog's ids (custom roles included; the fallback persona not).
                 roleIds = { roles.all().map { it.id }.filter { it != RoleIds.CUSTOM } },
                 // IMG-3: a ticket's images live under its project's directory (.agenthq/uploads/ticket/).

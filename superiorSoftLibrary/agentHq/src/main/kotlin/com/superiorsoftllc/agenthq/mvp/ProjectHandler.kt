@@ -38,6 +38,18 @@ class ProjectHandler(
     private val baseCheck: ProjectBaseCheck? = null,
     /** LANE-CAPS: told the whole project after a `project_config` changed it, so the daemon can push it to every client. */
     private val onConfigChanged: (Project) -> Unit = {},
+    /**
+     * ROUTING-1 (contract 1.123.0): normalises and checks a submitted rule list (throws IllegalArgumentException with the
+     * reason). The daemon passes [com.superiorsoftllc.agenthq.backlog.RoutingRules.validate] over the harness check
+     * ticket create uses; the default has no harness to check against and refuses every non-empty list.
+     */
+    private val routingValidator: (List<com.superiorsoftllc.agenthq.protocol.RoutingRule>) -> List<com.superiorsoftllc.agenthq.protocol.RoutingRule> = { rules ->
+        com.superiorsoftllc.agenthq.backlog.RoutingRules.validate(
+            rules,
+            checkExecutor = { _, _, _ -> throw IllegalArgumentException("this daemon has no harness list to check a provider / model against") },
+            roleKnown = { true },
+        )
+    },
 ) {
     /** CP-3: the DEFAULT project (the oldest, the order `project_list` answers in), or null when there is none. */
     fun defaultProjectId(): String? = store.list().firstOrNull()?.id
@@ -97,11 +109,15 @@ class ProjectHandler(
             val request = ProjectConfigRequest.decode(envelope.data)
             val caps = request.laneCaps
             val autoRemove = request.autoRemoveDoneWorkers
-            if (caps.isNullOrEmpty() && autoRemove == null) projectEnvelope(store.get(request.projectId))
+            val rules = request.routingRules
+            if (caps.isNullOrEmpty() && autoRemove == null && rules == null) projectEnvelope(store.get(request.projectId))
             else {
-                // The caps go first: a refused cap writes nothing, so the flag is not changed by a refused request either.
+                // ROUTING-1: the rules are validated first (a refused list writes nothing), then the caps: a refused cap
+                // writes nothing either, so nothing else is changed by a refused request.
                 var project = store.get(request.projectId)
+                val checkedRules = rules?.let(routingValidator)
                 if (!caps.isNullOrEmpty()) project = store.setLaneCaps(request.projectId, caps)
+                if (checkedRules != null) project = store.setRoutingRules(request.projectId, checkedRules)
                 if (autoRemove != null) project = store.setAutoRemoveDoneWorkers(request.projectId, autoRemove)
                 projectEnvelope(project.also(onConfigChanged))
             }

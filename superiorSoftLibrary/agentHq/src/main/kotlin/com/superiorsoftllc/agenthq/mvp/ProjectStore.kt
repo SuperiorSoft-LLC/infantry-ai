@@ -124,6 +124,30 @@ class ProjectStore(
         return updated
     }
 
+    /**
+     * ROUTING-1 (contract 1.123.0): REPLACE project [id]'s routing rules with [rules], after [validate] normalised and
+     * accepted them (it throws IllegalArgumentException with the reason, and then nothing is written). Empty clears them.
+     */
+    @Synchronized
+    fun setRoutingRules(
+        id: String,
+        rules: List<com.superiorsoftllc.agenthq.protocol.RoutingRule>,
+        validate: (List<com.superiorsoftllc.agenthq.protocol.RoutingRule>) -> List<com.superiorsoftllc.agenthq.protocol.RoutingRule> = { it },
+    ): Project {
+        val existing = get(id)
+        val checked = validate(rules)
+        if (existing.routingRules == checked) return existing
+        val updated = existing.copy(routingRules = checked)
+        projects[existing.id] = updated
+        persist(updated)
+        return updated
+    }
+
+    /** ROUTING-1: project [projectId]'s routing rules (empty when it has none, or there is no such project). */
+    @Synchronized
+    fun routingRulesOf(projectId: String?): List<com.superiorsoftllc.agenthq.protocol.RoutingRule> =
+        projects[projectId?.trim().orEmpty()]?.routingRules.orEmpty()
+
     /** BASICS-KILL-1: whether project [projectId] removes a done ticket's worker session (false when unset or unknown). */
     @Synchronized
     fun autoRemovesDoneWorkers(projectId: String?): Boolean = projects[projectId?.trim().orEmpty()]?.autoRemoveDoneWorkers == true

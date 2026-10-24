@@ -1599,6 +1599,7 @@ internal object Cli {
     private fun project(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable): Int = runBlocking {
         checkContract(stream, err)
         if (parsed.args[0] == "config") return@runBlocking projectConfig(stream, parsed.args, out, err)
+        if (parsed.args[0] == "routing") return@runBlocking projectRouting(stream, parsed.args[1].trim(), parsed.file, parsed.clear, out, err)
         val projectId = parsed.args[1].trim()
         when (parsed.args[0]) {
             "branches" -> projectBranches(stream, projectId, out, err)
@@ -1631,6 +1632,58 @@ internal object Cli {
         for ((role, cap) in project.laneCaps) out.appendLine("  $role $cap")
         out.appendLine("$AUTO_REMOVE_SETTING: ${if (project.autoRemoveDoneWorkers) "on" else "off"} (a done ticket's worker session is ended and removed)")
         return 0
+    }
+
+    /**
+     * ROUTING-1 (contract 1.123.0): `project routing <projectId>` prints the project's routing rules in order;
+     * `--file <rules.json>` REPLACES them with the JSON array in the file (each `{name, weights?, ticketTypes?, role?,
+     * provider, model, effort?, setRole?}`, the last one a default row with no match field); `--clear` removes them all.
+     */
+    private suspend fun projectRouting(stream: FrameStream, projectId: String, file: String?, clear: Boolean, out: Appendable, err: Appendable): Int {
+        val rules: List<com.superiorsoftllc.agenthq.protocol.RoutingRule>? = when {
+            clear -> emptyList()
+            file != null -> try {
+                json.decodeFromString(
+                    kotlinx.serialization.builtins.ListSerializer(com.superiorsoftllc.agenthq.protocol.RoutingRule.serializer()),
+                    File(file).readText(),
+                )
+            } catch (e: Exception) {
+                err.appendLine("error: $file is not a JSON array of routing rules: ${e.message?.take(200)}")
+                return 2
+            }
+            else -> null
+        }
+        val payload = json.encodeToString(
+            com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest.serializer(),
+            com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest(projectId = projectId, routingRules = rules),
+        )
+        val answer = stream.request(Envelope(Envelope.PROJECT_CONFIG, payload), Envelope.PROJECT, "project_config", idempotent = true)
+        val project = try {
+            json.decodeFromString(Project.serializer(), answer.data)
+        } catch (e: Exception) {
+            err.appendLine("error: malformed project answer from the daemon: ${e.message}")
+            return 1
+        }
+        out.append(routingRulesText(project))
+        return 0
+    }
+
+    /** ROUTING-1: the rule table `project routing` prints; first match wins, the last row is the default. */
+    internal fun routingRulesText(project: Project): String = buildString {
+        appendLine("project ${project.id} routing rules (first match wins; a ticket's own provider/model pin always wins):")
+        if (project.routingRules.isEmpty()) {
+            appendLine("  (none: ticket pin > profile / role binding > tickets.weightExecutors > default)")
+            return@buildString
+        }
+        project.routingRules.forEachIndexed { i, r ->
+            val match = if (com.superiorsoftllc.agenthq.backlog.RoutingRules.isDefault(r)) "default" else listOfNotNull(
+                "weight ${com.superiorsoftllc.agenthq.backlog.RoutingRules.weightLabel(r.weights)}".takeIf { r.weights.isNotEmpty() },
+                "type ${r.ticketTypes.joinToString(",")}".takeIf { r.ticketTypes.isNotEmpty() },
+                r.role?.let { "role $it" },
+            ).joinToString(" + ")
+            val result = listOfNotNull("${r.provider}/${r.model}", r.effort?.let { "effort $it" }, r.setRole?.let { "as role $it" }).joinToString(", ")
+            appendLine("  ${i + 1}. ${r.name} | $match -> $result")
+        }
     }
 
     /** BASICS-KILL-1 (1.118.0): the `project config set` key for [Project.autoRemoveDoneWorkers]. */
@@ -1901,9 +1954,11 @@ internal object Cli {
         out.appendLine("PROVIDER: ${ticket.provider ?: "-"}")
         out.appendLine("MODEL: ${ticket.model ?: "-"}")
         // TICKET-WEIGHT: the weight, and which provider / model will run and why (source: ticket, profile, role, weight or default).
-        out.appendLine("WEIGHT: ${ticket.weight ?: "-"}")
+        // ROUTING-1: an unweighted ticket is flagged so the PM sets a weight before it starts.
+        out.appendLine("WEIGHT: ${ticket.weight ?: "- (unweighted: set one with ticket update --weight 1-5 before start)"}")
         ticket.effectiveExecutor?.let { e ->
-            out.appendLine("EFFECTIVE: ${e.provider?.value ?: "-"} (${e.provider?.source ?: "-"}) / ${e.model?.value ?: "-"} (${e.model?.source ?: "-"})")
+            out.appendLine("EFFECTIVE: ${e.provider?.value ?: "-"} (${e.provider?.source ?: "-"}) / ${e.model?.value ?: "-"} (${e.model?.source ?: "-"})" +
+                (e.rule?.let { " via rule '$it'" } ?: ""))
         }
         out.appendLine("PROJECT: ${ticket.projectId ?: "-"}")
         out.appendLine("EPIC: ${ticket.epicId ?: "-"}")
@@ -4073,7 +4128,13 @@ internal object Cli {
               ticket show <id|prefix>        One ticket in full: title, status, agent, links, description
               ticket create --title <t> [--desc <d> | --desc-file <path> | --desc -] [--project <id>] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5] [--image <file>]...   Save a todo ticket; prints its id
               ticket update <id|prefix> [--title <t>] [--desc <d> | --desc-file <path> | --desc -] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5|0] [--image <file>]... [--remove-image <path>]...   Edit a ticket; flags left out keep their value
-                                  --image (repeatable) attaches a png/jpeg/gif/webp file (max 10 MB), uploaded to the
+                                  --weight: how likely the ticket is to come back wrong, not its size (ROUTING-1 rubric):
+                        4-5 touches the wire / contract, the daemon, auth or project scope, concurrency or SSR timing,
+                            an Android build, or more than one module
+                        3   gate fixes and bisects; UI that depends on daemon behaviour
+                        1-2 copy changes, icons, renames, docs: mechanical, one owner file
+                      An unweighted ticket is flagged; set a weight before it starts (project routing rules match on it).
+                      --image (repeatable) attaches a png/jpeg/gif/webp file (max 10 MB), uploaded to the
                                   project's .agenthq/uploads/ticket/; on update it is ADDED to the stored images.
                                   --remove-image (repeatable) drops an attached image, named by the path `ticket show`
                                   prints, its file name, or the original file. A missing, oversized or non-image file,
@@ -4112,6 +4173,10 @@ internal object Cli {
               project config get <projectId>   Each role's cap on concurrent agents (LANE-CAPS; unlisted roles run 1)
               project config set <projectId> <role> <n>   Set a role's cap (n >= 1); lowering never stops a running agent
               project config set <projectId> auto-remove-done-workers on|off   End and remove a done ticket's worker session (default off)
+              project routing <projectId> [--file <rules.json> | --clear]   The task routing rules (ROUTING-1): print them, replace
+                                  them with a JSON array ({name, weights?, ticketTypes?, role?, provider, model, effort?, setRole?},
+                                  first match wins, the last one a default row with no match field), or clear them. A rule naming a
+                                  provider / model its harness does not list is refused; Opus only as pi + anthropic/claude-opus-5-5
               project branches <projectId>   The project repo's local branches; * marks the checked-out one
               image upload <projectId> <file> [--purpose chat|ticket]   Store a png/jpeg/gif/webp (max 10 MB) in
                                   the project's .agenthq/uploads/<purpose>/ (default ticket) and print its absolute
@@ -4961,7 +5026,7 @@ internal object Cli {
     /** BASE-1a: the usage error for a `project` invocation, or null when it is valid. */
     private fun projectUsageError(parsed: ParsedArgs): String? {
         val args = parsed.args
-        val usage = "agenthq project base <projectId> [<branch>|--clear] | branches <projectId> | rename <projectId> \"<name>\" | config get <projectId> | config set <projectId> <role> <n> | config set <projectId> $AUTO_REMOVE_SETTING on|off"
+        val usage = "agenthq project base <projectId> [<branch>|--clear] | branches <projectId> | rename <projectId> \"<name>\" | config get <projectId> | config set <projectId> <role> <n> | config set <projectId> $AUTO_REMOVE_SETTING on|off | routing <projectId> [--file <rules.json>|--clear]"
         return when {
             args.firstOrNull() == "config" -> when {
                 args.getOrNull(1) == "get" && args.size == 3 && args[2].isNotBlank() -> null
@@ -4970,6 +5035,12 @@ internal object Cli {
                 args.getOrNull(1) == "set" && args.size == 5 && args[2].isNotBlank() && args[3].isNotBlank() &&
                     (args[4].trim().toIntOrNull() ?: 0) >= 1 -> null
                 else -> "project config takes get <projectId> or set <projectId> <role> <n >= 1>: $usage"
+            }
+            args.firstOrNull() == "routing" -> when {
+                args.size != 2 || args[1].isBlank() -> "project routing takes one project id: agenthq project routing <projectId> [--file <rules.json> | --clear]"
+                parsed.clear && parsed.file != null -> "project routing takes --file or --clear, not both"
+                parsed.file != null && !File(parsed.file).isFile -> "project routing: no such file: ${parsed.file}"
+                else -> null
             }
             args.firstOrNull() !in setOf("base", "branches", "rename") -> "project needs a subcommand: $usage"
             args.getOrNull(1)?.isBlank() != false -> "project ${args[0]} requires a project id: $usage"

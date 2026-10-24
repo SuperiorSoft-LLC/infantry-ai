@@ -139,7 +139,18 @@ class TicketBoard(
     private val weightExecutors: () -> WeightExecutors = { WeightExecutors.DEFAULT },
     /** LANE-CAPS: the most agents of a role that may run at once in a project (1 = one per role, today's behaviour). */
     private val laneCap: (projectId: String?, role: String) -> Int = { _, _ -> 1 },
+    /** ROUTING-1 (contract 1.123.0): a project's routing rules, in order (empty = none), read at every start and view. */
+    private val routingRules: (projectId: String?) -> List<com.superiorsoftllc.agenthq.protocol.RoutingRule> = { emptyList() },
+    /**
+     * ROUTING-1: told when a rule-driven start was refused (the ticket is parked in todo, never retried on another rule or
+     * harness), with the ticket, its project and the reason. The daemon raises an attention item. Called once per distinct
+     * (ticket, reason) so a lane drain or a trigger retrying the same ticket does not repeat it.
+     */
+    private val routingRefused: (ticketId: String, projectId: String?, detail: String) -> Unit = { _, _, _ -> },
 ) {
+    /** ROUTING-1: the (ticket, reason) pairs already reported through [routingRefused]. */
+    private val reportedRoutingRefusals = java.util.Collections.synchronizedSet(HashSet<String>())
+
     @Volatile
     private var queueDrainEnabled = true
 
@@ -625,7 +636,11 @@ class TicketBoard(
             ?: return refusedStart(initialTicket, "ticket session manager is unavailable")
         val profiles = agents
             ?: return refusedStart(initialTicket, "agent profiles are unavailable")
-        val assignment = resolveAssignment(row.agentId, profiles, sessionManager, row.projectId)
+        // ROUTING-1: the project's first matching rule (none when the ticket pins its own provider / model or the project
+        // has no rules). Its setRole is the role of a ticket that has none; it never replaces the ticket's own.
+        val rule = routingChoice(row)
+        val assigned = row.agentId ?: rule?.setRole?.let { "role:$it" }
+        val assignment = resolveAssignment(assigned, profiles, sessionManager, row.projectId)
         if (assignment.refusal != null) return refusedStart(initialTicket, assignment.refusal)
         // BUG-WT-1: with no repo configured and no explicit pin, a project folder that is a git checkout IS the
         // repo: the ticket gets its own branch and worktree there, never the checkout itself.
@@ -684,10 +699,28 @@ class TicketBoard(
         // ROLE-1b: ticket pins > profile > the role's binding > daemon default (one resolver, shared with spawn).
         val bound = profiles.executorFor(profile, row.provider, row.model, null)
         // TICKET-WEIGHT: a weighted ticket that pins nothing (and whose profile / role binding pins nothing) runs on the weight's executor.
-        val byWeight = weightChoice(row, bound.provider, bound.model)
-        val executor = if (byWeight == null) bound else profiles.executorFor(profile, byWeight.provider, byWeight.model, null)
+        // ROUTING-1: in a project with rules the matched rule beats the profile / role binding and the weight mapping.
+        val byWeight = if (rule == null && routingRules(row.projectId).isEmpty()) weightChoice(row, bound.provider, bound.model) else null
+        val executor = when {
+            rule != null -> profiles.executorFor(profile, rule.provider, rule.model, rule.effort)
+            byWeight != null -> profiles.executorFor(profile, byWeight.provider, byWeight.model, null)
+            else -> bound
+        }
         val providerId = executor.provider
         val model = executor.model
+        if (rule != null) {
+            // ROUTING-1: the rule's executor is checked again at start (the harness list may have changed since the save),
+            // with the Opus line. A refusal PARKS the ticket: no other rule, no default row, no other harness is tried.
+            try {
+                RoutingRules.requireOpusSafe(rule.name, providerId, model)
+                profiles.validateExecutor(providerId, model, executor.effort)
+            } catch (e: IllegalArgumentException) {
+                val detail = "rule '${rule.name}': $providerId/$model refused: ${e.message ?: "provider or model refused"}; " +
+                    "the ticket stays in todo (no fallback): fix the rule or pin the ticket"
+                if (reportedRoutingRefusals.add("$id|$detail")) runCatching { routingRefused(id, row.projectId, detail) }
+                return refusedStart(initialTicket, detail)
+            }
+        }
         try {
             sessionManager.checkSpawn(providerId, model)
         } catch (e: IllegalArgumentException) {
@@ -783,7 +816,8 @@ class TicketBoard(
         }
         // BUG-REGRESS-1: what the branch was cut from, then any launch warning (TicketStarter reads them apart).
         val weightNote = byWeight?.let { "weight ${row.weight}: ${providerId ?: "default provider"}/${model ?: "default model"} from ${WeightExecutors.SETTING}" }
-        val detail = listOfNotNull(cutNote, weightNote, launchWarning?.let { TicketStart.LAUNCH_WARNING + it }).joinToString("; ").ifEmpty { null }
+        val ruleNote = rule?.let { "rule '${it.name}': $providerId/$model" }
+        val detail = listOfNotNull(cutNote, ruleNote, weightNote, launchWarning?.let { TicketStart.LAUNCH_WARNING + it }).joinToString("; ").ifEmpty { null }
         return startAnswer(id, TicketStart(ok = true, reason = "started", detail = detail), outcome)
     }
 
@@ -1435,8 +1469,21 @@ class TicketBoard(
     private fun weightChoice(row: TicketRow, boundProvider: String?, boundModel: String?): WeightExecutor? =
         if (WeightExecutors.applies(row.weight, row.provider, row.model, boundProvider, boundModel)) weightExecutors().forWeight(row.weight) else null
 
+    /**
+     * ROUTING-1: the first rule of [row]'s project that matches it, or null when the ticket pins its own provider or model
+     * (an explicit pin always wins) or the project has no rules. The ticket's role is read from its assignment.
+     */
+    private fun routingChoice(row: TicketRow): com.superiorsoftllc.agenthq.protocol.RoutingRule? {
+        if (row.provider != null || row.model != null) return null
+        val rules = routingRules(row.projectId)
+        if (rules.isEmpty()) return null
+        val role = row.agentId?.let { a -> if (a.startsWith("role:")) a.removePrefix("role:") else ticketProfile(a)?.role }
+        return RoutingRules.match(rules, row.weight, row.ticketType, role)
+    }
+
     private fun effectiveExecutor(row: TicketRow): EffectiveExecutor? {
-        val assigned = row.agentId ?: return null
+        val rule = routingChoice(row)
+        val assigned = row.agentId ?: rule?.setRole?.let { "role:$it" } ?: return null
         val isRole = assigned.startsWith("role:")
         val roleId = if (isRole) assigned.removePrefix("role:") else null
         val profile = ticketProfile(assigned)
@@ -1445,7 +1492,16 @@ class TicketBoard(
         // ROLE-1d: the role's binding comes from the one resolver (executorFor), never a second path.
         val bound = (profile ?: roleId?.let { AgentProfile(name = it, role = it) })
             ?.let { agents?.executorFor(it, row.provider, row.model, null) }
-        val byWeight = weightChoice(row, profileProvider ?: bound?.provider, profile?.model ?: bound?.model)
+        if (rule != null) {
+            return EffectiveExecutor(
+                agentId = profile?.id ?: assigned.takeUnless { isRole },
+                role = role,
+                provider = ExecutorField(rule.provider, "rule"),
+                model = ExecutorField(rule.model, "rule"),
+                rule = rule.name,
+            )
+        }
+        val byWeight = if (routingRules(row.projectId).isEmpty()) weightChoice(row, profileProvider ?: bound?.provider, profile?.model ?: bound?.model) else null
         val provider = when {
             row.provider != null -> ExecutorField(row.provider, "ticket")
             byWeight?.provider != null -> ExecutorField(byWeight.provider, "weight")

@@ -33,13 +33,25 @@ internal class McpProjectConfigTools {
             "false" -> false
             else -> return refused("$SET: autoRemoveDoneWorkers must be true or false, was '${autoRaw.take(20)}'")
         }
+        // ROUTING-1 (1.123.0): routingRules, a JSON array (as text), REPLACES the project's rules; "[]" clears them.
+        val rulesRaw = arguments.string("routingRules")?.trim()?.takeIf { it.isNotEmpty() }
+        val rules = rulesRaw?.let {
+            try {
+                json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(com.superiorsoftllc.agenthq.protocol.RoutingRule.serializer()), it)
+            } catch (e: Exception) {
+                return refused("$SET: routingRules must be a JSON array of {name, weights?, ticketTypes?, role?, provider, model, effort?, setRole?}: ${e.message?.take(200)}")
+            }
+        }
         val role = arguments.string("role")
+        if (role == null && rules != null && arguments.string("cap") == null) {
+            return request(stream, ProjectConfigRequest(projectId, autoRemoveDoneWorkers = autoRemove, routingRules = rules))
+        }
         if (role == null && autoRemove != null && arguments.string("cap") == null) {
             return request(stream, ProjectConfigRequest(projectId, autoRemoveDoneWorkers = autoRemove))
         }
-        role ?: return refused("$SET needs a role (with a cap), or autoRemoveDoneWorkers")
+        role ?: return refused("$SET needs a role (with a cap), autoRemoveDoneWorkers, or routingRules")
         val cap = arguments.string("cap")?.toIntOrNull()?.takeIf { it >= 1 } ?: return refused("$SET needs a cap of 1 or more")
-        return request(stream, ProjectConfigRequest(projectId, mapOf(role to cap), autoRemove))
+        return request(stream, ProjectConfigRequest(projectId, mapOf(role to cap), autoRemove, rules))
     }
 
     private suspend fun request(stream: FrameStream, request: ProjectConfigRequest): ToolResult = try {
@@ -50,7 +62,10 @@ internal class McpProjectConfigTools {
             put("projectId", project.id)
             put("laneCaps", buildJsonObject { project.laneCaps.forEach { (role, cap) -> put(role, cap) } })
             put("autoRemoveDoneWorkers", project.autoRemoveDoneWorkers)
-            put("note", "max concurrent agents per role; a role not listed runs 1. autoRemoveDoneWorkers: a done ticket's worker session is ended and removed")
+            put("routingRules", json.encodeToJsonElement(
+                kotlinx.serialization.builtins.ListSerializer(com.superiorsoftllc.agenthq.protocol.RoutingRule.serializer()), project.routingRules,
+            ))
+            put("note", "routingRules: first match wins, the last is the default row; a ticket's own provider/model pin always wins. max concurrent agents per role; a role not listed runs 1. autoRemoveDoneWorkers: a done ticket's worker session is ended and removed")
         }))
     } catch (e: Exception) {
         refused(e.message ?: "project_config failed")
@@ -90,16 +105,20 @@ internal class McpProjectConfigTools {
         private val PROJECT = "projectId" to "The project id."
 
         fun descriptors() = buildJsonArray {
-            add(tool(GET, "Read a project's per-role caps on concurrent agents (a role not listed runs 1).", true, listOf(PROJECT), listOf("projectId")))
+            add(tool(GET, "Read a project's per-role caps on concurrent agents (a role not listed runs 1) and its task routing rules.", true, listOf(PROJECT), listOf("projectId")))
             add(tool(
                 SET,
                 "Set how many agents of one role may run at once in a project (1 = the default; lowering it never stops a running " +
                     "agent), and/or autoRemoveDoneWorkers: when true, a ticket moved to done ends and removes its worker session " +
-                    "once the worker's turn is over (default false).",
+                    "once the worker's turn is over (default false), and/or routingRules: REPLACE the project's task routing rules.",
                 false,
                 listOf(
                     PROJECT, "role" to "The role id, e.g. backend (with cap).", "cap" to "The most concurrent agents of the role, 1 or more.",
                     "autoRemoveDoneWorkers" to "true or false: end and remove a done ticket's worker session.",
+                    "routingRules" to "A JSON array (as text) of rules, in order, first match wins: {name, weights?: [1..5], ticketTypes?: " +
+                        "[type], role?, provider, model, effort?, setRole?}. The last rule must be the default row (no weights, " +
+                        "ticketTypes or role). A provider/model its harness does not list is refused; Opus only as pi + " +
+                        "anthropic/claude-opus-5-5. \"[]\" clears the rules.",
                 ),
                 listOf("projectId"),
             ))
