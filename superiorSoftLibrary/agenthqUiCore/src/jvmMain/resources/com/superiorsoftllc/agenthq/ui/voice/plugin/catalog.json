@@ -1,0 +1,39 @@
+[
+  {
+    "id": "piper-kathleen",
+    "name": "Natural voice (Piper, Kathleen)",
+    "version": "1.0.0",
+    "kind": "tts",
+    "pluginApi": "1.0.0",
+    "platforms": ["windows-x64"],
+    "description": "Offline neural US English voice. Runs as a separate program only while it speaks (about 130 MB for about a second), nothing at idle.",
+    "license": "Piper: MIT. espeak-ng (bundled with Piper, runs inside that separate program): GPL-3.0. Voice: Kathleen, CC0.",
+    "entry": ["{dir}/piper/piper.exe", "--model", "{dir}/voice.onnx", "--config", "{dir}/voice.onnx.json", "--output-raw", "-q"],
+    "output": {"format": "pcm-s16le", "sampleRate": 16000, "channels": 1},
+    "timeoutMs": 15000,
+    "assets": [
+      {
+        "path": "piper.zip",
+        "url": "https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip",
+        "size": 22477236,
+        "sha256": "f3c58906402b24f3a96d92145f58acba6d86c9b5db896d207f78dc80811efcea",
+        "license": "MIT (piper), GPL-3.0 (espeak-ng)",
+        "unpack": true
+      },
+      {
+        "path": "voice.onnx",
+        "url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kathleen/low/en_US-kathleen-low.onnx",
+        "size": 63104526,
+        "sha256": "87adf17f5326bc0782282147a8b9788406236245f0f9b0e68dacb651bc1de8b6",
+        "license": "CC0"
+      },
+      {
+        "path": "voice.onnx.json",
+        "url": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/kathleen/low/en_US-kathleen-low.onnx.json",
+        "size": 4169,
+        "sha256": "39ebab88416edce0f63781754651788620cb97b9bb73ddf3c01f28e29a648feb",
+        "license": "CC0"
+      }
+    ]
+  }
+]
