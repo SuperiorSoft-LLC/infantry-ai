@@ -29,3 +29,5 @@ include(":superiorSoftLibrary:agentHqUi")
 include(":superiorSoftLibrary:agentHqWeb")
 include(":superiorSoftLibrary:agentHqAndroid")
 include(":superiorSoftLibrary:agentHqHeadless")
+// MD-PLUGIN-1: the example markdown engine plugin (built to a jar the app loads at runtime).
+include(":superiorSoftLibrary:samples:markdownEnginePlugin")

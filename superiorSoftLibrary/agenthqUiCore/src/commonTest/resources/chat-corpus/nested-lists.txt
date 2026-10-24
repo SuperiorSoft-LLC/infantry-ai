@@ -1,0 +1,9 @@
+Plan:
+
+- Parser
+  - blocks
+  - inline spans
+- Renderer
+  - paragraphs
+  - tables
+- Tests

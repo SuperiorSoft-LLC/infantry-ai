@@ -1,0 +1,3 @@
+Use `a | b` to pipe, or `cat x.txt | grep y | wc -l` for a count.
+
+Not a table: a | b | c

@@ -60,8 +60,9 @@ class ChatMarkdownEngineTest {
     }
 
     @Test
-    fun `an engine that throws degrades to one plain paragraph`() {
-        assertEquals(listOf(ChatBlock.Paragraph("x | y")), chatLineBlocks(LineKind.TEXT, "x | y", ThrowingEngine))
+    fun `an engine that throws falls back to the built-in output`() {
+        assertEquals(parseChatMarkdown("# T\n\n- a"), chatLineBlocks(LineKind.TEXT, "# T\n\n- a", ThrowingEngine))
+        assertEquals(parseChatMarkdown("x | y"), chatLineBlocks(LineKind.TEXT, "x | y", ThrowingEngine))
         assertEquals(emptyList(), chatLineBlocks(LineKind.TEXT, "  ", ThrowingEngine))
     }
 
