@@ -180,6 +180,7 @@ class OpenCodeServeAdapterTest {
                 override fun closeInput() {
                     Thread {
                         listener.onStdout("""{"type":"step_start","sessionID":"ses_oneshot"}""")
+                        listener.onStdout("""{"type":"text","sessionID":"ses_oneshot","part":{"type":"text","text":"ok"}}""")
                         alive = false
                         listener.onExit(0)
                     }.start()

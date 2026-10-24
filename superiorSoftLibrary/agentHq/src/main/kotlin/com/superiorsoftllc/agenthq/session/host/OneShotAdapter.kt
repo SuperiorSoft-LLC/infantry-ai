@@ -39,6 +39,9 @@ class OneShotAdapter(private val provider: AgentProvider) : HarnessSessionAdapte
     private class Turn(private val sink: AdapterSink) {
         private val ended = AtomicBoolean(false)
         val abortRequested = AtomicBoolean(false)
+        /** An opencode stdout line that is an answer (`text`, `tool_use`) or an explanation (`error`). */
+        @Volatile var produced = false
+        val stderrTail: MutableList<String> = java.util.Collections.synchronizedList(mutableListOf<String>())
         val isEnded: Boolean get() = ended.get()
 
         fun end(end: TurnEnd, exitCode: Int?, reason: String?) {
@@ -76,17 +79,32 @@ class OneShotAdapter(private val provider: AgentProvider) : HarnessSessionAdapte
                 return
             }
             val listener = object : ProcessListener {
-                override fun onStdout(line: String) = sink.output(line)
-                override fun onStderr(line: String) = sink.diagnostic(line)
-                override fun onExit(exitCode: Int) = current.end(
-                    when {
-                        current.abortRequested.get() -> TurnEnd.INTERRUPTED
-                        exitCode == 0 -> TurnEnd.COMPLETED
-                        else -> TurnEnd.FAILED
-                    },
-                    exitCode,
-                    null,
-                )
+                override fun onStdout(line: String) {
+                    if (OUTPUT_MARKER.containsMatchIn(line)) current.produced = true
+                    sink.output(line)
+                }
+                override fun onStderr(line: String) {
+                    current.stderrTail += line
+                    while (current.stderrTail.size > 10) current.stderrTail.removeAt(0)
+                    sink.diagnostic(line)
+                }
+                override fun onExit(exitCode: Int) {
+                    // opencode exiting 0 having printed no text, tool call or error is no answer: say so, never "succeeded".
+                    if (exitCode == 0 && !current.abortRequested.get() && provider.id == "opencode" && !current.produced) {
+                        val model = request.model?.takeIf { it.isNotBlank() } ?: runCatching { provider.defaultModel() }.getOrNull() ?: "default"
+                        current.end(TurnEnd.FAILED, null, com.superiorsoftllc.agenthq.opencode.OpenCodeServeAdapter.noReply(model, current.stderrTail.toList()))
+                        return
+                    }
+                    current.end(
+                        when {
+                            current.abortRequested.get() -> TurnEnd.INTERRUPTED
+                            exitCode == 0 -> TurnEnd.COMPLETED
+                            else -> TurnEnd.FAILED
+                        },
+                        exitCode,
+                        null,
+                    )
+                }
             }
             val started = try {
                 runner.start(spec.copy(env = spec.env + env), listener)
@@ -128,5 +146,6 @@ class OneShotAdapter(private val provider: AgentProvider) : HarnessSessionAdapte
 
     private companion object {
         const val FINGERPRINT = "one-shot"
+        val OUTPUT_MARKER = Regex(""""type"\s*:\s*"(text|tool_use|error)"""")
     }
 }

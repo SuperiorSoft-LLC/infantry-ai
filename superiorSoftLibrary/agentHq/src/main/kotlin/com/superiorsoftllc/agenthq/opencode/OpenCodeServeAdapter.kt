@@ -108,6 +108,8 @@ class OpenCodeServeAdapter(
         private val auth = "Basic " + Base64.getEncoder().encodeToString("opencode:$password".toByteArray())
         private val urlFuture = CompletableFuture<String>()
         private val bootStderr = Collections.synchronizedList(mutableListOf<String>())
+        /** The last server stderr lines, kept for the "no reply" notice (the raw reason a silent turn can name). */
+        private val recentStderr = Collections.synchronizedList(mutableListOf<String>())
         private val booted = AtomicBoolean(false)
         private val stopped = AtomicBoolean(false)
         private val subscribed = CountDownLatch(1)
@@ -154,6 +156,8 @@ class OpenCodeServeAdapter(
                 // Until the server is up, stderr is kept for the launch-failure message only: the launch runs on the
                 // caller's thread, which may hold the session manager's monitor that a forwarded line would need.
                 override fun onStderr(line: String) {
+                    recentStderr += line
+                    while (recentStderr.size > 10) recentStderr.removeAt(0)
                     if (booted.get()) return sink.diagnostic(line)
                     bootStderr += line
                     while (bootStderr.size > 10) bootStderr.removeAt(0)
@@ -197,12 +201,13 @@ class OpenCodeServeAdapter(
 
         fun send(request: RunRequest) {
             toolApproval = request.toolApproval
-            val turn = Turn(sink).also { active = it }
+            val model = modelFor(request.model)
+            val turn = Turn(sink, model) { recentStderr.toList() }.also { active = it }
             val ses = providerSessionId ?: return turn.end(TurnEnd.FAILED, 1, "opencode serve has no session")
             try {
                 val body = buildJsonObject {
                     put("parts", buildJsonArray { add(buildJsonObject { put("type", "text"); put("text", request.prompt) }) })
-                    splitModel(modelFor(request.model))?.let { (providerId, modelId) ->
+                    splitModel(model)?.let { (providerId, modelId) ->
                         put("model", buildJsonObject { put("providerID", providerId); put("modelID", modelId) })
                     }
                 }
@@ -310,8 +315,11 @@ class OpenCodeServeAdapter(
 
     // --- one turn -------------------------------------------------------------------------------------
 
-    private class Turn(private val sink: AdapterSink) {
+    internal class Turn(private val sink: AdapterSink, private val model: String, private val stderrTail: () -> List<String> = { emptyList() }) {
         private val done = AtomicBoolean(false)
+        private val userMessages = ConcurrentHashMap.newKeySet<String>()
+        /** True once a `text` or `tool_use` line was emitted: the turn produced something the owner can read. */
+        @Volatile private var replied = false
         private val emitted = ConcurrentHashMap.newKeySet<String>()
         @Volatile private var sawBusy = false
         @Volatile private var errored = false
@@ -320,7 +328,12 @@ class OpenCodeServeAdapter(
             if (done.compareAndSet(false, true)) sink.turnEnded(end, exitCode, reason)
         }
 
-        private fun idle() = if (errored) end(TurnEnd.FAILED, 1, "opencode reported an error") else end(TurnEnd.COMPLETED, 0, null)
+        private fun idle() = when {
+            errored -> end(TurnEnd.FAILED, 1, "opencode reported an error")
+            // An idle with nothing said is not a success: the owner would see a finished turn and no answer.
+            !replied -> end(TurnEnd.FAILED, null, noReply(model, stderrTail()))
+            else -> end(TurnEnd.COMPLETED, 0, null)
+        }
 
         fun onEvent(type: String, props: JsonObject, part: JsonObject?, sessionId: String) {
             if (done.get()) return
@@ -330,6 +343,10 @@ class OpenCodeServeAdapter(
                     "idle" -> if (sawBusy) idle()
                 }
                 "session.idle" -> if (sawBusy) idle()
+                "message.updated" -> {
+                    val info = props["info"] as? JsonObject
+                    if (info?.get("role").str() == "user") info?.get("id").str()?.let { userMessages += it }
+                }
                 "session.error" -> {
                     errored = true
                     sawBusy = true
@@ -343,10 +360,14 @@ class OpenCodeServeAdapter(
                 }
                 "message.part.updated" -> {
                     part ?: return
+                    // The prompt's own echo (a user message part) is no sign the model started: an idle after it
+                    // (a late one from an aborted turn) must not end this turn as if it had answered.
+                    if (part["messageID"].str()?.let { it in userMessages } == true) return
                     sawBusy = true
                     val lineType = runLineType(part) ?: return
                     val partId = part["id"].str()
                     if (partId != null && !emitted.add(partId)) return
+                    if (lineType == "text" || lineType == "tool_use") replied = true
                     emit(buildJsonObject {
                         put("type", lineType)
                         put("timestamp", (props["time"] as? JsonPrimitive)?.longOrNull ?: System.currentTimeMillis())
@@ -366,6 +387,11 @@ class OpenCodeServeAdapter(
     companion object {
         /** `opencode serve` reads its basic-auth password from here; set per child so no other local process can drive it. */
         const val PASSWORD_ENV = "OPENCODE_SERVER_PASSWORD"
+
+        /** The "no reply" reason: names the model asked and the raw stderr, so a silent turn is never a plain success. */
+        internal fun noReply(model: String, stderr: List<String> = emptyList()): String =
+            "no reply from $model: the turn ended with no assistant output" +
+                stderr.filter { it.isNotBlank() }.takeIf { it.isNotEmpty() }?.joinToString(" | ", prefix = " (opencode stderr: ", postfix = ")").orEmpty()
 
         private val LISTENING = Regex("""listening on (https?://\S+)""")
 
