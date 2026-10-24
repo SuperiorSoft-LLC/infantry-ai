@@ -39,11 +39,23 @@ data class SessionProgress(
     val startedAt: Long,
     /** The newest report; a client reads "no update for N min" against it. */
     val updatedAt: Long,
+    /**
+     * Contract 1.124.0 (additive): when the current label / step began (the clock a time estimate counts from), the
+     * time the current label is expected to take and where that number came from (`worker` = the agent said so,
+     * `learned` = the daemon's rolling median for this project and label; null = no estimate yet), and when output was
+     * last seen (a report or a `--watch` heartbeat), the "alive" signal of a job with no number at all.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val labelStartedAt: Long? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val estimateMs: Long? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val estimateSource: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val lastOutputAt: Long? = null,
 ) {
     companion object {
         const val RUNNING = "running"
         const val DONE = "done"
         const val FAILED = "failed"
+        const val SOURCE_WORKER = "worker"
+        const val SOURCE_LEARNED = "learned"
         val MODES = setOf("percent", "steps", "bytes", "count", "indeterminate")
     }
 }
@@ -52,7 +64,7 @@ data class SessionProgress(
  * One `progress` request (the CLI, a marker line and the MCP tool all build this). [op] is
  * `percent` (percent, label), `plan` (steps or count, label), `step` (step = the one that just completed, or null for
  * "the current one"), `bytes` / `count` (done, total, label), `status` (label: indeterminate), `done`, `fail` (label =
- * the reason), `clear`, or `get` (no change, answers the current value).
+ * the reason), `clear`, `output` (1.124.0: the job printed something, nothing else changed) or `get` (no change, answers the current value).
  */
 @Serializable
 data class ProgressReport(
@@ -64,6 +76,8 @@ data class ProgressReport(
     val step: String? = null,
     val done: Long? = null,
     val total: Long? = null,
+    /** Contract 1.124.0: how long the current label / step should take, in ms (the worker's own estimate). */
+    val estimateMs: Long? = null,
 )
 
 /** The pure rule that folds a [ProgressReport] into the current [SessionProgress]. No clock, no I/O. */
@@ -71,10 +85,102 @@ object ProgressReducer {
     const val MAX_LABEL = 120
     const val MAX_STEP = 80
     const val MAX_STEPS = 200
-    val OPS = setOf("percent", "plan", "step", "bytes", "count", "status", "done", "fail", "clear", "get")
+    val OPS = setOf("percent", "plan", "step", "bytes", "count", "status", "done", "fail", "clear", "output", "get")
 
     /** The next value, or null to clear. Throws [IllegalArgumentException] for a malformed report. */
-    fun apply(previous: SessionProgress?, report: ProgressReport, now: Long): SessionProgress? {
+    fun apply(
+        previous: SessionProgress?, report: ProgressReport, now: Long,
+        /** The daemon's learned estimate (ms) for a label, when it has one. */
+        learned: (String) -> Long? = { null },
+    ): SessionProgress? {
+        require(report.op in OPS) { "unknown progress op '${report.op.take(40)}' (${OPS.joinToString(", ")})" }
+        val running = previous?.takeIf { it.state == SessionProgress.RUNNING }
+        if (report.op == "output") return running?.copy(lastOutputAt = now) ?: previous
+        val next = fold(previous, report, now)
+        if (next == null || report.op !in STAMPED) return next
+        return stamp(running, next, report, now, learned)
+    }
+
+    private val STAMPED = setOf("percent", "plan", "step", "bytes", "count", "status")
+
+    /** What a job's current stretch is called: the running step, else the label. The learned estimates key on it. */
+    fun key(p: SessionProgress): String? =
+        (if (p.mode == "steps") p.step ?: p.label else p.label)?.takeIf { it.isNotBlank() }
+
+    private fun stamp(running: SessionProgress?, next: SessionProgress, report: ProgressReport, now: Long, learned: (String) -> Long?): SessionProgress {
+        val key = key(next)
+        val same = running != null && key == key(running)
+        val explicit = report.estimateMs?.takeIf { it > 0 }
+        val keep = same && running?.estimateMs != null
+        val learnedMs = if (explicit == null && !keep && key != null) learned(key)?.takeIf { it > 0 } else null
+        val (est, source) = when {
+            explicit != null -> explicit to SessionProgress.SOURCE_WORKER
+            keep -> running?.estimateMs to running?.estimateSource
+            learnedMs != null -> learnedMs to SessionProgress.SOURCE_LEARNED
+            else -> null to null
+        }
+        return next.copy(
+            labelStartedAt = if (same) running?.labelStartedAt ?: running?.startedAt else now,
+            estimateMs = est, estimateSource = source, lastOutputAt = now,
+        )
+    }
+
+    /**
+     * The label that just ended and how long it ran, for the learned medians: [previous] was running a labelled stretch
+     * and [next] moved to another label or finished it. A failed stretch teaches nothing; under a second is noise.
+     */
+    fun finished(previous: SessionProgress?, next: SessionProgress?, now: Long): Pair<String, Long>? {
+        if (previous == null || next == null || previous.state != SessionProgress.RUNNING) return null
+        if (next.state == SessionProgress.FAILED) return null
+        val key = key(previous) ?: return null
+        if (next.state != SessionProgress.DONE && key(next) == key) return null
+        val ms = now - (previous.labelStartedAt ?: previous.startedAt)
+        return if (ms >= MIN_LEARN_MS) key to ms else null
+    }
+
+    const val MIN_LEARN_MS = 1_000L
+
+    /** The countdown of a running job. [percent] is the meter fill; [remainingMs] / [overMs] / [noEstimate] its words. */
+    data class Eta(val percent: Double?, val remainingMs: Long?, val overMs: Long?, val noEstimate: Boolean, val estimated: Boolean)
+
+    /**
+     * The rule that keeps the meter honest: a counter's percent always wins (its time left is extrapolated from the pace
+     * so far); else a time estimate (the worker's, else the learned median) gives percent and time left, or "over
+     * estimate by" once it is exceeded (the fill stops at 99%); else nothing: [Eta.noEstimate] for a job that is only a label.
+     */
+    fun eta(p: SessionProgress, now: Long): Eta {
+        if (p.state != SessionProgress.RUNNING) return Eta(p.percent, null, null, false, false)
+        val pct = p.percent
+        if (p.mode != "indeterminate" && pct != null) {
+            val elapsed = (now - p.startedAt).coerceAtLeast(0)
+            val left = if (pct > 0.0 && pct < 100.0 && elapsed > 0) (elapsed * (100.0 - pct) / pct).toLong() else null
+            return Eta(pct, left, null, false, false)
+        }
+        val est = p.estimateMs ?: return Eta(null, null, null, p.mode == "indeterminate", false)
+        val elapsed = (now - (p.labelStartedAt ?: p.startedAt)).coerceAtLeast(0)
+        return if (elapsed <= est) Eta(minOf(99.0, elapsed * 100.0 / est), est - elapsed, null, false, true)
+        else Eta(99.0, null, elapsed - est, false, true)
+    }
+
+    /** "~2m left", "over estimate by 1m", "no estimate yet"; null when the job has no countdown to speak of. */
+    fun countdownText(e: Eta): String? = when {
+        e.remainingMs != null -> "~${coarse(e.remainingMs, true)} left"
+        e.overMs != null -> "over estimate by ${coarse(e.overMs, false)}"
+        e.noEstimate -> "no estimate yet"
+        else -> null
+    }
+
+    /** 45s, 2m, 1h05m: whole minutes rounded up when counting down, down when counting over. */
+    fun coarse(ms: Long, up: Boolean): String {
+        val s = (ms / 1000).coerceAtLeast(0)
+        return when {
+            s < 60 -> "${s}s"
+            s < 3600 -> "${(if (up) (s + 59) / 60 else s / 60)}m"
+            else -> "${s / 3600}h${((s % 3600) / 60).toString().padStart(2, '0')}m"
+        }
+    }
+
+    private fun fold(previous: SessionProgress?, report: ProgressReport, now: Long): SessionProgress? {
         require(report.op in OPS) { "unknown progress op '${report.op.take(40)}' (${OPS.joinToString(", ")})" }
         val label = report.label?.trim()?.take(MAX_LABEL)?.takeIf { it.isNotEmpty() }
         // A job that finished (or never existed) starts its clock again on the next report.
@@ -170,15 +276,18 @@ object ProgressReducer {
     fun line(p: SessionProgress, now: Long): String {
         val parts = mutableListOf<String>()
         if (p.state != SessionProgress.RUNNING) parts += p.state
-        p.percent?.let { parts += "${it.roundToInt()}%" }
+        val eta = eta(p, now)
+        eta.percent?.let { parts += "${it.roundToInt()}%" }
         when (p.mode) {
             "steps" -> parts += "step ${minOf((p.stepsDone ?: 0) + if (p.state == SessionProgress.RUNNING) 1 else 0, p.stepsTotal ?: 0)}/${p.stepsTotal ?: 0}" +
                 (p.step?.let { " $it" } ?: "")
             "bytes" -> parts += "${bytes(p.done ?: 0)}${p.total?.let { "/" + bytes(it) } ?: ""}" +
                 (p.bytesPerSec?.let { ", ${bytes(it.toLong())}/s" } ?: "")
             "count" -> parts += "${p.done ?: 0}${p.total?.let { "/$it" } ?: ""}"
-            "indeterminate" -> parts += "elapsed ${duration(now - p.startedAt)}"
         }
+        if (p.state == SessionProgress.RUNNING) countdownText(eta)?.let { parts += "· $it" }
+        // No number and no estimate: say the job is alive (last output), never a bare elapsed counter.
+        if (p.state == SessionProgress.RUNNING && eta.noEstimate) parts += "· last output ${duration(now - (p.lastOutputAt ?: p.updatedAt))} ago"
         p.label?.let { parts += "- $it" }
         parts += "(updated ${duration(now - p.updatedAt)} ago)"
         return parts.joinToString(" ")

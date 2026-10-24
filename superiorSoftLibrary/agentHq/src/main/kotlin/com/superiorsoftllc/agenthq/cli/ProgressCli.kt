@@ -29,6 +29,7 @@ internal object ProgressCli {
 
     /** How often a streaming command sends a numeric update at most (a step / plan / done always goes out). */
     const val COALESCE_MS = 250L
+    const val HEARTBEAT_MS = 5_000L
 
     val USAGE = """
         |agenthq progress <0-100> ["label"]            percent
@@ -261,15 +262,26 @@ internal object ProgressCli {
 
     /** Turns lines into reports: a marker always, else each opted-in reader. Thread-safe (stdout and stderr share one). */
     private class LineScanner(private val reporter: ProgressReporter, private val readers: List<ProgressReader>) {
+        private var lastSent = 0L
+
         @Synchronized
         fun line(text: String) {
             if (!reporter.enabled) return
+            val now = System.currentTimeMillis()
             val marker = ProgressMarkers.parse(text)
             if (marker != null) {
                 reporter.submit(marker)
+                lastSent = now
                 return
             }
-            for (r in readers) r.read(text, reporter.current).forEach(reporter::submit)
+            var sent = false
+            for (r in readers) r.read(text, reporter.current).forEach { reporter.submit(it); sent = true }
+            if (sent) lastSent = now
+            // 1.124.0: a job whose report did not change still shows it is alive ("last output Ns ago").
+            else if (now - lastSent >= ProgressCli.HEARTBEAT_MS && reporter.current?.state == SessionProgress.RUNNING) {
+                reporter.submit(ProgressReport("output"))
+                lastSent = now
+            }
         }
     }
 }
@@ -313,6 +325,10 @@ internal object ProgressMarkers {
             "step" -> ProgressReport("step", step = tail)
             "bytes", "count" -> ProgressCli.amounts(verb, rest)
             "status" -> tail?.let { ProgressReport("status", label = it) }
+            // 1.124.0: ##infantry eta <seconds> [label...]  (an indeterminate step the worker expects to take that long)
+            "eta" -> rest.firstOrNull()?.toLongOrNull()?.takeIf { it > 0 }?.let {
+                ProgressReport("status", label = rest.drop(1).joinToString(" ").ifBlank { null }, estimateMs = it * 1000)
+            }
             "done" -> ProgressReport("done", label = tail)
             "fail" -> ProgressReport("fail", label = tail)
             "clear" -> ProgressReport("clear")
@@ -474,7 +490,7 @@ internal class ProgressReporter(
     }
 
     companion object {
-        val NUMERIC = setOf("percent", "bytes", "count")
+        val NUMERIC = setOf("percent", "bytes", "count", "output")
     }
 }
 

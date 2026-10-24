@@ -661,6 +661,9 @@ class AgentHqDaemon(
                 defaultWorkingDir = workingDir,
                 // BUG-REAP-OWNER: no id (unwritable dir) => nothing is ever reaped, which is the safe side.
                 instanceId = runCatching { InstanceId.loadOrCreate(com.superiorsoftllc.agenthq.session.stateDir()) }.getOrNull(),
+                progressEstimates = com.superiorsoftllc.agenthq.session.ProgressEstimates(
+                    runCatching { java.io.File(com.superiorsoftllc.agenthq.session.stateDir(), "progress-estimates.json") }.getOrNull(),
+                ),
             )
             // BUG-M2-11f: a new keep-alive value applies to the processes already kept, not only to the next launch.
             settings.onKeepAliveChanged = manager::lifecyclePolicyChanged

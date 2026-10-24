@@ -119,6 +119,8 @@ class SessionManager(
     idleSweepMs: Long = 30_000,
     /** BUG-REAP-OWNER: this state dir's id, stamped on every kept process and required to match before one is reaped. Null = never reap. */
     private val instanceId: String? = null,
+    /** Contract 1.124.0: the durations learned per project and progress label (the default estimate of a countdown). */
+    val progressEstimates: ProgressEstimates = ProgressEstimates(),
 ) {
     val providerId: String get() = provider.id
 
@@ -360,8 +362,18 @@ class SessionManager(
     fun reportProgress(sessionId: String, report: ProgressReport): SessionRecord? {
         val current = sessions[sessionId] ?: return null
         if (report.op == "get") return current
-        ProgressReducer.apply(current.progress, report, clock()) // validate outside the lock, so a bad report changes nothing
-        return update(sessionId) { it.copy(progress = ProgressReducer.apply(it.progress, report, clock())) }
+        val project = current.projectId
+        val learned = { label: String -> progressEstimates.estimate(project, label) }
+        ProgressReducer.apply(current.progress, report, clock(), learned) // validate outside the lock, so a bad report changes nothing
+        var finished: Pair<String, Long>? = null
+        val now = clock()
+        val record = update(sessionId) {
+            val next = ProgressReducer.apply(it.progress, report, now, learned)
+            finished = ProgressReducer.finished(it.progress, next, now)
+            it.copy(progress = next)
+        }
+        finished?.let { (label, ms) -> progressEstimates.record(project, label, ms) }
+        return record
     }
 
     /** The wrapper's command ended: drop the job. */
