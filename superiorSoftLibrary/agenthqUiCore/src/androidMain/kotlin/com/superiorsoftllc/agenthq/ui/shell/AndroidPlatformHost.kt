@@ -17,6 +17,8 @@ class AndroidPlatformHost(
     override val savedServers: com.superiorsoftllc.agenthq.ui.pair.SavedServers? = null,
     /** Per-device UI preferences (Stats chart scales); null = not persisted. */
     private val uiPrefs: KeyValueStore? = null,
+    /** BUILD-STAMP-1: the APK's versionName, which agentHqAndroid/build.gradle.kts sets to the whole build string. */
+    override val appBuild: String? = null,
 ) : PlatformHost {
     override fun uiPref(key: String): String? = uiPrefs?.get(key)
     override fun saveUiPref(key: String, value: String) { uiPrefs?.put(key, value) }

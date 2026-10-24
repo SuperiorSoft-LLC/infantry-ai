@@ -519,7 +519,7 @@ fun App(
             }
             }
             }
-            StatusBar(state, serverMismatch, onConfig = { showConfig = true })
+            StatusBar(state, serverMismatch, host.appBuild, onConfig = { showConfig = true })
         }
         // ASSISTANT-1: the global Assistant's popup, docked top right under the title bar (a full-screen sheet when compact). The
         // window owns its state, so closing it keeps the draft, the width and the model; it is one more host of ChatPanel.
@@ -589,6 +589,7 @@ fun App(
                 serverMismatch = serverMismatch,
                 theme = Palette.theme,
                 onTheme = { next -> Palette.theme = next; host.saveUiPref(THEME_PREF_KEY, next.encode()) },
+                about = AboutEntry(host.appBuild, state.connection.daemonBuild, state.connection.isLive),
                 secrets = state.secrets,
                 pair = PairEntry(url, token.ifBlank { null }, null) { link ->
                     // PAIR-1: save the server + token through the host's store, then connect with the bearer.
@@ -1143,7 +1144,7 @@ private fun nodeColor(s: String) = when (s) {
 }
 
 @Composable
-private fun StatusBar(state: AppState, serverMismatch: String?, onConfig: () -> Unit) {
+private fun StatusBar(state: AppState, serverMismatch: String?, appBuild: String?, onConfig: () -> Unit) {
     val c = state.connection
     var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(Unit) { while (true) { delay(1000); now = Clock.System.now().toEpochMilliseconds() } }
@@ -1159,7 +1160,12 @@ private fun StatusBar(state: AppState, serverMismatch: String?, onConfig: () -> 
         // SERVER-UPDATE-4: client and server differ by more than a patch; the full text is in Configuration > Server.
         if (c.isLive && serverMismatch != null) Text("   version mismatch (see Configuration)", color = Palette.Accent, fontSize = 11.sp, modifier = Modifier.testTag(SERVER_MISMATCH_TAG))
         Spacer(Modifier.weight(1f))
-        Text("^K search  Alt+↑↓ agents  ^J needs input  ^N new  ^R resume  ^5 roles  ^6 attention  ^L connection  ^, config", color = Palette.Muted, fontSize = 10.sp)
+        // The shortcut hint only where there is room for it (a phone has no keyboard shortcuts and no width to spare).
+        if (!state.panels.compactWindow) {
+            Text("^K search  Alt+↑↓ agents  ^J needs input  ^N new  ^R resume  ^5 roles  ^6 attention  ^L connection  ^, config", color = Palette.Muted, fontSize = 10.sp, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+        }
+        // BUILD-STAMP-1: which build this is (and a plain warning when the daemon is another build); the cog opens About.
+        FooterBuild(appBuild, if (c.isLive) c.daemonBuild else null, Modifier.padding(start = 10.dp).clickable(role = Role.Button, onClick = onConfig))
         // The footer cog, bottom-right. It opens the configuration modal (flags).
         Box(
             Modifier.padding(start = 10.dp).size(24.dp)

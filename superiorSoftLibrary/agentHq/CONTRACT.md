@@ -1916,7 +1916,7 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 
 | Type | `data` | Direction |
 | --- | --- | --- |
-| `ready` | `"provider=<id> contract=<version> instance=<id> since=<epoch millis>"` (`instance`, `since`: 1.11.0) | daemon → client |
+| `ready` | `"provider=<id> contract=<version> instance=<id> since=<epoch millis> build=<build>"` (`instance`, `since`: 1.11.0; `build`: BUILD-STAMP-1, additive within 1.115.0, e.g. `1.0.1+20261023.1432.e85b223[.dirty]`, absent from older daemons) | daemon → client |
 | `session` | one `SessionRecord` (JSON) | daemon → client |
 | `sessions` | list of `SessionRecord` | daemon → client |
 | `worktree` | one `WorktreeStatus` (JSON). Carries `changes` (git view): `null`/absent = UNKNOWN, `[]` = known clean, else `{path,status,staged,fromPath?}` per changed file, status one of `ADDED MODIFIED DELETED RENAMED UNTRACKED CONFLICTED`; a file changed on both sides appears once per side; `changesTruncated` is true when the list was cut at 500 | daemon → client |
