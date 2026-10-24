@@ -196,15 +196,25 @@ class SessionStoreWindowResumeTest {
                 "delete() at :745 (kill throws the same string). Stack:\n" +
                 error.stackTrace.take(8).joinToString("\n")
         )
-        // The line is read from the source (resume()'s own `unknown session` error), not hard-coded: a pinned number
+        // TICKET-HANDOVER split resume() into the hold check and resumeHeld(), its body: the `unknown session` error
+        // now lives in resumeHeld(), reached only through resume() here. The THROW frame (the innermost SessionManager
+        // frame) must be that error, so kill() / delete() (same string) can still never be mistaken for it.
+        val throwFrame = error.stackTrace.first { it.className.contains("SessionManager") }
+        assertEquals(
+            "resumeHeld",
+            throwFrame.methodName,
+            "the throw must be resume()'s body, resumeHeld(), not kill() or delete(). Stack:\n" +
+                error.stackTrace.take(8).joinToString("\n"),
+        )
+        // The line is read from the source (resumeHeld()'s own `unknown session` error), not hard-coded: a pinned number
         // broke on every unrelated edit above resume() (TRAITS-T4 added the instance chokepoint there).
         val source = java.io.File("src/main/kotlin/com/superiorsoftllc/agenthq/session/SessionManager.kt").readLines()
-        val resumeStart = source.indexOfFirst { it.contains("fun resume(sessionId: String") }
+        val resumeStart = source.indexOfFirst { it.contains("fun resumeHeld(sessionId: String") }
         val resumeThrowLine = source.drop(resumeStart).indexOfFirst { it.contains("error(\"unknown session") } + resumeStart + 1
-        assertTrue(resumeStart >= 0 && resumeThrowLine > resumeStart, "resume()'s unknown-session line not found in the source")
+        assertTrue(resumeStart >= 0 && resumeThrowLine > resumeStart, "resumeHeld()'s unknown-session line not found in the source")
         assertEquals(
             resumeThrowLine,
-            resumeFrame.lineNumber,
+            throwFrame.lineNumber,
             "the throw must be from resume():$resumeThrowLine specifically, not kill(). Stack:\n" +
                 error.stackTrace.take(8).joinToString("\n")
         )
