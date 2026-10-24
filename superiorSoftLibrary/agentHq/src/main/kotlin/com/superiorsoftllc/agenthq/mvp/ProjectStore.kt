@@ -113,6 +113,21 @@ class ProjectStore(
         return updated
     }
 
+    /** BASICS-KILL-1 (contract 1.116.0): turn project [id]'s auto-removal of done tickets' worker sessions on or off. */
+    @Synchronized
+    fun setAutoRemoveDoneWorkers(id: String, on: Boolean): Project {
+        val existing = get(id)
+        if (existing.autoRemoveDoneWorkers == on) return existing
+        val updated = existing.copy(autoRemoveDoneWorkers = on)
+        projects[existing.id] = updated
+        persist(updated)
+        return updated
+    }
+
+    /** BASICS-KILL-1: whether project [projectId] removes a done ticket's worker session (false when unset or unknown). */
+    @Synchronized
+    fun autoRemovesDoneWorkers(projectId: String?): Boolean = projects[projectId?.trim().orEmpty()]?.autoRemoveDoneWorkers == true
+
     /** LANE-CAPS: the most agents of [role] that may run at once in project [projectId] (1 when unset or unknown). */
     @Synchronized
     fun laneCapOf(projectId: String?, role: String): Int = projects[projectId?.trim().orEmpty()]?.laneCaps?.get(role) ?: 1

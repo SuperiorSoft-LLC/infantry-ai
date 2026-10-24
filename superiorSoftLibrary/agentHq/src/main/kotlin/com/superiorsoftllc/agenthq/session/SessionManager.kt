@@ -532,6 +532,7 @@ class SessionManager(
         /** Contract 1.115.0: create the installation-wide Assistant; set on the FIRST `session` frame, so no client ever sees it as an ordinary agent. */
         global: Boolean = false,
     ): SessionRecord {
+        busyTwin(null, agentId, ticketId)?.let { throw IllegalArgumentException(twinRefusal("start", agentId, ticketId, it)) }
         val chosen = resolveProvider(providerId).provider
         val sessionModel = spawnModel(model)
         val sessionEffort = effort?.trim()?.takeIf { it.isNotEmpty() }?.also {
@@ -639,6 +640,9 @@ class SessionManager(
     fun resume(sessionId: String, prompt: String): SessionRecord {
         val session = sessions[sessionId] ?: error("unknown session $sessionId")
         if (runs.containsKey(sessionId)) throw RunInFlightException(sessionId, "session $sessionId already has a run in flight")
+        busyTwin(sessionId, session.agentId, session.ticketId)?.let {
+            throw RunInFlightException(it.id, twinRefusal("resume of $sessionId", session.agentId, session.ticketId, it))
+        }
         require(session.providerSessionId != null || session.neverRun) {
             "session $sessionId is not resumable: no provider session id was ever observed " +
                 "(state=${session.state})"
@@ -1143,7 +1147,9 @@ class SessionManager(
     @Synchronized
     fun delete(sessionId: String) {
         val existing = sessions[sessionId] ?: throw IllegalArgumentException("unknown session '$sessionId'")
-        if (existing.live) throw IllegalArgumentException("session '$sessionId' is still running (${existing.state}); kill it first, then remove it")
+        // BASICS-KILL-1: a record that claims a run but has none in this daemon and no live process is stale: ended here.
+        if (existing.live && isStaleLive(sessionId, existing)) markKilled(sessionId, KillOutcome.GRACEFUL)
+        if (sessions.getValue(sessionId).live) throw IllegalArgumentException("session '$sessionId' is still running (${existing.state}); kill it first, then remove it")
         host.stop(sessionId)
         sessions.remove(sessionId)
         conversation.drop(sessionId)
@@ -1153,6 +1159,33 @@ class SessionManager(
         onSessionEnded(sessionId)
         writeAll()
     }
+
+    /**
+     * BASICS-KILL-1: [record] reads live (STARTING / BUSY / WAITING_INPUT, or a pid marked alive) while this daemon has
+     * NO run for it and its pid, if any, is gone. Nothing can bring such a record to rest by itself, so kill and remove
+     * treat it as ended instead of refusing it forever.
+     */
+    fun isStaleLive(sessionId: String, record: SessionRecord = sessions[sessionId] ?: error("unknown session $sessionId")): Boolean =
+        record.live && !runs.containsKey(sessionId) && record.childPid.let { it == null || !pidProbe(it) }
+
+    /**
+     * BASICS-KILL-1: the OTHER session with a turn in flight that a start or resume for [agentId] / [ticketId] would run
+     * next to, or null. A ticket's work is exclusive: two sessions may not run the same ticket, nor the same agent while
+     * either of them works a ticket (they would share its worktree). Ticketless sessions of one agent (pod nodes) are not
+     * restricted.
+     */
+    fun busyTwin(exceptId: String?, agentId: String?, ticketId: String?): SessionRecord? = sessions.values.firstOrNull { other ->
+        other.id != exceptId && other.isBusy() && (
+            (ticketId != null && other.ticketId == ticketId) ||
+                (agentId != null && other.agentId == agentId && (ticketId != null || other.ticketId != null))
+            )
+    }
+
+    private fun twinRefusal(what: String, agentId: String?, ticketId: String?, twin: SessionRecord) =
+        "$what refused: session ${twin.id} already runs " +
+            (if (ticketId != null && twin.ticketId == ticketId) "ticket $ticketId" else "agent $agentId") +
+            " (${twin.state}, ${twin.provider}${twin.model?.let { " / $it" } ?: ""}); one agent works one ticket in one session. " +
+            "Wait for it, or kill it first (agenthq kill ${twin.id})"
 
     @Synchronized
     private fun markKilled(

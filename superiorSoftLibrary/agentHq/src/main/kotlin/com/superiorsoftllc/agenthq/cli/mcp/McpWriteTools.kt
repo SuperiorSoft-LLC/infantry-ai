@@ -535,7 +535,7 @@ internal class McpWriteTools(
     }
 
     private fun decodeSessions(frame: Envelope): List<SessionRecord> =
-        json.decodeFromString(ListSerializer(SessionRecord.serializer()), frame.data)
+        json.decodeFromString(com.superiorsoftllc.agenthq.session.SessionListWire, frame.data)
 
     private fun ok(payload: JsonObject) = ToolResult(json.encodeToString(JsonObject.serializer(), payload))
 

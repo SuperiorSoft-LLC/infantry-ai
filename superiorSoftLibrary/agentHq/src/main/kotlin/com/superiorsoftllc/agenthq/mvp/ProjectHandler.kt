@@ -96,8 +96,15 @@ class ProjectHandler(
         Envelope.PROJECT_CONFIG -> projectRequest(envelope.type) {
             val request = ProjectConfigRequest.decode(envelope.data)
             val caps = request.laneCaps
-            if (caps.isNullOrEmpty()) projectEnvelope(store.get(request.projectId))
-            else projectEnvelope(store.setLaneCaps(request.projectId, caps).also(onConfigChanged))
+            val autoRemove = request.autoRemoveDoneWorkers
+            if (caps.isNullOrEmpty() && autoRemove == null) projectEnvelope(store.get(request.projectId))
+            else {
+                // The caps go first: a refused cap writes nothing, so the flag is not changed by a refused request either.
+                var project = store.get(request.projectId)
+                if (!caps.isNullOrEmpty()) project = store.setLaneCaps(request.projectId, caps)
+                if (autoRemove != null) project = store.setAutoRemoveDoneWorkers(request.projectId, autoRemove)
+                projectEnvelope(project.also(onConfigChanged))
+            }
         }
 
         else -> null

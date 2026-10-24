@@ -53,6 +53,13 @@ data class Project(
      * (never `project_save`). An older daemon omits the key, which a client reads as "every role: 1".
      */
     val laneCaps: Map<String, Int> = emptyMap(),
+    /**
+     * Contract 1.116.0 (BASICS-KILL-1): when true, a ticket of this project moved to `done` ends its worker session (the
+     * process tree is killed once the worker's current turn is over) and removes it from the session list, so nobody has
+     * to clean up finished workers. Default false (the worker stays listed, today's behaviour). Set only with
+     * `project_config`. An older daemon omits the key, which a client reads as false.
+     */
+    val autoRemoveDoneWorkers: Boolean = false,
 )
 
 /**
@@ -65,6 +72,8 @@ data class Project(
 data class ProjectConfigRequest(
     val projectId: String,
     val laneCaps: Map<String, Int>? = null,
+    /** Contract 1.116.0: set [Project.autoRemoveDoneWorkers]; absent = unchanged. */
+    val autoRemoveDoneWorkers: Boolean? = null,
 ) {
     companion object {
         fun decode(text: String): ProjectConfigRequest = StrictJson.decode(serializer(), text, "project_config payload")

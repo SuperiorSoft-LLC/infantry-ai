@@ -369,8 +369,29 @@ private fun LanesTab(state: AppState, controller: Controller, project: ProjectVi
             color = Palette.Danger, fontSize = 11.sp,
         )
     }
+    // BASICS-KILL-1 (contract 1.116.0): finished workers leave the session list by themselves.
+    if (state.connection.autoRemovesDoneWorkers) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.Checkbox(
+                checked = project.autoRemoveDoneWorkers,
+                enabled = live,
+                onCheckedChange = { on ->
+                    error = null
+                    scope.launch { (controller.setAutoRemoveDoneWorkers(project.id, on) as? CommandResult.Refused)?.let { error = it.reason } }
+                },
+                modifier = Modifier.testTag(PROJECT_CONFIG_AUTO_REMOVE_TAG),
+            )
+            Text(
+                "Remove a worker's session when its ticket is done (after its last turn)",
+                color = Palette.Text, fontSize = 12.sp, modifier = Modifier.weight(1f),
+            )
+        }
+    }
     error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
 }
+
+/** BASICS-KILL-1: the Lanes tab's "remove done workers" checkbox. */
+const val PROJECT_CONFIG_AUTO_REMOVE_TAG = "project-config-auto-remove-done-workers"
 
 @Composable
 private fun CapStep(label: String, enabled: Boolean, tag: String, onClick: () -> Unit) {

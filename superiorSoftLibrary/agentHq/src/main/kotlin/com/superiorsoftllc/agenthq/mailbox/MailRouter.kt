@@ -87,7 +87,13 @@ class MailRouter(
     /** Feed every session status event here; a session that just came to rest gets its mail. */
     fun onSessionEvent(event: SessionEvent) {
         if (event !is SessionEvent.Status) return
-        if (event.session.isAvailable()) pump(event.session.id)
+        if (!event.session.isAvailable()) return
+        pump(event.session.id)
+        // BASICS-KILL-1: mail for another session of the same agent waited for this one's turn to end (busyTwin): drain it.
+        val agentId = event.session.agentId ?: return
+        for (sibling in manager.list()) {
+            if (sibling.id != event.session.id && sibling.agentId == agentId && sibling.isAvailable()) pump(sibling.id)
+        }
     }
 
     /** At startup, deliver anything already queued for a session that is at rest. */
@@ -228,6 +234,10 @@ class MailRouter(
         if (session.isBusy()) {
             return DeliveryOutcome.Retry("recipient '${session.id}' has a run in flight")
         }
+        // BASICS-KILL-1: waking this session would run it next to another session of the same agent / ticket: queue.
+        manager.busyTwin(session.id, session.agentId, session.ticketId)?.let {
+            return DeliveryOutcome.Retry("session ${it.id} of the same agent / ticket has a run in flight")
+        }
         if (!session.resumable && !session.neverRun) {
             return DeliveryOutcome.Failed(
                 "recipient '${session.id}' is not resumable: state=${session.state}, " +
@@ -345,6 +355,10 @@ class MailRouter(
     private fun freshSessionIfHarnessMoved(session: SessionRecord): SessionRecord? {
         val bind = bindFreshSession ?: return null
         val agentId = session.agentId ?: return null
+        // BASICS-KILL-1: a ticket worker runs on its TICKET's provider/model, which may differ from the profile's on
+        // purpose. Cutting a fresh profile-harness session here put a second session (other harness, same agent id) in
+        // the ticket's worktree next to the real worker. A ticket session keeps its harness; mail resumes it.
+        if (session.ticketId != null) return null
         val profile = agentProfiles.get(agentId) ?: return null
         val wanted = agentProfiles.executorFor(profile, null, null, null).provider ?: manager.providerId
         if (session.provider == wanted) return null
