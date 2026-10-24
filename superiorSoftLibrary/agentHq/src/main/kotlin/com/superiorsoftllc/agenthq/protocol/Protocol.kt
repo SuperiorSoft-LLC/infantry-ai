@@ -327,6 +327,8 @@ data class Envelope(
         // plan meter's percent, reset, pace, allowance and running ticket workers, plus the pacing rule).
         const val USAGE_GET = "usage_get"
         const val USAGE_REPORT = "usage_report"
+        // Contract 1.120.0: `usage_set` (a `UsageSet`): a meter's manual percent / override, or the pacing rule; answered by `usage_report`.
+        const val USAGE_SET = "usage_set"
 
         // Contract 1.14.0 -- story 9.5: triggers. Changes are pushed to every client.
         const val TRIGGER_SAVE = "trigger_save"

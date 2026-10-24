@@ -441,7 +441,7 @@ internal object Cli {
                 "skill" -> skill(stream, parsed, out, err)
                 "role" -> role(stream, parsed, out, err, getenv, input)
                 "ask" -> ask(stream, parsed, out, err, getenv)
-                "usage" -> runBlocking { UsageCli.run(stream, parsed.args, out) }
+                "usage" -> runBlocking { UsageCli.run(stream, parsed.args, out, err) }
                 else -> {
                     // Unreachable: [run] rejects an unknown command before it connects.
                     err.appendLine("error: unknown command '$command'")
@@ -4099,7 +4099,10 @@ internal object Cli {
                                   Harmless outside Infantry AI: no session or daemon = no report, exit 0 (run keeps CMD's code)
               harnesses           The harnesses (provider ids) a ticket can pin, and each one's models
               usage [show]        Plan usage per meter (claude, opencode-go, ...): percent used, reset, pace, and how many
-                                  ticket workers the pacing rule allows (<60%: 3, <80%: 2, else 1) vs how many run; read-only
+                                  ticket workers the pacing rule allows (default <60%: 3, <80%: 2, else 1) vs how many run
+              usage set <meter> <pct> [<resetsInMin>] | clear <meter>   Type a percent for a meter with no readable usage
+              usage override <meter> <n|none> [<hours>] | override <meter> clear   Allowance override (default: until reset, else 2h)
+              usage rule <60:3,80:2,1|on|off|default>   The pacing rule: below:workers tiers, the last one workers alone
               harness-status      Which harness CLIs are installed / missing / outdated; harness-install [id...] [--update] installs them via npm
               epics --project <id> List that project's epics, with each one's goal and story count
               epic show <id|prefix> [--project <id>]   One epic: its title, then its tickets as ID | STATUS | TITLE | AGENT

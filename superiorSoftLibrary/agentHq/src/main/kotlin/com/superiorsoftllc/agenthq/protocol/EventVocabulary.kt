@@ -358,7 +358,8 @@ object EventVocabulary {
     // **1.117.0 (PROGRESS-1, ticket-1371d44b) is ADDITIVE**: `SessionRecord.progress`, the `progress` request frame, `agenthq progress` / `agenthq run` / `agenthq_progress`. See CONTRACT.md.
     // **1.118.0 (BASICS-KILL-1) is ADDITIVE**: `Project.autoRemoveDoneWorkers` + `project_config` key; stale BUSY removable; one session per ticket. See CONTRACT.md.
     // **1.119.0 (USAGE-PACE) is ADDITIVE**: `usage_get` / `usage_report` (read-only plan meters + pacing allowance), `agenthq usage` / `agenthq_usage`. See CONTRACT.md.
-    const val VERSION = "1.119.0"
+    // **1.120.0 (USAGE-PACE S2) is ADDITIVE**: `usage_set`, settings `usage.pacing|manual|overrides`, `agenthq usage set|clear|override|rule`. See CONTRACT.md.
+    const val VERSION = "1.120.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA

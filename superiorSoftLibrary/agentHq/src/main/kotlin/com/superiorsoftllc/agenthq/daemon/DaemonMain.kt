@@ -876,13 +876,12 @@ class AgentHqDaemon(
                     ticket = ticketId?.let(store.tickets::get),
                 )
             }
-            // USAGE-PACE S1 (1.119.0): plan meters -> allowance of ticket workers, read-only through `usage_get`.
-            // Manual entries, overrides, a configurable rule and the start gate come in later slices.
+            // USAGE-PACE (1.119.0 read, 1.120.0 manual / override / rule): plan meters -> allowance of ticket workers.
             val usagePacing = UsagePacing(
                 limits = limits::cachedOrRefresh,
-                rule = { com.superiorsoftllc.agenthq.usage.PacingRule.DEFAULT },
-                manual = { emptyMap() },
-                overrides = { emptyMap() },
+                rule = settings::usagePacing,
+                manual = settings::usageManual,
+                overrides = settings::usageOverrides,
                 workerMeters = {
                     store.tickets.all()
                         .filter { it.status == com.superiorsoftllc.agenthq.protocol.TicketStatus.IN_PROGRESS }
@@ -2318,6 +2317,18 @@ private suspend fun handleConnection(
                         outgoing.trySend(answer)
                     }
                     null
+                }
+
+                // USAGE-PACE (1.120.0): the owner's manual percent / override / rule; answered by the fresh report.
+                Envelope.USAGE_SET -> try {
+                    val service = settings as? com.superiorsoftllc.agenthq.settings.SettingsService
+                        ?: throw IllegalArgumentException("this daemon has no usage settings")
+                    service.applyUsage(com.superiorsoftllc.agenthq.usage.UsageSet.decode(envelope.data))
+                    Envelope(Envelope.USAGE_REPORT, json.encodeToString(UsageReport.serializer(), usagePacing.report()))
+                } catch (e: IllegalArgumentException) {
+                    Envelope(Envelope.ERROR, "usage_set refused: ${e.message ?: "invalid request"}")
+                } catch (e: Exception) {
+                    Envelope(Envelope.ERROR, "usage_set failed: ${e.message ?: e::class.simpleName}")
                 }
 
                 // Contract 1.4.0 -- agent profiles. Answers go to the requesting client only; a refusal

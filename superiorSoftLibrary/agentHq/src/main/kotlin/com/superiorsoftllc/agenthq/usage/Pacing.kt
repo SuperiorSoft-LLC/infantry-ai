@@ -9,7 +9,7 @@ import kotlinx.serialization.json.JsonObject
 
 /*
  * USAGE-PACE (contract 1.119.0): how many ticket workers may run on a plan meter, read from how much of the plan window
- * is used. S1 is read-only: the report only; manual entries, overrides and the start gate come later. A METER is the plan a run draws on, which is not always its harness: pi or opencode running an `anthropic/...`
+ * is used. The owner can type a percent for a meter with no readable usage, override the allowance, and change the rule. A METER is the plan a run draws on, which is not always its harness: pi or opencode running an `anthropic/...`
  * model spends the Claude subscription, an `opencode-go/...` model spends OpenCode Go. Unknown usage FAILS OPEN (no
  * pacing, a warning in the report): a dead usage endpoint never stalls the board.
  */
@@ -124,6 +124,34 @@ data class MeterUsage(
 @Serializable
 data class UsageReport(val meters: List<MeterUsage>, val rule: PacingRule, val observedAt: Long)
 
+/**
+ * The `usage_set` frame (contract 1.120.0), answered by `usage_report`: a meter's manual percent and/or override set or
+ * cleared, and/or the pacing rule replaced. An override with [overrideUntil] set and [overrideWorkers] null = no limit.
+ */
+@Serializable
+data class UsageSet(
+    val meter: String = "",
+    val manualPercent: Double? = null,
+    /** Epoch millis the typed window resets; null = unknown (the entry then lapses after [ManualUsage.MANUAL_TTL_MS]). */
+    val manualResetsAt: Long? = null,
+    val clearManual: Boolean = false,
+    val overrideWorkers: Int? = null,
+    val overrideUntil: Long? = null,
+    val clearOverride: Boolean = false,
+    /** A whole [PacingRule] as JSON; validated by the settings service. */
+    val rule: JsonElement? = null,
+) {
+    companion object {
+        fun decode(data: String): UsageSet = try {
+            json.decodeFromString(serializer(), data)
+        } catch (e: Exception) {
+            throw IllegalArgumentException("usage_set expects a UsageSet JSON object")
+        }
+
+        fun encode(set: UsageSet): String = json.encodeToString(serializer(), set)
+    }
+}
+
 /** Plain-text rendering of a [UsageReport], shared by `agenthq usage` and `agenthq_usage`. */
 object UsageText {
     fun render(report: UsageReport): String = buildString {
@@ -164,6 +192,30 @@ object UsageText {
     }
 
     fun fmt(d: Double): String = if (d == Math.floor(d)) d.toLong().toString() else "%.1f".format(d)
+
+    /** `60:3,80:2,1` -> a [PacingRule] JSON; `off` / `on` toggle [current]; `default` resets. Throws [IllegalArgumentException]. */
+    fun parseRule(text: String, current: PacingRule = PacingRule.DEFAULT): JsonElement {
+        val rule = when (val t = text.trim().lowercase()) {
+            "off" -> current.copy(enabled = false)
+            "on" -> current.copy(enabled = true)
+            "default" -> PacingRule.DEFAULT
+            else -> PacingRule(
+                enabled = true,
+                tiers = t.split(',').map { part ->
+                    val bits = part.trim().split(':')
+                    when (bits.size) {
+                        1 -> PacingTier(null, bits[0].trim().toIntOrNull() ?: throw IllegalArgumentException("bad tier '$part'"))
+                        2 -> PacingTier(
+                            bits[0].trim().removeSuffix("%").toDoubleOrNull() ?: throw IllegalArgumentException("bad percent in '$part'"),
+                            bits[1].trim().toIntOrNull() ?: throw IllegalArgumentException("bad workers in '$part'"),
+                        )
+                        else -> throw IllegalArgumentException("bad tier '$part' (want below:workers, the last one workers alone)")
+                    }
+                },
+            )
+        }
+        return UsagePacing.ruleJson(PacingRule.parse(UsagePacing.ruleJson(rule)))
+    }
 }
 
 sealed interface PacingVerdict {
