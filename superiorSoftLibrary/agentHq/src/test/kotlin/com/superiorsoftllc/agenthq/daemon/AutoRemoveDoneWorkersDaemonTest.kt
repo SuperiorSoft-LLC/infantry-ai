@@ -56,7 +56,7 @@ class AutoRemoveDoneWorkersDaemonTest {
     private fun <T> DaemonFixture.use(block: DaemonFixture.() -> T): T = try { block() } finally { stop(); deleteState() }
 
     @Test
-    fun onADoneTicketsWorkerIsRemovedOnlyAfterItsTurnEnds() = launch().use {
+    fun onADoneTicketsWorkerIsRemovedOnlyAfterItsTurnEnds(): Unit = launch().use {
         val p = createProject()
         autoRemove(p, true)
         val (ticketId, session) = startWorker(p).split(" ")
@@ -70,7 +70,7 @@ class AutoRemoveDoneWorkersDaemonTest {
     }
 
     @Test
-    fun offIsTheDefaultAndTheFinishedWorkerStaysListed() = launch().use {
+    fun offIsTheDefaultAndTheFinishedWorkerStaysListed(): Unit = launch().use {
         val p = createProject()
         val (ticketId, session) = startWorker(p).split(" ")
         client.moveTicket(ticketId, TicketStatus.DONE)

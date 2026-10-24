@@ -90,7 +90,7 @@ class ProjectDaemonTest {
         assertEquals("Sprint-Zero MVP", created.name)
         assertEquals("one story, three ways", created.goal)
         assertEquals(
-            setOf("id", "name", "goal", "directory", "baseBranch", "laneCaps"), // + laneCaps: 1.111.0 (LANE-CAPS); + directory: 1.36.0 (CP-2); + baseBranch: 1.81.0 (BASE-1a); additive
+            setOf("id", "name", "goal", "directory", "baseBranch", "laneCaps", "autoRemoveDoneWorkers"), // + autoRemoveDoneWorkers: 1.116.0 (BASICS-KILL-1); + laneCaps: 1.111.0 (LANE-CAPS); + directory: 1.36.0 (CP-2); + baseBranch: 1.81.0 (BASE-1a); additive
             fixture.client.of(Envelope.PROJECT).first().let { json.parseToJsonElement(it.data).jsonObject.keys },
         )
 
@@ -249,7 +249,7 @@ class ProjectHandlerTest {
     private fun Envelope.assertProjectKeys() {
         assertEquals(Envelope.PROJECT, type, "a project request is answered by a `project` frame")
         assertEquals(
-            setOf("id", "name", "goal", "directory", "baseBranch", "laneCaps"), // + laneCaps: 1.111.0 (LANE-CAPS); + directory: 1.36.0 (CP-2); + baseBranch: 1.81.0 (BASE-1a); additive
+            setOf("id", "name", "goal", "directory", "baseBranch", "laneCaps", "autoRemoveDoneWorkers"), // + autoRemoveDoneWorkers: 1.116.0 (BASICS-KILL-1); + laneCaps: 1.111.0 (LANE-CAPS); + directory: 1.36.0 (CP-2); + baseBranch: 1.81.0 (BASE-1a); additive
             json.parseToJsonElement(data).jsonObject.keys,
             "the `project` frame's wire keys are the frozen ones",
         )
