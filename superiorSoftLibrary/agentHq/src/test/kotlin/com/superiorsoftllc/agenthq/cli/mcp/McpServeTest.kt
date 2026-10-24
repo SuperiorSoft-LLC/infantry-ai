@@ -156,6 +156,7 @@ class McpServeTest {
                 "agenthq_role_list", "agenthq_role_get", "agenthq_role_update", "agenthq_role_create", "agenthq_role_delete", "agenthq_project_config_get", "agenthq_project_config_set", // ROLE-EDIT-1, LANE-CAPS
                 "agenthq_ask", // ASK-1
                 "agenthq_progress", // PROGRESS-1 (1.117.0)
+                "agenthq_processes", "agenthq_processes_reap", // ROGUE-1 (1.120.0)
             ),
             tools.map { it["name"]!!.jsonPrimitive.content },
         )

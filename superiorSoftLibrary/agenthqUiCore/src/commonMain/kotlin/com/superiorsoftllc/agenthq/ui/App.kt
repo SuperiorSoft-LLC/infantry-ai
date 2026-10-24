@@ -528,7 +528,10 @@ fun App(
             }
             }
             }
-            StatusBar(state, serverMismatch, host.appBuild, onConfig = { tab -> if (tab != null) configTab = tab; showConfig = true })
+            StatusBar(state, serverMismatch, host.appBuild, onConfig = { tab -> if (tab != null) configTab = tab; showConfig = true }) {
+                // ROGUE-1 (1.120.0): rogue background processes / low memory; hidden while nothing is wrong.
+                ProcessesBadge(state, controller)
+            }
         }
         // ASSISTANT-1: the global Assistant's popup, docked top right under the title bar (a full-screen sheet when compact). The
         // window owns its state, so closing it keeps the draft, the width and the model; it is one more host of ChatPanel.
@@ -1158,7 +1161,7 @@ private fun nodeColor(s: String) = when (s) {
 }
 
 @Composable
-private fun StatusBar(state: AppState, serverMismatch: String?, appBuild: String?, onConfig: (ConfigTab?) -> Unit) {
+private fun StatusBar(state: AppState, serverMismatch: String?, appBuild: String?, onConfig: (ConfigTab?) -> Unit, processes: @Composable () -> Unit = {}) {
     val c = state.connection
     var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(Unit) { while (true) { delay(1000); now = Clock.System.now().toEpochMilliseconds() } }
@@ -1173,6 +1176,7 @@ private fun StatusBar(state: AppState, serverMismatch: String?, appBuild: String
         if (c.isLive && c.contract?.substringBefore('.') != "1") Text("   unexpected contract version", color = Palette.Danger, fontSize = 11.sp)
         // SERVER-UPDATE-4: client and server differ by more than a patch; the full text is in Configuration > Server.
         if (c.isLive && serverMismatch != null) Text("   version mismatch (see Configuration)", color = Palette.Accent, fontSize = 11.sp, modifier = Modifier.testTag(SERVER_MISMATCH_TAG))
+        processes()
         Spacer(Modifier.weight(1f))
         // The shortcut hint only where there is room for it (a phone has no keyboard shortcuts and no width to spare).
         if (!state.panels.compactWindow) {
