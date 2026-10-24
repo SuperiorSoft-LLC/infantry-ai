@@ -246,6 +246,8 @@ fun App(
     val host = LocalPlatformHost.current
     var flags by remember { mutableStateOf(UiFlags(blurBehindDialogs = host.uiPref(BLUR_PREF_KEY) != "off")) }
     val modalBlur = remember { ModalBlurState(supported = host.supportsBlur) }
+    // THEME-1: the stored theme, applied once before the first themed frame; Palette.theme is its only owner from here on.
+    remember(host) { Palette.theme = com.superiorsoftllc.agenthq.ui.model.ThemeSettings.decode(host.uiPref(THEME_PREF_KEY)) }
     modalBlur.enabled = flags.blurBehindDialogs
     var url by remember { mutableStateOf(initialUrl) }
     var token by remember { mutableStateOf(initialToken.orEmpty()) }
@@ -585,6 +587,8 @@ fun App(
                 updates = updates,
                 serverUpdate = serverUpdate,
                 serverMismatch = serverMismatch,
+                theme = Palette.theme,
+                onTheme = { next -> Palette.theme = next; host.saveUiPref(THEME_PREF_KEY, next.encode()) },
                 secrets = state.secrets,
                 pair = PairEntry(url, token.ifBlank { null }, null) { link ->
                     // PAIR-1: save the server + token through the host's store, then connect with the bearer.
@@ -630,6 +634,9 @@ fun App(
 
 /** MODAL-BLUR: the host preference key for "Blur behind dialogs" ("on" / "off"; unset = on). */
 const val BLUR_PREF_KEY = "blurBehindDialogs"
+
+/** THEME-1: the host preference key for the Material theme (ThemeSettings.encode; unset = amber on dark). */
+const val THEME_PREF_KEY = "materialTheme"
 
 @Composable private fun VLine() = Box(Modifier.width(1.dp).fillMaxHeight().background(Palette.Border))
 
