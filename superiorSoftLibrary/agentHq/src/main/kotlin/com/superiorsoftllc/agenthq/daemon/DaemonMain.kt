@@ -898,6 +898,11 @@ class AgentHqDaemon(
                 knowledge = knowledge, skills = skillsSource,
                 exitBehavior = settings::ticketExitBehavior,
                 weightExecutors = settings::weightExecutors,
+                // USAGE-PACE (1.121.0): an agent's / the daemon's ticket start beyond the plan allowance is refused.
+                pacing = { providerId, model ->
+                    val pid = providerId ?: manager.providers.firstOrNull()?.id ?: UsageMeters.CLAUDE
+                    usagePacing.check(UsageMeters.meterFor(pid, model ?: manager.providerFor(pid)?.defaultModel()))
+                },
                 laneCap = projectStore::laneCapOf,
                 // BUG-ASSIGN-1: a refused role lists the catalog's ids (custom roles included; the fallback persona not).
                 roleIds = { roles.all().map { it.id }.filter { it != RoleIds.CUSTOM } },

@@ -11,7 +11,8 @@ import kotlinx.serialization.json.put
 
 /**
  * USAGE-PACE (contract 1.119.0): `agenthq_usage`, read-only. The plan usage per meter and the pacing allowance, so a PM
- * can pace how many ticket workers it starts. Nothing here is enforced yet (S1): the PM paces by reading it.
+ * can pace how many ticket workers it starts (a start past the allowance is refused, 1.121.0). Changing a manual
+ * percent, an override or the rule is the owner's: the app, or `agenthq usage set|override|rule`.
  */
 internal class McpUsageTools {
 
@@ -36,7 +37,7 @@ internal class McpUsageTools {
                     "Read plan usage per meter (claude = the Claude subscription, also spent by pi/opencode running anthropic/* " +
                         "models; opencode-go; others): percent of the plan window used (the highest window), when it resets, " +
                         "points ahead/under an even burn, and how many ticket workers the pacing rule allows versus how many " +
-                        "run. Pace your ticket starts to it. Unknown usage = no pacing (fail open). " +
+                        "run. An agent's ticket start beyond the allowance is refused, with the reason. Unknown usage = no pacing (fail open). " +
                         "Text summary first, then the JSON report.",
                 )
                 put("inputSchema", buildJsonObject {

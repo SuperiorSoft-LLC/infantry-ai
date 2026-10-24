@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.120.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.121.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -105,6 +105,16 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
 
+### What changed in 1.121.0 (USAGE-PACE S3, ticket-2d954bda) — ticket starts are paced to the plan allowance
+
+BEHAVIOURAL, no new frame; the `ready` frame reports `contract=1.121.0`.
+- A ticket hand-out whose run would spend a meter with `canStart` false (see `usage_report`) is refused when an agent
+  started it (`ticket_move` to in_progress with a starter session, `agenthq_ticket_start`), or the daemon did
+  (`ticket_start_next`, a trigger, a queue drain): `start.ok` false, `start.reason` `start_refused`, `start.detail`
+  `usage pacing: <meter> at <pct> ..., allowance <n> (rule|override), running <n>; resets <instant>. ...`.
+- The owner's own move (no starter session) still starts, with that text in `start.detail` as a warning.
+- Unknown usage never refuses (fail open); `usage override <meter> none` lifts the limit until it lapses.
+
 ### What changed in 1.120.0 (USAGE-PACE S2, ticket-2d954bda) — manual usage, allowance override, pacing rule
 
 ADDITIVE; a 1.119.0 client keeps working. The `ready` frame reports `contract=1.120.0`.
@@ -127,7 +137,7 @@ ADDITIVE and read-only; a 1.118.0 client keeps working. The `ready` frame report
   harness id. Each `MeterUsage` carries `percent` (the highest window), `window`, `resetsAt`, `paceDelta` (points vs an
   even burn), `source` (`live` | `none`), `windows`, `reason`, `allowance` (what the rule allows; null = no limit),
   `running` (live in_progress ticket workers on the meter) and `canStart`. Unknown usage FAILS OPEN (no allowance, a
-  `warning`). The rule defaults to `<60%: 3, <80%: 2, else 1`; nothing is enforced in 1.119.0.
+  `warning`). The rule defaults to `<60%: 3, <80%: 2, else 1`; nothing is enforced in 1.119.0 (1.121.0 enforces it).
 - `agenthq usage [show]` and the MCP tool `agenthq_usage` (read-only) print the same report.
 
 ### What changed in 1.118.0 (BASICS-KILL-1) — sessions can always be ended and removed

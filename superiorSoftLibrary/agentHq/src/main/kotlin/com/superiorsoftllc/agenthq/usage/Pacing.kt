@@ -173,7 +173,7 @@ object UsageText {
             m.override?.let { o ->
                 append(" (override ").append(o.workers?.toString() ?: "no limit").append(" for ").append(until(o.until, report.observedAt)).append(")")
             }
-            append(" | ").append(if (m.canStart) "may start 1 more" else "FULL: at the allowance, start no more")
+            append(" | ").append(if (m.canStart) "may start 1 more" else "FULL: agent ticket starts refused")
             appendLine()
             if (m.windows.size > 1) m.windows.forEach { w ->
                 appendLine("    ${w.label}: ${w.percent?.let { "${fmt(it)}%" } ?: "?"}${w.resetsAt?.let { ", resets in " + until(it, report.observedAt) } ?: ""}")
@@ -299,7 +299,7 @@ class UsagePacing(
         val by = if (m.override != null) "override" else "rule"
         val resets = m.resetsAt?.let { "; resets ${java.time.Instant.ofEpochMilli(it)}" } ?: ""
         return "usage pacing: ${m.meter} at $pct$pace, allowance ${m.allowance} ($by), running ${m.running}$resets. " +
-            "Wait for a worker to finish."
+            "Wait for a worker to finish, or ask the owner for an override (agenthq usage override ${m.meter} <n|none>)."
     }
 
     private fun fmt(d: Double): String = if (d == Math.floor(d)) d.toLong().toString() else "%.1f".format(d)
