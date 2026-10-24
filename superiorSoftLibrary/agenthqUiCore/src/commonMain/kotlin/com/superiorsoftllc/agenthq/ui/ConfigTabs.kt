@@ -1,0 +1,99 @@
+package com.superiorsoftllc.agenthq.ui
+
+import com.superiorsoftllc.agenthq.ui.model.AGENT_SCOPE_APPLIES_TO
+import com.superiorsoftllc.agenthq.ui.model.CliLocationsSetting
+import com.superiorsoftllc.agenthq.ui.model.LifecycleSetting
+import com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_APPLIES_TO
+import com.superiorsoftllc.agenthq.ui.model.ThemeSettings
+import com.superiorsoftllc.agenthq.ui.model.ToolApprovalSetting
+import com.superiorsoftllc.agenthq.ui.model.UserPortrait
+
+/**
+ * CONFIG-TABS-1: the tabs of the configuration modal, in display order. Appearance comes first.
+ * A tab with no section to show (e.g. Secrets on an older daemon) is hidden by [visibleConfigTabs].
+ */
+enum class ConfigTab(val label: String) {
+    APPEARANCE("Appearance"),
+    GENERAL("General"),
+    AGENTS("Agents"),
+    NOTIFICATIONS("Notifications"),
+    SECRETS("Secrets"),
+    DEVICES("Devices"),
+    ABOUT("About"),
+}
+
+/**
+ * CONFIG-TABS-1: every section of the configuration modal, each in exactly one tab, in the order it shows there.
+ * [title] and [applies] are the copy the section shows; [keywords] are extra words a later search may match
+ * (ticket 3463d1b2: search + jump/highlight builds on this registry).
+ */
+enum class ConfigEntry(val tab: ConfigTab, val title: String, val applies: String, val keywords: List<String> = emptyList()) {
+    THEME(ConfigTab.APPEARANCE, ThemeSettings.TITLE, ThemeSettings.APPLIES_TO, listOf("color", "colour", "accent", "dark", "light")),
+    BLUR(ConfigTab.APPEARANCE, BLUR_TITLE, BLUR_APPLIES_TO, listOf("dialog", "scrim", "modal")),
+    USER_PORTRAIT(ConfigTab.APPEARANCE, UserPortrait.TITLE, UserPortrait.APPLIES_TO, listOf("avatar", "picture", "photo")),
+    AGENT_SCOPE(ConfigTab.GENERAL, AGENT_SCOPE_TITLE, AGENT_SCOPE_APPLIES_TO, listOf("project", "sidebar", "global")),
+    PROGRESS_STALE(ConfigTab.GENERAL, PROGRESS_STALE_TITLE, PROGRESS_STALE_APPLIES_TO, listOf("progress", "stale", "minutes")),
+    LIFECYCLE(ConfigTab.GENERAL, LifecycleSetting.TITLE, LifecycleSetting.APPLIES_TO, listOf("keep alive", "idle", "timeout")),
+    CLI_LOCATIONS(ConfigTab.AGENTS, CliLocationsSetting.TITLE, CliLocationsSetting.APPLIES_TO, listOf("harness", "install", "path", "cli")),
+    TOOL_APPROVAL(ConfigTab.AGENTS, ToolApprovalSetting.TITLE, ToolApprovalSetting.APPLIES_TO, listOf("permission", "approve", "tools")),
+    ROLES(ConfigTab.AGENTS, ROLES_TITLE, ROLES_APPLIES_TO, listOf("role", "provider", "model", "traits")),
+    VOICE(ConfigTab.NOTIFICATIONS, VOICE_TITLE, com.superiorsoftllc.agenthq.ui.voice.VOICE_APPLIES_TO, listOf("voice", "speech", "alert", "sound")),
+    SECRETS(ConfigTab.SECRETS, SECRETS_TITLE, SECRETS_APPLIES_TO, listOf("keystore", "token", "api key", "password")),
+    PAIR(ConfigTab.DEVICES, PairEntry.TITLE, PairEntry.APPLIES_TO, listOf("qr", "phone", "android", "connect")),
+    ABOUT(ConfigTab.ABOUT, AboutEntry.TITLE, AboutEntry.APPLIES_TO, listOf("build", "version", "commit")),
+    UPDATES(ConfigTab.ABOUT, UpdatesEntry.TITLE, UpdatesEntry.APPLIES_TO, listOf("update", "version")),
+    SERVER_UPDATE(ConfigTab.ABOUT, ServerUpdateEntry.TITLE, ServerUpdateEntry.APPLIES_TO, listOf("daemon", "server", "update")),
+    LOGS(ConfigTab.ABOUT, LogsFolder.TITLE, LogsFolder.APPLIES_TO, listOf("log", "folder", "diagnostics")),
+    ;
+
+    companion object {
+        /** The sections of [tab], in display order. */
+        fun of(tab: ConfigTab): List<ConfigEntry> = entries.filter { it.tab == tab }
+    }
+}
+
+/** The tabs that have at least one of the [present] sections, in display order. */
+fun visibleConfigTabs(present: Set<ConfigEntry>): List<ConfigTab> =
+    ConfigTab.entries.filter { tab -> present.any { it.tab == tab } }
+
+/** The tab to show: [wanted] when it has something to show, else the first visible tab (null when nothing shows). */
+fun pickConfigTab(wanted: ConfigTab?, present: Set<ConfigEntry>): ConfigTab? {
+    val visible = visibleConfigTabs(present)
+    return if (wanted != null && wanted in visible) wanted else visible.firstOrNull()
+}
+
+/**
+ * CONFIG-SEARCH-1 (ticket 3463d1b2, merged here): the [present] sections that match [query], in display order.
+ * Every word of the query must occur, case-insensitively, in the section's title, applies-to copy, keywords or
+ * tab label. A blank query matches nothing (the dialog shows its tabs instead).
+ */
+fun searchConfig(query: String, present: Set<ConfigEntry>): List<ConfigEntry> {
+    val words = query.trim().lowercase().split(' ', '\t').filter { it.isNotEmpty() }
+    if (words.isEmpty()) return emptyList()
+    return ConfigEntry.entries.filter { it in present }.filter { e ->
+        val hay = (listOf(e.title, e.applies, e.tab.label) + e.keywords).joinToString(" | ").lowercase()
+        words.all { it in hay }
+    }
+}
+
+const val AGENT_SCOPE_TITLE = "Agent scope"
+const val BLUR_TITLE = "Blur behind dialogs"
+const val PROGRESS_STALE_TITLE = "Progress bars: stale after"
+const val VOICE_TITLE = "Spoken alerts"
+const val ROLES_TITLE = "Roles"
+const val ROLES_APPLIES_TO = "Define and edit roles: notes, default provider and model, traits. Applies to new sessions."
+
+/** Test tags: a tab is CONFIG_TAB_TAG_PREFIX + [ConfigTab.name], a section CONFIG_SECTION_TAG_PREFIX + [ConfigEntry.name]. */
+const val CONFIG_TAB_TAG_PREFIX = "config-tab-"
+const val CONFIG_SECTION_TAG_PREFIX = "config-section-"
+const val CONFIG_TAB_ROW_TAG = "config-tab-row"
+const val CONFIG_TAB_BODY_TAG = "config-tab-body"
+const val CONFIG_SEARCH_TAG = "config-search"
+const val CONFIG_SEARCH_RESULTS_TAG = "config-search-results"
+const val CONFIG_SEARCH_EMPTY_TAG = "config-search-empty"
+/** A search result row is CONFIG_RESULT_TAG_PREFIX + [ConfigEntry.name]. */
+const val CONFIG_RESULT_TAG_PREFIX = "config-result-"
+
+/** CONFIG-SEARCH-1: how long a picked search result stays outlined, and the state it reports meanwhile. */
+const val CONFIG_HIGHLIGHT_MS = 1800L
+const val CONFIG_HIGHLIGHT_STATE = "highlighted"

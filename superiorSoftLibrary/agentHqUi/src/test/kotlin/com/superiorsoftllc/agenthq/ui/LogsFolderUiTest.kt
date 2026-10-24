@@ -16,6 +16,7 @@ class LogsFolderUiTest {
         var opened = 0
         runDesktopComposeUiTest(900, 900) {
             setContent { ConfigDialog(UiFlagsDefault, onFlags = {}, onDismiss = {}, logs = LogsFolder("C:/AgentHQ/logs") { opened++; false }) }
+            onNodeWithTag(CONFIG_TAB_TAG_PREFIX + ConfigTab.ABOUT.name).performClick()
             onNodeWithTag(LOGS_PATH_TAG).assertTextEquals("C:/AgentHQ/logs")
             onNodeWithTag(LOGS_OPEN_FAILED_TAG).assertDoesNotExist()
             onNodeWithTag(LOGS_OPEN_TAG).performScrollTo().performClick()

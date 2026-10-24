@@ -32,6 +32,9 @@ class ConfigModalUiTest {
 
                 // Default (BUG-M2-15): Project Scoped Agents, with its effect stated.
                 onNodeWithContentDescription("Configuration").performClick()
+                // CONFIG-TABS-1: the modal opens on Appearance; agent scope lives under General.
+                onNodeWithTag("agent-scope-field").assertDoesNotExist()
+                onNodeWithTag(CONFIG_TAB_TAG_PREFIX + ConfigTab.GENERAL.name).performClick()
                 onNodeWithTag("agent-scope-field").assertTextContains("Project Scoped Agents")
                 onNodeWithText(AgentScope.PROJECT.effect).assertExists()
                 // The modal must keep stating the flags' lifetime: it is the only thing telling the user
@@ -46,7 +49,7 @@ class ConfigModalUiTest {
                 onNodeWithText(AgentScope.GLOBAL.effect).assertExists()
                 onNodeWithText(AgentScope.PROJECT.effect).assertDoesNotExist()
 
-                // Close, reopen: the choice is still there (remembered within the window).
+                // Close, reopen: the choice is still there (remembered within the window), and so is the tab.
                 onNodeWithText("Done").performClick()
                 onNodeWithTag("agent-scope-field").assertDoesNotExist()
                 onNodeWithContentDescription("Configuration").performClick()
