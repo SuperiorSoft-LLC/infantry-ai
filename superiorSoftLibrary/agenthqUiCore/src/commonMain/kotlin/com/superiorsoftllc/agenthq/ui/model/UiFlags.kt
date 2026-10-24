@@ -35,6 +35,8 @@ data class UiFlags(
     val blurBehindDialogs: Boolean = true,
     /** Contract 1.117.0: a running progress bar turns amber with "no update for N min" after this many minutes. Persisted by the host. */
     val progressStaleMin: Int = PROGRESS_STALE_DEFAULT_MIN,
+    /** CHAT-MD-ENGINE: id of the chosen chat markdown engine (client-side, per device); unknown ids fall back to the built-in one. Persisted by the host. */
+    val chatMarkdownEngine: String = BuiltInChatMarkdownEngine.ID,
 )
 
 const val PROGRESS_STALE_APPLIES_TO = "Applies to: the progress bars agents report on their card, their session header and their ticket's board card. A running bar with no update for this long turns amber."

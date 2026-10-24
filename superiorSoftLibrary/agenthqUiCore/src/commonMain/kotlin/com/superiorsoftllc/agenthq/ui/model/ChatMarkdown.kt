@@ -37,6 +37,9 @@ sealed interface ChatBlock {
     /** A pipe table: [header] cells and [rows] of cells (each row padded/truncated to the header width). */
     data class Table(val header: List<String>, val rows: List<List<String>>) : ChatBlock
 
+    /** A block of a type the built-in parser never makes: an engine or plugin names it in [type] and a renderer registered for that name draws it; with none, [text] shows as plain text. */
+    data class Custom(val type: String, val text: String, val data: Map<String, String> = emptyMap()) : ChatBlock
+
     /** A thematic break (`---`, `***`, `___`). */
     data object Rule : ChatBlock
 }
@@ -132,8 +135,8 @@ fun parseChatInline(text: String): List<ChatSpan> {
 }
 
 /** Blocks for a transcript line: only assistant [LineKind.TEXT] is formatted; every other kind stays plain (null). */
-fun chatLineBlocks(kind: LineKind, text: String): List<ChatBlock>? =
-    if (kind == LineKind.TEXT) parseChatMarkdown(text) else null
+fun chatLineBlocks(kind: LineKind, text: String, engine: ChatMarkdownEngine = BuiltInChatMarkdownEngine, streaming: Boolean = false): List<ChatBlock>? =
+    if (kind == LineKind.TEXT) parseChatMarkdownSafely(engine, text, streaming) else null
 
 /** A leading ATX heading marker followed by a space; level clamps to 3. `#foo` (no space) is not a heading. */
 private fun parseChatHeading(line: String): Pair<Int, String>? {
@@ -161,7 +164,7 @@ private fun bulletItem(t: String): String? =
     if (t.length >= 2 && (t[0] == '-' || t[0] == '*' || t[0] == '+') && t[1] == ' ') t.substring(2).trim() else null
 
 /** Parse a reply into ordered [ChatBlock]s. Plain text becomes one paragraph per blank-line-separated run. */
-fun parseChatMarkdown(text: String): List<ChatBlock> {
+fun parseChatMarkdown(text: String, streaming: Boolean = false): List<ChatBlock> {
     val blocks = ArrayList<ChatBlock>()
     val prose = ArrayList<String>()
     val quote = ArrayList<String>()

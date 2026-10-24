@@ -124,6 +124,7 @@ fun ConfigDialog(
     val present = buildSet {
         if (theme != null && onTheme != null) add(ConfigEntry.THEME)
         add(ConfigEntry.BLUR)
+        add(ConfigEntry.MARKDOWN_ENGINE)
         if (userPortrait != null) add(ConfigEntry.USER_PORTRAIT)
         if (about != null) add(ConfigEntry.ABOUT)
         add(ConfigEntry.AGENT_SCOPE)
@@ -184,6 +185,9 @@ fun ConfigDialog(
                                     )
                                     Text(if (flags.blurBehindDialogs) "On" else "Off", fontSize = 12.sp)
                                 }
+                            }
+                            if (shows(ConfigEntry.MARKDOWN_ENGINE)) FlagSection(ConfigEntry.MARKDOWN_ENGINE, highlight) {
+                                MarkdownEngineDropdown(flags.chatMarkdownEngine) { onFlags(flags.copy(chatMarkdownEngine = it)) }
                             }
                             if (shows(ConfigEntry.USER_PORTRAIT) && userPortrait != null) {
                                 FlagSection(ConfigEntry.USER_PORTRAIT, highlight) { UserPortraitSection(userPortrait.first, userPortrait.second) }
@@ -793,4 +797,31 @@ private fun AccentSwatch(accent: ThemeAccent, selected: Boolean, onClick: () -> 
             .clip(CircleShape)
             .background(androidx.compose.ui.graphics.Color(accent.argb)),
     )
+}
+
+/** CHAT-MD-ENGINE: pick the chat markdown engine among the registered ones; an unknown stored id shows as the built-in fallback. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MarkdownEngineDropdown(value: String, onPick: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val engines = com.superiorsoftllc.agenthq.ui.model.ChatMarkdown.engines
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = engines.resolve(value).label,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).handCursor(overrideDescendants = true).fillMaxWidth().testTag("markdown-engine-field"),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            engines.available().forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.label) },
+                    onClick = { onPick(option.id); expanded = false },
+                    modifier = Modifier.testTag("markdown-engine-option-${option.id}"),
+                )
+            }
+        }
+    }
 }
