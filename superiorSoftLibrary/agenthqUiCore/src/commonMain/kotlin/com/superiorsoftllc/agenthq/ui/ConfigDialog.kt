@@ -111,112 +111,137 @@ fun ConfigDialog(
     onTheme: ((ThemeSettings) -> Unit)? = null,
     /** BUILD-STAMP-1: this app's and the daemon's build strings; null hides the About section. */
     about: AboutEntry? = null,
+    /** CONFIG-TABS-1: the tab to open on (the host remembers the last one); falls back to the first tab with something to show. */
+    initialTab: ConfigTab? = null,
+    /** CONFIG-TABS-1: told when the user picks another tab, so the host can reopen there. */
+    onTab: ((ConfigTab) -> Unit)? = null,
 ) {
+    // CONFIG-TABS-1: which sections this host has; a tab with none of them is not offered.
+    val present = buildSet {
+        if (theme != null && onTheme != null) add(ConfigEntry.THEME)
+        add(ConfigEntry.BLUR)
+        if (userPortrait != null) add(ConfigEntry.USER_PORTRAIT)
+        if (about != null) add(ConfigEntry.ABOUT)
+        add(ConfigEntry.AGENT_SCOPE)
+        add(ConfigEntry.PROGRESS_STALE)
+        if (onKeepAliveMinutes != null) add(ConfigEntry.LIFECYCLE)
+        if (onCliLocation != null) add(ConfigEntry.CLI_LOCATIONS)
+        if (onToolApproval != null) add(ConfigEntry.TOOL_APPROVAL)
+        if (onOpenRoles != null) add(ConfigEntry.ROLES)
+        add(ConfigEntry.VOICE)
+        if (secretActions != null && secrets != null) add(ConfigEntry.SECRETS)
+        if (pair != null) add(ConfigEntry.PAIR)
+        if (updates != null) add(ConfigEntry.UPDATES)
+        if (serverUpdate != null) add(ConfigEntry.SERVER_UPDATE)
+        if (logs != null) add(ConfigEntry.LOGS)
+    }
+    val tabs = visibleConfigTabs(present)
+    var wanted by remember { mutableStateOf(initialTab) }
+    val tab = pickConfigTab(wanted, present)
+    // A section shows when its tab is the selected one and this host has it.
+    val shows: (ConfigEntry) -> Boolean = { it.tab == tab && it in present }
     AhqAlertDialog(
         onDismissRequest = onDismiss,
+        // CONFIG-TABS-1: one width whatever the tab, so switching tabs does not resize the dialog.
+        modifier = Modifier.fillMaxWidth(),
         title = { Text("Configuration", fontWeight = FontWeight.Bold) },
         text = {
-            Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(FLAGS_LIFETIME_NOTE, color = Palette.Muted, fontSize = 11.sp)
-                // BUILD-STAMP-1: first, so "which build am I running?" is answered without scrolling.
-                if (about != null) {
-                    FlagSection(title = AboutEntry.TITLE, applies = AboutEntry.APPLIES_TO) { AboutSection(about) }
-                }
-                FlagSection(title = "Agent scope", applies = AGENT_SCOPE_APPLIES_TO) {
-                    AgentScopeDropdown(flags.agentScope) { onFlags(flags.copy(agentScope = it)) }
-                }
-                if (theme != null && onTheme != null) {
-                    FlagSection(title = ThemeSettings.TITLE, applies = ThemeSettings.APPLIES_TO) {
-                        ThemeSection(theme, onTheme)
-                    }
-                }
-                FlagSection(title = "Blur behind dialogs", applies = BLUR_APPLIES_TO) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        androidx.compose.material3.Switch(
-                            checked = flags.blurBehindDialogs,
-                            onCheckedChange = { onFlags(flags.copy(blurBehindDialogs = it)) },
-                            modifier = Modifier.testTag(BLUR_SWITCH_TAG),
-                        )
-                        Text(if (flags.blurBehindDialogs) "On" else "Off", fontSize = 12.sp)
-                    }
-                }
-                FlagSection(title = "Progress bars: stale after", applies = com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_APPLIES_TO) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_CHOICES.forEach { min ->
-                            val picked = flags.progressStaleMin == min
-                            OutlinedButton(
-                                onClick = { onFlags(flags.copy(progressStaleMin = min)) },
-                                modifier = Modifier.testTag(PROGRESS_STALE_CHOICE_TAG_PREFIX + min),
-                            ) { Text("$min min", fontSize = 11.sp, color = if (picked) Palette.Accent else Palette.Text, fontWeight = if (picked) FontWeight.Bold else FontWeight.Normal) }
-                        }
-                    }
-                }
-                FlagSection(title = "Spoken alerts", applies = com.superiorsoftllc.agenthq.ui.voice.VOICE_APPLIES_TO) {
-                    com.superiorsoftllc.agenthq.ui.voice.VoiceSettingsSection(flags.voice) { onFlags(flags.copy(voice = it)) }
-                }
-                if (userPortrait != null) {
-                    FlagSection(title = UserPortrait.TITLE, applies = UserPortrait.APPLIES_TO) {
-                        UserPortraitSection(userPortrait.first, userPortrait.second)
-                    }
-                }
-                // BUG-M2-11e: daemon state, not a window flag: it is stored by the daemon and survives a restart.
-                if (onKeepAliveMinutes != null) {
-                    FlagSection(title = LifecycleSetting.TITLE, applies = LifecycleSetting.APPLIES_TO) {
-                        KeepAliveDropdown(keepAliveMinutes, onKeepAliveMinutes)
-                    }
-                }
-                // CLIPATH-1: daemon state too: the daemon validates and stores each path, and says where each CLI resolved.
-                if (onCliLocation != null) {
-                    FlagSection(title = CliLocationsSetting.TITLE, applies = CliLocationsSetting.APPLIES_TO) {
-                        CliLocationsSection(cliLocations, onCliLocation, onBrowse, harnessInstall, harnessInstallBusy, onHarnessInstall)
-                        if (harnessInstall != null && onHarnessCheck != null && onHarnessInstall != null) {
-                            HarnessInstallControls(harnessInstall, harnessInstallBusy, harnessInstallLog, onHarnessCheck, onHarnessInstall)
-                        }
-                    }
-                }
-                // BUG-PERM-1: daemon state: no harness can relay an approval prompt yet, so this decides what tools may run.
-                if (onToolApproval != null) {
-                    FlagSection(title = ToolApprovalSetting.TITLE, applies = ToolApprovalSetting.APPLIES_TO) {
-                        ToolApprovalDropdown(toolApproval, onToolApproval)
-                    }
-                }
-                // PKG-3: where the installed app writes its log, so a Start-menu launch (no console) can still report a problem.
-                if (logs != null) {
-                    FlagSection(title = LogsFolder.TITLE, applies = LogsFolder.APPLIES_TO) {
-                        LogsSection(logs)
-                    }
-                }
-                // SECRETS-1: the daemon owns the secrets; this only sends "set / clear / import" and shows set / not set.
-                if (secretActions != null && secrets != null) {
-                    FlagSection(title = SECRETS_TITLE, applies = SECRETS_APPLIES_TO) {
-                        SecretsSection(secrets, secretActions)
-                    }
-                }
-                // ROLE-EDIT-1: the role manager is its own dialog (shared modal), so it can move into a tab later.
-                if (onOpenRoles != null) {
-                    FlagSection(title = "Roles", applies = "Define and edit roles: notes, default provider and model, traits. Applies to new sessions.") {
-                        OutlinedButton(onClick = onOpenRoles, modifier = Modifier.testTag(ROLE_MANAGER_OPEN_TAG)) { Text("Manage roles") }
-                    }
-                }
-                // PAIR-1: show this connection as a QR / link, or connect to another server from one.
-                if (pair != null) {
-                    FlagSection(title = PairEntry.TITLE, applies = PairEntry.APPLIES_TO) {
-                        com.superiorsoftllc.agenthq.ui.pair.PairDeviceSection(pair.url, pair.token, pair.name, pair.onLink)
-                    }
-                }
-                // SERVER-UPDATE-4: the daemon's own version and updater, over the existing connection.
-                if (serverUpdate != null) {
-                    FlagSection(title = ServerUpdateEntry.TITLE, applies = ServerUpdateEntry.APPLIES_TO) {
-                        ServerUpdateSection(serverUpdate, serverMismatch)
-                    }
-                }
-                // UPDATE-1: the check itself runs in the daemon side's updater; this only asks for it.
-                if (updates != null) {
-                    FlagSection(title = UpdatesEntry.TITLE, applies = UpdatesEntry.APPLIES_TO) {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("Running ${updates.version}", fontSize = 12.sp, modifier = Modifier.testTag(UPDATES_VERSION_TAG))
-                            OutlinedButton(onClick = updates.check, modifier = Modifier.testTag(UPDATES_CHECK_TAG)) { Text("Check for updates") }
-                        }
+                ConfigTabRow(tabs, tab) { picked -> wanted = picked; onTab?.invoke(picked) }
+                // Each tab scrolls on its own, from the top: the key gives each tab a fresh scroll state.
+                androidx.compose.runtime.key(tab) {
+                    Column(
+                        Modifier.fillMaxWidth().heightIn(min = 360.dp, max = 480.dp).verticalScroll(rememberScrollState()).testTag(CONFIG_TAB_BODY_TAG),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                            if (shows(ConfigEntry.THEME) && theme != null && onTheme != null) {
+                                FlagSection(ConfigEntry.THEME) { ThemeSection(theme, onTheme) }
+                            }
+                            if (shows(ConfigEntry.BLUR)) FlagSection(ConfigEntry.BLUR) {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    androidx.compose.material3.Switch(
+                                        checked = flags.blurBehindDialogs,
+                                        onCheckedChange = { onFlags(flags.copy(blurBehindDialogs = it)) },
+                                        modifier = Modifier.testTag(BLUR_SWITCH_TAG),
+                                    )
+                                    Text(if (flags.blurBehindDialogs) "On" else "Off", fontSize = 12.sp)
+                                }
+                            }
+                            if (shows(ConfigEntry.USER_PORTRAIT) && userPortrait != null) {
+                                FlagSection(ConfigEntry.USER_PORTRAIT) { UserPortraitSection(userPortrait.first, userPortrait.second) }
+                            }
+                            if (shows(ConfigEntry.AGENT_SCOPE)) FlagSection(ConfigEntry.AGENT_SCOPE) {
+                                AgentScopeDropdown(flags.agentScope) { onFlags(flags.copy(agentScope = it)) }
+                            }
+                            if (shows(ConfigEntry.PROGRESS_STALE)) FlagSection(ConfigEntry.PROGRESS_STALE) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_CHOICES.forEach { min ->
+                                        val picked = flags.progressStaleMin == min
+                                        OutlinedButton(
+                                            onClick = { onFlags(flags.copy(progressStaleMin = min)) },
+                                            modifier = Modifier.testTag(PROGRESS_STALE_CHOICE_TAG_PREFIX + min),
+                                        ) { Text("$min min", fontSize = 11.sp, color = if (picked) Palette.Accent else Palette.Text, fontWeight = if (picked) FontWeight.Bold else FontWeight.Normal) }
+                                    }
+                                }
+                            }
+                            // BUG-M2-11e: daemon state, not a window flag: it is stored by the daemon and survives a restart.
+                            if (shows(ConfigEntry.LIFECYCLE) && onKeepAliveMinutes != null) {
+                                FlagSection(ConfigEntry.LIFECYCLE) { KeepAliveDropdown(keepAliveMinutes, onKeepAliveMinutes) }
+                            }
+                            // CLIPATH-1: daemon state too: the daemon validates and stores each path, and says where each CLI resolved.
+                            if (shows(ConfigEntry.CLI_LOCATIONS) && onCliLocation != null) {
+                                FlagSection(ConfigEntry.CLI_LOCATIONS) {
+                                    CliLocationsSection(cliLocations, onCliLocation, onBrowse, harnessInstall, harnessInstallBusy, onHarnessInstall)
+                                    if (harnessInstall != null && onHarnessCheck != null && onHarnessInstall != null) {
+                                        HarnessInstallControls(harnessInstall, harnessInstallBusy, harnessInstallLog, onHarnessCheck, onHarnessInstall)
+                                    }
+                                }
+                            }
+                            // BUG-PERM-1: daemon state: no harness can relay an approval prompt yet, so this decides what tools may run.
+                            if (shows(ConfigEntry.TOOL_APPROVAL) && onToolApproval != null) {
+                                FlagSection(ConfigEntry.TOOL_APPROVAL) { ToolApprovalDropdown(toolApproval, onToolApproval) }
+                            }
+                            // ROLE-EDIT-1: the role manager is its own dialog (shared modal).
+                            if (shows(ConfigEntry.ROLES) && onOpenRoles != null) {
+                                FlagSection(ConfigEntry.ROLES) {
+                                    OutlinedButton(onClick = onOpenRoles, modifier = Modifier.testTag(ROLE_MANAGER_OPEN_TAG)) { Text("Manage roles") }
+                                }
+                            }
+                            if (shows(ConfigEntry.VOICE)) FlagSection(ConfigEntry.VOICE) {
+                                com.superiorsoftllc.agenthq.ui.voice.VoiceSettingsSection(flags.voice) { onFlags(flags.copy(voice = it)) }
+                            }
+                            // SECRETS-1: the daemon owns the secrets; this only sends "set / clear / import" and shows set / not set.
+                            if (shows(ConfigEntry.SECRETS) && secretActions != null && secrets != null) {
+                                FlagSection(ConfigEntry.SECRETS) { SecretsSection(secrets, secretActions) }
+                            }
+                            // PAIR-1: show this connection as a QR / link, or connect to another server from one.
+                            if (shows(ConfigEntry.PAIR) && pair != null) {
+                                FlagSection(ConfigEntry.PAIR) {
+                                    com.superiorsoftllc.agenthq.ui.pair.PairDeviceSection(pair.url, pair.token, pair.name, pair.onLink)
+                                }
+                            }
+                            // BUILD-STAMP-1: first in About, it answers "which build am I running?".
+                            if (shows(ConfigEntry.ABOUT) && about != null) {
+                                FlagSection(ConfigEntry.ABOUT) { AboutSection(about) }
+                            }
+                            // UPDATE-1: the check itself runs in the daemon side's updater; this only asks for it.
+                            if (shows(ConfigEntry.UPDATES) && updates != null) {
+                                FlagSection(ConfigEntry.UPDATES) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Text("Running ${updates.version}", fontSize = 12.sp, modifier = Modifier.testTag(UPDATES_VERSION_TAG))
+                                        OutlinedButton(onClick = updates.check, modifier = Modifier.testTag(UPDATES_CHECK_TAG)) { Text("Check for updates") }
+                                    }
+                                }
+                            }
+                            // SERVER-UPDATE-4: the daemon's own version and updater, over the existing connection.
+                            if (shows(ConfigEntry.SERVER_UPDATE) && serverUpdate != null) {
+                                FlagSection(ConfigEntry.SERVER_UPDATE) { ServerUpdateSection(serverUpdate, serverMismatch) }
+                            }
+                            // PKG-3: where the installed app writes its log, so a Start-menu launch (no console) can still report a problem.
+                            if (shows(ConfigEntry.LOGS) && logs != null) {
+                                FlagSection(ConfigEntry.LOGS) { LogsSection(logs) }
+                            }
                     }
                 }
             }
@@ -225,9 +250,47 @@ fun ConfigDialog(
     )
 }
 
+/**
+ * CONFIG-TABS-1: the tab strip. Scrollable, so a phone can swipe through tabs that do not fit;
+ * each tab carries CONFIG_TAB_TAG_PREFIX + its name.
+ */
 @Composable
-private fun FlagSection(title: String, applies: String, control: @Composable () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+private fun ConfigTabRow(tabs: List<ConfigTab>, selected: ConfigTab?, onPick: (ConfigTab) -> Unit) {
+    if (tabs.isEmpty()) return
+    val index = tabs.indexOf(selected).coerceAtLeast(0)
+    androidx.compose.material3.ScrollableTabRow(
+        selectedTabIndex = index,
+        edgePadding = 0.dp,
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        contentColor = Palette.Accent,
+        modifier = Modifier.fillMaxWidth().testTag(CONFIG_TAB_ROW_TAG),
+    ) {
+        tabs.forEach { t ->
+            val on = t == selected
+            androidx.compose.material3.Tab(
+                selected = on,
+                onClick = { onPick(t) },
+                modifier = Modifier.testTag(CONFIG_TAB_TAG_PREFIX + t.name),
+                text = {
+                    Text(
+                        t.label, fontSize = 12.sp,
+                        fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (on) Palette.Accent else Palette.Muted,
+                    )
+                },
+            )
+        }
+    }
+}
+
+/** CONFIG-TABS-1: a registered section: its title and applies-to copy come from [entry], and it carries a test tag. */
+@Composable
+private fun FlagSection(entry: ConfigEntry, control: @Composable () -> Unit) =
+    FlagSection(entry.title, entry.applies, Modifier.testTag(CONFIG_SECTION_TAG_PREFIX + entry.name), control)
+
+@Composable
+private fun FlagSection(title: String, applies: String, modifier: Modifier = Modifier, control: @Composable () -> Unit) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp)
         Text(applies, color = Palette.Muted, fontSize = 11.sp)
         control()

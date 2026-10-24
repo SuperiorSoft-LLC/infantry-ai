@@ -42,6 +42,7 @@ class BuildStampUiTest {
         setContent {
             ConfigDialog(UiFlags(), onFlags = {}, onDismiss = {}, about = AboutEntry(appBuild, "1.0.1+20261023.1500.e85b223", daemonConnected = true))
         }
+        onNodeWithTag(CONFIG_TAB_TAG_PREFIX + ConfigTab.ABOUT.name).performClick()
         onNodeWithTag(ABOUT_APP_BUILD_TAG).assertTextEquals("App: $appBuild")
         onNodeWithTag(ABOUT_DAEMON_BUILD_TAG).assertTextEquals("Daemon: 1.0.1+20261023.1500.e85b223")
         onNodeWithTag(ABOUT_BUILD_MISMATCH_TAG).assertDoesNotExist()
@@ -51,12 +52,14 @@ class BuildStampUiTest {
         setContent {
             ConfigDialog(UiFlags(), onFlags = {}, onDismiss = {}, about = AboutEntry(appBuild, "1.0.0+20261001.0800.0123abc.dirty", daemonConnected = true))
         }
+        onNodeWithTag(CONFIG_TAB_TAG_PREFIX + ConfigTab.ABOUT.name).performClick()
         onNodeWithTag(ABOUT_BUILD_MISMATCH_TAG).assertTextContains("Different builds", substring = true)
         onNodeWithTag(ABOUT_BUILD_MISMATCH_TAG).assertTextContains("1.0.0+20261001.0800.0123abc.dirty", substring = true)
     }
 
     @Test fun `About with an unstamped app and no daemon says so`() = runDesktopComposeUiTest(900, 900) {
         setContent { ConfigDialog(UiFlags(), onFlags = {}, onDismiss = {}, about = AboutEntry(null, null, daemonConnected = false)) }
+        onNodeWithTag(CONFIG_TAB_TAG_PREFIX + ConfigTab.ABOUT.name).performClick()
         onNodeWithTag(ABOUT_APP_BUILD_TAG).assertTextEquals("App: not stamped (a development run)")
         onNodeWithTag(ABOUT_DAEMON_BUILD_TAG).assertTextEquals("Daemon: not connected")
     }
