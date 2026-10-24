@@ -169,6 +169,9 @@ import com.superiorsoftllc.agenthq.usage.RunUsage
 import com.superiorsoftllc.agenthq.usage.UsageRecorder
 import com.superiorsoftllc.agenthq.usage.LimitService
 import com.superiorsoftllc.agenthq.usage.ProviderLimits
+import com.superiorsoftllc.agenthq.usage.UsageMeters
+import com.superiorsoftllc.agenthq.usage.UsagePacing
+import com.superiorsoftllc.agenthq.usage.UsageReport
 import com.superiorsoftllc.agenthq.role.Role
 import com.superiorsoftllc.agenthq.role.RoleIds
 import com.superiorsoftllc.agenthq.role.RoleService
@@ -192,6 +195,9 @@ import kotlin.system.exitProcess
 
 private const val DEFAULT_PORT = DaemonPort.DEFAULT
 private const val DEFAULT_DB_NAME = "agenthq.db"
+
+/** ROGUE-1: how often the process ledger walks the session trees (a ProcessHandle walk; no subprocess unless under pressure). */
+private const val PROCESS_WATCH_POLL_MS = 10_000L
 private const val SESSION_REPLAY_REQUEST_TYPE = "replay_request"
 private const val SESSION_REPLAY_GAP_TYPE = "replay_gap"
 private const val SESSION_REPLAY_BUFFER_CAPACITY = 256
@@ -647,6 +653,8 @@ class AgentHqDaemon(
             // BUG-PERM-1: every run resolves its Tool approval through this store-backed global value.
             val toolApproval = com.superiorsoftllc.agenthq.session.ToolApprovalService(store)
             val restoreToolApproval = com.superiorsoftllc.agenthq.session.ToolApprovals.install(toolApproval::stored)
+            // BUG-REAP-OWNER: no id (unwritable dir) => nothing is ever reaped, which is the safe side.
+            val instanceId = runCatching { InstanceId.loadOrCreate(com.superiorsoftllc.agenthq.session.stateDir()) }.getOrNull()
             val manager = SessionManager(
                 provider,
                 runner,
@@ -659,11 +667,7 @@ class AgentHqDaemon(
                 instances = store.sessionInstances,
                 lifecyclePolicy = { com.superiorsoftllc.agenthq.session.host.LifecyclePolicy(settings.keepAliveMinutes()) },
                 defaultWorkingDir = workingDir,
-                // BUG-REAP-OWNER: no id (unwritable dir) => nothing is ever reaped, which is the safe side.
-                instanceId = runCatching { InstanceId.loadOrCreate(com.superiorsoftllc.agenthq.session.stateDir()) }.getOrNull(),
-                progressEstimates = com.superiorsoftllc.agenthq.session.ProgressEstimates(
-                    runCatching { java.io.File(com.superiorsoftllc.agenthq.session.stateDir(), "progress-estimates.json") }.getOrNull(),
-                ),
+                instanceId = instanceId,
             )
             // BUG-M2-11f: a new keep-alive value applies to the processes already kept, not only to the next launch.
             settings.onKeepAliveChanged = manager::lifecyclePolicyChanged
@@ -678,7 +682,40 @@ class AgentHqDaemon(
             // TRAITS-T4: the chokepoint's fallback, so a spawn path that resolves no instance itself still freezes one.
             manager.instanceFor = agents::instanceFor
             manager.assistantDir = assistantDir
+            // PROGRESS-S5: the opt-in estimated mode's per-project label durations outlive a restart.
+            manager.progressEstimates = com.superiorsoftllc.agenthq.session.FileProgressEstimates(
+                File(com.superiorsoftllc.agenthq.session.stateDir(), com.superiorsoftllc.agenthq.session.FileProgressEstimates.FILE_NAME),
+            )
             val clients = CopyOnWriteArrayList<Channel<Envelope>>()
+            // ROGUE-1 (contract 1.120.0): the rogue process detector. The ledger records only what a session tree started
+            // (pid + start instant, owned by this state dir); a slow timer feeds it and warns under memory pressure.
+            val processWatch = com.superiorsoftllc.agenthq.session.ProcessWatch(
+                com.superiorsoftllc.agenthq.session.ProcessLedger(
+                    com.superiorsoftllc.agenthq.session.OsProcessSource,
+                    com.superiorsoftllc.agenthq.session.host.OsProcessTable,
+                    File(com.superiorsoftllc.agenthq.session.stateDir(), com.superiorsoftllc.agenthq.session.ProcessLedger.FILE_NAME),
+                    instanceId,
+                    isProtected = com.superiorsoftllc.agenthq.session.ProcessWatch::isProtected,
+                ),
+                manager::list,
+                com.superiorsoftllc.agenthq.session.OsMemorySource,
+                com.superiorsoftllc.agenthq.session.host.OsProcessTable,
+                config = settings::processWatchConfig,
+                onPressure = { report ->
+                    val envelope = Envelope(
+                        Envelope.PROCESS_PRESSURE,
+                        json.encodeToString(com.superiorsoftllc.agenthq.session.ProcessReport.serializer(), report),
+                    )
+                    println("[agentHq] memory pressure: ${report.freeMb} MB free (floor ${report.floorMb}), ${report.rogue.size} rogue process(es)")
+                    for (c in clients.toList()) c.trySend(envelope)
+                },
+            )
+            java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+                Thread(r, "agenthq-process-watch").also { it.isDaemon = true }
+            }.scheduleWithFixedDelay(
+                { runCatching { processWatch.tick() }.onFailure { System.err.println("[agentHq] process watch failed: ${it.message}") } },
+                PROCESS_WATCH_POLL_MS, PROCESS_WATCH_POLL_MS, java.util.concurrent.TimeUnit.MILLISECONDS,
+            )
             // PROMPT-1: `prompts.timeoutSec` is read at every open; every request / resolution goes to every client.
             val pendingPrompts = com.superiorsoftllc.agenthq.prompts.PendingPrompts(
                 timeoutMillis = { settings.promptTimeoutSec() * 1000L },
@@ -872,6 +909,20 @@ class AgentHqDaemon(
                     ticket = ticketId?.let(store.tickets::get),
                 )
             }
+            // USAGE-PACE (1.119.0 read, 1.121.0 manual / override / rule): plan meters -> allowance of ticket workers.
+            val usagePacing = UsagePacing(
+                limits = limits::cachedOrRefresh,
+                rule = settings::usagePacing,
+                manual = settings::usageManual,
+                overrides = settings::usageOverrides,
+                workerMeters = {
+                    store.tickets.all()
+                        .filter { it.status == com.superiorsoftllc.agenthq.protocol.TicketStatus.IN_PROGRESS }
+                        .mapNotNull { row -> row.sessionId?.takeIf { it.isNotBlank() }?.let(manager::get) }
+                        .filter { it.state !in DEAD_SESSION_STATES }
+                        .map { r -> UsageMeters.meterFor(r.provider, r.model ?: manager.providerFor(r.provider)?.defaultModel()) }
+                },
+            )
             val board = TicketBoard(
                 store, context = ticketContext, agents = agents, sessions = manager, repo = repo,
                 // BASE-1c: the ticket's epic's base branch, then its project's (BASE-1a), then the daemon's
@@ -880,6 +931,11 @@ class AgentHqDaemon(
                 knowledge = knowledge, skills = skillsSource,
                 exitBehavior = settings::ticketExitBehavior,
                 weightExecutors = settings::weightExecutors,
+                // USAGE-PACE (1.121.0): an agent's / the daemon's ticket start beyond the plan allowance is refused.
+                pacing = { providerId, model ->
+                    val pid = providerId ?: manager.providers.firstOrNull()?.id ?: UsageMeters.CLAUDE
+                    usagePacing.check(UsageMeters.meterFor(pid, model ?: manager.providerFor(pid)?.defaultModel()))
+                },
                 laneCap = projectStore::laneCapOf,
                 // BUG-ASSIGN-1: a refused role lists the catalog's ids (custom roles included; the fallback persona not).
                 roleIds = { roles.all().map { it.id }.filter { it != RoleIds.CUSTOM } },
@@ -1204,6 +1260,7 @@ class AgentHqDaemon(
                             skillsSource,
                             spawnGuard,
                             limits = limits,
+                            usagePacing = usagePacing,
                             cliLocations = cliLocations,
                             harnessInstaller = harnessInstaller,
                             toolApproval = toolApproval,
@@ -1212,6 +1269,7 @@ class AgentHqDaemon(
                             imageUploads = com.superiorsoftllc.agenthq.images.ImageUploadHandler(projectStore, clock = clock),
                             ownerQuestions = ownerQuestions,
                             handover = handover,
+                            processWatch = processWatch,
                         )
                     }
                 }
@@ -1601,7 +1659,15 @@ private inline fun triggerRequest(type: String, block: () -> Envelope?): Envelop
     Envelope(Envelope.ERROR, "$type failed: ${e.message ?: e::class.simpleName}")
 }
 
+/** USAGE-PACE: a ticket worker in one of these states no longer spends its meter. */
+private val DEAD_SESSION_STATES = setOf(
+    com.superiorsoftllc.agenthq.session.SessionState.EXITED,
+    com.superiorsoftllc.agenthq.session.SessionState.FAILED,
+    com.superiorsoftllc.agenthq.session.SessionState.ORPHANED,
+)
+
 /** Contract 1.13.0: push a provider's new observed limit state to every connected client. */
+
 /** U1: the `limits` frame; [ProviderLimits] holds no credential by construction. */
 private fun limitsEnvelope(snapshot: List<ProviderLimits>): Envelope =
     Envelope(Envelope.LIMITS, json.encodeToString(ListSerializer(ProviderLimits.serializer()), snapshot))
@@ -1726,6 +1792,8 @@ private suspend fun handleConnection(
     spawnGuard: SpawnGuard = SpawnGuard(manager::get),
     /** U1: the plan-limit meters a `limits` request reads. */
     limits: LimitService = LimitService.NONE,
+    /** USAGE-PACE (1.119.0): the meters and allowances a `usage_get` request reads. */
+    usagePacing: UsagePacing = UsagePacing({ emptyList() }, { com.superiorsoftllc.agenthq.usage.PacingRule.DEFAULT }, { emptyMap() }, { emptyMap() }, { emptyList() }),
     /** CLIPATH-1 (contract 1.73.0): `cli_locations` / `cli_location_set`; null = this daemon serves neither. */
     cliLocations: com.superiorsoftllc.agenthq.executables.CliLocationService? = null,
     /** HARNESS-INSTALL-1 (contract 1.100.0): `harness_install_status` / `harness_install`; null = this daemon serves neither. */
@@ -1740,6 +1808,8 @@ private suspend fun handleConnection(
     ownerQuestions: com.superiorsoftllc.agenthq.questions.OwnerQuestions? = null,
     /** TICKET-HANDOVER: a ticket worker's harness switch goes through a handoff turn; null = switched at once. */
     handover: SessionHandover? = null,
+    /** ROGUE-1 (contract 1.120.0): `processes`; null = this daemon serves none. */
+    processWatch: com.superiorsoftllc.agenthq.session.ProcessWatch? = null,
 ) {
     println("[agentHq] ws connected (provider=${manager.providerId})")
     val outgoing = Channel<Envelope>(Channel.UNLIMITED)
@@ -2276,6 +2346,32 @@ private suspend fun handleConnection(
                     null
                 }
 
+                // USAGE-PACE (1.119.0): a fresh live read (at most once per 5 min), then the meters, off the request loop.
+                Envelope.USAGE_GET -> {
+                    session.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        val answer = try {
+                            limits.snapshot()
+                            Envelope(Envelope.USAGE_REPORT, json.encodeToString(UsageReport.serializer(), usagePacing.report()))
+                        } catch (e: Exception) {
+                            Envelope(Envelope.ERROR, "usage_get failed: ${e.message ?: e::class.simpleName}")
+                        }
+                        outgoing.trySend(answer)
+                    }
+                    null
+                }
+
+                // USAGE-PACE (1.121.0): the owner's manual percent / override / rule; answered by the fresh report.
+                Envelope.USAGE_SET -> try {
+                    val service = settings as? com.superiorsoftllc.agenthq.settings.SettingsService
+                        ?: throw IllegalArgumentException("this daemon has no usage settings")
+                    service.applyUsage(com.superiorsoftllc.agenthq.usage.UsageSet.decode(envelope.data))
+                    Envelope(Envelope.USAGE_REPORT, json.encodeToString(UsageReport.serializer(), usagePacing.report()))
+                } catch (e: IllegalArgumentException) {
+                    Envelope(Envelope.ERROR, "usage_set refused: ${e.message ?: "invalid request"}")
+                } catch (e: Exception) {
+                    Envelope(Envelope.ERROR, "usage_set failed: ${e.message ?: e::class.simpleName}")
+                }
+
                 // Contract 1.4.0 -- agent profiles. Answers go to the requesting client only; a refusal
                 // is an `error` frame naming the problem, and nothing is stored.
                 Envelope.AGENT_SAVE -> try {
@@ -2690,6 +2786,19 @@ private suspend fun handleConnection(
                     Envelope(Envelope.ERROR, "session_project refused: ${e.message ?: "invalid request"}")
                 } catch (e: Exception) {
                     Envelope(Envelope.ERROR, "session_project refused: ${e.message ?: e::class.simpleName}")
+                }
+
+                // ROGUE-1 (contract 1.120.0): list / reap the processes this daemon's sessions started.
+                Envelope.PROCESSES -> try {
+                    val watch = processWatch ?: throw IllegalArgumentException("this daemon has no process watch")
+                    val req = if (envelope.data.isBlank()) com.superiorsoftllc.agenthq.session.ProcessesRequest()
+                    else json.decodeFromString(com.superiorsoftllc.agenthq.session.ProcessesRequest.serializer(), envelope.data)
+                    val answer = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        com.superiorsoftllc.agenthq.session.ProcessFrames.answer(watch, req)
+                    }
+                    Envelope(Envelope.PROCESSES, json.encodeToString(com.superiorsoftllc.agenthq.session.ProcessesAnswer.serializer(), answer))
+                } catch (e: Exception) {
+                    Envelope(Envelope.ERROR, "processes refused: ${e.message ?: e::class.simpleName}")
                 }
 
                 // `agenthq bg run`: beat (register/heartbeat), done, list. The answer is always the session's job list

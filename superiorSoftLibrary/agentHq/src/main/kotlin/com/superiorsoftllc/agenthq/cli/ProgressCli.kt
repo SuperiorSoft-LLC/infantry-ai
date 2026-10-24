@@ -24,6 +24,12 @@ internal object ProgressCli {
 
     const val DEBUG_ENV = "AGENTHQ_PROGRESS_DEBUG"
 
+    /**
+     * Set to `1` on the command `agenthq run` wraps: its `##infantry` lines are already read, so a script that can also
+     * call `agenthq progress` itself (scripts/agenthq-gate.sh) prints markers only and does not report twice.
+     */
+    const val PIPE_ENV = "AGENTHQ_PROGRESS_PIPE"
+
     /** How long a command waits, at the end, for its last reports to reach the daemon. */
     const val FLUSH_MS = 3_000L
 
@@ -38,12 +44,13 @@ internal object ProgressCli {
         |agenthq progress bytes <done> <total|?> ["label"]   a transfer (speed is derived)
         |agenthq progress count <done> <total|?> ["label"]   items done of a total
         |agenthq progress status "label"                indeterminate: a label and an elapsed timer, no number
+        |agenthq progress estimate "label" (= status "label" --estimate)  indeterminate + "~N min left (estimated)" from this label's past runs (opt-in; prefer a measurement)
         |agenthq progress done ["label"] | fail ["reason"] | clear | show
-        |agenthq progress --watch [--reader gradle|junit|gate]...   stdin -> stdout unchanged, reading ##infantry markers
-        |agenthq run [--label x] [--reader r]... -- <command...>    run it, output and exit code unchanged; done on 0, failed otherwise
+        |agenthq progress --watch [--label x [--estimate]] [--reader gradle|junit|gate]...   stdin -> stdout unchanged, reading ##infantry markers
+        |agenthq run [--label x] [--estimate] [--reader r]... -- <command...>    run it, output and exit code unchanged; done on 0, failed otherwise
         |Markers (any language, one line): ##infantry progress 40 compile | ##infantry plan a|b|c | ##infantry plan 4
         |  ##infantry step [name] | ##infantry bytes <done> <total> [label] | ##infantry count <done> <total> [label]
-        |  ##infantry status <label> | ##infantry done [label] | ##infantry fail [reason] | ##infantry clear
+        |  ##infantry status [--estimate] <label> | ##infantry estimate <label> | ##infantry done [label] | ##infantry fail [reason] | ##infantry clear
         |Outside Infantry AI (no AGENTHQ_SESSION_ID, no daemon) every progress command does nothing and exits 0.
     """.trimMargin()
 
@@ -68,7 +75,7 @@ internal object ProgressCli {
                 err.appendLine("error: progress --watch: ${opts.bad}")
                 return 0.also { pump(stdin, stdout, null, reporter, emptyList()) }
             }
-            opts.label?.let { reporter.submit(ProgressReport("status", label = it)) }
+            opts.label?.let { reporter.submit(ProgressReport("status", label = it, estimate = if (opts.estimate) true else null)) }
             pump(stdin, stdout, null, reporter, opts.readers)
             reporter.close(FLUSH_MS)
             return 0
@@ -107,13 +114,20 @@ internal object ProgressCli {
             return 2
         }
         val child = try {
-            ProcessBuilder(opts.command).redirectInput(ProcessBuilder.Redirect.INHERIT).start()
+            ProcessBuilder(opts.command).redirectInput(ProcessBuilder.Redirect.INHERIT)
+                .also { it.environment()[PIPE_ENV] = "1" }
+                .start()
         } catch (e: Exception) {
             err.appendLine("agenthq run: cannot run '${opts.command.first()}': ${e.message}")
             return 127
         }
         val reporter = ProgressReporter(session(getenv), open, err, debug(getenv))
-        reporter.submit(ProgressReport("status", label = opts.label ?: opts.command.joinToString(" ").take(ProgressReducer.MAX_LABEL)))
+        reporter.submit(
+            ProgressReport(
+                "status", label = opts.label ?: opts.command.joinToString(" ").take(ProgressReducer.MAX_LABEL),
+                estimate = if (opts.estimate) true else null,
+            ),
+        )
         val scanner = LineScanner(reporter, opts.readers)
         val errPump = Thread { pump(child.errorStream, stderr, scanner, reporter, opts.readers) }.apply { isDaemon = true; start() }
         pump(child.inputStream, stdout, scanner, reporter, opts.readers)
@@ -127,7 +141,7 @@ internal object ProgressCli {
     private fun session(getenv: (String) -> String?): String? = getenv(AccessPolicy.SESSION_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }
     private fun debug(getenv: (String) -> String?): Boolean = getenv(DEBUG_ENV)?.trim() == "1"
 
-    class StreamOptions(val label: String?, val readers: List<ProgressReader>, val command: List<String>, val bad: String?)
+    class StreamOptions(val label: String?, val readers: List<ProgressReader>, val command: List<String>, val bad: String?, val estimate: Boolean = false)
 
     fun parseStreamOptions(args: List<String>, allowCommand: Boolean): StreamOptions {
         val split = args.indexOf("--")
@@ -135,11 +149,14 @@ internal object ProgressCli {
         val command = if (split >= 0) args.drop(split + 1) else emptyList()
         if (!allowCommand && split >= 0) return StreamOptions(null, emptyList(), emptyList(), "takes no command (use agenthq run -- <cmd>)")
         var label: String? = null
+        var estimate = false
         val readers = mutableListOf<ProgressReader>()
         var i = 0
         while (i < opts.size) {
             when (opts[i]) {
                 "--label" -> label = opts.getOrNull(++i) ?: return StreamOptions(null, emptyList(), command, "--label expects a label")
+                // PROGRESS-S5: opt-in only; the label is the key past runs are remembered by.
+                "--estimate" -> estimate = true
                 "--reader" -> {
                     val name = opts.getOrNull(++i)
                     readers += ProgressReaders.byName(name) ?: return StreamOptions(
@@ -150,7 +167,8 @@ internal object ProgressCli {
             }
             i++
         }
-        return StreamOptions(label, readers, command, null)
+        if (estimate && !allowCommand && label == null) return StreamOptions(null, emptyList(), command, "--estimate needs --label (past runs are remembered by it)")
+        return StreamOptions(label, readers, command, null, estimate)
     }
 
     /** The CLI words after `progress` as one report; null = not a form this command knows. */
@@ -177,7 +195,12 @@ internal object ProgressCli {
             }
             "step" -> ProgressReport("step", step = rest.joinToString(" ").ifBlank { null })
             "bytes", "count" -> amounts(verb, rest)
-            "status", "start" -> ProgressReport("status", label = rest.joinToString(" ").ifBlank { null })
+            "status", "start" -> {
+                val estimate = "--estimate" in rest
+                val label = rest.filter { it != "--estimate" }.joinToString(" ").ifBlank { null }
+                if (estimate && label == null) null else ProgressReport("status", label = label, estimate = if (estimate) true else null)
+            }
+            "estimate" -> rest.joinToString(" ").ifBlank { null }?.let { ProgressReport("status", label = it, estimate = true) }
             "done" -> ProgressReport("done", label = rest.joinToString(" ").ifBlank { null })
             "fail" -> ProgressReport("fail", label = rest.joinToString(" ").ifBlank { null })
             "clear" -> if (rest.isEmpty()) ProgressReport("clear") else null
@@ -297,6 +320,7 @@ internal object ProgressCli {
  * ##infantry bytes <done> <total|?> [label...]
  * ##infantry count <done> <total|?> [label...]
  * ##infantry status <label...>              (indeterminate)
+ * ##infantry estimate <label...>            (indeterminate, opt-in estimate from past runs of the label)
  * ##infantry done [label...] | ##infantry fail [reason...] | ##infantry clear
  * ```
  */
@@ -324,7 +348,9 @@ internal object ProgressMarkers {
             }
             "step" -> ProgressReport("step", step = tail)
             "bytes", "count" -> ProgressCli.amounts(verb, rest)
-            "status" -> tail?.let { ProgressReport("status", label = it) }
+            "status" -> rest.filter { it != "--estimate" }.joinToString(" ").ifBlank { null }
+                ?.let { ProgressReport("status", label = it, estimate = if ("--estimate" in rest) true else null) }
+            "estimate" -> tail?.let { ProgressReport("status", label = it, estimate = true) }
             // 1.124.0: ##infantry eta <seconds> [label...]  (an indeterminate step the worker expects to take that long)
             "eta" -> rest.firstOrNull()?.toLongOrNull()?.takeIf { it > 0 }?.let {
                 ProgressReport("status", label = rest.drop(1).joinToString(" ").ifBlank { null }, estimateMs = it * 1000)

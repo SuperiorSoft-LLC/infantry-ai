@@ -77,7 +77,8 @@ class OpencodeModelPickerWiringTest {
             runDesktopComposeUiTest(1700, 1000) {
                 setContent { App(controller, "ws://127.0.0.1:$port/ws", null) }
                 waitUntil(timeoutMillis = 20_000) {
-                    controller.state.value.connection.isLive && controller.state.value.modelCatalog.isNotEmpty()
+                    // GATE-FLAKE-1: the harness chips render from `providers`, a frame separate from `models`; wait for both.
+                    controller.state.value.connection.isLive && controller.state.value.modelCatalog.isNotEmpty() && controller.state.value.providers.isNotEmpty()
                 }
                 // Not shown until the human starts a new agent.
                 onNodeWithContentDescription("New agent").performClick()

@@ -35,6 +35,14 @@ data class SessionProgress(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val total: Long? = null,
     /** `bytes`: smoothed transfer speed, derived by the daemon from successive reports. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val bytesPerSec: Double? = null,
+    /**
+     * PROGRESS-S5, opt-in only (`--estimate`): true on an `indeterminate` job whose agent asked for an estimate. The
+     * job has no measurement; a client may show [estimateMs] as "~12 min left (estimated)" on a hatched bar, never as
+     * [percent]. Omitted otherwise. Any measured report (percent, steps, bytes, count) drops it: a measurement wins.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val estimated: Boolean? = null,
+    /** PROGRESS-S5: how long this label's past runs in the project took (median of the last few), in ms; null = no history yet. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val estimateMs: Long? = null,
     /** When this job began (the first report since the last finished one). */
     val startedAt: Long,
     /** The newest report; a client reads "no update for N min" against it. */
@@ -46,7 +54,6 @@ data class SessionProgress(
      * last seen (a report or a `--watch` heartbeat), the "alive" signal of a job with no number at all.
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val labelStartedAt: Long? = null,
-    @EncodeDefault(EncodeDefault.Mode.NEVER) val estimateMs: Long? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val estimateSource: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val lastOutputAt: Long? = null,
 ) {
@@ -66,6 +73,7 @@ data class SessionProgress(
  * "the current one"), `bytes` / `count` (done, total, label), `status` (label: indeterminate), `done`, `fail` (label =
  * the reason), `clear`, `output` (1.124.0: the job printed something, nothing else changed) or `get` (no change, answers the current value).
  */
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class ProgressReport(
     val op: String,
@@ -76,6 +84,8 @@ data class ProgressReport(
     val step: String? = null,
     val done: Long? = null,
     val total: Long? = null,
+    /** PROGRESS-S5: on `status`, opt in to an estimate from past runs of the same label (never the default). */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val estimate: Boolean? = null,
     /** Contract 1.124.0: how long the current label / step should take, in ms (the worker's own estimate). */
     val estimateMs: Long? = null,
 )
@@ -121,7 +131,7 @@ object ProgressReducer {
         }
         return next.copy(
             labelStartedAt = if (same) running?.labelStartedAt ?: running?.startedAt else now,
-            estimateMs = est, estimateSource = source, lastOutputAt = now,
+            estimateMs = est, estimateSource = source, lastOutputAt = now, estimated = if (est != null) true else next.estimated,
         )
     }
 
@@ -140,6 +150,9 @@ object ProgressReducer {
 
     const val MIN_LEARN_MS = 1_000L
 
+    /** A pace measured over less than this is noise: no "time left" is extrapolated from it. */
+    const val MIN_PACE_MS = 2_000L
+
     /** The countdown of a running job. [percent] is the meter fill; [remainingMs] / [overMs] / [noEstimate] its words. */
     data class Eta(val percent: Double?, val remainingMs: Long?, val overMs: Long?, val noEstimate: Boolean, val estimated: Boolean)
 
@@ -153,7 +166,7 @@ object ProgressReducer {
         val pct = p.percent
         if (p.mode != "indeterminate" && pct != null) {
             val elapsed = (now - p.startedAt).coerceAtLeast(0)
-            val left = if (pct > 0.0 && pct < 100.0 && elapsed > 0) (elapsed * (100.0 - pct) / pct).toLong() else null
+            val left = if (pct > 0.0 && pct < 100.0 && elapsed >= MIN_PACE_MS) (elapsed * (100.0 - pct) / pct).toLong() else null
             return Eta(pct, left, null, false, false)
         }
         val est = p.estimateMs ?: return Eta(null, null, null, p.mode == "indeterminate", false)
@@ -197,9 +210,18 @@ object ProgressReducer {
                     label = label ?: running?.label, startedAt = startedAt, updatedAt = now,
                 )
             }
-            "status" -> SessionProgress(
-                mode = "indeterminate", label = label ?: running?.label, startedAt = startedAt, updatedAt = now,
-            )
+            "status" -> {
+                // PROGRESS-S5: an estimated job stays estimated across its own status updates; the daemon fills estimateMs.
+                val keep = running?.takeIf { it.mode == "indeterminate" && it.estimated == true }
+                val estimated = report.estimate == true || keep != null
+                val nextLabel = label ?: running?.label
+                if (report.estimate == true) require(nextLabel != null) { "an estimate needs a label (past runs are remembered by it)" }
+                SessionProgress(
+                    mode = "indeterminate", label = nextLabel, startedAt = startedAt, updatedAt = now,
+                    estimated = if (estimated) true else null,
+                    estimateMs = keep?.takeIf { it.label == nextLabel }?.estimateMs,
+                )
+            }
             "plan" -> {
                 val names = report.steps.map { it.trim().take(MAX_STEP) }.filter { it.isNotEmpty() }.take(MAX_STEPS)
                 val total = if (names.isNotEmpty()) names.size else requireNotNull(report.count?.takeIf { it > 0 }) {
@@ -277,7 +299,7 @@ object ProgressReducer {
         val parts = mutableListOf<String>()
         if (p.state != SessionProgress.RUNNING) parts += p.state
         val eta = eta(p, now)
-        eta.percent?.let { parts += "${it.roundToInt()}%" }
+        eta.percent?.takeIf { eta.overMs == null }?.let { parts += "${it.roundToInt()}%" }
         when (p.mode) {
             "steps" -> parts += "step ${minOf((p.stepsDone ?: 0) + if (p.state == SessionProgress.RUNNING) 1 else 0, p.stepsTotal ?: 0)}/${p.stepsTotal ?: 0}" +
                 (p.step?.let { " $it" } ?: "")

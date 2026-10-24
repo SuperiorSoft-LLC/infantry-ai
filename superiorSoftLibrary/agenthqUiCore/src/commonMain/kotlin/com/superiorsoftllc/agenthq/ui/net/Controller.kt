@@ -7,6 +7,7 @@ import com.superiorsoftllc.agenthq.ui.model.HarnessPickerAsk
 import com.superiorsoftllc.agenthq.ui.model.CliLocationsSetting
 import com.superiorsoftllc.agenthq.ui.model.ToolApprovalSetting
 import com.superiorsoftllc.agenthq.ui.model.LifecycleSetting
+import com.superiorsoftllc.agenthq.ui.model.ProcessWatchView
 import com.superiorsoftllc.agenthq.ui.model.UserPortrait
 import kotlinx.serialization.json.JsonPrimitive
 import com.superiorsoftllc.agenthq.ui.model.withChangesBranch
@@ -126,6 +127,7 @@ class Controller(
     private val agentConfirmMs: Long = 10_000,
 ) {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+    private val usageSetJson = Json { encodeDefaults = false }
     private val _state = MutableStateFlow(AppState())
     val state: StateFlow<AppState> = _state.asStateFlow()
 
@@ -188,6 +190,8 @@ class Controller(
                         if (contractAtLeast(contract, 1, 33)) client.send(WireRequests.commandList())
                         // U2: the plan-limit meters (1.59.0); the daemon also pushes them after each run's usage.
                         if (contractAtLeast(contract, 1, 59)) client.send(Envelope(Envelope.LIMITS))
+                        // USAGE-PACE: the plan meters and pacing allowance (1.119.0).
+                        if (contractAtLeast(contract, 1, 119)) client.send(Envelope(Envelope.USAGE_GET))
                         // BUG-M2-11e: the one session-lifecycle setting, shown in the Configuration modal (1.68.0).
                         if (contractAtLeast(contract, LifecycleSetting.SINCE_MAJOR, LifecycleSetting.SINCE_MINOR)) {
                             client.send(WireRequests.settingsGet(LifecycleSetting.KEY))
@@ -210,6 +214,10 @@ class Controller(
                         }
                         // SECRETS-1: the keystore's set / not set state, shown in the Configuration modal (1.100.0).
                         if (contractAtLeast(contract, 1, 102)) client.send(WireRequests.secretStatus())
+                        // ROGUE-1: the rogue process detector's first report, for the status-bar badge (1.120.0).
+                        if (contractAtLeast(contract, ProcessWatchView.SINCE_MAJOR, ProcessWatchView.SINCE_MINOR)) {
+                            client.send(WireRequests.processes())
+                        }
                     }
                     // The sidebar shows the active project's workspaces, including the one chosen by default.
                     Envelope.PROJECTS -> _state.value.activeProjectId?.let { client.send(WireRequests.workspaceList(it)) }
@@ -400,7 +408,18 @@ class Controller(
     }
 
     /** U2 (contract 1.59.0): ask for the plan-limit meters again; the daemon re-reads a provider at most once per 5 minutes. */
-    suspend fun refreshLimits(): CommandResult = report(send(Envelope(Envelope.LIMITS)))
+    suspend fun refreshLimits(): CommandResult {
+        val limits = report(send(Envelope(Envelope.LIMITS)))
+        if (contractAtLeast(_state.value.connection.contract, 1, 119)) refreshUsage()
+        return limits
+    }
+
+    /** USAGE-PACE (contract 1.119.0): ask for the plan meters and the pacing allowance again. */
+    suspend fun refreshUsage(): CommandResult = report(send(Envelope(Envelope.USAGE_GET)))
+
+    /** USAGE-PACE (contract 1.121.0): a manual percent, an override or the rule; the answer is the fresh `usage_report`. */
+    suspend fun usageSet(set: com.superiorsoftllc.agenthq.ui.protocol.UsageSet): CommandResult =
+        report(send(Envelope(Envelope.USAGE_SET, usageSetJson.encodeToString(com.superiorsoftllc.agenthq.ui.protocol.UsageSet.serializer(), set))))
 
     /**
      * STATS-2: ask for [sessionId]'s statistics (contract 1.92.0); the answer is a `session_stats` frame the reducer
@@ -429,6 +448,26 @@ class Controller(
      * USER-PORTRAIT: store [png] (already downscaled) as the daemon's `user.portrait`; null resets to the bundled default.
      * The shown portrait changes only when the daemon answers `settings`.
      */
+    private fun hasProcessWatch(): Boolean =
+        contractAtLeast(_state.value.connection.contract, ProcessWatchView.SINCE_MAJOR, ProcessWatchView.SINCE_MINOR)
+
+    /** ROGUE-1 (1.120.0): ask for a fresh process report. Silent: the badge polls it, and an older daemon is never asked. */
+    suspend fun refreshProcesses(): CommandResult =
+        if (!hasProcessWatch()) CommandResult.Refused("this daemon has no process detector (contract 1.120.0)")
+        else send(WireRequests.processes())
+
+    /** ROGUE-1: reap one process ([pid]) or, with null, every rogue one. The daemon refuses anything its sessions did not start. */
+    suspend fun reapProcesses(pid: Long?): CommandResult {
+        if (!hasProcessWatch()) return report(CommandResult.Refused("this daemon has no process detector (contract 1.120.0)"))
+        return report(send(if (pid == null) WireRequests.processes("reap_rogue") else WireRequests.processes("reap", pid)))
+    }
+
+    /** ROGUE-1: the daemon's `processes.autoReap` (default off). Shown changed only when the daemon answers `settings`. */
+    suspend fun setProcessAutoReap(on: Boolean): CommandResult {
+        if (!hasProcessWatch()) return report(CommandResult.Refused("this daemon has no process detector (contract 1.120.0)"))
+        return report(send(WireRequests.settingsSet(ProcessWatchView.AUTO_REAP_KEY, JsonPrimitive(on))))
+    }
+
     suspend fun setUserPortrait(png: ByteArray?): CommandResult {
         if (!contractAtLeast(_state.value.connection.contract, UserPortrait.SINCE_MAJOR, UserPortrait.SINCE_MINOR)) {
             return report(CommandResult.Refused("this daemon cannot store a portrait (needs contract 1.107.0)"))

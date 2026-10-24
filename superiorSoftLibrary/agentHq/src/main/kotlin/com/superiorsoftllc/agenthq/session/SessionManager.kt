@@ -119,8 +119,6 @@ class SessionManager(
     idleSweepMs: Long = 30_000,
     /** BUG-REAP-OWNER: this state dir's id, stamped on every kept process and required to match before one is reaped. Null = never reap. */
     private val instanceId: String? = null,
-    /** Contract 1.124.0: the durations learned per project and progress label (the default estimate of a countdown). */
-    val progressEstimates: ProgressEstimates = ProgressEstimates(),
 ) {
     val providerId: String get() = provider.id
 
@@ -375,6 +373,9 @@ class SessionManager(
         finished?.let { (label, ms) -> progressEstimates.record(project, label, ms) }
         return record
     }
+
+    /** PROGRESS-S5: past durations for the opt-in estimated mode. The daemon sets a file-backed one in its state dir. */
+    @Volatile var progressEstimates: ProgressEstimates = InMemoryProgressEstimates()
 
     /** The wrapper's command ended: drop the job. */
     fun bgJobDone(sessionId: String, jobId: String) {

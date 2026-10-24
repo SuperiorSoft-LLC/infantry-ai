@@ -16,6 +16,8 @@ data class ProgressDisplay(
     val headline: String,
     val detail: String,
     val tone: ProgressTone,
+    /** PROGRESS-S5: the fill is a guess from past runs, not a measurement; the bar draws it hatched. */
+    val estimated: Boolean = false,
 )
 
 /** Default "no update for N min" threshold, in minutes; the Configuration dialog changes it. */
@@ -39,7 +41,7 @@ fun progressDisplay(p: ProgressView, now: Long, staleMin: Int = PROGRESS_STALE_D
         if (running) null else 1f
     } else (shownPercent / 100.0).toFloat().coerceIn(0f, 1f)
     val head = buildList {
-        shownPercent?.let { add("${it.roundToInt()}%") }
+        shownPercent?.takeIf { eta?.overMs == null }?.let { add("${it.roundToInt()}%") }
         eta?.let { progressCountdown(it) }?.let { add(it) }
         when (p.mode) {
             "steps" -> {
@@ -62,17 +64,19 @@ fun progressDisplay(p: ProgressView, now: Long, staleMin: Int = PROGRESS_STALE_D
         if (running && eta?.noEstimate == true) add("last output ${formatElapsed(now - (p.lastOutputAt ?: p.updatedAt))} ago")
         if (tone == ProgressTone.Stale) add("no update for ${quietMs / 60_000} min")
     }.joinToString(" · ")
-    return ProgressDisplay(fraction, head, detail, tone)
+    return ProgressDisplay(fraction, head, detail, tone, estimated = eta != null && eta.percent != null && p.estimateMs != null && !(p.mode != "indeterminate" && p.percent != null))
 }
 
 /** The countdown of a running job; mirrors the daemon's ProgressReducer.eta so every surface says the same thing. */
 data class ProgressEta(val percent: Double?, val remainingMs: Long?, val overMs: Long?, val noEstimate: Boolean)
 
+private const val MIN_PACE_MS = 2_000L
+
 fun progressEta(p: ProgressView, now: Long): ProgressEta {
     val pct = p.percent
     if (p.mode != "indeterminate" && pct != null) {
         val elapsed = (now - p.startedAt).coerceAtLeast(0)
-        val left = if (pct > 0.0 && pct < 100.0 && elapsed > 0) (elapsed * (100.0 - pct) / pct).toLong() else null
+        val left = if (pct > 0.0 && pct < 100.0 && elapsed >= MIN_PACE_MS) (elapsed * (100.0 - pct) / pct).toLong() else null
         return ProgressEta(pct, left, null, false)
     }
     val est = p.estimateMs ?: return ProgressEta(null, null, null, p.mode == "indeterminate")

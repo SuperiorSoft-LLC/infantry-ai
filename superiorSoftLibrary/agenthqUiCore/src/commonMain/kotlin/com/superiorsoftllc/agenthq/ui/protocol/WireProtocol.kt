@@ -129,6 +129,16 @@ data class Envelope(
         // Contract 1.59.0 (U1): plan-limit meters. `limits` (empty data) asks; the daemon answers `limits` (a list of
         // `ProviderLimits`) and pushes the same frame after each run's `usage`.
         const val LIMITS = "limits"
+        // Contract 1.119.0 (USAGE-PACE): `usage_get` (empty) is answered by `usage_report` (a `UsageReport`); 1.121.0 adds
+        // `usage_set` (a `UsageSet`: manual percent / override / pacing rule), also answered by `usage_report`.
+        const val USAGE_GET = "usage_get"
+        const val USAGE_REPORT = "usage_report"
+        const val USAGE_SET = "usage_set"
+
+        // Contract 1.120.0 (ROGUE-1): `processes` {op: list|reap|reap_rogue, pid?} is answered by `processes`
+        // (a ProcessesAnswer); `process_pressure` (a ProcessReport) is pushed when free RAM drops under the floor.
+        const val PROCESSES = "processes"
+        const val PROCESS_PRESSURE = "process_pressure"
 
         // Contract 1.92.0 (STATS-1): `session_stats_get` {"sessionId"} asks for one session's statistics, read by the
         // daemon from its harness's own local record; answered to the requester only by `session_stats` (a SessionStats).
@@ -586,6 +596,90 @@ data class StatsPoint(val at: Long? = null, val contextTokens: Long, val cumulat
 @Serializable
 data class ContextSource(val tool: String, val calls: Int, val tokensAdded: Long? = null)
 
+/** USAGE-PACE (1.119.0): below [below] percent used, [workers] ticket workers may run; [below] null = every percent left. */
+@Serializable
+data class PacingTier(val below: Double? = null, val workers: Int)
+
+/** USAGE-PACE: the pacing rule; the metric is the highest percent among a meter's windows. */
+@Serializable
+data class PacingRule(val enabled: Boolean = true, val tiers: List<PacingTier> = emptyList())
+
+/** USAGE-PACE: a hand-set allowance: [workers] null = no limit, until [until] (epoch millis). */
+@Serializable
+data class UsageOverride(val workers: Int? = null, val until: Long = 0)
+
+/** USAGE-PACE: one plan meter (`claude`, `opencode-go`, else a harness id) of a [UsageReport]. */
+@Serializable
+data class MeterUsage(
+    val meter: String,
+    val percent: Double? = null,
+    val window: String? = null,
+    val resetsAt: Long? = null,
+    val paceDelta: Double? = null,
+    /** `live`, `manual` or `none`. */
+    val source: String = "none",
+    val windows: List<LimitWindow> = emptyList(),
+    val reason: String? = null,
+    val ruleAllowance: Int? = null,
+    val override: UsageOverride? = null,
+    /** null = no limit. */
+    val allowance: Int? = null,
+    val running: Int = 0,
+    val canStart: Boolean = true,
+    val warning: String? = null,
+)
+
+/** USAGE-PACE (1.119.0): the `usage_report` frame. */
+@Serializable
+data class UsageReport(val meters: List<MeterUsage> = emptyList(), val rule: PacingRule = PacingRule(), val observedAt: Long = 0)
+
+/** USAGE-PACE (1.121.0): the `usage_set` frame; only the keys a request names are sent (no defaults encoded). */
+@Serializable
+data class UsageSet(
+    val meter: String = "",
+    val manualPercent: Double? = null,
+    val manualResetsAt: Long? = null,
+    val clearManual: Boolean = false,
+    val overrideWorkers: Int? = null,
+    val overrideUntil: Long? = null,
+    val clearOverride: Boolean = false,
+    val rule: PacingRule? = null,
+)
+
+/** Contract 1.120.0 (ROGUE-1): one process the daemon's rogue detector reports; [sessionId] null = not ours (never reaped). */
+@Serializable
+data class TrackedProcess(
+    val pid: Long,
+    val command: String,
+    val sessionId: String? = null,
+    val startedAt: Long? = null,
+    val memoryMb: Long? = null,
+    val rogue: Boolean = false,
+    val reason: String? = null,
+)
+
+/** Contract 1.120.0 (ROGUE-1): free RAM against the floor, the tracked processes and the heavy unattributed ones. */
+@Serializable
+data class ProcessReport(
+    val freeMb: Long? = null,
+    val totalMb: Long? = null,
+    val floorMb: Long = 4096,
+    val underPressure: Boolean = false,
+    val autoReap: Boolean = false,
+    val tracked: List<TrackedProcess> = emptyList(),
+    val unattributed: List<TrackedProcess> = emptyList(),
+) {
+    val rogue: List<TrackedProcess> get() = tracked.filter { it.rogue }
+}
+
+/** Contract 1.120.0 (ROGUE-1): the `processes` answer. */
+@Serializable
+data class ProcessesAnswer(
+    val report: ProcessReport,
+    val reaped: List<TrackedProcess> = emptyList(),
+    val refused: String? = null,
+)
+
 /** Contract 1.59.0 (U1): one provider's plan limits. [status] `ok` or `unknown`; [reason] is a fixed code when unknown. */
 @Serializable
 data class ProviderLimits(
@@ -938,11 +1032,13 @@ data class ProgressView(
     val done: Long? = null,
     val total: Long? = null,
     val bytesPerSec: Double? = null,
+    /** PROGRESS-S5 (opt-in): an indeterminate job that asked for an estimate from past runs; [estimateMs] = their median, null = none yet. */
+    val estimated: Boolean? = null,
+    val estimateMs: Long? = null,
     val startedAt: Long = 0,
     val updatedAt: Long = 0,
     /** 1.124.0: the countdown inputs; see the daemon's SessionProgress. */
     val labelStartedAt: Long? = null,
-    val estimateMs: Long? = null,
     val estimateSource: String? = null,
     val lastOutputAt: Long? = null,
 )
@@ -1838,6 +1934,12 @@ object WireRequests {
     /** STATS-2: `session_stats_get` for one AgentHQ session id (contract 1.92.0); answered by `session_stats`. */
     fun sessionStatsGet(sessionId: String): Envelope =
         Envelope(Envelope.SESSION_STATS_GET, JsonObject(mapOf("sessionId" to JsonPrimitive(sessionId))).toString())
+
+    /** ROGUE-1 (1.120.0): list the tracked processes (`op=list`), reap one (`reap` + [pid]) or every rogue one (`reap_rogue`). */
+    fun processes(op: String = "list", pid: Long? = null): Envelope = Envelope(
+        Envelope.PROCESSES,
+        JsonObject(buildMap { put("op", JsonPrimitive(op)); if (pid != null) put("pid", JsonPrimitive(pid)) }).toString(),
+    )
 
     /** `settings_set`: the daemon validates [value], stores it and answers `settings` with every setting. */
     fun settingsSet(key: String, value: JsonElement): Envelope = Envelope(

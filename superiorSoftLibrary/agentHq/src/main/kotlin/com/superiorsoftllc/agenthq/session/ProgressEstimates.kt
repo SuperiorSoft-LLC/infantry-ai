@@ -1,73 +1,81 @@
 package com.superiorsoftllc.agenthq.session
 
-import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 
 /**
- * Contract 1.124.0: what the daemon has learned about how long a labelled stretch of a job takes (a gradle task, a test
- * task, a gate stage), per project. The last [MAX_DURATIONS] durations of each label are kept; the rolling median is the
- * default estimate when a worker reports a label with none of its own. Small by design: at most [MAX_LABELS] labels per
- * project, persisted to [file] (null = memory only) so a daemon restart keeps what it learned.
+ * PROGRESS-S5 (ticket-680e0b39): how long a labelled job took the last few times in a project, for the OPT-IN estimated
+ * mode (`agenthq run --estimate`). Only a job that asked for an estimate and finished `done` is recorded; a failure is
+ * not a duration. Keyed by (project, label); a session with no project shares the "" project.
  */
-class ProgressEstimates(private val file: File? = null) {
-    @Serializable
-    private data class Snapshot(val version: Int = 1, val projects: Map<String, Map<String, List<Long>>> = emptyMap())
+interface ProgressEstimates {
+    /** The expected duration in ms (median of the remembered runs), or null when the label has no finished run. */
+    fun estimate(projectId: String?, label: String): Long?
 
-    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-    private val data = LinkedHashMap<String, LinkedHashMap<String, ArrayDeque<Long>>>()
+    /** Remembers one finished run, keeping the newest [KEEP]. */
+    fun record(projectId: String?, label: String, durationMs: Long)
+
+    companion object {
+        const val KEEP = 20
+
+        fun key(projectId: String?, label: String) = "${projectId.orEmpty()}\u0000$label"
+
+        fun median(runs: List<Long>): Long? = runs.sorted().takeIf { it.isNotEmpty() }?.let { s ->
+            if (s.size % 2 == 1) s[s.size / 2] else (s[s.size / 2 - 1] + s[s.size / 2]) / 2
+        }
+    }
+}
+
+/** Memory only (tests, and a daemon that could not open its file). */
+open class InMemoryProgressEstimates : ProgressEstimates {
+    protected val runs = LinkedHashMap<String, List<Long>>()
+
+    @Synchronized
+    override fun estimate(projectId: String?, label: String): Long? = ProgressEstimates.median(runs[ProgressEstimates.key(projectId, label)].orEmpty())
+
+    @Synchronized
+    override fun record(projectId: String?, label: String, durationMs: Long) {
+        if (durationMs <= 0) return
+        val k = ProgressEstimates.key(projectId, label)
+        val kept = (runs.remove(k).orEmpty() + durationMs).takeLast(ProgressEstimates.KEEP)
+        runs[k] = kept // re-inserted, so it is now the newest-used label
+        // A bounded file: the oldest-used labels go first.
+        while (runs.size > MAX_LABELS) runs.remove(runs.keys.first())
+        saved()
+    }
+
+    protected open fun saved() = Unit
+
+    companion object {
+        const val MAX_LABELS = 500
+    }
+}
+
+/** Persisted in `<stateDir>/progress-estimates.json`, so the history outlives a daemon restart. Never throws. */
+class FileProgressEstimates(private val file: File) : InMemoryProgressEstimates() {
+    private val json = Json { ignoreUnknownKeys = true }
+    private val shape = MapSerializer(String.serializer(), ListSerializer(Long.serializer()))
 
     init {
+        runCatching { if (file.isFile) runs.putAll(json.decodeFromString(shape, file.readText())) }
+    }
+
+    override fun saved() {
         runCatching {
-            if (file?.isFile == true) {
-                for ((project, labels) in json.decodeFromString(Snapshot.serializer(), file.readText()).projects) {
-                    val into = data.getOrPut(project) { LinkedHashMap() }
-                    for ((label, ms) in labels) into[label] = ArrayDeque(ms.takeLast(MAX_DURATIONS))
-                }
+            file.parentFile?.mkdirs()
+            val tmp = File(file.path + ".tmp")
+            tmp.writeText(json.encodeToString(shape, runs))
+            if (!tmp.renameTo(file)) {
+                file.delete()
+                tmp.renameTo(file)
             }
         }
     }
 
-    /** The median duration (ms) of [label] in [project], or null when it has never finished (a first run). */
-    @Synchronized
-    fun estimate(project: String?, label: String): Long? = data[project.orEmpty()]?.get(label)?.takeIf { it.isNotEmpty() }?.let(::median)
-
-    /** The durations kept for [label], oldest first (for tests and diagnostics). */
-    @Synchronized
-    fun durations(project: String?, label: String): List<Long> = data[project.orEmpty()]?.get(label)?.toList().orEmpty()
-
-    @Synchronized
-    fun record(project: String?, label: String, ms: Long) {
-        if (ms <= 0 || label.isBlank()) return
-        val labels = data.getOrPut(project.orEmpty()) { LinkedHashMap() }
-        val list = labels.remove(label) ?: ArrayDeque() // re-inserted last: the oldest label is the one evicted
-        list.addLast(ms)
-        while (list.size > MAX_DURATIONS) list.removeFirst()
-        labels[label] = list
-        while (labels.size > MAX_LABELS) labels.remove(labels.keys.first())
-        save()
-    }
-
-    private fun save() {
-        val target = file ?: return
-        runCatching {
-            target.parentFile?.mkdirs()
-            val tmp = File(target.parentFile, target.name + ".tmp")
-            val snapshot = Snapshot(projects = data.mapValues { (_, l) -> l.mapValues { it.value.toList() } })
-            tmp.writeText(json.encodeToString(Snapshot.serializer(), snapshot))
-            Files.move(tmp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
-        }
-    }
-
-    private fun median(values: List<Long>): Long {
-        val s = values.sorted()
-        return if (s.size % 2 == 1) s[s.size / 2] else (s[s.size / 2 - 1] + s[s.size / 2]) / 2
-    }
-
     companion object {
-        const val MAX_DURATIONS = 20
-        const val MAX_LABELS = 200
+        const val FILE_NAME = "progress-estimates.json"
     }
 }

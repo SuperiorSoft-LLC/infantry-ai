@@ -98,14 +98,12 @@ class ProgressCountdownTest {
     @Test
     fun estimatesKeepTwentyAndTheMedianAndPersist() {
         val file = File.createTempFile("est", ".json").apply { delete(); deleteOnExit() }
-        val e = ProgressEstimates(file)
+        val e = FileProgressEstimates(file)
         assertNull(e.estimate("p", "l"))
         for (i in 1..25) e.record("p", "l", i * 1000L)
-        assertEquals(20, e.durations("p", "l").size)
-        assertEquals(6_000L, e.durations("p", "l").first())
-        assertEquals(15_500L, e.estimate("p", "l")) // median of 6..25 s
+        assertEquals(15_500L, e.estimate("p", "l")) // median of the last 20: 6..25 s
         assertNull(e.estimate("other", "l"))
-        val again = ProgressEstimates(file)
+        val again = FileProgressEstimates(file)
         assertEquals(15_500L, again.estimate("p", "l"))
         assertNotNull(file.takeIf { it.isFile })
     }
