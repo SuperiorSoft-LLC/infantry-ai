@@ -60,7 +60,7 @@ object BoardSummary {
     }
 
     private fun ticketLine(t: Ticket, worker: SessionRecord?, now: Long, commitOf: (Ticket) -> String?): String {
-        val parts = mutableListOf(t.id.take(8), t.title.take(60))
+        val parts = mutableListOf(shortTicketId(t.id), cutTitle(t.title))
         if (worker != null) {
             parts += "${worker.role ?: "?"} ${worker.id.take(8)} ${liveState(worker)}"
             worker.lastAction?.let { parts += "doing '$it'" }
@@ -68,6 +68,16 @@ object BoardSummary {
         } else if (t.sessionId != null) parts += "worker ${t.sessionId!!.take(8)} gone"
         t.branch?.let { b -> parts += "$b@${commitOf(t) ?: "no commit"}" }
         return parts.joinToString(" | ")
+    }
+
+    /** Widest title a board line prints; a longer one is cut and ends in [ELLIPSIS]. */
+    const val TITLE_WIDTH = 100
+    const val ELLIPSIS = "..."
+
+    /** [title] on one line, at most [TITLE_WIDTH] characters, ending in [ELLIPSIS] only when it was cut. */
+    fun cutTitle(title: String): String {
+        val flat = title.replace(Regex("\\s+"), " ").trim()
+        return if (flat.length <= TITLE_WIDTH) flat else flat.take(TITLE_WIDTH - ELLIPSIS.length).trimEnd() + ELLIPSIS
     }
 
     /** The branch tip of [ticket], via git in the worker's checkout or repo; null when it cannot be read. */

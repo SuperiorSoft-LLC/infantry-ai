@@ -616,7 +616,7 @@ class CliAcceptanceTest {
      * lists BOTH candidates -- it must never silently pick one and show the wrong brief.
      *
      * Ticket ids are `ticket-` plus eight random hex characters, and `tickets` prints the LAST 8
-     * characters. A ONE-character suffix has only 16 distinct values, so seventeen saves force a shared
+     * characters. A ONE-character head prefix of the tail has only 16 distinct values, so seventeen saves force a shared
      * one by pigeonhole, so the collision is guaranteed, not lucky. The
      * test does not care WHICH two ids collide. The pinned-id case is covered deterministically by
      * `TicketPrefixTest`, which needs no daemon.
@@ -626,7 +626,8 @@ class CliAcceptanceTest {
         val fixture = launch(StubScript.default())
         fixture.client.await(Envelope.READY)
         val saved = (0..16).map { saveTicketTitled(fixture, "Collide $it", """{"title":"Collide $it"}""") }
-        val shared = saved.groupBy { it.id.takeLast(1) }.entries.first { it.value.size >= 2 }
+        // A one-character HEAD prefix of the random tail (what the board prints first) is the reading that wins.
+        val shared = saved.groupBy { it.id.removePrefix("ticket-").take(1) }.entries.first { it.value.size >= 2 }
         val (prefix, colliding) = shared.key to shared.value.take(2)
 
         val show = cli(fixture.port, "ticket", "show", prefix)

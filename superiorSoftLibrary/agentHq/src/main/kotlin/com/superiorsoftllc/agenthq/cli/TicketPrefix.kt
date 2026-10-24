@@ -23,11 +23,31 @@ internal const val TICKET_SHORT_ID_LEN = 8
 /** The printed short form of a ticket-scheme id: its last [TICKET_SHORT_ID_LEN] characters. */
 internal fun shortTicketId(id: String): String = id.takeLast(TICKET_SHORT_ID_LEN)
 
+/**
+ * Matches [prefix] against the ids of [tickets], in tiers so the most specific reading wins:
+ * 1. the exact full id;
+ * 2. a HEAD prefix of the random tail, of any length, typed with or without the `ticket-` scheme
+ *    (`63df`, `63df1aba`, `ticket-63df`): what the board and `tickets` print is that 8-char tail;
+ * 3. a SUFFIX of the id (the historical short-id rule; a full id is a suffix of itself).
+ * The first tier with any match decides: one match is [TicketPrefixMatch.Unique], several are
+ * [TicketPrefixMatch.Ambiguous] so the caller can list them.
+ */
 internal fun matchTicketPrefix(prefix: String, tickets: List<Ticket>): TicketPrefixMatch {
-    val matches = tickets.filter { it.id.endsWith(prefix) }
-    return when (matches.size) {
-        0 -> TicketPrefixMatch.None
-        1 -> TicketPrefixMatch.Unique(matches.single())
-        else -> TicketPrefixMatch.Ambiguous(matches)
+    val wanted = prefix.trim()
+    if (wanted.isEmpty()) return TicketPrefixMatch.None
+    tickets.filter { it.id == wanted }.takeIf { it.isNotEmpty() }?.let { return outcome(it) }
+    val head = wanted.removePrefix(TICKET_ID_SCHEME)
+    if (head.isNotEmpty()) {
+        tickets.filter { it.id.removePrefix(TICKET_ID_SCHEME).startsWith(head) }.takeIf { it.isNotEmpty() }?.let { return outcome(it) }
     }
+    return outcome(tickets.filter { it.id.endsWith(wanted) })
+}
+
+/** The constant scheme every ticket id starts with; the random tail after it is what identifies a ticket. */
+internal const val TICKET_ID_SCHEME = "ticket-"
+
+private fun outcome(matches: List<Ticket>): TicketPrefixMatch = when (matches.size) {
+    0 -> TicketPrefixMatch.None
+    1 -> TicketPrefixMatch.Unique(matches.single())
+    else -> TicketPrefixMatch.Ambiguous(matches)
 }
