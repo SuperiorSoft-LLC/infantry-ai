@@ -1,0 +1,4 @@
+# Used by the `tls` profile of compose.yaml. {$AGENTHQ_DOMAIN} comes from the environment.
+{$AGENTHQ_DOMAIN} {
+	reverse_proxy infantry-ai:8787
+}

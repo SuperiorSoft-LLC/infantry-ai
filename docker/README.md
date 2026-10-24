@@ -12,3 +12,16 @@ Starting a ticket cuts a git worktree, so the container needs a repository and a
 
 Without them the Start is refused: "this project has no directory configured" (no repo) or
 "no base branch configured" (no base). A ticket also needs a role (`agenthq ticket update <id> --role <role id>`).
+
+## Compose and smoke test
+
+`compose.yaml` is the single-host deployment (loopback port, `/data` + `/work` + home volumes, secrets as files,
+read-only root, no capabilities, optional Caddy TLS with `--profile tls`). `.env.example` lists its settings.
+
+    mkdir -p secrets && openssl rand -hex 32 > secrets/agenthq_token && openssl rand -hex 32 > secrets/agenthq_keystore_key
+    chmod 644 secrets/*          # uid 10001 in the container must read them
+    docker compose -f docker/compose.yaml up -d
+
+The daemon refuses to start without a token. `docker/smoke.sh [image]` checks: no token refuses, `/health`, an
+authenticated route refuses without a token, non-root, a ticket started with a fake harness, and that the data survives
+`down` / `up`. The `docker-smoke` workflow runs it for changes under `docker/`.
