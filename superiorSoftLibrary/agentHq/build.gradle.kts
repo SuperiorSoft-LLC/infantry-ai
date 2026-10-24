@@ -323,6 +323,34 @@ tasks.withType<Test>().configureEach {
     }
 }
 
+// TEST-SPEED-3: two tiers split by class name. `test` still runs BOTH (the gate is unchanged); `testFast` is the quick
+// inner loop (~240 s of tests, unit-level), `testSlow` is the rest (~550 s: real git, CLI processes, fixture daemons,
+// E2E/soak/live). Every class is in exactly one tier: the slow patterns are an include list for one and an exclude list
+// for the other. A new slow class joins `testSlow` by its name (suffix or package) or by adding a pattern here.
+val slowTestPatterns = listOf(
+    "*E2eTest", "*E2ETest", "*SoakTest", "*LiveTest", "*DaemonTest", "*AcceptanceTest", "*IntegrationTest",
+    "com.superiorsoftllc.agenthq.cli.*",
+    "com.superiorsoftllc.agenthq.projectgit.*",
+    "com.superiorsoftllc.agenthq.worktree.*",
+    "*.VerifyBaseTaskTest",
+    "*.ToolApprovalMatrixTest",
+)
+val unitTest = tasks.named<Test>("test")
+tasks.register<Test>("testFast") {
+    group = "verification"
+    description = "TEST-SPEED-3: the fast tier (every test class NOT matched by slowTestPatterns)."
+    testClassesDirs = unitTest.get().testClassesDirs
+    classpath = unitTest.get().classpath
+    filter { slowTestPatterns.forEach { excludeTestsMatching(it) } }
+}
+tasks.register<Test>("testSlow") {
+    group = "verification"
+    description = "TEST-SPEED-3: the slow tier (test classes matched by slowTestPatterns)."
+    testClassesDirs = unitTest.get().testClassesDirs
+    classpath = unitTest.get().classpath
+    filter { slowTestPatterns.forEach { includeTestsMatching(it) } }
+}
+
 // PERF-1: `./gradlew :superiorSoftLibrary:agentHq:perfProfile` -- the profile lives in agentHqUi (it needs the UI's
 // classpath and the window's Controller), so this is an alias. See agentHqUi/build.gradle.kts `perfProfile`.
 tasks.register("perfProfile") {

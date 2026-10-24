@@ -153,6 +153,24 @@ tasks.named<Test>("test") {
     maxParallelForks = providers.gradleProperty("agenthq.uiTestForks").map { it.toInt() }.getOrElse(2)
     maxHeapSize = "2g"
 }
+// TEST-SPEED-3: two tiers split by class name; `test` still runs both. `testFast` is ~30 s of plain unit tests,
+// `testSlow` the ~390 s of Compose windows over a real daemon. Same fork count as `test`; ownerSmoke is in neither.
+val slowUiTestPatterns = listOf("*UiTest", "*E2ETest", "*E2eTest", "*IntegrationTest")
+val uiUnitTest = tasks.named<Test>("test")
+fun Test.uiTier(desc: String, slow: Boolean) {
+    group = "verification"
+    description = desc
+    testClassesDirs = uiUnitTest.get().testClassesDirs
+    classpath = uiUnitTest.get().classpath
+    maxParallelForks = uiUnitTest.get().maxParallelForks
+    maxHeapSize = "2g"
+    filter {
+        excludeTestsMatching(ownerSmokeTests)
+        slowUiTestPatterns.forEach { if (slow) includeTestsMatching(it) else excludeTestsMatching(it) }
+    }
+}
+tasks.register<Test>("testFast") { uiTier("TEST-SPEED-3: the fast UI tier (classes NOT matched by slowUiTestPatterns).", slow = false) }
+tasks.register<Test>("testSlow") { uiTier("TEST-SPEED-3: the slow UI tier (classes matched by slowUiTestPatterns).", slow = true) }
 tasks.register<Test>("ownerSmoke") {
     group = "verification"
     description = "E2E-OWNER-1: the owner's path end to end (real daemon JVM, installed agenthq over MCP and CLI, stub harness)."

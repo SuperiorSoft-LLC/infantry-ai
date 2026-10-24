@@ -25,6 +25,9 @@ Run it from Git Bash inside any AgentHQ checkout. Long run (tens of minutes): st
    taken from the cache, so every module compiles fresh in the new worktree, once (later stages see it up-to-date).
    The verdict line then says `(full)`.
    Test tasks run several forks in parallel (`maxParallelForks`; `-Pagenthq.testForks=N`, `-Pagenthq.uiTestForks=N`).
+   The gate always runs the full `test` tasks. For a quick inner loop, `agentHq` and `agentHqUi` also have
+   `testFast` and `testSlow` (TEST-SPEED-3): two tiers split by class name (`slowTestPatterns` /
+   `slowUiTestPatterns` in each build file). Each class is in exactly one tier, so `testFast` + `testSlow` = `test`.
 5. Removes the worktree and the lock on exit (also on Ctrl-C). `GATE_KEEP=1` keeps the worktree for inspection.
 
 Logs are in `$TEMP/agenthq-gate-<sha8>-<pid>/`: `status.log` (one line per stage) and `<stage>.log` (full Gradle output).
