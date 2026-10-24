@@ -121,6 +121,7 @@ fun TitleBar(
     // move into an overflow menu, and the avatar strip gives way to a plain drag area. At or above it the bar is unchanged.
     BoxWithConstraints(Modifier.fillMaxWidth()) {
     val compact = PanelLayout.isCompact(maxWidth.value)
+    androidx.compose.runtime.CompositionLocalProvider(LocalTitleBarCompact provides compact) {
     Row(
         Modifier.fillMaxWidth().height(TITLE_BAR_HEIGHT).background(Palette.Panel).testTag(TITLE_BAR_TAG),
         verticalAlignment = Alignment.CenterVertically,
@@ -184,10 +185,14 @@ fun TitleBar(
         }
     }
     }
+    }
     HorizontalDivider(color = Palette.Border)
 }
 
 val TITLE_BAR_HEIGHT = 36.dp
+
+/** True while the title bar is in its compact (narrow) layout; read by the Assistant pill to drop its label. */
+val LocalTitleBarCompact = androidx.compose.runtime.compositionLocalOf { false }
 
 /**
  * MOBILE-TITLEBAR-1: the compact bar's overflow button and its menu: the project picker slot, the attention entry (while
