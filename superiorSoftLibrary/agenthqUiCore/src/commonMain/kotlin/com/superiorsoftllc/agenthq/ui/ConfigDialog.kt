@@ -1,6 +1,17 @@
 package com.superiorsoftllc.agenthq.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -40,6 +51,8 @@ import com.superiorsoftllc.agenthq.ui.model.FLAGS_LIFETIME_NOTE
 import com.superiorsoftllc.agenthq.ui.model.LifecycleSetting
 import com.superiorsoftllc.agenthq.ui.model.UserPortrait
 import com.superiorsoftllc.agenthq.ui.model.UiFlags
+import com.superiorsoftllc.agenthq.ui.model.ThemeAccent
+import com.superiorsoftllc.agenthq.ui.model.ThemeSettings
 
 /** PAIR-1: the connection "Pair a device" shares ([url], [token]) and what a link scanned or pasted there does. */
 class PairEntry(val url: String, val token: String?, val name: String?, val onLink: (com.superiorsoftllc.agenthq.ui.pair.PairingLink) -> Unit) {
@@ -93,6 +106,9 @@ fun ConfigDialog(
     /** SERVER-UPDATE-4: the connected server's version and update state, and the client/server mismatch warning; null hides the section. */
     serverUpdate: com.superiorsoftllc.agenthq.ui.model.ServerUpdateState? = null,
     serverMismatch: String? = null,
+    /** THEME-1: the current theme and the callback that applies and stores a new one; null hides the section. */
+    theme: ThemeSettings? = null,
+    onTheme: ((ThemeSettings) -> Unit)? = null,
 ) {
     AhqAlertDialog(
         onDismissRequest = onDismiss,
@@ -102,6 +118,11 @@ fun ConfigDialog(
                 Text(FLAGS_LIFETIME_NOTE, color = Palette.Muted, fontSize = 11.sp)
                 FlagSection(title = "Agent scope", applies = AGENT_SCOPE_APPLIES_TO) {
                     AgentScopeDropdown(flags.agentScope) { onFlags(flags.copy(agentScope = it)) }
+                }
+                if (theme != null && onTheme != null) {
+                    FlagSection(title = ThemeSettings.TITLE, applies = ThemeSettings.APPLIES_TO) {
+                        ThemeSection(theme, onTheme)
+                    }
                 }
                 FlagSection(title = "Blur behind dialogs", applies = BLUR_APPLIES_TO) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -563,3 +584,57 @@ private fun UserPortraitSection(portrait: String?, onSave: (ByteArray?) -> Unit)
 
 const val BLUR_SWITCH_TAG = "blur-behind-dialogs-switch"
 const val BLUR_APPLIES_TO = "Applies to: every dialog. On blurs the window behind it; off dims it instead. Android before 12 always dims. Remembered across launches."
+
+const val THEME_ACCENT_TAG_PREFIX = "theme-accent-"
+const val THEME_DARK_SWITCH_TAG = "theme-dark-switch"
+const val THEME_RESET_TAG = "theme-reset"
+
+/**
+ * THEME-1: accent presets as swatches (a radio group: the chosen one is ringed and announced as selected), a dark / light
+ * switch, and "Reset to default" (amber on dark). Each pick goes straight to [onPick], which applies it live.
+ */
+@Composable
+private fun ThemeSection(theme: ThemeSettings, onPick: (ThemeSettings) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.selectableGroup(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ThemeAccent.entries.forEach { accent ->
+                AccentSwatch(accent, selected = accent == theme.accent) { onPick(theme.copy(accent = accent)) }
+            }
+        }
+        Text("Accent: ${theme.accent.label}", fontSize = 12.sp)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            androidx.compose.material3.Switch(
+                checked = theme.dark,
+                onCheckedChange = { onPick(theme.copy(dark = it)) },
+                modifier = Modifier.testTag(THEME_DARK_SWITCH_TAG),
+            )
+            Text(if (theme.dark) "Dark" else "Light", fontSize = 12.sp)
+        }
+        TextButton(
+            onClick = { onPick(ThemeSettings()) },
+            enabled = !theme.isDefault,
+            modifier = Modifier.testTag(THEME_RESET_TAG),
+        ) { Text("Reset to default") }
+    }
+}
+
+@Composable
+private fun AccentSwatch(accent: ThemeAccent, selected: Boolean, onClick: () -> Unit) {
+    val ring = if (selected) androidx.compose.material3.MaterialTheme.colorScheme.onSurface else androidx.compose.ui.graphics.Color.Transparent
+    androidx.compose.foundation.layout.Box(
+        Modifier.size(32.dp)
+            .clip(CircleShape)
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .semantics { contentDescription = accent.label }
+            .handCursor()
+            .testTag(THEME_ACCENT_TAG_PREFIX + accent.name)
+            .border(2.dp, ring, CircleShape)
+            .padding(4.dp)
+            .clip(CircleShape)
+            .background(androidx.compose.ui.graphics.Color(accent.argb)),
+    )
+}

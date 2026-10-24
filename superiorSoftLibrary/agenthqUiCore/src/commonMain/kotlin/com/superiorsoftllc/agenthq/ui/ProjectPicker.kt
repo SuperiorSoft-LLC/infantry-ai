@@ -241,7 +241,7 @@ private fun NewProjectDialog(
         confirmButton = {
             Button(
                 onClick = ::create, enabled = canCreate,
-                colors = ButtonDefaults.buttonColors(containerColor = Palette.Accent, contentColor = Color(0xFF1A1200)),
+                colors = ButtonDefaults.buttonColors(containerColor = Palette.Accent, contentColor = Palette.OnAccent),
                 modifier = Modifier.testTag(NEW_PROJECT_CREATE_TAG),
             ) { Text(confirmLabel) }
         },
@@ -320,7 +320,7 @@ private fun ProjectConfigDialog(state: AppState, controller: Controller, project
         confirmButton = {
             if (tab == ProjectConfigTab.General) Button(
                 onClick = ::save, enabled = canSave,
-                colors = ButtonDefaults.buttonColors(containerColor = Palette.Accent, contentColor = Color(0xFF1A1200)),
+                colors = ButtonDefaults.buttonColors(containerColor = Palette.Accent, contentColor = Palette.OnAccent),
                 modifier = Modifier.testTag(NEW_PROJECT_CREATE_TAG),
             ) { Text("Save") }
         },
