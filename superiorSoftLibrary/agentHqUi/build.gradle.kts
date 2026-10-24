@@ -148,6 +148,10 @@ tasks.withType<Test>().configureEach {
 val ownerSmokeTests = "com.superiorsoftllc.agenthq.ui.owner.*"
 tasks.named<Test>("test") {
     filter { excludeTestsMatching(ownerSmokeTests) }
+    // TEST-SPEED-1: parallel test-class forks (was 1 fork, fully serial). Fewer than :agentHq because each UI fork boots a
+    // daemon AND a Compose window. ownerSmoke stays a single fork. Override: -Pagenthq.uiTestForks=1.
+    maxParallelForks = providers.gradleProperty("agenthq.uiTestForks").map { it.toInt() }.getOrElse(2)
+    maxHeapSize = "2g"
 }
 tasks.register<Test>("ownerSmoke") {
     group = "verification"
