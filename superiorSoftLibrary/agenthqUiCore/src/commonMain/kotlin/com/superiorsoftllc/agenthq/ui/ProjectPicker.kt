@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
 import androidx.compose.foundation.background
+import com.superiorsoftllc.agenthq.ui.model.ProjectSettingsRegistry
 import com.superiorsoftllc.agenthq.ui.model.ProjectView
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.verticalScroll
@@ -75,7 +76,7 @@ const val NEW_PROJECT_CANCEL_TAG = "new-project-cancel"
 
 /** Edit project: the title bar's pencil beside "+" opens the same dialog prefilled with the current project's name. */
 const val EDIT_PROJECT_BUTTON_TAG = "title-bar-edit-project"
-const val EDIT_PROJECT_LABEL = "Project Configurations"
+const val EDIT_PROJECT_LABEL = "Project settings"
 const val PROJECT_CONFIG_DIALOG_TAG = "project-config-dialog"
 const val PROJECT_CONFIG_TAB_GENERAL_TAG = "project-config-tab-general"
 const val PROJECT_CONFIG_TAB_LANES_TAG = "project-config-tab-lanes"
@@ -251,21 +252,15 @@ private fun NewProjectDialog(
     )
 }
 
-/** The tabs of the Project Configurations dialog; more (themes, ...) slot in here. */
-private enum class ProjectConfigTab(val label: String, val tag: String) {
-    General("General", PROJECT_CONFIG_TAB_GENERAL_TAG),
-    Lanes("Lanes / Roles", PROJECT_CONFIG_TAB_LANES_TAG),
-}
-
 /**
- * Project Configurations (replaces Rename Project): a tabbed dialog on the shared blurred modal. General renames the
- * project; Lanes / Roles sets, per role, the most agents that run at once (default 1, no upper limit). A cap change is
+ * Project settings (replaces Rename Project): a tabbed dialog on the shared blurred modal. The sections and their toggles are
+ * registered in [ProjectSettingsRegistry]. General renames the project; Pipeline holds the on/off switches; Lanes / Roles sets, per role, the most agents that run at once (default 1, no upper limit). A cap change is
  * applied at once (the daemon pushes the project back); lowering it never stops a running agent.
  */
 @Composable
 private fun ProjectConfigDialog(state: AppState, controller: Controller, project: ProjectView, live: Boolean, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
-    var tab by remember { mutableStateOf(ProjectConfigTab.General) }
+    var tab by remember { mutableStateOf(ProjectSettingsRegistry.GENERAL) }
     var name by remember { mutableStateOf(project.name) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -292,18 +287,18 @@ private fun ProjectConfigDialog(state: AppState, controller: Controller, project
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.widthIn(min = 360.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    ProjectConfigTab.entries.forEach { t ->
-                        val selected = t == tab
+                    ProjectSettingsRegistry.sections.forEach { t ->
+                        val selected = t.id == tab
                         Text(
                             t.label, fontSize = 12.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                             color = if (selected) Palette.Accent else Palette.Muted,
-                            modifier = Modifier.clickable(role = Role.Tab, onClickLabel = t.label) { tab = t }
+                            modifier = Modifier.clickable(role = Role.Tab, onClickLabel = t.label) { tab = t.id }
                                 .padding(vertical = 4.dp).testTag(t.tag),
                         )
                     }
                 }
                 when (tab) {
-                    ProjectConfigTab.General -> {
+                    ProjectSettingsRegistry.GENERAL -> {
                         val focus = remember { FocusRequester() }
                         LaunchedEffect(Unit) { focus.requestFocus() }
                         OutlinedTextField(
@@ -313,12 +308,13 @@ private fun ProjectConfigDialog(state: AppState, controller: Controller, project
                         if (!live) Text("Connect to a daemon to change the project.", color = Palette.Muted, fontSize = 11.sp)
                         error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
                     }
-                    ProjectConfigTab.Lanes -> LanesTab(state, controller, project, live)
+                    ProjectSettingsRegistry.LANES -> LanesTab(state, controller, project, live)
+                    else -> ToggleSection(state, controller, project, live, tab)
                 }
             }
         },
         confirmButton = {
-            if (tab == ProjectConfigTab.General) Button(
+            if (tab == ProjectSettingsRegistry.GENERAL) Button(
                 onClick = ::save, enabled = canSave,
                 colors = ButtonDefaults.buttonColors(containerColor = Palette.Accent, contentColor = Palette.OnAccent),
                 modifier = Modifier.testTag(NEW_PROJECT_CREATE_TAG),
@@ -326,7 +322,7 @@ private fun ProjectConfigDialog(state: AppState, controller: Controller, project
         },
         dismissButton = {
             TextButton(onClick = onDismiss, modifier = Modifier.testTag(NEW_PROJECT_CANCEL_TAG)) {
-                Text(if (tab == ProjectConfigTab.General) "Cancel" else "Close", color = Palette.Text)
+                Text(if (tab == ProjectSettingsRegistry.GENERAL) "Cancel" else "Close", color = Palette.Text)
             }
         },
     )
@@ -369,29 +365,33 @@ private fun LanesTab(state: AppState, controller: Controller, project: ProjectVi
             color = Palette.Danger, fontSize = 11.sp,
         )
     }
-    // BASICS-KILL-1 (contract 1.118.0): finished workers leave the session list by themselves.
-    if (state.connection.autoRemovesDoneWorkers) {
+    error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
+}
+
+/** BASICS-KILL-1: the "remove done workers" switch (now in the Pipeline section). */
+const val PROJECT_CONFIG_AUTO_REMOVE_TAG = "project-config-auto-remove-done-workers"
+
+/** A section made only of registered switches ([ProjectSettingsRegistry.toggles]); a change applies at once and the pushed project redraws it. */
+@Composable
+private fun ToggleSection(state: AppState, controller: Controller, project: ProjectView, live: Boolean, sectionId: String) {
+    val scope = rememberCoroutineScope()
+    var error by remember { mutableStateOf<String?>(null) }
+    ProjectSettingsRegistry.togglesFor(sectionId, state.connection).forEach { toggle ->
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             androidx.compose.material3.Checkbox(
-                checked = project.autoRemoveDoneWorkers,
+                checked = toggle.isOn(project),
                 enabled = live,
                 onCheckedChange = { on ->
                     error = null
-                    scope.launch { (controller.setAutoRemoveDoneWorkers(project.id, on) as? CommandResult.Refused)?.let { error = it.reason } }
+                    scope.launch { (toggle.write(controller, project.id, on) as? CommandResult.Refused)?.let { error = it.reason } }
                 },
-                modifier = Modifier.testTag(PROJECT_CONFIG_AUTO_REMOVE_TAG),
+                modifier = Modifier.testTag(toggle.tag),
             )
-            Text(
-                "Remove a worker's session when its ticket is done (after its last turn)",
-                color = Palette.Text, fontSize = 12.sp, modifier = Modifier.weight(1f),
-            )
+            Text(toggle.label, color = Palette.Text, fontSize = 12.sp, modifier = Modifier.weight(1f))
         }
     }
     error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
 }
-
-/** BASICS-KILL-1: the Lanes tab's "remove done workers" checkbox. */
-const val PROJECT_CONFIG_AUTO_REMOVE_TAG = "project-config-auto-remove-done-workers"
 
 @Composable
 private fun CapStep(label: String, enabled: Boolean, tag: String, onClick: () -> Unit) {

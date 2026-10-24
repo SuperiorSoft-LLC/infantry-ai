@@ -1268,6 +1268,13 @@ class Controller(
         return report(send(WireRequests.projectAutoRemove(projectId, on)))
     }
 
+    /** Project settings: switch [key] of [projectId] on or off (`project_config` experiments, 1.126.0). */
+    suspend fun setProjectSwitch(projectId: String, key: String, on: Boolean): CommandResult {
+        if (!contractAtLeast(_state.value.connection.contract, 1, 126)) return report(CommandResult.Refused("This daemon cannot store project switches (needs contract 1.126.0)."))
+        if (_state.value.projects.none { it.id == projectId }) return report(CommandResult.Refused("unknown project"))
+        return report(send(WireRequests.projectSwitch(projectId, key, on)))
+    }
+
     /** True when the connected daemon speaks contract 1.81.0 or later (`project_base`). */
     fun supportsProjectBase(): Boolean = contractAtLeast(_state.value.connection.contract, 1, 81)
 

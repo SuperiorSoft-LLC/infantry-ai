@@ -1107,6 +1107,7 @@ class AgentHqDaemon(
             com.superiorsoftllc.agenthq.mailbox.AgentWatchdog(
                 sessions = manager, mailbox = mailbox, send = mail::send, attention = attention,
                 config = com.superiorsoftllc.agenthq.session.WatchdogConfig.fromEnv(),
+                isEnabledFor = { projectStore.experimentOn(it, "agentWatchdog") },
             ).start()
             manager.eventSink = { event ->
                 broadcast(clients, event, streamSequencer, runActivity) { id -> manager.toolApprovalFor(id).mode }

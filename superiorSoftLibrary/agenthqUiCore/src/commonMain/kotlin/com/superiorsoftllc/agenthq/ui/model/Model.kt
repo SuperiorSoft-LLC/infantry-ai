@@ -496,6 +496,8 @@ data class ProjectView(
     val laneCaps: Map<String, Int> = emptyMap(),
     /** BASICS-KILL-1 (contract 1.118.0): a done ticket's worker session is ended and removed. */
     val autoRemoveDoneWorkers: Boolean = false,
+    /** EXPERIMENTS-1 (contract 1.126.0): named project switches, key to `on`; a key not listed is off. */
+    val experiments: Map<String, String> = emptyMap(),
 )
 
 /**
@@ -1473,7 +1475,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     // chosen yet; the current active project is kept while it is still in the list.
     Envelope.PROJECTS -> {
         val views = json.decodeFromString(ListSerializer(Project.serializer()), env.data)
-            .map { ProjectView(it.id, it.name, it.goal, it.directory, it.baseBranch, it.laneCaps, it.autoRemoveDoneWorkers) }
+            .map { ProjectView(it.id, it.name, it.goal, it.directory, it.baseBranch, it.laneCaps, it.autoRemoveDoneWorkers, it.experiments) }
         val active = s.activeProjectId?.takeIf { id -> views.any { it.id == id } } ?: views.firstOrNull()?.id
         s.copy(projects = views, activeProjectId = active)
     }
@@ -1517,7 +1519,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     // The daemon's answer to project_save / workspace_save: ONE stored row, upserted by id (a create appends,
     // a re-send of a known id replaces it), so a new project or workspace appears without a re-list.
     Envelope.PROJECT -> {
-        val p = json.decodeFromString(Project.serializer(), env.data).let { ProjectView(it.id, it.name, it.goal, it.directory, it.baseBranch, it.laneCaps, it.autoRemoveDoneWorkers) }
+        val p = json.decodeFromString(Project.serializer(), env.data).let { ProjectView(it.id, it.name, it.goal, it.directory, it.baseBranch, it.laneCaps, it.autoRemoveDoneWorkers, it.experiments) }
         val known = s.projects.any { it.id == p.id }
         s.copy(
             projects = if (known) s.projects.map { if (it.id == p.id) p else it } else s.projects + p,

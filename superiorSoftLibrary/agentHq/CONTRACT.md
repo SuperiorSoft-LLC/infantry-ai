@@ -105,6 +105,10 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
 
+### Note (no version bump): the `agentWatchdog` project switch (ticket-4e1d52c6)
+
+Not a wire change. The agent watchdog is a per-project opt-in stored as `Project.experiments["agentWatchdog"] = "on"` (absent = off, the default), set with `project_config.experiments` and read by the daemon at every watchdog tick (a flip needs no restart). While off, the watchdog sends nothing for that project's sessions (no nudge, no PM mail, no attention item) and shows them IDLE. `AGENTHQ_WATCHDOG=off` stays a global hard off. Mail from `system` or a `trigger:` sender is never a pending item.
+
 ### What changed in 1.127.0 (TODO-OVERLAY-1, ticket-8bea1a4d) - the agent's own to-do list
 
 Additive; `contract=1.127.0`. `status.todos` (`[{text, status: pending|in_progress|done, activeText?}]`) is set on the status frame of a to-do tool call (claude `TodoWrite`, opencode `todowrite`) and is the FULL list: a client REPLACES its list, an empty list clears it. Only these items are sent, never other tool arguments. Omitted otherwise; an older daemon never sends it. Replay: it rides the sequenced status frame like any other.

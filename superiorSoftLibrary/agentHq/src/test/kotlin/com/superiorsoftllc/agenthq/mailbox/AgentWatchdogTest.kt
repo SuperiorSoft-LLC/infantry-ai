@@ -22,12 +22,14 @@ class AgentWatchdogTest {
             SqlAgentHqStore.open(Files.createTempFile("agenthq-wd-", ".db").also { it.toFile().delete() }.toAbsolutePath().toString()).attention,
         )
         var offset = 0L
+        var enabled = true
         val dog = AgentWatchdog(
             manager, mailbox,
             send = { r -> sent += r; mailbox.send(r) },
             attention = attention,
             config = WatchdogConfig(),
             clock = { System.currentTimeMillis() + offset * 60_000 },
+            isEnabledFor = { enabled },
         )
         fun at(minutes: Long) { offset = minutes; dog.tick() }
         fun nudges() = sent.count { it.subject == AgentWatchdog.NUDGE_SUBJECT }
@@ -72,6 +74,50 @@ class AgentWatchdogTest {
         r.at(18)
         assertEquals(1, r.pmMails(), "the PM is told once")
         assertEquals(1, r.attention.list().size, "then the owner")
+    }
+
+    @Test
+    fun a_project_with_the_watchdog_off_gets_no_sends_no_attention_and_shows_idle() {
+        val r = Rig(autoExit = true)
+        r.enabled = false
+        val s = r.manager.startNew("hello")
+        r.mailbox.send(MailSendRequest(from = "human", to = s.id, subject = "review X", body = "please"))
+        for (m in listOf(1L, 6L, 12L, 18L, 40L)) r.at(m)
+        assertTrue(r.sent.isEmpty())
+        assertTrue(r.attention.list().isEmpty())
+        assertEquals(WatchState.IDLE.name, r.manager.get(s.id)!!.watch!!.state)
+        assertEquals(null, r.manager.get(s.id)!!.watch!!.pending)
+    }
+
+    @Test
+    fun flipping_the_switch_takes_effect_on_the_next_tick_without_a_restart() {
+        val r = Rig(autoExit = true)
+        r.enabled = false
+        val s = r.manager.startNew("hello")
+        r.mailbox.send(MailSendRequest(from = "human", to = s.id, subject = "review X", body = "please"))
+        r.at(6)
+        assertEquals(0, r.nudges())
+        r.enabled = true
+        r.at(7)
+        assertEquals(1, r.nudges())
+        r.enabled = false
+        r.at(30)
+        r.at(60)
+        assertEquals(1, r.nudges())
+        assertEquals(0, r.pmMails())
+        assertEquals(WatchState.IDLE.name, r.manager.get(s.id)!!.watch!!.state)
+    }
+
+    @Test
+    fun mail_from_system_or_a_trigger_is_never_a_pending_item() {
+        val r = Rig(autoExit = true)
+        val s = r.manager.startNew("hello")
+        r.mailbox.send(MailSendRequest(from = "system", to = s.id, subject = "FYI", body = "x"))
+        r.mailbox.send(MailSendRequest(from = "trigger:nightly", to = s.id, subject = "wake", body = "x"))
+        r.at(6)
+        r.at(30)
+        assertTrue(r.sent.isEmpty())
+        assertEquals(WatchState.IDLE.name, r.manager.get(s.id)!!.watch!!.state)
     }
 
     @Test
