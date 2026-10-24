@@ -72,7 +72,7 @@ fun runRealDaemonUi(
         } else {
             application {
                 AgentHqWindow(onCloseRequest = ::exitApplication) {
-                    AgentHqShell(PinnedDaemonHost(defaultPlatformHost(), wsUrl, logsDir, updater, servers = servers, remote = remote, local = local, activeFile = activeServer))
+                    AgentHqShell(PinnedDaemonHost(defaultPlatformHost(), wsUrl, logsDir, updater, servers = servers, remote = remote, local = local, activeFile = activeServer, pluginsDir = File(stateDir(), "plugins")))
                     if (updater != null) UpdatePrompt(updater)
                 }
             }
@@ -179,7 +179,17 @@ internal class PinnedDaemonHost(
     /** SWITCH-1: this machine's daemon, started on demand by "This computer". */
     local: LocalServer? = null,
     private val activeFile: ActiveServerFile? = null,
+    /** VOICE-PLUGIN-1: where voice plugins are installed (`<stateDir>/plugins`); null = OS voice only, no Plugins section (tests). */
+    pluginsDir: File? = null,
 ) : PlatformHost by base {
+    private val pluginStore = pluginsDir?.let { com.superiorsoftllc.agenthq.ui.voice.plugin.VoicePluginStore(it) }
+
+    override val voicePlugins: com.superiorsoftllc.agenthq.ui.voice.plugin.VoicePlugins? = pluginStore
+
+    /** VOICE-PLUGIN-1: the enabled voice plugin, falling back to the OS voice on any failure; the OS voice when none is enabled. */
+    override val speaker: com.superiorsoftllc.agenthq.ui.voice.Speaker? =
+        base.speaker?.let { os -> pluginStore?.let { com.superiorsoftllc.agenthq.ui.voice.plugin.PluginSpeaker(it, os) } ?: os }
+
     override val localServer: LocalServer? = local
 
     override fun activeServer(): String? = remote?.url

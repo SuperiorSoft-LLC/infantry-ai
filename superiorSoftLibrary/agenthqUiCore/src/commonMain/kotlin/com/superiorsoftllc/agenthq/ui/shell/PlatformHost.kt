@@ -30,6 +30,9 @@ interface PlatformHost {
     /** VOICE-1: the platform's text-to-speech, or null when it has none (alerts then only toast and beep). */
     val speaker: com.superiorsoftllc.agenthq.ui.voice.Speaker? get() = null
 
+    /** VOICE-PLUGIN-1: the installable voice plugins of this machine (Configuration > Plugins); null = no section. */
+    val voicePlugins: com.superiorsoftllc.agenthq.ui.voice.plugin.VoicePlugins? get() = null
+
     /** VOICE-1: whether the app window has focus right now; true when the host cannot tell. */
     fun windowFocused(): Boolean = true
 
