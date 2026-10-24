@@ -39,6 +39,8 @@ data class UiFlags(
     val progressStaleMin: Int = PROGRESS_STALE_DEFAULT_MIN,
     /** CHAT-MD-ENGINE: id of the chosen chat markdown engine (client-side, per device); unknown ids fall back to the built-in one. Persisted by the host. */
     val chatMarkdownEngine: String = BuiltInChatMarkdownEngine.ID,
+    /** Where agent reasoning shows (client-side, per device); default inline as before. Persisted by the host. */
+    val reasoningPlacement: ReasoningPlacement = ReasoningPlacement.INLINE,
 )
 
 const val PROGRESS_STALE_APPLIES_TO = "Applies to: the progress bars agents report on their card, their session header and their ticket's board card. A running bar with no update for this long turns amber."

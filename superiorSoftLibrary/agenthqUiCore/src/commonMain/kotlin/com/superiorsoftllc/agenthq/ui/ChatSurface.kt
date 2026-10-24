@@ -97,6 +97,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import com.superiorsoftllc.agenthq.ui.model.PickedModel
+import com.superiorsoftllc.agenthq.ui.model.chatRows
 import com.superiorsoftllc.agenthq.ui.model.NoticeKind
 import com.superiorsoftllc.agenthq.ui.model.noticesForSession
 import androidx.compose.ui.semantics.Role
@@ -378,7 +379,7 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
     // [nowProvider] is the clock (injectable so a UI test can drive it with the Compose frame clock).
     var now by remember { mutableStateOf(nowProvider()) }
     LaunchedEffect(agent.id) { while (true) { delay(1_000); now = nowProvider() } }
-    val rows = chatItems(agent.output)
+    val rows = LocalReasoningPlacement.current.chatRows(chatItems(agent.output))
     val status = agent.chatStatus(now)
     // Keyed on the status PRESENCE, not its value: the ticker changes it every second, and that must
     // not restart the scroll effect.

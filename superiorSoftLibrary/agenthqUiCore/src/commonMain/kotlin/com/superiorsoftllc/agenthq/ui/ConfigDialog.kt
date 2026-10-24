@@ -190,6 +190,9 @@ fun ConfigDialog(
                             if (shows(ConfigEntry.MARKDOWN_ENGINE)) FlagSection(ConfigEntry.MARKDOWN_ENGINE, highlight) {
                                 MarkdownEngineDropdown(flags.chatMarkdownEngine) { onFlags(flags.copy(chatMarkdownEngine = it)) }
                             }
+                            if (shows(ConfigEntry.REASONING)) FlagSection(ConfigEntry.REASONING, highlight) {
+                                ReasoningPlacementChoice(flags.reasoningPlacement) { onFlags(flags.copy(reasoningPlacement = it)) }
+                            }
                             if (shows(ConfigEntry.USER_PORTRAIT) && userPortrait != null) {
                                 FlagSection(ConfigEntry.USER_PORTRAIT, highlight) { UserPortraitSection(userPortrait.first, userPortrait.second) }
                             }

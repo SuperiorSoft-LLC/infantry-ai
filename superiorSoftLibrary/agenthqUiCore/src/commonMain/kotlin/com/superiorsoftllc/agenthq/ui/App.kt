@@ -252,6 +252,7 @@ fun App(
                 commsSound = com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundSettings.load(host),
                 blurBehindDialogs = host.uiPref(BLUR_PREF_KEY) != "off",
                 chatMarkdownEngine = host.uiPref(com.superiorsoftllc.agenthq.ui.model.CHAT_MARKDOWN_PREF_KEY) ?: com.superiorsoftllc.agenthq.ui.model.BuiltInChatMarkdownEngine.ID,
+                reasoningPlacement = com.superiorsoftllc.agenthq.ui.model.ReasoningPlacement.fromId(host.uiPref(com.superiorsoftllc.agenthq.ui.model.REASONING_PLACEMENT_PREF_KEY)),
                 progressStaleMin = host.uiPref(com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_PREF_KEY)?.toIntOrNull()?.takeIf { it > 0 } ?: com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_DEFAULT_MIN,
             ),
         )
@@ -373,6 +374,7 @@ fun App(
       androidx.compose.runtime.CompositionLocalProvider(
           LocalModalBlur provides modalBlur,
           LocalProgressStaleMin provides flags.progressStaleMin,
+          LocalReasoningPlacement provides flags.reasoningPlacement,
           LocalChatMarkdown provides remember(flags.chatMarkdownEngine) { ChatMarkdownConfig(com.superiorsoftllc.agenthq.ui.model.ChatMarkdown.engines.resolve(flags.chatMarkdownEngine), chatBlockRenderers) },
       ) {
       ImageViewerHost {
@@ -587,6 +589,7 @@ fun App(
                     if (next.blurBehindDialogs != flags.blurBehindDialogs) host.saveUiPref(BLUR_PREF_KEY, if (next.blurBehindDialogs) "on" else "off")
                     if (next.progressStaleMin != flags.progressStaleMin) host.saveUiPref(com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_PREF_KEY, next.progressStaleMin.toString())
                     if (next.chatMarkdownEngine != flags.chatMarkdownEngine) host.saveUiPref(com.superiorsoftllc.agenthq.ui.model.CHAT_MARKDOWN_PREF_KEY, next.chatMarkdownEngine)
+                    if (next.reasoningPlacement != flags.reasoningPlacement) host.saveUiPref(com.superiorsoftllc.agenthq.ui.model.REASONING_PLACEMENT_PREF_KEY, next.reasoningPlacement.name)
                     next.commsSound.save(host, flags.commsSound)
                     flags = next
                 }, onDismiss = { showConfig = false },
