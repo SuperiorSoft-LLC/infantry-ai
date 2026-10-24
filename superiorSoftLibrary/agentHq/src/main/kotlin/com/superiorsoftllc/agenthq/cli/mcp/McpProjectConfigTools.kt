@@ -25,9 +25,21 @@ internal class McpProjectConfigTools {
 
     suspend fun set(stream: FrameStream, arguments: JsonObject): ToolResult {
         val projectId = arguments.string("projectId") ?: return refused("$SET needs a projectId")
-        val role = arguments.string("role") ?: return refused("$SET needs a role")
+        // BASICS-KILL-1 (1.118.0): autoRemoveDoneWorkers alone is a valid change; a role and a cap still go together.
+        val autoRaw = arguments.string("autoRemoveDoneWorkers")?.trim()?.lowercase()
+        val autoRemove = when (autoRaw) {
+            null, "" -> null
+            "true" -> true
+            "false" -> false
+            else -> return refused("$SET: autoRemoveDoneWorkers must be true or false, was '${autoRaw.take(20)}'")
+        }
+        val role = arguments.string("role")
+        if (role == null && autoRemove != null && arguments.string("cap") == null) {
+            return request(stream, ProjectConfigRequest(projectId, autoRemoveDoneWorkers = autoRemove))
+        }
+        role ?: return refused("$SET needs a role (with a cap), or autoRemoveDoneWorkers")
         val cap = arguments.string("cap")?.toIntOrNull()?.takeIf { it >= 1 } ?: return refused("$SET needs a cap of 1 or more")
-        return request(stream, ProjectConfigRequest(projectId, mapOf(role to cap)))
+        return request(stream, ProjectConfigRequest(projectId, mapOf(role to cap), autoRemove))
     }
 
     private suspend fun request(stream: FrameStream, request: ProjectConfigRequest): ToolResult = try {
@@ -37,7 +49,8 @@ internal class McpProjectConfigTools {
         ToolResult(json.encodeToString(JsonObject.serializer(), buildJsonObject {
             put("projectId", project.id)
             put("laneCaps", buildJsonObject { project.laneCaps.forEach { (role, cap) -> put(role, cap) } })
-            put("note", "max concurrent agents per role; a role not listed runs 1")
+            put("autoRemoveDoneWorkers", project.autoRemoveDoneWorkers)
+            put("note", "max concurrent agents per role; a role not listed runs 1. autoRemoveDoneWorkers: a done ticket's worker session is ended and removed")
         }))
     } catch (e: Exception) {
         refused(e.message ?: "project_config failed")
@@ -80,10 +93,15 @@ internal class McpProjectConfigTools {
             add(tool(GET, "Read a project's per-role caps on concurrent agents (a role not listed runs 1).", true, listOf(PROJECT), listOf("projectId")))
             add(tool(
                 SET,
-                "Set how many agents of one role may run at once in a project (1 = the default). Lowering it never stops a running agent.",
+                "Set how many agents of one role may run at once in a project (1 = the default; lowering it never stops a running " +
+                    "agent), and/or autoRemoveDoneWorkers: when true, a ticket moved to done ends and removes its worker session " +
+                    "once the worker's turn is over (default false).",
                 false,
-                listOf(PROJECT, "role" to "The role id, e.g. backend.", "cap" to "The most concurrent agents of the role, 1 or more."),
-                listOf("projectId", "role", "cap"),
+                listOf(
+                    PROJECT, "role" to "The role id, e.g. backend (with cap).", "cap" to "The most concurrent agents of the role, 1 or more.",
+                    "autoRemoveDoneWorkers" to "true or false: end and remove a done ticket's worker session.",
+                ),
+                listOf("projectId"),
             ))
         }
     }

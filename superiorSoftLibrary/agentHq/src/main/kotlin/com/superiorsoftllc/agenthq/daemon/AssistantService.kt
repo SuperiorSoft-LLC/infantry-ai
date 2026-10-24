@@ -23,6 +23,7 @@ object AssistantService {
 
     /** The Assistant session, created on the first call. Later calls (and other clients) get the same one. */
     fun ensure(manager: SessionManager, agents: AgentProfiles): SessionRecord = synchronized(lock) {
+        manager.assistantDir?.let { runCatching { it.mkdirs(); syncKnowledge(it) } }
         manager.list().firstOrNull { it.global }?.let { return it }
         val dir = (manager.assistantDir ?: throw IllegalArgumentException("this daemon has no assistant directory configured")).also { it.mkdirs() }
         val resolved = agents.resolveSpawn(SpawnOptions(role = ROLE))
@@ -37,6 +38,29 @@ object AssistantService {
             instance = agents.instanceFor(null, ROLE),
             global = true,
         )
+    }
+
+    /** Classpath location of the bundled user-guide knowledge file. */
+    const val KNOWLEDGE_RESOURCE = "assistant/KNOWLEDGE.md"
+    const val KNOWLEDGE_FILE = "KNOWLEDGE.md"
+
+    /**
+     * Copies the bundled KNOWLEDGE.md into the Assistant's directory: written when missing, overwritten when the bundled
+     * copy is newer than the one on disk (a daemon update), left alone otherwise. Returns true when it wrote the file.
+     */
+    fun syncKnowledge(dir: File, loader: ClassLoader = AssistantService::class.java.classLoader): Boolean {
+        val url = loader.getResource(KNOWLEDGE_RESOURCE) ?: return false
+        val conn = url.openConnection().apply { useCaches = false }
+        val bundledModified = conn.lastModified
+        val bytes = conn.getInputStream().use { it.readBytes() }
+        val target = File(dir, KNOWLEDGE_FILE)
+        if (target.isFile) {
+            if (bundledModified <= 0L || bundledModified <= target.lastModified()) return false
+            if (target.readBytes().contentEquals(bytes)) return false
+        }
+        target.writeBytes(bytes)
+        if (bundledModified > 0L) target.setLastModified(bundledModified)
+        return true
     }
 
     /**
@@ -55,6 +79,7 @@ object AssistantService {
         appendLine("- Roles (architect, backend, frontend, qa, pm, assistant, ...) carry a persona and standing rules; a role binding says which provider and model it runs on. Triggers start work on a schedule or an event.")
         appendLine("- Settings (the gear, bottom right) hold the connection, the harness locations, models, voice, remote access and pairing for a phone. The CLI covers the same ground; run `agenthq --help` for the live list.")
         appendLine("- Mail: sessions message each other and the owner with `agenthq send`; questions to the owner use `agenthq ask`.")
+        appendLine("- User guide: $KNOWLEDGE_FILE in your working directory holds setup, FAQ, troubleshooting, known issues, roadmap and help links; read the matching section before you answer those questions.")
         appendLine()
         appendLine("The complete CLI help of the daemon you are talking to (authoritative, generated now):")
         appendLine()

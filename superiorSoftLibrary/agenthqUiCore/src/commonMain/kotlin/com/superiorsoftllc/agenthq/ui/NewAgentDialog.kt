@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AlertDialogDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -145,7 +146,7 @@ private fun RoleStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> Unit
                     val shape = RoundedCornerShape(6.dp)
                     Row(
                         Modifier.fillMaxWidth().clip(shape)
-                            .border(BorderStroke(if (on) 2.dp else 1.dp, if (on) Palette.Accent else Palette.Muted.copy(alpha = 0.4f)), shape)
+                            .border(BorderStroke(if (on) 2.dp else 1.dp, if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)), shape)
                             .clickable { update(m.withRole(r.id)) }.padding(8.dp).testTag(NEW_AGENT_ROLE_TAG_PREFIX + r.id),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
@@ -190,8 +191,11 @@ private fun ExecutorStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> 
     }
 }
 
-/** The theme's outline is the panel border colour, which vanishes on the dialog surface: give modal fields a visible rest border and an accent focus border. */
+/**
+ * The theme's outline is the panel border colour, which vanishes on the dialog surface: give modal fields a visible rest
+ * border and an accent focus border. THEME-1: both come from the live colour scheme, so they follow the chosen accent and mode.
+ */
 @Composable
 internal fun visibleBorderFieldColors() = OutlinedTextFieldDefaults.colors(
-    unfocusedBorderColor = Palette.Muted, focusedBorderColor = Palette.Accent,
+    unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant, focusedBorderColor = MaterialTheme.colorScheme.primary,
 )

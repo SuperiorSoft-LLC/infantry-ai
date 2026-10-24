@@ -86,6 +86,7 @@ class SqlProjectPersistence(
                 directory = row.directory,
                 baseBranch = row.base_branch,
                 laneCaps = runCatching { Json.decodeFromString<Map<String, Int>>(row.lane_caps) }.getOrDefault(emptyMap()),
+                autoRemoveDoneWorkers = row.auto_remove_done_workers != 0L,
             )
         }
 
@@ -99,6 +100,7 @@ class SqlProjectPersistence(
             directory = project.directory,
             base_branch = project.baseBranch,
             lane_caps = Json.encodeToString(project.laneCaps),
+            auto_remove_done_workers = if (project.autoRemoveDoneWorkers) 1L else 0L,
         ).value
         // The insert reports how many rows it actually wrote: 1 for a create, 0 when the id was
         // already there -- and SQLDelight drops every statement after the first in a label, so the
@@ -110,6 +112,7 @@ class SqlProjectPersistence(
                 directory = project.directory,
                 base_branch = project.baseBranch,
                 lane_caps = Json.encodeToString(project.laneCaps),
+                auto_remove_done_workers = if (project.autoRemoveDoneWorkers) 1L else 0L,
                 id = project.id,
             )
         }

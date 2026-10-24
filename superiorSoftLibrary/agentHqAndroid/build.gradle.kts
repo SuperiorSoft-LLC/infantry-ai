@@ -60,7 +60,9 @@ configure<com.android.build.api.dsl.ApplicationExtension> {
         minSdk = 24
         targetSdk = 36
         versionCode = agentHqVersionCode
-        versionName = agentHqVersionName
+        // BUILD-STAMP-1: the whole build string (1.0.1+20261023.1432.e85b223), so Android's app info and the app's own
+        // footer and Configuration > About name the exact build. versionCode above stays derived from the plain version.
+        versionName = rootProject.extra["agenthqBuild"] as String
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

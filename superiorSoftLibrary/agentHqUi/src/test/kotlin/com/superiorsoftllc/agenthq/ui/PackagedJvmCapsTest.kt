@@ -31,4 +31,10 @@ class PackagedJvmCapsTest {
     fun packagedLauncherKeepsTheVersionProperty() {
         assertTrue(packaged.any { it.startsWith("-Dagenthq.version=") }, "UPDATE-1's -Dagenthq.version is gone: $packaged")
     }
+
+    @Test
+    fun packagedLauncherCarriesTheBuildStamp() {
+        // BUILD-STAMP-1: Configuration > About, the footer and the in-process daemon's `ready` build= all read it.
+        assertTrue(packaged.any { it.startsWith("-Dagenthq.build=") }, "BUILD-STAMP-1's -Dagenthq.build is missing: $packaged")
+    }
 }

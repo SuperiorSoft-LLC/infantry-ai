@@ -81,6 +81,9 @@ configurations.all {
     }
 }
 
+// BUILD-STAMP-1: the build string (root gradle/build-stamp.gradle.kts), shown by the app and sent by its in-process daemon.
+val agentHqBuildStamp: String = rootProject.extra["agenthqBuild"] as String
+
 // PERF-2: the JVM heap caps shared with :agentHq's runDaemon, from one file: agentHq/jvm-caps.txt.
 val agentHqJvmCaps: List<String> = project(":superiorSoftLibrary:agentHq").file("jvm-caps.txt").readLines()
     .map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
@@ -108,6 +111,7 @@ tasks.register<JavaExec>("runRealDaemon") {
     // set by the caller still wins; a taken port falls back to a free one and the window follows it.
     if (System.getenv("AGENTHQ_PORT").isNullOrBlank()) environment("AGENTHQ_PORT", "8788")
     jvmArgs(agentHqJvmCaps) // PERF-2
+    systemProperty("agenthq.build", agentHqBuildStamp) // BUILD-STAMP-1
     // BUG-BUILD-1: agents run the `agenthq` CLI/MCP from :agentHq's installDist (AgentHqBin), not this classpath.
     // Refresh it on every preview so agents never run an older CLI than the daemon.
     dependsOn(":superiorSoftLibrary:agentHq:installDist")
@@ -126,7 +130,11 @@ tasks.register<JavaExec>("runSmoke") {
 tasks.withType<Test>().configureEach {
     environment("AGENTHQ_LIMITS_LIVE", "false")
     // PERF-2: PackagedJvmCapsTest reads the packaged launcher's jvmArgs (the compose block below), lazily, '|'-separated (no flag contains '|').
-    val packagedJvmArgs = provider { compose.desktop.application.jvmArgs.joinToString("|") }
+    // BUILD-STAMP-1: the stamp's VALUE changes per commit (per minute when packaging); the test only checks it is there, so the
+    // input carries a fixed placeholder and the tests stay cacheable.
+    val packagedJvmArgs = provider {
+        compose.desktop.application.jvmArgs.joinToString("|") { if (it.startsWith("-Dagenthq.build=")) "-Dagenthq.build=<stamp>" else it }
+    }
     inputs.property("packagedJvmArgs", packagedJvmArgs)
     jvmArgumentProviders += CommandLineArgumentProvider { listOf("-Dagenthq.packagedJvmArgs=${packagedJvmArgs.get()}") }
 }
@@ -186,6 +194,8 @@ compose.desktop {
         mainClass = "com.superiorsoftllc.agenthq.ui.AppMainKt"
         // UPDATE-1: the running version, compared with the latest GitHub release's tag (UpdateSettings.VERSION_PROPERTY).
         jvmArgs += listOf("-Dagenthq.version=$agentHqPackageVersion")
+        // BUILD-STAMP-1: what Configuration > About and the footer show, and what the in-process daemon sends as `ready` build=.
+        jvmArgs += listOf("-Dagenthq.build=$agentHqBuildStamp")
         // PERF-2: heap caps (GC stays G1) for the packaged launcher (jpackage java-options) and `run`; the installed app runs
         // the daemon in this same JVM, so these cover both. Asserted by PackagedJvmCapsTest.
         jvmArgs += agentHqJvmCaps

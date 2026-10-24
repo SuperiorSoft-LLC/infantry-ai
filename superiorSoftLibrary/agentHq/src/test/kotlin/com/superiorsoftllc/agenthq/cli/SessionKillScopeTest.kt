@@ -22,6 +22,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import com.superiorsoftllc.agenthq.session.isBusy
 
 /**
  * Contract 1.114.0: who may kill (and `session rm --force`) a running session. A pm kills any session in its own
@@ -232,5 +233,77 @@ class SessionKillScopeTest {
         val done = serve(fixture, pm).callTool("agenthq_session_remove", """{"sessionId":"$stuck","force":true}""")
         assertEquals("false", done["isError"]!!.jsonPrimitive.content, text(done))
         assertNull(manager.get(stuck))
+    }
+
+    // --- BASICS-KILL-1: stale BUSY -------------------------------------------------------------------------
+
+    /**
+     * An at-rest worker whose leftover process (here: a registered background job on this live JVM's pid, as a Gradle
+     * daemon would be) makes the wire read BUSY. Its turn is over, so it is removable WITHOUT force. Before the fix the
+     * CLI and MCP decoded the rewritten state, called it live and refused it forever.
+     */
+    private fun staleBusy(fixture: DaemonFixture, project: String): String {
+        val manager = fixture.daemon.manager
+        val id = session(fixture, "backend", project)
+        val pid = ProcessHandle.current().pid()
+        manager.bgJobBeat(id, com.superiorsoftllc.agenthq.session.BgJob("job-1", "gradlew test", pid, System.currentTimeMillis()))
+        assertFalse(manager.get(id)!!.isBusy(), "no turn in flight")
+        val wire = Json.parseToJsonElement(Json.encodeToString(com.superiorsoftllc.agenthq.session.SessionRecordSerializer, manager.get(id)!!)).jsonObject
+        assertEquals("BUSY", wire["state"]!!.jsonPrimitive.content, "the wire reads BUSY: the stale-BUSY shape")
+        return id
+    }
+
+    @Test
+    fun aPmRemovesAStaleBusySessionWithoutForceOverTheCli() {
+        val fixture = launch()
+        val manager = fixture.daemon.manager
+        val pm = session(fixture, "pm", "alpha")
+        val stale = staleBusy(fixture, "alpha")
+
+        val removed = cli(fixture, pm, "session", "rm", stale)
+        assertEquals(0, removed.exit, removed.err)
+        assertNull(manager.get(stale))
+    }
+
+    @Test
+    fun theMcpRemoveToolRemovesAStaleBusySessionWithoutForce() {
+        val fixture = launch()
+        val manager = fixture.daemon.manager
+        val pm = session(fixture, "pm", "alpha")
+        val stale = staleBusy(fixture, "alpha")
+
+        val done = serve(fixture, pm).callTool("agenthq_session_remove", """{"sessionId":"$stale"}""")
+        assertEquals("false", done["isError"]!!.jsonPrimitive.content, text(done))
+        assertNull(manager.get(stale))
+    }
+
+    @Test
+    fun aPmKillsAndRemovesAResumedWorkerItDidNotSpawnAfterAnMcpRestart() {
+        val fixture = launch()
+        val manager = fixture.daemon.manager
+        val pm = session(fixture, "pm", "alpha")
+        // A worker of the project with a turn in flight, spawned by nobody this MCP server knows (the app restarted).
+        val worker = session(fixture, "frontend", "alpha", busy = true)
+        manager.setSpawner(worker, "a-session-from-before-the-restart")
+
+        val killed = serve(fixture, pm).callTool("agenthq_kill", """{"sessionId":"$worker","force":true}""")
+        assertEquals("false", killed["isError"]!!.jsonPrimitive.content, text(killed))
+        assertFalse(manager.get(worker)!!.live)
+        val removed = serve(fixture, pm).callTool("agenthq_session_remove", """{"sessionId":"$worker"}""")
+        assertEquals("false", removed["isError"]!!.jsonPrimitive.content, text(removed))
+        assertNull(manager.get(worker))
+    }
+
+    @Test
+    fun aWorkerStillMayNotRemoveAnotherWorkersRunningSession() {
+        val fixture = launch()
+        val manager = fixture.daemon.manager
+        val worker = session(fixture, "backend", "alpha")
+        val other = session(fixture, "frontend", "alpha", busy = true)
+
+        val refused = serve(fixture, worker).callTool("agenthq_session_remove", """{"sessionId":"$other","force":true}""")
+        assertEquals("true", refused["isError"]!!.jsonPrimitive.content)
+        assertTrue(text(refused).contains("agenthq send pm"), text(refused))
+        assertTrue(manager.get(other)!!.live)
     }
 }

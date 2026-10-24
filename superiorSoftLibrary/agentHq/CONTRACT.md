@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.115.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.118.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,56 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+
+### What changed in 1.118.0 (BASICS-KILL-1) — sessions can always be ended and removed
+
+ADDITIVE; a 1.117.0 client keeps working. The `ready` frame reports `contract=1.118.0`.
+- **`Project.autoRemoveDoneWorkers`** (default false; an older daemon omits it): when true, a ticket of the project moved to `done` ends its
+  worker session (a forced kill of its process tree) and removes it from the session list, once the worker's current turn is over (a worker
+  usually moves its own ticket and then mails its starter in the same turn). Stored with the project (migration 47).
+- **`project_config`** gains `autoRemoveDoneWorkers?` (absent = unchanged). A request with neither it nor `laneCaps` is still a read. CLI:
+  `agenthq project config set <projectId> auto-remove-done-workers on|off`; MCP: `agenthq_project_config_set` `autoRemoveDoneWorkers` (`true` /
+  `false`; `role` + `cap` are now optional when it is given).
+- **Stale BUSY is removable.** A `SessionRecord` served with `turnActive=false` and `state=BUSY` (an at-rest session whose leftover background
+  process, e.g. a Gradle daemon, makes it read busy) decodes in the CLI / MCP as its true state, IDLE: `agenthq_session_remove` /
+  `session rm` remove it without `force`. The daemon's `session_delete` also ends, instead of refusing, a record that claims a run while the
+  daemon has no run for it and its pid is gone. No frame changes.
+- **One session per ticket / ticket-working agent.** A start or resume that would run next to another session with a turn in flight on the
+  same ticket, or of the same agent when either works a ticket, is refused (`... refused: session <id> already runs ticket|agent ...; kill it
+  first`); mail to such a session stays queued until the other one rests. Ticketless sessions of one agent (pod nodes) are not restricted.
+- **A ticket worker keeps its harness.** Mail addressed to the agent of a ticket session resumes that session on the ticket's provider / model;
+  it no longer opens a fresh session on the agent profile's harness (BUG-S3's swap rule now applies to ticketless sessions only).
+- **UI Remove** kills with `force` first when the session reads running, so a stuck turn or leftover background processes do not block it.
+### What changed in 1.117.0 (PROGRESS-1, ticket-1371d44b) — an agent reports how far along its long job is
+
+ADDITIVE; a 1.115.0 client keeps working (the new key is ignored on decode). The `ready` frame reports `contract=1.117.0`.
+(1.116.0 is claimed by a parallel ticket.)
+
+- **`SessionRecord.progress`** (omitted when none): the agent's OWN measurement of its long job. Never estimated.
+
+| Key | Type | Meaning |
+|---|---|---|
+| `mode` | `percent` \| `steps` \| `bytes` \| `count` \| `indeterminate` | how the agent measures |
+| `state` | `running` \| `done` \| `failed` | |
+| `percent` | 0-100, omitted for `indeterminate` | derived by the daemon for `steps` / `bytes` / `count` (omitted when the total is unknown) |
+| `label` | string ≤ 120 | what the job is ("gate", "download model") |
+| `steps`, `stepsTotal`, `stepsDone`, `step` | `steps` only | planned names (empty for a bare count), total, complete, and the name of the step now running |
+| `done`, `total` | `bytes` / `count` | units done of total |
+| `bytesPerSec` | `bytes` only | smoothed speed from successive reports |
+| `startedAt`, `updatedAt` | epoch ms | the job's start; the newest report (a client shows "no update for N min" against it) |
+
+- **`progress` frame** (client -> daemon, `sessionId` = the reporting session, `data` = a `ProgressReport`
+  `{op, percent?, label?, steps?, count?, step?, done?, total?}`), `op` one of `percent`, `plan` (steps or count), `step` (the named step
+  completed; no name = the current one; an unplanned name is inserted where the job stands, already complete), `bytes`, `count`, `status`
+  (indeterminate), `done`, `fail`, `clear`, `get`. Answered by a `progress` frame carrying the session's progress (or `null`); a bad report is
+  `error` `progress refused: ...` and changes nothing. The change reaches every client as the usual `session` push (and is in the `sessions`
+  list, so a late-joining client sees the current value). No separate push frame.
+- **Cleared** when the session ends (`EXITED` / `ORPHANED`), when a turn ends with no report made during it (unless an `agenthq bg run` job is
+  still registered), and on a daemon start. A finished job (`done` / `failed`) stays visible until then.
+- **CLI** (`agenthq progress ...`, `agenthq run --label x -- <cmd>`, `agenthq progress --watch`) and **MCP** (`agenthq_progress`) build the
+  same report. HARMLESS outside Infantry AI: with no `AGENTHQ_SESSION_ID` or no reachable daemon every progress command exits 0 and prints
+  nothing; `run` / `--watch` still pass the output through unchanged and keep the command's exit code. See `docs/PROGRESS.md` for the marker
+  grammar (`##infantry progress 40 compile`), the readers and the coalescing rules.
 
 ### What changed in 1.115.0 (ASSISTANT-1) — the global Assistant
 
@@ -1916,7 +1966,7 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 
 | Type | `data` | Direction |
 | --- | --- | --- |
-| `ready` | `"provider=<id> contract=<version> instance=<id> since=<epoch millis>"` (`instance`, `since`: 1.11.0) | daemon → client |
+| `ready` | `"provider=<id> contract=<version> instance=<id> since=<epoch millis> build=<build>"` (`instance`, `since`: 1.11.0; `build`: BUILD-STAMP-1, additive within 1.115.0, e.g. `1.0.1+20261023.1432.e85b223[.dirty]`, absent from older daemons) | daemon → client |
 | `session` | one `SessionRecord` (JSON) | daemon → client |
 | `sessions` | list of `SessionRecord` | daemon → client |
 | `worktree` | one `WorktreeStatus` (JSON). Carries `changes` (git view): `null`/absent = UNKNOWN, `[]` = known clean, else `{path,status,staged,fromPath?}` per changed file, status one of `ADDED MODIFIED DELETED RENAMED UNTRACKED CONFLICTED`; a file changed on both sides appears once per side; `changesTruncated` is true when the list was cut at 500 | daemon → client |
@@ -1938,6 +1988,8 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `usage` | one `RunUsage` (JSON), session-tagged and sequenced, when a run that reported usage ends (1.13.0) | daemon → client |
 | `session_project` | `{"sessionId","projectId"}`: bind an unbound session to a project; answered by a `session` push (1.61.0) | client → daemon |
 | `session_restart` | `{"sessionId","force"?}`: reboot a session in place as a never-run session (same id, role, harness, project, worktree); mid-turn refused unless `force`; answered by a `session` push (ROLE-NOTES-1, version PM-allocated) | client → daemon |
+| `progress` | `sessionId` = the reporting session; one `ProgressReport` (JSON) `{op, percent?, label?, steps?, count?, step?, done?, total?}`, `op` = `percent` \| `plan` \| `step` \| `bytes` \| `count` \| `status` \| `done` \| `fail` \| `clear` \| `get`; the change reaches every client as the usual `session` push, a bad report is `error` `progress refused: ...` (1.117.0) | client → daemon |
+| `progress` | the session's `SessionProgress` (JSON) or `null`, answering a `progress` request (1.117.0) | daemon → client |
 | `assistant` | — (empty; ignored): open the installation-wide Assistant. Answered to the sender with the Assistant's `session` frame (one `SessionRecord`, `global` = true, tagged with its session id); the first request creates it (role `assistant`, no project, working directory `<stateDir>/assistant`) and every later request, from any client, answers the same session. Failure: `error` `assistant refused: ...` / `assistant failed: ...` (1.115.0) | client → daemon |
 | `limits` | — (request the plan-limit meters; 1.59.0) | client → daemon |
 | `limits` | list of `ProviderLimits` (JSON), the answer and a push after each `usage` (1.59.0) | daemon → client |
@@ -2049,7 +2101,7 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `project_git_history` | one `ProjectGitHistory` `{projectId, available, reason, commits[{hash,shortHash,author,timestamp,subject}], truncated}`, newest first (1.36.0) | daemon → client |
 | `project_base` | `ProjectBaseRequest` `{projectId, branch?, clear?}` (1.81.0); answered by `project`; a refusal is an `error` `"project_base refused: ..."` | client → daemon |
 | `epic_base` | `EpicBaseRequest` `{epicId, branch?, clear?}` (1.82.0); answered by `epic`; a refusal is an `error` `"epic_base refused: ..."` | client → daemon |
-| `project_config` | `ProjectConfigRequest` `{projectId, laneCaps?}` (LANE-CAPS, 1.111.0): absent or empty `laneCaps` reads the project, otherwise the `{role: max}` entries are MERGED into `Project.laneCaps` (a cap of 1 is the default and removes the entry); answered by the whole `project` frame, also pushed to every client when a cap changed; a cap below 1, an unknown project or a malformed payload is an `error` `"project_config refused: ..."` | client → daemon |
+| `project_config` | `ProjectConfigRequest` `{projectId, laneCaps?, autoRemoveDoneWorkers?}` (LANE-CAPS, 1.111.0; `autoRemoveDoneWorkers` 1.118.0 sets `Project.autoRemoveDoneWorkers`, absent = unchanged): absent or empty `laneCaps` (and no `autoRemoveDoneWorkers`) reads the project, otherwise the `{role: max}` entries are MERGED into `Project.laneCaps` (a cap of 1 is the default and removes the entry); answered by the whole `project` frame, also pushed to every client when a cap changed; a cap below 1, an unknown project or a malformed payload is an `error` `"project_config refused: ..."` | client → daemon |
 | `image_upload` | `ImageUpload` `{projectId, purpose, fileName, mimeType, base64}` (1.83.0): `purpose` `chat`\|`ticket`\|`file` (required; `file` 1.89.0: any type, at most 20 MB, no magic-byte check); otherwise png/jpeg/gif/webp by magic bytes, at most 10 MB, stored at `<Project.directory>/.agenthq/uploads/<purpose>/<sha256>.<ext>`; answered by `image`; a refusal is an `error` `"image_upload refused: ..."` and writes nothing | client → daemon |
 | `image` | `ImageStored` `{path, relPath, sha256, bytes, mimeType}` (1.83.0): where an `image_upload` is stored; the same bytes answer the same `path` | daemon → client |
 | `session_swap` | `SessionSwap` `{sessionId, provider, model?, effort?}` (strict, 1.84.0); a session with no agent onto another harness, in place; answered by the `session_swapped` push to every client; a refusal is an `error` `"session_swap refused: ..."` | client → daemon |
@@ -2798,6 +2850,7 @@ Three authenticated HTTP routes (bearer token like every route but `/health`): `
 The board used to run ONE agent per role; a second ticket of the same role queued. Now each project stores, per role, the most agents that may run at once.
 
 - `Project.laneCaps` (`{role: max}`, default `{}`): a role not listed runs 1 (today's behaviour). No upper bound in the daemon. Stored with the project (migration 46); an older daemon omits the key.
+- `Project.autoRemoveDoneWorkers` (1.118.0, default false): a done ticket's worker session is ended and removed once its turn is over (migration 47).
 - `project_config` request `{"projectId", "laneCaps"?}`: absent or empty `laneCaps` is a read; otherwise the entries are merged (a cap of 1 is the default and removes the entry; below 1 is refused as `project_config refused: ...`). Answered by the whole `project` frame, which is also PUSHED to every connected client when a cap changed.
 - Ticket start/queue: a `role:<role>` ticket takes an idle agent of the role; if all are busy and fewer than the cap are running, the daemon adds another agent of the role (a copy of the first, named `<name> 2`, `<name> 3`, ... with its own agent id; each ticket already gets its own worktree). `queued` is answered only at the cap. Lowering a cap never stops a running agent; queued tickets drain as runs end, and a clone left idle above the cap is removed when a run of its role ends (the role's first agent never is). A clone keeps the template's persona, provider and model, and an idle agent is always reused before a new clone is made.
 - CLI: `agenthq project config get <projectId>` / `project config set <projectId> <role> <n>`. MCP: `agenthq_project_config_get`, `agenthq_project_config_set` (`projectId`, `role`, `cap`).

@@ -33,10 +33,14 @@ data class UiFlags(
     val voice: com.superiorsoftllc.agenthq.ui.voice.VoiceSettings = com.superiorsoftllc.agenthq.ui.voice.VoiceSettings(),
     /** MODAL-BLUR: blur the app behind dialogs (default on); off keeps the dark scrim. Persisted by the host. */
     val blurBehindDialogs: Boolean = true,
+    /** Contract 1.117.0: a running progress bar turns amber with "no update for N min" after this many minutes. Persisted by the host. */
+    val progressStaleMin: Int = PROGRESS_STALE_DEFAULT_MIN,
 )
+
+const val PROGRESS_STALE_APPLIES_TO = "Applies to: the progress bars agents report on their card, their session header and their ticket's board card. A running bar with no update for this long turns amber."
 
 /** What the modal says each flag applies to, shown in the label rather than a tooltip. */
 const val AGENT_SCOPE_APPLIES_TO = "Applies to: the sidebar agent list and the top-bar avatars. Agents with no project are listed under every project. Header counters, the roster and the board are not affected."
 
 /** Shown once in the modal: how long a change lasts and whether it needs a restart. */
-const val FLAGS_LIFETIME_NOTE = "Changes apply at once and last for this window only. They reset when Infantry AI restarts."
+const val FLAGS_LIFETIME_NOTE = "Changes apply at once. A setting that says \"Remembered across launches\", or that the daemon stores, survives a restart; the others last for this window only."

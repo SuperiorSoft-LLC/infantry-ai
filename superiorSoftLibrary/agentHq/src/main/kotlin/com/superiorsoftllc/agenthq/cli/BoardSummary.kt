@@ -40,7 +40,9 @@ object BoardSummary {
     /** Session activity in one phrase: "idle; last action 'Bash: ls' (last output 2m ago)". */
     fun activity(session: SessionRecord, now: Long): String =
         liveState(session) + (session.lastAction?.let { "; last action '$it'" } ?: "") +
-            " (last output ${ago(session.lastOutputAt, now)}, last event ${ago(session.lastEventAt, now)})"
+            " (last output ${ago(session.lastOutputAt, now)}, last event ${ago(session.lastEventAt, now)})" +
+            // Contract 1.117.0: the agent's own progress report, so the PM can follow a gate without the transcript.
+            (session.progress?.let { "; progress " + com.superiorsoftllc.agenthq.session.ProgressReducer.line(it, now) } ?: "")
 
     fun render(tickets: List<Ticket>, sessions: List<SessionRecord>, now: Long, commitOf: (Ticket) -> String?): List<String> {
         if (tickets.isEmpty()) return listOf("board is empty: no tickets")
@@ -65,6 +67,7 @@ object BoardSummary {
             parts += "${worker.role ?: "?"} ${worker.id.take(8)} ${liveState(worker)}"
             worker.lastAction?.let { parts += "doing '$it'" }
             parts += "out ${ago(worker.lastOutputAt, now)}"
+            worker.progress?.let { parts += "progress " + com.superiorsoftllc.agenthq.session.ProgressReducer.line(it, now) }
         } else if (t.sessionId != null) parts += "worker ${t.sessionId!!.take(8)} gone"
         t.branch?.let { b -> parts += "$b@${commitOf(t) ?: "no commit"}" }
         return parts.joinToString(" | ")

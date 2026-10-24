@@ -8,7 +8,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
 import kotlinx.serialization.json.JsonEncoder
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.encodeToJsonElement
@@ -206,6 +208,11 @@ data class SessionRecord(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val spawnerSessionId: String? = null,
     /** Contract 1.115.0: the ONE installation-wide Assistant session (no project, role `assistant`, started by the `assistant` frame). Omitted when false. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val global: Boolean = false,
+    /**
+     * Contract 1.117.0: the agent's own progress report on its long job ([SessionProgress]); memory only in effect (a
+     * daemon start clears it), cleared when the session ends or a turn ends with no report in it. Omitted when none.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val progress: SessionProgress? = null,
 ) {
     /**
      * Whether this session is LIVE (a run is in flight) or HISTORY (none is).
@@ -279,8 +286,23 @@ object SessionRecordSerializer : KSerializer<SessionRecord> {
         jsonEncoder.encodeJsonElement(JsonObject(extended))
     }
 
-    override fun deserialize(decoder: Decoder): SessionRecord = generated.deserialize(decoder)
+    /**
+     * BASICS-KILL-1: undoes the display-only BUSY rewrite above. A record served with `turnActive=false` and state BUSY
+     * is an at-rest session whose leftover child (a Gradle daemon, a bg job) made it READ busy; decoded as BUSY it
+     * looked live to every client and `session_remove` refused it forever ("stale BUSY"). Its true state is IDLE, which
+     * is also what the daemon's own record says. A record without the flag (an older daemon) decodes as before.
+     */
+    override fun deserialize(decoder: Decoder): SessionRecord {
+        val jsonDecoder = decoder as? JsonDecoder ?: return generated.deserialize(decoder)
+        val element = jsonDecoder.decodeJsonElement()
+        val record = jsonDecoder.json.decodeFromJsonElement(generated, element)
+        val turnActive = ((element as? JsonObject)?.get("turnActive") as? JsonPrimitive)?.booleanOrNull
+        return if (turnActive == false && record.state == SessionState.BUSY) record.copy(state = SessionState.IDLE) else record
+    }
 }
+
+/** BASICS-KILL-1: a `sessions` frame decoded to the records' TRUE state (see [SessionRecordSerializer.deserialize]). */
+val SessionListWire: KSerializer<List<SessionRecord>> = kotlinx.serialization.builtins.ListSerializer(SessionRecordSerializer)
 
 /**
  * Contract 1.6.0: one source the start composed into a session's prompt, and how many characters it

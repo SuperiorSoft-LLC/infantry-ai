@@ -231,6 +231,8 @@ fun App(
     val changeConnection = LocalPlatformHost.current.onChangeConnection
     val pairStore = LocalPlatformHost.current.savedServers
     var showConfig by remember { mutableStateOf(false) }
+    // CONFIG-TABS-1: the configuration tab last shown, so the modal reopens where the user left it (while the app runs).
+    var configTab by remember { mutableStateOf<ConfigTab?>(null) }
     var showRoles by remember { mutableStateOf(false) }
     var showNewAgent by remember { mutableStateOf(false) }
     // CHAT-PANEL-1: the main window's chat state (draft, attachments, New agent mode, Switch picker); one per window, as before.
@@ -244,8 +246,17 @@ fun App(
     LaunchedEffect(state.activeProject?.id) { diffTarget = null }
     // MODAL-BLUR: the one blur state every dialog reports into; the setting is remembered by the host.
     val host = LocalPlatformHost.current
-    var flags by remember { mutableStateOf(UiFlags(blurBehindDialogs = host.uiPref(BLUR_PREF_KEY) != "off")) }
+    var flags by remember {
+        mutableStateOf(
+            UiFlags(
+                blurBehindDialogs = host.uiPref(BLUR_PREF_KEY) != "off",
+                progressStaleMin = host.uiPref(com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_PREF_KEY)?.toIntOrNull()?.takeIf { it > 0 } ?: com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_DEFAULT_MIN,
+            ),
+        )
+    }
     val modalBlur = remember { ModalBlurState(supported = host.supportsBlur) }
+    // THEME-1: the stored theme, applied once before the first themed frame; Palette.theme is its only owner from here on.
+    remember(host) { Palette.theme = com.superiorsoftllc.agenthq.ui.model.ThemeSettings.decode(host.uiPref(THEME_PREF_KEY)) }
     modalBlur.enabled = flags.blurBehindDialogs
     var url by remember { mutableStateOf(initialUrl) }
     var token by remember { mutableStateOf(initialToken.orEmpty()) }
@@ -356,7 +367,7 @@ fun App(
     AgentHqTheme {
       // M2-8: a Box so the Board modal overlay stacks over the window.
       // IMG-VIEW-1: chat images open full size over the whole window (the Board keeps its own host, above it).
-      androidx.compose.runtime.CompositionLocalProvider(LocalModalBlur provides modalBlur) {
+      androidx.compose.runtime.CompositionLocalProvider(LocalModalBlur provides modalBlur, LocalProgressStaleMin provides flags.progressStaleMin) {
       ImageViewerHost {
       Box(Modifier.fillMaxSize()) {
         Column(
@@ -517,7 +528,7 @@ fun App(
             }
             }
             }
-            StatusBar(state, serverMismatch, onConfig = { showConfig = true })
+            StatusBar(state, serverMismatch, host.appBuild, onConfig = { tab -> if (tab != null) configTab = tab; showConfig = true })
         }
         // ASSISTANT-1: the global Assistant's popup, docked top right under the title bar (a full-screen sheet when compact). The
         // window owns its state, so closing it keeps the draft, the width and the model; it is one more host of ChatPanel.
@@ -566,6 +577,7 @@ fun App(
                 flags,
                 onFlags = { next ->
                     if (next.blurBehindDialogs != flags.blurBehindDialogs) host.saveUiPref(BLUR_PREF_KEY, if (next.blurBehindDialogs) "on" else "off")
+                    if (next.progressStaleMin != flags.progressStaleMin) host.saveUiPref(com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_PREF_KEY, next.progressStaleMin.toString())
                     flags = next
                 }, onDismiss = { showConfig = false },
                 keepAliveMinutes = state.keepAliveMinutes,
@@ -585,6 +597,9 @@ fun App(
                 updates = updates,
                 serverUpdate = serverUpdate,
                 serverMismatch = serverMismatch,
+                theme = Palette.theme,
+                onTheme = { next -> Palette.theme = next; host.saveUiPref(THEME_PREF_KEY, next.encode()) },
+                about = AboutEntry(host.appBuild, state.connection.daemonBuild, state.connection.isLive),
                 secrets = state.secrets,
                 pair = PairEntry(url, token.ifBlank { null }, null) { link ->
                     // PAIR-1: save the server + token through the host's store, then connect with the bearer.
@@ -599,6 +614,8 @@ fun App(
                     import = { n -> actionScope.launch { controller.importSecret(n) } },
                 ),
                 onOpenRoles = { showRoles = true },
+                initialTab = configTab,
+                onTab = { configTab = it },
             )
         }
         ServerUpdateConfirm(serverUpdate)
@@ -630,6 +647,9 @@ fun App(
 
 /** MODAL-BLUR: the host preference key for "Blur behind dialogs" ("on" / "off"; unset = on). */
 const val BLUR_PREF_KEY = "blurBehindDialogs"
+
+/** THEME-1: the host preference key for the Material theme (ThemeSettings.encode; unset = amber on dark). */
+const val THEME_PREF_KEY = "materialTheme"
 
 @Composable private fun VLine() = Box(Modifier.width(1.dp).fillMaxHeight().background(Palette.Border))
 
@@ -873,6 +893,8 @@ fun AgentRow(a: AgentView, state: AppState, selected: Boolean, onClick: () -> Un
                 }
             }
             TicketTag(a, state, onOpenTicket, Modifier.testTag("agent-row-ticket-${a.id}"))
+            // Contract 1.117.0: the agent's own progress report on its long job, as a slim live bar.
+            a.session.progress?.let { ProgressMeter(it, "row-${a.id}", Modifier.padding(top = 3.dp), compact = true) }
             Spacer(Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 a.role?.let { Text(it, color = roleColor, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, modifier = Modifier.testTag("agent-row-role-${a.id}")); Spacer(Modifier.width(5.dp)) }
@@ -1136,7 +1158,7 @@ private fun nodeColor(s: String) = when (s) {
 }
 
 @Composable
-private fun StatusBar(state: AppState, serverMismatch: String?, onConfig: () -> Unit) {
+private fun StatusBar(state: AppState, serverMismatch: String?, appBuild: String?, onConfig: (ConfigTab?) -> Unit) {
     val c = state.connection
     var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(Unit) { while (true) { delay(1000); now = Clock.System.now().toEpochMilliseconds() } }
@@ -1152,11 +1174,16 @@ private fun StatusBar(state: AppState, serverMismatch: String?, onConfig: () -> 
         // SERVER-UPDATE-4: client and server differ by more than a patch; the full text is in Configuration > Server.
         if (c.isLive && serverMismatch != null) Text("   version mismatch (see Configuration)", color = Palette.Accent, fontSize = 11.sp, modifier = Modifier.testTag(SERVER_MISMATCH_TAG))
         Spacer(Modifier.weight(1f))
-        Text("^K search  Alt+↑↓ agents  ^J needs input  ^N new  ^R resume  ^5 roles  ^6 attention  ^L connection  ^, config", color = Palette.Muted, fontSize = 10.sp)
+        // The shortcut hint only where there is room for it (a phone has no keyboard shortcuts and no width to spare).
+        if (!state.panels.compactWindow) {
+            Text("^K search  Alt+↑↓ agents  ^J needs input  ^N new  ^R resume  ^5 roles  ^6 attention  ^L connection  ^, config", color = Palette.Muted, fontSize = 10.sp, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+        }
+        // BUILD-STAMP-1: which build this is (and a plain warning when the daemon is another build); the cog opens About.
+        FooterBuild(appBuild, if (c.isLive) c.daemonBuild else null, Modifier.padding(start = 10.dp).clickable(role = Role.Button) { onConfig(ConfigTab.ABOUT) })
         // The footer cog, bottom-right. It opens the configuration modal (flags).
         Box(
             Modifier.padding(start = 10.dp).size(24.dp)
-                .clickable(role = Role.Button, onClick = onConfig)
+                .clickable(role = Role.Button) { onConfig(null) }
                 .semantics { contentDescription = "Configuration" },
             contentAlignment = Alignment.Center,
         ) { Text("\u2699", color = Palette.Muted, fontSize = 13.sp) }

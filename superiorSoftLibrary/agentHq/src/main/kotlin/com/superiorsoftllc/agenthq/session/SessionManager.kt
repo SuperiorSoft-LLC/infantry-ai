@@ -275,6 +275,30 @@ class SessionManager(
     private val carryPending: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     /**
+     * TICKET-HANDOVER: sessions held by a harness switch in progress ([com.superiorsoftllc.agenthq.daemon.SessionHandover]).
+     * While held, only the handover may start a turn ([resumeHeld]); every other [resume] is refused as a run in flight,
+     * so mail or a prompt cannot slip a turn onto the old harness between the handoff turn and the switch.
+     */
+    private val held: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /** TICKET-HANDOVER: hold [sessionId] for a switch; false when it is already held (a switch is in progress). */
+    fun hold(sessionId: String): Boolean = held.add(sessionId)
+
+    /** TICKET-HANDOVER: end the hold [hold] took. */
+    fun release(sessionId: String) {
+        held.remove(sessionId)
+    }
+
+    /** TICKET-HANDOVER: true while a harness switch holds [sessionId]. */
+    fun isHeld(sessionId: String): Boolean = sessionId in held
+
+    /** TICKET-HANDOVER: true while [sessionId] has a turn in flight. */
+    fun inFlight(sessionId: String): Boolean = runs.containsKey(sessionId) || sessions[sessionId]?.live == true
+
+    /** TICKET-HANDOVER: the visible text of [sessionId]'s latest reply as AgentHQ recorded it, or null. */
+    fun lastReply(sessionId: String): String? = conversation.history(sessionId).lastOrNull()?.reply?.takeIf { it.isNotBlank() }
+
+    /**
      * BUG-PERM-1: each session's own Tool approval, chosen at spawn. Held in memory: after a daemon restart a resumed
      * session falls back to the global value (Settings / env / deny).
      */
@@ -327,6 +351,17 @@ class SessionManager(
         val beat = job.copy(lastBeat = clock())
         update(sessionId) { r -> r.copy(bgJobs = r.bgJobs.filter { it.id != beat.id } + beat) }
         return true
+    }
+
+    /**
+     * Contract 1.117.0: fold one progress [report] into [sessionId]'s [SessionRecord.progress]; the change reaches every
+     * client as a `session` push. Null when there is no such session; throws [IllegalArgumentException] for a bad report.
+     */
+    fun reportProgress(sessionId: String, report: ProgressReport): SessionRecord? {
+        val current = sessions[sessionId] ?: return null
+        if (report.op == "get") return current
+        ProgressReducer.apply(current.progress, report, clock()) // validate outside the lock, so a bad report changes nothing
+        return update(sessionId) { it.copy(progress = ProgressReducer.apply(it.progress, report, clock())) }
     }
 
     /** The wrapper's command ended: drop the job. */
@@ -394,7 +429,7 @@ class SessionManager(
             val kept = loadedRecord.keptProcess
             val reaped = kept != null && reap(loadedRecord.id, kept)
             // Background work is derived, never trusted from disk: its wire state read BUSY, so the real one is IDLE.
-            val persisted = loadedRecord.copy(keptProcess = null, backgroundWork = null, bgJobs = emptyList(), watch = null).let {
+            val persisted = loadedRecord.copy(keptProcess = null, backgroundWork = null, bgJobs = emptyList(), watch = null, progress = null).let {
                 if ((loadedRecord.backgroundWork != null || loadedRecord.bgJobs.isNotEmpty()) && it.state == SessionState.BUSY && it.childPid == null) it.copy(state = SessionState.IDLE) else it
             }
             val midRun = persisted.state == SessionState.STARTING ||
@@ -532,6 +567,7 @@ class SessionManager(
         /** Contract 1.115.0: create the installation-wide Assistant; set on the FIRST `session` frame, so no client ever sees it as an ordinary agent. */
         global: Boolean = false,
     ): SessionRecord {
+        busyTwin(null, agentId, ticketId)?.let { throw IllegalArgumentException(twinRefusal("start", agentId, ticketId, it)) }
         val chosen = resolveProvider(providerId).provider
         val sessionModel = spawnModel(model)
         val sessionEffort = effort?.trim()?.takeIf { it.isNotEmpty() }?.also {
@@ -637,8 +673,18 @@ class SessionManager(
      */
     @Synchronized
     fun resume(sessionId: String, prompt: String): SessionRecord {
+        if (sessionId in held) throw RunInFlightException(sessionId, "session $sessionId is switching harness; send again once it has switched")
+        return resumeHeld(sessionId, prompt)
+    }
+
+    /** TICKET-HANDOVER: [resume] for the switch that holds [sessionId] (the only caller allowed past the hold). */
+    @Synchronized
+    fun resumeHeld(sessionId: String, prompt: String): SessionRecord {
         val session = sessions[sessionId] ?: error("unknown session $sessionId")
         if (runs.containsKey(sessionId)) throw RunInFlightException(sessionId, "session $sessionId already has a run in flight")
+        busyTwin(sessionId, session.agentId, session.ticketId)?.let {
+            throw RunInFlightException(it.id, twinRefusal("resume of $sessionId", session.agentId, session.ticketId, it))
+        }
         require(session.providerSessionId != null || session.neverRun) {
             "session $sessionId is not resumable: no provider session id was ever observed " +
                 "(state=${session.state})"
@@ -699,6 +745,18 @@ class SessionManager(
     }
 
     /**
+     * TICKET-HANDOVER: the checks [reharness] makes on its target ([providerId], [model], [effort]), with nothing written,
+     * so a switch that only reharnesses later (after a handoff turn) is refused NOW. Throws [IllegalArgumentException].
+     */
+    fun checkSwitch(providerId: String, model: String?, effort: String?) {
+        resolveProvider(providerId)
+        spawnModel(model)
+        effort?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            require(modelProblem(it) == null) { "effort '${it.take(40)}' is not a usable level" }
+        }
+    }
+
+    /**
      * UX-HARNESS-2 (`session_swap`): restart [sessionId] on another harness ([providerId], [model], [effort]; a null
      * model / effort = that harness's default). The record keeps its id, project, working directory and history, and
      * becomes a never-run session on the new harness: its provider session id is dropped (it belonged to the old CLI),
@@ -709,7 +767,7 @@ class SessionManager(
      * changing nothing.
      */
     @Synchronized
-    fun reharness(sessionId: String, providerId: String, model: String?, effort: String?): SessionRecord {
+    fun reharness(sessionId: String, providerId: String, model: String?, effort: String?, carry: Boolean = true): SessionRecord {
         val session = sessions[sessionId] ?: throw IllegalArgumentException("unknown session '$sessionId'")
         require(!runs.containsKey(sessionId) && !session.live) { "a reply is still running; wait for it to finish or stop it, then switch" }
         val target = resolveProvider(providerId).provider.id
@@ -720,7 +778,8 @@ class SessionManager(
         }
         host.stop(sessionId)
         // HARNESS-CARRY-1: the conversation follows the session onto the new harness, seeded on its first run.
-        carryPending += sessionId
+        // TICKET-HANDOVER: [carry] false = the first run brings its own context (the ticket brief and a handoff note).
+        if (carry) carryPending += sessionId else carryPending -= sessionId
         return changeSetting(sessionId) {
             it.copy(
                 provider = target, model = wantedModel, effort = wantedEffort,
@@ -946,6 +1005,12 @@ class SessionManager(
     private fun finishHosted(sessionId: String, end: TurnEnd, exitCode: Int?, processExited: Boolean, reason: String?) {
         val run = runs[sessionId] ?: return
         if (!runs.remove(sessionId, run)) return
+        // 1.117.0: a turn that ended with no progress report in it drops the old report, unless a registered
+        // background job (`agenthq bg run`) is still running the measured work.
+        update(sessionId) { r ->
+            val p = r.progress
+            if (p == null || p.updatedAt >= run.startedAt || r.bgJobs.isNotEmpty()) r else r.copy(progress = null)
+        }
         when {
             run.interruptRequested.get() || end == TurnEnd.INTERRUPTED -> settleInterrupted(sessionId, exitCode)
             run.killRequested.get() -> settle(sessionId, run, exitCode, processExited = false)
@@ -1143,7 +1208,9 @@ class SessionManager(
     @Synchronized
     fun delete(sessionId: String) {
         val existing = sessions[sessionId] ?: throw IllegalArgumentException("unknown session '$sessionId'")
-        if (existing.live) throw IllegalArgumentException("session '$sessionId' is still running (${existing.state}); kill it first, then remove it")
+        // BASICS-KILL-1: a record that claims a run but has none in this daemon and no live process is stale: ended here.
+        if (existing.live && isStaleLive(sessionId, existing)) markKilled(sessionId, KillOutcome.GRACEFUL)
+        if (sessions.getValue(sessionId).live) throw IllegalArgumentException("session '$sessionId' is still running (${existing.state}); kill it first, then remove it")
         host.stop(sessionId)
         sessions.remove(sessionId)
         conversation.drop(sessionId)
@@ -1153,6 +1220,33 @@ class SessionManager(
         onSessionEnded(sessionId)
         writeAll()
     }
+
+    /**
+     * BASICS-KILL-1: [record] reads live (STARTING / BUSY / WAITING_INPUT, or a pid marked alive) while this daemon has
+     * NO run for it and its pid, if any, is gone. Nothing can bring such a record to rest by itself, so kill and remove
+     * treat it as ended instead of refusing it forever.
+     */
+    fun isStaleLive(sessionId: String, record: SessionRecord = sessions[sessionId] ?: error("unknown session $sessionId")): Boolean =
+        record.live && !runs.containsKey(sessionId) && record.childPid.let { it == null || !pidProbe(it) }
+
+    /**
+     * BASICS-KILL-1: the OTHER session with a turn in flight that a start or resume for [agentId] / [ticketId] would run
+     * next to, or null. A ticket's work is exclusive: two sessions may not run the same ticket, nor the same agent while
+     * either of them works a ticket (they would share its worktree). Ticketless sessions of one agent (pod nodes) are not
+     * restricted.
+     */
+    fun busyTwin(exceptId: String?, agentId: String?, ticketId: String?): SessionRecord? = sessions.values.firstOrNull { other ->
+        other.id != exceptId && other.isBusy() && (
+            (ticketId != null && other.ticketId == ticketId) ||
+                (agentId != null && other.agentId == agentId && (ticketId != null || other.ticketId != null))
+            )
+    }
+
+    private fun twinRefusal(what: String, agentId: String?, ticketId: String?, twin: SessionRecord) =
+        "$what refused: session ${twin.id} already runs " +
+            (if (ticketId != null && twin.ticketId == ticketId) "ticket $ticketId" else "agent $agentId") +
+            " (${twin.state}, ${twin.provider}${twin.model?.let { " / $it" } ?: ""}); one agent works one ticket in one session. " +
+            "Wait for it, or kill it first (agenthq kill ${twin.id})"
 
     @Synchronized
     private fun markKilled(
@@ -1315,7 +1409,10 @@ class SessionManager(
     @Synchronized
     private fun update(sessionId: String, transform: (SessionRecord) -> SessionRecord): SessionRecord? {
         val current = sessions[sessionId] ?: return null
-        val next = transform(current)
+        // 1.117.0: a session that ended (killed, orphaned) has no job left to measure.
+        val next = transform(current).let {
+            if (it.progress != null && (it.state == SessionState.EXITED || it.state == SessionState.ORPHANED)) it.copy(progress = null) else it
+        }
         if (next == current) return current
         // live is a computed property based on state and isProcessAlive; no need to copy it.
         // But we need to force persist when the computed live value changes.
@@ -1338,7 +1435,8 @@ class SessionManager(
         // M2-12: a turn is BUSY from its start, so the first output no longer changes the state; the provider session
         // id it carries (what resume and the interrupt snapshot need) must still reach clients as its own status.
         val backgroundChanged = next.backgroundWork != current.backgroundWork || next.bgJobs.map { it.id } != current.bgJobs.map { it.id }
-        if (stateChanged || identityChanged || backgroundChanged) eventSink?.invoke(SessionEvent.Status(next))
+        val progressChanged = next.progress != current.progress
+        if (stateChanged || identityChanged || backgroundChanged || progressChanged) eventSink?.invoke(SessionEvent.Status(next))
         return next
     }
 

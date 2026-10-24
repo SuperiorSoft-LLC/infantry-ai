@@ -1,0 +1,6 @@
+-- BASICS-KILL-1 -- migration v47 -> v48: a project may end and remove a ticket's worker session once the ticket is done.
+-- NOT NULL DEFAULT 0 so every existing project reads back as "off": today's behaviour, the worker stays listed.
+--
+-- NEXT MIGRATION: 48.sqm
+
+ALTER TABLE projects ADD COLUMN auto_remove_done_workers INTEGER NOT NULL DEFAULT 0;

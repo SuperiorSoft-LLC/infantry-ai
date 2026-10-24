@@ -236,7 +236,7 @@ fun main(args: Array<String>) {
  * agenthq ask --question "..." --option "label|description" [--multi] [--other] [--timeout <sec>]   ask the owner (PROMPT-5)
  * agenthq ask --question "..." --option "label|consequence" ... --recommend <label> --reason "..." [--other] [--default-after <min>]
  *                                  non-blocking owner question (ASK-1): prints {"questionId":..}, the pick arrives as mail
- * agenthq --version | version  this CLI's contract and the daemon's: `agenthq <cli> (daemon: <contract|not running>)`
+ * agenthq --version | version  this CLI's contract and build, and the daemon's: `agenthq <cli> build <b> (daemon: <contract> build <b>|not running)`
  * agenthq mcp serve            an MCP server on stdio (read + guarded write tools over this daemon), see docs/MCP.md
  * ```
  *
@@ -261,7 +261,25 @@ internal object Cli {
         input: () -> Reader = { System.`in`.bufferedReader() },
         /** Where `mcp serve` looks for its optional `.agenthq/mcp.json` (P11-C). */
         cwd: File = File(System.getProperty("user.dir") ?: "."),
+        /** Contract 1.117.0: the raw stdin `progress --watch` copies through byte for byte. */
+        rawInput: () -> java.io.InputStream = { System.`in` },
     ): Int {
+        // Contract 1.117.0: `progress ...` and `run -- <cmd...>` never meet the global flag parser either, and never fail
+        // outside Infantry AI: no session, no daemon or a bad connection option all mean "report nothing".
+        if (args.firstOrNull() == "progress" || args.firstOrNull() == "run") {
+            val quiet = getenv(ProgressCli.DEBUG_ENV)?.trim() != "1"
+            val open = {
+                val target = resolveTarget(parseArgs(emptyArray(), DiscardAppendable) ?: error("no connection target"), getenv)
+                FrameStream.open(target, if (quiet) DiscardAppendable else err)
+            }
+            val stdout = out as? java.io.OutputStream ?: AppendableOutputStream(out)
+            return if (args[0] == "progress") {
+                ProgressCli.progress(args.drop(1), rawInput(), stdout, err, getenv, open)
+            } else {
+                val stderr = err as? java.io.OutputStream ?: AppendableOutputStream(err)
+                ProgressCli.run(args.drop(1), stdout, stderr, err, getenv, open)
+            }
+        }
         // `bg run [--name x] -- <cmd...>`: the command after `--` is raw, so it must not meet the global flag parser.
         if (args.firstOrNull() == "bg") {
             // Only the words before `--` are ours: a `--port N` there still addresses the daemon.
@@ -455,13 +473,26 @@ internal object Cli {
      * point of the command is to be answerable on a machine where something is wrong.
      */
     private fun version(parsed: ParsedArgs, out: Appendable, getenv: (String) -> String?): Int {
-        val daemon = try {
-            daemonContract(resolveTarget(parsed, getenv), VERSION_PROBE_MS)
+        val ready = try {
+            daemonReady(resolveTarget(parsed, getenv), VERSION_PROBE_MS)
         } catch (_: Exception) {
             null
         }
-        out.appendLine("agenthq ${EventVocabulary.VERSION} (daemon: ${daemon ?: "not running"})")
+        out.appendLine(versionLine(com.superiorsoftllc.agenthq.update.BuildInfo.current, ready))
         return 0
+    }
+
+    /**
+     * BUG-CLI-4 + BUILD-STAMP-1: `agenthq <cli contract> build <cli build> (daemon: <contract> build <daemon build>)`. [ready] is
+     * the daemon's `ready` (null = not running); an older daemon that sends no `build=` shows its contract alone.
+     */
+    internal fun versionLine(cliBuild: String, ready: ReadyInfo?): String {
+        val daemon = when {
+            ready == null -> "not running"
+            ready.build == null -> ready.contract
+            else -> "${ready.contract} build ${ready.build}"
+        }
+        return "agenthq ${EventVocabulary.VERSION} build $cliBuild (daemon: $daemon)"
     }
 
     /** ASK-1: the shape of `agenthq ask` as a non-blocking owner question. */
@@ -841,7 +872,7 @@ internal object Cli {
     /** `session restart <id> [--force]`: reboot a session in place; a mid-turn session is refused unless `--force`. */
     private suspend fun sessionRestart(stream: FrameStream, requested: String, force: Boolean, out: Appendable, err: Appendable): Int {
         val snapshot = json.decodeFromString(
-            ListSerializer(SessionRecord.serializer()),
+            com.superiorsoftllc.agenthq.session.SessionListWire,
             stream.request(Envelope(Envelope.SESSIONS), answerType = Envelope.SESSIONS, what = "sessions", idempotent = true).data,
         )
         val matches = snapshot.filter { it.id == requested }.ifEmpty { snapshot.filter { it.id.startsWith(requested) } }
@@ -888,7 +919,7 @@ internal object Cli {
             when {
                 frame.type == Envelope.ERROR && frame.sessionId == null -> { err.appendLine("error: kill failed: ${frame.data}"); return null }
                 frame.type == Envelope.SESSIONS ->
-                    json.decodeFromString(ListSerializer(SessionRecord.serializer()), frame.data).firstOrNull { it.id == session.id }
+                    json.decodeFromString(com.superiorsoftllc.agenthq.session.SessionListWire, frame.data).firstOrNull { it.id == session.id }
                         ?.let { if (!it.live) return it }
             }
         }
@@ -898,7 +929,7 @@ internal object Cli {
 
     private suspend fun resolveSessionArg(stream: FrameStream, requested: String, err: Appendable): Pair<SessionRecord, List<SessionRecord>>? {
         val snapshot = json.decodeFromString(
-            ListSerializer(SessionRecord.serializer()),
+            com.superiorsoftllc.agenthq.session.SessionListWire,
             stream.request(Envelope(Envelope.SESSIONS), answerType = Envelope.SESSIONS, what = "sessions", idempotent = true).data,
         )
         val matches = snapshot.filter { it.id == requested }.ifEmpty { snapshot.filter { it.id.startsWith(requested) } }
@@ -926,7 +957,7 @@ internal object Cli {
             checkContract(stream, err)
             if (parsed.args[0] == "restart") return@runBlocking sessionRestart(stream, requested, parsed.force, out, err)
             val snapshot = json.decodeFromString(
-                ListSerializer(SessionRecord.serializer()),
+                com.superiorsoftllc.agenthq.session.SessionListWire,
                 stream.request(Envelope(Envelope.SESSIONS), answerType = Envelope.SESSIONS, what = "sessions", idempotent = true).data,
             )
             val matches = snapshot.filter { it.id == requested }.ifEmpty { snapshot.filter { it.id.startsWith(requested) } }
@@ -957,7 +988,7 @@ internal object Cli {
                         return@runBlocking 1
                     }
                     frame.type == Envelope.SESSIONS -> {
-                        val after = json.decodeFromString(ListSerializer(SessionRecord.serializer()), frame.data)
+                        val after = json.decodeFromString(com.superiorsoftllc.agenthq.session.SessionListWire, frame.data)
                         // An earlier push from another client's change may still name it: wait for the next list.
                         if (after.none { it.id == session.id }) {
                             out.appendLine("removed ${session.id} (${session.state}${session.ticketId?.let { ", $it" } ?: ""})")
@@ -1582,10 +1613,11 @@ internal object Cli {
      */
     private suspend fun projectConfig(stream: FrameStream, args: List<String>, out: Appendable, err: Appendable): Int {
         val projectId = args[2].trim()
-        val caps = if (args[1] == "set") mapOf(args[3].trim() to args[4].trim().toInt()) else null
+        val autoRemove = if (args[1] == "set" && args[3].trim() == AUTO_REMOVE_SETTING) onOff(args[4]) else null
+        val caps = if (args[1] == "set" && autoRemove == null) mapOf(args[3].trim() to args[4].trim().toInt()) else null
         val payload = json.encodeToString(
             com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest.serializer(),
-            com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest(projectId = projectId, laneCaps = caps),
+            com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest(projectId = projectId, laneCaps = caps, autoRemoveDoneWorkers = autoRemove),
         )
         val answer = stream.request(Envelope(Envelope.PROJECT_CONFIG, payload), Envelope.PROJECT, "project_config", idempotent = true)
         val project = try {
@@ -1597,7 +1629,17 @@ internal object Cli {
         out.appendLine("project ${project.id} lane caps (max concurrent agents per role; unlisted = 1):")
         if (project.laneCaps.isEmpty()) out.appendLine("  (none set)")
         for ((role, cap) in project.laneCaps) out.appendLine("  $role $cap")
+        out.appendLine("$AUTO_REMOVE_SETTING: ${if (project.autoRemoveDoneWorkers) "on" else "off"} (a done ticket's worker session is ended and removed)")
         return 0
+    }
+
+    /** BASICS-KILL-1 (1.118.0): the `project config set` key for [Project.autoRemoveDoneWorkers]. */
+    private const val AUTO_REMOVE_SETTING = "auto-remove-done-workers"
+
+    private fun onOff(value: String): Boolean? = when (value.trim().lowercase()) {
+        "on", "true" -> true
+        "off", "false" -> false
+        else -> null
     }
 
     private suspend fun projectBase(
@@ -4049,6 +4091,11 @@ internal object Cli {
               remote on|off|status  Let the daemon accept outside (Tailscale) connections; prints the ws address
                                   and token. Takes effect on the next daemon restart.
               bg run [--name L] -- CMD  Run CMD as a registered background job (session reads Running); bg list|status|logs|stop ID
+              progress <0-100> ["label"] | plan "a" "b" .. | plan N | step [name] | bytes D T | count D T | status "label" | done | fail | clear | show
+                                  Report your long job's progress, shown as a live bar on your card (progress --help: all forms)
+              progress --watch [--reader gradle|junit|gate]   Copy stdin to stdout unchanged, reporting ##infantry marker lines
+              run [--label L] [--reader R] -- CMD   Run CMD with its output and exit code unchanged; progress done on exit 0, failed otherwise
+                                  Harmless outside Infantry AI: no session or daemon = no report, exit 0 (run keeps CMD's code)
               harnesses           The harnesses (provider ids) a ticket can pin, and each one's models
               harness-status      Which harness CLIs are installed / missing / outdated; harness-install [id...] [--update] installs them via npm
               epics --project <id> List that project's epics, with each one's goal and story count
@@ -4064,6 +4111,7 @@ internal object Cli {
                                   (then AGENTHQ_BASE_BRANCH, else the start is refused). Tickets already started keep their base.
               project config get <projectId>   Each role's cap on concurrent agents (LANE-CAPS; unlisted roles run 1)
               project config set <projectId> <role> <n>   Set a role's cap (n >= 1); lowering never stops a running agent
+              project config set <projectId> auto-remove-done-workers on|off   End and remove a done ticket's worker session (default off)
               project branches <projectId>   The project repo's local branches; * marks the checked-out one
               image upload <projectId> <file> [--purpose chat|ticket]   Store a png/jpeg/gif/webp (max 10 MB) in
                                   the project's .agenthq/uploads/<purpose>/ (default ticket) and print its absolute
@@ -4184,7 +4232,7 @@ internal object Cli {
                                   `threads` read (set by a spawned agent); without it a message is
                                   sent as "$HUMAN_SENDER" and `inbox` reads the "$HUMAN_SENDER" mailbox
               --help, -h          Show this help
-              --version, version  Print this CLI's contract and the daemon's: agenthq <cli> (daemon: <contract|not running>)
+              --version, version  Print this CLI's contract and build and the daemon's: agenthq <cli> build <b> (daemon: <contract> build <b>|not running)
         """.trimIndent()
 
     private data class ParsedArgs(
@@ -4913,10 +4961,12 @@ internal object Cli {
     /** BASE-1a: the usage error for a `project` invocation, or null when it is valid. */
     private fun projectUsageError(parsed: ParsedArgs): String? {
         val args = parsed.args
-        val usage = "agenthq project base <projectId> [<branch>|--clear] | branches <projectId> | rename <projectId> \"<name>\" | config get <projectId> | config set <projectId> <role> <n>"
+        val usage = "agenthq project base <projectId> [<branch>|--clear] | branches <projectId> | rename <projectId> \"<name>\" | config get <projectId> | config set <projectId> <role> <n> | config set <projectId> $AUTO_REMOVE_SETTING on|off"
         return when {
             args.firstOrNull() == "config" -> when {
                 args.getOrNull(1) == "get" && args.size == 3 && args[2].isNotBlank() -> null
+                args.getOrNull(1) == "set" && args.size == 5 && args[2].isNotBlank() && args[3].trim() == AUTO_REMOVE_SETTING ->
+                    if (onOff(args[4]) != null) null else "project config set <projectId> $AUTO_REMOVE_SETTING takes on or off: $usage"
                 args.getOrNull(1) == "set" && args.size == 5 && args[2].isNotBlank() && args[3].isNotBlank() &&
                     (args[4].trim().toIntOrNull() ?: 0) >= 1 -> null
                 else -> "project config takes get <projectId> or set <projectId> <role> <n >= 1>: $usage"
@@ -5565,7 +5615,13 @@ internal fun contractAtLeast(version: String, minimum: String): Boolean {
     return true
 }
 
-internal fun daemonContract(target: Target, timeoutMs: Long): String? {
+/** BUG-CLI-4 + BUILD-STAMP-1: the `contract=` ("unknown" when absent) and `build=` (null when absent) of a daemon's `ready`. */
+internal data class ReadyInfo(val contract: String, val build: String?)
+
+internal fun daemonContract(target: Target, timeoutMs: Long): String? = daemonReady(target, timeoutMs)?.contract
+
+/** The [ReadyInfo] of the daemon at [target], or null when nothing answers within [timeoutMs]; see [daemonContract]. */
+internal fun daemonReady(target: Target, timeoutMs: Long): ReadyInfo? {
     val deadline = System.currentTimeMillis() + timeoutMs
     val recorder = FrameRecorder()
     val builder = HttpClient.newBuilder().connectTimeout(java.time.Duration.ofMillis(timeoutMs)).build().newWebSocketBuilder()
@@ -5578,8 +5634,9 @@ internal fun daemonContract(target: Target, timeoutMs: Long): String? {
     try {
         while (System.currentTimeMillis() < deadline) {
             recorder.frames.firstOrNull { it.type == Envelope.READY }?.let { ready ->
-                return ready.data.split(' ').firstOrNull { it.startsWith("contract=") }?.removePrefix("contract=")
-                    ?.takeIf { it.isNotBlank() } ?: "unknown"
+                val fields = ready.data.split(' ')
+                fun field(key: String) = fields.firstOrNull { it.startsWith("$key=") }?.removePrefix("$key=")?.takeIf { it.isNotBlank() }
+                return ReadyInfo(field("contract") ?: "unknown", field("build"))
             }
             if (recorder.closed) return null
             Thread.sleep(10)

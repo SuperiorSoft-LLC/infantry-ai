@@ -155,6 +155,8 @@ class Controller(
                             // from a restarted daemon (contract 1.11.0).
                             instance = cur.instance,
                             historySince = cur.historySince,
+                            // BUILD-STAMP-1: set by `ready`, like the contract; a link-state change keeps it.
+                            daemonBuild = cur.daemonBuild,
                         ),
                     )
                 }
@@ -1216,6 +1218,13 @@ class Controller(
         return report(send(WireRequests.projectConfig(projectId, role, cap)))
     }
 
+    /** BASICS-KILL-1: turn [projectId]'s auto-removal of done tickets' worker sessions on or off (`project_config`, 1.118.0). */
+    suspend fun setAutoRemoveDoneWorkers(projectId: String, on: Boolean): CommandResult {
+        if (!_state.value.connection.autoRemovesDoneWorkers) return report(CommandResult.Refused("This daemon cannot remove done workers (needs contract 1.118.0)."))
+        if (_state.value.projects.none { it.id == projectId }) return report(CommandResult.Refused("unknown project"))
+        return report(send(WireRequests.projectAutoRemove(projectId, on)))
+    }
+
     /** True when the connected daemon speaks contract 1.81.0 or later (`project_base`). */
     fun supportsProjectBase(): Boolean = contractAtLeast(_state.value.connection.contract, 1, 81)
 
@@ -1440,6 +1449,10 @@ class Controller(
      * currently-running session, so a session with a run in flight is killed first (the daemon
      * processes the two frames in order and `kill` lands the record in EXITED before the delete
      * is read). An idle/history session is deleted directly.
+     *
+     * BASICS-KILL-1: the user confirmed the removal, so the kill is FORCED: a stuck turn does not wait out the grace, and
+     * a session that only reads BUSY because of leftover background processes (a Gradle daemon) has that process tree
+     * ended too. A refusal (the kill or the delete) is shown as a notice; the daemon's own `error` frame names why.
      */
     suspend fun removeSession(sessionId: String): CommandResult {
         val running = _state.value.agents[sessionId]?.session?.state in setOf(
@@ -1448,7 +1461,7 @@ class Controller(
             SessionState.WAITING_INPUT,
         )
         if (running) {
-            val killed = kill(sessionId)
+            val killed = kill(sessionId, force = true)
             if (killed is CommandResult.Refused) return killed
         }
         return deleteSession(sessionId)

@@ -42,6 +42,8 @@ application {
     // prompt uses (`agenthq knowledge`) resolves on case-sensitive filesystems too. The daemon puts this
     // bin dir on every spawned session's PATH (AgentHqBin).
     applicationName = "agenthq"
+    // BUILD-STAMP-1: the build string (root gradle/build-stamp.gradle.kts): `agenthq version` prints it, a daemon sends it in `ready`.
+    applicationDefaultJvmArgs = listOf("-Dagenthq.build=${rootProject.extra["agenthqBuild"]}")
 }
 
 // Infantry AI: `infantry` is the product-name launcher; `agenthq` stays (agents, scripts and prompts still call it).
@@ -136,6 +138,7 @@ tasks.register<JavaExec>("runDaemon") {
     environment("AGENTHQ_BIN", layout.buildDirectory.dir("install/agenthq/bin").get().asFile.absolutePath)
     // PERF-2: the same heap caps and GC as the installed app (jvm-caps.txt).
     jvmArgs(agentHqJvmCaps)
+    systemProperty("agenthq.build", rootProject.extra["agenthqBuild"] as String) // BUILD-STAMP-1
 }
 
 // Phase 10a: dump the bundled role catalog and the avatar resolution chain, so the shipped data
@@ -383,6 +386,8 @@ val headlessContents: CopySpec = copySpec {
     from("headless/README.txt")
     // The running version, read by the daemon's update routes (ServerUpdateService.fromEnvironment).
     from(resources.text.fromString(headlessVersion)) { rename { "VERSION" } }
+    // BUILD-STAMP-1: the server's build string, read by BuildInfo when no -Dagenthq.build reached the JVM.
+    from(resources.text.fromString(rootProject.extra["agenthqBuild"] as String)) { rename { "BUILD" } }
     eachFile {
         if (path.endsWith(".sh") || path.endsWith("/bin/agenthq") || path.endsWith("/bin/infantry") || path.contains("/runtime/bin/") || path.contains("/runtime/lib/jspawnhelper")) {
             permissions { unix("rwxr-xr-x") }
