@@ -19,7 +19,7 @@ interface ProgressEstimates {
     fun record(projectId: String?, label: String, durationMs: Long)
 
     companion object {
-        const val KEEP = 5
+        const val KEEP = 20
 
         fun key(projectId: String?, label: String) = "${projectId.orEmpty()}\u0000$label"
 

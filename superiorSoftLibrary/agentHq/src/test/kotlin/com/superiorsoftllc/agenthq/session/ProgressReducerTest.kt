@@ -147,20 +147,10 @@ class ProgressReducerTest {
         assertEquals(true, apply(withHistory, ProgressReport("done"))!!.estimated, "done keeps the flag so the run is recorded")
     }
 
-    @Test fun `estimate text`() {
-        val p = SessionProgress(mode = "indeterminate", label = "gate", estimated = true, estimateMs = 12 * 60_000L, startedAt = 0, updatedAt = 0)
-        assertEquals("~12 min left (estimated)", ProgressReducer.estimateText(p, 0))
-        assertEquals("~1 min left (estimated)", ProgressReducer.estimateText(p, 11 * 60_000L + 30_000))
-        assertEquals("over the usual 12 min (estimated)", ProgressReducer.estimateText(p, 13 * 60_000L))
-        assertEquals("no estimate yet (first run)", ProgressReducer.estimateText(p.copy(estimateMs = null), 0))
-        assertNull(ProgressReducer.estimateText(p.copy(estimated = null), 0))
-        assertTrue(ProgressReducer.line(p, 2 * 60_000L).contains("~10 min left (estimated)"), ProgressReducer.line(p, 2 * 60_000L))
-    }
-
     @Test fun `line and formatting`() {
         val p = apply(null, ProgressReport("plan", steps = listOf("a", "b", "c", "d", "e"), label = "gate"), 0)!!
             .let { apply(apply(it, ProgressReport("step"), 0)!!, ProgressReport("step"), 0)!! }
-        assertEquals("40% step 3/5 c - gate (updated 12s ago)", ProgressReducer.line(p, 12_000))
+        assertEquals("40% step 3/5 c · ~18s left - gate (updated 12s ago)", ProgressReducer.line(p, 12_000))
         assertEquals("512 B", ProgressReducer.bytes(512))
         assertEquals("1.5 KB", ProgressReducer.bytes(1_536))
         assertEquals("2.0 MB", ProgressReducer.bytes(2L shl 20))

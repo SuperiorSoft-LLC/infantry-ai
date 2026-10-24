@@ -360,23 +360,18 @@ class SessionManager(
     fun reportProgress(sessionId: String, report: ProgressReport): SessionRecord? {
         val current = sessions[sessionId] ?: return null
         if (report.op == "get") return current
-        ProgressReducer.apply(current.progress, report, clock()) // validate outside the lock, so a bad report changes nothing
-        var finished: SessionProgress? = null
-        val next = update(sessionId) { r ->
-            var p = ProgressReducer.apply(r.progress, report, clock())
-            // PROGRESS-S5: an opted-in estimated job gets its label's past duration; a done one becomes history.
-            if (p != null && p.estimated == true && p.mode == "indeterminate") {
-                val label = p.label
-                if (p.state == SessionProgress.RUNNING && p.estimateMs == null && label != null) {
-                    p = p.copy(estimateMs = progressEstimates.estimate(r.projectId, label))
-                } else if (p.state == SessionProgress.DONE && r.progress?.state == SessionProgress.RUNNING) {
-                    finished = p
-                }
-            }
-            r.copy(progress = p)
+        val project = current.projectId
+        val learned = { label: String -> progressEstimates.estimate(project, label) }
+        ProgressReducer.apply(current.progress, report, clock(), learned) // validate outside the lock, so a bad report changes nothing
+        var finished: Pair<String, Long>? = null
+        val now = clock()
+        val record = update(sessionId) {
+            val next = ProgressReducer.apply(it.progress, report, now, learned)
+            finished = ProgressReducer.finished(it.progress, next, now)
+            it.copy(progress = next)
         }
-        if (next != null) finished?.let { f -> f.label?.let { progressEstimates.record(next.projectId, it, f.updatedAt - f.startedAt) } }
-        return next
+        finished?.let { (label, ms) -> progressEstimates.record(project, label, ms) }
+        return record
     }
 
     /** PROGRESS-S5: past durations for the opt-in estimated mode. The daemon sets a file-backed one in its state dir. */

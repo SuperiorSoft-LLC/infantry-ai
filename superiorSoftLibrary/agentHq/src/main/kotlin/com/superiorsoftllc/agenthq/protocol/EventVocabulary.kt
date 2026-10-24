@@ -364,7 +364,8 @@ object EventVocabulary {
     // **1.122.0 (WEB-1, ticket 6cb0d59e) is ADDITIVE**: the daemon serves the browser client bundle at `/` (no token; Host and
     // Origin still checked); a SAME-ORIGIN browser is admitted on `/ws` only with the bearer, which it may send as the
     // `agenthq.bearer.<base64url token>` subprotocol (the daemon answers `agenthq`); setting `AGENTHQ_WEB_HOSTS`. See CONTRACT.md.
-    const val VERSION = "1.122.0"
+    // **1.123.0 (PROGRESS-COUNTDOWN, ticket 564d0e01) is ADDITIVE**: `SessionProgress` labelStartedAt / estimateSource / lastOutputAt, `ProgressReport` estimateMs and op `output`; the meter always counts down. See CONTRACT.md.
+    const val VERSION = "1.123.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA
