@@ -24,6 +24,7 @@ import com.superiorsoftllc.agenthq.protocol.ExecutorField
 import com.superiorsoftllc.agenthq.protocol.TicketWeight
 import com.superiorsoftllc.agenthq.protocol.FinishedPayload
 import com.superiorsoftllc.agenthq.protocol.Ticket
+import com.superiorsoftllc.agenthq.usage.PacingVerdict
 import com.superiorsoftllc.agenthq.protocol.TicketLink
 import com.superiorsoftllc.agenthq.protocol.TicketLinkRequest
 import com.superiorsoftllc.agenthq.protocol.TicketLinkType
@@ -139,6 +140,11 @@ class TicketBoard(
     private val weightExecutors: () -> WeightExecutors = { WeightExecutors.DEFAULT },
     /** LANE-CAPS: the most agents of a role that may run at once in a project (1 = one per role, today's behaviour). */
     private val laneCap: (projectId: String?, role: String) -> Int = { _, _ -> 1 },
+    /**
+     * USAGE-PACE (contract 1.121.0): whether one more ticket worker may start on the plan meter (provider, model) spends.
+     * An agent's or the daemon's start beyond the allowance is refused with the reason; a human move only warns.
+     */
+    private val pacing: (providerId: String?, model: String?) -> PacingVerdict = { _, _ -> PacingVerdict.Allow() },
 ) {
     @Volatile
     private var queueDrainEnabled = true
@@ -698,6 +704,12 @@ class TicketBoard(
         val unattendedLaunch = origin == HandOutOrigin.QUEUE_DRAIN || origin == HandOutOrigin.TRIGGER
         val launchWarning = if (unattendedLaunch) null else
             (sessionManager.launchCheck(providerId, LaunchOrigin.HUMAN, id) as? GateDecision.Warn)?.reason
+        // USAGE-PACE: only the owner's own move (no starter session) may go past the plan allowance, with a warning.
+        val humanMove = origin == HandOutOrigin.MOVE && startedBy == null
+        val pacingWarning = when (val verdict = pacing(providerId, model)) {
+            is PacingVerdict.Over -> if (humanMove) verdict.reason else return refusedStart(initialTicket, verdict.reason)
+            is PacingVerdict.Allow -> null
+        }
 
         // BRANCH-PER-TASK 1/3: the ticket's own branch and worktree, cut or reused BEFORE the session exists,
         // so a refused base leaves nothing behind and a start never creates a second branch for one ticket.
@@ -783,7 +795,7 @@ class TicketBoard(
         }
         // BUG-REGRESS-1: what the branch was cut from, then any launch warning (TicketStarter reads them apart).
         val weightNote = byWeight?.let { "weight ${row.weight}: ${providerId ?: "default provider"}/${model ?: "default model"} from ${WeightExecutors.SETTING}" }
-        val detail = listOfNotNull(cutNote, weightNote, launchWarning?.let { TicketStart.LAUNCH_WARNING + it }).joinToString("; ").ifEmpty { null }
+        val detail = listOfNotNull(cutNote, weightNote, launchWarning?.let { TicketStart.LAUNCH_WARNING + it }, pacingWarning).joinToString("; ").ifEmpty { null }
         return startAnswer(id, TicketStart(ok = true, reason = "started", detail = detail), outcome)
     }
 

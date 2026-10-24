@@ -73,6 +73,8 @@ object LimitReason {
     const val BAD_RESPONSE = "bad_response"
     const val LIVE_SOURCES_OFF = "live_sources_off"
     const val SOURCE_FAILED = "source_failed"
+    /** USAGE-PACE (1.119.0): the first live read has not landed yet. */
+    const val NOT_READ_YET = "not_read_yet"
 
     fun ofStatus(status: Int): String? = when (status) {
         in 200..299 -> null
@@ -295,6 +297,19 @@ class LimitService(
         cached = fresh
         cachedAt = now
         return fresh
+    }
+
+    /**
+     * USAGE-PACE: the last read, never blocking (the pacing gate runs inside the board's synchronized start). A stale or
+     * missing read starts a refresh off this thread; until it lands the answer is the old read, or every source
+     * `unknown` (the pacer then fails open).
+     */
+    fun cachedOrRefresh(): List<ProviderLimits> {
+        val now = clock()
+        if (!liveEnabled()) return sources.map { ProviderLimits.unknown(it.provider, now, LimitReason.LIVE_SOURCES_OFF) }
+        val (last, at) = synchronized(this) { cached to cachedAt }
+        if (last == null || now - at >= minIntervalMs) snapshotAsync {}
+        return last ?: sources.map { ProviderLimits.unknown(it.provider, now, LimitReason.NOT_READ_YET) }
     }
 
     /** [snapshot] off the caller's thread (a live read can take 12 s per source), then [onReady]. */

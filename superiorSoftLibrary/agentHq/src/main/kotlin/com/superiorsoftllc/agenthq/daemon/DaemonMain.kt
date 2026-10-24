@@ -169,6 +169,9 @@ import com.superiorsoftllc.agenthq.usage.RunUsage
 import com.superiorsoftllc.agenthq.usage.UsageRecorder
 import com.superiorsoftllc.agenthq.usage.LimitService
 import com.superiorsoftllc.agenthq.usage.ProviderLimits
+import com.superiorsoftllc.agenthq.usage.UsageMeters
+import com.superiorsoftllc.agenthq.usage.UsagePacing
+import com.superiorsoftllc.agenthq.usage.UsageReport
 import com.superiorsoftllc.agenthq.role.Role
 import com.superiorsoftllc.agenthq.role.RoleIds
 import com.superiorsoftllc.agenthq.role.RoleService
@@ -906,6 +909,20 @@ class AgentHqDaemon(
                     ticket = ticketId?.let(store.tickets::get),
                 )
             }
+            // USAGE-PACE (1.119.0 read, 1.121.0 manual / override / rule): plan meters -> allowance of ticket workers.
+            val usagePacing = UsagePacing(
+                limits = limits::cachedOrRefresh,
+                rule = settings::usagePacing,
+                manual = settings::usageManual,
+                overrides = settings::usageOverrides,
+                workerMeters = {
+                    store.tickets.all()
+                        .filter { it.status == com.superiorsoftllc.agenthq.protocol.TicketStatus.IN_PROGRESS }
+                        .mapNotNull { row -> row.sessionId?.takeIf { it.isNotBlank() }?.let(manager::get) }
+                        .filter { it.state !in DEAD_SESSION_STATES }
+                        .map { r -> UsageMeters.meterFor(r.provider, r.model ?: manager.providerFor(r.provider)?.defaultModel()) }
+                },
+            )
             val board = TicketBoard(
                 store, context = ticketContext, agents = agents, sessions = manager, repo = repo,
                 // BASE-1c: the ticket's epic's base branch, then its project's (BASE-1a), then the daemon's
@@ -914,6 +931,11 @@ class AgentHqDaemon(
                 knowledge = knowledge, skills = skillsSource,
                 exitBehavior = settings::ticketExitBehavior,
                 weightExecutors = settings::weightExecutors,
+                // USAGE-PACE (1.121.0): an agent's / the daemon's ticket start beyond the plan allowance is refused.
+                pacing = { providerId, model ->
+                    val pid = providerId ?: manager.providers.firstOrNull()?.id ?: UsageMeters.CLAUDE
+                    usagePacing.check(UsageMeters.meterFor(pid, model ?: manager.providerFor(pid)?.defaultModel()))
+                },
                 laneCap = projectStore::laneCapOf,
                 // BUG-ASSIGN-1: a refused role lists the catalog's ids (custom roles included; the fallback persona not).
                 roleIds = { roles.all().map { it.id }.filter { it != RoleIds.CUSTOM } },
@@ -1238,6 +1260,7 @@ class AgentHqDaemon(
                             skillsSource,
                             spawnGuard,
                             limits = limits,
+                            usagePacing = usagePacing,
                             cliLocations = cliLocations,
                             harnessInstaller = harnessInstaller,
                             toolApproval = toolApproval,
@@ -1636,7 +1659,15 @@ private inline fun triggerRequest(type: String, block: () -> Envelope?): Envelop
     Envelope(Envelope.ERROR, "$type failed: ${e.message ?: e::class.simpleName}")
 }
 
+/** USAGE-PACE: a ticket worker in one of these states no longer spends its meter. */
+private val DEAD_SESSION_STATES = setOf(
+    com.superiorsoftllc.agenthq.session.SessionState.EXITED,
+    com.superiorsoftllc.agenthq.session.SessionState.FAILED,
+    com.superiorsoftllc.agenthq.session.SessionState.ORPHANED,
+)
+
 /** Contract 1.13.0: push a provider's new observed limit state to every connected client. */
+
 /** U1: the `limits` frame; [ProviderLimits] holds no credential by construction. */
 private fun limitsEnvelope(snapshot: List<ProviderLimits>): Envelope =
     Envelope(Envelope.LIMITS, json.encodeToString(ListSerializer(ProviderLimits.serializer()), snapshot))
@@ -1761,6 +1792,8 @@ private suspend fun handleConnection(
     spawnGuard: SpawnGuard = SpawnGuard(manager::get),
     /** U1: the plan-limit meters a `limits` request reads. */
     limits: LimitService = LimitService.NONE,
+    /** USAGE-PACE (1.119.0): the meters and allowances a `usage_get` request reads. */
+    usagePacing: UsagePacing = UsagePacing({ emptyList() }, { com.superiorsoftllc.agenthq.usage.PacingRule.DEFAULT }, { emptyMap() }, { emptyMap() }, { emptyList() }),
     /** CLIPATH-1 (contract 1.73.0): `cli_locations` / `cli_location_set`; null = this daemon serves neither. */
     cliLocations: com.superiorsoftllc.agenthq.executables.CliLocationService? = null,
     /** HARNESS-INSTALL-1 (contract 1.100.0): `harness_install_status` / `harness_install`; null = this daemon serves neither. */
@@ -2311,6 +2344,32 @@ private suspend fun handleConnection(
                 Envelope.LIMITS -> {
                     session.launch(kotlinx.coroutines.Dispatchers.IO) { outgoing.trySend(limitsEnvelope(limits.snapshot())) }
                     null
+                }
+
+                // USAGE-PACE (1.119.0): a fresh live read (at most once per 5 min), then the meters, off the request loop.
+                Envelope.USAGE_GET -> {
+                    session.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        val answer = try {
+                            limits.snapshot()
+                            Envelope(Envelope.USAGE_REPORT, json.encodeToString(UsageReport.serializer(), usagePacing.report()))
+                        } catch (e: Exception) {
+                            Envelope(Envelope.ERROR, "usage_get failed: ${e.message ?: e::class.simpleName}")
+                        }
+                        outgoing.trySend(answer)
+                    }
+                    null
+                }
+
+                // USAGE-PACE (1.121.0): the owner's manual percent / override / rule; answered by the fresh report.
+                Envelope.USAGE_SET -> try {
+                    val service = settings as? com.superiorsoftllc.agenthq.settings.SettingsService
+                        ?: throw IllegalArgumentException("this daemon has no usage settings")
+                    service.applyUsage(com.superiorsoftllc.agenthq.usage.UsageSet.decode(envelope.data))
+                    Envelope(Envelope.USAGE_REPORT, json.encodeToString(UsageReport.serializer(), usagePacing.report()))
+                } catch (e: IllegalArgumentException) {
+                    Envelope(Envelope.ERROR, "usage_set refused: ${e.message ?: "invalid request"}")
+                } catch (e: Exception) {
+                    Envelope(Envelope.ERROR, "usage_set failed: ${e.message ?: e::class.simpleName}")
                 }
 
                 // Contract 1.4.0 -- agent profiles. Answers go to the requesting client only; a refusal

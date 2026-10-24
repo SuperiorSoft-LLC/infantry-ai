@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.120.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.121.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -105,6 +105,26 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
 
+### What changed in 1.121.0 (USAGE-PACE S2+S3, ticket-2d954bda) — manual usage, allowance override, pacing rule; ticket starts are paced
+
+ADDITIVE (`usage_set`) and BEHAVIOURAL (the start gate); a 1.120.0 client keeps working. The `ready` frame reports
+`contract=1.121.0`. (S2 and S3 ship together under 1.121.0 because ROGUE-1 took 1.120.0.)
+- A ticket hand-out whose run would spend a meter with `canStart` false (see `usage_report`) is refused when an agent
+  started it (`ticket_move` to in_progress with a starter session, `agenthq_ticket_start`), or the daemon did
+  (`ticket_start_next`, a trigger, a queue drain): `start.ok` false, `start.reason` `start_refused`, `start.detail`
+  `usage pacing: <meter> at <pct> ..., allowance <n> (rule|override), running <n>; resets <instant>. ...`.
+- The owner's own move (no starter session) still starts, with that text in `start.detail` as a warning.
+- Unknown usage never refuses (fail open); `usage override <meter> none` lifts the limit until it lapses.
+- **`usage_set`** (client -> daemon, `data` = a `UsageSet` `{meter?, manualPercent?, manualResetsAt?, clearManual?,
+  overrideWorkers?, overrideUntil?, clearOverride?, rule?}`) is answered by `usage_report`. A manual percent (0..100)
+  feeds a meter with no live read (`source` = `manual`) until `manualResetsAt`, else 5 h. An override (`overrideUntil`
+  in the future, `overrideWorkers` 0..50 or null = no limit) replaces the rule's allowance until it lapses; a
+  `MeterUsage` shows it as `override` next to `ruleAllowance`. `rule` is a whole `PacingRule`
+  `{enabled, tiers: [{below?, workers}]}` (`below` increasing in (0, 100], only the last tier without it). A bad
+  request is an `error` `usage_set refused: ...` and changes nothing.
+- Three new settings keys hold them: `usage.pacing`, `usage.manual`, `usage.overrides` (also writable through `settings_set`).
+- `agenthq usage set|clear|override|rule`; the MCP `agenthq_usage` stays read-only.
+
 ### What changed in 1.120.0 (ROGUE-1) — the rogue background process detector
 
 ADDITIVE; a 1.118.0 client keeps working. The `ready` frame reports `contract=1.120.0`.
@@ -125,6 +145,17 @@ ADDITIVE; a 1.118.0 client keeps working. The `ready` frame reports `contract=1.
 - **Settings** `processes.autoReap` (bool, default false: reap rogue processes every minute), `processes.idleMinutes` (1..1440,
   default 30), `processes.heavyMb` (default 500), `processes.floorMb` (default 4096).
 - CLI `agenthq processes [--all]`, `agenthq processes reap <pid> | --all`; MCP `agenthq_processes` / `agenthq_processes_reap`.
+### What changed in 1.119.0 (USAGE-PACE S1, ticket-2d954bda) — read plan usage and the pacing allowance
+
+ADDITIVE and read-only; a 1.118.0 client keeps working. The `ready` frame reports `contract=1.119.0`.
+- **`usage_get`** (client -> daemon, empty `data`) is answered by **`usage_report`**, a `UsageReport`
+  `{meters: [MeterUsage], rule: PacingRule, observedAt}`. A meter is the plan a run spends, not its harness: `claude`
+  (the Claude subscription, also spent by pi / opencode running an `anthropic/...` model), `opencode-go`, else the
+  harness id. Each `MeterUsage` carries `percent` (the highest window), `window`, `resetsAt`, `paceDelta` (points vs an
+  even burn), `source` (`live` | `none`), `windows`, `reason`, `allowance` (what the rule allows; null = no limit),
+  `running` (live in_progress ticket workers on the meter) and `canStart`. Unknown usage FAILS OPEN (no allowance, a
+  `warning`). The rule defaults to `<60%: 3, <80%: 2, else 1`; nothing is enforced in 1.119.0 (1.121.0 enforces it).
+- `agenthq usage [show]` and the MCP tool `agenthq_usage` (read-only) print the same report.
 
 ### What changed in 1.118.0 (BASICS-KILL-1) — sessions can always be ended and removed
 
@@ -2020,6 +2051,9 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `assistant` | — (empty; ignored): open the installation-wide Assistant. Answered to the sender with the Assistant's `session` frame (one `SessionRecord`, `global` = true, tagged with its session id); the first request creates it (role `assistant`, no project, working directory `<stateDir>/assistant`) and every later request, from any client, answers the same session. Failure: `error` `assistant refused: ...` / `assistant failed: ...` (1.115.0) | client → daemon |
 | `limits` | — (request the plan-limit meters; 1.59.0) | client → daemon |
 | `limits` | list of `ProviderLimits` (JSON), the answer and a push after each `usage` (1.59.0) | daemon → client |
+| `usage_get` | — (empty): request the plan meters and pacing allowance (1.119.0) | client → daemon |
+| `usage_report` | `UsageReport` (JSON) `{meters, rule, observedAt}`, answering `usage_get` (1.119.0) and `usage_set` (1.121.0) | daemon → client |
+| `usage_set` | `UsageSet` (JSON): a meter's manual percent / override set or cleared, and/or the pacing rule; refused = `error` `usage_set refused: ...` (1.121.0) | client → daemon |
 | `providers` | — (request the list; 1.3.0) | client → daemon |
 | `providers` | list of `ProviderInfo` (JSON), the default first (1.3.0) | daemon → client |
 | `agent_save` | one `AgentProfile` (JSON): no `id`, or one nobody has, creates; a known `id` overwrites (1.4.0); `traitIds` absent/null keeps the stored list, `[]` clears it (1.50.0); `skillIds` likewise, unknown ids refused (1.56.0) | client → daemon |
