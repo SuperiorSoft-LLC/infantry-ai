@@ -2,6 +2,7 @@ package com.superiorsoftllc.agenthq.ui
 
 import com.superiorsoftllc.agenthq.ui.model.ChatBlock
 import com.superiorsoftllc.agenthq.ui.model.ChatSpan
+import com.superiorsoftllc.agenthq.ui.model.ColumnAlign
 import com.superiorsoftllc.agenthq.ui.model.isSafeChatUrl
 import com.superiorsoftllc.agenthq.ui.model.parseChatInline
 import com.superiorsoftllc.agenthq.ui.model.parseChatMarkdown
@@ -40,7 +41,7 @@ class ChatMarkdownRichTest {
             parseChatMarkdown("a\n\n---\n\nb"),
         )
         assertEquals(
-            listOf(ChatBlock.Table(listOf("k", "v"), listOf(listOf("1", "2"), listOf("3", "")))),
+            listOf(ChatBlock.Table(listOf("k", "v"), listOf(ColumnAlign.NONE, ColumnAlign.CENTER), listOf(listOf("1", "2"), listOf("3", "")))),
             parseChatMarkdown("| k | v |\n|---|:-:|\n| 1 | 2 |\n| 3 |"),
         )
         // a pipe line without a separator row is just text

@@ -18,6 +18,9 @@ sealed interface ChatSpan {
     data class Link(val label: String, val url: String) : ChatSpan
 }
 
+/** How a table column aligns its cells, from the `:--`, `:-:`, `--:` separator row; [NONE] renders like [START]. */
+enum class ColumnAlign { NONE, START, CENTER, END }
+
 sealed interface ChatBlock {
     /** Prose between structural blocks (trimmed); [spans] is the inline-parsed form of [text]. */
     data class Paragraph(val text: String, val spans: List<ChatSpan> = parseChatInline(text)) : ChatBlock
@@ -34,8 +37,8 @@ sealed interface ChatBlock {
     /** A `>` quote; [text] is the quoted lines joined by newline, markers stripped. */
     data class Quote(val text: String, val spans: List<ChatSpan> = parseChatInline(text)) : ChatBlock
 
-    /** A pipe table: [header] cells and [rows] of cells (each row padded/truncated to the header width). */
-    data class Table(val header: List<String>, val rows: List<List<String>>) : ChatBlock
+    /** A pipe table: [header] cells, one [alignments] entry per column and [rows] of cells (each row padded/truncated to the header width). Cell text is raw; the renderer parses inline markup. */
+    data class Table(val header: List<String>, val alignments: List<ColumnAlign> = List(header.size) { ColumnAlign.NONE }, val rows: List<List<String>>) : ChatBlock
 
     /** A block of a type the built-in parser never makes: an engine or plugin names it in [type] and a renderer registered for that name draws it; with none, [text] shows as plain text. */
     data class Custom(val type: String, val text: String, val data: Map<String, String> = emptyMap()) : ChatBlock
@@ -150,14 +153,55 @@ private fun parseChatHeading(line: String): Pair<Int, String>? {
 }
 
 private val ORDERED_ITEM = Regex("^(\\d{1,9})[.)] +(.*)$")
-private val TABLE_SEPARATOR = Regex("^\\|?\\s*:?-+:?\\s*(\\|\\s*:?-+:?\\s*)*\\|?$")
 private val RULE = Regex("^(-{3,}|\\*{3,}|_{3,})$")
 
-private fun tableCells(line: String): List<String> =
-    line.trim().removePrefix("|").removeSuffix("|").split('|').map { it.trim() }
+private val SEPARATOR_CELL = Regex("^:?-+:?$")
 
-private fun isTableStart(line: String, next: String?): Boolean =
-    next != null && line.contains('|') && next.contains('-') && TABLE_SEPARATOR.matches(next.trim()) && tableCells(line).size >= 2
+/** Split a table row into trimmed cells; `\|` is a literal pipe inside a cell, and one leading/trailing pipe is the row's frame. */
+private fun tableCells(line: String): List<String> {
+    val t = line.trim()
+    val cells = ArrayList<String>()
+    val cur = StringBuilder()
+    var i = if (t.startsWith("|")) 1 else 0
+    while (i < t.length) {
+        val c = t[i]
+        when {
+            c == '\\' && i + 1 < t.length && t[i + 1] == '|' -> { cur.append('|'); i += 2 }
+            c == '|' -> { cells += cur.toString().trim(); cur.clear(); i++ }
+            else -> { cur.append(c); i++ }
+        }
+    }
+    // The text after the last pipe is a cell unless it is only the closing frame.
+    if (cur.isNotBlank() || !t.endsWith("|") || t.endsWith("\\|")) cells += cur.toString().trim()
+    return cells
+}
+
+/** The column alignments of a separator row, or null when [line] is not one (every cell is dashes with optional colons, and it has a pipe). */
+private fun tableAlignments(line: String): List<ColumnAlign>? {
+    if (!line.contains('|')) return null
+    val cells = tableCells(line)
+    if (cells.isEmpty() || !cells.all { SEPARATOR_CELL.matches(it) }) return null
+    return cells.map {
+        when {
+            it.startsWith(":") && it.endsWith(":") -> ColumnAlign.CENTER
+            it.endsWith(":") -> ColumnAlign.END
+            it.startsWith(":") -> ColumnAlign.START
+            else -> ColumnAlign.NONE
+        }
+    }
+}
+
+/**
+ * The separator's alignments when [line] (header) and [next] (separator) open a table: same column count, and while
+ * [streaming] a separator still arriving (last line, no closing pipe) is not yet a table, so no flicker.
+ */
+private fun tableStart(line: String, next: String?, nextIsLast: Boolean, streaming: Boolean): List<ColumnAlign>? {
+    if (next == null || !line.contains('|')) return null
+    val aligns = tableAlignments(next) ?: return null
+    if (aligns.size != tableCells(line).size) return null
+    if (streaming && nextIsLast && !next.trimEnd().endsWith("|")) return null
+    return aligns
+}
 
 /** Bullet marker (`- `, `* `, `+ `) item text, or null. */
 private fun bulletItem(t: String): String? =
@@ -205,6 +249,7 @@ fun parseChatMarkdown(text: String, streaming: Boolean = false): List<ChatBlock>
         val heading = parseChatHeading(line)
         val ordered = ORDERED_ITEM.matchEntire(t)
         val bullet = bulletItem(t)
+        val tableAligns = tableStart(line, lines.getOrNull(idx + 1), idx + 1 == lines.lastIndex, streaming)
         when {
             t.startsWith("```") -> {
                 flushAll()
@@ -213,7 +258,7 @@ fun parseChatMarkdown(text: String, streaming: Boolean = false): List<ChatBlock>
             }
             heading != null -> { flushAll(); blocks += ChatBlock.Heading(heading.first, heading.second) }
             RULE.matches(t.trim()) -> { flushAll(); blocks += ChatBlock.Rule }
-            isTableStart(line, lines.getOrNull(idx + 1)) -> {
+            tableAligns != null -> {
                 flushAll()
                 val header = tableCells(line)
                 val rows = ArrayList<List<String>>()
@@ -223,7 +268,7 @@ fun parseChatMarkdown(text: String, streaming: Boolean = false): List<ChatBlock>
                     rows += List(header.size) { cells.getOrElse(it) { "" } }
                     idx++
                 }
-                blocks += ChatBlock.Table(header, rows)
+                blocks += ChatBlock.Table(header, tableAligns, rows)
                 continue
             }
             t.startsWith(">") -> { flushProse(); flushList(); quote += t.removePrefix(">").removePrefix(" ") }

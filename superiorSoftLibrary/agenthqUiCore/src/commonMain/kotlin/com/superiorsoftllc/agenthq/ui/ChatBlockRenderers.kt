@@ -74,11 +74,7 @@ object DefaultChatBlockRenderer : ChatBlockRenderer {
                 Box(Modifier.width(3.dp).fillMaxHeight().background(Palette.Border))
                 Text(spansText(block.spans), color = Palette.Muted, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
             }
-            is ChatBlock.Table -> Column(Modifier.horizontalScroll(rememberScrollState())) {
-                for ((r, row) in (listOf(block.header) + block.rows).withIndex()) Row {
-                    for (cell in row) Text(spansText(parseChatInline(cell)), color = Palette.Text, fontFamily = Mono, fontSize = 12.sp, fontWeight = if (r == 0) FontWeight.Bold else null, modifier = Modifier.width(140.dp).padding(end = 8.dp))
-                }
-            }
+            is ChatBlock.Table -> ChatTable(block)
             is ChatBlock.Heading -> Text(
                 spansText(block.spans),
                 color = Palette.Text,
