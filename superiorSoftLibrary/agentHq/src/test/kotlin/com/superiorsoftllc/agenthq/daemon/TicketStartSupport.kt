@@ -128,8 +128,15 @@ fun WsTestClient.moveTicket(id: String, status: String): Ticket {
 }
 
 /** Read the whole board as the daemon serves it now. */
-fun WsTestClient.board(): List<Ticket> =
-    JSON.decodeFromString(ListSerializer(Ticket.serializer()), answerTo(Envelope.TICKET_LIST).data)
+fun WsTestClient.board(): List<Ticket> {
+    // Wait for the `tickets` answer by type: a `ticket` push for a ticket changing under us (a session binding,
+    // a run finishing) is also on the wire and must never be taken for the listing.
+    val from = mark()
+    send(Envelope.TICKET_LIST, "")
+    val listed = awaitAfter(from, "the tickets answer to ticket_list") { it.type == Envelope.ERROR || it.type == Envelope.TICKETS }
+    check(listed.type == Envelope.TICKETS) { "ticket_list refused: ${listed.data}" }
+    return JSON.decodeFromString(ListSerializer(Ticket.serializer()), listed.data)
+}
 
 /** Read one setting (or all when [key] is blank) as a JSON object. */
 fun WsTestClient.settings(key: String = ""): JsonObject {
