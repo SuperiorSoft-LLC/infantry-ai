@@ -415,7 +415,8 @@ class Controller(
     }
 
     /** USAGE-PACE (contract 1.119.0): ask for the plan meters and the pacing allowance again. */
-    suspend fun refreshUsage(): CommandResult = report(send(Envelope(Envelope.USAGE_GET)))
+    suspend fun refreshUsage(force: Boolean = false): CommandResult =
+        report(send(if (force) Envelope(Envelope.USAGE_GET, "force") else Envelope(Envelope.USAGE_GET)))
 
     /** USAGE-PACE (contract 1.121.0): a manual percent, an override or the rule; the answer is the fresh `usage_report`. */
     suspend fun usageSet(set: com.superiorsoftllc.agenthq.ui.protocol.UsageSet): CommandResult =

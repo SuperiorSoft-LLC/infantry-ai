@@ -64,6 +64,10 @@ internal fun PacingSection(state: AppState, now: Long, controller: Controller?) 
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text("Pacing", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
         if (canEdit) {
+            val scope = rememberCoroutineScope()
+            TextButton(onClick = { scope.launch { controller?.refreshUsage(force = true) } }, modifier = Modifier.testTag("pacing-refresh")) {
+                Text("Refresh", fontSize = 11.sp, color = Palette.Text)
+            }
             TextButton(onClick = { edit = PacingEdit.Rule }, modifier = Modifier.testTag("pacing-edit-rule")) {
                 Text("Edit rule", fontSize = 11.sp, color = Palette.Text)
             }
@@ -102,7 +106,7 @@ private fun MeterCard(m: MeterUsage, now: Long, onManual: (() -> Unit)?, onOverr
             Text(LimitsView.percentText(m.percent), color = if (m.percent == null) Palette.Muted else Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
         }
         Text(
-            listOfNotNull(m.window, PacingView.sourceText(m), LimitsView.paceText(m.paceDelta), LimitsView.resetText(m.resetsAt)).joinToString(" · "),
+            listOfNotNull(m.window, PacingView.sourceText(m), LimitsView.paceText(m.paceDelta), LimitsView.resetText(m.resetsAt), PacingView.updatedText(m.updatedAt, now)).joinToString(" · "),
             color = Palette.Muted, fontSize = 10.sp,
         )
         Row(verticalAlignment = Alignment.CenterVertically) {

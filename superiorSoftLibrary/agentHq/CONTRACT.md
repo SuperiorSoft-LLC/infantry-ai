@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.123.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.124.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,13 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+
+### What changed in 1.124.0 (USAGE-AUTO, ticket-8d3838fd) — usage refreshes itself
+
+Additive; `contract=1.124.0`. The daemon re-reads every live plan meter on its own and pushes a `usage_report` to every client.
+- Setting `usage.refreshMinutes` (int 0..1440, default 5; 0 = off). One refresh at a time; a failed read (network, rate limit, bad response, http error) doubles the wait up to 30 min, a good read resets it. The scheduler wakes at most once a minute. Manual (typed) meters are not refreshed.
+- `MeterUsage` gains `updatedAt` (epoch ms of the live read; omitted for manual / unread meters): clients show "updated Nm ago".
+- `usage_get` still answers from the daemon's 5-minute read cache; with `data` = `force` it re-reads live now (the manual Refresh button).
 
 ### What changed in 1.123.0 (PROGRESS-COUNTDOWN, ticket-564d0e01) — the progress meter always counts down
 

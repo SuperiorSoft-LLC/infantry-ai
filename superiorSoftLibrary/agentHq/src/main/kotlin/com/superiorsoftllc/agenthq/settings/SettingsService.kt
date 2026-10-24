@@ -50,6 +50,7 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
             USAGE_PACING to UsagePacing.ruleJson(usagePacing()),
             USAGE_MANUAL to UsagePacing.manualJson(usageManual()),
             USAGE_OVERRIDES to UsagePacing.overridesJson(usageOverrides()),
+            USAGE_REFRESH_MINUTES to JsonPrimitive(usageRefreshMinutes()),
             PROCESSES_AUTO_REAP to JsonPrimitive(processWatchConfig().autoReap),
             PROCESSES_IDLE_MINUTES to JsonPrimitive(processWatchConfig().idleMinutes),
             PROCESSES_HEAVY_MB to JsonPrimitive(processWatchConfig().heavyMb),
@@ -89,6 +90,13 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
     fun usagePacing(): PacingRule {
         val stored = store.settings.get(USAGE_PACING)?.value ?: return PacingRule.DEFAULT
         return runCatching { PacingRule.parse(Json.parseToJsonElement(stored)) }.getOrDefault(PacingRule.DEFAULT)
+    }
+
+    /** USAGE-AUTO (1.124.0): minutes between automatic live usage reads; default 5, 0 = off, read at every tick. */
+    fun usageRefreshMinutes(): Int {
+        val stored = store.settings.get(USAGE_REFRESH_MINUTES)?.value ?: return USAGE_REFRESH_DEFAULT
+        return runCatching { (Json.parseToJsonElement(stored) as JsonPrimitive).content.toInt() }
+            .getOrNull()?.takeIf { it in USAGE_REFRESH_RANGE } ?: USAGE_REFRESH_DEFAULT
     }
 
     /** USAGE-PACE: hand-typed percents per meter (expired ones included; the pacer drops them). */
@@ -178,6 +186,7 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
             USAGE_PACING -> UsagePacing.ruleJson(usageSetting(key) { PacingRule.parse(value) })
             USAGE_MANUAL -> UsagePacing.manualJson(usageSetting(key) { UsagePacing.parseManual(value) })
             USAGE_OVERRIDES -> UsagePacing.overridesJson(usageSetting(key) { UsagePacing.parseOverrides(value) })
+            USAGE_REFRESH_MINUTES -> JsonPrimitive(requireIntIn(key, value, USAGE_REFRESH_RANGE))
             PROCESSES_AUTO_REAP -> JsonPrimitive(requireBoolean(key, value))
             PROCESSES_IDLE_MINUTES -> JsonPrimitive(requireIntIn(key, value, PROCESSES_IDLE_RANGE))
             PROCESSES_HEAVY_MB, PROCESSES_FLOOR_MB -> JsonPrimitive(requireIntIn(key, value, PROCESSES_MB_RANGE))
@@ -344,6 +353,10 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
         const val USAGE_PACING = UsagePacing.RULE_SETTING
         const val USAGE_MANUAL = UsagePacing.MANUAL_SETTING
         const val USAGE_OVERRIDES = UsagePacing.OVERRIDES_SETTING
+        /** USAGE-AUTO (1.124.0): minutes between automatic live usage reads (0 = off). */
+        const val USAGE_REFRESH_MINUTES = "usage.refreshMinutes"
+        const val USAGE_REFRESH_DEFAULT = 5
+        private val USAGE_REFRESH_RANGE = 0..1440
         const val EXIT_LEAVE = "leave"
         const val EXIT_DONE = "done"
         private val EXIT_BEHAVIORS = listOf(EXIT_LEAVE, EXIT_DONE)
