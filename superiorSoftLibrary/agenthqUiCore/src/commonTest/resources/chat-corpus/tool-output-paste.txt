@@ -1,0 +1,13 @@
+Build output:
+
+```
+> Task :superiorSoftLibrary:agenthqUiCore:compileKotlinJvm
+w: file:///C:/repo/Foo.kt:12:5 Parameter 'x' is never used
+> Task :superiorSoftLibrary:agenthqUiCore:jvmTest
+ChatMarkdownEngineTest > a registered engine is selectable PASSED
+ChatMarkdownEngineTest > an engine that throws FAILED
+    java.lang.IllegalStateException at ChatMarkdownEngineTest.kt:44
+| not | a | table |
+## not a heading
+BUILD FAILED in 41s
+```

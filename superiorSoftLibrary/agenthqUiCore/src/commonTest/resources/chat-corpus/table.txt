@@ -1,0 +1,9 @@
+Gate result per module:
+
+| Module | Tests | Result |
+|--------|------:|:------:|
+| agentHq | 1,204 | pass |
+| agenthqUiCore | 880 | pass |
+| agentHqUi | 96 | fail |
+
+Only agentHqUi needs a look.

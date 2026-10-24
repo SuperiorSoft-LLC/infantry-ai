@@ -75,3 +75,10 @@ configurations.all {
         }
     }
 }
+
+// MD-PLUGIN-1: the plugin tests load the example markdown engine from its real jar, so build it first and hand over the path.
+tasks.named<Test>("jvmTest") {
+    val pluginJar = project(":superiorSoftLibrary:samples:markdownEnginePlugin").tasks.named("pluginJar")
+    dependsOn(pluginJar)
+    systemProperty("markdown.example.jar", pluginJar.map { it.outputs.files.singleFile.absolutePath }.get())
+}

@@ -101,3 +101,20 @@ object DefaultChatBlockRenderer : ChatBlockRenderer {
         }
     }
 }
+
+/**
+ * MD-PLUGIN-1: draws the `callout` block the example markdown plugin emits (`ChatBlock.Custom("callout", text, {kind})`).
+ * Plugins stay Compose-free, so the host owns the look: a tinted, bordered box; kind `warning`/`error` uses the danger tone.
+ */
+object CalloutBlockRenderer : ChatBlockRenderer {
+    @Composable
+    override fun Render(block: ChatBlock) {
+        val custom = block as? ChatBlock.Custom ?: return
+        val kind = custom.data["kind"].orEmpty().ifEmpty { "note" }
+        val tone = if (kind == "warning" || kind == "error") Palette.Danger else Palette.Info
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)).background(Palette.Raised).border(1.dp, tone, RoundedCornerShape(4.dp)).padding(8.dp)) {
+            Text(kind.uppercase(), color = tone, fontFamily = Mono, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            Text(custom.text, color = Palette.Text, fontFamily = Mono, fontSize = 12.sp)
+        }
+    }
+}

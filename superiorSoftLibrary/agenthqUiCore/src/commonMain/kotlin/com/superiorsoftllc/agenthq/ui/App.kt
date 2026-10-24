@@ -257,7 +257,7 @@ fun App(
         )
     }
     val modalBlur = remember { ModalBlurState(supported = host.supportsBlur) }
-    val chatBlockRenderers = remember { ChatBlockRenderers() }
+    val chatBlockRenderers = remember { ChatBlockRenderers().also { it.override("callout", CalloutBlockRenderer) } }
     // THEME-1: the stored theme, applied once before the first themed frame; Palette.theme is its only owner from here on.
     remember(host) { Palette.theme = com.superiorsoftllc.agenthq.ui.model.ThemeSettings.decode(host.uiPref(THEME_PREF_KEY)) }
     modalBlur.enabled = flags.blurBehindDialogs

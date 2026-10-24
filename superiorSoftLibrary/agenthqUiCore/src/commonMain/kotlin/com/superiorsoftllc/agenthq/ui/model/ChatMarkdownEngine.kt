@@ -42,12 +42,18 @@ fun chatBlockType(block: ChatBlock): String = when (block) {
     is ChatBlock.Custom -> block.type
 }
 
-/** Run [engine]; an engine that throws must never take the chat down, so its text shows as one plain paragraph. */
+/**
+ * Run [engine]; an engine that fails must never take the chat down, so that message is shown with the built-in engine
+ * instead. Anything it throws counts (a StackOverflowError from a plugin too) except OutOfMemoryError, which is
+ * not recoverable here and propagates.
+ */
 fun parseChatMarkdownSafely(engine: ChatMarkdownEngine, text: String, streaming: Boolean = false): List<ChatBlock> =
     try {
         engine.parse(text, streaming)
-    } catch (e: Exception) {
-        if (text.isBlank()) emptyList() else listOf(ChatBlock.Paragraph(text))
+    } catch (e: OutOfMemoryError) {
+        throw e
+    } catch (e: Throwable) {
+        BuiltInChatMarkdownEngine.parse(text, streaming)
     }
 
 /**

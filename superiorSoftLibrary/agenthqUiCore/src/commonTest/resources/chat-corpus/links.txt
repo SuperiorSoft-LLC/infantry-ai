@@ -1,0 +1,2 @@
+See [the docs](https://example.com/docs) and <https://example.com/raw>, or mail [me](mailto:a@example.com).
+A bad one: [click](javascript:alert(1)) and a bare https://example.com/path?a=1&b=2 url.
