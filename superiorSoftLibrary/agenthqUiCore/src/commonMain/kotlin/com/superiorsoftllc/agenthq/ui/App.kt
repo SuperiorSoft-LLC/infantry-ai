@@ -250,11 +250,13 @@ fun App(
         mutableStateOf(
             UiFlags(
                 blurBehindDialogs = host.uiPref(BLUR_PREF_KEY) != "off",
+                chatMarkdownEngine = host.uiPref(com.superiorsoftllc.agenthq.ui.model.CHAT_MARKDOWN_PREF_KEY) ?: com.superiorsoftllc.agenthq.ui.model.BuiltInChatMarkdownEngine.ID,
                 progressStaleMin = host.uiPref(com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_PREF_KEY)?.toIntOrNull()?.takeIf { it > 0 } ?: com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_DEFAULT_MIN,
             ),
         )
     }
     val modalBlur = remember { ModalBlurState(supported = host.supportsBlur) }
+    val chatBlockRenderers = remember { ChatBlockRenderers() }
     // THEME-1: the stored theme, applied once before the first themed frame; Palette.theme is its only owner from here on.
     remember(host) { Palette.theme = com.superiorsoftllc.agenthq.ui.model.ThemeSettings.decode(host.uiPref(THEME_PREF_KEY)) }
     modalBlur.enabled = flags.blurBehindDialogs
@@ -367,7 +369,11 @@ fun App(
     AgentHqTheme {
       // M2-8: a Box so the Board modal overlay stacks over the window.
       // IMG-VIEW-1: chat images open full size over the whole window (the Board keeps its own host, above it).
-      androidx.compose.runtime.CompositionLocalProvider(LocalModalBlur provides modalBlur, LocalProgressStaleMin provides flags.progressStaleMin) {
+      androidx.compose.runtime.CompositionLocalProvider(
+          LocalModalBlur provides modalBlur,
+          LocalProgressStaleMin provides flags.progressStaleMin,
+          LocalChatMarkdown provides remember(flags.chatMarkdownEngine) { ChatMarkdownConfig(com.superiorsoftllc.agenthq.ui.model.ChatMarkdown.engines.resolve(flags.chatMarkdownEngine), chatBlockRenderers) },
+      ) {
       ImageViewerHost {
       Box(Modifier.fillMaxSize()) {
         Column(
@@ -581,6 +587,7 @@ fun App(
                 onFlags = { next ->
                     if (next.blurBehindDialogs != flags.blurBehindDialogs) host.saveUiPref(BLUR_PREF_KEY, if (next.blurBehindDialogs) "on" else "off")
                     if (next.progressStaleMin != flags.progressStaleMin) host.saveUiPref(com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_PREF_KEY, next.progressStaleMin.toString())
+                    if (next.chatMarkdownEngine != flags.chatMarkdownEngine) host.saveUiPref(com.superiorsoftllc.agenthq.ui.model.CHAT_MARKDOWN_PREF_KEY, next.chatMarkdownEngine)
                     flags = next
                 }, onDismiss = { showConfig = false },
                 keepAliveMinutes = state.keepAliveMinutes,

@@ -477,45 +477,11 @@ private fun chatStatusLabel(status: ChatStatus): String = when (status) {
 /** How long the agent has been working, shown beside the label: " 3s", or null when not yet known. */
 private fun ChatStatus.elapsedSuffix(): String? = (this as? ChatStatus.Thinking)?.elapsed?.takeIf { it.isNotBlank() }?.let { " $it" }
 
-/** Renders parsed assistant markdown; re-parsed by the caller on every streamed update. */
+/** Renders parsed assistant markdown through the active [ChatMarkdownConfig]; re-parsed by the caller on every streamed update. */
 @Composable
-private fun ChatBlocks(blocks: List<ChatBlock>) {
-    val clip = LocalClipboardManager.current
+private fun ChatBlocks(blocks: List<ChatBlock>, renderers: ChatBlockRenderers) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        for (b in blocks) when (b) {
-            is ChatBlock.Paragraph -> Text(spansText(b.spans), color = Palette.Text, fontFamily = Mono, fontSize = 12.sp)
-            is ChatBlock.BulletList -> Column {
-                for ((n, item) in b.items.withIndex()) Text(spansText(listOf<ChatSpan>(ChatSpan.Text(if (b.ordered) "${n + 1}. " else "• ")) + parseChatInline(item)), color = Palette.Text, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
-            }
-            ChatBlock.Rule -> HorizontalDivider(color = Palette.Border)
-            is ChatBlock.Quote -> Row(Modifier.height(IntrinsicSize.Min)) {
-                Box(Modifier.width(3.dp).fillMaxHeight().background(Palette.Border))
-                Text(spansText(b.spans), color = Palette.Muted, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
-            }
-            is ChatBlock.Table -> Column(Modifier.horizontalScroll(rememberScrollState())) {
-                for ((r, row) in (listOf(b.header) + b.rows).withIndex()) Row {
-                    for (cell in row) Text(spansText(parseChatInline(cell)), color = Palette.Text, fontFamily = Mono, fontSize = 12.sp, fontWeight = if (r == 0) FontWeight.Bold else null, modifier = Modifier.width(140.dp).padding(end = 8.dp))
-                }
-            }
-            is ChatBlock.Heading -> Text(
-                spansText(b.spans),
-                color = Palette.Text,
-                fontFamily = Mono,
-                fontWeight = FontWeight.Bold,
-                fontSize = when (b.level) {
-                    1 -> 18.sp
-                    2 -> 16.sp
-                    else -> 14.sp
-                },
-            )
-            is ChatBlock.Code -> Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).border(1.dp, Palette.Border, RoundedCornerShape(6.dp)).padding(8.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(b.language, color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { clip.setText(AnnotatedString(b.body)) }) { Text("Copy", fontSize = 11.sp) }
-                }
-                Text(b.body, color = Palette.Text, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.horizontalScroll(rememberScrollState()))
-            }
-        }
+        for (b in blocks) renderers.rendererFor(b).Render(b)
     }
 }
 
@@ -628,7 +594,8 @@ fun ChatLine(
     AgentSideRow(showAvatar, agentRole, agentId, agentRoleColor) {
         when (line.kind) {
             LineKind.TEXT -> CommsCard(AgentReplyCardStyle, line.at) {
-                ChatBlocks(chatLineBlocks(line.kind, line.text).orEmpty())
+                val md = LocalChatMarkdown.current
+                ChatBlocks(chatLineBlocks(line.kind, line.text, md.engine).orEmpty(), md.renderers)
             }
             LineKind.REASONING -> ReasoningBlock(listOf(line))
             LineKind.STATUS -> Text("· ${line.text}", color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp)
@@ -687,7 +654,7 @@ private fun CommsCard(style: CommsCardStyle, at: Long, body: @Composable () -> U
 
 const val CARD_COMMS_ICON_TAG = "card-comms-icon"
 
-private fun spansText(spans: List<ChatSpan>): AnnotatedString = buildAnnotatedString {
+internal fun spansText(spans: List<ChatSpan>): AnnotatedString = buildAnnotatedString {
     for (s in spans) when (s) {
         is ChatSpan.Text -> append(s.text)
         is ChatSpan.Bold -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(s.text) }
