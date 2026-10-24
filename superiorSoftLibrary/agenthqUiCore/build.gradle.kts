@@ -11,6 +11,9 @@ plugins {
 kotlin {
     jvmToolchain(21)
     jvm()
+    // WEB-1: the browser client (agentHqWeb) runs this same UI as WebAssembly.
+    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+    wasmJs { browser() }
     androidLibrary {
         namespace = "com.superiorsoftllc.agenthq.ui.core"
         compileSdk = 36
@@ -39,6 +42,9 @@ kotlin {
             implementation(libs.ktor.client.cio)
             // PAIR-1: the QR encoder (and, on desktop, the decoder for "Open image").
             implementation(libs.zxing.core)
+        }
+        wasmJsMain.dependencies {
+            implementation(libs.ktor.client.js)
         }
         androidMain.dependencies {
             implementation(libs.ktor.client.cio)

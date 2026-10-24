@@ -51,7 +51,7 @@ on your machine or on your own server: your code, keys and agent output never pa
 |---|---|---|
 | **Windows desktop** | The full app: board, agents, mail, knowledge. It runs its own daemon, so it works on its own with no server. | `InfantryAI-<version>.msi` from the [latest Release](../../releases/latest) (or the `-windows.zip` app image). |
 | **Android** | A phone client for a daemon running elsewhere (your PC or a server): watch agents, answer questions, move tickets. | `InfantryAI-<version>.apk` from the [latest Release](../../releases/latest), installed by hand (not on Google Play yet). |
-| **Web** | A browser client. | **Not available yet.** It is on the [roadmap](#roadmap-and-known-issues). |
+| **Web** | A browser client (Kotlin/WASM) served by the daemon itself: board, agents, transcripts, messages, ticket starts. File, QR and camera features stay in the desktop and phone apps. | Open `http://<host>:<port>/` on a daemon that has a token. See [Web](#web). |
 | **CLI** (`infantry`, alias `agenthq`) | Every board, ticket, mail and knowledge command, for scripts and for the agents themselves. | Ships inside the desktop app and the server archive. |
 | **Headless server** | The daemon with no UI, for a home server, a VM or a cloud box. | Docker image (build it yourself for now) or `InfantryAI-server-<version>-<os>-<arch>` archive from the Release. |
 
@@ -89,7 +89,12 @@ The Android app is a client: it needs a daemon to connect to (your Windows app o
 
 ### Web
 
-There is no web client yet. Until there is, use the Android app or the CLI against a server.
+The daemon serves a browser client at `http://<host>:<port>/` (the server archive, the Docker image and the desktop app
+ship it). Open that address, enter the daemon's token once (the browser keeps it in its localStorage), and you get the
+board, the agents, their transcripts, messages and ticket starts. The browser only connects to a daemon that has a token
+(`AGENTHQ_TOKEN` / `AGENTHQ_TOKEN_FILE`, or remote access turned on), and only from the same origin. If you reach the
+daemon by a host name it cannot see (a domain, or Docker), list it in `AGENTHQ_WEB_HOSTS` (comma-separated). An offline
+demo with fake data is on the token screen.
 
 ### Server (about 5 minutes with Docker)
 
@@ -229,7 +234,7 @@ More: [QUICKSTART.md troubleshooting](superiorSoftLibrary/agentHq/docs/QUICKSTAR
 
 What is **not** finished, stated plainly:
 
-- **No web client** yet.
+- **Web client** is new: it covers the board, agents, transcripts, messages and ticket starts; file attach, QR codes, camera and voice stay in the desktop and phone apps, and some icon glyphs render as boxes (no symbol font bundled yet).
 - **No macOS or Linux desktop app** packages yet (the headless server runs there).
 - **The Docker image is not published**; build it yourself (above).
 - **The Windows installer is not code-signed**, so SmartScreen warns.
@@ -240,7 +245,7 @@ What is **not** finished, stated plainly:
 - opencode and pi have no slash commands in the app yet (Claude does).
 - The installed Windows app bundles a full Java runtime, so the download is larger than it needs to be.
 
-Planned next: web client, published Docker image, signed Windows builds, macOS/Linux desktop packages, multi-user access.
+Planned next: published Docker image, signed Windows builds, macOS/Linux desktop packages, multi-user access.
 Priorities can change; watch the [Releases](../../releases) page.
 
 ## Getting help

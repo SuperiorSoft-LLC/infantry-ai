@@ -25,5 +25,7 @@ include(":superiorSoftLibrary")
 include(":superiorSoftLibrary:agentHq")
 include(":superiorSoftLibrary:agenthqUiCore")
 include(":superiorSoftLibrary:agentHqUi")
+// WEB-1: browser (wasmJs) client over agenthqUiCore; the daemon serves its bundle at /.
+include(":superiorSoftLibrary:agentHqWeb")
 include(":superiorSoftLibrary:agentHqAndroid")
 include(":superiorSoftLibrary:agentHqHeadless")

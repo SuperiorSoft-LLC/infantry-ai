@@ -31,8 +31,11 @@ ENV AGENTHQ_VERSION=$AGENTHQ_VERSION \
     AGENTHQ_STATE_DIR=/data \
     AGENTHQ_HOME=/data \
     AGENTHQ_BIN=/opt/agenthq/bin \
+    AGENTHQ_WEB_DIR=/opt/agenthq/web \
     PATH=/opt/agenthq/bin:$PATH
 # AGENTHQ_TOKEN (or AGENTHQ_TOKEN_FILE) is required: the daemon refuses a non-loopback bind without one.
+# WEB-1: the browser client is at http://<host>:8787/. Set AGENTHQ_WEB_HOSTS to the host name(s) the browser uses
+# (e.g. agents.example.com): inside a container the daemon cannot see the host's own addresses.
 # Mount the keystore master key and set AGENTHQ_KEYSTORE_KEY_FILE (CONTRACT.md 1.102.0); never bake it in.
 
 USER agenthq

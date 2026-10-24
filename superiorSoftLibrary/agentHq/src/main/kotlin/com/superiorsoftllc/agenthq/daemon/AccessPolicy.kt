@@ -7,6 +7,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationCallPipeline
 import io.ktor.server.application.call
+import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.server.response.header
 import io.ktor.server.response.respond
@@ -39,6 +40,8 @@ data class Refusal(val status: HttpStatusCode, val reason: String, val challenge
  *
  * In BOTH configurations a request carrying an Origin header is refused. Browsers attach Origin to
  * cross-site requests; CLIs and agents never send it, so this closes cross-site WebSocket hijacking.
+ * WEB-1 (1.122.0) makes two narrow exceptions: the browser bundle's files (no data, see [WebBundle]) and a SAME-ORIGIN
+ * browser on `/ws` that also presents the bearer token, on an allowlisted Host. Same-origin never replaces the token.
  *
  * This is NOT transport security. The token and every frame cross the wire in cleartext, and the daemon
  * does not terminate TLS. See README, "Remote daemon".
@@ -46,7 +49,12 @@ data class Refusal(val status: HttpStatusCode, val reason: String, val challenge
 class AccessPolicy private constructor(
     val bindHost: String,
     private val tokenDigest: ByteArray?,
+    /** WEB-1: lowercased host names a browser may reach this daemon by (see [browserHosts]). */
+    private val browserHostNames: Set<String> = emptySet(),
 ) {
+    /** WEB-1: the host names (no port) a browser page may name in its Host and Origin, lowercased and sorted. */
+    val browserHosts: List<String> get() = browserHostNames.sorted()
+
     /** True when a bearer token is required on every route except [OPEN_PATH]. */
     val tokenRequired: Boolean get() = tokenDigest != null
 
@@ -59,7 +67,16 @@ class AccessPolicy private constructor(
      * The order is fixed: Origin first (every configuration); then, with no token, the Host header; then,
      * with a token, the bearer credential (exempting [OPEN_PATH]).
      */
-    fun check(path: String, host: String?, origin: String?, authorization: String?): Refusal? {
+    fun check(
+        path: String,
+        host: String?,
+        origin: String?,
+        authorization: String?,
+        webSocketProtocols: String? = null,
+        webAsset: Boolean = false,
+    ): Refusal? {
+        if (webAsset) return checkWebAsset(host, origin)
+        if (origin != null && path == BROWSER_PATH) return checkBrowser(host, origin, authorization, webSocketProtocols)
         if (origin != null) {
             return Refusal(
                 HttpStatusCode.Forbidden,
@@ -89,6 +106,60 @@ class AccessPolicy private constructor(
         "bearer token required on every route except $OPEN_PATH and /hooks/{id} (signature-admitted)"
     } else {
         "loopback only, no token: only processes on this machine can connect"
+    }
+
+    /**
+     * WEB-1 (contract 1.122.0): a file of the browser bundle. It holds no data, so no token is asked; but a
+     * loopback daemon keeps its Host check (DNS rebinding), a token daemon asks for an allowlisted Host, and a
+     * request carrying an Origin must be same-origin.
+     */
+    private fun checkWebAsset(host: String?, origin: String?): Refusal? {
+        if (tokenDigest == null && !hostNamesLoopback(host)) {
+            return Refusal(HttpStatusCode.Forbidden, "the Host header must name the loopback address (localhost, 127.0.0.1 or [::1])")
+        }
+        if (tokenDigest != null && !browserHostAllowed(host)) return hostRefusal()
+        if (origin != null && !sameOrigin(origin, host)) return crossOriginRefusal()
+        return null
+    }
+
+    /**
+     * WEB-1 (contract 1.122.0): a browser on the WebSocket. Same-origin admission NEVER replaces the token: the
+     * daemon must have one (a tokenless loopback daemon refuses every browser), the Host must be allowlisted
+     * (the Host header is attacker-controlled under DNS rebinding, so it is not trusted as it arrives), the Origin
+     * must be that same allowlisted host, and the bearer must match -- from `Authorization` or, since a browser
+     * WebSocket cannot set headers, from the `agenthq.bearer.<base64url token>` subprotocol.
+     */
+    private fun checkBrowser(host: String?, origin: String, authorization: String?, protocols: String?): Refusal? {
+        if (tokenDigest == null) {
+            return Refusal(
+                HttpStatusCode.Forbidden,
+                "a browser can only connect to a daemon with a bearer token: set $TOKEN_FILE_ENV (or $TOKEN_ENV), or turn on remote access",
+            )
+        }
+        if (!browserHostAllowed(host)) return hostRefusal()
+        if (!sameOrigin(origin, host)) return crossOriginRefusal()
+        val admitted = bearerMatches(authorization) ||
+            (bearerFromProtocols(protocols)?.let { matchesToken(it) } ?: false)
+        return if (admitted) null else Refusal(HttpStatusCode.Unauthorized, "a bearer token is required", challengeBearer = true)
+    }
+
+    private fun hostRefusal() = Refusal(
+        HttpStatusCode.Forbidden,
+        "this host name is not one the daemon answers browsers on; add it to $WEB_HOSTS_ENV",
+    )
+
+    private fun crossOriginRefusal() = Refusal(
+        HttpStatusCode.Forbidden,
+        "requests carrying a cross-site Origin header are refused: this daemon is not a browser API",
+    )
+
+    private fun browserHostAllowed(hostHeader: String?): Boolean =
+        hostName(hostHeader)?.lowercase()?.let { it in browserHostNames } ?: false
+
+    private fun matchesToken(presented: String): Boolean {
+        val expected = tokenDigest ?: return false
+        if (presented.isEmpty()) return false
+        return MessageDigest.isEqual(digest(presented), expected)
     }
 
     private fun bearerMatches(authorization: String?): Boolean {
@@ -143,6 +214,74 @@ class AccessPolicy private constructor(
 
         private const val BEARER_PREFIX = "Bearer "
 
+        /** WEB-1: the one route a browser may call (besides the bundle files): the client WebSocket. */
+        const val BROWSER_PATH = "/ws"
+
+        /** WEB-1: the subprotocol the browser client offers, and the only one the daemon ever answers with. */
+        const val WEB_PROTOCOL = "agenthq"
+
+        /** WEB-1: the subprotocol prefix that carries the bearer token, base64url (no padding) encoded. */
+        const val BEARER_PROTOCOL_PREFIX = "agenthq.bearer."
+
+        /** WEB-1: extra host names (comma-separated) a browser may reach a token daemon by, e.g. a droplet's domain. */
+        const val WEB_HOSTS_ENV = "AGENTHQ_WEB_HOSTS"
+
+        /** The token carried by a `Sec-WebSocket-Protocol` value, or null when none is offered or it does not decode. */
+        fun bearerFromProtocols(protocols: String?): String? {
+            val offered = protocols?.split(',')?.map { it.trim() } ?: return null
+            val encoded = offered.firstOrNull { it.startsWith(BEARER_PROTOCOL_PREFIX) }?.removePrefix(BEARER_PROTOCOL_PREFIX)
+                ?: return null
+            return runCatching { String(java.util.Base64.getUrlDecoder().decode(encoded), Charsets.UTF_8) }.getOrNull()
+        }
+
+        /** True when a `Sec-WebSocket-Protocol` value offers the plain [WEB_PROTOCOL] the daemon answers with. */
+        fun offersWebProtocol(protocols: String?): Boolean =
+            protocols?.split(',')?.any { it.trim() == WEB_PROTOCOL } ?: false
+
+        /** The machine's own interface addresses, for a wildcard bind (a browser on the LAN names one of them). */
+        fun localInterfaceAddresses(): Set<String> = runCatching {
+            java.net.NetworkInterface.getNetworkInterfaces().toList()
+                .flatMap { it.inetAddresses.toList() }
+                .map { it.hostAddress.substringBefore('%') }
+                .toSet()
+        }.getOrDefault(emptySet())
+
+        /** The host names a browser may use: loopback, the bind host (or, bound to the wildcard, every local address), and [extra]. */
+        fun browserHostNames(bindHost: String, extra: Collection<String>, localAddresses: () -> Set<String>): Set<String> {
+            val bare = bindHost.trim().removePrefix("[").removeSuffix("]")
+            val wildcard = bare.isEmpty() || bare == "0.0.0.0" || bare == "::"
+            return buildSet {
+                addAll(listOf("localhost", "127.0.0.1", "::1"))
+                if (wildcard) addAll(localAddresses()) else add(bare)
+                extra.map { it.trim().removePrefix("[").removeSuffix("]") }.filter { it.isNotEmpty() }.forEach { add(it) }
+            }.map { it.lowercase() }.toSet()
+        }
+
+        /** The bare host name of a Host header value (no port, no IPv6 brackets), or null when it is blank. */
+        private fun hostName(hostHeader: String?): String? {
+            val value = hostHeader?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            return when {
+                value.startsWith("[") -> value.substringAfter('[').substringBefore(']')
+                value.count { it == ':' } > 1 -> value // a bare IPv6 literal carries no port
+                else -> value.substringBefore(':')
+            }
+        }
+
+        /**
+         * Whether [origin] is exactly `http(s)://<host header>`: same host and port, compared without regard to case.
+         * `null` (an opaque origin), a path, user info or any other scheme is not same-origin.
+         */
+        fun sameOrigin(origin: String, hostHeader: String?): Boolean {
+            val host = hostHeader?.trim()?.takeIf { it.isNotEmpty() } ?: return false
+            val authority = when {
+                origin.startsWith("http://", ignoreCase = true) -> origin.substring("http://".length)
+                origin.startsWith("https://", ignoreCase = true) -> origin.substring("https://".length)
+                else -> return false
+            }
+            if (authority.isEmpty() || authority.any { it == '/' || it == '@' || it == '?' || it == '#' || it.isWhitespace() }) return false
+            return authority.equals(host, ignoreCase = true)
+        }
+
         /**
          * P9.6 (Owner decision 2026-10-18): `POST /hooks/{id}` is admitted without the daemon bearer; the route
          * itself demands a valid per-hook HMAC signature. The match is deliberately STRICT -- exactly one
@@ -154,7 +293,12 @@ class AccessPolicy private constructor(
         fun isHookPath(path: String): Boolean = HOOK_PATH.matches(path)
 
         /** Validate a bind host and a token together, and build the policy. Throws [AccessConfigurationException]. */
-        fun of(bindHost: String, token: String?): AccessPolicy {
+        fun of(
+            bindHost: String,
+            token: String?,
+            webHosts: Collection<String> = webHostsFromEnvironment(),
+            localAddresses: () -> Set<String> = ::localInterfaceAddresses,
+        ): AccessPolicy {
             if (token == null) {
                 if (!isLoopbackHost(bindHost)) {
                     throw AccessConfigurationException(
@@ -162,7 +306,7 @@ class AccessPolicy private constructor(
                             "address could drive your agents. Set $TOKEN_FILE_ENV (or $TOKEN_ENV), or bind 127.0.0.1.",
                     )
                 }
-                return AccessPolicy(bindHost, null)
+                return AccessPolicy(bindHost, null, browserHostNames(bindHost, webHosts, localAddresses))
             }
             if (token.length < MIN_TOKEN_LENGTH) {
                 throw AccessConfigurationException(
@@ -174,8 +318,12 @@ class AccessPolicy private constructor(
                     "the bearer token must not contain whitespace or control characters",
                 )
             }
-            return AccessPolicy(bindHost, digest(token))
+            return AccessPolicy(bindHost, digest(token), browserHostNames(bindHost, webHosts, localAddresses))
         }
+
+        /** WEB-1: [WEB_HOSTS_ENV], split on commas; empty when unset. */
+        fun webHostsFromEnvironment(getenv: (String) -> String? = InfantryEnv::get): List<String> =
+            getenv(WEB_HOSTS_ENV)?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
 
         /**
          * The token from the environment: [TOKEN_FILE_ENV] (its trimmed contents), else [TOKEN_ENV].
@@ -229,12 +377,7 @@ class AccessPolicy private constructor(
         }
 
         private fun hostNamesLoopback(hostHeader: String?): Boolean {
-            val value = hostHeader?.trim()?.takeIf { it.isNotEmpty() } ?: return false
-            val name = when {
-                value.startsWith("[") -> value.substringAfter('[').substringBefore(']')
-                value.count { it == ':' } > 1 -> value // a bare IPv6 literal carries no port
-                else -> value.substringBefore(':')
-            }
+            val name = hostName(hostHeader) ?: return false
             return name.equals("localhost", ignoreCase = true) || name == "127.0.0.1" || name == "::1"
         }
 
@@ -247,14 +390,26 @@ class AccessPolicy private constructor(
  * Install [policy] in front of every route. A refused request is answered here and the pipeline is
  * finished, so no handler runs: a refused `POST /mail/send` must never reach the mailbox.
  */
-fun Application.installAccessPolicy(policy: AccessPolicy) {
+fun Application.installAccessPolicy(policy: AccessPolicy, isWebAsset: (String) -> Boolean = { false }) {
     intercept(ApplicationCallPipeline.Plugins) {
+        val path = call.request.path()
+        val protocols = call.request.headers.getAll(HttpHeaders.SecWebSocketProtocol)?.joinToString(",")
         val refusal = policy.check(
-            path = call.request.path(),
+            path = path,
             host = call.request.headers[HttpHeaders.Host],
             origin = call.request.headers[HttpHeaders.Origin],
             authorization = call.request.headers[HttpHeaders.Authorization],
-        ) ?: return@intercept
+            webSocketProtocols = protocols,
+            webAsset = call.request.httpMethod == io.ktor.http.HttpMethod.Get && isWebAsset(path),
+        )
+        if (refusal == null) {
+            // WEB-1: a browser that offered subprotocols fails the handshake unless one is selected. Answer with the
+            // plain one only: the bearer subprotocol is never echoed.
+            if (path == AccessPolicy.BROWSER_PATH && AccessPolicy.offersWebProtocol(protocols)) {
+                call.response.header(HttpHeaders.SecWebSocketProtocol, AccessPolicy.WEB_PROTOCOL)
+            }
+            return@intercept
+        }
         if (refusal.challengeBearer) call.response.header(HttpHeaders.WWWAuthenticate, "Bearer realm=\"agenthq\"")
         call.respond(refusal.status, refusal.reason)
         finish()

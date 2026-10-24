@@ -294,6 +294,13 @@ compose.desktop {
 // Being a doLast of createRuntimeImage, the copy is part of that task's output: up-to-date checks and the build cache
 // carry it, and every package task (createDistributable, packageMsi/Exe, release variants) gets it.
 val keepJavaLauncherAction = "keepJavaLauncher"
+
+// WEB-1: the installed app's in-process daemon serves the browser client at / from <resources>/web (WebBundle reads
+// compose.application.resources.dir). Compose's prepareAppResources (a Sync) feeds every package task and `run`.
+tasks.withType<Sync>().matching { it.name == "prepareAppResources" }.configureEach {
+    dependsOn(":superiorSoftLibrary:agentHqWeb:assembleWeb")
+    from(project(":superiorSoftLibrary:agentHqWeb").layout.buildDirectory.dir("assembleWeb")) { into("web") }
+}
 val javaLauncherName = if (System.getProperty("os.name").startsWith("Windows")) "java.exe" else "java"
 
 tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask>().configureEach {

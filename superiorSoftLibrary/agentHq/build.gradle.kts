@@ -367,6 +367,9 @@ tasks.register<Sync>("dockerContext") {
     description = "DOCKER-1: assembles the Docker build context (installDist + docker/Dockerfile) in build/docker."
     dependsOn("installDist")
     from(layout.buildDirectory.dir("install/agenthq")) { into("agenthq") }
+    // WEB-1: the browser client; the Dockerfile points AGENTHQ_WEB_DIR at /opt/agenthq/web.
+    dependsOn(webBundleTask)
+    from(webBundleDir) { into("agenthq/web") }
     from(rootProject.layout.projectDirectory.file("docker/Dockerfile"))
     into(layout.buildDirectory.dir("docker"))
 }
@@ -407,6 +410,11 @@ val headlessRuntime = tasks.register<Exec>("headlessRuntime") {
     }
 }
 
+// WEB-1: the browser client's production bundle (:agentHqWeb:assembleWeb). Only the distributions (headless archive, Docker
+// context) build it: installDist, test and check never compile wasm.
+val webBundleTask = ":superiorSoftLibrary:agentHqWeb:assembleWeb"
+val webBundleDir = project(":superiorSoftLibrary:agentHqWeb").layout.buildDirectory.dir("assembleWeb")
+
 val headlessContents: CopySpec = copySpec {
     into(headlessBaseName)
     from(tasks.named("installDist")) {
@@ -432,6 +440,8 @@ val headlessContents: CopySpec = copySpec {
         into("bin")
     }
     from("headless/README.txt")
+    // WEB-1: the browser client, served at / (WebBundle finds <AGENTHQ_APP_HOME>/web; the launcher sets the app home).
+    from(webBundleDir) { into("web") }
     // The running version, read by the daemon's update routes (ServerUpdateService.fromEnvironment).
     from(resources.text.fromString(headlessVersion)) { rename { "VERSION" } }
     // BUILD-STAMP-1: the server's build string, read by BuildInfo when no -Dagenthq.build reached the JVM.
@@ -447,6 +457,7 @@ tasks.register<Zip>("headlessDistZip") {
     group = "distribution"
     description = "HEADLESS-DIST-1: the headless server as a zip (Windows)."
     archiveFileName.set("$headlessBaseName.zip")
+    dependsOn(webBundleTask)
     destinationDirectory.set(layout.buildDirectory.dir("distributions"))
     with(headlessContents)
 }
@@ -456,6 +467,7 @@ tasks.register<Tar>("headlessDistTar") {
     description = "HEADLESS-DIST-1: the headless server as a tar.gz (Linux/macOS, keeps the executable bits)."
     archiveFileName.set("$headlessBaseName.tar.gz")
     compression = Compression.GZIP
+    dependsOn(webBundleTask)
     destinationDirectory.set(layout.buildDirectory.dir("distributions"))
     with(headlessContents)
 }

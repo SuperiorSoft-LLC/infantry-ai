@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.121.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.122.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,24 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+
+### What changed in 1.122.0 (WEB-1) — the browser client, served by the daemon
+
+ADDITIVE; a 1.121.0 client keeps working. The `ready` frame reports `contract=1.122.0`.
+- **Bundle at `/`.** The daemon serves the browser (Kotlin/WASM) client from its own port: `GET /` is `index.html`, and every
+  file of the bundle is one exact `GET` route, listed once at startup (no path resolution, so `..`, encoded slashes and
+  symlinks out of the folder are never served). The bundle is found at `AGENTHQ_WEB_DIR`, else `<AGENTHQ_APP_HOME>/web`
+  (headless archive, Docker), else the desktop app's `resources/web`. Without a bundle `GET /` is 404 with a one-line note.
+  Bundle files need no token (they hold no data); a tokenless loopback daemon still checks Host, a token daemon asks for an
+  allowlisted Host, and an Origin, when sent, must be same-origin.
+- **Browser admission on `/ws` only.** A request carrying an Origin is still refused everywhere except `/ws` (and the bundle).
+  On `/ws` a browser is admitted only when ALL hold: the daemon has a bearer token (a tokenless loopback daemon refuses every
+  browser); the Host names an allowlisted host (`localhost`, `127.0.0.1`, `::1`, the bind host or, bound to the wildcard,
+  the machine's own interface addresses, plus `AGENTHQ_WEB_HOSTS`, comma-separated); the Origin is exactly
+  `http(s)://<that Host>`; and the bearer matches (constant-time, as before).
+- **Subprotocol bearer.** A browser WebSocket cannot set `Authorization`, so on `/ws` the token may also arrive as the
+  `Sec-WebSocket-Protocol` value `agenthq.bearer.<base64url(token), no padding>`, offered together with `agenthq`. The
+  daemon answers `Sec-WebSocket-Protocol: agenthq`; it never echoes the bearer protocol. The token never goes in a URL.
 
 ### What changed in 1.121.0 (USAGE-PACE S2+S3, ticket-2d954bda) — manual usage, allowance override, pacing rule; ticket starts are paced
 
