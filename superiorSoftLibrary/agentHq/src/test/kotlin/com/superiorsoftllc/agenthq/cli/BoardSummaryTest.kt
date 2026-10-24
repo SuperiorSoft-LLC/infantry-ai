@@ -32,12 +32,12 @@ class BoardSummaryTest {
     @Test
     fun groupsByColumnWithWorkerStateAndCommit() {
         val lines = BoardSummary.render(
-            listOf(ticket("aaaaaaaa1", "todo"), ticket("bbbbbbbb2", "in_progress", "s1234567890", "ticket/b"), ticket("cccccccc3", "done")),
+            listOf(ticket("ticket-aaaaaaa1", "todo"), ticket("ticket-bbbbbbb2", "in_progress", "s1234567890", "ticket/b"), ticket("ticket-ccccccc3", "done")),
             listOf(session("s1234567890", bg = BackgroundWork(1, "gradlew test", 0))),
             now,
         ) { "abc1234" }
         assertEquals(listOf("todo (1)", "in_progress (1)", "done (1)"), lines.filter { !it.startsWith("  ") })
-        val line = lines.single { it.contains("bbbbbbbb") }
+        val line = lines.single { it.contains("bbbbbbb2") }
         assertTrue("qa s1234567" in line && "running background process (gradlew test)" in line && "ticket/b@abc1234" in line, line)
     }
 
@@ -59,5 +59,27 @@ class BoardSummaryTest {
         assertEquals("900000", json["lastOutputAt"].toString())
         assertEquals("950000", json["lastEventAt"].toString())
         SessionActivityLog.clear()
+    }
+
+    @Test
+    fun idsSharingTheirFirstCharactersStayDistinguishable() {
+        // ticket-91a3d988: the old line cut the id to 8 characters INCLUDING `ticket-`, so all three printed `ticket-1`.
+        val ids = listOf("ticket-1a2b3c4d", "ticket-1a2b3c4e", "ticket-1f000000")
+        val lines = BoardSummary.render(ids.map { ticket(it, "todo") }, emptyList(), now) { null }.filter { it.startsWith("  ") }
+        assertEquals(listOf("1a2b3c4d", "1a2b3c4e", "1f000000"), lines.map { it.trim().substringBefore(" | ") })
+        assertEquals("  1a2b3c4d | title ticket-1a2b3c4d", lines[0])
+    }
+
+    @Test
+    fun aLongTitleIsCutWithAnEllipsisAndAShortOneIsNot() {
+        assertEquals("short", BoardSummary.cutTitle("short"))
+        assertEquals("x".repeat(100), BoardSummary.cutTitle("x".repeat(100)))
+        val cut = BoardSummary.cutTitle("y".repeat(150))
+        assertEquals(100, cut.length)
+        assertTrue(cut.endsWith("...") && cut.startsWith("y".repeat(97)), cut)
+        assertEquals("two lines", BoardSummary.cutTitle("two\nlines"))
+        val long = Ticket(id = "ticket-abcdef12", title = "z".repeat(150), status = "todo", position = 0, createdAt = 0, updatedAt = 0)
+        val line = BoardSummary.render(listOf(long), emptyList(), now) { null }.last()
+        assertEquals("  abcdef12 | " + "z".repeat(97) + "...", line)
     }
 }

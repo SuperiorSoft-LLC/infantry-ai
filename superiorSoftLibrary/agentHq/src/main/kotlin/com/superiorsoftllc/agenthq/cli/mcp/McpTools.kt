@@ -2,6 +2,7 @@ package com.superiorsoftllc.agenthq.cli.mcp
 
 import com.superiorsoftllc.agenthq.cli.AuthRefused
 import com.superiorsoftllc.agenthq.cli.BoardSummary
+import com.superiorsoftllc.agenthq.cli.shortTicketId
 import com.superiorsoftllc.agenthq.protocol.Ticket
 import com.superiorsoftllc.agenthq.cli.FrameStream
 import com.superiorsoftllc.agenthq.cli.HarnessCatalog
@@ -315,7 +316,7 @@ internal class McpTools(
             stream.request(Envelope(Envelope.TICKET_LIST, scope.projectId ?: ""), Envelope.TICKETS, "ticket_list", idempotent = true).data,
         )
         val lines = BoardSummary.render(tickets, sessions, System.currentTimeMillis(), BoardSummary.gitCommitOf(sessions))
-            .map { line -> if (scope.projectId == null) tickets.firstOrNull { line.startsWith("  " + it.id.take(8)) }?.let { "  [${it.projectId}] ${line.trimStart()}" } ?: line else line }
+            .map { line -> if (scope.projectId == null) tickets.firstOrNull { line.startsWith("  " + shortTicketId(it.id) + " ") }?.let { "  [${it.projectId}] ${line.trimStart()}" } ?: line else line }
         return ok(buildJsonObject {
             scope.projectId?.let { put("projectId", it) }
             put("scope", scope.label)
