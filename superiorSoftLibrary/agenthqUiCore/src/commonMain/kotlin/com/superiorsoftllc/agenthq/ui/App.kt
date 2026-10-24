@@ -79,6 +79,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -1036,14 +1037,27 @@ fun CenterTabBar(state: AppState, current: CenterTab, onPick: (CenterTab) -> Uni
     ) { onPick(CenterTab.entries[it]) }
 }
 
+const val TAB_BAR_MORE_CUE_TAG = "tab-bar-more-cue"
+
 @Composable
 private fun TabBar(tabs: List<Pair<String, Boolean>>, hPad: androidx.compose.ui.unit.Dp = 14.dp, fontSize: androidx.compose.ui.unit.TextUnit = 12.sp, tagOf: ((Int) -> String)? = null, barTag: String? = null, onPick: (Int) -> Unit) {
-    // Scrolls sideways when the labels outgrow the width, so no tab is ever squeezed or hidden.
-    Row(Modifier.fillMaxWidth().let { m -> barTag?.let { m.testTag(it) } ?: m }.background(Palette.Panel).horizontalScroll(rememberScrollState())) {
-        tabs.forEachIndexed { i, (label, on) ->
-            Column(Modifier.let { m -> tagOf?.let { m.testTag(it(i)) } ?: m }.clickable { onPick(i) }.padding(horizontal = hPad, vertical = 7.dp)) {
-                Text(label, maxLines = 1, softWrap = false, color = if (on) Palette.Accent else Palette.Muted, fontSize = fontSize, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+    // Scrolls sideways when the labels outgrow the width, so no tab is ever squeezed or hidden. While more tabs lie
+    // off the right edge, a fade over that edge is the visible scroll cue (a scrollbar is not shown on touch or web).
+    val scroll = rememberScrollState()
+    Box(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().let { m -> barTag?.let { m.testTag(it) } ?: m }.background(Palette.Panel).horizontalScroll(scroll)) {
+            tabs.forEachIndexed { i, (label, on) ->
+                Column(Modifier.let { m -> tagOf?.let { m.testTag(it(i)) } ?: m }.clickable { onPick(i) }.padding(horizontal = hPad, vertical = 7.dp)) {
+                    Text(label, maxLines = 1, softWrap = false, color = if (on) Palette.Accent else Palette.Muted, fontSize = fontSize, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
+                }
             }
+        }
+        if (scroll.canScrollForward) {
+            Box(
+                Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(32.dp)
+                    .background(Brush.horizontalGradient(listOf(Palette.Panel.copy(alpha = 0f), Palette.Panel)))
+                    .testTag(TAB_BAR_MORE_CUE_TAG),
+            )
         }
     }
     HorizontalDivider(color = Palette.Border)

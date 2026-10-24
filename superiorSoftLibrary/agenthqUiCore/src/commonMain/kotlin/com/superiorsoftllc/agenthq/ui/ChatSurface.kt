@@ -238,8 +238,10 @@ fun CenterHeader(
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(state.agentTitle(a), fontWeight = FontWeight.SemiBold, color = Palette.Text, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag(AGENT_HEADER_TITLE_TAG))
-                state.agentSecondaryId(a)?.let { Spacer(Modifier.width(6.dp)); Text(it, color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp, maxLines = 1, modifier = Modifier.testTag(AGENT_HEADER_ID_TAG)) }
+                // Non-weighted siblings are measured first, so the title takes only what is left and ellipsizes;
+                // the id is ellipsized too, so it can never be clipped down to a stray glyph.
+                Text(state.agentTitle(a), fontWeight = FontWeight.SemiBold, color = Palette.Text, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).testTag(AGENT_HEADER_TITLE_TAG))
+                state.agentSecondaryId(a)?.let { Spacer(Modifier.width(6.dp)); Text(it, color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.testTag(AGENT_HEADER_ID_TAG)) }
                 a.role?.let { Spacer(Modifier.width(8.dp)); Chip(it, Palette.Accent) }
                 Spacer(Modifier.width(8.dp))
                 val waiting = needsInput(a, state.waiting, state.openPrompts, state.openQuestionSessions)
