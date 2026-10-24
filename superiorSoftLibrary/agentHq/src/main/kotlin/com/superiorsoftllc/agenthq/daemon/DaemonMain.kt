@@ -675,6 +675,10 @@ class AgentHqDaemon(
             // TRAITS-T4: the chokepoint's fallback, so a spawn path that resolves no instance itself still freezes one.
             manager.instanceFor = agents::instanceFor
             manager.assistantDir = assistantDir
+            // PROGRESS-S5: the opt-in estimated mode's per-project label durations outlive a restart.
+            manager.progressEstimates = com.superiorsoftllc.agenthq.session.FileProgressEstimates(
+                File(com.superiorsoftllc.agenthq.session.stateDir(), com.superiorsoftllc.agenthq.session.FileProgressEstimates.FILE_NAME),
+            )
             val clients = CopyOnWriteArrayList<Channel<Envelope>>()
             // PROMPT-1: `prompts.timeoutSec` is read at every open; every request / resolution goes to every client.
             val pendingPrompts = com.superiorsoftllc.agenthq.prompts.PendingPrompts(

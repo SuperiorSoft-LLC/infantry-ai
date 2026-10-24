@@ -938,6 +938,9 @@ data class ProgressView(
     val done: Long? = null,
     val total: Long? = null,
     val bytesPerSec: Double? = null,
+    /** PROGRESS-S5 (opt-in): an indeterminate job that asked for an estimate from past runs; [estimateMs] = their median, null = none yet. */
+    val estimated: Boolean? = null,
+    val estimateMs: Long? = null,
     val startedAt: Long = 0,
     val updatedAt: Long = 0,
 )
