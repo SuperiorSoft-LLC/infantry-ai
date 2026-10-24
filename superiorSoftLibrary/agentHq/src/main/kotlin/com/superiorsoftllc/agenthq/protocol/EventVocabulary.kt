@@ -365,7 +365,7 @@ object EventVocabulary {
     // Origin still checked); a SAME-ORIGIN browser is admitted on `/ws` only with the bearer, which it may send as the
     // `agenthq.bearer.<base64url token>` subprotocol (the daemon answers `agenthq`); setting `AGENTHQ_WEB_HOSTS`. See CONTRACT.md.
     // **1.123.0 (PROGRESS-COUNTDOWN, ticket 564d0e01) is ADDITIVE**: `SessionProgress` labelStartedAt / estimateSource / lastOutputAt, `ProgressReport` estimateMs and op `output`; the meter always counts down. See CONTRACT.md.
-    const val VERSION = "1.125.0"
+    const val VERSION = "1.126.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA

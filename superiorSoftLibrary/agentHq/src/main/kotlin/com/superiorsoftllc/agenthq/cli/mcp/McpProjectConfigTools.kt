@@ -33,6 +33,11 @@ internal class McpProjectConfigTools {
             "false" -> false
             else -> return refused("$SET: autoRemoveDoneWorkers must be true or false, was '${autoRaw.take(20)}'")
         }
+        // EXPERIMENTS-1 (1.126.0): `experiment` (a key) with `value` (on/off) is a change of its own.
+        arguments.string("experiment")?.let { key ->
+            val value = arguments.string("value") ?: return refused("$SET: experiment needs a value of on or off")
+            return request(stream, ProjectConfigRequest(projectId, experiments = mapOf(key to value)))
+        }
         val role = arguments.string("role")
         if (role == null && autoRemove != null && arguments.string("cap") == null) {
             return request(stream, ProjectConfigRequest(projectId, autoRemoveDoneWorkers = autoRemove))
@@ -50,6 +55,7 @@ internal class McpProjectConfigTools {
             put("projectId", project.id)
             put("laneCaps", buildJsonObject { project.laneCaps.forEach { (role, cap) -> put(role, cap) } })
             put("autoRemoveDoneWorkers", project.autoRemoveDoneWorkers)
+            put("experiments", buildJsonObject { project.experiments.forEach { (k, v) -> put(k, v) } })
             put("note", "max concurrent agents per role; a role not listed runs 1. autoRemoveDoneWorkers: a done ticket's worker session is ended and removed")
         }))
     } catch (e: Exception) {
@@ -100,6 +106,8 @@ internal class McpProjectConfigTools {
                 listOf(
                     PROJECT, "role" to "The role id, e.g. backend (with cap).", "cap" to "The most concurrent agents of the role, 1 or more.",
                     "autoRemoveDoneWorkers" to "true or false: end and remove a done ticket's worker session.",
+                    "experiment" to "an experiment switch name (a name the daemon knows); needs value.",
+                    "value" to "on or off, for experiment.",
                 ),
                 listOf("projectId"),
             ))

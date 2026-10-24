@@ -50,6 +50,22 @@ data class SessionStats(
     val unattributedToolTokens: Long? = null,
     /** Contract 1.113.0: running total of the cost the harness REPORTED, null when it reports none (never computed). */
     val costTotal: Double? = null,
+    /** Contract 1.126.0 (EXPERIMENTS-1): experiment tags the session record shows (for example `experiment:<name>`). */
+    val tags: List<String>? = null,
+    /** Contract 1.126.0: context tokens of the FIRST model request (the start context). */
+    val firstContextTokens: Long? = null,
+    /** Contract 1.126.0: millis from the first record to the first edit/write tool call; null when the session never edited. */
+    val msToFirstEdit: Long? = null,
+    /** Contract 1.126.0: tool calls made before the first edit; null when the session never edited. */
+    val toolCallsBeforeFirstEdit: Int? = null,
+    /** Contract 1.126.0: tool results seen, their average and largest size in characters. */
+    val toolResults: Int? = null,
+    val avgToolResultChars: Long? = null,
+    val maxToolResultChars: Long? = null,
+    /** Contract 1.126.0: per-step round trip (tool result to the next assistant record), millis. */
+    val stepMsP50: Long? = null,
+    val stepMsP90: Long? = null,
+    val stepMsMean: Long? = null,
 )
 
 @Serializable
