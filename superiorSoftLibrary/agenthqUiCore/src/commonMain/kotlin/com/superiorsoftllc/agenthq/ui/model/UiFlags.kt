@@ -31,10 +31,16 @@ data class UiFlags(
     val agentScope: AgentScope = AgentScope.PROJECT,
     /** VOICE-1: spoken attention alerts. */
     val voice: com.superiorsoftllc.agenthq.ui.voice.VoiceSettings = com.superiorsoftllc.agenthq.ui.voice.VoiceSettings(),
+    /** The incoming-comms sound (on by default, volume, optional own mp3). Persisted by the host. */
+    val commsSound: com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundSettings = com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundSettings(),
     /** MODAL-BLUR: blur the app behind dialogs (default on); off keeps the dark scrim. Persisted by the host. */
     val blurBehindDialogs: Boolean = true,
     /** Contract 1.117.0: a running progress bar turns amber with "no update for N min" after this many minutes. Persisted by the host. */
     val progressStaleMin: Int = PROGRESS_STALE_DEFAULT_MIN,
+    /** CHAT-MD-ENGINE: id of the chosen chat markdown engine (client-side, per device); unknown ids fall back to the built-in one. Persisted by the host. */
+    val chatMarkdownEngine: String = BuiltInChatMarkdownEngine.ID,
+    /** Where agent reasoning shows (client-side, per device); default inline as before. Persisted by the host. */
+    val reasoningPlacement: ReasoningPlacement = ReasoningPlacement.INLINE,
 )
 
 const val PROGRESS_STALE_APPLIES_TO = "Applies to: the progress bars agents report on their card, their session header and their ticket's board card. A running bar with no update for this long turns amber."

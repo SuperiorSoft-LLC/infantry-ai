@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.ui.model
 
 import androidx.compose.runtime.mutableStateMapOf
+import kotlin.math.roundToLong
 
 /** Which Stats chart a scale belongs to. */
 enum class ChartKind(val key: String, val defaultMax: Long, val presets: List<Long>) {
@@ -65,7 +66,7 @@ object ChartScale {
         if (t.isEmpty()) return null
         val mult = when (t.last()) { 'k' -> 1_000.0; 'm' -> 1_000_000.0; else -> 1.0 }
         val num = (if (mult == 1.0) t else t.dropLast(1)).toDoubleOrNull() ?: return null
-        val v = Math.round(num * mult)
+        val v = (num * mult).roundToLong()
         return v.takeIf { it > 0 }
     }
 }

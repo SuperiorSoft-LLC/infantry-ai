@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.daemon
 
+import com.superiorsoftllc.agenthq.protocol.MessageOrigin
+import com.superiorsoftllc.agenthq.protocol.SystemKind
 import com.superiorsoftllc.agenthq.session.SessionManager
 import com.superiorsoftllc.agenthq.session.SessionRecord
 import com.superiorsoftllc.agenthq.session.SessionState
@@ -88,7 +90,7 @@ class SessionHandover(
         if (!canHandOff) {
             reason = "the previous session could not be asked for one (it never ran, or its harness is gone)"
         } else {
-            val asked = runCatching { manager.resumeHeld(sessionId, HANDOFF_PROMPT) }
+            val asked = runCatching { manager.resumeHeld(sessionId, HANDOFF_PROMPT, MessageOrigin.System(SystemKind.HANDOVER)) }
             if (asked.isFailure) {
                 reason = "the previous session could not be asked for one (${asked.exceptionOrNull()?.message})"
             } else if (!settle(sessionId, deadline)) {
@@ -108,7 +110,7 @@ class SessionHandover(
             // No ticket to brief from (deleted meanwhile): leave the session at rest, as an untracked switch does.
             return Outcome(note, reason)
         }
-        manager.resumeHeld(sessionId, resumePrompt(ticketBrief, note, reason))
+        manager.resumeHeld(sessionId, resumePrompt(ticketBrief, note, reason), MessageOrigin.System(SystemKind.HANDOVER))
         return Outcome(note, reason)
     }
 

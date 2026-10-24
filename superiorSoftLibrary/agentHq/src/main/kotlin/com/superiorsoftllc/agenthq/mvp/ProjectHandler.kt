@@ -39,7 +39,7 @@ class ProjectHandler(
     /** LANE-CAPS: told the whole project after a `project_config` changed it, so the daemon can push it to every client. */
     private val onConfigChanged: (Project) -> Unit = {},
     /**
-     * ROUTING-1 (contract 1.123.0): normalises and checks a submitted rule list (throws IllegalArgumentException with the
+     * ROUTING-1 (contract 1.128.0): normalises and checks a submitted rule list (throws IllegalArgumentException with the
      * reason). The daemon passes [com.superiorsoftllc.agenthq.backlog.RoutingRules.validate] over the harness check
      * ticket create uses; the default has no harness to check against and refuses every non-empty list.
      */
@@ -110,7 +110,8 @@ class ProjectHandler(
             val caps = request.laneCaps
             val autoRemove = request.autoRemoveDoneWorkers
             val rules = request.routingRules
-            if (caps.isNullOrEmpty() && autoRemove == null && rules == null) projectEnvelope(store.get(request.projectId))
+            val experiments = request.experiments
+            if (caps.isNullOrEmpty() && autoRemove == null && rules == null && experiments.isNullOrEmpty()) projectEnvelope(store.get(request.projectId))
             else {
                 // ROUTING-1: the rules are validated first (a refused list writes nothing), then the caps: a refused cap
                 // writes nothing either, so nothing else is changed by a refused request.
@@ -119,6 +120,8 @@ class ProjectHandler(
                 if (!caps.isNullOrEmpty()) project = store.setLaneCaps(request.projectId, caps)
                 if (checkedRules != null) project = store.setRoutingRules(request.projectId, checkedRules)
                 if (autoRemove != null) project = store.setAutoRemoveDoneWorkers(request.projectId, autoRemove)
+                if (!experiments.isNullOrEmpty()) project = store.setExperiments(request.projectId, experiments)
+                if (!experiments.isNullOrEmpty()) project = store.setExperiments(request.projectId, experiments)
                 projectEnvelope(project.also(onConfigChanged))
             }
         }

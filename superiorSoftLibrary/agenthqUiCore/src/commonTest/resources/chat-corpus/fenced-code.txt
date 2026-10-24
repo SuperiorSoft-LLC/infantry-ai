@@ -1,0 +1,10 @@
+Run this:
+
+```kotlin
+fun main() {
+    val xs = listOf(1, 2, 3)   // **not bold** | not a table
+    println(xs.map { it * 2 })
+}
+```
+
+Then check the output.

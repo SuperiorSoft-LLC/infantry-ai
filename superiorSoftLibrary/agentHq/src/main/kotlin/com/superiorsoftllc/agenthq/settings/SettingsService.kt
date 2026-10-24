@@ -11,6 +11,11 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
 import com.superiorsoftllc.agenthq.session.host.LifecyclePolicy
+import com.superiorsoftllc.agenthq.usage.ManualUsage
+import com.superiorsoftllc.agenthq.usage.PacingRule
+import com.superiorsoftllc.agenthq.usage.UsageOverride
+import com.superiorsoftllc.agenthq.usage.UsagePacing
+import com.superiorsoftllc.agenthq.usage.UsageSet
 
 /**
  * The daemon's closed set of durable project-level settings: `context.includeLinkedTasksContext` and, since P10-K11
@@ -42,6 +47,14 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
             QUESTIONS_MAX_PER_HOUR to JsonPrimitive(questionsMaxPerHour()),
             TICKET_EXIT_BEHAVIOR to JsonPrimitive(ticketExitBehavior()),
             TICKET_WEIGHT_EXECUTORS to weightExecutors().toJson(),
+            USAGE_PACING to UsagePacing.ruleJson(usagePacing()),
+            USAGE_MANUAL to UsagePacing.manualJson(usageManual()),
+            USAGE_OVERRIDES to UsagePacing.overridesJson(usageOverrides()),
+            USAGE_REFRESH_MINUTES to JsonPrimitive(usageRefreshMinutes()),
+            PROCESSES_AUTO_REAP to JsonPrimitive(processWatchConfig().autoReap),
+            PROCESSES_IDLE_MINUTES to JsonPrimitive(processWatchConfig().idleMinutes),
+            PROCESSES_HEAVY_MB to JsonPrimitive(processWatchConfig().heavyMb),
+            PROCESSES_FLOOR_MB to JsonPrimitive(processWatchConfig().floorMb),
         ) + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
     )
 
@@ -71,6 +84,73 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
     fun weightExecutors(): WeightExecutors {
         val stored = store.settings.get(TICKET_WEIGHT_EXECUTORS)?.value ?: return WeightExecutors.DEFAULT
         return runCatching { WeightExecutors.parse(Json.parseToJsonElement(stored)) }.getOrDefault(WeightExecutors.DEFAULT)
+    }
+
+    /** USAGE-PACE (1.121.0): the pacing rule, read at every report; an unreadable stored value falls back to the default. */
+    fun usagePacing(): PacingRule {
+        val stored = store.settings.get(USAGE_PACING)?.value ?: return PacingRule.DEFAULT
+        return runCatching { PacingRule.parse(Json.parseToJsonElement(stored)) }.getOrDefault(PacingRule.DEFAULT)
+    }
+
+    /** USAGE-AUTO (1.124.0): minutes between automatic live usage reads; default 5, 0 = off, read at every tick. */
+    fun usageRefreshMinutes(): Int {
+        val stored = store.settings.get(USAGE_REFRESH_MINUTES)?.value ?: return USAGE_REFRESH_DEFAULT
+        return runCatching { (Json.parseToJsonElement(stored) as JsonPrimitive).content.toInt() }
+            .getOrNull()?.takeIf { it in USAGE_REFRESH_RANGE } ?: USAGE_REFRESH_DEFAULT
+    }
+
+    /** USAGE-PACE: hand-typed percents per meter (expired ones included; the pacer drops them). */
+    fun usageManual(): Map<String, ManualUsage> {
+        val stored = store.settings.get(USAGE_MANUAL)?.value ?: return emptyMap()
+        return runCatching { UsagePacing.parseManual(Json.parseToJsonElement(stored)) }.getOrDefault(emptyMap())
+    }
+
+    /** USAGE-PACE: hand-set allowances per meter (expired ones included; the pacer drops them). */
+    fun usageOverrides(): Map<String, UsageOverride> {
+        val stored = store.settings.get(USAGE_OVERRIDES)?.value ?: return emptyMap()
+        return runCatching { UsagePacing.parseOverrides(Json.parseToJsonElement(stored)) }.getOrDefault(emptyMap())
+    }
+
+    /**
+     * USAGE-PACE: one `usage_set` ([UsageSet]): the rule replaced and/or one meter's manual entry / override set or
+     * cleared; a read-modify-write of the maps, expired entries dropped on the way. Validates everything before writing.
+     */
+    @Synchronized
+    fun applyUsage(request: UsageSet, now: Long = System.currentTimeMillis()) {
+        val meter = request.meter.trim().lowercase()
+        val touchesMeter = request.clearManual || request.manualPercent != null || request.clearOverride || request.overrideUntil != null
+        require(request.rule != null || touchesMeter) { "usage_set changes nothing" }
+        require(!touchesMeter || meter.isNotEmpty()) { "usage_set needs a meter" }
+        request.manualPercent?.let { pct ->
+            require(pct in 0.0..100.0) { "percent must be in 0..100" }
+            require(request.manualResetsAt == null || request.manualResetsAt > now) { "resetsAt must be in the future" }
+        }
+        request.overrideUntil?.let { until ->
+            require(until > now) { "override 'until' must be in the future" }
+            require(request.overrideWorkers == null || request.overrideWorkers in 0..PacingRule.MAX_WORKERS) {
+                "workers must be in 0..${PacingRule.MAX_WORKERS} or none"
+            }
+        }
+        val rule = request.rule?.let { usageSetting(USAGE_PACING) { PacingRule.parse(it) } }
+        rule?.let { set(USAGE_PACING, UsagePacing.ruleJson(it)) }
+        if (request.clearManual || request.manualPercent != null) {
+            val next = usageManual().filterValues { it.expiresAt > now }.toMutableMap()
+            if (request.clearManual) next.remove(meter)
+            request.manualPercent?.let { next[meter] = ManualUsage(it, request.manualResetsAt, now) }
+            set(USAGE_MANUAL, UsagePacing.manualJson(next))
+        }
+        if (request.clearOverride || request.overrideUntil != null) {
+            val next = usageOverrides().filterValues { it.until > now }.toMutableMap()
+            if (request.clearOverride) next.remove(meter)
+            request.overrideUntil?.let { next[meter] = UsageOverride(request.overrideWorkers, it) }
+            set(USAGE_OVERRIDES, UsagePacing.overridesJson(next))
+        }
+    }
+
+    private fun <T> usageSetting(key: String, parse: () -> T): T = try {
+        parse()
+    } catch (e: IllegalArgumentException) {
+        throw IllegalArgumentException("setting '$key' ${e.message}")
     }
 
     /** `leave` (default) or `done`: what a clean worker exit does to its in_progress ticket; read at every run end. */
@@ -103,6 +183,13 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
                 throw IllegalArgumentException("setting '$TICKET_WEIGHT_EXECUTORS' ${e.message}")
             }
             USER_PORTRAIT -> JsonPrimitive(requireUserPortrait(value))
+            USAGE_PACING -> UsagePacing.ruleJson(usageSetting(key) { PacingRule.parse(value) })
+            USAGE_MANUAL -> UsagePacing.manualJson(usageSetting(key) { UsagePacing.parseManual(value) })
+            USAGE_OVERRIDES -> UsagePacing.overridesJson(usageSetting(key) { UsagePacing.parseOverrides(value) })
+            USAGE_REFRESH_MINUTES -> JsonPrimitive(requireIntIn(key, value, USAGE_REFRESH_RANGE))
+            PROCESSES_AUTO_REAP -> JsonPrimitive(requireBoolean(key, value))
+            PROCESSES_IDLE_MINUTES -> JsonPrimitive(requireIntIn(key, value, PROCESSES_IDLE_RANGE))
+            PROCESSES_HEAVY_MB, PROCESSES_FLOOR_MB -> JsonPrimitive(requireIntIn(key, value, PROCESSES_MB_RANGE))
             else -> throw IllegalArgumentException("unknown setting '$key'")
         }
         store.settings.put(
@@ -147,6 +234,30 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
 
     /** ASK-1: read at every `question_ask`, never cached; an unreadable stored value falls back to the default. */
     fun questionsMaxPerHour(): Int = storedQuestionLimit(QUESTIONS_MAX_PER_HOUR, DEFAULT_QUESTIONS_MAX_PER_HOUR)
+
+    /** ROGUE-1 (1.120.0): the rogue process detector's settings, read on every timer pass; a bad stored value falls back. */
+    fun processWatchConfig(): com.superiorsoftllc.agenthq.session.ProcessWatchConfig {
+        val d = com.superiorsoftllc.agenthq.session.ProcessWatchConfig()
+        fun int(key: String, range: IntRange, default: Int): Int {
+            val stored = store.settings.get(key)?.value ?: return default
+            val parsed = runCatching { (Json.parseToJsonElement(stored) as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull }.getOrNull()
+            return parsed?.takeIf { it in range } ?: default
+        }
+        val autoReap = store.settings.get(PROCESSES_AUTO_REAP)?.value
+            ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonPrimitive)?.booleanOrNull }.getOrNull() } ?: d.autoReap
+        return com.superiorsoftllc.agenthq.session.ProcessWatchConfig(
+            idleMinutes = int(PROCESSES_IDLE_MINUTES, PROCESSES_IDLE_RANGE, d.idleMinutes),
+            heavyMb = int(PROCESSES_HEAVY_MB, PROCESSES_MB_RANGE, d.heavyMb.toInt()).toLong(),
+            floorMb = int(PROCESSES_FLOOR_MB, PROCESSES_MB_RANGE, d.floorMb.toInt()).toLong(),
+            autoReap = autoReap,
+        )
+    }
+
+    private fun requireIntIn(key: String, value: JsonElement, range: IntRange): Int {
+        val v = (value as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toIntOrNull()
+        require(v != null && v in range) { "setting '$key' must be a JSON integer in $range" }
+        return v
+    }
 
     private fun storedQuestionLimit(key: String, default: Int): Int {
         val stored = store.settings.get(key)?.value ?: return default
@@ -238,9 +349,24 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
         const val TICKET_EXIT_BEHAVIOR = "tickets.exitBehavior"
         /** TICKET-WEIGHT: JSON object weight ("1".."5") -> {provider, model}; see [WeightExecutors]. */
         const val TICKET_WEIGHT_EXECUTORS = WeightExecutors.SETTING
+        /** USAGE-PACE (1.121.0): see [PacingRule], [ManualUsage], [UsageOverride]. */
+        const val USAGE_PACING = UsagePacing.RULE_SETTING
+        const val USAGE_MANUAL = UsagePacing.MANUAL_SETTING
+        const val USAGE_OVERRIDES = UsagePacing.OVERRIDES_SETTING
+        /** USAGE-AUTO (1.124.0): minutes between automatic live usage reads (0 = off). */
+        const val USAGE_REFRESH_MINUTES = "usage.refreshMinutes"
+        const val USAGE_REFRESH_DEFAULT = 5
+        private val USAGE_REFRESH_RANGE = 0..1440
         const val EXIT_LEAVE = "leave"
         const val EXIT_DONE = "done"
         private val EXIT_BEHAVIORS = listOf(EXIT_LEAVE, EXIT_DONE)
+        /** ROGUE-1 (1.120.0): the rogue process detector (auto-reap is opt-in, default false). */
+        const val PROCESSES_AUTO_REAP = "processes.autoReap"
+        const val PROCESSES_IDLE_MINUTES = "processes.idleMinutes"
+        const val PROCESSES_HEAVY_MB = "processes.heavyMb"
+        const val PROCESSES_FLOOR_MB = "processes.floorMb"
+        private val PROCESSES_IDLE_RANGE = 1..1440
+        private val PROCESSES_MB_RANGE = 0..1_048_576
         private val QUESTION_LIMIT_RANGE = 1..100
         private val PROMPT_TIMEOUT_RANGE = 1..86_400
         private val KEEP_ALIVE_RANGE = 0..LifecyclePolicy.MAX_KEEP_ALIVE_MINUTES

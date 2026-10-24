@@ -249,12 +249,16 @@ fun App(
     var flags by remember {
         mutableStateOf(
             UiFlags(
+                commsSound = com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundSettings.load(host),
                 blurBehindDialogs = host.uiPref(BLUR_PREF_KEY) != "off",
+                chatMarkdownEngine = host.uiPref(com.superiorsoftllc.agenthq.ui.model.CHAT_MARKDOWN_PREF_KEY) ?: com.superiorsoftllc.agenthq.ui.model.BuiltInChatMarkdownEngine.ID,
+                reasoningPlacement = com.superiorsoftllc.agenthq.ui.model.ReasoningPlacement.fromId(host.uiPref(com.superiorsoftllc.agenthq.ui.model.REASONING_PLACEMENT_PREF_KEY)),
                 progressStaleMin = host.uiPref(com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_PREF_KEY)?.toIntOrNull()?.takeIf { it > 0 } ?: com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_DEFAULT_MIN,
             ),
         )
     }
     val modalBlur = remember { ModalBlurState(supported = host.supportsBlur) }
+    val chatBlockRenderers = remember { ChatBlockRenderers().also { it.override("callout", CalloutBlockRenderer) } }
     // THEME-1: the stored theme, applied once before the first themed frame; Palette.theme is its only owner from here on.
     remember(host) { Palette.theme = com.superiorsoftllc.agenthq.ui.model.ThemeSettings.decode(host.uiPref(THEME_PREF_KEY)) }
     modalBlur.enabled = flags.blurBehindDialogs
@@ -367,7 +371,12 @@ fun App(
     AgentHqTheme {
       // M2-8: a Box so the Board modal overlay stacks over the window.
       // IMG-VIEW-1: chat images open full size over the whole window (the Board keeps its own host, above it).
-      androidx.compose.runtime.CompositionLocalProvider(LocalModalBlur provides modalBlur, LocalProgressStaleMin provides flags.progressStaleMin) {
+      androidx.compose.runtime.CompositionLocalProvider(
+          LocalModalBlur provides modalBlur,
+          LocalProgressStaleMin provides flags.progressStaleMin,
+          LocalReasoningPlacement provides flags.reasoningPlacement,
+          LocalChatMarkdown provides remember(flags.chatMarkdownEngine) { ChatMarkdownConfig(com.superiorsoftllc.agenthq.ui.model.ChatMarkdown.engines.resolve(flags.chatMarkdownEngine), chatBlockRenderers) },
+      ) {
       ImageViewerHost {
       Box(Modifier.fillMaxSize()) {
         Column(
@@ -454,12 +463,6 @@ fun App(
               }
               run {
                 Column(Modifier.weight(1f).fillMaxHeight().testTag(CENTER_PANE_TAG)) {
-                    if (compact) {
-                        CompactNavRow(
-                            onOpenLeft = { controller.showCompactScreen(CompactScreen.LIST) },
-                            onOpenRight = { controller.showCompactScreen(CompactScreen.RIGHT) },
-                        )
-                    }
                     // CHAT-PANEL-1: the main window is one host of the shared ChatPanel; the tab strip and the other tabs are its slots.
                     ChatPanel(
                         selected?.id, controller, Modifier.weight(1f).fillMaxWidth(), chat = chat,
@@ -528,7 +531,10 @@ fun App(
             }
             }
             }
-            StatusBar(state, serverMismatch, host.appBuild, onConfig = { tab -> if (tab != null) configTab = tab; showConfig = true })
+            StatusBar(state, serverMismatch, host.appBuild, onConfig = { tab -> if (tab != null) configTab = tab; showConfig = true }) {
+                // ROGUE-1 (1.120.0): rogue background processes / low memory; hidden while nothing is wrong.
+                ProcessesBadge(state, controller)
+            }
         }
         // ASSISTANT-1: the global Assistant's popup, docked top right under the title bar (a full-screen sheet when compact). The
         // window owns its state, so closing it keeps the draft, the width and the model; it is one more host of ChatPanel.
@@ -541,7 +547,10 @@ fun App(
         }
         ToastHost(
             state,
-            onOpen = { n -> n.projectId?.let { id -> actionScope.launch { controller.selectProject(id) } }; showBoard = true },
+            onOpen = { n ->
+                n.projectId?.let { id -> actionScope.launch { controller.selectProject(id) } }
+                if (n.sessionId != null && state.agents.containsKey(n.sessionId)) controller.select(n.sessionId) else showBoard = true
+            },
             modifier = Modifier.align(Alignment.BottomEnd),
         )
         if (showBoard) {
@@ -560,15 +569,16 @@ fun App(
             ProjectDiffModal(state, controller, target, onTarget = { next -> diffTarget = next; if (next == null) root.requestFocus() })
         }
         // VOICE-1: spoken attention alerts (and their toast) over every pane.
+        com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundEffect(controller.state, flags.commsSound)
         com.superiorsoftllc.agenthq.ui.voice.VoiceAlerts(controller.spoken, flags.voice, Modifier.align(Alignment.BottomStart))
-        // ASK-1: an agent's question to the owner shows over every pane (and over the Board / diff modals).
-        QuestionWindow(
-            shown = state.shownQuestions,
-            waiting = state.openQuestions.size,
-            onAnswer = { answer -> actionScope.launch { controller.answerQuestion(answer) } },
-            onCancel = { id -> actionScope.launch { controller.cancelQuestion(id) } },
-            onLater = { controller.dismissQuestions(); root.requestFocus() },
-            onShow = controller::showQuestions,
+        // ASK-1: questions the owner cannot see inline (another session, or put off with Later): a pill that opens the asker.
+        QuestionPill(
+            hidden = state.openQuestions.count { q -> q.id in state.dismissedQuestions || q.sessionId != state.selectedId },
+            onShow = {
+                state.openQuestions.firstOrNull { it.sessionId != state.selectedId && state.agents.containsKey(it.sessionId) }
+                    ?.let { controller.select(it.sessionId); centerTab = CenterTab.OUTPUT; chat.spawnMode = false }
+                controller.showQuestions()
+            },
         )
       }
       }
@@ -578,6 +588,9 @@ fun App(
                 onFlags = { next ->
                     if (next.blurBehindDialogs != flags.blurBehindDialogs) host.saveUiPref(BLUR_PREF_KEY, if (next.blurBehindDialogs) "on" else "off")
                     if (next.progressStaleMin != flags.progressStaleMin) host.saveUiPref(com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_PREF_KEY, next.progressStaleMin.toString())
+                    if (next.chatMarkdownEngine != flags.chatMarkdownEngine) host.saveUiPref(com.superiorsoftllc.agenthq.ui.model.CHAT_MARKDOWN_PREF_KEY, next.chatMarkdownEngine)
+                    if (next.reasoningPlacement != flags.reasoningPlacement) host.saveUiPref(com.superiorsoftllc.agenthq.ui.model.REASONING_PLACEMENT_PREF_KEY, next.reasoningPlacement.name)
+                    next.commsSound.save(host, flags.commsSound)
                     flags = next
                 }, onDismiss = { showConfig = false },
                 keepAliveMinutes = state.keepAliveMinutes,
@@ -614,6 +627,8 @@ fun App(
                     import = { n -> actionScope.launch { controller.importSecret(n) } },
                 ),
                 onOpenRoles = { showRoles = true },
+                onSendTestQuestion = { state.selectedId?.let { id -> actionScope.launch { controller.sendTestQuestion(id) } } },
+                testQuestionReady = state.selectedId != null,
                 initialTab = configTab,
                 onTab = { configTab = it },
             )
@@ -670,30 +685,15 @@ const val CENTER_TRANSCRIPT_TAG = "center-transcript"
 const val COMPOSER_TAG = "composer"
 /** MOBILE-LAYOUT-1: the compact window's back button (output -> agent list, right panel -> output). */
 const val COMPACT_BACK_TAG = "compact-back"
-/** MOBILE-LAYOUT-1: the compact output screen's button that opens the right panel. */
-const val COMPACT_OPEN_RIGHT_TAG = "compact-open-right"
-/** MOBILE-DRAWERS-1: the compact output screen's button that opens the agent list drawer. */
-const val COMPACT_OPEN_LEFT_TAG = "compact-open-left"
 /** MOBILE-DRAWERS-1: an open compact drawer and the scrim behind it. */
 const val DRAWER_TAG = "compact-drawer"
 const val DRAWER_SCRIM_TAG = "compact-drawer-scrim"
 
-/**
- * MOBILE-LAYOUT-1: the strip above a compact screen: a back button and, on the output screen, the side-panel button
- * ([onOpenRight] null = no such button). IconAction only, so the hand cursor guard holds.
- */
+/** MOBILE-LAYOUT-1: the strip above a compact drawer: its close button. The title bar owns both panel toggles. */
 @Composable
-private fun CompactNavRow(backLabel: String = "", onBack: () -> Unit = {}, onOpenLeft: (() -> Unit)? = null, onOpenRight: (() -> Unit)? = null) {
+private fun CompactNavRow(backLabel: String, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (onOpenLeft != null) {
-            IconAction(AhqIcons.PanelLeft, "Agents", onOpenLeft, Modifier.testTag(COMPACT_OPEN_LEFT_TAG), style = IconActionStyle.TEXT)
-        } else {
-            IconAction(AhqIcons.ArrowBack, backLabel, onBack, Modifier.testTag(COMPACT_BACK_TAG), style = IconActionStyle.TEXT)
-        }
-        Spacer(Modifier.weight(1f))
-        if (onOpenRight != null) {
-            IconAction(AhqIcons.PanelRight, "Side panel", onOpenRight, Modifier.testTag(COMPACT_OPEN_RIGHT_TAG), style = IconActionStyle.TEXT)
-        }
+        IconAction(AhqIcons.ArrowBack, backLabel, onBack, Modifier.testTag(COMPACT_BACK_TAG), style = IconActionStyle.TEXT)
     }
     HorizontalDivider(color = Palette.Border)
 }
@@ -1158,7 +1158,7 @@ private fun nodeColor(s: String) = when (s) {
 }
 
 @Composable
-private fun StatusBar(state: AppState, serverMismatch: String?, appBuild: String?, onConfig: (ConfigTab?) -> Unit) {
+private fun StatusBar(state: AppState, serverMismatch: String?, appBuild: String?, onConfig: (ConfigTab?) -> Unit, processes: @Composable () -> Unit = {}) {
     val c = state.connection
     var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(Unit) { while (true) { delay(1000); now = Clock.System.now().toEpochMilliseconds() } }
@@ -1173,6 +1173,7 @@ private fun StatusBar(state: AppState, serverMismatch: String?, appBuild: String
         if (c.isLive && c.contract?.substringBefore('.') != "1") Text("   unexpected contract version", color = Palette.Danger, fontSize = 11.sp)
         // SERVER-UPDATE-4: client and server differ by more than a patch; the full text is in Configuration > Server.
         if (c.isLive && serverMismatch != null) Text("   version mismatch (see Configuration)", color = Palette.Accent, fontSize = 11.sp, modifier = Modifier.testTag(SERVER_MISMATCH_TAG))
+        processes()
         Spacer(Modifier.weight(1f))
         // The shortcut hint only where there is room for it (a phone has no keyboard shortcuts and no width to spare).
         if (!state.panels.compactWindow) {

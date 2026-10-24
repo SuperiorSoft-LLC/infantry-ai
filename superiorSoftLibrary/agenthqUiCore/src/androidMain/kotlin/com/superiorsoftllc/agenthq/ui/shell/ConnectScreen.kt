@@ -179,7 +179,20 @@ fun AndroidConnectGate(
                 val context = androidx.compose.ui.platform.LocalContext.current.applicationContext
                 val speaker = remember(context) { com.superiorsoftllc.agenthq.ui.voice.AndroidSpeaker(context) }
                 androidx.compose.runtime.DisposableEffect(speaker) { onDispose { speaker.shutdown() } }
-                val host = remember(g) { AndroidPlatformHost(g.settings, onChangeConnection = { gate = Gate.Form() }, speaker = speaker, savedServers = ConnectionSavedServers(store), uiPrefs = PrefsKeyValueStore(context.getSharedPreferences("agenthq_ui", android.content.Context.MODE_PRIVATE)), appBuild = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()) }
+                val soundPlayer = remember(context) { com.superiorsoftllc.agenthq.ui.sound.AndroidSoundPlayer(context) }
+                val soundStore = remember(context) { com.superiorsoftllc.agenthq.ui.sound.AndroidCustomSoundStore(context) }
+                var soundCallback by remember { androidx.compose.runtime.mutableStateOf<((PickedImage?) -> Unit)?>(null) }
+                val soundLauncher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+                    val cb = soundCallback; soundCallback = null
+                    cb?.invoke(uri?.let { u ->
+                        runCatching {
+                            val name = u.lastPathSegment?.substringAfterLast('/')?.substringAfterLast(':') ?: "sound.mp3"
+                            val bytes = context.contentResolver.openInputStream(u)?.use { it.readNBytes(MAX_SOUND_BYTES.toInt() + 1) }
+                            bytes?.takeIf { it.size <= MAX_SOUND_BYTES }?.let { PickedImage(name, "audio/mpeg", it) }
+                        }.getOrNull()
+                    })
+                }
+                val host = remember(g) { AndroidPlatformHost(g.settings, soundPlayer = soundPlayer, customSoundStore = soundStore, soundPicker = { cb -> soundCallback = cb; soundLauncher.launch(arrayOf("audio/*")) }, onChangeConnection = { gate = Gate.Form() }, speaker = speaker, savedServers = ConnectionSavedServers(store), uiPrefs = PrefsKeyValueStore(context.getSharedPreferences("agenthq_ui", android.content.Context.MODE_PRIVATE)), appBuild = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull()) }
                 AgentHqShell(host)
             }
         }

@@ -181,7 +181,7 @@ data class AgentActivity(val tool: String, val detail: String?, val at: Long) {
 }
 
 /** One rendered line of a session's transcript. Consecutive text deltas are coalesced into one line. */
-data class OutputLine(val kind: LineKind, val text: String, val at: Long)
+data class OutputLine(val kind: LineKind, val text: String, val at: Long, val origin: MessageOrigin = MessageOrigin.Owner)
 
 /**
  * One transcript entry as it arrived, and where it sits in its session's stream.
@@ -191,7 +191,7 @@ data class OutputLine(val kind: LineKind, val text: String, val at: Long)
  * now). Sequenced entries are kept in sequence order, so a replayed frame that arrives after newer live
  * frames still lands where it belongs; unsequenced entries keep their arrival position.
  */
-data class TranscriptEntry(val seq: Long?, val kind: LineKind, val text: String, val at: Long, val closed: Boolean = false)
+data class TranscriptEntry(val seq: Long?, val kind: LineKind, val text: String, val at: Long, val closed: Boolean = false, val origin: MessageOrigin = MessageOrigin.Owner)
 
 /**
  * Which of one session's sequenced frames this window has applied, so a frame is applied exactly once
@@ -259,6 +259,8 @@ data class AgentView(
     val activityLog: List<AgentActivity> = emptyList(),
     /** Contract 1.95.0 (1c24fdc4): the daemon's latest run activity, or null from a daemon that predates it. */
     val runActivity: RunActivityView? = null,
+    /** Contract 1.127.0 (TODO-OVERLAY-1): the agent's latest to-do list; every update replaces it. */
+    val todos: AgentTodoList? = null,
 ) {
     val id: String get() = session.id
 
@@ -449,7 +451,7 @@ internal fun render(entries: List<TranscriptEntry>): List<OutputLine> {
         when {
             joins -> out[out.lastIndex] = last!!.copy(text = last.text + e.text, at = e.at)
             e.kind == LineKind.STATUS && last?.kind == LineKind.STATUS && last.text == e.text -> Unit
-            else -> out += OutputLine(e.kind, e.text, e.at)
+            else -> out += OutputLine(e.kind, e.text, e.at, e.origin)
         }
     }
     return out
@@ -494,6 +496,8 @@ data class ProjectView(
     val laneCaps: Map<String, Int> = emptyMap(),
     /** BASICS-KILL-1 (contract 1.118.0): a done ticket's worker session is ended and removed. */
     val autoRemoveDoneWorkers: Boolean = false,
+    /** EXPERIMENTS-1 (contract 1.126.0): named project switches, key to `on`; a key not listed is off. */
+    val experiments: Map<String, String> = emptyMap(),
 )
 
 /**
@@ -594,6 +598,8 @@ data class AppState(
     val selectedId: String? = null,
     /** Frames the daemon refused or reported that belong to no session ("unknown pod", "resume failed"). */
     val notices: List<Notice> = emptyList(),
+    /** Global bottom-right toasts, oldest first; the host draws the newest few. */
+    val toasts: List<ToastEvent> = emptyList(),
     /**
      * Set while a spawn this window sent has not produced its session yet: the session ids that already
      * existed. The first session frame naming any OTHER id is the spawned one, and it is selected.
@@ -658,6 +664,8 @@ data class AppState(
     val providerStates: Map<String, ProviderState> = emptyMap(),
     /** Contract 1.59.0 (U1): the last `limits` answer, one entry per provider in the daemon's order; null = never answered. */
     val planLimits: List<ProviderLimits>? = null,
+    /** USAGE-PACE (contract 1.119.0): the last `usage_report`, plan meters and pacing allowance; null = never answered. */
+    val usageReport: com.superiorsoftllc.agenthq.ui.protocol.UsageReport? = null,
     /** STATS-2 (contract 1.92.0): the last `session_stats` answer per AgentHQ session id; absent = never answered. */
     val sessionStats: Map<String, SessionStats> = emptyMap(),
     /**
@@ -665,6 +673,10 @@ data class AppState(
      * daemon older than contract 1.68.0, which has no such setting): the control says so instead of guessing a value.
      */
     val keepAliveMinutes: Int? = null,
+    /** ROGUE-1 (1.120.0): the daemon's last `processes` answer or `process_pressure` push; null = never answered. */
+    val processReport: com.superiorsoftllc.agenthq.ui.protocol.ProcessReport? = null,
+    /** ROGUE-1 (1.120.0): the daemon's `processes.autoReap` as its last `settings` frame said; null = not read yet. */
+    val processAutoReap: Boolean? = null,
     /** USER-PORTRAIT (1.107.0): the daemon's `user.portrait` (base64 PNG); null = unset, the bundled default shows. */
     val userPortrait: String? = null,
     /** CLIPATH-1 (1.73.0): where the daemon runs each CLI from, as its last `cli_locations` said. Null = not read yet. */
@@ -867,6 +879,10 @@ data class AppState(
     /** ASK-1: what the question window shows: the open questions not hidden by "Later", oldest first. */
     val shownQuestions: List<com.superiorsoftllc.agenthq.ui.protocol.OwnerQuestionView>
         get() = openQuestions.filter { it.id !in dismissedQuestions }
+
+    /** ASK-1: one session's pending questions as its chat shows them inline: open, not put off, oldest first. */
+    fun shownQuestionsFor(sessionId: String): List<com.superiorsoftllc.agenthq.ui.protocol.OwnerQuestionView> =
+        shownQuestions.filter { it.sessionId == sessionId }
 
     /** ASK-1: the sessions with an open owner question (they count as needing input). */
     val openQuestionSessions: Set<String> get() = openQuestions.mapTo(HashSet()) { it.sessionId }
@@ -1222,7 +1238,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
         }
     }
 
-    Envelope.TURN -> s.stream(env) { a, _ -> a.withEntry(TranscriptEntry(env.sequence, LineKind.USER, env.data, now)) }
+    Envelope.TURN -> s.stream(env) { a, _ -> a.withEntry(TranscriptEntry(env.sequence, LineKind.USER, env.data, now, origin = env.origin ?: LegacyOriginAdapter.originOf(env.data))) }
         // A queued message on the stream was taken: its wait for a refusal is over.
         .let { t -> t.copy(queueSending = t.queueSending.filterValues { it.sessionId != env.sessionId || it.prompt.text != env.data }) }
 
@@ -1254,7 +1270,9 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
         val withRun = if (inOrder && p.runActivity != null) {
             withActivity.copy(runActivity = RunActivityView(p.runActivity.state, p.runActivity.label, now))
         } else withActivity
-        if (inOrder) withRun.copy(statusDetail = p.detail) else withRun
+        // Contract 1.127.0 (TODO-OVERLAY-1): a to-do call carries the FULL list, so the newest in-order one replaces it.
+        val withTodos = if (inOrder && p.todos != null) withRun.copy(todos = AgentTodoList.of(p.todos, now)) else withRun
+        if (inOrder) withTodos.copy(statusDetail = p.detail) else withTodos
     }
 
     Envelope.ERROR -> requeueRefused(s, env) ?: if (env.sessionId == null) {
@@ -1431,7 +1449,9 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
         else if (start != null && start.reason == "started" && !start.detail.isNullOrBlank()) {
             val text = "started \"${t.title.take(60)}\": ${start.detail}"
             // The answer and the board push can both carry the same start: say it once.
-            if (s.notices.lastOrNull()?.text == text) upserted else upserted.withNotice(now, text, null, ticketStartKind(start))
+            // The toast is the global signal; the inline line is the owning session's record only (typed ticket.sessionId, never a global notice).
+            val toasted = upserted.withToast(ToastEvent("started-${t.id}-${start.detail}", now, ticketStartKind(start).toToastKind(), "Ticket started", text, t.id, t.sessionId, t.projectId))
+            if (t.sessionId == null || s.notices.lastOrNull()?.text == text) toasted else toasted.withNotice(now, text, t.sessionId, ticketStartKind(start))
         } else upserted
     }
 
@@ -1459,7 +1479,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     // chosen yet; the current active project is kept while it is still in the list.
     Envelope.PROJECTS -> {
         val views = json.decodeFromString(ListSerializer(Project.serializer()), env.data)
-            .map { ProjectView(it.id, it.name, it.goal, it.directory, it.baseBranch, it.laneCaps, it.autoRemoveDoneWorkers) }
+            .map { ProjectView(it.id, it.name, it.goal, it.directory, it.baseBranch, it.laneCaps, it.autoRemoveDoneWorkers, it.experiments) }
         val active = s.activeProjectId?.takeIf { id -> views.any { it.id == id } } ?: views.firstOrNull()?.id
         s.copy(projects = views, activeProjectId = active)
     }
@@ -1503,7 +1523,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     // The daemon's answer to project_save / workspace_save: ONE stored row, upserted by id (a create appends,
     // a re-send of a known id replaces it), so a new project or workspace appears without a re-list.
     Envelope.PROJECT -> {
-        val p = json.decodeFromString(Project.serializer(), env.data).let { ProjectView(it.id, it.name, it.goal, it.directory, it.baseBranch, it.laneCaps, it.autoRemoveDoneWorkers) }
+        val p = json.decodeFromString(Project.serializer(), env.data).let { ProjectView(it.id, it.name, it.goal, it.directory, it.baseBranch, it.laneCaps, it.autoRemoveDoneWorkers, it.experiments) }
         val known = s.projects.any { it.id == p.id }
         s.copy(
             projects = if (known) s.projects.map { if (it.id == p.id) p else it } else s.projects + p,
@@ -1668,14 +1688,40 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     // Contract 1.59.0 (U1): the plan-limit meters, replaced whole by each answer or push.
     Envelope.LIMITS -> s.copy(planLimits = json.decodeFromString(ListSerializer(ProviderLimits.serializer()), env.data))
 
+    // USAGE-PACE (1.119.0): the plan meters and allowances, replaced whole by each answer.
+    Envelope.USAGE_REPORT -> s.copy(usageReport = json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.UsageReport.serializer(), env.data))
+
     // STATS-2 (1.92.0): one session's statistics, replacing that session's previous answer whole.
     Envelope.SESSION_STATS -> runCatching { json.decodeFromString(SessionStats.serializer(), env.data) }
         .getOrNull()?.let { s.copy(sessionStats = s.sessionStats + (it.sessionId to it)) } ?: s
 
     // BUG-M2-11e: a `settings` answer (to this window's get/set, or another client's set) carries the lifecycle setting.
     // A frame without the key (a get of another key) leaves the known value alone.
+    // ROGUE-1 (1.120.0): the report replaces the last one; a reap names what it killed or why it refused.
+    Envelope.PROCESSES -> runCatching {
+        json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.ProcessesAnswer.serializer(), env.data)
+    }.getOrNull()?.let { a ->
+        val next = s.copy(processReport = a.report, processAutoReap = a.report.autoReap)
+        when {
+            a.refused != null -> next.withNotice(now, "reap refused: ${a.refused.take(160)}", null, NoticeKind.ERROR)
+            a.reaped.isNotEmpty() -> next.withNotice(now, "reaped ${a.reaped.size} process${if (a.reaped.size == 1) "" else "es"}: " +
+                a.reaped.joinToString { "pid ${it.pid}" }.take(160), null, NoticeKind.OK)
+            else -> next
+        }
+    } ?: s
+    Envelope.PROCESS_PRESSURE -> runCatching {
+        json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.ProcessReport.serializer(), env.data)
+    }.getOrNull()?.let { r ->
+        s.copy(processReport = r, processAutoReap = r.autoReap).withNotice(
+            now, "low memory: ${r.freeMb?.let(ProcessWatchView::mb) ?: "?"} free (floor ${ProcessWatchView.mb(r.floorMb)}), " +
+                "${r.rogue.size} rogue process${if (r.rogue.size == 1) "" else "es"}: see the badge in the status bar",
+            null, NoticeKind.HEADS_UP,
+        )
+    } ?: s
+
     Envelope.SETTINGS -> {
-        val withKeepAlive = LifecycleSetting.fromSettingsFrame(env.data)?.let { s.copy(keepAliveMinutes = it) } ?: s
+        val withAutoReap = ProcessWatchView.autoReapFromSettingsFrame(env.data)?.let { s.copy(processAutoReap = it) } ?: s
+        val withKeepAlive = LifecycleSetting.fromSettingsFrame(env.data)?.let { withAutoReap.copy(keepAliveMinutes = it) } ?: withAutoReap
         UserPortrait.fromSettingsFrame(env.data)?.let { withKeepAlive.copy(userPortrait = it.base64) } ?: withKeepAlive
     }
 

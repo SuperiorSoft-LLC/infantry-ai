@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.123.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.128.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -105,6 +105,119 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
 
+### Note (no version bump): the `agentWatchdog` project switch (ticket-4e1d52c6)
+
+Not a wire change. The agent watchdog is a per-project opt-in stored as `Project.experiments["agentWatchdog"] = "on"` (absent = off, the default), set with `project_config.experiments` and read by the daemon at every watchdog tick (a flip needs no restart). While off, the watchdog sends nothing for that project's sessions (no nudge, no PM mail, no attention item) and shows them IDLE. `AGENTHQ_WATCHDOG=off` stays a global hard off. Mail from `system` or a `trigger:` sender is never a pending item.
+
+### What changed in 1.127.0 (TODO-OVERLAY-1, ticket-8bea1a4d) - the agent's own to-do list
+
+Additive; `contract=1.127.0`. `status.todos` (`[{text, status: pending|in_progress|done, activeText?}]`) is set on the status frame of a to-do tool call (claude `TodoWrite`, opencode `todowrite`) and is the FULL list: a client REPLACES its list, an empty list clears it. Only these items are sent, never other tool arguments. Omitted otherwise; an older daemon never sends it. Replay: it rides the sequenced status frame like any other.
+
+### What changed in 1.126.0 (EXPERIMENTS-1, ticket-c62a975a) - experiment switches and A/B session measures
+
+Additive; `contract=1.126.0`. `Project.experiments` (key to `on`/`off`, absent = off) and `project_config.experiments` (merged; `off` removes the key). `session_stats` gains optional `tags`, `firstContextTokens`, `msToFirstEdit`, `toolCallsBeforeFirstEdit`, `toolResults`, `avgToolResultChars`, `maxToolResultChars`, `stepMsP50`, `stepMsP90`, `stepMsMean`; every one is null when the harness record does not say. An older daemon omits all of them.
+
+### What changed in 1.125.0 (MESSAGE-ORIGIN, ticket-eeab5a16) — a turn says who it came from
+
+Additive; `contract=1.125.0`. The `turn` frame gains an optional `origin`, a typed `MessageOrigin`. Absent means the owner, so a
+frame from an older daemon, and every owner turn, is byte-for-byte what it was.
+
+- Wire (`Envelope.origin`, omitted when null): `{"type":"owner"}`, `{"type":"agent","sessionId":..,"agentId":..,"role":..}`
+  (agentId / role optional), `{"type":"external","senderLabel":..,"channel":..}`, `{"type":"system","kind":"handover"}`
+  (`handover`, `slash_command`, `scheduler`, `mail`).
+- The daemon sets it where the turn is created (mail: `MailSource`; handover and slash commands: `System`); a client never infers
+  it from text. The `[Infantry AI COMMS] ...` header the model reads is only the harness-facing rendering, written in one place
+  (`MailSource.render`); nothing downstream parses it.
+- Clients render from the origin alone, in one file (`OriginRenderer.kt`, agenthqUiCore): owner as before; agent = that role's
+  portrait and role name; external / system = the sender label only. CLI `logs` and the MCP session transcript print
+  `[turn from architect (dd062cba)]` from the same `MessageOrigin.label()`.
+- Transcripts recorded before 1.125.0 carry only the header text; one isolated client adapter (`LegacyOriginAdapter`, marked for
+  removal) maps them. Nothing else matches on turn text.
+
+### What changed in 1.124.0 (USAGE-AUTO, ticket-8d3838fd) — usage refreshes itself
+
+Additive; `contract=1.124.0`. The daemon re-reads every live plan meter on its own and pushes a `usage_report` to every client.
+- Setting `usage.refreshMinutes` (int 0..1440, default 5; 0 = off). One refresh at a time; a failed read (network, rate limit, bad response, http error) doubles the wait up to 30 min, a good read resets it. The scheduler wakes at most once a minute. Manual (typed) meters are not refreshed.
+- `MeterUsage` gains `updatedAt` (epoch ms of the live read; omitted for manual / unread meters): clients show "updated Nm ago".
+- `usage_get` still answers from the daemon's 5-minute read cache; with `data` = `force` it re-reads live now (the manual Refresh button).
+
+### What changed in 1.123.0 (PROGRESS-COUNTDOWN, ticket-564d0e01) — the progress meter always counts down
+
+Additive; `contract=1.123.0`. The meter never shows a bare elapsed timer: a running job shows percent + time left, "over estimate by N", or (no number, no history) its label + "last output Ns ago".
+- `SessionProgress` gains `labelStartedAt` (when the current label / step began), `estimateMs` + `estimateSource` (`worker` | `learned`; omitted = no estimate yet), `lastOutputAt` (newest report or `--watch` heartbeat). `ProgressReport` gains `estimateMs` and the op `output` (heartbeat: sets `lastOutputAt` only).
+- The daemon learns: every label that ends normally (a status label change, a finished step, `done`; a failure is not recorded; under 1 s is ignored) records its duration per project in `progress-estimates.json` (last 20 per label, median = the default estimate for the next run of that label). The worker's own `estimateMs` (marker `##infantry eta <seconds> [label]`) wins over it.
+- Rule: a counter's percent wins (time left = pace so far, only after 2 s); else a time estimate (percent = elapsed/estimate capped 99, "~2m left", then "over estimate by 1m"); else nothing ("no estimate yet" + last output). `agenthq progress --watch` sends an `output` heartbeat every 5 s of output that changed nothing.
+
+### What changed in 1.122.0 (WEB-1) — the browser client, served by the daemon
+
+ADDITIVE; a 1.121.0 client keeps working. The `ready` frame reports `contract=1.122.0`.
+- **Bundle at `/`.** The daemon serves the browser (Kotlin/WASM) client from its own port: `GET /` is `index.html`, and every
+  file of the bundle is one exact `GET` route, listed once at startup (no path resolution, so `..`, encoded slashes and
+  symlinks out of the folder are never served). The bundle is found at `AGENTHQ_WEB_DIR`, else `<AGENTHQ_APP_HOME>/web`
+  (headless archive, Docker), else the desktop app's `resources/web`. Without a bundle `GET /` is 404 with a one-line note.
+  Bundle files need no token (they hold no data); a tokenless loopback daemon still checks Host, a token daemon asks for an
+  allowlisted Host, and an Origin, when sent, must be same-origin.
+- **Browser admission on `/ws` only.** A request carrying an Origin is still refused everywhere except `/ws` (and the bundle).
+  On `/ws` a browser is admitted only when ALL hold: the daemon has a bearer token (a tokenless loopback daemon refuses every
+  browser); the Host names an allowlisted host (`localhost`, `127.0.0.1`, `::1`, the bind host or, bound to the wildcard,
+  the machine's own interface addresses, plus `AGENTHQ_WEB_HOSTS`, comma-separated); the Origin is exactly
+  `http(s)://<that Host>`; and the bearer matches (constant-time, as before).
+- **Subprotocol bearer.** A browser WebSocket cannot set `Authorization`, so on `/ws` the token may also arrive as the
+  `Sec-WebSocket-Protocol` value `agenthq.bearer.<base64url(token), no padding>`, offered together with `agenthq`. The
+  daemon answers `Sec-WebSocket-Protocol: agenthq`; it never echoes the bearer protocol. The token never goes in a URL.
+
+### What changed in 1.121.0 (USAGE-PACE S2+S3, ticket-2d954bda) — manual usage, allowance override, pacing rule; ticket starts are paced
+
+ADDITIVE (`usage_set`) and BEHAVIOURAL (the start gate); a 1.120.0 client keeps working. The `ready` frame reports
+`contract=1.121.0`. (S2 and S3 ship together under 1.121.0 because ROGUE-1 took 1.120.0.)
+- A ticket hand-out whose run would spend a meter with `canStart` false (see `usage_report`) is refused when an agent
+  started it (`ticket_move` to in_progress with a starter session, `agenthq_ticket_start`), or the daemon did
+  (`ticket_start_next`, a trigger, a queue drain): `start.ok` false, `start.reason` `start_refused`, `start.detail`
+  `usage pacing: <meter> at <pct> ..., allowance <n> (rule|override), running <n>; resets <instant>. ...`.
+- The owner's own move (no starter session) still starts, with that text in `start.detail` as a warning.
+- Unknown usage never refuses (fail open); `usage override <meter> none` lifts the limit until it lapses.
+- **`usage_set`** (client -> daemon, `data` = a `UsageSet` `{meter?, manualPercent?, manualResetsAt?, clearManual?,
+  overrideWorkers?, overrideUntil?, clearOverride?, rule?}`) is answered by `usage_report`. A manual percent (0..100)
+  feeds a meter with no live read (`source` = `manual`) until `manualResetsAt`, else 5 h. An override (`overrideUntil`
+  in the future, `overrideWorkers` 0..50 or null = no limit) replaces the rule's allowance until it lapses; a
+  `MeterUsage` shows it as `override` next to `ruleAllowance`. `rule` is a whole `PacingRule`
+  `{enabled, tiers: [{below?, workers}]}` (`below` increasing in (0, 100], only the last tier without it). A bad
+  request is an `error` `usage_set refused: ...` and changes nothing.
+- Three new settings keys hold them: `usage.pacing`, `usage.manual`, `usage.overrides` (also writable through `settings_set`).
+- `agenthq usage set|clear|override|rule`; the MCP `agenthq_usage` stays read-only.
+
+### What changed in 1.120.0 (ROGUE-1) — the rogue background process detector
+
+ADDITIVE; a 1.118.0 client keeps working. The `ready` frame reports `contract=1.120.0`.
+- **Process ledger.** Every 10 s the daemon walks the OS process tree under each session's harness process (kept or running) and
+  under every process it already recorded, and records each process by pid AND OS start instant with its owner session
+  (`process-ledger.json` in the state dir, stamped with the state dir's instance id). A process whose parent exited (a Gradle daemon
+  after `gradlew` ends) stays attributed. Only a ledger process can ever be reaped; the daemon, its ancestors and anything run by the
+  app's own runtime are never recorded.
+- **Rogue** = a ledger process whose owner session was removed or ended (EXITED / FAILED / ORPHANED), or whose owner is idle (no
+  turn, no bg job, no output for `processes.idleMinutes`) while it holds at least `processes.heavyMb`. A live session's own harness
+  process is never rogue by idleness and is refused by `reap` (kill the session instead).
+- **`processes`** request `ProcessesRequest {op: list|reap|reap_rogue, pid?}` → `processes` answer
+  `ProcessesAnswer {report: ProcessReport, reaped: [TrackedProcess], refused?}`. `ProcessReport {freeMb?, totalMb?, floorMb,
+  underPressure, autoReap, tracked: [TrackedProcess], unattributed: [TrackedProcess]}`; `TrackedProcess {pid, command, sessionId?,
+  startedAt?, memoryMb?, rogue, reason?}`. `unattributed` lists heavy runtimes (java, node, docker, WSL...) the ledger cannot prove are
+  ours: shown, never reaped. A reap re-checks the start instant before a tree kill. A bad op is `error` `processes refused: ...`.
+- **`process_pressure`** push (a `ProcessReport`) to every client when free RAM drops under `processes.floorMb`, at most once per 10 min.
+- **Settings** `processes.autoReap` (bool, default false: reap rogue processes every minute), `processes.idleMinutes` (1..1440,
+  default 30), `processes.heavyMb` (default 500), `processes.floorMb` (default 4096).
+- CLI `agenthq processes [--all]`, `agenthq processes reap <pid> | --all`; MCP `agenthq_processes` / `agenthq_processes_reap`.
+### What changed in 1.119.0 (USAGE-PACE S1, ticket-2d954bda) — read plan usage and the pacing allowance
+
+ADDITIVE and read-only; a 1.118.0 client keeps working. The `ready` frame reports `contract=1.119.0`.
+- **`usage_get`** (client -> daemon, empty `data`) is answered by **`usage_report`**, a `UsageReport`
+  `{meters: [MeterUsage], rule: PacingRule, observedAt}`. A meter is the plan a run spends, not its harness: `claude`
+  (the Claude subscription, also spent by pi / opencode running an `anthropic/...` model), `opencode-go`, else the
+  harness id. Each `MeterUsage` carries `percent` (the highest window), `window`, `resetsAt`, `paceDelta` (points vs an
+  even burn), `source` (`live` | `none`), `windows`, `reason`, `allowance` (what the rule allows; null = no limit),
+  `running` (live in_progress ticket workers on the meter) and `canStart`. Unknown usage FAILS OPEN (no allowance, a
+  `warning`). The rule defaults to `<60%: 3, <80%: 2, else 1`; nothing is enforced in 1.119.0 (1.121.0 enforces it).
+- `agenthq usage [show]` and the MCP tool `agenthq_usage` (read-only) print the same report.
+
 ### What changed in 1.118.0 (BASICS-KILL-1) — sessions can always be ended and removed
 
 ADDITIVE; a 1.117.0 client keeps working. The `ready` frame reports `contract=1.118.0`.
@@ -129,7 +242,7 @@ ADDITIVE; a 1.117.0 client keeps working. The `ready` frame reports `contract=1.
 ADDITIVE; a 1.115.0 client keeps working (the new key is ignored on decode). The `ready` frame reports `contract=1.117.0`.
 (1.116.0 is claimed by a parallel ticket.)
 
-- **`SessionRecord.progress`** (omitted when none): the agent's OWN measurement of its long job. Never estimated.
+- **`SessionRecord.progress`** (omitted when none): the agent's OWN measurement of its long job; since 1.123.0 also a countdown (see that section).
 
 | Key | Type | Meaning |
 |---|---|---|
@@ -257,10 +370,10 @@ ephemeral (not stored, not replayed to a client that connects later).
 - `spoken` (daemon → every client, the requester included): one `SpokenNotice`
   `{id, at, say, level, projectId?, projectName?, ticketId?}`. Clients speak `projectName` first, then `say`, and nothing else.
 - CLI: `agenthq notify --say "<short text>" [--level info|needs-owner|urgent]` (project from `--project` / `AGENTHQ_PROJECT_ID`).
-### What changed in 1.123.0 (ROUTING-1) — per-project task routing rules pick a ticket's executor
+### What changed in 1.128.0 (ROUTING-1) — per-project task routing rules pick a ticket's executor
 
 ADDITIVE; a 1.118.0 client keeps working (it never sends `routingRules` and ignores the new keys). The `ready` frame reports
-`contract=1.123.0`. Stored in `projects.routing_rules` (`48.sqm`, schema v49); an older store reads back every project with no rules.
+`contract=1.128.0`. Stored in `projects.routing_rules` (`49.sqm`, schema v50); an older store reads back every project with no rules.
 
 - **`Project.routingRules`** `[RoutingRule]`, in order; empty (default) = no rules, today's resolution unchanged.
 - **`RoutingRule`** `{name, weights?: [int], ticketTypes?: [string], role?, provider, model, effort?, setRole?}`.
@@ -2027,6 +2140,9 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `assistant` | — (empty; ignored): open the installation-wide Assistant. Answered to the sender with the Assistant's `session` frame (one `SessionRecord`, `global` = true, tagged with its session id); the first request creates it (role `assistant`, no project, working directory `<stateDir>/assistant`) and every later request, from any client, answers the same session. Failure: `error` `assistant refused: ...` / `assistant failed: ...` (1.115.0) | client → daemon |
 | `limits` | — (request the plan-limit meters; 1.59.0) | client → daemon |
 | `limits` | list of `ProviderLimits` (JSON), the answer and a push after each `usage` (1.59.0) | daemon → client |
+| `usage_get` | — (empty): request the plan meters and pacing allowance (1.119.0) | client → daemon |
+| `usage_report` | `UsageReport` (JSON) `{meters, rule, observedAt}`, answering `usage_get` (1.119.0) and `usage_set` (1.121.0) | daemon → client |
+| `usage_set` | `UsageSet` (JSON): a meter's manual percent / override set or cleared, and/or the pacing rule; refused = `error` `usage_set refused: ...` (1.121.0) | client → daemon |
 | `providers` | — (request the list; 1.3.0) | client → daemon |
 | `providers` | list of `ProviderInfo` (JSON), the default first (1.3.0) | daemon → client |
 | `agent_save` | one `AgentProfile` (JSON): no `id`, or one nobody has, creates; a known `id` overwrites (1.4.0); `traitIds` absent/null keeps the stored list, `[]` clears it (1.50.0); `skillIds` likewise, unknown ids refused (1.56.0) | client → daemon |
@@ -2089,6 +2205,8 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `memory_list` (scoped) | `{projectId, scope?, sessionId?, role?}` (a payload starting with `{`); answered by `memory_notes` (1.98.0) | client → daemon |
 | `memory_delete` | `{projectId, name, scope?, sessionId?, role?}`; answered by that scope's `memory_notes` index (1.98.0) | client → daemon |
 | `memory_purge_role` | `{role, confirm}`, `confirm` must equal `role`; deletes the role's notes in every project (1.98.0) | client → daemon |
+| `processes` | `ProcessesRequest` `{op: list\|reap\|reap_rogue, pid?}` → `ProcessesAnswer` `{report, reaped, refused?}`: list / reap the processes this daemon's sessions started (1.120.0) | client → daemon, daemon → client |
+| `process_pressure` | a `ProcessReport`, pushed when free RAM drops under `processes.floorMb`, at most once per 10 min (1.120.0) | daemon → client |
 | `bg_job` | `{op: beat|done|list, job?, jobId?}` with the frame sessionId; `beat` registers or heartbeats a `BgJob` (`agenthq bg run`), answered by a `bg_job` list of the session's jobs; additive, no version bump | client → daemon, daemon → client |
 | `decision_add` | `{projectId, sessionId?, summary, body?, supersedes?}` (strict); answered by a `decision_item` pushed to every client; refusals `decision_not_found`, `already_superseded`, `session_not_found` code first (1.53.0) | client → daemon |
 | `decision_list` | `{projectId, includeSuperseded = false}`; answered by `decisions` (1.53.0) | client → daemon |
@@ -2135,7 +2253,7 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `project_git_history` | one `ProjectGitHistory` `{projectId, available, reason, commits[{hash,shortHash,author,timestamp,subject}], truncated}`, newest first (1.36.0) | daemon → client |
 | `project_base` | `ProjectBaseRequest` `{projectId, branch?, clear?}` (1.81.0); answered by `project`; a refusal is an `error` `"project_base refused: ..."` | client → daemon |
 | `epic_base` | `EpicBaseRequest` `{epicId, branch?, clear?}` (1.82.0); answered by `epic`; a refusal is an `error` `"epic_base refused: ..."` | client → daemon |
-| `project_config` | `ProjectConfigRequest` `{projectId, laneCaps?, autoRemoveDoneWorkers?, routingRules?}` (LANE-CAPS, 1.111.0; `autoRemoveDoneWorkers` 1.118.0 sets `Project.autoRemoveDoneWorkers`, absent = unchanged; `routingRules` 1.123.0 REPLACES `Project.routingRules`, see ROUTING-1): absent or empty `laneCaps` (and no `autoRemoveDoneWorkers` or `routingRules`) reads the project, otherwise the `{role: max}` entries are MERGED into `Project.laneCaps` (a cap of 1 is the default and removes the entry); answered by the whole `project` frame, also pushed to every client when a cap changed; a cap below 1, an unknown project or a malformed payload is an `error` `"project_config refused: ..."` | client → daemon |
+| `project_config` | `ProjectConfigRequest` `{projectId, laneCaps?, autoRemoveDoneWorkers?, routingRules?}` (LANE-CAPS, 1.111.0; `autoRemoveDoneWorkers` 1.118.0 sets `Project.autoRemoveDoneWorkers`, absent = unchanged; `routingRules` 1.128.0 REPLACES `Project.routingRules`, see ROUTING-1): absent or empty `laneCaps` (and no `autoRemoveDoneWorkers` or `routingRules`) reads the project, otherwise the `{role: max}` entries are MERGED into `Project.laneCaps` (a cap of 1 is the default and removes the entry); answered by the whole `project` frame, also pushed to every client when a cap changed; a cap below 1, an unknown project or a malformed payload is an `error` `"project_config refused: ..."` | client → daemon |
 | `image_upload` | `ImageUpload` `{projectId, purpose, fileName, mimeType, base64}` (1.83.0): `purpose` `chat`\|`ticket`\|`file` (required; `file` 1.89.0: any type, at most 20 MB, no magic-byte check); otherwise png/jpeg/gif/webp by magic bytes, at most 10 MB, stored at `<Project.directory>/.agenthq/uploads/<purpose>/<sha256>.<ext>`; answered by `image`; a refusal is an `error` `"image_upload refused: ..."` and writes nothing | client → daemon |
 | `image` | `ImageStored` `{path, relPath, sha256, bytes, mimeType}` (1.83.0): where an `image_upload` is stored; the same bytes answer the same `path` | daemon → client |
 | `session_swap` | `SessionSwap` `{sessionId, provider, model?, effort?}` (strict, 1.84.0); a session with no agent onto another harness, in place; answered by the `session_swapped` push to every client; a refusal is an `error` `"session_swap refused: ..."` | client → daemon |

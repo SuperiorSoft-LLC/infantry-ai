@@ -64,6 +64,11 @@ fun runRealDaemonUi(
     // UPDATE-1: on start, off the UI thread; a failure is a dismissable card, never a blocked window.
     updater?.check(manual = false)
 
+    // MD-PLUGIN-1: markdown engine plugins (jars) from <stateDir>/markdown-engines show up in Config > Appearance > Markdown engine.
+    if (!headless) runCatching {
+        com.superiorsoftllc.agenthq.ui.markdown.MarkdownEnginePluginLoader(File(stateDir(), "markdown-engines"), com.superiorsoftllc.agenthq.ui.model.ChatMarkdown.engines).loadAll()
+    }
+
     try {
         if (headless) {
             // E2E-OWNER-1: the owner-path smoke boots this exact entry without a window; closing stdin stops it.

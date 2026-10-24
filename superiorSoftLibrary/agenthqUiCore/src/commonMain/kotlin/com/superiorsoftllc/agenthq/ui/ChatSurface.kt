@@ -97,8 +97,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import com.superiorsoftllc.agenthq.ui.model.PickedModel
+import com.superiorsoftllc.agenthq.ui.model.chatRows
 import com.superiorsoftllc.agenthq.ui.model.NoticeKind
-import com.superiorsoftllc.agenthq.ui.model.localNotices
+import com.superiorsoftllc.agenthq.ui.model.noticesForSession
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -307,7 +308,7 @@ fun TicketTag(a: AgentView, state: AppState, onOpen: (String) -> Unit, modifier:
 }
 
 @Composable
-internal fun OutputPane(a: AgentView?, spawnMode: Boolean, roleColor: String? = null, onStartSession: (() -> Unit)?) {
+internal fun OutputPane(a: AgentView?, spawnMode: Boolean, roleColor: String? = null, onStartSession: (() -> Unit)?, questionSlot: @Composable () -> Unit = {}) {
     if (a == null) {
         Box(Modifier.fillMaxSize(), Alignment.Center) {
             if (spawnMode) return@Box
@@ -322,7 +323,8 @@ internal fun OutputPane(a: AgentView?, spawnMode: Boolean, roleColor: String? = 
         return
     }
     if (a.output.isEmpty() && a.chatStatus(Clock.System.now().toEpochMilliseconds()) == null) {
-        Box(Modifier.fillMaxSize(), Alignment.Center) {
+      Column(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 BrandEmblem(72.dp)
                 Spacer(Modifier.height(10.dp))
@@ -335,9 +337,11 @@ internal fun OutputPane(a: AgentView?, spawnMode: Boolean, roleColor: String? = 
                 if (onStartSession != null) OutlinedButton(onClick = onStartSession) { Text("Start a session") }
             }
         }
+        questionSlot()
+      }
         return
     }
-    AgentChat(a, roleColor = roleColor)
+    AgentChat(a, roleColor = roleColor, questionSlot = questionSlot)
 }
 
 /** Test tag on the transient status row under the transcript (or in place of the empty state). */
@@ -371,14 +375,14 @@ const val ACTIVITY_LINE_TAG = "activity-line"
  * The status row sits under the last line and is absent once [AgentView.chatStatus] is null.
  */
 @Composable
-fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().toEpochMilliseconds() }, roleColor: String? = null) {
+fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().toEpochMilliseconds() }, roleColor: String? = null, questionSlot: @Composable () -> Unit = {}) {
     val list = rememberLazyListState()
     // The elapsed label must age on its own: no status frame may arrive for seconds while the agent
     // works, so a one-second ticker keeps "Thinking... 3s" counting with the transcript otherwise still.
     // [nowProvider] is the clock (injectable so a UI test can drive it with the Compose frame clock).
     var now by remember { mutableStateOf(nowProvider()) }
     LaunchedEffect(agent.id) { while (true) { delay(1_000); now = nowProvider() } }
-    val rows = chatItems(agent.output)
+    val rows = LocalReasoningPlacement.current.chatRows(chatItems(agent.output))
     val status = agent.chatStatus(now)
     // Keyed on the status PRESENCE, not its value: the ticker changes it every second, and that must
     // not restart the scroll effect.
@@ -404,6 +408,7 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
                 }
             }
         }
+        questionSlot()
         ActivityBox(agent)
     }
 }
@@ -477,45 +482,11 @@ private fun chatStatusLabel(status: ChatStatus): String = when (status) {
 /** How long the agent has been working, shown beside the label: " 3s", or null when not yet known. */
 private fun ChatStatus.elapsedSuffix(): String? = (this as? ChatStatus.Thinking)?.elapsed?.takeIf { it.isNotBlank() }?.let { " $it" }
 
-/** Renders parsed assistant markdown; re-parsed by the caller on every streamed update. */
+/** Renders parsed assistant markdown through the active [ChatMarkdownConfig]; re-parsed by the caller on every streamed update. */
 @Composable
-private fun ChatBlocks(blocks: List<ChatBlock>) {
-    val clip = LocalClipboardManager.current
+private fun ChatBlocks(blocks: List<ChatBlock>, renderers: ChatBlockRenderers) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        for (b in blocks) when (b) {
-            is ChatBlock.Paragraph -> Text(spansText(b.spans), color = Palette.Text, fontFamily = Mono, fontSize = 12.sp)
-            is ChatBlock.BulletList -> Column {
-                for ((n, item) in b.items.withIndex()) Text(spansText(listOf<ChatSpan>(ChatSpan.Text(if (b.ordered) "${n + 1}. " else "• ")) + parseChatInline(item)), color = Palette.Text, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
-            }
-            ChatBlock.Rule -> HorizontalDivider(color = Palette.Border)
-            is ChatBlock.Quote -> Row(Modifier.height(IntrinsicSize.Min)) {
-                Box(Modifier.width(3.dp).fillMaxHeight().background(Palette.Border))
-                Text(spansText(b.spans), color = Palette.Muted, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
-            }
-            is ChatBlock.Table -> Column(Modifier.horizontalScroll(rememberScrollState())) {
-                for ((r, row) in (listOf(b.header) + b.rows).withIndex()) Row {
-                    for (cell in row) Text(spansText(parseChatInline(cell)), color = Palette.Text, fontFamily = Mono, fontSize = 12.sp, fontWeight = if (r == 0) FontWeight.Bold else null, modifier = Modifier.width(140.dp).padding(end = 8.dp))
-                }
-            }
-            is ChatBlock.Heading -> Text(
-                spansText(b.spans),
-                color = Palette.Text,
-                fontFamily = Mono,
-                fontWeight = FontWeight.Bold,
-                fontSize = when (b.level) {
-                    1 -> 18.sp
-                    2 -> 16.sp
-                    else -> 14.sp
-                },
-            )
-            is ChatBlock.Code -> Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).border(1.dp, Palette.Border, RoundedCornerShape(6.dp)).padding(8.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(b.language, color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
-                    TextButton(onClick = { clip.setText(AnnotatedString(b.body)) }) { Text("Copy", fontSize = 11.sp) }
-                }
-                Text(b.body, color = Palette.Text, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.horizontalScroll(rememberScrollState()))
-            }
-        }
+        for (b in blocks) renderers.rendererFor(b).Render(b)
     }
 }
 
@@ -612,12 +583,12 @@ fun ChatLine(
     if (line.kind == LineKind.USER) {
         // IMG-2: the turn's `[image: ...]` lines show as thumbnails, not as text.
         val (said, images) = ChatImageLines.split(line.text)
-        SpeakerRow({ UserAvatar(CHAT_AVATAR_SIZE) }) {
+        SpeakerRow({ OriginAvatar(line.origin, CHAT_AVATAR_SIZE) }) {
             Column {
-                Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Palette.Accent.copy(alpha = 0.12f), RoundedCornerShape(8.dp)).padding(8.dp)) {
-                    CardTimestamp(line.at)
+                OriginLabel(line.origin)
+                CommsCard(commsCardStyle(line.origin), line.at) {
                     if (said.isNotBlank() || images.isEmpty()) {
-                        Text("> $said", color = Palette.Accent, fontFamily = Mono, fontSize = 12.sp)
+                        Text(said, color = Palette.Accent, fontFamily = Mono, fontSize = 12.sp)
                     }
                     ChatSentImages(images)
                 }
@@ -627,9 +598,9 @@ fun ChatLine(
     }
     AgentSideRow(showAvatar, agentRole, agentId, agentRoleColor) {
         when (line.kind) {
-            LineKind.TEXT -> Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Palette.Raised, RoundedCornerShape(8.dp)).padding(8.dp)) {
-                CardTimestamp(line.at)
-                ChatBlocks(chatLineBlocks(line.kind, line.text).orEmpty())
+            LineKind.TEXT -> CommsCard(AgentReplyCardStyle, line.at) {
+                val md = LocalChatMarkdown.current
+                ChatBlocks(chatLineBlocks(line.kind, line.text, md.engine).orEmpty(), md.renderers)
             }
             LineKind.REASONING -> ReasoningBlock(listOf(line))
             LineKind.STATUS -> Text("· ${line.text}", color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp)
@@ -647,28 +618,48 @@ fun ChatLine(
 /** Test tag on the quiet send/response time at the top-right of a chat card. */
 const val CARD_TIMESTAMP_TAG = "card-timestamp"
 
-/** Small muted time, right-aligned at the top of a chat card, so it never competes with the message. */
+/** Test tag on the card header's title. */
+const val CARD_TITLE_TAG = "card-title"
+
+/**
+ * A chat card: a light header band (icon, bold title, muted time on one line) over the body, all tinted from
+ * [style]'s tone. Compact: one text line of header plus small padding; the body has the normal padding.
+ */
 @Composable
-private fun CardTimestamp(at: Long) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        androidx.compose.material3.Icon(
-            AhqIcons.Radio, contentDescription = null, tint = Palette.Muted.copy(alpha = 0.7f),
-            modifier = Modifier.size(15.dp).testTag(CARD_COMMS_ICON_TAG),
-        )
-        Text(
-            activityTimestamp(at),
-            color = Palette.Muted.copy(alpha = 0.7f),
-            fontFamily = Mono,
-            fontSize = 9.sp,
-            textAlign = TextAlign.End,
-            modifier = Modifier.weight(1f).testTag(CARD_TIMESTAMP_TAG),
-        )
+fun CommsCard(style: CommsCardStyle, at: Long, body: @Composable () -> Unit) {
+    val shape = RoundedCornerShape(8.dp)
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(shape).background(style.tone.body)) {
+        Row(
+            Modifier.fillMaxWidth().background(style.tone.header).padding(horizontal = 8.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (style.showIcon) {
+                androidx.compose.material3.Icon(
+                    AhqIcons.Radio, contentDescription = null, tint = Palette.Text,
+                    modifier = Modifier.size(16.dp).testTag(CARD_COMMS_ICON_TAG),
+                )
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(
+                style.title, color = Palette.Text, fontWeight = FontWeight.Bold, fontSize = 11.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).testTag(CARD_TITLE_TAG),
+            )
+            if (style.showTime) {
+                Text(
+                    activityTimestamp(at), color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp,
+                    maxLines = 1, softWrap = false, textAlign = TextAlign.End,
+                    modifier = Modifier.padding(start = 8.dp).testTag(CARD_TIMESTAMP_TAG),
+                )
+            }
+        }
+        Column(Modifier.fillMaxWidth().padding(8.dp)) { body() }
     }
 }
 
 const val CARD_COMMS_ICON_TAG = "card-comms-icon"
 
-private fun spansText(spans: List<ChatSpan>): AnnotatedString = buildAnnotatedString {
+internal fun spansText(spans: List<ChatSpan>): AnnotatedString = buildAnnotatedString {
     for (s in spans) when (s) {
         is ChatSpan.Text -> append(s.text)
         is ChatSpan.Bold -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(s.text) }
@@ -682,8 +673,8 @@ private fun spansText(spans: List<ChatSpan>): AnnotatedString = buildAnnotatedSt
 }
 
 @Composable
-fun NoticeStrip(state: AppState) {
-    val n = state.localNotices().lastOrNull() ?: return
+fun NoticeStrip(state: AppState, sessionId: String? = null) {
+    val n = state.noticesForSession(sessionId).lastOrNull() ?: return
     var hidden by remember(n.at) { mutableStateOf(false) }
     LaunchedEffect(n.at) { delay(8_000); hidden = true }
     if (hidden) return

@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.cli.mcp
 
+import com.superiorsoftllc.agenthq.cli.TurnLine
 import com.superiorsoftllc.agenthq.cli.AuthRefused
 import com.superiorsoftllc.agenthq.cli.BoardSummary
 import com.superiorsoftllc.agenthq.cli.shortTicketId
@@ -63,6 +64,10 @@ internal class McpTools(
     /** ROLE-EDIT-1: the role catalog (`agenthq_role_*`); an agent caller may only edit persona and description. */
     private val roles = McpRoleTools(getenv)
     private val projectConfig = McpProjectConfigTools()
+    private val usage = McpUsageTools()
+
+    /** ROGUE-1 (contract 1.120.0): `agenthq_processes` / `agenthq_processes_reap`. */
+    private val processTools = McpProcessTools()
 
     fun call(name: String, arguments: JsonObject): ToolResult {
         val stream = try {
@@ -100,7 +105,10 @@ internal class McpTools(
                     McpRoleTools.CREATE -> roles.create(stream, arguments)
                     McpRoleTools.DELETE -> roles.delete(stream, arguments)
                     McpProjectConfigTools.GET -> projectConfig.get(stream, arguments)
+                    McpUsageTools.USAGE -> usage.usage(stream)
                     McpProjectConfigTools.SET -> projectConfig.set(stream, arguments)
+                    McpProcessTools.LIST -> processTools.list(stream, arguments)
+                    McpProcessTools.REAP -> processTools.reap(stream, arguments)
                     McpTicketTools.CREATE -> tickets.create(stream, arguments)
                     McpTicketTools.UPDATE -> tickets.update(stream, arguments)
                     McpTicketTools.GET -> tickets.get(stream, arguments)
@@ -209,6 +217,8 @@ internal class McpTools(
                     lastWasDelta = true
                     continue
                 }
+                // Contract 1.125.0: who the turn came from, from its typed origin; the text is the model-facing rendering.
+                Envelope.TURN -> entries += StringBuilder(TurnLine.of(frame) + " " + frame.data.lineSequence().first().take(200))
                 Envelope.STDERR -> entries += StringBuilder("[stderr] ${frame.data}")
                 Envelope.ERROR -> entries += StringBuilder("[error] ${frame.data}")
                 Envelope.FINISHED -> {
@@ -413,7 +423,7 @@ internal class McpTools(
         /** HARNESS-INSTALL-1: detect / install the harness CLIs (claude, opencode, pi) through npm, on a local or remote daemon. */
         const val HARNESS_STATUS = "agenthq_harness_status"
         const val HARNESS_INSTALL = "agenthq_harness_install"
-        val NAMES = setOf(LIST_SESSIONS, GET_SESSION, POD_STATE, BOARD, LIST_HARNESSES, HARNESS_STATUS, HARNESS_INSTALL) + McpWriteTools.NAMES + McpMailTools.NAMES + McpTicketTools.NAMES + McpQuestionTools.NAMES + McpProgressTools.NAMES + McpPipelineTools.NAMES + McpRoleTools.NAMES + McpProjectConfigTools.NAMES
+        val NAMES = setOf(LIST_SESSIONS, GET_SESSION, POD_STATE, BOARD, LIST_HARNESSES, HARNESS_STATUS, HARNESS_INSTALL) + McpWriteTools.NAMES + McpMailTools.NAMES + McpTicketTools.NAMES + McpQuestionTools.NAMES + McpProgressTools.NAMES + McpPipelineTools.NAMES + McpRoleTools.NAMES + McpProjectConfigTools.NAMES + McpUsageTools.NAMES + McpProcessTools.NAMES
 
         /** The one, fixed message a tool answers with when nothing is listening at the daemon address. */
         const val DAEMON_UNREACHABLE =
@@ -552,8 +562,10 @@ internal class McpTools(
             McpPipelineTools.descriptors().forEach { add(it) }
             McpRoleTools.descriptors().forEach { add(it) }
             McpProjectConfigTools.descriptors().forEach { add(it) }
+            McpUsageTools.descriptors().forEach { add(it) }
             McpQuestionTools.descriptors().forEach { add(it) }
             McpProgressTools.descriptors().forEach { add(it) }
+            McpProcessTools.descriptors().forEach { add(it) }
         }
 
         private fun tool(

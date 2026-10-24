@@ -105,6 +105,9 @@ fun ConfigDialog(
     pair: PairEntry? = null,
     /** ROLE-EDIT-1: opens the role manager dialog; null hides the section. */
     onOpenRoles: (() -> Unit)? = null,
+    /** ASK-2: raises a sample owner question to the open session; null hides the section, [testQuestionReady] false disables the button. */
+    onSendTestQuestion: (() -> Unit)? = null,
+    testQuestionReady: Boolean = true,
     /** SERVER-UPDATE-4: the connected server's version and update state, and the client/server mismatch warning; null hides the section. */
     serverUpdate: com.superiorsoftllc.agenthq.ui.model.ServerUpdateState? = null,
     serverMismatch: String? = null,
@@ -124,6 +127,7 @@ fun ConfigDialog(
     val present = buildSet {
         if (theme != null && onTheme != null) add(ConfigEntry.THEME)
         add(ConfigEntry.BLUR)
+        add(ConfigEntry.MARKDOWN_ENGINE)
         if (userPortrait != null) add(ConfigEntry.USER_PORTRAIT)
         if (about != null) add(ConfigEntry.ABOUT)
         add(ConfigEntry.AGENT_SCOPE)
@@ -133,6 +137,8 @@ fun ConfigDialog(
         if (onToolApproval != null) add(ConfigEntry.TOOL_APPROVAL)
         if (onOpenRoles != null) add(ConfigEntry.ROLES)
         add(ConfigEntry.VOICE)
+        add(ConfigEntry.INCOMING_SOUND)
+        if (onSendTestQuestion != null) add(ConfigEntry.QUESTIONS)
         if (voicePlugins != null) add(ConfigEntry.PLUGINS)
         if (secretActions != null && secrets != null) add(ConfigEntry.SECRETS)
         if (pair != null) add(ConfigEntry.PAIR)
@@ -185,6 +191,12 @@ fun ConfigDialog(
                                     Text(if (flags.blurBehindDialogs) "On" else "Off", fontSize = 12.sp)
                                 }
                             }
+                            if (shows(ConfigEntry.MARKDOWN_ENGINE)) FlagSection(ConfigEntry.MARKDOWN_ENGINE, highlight) {
+                                MarkdownEngineDropdown(flags.chatMarkdownEngine) { onFlags(flags.copy(chatMarkdownEngine = it)) }
+                            }
+                            if (shows(ConfigEntry.REASONING)) FlagSection(ConfigEntry.REASONING, highlight) {
+                                ReasoningPlacementChoice(flags.reasoningPlacement) { onFlags(flags.copy(reasoningPlacement = it)) }
+                            }
                             if (shows(ConfigEntry.USER_PORTRAIT) && userPortrait != null) {
                                 FlagSection(ConfigEntry.USER_PORTRAIT, highlight) { UserPortraitSection(userPortrait.first, userPortrait.second) }
                             }
@@ -227,6 +239,14 @@ fun ConfigDialog(
                             }
                             if (shows(ConfigEntry.VOICE)) FlagSection(ConfigEntry.VOICE, highlight) {
                                 com.superiorsoftllc.agenthq.ui.voice.VoiceSettingsSection(flags.voice) { onFlags(flags.copy(voice = it)) }
+                            }
+                            if (shows(ConfigEntry.INCOMING_SOUND)) FlagSection(ConfigEntry.INCOMING_SOUND, highlight) {
+                                com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundSection(flags.commsSound) { onFlags(flags.copy(commsSound = it)) }
+                            }
+                            if (shows(ConfigEntry.QUESTIONS) && onSendTestQuestion != null) FlagSection(ConfigEntry.QUESTIONS, highlight) {
+                                OutlinedButton(onClick = onSendTestQuestion, enabled = testQuestionReady, modifier = Modifier.testTag(TEST_QUESTION_TAG)) {
+                                    Text(if (testQuestionReady) "Send a test question" else "Open a session first")
+                                }
                             }
                             if (shows(ConfigEntry.PLUGINS) && voicePlugins != null) FlagSection(ConfigEntry.PLUGINS, highlight) {
                                 com.superiorsoftllc.agenthq.ui.voice.plugin.PluginsSection(voicePlugins)
@@ -793,4 +813,31 @@ private fun AccentSwatch(accent: ThemeAccent, selected: Boolean, onClick: () -> 
             .clip(CircleShape)
             .background(androidx.compose.ui.graphics.Color(accent.argb)),
     )
+}
+
+/** CHAT-MD-ENGINE: pick the chat markdown engine among the registered ones; an unknown stored id shows as the built-in fallback. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MarkdownEngineDropdown(value: String, onPick: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val engines = com.superiorsoftllc.agenthq.ui.model.ChatMarkdown.engines
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = engines.resolve(value).label,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).handCursor(overrideDescendants = true).fillMaxWidth().testTag("markdown-engine-field"),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            engines.available().forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.label) },
+                    onClick = { onPick(option.id); expanded = false },
+                    modifier = Modifier.testTag("markdown-engine-option-${option.id}"),
+                )
+            }
+        }
+    }
 }

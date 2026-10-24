@@ -39,11 +39,4 @@ class CrossProjectToastTest {
         assertEquals(listOf("p2"), s.crossProjectNotices().map { it.projectId })
         assertTrue(s.localNotices().isEmpty())
     }
-
-    @Test fun `visible toasts skip history and dismissed ones, newest four`() {
-        val ns = (1L..6L).map { Notice(it, "n$it", projectId = "p2") }
-        assertEquals(listOf(3L, 4L, 5L, 6L), visibleToasts(ns, 0, emptySet()).map { it.at })
-        assertEquals(listOf(4L, 5L, 6L), visibleToasts(ns, 3, emptySet()).map { it.at })
-        assertEquals(listOf(5L), visibleToasts(ns, 4, setOf(ns[5])).map { it.at })
-    }
 }

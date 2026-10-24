@@ -61,16 +61,21 @@ data class Project(
      */
     val autoRemoveDoneWorkers: Boolean = false,
     /**
-     * Contract 1.123.0 (ROUTING-1): the project's task routing rules, in order; the FIRST rule that matches a ticket picks
+     * Contract 1.128.0 (ROUTING-1): the project's task routing rules, in order; the FIRST rule that matches a ticket picks
      * its executor at start (see [RoutingRule]). Empty (default) = no rules: today's resolution (ticket pin > profile /
      * role binding > `tickets.weightExecutors` > default). A non-empty list always ends with a match-all default row.
      * Set only with `project_config` (the whole list is replaced). An older daemon omits the key (= no rules).
      */
     val routingRules: List<RoutingRule> = emptyList(),
+    /**
+     * Contract 1.126.0 (EXPERIMENTS-1): named experiment switches, key to `on` or `off`; a key not listed is off. Set only with
+     * `project_config`. An older daemon omits the key, which a client reads as "no experiment on".
+     */
+    val experiments: Map<String, String> = emptyMap(),
 )
 
 /**
- * Contract 1.123.0 (ROUTING-1): one task routing rule. MATCH fields ([weights], [ticketTypes], [role]) are each optional;
+ * Contract 1.128.0 (ROUTING-1): one task routing rule. MATCH fields ([weights], [ticketTypes], [role]) are each optional;
  * an empty / absent one matches anything, and a rule matches a ticket when every present one does. A rule with no match
  * field is the default row (it matches every ticket, an unweighted one included), and it must be the last one.
  * RESULT: [provider] and [model] (both required, validated against the harness list when saved and again at start),
@@ -105,8 +110,10 @@ data class ProjectConfigRequest(
     val laneCaps: Map<String, Int>? = null,
     /** Contract 1.118.0: set [Project.autoRemoveDoneWorkers]; absent = unchanged. */
     val autoRemoveDoneWorkers: Boolean? = null,
-    /** Contract 1.123.0 (ROUTING-1): REPLACE [Project.routingRules] with this list (empty clears every rule); absent = unchanged. */
+    /** Contract 1.128.0 (ROUTING-1): REPLACE [Project.routingRules] with this list (empty clears every rule); absent = unchanged. */
     val routingRules: List<RoutingRule>? = null,
+    /** Contract 1.126.0: experiment switches merged into [Project.experiments] (`on`/`off`); absent = unchanged. */
+    val experiments: Map<String, String>? = null,
 ) {
     companion object {
         fun decode(text: String): ProjectConfigRequest = StrictJson.decode(serializer(), text, "project_config payload")

@@ -248,7 +248,7 @@ data class EffectiveExecutor(
     val role: String? = null,
     val provider: ExecutorField? = null,
     val model: ExecutorField? = null,
-    /** Contract 1.123.0 (ROUTING-1): the name of the project routing rule that picked the executor (source `rule`); null when none did. */
+    /** Contract 1.128.0 (ROUTING-1): the name of the project routing rule that picked the executor (source `rule`); null when none did. */
     val rule: String? = null,
 )
 

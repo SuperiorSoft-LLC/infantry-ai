@@ -302,6 +302,8 @@ class DaemonFixture private constructor(
             chatImageTicker: (Long, () -> Unit) -> AutoCloseable = com.superiorsoftllc.agenthq.images.ChatImageRetention::scheduledTicker,
             /** TICKET-HANDOVER: how long a switched ticket worker's handoff turn may run. */
             handoffTimeoutMs: Long = SessionHandover.DEFAULT_TIMEOUT_MS,
+            /** WEB-1: the browser bundle served at `/`; none by default, so the operator's AGENTHQ_WEB_DIR never leaks in. */
+            webBundle: WebBundle = WebBundle.EMPTY,
         ): DaemonFixture {
             val opened: AgentHqStore = store ?: SqlAgentHqStore.open(storePath, holderLabel, busyTimeoutMs)
             val provider = StubProvider(script = script, delayMs = 0)
@@ -342,6 +344,7 @@ class DaemonFixture private constructor(
                 clock = clock,
                 chatImageTicker = chatImageTicker,
                 handoffTimeoutMs = handoffTimeoutMs,
+                webBundle = webBundle,
             )
             beforeStart(daemon)
             // PORT-1: the production start path: bind, then record the bound port (resolves the ephemeral 0).

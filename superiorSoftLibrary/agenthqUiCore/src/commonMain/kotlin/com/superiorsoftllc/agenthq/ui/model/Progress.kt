@@ -34,16 +34,16 @@ fun progressDisplay(p: ProgressView, now: Long, staleMin: Int = PROGRESS_STALE_D
         quietMs > staleMin.coerceAtLeast(1) * 60_000L -> ProgressTone.Stale
         else -> ProgressTone.Running
     }
-    val elapsed = (now - p.startedAt).coerceAtLeast(0)
-    // PROGRESS-S5: only an opted-in, still-running indeterminate job with a history is drawn as an estimate.
-    val estimate = p.estimateMs?.takeIf { p.mode == "indeterminate" && p.estimated == true && running && it > 0 }
-    val fraction = if (estimate != null) {
-        (elapsed.toDouble() / estimate).toFloat().coerceIn(0f, 0.99f)
-    } else if (p.mode == "indeterminate" || p.percent == null) {
+    val eta = if (running) progressEta(p, now) else null
+    // A counter's percent wins over a time estimate; a time estimate wins over nothing (a shimmer).
+    val shownPercent = if (running) eta?.percent else p.percent.takeIf { p.mode != "indeterminate" }
+    val fraction = if (shownPercent == null) {
         if (running) null else 1f
-    } else (p.percent / 100.0).toFloat().coerceIn(0f, 1f)
-    val head = buildList {
-        if (p.mode != "indeterminate") p.percent?.let { add("${it.roundToInt()}%") }
+    } else (shownPercent / 100.0).toFloat().coerceIn(0f, 1f)
+    val waiting = if (running && p.estimateSource == "sleep") waitingText(eta) else null
+    val head = waiting ?: buildList {
+        shownPercent?.takeIf { eta?.overMs == null }?.let { add("${it.roundToInt()}%") }
+        eta?.let { progressCountdown(it) }?.let { add(it) }
         when (p.mode) {
             "steps" -> {
                 val total = p.stepsTotal ?: 0
@@ -53,26 +53,55 @@ fun progressDisplay(p: ProgressView, now: Long, staleMin: Int = PROGRESS_STALE_D
             "bytes" -> add(formatBytes(p.done ?: 0) + (p.total?.let { " / " + formatBytes(it) } ?: ""))
             "count" -> add("${p.done ?: 0}" + (p.total?.let { " / $it" } ?: ""))
         }
-        if (estimate != null) {
-            val left = estimate - elapsed
-            add(if (left > 0) "~${minutesUp(left)} min left (estimated)" else "over the usual ${minutesUp(estimate)} min (estimated)")
-        }
         when (p.state) {
             "done" -> add("done")
             "failed" -> add("failed")
         }
     }.joinToString(" · ").ifEmpty { p.label ?: "working" }
     val detail = buildList {
-        if (head != p.label) p.label?.let { add(it) }
+        if (waiting == null && head != p.label) p.label?.let { add(it) }
         if (p.mode == "bytes" && running) p.bytesPerSec?.let { add(formatBytes(it.toLong()) + "/s") }
-        if (running && p.mode == "indeterminate" && p.estimated == true && estimate == null) add("no estimate yet")
-        if (running) add(formatElapsed(elapsed))
+        // No number and no estimate: alive/stuck signal only; never a bare elapsed timer.
+        if (running && eta?.noEstimate == true) add("last output ${formatElapsed(now - (p.lastOutputAt ?: p.updatedAt))} ago")
         if (tone == ProgressTone.Stale) add("no update for ${quietMs / 60_000} min")
     }.joinToString(" · ")
-    return ProgressDisplay(fraction, head, detail, tone, estimated = estimate != null)
+    return ProgressDisplay(fraction, head, detail, tone, estimated = eta != null && eta.percent != null && p.estimateSource != null && !(p.mode != "indeterminate" && p.percent != null))
 }
 
-private fun minutesUp(ms: Long): Long = ((ms + 59_999) / 60_000).coerceAtLeast(1)
+/** The countdown of a running job; mirrors the daemon's ProgressReducer.eta so every surface says the same thing. */
+data class ProgressEta(val percent: Double?, val remainingMs: Long?, val overMs: Long?, val noEstimate: Boolean)
+
+private const val MIN_PACE_MS = 2_000L
+
+fun progressEta(p: ProgressView, now: Long): ProgressEta {
+    val pct = p.percent
+    if (p.mode != "indeterminate" && pct != null) {
+        val elapsed = (now - p.startedAt).coerceAtLeast(0)
+        val left = if (pct > 0.0 && pct < 100.0 && elapsed >= MIN_PACE_MS) (elapsed * (100.0 - pct) / pct).toLong() else null
+        return ProgressEta(pct, left, null, false)
+    }
+    val est = p.estimateMs ?: return ProgressEta(null, null, null, p.mode == "indeterminate")
+    val elapsed = (now - (p.labelStartedAt ?: p.startedAt)).coerceAtLeast(0)
+    return if (elapsed <= est) ProgressEta(minOf(99.0, elapsed * 100.0 / est), est - elapsed, null, false)
+    else ProgressEta(99.0, null, elapsed - est, false)
+}
+
+/** "~2m left", "over estimate by 1m", "no estimate yet"; null = nothing to say. */
+fun progressCountdown(e: ProgressEta): String? = when {
+    e.remainingMs != null -> "~${coarseDuration(e.remainingMs, true)} left"
+    e.overMs != null -> "over estimate by ${coarseDuration(e.overMs, false)}"
+    e.noEstimate -> "no estimate yet"
+    else -> null
+}
+
+fun coarseDuration(ms: Long, up: Boolean): String {
+    val s = (ms / 1000).coerceAtLeast(0)
+    return when {
+        s < 60 -> "${s}s"
+        s < 3600 -> "${if (up) (s + 59) / 60 else s / 60}m"
+        else -> "${s / 3600}h${((s % 3600) / 60).toString().padStart(2, '0')}m"
+    }
+}
 
 fun formatBytes(n: Long): String = when {
     n >= 1L shl 30 -> oneDecimal(n / (1L shl 30).toDouble()) + " GB"
@@ -94,4 +123,12 @@ fun formatElapsed(ms: Long): String {
         s < 3600 -> "${s / 60}m ${(s % 60).toString().padStart(2, '0')}s"
         else -> "${s / 3600}h ${((s % 3600) / 60).toString().padStart(2, '0')}m"
     }
+}
+
+/** An agent `sleep N` read from its tool call: "waiting 1m 20s", counting down; just "waiting" once the time is up. */
+fun waitingText(eta: ProgressEta?): String {
+    val s = ((eta?.remainingMs ?: 0L) / 1000 + if ((eta?.remainingMs ?: 0L) % 1000 > 0) 1 else 0).coerceAtLeast(0)
+    if (s <= 0) return "waiting"
+    val h = s / 3600; val m = (s % 3600) / 60; val sec = s % 60
+    return "waiting " + listOfNotNull(h.takeIf { it > 0 }?.let { "${it}h" }, m.takeIf { it > 0 }?.let { "${it}m" }, sec.takeIf { it > 0 }?.let { "${it}s" }).joinToString(" ")
 }

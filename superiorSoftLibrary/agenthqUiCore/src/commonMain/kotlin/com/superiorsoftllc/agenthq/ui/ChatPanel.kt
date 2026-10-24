@@ -172,6 +172,7 @@ import com.superiorsoftllc.agenthq.ui.model.isBusy
 import com.superiorsoftllc.agenthq.ui.model.QueuedPrompt
 import com.superiorsoftllc.agenthq.ui.model.interruptBlocker
 import com.superiorsoftllc.agenthq.ui.model.queuedFor
+import com.superiorsoftllc.agenthq.ui.model.TodoCollapseMemory
 import com.superiorsoftllc.agenthq.ui.model.isRunning
 import com.superiorsoftllc.agenthq.ui.model.needsInput
 import com.superiorsoftllc.agenthq.ui.model.insertIntoPrompt
@@ -330,6 +331,7 @@ fun ChatPanel(
     val state by controller.state.collectAsState()
     val scope = rememberCoroutineScope()
     val agent = sessionId?.let { state.agents[it] }
+    var todoMemory by remember { mutableStateOf(TodoCollapseMemory()) }
     LaunchedEffect(state.harnessPickerAsk) { state.harnessPickerAsk?.let { chat.openSwitch(it.sessionId, it.harness) } }
     // CP-1b: every time New agent opens (and on reconnect while open), re-read the model catalog.
     LaunchedEffect(chat.spawnMode || chat.switchAsk != null, state.connection.isLive) {
@@ -341,11 +343,26 @@ fun ChatPanel(
         Box(Modifier.weight(1f).fillMaxWidth().testTag(transcriptTag)) {
             content {
                 androidx.compose.runtime.CompositionLocalProvider(LocalUserPortrait provides state.userPortrait) {
-                    OutputPane(agent, chat.spawnMode, roleColor = state.role(agent?.role)?.color, onStartSession = if (allowSpawn) ({ chat.spawnMode = true; chat.focus.requestFocus() }) else null)
+                    OutputPane(agent, chat.spawnMode, roleColor = state.role(agent?.role)?.color, onStartSession = if (allowSpawn) ({ chat.spawnMode = true; chat.focus.requestFocus() }) else null) {
+                        // ASK-1: this session's pending question, inline above the Activity box.
+                        QuestionPanel(
+                            shown = agent?.let { state.shownQuestionsFor(it.id) }.orEmpty(),
+                            onAnswer = { answer -> scope.launch { controller.answerQuestion(answer) } },
+                            onCancel = { id -> scope.launch { controller.cancelQuestion(id) } },
+                            onLater = { controller.dismissQuestions(); chat.focus.requestFocus() },
+                        )
+                    }
                 }
             }
+            if (agent != null && !chat.spawnMode) {
+                // One top-right slot: the reasoning button on top, the to-do card under it (hidden while the panel is open).
+                val reasoning = remember(agent.output) { com.superiorsoftllc.agenthq.ui.model.reasoningLines(agent.output) }
+                var reasoningOpen by remember(agent.id) { mutableStateOf(false) }
+                if (!reasoningOpen) TodoOverlay(agent.id, agent.todos, isRunning(agent.session.state), todoMemory, topInset = if (reasoning.isEmpty()) 0.dp else REASONING_BUTTON_SLOT) { todoMemory = it }
+                ReasoningSlot(reasoning, reasoningOpen) { reasoningOpen = it }
+            }
         }
-        NoticeStrip(state)
+        NoticeStrip(state, agent?.id)
         if (chat.spawnMode && state.roles.isNotEmpty()) {
             // ROLE-1c: the role a new agent spawns as. Its binding is the DEFAULT below; the picker still overrides it for this spawn.
             SpawnRoleRow(state, controller)

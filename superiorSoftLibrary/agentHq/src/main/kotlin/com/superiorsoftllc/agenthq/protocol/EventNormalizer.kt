@@ -60,7 +60,7 @@ object EventNormalizer {
         data class Reasoning(val text: String) : Line
         data class Status(val label: String) : Line
         /** Contract 1.25.0: a provider tool call, so a UI can name the tool a run is using now. */
-        data class Tool(val name: String, val activity: String? = null, val write: FileWrite? = null) : Line
+        data class Tool(val name: String, val activity: String? = null, val write: FileWrite? = null, val todos: List<com.superiorsoftllc.agenthq.protocol.todo.TodoItemPayload>? = null, val waitSeconds: Long? = null) : Line
         /**
          * Contract 1.95.0 (1c24fdc4): a tool call ENDED (its result came back). Carries nothing a UI renders; it is
          * what lets the daemon's [RunActivityTracker] move a run from `tool_running` back to `thinking`.
@@ -141,14 +141,14 @@ object EventNormalizer {
             // forwarded part, so a serve reject is never announced twice.
             // 1.95.0: a part that is already `completed` / `error` is a call that started AND ended, so it also ends.
             "tool_use", "tool" -> toolNameOf(obj)?.let { name ->
-                listOf(Line.Tool(name, toolActivityOf(obj), if (isOpenCodeFailedCall(obj)) null else fileWriteOf(name, obj))) +
+                listOf(Line.Tool(name, toolActivityOf(obj), if (isOpenCodeFailedCall(obj)) null else fileWriteOf(name, obj), todoListOf(name, obj))) +
                     (if (isOpenCodeRejection(obj)) listOf(Line.Denial("opencode", name)) else emptyList()) +
                     (if (isOpenCodeEndedCall(obj)) listOf(Line.ToolEnd) else emptyList())
             } ?: emptyList()
 
             // 1.95.0: pi reports a tool's real execution start and end on their own records.
             "tool_execution_start" -> (obj["toolName"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf(String::isNotBlank)?.let { name ->
-                listOf(Line.Tool(name, (obj["args"] as? JsonObject)?.let { toolActivityOf(JsonObject(mapOf("input" to it))) }))
+                listOf(Line.Tool(name, (obj["args"] as? JsonObject)?.let { toolActivityOf(JsonObject(mapOf("input" to it))) }, waitSeconds = waitSecondsOf(name, obj["args"] as? JsonObject, claudeTimeoutMs = false)))
             } ?: emptyList()
             "tool_execution_end" -> listOf(Line.ToolEnd)
 
@@ -262,6 +262,18 @@ object EventNormalizer {
     }
 
     /**
+     * The seconds a shell tool call only waits (`sleep N` ...), read from its own `command` / `timeout` /
+     * `run_in_background` arguments by [SleepHint]; null for anything else. claude's `timeout` is in ms, pi's in seconds.
+     */
+    private fun waitSecondsOf(name: String, input: JsonObject?, claudeTimeoutMs: Boolean): Long? {
+        input ?: return null
+        val command = (input["command"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+        val background = (input["run_in_background"] as? JsonPrimitive)?.content == "true"
+        val timeout = (input["timeout"] as? JsonPrimitive)?.content?.toDoubleOrNull()?.let { if (claudeTimeoutMs) it / 1000 else it }?.toLong()
+        return com.superiorsoftllc.agenthq.session.SleepHint.parse(name, command, background, timeout)
+    }
+
+    /**
      * Contract 1.26.0: the tool call's salient ARGUMENT -- the path being searched, the command being
      * run -- so a UI can say what a run is DOING, not merely name the tool.
      *
@@ -327,6 +339,15 @@ object EventNormalizer {
      * `patch` / `apply_patch`), then read from the input in the shape that tool uses. Only the agent's OWN output is read
      * here -- the content it is writing -- never a file it reads. A call whose input does not have that shape yields null.
      */
+    /** Contract 1.127.0 (TODO-OVERLAY-1): the to-do list a to-do tool call carries, or null for any other call. Only the items are kept. */
+    internal fun todoListOf(toolName: String, obj: JsonObject): List<com.superiorsoftllc.agenthq.protocol.todo.TodoItemPayload>? {
+        val part = obj["part"] as? JsonObject
+        val state = part?.get("state") as? JsonObject
+        val input = listOfNotNull(obj["input"] as? JsonObject, state?.get("input") as? JsonObject, part?.get("input") as? JsonObject)
+            .firstOrNull() ?: return null
+        return com.superiorsoftllc.agenthq.protocol.todo.TodoAdapters.parse(toolName, input)
+    }
+
     internal fun fileWriteOf(toolName: String, obj: JsonObject): FileWrite? {
         val name = toolName.lowercase()
         if (name !in WRITE_TOOLS && name !in EDIT_TOOLS && name !in PATCH_TOOLS) return null
@@ -427,7 +448,7 @@ object EventNormalizer {
                     ?.takeIf { it.isNotBlank() }
                     ?.let { name ->
                         flushText()
-                        lines += Line.Tool(name, toolActivityOf(block), fileWriteOf(name, block))
+                        lines += Line.Tool(name, toolActivityOf(block), fileWriteOf(name, block), todoListOf(name, block), waitSecondsOf(name, block["input"] as? JsonObject, claudeTimeoutMs = true))
                     }
 
                 else -> Unit

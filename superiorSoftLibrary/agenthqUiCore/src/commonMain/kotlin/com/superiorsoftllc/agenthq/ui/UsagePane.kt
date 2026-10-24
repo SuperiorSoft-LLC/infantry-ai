@@ -57,6 +57,9 @@ fun UsagePane(state: AppState, selected: AgentView?, controller: Controller? = n
         PlanLimits(state, now, onRefresh = refresh)
 
         HorizontalDivider(color = Palette.Border)
+        PacingSection(state, now, controller)
+
+        HorizontalDivider(color = Palette.Border)
         Text("Observed in runs", color = Palette.Muted, fontSize = 10.sp)
         if (state.providerStates.isEmpty()) {
             Text(if (state.connection.isLive) "The daemon reported no provider." else "Connect to a daemon to see provider limits.", color = Palette.Muted, fontSize = 11.sp)

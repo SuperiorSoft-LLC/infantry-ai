@@ -234,6 +234,7 @@ fun main(args: Array<String>) {
  * agenthq skill list|show <name|id>        the daemon's skills library, read-only (P10-K14)
  * agenthq role traits <roleId> [--set a,b | --clear]   a role's ordered trait list (TRAITS-T7)
  * agenthq ask --question "..." --option "label|description" [--multi] [--other] [--timeout <sec>]   ask the owner (PROMPT-5)
+ * agenthq ask --test                                                                              raise a sample owner question to this session (ASK-2)
  * agenthq ask --question "..." --option "label|consequence" ... --recommend <label> --reason "..." [--other] [--default-after <min>]
  *                                  non-blocking owner question (ASK-1): prints {"questionId":..}, the pick arrives as mail
  * agenthq --version | version  this CLI's contract and build, and the daemon's: `agenthq <cli> build <b> (daemon: <contract> build <b>|not running)`
@@ -417,6 +418,7 @@ internal object Cli {
                 "harnesses" -> harnesses(stream, out, err)
                 "harness-status" -> harnessStatus(stream, parsed, out, err)
                 "harness-install" -> harnessInstall(stream, parsed, out, err)
+                "processes" -> processes(stream, parsed, out, err)
                 "agents" -> agents(stream, parsed, out, err, getenv)
                 "send" -> send(stream, parsed, out, err, getenv)
                 "inbox" -> inbox(stream, parsed, out, err, getenv)
@@ -441,6 +443,7 @@ internal object Cli {
                 "skill" -> skill(stream, parsed, out, err)
                 "role" -> role(stream, parsed, out, err, getenv, input)
                 "ask" -> ask(stream, parsed, out, err, getenv)
+                "usage" -> runBlocking { UsageCli.run(stream, parsed.args, out, err) }
                 else -> {
                     // Unreachable: [run] rejects an unknown command before it connects.
                     err.appendLine("error: unknown command '$command'")
@@ -509,7 +512,7 @@ internal object Cli {
      * (the daemon withdraws a question whose asker went away, so it is never re-sent).
      */
     private fun ask(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable, getenv: (String) -> String?): Int =
-        if (parsed.recommend != null) askOwnerQuestion(stream, parsed, out, err, getenv) else runBlocking {
+        if (parsed.recommend != null || parsed.test) askOwnerQuestion(stream, parsed, out, err, getenv) else runBlocking {
             val session = callerSession(getenv) ?: return@runBlocking 2
             val request = askRequest(parsed)
             checkContract(stream, err)
@@ -562,7 +565,8 @@ internal object Cli {
         runBlocking {
             val session = callerSession(getenv) ?: return@runBlocking 2
             checkContract(stream, err)
-            val payload = json.encodeToString(QuestionAsk.serializer(), ownerQuestionRequest(parsed))
+            val request = if (parsed.test) QuestionAsk.sample() else ownerQuestionRequest(parsed)
+            val payload = json.encodeToString(QuestionAsk.serializer(), request)
             // Not idempotent: a re-send after a dropped connection could ask the owner twice.
             val answer = try {
                 stream.request(Envelope(Envelope.QUESTION_ASK, payload, session), Envelope.QUESTION_ASKED, "question_ask", idempotent = false)
@@ -609,6 +613,7 @@ internal object Cli {
                 "there is none, so there is no session to ask for"
         }
         if (parsed.args.isNotEmpty()) return "ask takes no positional arguments: $shape"
+        if (parsed.test) return null
         if (parsed.question?.isBlank() != false) return "ask requires a question: $shape"
         if (parsed.options.isEmpty()) return "ask requires at least one --option: $shape"
         // ASK-1: --recommend selects the non-blocking owner question; --reason / --default-after belong to it alone.
@@ -831,6 +836,8 @@ internal object Cli {
                         err.appendLine(frame.data)
                         seen++
                     }
+                    // Contract 1.125.0: a turn from another agent / outside source is named by its typed origin.
+                    frame.type == Envelope.TURN && frame.origin != null -> out.appendLine(TurnLine.of(frame))
                     frame.type == Envelope.FINISHED -> {
                         val payload = decodeFinished(frame)
                         out.appendLine(
@@ -1325,6 +1332,15 @@ internal object Cli {
         0
     }
 
+    /** ROGUE-1 (contract 1.120.0): `processes [--all]` lists; `processes reap <pid>|--all` reaps. Exit 1 when a reap is refused. */
+    private fun processes(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable): Int = runBlocking {
+        checkContract(stream, err)
+        val req = ProcessesCli.requestFor(parsed.args, parsed.all)
+        val answer = ProcessesCli.request(stream, req)
+        out.append(ProcessesCli.render(answer, showAll = parsed.all && req.op == "list"))
+        if (answer.refused != null) 1 else 0
+    }
+
     /** HARNESS-INSTALL-1: `harness-install [id...] [--update]`: npm-install into the app prefix; exit 1 when any one failed. */
     private fun harnessInstall(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable): Int = runBlocking {
         checkContract(stream, err)
@@ -1615,10 +1631,11 @@ internal object Cli {
     private suspend fun projectConfig(stream: FrameStream, args: List<String>, out: Appendable, err: Appendable): Int {
         val projectId = args[2].trim()
         val autoRemove = if (args[1] == "set" && args[3].trim() == AUTO_REMOVE_SETTING) onOff(args[4]) else null
-        val caps = if (args[1] == "set" && autoRemove == null) mapOf(args[3].trim() to args[4].trim().toInt()) else null
+        val experiment = if (args[1] == "set" && args[3].trim().startsWith(EXPERIMENT_PREFIX)) mapOf(args[3].trim().removePrefix(EXPERIMENT_PREFIX) to args[4].trim()) else null
+        val caps = if (args[1] == "set" && autoRemove == null && experiment == null) mapOf(args[3].trim() to args[4].trim().toInt()) else null
         val payload = json.encodeToString(
             com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest.serializer(),
-            com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest(projectId = projectId, laneCaps = caps, autoRemoveDoneWorkers = autoRemove),
+            com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest(projectId = projectId, laneCaps = caps, autoRemoveDoneWorkers = autoRemove, experiments = experiment),
         )
         val answer = stream.request(Envelope(Envelope.PROJECT_CONFIG, payload), Envelope.PROJECT, "project_config", idempotent = true)
         val project = try {
@@ -1631,11 +1648,12 @@ internal object Cli {
         if (project.laneCaps.isEmpty()) out.appendLine("  (none set)")
         for ((role, cap) in project.laneCaps) out.appendLine("  $role $cap")
         out.appendLine("$AUTO_REMOVE_SETTING: ${if (project.autoRemoveDoneWorkers) "on" else "off"} (a done ticket's worker session is ended and removed)")
+        for ((k, v) in project.experiments) out.appendLine("$EXPERIMENT_PREFIX$k: $v (experimental)")
         return 0
     }
 
     /**
-     * ROUTING-1 (contract 1.123.0): `project routing <projectId>` prints the project's routing rules in order;
+     * ROUTING-1 (contract 1.128.0): `project routing <projectId>` prints the project's routing rules in order;
      * `--file <rules.json>` REPLACES them with the JSON array in the file (each `{name, weights?, ticketTypes?, role?,
      * provider, model, effort?, setRole?}`, the last one a default row with no match field); `--clear` removes them all.
      */
@@ -1688,6 +1706,9 @@ internal object Cli {
 
     /** BASICS-KILL-1 (1.118.0): the `project config set` key for [Project.autoRemoveDoneWorkers]. */
     private const val AUTO_REMOVE_SETTING = "auto-remove-done-workers"
+
+    /** EXPERIMENTS-1 (1.126.0): `project config set <id> experiment.<key> on|off`. */
+    private const val EXPERIMENT_PREFIX = "experiment."
 
     private fun onOff(value: String): Boolean? = when (value.trim().lowercase()) {
         "on", "true" -> true
@@ -4158,6 +4179,15 @@ internal object Cli {
               run [--label L] [--reader R] -- CMD   Run CMD with its output and exit code unchanged; progress done on exit 0, failed otherwise
                                   Harmless outside Infantry AI: no session or daemon = no report, exit 0 (run keeps CMD's code)
               harnesses           The harnesses (provider ids) a ticket can pin, and each one's models
+              usage [show]        Plan usage per meter (claude, opencode-go, ...): percent used, reset, pace, and how many
+                                  ticket workers the pacing rule allows (default <60%: 3, <80%: 2, else 1) vs how many run
+              usage set <meter> <pct> [<resetsInMin>] | clear <meter>   Type a percent for a meter with no readable usage
+              usage override <meter> <n|none> [<hours>] | override <meter> clear   Allowance override (default: until reset, else 2h)
+              usage rule <60:3,80:2,1|on|off|default>   The pacing rule: below:workers tiers, the last one workers alone
+              processes [--all]   Rogue background processes (Gradle/Kotlin daemons, node, JVMs) left by ended or idle sessions,
+                                  with MB, age and owner session; --all adds healthy ones and heavy processes that are not ours
+              processes reap <pid> | --all   Kill one process (or every rogue one) that a session of this daemon started;
+                                  anything else is refused. Setting processes.autoReap (default off) reaps rogue ones on a timer
               harness-status      Which harness CLIs are installed / missing / outdated; harness-install [id...] [--update] installs them via npm
               epics --project <id> List that project's epics, with each one's goal and story count
               epic show <id|prefix> [--project <id>]   One epic: its title, then its tickets as ID | STATUS | TITLE | AGENT
@@ -4391,6 +4421,8 @@ internal object Cli {
         val recommend: String? = null,
         val reason: String? = null,
         val defaultAfter: String? = null,
+        /** ASK-2: `ask --test` raises a canned sample owner question ([QuestionAsk.sample]). */
+        val test: Boolean = false,
         /** IMG-1: `image upload --purpose chat|ticket` (default ticket). */
         val purpose: String? = null,
         /** IMG-AGENT-1: `ticket create|update --image <file>` (repeatable): image files to attach. */
@@ -4498,6 +4530,7 @@ internal object Cli {
         var recommend: String? = null
         var reason: String? = null
         var defaultAfter: String? = null
+        var test = false
 
         var i = 0
         while (i < args.size) {
@@ -4732,6 +4765,10 @@ internal object Cli {
                     recommend = args.getOrNull(++i) ?: return fail(err, "--recommend expects the label of the recommended option")
                     i++
                 }
+                "--test" -> {
+                    test = true
+                    i++
+                }
                 "--reason" -> {
                     reason = args.getOrNull(++i) ?: return fail(err, "--reason expects why the recommended option is recommended")
                     i++
@@ -4900,6 +4937,7 @@ internal object Cli {
             recommend = recommend,
             reason = reason,
             defaultAfter = defaultAfter,
+            test = test,
             purpose = purpose,
         )
     }
@@ -4989,6 +5027,7 @@ internal object Cli {
         "harnesses" -> if (parsed.args.isNotEmpty()) "harnesses takes no arguments: agenthq harnesses" else null
         "harness-status" -> if (parsed.args.isNotEmpty()) "harness-status takes no arguments: agenthq harness-status [--check]" else null
         "harness-install" -> null
+        "processes" -> ProcessesCli.usageError(parsed.args, parsed.all)
         "epic" -> epicUsageError(parsed, getenv)
         "project" -> projectUsageError(parsed)
         "image" -> imageUsageError(parsed)
@@ -5004,6 +5043,7 @@ internal object Cli {
         "skill" -> skillUsageError(parsed)
         "role" -> roleUsageError(parsed)
         "ask" -> askUsageError(parsed, getenv)
+        "usage" -> UsageCli.usageError(parsed.args)
         else -> null
     }
 
@@ -5182,7 +5222,8 @@ internal object Cli {
     private val COMMANDS = setOf(
         "submit", "watch", "pods", "runs", "logs", "cancel", "tickets", "board", "ticket", "agents", "send", "inbox",
         "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
-        "trait", "skill", "role", "ask", "harnesses", "harness-status", "harness-install", "image", "session", "remote", "bg", "kill",
+        "trait", "skill", "role", "ask", "harnesses", "harness-status", "harness-install", "image", "session", "remote", "bg", "kill", "usage",
+        "processes",
     )
 
     /** `agenthq remote on|off|status`: edits `<stateDir>/network.properties`; takes effect on the next daemon restart. */

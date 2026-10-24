@@ -36,6 +36,11 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
     @Volatile internal var resolveScans: Int = 0
         private set
 
+    /** EXPERIMENTS-1: functions that tag a session from one parsed record line (generic; experiments register here). */
+    private val taggers = java.util.concurrent.CopyOnWriteArrayList<(JsonObject) -> String?>()
+
+    fun addTagger(tagger: (JsonObject) -> String?) { taggers += tagger }
+
     private val paths = ConcurrentHashMap<String, File>()
     private val limitCache = ConcurrentHashMap<String, Pair<Long, Long?>>()
 
@@ -87,11 +92,12 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
                 acc.seen(at)
                 val message = o["message"] as? JsonObject ?: continue
                 when (o.str("type")) {
-                    "user" -> if (o.bool("isMeta") != true && o.bool("isCompactSummary") != true && o.bool("isSidechain") != true &&
+                    "user" -> { claudeToolResults(message["content"], acc, at); if (o.bool("isMeta") != true && o.bool("isCompactSummary") != true && o.bool("isSidechain") != true &&
                         isClaudePrompt(message["content"])
-                    ) acc.prompt()
+                    ) acc.prompt() }
                     "assistant" -> {
                         val id = message.str("id")
+                        acc.assistantAt(at)
                         if (id != null && seenMessages.add(id)) {
                             acc.turn(message.str("model"))
                             val u = message["usage"] as? JsonObject
@@ -103,7 +109,7 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
                             val b = block as? JsonObject ?: return@forEach
                             if (b.str("type") == "tool_use") {
                                 val toolId = b.str("id")
-                                if (toolId == null || seenTools.add(toolId)) acc.tool(b.str("name") ?: "unknown")
+                                if (toolId == null || seenTools.add(toolId)) acc.tool(b.str("name") ?: "unknown", at)
                             }
                         }
                     }
@@ -111,6 +117,21 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
             }
         }
         return acc.build(base, anyCatalogLimit(acc.lastModel))
+    }
+
+    /** EXPERIMENTS-1: each `tool_result` block of a Claude user record is one tool result; its size is the text it carries. */
+    private fun claudeToolResults(content: JsonElement?, acc: StatsAccumulator, at: Long?) {
+        (content as? JsonArray)?.forEach { block ->
+            val b = block as? JsonObject ?: return@forEach
+            if (b.str("type") != "tool_result") return@forEach
+            acc.toolResult(textLength(b["content"]), at)
+        }
+    }
+
+    private fun textLength(content: JsonElement?): Int = when (content) {
+        is JsonPrimitive -> content.content.length
+        is JsonArray -> content.sumOf { (it as? JsonObject)?.str("text")?.length ?: 0 }
+        else -> 0
     }
 
     /** A real prompt: plain string content, or text blocks with no tool_result (that is a tool's answer). */
@@ -132,6 +153,7 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
 
     private fun readPi(root: String, file: File, base: SessionStats): SessionStats {
         val acc = StatsAccumulator()
+        val tags = LinkedHashSet<String>()
         var provider: String? = null
         var model: String? = null
         file.bufferedReader().useLines { lines ->
@@ -144,10 +166,13 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
                     "model_change" -> { provider = o.str("provider") ?: provider; model = o.str("modelId") ?: model }
                     "message" -> {
                         val m = o["message"] as? JsonObject ?: continue
+                        if (taggers.isNotEmpty() && m.str("role") == "system") taggers.forEach { t -> t(o)?.let { tags += it } }
                         when (m.str("role")) {
                             "user" -> acc.prompt()
+                            "toolResult" -> acc.toolResult(textLength(m["content"]), m.longOrNull("timestamp") ?: lineAt)
                             "assistant" -> {
                                 provider = m.str("provider") ?: provider
+                                acc.assistantAt(m.longOrNull("timestamp") ?: lineAt)
                                 model = m.str("model") ?: model
                                 acc.turn(m.str("model"))
                                 val u = m["usage"] as? JsonObject
@@ -156,7 +181,7 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
                                 }
                                 (m["content"] as? JsonArray)?.forEach { block ->
                                     val b = block as? JsonObject ?: return@forEach
-                                    if (b.str("type") == "toolCall") acc.tool(b.str("name") ?: "unknown")
+                                    if (b.str("type") == "toolCall") acc.tool(b.str("name") ?: "unknown", m.longOrNull("timestamp") ?: lineAt)
                                 }
                             }
                         }
@@ -169,7 +194,7 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
                 ?.firstOrNull { (it as? JsonObject)?.str("id") == id }
                 ?.let { (it as JsonObject).longOrNull("contextWindow") }
         }
-        return acc.build(base, limit ?: anyCatalogLimit(model))
+        return acc.build(base, limit ?: anyCatalogLimit(model)).let { if (tags.isEmpty()) it else it.copy(tags = tags.toList()) }
     }
 
     // ------------------------------------------------------------------ OpenCode

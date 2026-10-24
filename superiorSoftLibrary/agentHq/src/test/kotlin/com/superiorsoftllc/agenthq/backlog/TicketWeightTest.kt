@@ -99,7 +99,11 @@ class TicketWeightTest {
         val defaults = settings.weightExecutors()
         assertEquals("claude-haiku-5-5", defaults.forWeight(1)?.model)
         assertEquals("claude-sonnet-5-5", defaults.forWeight(3)?.model)
-        assertEquals("claude-opus-5-5", defaults.forWeight(5)?.model)
+        assertEquals(WeightExecutor("pi", "anthropic/claude-opus-5-5"), defaults.forWeight(5), "Opus only as pi + anthropic/claude-opus-5-5")
+        assertEquals(WeightExecutor("pi", "anthropic/claude-opus-5-5"), defaults.forWeight(4))
+        assertFailsWith<IllegalArgumentException>("Opus off pi is refused") {
+            settings.set(WeightExecutors.SETTING, Json.parseToJsonElement("""{"5":{"provider":"claude","model":"claude-opus-5-5"}}"""))
+        }
         assertNull(defaults.forWeight(null), "no weight, no choice")
         assertTrue(settings.all().containsKey(WeightExecutors.SETTING), "the mapping is listed with the other settings")
 

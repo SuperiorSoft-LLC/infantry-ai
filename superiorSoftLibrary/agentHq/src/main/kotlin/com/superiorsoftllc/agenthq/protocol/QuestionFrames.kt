@@ -42,6 +42,19 @@ data class QuestionAsk(
     companion object {
         fun decode(text: String): QuestionAsk = StrictJson.decode(serializer(), text, "question_ask payload")
 
+        /** ASK-2: the canned question `agenthq ask --test` and the Config "Send a test question" action raise. */
+        fun sample() = QuestionAsk(
+            question = "TEST: how should this sample question be answered?",
+            options = listOf(
+                PromptOption("Looks good", "Nothing happens: this is only a test"),
+                PromptOption("Try the keyboard", "Press 1-9 to pick, Enter to confirm"),
+                PromptOption("A deliberately long option label to check that wrapping works on a narrow phone screen", "Also nothing happens"),
+            ),
+            recommended = "Looks good",
+            reason = "a test question, no real decision",
+            allowOther = true,
+        )
+
         const val QUESTION_MAX = 2_000
         const val REASON_MAX = 200
         const val OPTIONS_MAX = 8

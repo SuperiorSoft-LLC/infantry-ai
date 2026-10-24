@@ -36,14 +36,14 @@ class WeightExecutors(private val byWeight: Map<Int, WeightExecutor>) {
     companion object {
         const val SETTING = "tickets.weightExecutors"
 
-        /** Low (1-2) = cheap, mid (3) = sonnet-class, high (4-5) = opus-class. The owner edits these in project settings. */
+        /** Low (1-2) = cheap, mid (3) = sonnet-class, high (4-5) = opus-class, which runs only on pi (the Opus safety rule). The owner edits these in project settings. */
         val DEFAULT = WeightExecutors(
             mapOf(
                 1 to WeightExecutor("claude", "claude-haiku-5-5"),
                 2 to WeightExecutor("claude", "claude-haiku-5-5"),
                 3 to WeightExecutor("claude", "claude-sonnet-5-5"),
-                4 to WeightExecutor("claude", "claude-opus-5-5"),
-                5 to WeightExecutor("claude", "claude-opus-5-5"),
+                4 to WeightExecutor(RoutingRules.OPUS_PROVIDER, RoutingRules.OPUS_MODEL),
+                5 to WeightExecutor(RoutingRules.OPUS_PROVIDER, RoutingRules.OPUS_MODEL),
             ),
         )
 
@@ -71,6 +71,8 @@ class WeightExecutors(private val byWeight: Map<Int, WeightExecutor>) {
                 val provider = field("provider")?.lowercase()
                 val model = field("model")
                 require(provider != null || model != null) { "weight $w needs a provider or a model" }
+                // ROUTING-1: the Opus safety line holds for the legacy mapping too (Opus only as pi + anthropic/claude-opus-5-5).
+                RoutingRules.requireOpusSafe("weight $w", provider, model)
                 out[w] = WeightExecutor(provider, model)
             }
             return WeightExecutors(out)

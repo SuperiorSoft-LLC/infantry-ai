@@ -125,7 +125,7 @@ class CompactLayoutUiTest {
 
     @Test
     fun `at phone width the agent list opens over the chat, selecting closes it`() = withWindow(400) { controller ->
-        click("compact-open-left")
+        click("title-bar-toggle-left")
         assertTrue(shown("left-sidebar") && shown("compact-drawer") && shown("compact-drawer-scrim"), "the drawer and its scrim show")
         assertTrue(width("left-sidebar") < 400f, "the drawer leaves a strip of the chat visible")
         assertEquals(400f, width("center-pane"), "the chat keeps its full width under the drawer")
@@ -138,7 +138,7 @@ class CompactLayoutUiTest {
 
     @Test
     fun `at phone width tapping the scrim closes the agent list drawer`() = withWindow(400) { _ ->
-        click("compact-open-left")
+        click("title-bar-toggle-left")
         onNodeWithTag("compact-drawer-scrim").performTouchInput { touchClick(Offset(width - 5f, height / 2f)) }
         waitForIdle()
         assertTrue(!shown("left-sidebar"), "the scrim tap closes the drawer")
@@ -147,7 +147,7 @@ class CompactLayoutUiTest {
 
     @Test
     fun `at phone width the right panel opens over the chat from a button and closes`() = withWindow(400) { _ ->
-        click("compact-open-right")
+        click("title-bar-toggle-right")
         assertTrue(shown("right-panel"), "the button opens the right panel")
         assertTrue(shown("center-pane") && !shown("left-sidebar"), "the chat stays under it")
         assertTrue(width("right-panel") < 400f, "the panel is a drawer, not full width")
@@ -166,7 +166,7 @@ class CompactLayoutUiTest {
         assertTrue(shown("left-sidebar") && shown("center-pane") && shown("right-panel"), "wide: three panes before narrowing")
         resize(400)
         assertTrue(!shown("left-sidebar") && shown("center-pane"), "compact: the chat")
-        click("compact-open-left")
+        click("title-bar-toggle-left")
         click("agent-row-$sid")
         assertTrue(shown("center-pane") && !shown("left-sidebar"), "compact: the agent's output")
         resize(1400)
@@ -189,7 +189,7 @@ class CompactLayoutUiTest {
             ),
         )
         waitUntil(timeoutMillis = 10_000) { controller.state.value.tickets.any { it.id == "t-phone-1" } }
-        click("compact-open-left")
+        click("title-bar-toggle-left")
         click("sidebar-board-button")
         val inProgress = onNode(hasText("IN PROGRESS") and hasAnyAncestor(hasTestTag("board-modal")))
         val header = inProgress.fetchSemanticsNode()
@@ -214,7 +214,7 @@ class CompactLayoutUiTest {
         assertTrue(shown("sidebar-resize-handle") && shown("right-panel-resize-handle"), "both resize handles")
         assertEquals(260f, width("left-sidebar"), "sidebar default width")
         assertEquals(320f, width("right-panel"), "right panel default width")
-        assertTrue(!shown("compact-back") && !shown("compact-open-right"), "no compact navigation on desktop")
+        assertTrue(!shown("compact-back"), "no compact navigation on desktop")
 
         click("agent-row-$sid")
         assertTrue(shown("left-sidebar") && shown("center-pane") && shown("right-panel"), "selecting keeps the three panes")
@@ -273,15 +273,27 @@ class CompactLayoutUiTest {
 
     /** The secondary items go into the overflow menu: the project picker, the attention entry, the side-panel toggle. */
     @Test
-    fun `at 360dp the overflow menu holds the project picker, the attention entry and the side panel toggle`() = withWindow(360) { controller ->
+    fun `at 360dp the overflow menu holds the project picker and the attention entry`() = withWindow(360) { controller ->
         pushAttention(controller)
-        assertTrue(!shown("title-bar-project-slot") && !shown("title-bar-attention-chip") && !shown("title-bar-toggle-right"), "secondary items are not in the bar")
+        assertTrue(!shown("title-bar-project-slot") && !shown("title-bar-attention-chip"), "secondary items are not in the bar")
         click("title-bar-overflow")
-        listOf("title-bar-project-slot", "title-bar-overflow-attention", "title-bar-toggle-right").forEach { onNodeWithTag(it).assertIsDisplayed() }
+        listOf("title-bar-project-slot", "title-bar-overflow-attention").forEach { onNodeWithTag(it).assertIsDisplayed() }
+    }
+
+    /** The thin strip under the bar is gone; both panel toggles live in the bar, 40dp wide, and the bar keeps its height. */
+    @Test
+    fun `at 360dp the panel toggles are in the title bar and the strip under it is gone`() = withWindow(360) { _ ->
+        assertTrue(shown("title-bar-toggle-left") && shown("title-bar-toggle-right"), "both toggles are in the bar")
+        assertTrue(!shown("compact-open-left") && !shown("compact-open-right"), "the strip's buttons are gone")
+        assertEquals(40f, width("title-bar-toggle-right"), "the right toggle is a 40dp target")
+        val bar = onNodeWithTag("title-bar").fetchSemanticsNode().boundsInRoot
+        val toggle = onNodeWithTag("title-bar-toggle-right").fetchSemanticsNode().boundsInRoot
+        assertTrue(toggle.right <= bar.right, "the toggle is not pushed off screen")
+        assertTrue(onNodeWithTag("center-pane").fetchSemanticsNode().boundsInRoot.top <= bar.bottom + 1f, "the chat starts right under the bar")
         click("title-bar-toggle-right")
-        assertTrue(!shown("title-bar-toggle-right"), "picking an entry closes the menu")
-        assertTrue(controller.state.value.panels.rightShown, "the side panel entry opens the closed right drawer")
-        assertTrue(shown("right-panel"), "the drawer is on screen")
+        assertTrue(shown("right-panel"), "the right toggle opens the drawer")
+        click("title-bar-toggle-right")
+        assertTrue(!shown("right-panel"), "and closes it again")
     }
 
     /**

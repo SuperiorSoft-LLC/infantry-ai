@@ -5,7 +5,7 @@ import com.superiorsoftllc.agenthq.protocol.TicketType
 import com.superiorsoftllc.agenthq.protocol.TicketWeight
 
 /**
- * ROUTING-1 (contract 1.123.0): a project's task routing rules -- which role / provider / model a ticket starts on, by its
+ * ROUTING-1 (contract 1.128.0): a project's task routing rules -- which role / provider / model a ticket starts on, by its
  * weight, type and role. Pure: matching, shape checks and the Opus safety line live here; the executor check (does the
  * harness list this provider / model) is passed in by the caller, so the one check ticket create uses is reused.
  *

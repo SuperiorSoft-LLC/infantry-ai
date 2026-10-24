@@ -1,12 +1,21 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.ui.model.REASONING_APPLIES_TO
+import com.superiorsoftllc.agenthq.ui.model.REASONING_TITLE
+
 import com.superiorsoftllc.agenthq.ui.model.AGENT_SCOPE_APPLIES_TO
+import com.superiorsoftllc.agenthq.ui.model.CHAT_MARKDOWN_APPLIES_TO
+import com.superiorsoftllc.agenthq.ui.model.CHAT_MARKDOWN_TITLE
 import com.superiorsoftllc.agenthq.ui.model.CliLocationsSetting
 import com.superiorsoftllc.agenthq.ui.model.LifecycleSetting
 import com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_APPLIES_TO
 import com.superiorsoftllc.agenthq.ui.model.ThemeSettings
 import com.superiorsoftllc.agenthq.ui.model.ToolApprovalSetting
 import com.superiorsoftllc.agenthq.ui.model.UserPortrait
+
+const val TEST_QUESTION_TITLE = "Test question"
+const val TEST_QUESTION_APPLIES_TO = "Applies to: the session you have open. Raises a sample option menu there so you can see and try the popup (click, keys 1-9 + Enter, or type your own answer) without waiting for an agent to ask. Your pick is mailed to that session, marked TEST."
+const val TEST_QUESTION_TAG = "test-question-send"
 
 /**
  * CONFIG-TABS-1: the tabs of the configuration modal, in display order. Appearance comes first.
@@ -32,6 +41,8 @@ enum class ConfigEntry(val tab: ConfigTab, val title: String, val applies: Strin
     THEME(ConfigTab.APPEARANCE, ThemeSettings.TITLE, ThemeSettings.APPLIES_TO, listOf("color", "colour", "accent", "dark", "light")),
     BLUR(ConfigTab.APPEARANCE, BLUR_TITLE, BLUR_APPLIES_TO, listOf("dialog", "scrim", "modal")),
     USER_PORTRAIT(ConfigTab.APPEARANCE, UserPortrait.TITLE, UserPortrait.APPLIES_TO, listOf("avatar", "picture", "photo")),
+    MARKDOWN_ENGINE(ConfigTab.APPEARANCE, CHAT_MARKDOWN_TITLE, CHAT_MARKDOWN_APPLIES_TO, listOf("markdown", "table", "chat", "format", "renderer")),
+    REASONING(ConfigTab.APPEARANCE, REASONING_TITLE, REASONING_APPLIES_TO, listOf("reasoning", "thinking", "thought", "panel", "inline")),
     AGENT_SCOPE(ConfigTab.GENERAL, AGENT_SCOPE_TITLE, AGENT_SCOPE_APPLIES_TO, listOf("project", "sidebar", "global")),
     PROGRESS_STALE(ConfigTab.GENERAL, PROGRESS_STALE_TITLE, PROGRESS_STALE_APPLIES_TO, listOf("progress", "stale", "minutes")),
     LIFECYCLE(ConfigTab.GENERAL, LifecycleSetting.TITLE, LifecycleSetting.APPLIES_TO, listOf("keep alive", "idle", "timeout")),
@@ -39,6 +50,8 @@ enum class ConfigEntry(val tab: ConfigTab, val title: String, val applies: Strin
     TOOL_APPROVAL(ConfigTab.AGENTS, ToolApprovalSetting.TITLE, ToolApprovalSetting.APPLIES_TO, listOf("permission", "approve", "tools")),
     ROLES(ConfigTab.AGENTS, ROLES_TITLE, ROLES_APPLIES_TO, listOf("role", "provider", "model", "traits")),
     VOICE(ConfigTab.NOTIFICATIONS, VOICE_TITLE, com.superiorsoftllc.agenthq.ui.voice.VOICE_APPLIES_TO, listOf("voice", "speech", "alert", "sound")),
+    INCOMING_SOUND(ConfigTab.NOTIFICATIONS, com.superiorsoftllc.agenthq.ui.sound.INCOMING_SOUND_TITLE, com.superiorsoftllc.agenthq.ui.sound.INCOMING_SOUND_APPLIES_TO, listOf("sound", "volume", "mp3", "comms", "incoming", "audio")),
+    QUESTIONS(ConfigTab.NOTIFICATIONS, TEST_QUESTION_TITLE, TEST_QUESTION_APPLIES_TO, listOf("question", "ask", "popup", "option", "menu", "test")),
     PLUGINS(ConfigTab.PLUGINS, com.superiorsoftllc.agenthq.ui.voice.plugin.PluginsSetting.TITLE, com.superiorsoftllc.agenthq.ui.voice.plugin.PluginsSetting.APPLIES_TO, listOf("plugin", "install", "voice", "piper", "natural", "download")),
     SECRETS(ConfigTab.SECRETS, SECRETS_TITLE, SECRETS_APPLIES_TO, listOf("keystore", "token", "api key", "password")),
     PAIR(ConfigTab.DEVICES, PairEntry.TITLE, PairEntry.APPLIES_TO, listOf("qr", "phone", "android", "connect")),

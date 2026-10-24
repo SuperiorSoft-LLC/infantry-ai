@@ -8,6 +8,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /** Client-owned common DTOs for the published AgentHQ WebSocket contract. */
 @OptIn(ExperimentalSerializationApi::class)
@@ -23,6 +26,8 @@ data class Envelope(
      * when null, so a frame without it is what an older client sent.
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val requestId: String? = null,
+    /** Contract 1.125.0: who a `turn` frame came from; absent means the owner. Omitted when null. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val origin: com.superiorsoftllc.agenthq.ui.model.MessageOrigin? = null,
 ) {
     companion object {
         const val READY = "ready"
@@ -129,6 +134,16 @@ data class Envelope(
         // Contract 1.59.0 (U1): plan-limit meters. `limits` (empty data) asks; the daemon answers `limits` (a list of
         // `ProviderLimits`) and pushes the same frame after each run's `usage`.
         const val LIMITS = "limits"
+        // Contract 1.119.0 (USAGE-PACE): `usage_get` (empty) is answered by `usage_report` (a `UsageReport`); 1.121.0 adds
+        // `usage_set` (a `UsageSet`: manual percent / override / pacing rule), also answered by `usage_report`.
+        const val USAGE_GET = "usage_get"
+        const val USAGE_REPORT = "usage_report"
+        const val USAGE_SET = "usage_set"
+
+        // Contract 1.120.0 (ROGUE-1): `processes` {op: list|reap|reap_rogue, pid?} is answered by `processes`
+        // (a ProcessesAnswer); `process_pressure` (a ProcessReport) is pushed when free RAM drops under the floor.
+        const val PROCESSES = "processes"
+        const val PROCESS_PRESSURE = "process_pressure"
 
         // Contract 1.92.0 (STATS-1): `session_stats_get` {"sessionId"} asks for one session's statistics, read by the
         // daemon from its harness's own local record; answered to the requester only by `session_stats` (a SessionStats).
@@ -178,6 +193,7 @@ data class Envelope(
         const val QUESTION_LIST = "question_list"
         const val QUESTION_ANSWER = "question_answer"
         const val QUESTION_CANCEL = "question_cancel"
+        const val QUESTION_ASK = "question_ask"
 
         // Contracts 1.5.0 / 1.6.0: the daemon-owned backlog (the scrum board). Changes are pushed to every client.
         const val TICKET_SAVE = "ticket_save"
@@ -586,6 +602,92 @@ data class StatsPoint(val at: Long? = null, val contextTokens: Long, val cumulat
 @Serializable
 data class ContextSource(val tool: String, val calls: Int, val tokensAdded: Long? = null)
 
+/** USAGE-PACE (1.119.0): below [below] percent used, [workers] ticket workers may run; [below] null = every percent left. */
+@Serializable
+data class PacingTier(val below: Double? = null, val workers: Int)
+
+/** USAGE-PACE: the pacing rule; the metric is the highest percent among a meter's windows. */
+@Serializable
+data class PacingRule(val enabled: Boolean = true, val tiers: List<PacingTier> = emptyList())
+
+/** USAGE-PACE: a hand-set allowance: [workers] null = no limit, until [until] (epoch millis). */
+@Serializable
+data class UsageOverride(val workers: Int? = null, val until: Long = 0)
+
+/** USAGE-PACE: one plan meter (`claude`, `opencode-go`, else a harness id) of a [UsageReport]. */
+@Serializable
+data class MeterUsage(
+    val meter: String,
+    val percent: Double? = null,
+    val window: String? = null,
+    val resetsAt: Long? = null,
+    val paceDelta: Double? = null,
+    /** `live`, `manual` or `none`. */
+    val source: String = "none",
+    val windows: List<LimitWindow> = emptyList(),
+    val reason: String? = null,
+    val ruleAllowance: Int? = null,
+    val override: UsageOverride? = null,
+    /** null = no limit. */
+    val allowance: Int? = null,
+    val running: Int = 0,
+    val canStart: Boolean = true,
+    val warning: String? = null,
+    /** 1.124.0: epoch ms of the live read behind these numbers; null for a manual / unread meter. */
+    val updatedAt: Long? = null,
+)
+
+/** USAGE-PACE (1.119.0): the `usage_report` frame. */
+@Serializable
+data class UsageReport(val meters: List<MeterUsage> = emptyList(), val rule: PacingRule = PacingRule(), val observedAt: Long = 0)
+
+/** USAGE-PACE (1.121.0): the `usage_set` frame; only the keys a request names are sent (no defaults encoded). */
+@Serializable
+data class UsageSet(
+    val meter: String = "",
+    val manualPercent: Double? = null,
+    val manualResetsAt: Long? = null,
+    val clearManual: Boolean = false,
+    val overrideWorkers: Int? = null,
+    val overrideUntil: Long? = null,
+    val clearOverride: Boolean = false,
+    val rule: PacingRule? = null,
+)
+
+/** Contract 1.120.0 (ROGUE-1): one process the daemon's rogue detector reports; [sessionId] null = not ours (never reaped). */
+@Serializable
+data class TrackedProcess(
+    val pid: Long,
+    val command: String,
+    val sessionId: String? = null,
+    val startedAt: Long? = null,
+    val memoryMb: Long? = null,
+    val rogue: Boolean = false,
+    val reason: String? = null,
+)
+
+/** Contract 1.120.0 (ROGUE-1): free RAM against the floor, the tracked processes and the heavy unattributed ones. */
+@Serializable
+data class ProcessReport(
+    val freeMb: Long? = null,
+    val totalMb: Long? = null,
+    val floorMb: Long = 4096,
+    val underPressure: Boolean = false,
+    val autoReap: Boolean = false,
+    val tracked: List<TrackedProcess> = emptyList(),
+    val unattributed: List<TrackedProcess> = emptyList(),
+) {
+    val rogue: List<TrackedProcess> get() = tracked.filter { it.rogue }
+}
+
+/** Contract 1.120.0 (ROGUE-1): the `processes` answer. */
+@Serializable
+data class ProcessesAnswer(
+    val report: ProcessReport,
+    val reaped: List<TrackedProcess> = emptyList(),
+    val refused: String? = null,
+)
+
 /** Contract 1.59.0 (U1): one provider's plan limits. [status] `ok` or `unknown`; [reason] is a fixed code when unknown. */
 @Serializable
 data class ProviderLimits(
@@ -943,6 +1045,10 @@ data class ProgressView(
     val estimateMs: Long? = null,
     val startedAt: Long = 0,
     val updatedAt: Long = 0,
+    /** 1.123.0: the countdown inputs; see the daemon's SessionProgress. */
+    val labelStartedAt: Long? = null,
+    val estimateSource: String? = null,
+    val lastOutputAt: Long? = null,
 )
 
 @Serializable
@@ -1025,6 +1131,8 @@ data class StatusPayload(
     val activity: String? = null,
     /** Contract 1.80.0 (UX-WRITE-1): what a file-writing tool call wrote, or null for every other status. */
     val write: FileWrite? = null,
+    /** Contract 1.127.0 (TODO-OVERLAY-1): the agent's whole to-do list (REPLACES the client's), or null on every other status. */
+    val todos: List<TodoItemPayload>? = null,
     /** Contract 1.95.0 (1c24fdc4): the run's harness-neutral activity, sent when its phase or label changes. */
     val runActivity: RunActivityPayload? = null,
 )
@@ -1034,6 +1142,10 @@ data class StatusPayload(
  * `waiting_for_input`, `finished`, `error`; kept as a string so a phase added later decodes instead of failing the
  * whole frame. [label] names the tool call while `tool_running`. Times are the daemon's clock (epoch ms).
  */
+/** Contract 1.127.0: one to-do item; [status] is `pending`, `in_progress` or `done`, [activeText] the present-tense form or null. */
+@Serializable
+data class TodoItemPayload(val text: String, val status: String, val activeText: String? = null)
+
 @Serializable
 data class RunActivityPayload(
     val state: String,
@@ -1155,6 +1267,8 @@ data class Project(
     val laneCaps: Map<String, Int> = emptyMap(),
     /** Contract 1.118.0 (BASICS-KILL-1): a done ticket's worker session is ended and removed; false from an older daemon. */
     val autoRemoveDoneWorkers: Boolean = false,
+    /** Contract 1.126.0 (EXPERIMENTS-1): named project switches, key to `on`; a key not listed is off. */
+    val experiments: Map<String, String> = emptyMap(),
 )
 
 /** Contract 1.111.0 (LANE-CAPS) `project_config`, answered by `project`: [laneCaps] merges into the stored caps; null reads. */
@@ -1164,6 +1278,8 @@ data class ProjectConfigRequest(
     val laneCaps: Map<String, Int>? = null,
     /** Contract 1.118.0: set `Project.autoRemoveDoneWorkers`; null = unchanged. */
     val autoRemoveDoneWorkers: Boolean? = null,
+    /** Contract 1.126.0: switches merged into `Project.experiments` (`on`/`off`); null = unchanged. */
+    val experiments: Map<String, String>? = null,
 )
 
 /**
@@ -1740,6 +1856,14 @@ object WireRequests {
         ),
     )
 
+    /** `project_config` (contract 1.126.0): switch [key] of [projectId] on or off. */
+    fun projectSwitch(projectId: String, key: String, on: Boolean): Envelope = Envelope(
+        Envelope.PROJECT_CONFIG,
+        Json { encodeDefaults = false; explicitNulls = false }.encodeToString(
+            ProjectConfigRequest.serializer(), ProjectConfigRequest(projectId, experiments = mapOf(key to if (on) "on" else "off")),
+        ),
+    )
+
     /** `project_base` (contract 1.81.0): set [projectId]'s base branch to [branch], or clear it when [branch] is null. */
     fun projectBase(projectId: String, branch: String?): Envelope = Envelope(
         Envelope.PROJECT_BASE,
@@ -1837,6 +1961,12 @@ object WireRequests {
     fun sessionStatsGet(sessionId: String): Envelope =
         Envelope(Envelope.SESSION_STATS_GET, JsonObject(mapOf("sessionId" to JsonPrimitive(sessionId))).toString())
 
+    /** ROGUE-1 (1.120.0): list the tracked processes (`op=list`), reap one (`reap` + [pid]) or every rogue one (`reap_rogue`). */
+    fun processes(op: String = "list", pid: Long? = null): Envelope = Envelope(
+        Envelope.PROCESSES,
+        JsonObject(buildMap { put("op", JsonPrimitive(op)); if (pid != null) put("pid", JsonPrimitive(pid)) }).toString(),
+    )
+
     /** `settings_set`: the daemon validates [value], stores it and answers `settings` with every setting. */
     fun settingsSet(key: String, value: JsonElement): Envelope = Envelope(
         Envelope.SETTINGS_SET,
@@ -1869,6 +1999,28 @@ object WireRequests {
     /** ASK-1 (1.97.0): the owner's pick (or override) of a question; the daemon answers with a `question` push. */
     fun questionAnswer(a: QuestionAnswerWire): Envelope =
         Envelope(Envelope.QUESTION_ANSWER, wireJson.encodeToString(QuestionAnswerWire.serializer(), a))
+
+    /**
+     * ASK-2: the owner raises a canned sample question for [sessionId] (the open session) to try the popup. It is a plain
+     * `question_ask` (no new frame); the same text as the daemon's `QuestionAsk.sample()`.
+     */
+    fun questionAskTest(sessionId: String): Envelope = Envelope(
+        Envelope.QUESTION_ASK,
+        buildJsonObject {
+            put("question", "TEST: how should this sample question be answered?")
+            put("options", buildJsonArray {
+                for ((label, description) in listOf(
+                    "Looks good" to "Nothing happens: this is only a test",
+                    "Try the keyboard" to "Press 1-9 to pick, Enter to confirm",
+                    "A deliberately long option label to check that wrapping works on a narrow phone screen" to "Also nothing happens",
+                )) add(buildJsonObject { put("label", label); put("description", description) })
+            })
+            put("recommended", "Looks good")
+            put("reason", "a test question, no real decision")
+            put("allowOther", true)
+        }.toString(),
+        sessionId,
+    )
 
     /** ASK-1 (1.97.0): the owner withdraws an open question; the daemon tells the agent and pushes `question`. */
     fun questionCancel(questionId: String): Envelope =

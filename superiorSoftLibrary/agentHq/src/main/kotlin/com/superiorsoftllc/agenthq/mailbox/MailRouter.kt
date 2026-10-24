@@ -251,15 +251,17 @@ class MailRouter(
         return try {
             // A bound-but-never-run session takes its persona and identity with its first turn, exactly as
             // a `prompt` frame gives them (BUG-808ce596: one composer, [firstTurn]).
+            val source = MailSource.of(message, manager)
+            val text = source.render()
             val turn = if (session.neverRun) {
                 // TRAITS-T5: the persona and traits FROZEN at spawn, never the live profile (a later edit never reaches it).
                 // P10-K9: the knowledge counts are read NOW, at delivery, for the session's own project.
                 val instance = manager.instance(session.id)
-                firstTurn(instance, session.role, session.agentId, render(message), knowledge.section(session.projectId, session.role), skills.section(instance))
+                firstTurn(instance, session.role, session.agentId, text, knowledge.section(session.projectId, session.role), skills.section(instance))
             } else {
-                render(message)
+                text
             }
-            manager.resume(session.id, turn)
+            manager.resume(session.id, turn, source.origin)
             DeliveryOutcome.Delivered("resumed ${session.id}")
         } catch (e: Exception) {
             DeliveryOutcome.Failed("resume of '${session.id}' failed: ${e.message}")
@@ -376,45 +378,5 @@ class MailRouter(
     fun waiting(): List<WaitingOn> = mailbox.waiting().filter { w ->
         val session = manager.get(w.session) ?: return@filter false
         !session.isBusy()
-    }
-
-    /**
-     * Render a message as the prompt the recipient's CLI will read.
-     *
-     * It states who sent it, prints any checkpoint, and -- crucially -- gives the recipient the exact
-     * `agenthq` commands that answer it, and the MCP tools that do the same, so a handoff is completed
-     * unattended with no human relaying anything. MAIL-FOOTER-1: this used to print `curl` recipes
-     * against the HTTP mail API, and cmd.exe does not treat '...' as quotes, so their JSON reached the
-     * daemon mangled ("malformed mail_read payload"). The CLI takes plain arguments that survive any
-     * shell. The reply carries the FULL message id, ready to paste; `read` takes the 8-char id.
-     */
-    private fun render(message: Message): String = buildString {
-        append("[Infantry AI COMMS] message ").append(message.id)
-        append(" from ").append(message.from)
-        append(" · thread ").append(message.threadId)
-        if (message.subject.isNotBlank()) append(" · ").append(message.subject)
-        append('\n')
-        append('\n')
-        append(message.body)
-        message.checkpoint?.takeUnless { it.isEmpty }?.let { cp ->
-            append("\n\n-- checkpoint --\n")
-            cp.state?.takeIf { it.isNotBlank() }?.let { append("state: ").append(it).append('\n') }
-            cp.decisions?.takeIf { it.isNotBlank() }?.let { append("decisions: ").append(it).append('\n') }
-            cp.evidence?.takeIf { it.isNotBlank() }?.let { append("evidence: ").append(it).append('\n') }
-            cp.blockers?.takeIf { it.isNotBlank() }?.let { append("blockers: ").append(it).append('\n') }
-            cp.nextAction?.takeIf { it.isNotBlank() }?.let { append("next: ").append(it).append('\n') }
-        }
-        append("\n-- answer this message --\n")
-        append("mark it read:\n")
-        append("  agenthq read ").append(message.id.take(8)).append('\n')
-        append("reply (goes back to ").append(message.from).append(" in this same thread):\n")
-        append("  agenthq send ").append(message.from).append(" \"<your answer, one line>\" --reply-to ")
-        append(message.id).append('\n')
-        append("check the reply landed:\n")
-        append("  agenthq threads\n")
-        append("or with the MCP tools: agenthq_read {\"messageId\":\"").append(message.id).append("\"}, then ")
-        append("agenthq_message {\"to\":\"").append(message.from).append("\",\"replyTo\":\"").append(message.id)
-        append("\",\"body\":\"<your answer>\"}\n")
-        append("all mail commands: agenthq mail\n")
     }
 }

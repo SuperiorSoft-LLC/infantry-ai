@@ -33,7 +33,12 @@ internal class McpProjectConfigTools {
             "false" -> false
             else -> return refused("$SET: autoRemoveDoneWorkers must be true or false, was '${autoRaw.take(20)}'")
         }
-        // ROUTING-1 (1.123.0): routingRules, a JSON array (as text), REPLACES the project's rules; "[]" clears them.
+        // EXPERIMENTS-1 (1.126.0): `experiment` (a key) with `value` (on/off) is a change of its own.
+        arguments.string("experiment")?.let { key ->
+            val value = arguments.string("value") ?: return refused("$SET: experiment needs a value of on or off")
+            return request(stream, ProjectConfigRequest(projectId, experiments = mapOf(key to value)))
+        }
+        // ROUTING-1 (1.128.0): routingRules, a JSON array (as text), REPLACES the project's rules; "[]" clears them.
         val rulesRaw = arguments.string("routingRules")?.trim()?.takeIf { it.isNotEmpty() }
         val rules = rulesRaw?.let {
             try {
@@ -65,6 +70,7 @@ internal class McpProjectConfigTools {
             put("routingRules", json.encodeToJsonElement(
                 kotlinx.serialization.builtins.ListSerializer(com.superiorsoftllc.agenthq.protocol.RoutingRule.serializer()), project.routingRules,
             ))
+            put("experiments", buildJsonObject { project.experiments.forEach { (k, v) -> put(k, v) } })
             put("note", "routingRules: first match wins, the last is the default row; a ticket's own provider/model pin always wins. max concurrent agents per role; a role not listed runs 1. autoRemoveDoneWorkers: a done ticket's worker session is ended and removed")
         }))
     } catch (e: Exception) {
@@ -119,6 +125,8 @@ internal class McpProjectConfigTools {
                         "[type], role?, provider, model, effort?, setRole?}. The last rule must be the default row (no weights, " +
                         "ticketTypes or role). A provider/model its harness does not list is refused; Opus only as pi + " +
                         "anthropic/claude-opus-5-5. \"[]\" clears the rules.",
+                    "experiment" to "an experiment switch name (a name the daemon knows); needs value.",
+                    "value" to "on or off, for experiment.",
                 ),
                 listOf("projectId"),
             ))

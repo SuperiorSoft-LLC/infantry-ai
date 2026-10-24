@@ -11,6 +11,9 @@ plugins {
 kotlin {
     jvmToolchain(21)
     jvm()
+    // WEB-1: the browser client (agentHqWeb) runs this same UI as WebAssembly.
+    @OptIn(org.jetbrains.kotlin.gradle.ExperimentalWasmDsl::class)
+    wasmJs { browser() }
     androidLibrary {
         namespace = "com.superiorsoftllc.agenthq.ui.core"
         compileSdk = 36
@@ -39,6 +42,11 @@ kotlin {
             implementation(libs.ktor.client.cio)
             // PAIR-1: the QR encoder (and, on desktop, the decoder for "Open image").
             implementation(libs.zxing.core)
+            // The mp3 decoder of the incoming-comms sound (LGPL, ~100 KB); isolated in JvmSoundPlayer.
+            implementation(libs.jlayer)
+        }
+        wasmJsMain.dependencies {
+            implementation(libs.ktor.client.js)
         }
         androidMain.dependencies {
             implementation(libs.ktor.client.cio)
@@ -66,4 +74,11 @@ configurations.all {
             useVersion(libs.versions.ktor.get())
         }
     }
+}
+
+// MD-PLUGIN-1: the plugin tests load the example markdown engine from its real jar, so build it first and hand over the path.
+tasks.named<Test>("jvmTest") {
+    val pluginJar = project(":superiorSoftLibrary:samples:markdownEnginePlugin").tasks.named("pluginJar")
+    dependsOn(pluginJar)
+    systemProperty("markdown.example.jar", pluginJar.map { it.outputs.files.singleFile.absolutePath }.get())
 }

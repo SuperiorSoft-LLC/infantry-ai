@@ -100,8 +100,7 @@ fun VoiceSettingsSection(settings: VoiceSettings, onChange: (VoiceSettings) -> U
             HourSlider("From", settings.quietStartHour) { onChange(settings.copy(quietStartHour = it)) }
             HourSlider("Until", settings.quietEndHour) { onChange(settings.copy(quietEndHour = it)) }
         }
-        Text("Volume ${settings.volumePercent}%", color = Palette.Muted, fontSize = 11.sp)
-        Slider(settings.volumePercent / 100f, { onChange(settings.copy(volumePercent = (it * 100).toInt())) })
+        com.superiorsoftllc.agenthq.ui.VolumeSlider(settings.volumePercent, { onChange(settings.copy(volumePercent = it)) })
         if (voices.isNotEmpty()) {
             Text("Voice", color = Palette.Muted, fontSize = 11.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

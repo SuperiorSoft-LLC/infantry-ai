@@ -296,8 +296,7 @@ class TicketContextComposerTest {
         const val KEY = "context.includeLinkedTasksContext"
 
         // PROMPT-5: the one preamble line that tells every harness how to ask the owner a choice.
-        const val ASK_LINE = "- To ask the owner a choice, run `agenthq ask --question \"...\" --option \"label|consequence\" --recommend <label> --reason \"...\"` " +
-            "(repeat --option; --other, --default-after <min>). It returns a question id at once and does not wait: carry on with other work; the owner's pick arrives as mail (thread question:<id>)."
+        const val ASK_LINE = TicketContextComposer.ASK_LINE
 
         // Must match TicketContextComposer's TEAM_BLOCK exactly (MAIL-5).
         val teamBlock = "Team (scoped to your project):\n" +

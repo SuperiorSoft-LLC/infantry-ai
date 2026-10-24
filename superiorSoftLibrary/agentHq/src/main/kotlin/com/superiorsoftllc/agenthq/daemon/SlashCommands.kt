@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.daemon
 
+import com.superiorsoftllc.agenthq.protocol.MessageOrigin
+import com.superiorsoftllc.agenthq.protocol.SystemKind
 import com.superiorsoftllc.agenthq.harness.CommandAction
 import com.superiorsoftllc.agenthq.harness.CommandLines
 import com.superiorsoftllc.agenthq.harness.HarnessCommand
@@ -94,7 +96,7 @@ internal object SlashCommands {
                 }
                 CommandAction.NATIVE -> {
                     require(session.providerSessionId != null) { "/${command.name} has nothing to act on: this session has not run a turn yet" }
-                    manager.resume(session.id, command.native!!)
+                    manager.resume(session.id, command.native!!, MessageOrigin.System(SystemKind.SLASH_COMMAND))
                     "${command.name}: the harness's own ${command.native} was started on this session's conversation"
                 }
             }

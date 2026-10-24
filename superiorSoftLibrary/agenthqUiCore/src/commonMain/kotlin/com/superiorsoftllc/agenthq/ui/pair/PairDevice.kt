@@ -40,6 +40,9 @@ expect fun qrMatrix(text: String): Array<BooleanArray>
 @Composable
 expect fun ScannerModal(onDismissRequest: () -> Unit, content: @Composable () -> Unit)
 
+/** WEB-1: what the browser shows instead of a QR code. */
+const val QR_DESKTOP_ONLY = "QR codes are shown in the desktop and phone apps only. Copy the link instead."
+
 const val PAIR_SHOW_TAG = "pair-show-qr"
 const val PAIR_QR_TAG = "pair-qr"
 const val PAIR_NOTICE_TAG = "pair-notice"
@@ -53,6 +56,11 @@ const val PAIR_ADDRESS_TAG = "pair-address"
 @Composable
 fun QrCodeView(text: String, modifier: Modifier = Modifier.size(220.dp)) {
     val matrix = remember(text) { qrMatrix(text) }
+    if (matrix.isEmpty()) {
+        // WEB-1: the browser has no QR encoder; the link above still pairs a device.
+        Text(QR_DESKTOP_ONLY, color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.padding(8.dp))
+        return
+    }
     Canvas(modifier.background(Color.White)) {
         val quiet = 4
         val modules = matrix.size + 2 * quiet

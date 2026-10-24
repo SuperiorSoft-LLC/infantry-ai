@@ -59,7 +59,7 @@ class BaseBranchModelTest {
     }
 
     @Test fun `a started ticket says what it was cut from, once, as information`() {
-        val t = Ticket("t1", "Ship it", status = "in_progress", start = TicketStart(true, "started", "cut from develop 1a2b3c4d"))
+        val t = Ticket("t1", "Ship it", status = "in_progress", sessionId = "s1", start = TicketStart(true, "started", "cut from develop 1a2b3c4d"))
         val frame = Envelope(Envelope.TICKET, json.encodeToString(Ticket.serializer(), t))
         val s = reduce(reduce(AppState(), frame, 1), frame, 2)
         assertEquals(1, s.notices.size, "the answer and the push say it once: ${s.notices}")

@@ -121,13 +121,14 @@ fun TitleBar(
     // move into an overflow menu, and the avatar strip gives way to a plain drag area. At or above it the bar is unchanged.
     BoxWithConstraints(Modifier.fillMaxWidth()) {
     val compact = PanelLayout.isCompact(maxWidth.value)
+    androidx.compose.runtime.CompositionLocalProvider(LocalTitleBarCompact provides compact) {
     Row(
         Modifier.fillMaxWidth().height(TITLE_BAR_HEIGHT).background(Palette.Panel).testTag(TITLE_BAR_TAG),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (onTogglePanel != null) {
             Spacer(Modifier.width(6.dp))
-            PanelToggle(PanelSide.LEFT, state.panels.leftShown) { onTogglePanel(PanelSide.LEFT) }
+            PanelToggle(PanelSide.LEFT, state.panels.leftShown, compact) { onTogglePanel(PanelSide.LEFT) }
         }
         Row(drag.fillMaxHeight().padding(start = if (onTogglePanel != null) 6.dp else 12.dp, end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Logo()
@@ -138,8 +139,10 @@ fun TitleBar(
             // A narrow desktop window still moves by its bar: the free space is the drag area.
             Spacer(drag.weight(1f).fillMaxHeight().testTag(TITLE_BAR_DRAG_TAG))
             assistantSlot()
-            TitleBarOverflow(state, onConnect, onAttention, projectSlot, onTogglePanel)
-            Spacer(Modifier.width(6.dp))
+            TitleBarOverflow(state, onConnect, onAttention, projectSlot)
+            // The right-panel toggle stays in view on a phone (the owner's ask): it replaces the old strip under the bar.
+            if (onTogglePanel != null) PanelToggle(PanelSide.RIGHT, state.panels.rightShown, compact = true) { onTogglePanel(PanelSide.RIGHT) }
+            Spacer(Modifier.width(4.dp))
         } else {
             // M2-7: the project drop-down and the "+" New Project box ([ProjectPicker]).
             Box(Modifier.fillMaxHeight().testTag(TITLE_BAR_PROJECT_SLOT_TAG), contentAlignment = Alignment.Center) { projectSlot() }
@@ -163,7 +166,7 @@ fun TitleBar(
                 Spacer(Modifier.width(10.dp))
             }
             if (onTogglePanel != null) {
-                PanelToggle(PanelSide.RIGHT, state.panels.rightShown) { onTogglePanel(PanelSide.RIGHT) }
+                PanelToggle(PanelSide.RIGHT, state.panels.rightShown, compact = false) { onTogglePanel(PanelSide.RIGHT) }
                 Spacer(Modifier.width(8.dp))
             }
         }
@@ -182,14 +185,18 @@ fun TitleBar(
         }
     }
     }
+    }
     HorizontalDivider(color = Palette.Border)
 }
 
 val TITLE_BAR_HEIGHT = 36.dp
 
+/** True while the title bar is in its compact (narrow) layout; read by the Assistant pill to drop its label. */
+val LocalTitleBarCompact = androidx.compose.runtime.compositionLocalOf { false }
+
 /**
  * MOBILE-TITLEBAR-1: the compact bar's overflow button and its menu: the project picker slot, the attention entry (while
- * any is open), the side-panel toggle, and the connection URL the chip no longer has room for (a tap opens the connection).
+ * any is open), and the connection URL the chip no longer has room for (a tap opens the connection).
  */
 @Composable
 private fun TitleBarOverflow(
@@ -197,7 +204,6 @@ private fun TitleBarOverflow(
     onConnect: () -> Unit,
     onAttention: () -> Unit,
     projectSlot: @Composable () -> Unit,
-    onTogglePanel: ((PanelSide) -> Unit)?,
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
@@ -223,14 +229,6 @@ private fun TitleBarOverflow(
                     modifier = Modifier.testTag(TITLE_BAR_OVERFLOW_ATTENTION_TAG),
                 )
             }
-            if (onTogglePanel != null) {
-                val shown = state.panels.rightShown
-                DropdownMenuItem(
-                    text = { Text(if (shown) "Hide side panel" else "Show side panel", color = Palette.Text, fontSize = 12.sp) },
-                    onClick = { open = false; onTogglePanel(PanelSide.RIGHT) },
-                    modifier = Modifier.testTag(TITLE_BAR_TOGGLE_RIGHT_TAG),
-                )
-            }
             HorizontalDivider(color = Palette.Border)
             DropdownMenuItem(
                 text = { Text(state.connection.url.ifBlank { "Connect..." }, color = Palette.Muted, fontSize = 11.sp) },
@@ -254,11 +252,11 @@ private fun Logo() {
  * panel is shown, muted while hidden.
  */
 @Composable
-private fun PanelToggle(side: PanelSide, shown: Boolean, onClick: () -> Unit) {
+private fun PanelToggle(side: PanelSide, shown: Boolean, compact: Boolean, onClick: () -> Unit) {
     val left = side == PanelSide.LEFT
     val label = (if (shown) "Hide " else "Show ") + (if (left) "agent list" else "side panel")
     val tag = if (left) TITLE_BAR_TOGGLE_LEFT_TAG else TITLE_BAR_TOGGLE_RIGHT_TAG
-    IconActionTooltipBox(label, modifier = Modifier.size(28.dp).testTag(tag)) { m ->
+    IconActionTooltipBox(label, modifier = (if (compact) Modifier.size(width = 40.dp, height = TITLE_BAR_HEIGHT) else Modifier.size(28.dp)).testTag(tag)) { m ->
         Box(
             m.clip(RoundedCornerShape(5.dp)).clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
             contentAlignment = Alignment.Center,

@@ -39,7 +39,9 @@ CREATE TABLE IF NOT EXISTS projects (
     lane_caps TEXT NOT NULL DEFAULT '{}',
     -- BASICS-KILL-1 (47.sqm): 1 = a ticket moved to done ends and removes its worker session; 0 (default) = it stays. Declared LAST.
     auto_remove_done_workers INTEGER NOT NULL DEFAULT 0,
-    -- ROUTING-1 (48.sqm): JSON array of RoutingRule, in order; '[]' = no rules. Declared LAST.
+    -- EXPERIMENTS-1 (48.sqm): JSON object experiment key -> "on"/"off"; absent = off.
+    experiments TEXT NOT NULL DEFAULT '{}',
+    -- ROUTING-1 (49.sqm): JSON array of RoutingRule, in order; '[]' = no rules. Declared LAST.
     routing_rules TEXT NOT NULL DEFAULT '[]'
 );
 
@@ -55,9 +57,9 @@ SELECT * FROM projects ORDER BY created_at ASC, id ASC;
 -- The insert only lands for a new id, so `created_at` keeps the row's original value and an edit
 -- can never reorder the listing.
 insertProjectIgnore:
-INSERT OR IGNORE INTO projects(id, name, goal, created_at, directory, base_branch, lane_caps, auto_remove_done_workers, routing_rules) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT OR IGNORE INTO projects(id, name, goal, created_at, directory, base_branch, lane_caps, auto_remove_done_workers, experiments, routing_rules) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- The edit half: overwrites everything but the id and created_at (and the retired story_ids
 -- column, which neither this nor the insert above touches any more).
 updateProject:
-UPDATE projects SET name = ?, goal = ?, directory = ?, base_branch = ?, lane_caps = ?, auto_remove_done_workers = ?, routing_rules = ? WHERE id = ?;
+UPDATE projects SET name = ?, goal = ?, directory = ?, base_branch = ?, lane_caps = ?, auto_remove_done_workers = ?, experiments = ?, routing_rules = ? WHERE id = ?;

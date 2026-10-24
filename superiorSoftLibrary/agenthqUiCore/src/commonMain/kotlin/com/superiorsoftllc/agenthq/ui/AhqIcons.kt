@@ -348,6 +348,32 @@ object AhqIcons {
         }
     }
 
+    /** REASONING: a simple brain (two lobes split by a centre groove, plus a stem). Drawn here, not Material. */
+    val Brain: ImageVector by lazy {
+        icon("Brain", autoMirror = false) {
+            disc(8.5f, 10.5f, 5.5f); disc(15.5f, 10.5f, 5.5f)
+            rect(10f, 14f, 14f, 19f)
+            // Counter-clockwise bars cut the centre groove and two folds out of the non-zero fill.
+            hole(11.4f, 5f, 12.6f, 15f); hole(5.5f, 9.4f, 10f, 10.6f); hole(14f, 9.4f, 18.5f, 10.6f)
+        }
+    }
+
+    private fun PathBuilder.disc(cx: Float, cy: Float, r: Float) {
+        moveTo(cx - r, cy)
+        arcTo(r, r, 0f, true, true, cx + r, cy)
+        arcTo(r, r, 0f, true, true, cx - r, cy)
+        close()
+    }
+
+    /** A rectangle wound the other way round, so it cuts a hole in the fill beneath it. */
+    private fun PathBuilder.hole(left: Float, top: Float, right: Float, bottom: Float) {
+        moveTo(left, top)
+        verticalLineTo(bottom)
+        horizontalLineTo(right)
+        verticalLineTo(top)
+        close()
+    }
+
     /** A 2dp frame from (3,4) to (21,20), as four bars (non-zero fill: each bar is its own clockwise rectangle). */
     private fun PathBuilder.panelFrame() {
         rect(3f, 4f, 21f, 6f)
