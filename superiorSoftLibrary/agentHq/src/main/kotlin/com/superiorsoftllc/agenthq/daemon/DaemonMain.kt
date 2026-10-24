@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.daemon
 
+import com.superiorsoftllc.agenthq.protocol.MessageOrigin
 import com.superiorsoftllc.agenthq.session.isBusy
 import com.superiorsoftllc.agenthq.session.InfantryEnv
 
@@ -1481,7 +1482,8 @@ private fun broadcast(
 
         // Contract 1.11.0: what this run was asked, sequenced ahead of anything it prints.
         is SessionEvent.Turn -> listOf(
-            Envelope(Envelope.TURN, event.prompt, event.sessionId),
+            // Contract 1.125.0: an owner turn omits `origin` (absent = Owner), so it is byte-identical to before.
+            Envelope(Envelope.TURN, event.prompt, event.sessionId, origin = event.origin.takeUnless { it == MessageOrigin.Owner }),
             // 1.95.0: an accepted turn is a run that is thinking, before the harness prints a single line.
             runActivityEnvelope(event.sessionId, runActivity.turnStarted(event.sessionId)),
         )

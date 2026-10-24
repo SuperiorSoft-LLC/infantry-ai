@@ -612,8 +612,9 @@ fun ChatLine(
     if (line.kind == LineKind.USER) {
         // IMG-2: the turn's `[image: ...]` lines show as thumbnails, not as text.
         val (said, images) = ChatImageLines.split(line.text)
-        SpeakerRow({ UserAvatar(CHAT_AVATAR_SIZE) }) {
+        SpeakerRow({ OriginAvatar(line.origin, CHAT_AVATAR_SIZE) }) {
             Column {
+                OriginLabel(line.origin)
                 Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).background(Palette.Accent.copy(alpha = 0.12f), RoundedCornerShape(8.dp)).padding(8.dp)) {
                     CardTimestamp(line.at)
                     if (said.isNotBlank() || images.isEmpty()) {

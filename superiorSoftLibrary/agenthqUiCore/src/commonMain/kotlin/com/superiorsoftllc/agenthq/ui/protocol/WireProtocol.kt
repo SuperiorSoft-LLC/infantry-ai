@@ -23,6 +23,8 @@ data class Envelope(
      * when null, so a frame without it is what an older client sent.
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val requestId: String? = null,
+    /** Contract 1.125.0: who a `turn` frame came from; absent means the owner. Omitted when null. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val origin: com.superiorsoftllc.agenthq.ui.model.MessageOrigin? = null,
 ) {
     companion object {
         const val READY = "ready"

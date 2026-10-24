@@ -824,3 +824,16 @@ Everything the catalog renders is **replaceable data, never compiled-in Kotlin**
 Verify the shipped data and the chain without a UI: `.\gradlew.bat :superiorSoftLibrary:agentHq:roleCatalog`
 (add `-Proles=<dir>` for a custom-role directory).
 
+## How to add a new message source
+
+Every turn in a transcript carries a typed `MessageOrigin` (owner, agent, external, system), set where the turn is created. A new
+source (a webhook, an email bridge, a scheduler) does not touch any client or know how the wire works:
+
+1. Implement `mailbox/MessageSource`: `origin` (who it is, as a `MessageOrigin`) and `render()` (the text the harness's CLI
+   reads; this is the only place any header text is written).
+2. Deliver it with `SessionManager.resume(sessionId, source.render(), source.origin)`. The daemon puts `origin` on the `turn`
+   frame; the UI, the CLI and the MCP tools already render every origin kind.
+3. Need a new kind of sender? Add a case to `MessageOrigin` (daemon `protocol/MessageOrigin.kt` and the client twin
+   `ui/model/MessageOrigin.kt`). The exhaustive `when` in `OriginRenderer.kt` stops compiling until clients handle it.
+
+Never parse the rendered text back into an origin. The one exception is `LegacyOriginAdapter`, for transcripts older than 1.125.0.

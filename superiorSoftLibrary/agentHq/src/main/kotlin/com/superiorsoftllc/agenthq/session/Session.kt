@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.session
 
+import com.superiorsoftllc.agenthq.protocol.MessageOrigin
 import com.superiorsoftllc.agenthq.session.host.KeptProcess
 import com.superiorsoftllc.agenthq.worktree.WorktreeRef
 import kotlinx.serialization.EncodeDefault
@@ -330,7 +331,8 @@ data class ContextSource(
  */
 sealed interface SessionEvent {
     data class Status(val session: SessionRecord) : SessionEvent
-    data class Turn(val sessionId: String, val prompt: String) : SessionEvent
+    /** [origin] (contract 1.125.0): who the turn came from; [MessageOrigin.Owner] unless its creator said otherwise. */
+    data class Turn(val sessionId: String, val prompt: String, val origin: MessageOrigin = MessageOrigin.Owner) : SessionEvent
     /** [afterInterrupt]: BUG-M2-11c-INTERRUPT, the line belongs to a turn the owner interrupted. */
     data class Stdout(val sessionId: String, val line: String, val afterInterrupt: Boolean = false) : SessionEvent
     data class Stderr(val sessionId: String, val line: String) : SessionEvent

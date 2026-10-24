@@ -139,6 +139,11 @@ data class Envelope(
      * byte-for-byte what a pre-1.87 peer sends.
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val requestId: String? = null,
+    /**
+     * Contract 1.125.0: who a `turn` frame came from. Omitted when null; absent means [MessageOrigin.Owner], so a frame
+     * without it is byte-for-byte what a pre-1.125 daemon sends. Only a `turn` frame carries it.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val origin: MessageOrigin? = null,
 ) {
     companion object {
         /**

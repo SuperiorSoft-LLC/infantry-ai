@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.session
 
+import com.superiorsoftllc.agenthq.protocol.MessageOrigin
 import com.superiorsoftllc.agenthq.daemon.AccessPolicy
 import com.superiorsoftllc.agenthq.provider.AgentProvider
 import com.superiorsoftllc.agenthq.provider.RunRequest
@@ -685,14 +686,14 @@ class SessionManager(
      * one could only fail, later and less clearly.
      */
     @Synchronized
-    fun resume(sessionId: String, prompt: String): SessionRecord {
+    fun resume(sessionId: String, prompt: String, origin: MessageOrigin = MessageOrigin.Owner): SessionRecord {
         if (sessionId in held) throw RunInFlightException(sessionId, "session $sessionId is switching harness; send again once it has switched")
-        return resumeHeld(sessionId, prompt)
+        return resumeHeld(sessionId, prompt, origin)
     }
 
     /** TICKET-HANDOVER: [resume] for the switch that holds [sessionId] (the only caller allowed past the hold). */
     @Synchronized
-    fun resumeHeld(sessionId: String, prompt: String): SessionRecord {
+    fun resumeHeld(sessionId: String, prompt: String, origin: MessageOrigin = MessageOrigin.Owner): SessionRecord {
         val session = sessions[sessionId] ?: error("unknown session $sessionId")
         if (runs.containsKey(sessionId)) throw RunInFlightException(sessionId, "session $sessionId already has a run in flight")
         busyTwin(sessionId, session.agentId, session.ticketId)?.let {
@@ -717,7 +718,7 @@ class SessionManager(
         sessions[sessionId] = revived
         persist(sessionId, force = true)
         eventSink?.invoke(SessionEvent.Status(revived))
-        if (prompt.isNotBlank()) startRun(sessionId, prompt, resuming = !session.neverRun)
+        if (prompt.isNotBlank()) startRun(sessionId, prompt, resuming = !session.neverRun, origin = origin)
         return sessions.getValue(sessionId)
     }
 
@@ -908,7 +909,7 @@ class SessionManager(
         return next
     }
 
-    private fun startRun(sessionId: String, prompt: String, resuming: Boolean = false) {
+    private fun startRun(sessionId: String, prompt: String, resuming: Boolean = false, origin: MessageOrigin = MessageOrigin.Owner) {
         val session = sessions[sessionId] ?: return
         if (runs.containsKey(sessionId)) {
             throw RunInFlightException(sessionId, "session $sessionId already has a run in flight (one run per session; concurrency is a later phase)")
@@ -916,7 +917,7 @@ class SessionManager(
         // Contract 1.11.0: the turn is accepted, so it goes on the session's stream NOW -- before the
         // provider is resolved or spawned -- and therefore ahead of anything this run prints. A run that
         // then fails to start still shows what was asked, followed by why it never ran.
-        eventSink?.invoke(SessionEvent.Turn(sessionId, prompt))
+        eventSink?.invoke(SessionEvent.Turn(sessionId, prompt, origin))
         // The session's OWN provider and transport (contract 1.3.0). startNew and resume have already
         // refused an unconfigured provider; this guard only keeps a run from ever reaching another CLI.
         val target = lookup(session.provider) ?: run {

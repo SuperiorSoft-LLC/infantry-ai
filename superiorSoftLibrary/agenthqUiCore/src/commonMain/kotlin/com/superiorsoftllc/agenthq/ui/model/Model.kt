@@ -181,7 +181,7 @@ data class AgentActivity(val tool: String, val detail: String?, val at: Long) {
 }
 
 /** One rendered line of a session's transcript. Consecutive text deltas are coalesced into one line. */
-data class OutputLine(val kind: LineKind, val text: String, val at: Long)
+data class OutputLine(val kind: LineKind, val text: String, val at: Long, val origin: MessageOrigin = MessageOrigin.Owner)
 
 /**
  * One transcript entry as it arrived, and where it sits in its session's stream.
@@ -191,7 +191,7 @@ data class OutputLine(val kind: LineKind, val text: String, val at: Long)
  * now). Sequenced entries are kept in sequence order, so a replayed frame that arrives after newer live
  * frames still lands where it belongs; unsequenced entries keep their arrival position.
  */
-data class TranscriptEntry(val seq: Long?, val kind: LineKind, val text: String, val at: Long, val closed: Boolean = false)
+data class TranscriptEntry(val seq: Long?, val kind: LineKind, val text: String, val at: Long, val closed: Boolean = false, val origin: MessageOrigin = MessageOrigin.Owner)
 
 /**
  * Which of one session's sequenced frames this window has applied, so a frame is applied exactly once
@@ -449,7 +449,7 @@ internal fun render(entries: List<TranscriptEntry>): List<OutputLine> {
         when {
             joins -> out[out.lastIndex] = last!!.copy(text = last.text + e.text, at = e.at)
             e.kind == LineKind.STATUS && last?.kind == LineKind.STATUS && last.text == e.text -> Unit
-            else -> out += OutputLine(e.kind, e.text, e.at)
+            else -> out += OutputLine(e.kind, e.text, e.at, e.origin)
         }
     }
     return out
@@ -1228,7 +1228,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
         }
     }
 
-    Envelope.TURN -> s.stream(env) { a, _ -> a.withEntry(TranscriptEntry(env.sequence, LineKind.USER, env.data, now)) }
+    Envelope.TURN -> s.stream(env) { a, _ -> a.withEntry(TranscriptEntry(env.sequence, LineKind.USER, env.data, now, origin = env.origin ?: LegacyOriginAdapter.originOf(env.data))) }
         // A queued message on the stream was taken: its wait for a refusal is over.
         .let { t -> t.copy(queueSending = t.queueSending.filterValues { it.sessionId != env.sessionId || it.prompt.text != env.data }) }
 
