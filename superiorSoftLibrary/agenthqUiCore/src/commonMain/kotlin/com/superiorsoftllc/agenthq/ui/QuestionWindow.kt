@@ -1,5 +1,8 @@
 package com.superiorsoftllc.agenthq.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -9,10 +12,9 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -30,7 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -62,6 +64,8 @@ const val QUESTION_HISTORY_TAG_PREFIX = "question-history-"
 /** + the question id + "-" + the option index: an override chip on an auto-picked question. */
 const val QUESTION_OVERRIDE_TAG_PREFIX = "question-override-"
 
+private val QUESTION_DIGIT_KEYS = listOf(Key.One, Key.Two, Key.Three, Key.Four, Key.Five, Key.Six, Key.Seven, Key.Eight, Key.Nine)
+
 /** ASK-1: who asked, as the window shows it: the role and the agent (or the session when there is no agent). */
 fun questionAsker(q: OwnerQuestionView): String {
     val who = q.agentId?.takeIf { it.isNotBlank() } ?: "session ${q.sessionId.take(8)}"
@@ -69,52 +73,66 @@ fun questionAsker(q: OwnerQuestionView): String {
 }
 
 /**
- * ASK-1: the owner-question window, drawn over the WHOLE app (whatever pane is on screen) while [shown] is not empty.
- * It shows the oldest question: the asking agent, the question, one button per option with its consequence, the
- * recommended option marked with its reason, a free-text answer when the question allows one, "Later" (hide it in this
- * window; [onLater]) and "Cancel question". One click on an option answers ([onAnswer]); the window moves on when the
- * daemon's `question` push says the question is answered. While questions wait but are hidden ([waiting] > 0, nothing
- * shown), a pill in the corner brings the window back ([onShow]). Esc = Later.
+ * ASK-1: the corner pill for questions the owner cannot see inline: [hidden] open questions that are for another session
+ * or were put off with "Later". Absent when [hidden] is 0. [onShow] brings them back (and opens the asking session).
  */
 @Composable
-fun BoxScope.QuestionWindow(
+fun BoxScope.QuestionPill(hidden: Int, onShow: () -> Unit) {
+    if (hidden <= 0) return
+    Text(
+        "? $hidden ${if (hidden == 1) "question" else "questions"} waiting",
+        color = Palette.OnAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+        modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).clip(RoundedCornerShape(16.dp))
+            .background(Palette.Accent).clickable(role = Role.Button, onClickLabel = "Show the questions", onClick = onShow)
+            .padding(horizontal = 12.dp, vertical = 6.dp).testTag(QUESTION_PILL_TAG),
+    )
+}
+
+/**
+ * ASK-1: the selected session's pending owner question, inline in the chat above the Activity box. [shown] is that
+ * session's open, not-put-off questions, oldest first; the oldest is drawn, with "1 of N". It pops out when a question
+ * arrives and collapses once it is answered; with nothing pending it is not composed at all (no space, no header).
+ * One click on an option answers ([onAnswer]); keys 1-9 pick an option and Enter sends the own answer (or picks the
+ * recommended option) while the panel has focus, except while typing in the own-answer field.
+ */
+@Composable
+fun QuestionPanel(
     shown: List<OwnerQuestionView>,
-    waiting: Int,
     onAnswer: (QuestionAnswerWire) -> Unit,
     onCancel: (String) -> Unit,
     onLater: () -> Unit,
-    onShow: () -> Unit,
 ) {
-    val q = shown.firstOrNull()
-    if (q == null) {
-        if (waiting > 0) {
-            Text(
-                "? $waiting ${if (waiting == 1) "question" else "questions"} waiting",
-                color = Palette.OnAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp).clip(RoundedCornerShape(16.dp))
-                    .background(Palette.Accent).clickable(role = Role.Button, onClickLabel = "Show the questions", onClick = onShow)
-                    .padding(horizontal = 12.dp, vertical = 6.dp).testTag(QUESTION_PILL_TAG),
-            )
-        }
-        return
-    }
-    key(q.id) {
-        var other by remember { mutableStateOf("") }
-        val focus = remember { FocusRequester() }
-        LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
-        RegisterModal()
-        val blurStyle = LocalModalBlur.current.blurStyle
-        Box(
-            // The scrim takes the clicks meant for the panes behind it: a question is answered, put off, or cancelled.
-            Modifier.fillMaxSize().background(if (blurStyle) ModalScrimTint else Color(0x99000000)).clickable(onClick = {}).testTag(QUESTION_WINDOW_TAG)
-                .focusRequester(focus).focusable()
-                .onPreviewKeyEvent { e -> if (e.type == KeyEventType.KeyDown && e.key == Key.Escape) { onLater(); true } else false },
-            contentAlignment = Alignment.Center,
-        ) {
+    val current = shown.firstOrNull()
+    // The last question stays drawn while the panel animates out.
+    var last by remember { mutableStateOf(current) }
+    if (current != null) last = current
+    AnimatedVisibility(visible = current != null, enter = expandVertically(), exit = shrinkVertically()) {
+        val q = current ?: last ?: return@AnimatedVisibility
+        key(q.id) {
+            var other by remember { mutableStateOf("") }
+            var otherFocused by remember { mutableStateOf(false) }
+            val focus = remember { FocusRequester() }
+            LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+            fun send() {
+                if (otherFocused && other.isNotBlank()) onAnswer(QuestionAnswerWire(q.id, otherText = other.trim()))
+                else q.options.firstOrNull { it.label == q.recommended }?.let { onAnswer(QuestionAnswerWire(q.id, answer = it.label)) }
+            }
             val shape = RoundedCornerShape(10.dp)
+            Box(Modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = 14.dp, vertical = 8.dp).testTag(QUESTION_WINDOW_TAG)) {
             Column(
-                Modifier.widthIn(max = 560.dp).fillMaxWidth().padding(24.dp).clip(shape).background(Palette.Raised)
-                    .border(1.dp, Palette.Accent, shape).verticalScroll(rememberScrollState()).padding(16.dp),
+                Modifier.fillMaxWidth().heightIn(max = 360.dp).clip(shape).background(Palette.Raised)
+                    .border(1.dp, Palette.Accent, shape).focusRequester(focus).focusable()
+                    .onPreviewKeyEvent { e ->
+                        if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                        val digit: Int = if (otherFocused) -1 else QUESTION_DIGIT_KEYS.indexOf(e.key)
+                        when {
+                            e.key == Key.Escape -> { onLater(); true }
+                            e.key == Key.Enter -> { send(); true }
+                            digit in q.options.indices -> { onAnswer(QuestionAnswerWire(q.id, answer = q.options[digit].label)); true }
+                            else -> false
+                        }
+                    }
+                    .verticalScroll(rememberScrollState()).padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -156,7 +174,7 @@ fun BoxScope.QuestionWindow(
                         OutlinedTextField(
                             value = other, onValueChange = { other = it }, singleLine = true,
                             label = { Text("Your own answer", fontSize = 11.sp) },
-                            modifier = Modifier.weight(1f).testTag(QUESTION_OTHER_FIELD_TAG),
+                            modifier = Modifier.weight(1f).onFocusChanged { otherFocused = it.isFocused }.testTag(QUESTION_OTHER_FIELD_TAG),
                         )
                         Button(
                             onClick = { onAnswer(QuestionAnswerWire(q.id, otherText = other.trim())) }, enabled = other.isNotBlank(),
@@ -173,6 +191,7 @@ fun BoxScope.QuestionWindow(
                         Text("Later", color = Palette.Text, fontSize = 12.sp)
                     }
                 }
+            }
             }
         }
     }

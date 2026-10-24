@@ -880,6 +880,10 @@ data class AppState(
     val shownQuestions: List<com.superiorsoftllc.agenthq.ui.protocol.OwnerQuestionView>
         get() = openQuestions.filter { it.id !in dismissedQuestions }
 
+    /** ASK-1: one session's pending questions as its chat shows them inline: open, not put off, oldest first. */
+    fun shownQuestionsFor(sessionId: String): List<com.superiorsoftllc.agenthq.ui.protocol.OwnerQuestionView> =
+        shownQuestions.filter { it.sessionId == sessionId }
+
     /** ASK-1: the sessions with an open owner question (they count as needing input). */
     val openQuestionSessions: Set<String> get() = openQuestions.mapTo(HashSet()) { it.sessionId }
 

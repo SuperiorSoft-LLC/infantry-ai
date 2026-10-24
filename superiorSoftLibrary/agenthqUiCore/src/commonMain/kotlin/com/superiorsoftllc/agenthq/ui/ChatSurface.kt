@@ -308,7 +308,7 @@ fun TicketTag(a: AgentView, state: AppState, onOpen: (String) -> Unit, modifier:
 }
 
 @Composable
-internal fun OutputPane(a: AgentView?, spawnMode: Boolean, roleColor: String? = null, onStartSession: (() -> Unit)?) {
+internal fun OutputPane(a: AgentView?, spawnMode: Boolean, roleColor: String? = null, onStartSession: (() -> Unit)?, questionSlot: @Composable () -> Unit = {}) {
     if (a == null) {
         Box(Modifier.fillMaxSize(), Alignment.Center) {
             if (spawnMode) return@Box
@@ -323,7 +323,8 @@ internal fun OutputPane(a: AgentView?, spawnMode: Boolean, roleColor: String? = 
         return
     }
     if (a.output.isEmpty() && a.chatStatus(Clock.System.now().toEpochMilliseconds()) == null) {
-        Box(Modifier.fillMaxSize(), Alignment.Center) {
+      Column(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 BrandEmblem(72.dp)
                 Spacer(Modifier.height(10.dp))
@@ -336,9 +337,11 @@ internal fun OutputPane(a: AgentView?, spawnMode: Boolean, roleColor: String? = 
                 if (onStartSession != null) OutlinedButton(onClick = onStartSession) { Text("Start a session") }
             }
         }
+        questionSlot()
+      }
         return
     }
-    AgentChat(a, roleColor = roleColor)
+    AgentChat(a, roleColor = roleColor, questionSlot = questionSlot)
 }
 
 /** Test tag on the transient status row under the transcript (or in place of the empty state). */
@@ -372,7 +375,7 @@ const val ACTIVITY_LINE_TAG = "activity-line"
  * The status row sits under the last line and is absent once [AgentView.chatStatus] is null.
  */
 @Composable
-fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().toEpochMilliseconds() }, roleColor: String? = null) {
+fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().toEpochMilliseconds() }, roleColor: String? = null, questionSlot: @Composable () -> Unit = {}) {
     val list = rememberLazyListState()
     // The elapsed label must age on its own: no status frame may arrive for seconds while the agent
     // works, so a one-second ticker keeps "Thinking... 3s" counting with the transcript otherwise still.
@@ -405,6 +408,7 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
                 }
             }
         }
+        questionSlot()
         ActivityBox(agent)
     }
 }

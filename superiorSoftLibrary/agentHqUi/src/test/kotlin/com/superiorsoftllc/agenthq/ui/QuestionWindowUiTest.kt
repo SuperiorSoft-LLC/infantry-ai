@@ -37,12 +37,15 @@ class QuestionWindowUiTest {
 
     private fun stateWithQuestion(): AppState = reduce(AppState(), Envelope(Envelope.QUESTIONS, "[$openJson]"), 1)
 
-    @Test fun `a questions push opens the window with the recommended option marked`() = runDesktopComposeUiTest(900, 700) {
-        val state = stateWithQuestion()
-        assertEquals(setOf("s1"), state.openQuestionSessions)
-        setContent { Box(Modifier.fillMaxSize()) { QuestionWindow(state.shownQuestions, state.openQuestions.size, {}, {}, {}, {}) } }
+    private fun answeredJson() = openJson.replace(""""state":"open"""", """"state":"answered","answer":"sqlite","resolvedBy":"owner"""")
+
+    @Test fun `the inline panel exists only while this session has a pending question`() = runDesktopComposeUiTest(900, 700) {
+        var state by mutableStateOf(AppState())
+        setContent { QuestionPanel(state.shownQuestionsFor("s1"), {}, {}, {}) }
+        onNodeWithTag(QUESTION_WINDOW_TAG).assertDoesNotExist()
+        state = stateWithQuestion()
+        waitForIdle()
         onNodeWithTag(QUESTION_WINDOW_TAG).assertExists()
-        onNodeWithTag(QUESTION_ASKER_TAG, useUnmergedTree = true).assertExists()
         onNodeWithText("Dev · worker-1").assertExists()
         onNodeWithText("Which store?").assertExists()
         onNodeWithTag(QUESTION_OPTION_TAG_PREFIX + 0).assertExists()
@@ -52,43 +55,48 @@ class QuestionWindowUiTest {
         onNodeWithText("Why: concurrent writers").assertExists()
     }
 
-    @Test fun `one click on an option sends that label, and an answered push closes the window`() = runDesktopComposeUiTest(900, 700) {
+    @Test fun `a click answers with that label and the answered push collapses the panel`() = runDesktopComposeUiTest(900, 700) {
         var state by mutableStateOf(stateWithQuestion())
         val sent = mutableListOf<QuestionAnswerWire>()
-        setContent { Box(Modifier.fillMaxSize()) { QuestionWindow(state.shownQuestions, state.openQuestions.size, { sent += it }, {}, {}, {}) } }
+        setContent { QuestionPanel(state.shownQuestionsFor("s1"), { sent += it }, {}, {}) }
         onNodeWithTag(QUESTION_OPTION_TAG_PREFIX + 0).performClick()
         waitForIdle()
         assertEquals(listOf(QuestionAnswerWire("q1", answer = "sqlite")), sent)
-        state = reduce(state, Envelope(Envelope.QUESTION, openJson.replace(""""state":"open"""", """"state":"answered","answer":"sqlite","resolvedBy":"owner"""")), 2)
+        state = reduce(state, Envelope(Envelope.QUESTION, answeredJson()), 2)
+        mainClock.advanceTimeBy(1_000)
         waitForIdle()
         onNodeWithTag(QUESTION_WINDOW_TAG).assertDoesNotExist()
-        onNodeWithTag(QUESTION_PILL_TAG).assertDoesNotExist()
         assertTrue(state.openQuestionSessions.isEmpty())
     }
 
     @Test fun `the other field sends the owner's own text`() = runDesktopComposeUiTest(900, 700) {
         val state = stateWithQuestion()
         val sent = mutableListOf<QuestionAnswerWire>()
-        setContent { Box(Modifier.fillMaxSize()) { QuestionWindow(state.shownQuestions, 1, { sent += it }, {}, {}, {}) } }
+        setContent { QuestionPanel(state.shownQuestionsFor("s1"), { sent += it }, {}, {}) }
         onNodeWithTag(QUESTION_OTHER_FIELD_TAG).performTextInput("  mysql  ")
         onNodeWithTag(QUESTION_SEND_OTHER_TAG).performClick()
         waitForIdle()
         assertEquals(listOf(QuestionAnswerWire("q1", otherText = "mysql")), sent)
     }
 
-    @Test fun `Later hides the window behind a pill that brings it back, and Cancel sends the id`() = runDesktopComposeUiTest(900, 700) {
+    @Test fun `Later hides the panel, the pill brings it back, and Cancel sends the id`() = runDesktopComposeUiTest(900, 700) {
         var state by mutableStateOf(stateWithQuestion())
         val cancelled = mutableListOf<String>()
         setContent {
             Box(Modifier.fillMaxSize()) {
-                QuestionWindow(
-                    state.shownQuestions, state.openQuestions.size, {}, { cancelled += it },
+                QuestionPanel(
+                    state.shownQuestionsFor("s1"), {}, { cancelled += it },
                     onLater = { state = state.copy(dismissedQuestions = state.openQuestions.mapTo(HashSet()) { it.id }) },
+                )
+                QuestionPill(
+                    state.openQuestions.count { it.id in state.dismissedQuestions },
                     onShow = { state = state.copy(dismissedQuestions = emptySet()) },
                 )
             }
         }
+        onNodeWithTag(QUESTION_PILL_TAG).assertDoesNotExist()
         onNodeWithTag(QUESTION_LATER_TAG).performClick()
+        mainClock.advanceTimeBy(1_000)
         waitForIdle()
         onNodeWithTag(QUESTION_WINDOW_TAG).assertDoesNotExist()
         onNodeWithText("? 1 question waiting").assertExists()
@@ -100,6 +108,16 @@ class QuestionWindowUiTest {
         onNodeWithTag(QUESTION_CANCEL_TAG).performClick()
         waitForIdle()
         assertEquals(listOf("q1"), cancelled)
+    }
+
+    @Test fun `shownQuestionsFor is per session, skips put-off ones and keeps the oldest first`() {
+        val two = "[" + openJson.replace(""""id":"q1"""", """"id":"q0"""").replace(""""createdAt":1""", """"createdAt":0""") + "," + openJson + "," +
+            openJson.replace(""""id":"q1"""", """"id":"q9"""").replace(""""sessionId":"s1"""", """"sessionId":"s2"""") + "]"
+        val state = reduce(AppState(), Envelope(Envelope.QUESTIONS, two), 1)
+        assertEquals(listOf("q0", "q1"), state.shownQuestionsFor("s1").map { it.id })
+        assertEquals(listOf("q9"), state.shownQuestionsFor("s2").map { it.id })
+        assertTrue(state.shownQuestionsFor("s3").isEmpty())
+        assertTrue(state.copy(dismissedQuestions = setOf("q0", "q1")).shownQuestionsFor("s1").isEmpty())
     }
 
     @Test fun `the history offers an override on an auto-picked question`() = runDesktopComposeUiTest(900, 700) {
