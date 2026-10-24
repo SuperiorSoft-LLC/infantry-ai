@@ -5,7 +5,9 @@ import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class JvmPlatformHostTest {
     /** A home with no `.agenthq/daemon.port`, so no test reads the operator's real state dir. */
@@ -47,6 +49,21 @@ class JvmPlatformHostTest {
         val host = JvmPlatformHost(env = { null }, home = emptyHome)
         assertEquals("abc\n", host.readTextFile(f.absolutePath))
         assertNull(host.readTextFile(f.absolutePath + ".missing"))
+    }
+
+    /** TEST-SPEED-4: blur is on unless -Dagenthq.ui.blur=off (the UI tests' CPU renderer pays ~150 ms a frame for it). */
+    @Test fun blurIsSupportedUnlessTheBlurPropertyIsOff() {
+        val before = System.getProperty("agenthq.ui.blur")
+        try {
+            System.clearProperty("agenthq.ui.blur")
+            assertTrue(JvmPlatformHost(env = { null }, home = emptyHome).supportsBlur)
+            System.setProperty("agenthq.ui.blur", "OFF")
+            assertFalse(JvmPlatformHost(env = { null }, home = emptyHome).supportsBlur)
+            System.setProperty("agenthq.ui.blur", "on")
+            assertTrue(JvmPlatformHost(env = { null }, home = emptyHome).supportsBlur)
+        } finally {
+            if (before == null) System.clearProperty("agenthq.ui.blur") else System.setProperty("agenthq.ui.blur", before)
+        }
     }
 
     @Test fun defaultPlatformHostIsTheJvmHost() {

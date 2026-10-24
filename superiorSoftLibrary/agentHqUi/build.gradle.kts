@@ -129,6 +129,9 @@ tasks.register<JavaExec>("runSmoke") {
 // daemon's plan-limit meters off so a test never reads real credentials or calls a provider (as :agentHq does).
 tasks.withType<Test>().configureEach {
     environment("AGENTHQ_LIMITS_LIVE", "false")
+    // TEST-SPEED-4: no modal blur in the test windows (JvmPlatformHost.supportsBlur). The tests render on the CPU, where
+    // blurring the whole window cost ~150 ms a frame under every open modal; the dark scrim draws in a few ms.
+    systemProperty("agenthq.ui.blur", "off")
     // PERF-2: PackagedJvmCapsTest reads the packaged launcher's jvmArgs (the compose block below), lazily, '|'-separated (no flag contains '|').
     // BUILD-STAMP-1: the stamp's VALUE changes per commit (per minute when packaging); the test only checks it is there, so the
     // input carries a fixed placeholder and the tests stay cacheable.
