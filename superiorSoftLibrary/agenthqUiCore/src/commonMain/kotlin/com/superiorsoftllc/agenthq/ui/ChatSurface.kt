@@ -621,7 +621,7 @@ const val CARD_TITLE_TAG = "card-title"
  * [style]'s tone. Compact: one text line of header plus small padding; the body has the normal padding.
  */
 @Composable
-private fun CommsCard(style: CommsCardStyle, at: Long, body: @Composable () -> Unit) {
+fun CommsCard(style: CommsCardStyle, at: Long, body: @Composable () -> Unit) {
     val shape = RoundedCornerShape(8.dp)
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(shape).background(style.tone.body)) {
         Row(
@@ -638,13 +638,13 @@ private fun CommsCard(style: CommsCardStyle, at: Long, body: @Composable () -> U
             Text(
                 style.title, color = Palette.Text, fontWeight = FontWeight.Bold, fontSize = 11.sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false).testTag(CARD_TITLE_TAG),
+                modifier = Modifier.weight(1f).testTag(CARD_TITLE_TAG),
             )
             if (style.showTime) {
                 Text(
                     activityTimestamp(at), color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp,
                     maxLines = 1, softWrap = false, textAlign = TextAlign.End,
-                    modifier = Modifier.weight(1f).padding(start = 8.dp).testTag(CARD_TIMESTAMP_TAG),
+                    modifier = Modifier.padding(start = 8.dp).testTag(CARD_TIMESTAMP_TAG),
                 )
             }
         }
