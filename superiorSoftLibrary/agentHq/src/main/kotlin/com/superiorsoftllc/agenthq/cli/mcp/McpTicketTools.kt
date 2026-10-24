@@ -6,6 +6,7 @@ import com.superiorsoftllc.agenthq.cli.TicketPlacement
 import com.superiorsoftllc.agenthq.cli.TicketPrefixMatch
 import com.superiorsoftllc.agenthq.cli.TicketStarter
 import com.superiorsoftllc.agenthq.cli.matchTicketPrefix
+import com.superiorsoftllc.agenthq.cli.BoardSummary
 import com.superiorsoftllc.agenthq.cli.shortTicketId
 import com.superiorsoftllc.agenthq.daemon.AccessPolicy
 import com.superiorsoftllc.agenthq.protocol.Envelope
@@ -361,7 +362,8 @@ internal class McpTicketTools(
                 TicketPrefixMatch.None -> Result.failure(NoSuchElementException("no ticket '$requested' on this daemon"))
                 is TicketPrefixMatch.Ambiguous -> Result.failure(
                     IllegalArgumentException(
-                        "ticket id '$requested' is ambiguous; use the full id: ${match.tickets.joinToString(", ") { it.id }}",
+                        "ticket id '$requested' is ambiguous; use a longer id or the full id: " +
+                            match.tickets.joinToString("; ") { "${it.id} (${BoardSummary.cutTitle(it.title)})" },
                     ),
                 )
             }

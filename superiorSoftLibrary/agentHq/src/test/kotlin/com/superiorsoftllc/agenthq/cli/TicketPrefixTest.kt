@@ -73,4 +73,31 @@ class TicketPrefixTest {
         assertEquals(TicketPrefixMatch.Unique(x), matchTicketPrefix(shortTicketId(x.id), listOf(x, y)))
         assertEquals(TicketPrefixMatch.Unique(y), matchTicketPrefix(shortTicketId(y.id), listOf(x, y)))
     }
+
+    @Test
+    fun aHeadPrefixOfAnyLengthResolvesWithOrWithoutTheScheme() {
+        // ticket-91a3d988: the owner reads the id off the board's head, so a head prefix must resolve.
+        val x = ticket("ticket-1a2b3c4d", "X")
+        val y = ticket("ticket-1f000000", "Y")
+        val board = listOf(x, y)
+        assertEquals(TicketPrefixMatch.Unique(x), matchTicketPrefix("1a", board))
+        assertEquals(TicketPrefixMatch.Unique(x), matchTicketPrefix("ticket-1a", board))
+        assertEquals(TicketPrefixMatch.Unique(y), matchTicketPrefix("1f00", board))
+        assertEquals(TicketPrefixMatch.Unique(x), matchTicketPrefix("1a2b3c4d", board))
+    }
+
+    @Test
+    fun theOldTruncatedBoardIdIsAmbiguousAndListsEveryCandidate() {
+        // `ticket-1` is what the broken board printed for both: it must list them, not say "no ticket".
+        val x = ticket("ticket-1a2b3c4d", "X")
+        val y = ticket("ticket-1f000000", "Y")
+        val z = ticket("ticket-90000000", "Z")
+        val match = assertIs<TicketPrefixMatch.Ambiguous>(matchTicketPrefix("ticket-1", listOf(x, y, z)))
+        assertEquals(listOf(x, y), match.tickets)
+    }
+
+    @Test
+    fun aBlankPrefixMatchesNothing() {
+        assertEquals(TicketPrefixMatch.None, matchTicketPrefix("  ", board))
+    }
 }
