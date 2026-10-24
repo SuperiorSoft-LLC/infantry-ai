@@ -67,8 +67,7 @@ fun modelChoices(providers: List<ProviderInfo>, providerId: String?, selected: S
  */
 fun groupModels(ids: List<String>): Map<String, List<String>> =
     ids.groupBy { subProviderOf(it) }
-        .toSortedMap()
-        .mapValues { (_, models) -> models.sorted() }
+        .let { groups -> groups.keys.sorted().associateWith { groups.getValue(it).sorted() } }
 
 /** The sub-provider of ONE model id: the text before its FIRST "/", else "" when the id names none. */
 fun subProviderOf(id: String): String = if ('/' in id) id.substringBefore('/') else ""
