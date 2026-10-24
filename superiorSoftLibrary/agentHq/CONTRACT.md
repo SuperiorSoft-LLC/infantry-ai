@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.124.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.125.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,23 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+
+### What changed in 1.125.0 (MESSAGE-ORIGIN, ticket-eeab5a16) — a turn says who it came from
+
+Additive; `contract=1.125.0`. The `turn` frame gains an optional `origin`, a typed `MessageOrigin`. Absent means the owner, so a
+frame from an older daemon, and every owner turn, is byte-for-byte what it was.
+
+- Wire (`Envelope.origin`, omitted when null): `{"type":"owner"}`, `{"type":"agent","sessionId":..,"agentId":..,"role":..}`
+  (agentId / role optional), `{"type":"external","senderLabel":..,"channel":..}`, `{"type":"system","kind":"handover"}`
+  (`handover`, `slash_command`, `scheduler`, `mail`).
+- The daemon sets it where the turn is created (mail: `MailSource`; handover and slash commands: `System`); a client never infers
+  it from text. The `[Infantry AI COMMS] ...` header the model reads is only the harness-facing rendering, written in one place
+  (`MailSource.render`); nothing downstream parses it.
+- Clients render from the origin alone, in one file (`OriginRenderer.kt`, agenthqUiCore): owner as before; agent = that role's
+  portrait and role name; external / system = the sender label only. CLI `logs` and the MCP session transcript print
+  `[turn from architect (dd062cba)]` from the same `MessageOrigin.label()`.
+- Transcripts recorded before 1.125.0 carry only the header text; one isolated client adapter (`LegacyOriginAdapter`, marked for
+  removal) maps them. Nothing else matches on turn text.
 
 ### What changed in 1.124.0 (USAGE-AUTO, ticket-8d3838fd) — usage refreshes itself
 
