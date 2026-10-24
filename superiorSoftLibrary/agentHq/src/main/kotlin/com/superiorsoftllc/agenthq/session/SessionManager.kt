@@ -361,8 +361,26 @@ class SessionManager(
         val current = sessions[sessionId] ?: return null
         if (report.op == "get") return current
         ProgressReducer.apply(current.progress, report, clock()) // validate outside the lock, so a bad report changes nothing
-        return update(sessionId) { it.copy(progress = ProgressReducer.apply(it.progress, report, clock())) }
+        var finished: SessionProgress? = null
+        val next = update(sessionId) { r ->
+            var p = ProgressReducer.apply(r.progress, report, clock())
+            // PROGRESS-S5: an opted-in estimated job gets its label's past duration; a done one becomes history.
+            if (p != null && p.estimated == true && p.mode == "indeterminate") {
+                val label = p.label
+                if (p.state == SessionProgress.RUNNING && p.estimateMs == null && label != null) {
+                    p = p.copy(estimateMs = progressEstimates.estimate(r.projectId, label))
+                } else if (p.state == SessionProgress.DONE && r.progress?.state == SessionProgress.RUNNING) {
+                    finished = p
+                }
+            }
+            r.copy(progress = p)
+        }
+        if (next != null) finished?.let { f -> f.label?.let { progressEstimates.record(next.projectId, it, f.updatedAt - f.startedAt) } }
+        return next
     }
+
+    /** PROGRESS-S5: past durations for the opt-in estimated mode. The daemon sets a file-backed one in its state dir. */
+    @Volatile var progressEstimates: ProgressEstimates = InMemoryProgressEstimates()
 
     /** The wrapper's command ended: drop the job. */
     fun bgJobDone(sessionId: String, jobId: String) {

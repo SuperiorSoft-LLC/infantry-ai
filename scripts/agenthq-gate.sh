@@ -3,6 +3,10 @@
 # Usage: scripts/agenthq-gate.sh [--full] <commit-or-branch>   (see docs/GATE.md)
 #   --full: the promotion run. Nothing from the build cache (--no-build-cache): every module compiles fresh, once.
 # Env: GATE_MIN_FREE_GB (default 5), GATE_LOCK (lock dir), GATE_KEEP=1 keeps the worktree.
+# Progress (Infantry AI, docs/PROGRESS.md): the stages are declared as `##infantry plan/step` marker lines, read when the
+# gate runs under `agenthq run` (which sets AGENTHQ_PROGRESS_PIPE=1). Otherwise, when `agenthq` is on PATH, the same
+# reports go out through `agenthq progress`. The test totals are reported once, as a count, after the last stage.
+# Outside Infantry AI all of this is inert: the markers are plain lines and `agenthq progress` does nothing.
 
 set -u
 FULL=""
@@ -76,7 +80,23 @@ failing() {
   done | sort -u
 }
 
-SUMMARY=""; FAILED=0; FAILNAMES=""
+# --- progress: a marker line always; a direct report only when nothing reads the markers and the CLI exists ---
+STAGES="agentHq uiCore agentHqUi ownerSmoke"
+direct_progress() { [ -z "${AGENTHQ_PROGRESS_PIPE:-}" ] && command -v agenthq >/dev/null 2>&1; }
+progress() { # verb args... (CLI form)
+  direct_progress && agenthq progress "$@" >/dev/null 2>&1 || true
+}
+progress_plan() {
+  echo "##infantry plan $(echo $STAGES | tr ' ' '|')"
+  # shellcheck disable=SC2086
+  progress plan $STAGES --label "gate $(echo "$SHA" | cut -c1-8)"
+}
+progress_step() { echo "##infantry step $1"; progress step "$1"; }
+progress_count() { echo "##infantry count $1 $2 $3"; progress count "$1" "$2" "$3"; }
+progress_end() { echo "##infantry $1 $2"; progress "$1" "$2"; }
+
+SUMMARY=""; FAILED=0; FAILNAMES=""; TOTAL_TESTS=0; TOTAL_BAD=0
+progress_plan
 stage() { # name gradle-task project-dir
   name=$1; task=$2; dir=$3
   if ! check_disk; then SUMMARY="$SUMMARY $name=ABORT(disk)"; FAILED=1; return; fi
@@ -91,6 +111,8 @@ stage() { # name gradle-task project-dir
   [ -n "$names" ] && FAILNAMES="$FAILNAMES [$name: $names]"
   note "stage $name: rc=$rc tests=$1 skipped=$2 failures=$3 errors=$4 $verdict"
   SUMMARY="$SUMMARY $name=$verdict($1 tests,$3 fail,$4 err)"
+  TOTAL_TESTS=$((TOTAL_TESTS + $1)); TOTAL_BAD=$((TOTAL_BAD + $3 + $4))
+  progress_step "$name"
   sync; sleep 2   # let file handles from the finished JVM release before the next stage
 }
 
@@ -100,5 +122,7 @@ stage agentHqUi     :superiorSoftLibrary:agentHqUi:test          superiorSoftLib
 stage ownerSmoke    :superiorSoftLibrary:agentHqUi:ownerSmoke    superiorSoftLibrary/agentHqUi/build/test-results/ownerSmoke
 
 if [ $FAILED -eq 0 ]; then R=PASS; else R=FAIL; fi
+progress_count $((TOTAL_TESTS - TOTAL_BAD)) "$TOTAL_TESTS" "tests passed ($TOTAL_BAD failed)"
+if [ $FAILED -eq 0 ]; then progress_end done "gate PASS"; else progress_end fail "gate FAIL"; fi
 echo "GATE $R $SHA${FULL:+ (full)}:$SUMMARY${FAILNAMES:+ failing:$FAILNAMES} logs=$OUT"
 [ $FAILED -eq 0 ]
