@@ -19,7 +19,14 @@ class AndroidPlatformHost(
     private val uiPrefs: KeyValueStore? = null,
     /** BUILD-STAMP-1: the APK's versionName, which agentHqAndroid/build.gradle.kts sets to the whole build string. */
     override val appBuild: String? = null,
+    /** Incoming-comms sound: MediaPlayer, the app-private copy of the owner's mp3, and the system document picker. */
+    override val soundPlayer: com.superiorsoftllc.agenthq.ui.sound.SoundPlayer? = null,
+    override val customSoundStore: com.superiorsoftllc.agenthq.ui.sound.CustomSoundStore? = null,
+    private val soundPicker: ((onPicked: (PickedImage?) -> Unit) -> Unit)? = null,
 ) : PlatformHost {
+    override val canPickSound: Boolean get() = soundPicker != null
+    override fun pickSound(onPicked: (PickedImage?) -> Unit) { soundPicker?.invoke(onPicked) ?: onPicked(null) }
+
     override fun uiPref(key: String): String? = uiPrefs?.get(key)
     override fun saveUiPref(key: String, value: String) { uiPrefs?.put(key, value) }
 
