@@ -315,6 +315,7 @@ fun main() {
         exitProcess(2)
     }
     println("[agentHq] access: ${daemon.policy.describe()}")
+    println("[agentHq] web: ${daemon.webBundle.describe()}")
     println(
         AgentHqBin.resolve()?.let { "[agentHq] sessions get the agenthq CLI on PATH from $it" }
             ?: "[agentHq] WARNING: agenthq CLI not found (run installDist or set AGENTHQ_BIN); sessions cannot run `agenthq knowledge`",
@@ -364,6 +365,8 @@ class AgentHqDaemon(
     val server: EmbeddedServer<*, *>,
     /** Who may connect, decided at startup. Read by [main] for the banner; see [AccessPolicy]. */
     val policy: AccessPolicy,
+    /** WEB-1 (contract 1.122.0): the browser client bundle served at `/`; read by [main] for the banner. */
+    val webBundle: WebBundle,
     /** Contract 1.4.0: the agent profiles a spawn can name, stored in [store]. */
     val agents: AgentProfiles,
     /** Contract 1.5.0: the backlog, stored in [store]; every change it commits is pushed to every client. */
@@ -600,6 +603,8 @@ class AgentHqDaemon(
             assistantDir: File = File(stateDir(), "assistant"),
             /** TICKET-HANDOVER: how long a switched ticket worker's old agent gets to write its handoff note. */
             handoffTimeoutMs: Long = SessionHandover.DEFAULT_TIMEOUT_MS,
+            /** WEB-1 (contract 1.122.0): the browser client bundle served at `/` (none when it is not installed). */
+            webBundle: WebBundle = WebBundle.load(WebBundle.locate()),
         ): AgentHqDaemon {
             val policy = AccessPolicy.of(host, token)
             // PORT-1: FIRST, because the mail base and every session's AGENTHQ_URL below carry the port.
@@ -1171,7 +1176,7 @@ class AgentHqDaemon(
                 install(WebSockets)
                 install(ContentNegotiation) { json() }
                 // Before routing, so a refused request never reaches a handler (the mailbox included).
-                installAccessPolicy(policy)
+                installAccessPolicy(policy, webBundle::isAsset)
                 routing {
                     get("/health") {
                         call.respond(
@@ -1202,6 +1207,8 @@ class AgentHqDaemon(
                     // P9.6: signature-admitted webhook ingress (exempt from the bearer in AccessPolicy, signed per hook).
                     hookRoutes(WebhookIngress(triggers))
                     extraRoutes()
+                    // WEB-1: the browser client, one exact route per bundle file (no path resolution, nothing to traverse).
+                    webBundleRoutes(webBundle)
                     webSocket("/ws") {
                         handleConnection(
                             this,
@@ -1297,6 +1304,7 @@ class AgentHqDaemon(
                 clients = clients,
                 server = server,
                 policy = policy,
+                webBundle = webBundle,
                 agents = agents,
                 board = board,
                 attention = attention,

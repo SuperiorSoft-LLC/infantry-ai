@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.124.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.123.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -105,12 +105,30 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
 
-### What changed in 1.124.0 (PROGRESS-COUNTDOWN, ticket-564d0e01) — the progress meter always counts down
+### What changed in 1.123.0 (PROGRESS-COUNTDOWN, ticket-564d0e01) — the progress meter always counts down
 
-Additive; `contract=1.124.0`. The meter never shows a bare elapsed timer: a running job shows percent + time left, "over estimate by N", or (no number, no history) its label + "last output Ns ago".
+Additive; `contract=1.123.0`. The meter never shows a bare elapsed timer: a running job shows percent + time left, "over estimate by N", or (no number, no history) its label + "last output Ns ago".
 - `SessionProgress` gains `labelStartedAt` (when the current label / step began), `estimateMs` + `estimateSource` (`worker` | `learned`; omitted = no estimate yet), `lastOutputAt` (newest report or `--watch` heartbeat). `ProgressReport` gains `estimateMs` and the op `output` (heartbeat: sets `lastOutputAt` only).
 - The daemon learns: every label that ends normally (a status label change, a finished step, `done`; a failure is not recorded; under 1 s is ignored) records its duration per project in `progress-estimates.json` (last 20 per label, median = the default estimate for the next run of that label). The worker's own `estimateMs` (marker `##infantry eta <seconds> [label]`) wins over it.
 - Rule: a counter's percent wins (time left = pace so far, only after 2 s); else a time estimate (percent = elapsed/estimate capped 99, "~2m left", then "over estimate by 1m"); else nothing ("no estimate yet" + last output). `agenthq progress --watch` sends an `output` heartbeat every 5 s of output that changed nothing.
+
+### What changed in 1.122.0 (WEB-1) — the browser client, served by the daemon
+
+ADDITIVE; a 1.121.0 client keeps working. The `ready` frame reports `contract=1.122.0`.
+- **Bundle at `/`.** The daemon serves the browser (Kotlin/WASM) client from its own port: `GET /` is `index.html`, and every
+  file of the bundle is one exact `GET` route, listed once at startup (no path resolution, so `..`, encoded slashes and
+  symlinks out of the folder are never served). The bundle is found at `AGENTHQ_WEB_DIR`, else `<AGENTHQ_APP_HOME>/web`
+  (headless archive, Docker), else the desktop app's `resources/web`. Without a bundle `GET /` is 404 with a one-line note.
+  Bundle files need no token (they hold no data); a tokenless loopback daemon still checks Host, a token daemon asks for an
+  allowlisted Host, and an Origin, when sent, must be same-origin.
+- **Browser admission on `/ws` only.** A request carrying an Origin is still refused everywhere except `/ws` (and the bundle).
+  On `/ws` a browser is admitted only when ALL hold: the daemon has a bearer token (a tokenless loopback daemon refuses every
+  browser); the Host names an allowlisted host (`localhost`, `127.0.0.1`, `::1`, the bind host or, bound to the wildcard,
+  the machine's own interface addresses, plus `AGENTHQ_WEB_HOSTS`, comma-separated); the Origin is exactly
+  `http(s)://<that Host>`; and the bearer matches (constant-time, as before).
+- **Subprotocol bearer.** A browser WebSocket cannot set `Authorization`, so on `/ws` the token may also arrive as the
+  `Sec-WebSocket-Protocol` value `agenthq.bearer.<base64url(token), no padding>`, offered together with `agenthq`. The
+  daemon answers `Sec-WebSocket-Protocol: agenthq`; it never echoes the bearer protocol. The token never goes in a URL.
 
 ### What changed in 1.121.0 (USAGE-PACE S2+S3, ticket-2d954bda) — manual usage, allowance override, pacing rule; ticket starts are paced
 
@@ -188,7 +206,7 @@ ADDITIVE; a 1.117.0 client keeps working. The `ready` frame reports `contract=1.
 ADDITIVE; a 1.115.0 client keeps working (the new key is ignored on decode). The `ready` frame reports `contract=1.117.0`.
 (1.116.0 is claimed by a parallel ticket.)
 
-- **`SessionRecord.progress`** (omitted when none): the agent's OWN measurement of its long job; since 1.124.0 also a countdown (see that section).
+- **`SessionRecord.progress`** (omitted when none): the agent's OWN measurement of its long job; since 1.123.0 also a countdown (see that section).
 
 | Key | Type | Meaning |
 |---|---|---|

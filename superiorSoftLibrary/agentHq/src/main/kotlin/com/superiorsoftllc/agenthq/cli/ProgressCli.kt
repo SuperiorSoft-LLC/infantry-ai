@@ -300,7 +300,7 @@ internal object ProgressCli {
             var sent = false
             for (r in readers) r.read(text, reporter.current).forEach { reporter.submit(it); sent = true }
             if (sent) lastSent = now
-            // 1.124.0: a job whose report did not change still shows it is alive ("last output Ns ago").
+            // 1.123.0: a job whose report did not change still shows it is alive ("last output Ns ago").
             else if (now - lastSent >= ProgressCli.HEARTBEAT_MS && reporter.current?.state == SessionProgress.RUNNING) {
                 reporter.submit(ProgressReport("output"))
                 lastSent = now
@@ -351,7 +351,7 @@ internal object ProgressMarkers {
             "status" -> rest.filter { it != "--estimate" }.joinToString(" ").ifBlank { null }
                 ?.let { ProgressReport("status", label = it, estimate = if ("--estimate" in rest) true else null) }
             "estimate" -> tail?.let { ProgressReport("status", label = it, estimate = true) }
-            // 1.124.0: ##infantry eta <seconds> [label...]  (an indeterminate step the worker expects to take that long)
+            // 1.123.0: ##infantry eta <seconds> [label...]  (an indeterminate step the worker expects to take that long)
             "eta" -> rest.firstOrNull()?.toLongOrNull()?.takeIf { it > 0 }?.let {
                 ProgressReport("status", label = rest.drop(1).joinToString(" ").ifBlank { null }, estimateMs = it * 1000)
             }

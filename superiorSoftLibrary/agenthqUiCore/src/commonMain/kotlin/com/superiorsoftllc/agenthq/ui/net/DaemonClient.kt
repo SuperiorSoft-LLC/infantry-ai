@@ -58,7 +58,7 @@ open class DaemonClient(private val scope: CoroutineScope) {
     private var lastUrl: String? = null
     private var lastToken: String? = null
 
-    fun connect(url: String, token: String?) {
+    open fun connect(url: String, token: String?) {
         disconnect()
         lastUrl = url
         lastToken = token
@@ -73,7 +73,7 @@ open class DaemonClient(private val scope: CoroutineScope) {
         if (state == ConnState.RECONNECTING && job?.isActive == true) wake.trySend(Unit) else if (!live.value) connect(url, lastToken)
     }
 
-    fun disconnect() {
+    open fun disconnect() {
         job?.cancel()
         job = null
         live.value = false
@@ -105,7 +105,15 @@ open class DaemonClient(private val scope: CoroutineScope) {
             attempt++
             try {
                 val current = http.webSocketSession(urlString = url) {
-                    if (token != null) header(HttpHeaders.Authorization, "Bearer $token")
+                    if (token != null) {
+                        if (tokenAsSubprotocol) {
+                            // Two values, so the Js engine passes two protocols (one comma-joined string is invalid).
+                            header(HttpHeaders.SecWebSocketProtocol, WEB_PROTOCOL)
+                            header(HttpHeaders.SecWebSocketProtocol, bearerSubprotocol(token))
+                        } else {
+                            header(HttpHeaders.Authorization, "Bearer $token")
+                        }
+                    }
                 }
                 socket.value = current
                 val reason = receive(current)

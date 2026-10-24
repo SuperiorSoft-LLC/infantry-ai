@@ -48,7 +48,7 @@ data class SessionProgress(
     /** The newest report; a client reads "no update for N min" against it. */
     val updatedAt: Long,
     /**
-     * Contract 1.124.0 (additive): when the current label / step began (the clock a time estimate counts from), the
+     * Contract 1.123.0 (additive): when the current label / step began (the clock a time estimate counts from), the
      * time the current label is expected to take and where that number came from (`worker` = the agent said so,
      * `learned` = the daemon's rolling median for this project and label; null = no estimate yet), and when output was
      * last seen (a report or a `--watch` heartbeat), the "alive" signal of a job with no number at all.
@@ -71,7 +71,7 @@ data class SessionProgress(
  * One `progress` request (the CLI, a marker line and the MCP tool all build this). [op] is
  * `percent` (percent, label), `plan` (steps or count, label), `step` (step = the one that just completed, or null for
  * "the current one"), `bytes` / `count` (done, total, label), `status` (label: indeterminate), `done`, `fail` (label =
- * the reason), `clear`, `output` (1.124.0: the job printed something, nothing else changed) or `get` (no change, answers the current value).
+ * the reason), `clear`, `output` (1.123.0: the job printed something, nothing else changed) or `get` (no change, answers the current value).
  */
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
@@ -86,7 +86,7 @@ data class ProgressReport(
     val total: Long? = null,
     /** PROGRESS-S5: on `status`, opt in to an estimate from past runs of the same label (never the default). */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val estimate: Boolean? = null,
-    /** Contract 1.124.0: how long the current label / step should take, in ms (the worker's own estimate). */
+    /** Contract 1.123.0: how long the current label / step should take, in ms (the worker's own estimate). */
     val estimateMs: Long? = null,
 )
 

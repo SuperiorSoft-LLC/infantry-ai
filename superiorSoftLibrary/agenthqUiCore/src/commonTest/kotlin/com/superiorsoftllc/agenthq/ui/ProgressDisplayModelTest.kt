@@ -70,7 +70,7 @@ class ProgressDisplayModelTest {
     }
 
     @Test fun `an estimate reads as percent and time left on a hatched bar, an overrun says so`() {
-        val p = ProgressView(mode = "indeterminate", label = "gate", estimated = true, estimateMs = 12 * min, startedAt = 0, updatedAt = 3 * min)
+        val p = ProgressView(mode = "indeterminate", label = "gate", estimated = true, estimateMs = 12 * min, estimateSource = "learned", startedAt = 0, updatedAt = 3 * min)
         val d = progressDisplay(p, now = 3 * min, staleMin = 30)
         assertTrue(d.estimated)
         assertEquals(0.25f, d.fraction)
@@ -79,7 +79,7 @@ class ProgressDisplayModelTest {
         val over = progressDisplay(p, now = 20 * min, staleMin = 30)
         assertEquals(0.99f, over.fraction, "an overrun never reads as complete")
         assertEquals("over estimate by 8m", over.headline)
-        val first = progressDisplay(p.copy(estimated = null, estimateMs = null, updatedAt = 0), now = 42_000)
+        val first = progressDisplay(p.copy(estimated = null, estimateMs = null, estimateSource = null, updatedAt = 0), now = 42_000)
         assertNull(first.fraction, "no history: a shimmer, no number")
         assertEquals(false, first.estimated)
         assertEquals("no estimate yet", first.headline)

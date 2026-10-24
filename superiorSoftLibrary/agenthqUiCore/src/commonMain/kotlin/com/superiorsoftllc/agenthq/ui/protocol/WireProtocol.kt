@@ -1037,7 +1037,7 @@ data class ProgressView(
     val estimateMs: Long? = null,
     val startedAt: Long = 0,
     val updatedAt: Long = 0,
-    /** 1.124.0: the countdown inputs; see the daemon's SessionProgress. */
+    /** 1.123.0: the countdown inputs; see the daemon's SessionProgress. */
     val labelStartedAt: Long? = null,
     val estimateSource: String? = null,
     val lastOutputAt: Long? = null,

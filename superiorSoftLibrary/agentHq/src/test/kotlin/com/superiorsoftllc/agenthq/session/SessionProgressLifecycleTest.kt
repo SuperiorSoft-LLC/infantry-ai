@@ -124,7 +124,7 @@ class SessionProgressLifecycleTest {
         m.reportProgress(s.id, ProgressReport("status", label = "plain"))
         now += 1_000
         m.reportProgress(s.id, ProgressReport("done"))
-        assertEquals(1_000, history.estimate(null, "plain"), "1.124.0: every labelled job teaches its label, opted in or not")
+        assertEquals(1_000, history.estimate(null, "plain"), "1.123.0: every labelled job teaches its label, opted in or not")
     }
 
     @Test fun `a daemon start clears every persisted report, orphaned or not`() {

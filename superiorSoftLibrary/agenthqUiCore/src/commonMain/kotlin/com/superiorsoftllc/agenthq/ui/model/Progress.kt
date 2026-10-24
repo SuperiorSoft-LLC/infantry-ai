@@ -64,7 +64,7 @@ fun progressDisplay(p: ProgressView, now: Long, staleMin: Int = PROGRESS_STALE_D
         if (running && eta?.noEstimate == true) add("last output ${formatElapsed(now - (p.lastOutputAt ?: p.updatedAt))} ago")
         if (tone == ProgressTone.Stale) add("no update for ${quietMs / 60_000} min")
     }.joinToString(" · ")
-    return ProgressDisplay(fraction, head, detail, tone, estimated = eta != null && eta.percent != null && p.estimateMs != null && !(p.mode != "indeterminate" && p.percent != null))
+    return ProgressDisplay(fraction, head, detail, tone, estimated = eta != null && eta.percent != null && p.estimateSource != null && !(p.mode != "indeterminate" && p.percent != null))
 }
 
 /** The countdown of a running job; mirrors the daemon's ProgressReducer.eta so every surface says the same thing. */

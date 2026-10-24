@@ -1,6 +1,5 @@
 package com.superiorsoftllc.agenthq.ui
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,11 +9,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,7 +62,7 @@ fun ProcessesBadge(state: AppState, controller: Controller, modifier: Modifier =
         val alarm = ProcessWatchView.alarming(state.processReport)
         Text(
             if (alarm) "   ⚠ $text" else "   $text", color = if (alarm) Palette.Accent else Palette.Muted, fontSize = 11.sp, maxLines = 1,
-            modifier = modifier.testTag(PROCESSES_BADGE_TAG).handCursor().clickable(role = Role.Button) {
+            modifier = modifier.testTag(PROCESSES_BADGE_TAG).clickable(role = Role.Button) {
                 open = true
             },
         )
