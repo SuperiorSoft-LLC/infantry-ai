@@ -144,7 +144,7 @@ class SessionHost(
         }
         process.onExit { code -> onProcessExit(slot, code) }
         val model = request.model?.takeIf { it.isNotBlank() } ?: runCatching { provider.defaultModel() }.getOrNull() ?: "default"
-        events.bootLine(sessionId, "↻ session $verb (${adapter.label} · $model)")
+        events.bootLine(sessionId, "* session $verb (${adapter.label} · $model)")
         process.pid?.let { events.activity(sessionId, "the ${adapter.label} process is pid $it") }
         if (raced.abortRequested) {
             slot.idleSince = clock()
@@ -187,7 +187,7 @@ class SessionHost(
      * BUG-M2-11f (plan section 8): stop every kept process that has been idle [LifecyclePolicy.keepAliveMinutes] or
      * longer, on the host clock; 0 stops every kept process. Quietly: an idle stop is the host's own decision, so there is
      * NO chat line and NO [HostEvents.processExited] (`exit` frame), only an Activity detail; the next prompt launches
-     * and resumes ("↻ session resumed"). A handle with no OS process (one-shot) is left alone: it holds nothing.
+     * and resumes ("* session resumed"). A handle with no OS process (one-shot) is left alone: it holds nothing.
      * Returns the sessions it stopped.
      */
     fun stopIdle(): List<String> {

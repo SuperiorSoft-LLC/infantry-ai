@@ -10,10 +10,10 @@ import kotlin.math.roundToInt
  * so they are tested without a window. The daemon validates every change again; this only catches typos early.
  */
 object PacingView {
-    /** "<60% → 3 · <80% → 2 · else → 1", or "off". */
+    /** "<60% -> 3 · <80% -> 2 · else -> 1", or "off". */
     fun ruleText(rule: PacingRule): String =
         if (!rule.enabled) "off" else rule.tiers.joinToString(" · ") { t ->
-            (t.below?.let { "<${num(it)}%" } ?: "else") + " → ${t.workers}"
+            (t.below?.let { "<${num(it)}%" } ?: "else") + " -> ${t.workers}"
         }
 
     /** The editable form, "60:3, 80:2, 1". */

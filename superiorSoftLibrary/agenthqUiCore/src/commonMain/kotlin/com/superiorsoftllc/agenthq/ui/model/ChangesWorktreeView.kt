@@ -72,8 +72,8 @@ fun worktreeHeader(status: ProjectGitWorktreeStatus?): WorktreeHeader? {
     val base = status.base.let { if (FULL_SHA.matches(it)) it.take(8) else it }
     return WorktreeHeader(
         branch = status.branch ?: status.head?.let { "detached @ ${it.take(8)}" } ?: "no commit yet",
-        ahead = status.ahead?.takeIf { counted }?.let { "↑$it" },
-        behind = status.behind?.takeIf { counted }?.let { "↓$it" },
+        ahead = status.ahead?.takeIf { counted }?.let { "+$it" },
+        behind = status.behind?.takeIf { counted }?.let { "-$it" },
         base = if (counted) "vs $base" else "no base",
         uncommitted = if (status.uncommitted == 0) "clean" else "${status.uncommitted} uncommitted",
     )

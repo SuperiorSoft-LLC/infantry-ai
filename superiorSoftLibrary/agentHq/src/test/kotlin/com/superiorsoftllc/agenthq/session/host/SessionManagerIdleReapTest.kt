@@ -40,7 +40,7 @@ class SessionManagerIdleReapTest {
         idleSweepMs = 0,
     ).also { it.eventSink = { e -> events += e } }
 
-    private fun boots() = synchronized(events) { events.filterIsInstance<SessionEvent.Stderr>().map { it.line }.filter { it.contains("↻") } }
+    private fun boots() = synchronized(events) { events.filterIsInstance<SessionEvent.Stderr>().map { it.line }.filter { it.contains("*") } }
 
     private fun onDisk(id: String): SessionRecord = JsonSessionStore(storeFile).load().single { it.id == id }
 
@@ -65,12 +65,12 @@ class SessionManagerIdleReapTest {
         assertNull(stopped.keptProcess)
         assertNull(onDisk(session.id).keptProcess, "and cleared on disk, so a restart has nothing to reap")
         assertTrue(synchronized(events) { events.filterIsInstance<SessionEvent.ProcessExit>().isEmpty() }, "no `exit` frame")
-        assertEquals(listOf("[agenthq] ↻ session started (fake-harness · m1)"), boots(), "no chat line")
+        assertEquals(listOf("[agenthq] * session started (fake-harness · m1)"), boots(), "no chat line")
 
         manager.resume(session.id, "two")
         assertEquals(2, adapter.launches.size)
         assertEquals("fake-provider-session", adapter.launches.last().resumeSessionId)
-        assertEquals("[agenthq] ↻ session resumed (fake-harness · m1)", boots().last())
+        assertEquals("[agenthq] * session resumed (fake-harness · m1)", boots().last())
     }
 
     @Test

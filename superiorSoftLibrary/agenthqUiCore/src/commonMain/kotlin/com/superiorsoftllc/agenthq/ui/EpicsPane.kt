@@ -184,7 +184,7 @@ private fun EpicTicketRow(t: Ticket, live: Boolean, onMove: (id: String, status:
         FlowRow(Modifier.padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             MOVE_TARGETS.filter { it != t.status }.forEach { target ->
                 OutlinedButton(onClick = { onMove(t.id, target) }, enabled = live, modifier = Modifier.testTag("move-${t.id}-$target")) {
-                    Text("→ ${COLUMN_LABELS[target] ?: target}", fontSize = 10.sp)
+                    Text("-> ${COLUMN_LABELS[target] ?: target}", fontSize = 10.sp)
                 }
             }
         }

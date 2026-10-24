@@ -23,7 +23,7 @@ import kotlin.test.fail
  * BUG-M2-11e (plan section 3.2 / 6.4): a config-file (descriptor) harness has no persistent mode, so it goes through the
  * same SessionHost as every harness on the one-shot fallback, with keep-alive ON as well as OFF. No harness-specific code:
  * the descriptor provider is a plain [HarnessProvider] over a [DescriptorHarness], and the host picks its adapter.
- * Two prompts give ONE `↻ session started` chat line naming the descriptor's id, no per-turn plumbing in chat (it is in
+ * Two prompts give ONE `* session started` chat line naming the descriptor's id, no per-turn plumbing in chat (it is in
  * Activity, where nothing shows in a console) and no raw `exit` frame, because no hosted process ended unasked.
  */
 class DescriptorSessionHostTest {
@@ -88,9 +88,9 @@ class DescriptorSessionHostTest {
         awaitFinished(2)
 
         val chat = chat()
-        val boots = chat.filter { it.contains("↻") }
+        val boots = chat.filter { it.contains("*") }
         assertEquals(1, boots.size, "one boot line for two one-shot turns: $chat")
-        assertTrue(boots.single().startsWith("[agenthq] ↻ session started (echo-cli"), "the line names the descriptor: $boots")
+        assertTrue(boots.single().startsWith("[agenthq] * session started (echo-cli"), "the line names the descriptor: $boots")
         assertTrue(chat.none { it.startsWith("[agenthq] starting ") || it.startsWith("[agenthq] process started") }, "$chat")
 
         val rawExits = synchronized(events) { events.filterIsInstance<SessionEvent.Exit>().filter { it.processExited && it.code != null } }

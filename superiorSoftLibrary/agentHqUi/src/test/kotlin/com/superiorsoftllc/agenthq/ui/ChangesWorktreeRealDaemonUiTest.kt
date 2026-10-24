@@ -177,8 +177,8 @@ class ChangesWorktreeRealDaemonUiTest {
             onNodeWithTag("worktree-select").assert(hasText("this session", substring = true))
 
             // 2. The branch and its ahead/behind count against its base, plus the uncommitted count.
-            onNodeWithTag("changes-ahead").assertTextEquals("↑2")
-            onNodeWithTag("changes-behind").assertTextEquals("↓0")
+            onNodeWithTag("changes-ahead").assertTextEquals("+2")
+            onNodeWithTag("changes-behind").assertTextEquals("-0")
             onNodeWithTag("changes-base").assertTextEquals("vs main")
             onNodeWithTag("changes-uncommitted").assertTextEquals("1 uncommitted")
 

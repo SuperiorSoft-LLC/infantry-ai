@@ -203,7 +203,7 @@ class DaemonIntegrationTest {
         val lines = transcript(second, id)
         assertEquals(listOf("hello agent", "and a follow-up?"), lines.filter { it.first == LineKind.USER }.map { it.second }, "each turn once")
         // Contract 1.64.0 (BUG-M2-11b-1) supersedes UI-BOOT-1 / UI-LOG-1 / RESUME-1's per-turn lines: the session's ONE
-        // launch shows ONE boot LOG (`↻ session started`) ahead of the first reply, a turn that reuses it shows none, and
+        // launch shows ONE boot LOG (`* session started`) ahead of the first reply, a turn that reuses it shows none, and
         // no turn shows a process-exit notice (a one-shot turn's end is `finished`). Each run keeps its own stderr LOG.
         assertEquals(
             listOf(
@@ -212,7 +212,7 @@ class DaemonIntegrationTest {
             ),
             lines.map { it.first }.filter { it != LineKind.STATUS },
         )
-        assertTrue(lines.first { it.first == LineKind.LOG }.second.contains("↻ session started (stub"), "the one boot line: $lines")
+        assertTrue(lines.first { it.first == LineKind.LOG }.second.contains("* session started (stub"), "the one boot line: $lines")
         assertEquals(1, second.agents.size, "a follow-up never forks a new agent")
         val settled = until("the session at rest after two runs", c) { s ->
             s.agents.getValue(id).session.let { it.runCount == 2 && it.state == SessionState.IDLE }

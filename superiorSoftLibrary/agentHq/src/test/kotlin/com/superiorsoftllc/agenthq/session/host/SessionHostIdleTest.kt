@@ -63,14 +63,14 @@ class SessionHostIdleTest {
         assertFalse(kept.isAlive, "the idle process is stopped")
         assertFalse(host.hasProcess("s1"), "isProcessAlive: false")
         assertEquals(emptyList(), events.of("exit"), "an idle stop is the host's own decision: NO `exit` frame")
-        assertEquals(listOf("↻ session started (fake-harness · m1)"), events.of("chat"), "and NO chat line")
+        assertEquals(listOf("* session started (fake-harness · m1)"), events.of("chat"), "and NO chat line")
         assertTrue("stopped the fake-harness process after 30 idle minutes" in events.of("activity"), "${events.log}")
         assertEquals(listOf("COMPLETED code=0 processExited=false"), events.of("end"), "no turn was touched")
 
         prompt(text = "two", resume = "prov-1")
         assertEquals(2, adapter.launches.size, "the next prompt launches")
         assertEquals("prov-1", adapter.launches.last().resumeSessionId, "and resumes the provider session")
-        assertEquals("↻ session resumed (fake-harness · m1)", events.of("chat").last())
+        assertEquals("* session resumed (fake-harness · m1)", events.of("chat").last())
     }
 
     @Test
@@ -149,7 +149,7 @@ class SessionHostIdleTest {
         minutes(60)
         assertEquals(emptyList(), host.stopIdle(), "a one-shot handle between turns has no OS process to stop")
         prompt(text = "two")
-        assertEquals(listOf("↻ session started (fake-harness · m1)"), events.of("chat"), "no relaunch line per turn")
+        assertEquals(listOf("* session started (fake-harness · m1)"), events.of("chat"), "no relaunch line per turn")
         assertEquals(emptyList(), events.of("kept"), "and nothing to persist for reaping")
     }
 

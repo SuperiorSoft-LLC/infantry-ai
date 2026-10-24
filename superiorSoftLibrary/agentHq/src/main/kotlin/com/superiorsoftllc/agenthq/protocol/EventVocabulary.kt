@@ -144,7 +144,7 @@ object EventVocabulary {
      *
      * **1.64.0 (BUG-M2-11b-1) changes BEHAVIOUR, no frame or shape**: every session runs through one session host. `exit`
      * now reports a hosted process that ended unasked (a crash); one-shot turns stop sending it. One `stderr` boot line
-     * `[agenthq] ↻ session …` per launch; the per-turn plumbing lines moved to the Activity box (`status`). See `CONTRACT.md`.
+     * `[agenthq] * session …` per launch; the per-turn plumbing lines moved to the Activity box (`status`). See `CONTRACT.md`.
      * **1.65.0 (BRANCH-VIEW-1) is ADDITIVE**: `project_git_branches` -> `project_git_branch_list` (local branches),
      * `project_git_branch_changes` -> `project_git_branch_diffstat` (what a branch changed, `mergeBase..branch`) and
      * `project_git_branch_diff` -> `project_git_patch` (now carrying `branch`). Read-only. See `CONTRACT.md`.

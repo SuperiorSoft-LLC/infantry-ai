@@ -14,7 +14,7 @@ import kotlin.test.fail
 /**
  * UI-BOOT-1: the daemon explains a run, so a chat is never silent until the first reply and a failed run says why.
  *
- * Contract 1.64.0 (BUG-M2-11b-1) supersedes the per-turn chat lines: a launch shows ONE `↻ session …` chat line, and
+ * Contract 1.64.0 (BUG-M2-11b-1) supersedes the per-turn chat lines: a launch shows ONE `* session …` chat line, and
  * the per-turn plumbing (`starting …`, `process started …`, `resuming provider session …`, `Resuming session …`) is in
  * the Activity box. The model naming and the auth hint keep their meaning.
  */
@@ -61,7 +61,7 @@ class SessionBootLinesTest {
         rig.awaitExit()
 
         val firstStdout = rig.events.indexOfFirst { it is SessionEvent.Stdout }
-        val boot = rig.events.indexOfFirst { it is SessionEvent.Stderr && it.line == "[agenthq] ↻ session started (stub · some/model)" }
+        val boot = rig.events.indexOfFirst { it is SessionEvent.Stderr && it.line == "[agenthq] * session started (stub · some/model)" }
         val starting = rig.events.indexOfFirst { it is SessionEvent.Activity && it.detail.startsWith("starting stub model some/model in ") }
         val started = rig.events.indexOfFirst { it is SessionEvent.Activity && it.detail.startsWith("process started") }
         assertTrue(boot >= 0, "missing boot line: ${rig.stderr()}")
@@ -77,7 +77,7 @@ class SessionBootLinesTest {
         rig.manager.startNew("hello")
         rig.awaitExit()
         assertTrue(rig.activity().any { it.startsWith("starting stub model default in ") }, "${rig.activity()}")
-        assertTrue("[agenthq] ↻ session started (stub · default)" in rig.stderr(), "${rig.stderr()}")
+        assertTrue("[agenthq] * session started (stub · default)" in rig.stderr(), "${rig.stderr()}")
     }
 
     /** BUG-G2: the line names the model the run really uses, not a bare "default" (AGENTHQ_OPENCODE_MODEL). */
@@ -90,7 +90,7 @@ class SessionBootLinesTest {
             rig.activity().any { it.startsWith("starting stub model opencode/big-pickle (provider default) in ") },
             "${rig.activity()}",
         )
-        assertTrue("[agenthq] ↻ session started (stub · opencode/big-pickle)" in rig.stderr(), "${rig.stderr()}")
+        assertTrue("[agenthq] * session started (stub · opencode/big-pickle)" in rig.stderr(), "${rig.stderr()}")
     }
 
     @Test

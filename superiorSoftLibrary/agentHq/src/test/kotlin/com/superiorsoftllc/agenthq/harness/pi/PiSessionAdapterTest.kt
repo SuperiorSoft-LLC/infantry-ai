@@ -166,7 +166,7 @@ class PiSessionAdapterTest {
         /** A copy: the host thread may still append while a test reads. */
         fun snapshot(): List<SessionEvent> = synchronized(events) { events.toList() }
 
-        fun boots() = synchronized(events) { events.filterIsInstance<SessionEvent.Stderr>().map { it.line }.filter { "↻" in it } }
+        fun boots() = synchronized(events) { events.filterIsInstance<SessionEvent.Stderr>().map { it.line }.filter { "*" in it } }
 
         fun sent(p: FakePi, type: String) = synchronized(p.stdin) { p.stdin.toList() }.filter { it["type"]!!.jsonPrimitive.content == type }
 
@@ -195,7 +195,7 @@ class PiSessionAdapterTest {
         assertEquals("rpc", argv[argv.indexOf("--mode") + 1], "the persistent mode is --mode rpc: $argv")
         assertFalse("--session" in argv, "a fresh session resumes nothing: $argv")
         assertEquals("pi-ses-1", rig.manager.get(session.id)?.providerSessionId, "the id comes from get_state (rpc prints no session header)")
-        assertEquals(listOf("[agenthq] ↻ session started (pi · m)"), rig.boots(), "one chat line for the launch, none per turn")
+        assertEquals(listOf("[agenthq] * session started (pi · m)"), rig.boots(), "one chat line for the launch, none per turn")
         assertEquals(0, rig.snapshot().filterIsInstance<SessionEvent.ProcessExit>().size)
         assertTrue(rig.snapshot().filterIsInstance<SessionEvent.Exit>().none { it.processExited }, "a turn end is not a process exit")
     }
@@ -217,7 +217,7 @@ class PiSessionAdapterTest {
         val argv = rig.launcher.processes[1].command
         assertEquals("pi-ses-1", argv[argv.indexOf("--session") + 1], "and resumes the session id: $argv")
         assertEquals(
-            listOf("[agenthq] ↻ session started (pi · m)", "[agenthq] ↻ session restarted after a crash (pi · m)"),
+            listOf("[agenthq] * session started (pi · m)", "[agenthq] * session restarted after a crash (pi · m)"),
             rig.boots(),
         )
     }

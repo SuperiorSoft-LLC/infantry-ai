@@ -12,7 +12,7 @@ import kotlin.test.fail
 
 /**
  * BUG-M2-11b-1 RED (docs/AGENTHQ-SESSION-HOST-PLAN.md section 11): a one-shot session (the stub, no persistent mode) goes
- * through the same SessionHost as every harness. Two prompts give exactly ONE `↻ session started` chat line, none of the
+ * through the same SessionHost as every harness. Two prompts give exactly ONE `* session started` chat line, none of the
  * per-turn plumbing lines in chat (they are in Activity), and no raw `exit` frame, because no hosted process ended unasked.
  * Before the host, every turn printed `starting …` and `process started …` and sent `exit 0`.
  */
@@ -47,7 +47,7 @@ class SessionOneBootLineTest {
         awaitFinished(2)
 
         val chat = chat()
-        assertEquals(listOf("[agenthq] ↻ session started (stub · default)"), chat.filter { it.contains("↻") }, "$chat")
+        assertEquals(listOf("[agenthq] * session started (stub · default)"), chat.filter { it.contains("*") }, "$chat")
         assertTrue(chat.none { it.startsWith("[agenthq] starting ") || it.startsWith("[agenthq] process started") }, "$chat")
         assertTrue(chat.none { it.contains("resuming provider session") || it.contains("Resuming session") }, "$chat")
 

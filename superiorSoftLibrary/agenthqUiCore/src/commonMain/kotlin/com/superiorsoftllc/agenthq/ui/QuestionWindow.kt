@@ -239,7 +239,7 @@ fun QuestionHistory(
                         else -> "by ${q.resolvedBy}"
                     }
                     Text(
-                        "→ $picked ${if (by.isNotBlank()) "($by${if (q.overridden) ", overridden" else ""})" else ""}".trim(),
+                        "-> $picked ${if (by.isNotBlank()) "($by${if (q.overridden) ", overridden" else ""})" else ""}".trim(),
                         color = Palette.Muted, fontSize = 11.sp,
                     )
                 }

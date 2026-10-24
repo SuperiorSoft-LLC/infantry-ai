@@ -81,7 +81,7 @@ fun ProjectPipelineSection(state: AppState, controller: Controller, projectId: S
             color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(PIPELINE_EMPTY_TAG),
         )
         view is PipelineSectionView.Configured -> {
-            Text(view.stages.joinToString(" → "), color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(bottom = 4.dp))
+            Text(view.stages.joinToString(" -> "), color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(bottom = 4.dp))
             view.checks.forEach { CheckRow(it, now) }
             if (view.commits.isEmpty()) Text("No commit has been recorded yet.", color = Palette.Muted, fontSize = 11.sp)
             view.commits.forEach { CommitRow(it, view.stages, now) }

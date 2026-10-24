@@ -30,7 +30,7 @@ class SessionManagerHostTest {
     ).also { it.eventSink = { e -> events += e } }
 
     private fun chat() = synchronized(events) { events.filterIsInstance<SessionEvent.Stderr>().map { it.line } }
-    private fun boots() = chat().filter { it.contains("↻") }
+    private fun boots() = chat().filter { it.contains("*") }
 
     @Test
     fun twoPrompts_oneSpawn_closeStopsIt_crashRestartsOnce_oneBootLinePerLaunch() {
@@ -40,7 +40,7 @@ class SessionManagerHostTest {
         assertEquals(1, adapter.launches.size, "two prompts, one process")
         assertEquals(0, runner.starts.get(), "no one-shot child either")
         assertEquals(listOf("one", "two"), adapter.turns.map { it.prompt })
-        assertEquals(listOf("[agenthq] ↻ session started (fake-harness · m1)"), boots())
+        assertEquals(listOf("[agenthq] * session started (fake-harness · m1)"), boots())
         assertEquals(SessionState.IDLE, manager.get(session.id)!!.state)
         assertTrue(synchronized(events) { events.filterIsInstance<SessionEvent.Exit>().none { it.processExited } }, "no `exit` per turn")
 
@@ -52,7 +52,7 @@ class SessionManagerHostTest {
         assertEquals(2, adapter.launches.size, "the next prompt restarts it once")
         assertEquals("fake-provider-session", adapter.launches.last().resumeSessionId, "and resumes the provider session")
         assertEquals(
-            listOf("[agenthq] ↻ session started (fake-harness · m1)", "[agenthq] ↻ session restarted after a crash (fake-harness · m1)"),
+            listOf("[agenthq] * session started (fake-harness · m1)", "[agenthq] * session restarted after a crash (fake-harness · m1)"),
             boots(),
         )
 

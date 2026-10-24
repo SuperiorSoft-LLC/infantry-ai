@@ -115,7 +115,7 @@ private fun PlanLimits(state: AppState, now: Long, onRefresh: (() -> Unit)?) {
                     .semantics { contentDescription = "Refresh plan limits" }
                     .testTag("limits-refresh")
                     .padding(horizontal = 4.dp),
-            ) { Text("↻", color = if (state.connection.isLive) Palette.Text else Palette.Muted, fontSize = 13.sp) }
+            ) { Text("Refresh", color = if (state.connection.isLive) Palette.Text else Palette.Muted, fontSize = 13.sp) }
         }
     }
     when {

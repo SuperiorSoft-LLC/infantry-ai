@@ -152,7 +152,7 @@ class QuestionWindowUiTest {
         val sent = mutableListOf<QuestionAnswerWire>()
         setContent { QuestionHistory(listOf(auto), live = true, onOverride = { sent += it }, onShow = {}) }
         onNodeWithTag(QUESTION_HISTORY_TAG_PREFIX + "q2").assertExists()
-        onNodeWithText("→ yes (auto-selected)").assertExists()
+        onNodeWithText("-> yes (auto-selected)").assertExists()
         onNodeWithTag("${QUESTION_OVERRIDE_TAG_PREFIX}q2-0").assertDoesNotExist()
         onNodeWithTag("${QUESTION_OVERRIDE_TAG_PREFIX}q2-1").performClick()
         waitForIdle()

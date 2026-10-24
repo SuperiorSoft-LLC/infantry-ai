@@ -40,7 +40,7 @@ class SessionHostTest {
 
         assertEquals(1, adapter.launches.size, "a kept process takes the second turn")
         assertEquals(listOf("one", "two"), adapter.turns.map { it.prompt })
-        assertEquals(listOf("↻ session started (fake-harness · m1)"), events.of("chat"))
+        assertEquals(listOf("* session started (fake-harness · m1)"), events.of("chat"))
         assertEquals(listOf("COMPLETED code=0 processExited=false", "COMPLETED code=0 processExited=false"), events.of("end"))
     }
 
@@ -55,7 +55,7 @@ class SessionHostTest {
         assertFalse(first.isAlive, "the old process was stopped before the new launch")
         assertEquals(1, adapter.closes)
         assertEquals("prov-1", adapter.launches.last().resumeSessionId, "the relaunch resumes the provider session")
-        assertEquals(listOf("↻ session started (fake-harness · m1)", "↻ session restarted (fake-harness · m1)"), events.of("chat"))
+        assertEquals(listOf("* session started (fake-harness · m1)", "* session restarted (fake-harness · m1)"), events.of("chat"))
         assertEquals(emptyList(), events.of("exit"), "a restart the host asked for is not a crash")
     }
 
@@ -71,7 +71,7 @@ class SessionHostTest {
         prompt("two", resume = "prov-1")
         assertEquals(2, adapter.launches.size)
         assertEquals("prov-1", adapter.launches.last().resumeSessionId)
-        assertEquals("↻ session restarted after a crash (fake-harness · m1)", events.of("chat").last())
+        assertEquals("* session restarted after a crash (fake-harness · m1)", events.of("chat").last())
     }
 
     @Test
@@ -173,7 +173,7 @@ class SessionHostTest {
 
         assertEquals(0, adapter.launches.size, "keep-alive off never uses the persistent mode")
         assertEquals(2, oneShotRunner.starts.get(), "one child per turn")
-        assertEquals(listOf("↻ session started (fake-harness · m1)"), events.of("chat"), "and still ONE chat line")
+        assertEquals(listOf("* session started (fake-harness · m1)"), events.of("chat"), "and still ONE chat line")
         assertEquals(listOf("COMPLETED code=0 processExited=false", "COMPLETED code=0 processExited=false"), events.of("end"))
     }
 

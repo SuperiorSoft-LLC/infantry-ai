@@ -180,7 +180,7 @@ class ClaudeSessionAdapterTest {
 
         fun awaitIdle(id: String) = await("idle") { manager.get(id)?.state == SessionState.IDLE }
 
-        fun boots() = synchronized(events) { events.filterIsInstance<SessionEvent.Stderr>().map { it.line }.filter { "↻" in it } }
+        fun boots() = synchronized(events) { events.filterIsInstance<SessionEvent.Stderr>().map { it.line }.filter { "*" in it } }
 
         fun prompts(p: FakeClaude) = synchronized(p.stdin) { p.stdin.toList() }
             .filter { it["type"]!!.jsonPrimitive.content == "user" }
@@ -209,7 +209,7 @@ class ClaudeSessionAdapterTest {
         assertTrue("-p --input-format stream-json --output-format stream-json --verbose" in argv, argv)
         assertFalse("--resume" in argv, "a fresh session resumes nothing: $argv")
         assertEquals("claude-ses-1", rig.manager.get(session.id)?.providerSessionId)
-        assertEquals(listOf("[agenthq] ↻ session started (claude · m)"), rig.boots(), "one chat line for the launch, none per turn")
+        assertEquals(listOf("[agenthq] * session started (claude · m)"), rig.boots(), "one chat line for the launch, none per turn")
         assertEquals(0, rig.events.filterIsInstance<SessionEvent.ProcessExit>().size)
         assertTrue(rig.events.filterIsInstance<SessionEvent.Exit>().none { it.processExited }, "a turn end is not a process exit")
     }
@@ -231,7 +231,7 @@ class ClaudeSessionAdapterTest {
         val argv = rig.launcher.processes[1].command
         assertEquals("claude-ses-1", argv[argv.indexOf("--resume") + 1], "and resumes the session id: $argv")
         assertEquals(
-            listOf("[agenthq] ↻ session started (claude · m)", "[agenthq] ↻ session restarted after a crash (claude · m)"),
+            listOf("[agenthq] * session started (claude · m)", "[agenthq] * session restarted after a crash (claude · m)"),
             rig.boots(),
         )
         assertEquals("claude-ses-1", rig.manager.get(session.id)?.providerSessionId)

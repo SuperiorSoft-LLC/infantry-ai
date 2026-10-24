@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * BUG-M2-11b-1 (plan section 6.4): every harness without a persistent mode, and every harness when keep-alive is off.
  *
  * [launch] starts NO process: it returns a logical handle (pid null, alive until [close]), which is what gives a
- * one-shot session ONE `↻ session started` line like every other session. Each turn is today's spawn-per-reply path:
+ * one-shot session ONE `* session started` line like every other session. Each turn is today's spawn-per-reply path:
  * `provider.spec(request)` + the session env, `runner.start`, `provider.deliver`. The child's exit ends the turn:
  * COMPLETED on 0, FAILED otherwise.
  *
