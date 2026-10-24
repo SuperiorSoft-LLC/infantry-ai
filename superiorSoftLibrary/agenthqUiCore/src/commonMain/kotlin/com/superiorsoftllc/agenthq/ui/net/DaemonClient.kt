@@ -105,7 +105,15 @@ open class DaemonClient(private val scope: CoroutineScope) {
             attempt++
             try {
                 val current = http.webSocketSession(urlString = url) {
-                    if (token != null) header(HttpHeaders.Authorization, "Bearer $token")
+                    if (token != null) {
+                        if (tokenAsSubprotocol) {
+                            // Two values, so the Js engine passes two protocols (one comma-joined string is invalid).
+                            header(HttpHeaders.SecWebSocketProtocol, WEB_PROTOCOL)
+                            header(HttpHeaders.SecWebSocketProtocol, bearerSubprotocol(token))
+                        } else {
+                            header(HttpHeaders.Authorization, "Bearer $token")
+                        }
+                    }
                 }
                 socket.value = current
                 val reason = receive(current)
