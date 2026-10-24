@@ -627,6 +627,8 @@ data class MeterUsage(
     val running: Int = 0,
     val canStart: Boolean = true,
     val warning: String? = null,
+    /** 1.124.0: epoch ms of the live read behind these numbers; null for a manual / unread meter. */
+    val updatedAt: Long? = null,
 )
 
 /** USAGE-PACE (1.119.0): the `usage_report` frame. */

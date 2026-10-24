@@ -47,6 +47,17 @@ object PacingView {
     fun allowanceText(m: MeterUsage): String =
         m.allowance?.let { "${m.running} of $it running" } ?: "${m.running} running · no limit"
 
+    /** "updated just now" / "updated 4m ago" / "updated 2h ago"; null when the meter has no live read. */
+    fun updatedText(updatedAt: Long?, now: Long): String? {
+        updatedAt ?: return null
+        val min = ((now - updatedAt) / 60_000L).coerceAtLeast(0)
+        return "updated " + when {
+            min < 1 -> "just now"
+            min < 60 -> "${min}m ago"
+            else -> "${min / 60}h ago"
+        }
+    }
+
     /** Where the percent comes from, as a person reads it. */
     fun sourceText(m: MeterUsage): String = when (m.source) {
         "live" -> "live"

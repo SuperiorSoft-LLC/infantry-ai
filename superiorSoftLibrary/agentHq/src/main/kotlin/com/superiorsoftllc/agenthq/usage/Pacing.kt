@@ -118,6 +118,8 @@ data class MeterUsage(
     val canStart: Boolean,
     /** Set when pacing is off because usage is unknown (fail open), or other notes. */
     val warning: String? = null,
+    /** Contract 1.124.0: epoch millis of the live read these numbers come from; null for a manual or unread meter. */
+    val updatedAt: Long? = null,
 )
 
 /** The `usage_report` frame (contract 1.119.0). */
@@ -290,6 +292,7 @@ class UsagePacing(
             meter = meter, percent = percent, window = label, resetsAt = resetsAt, paceDelta = pace, source = source,
             windows = windows, reason = live?.reason, ruleAllowance = ruleAllowance, override = override,
             allowance = allowance, running = running, canStart = allowance == null || running < allowance, warning = warning,
+            updatedAt = if (top != null) live?.observedAt else null,
         )
     }
 

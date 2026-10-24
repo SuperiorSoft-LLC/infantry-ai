@@ -928,6 +928,15 @@ class AgentHqDaemon(
                         .map { r -> UsageMeters.meterFor(r.provider, r.model ?: manager.providerFor(r.provider)?.defaultModel()) }
                 },
             )
+            // USAGE-AUTO (1.124.0): every usage.refreshMinutes (default 5, 0 = off) a live read, pushed to every client.
+            com.superiorsoftllc.agenthq.usage.UsageRefresher(
+                read = { limits.snapshot(force = true) },
+                minutes = settings::usageRefreshMinutes,
+                onRefreshed = {
+                    val frame = Envelope(Envelope.USAGE_REPORT, json.encodeToString(UsageReport.serializer(), usagePacing.report()))
+                    for (c in clients.toList()) c.trySend(frame)
+                },
+            ).start()
             val board = TicketBoard(
                 store, context = ticketContext, agents = agents, sessions = manager, repo = repo,
                 // BASE-1c: the ticket's epic's base branch, then its project's (BASE-1a), then the daemon's
@@ -2358,7 +2367,7 @@ private suspend fun handleConnection(
                 Envelope.USAGE_GET -> {
                     session.launch(kotlinx.coroutines.Dispatchers.IO) {
                         val answer = try {
-                            limits.snapshot()
+                            limits.snapshot(force = envelope.data.trim() == "force")
                             Envelope(Envelope.USAGE_REPORT, json.encodeToString(UsageReport.serializer(), usagePacing.report()))
                         } catch (e: Exception) {
                             Envelope(Envelope.ERROR, "usage_get failed: ${e.message ?: e::class.simpleName}")

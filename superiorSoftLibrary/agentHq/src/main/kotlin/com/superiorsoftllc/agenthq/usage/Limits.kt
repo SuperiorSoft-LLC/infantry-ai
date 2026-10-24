@@ -285,10 +285,10 @@ class LimitService(
     }
 
     @Synchronized
-    fun snapshot(): List<ProviderLimits> {
+    fun snapshot(force: Boolean = false): List<ProviderLimits> {
         val now = clock()
         if (!liveEnabled()) return sources.map { ProviderLimits.unknown(it.provider, now, LimitReason.LIVE_SOURCES_OFF) }
-        cached?.let { if (now - cachedAt < minIntervalMs) return it }
+        if (!force) cached?.let { if (now - cachedAt < minIntervalMs) return it }
         val fresh = sources.map { s ->
             runCatching { s.read(now) }.getOrElse { ProviderLimits.unknown(s.provider, now, LimitReason.SOURCE_FAILED) }
         }
