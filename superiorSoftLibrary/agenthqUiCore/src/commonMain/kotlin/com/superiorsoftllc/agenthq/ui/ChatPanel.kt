@@ -172,6 +172,7 @@ import com.superiorsoftllc.agenthq.ui.model.isBusy
 import com.superiorsoftllc.agenthq.ui.model.QueuedPrompt
 import com.superiorsoftllc.agenthq.ui.model.interruptBlocker
 import com.superiorsoftllc.agenthq.ui.model.queuedFor
+import com.superiorsoftllc.agenthq.ui.model.TodoCollapseMemory
 import com.superiorsoftllc.agenthq.ui.model.isRunning
 import com.superiorsoftllc.agenthq.ui.model.needsInput
 import com.superiorsoftllc.agenthq.ui.model.insertIntoPrompt
@@ -330,6 +331,7 @@ fun ChatPanel(
     val state by controller.state.collectAsState()
     val scope = rememberCoroutineScope()
     val agent = sessionId?.let { state.agents[it] }
+    var todoMemory by remember { mutableStateOf(TodoCollapseMemory()) }
     LaunchedEffect(state.harnessPickerAsk) { state.harnessPickerAsk?.let { chat.openSwitch(it.sessionId, it.harness) } }
     // CP-1b: every time New agent opens (and on reconnect while open), re-read the model catalog.
     LaunchedEffect(chat.spawnMode || chat.switchAsk != null, state.connection.isLive) {
@@ -344,6 +346,7 @@ fun ChatPanel(
                     OutputPane(agent, chat.spawnMode, roleColor = state.role(agent?.role)?.color, onStartSession = if (allowSpawn) ({ chat.spawnMode = true; chat.focus.requestFocus() }) else null)
                 }
             }
+            if (agent != null && !chat.spawnMode) TodoOverlay(agent.id, agent.todos, isRunning(agent.session.state), todoMemory) { todoMemory = it }
         }
         NoticeStrip(state, agent?.id)
         if (chat.spawnMode && state.roles.isNotEmpty()) {
