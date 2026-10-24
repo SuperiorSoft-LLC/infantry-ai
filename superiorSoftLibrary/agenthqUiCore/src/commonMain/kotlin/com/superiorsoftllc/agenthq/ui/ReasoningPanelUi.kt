@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -68,19 +69,16 @@ fun BoxScope.ReasoningSlot(lines: List<OutputLine>, open: Boolean, onOpen: (Bool
 @Composable
 private fun ReasoningButton(count: Int, open: Boolean, onToggle: () -> Unit) {
     Surface(
-        shape = RoundedCornerShape(50),
+        shape = androidx.compose.foundation.shape.CircleShape,
         color = if (open) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceVariant,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.testTag(REASONING_BUTTON_TAG)
             .semantics { contentDescription = if (open) "Close reasoning panel" else "Open reasoning panel, $count lines" }
             .clickable(onClick = onToggle),
     ) {
-        Text(
-            "… $count",
-            Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        androidx.compose.material3.Icon(
+            AhqIcons.Brain, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(7.dp).size(18.dp),
         )
     }
 }
