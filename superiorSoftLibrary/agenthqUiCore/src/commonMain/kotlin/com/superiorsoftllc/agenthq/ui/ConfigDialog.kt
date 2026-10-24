@@ -109,6 +109,8 @@ fun ConfigDialog(
     /** THEME-1: the current theme and the callback that applies and stores a new one; null hides the section. */
     theme: ThemeSettings? = null,
     onTheme: ((ThemeSettings) -> Unit)? = null,
+    /** BUILD-STAMP-1: this app's and the daemon's build strings; null hides the About section. */
+    about: AboutEntry? = null,
 ) {
     AhqAlertDialog(
         onDismissRequest = onDismiss,
@@ -116,6 +118,10 @@ fun ConfigDialog(
         text = {
             Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text(FLAGS_LIFETIME_NOTE, color = Palette.Muted, fontSize = 11.sp)
+                // BUILD-STAMP-1: first, so "which build am I running?" is answered without scrolling.
+                if (about != null) {
+                    FlagSection(title = AboutEntry.TITLE, applies = AboutEntry.APPLIES_TO) { AboutSection(about) }
+                }
                 FlagSection(title = "Agent scope", applies = AGENT_SCOPE_APPLIES_TO) {
                     AgentScopeDropdown(flags.agentScope) { onFlags(flags.copy(agentScope = it)) }
                 }

@@ -1813,7 +1813,9 @@ private suspend fun handleConnection(
         Envelope(
             Envelope.READY,
             "provider=${manager.providerId} contract=${EventVocabulary.VERSION} " +
-                "instance=${identity.instance} since=${identity.historySince}",
+                "instance=${identity.instance} since=${identity.historySince} " +
+                // BUILD-STAMP-1: additive key (no contract bump): the daemon's build string, e.g. 1.0.1+20261023.1432.e85b223.
+                "build=${com.superiorsoftllc.agenthq.update.BuildInfo.current}",
         ),
     )
     // Manually serialize sessions with SessionRecordSerializer to include computed `live` field

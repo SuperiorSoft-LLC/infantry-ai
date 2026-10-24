@@ -236,7 +236,7 @@ fun main(args: Array<String>) {
  * agenthq ask --question "..." --option "label|description" [--multi] [--other] [--timeout <sec>]   ask the owner (PROMPT-5)
  * agenthq ask --question "..." --option "label|consequence" ... --recommend <label> --reason "..." [--other] [--default-after <min>]
  *                                  non-blocking owner question (ASK-1): prints {"questionId":..}, the pick arrives as mail
- * agenthq --version | version  this CLI's contract and the daemon's: `agenthq <cli> (daemon: <contract|not running>)`
+ * agenthq --version | version  this CLI's contract and build, and the daemon's: `agenthq <cli> build <b> (daemon: <contract> build <b>|not running)`
  * agenthq mcp serve            an MCP server on stdio (read + guarded write tools over this daemon), see docs/MCP.md
  * ```
  *
@@ -473,13 +473,26 @@ internal object Cli {
      * point of the command is to be answerable on a machine where something is wrong.
      */
     private fun version(parsed: ParsedArgs, out: Appendable, getenv: (String) -> String?): Int {
-        val daemon = try {
-            daemonContract(resolveTarget(parsed, getenv), VERSION_PROBE_MS)
+        val ready = try {
+            daemonReady(resolveTarget(parsed, getenv), VERSION_PROBE_MS)
         } catch (_: Exception) {
             null
         }
-        out.appendLine("agenthq ${EventVocabulary.VERSION} (daemon: ${daemon ?: "not running"})")
+        out.appendLine(versionLine(com.superiorsoftllc.agenthq.update.BuildInfo.current, ready))
         return 0
+    }
+
+    /**
+     * BUG-CLI-4 + BUILD-STAMP-1: `agenthq <cli contract> build <cli build> (daemon: <contract> build <daemon build>)`. [ready] is
+     * the daemon's `ready` (null = not running); an older daemon that sends no `build=` shows its contract alone.
+     */
+    internal fun versionLine(cliBuild: String, ready: ReadyInfo?): String {
+        val daemon = when {
+            ready == null -> "not running"
+            ready.build == null -> ready.contract
+            else -> "${ready.contract} build ${ready.build}"
+        }
+        return "agenthq ${EventVocabulary.VERSION} build $cliBuild (daemon: $daemon)"
     }
 
     /** ASK-1: the shape of `agenthq ask` as a non-blocking owner question. */
@@ -4207,7 +4220,7 @@ internal object Cli {
                                   `threads` read (set by a spawned agent); without it a message is
                                   sent as "$HUMAN_SENDER" and `inbox` reads the "$HUMAN_SENDER" mailbox
               --help, -h          Show this help
-              --version, version  Print this CLI's contract and the daemon's: agenthq <cli> (daemon: <contract|not running>)
+              --version, version  Print this CLI's contract and build and the daemon's: agenthq <cli> build <b> (daemon: <contract> build <b>|not running)
         """.trimIndent()
 
     private data class ParsedArgs(
@@ -5588,7 +5601,13 @@ internal fun contractAtLeast(version: String, minimum: String): Boolean {
     return true
 }
 
-internal fun daemonContract(target: Target, timeoutMs: Long): String? {
+/** BUG-CLI-4 + BUILD-STAMP-1: the `contract=` ("unknown" when absent) and `build=` (null when absent) of a daemon's `ready`. */
+internal data class ReadyInfo(val contract: String, val build: String?)
+
+internal fun daemonContract(target: Target, timeoutMs: Long): String? = daemonReady(target, timeoutMs)?.contract
+
+/** The [ReadyInfo] of the daemon at [target], or null when nothing answers within [timeoutMs]; see [daemonContract]. */
+internal fun daemonReady(target: Target, timeoutMs: Long): ReadyInfo? {
     val deadline = System.currentTimeMillis() + timeoutMs
     val recorder = FrameRecorder()
     val builder = HttpClient.newBuilder().connectTimeout(java.time.Duration.ofMillis(timeoutMs)).build().newWebSocketBuilder()
@@ -5601,8 +5620,9 @@ internal fun daemonContract(target: Target, timeoutMs: Long): String? {
     try {
         while (System.currentTimeMillis() < deadline) {
             recorder.frames.firstOrNull { it.type == Envelope.READY }?.let { ready ->
-                return ready.data.split(' ').firstOrNull { it.startsWith("contract=") }?.removePrefix("contract=")
-                    ?.takeIf { it.isNotBlank() } ?: "unknown"
+                val fields = ready.data.split(' ')
+                fun field(key: String) = fields.firstOrNull { it.startsWith("$key=") }?.removePrefix("$key=")?.takeIf { it.isNotBlank() }
+                return ReadyInfo(field("contract") ?: "unknown", field("build"))
             }
             if (recorder.closed) return null
             Thread.sleep(10)

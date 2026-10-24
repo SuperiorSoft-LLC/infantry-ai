@@ -31,6 +31,9 @@ class JvmPlatformHost(
     override val defaultDaemonUrl: String = "ws://127.0.0.1:${recordedPort() ?: DEFAULT_PORT}/ws"
     override fun setting(key: String): String? = env(key)
 
+    /** BUILD-STAMP-1: `-Dagenthq.build`, set by the packaged launcher, `run` and `runRealDaemon` (agentHqUi/build.gradle.kts). */
+    override val appBuild: String? get() = System.getProperty("agenthq.build")?.trim()?.takeIf { it.isNotEmpty() }
+
     /** MODAL-BLUR: UI prefs live in the per-user Java preferences store (the registry on Windows), never in the daemon's state dir. */
     private val prefs get() = java.util.prefs.Preferences.userRoot().node("com/superiorsoftllc/agenthq/ui")
     override fun uiPref(key: String): String? = runCatching { prefs.get(key, null) }.getOrNull()
