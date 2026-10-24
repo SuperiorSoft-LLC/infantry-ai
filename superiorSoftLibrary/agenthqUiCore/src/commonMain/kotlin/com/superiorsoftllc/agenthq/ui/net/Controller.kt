@@ -523,6 +523,9 @@ class Controller(
         report(send(WireRequests.questionAnswer(answer)))
 
     /** ASK-1: withdraw an owner question; the daemon mails the agent that no answer is coming. */
+    /** ASK-2: "Send a test question" (Config): raise a sample owner question for [sessionId] to try the popup. */
+    suspend fun sendTestQuestion(sessionId: String): CommandResult = report(send(WireRequests.questionAskTest(sessionId)))
+
     suspend fun cancelQuestion(questionId: String): CommandResult = report(send(WireRequests.questionCancel(questionId)))
 
     /** ASK-1: "Later": hide the question window in this window only; the questions stay open (the pill brings them back). */

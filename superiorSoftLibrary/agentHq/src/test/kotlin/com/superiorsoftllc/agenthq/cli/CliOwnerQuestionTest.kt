@@ -9,6 +9,7 @@ import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.OwnerQuestion
 import com.superiorsoftllc.agenthq.protocol.PromptOption
 import com.superiorsoftllc.agenthq.protocol.QuestionAnswer
+import com.superiorsoftllc.agenthq.protocol.QuestionAsk
 import com.superiorsoftllc.agenthq.protocol.QuestionStates
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -116,6 +117,37 @@ class CliOwnerQuestionTest {
         assertEquals("owner", mail.from)
         assertTrue(id in mail.subject && "Postgres" in mail.subject, mail.subject)
         assertTrue("Chosen option: Postgres" in mail.body, mail.body)
+    }
+
+    @Test
+    fun askTestRaisesTheSampleQuestionAndThePickIsMailed() {
+        val fixture = launch()
+        val session = fixture.spawnSession()
+
+        val result = fixture.cli("ask", "--test", session = session)
+        assertEquals(0, result.exit, result.err)
+        val id = result.questionId()
+
+        val shown = fixture.client.questionPush(id, QuestionStates.OPEN)
+        assertEquals(QuestionAsk.sample().options, shown.options)
+        assertEquals("Looks good", shown.recommended)
+        assertTrue(shown.allowOther)
+        assertTrue(shown.question.startsWith("TEST"), shown.question)
+
+        // The owner types an answer of their own: the Other path.
+        fixture.client.send(Envelope.QUESTION_ANSWER, json.encodeToString(QuestionAnswer.serializer(), QuestionAnswer(id, otherText = "my own words")))
+        assertEquals("my own words", fixture.client.questionPush(id, QuestionStates.ANSWERED).otherText)
+    }
+
+    @Test
+    fun theOwnersClientCanRaiseTheSampleForTheOpenSession() {
+        val fixture = launch()
+        val session = fixture.spawnSession()
+        // What the Config "Send a test question" button sends: a plain question_ask naming the open session.
+        fixture.client.send(Envelope(Envelope.QUESTION_ASK, json.encodeToString(QuestionAsk.serializer(), QuestionAsk.sample()), session))
+        val asked = fixture.client.await(Envelope.QUESTION_ASKED)
+        val id = json.decodeFromString(com.superiorsoftllc.agenthq.protocol.QuestionAsked.serializer(), asked.data).questionId
+        assertEquals(session, fixture.client.questionPush(id, QuestionStates.OPEN).sessionId)
     }
 
     @Test

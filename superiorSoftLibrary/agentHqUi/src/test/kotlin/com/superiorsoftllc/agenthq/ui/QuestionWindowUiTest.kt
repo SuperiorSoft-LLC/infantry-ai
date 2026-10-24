@@ -10,9 +10,11 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.superiorsoftllc.agenthq.ui.model.AppState
+import com.superiorsoftllc.agenthq.ui.model.UiFlags
 import com.superiorsoftllc.agenthq.ui.model.reduce
 import com.superiorsoftllc.agenthq.ui.protocol.Envelope
 import com.superiorsoftllc.agenthq.ui.protocol.OwnerQuestionView
@@ -114,5 +116,26 @@ class QuestionWindowUiTest {
         onNodeWithTag("${QUESTION_OVERRIDE_TAG_PREFIX}q2-1").performClick()
         waitForIdle()
         assertEquals(listOf(QuestionAnswerWire("q2", answer = "no")), sent)
+    }
+}
+
+/** ASK-2: the Config "Send a test question" action. */
+@OptIn(ExperimentalTestApi::class)
+class TestQuestionUiTest {
+    @Test fun `the Notifications tab sends the sample question for the open session`() = runDesktopComposeUiTest(900, 900) {
+        var sent = 0
+        setContent { ConfigDialog(UiFlags(), onFlags = {}, onDismiss = {}, onSendTestQuestion = { sent++ }) }
+        onNodeWithTag(CONFIG_TAB_TAG_PREFIX + ConfigTab.NOTIFICATIONS.name).performClick()
+        onNodeWithTag(TEST_QUESTION_TAG).performScrollTo().performClick()
+        assertEquals(1, sent)
+    }
+
+    @Test fun `the sample is a plain question_ask for the session with its recommendation among the options`() {
+        val frame = com.superiorsoftllc.agenthq.ui.protocol.WireRequests.questionAskTest("s1")
+        assertEquals(Envelope.QUESTION_ASK, frame.type)
+        assertEquals("s1", frame.sessionId)
+        val json = kotlinx.serialization.json.Json.parseToJsonElement(frame.data) as kotlinx.serialization.json.JsonObject
+        val labels = (json.getValue("options") as kotlinx.serialization.json.JsonArray).map { (it as kotlinx.serialization.json.JsonObject).getValue("label").toString().trim('"') }
+        assertTrue(json.getValue("recommended").toString().trim('"') in labels)
     }
 }
