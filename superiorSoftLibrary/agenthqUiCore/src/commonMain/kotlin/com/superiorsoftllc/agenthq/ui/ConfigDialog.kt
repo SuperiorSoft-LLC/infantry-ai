@@ -2,6 +2,9 @@ package com.superiorsoftllc.agenthq.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -138,6 +141,14 @@ fun ConfigDialog(
     val tabs = visibleConfigTabs(present)
     var wanted by remember { mutableStateOf(initialTab) }
     val tab = pickConfigTab(wanted, present)
+    // CONFIG-SEARCH-1: a non-empty query shows matching sections instead of the tab body; picking one jumps to its
+    // tab and briefly outlines it (highlight), scrolled into view.
+    var query by remember { mutableStateOf("") }
+    var highlight by remember { mutableStateOf<ConfigEntry?>(null) }
+    androidx.compose.runtime.LaunchedEffect(highlight) {
+        if (highlight != null) { kotlinx.coroutines.delay(CONFIG_HIGHLIGHT_MS); highlight = null }
+    }
+    val results = searchConfig(query, present)
     // A section shows when its tab is the selected one and this host has it.
     val shows: (ConfigEntry) -> Boolean = { it.tab == tab && it in present }
     AhqAlertDialog(
@@ -148,7 +159,11 @@ fun ConfigDialog(
         text = {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(FLAGS_LIFETIME_NOTE, color = Palette.Muted, fontSize = 11.sp)
-                ConfigTabRow(tabs, tab) { picked -> wanted = picked; onTab?.invoke(picked) }
+                ConfigSearchField(query) { query = it }
+                ConfigTabRow(tabs, tab) { picked -> query = ""; wanted = picked; onTab?.invoke(picked) }
+                if (query.isNotBlank()) {
+                    ConfigSearchResults(results) { e -> query = ""; wanted = e.tab; onTab?.invoke(e.tab); highlight = e }
+                } else
                 // Each tab scrolls on its own, from the top: the key gives each tab a fresh scroll state.
                 androidx.compose.runtime.key(tab) {
                     Column(
@@ -156,9 +171,9 @@ fun ConfigDialog(
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
                             if (shows(ConfigEntry.THEME) && theme != null && onTheme != null) {
-                                FlagSection(ConfigEntry.THEME) { ThemeSection(theme, onTheme) }
+                                FlagSection(ConfigEntry.THEME, highlight) { ThemeSection(theme, onTheme) }
                             }
-                            if (shows(ConfigEntry.BLUR)) FlagSection(ConfigEntry.BLUR) {
+                            if (shows(ConfigEntry.BLUR)) FlagSection(ConfigEntry.BLUR, highlight) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     androidx.compose.material3.Switch(
                                         checked = flags.blurBehindDialogs,
@@ -169,12 +184,12 @@ fun ConfigDialog(
                                 }
                             }
                             if (shows(ConfigEntry.USER_PORTRAIT) && userPortrait != null) {
-                                FlagSection(ConfigEntry.USER_PORTRAIT) { UserPortraitSection(userPortrait.first, userPortrait.second) }
+                                FlagSection(ConfigEntry.USER_PORTRAIT, highlight) { UserPortraitSection(userPortrait.first, userPortrait.second) }
                             }
-                            if (shows(ConfigEntry.AGENT_SCOPE)) FlagSection(ConfigEntry.AGENT_SCOPE) {
+                            if (shows(ConfigEntry.AGENT_SCOPE)) FlagSection(ConfigEntry.AGENT_SCOPE, highlight) {
                                 AgentScopeDropdown(flags.agentScope) { onFlags(flags.copy(agentScope = it)) }
                             }
-                            if (shows(ConfigEntry.PROGRESS_STALE)) FlagSection(ConfigEntry.PROGRESS_STALE) {
+                            if (shows(ConfigEntry.PROGRESS_STALE)) FlagSection(ConfigEntry.PROGRESS_STALE, highlight) {
                                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                                     com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_CHOICES.forEach { min ->
                                         val picked = flags.progressStaleMin == min
@@ -187,11 +202,11 @@ fun ConfigDialog(
                             }
                             // BUG-M2-11e: daemon state, not a window flag: it is stored by the daemon and survives a restart.
                             if (shows(ConfigEntry.LIFECYCLE) && onKeepAliveMinutes != null) {
-                                FlagSection(ConfigEntry.LIFECYCLE) { KeepAliveDropdown(keepAliveMinutes, onKeepAliveMinutes) }
+                                FlagSection(ConfigEntry.LIFECYCLE, highlight) { KeepAliveDropdown(keepAliveMinutes, onKeepAliveMinutes) }
                             }
                             // CLIPATH-1: daemon state too: the daemon validates and stores each path, and says where each CLI resolved.
                             if (shows(ConfigEntry.CLI_LOCATIONS) && onCliLocation != null) {
-                                FlagSection(ConfigEntry.CLI_LOCATIONS) {
+                                FlagSection(ConfigEntry.CLI_LOCATIONS, highlight) {
                                     CliLocationsSection(cliLocations, onCliLocation, onBrowse, harnessInstall, harnessInstallBusy, onHarnessInstall)
                                     if (harnessInstall != null && onHarnessCheck != null && onHarnessInstall != null) {
                                         HarnessInstallControls(harnessInstall, harnessInstallBusy, harnessInstallLog, onHarnessCheck, onHarnessInstall)
@@ -200,34 +215,34 @@ fun ConfigDialog(
                             }
                             // BUG-PERM-1: daemon state: no harness can relay an approval prompt yet, so this decides what tools may run.
                             if (shows(ConfigEntry.TOOL_APPROVAL) && onToolApproval != null) {
-                                FlagSection(ConfigEntry.TOOL_APPROVAL) { ToolApprovalDropdown(toolApproval, onToolApproval) }
+                                FlagSection(ConfigEntry.TOOL_APPROVAL, highlight) { ToolApprovalDropdown(toolApproval, onToolApproval) }
                             }
                             // ROLE-EDIT-1: the role manager is its own dialog (shared modal).
                             if (shows(ConfigEntry.ROLES) && onOpenRoles != null) {
-                                FlagSection(ConfigEntry.ROLES) {
+                                FlagSection(ConfigEntry.ROLES, highlight) {
                                     OutlinedButton(onClick = onOpenRoles, modifier = Modifier.testTag(ROLE_MANAGER_OPEN_TAG)) { Text("Manage roles") }
                                 }
                             }
-                            if (shows(ConfigEntry.VOICE)) FlagSection(ConfigEntry.VOICE) {
+                            if (shows(ConfigEntry.VOICE)) FlagSection(ConfigEntry.VOICE, highlight) {
                                 com.superiorsoftllc.agenthq.ui.voice.VoiceSettingsSection(flags.voice) { onFlags(flags.copy(voice = it)) }
                             }
                             // SECRETS-1: the daemon owns the secrets; this only sends "set / clear / import" and shows set / not set.
                             if (shows(ConfigEntry.SECRETS) && secretActions != null && secrets != null) {
-                                FlagSection(ConfigEntry.SECRETS) { SecretsSection(secrets, secretActions) }
+                                FlagSection(ConfigEntry.SECRETS, highlight) { SecretsSection(secrets, secretActions) }
                             }
                             // PAIR-1: show this connection as a QR / link, or connect to another server from one.
                             if (shows(ConfigEntry.PAIR) && pair != null) {
-                                FlagSection(ConfigEntry.PAIR) {
+                                FlagSection(ConfigEntry.PAIR, highlight) {
                                     com.superiorsoftllc.agenthq.ui.pair.PairDeviceSection(pair.url, pair.token, pair.name, pair.onLink)
                                 }
                             }
                             // BUILD-STAMP-1: first in About, it answers "which build am I running?".
                             if (shows(ConfigEntry.ABOUT) && about != null) {
-                                FlagSection(ConfigEntry.ABOUT) { AboutSection(about) }
+                                FlagSection(ConfigEntry.ABOUT, highlight) { AboutSection(about) }
                             }
                             // UPDATE-1: the check itself runs in the daemon side's updater; this only asks for it.
                             if (shows(ConfigEntry.UPDATES) && updates != null) {
-                                FlagSection(ConfigEntry.UPDATES) {
+                                FlagSection(ConfigEntry.UPDATES, highlight) {
                                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                         Text("Running ${updates.version}", fontSize = 12.sp, modifier = Modifier.testTag(UPDATES_VERSION_TAG))
                                         OutlinedButton(onClick = updates.check, modifier = Modifier.testTag(UPDATES_CHECK_TAG)) { Text("Check for updates") }
@@ -236,11 +251,11 @@ fun ConfigDialog(
                             }
                             // SERVER-UPDATE-4: the daemon's own version and updater, over the existing connection.
                             if (shows(ConfigEntry.SERVER_UPDATE) && serverUpdate != null) {
-                                FlagSection(ConfigEntry.SERVER_UPDATE) { ServerUpdateSection(serverUpdate, serverMismatch) }
+                                FlagSection(ConfigEntry.SERVER_UPDATE, highlight) { ServerUpdateSection(serverUpdate, serverMismatch) }
                             }
                             // PKG-3: where the installed app writes its log, so a Start-menu launch (no console) can still report a problem.
                             if (shows(ConfigEntry.LOGS) && logs != null) {
-                                FlagSection(ConfigEntry.LOGS) { LogsSection(logs) }
+                                FlagSection(ConfigEntry.LOGS, highlight) { LogsSection(logs) }
                             }
                     }
                 }
@@ -258,7 +273,7 @@ fun ConfigDialog(
 private fun ConfigTabRow(tabs: List<ConfigTab>, selected: ConfigTab?, onPick: (ConfigTab) -> Unit) {
     if (tabs.isEmpty()) return
     val index = tabs.indexOf(selected).coerceAtLeast(0)
-    androidx.compose.material3.ScrollableTabRow(
+    androidx.compose.material3.PrimaryScrollableTabRow(
         selectedTabIndex = index,
         edgePadding = 0.dp,
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
@@ -283,10 +298,65 @@ private fun ConfigTabRow(tabs: List<ConfigTab>, selected: ConfigTab?, onPick: (C
     }
 }
 
-/** CONFIG-TABS-1: a registered section: its title and applies-to copy come from [entry], and it carries a test tag. */
+/**
+ * CONFIG-TABS-1: a registered section: its title and applies-to copy come from [entry], and it carries a test tag.
+ * CONFIG-SEARCH-1: when it is the [highlight] (a search result just picked), it is outlined in the accent and
+ * scrolled into view.
+ */
 @Composable
-private fun FlagSection(entry: ConfigEntry, control: @Composable () -> Unit) =
-    FlagSection(entry.title, entry.applies, Modifier.testTag(CONFIG_SECTION_TAG_PREFIX + entry.name), control)
+private fun FlagSection(entry: ConfigEntry, highlight: ConfigEntry?, control: @Composable () -> Unit) {
+    val lit = entry == highlight
+    val requester = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+    androidx.compose.runtime.LaunchedEffect(lit) { if (lit) requester.bringIntoView() }
+    val mod = Modifier.testTag(CONFIG_SECTION_TAG_PREFIX + entry.name)
+        .bringIntoViewRequester(requester)
+        .then(if (lit) Modifier.border(2.dp, Palette.Accent, androidx.compose.foundation.shape.RoundedCornerShape(6.dp)).padding(8.dp) else Modifier)
+        .semantics { if (lit) stateDescription = CONFIG_HIGHLIGHT_STATE }
+    FlagSection(entry.title, entry.applies, mod, control)
+}
+
+/** CONFIG-SEARCH-1: the search box above the tabs. */
+@Composable
+private fun ConfigSearchField(query: String, onQuery: (String) -> Unit) {
+    OutlinedTextField(
+        value = query, onValueChange = onQuery, singleLine = true,
+        placeholder = { Text("Search settings", fontSize = 12.sp) },
+        trailingIcon = if (query.isEmpty()) null else {
+            { Text("✕", color = Palette.Muted, modifier = Modifier.clickable(role = Role.Button) { onQuery("") }.semantics { contentDescription = "Clear search" }.padding(8.dp)) }
+        },
+        modifier = Modifier.fillMaxWidth().testTag(CONFIG_SEARCH_TAG).semantics { contentDescription = "Search settings" },
+    )
+}
+
+/** CONFIG-SEARCH-1: the sections matching the query, each with its tab; picking one opens it. */
+@Composable
+private fun ConfigSearchResults(results: List<ConfigEntry>, onPick: (ConfigEntry) -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().heightIn(min = 360.dp, max = 480.dp).verticalScroll(rememberScrollState()).testTag(CONFIG_SEARCH_RESULTS_TAG),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        if (results.isEmpty()) {
+            Text("No setting matches.", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.padding(8.dp).testTag(CONFIG_SEARCH_EMPTY_TAG))
+        }
+        results.forEach { e ->
+            Row(
+                Modifier.fillMaxWidth().clickable(role = Role.Button) { onPick(e) }.padding(horizontal = 8.dp, vertical = 6.dp)
+                    .testTag(CONFIG_RESULT_TAG_PREFIX + e.name),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(e.title, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text(e.applies, color = Palette.Muted, fontSize = 11.sp, maxLines = 2)
+                }
+                Text(
+                    e.tab.label, fontSize = 10.sp, color = Palette.Accent,
+                    modifier = Modifier.border(1.dp, Palette.Accent, androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).padding(horizontal = 8.dp, vertical = 2.dp),
+                )
+            }
+        }
+    }
+}
 
 @Composable
 private fun FlagSection(title: String, applies: String, modifier: Modifier = Modifier, control: @Composable () -> Unit) {

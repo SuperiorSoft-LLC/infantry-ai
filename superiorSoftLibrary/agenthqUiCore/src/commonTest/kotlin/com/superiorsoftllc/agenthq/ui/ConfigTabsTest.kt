@@ -35,4 +35,27 @@ class ConfigTabsTest {
     @Test fun `titles are unique so a section is never ambiguous`() {
         assertEquals(ConfigEntry.entries.size, ConfigEntry.entries.map { it.title }.toSet().size)
     }
+
+    // CONFIG-SEARCH-1 (ticket 3463d1b2): search over the registry.
+    private val all = ConfigEntry.entries.toSet()
+
+    @Test fun `search matches the title, the applies-to copy and the keywords, case-insensitively`() {
+        assertEquals(listOf(ConfigEntry.BLUR), searchConfig("BLUR behind", all), "title")
+        assertTrue(ConfigEntry.THEME in searchConfig("Colour", all), "keyword")
+        assertTrue(ConfigEntry.AGENT_SCOPE in searchConfig("sidebar agent list", all), "applies-to copy")
+        assertTrue(ConfigEntry.SECRETS in searchConfig("  api KEY ", all), "trimmed, multi-word keyword")
+    }
+
+    @Test fun `every word must match, a blank query or an absent section finds nothing`() {
+        assertEquals(emptyList(), searchConfig("", all))
+        assertEquals(emptyList(), searchConfig("   ", all))
+        assertEquals(emptyList(), searchConfig("blur zzqx", all))
+        assertEquals(emptyList(), searchConfig("keystore", all - ConfigEntry.SECRETS), "a hidden section is never offered")
+    }
+
+    @Test fun `results keep display order`() {
+        val r = searchConfig("update", all)
+        assertEquals(r.sortedBy { it.ordinal }, r)
+        assertTrue(ConfigEntry.UPDATES in r && ConfigEntry.SERVER_UPDATE in r)
+    }
 }

@@ -62,6 +62,20 @@ fun pickConfigTab(wanted: ConfigTab?, present: Set<ConfigEntry>): ConfigTab? {
     return if (wanted != null && wanted in visible) wanted else visible.firstOrNull()
 }
 
+/**
+ * CONFIG-SEARCH-1 (ticket 3463d1b2, merged here): the [present] sections that match [query], in display order.
+ * Every word of the query must occur, case-insensitively, in the section's title, applies-to copy, keywords or
+ * tab label. A blank query matches nothing (the dialog shows its tabs instead).
+ */
+fun searchConfig(query: String, present: Set<ConfigEntry>): List<ConfigEntry> {
+    val words = query.trim().lowercase().split(' ', '\t').filter { it.isNotEmpty() }
+    if (words.isEmpty()) return emptyList()
+    return ConfigEntry.entries.filter { it in present }.filter { e ->
+        val hay = (listOf(e.title, e.applies, e.tab.label) + e.keywords).joinToString(" | ").lowercase()
+        words.all { it in hay }
+    }
+}
+
 const val AGENT_SCOPE_TITLE = "Agent scope"
 const val BLUR_TITLE = "Blur behind dialogs"
 const val PROGRESS_STALE_TITLE = "Progress bars: stale after"
@@ -74,3 +88,12 @@ const val CONFIG_TAB_TAG_PREFIX = "config-tab-"
 const val CONFIG_SECTION_TAG_PREFIX = "config-section-"
 const val CONFIG_TAB_ROW_TAG = "config-tab-row"
 const val CONFIG_TAB_BODY_TAG = "config-tab-body"
+const val CONFIG_SEARCH_TAG = "config-search"
+const val CONFIG_SEARCH_RESULTS_TAG = "config-search-results"
+const val CONFIG_SEARCH_EMPTY_TAG = "config-search-empty"
+/** A search result row is CONFIG_RESULT_TAG_PREFIX + [ConfigEntry.name]. */
+const val CONFIG_RESULT_TAG_PREFIX = "config-result-"
+
+/** CONFIG-SEARCH-1: how long a picked search result stays outlined, and the state it reports meanwhile. */
+const val CONFIG_HIGHLIGHT_MS = 1800L
+const val CONFIG_HIGHLIGHT_STATE = "highlighted"
