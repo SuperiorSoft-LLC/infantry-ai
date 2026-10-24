@@ -302,7 +302,7 @@ data class AgentView(
      * What the chat pane shows while the agent works, or after a turn that failed/stopped; null otherwise.
      * [now] is the wall clock the elapsed label is measured against. See [chatStatusOf] for the exact rule.
      */
-    fun chatStatus(now: Long): ChatStatus? = chatStatusOf(entries, now, activity, session.state, runActivity)
+    fun chatStatus(now: Long): ChatStatus? = chatStatusOf(entries, now, activity, session.state, runActivity, session.turnActive)
 }
 
 /**
@@ -345,9 +345,11 @@ fun chatStatusOf(
     activity: AgentActivity? = null,
     state: SessionState? = null,
     run: RunActivityView? = null,
+    turnActive: Boolean? = null,
 ): ChatStatus? {
     val newest = entries.lastOrNull { it.kind in TURN_DEFINING }
-    if (state != null && isRunning(state)) return workingStatus(entries, now, activity, run)
+    // The daemon says no turn is in flight (a session parked WAITING_INPUT between turns): never "Thinking...".
+    if (state != null && isRunning(state) && turnActive != false) return workingStatus(entries, now, activity, run)
     if (newest == null) return null
     return when (newest.kind) {
         // CHATSTATUS-3: the human's turn was answered with an error -> Failure, not an open wait.

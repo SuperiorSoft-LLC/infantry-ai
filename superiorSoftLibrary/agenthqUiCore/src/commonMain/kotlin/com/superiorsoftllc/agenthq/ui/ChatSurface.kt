@@ -196,6 +196,10 @@ const val AGENT_HEADER_ID_TAG = "agent-header-id"
 /** UX-HEADER-WRAP-1: the width the header's title column always keeps, however many chips sit to its right. */
 val HEADER_TITLE_MIN_WIDTH = 160.dp
 
+/** Below this header width the executor chips move to their own scrolling row. */
+val NARROW_HEADER_WIDTH = 600.dp
+const val AGENT_HEADER_CHIPS_TAG = "agent-header-chips"
+
 @Composable
 fun CenterHeader(
     a: AgentView?,
@@ -210,7 +214,21 @@ fun CenterHeader(
     // always keeps HEADER_TITLE_MIN_WIDTH; anything that does not fit is ellipsized or clipped, never wrapped.
     BoxWithConstraints(Modifier.fillMaxWidth()) {
     val chipsMax = (maxWidth - 24.dp - 44.dp - HEADER_TITLE_MIN_WIDTH).coerceAtLeast(0.dp)
-    Row(Modifier.fillMaxWidth().background(Palette.Panel).padding(12.dp, 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    val narrow = maxWidth < NARROW_HEADER_WIDTH
+    val chips: @Composable () -> Unit = {
+        if (a != null) {
+        ExecutorChips(state.sessionExecutor(a))
+        if (onOpenSwitch != null) {
+            Chip(state.sessionExecutor(a).switchChipText(), Palette.Info, modifier = Modifier.testTag(EXECUTOR_SWITCH_CHIP_TAG).clickable { onOpenSwitch() })
+            Spacer(Modifier.width(6.dp))
+        }
+        Chip("runs ${a.session.runCount}")
+        // Contract 1.13.0: what this session's runs reported using; nothing at all when none reported.
+        a.usageTotals?.let { t -> Spacer(Modifier.width(6.dp)); Chip("${compact(t.input)} in / ${compact(t.output)} out", Palette.Info) }
+        }
+    }
+    Column(Modifier.fillMaxWidth()) {
+    Row(Modifier.fillMaxWidth().background(Palette.Panel).padding(12.dp, if (narrow) 8.dp else 8.dp), verticalAlignment = Alignment.CenterVertically) {
         if (a == null || spawnMode) {
             Text(if (spawnMode) "New agent: type its task below and press Enter" else "No agent selected", color = Palette.Muted)
             return@Row
@@ -235,16 +253,12 @@ fun CenterHeader(
             // BRANCH-PER-TASK 2/3: the branch of the started ticket this agent runs; nothing when it holds none.
             state.ticketBranchFor(a.id)?.branchLine()?.let { Text(it, color = Palette.Info, fontFamily = Mono, fontSize = 11.sp, maxLines = 1, modifier = Modifier.testTag("agent-ticket-branch")) }
         }
-        Row(Modifier.widthIn(max = chipsMax), verticalAlignment = Alignment.CenterVertically) {
-        ExecutorChips(state.sessionExecutor(a))
-        if (onOpenSwitch != null) {
-            Chip(state.sessionExecutor(a).switchChipText(), Palette.Info, modifier = Modifier.testTag(EXECUTOR_SWITCH_CHIP_TAG).clickable { onOpenSwitch() })
-            Spacer(Modifier.width(6.dp))
-        }
-        Chip("runs ${a.session.runCount}")
-        // Contract 1.13.0: what this session's runs reported using; nothing at all when none reported.
-        a.usageTotals?.let { t -> Spacer(Modifier.width(6.dp)); Chip("${compact(t.input)} in / ${compact(t.output)} out", Palette.Info) }
-        }
+        if (!narrow) Row(Modifier.widthIn(max = chipsMax), verticalAlignment = Alignment.CenterVertically) { chips() }
+    }
+    // A phone-width header: the chips get their own row under the title, scrolling sideways, never clipped.
+    if (narrow && a != null && !spawnMode) {
+        Row(Modifier.fillMaxWidth().background(Palette.Panel).horizontalScroll(rememberScrollState()).padding(12.dp, 0.dp, 12.dp, 8.dp).testTag(AGENT_HEADER_CHIPS_TAG), verticalAlignment = Alignment.CenterVertically) { chips() }
+    }
     }
     }
     HorizontalDivider(color = Palette.Border)

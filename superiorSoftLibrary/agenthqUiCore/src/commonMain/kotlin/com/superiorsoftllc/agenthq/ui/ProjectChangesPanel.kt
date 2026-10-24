@@ -57,6 +57,7 @@ import com.superiorsoftllc.agenthq.ui.model.name
 import com.superiorsoftllc.agenthq.ui.model.optionKey
 import com.superiorsoftllc.agenthq.ui.model.projectChangesView
 import com.superiorsoftllc.agenthq.ui.model.summary
+import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitWorktreeList
 import com.superiorsoftllc.agenthq.ui.model.whenText
 import com.superiorsoftllc.agenthq.ui.model.worktreeChangesView
 import com.superiorsoftllc.agenthq.ui.model.worktreeHeader
@@ -104,6 +105,13 @@ const val WORKING_TREE_KEY = "working-tree"
 
 /** BRANCH-VIEW-2: one row of a branch's file list is [BRANCH_CHANGE_ROW_TAG] + its path. */
 const val BRANCH_CHANGE_ROW_TAG = "branch-change-row-"
+
+const val NOT_A_GIT_REPOSITORY = "Not a git repository: this project has no worktrees or changes to show."
+const val NOT_A_GIT_REPOSITORY_TAG = "changes-not-a-git-repository"
+
+/** The daemon answered that the project folder is not a git checkout: a final state, not an unknown one. */
+internal fun isNotGitRepository(list: ProjectGitWorktreeList?): Boolean =
+    list != null && !list.available && list.reason.contains("not a git repository", ignoreCase = true)
 
 /** UX-CHANGES-1: the worktree picker's anchor; each entry is [WORKTREE_SELECT_OPTION_TAG] + its branch (else folder). */
 const val WORKTREE_SELECT_TAG = "worktree-select"
@@ -274,6 +282,10 @@ fun ProjectChangesPanel(
             BranchSelect(state, controller, active, branch, branchesSupported)
             if (branch == null) WorkingTreeChanges(projectChangesView(state.projectGit[active.id], state.projectGitFailure), null, openDiff, onOpenDiff)
             else BranchChanges(state, active, branch, openDiff, onOpenDiff)
+            return@Column
+        }
+        if (isNotGitRepository(state.projectWorktrees[active.id])) {
+            Text(NOT_A_GIT_REPOSITORY, color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag(NOT_A_GIT_REPOSITORY_TAG))
             return@Column
         }
         val status = state.changesWorktreeStatus
