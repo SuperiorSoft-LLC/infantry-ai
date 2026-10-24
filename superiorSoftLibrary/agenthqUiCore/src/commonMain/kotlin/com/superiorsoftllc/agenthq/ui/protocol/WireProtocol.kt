@@ -130,6 +130,11 @@ data class Envelope(
         // `ProviderLimits`) and pushes the same frame after each run's `usage`.
         const val LIMITS = "limits"
 
+        // Contract 1.120.0 (ROGUE-1): `processes` {op: list|reap|reap_rogue, pid?} is answered by `processes`
+        // (a ProcessesAnswer); `process_pressure` (a ProcessReport) is pushed when free RAM drops under the floor.
+        const val PROCESSES = "processes"
+        const val PROCESS_PRESSURE = "process_pressure"
+
         // Contract 1.92.0 (STATS-1): `session_stats_get` {"sessionId"} asks for one session's statistics, read by the
         // daemon from its harness's own local record; answered to the requester only by `session_stats` (a SessionStats).
         const val SESSION_STATS_GET = "session_stats_get"
@@ -585,6 +590,40 @@ data class StatsPoint(val at: Long? = null, val contextTokens: Long, val cumulat
 /** STATS-1: one tool's share of the context; [tokensAdded] null when no single-tool step of it exists. */
 @Serializable
 data class ContextSource(val tool: String, val calls: Int, val tokensAdded: Long? = null)
+
+/** Contract 1.120.0 (ROGUE-1): one process the daemon's rogue detector reports; [sessionId] null = not ours (never reaped). */
+@Serializable
+data class TrackedProcess(
+    val pid: Long,
+    val command: String,
+    val sessionId: String? = null,
+    val startedAt: Long? = null,
+    val memoryMb: Long? = null,
+    val rogue: Boolean = false,
+    val reason: String? = null,
+)
+
+/** Contract 1.120.0 (ROGUE-1): free RAM against the floor, the tracked processes and the heavy unattributed ones. */
+@Serializable
+data class ProcessReport(
+    val freeMb: Long? = null,
+    val totalMb: Long? = null,
+    val floorMb: Long = 4096,
+    val underPressure: Boolean = false,
+    val autoReap: Boolean = false,
+    val tracked: List<TrackedProcess> = emptyList(),
+    val unattributed: List<TrackedProcess> = emptyList(),
+) {
+    val rogue: List<TrackedProcess> get() = tracked.filter { it.rogue }
+}
+
+/** Contract 1.120.0 (ROGUE-1): the `processes` answer. */
+@Serializable
+data class ProcessesAnswer(
+    val report: ProcessReport,
+    val reaped: List<TrackedProcess> = emptyList(),
+    val refused: String? = null,
+)
 
 /** Contract 1.59.0 (U1): one provider's plan limits. [status] `ok` or `unknown`; [reason] is a fixed code when unknown. */
 @Serializable
@@ -1836,6 +1875,12 @@ object WireRequests {
     /** STATS-2: `session_stats_get` for one AgentHQ session id (contract 1.92.0); answered by `session_stats`. */
     fun sessionStatsGet(sessionId: String): Envelope =
         Envelope(Envelope.SESSION_STATS_GET, JsonObject(mapOf("sessionId" to JsonPrimitive(sessionId))).toString())
+
+    /** ROGUE-1 (1.120.0): list the tracked processes (`op=list`), reap one (`reap` + [pid]) or every rogue one (`reap_rogue`). */
+    fun processes(op: String = "list", pid: Long? = null): Envelope = Envelope(
+        Envelope.PROCESSES,
+        JsonObject(buildMap { put("op", JsonPrimitive(op)); if (pid != null) put("pid", JsonPrimitive(pid)) }).toString(),
+    )
 
     /** `settings_set`: the daemon validates [value], stores it and answers `settings` with every setting. */
     fun settingsSet(key: String, value: JsonElement): Envelope = Envelope(
