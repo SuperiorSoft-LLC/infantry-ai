@@ -170,6 +170,7 @@ import com.superiorsoftllc.agenthq.ui.model.LineKind
 import com.superiorsoftllc.agenthq.ui.model.activityTimestamp
 import com.superiorsoftllc.agenthq.ui.model.isBusy
 import com.superiorsoftllc.agenthq.ui.model.QueuedPrompt
+import com.superiorsoftllc.agenthq.ui.model.AssistantEntryStyle
 import com.superiorsoftllc.agenthq.ui.model.interruptBlocker
 import com.superiorsoftllc.agenthq.ui.model.queuedFor
 import com.superiorsoftllc.agenthq.ui.model.isRunning
@@ -269,14 +270,26 @@ private fun PopupButton(glyph: String, label: String, tag: String, onClick: () -
     }
 }
 
-/** ASSISTANT-1: the last portrait of the team bar: the Assistant's avatar (a ring while its popup is open), a tap toggles the popup. */
+/**
+ * ASSISTANT-1: the Assistant's entry in the team bar. A pill (not a team portrait): the avatar, a 1dp accent border and an
+ * "Assistant" label (dropped in a compact bar, the border kept). It fits the 22dp portrait row, so the bar never grows.
+ */
 @Composable
 fun AssistantEntry(open: Boolean, needsInput: Boolean, onToggle: () -> Unit) {
-    val ring = if (open) Palette.Text else if (needsInput) Palette.Accent else Color.Transparent
+    val border = if (open) Palette.Text else Palette.Accent
+    val showLabel = AssistantEntryStyle.showLabel(LocalTitleBarCompact.current)
     IconActionTooltipBox(ASSISTANT_NAME, modifier = Modifier.padding(end = 4.dp).testTag(TITLE_BAR_ASSISTANT_TAG)) { m ->
-        Box(
-            m.clip(CircleShape).border(2.dp, ring, CircleShape).padding(1.dp)
+        Row(
+            m.clip(CircleShape).border(1.dp, border, CircleShape).padding(start = 1.dp, end = if (showLabel) 8.dp else 1.dp)
+                .background(if (needsInput) Palette.Accent.copy(alpha = 0.18f) else Color.Transparent)
                 .clickable(role = Role.Button, onClickLabel = if (open) "Close the Assistant" else "Open the Assistant", onClick = onToggle),
-        ) { AgentAvatar("assistant", ASSISTANT_NAME, 22) }
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            AgentAvatar("assistant", ASSISTANT_NAME, 22)
+            if (showLabel) {
+                Spacer(Modifier.width(5.dp))
+                Text(ASSISTANT_NAME, color = Palette.Text, fontSize = 11.sp, maxLines = 1, softWrap = false)
+            }
+        }
     }
 }
