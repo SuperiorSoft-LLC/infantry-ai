@@ -2687,6 +2687,22 @@ private suspend fun handleConnection(
                     Envelope(Envelope.ERROR, "bg_job refused: ${e.message ?: e::class.simpleName}")
                 }
 
+                // Contract 1.117.0: an agent's progress report on its own session. Validated by the reducer; the record
+                // change reaches every client as a `session` push, and the answer is the session's current progress.
+                Envelope.PROGRESS -> try {
+                    val req = json.decodeFromString(com.superiorsoftllc.agenthq.session.ProgressReport.serializer(), envelope.data)
+                    val sid = envelope.sessionId?.trim()?.takeIf { it.isNotEmpty() }
+                        ?: throw IllegalArgumentException("expects the frame's sessionId (AGENTHQ_SESSION_ID)")
+                    val record = manager.reportProgress(sid, req) ?: throw IllegalArgumentException("no session '${sid.take(80)}'")
+                    Envelope(
+                        Envelope.PROGRESS,
+                        record.progress?.let { json.encodeToString(com.superiorsoftllc.agenthq.session.SessionProgress.serializer(), it) } ?: "null",
+                        sid,
+                    )
+                } catch (e: Exception) {
+                    Envelope(Envelope.ERROR, "progress refused: ${e.message ?: e::class.simpleName}")
+                }
+
                 Envelope.SESSION_RESTART -> try {
                     val body = json.parseToJsonElement(envelope.data.ifBlank { "{}" }).jsonObject
                     val sessionId = body["sessionId"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()

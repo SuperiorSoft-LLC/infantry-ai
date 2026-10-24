@@ -134,6 +134,17 @@ fun ConfigDialog(
                         Text(if (flags.blurBehindDialogs) "On" else "Off", fontSize = 12.sp)
                     }
                 }
+                FlagSection(title = "Progress bars: stale after", applies = com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_APPLIES_TO) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_CHOICES.forEach { min ->
+                            val picked = flags.progressStaleMin == min
+                            OutlinedButton(
+                                onClick = { onFlags(flags.copy(progressStaleMin = min)) },
+                                modifier = Modifier.testTag(PROGRESS_STALE_CHOICE_TAG_PREFIX + min),
+                            ) { Text("$min min", fontSize = 11.sp, color = if (picked) Palette.Accent else Palette.Text, fontWeight = if (picked) FontWeight.Bold else FontWeight.Normal) }
+                        }
+                    }
+                }
                 FlagSection(title = "Spoken alerts", applies = com.superiorsoftllc.agenthq.ui.voice.VOICE_APPLIES_TO) {
                     com.superiorsoftllc.agenthq.ui.voice.VoiceSettingsSection(flags.voice) { onFlags(flags.copy(voice = it)) }
                 }
@@ -583,6 +594,7 @@ private fun UserPortraitSection(portrait: String?, onSave: (ByteArray?) -> Unit)
 }
 
 const val BLUR_SWITCH_TAG = "blur-behind-dialogs-switch"
+const val PROGRESS_STALE_CHOICE_TAG_PREFIX = "progress-stale-choice-"
 const val BLUR_APPLIES_TO = "Applies to: every dialog. On blurs the window behind it; off dims it instead. Android before 12 always dims. Remembered across launches."
 
 const val THEME_ACCENT_TAG_PREFIX = "theme-accent-"

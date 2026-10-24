@@ -206,6 +206,11 @@ data class SessionRecord(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val spawnerSessionId: String? = null,
     /** Contract 1.115.0: the ONE installation-wide Assistant session (no project, role `assistant`, started by the `assistant` frame). Omitted when false. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val global: Boolean = false,
+    /**
+     * Contract 1.117.0: the agent's own progress report on its long job ([SessionProgress]); memory only in effect (a
+     * daemon start clears it), cleared when the session ends or a turn ends with no report in it. Omitted when none.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val progress: SessionProgress? = null,
 ) {
     /**
      * Whether this session is LIVE (a run is in flight) or HISTORY (none is).

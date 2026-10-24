@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.115.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.117.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,37 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+
+### What changed in 1.117.0 (PROGRESS-1, ticket-1371d44b) — an agent reports how far along its long job is
+
+ADDITIVE; a 1.115.0 client keeps working (the new key is ignored on decode). The `ready` frame reports `contract=1.117.0`.
+(1.116.0 is claimed by a parallel ticket.)
+
+- **`SessionRecord.progress`** (omitted when none): the agent's OWN measurement of its long job. Never estimated.
+
+| Key | Type | Meaning |
+|---|---|---|
+| `mode` | `percent` \| `steps` \| `bytes` \| `count` \| `indeterminate` | how the agent measures |
+| `state` | `running` \| `done` \| `failed` | |
+| `percent` | 0-100, omitted for `indeterminate` | derived by the daemon for `steps` / `bytes` / `count` (omitted when the total is unknown) |
+| `label` | string ≤ 120 | what the job is ("gate", "download model") |
+| `steps`, `stepsTotal`, `stepsDone`, `step` | `steps` only | planned names (empty for a bare count), total, complete, and the name of the step now running |
+| `done`, `total` | `bytes` / `count` | units done of total |
+| `bytesPerSec` | `bytes` only | smoothed speed from successive reports |
+| `startedAt`, `updatedAt` | epoch ms | the job's start; the newest report (a client shows "no update for N min" against it) |
+
+- **`progress` frame** (client -> daemon, `sessionId` = the reporting session, `data` = a `ProgressReport`
+  `{op, percent?, label?, steps?, count?, step?, done?, total?}`), `op` one of `percent`, `plan` (steps or count), `step` (the named step
+  completed; no name = the current one; an unplanned name is inserted where the job stands, already complete), `bytes`, `count`, `status`
+  (indeterminate), `done`, `fail`, `clear`, `get`. Answered by a `progress` frame carrying the session's progress (or `null`); a bad report is
+  `error` `progress refused: ...` and changes nothing. The change reaches every client as the usual `session` push (and is in the `sessions`
+  list, so a late-joining client sees the current value). No separate push frame.
+- **Cleared** when the session ends (`EXITED` / `ORPHANED`), when a turn ends with no report made during it (unless an `agenthq bg run` job is
+  still registered), and on a daemon start. A finished job (`done` / `failed`) stays visible until then.
+- **CLI** (`agenthq progress ...`, `agenthq run --label x -- <cmd>`, `agenthq progress --watch`) and **MCP** (`agenthq_progress`) build the
+  same report. HARMLESS outside Infantry AI: with no `AGENTHQ_SESSION_ID` or no reachable daemon every progress command exits 0 and prints
+  nothing; `run` / `--watch` still pass the output through unchanged and keep the command's exit code. See `docs/PROGRESS.md` for the marker
+  grammar (`##infantry progress 40 compile`), the readers and the coalescing rules.
 
 ### What changed in 1.115.0 (ASSISTANT-1) — the global Assistant
 

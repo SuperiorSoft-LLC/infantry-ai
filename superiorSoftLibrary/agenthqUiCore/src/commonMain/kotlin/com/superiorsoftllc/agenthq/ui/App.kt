@@ -244,7 +244,14 @@ fun App(
     LaunchedEffect(state.activeProject?.id) { diffTarget = null }
     // MODAL-BLUR: the one blur state every dialog reports into; the setting is remembered by the host.
     val host = LocalPlatformHost.current
-    var flags by remember { mutableStateOf(UiFlags(blurBehindDialogs = host.uiPref(BLUR_PREF_KEY) != "off")) }
+    var flags by remember {
+        mutableStateOf(
+            UiFlags(
+                blurBehindDialogs = host.uiPref(BLUR_PREF_KEY) != "off",
+                progressStaleMin = host.uiPref(com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_PREF_KEY)?.toIntOrNull()?.takeIf { it > 0 } ?: com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_DEFAULT_MIN,
+            ),
+        )
+    }
     val modalBlur = remember { ModalBlurState(supported = host.supportsBlur) }
     // THEME-1: the stored theme, applied once before the first themed frame; Palette.theme is its only owner from here on.
     remember(host) { Palette.theme = com.superiorsoftllc.agenthq.ui.model.ThemeSettings.decode(host.uiPref(THEME_PREF_KEY)) }
@@ -358,7 +365,7 @@ fun App(
     AgentHqTheme {
       // M2-8: a Box so the Board modal overlay stacks over the window.
       // IMG-VIEW-1: chat images open full size over the whole window (the Board keeps its own host, above it).
-      androidx.compose.runtime.CompositionLocalProvider(LocalModalBlur provides modalBlur) {
+      androidx.compose.runtime.CompositionLocalProvider(LocalModalBlur provides modalBlur, LocalProgressStaleMin provides flags.progressStaleMin) {
       ImageViewerHost {
       Box(Modifier.fillMaxSize()) {
         Column(
@@ -568,6 +575,7 @@ fun App(
                 flags,
                 onFlags = { next ->
                     if (next.blurBehindDialogs != flags.blurBehindDialogs) host.saveUiPref(BLUR_PREF_KEY, if (next.blurBehindDialogs) "on" else "off")
+                    if (next.progressStaleMin != flags.progressStaleMin) host.saveUiPref(com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_PREF_KEY, next.progressStaleMin.toString())
                     flags = next
                 }, onDismiss = { showConfig = false },
                 keepAliveMinutes = state.keepAliveMinutes,
@@ -880,6 +888,8 @@ fun AgentRow(a: AgentView, state: AppState, selected: Boolean, onClick: () -> Un
                 }
             }
             TicketTag(a, state, onOpenTicket, Modifier.testTag("agent-row-ticket-${a.id}"))
+            // Contract 1.117.0: the agent's own progress report on its long job, as a slim live bar.
+            a.session.progress?.let { ProgressMeter(it, "row-${a.id}", Modifier.padding(top = 3.dp), compact = true) }
             Spacer(Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 a.role?.let { Text(it, color = roleColor, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, modifier = Modifier.testTag("agent-row-role-${a.id}")); Spacer(Modifier.width(5.dp)) }

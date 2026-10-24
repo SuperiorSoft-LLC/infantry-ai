@@ -261,7 +261,25 @@ internal object Cli {
         input: () -> Reader = { System.`in`.bufferedReader() },
         /** Where `mcp serve` looks for its optional `.agenthq/mcp.json` (P11-C). */
         cwd: File = File(System.getProperty("user.dir") ?: "."),
+        /** Contract 1.117.0: the raw stdin `progress --watch` copies through byte for byte. */
+        rawInput: () -> java.io.InputStream = { System.`in` },
     ): Int {
+        // Contract 1.117.0: `progress ...` and `run -- <cmd...>` never meet the global flag parser either, and never fail
+        // outside Infantry AI: no session, no daemon or a bad connection option all mean "report nothing".
+        if (args.firstOrNull() == "progress" || args.firstOrNull() == "run") {
+            val quiet = getenv(ProgressCli.DEBUG_ENV)?.trim() != "1"
+            val open = {
+                val target = resolveTarget(parseArgs(emptyArray(), DiscardAppendable) ?: error("no connection target"), getenv)
+                FrameStream.open(target, if (quiet) DiscardAppendable else err)
+            }
+            val stdout = out as? java.io.OutputStream ?: AppendableOutputStream(out)
+            return if (args[0] == "progress") {
+                ProgressCli.progress(args.drop(1), rawInput(), stdout, err, getenv, open)
+            } else {
+                val stderr = err as? java.io.OutputStream ?: AppendableOutputStream(err)
+                ProgressCli.run(args.drop(1), stdout, stderr, err, getenv, open)
+            }
+        }
         // `bg run [--name x] -- <cmd...>`: the command after `--` is raw, so it must not meet the global flag parser.
         if (args.firstOrNull() == "bg") {
             // Only the words before `--` are ours: a `--port N` there still addresses the daemon.
@@ -4049,6 +4067,11 @@ internal object Cli {
               remote on|off|status  Let the daemon accept outside (Tailscale) connections; prints the ws address
                                   and token. Takes effect on the next daemon restart.
               bg run [--name L] -- CMD  Run CMD as a registered background job (session reads Running); bg list|status|logs|stop ID
+              progress <0-100> ["label"] | plan "a" "b" .. | plan N | step [name] | bytes D T | count D T | status "label" | done | fail | clear | show
+                                  Report your long job's progress, shown as a live bar on your card (progress --help: all forms)
+              progress --watch [--reader gradle|junit|gate]   Copy stdin to stdout unchanged, reporting ##infantry marker lines
+              run [--label L] [--reader R] -- CMD   Run CMD with its output and exit code unchanged; progress done on exit 0, failed otherwise
+                                  Harmless outside Infantry AI: no session or daemon = no report, exit 0 (run keeps CMD's code)
               harnesses           The harnesses (provider ids) a ticket can pin, and each one's models
               harness-status      Which harness CLIs are installed / missing / outdated; harness-install [id...] [--update] installs them via npm
               epics --project <id> List that project's epics, with each one's goal and story count

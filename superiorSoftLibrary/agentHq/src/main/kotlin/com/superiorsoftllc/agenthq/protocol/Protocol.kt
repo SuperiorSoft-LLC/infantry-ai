@@ -239,6 +239,9 @@ data class Envelope(
 
         /** `agenthq bg run`: register / heartbeat / finish / list a session's registered background jobs ([com.superiorsoftllc.agenthq.session.BgJobRequest]); answered by a `bg_job` list. */
         const val BG_JOB = "bg_job"
+
+        /** Contract 1.117.0: `agenthq progress` / `agenthq_progress`: one [com.superiorsoftllc.agenthq.session.ProgressReport] for the frame's session; answered by a `progress` frame (the session's progress, or `null`). The change reaches clients as a `session` push. */
+        const val PROGRESS = "progress"
         const val MAIL_REFUSED = "mail_refused"
 
         // Phase 9 -- the public, provider-neutral event vocabulary (see EventVocabulary).
