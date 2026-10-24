@@ -1,11 +1,16 @@
 #!/bin/sh
 # Bulk QA gate: runs every test stage (test tasks forced, never cached), one Gradle at a time, in a throwaway worktree.
-# Usage: scripts/agenthq-gate.sh <commit-or-branch>   (see docs/GATE.md)
+# Usage: scripts/agenthq-gate.sh [--full] <commit-or-branch>   (see docs/GATE.md)
+#   --full: the promotion run. Nothing from the build cache (--no-build-cache): every module compiles fresh, once.
 # Env: GATE_MIN_FREE_GB (default 5), GATE_LOCK (lock dir), GATE_KEEP=1 keeps the worktree.
 
 set -u
+FULL=""
+if [ "${1:-}" = "--full" ]; then FULL=1; shift; fi
 REF="${1:-}"
-[ -n "$REF" ] || { echo "usage: $0 <commit-or-branch>" >&2; exit 2; }
+[ -n "$REF" ] || { echo "usage: $0 [--full] <commit-or-branch>" >&2; exit 2; }
+# TEST-SPEED-2: tests are always forced (--rerun). Only --full also bypasses the build cache for compilation.
+CACHE_FLAG=""; [ -n "$FULL" ] && CACHE_FLAG="--no-build-cache"
 
 REPO=$(git rev-parse --show-toplevel) || exit 2
 TMPROOT="${TEMP:-${TMP:-/tmp}}"
@@ -56,7 +61,7 @@ STATUS="$OUT/status.log"
 note() { echo "$(date '+%H:%M:%S') $*" | tee -a "$STATUS"; }
 
 git -C "$REPO" worktree add --detach "$WT" "$SHA" >/dev/null 2>&1 || { echo "worktree add failed" >&2; exit 2; }
-note "gate $REF = $SHA; worktree $WT; logs $OUT"
+note "gate $REF = $SHA${FULL:+ (FULL: --no-build-cache)}; worktree $WT; logs $OUT"
 
 # count tests from the JUnit XML a stage produced: "tests failures errors skipped|failing names"
 tally() {
@@ -77,8 +82,8 @@ stage() { # name gradle-task project-dir
   if ! check_disk; then SUMMARY="$SUMMARY $name=ABORT(disk)"; FAILED=1; return; fi
   # TEST-SPEED-2: --rerun forces THIS test task to execute (never up-to-date, never FROM-CACHE), so every test really
   # runs; compilation is reused (build cache, then up-to-date) instead of recompiling all modules once per stage.
-  note "stage $name: gradlew $task --rerun --no-daemon"
-  (cd "$WT" && ./gradlew "$task" --rerun --no-daemon --console=plain) > "$OUT/$name.log" 2>&1
+  note "stage $name: gradlew $task --rerun --no-daemon $CACHE_FLAG"
+  (cd "$WT" && ./gradlew "$task" --rerun --no-daemon $CACHE_FLAG --console=plain) > "$OUT/$name.log" 2>&1
   rc=$?
   set -- $(tally "$dir")
   names=$(failing "$dir" | tr '\n' ',' | sed 's/,$//')
@@ -95,5 +100,5 @@ stage agentHqUi     :superiorSoftLibrary:agentHqUi:test          superiorSoftLib
 stage ownerSmoke    :superiorSoftLibrary:agentHqUi:ownerSmoke    superiorSoftLibrary/agentHqUi/build/test-results/ownerSmoke
 
 if [ $FAILED -eq 0 ]; then R=PASS; else R=FAIL; fi
-echo "GATE $R $SHA:$SUMMARY${FAILNAMES:+ failing:$FAILNAMES} logs=$OUT"
+echo "GATE $R $SHA${FULL:+ (full)}:$SUMMARY${FAILNAMES:+ failing:$FAILNAMES} logs=$OUT"
 [ $FAILED -eq 0 ]

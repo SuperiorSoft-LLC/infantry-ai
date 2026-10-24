@@ -3,7 +3,8 @@
 One script runs the whole QA gate against a commit or branch. QA and the PM run the same thing.
 
 ```sh
-scripts/agenthq-gate.sh staging-agenthq     # or any commit sha / branch
+scripts/agenthq-gate.sh staging-agenthq          # batch gate: tests forced, compilation may come from the build cache
+scripts/agenthq-gate.sh --full staging-agenthq   # promotion gate (staging -> feature): nothing from the build cache
 ```
 
 Run it from Git Bash inside any AgentHQ checkout. Long run (tens of minutes): start it as
@@ -20,6 +21,9 @@ Run it from Git Bash inside any AgentHQ checkout. Long run (tens of minutes): st
    really runs. Compile tasks are NOT forced: they come from the build cache or are up-to-date, so the modules are
    compiled once per gate, not once per stage. (Before TEST-SPEED-2 each stage used `--rerun-tasks`, which
    recompiled everything four times, about 2-3 minutes of pure recompilation.)
+   `--full` (use it for the promotion run, staging -> feature) adds `--no-build-cache` to every stage: nothing is
+   taken from the cache, so every module compiles fresh in the new worktree, once (later stages see it up-to-date).
+   The verdict line then says `(full)`.
    Test tasks run several forks in parallel (`maxParallelForks`; `-Pagenthq.testForks=N`, `-Pagenthq.uiTestForks=N`).
 5. Removes the worktree and the lock on exit (also on Ctrl-C). `GATE_KEEP=1` keeps the worktree for inspection.
 
