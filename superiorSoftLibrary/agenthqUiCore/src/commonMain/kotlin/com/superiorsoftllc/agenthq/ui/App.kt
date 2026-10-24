@@ -571,14 +571,14 @@ fun App(
         // VOICE-1: spoken attention alerts (and their toast) over every pane.
         com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundEffect(controller.state, flags.commsSound)
         com.superiorsoftllc.agenthq.ui.voice.VoiceAlerts(controller.spoken, flags.voice, Modifier.align(Alignment.BottomStart))
-        // ASK-1: an agent's question to the owner shows over every pane (and over the Board / diff modals).
-        QuestionWindow(
-            shown = state.shownQuestions,
-            waiting = state.openQuestions.size,
-            onAnswer = { answer -> actionScope.launch { controller.answerQuestion(answer) } },
-            onCancel = { id -> actionScope.launch { controller.cancelQuestion(id) } },
-            onLater = { controller.dismissQuestions(); root.requestFocus() },
-            onShow = controller::showQuestions,
+        // ASK-1: questions the owner cannot see inline (another session, or put off with Later): a pill that opens the asker.
+        QuestionPill(
+            hidden = state.openQuestions.count { q -> q.id in state.dismissedQuestions || q.sessionId != state.selectedId },
+            onShow = {
+                state.openQuestions.firstOrNull { it.sessionId != state.selectedId && state.agents.containsKey(it.sessionId) }
+                    ?.let { controller.select(it.sessionId); centerTab = CenterTab.OUTPUT; chat.spawnMode = false }
+                controller.showQuestions()
+            },
         )
       }
       }

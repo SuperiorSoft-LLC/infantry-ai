@@ -343,7 +343,15 @@ fun ChatPanel(
         Box(Modifier.weight(1f).fillMaxWidth().testTag(transcriptTag)) {
             content {
                 androidx.compose.runtime.CompositionLocalProvider(LocalUserPortrait provides state.userPortrait) {
-                    OutputPane(agent, chat.spawnMode, roleColor = state.role(agent?.role)?.color, onStartSession = if (allowSpawn) ({ chat.spawnMode = true; chat.focus.requestFocus() }) else null)
+                    OutputPane(agent, chat.spawnMode, roleColor = state.role(agent?.role)?.color, onStartSession = if (allowSpawn) ({ chat.spawnMode = true; chat.focus.requestFocus() }) else null) {
+                        // ASK-1: this session's pending question, inline above the Activity box.
+                        QuestionPanel(
+                            shown = agent?.let { state.shownQuestionsFor(it.id) }.orEmpty(),
+                            onAnswer = { answer -> scope.launch { controller.answerQuestion(answer) } },
+                            onCancel = { id -> scope.launch { controller.cancelQuestion(id) } },
+                            onLater = { controller.dismissQuestions(); chat.focus.requestFocus() },
+                        )
+                    }
                 }
             }
             if (agent != null && !chat.spawnMode) {
