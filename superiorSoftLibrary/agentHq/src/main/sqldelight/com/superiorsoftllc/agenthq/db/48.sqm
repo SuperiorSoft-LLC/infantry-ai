@@ -1,0 +1,6 @@
+-- EXPERIMENTS-1 -- migration v48 -> v49: a project carries a small JSON object of named experiment switches (key -> "on"/"off").
+-- NOT NULL DEFAULT '{}' so every existing project reads back as "no experiment on": today's behaviour.
+--
+-- NEXT MIGRATION: 49.sqm
+
+ALTER TABLE projects ADD COLUMN experiments TEXT NOT NULL DEFAULT '{}';

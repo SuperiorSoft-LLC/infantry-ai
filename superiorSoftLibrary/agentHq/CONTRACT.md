@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.125.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.126.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,10 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+
+### What changed in 1.126.0 (EXPERIMENTS-1, ticket-c62a975a) - experiment switches and A/B session measures
+
+Additive; `contract=1.126.0`. `Project.experiments` (key to `on`/`off`, absent = off) and `project_config.experiments` (merged; `off` removes the key). `session_stats` gains optional `tags`, `firstContextTokens`, `msToFirstEdit`, `toolCallsBeforeFirstEdit`, `toolResults`, `avgToolResultChars`, `maxToolResultChars`, `stepMsP50`, `stepMsP90`, `stepMsMean`; every one is null when the harness record does not say. An older daemon omits all of them.
 
 ### What changed in 1.125.0 (MESSAGE-ORIGIN, ticket-eeab5a16) — a turn says who it came from
 

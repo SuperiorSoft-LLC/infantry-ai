@@ -1627,10 +1627,11 @@ internal object Cli {
     private suspend fun projectConfig(stream: FrameStream, args: List<String>, out: Appendable, err: Appendable): Int {
         val projectId = args[2].trim()
         val autoRemove = if (args[1] == "set" && args[3].trim() == AUTO_REMOVE_SETTING) onOff(args[4]) else null
-        val caps = if (args[1] == "set" && autoRemove == null) mapOf(args[3].trim() to args[4].trim().toInt()) else null
+        val experiment = if (args[1] == "set" && args[3].trim().startsWith(EXPERIMENT_PREFIX)) mapOf(args[3].trim().removePrefix(EXPERIMENT_PREFIX) to args[4].trim()) else null
+        val caps = if (args[1] == "set" && autoRemove == null && experiment == null) mapOf(args[3].trim() to args[4].trim().toInt()) else null
         val payload = json.encodeToString(
             com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest.serializer(),
-            com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest(projectId = projectId, laneCaps = caps, autoRemoveDoneWorkers = autoRemove),
+            com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest(projectId = projectId, laneCaps = caps, autoRemoveDoneWorkers = autoRemove, experiments = experiment),
         )
         val answer = stream.request(Envelope(Envelope.PROJECT_CONFIG, payload), Envelope.PROJECT, "project_config", idempotent = true)
         val project = try {
@@ -1643,11 +1644,15 @@ internal object Cli {
         if (project.laneCaps.isEmpty()) out.appendLine("  (none set)")
         for ((role, cap) in project.laneCaps) out.appendLine("  $role $cap")
         out.appendLine("$AUTO_REMOVE_SETTING: ${if (project.autoRemoveDoneWorkers) "on" else "off"} (a done ticket's worker session is ended and removed)")
+        for ((k, v) in project.experiments) out.appendLine("$EXPERIMENT_PREFIX$k: $v (experimental)")
         return 0
     }
 
     /** BASICS-KILL-1 (1.118.0): the `project config set` key for [Project.autoRemoveDoneWorkers]. */
     private const val AUTO_REMOVE_SETTING = "auto-remove-done-workers"
+
+    /** EXPERIMENTS-1 (1.126.0): `project config set <id> experiment.<key> on|off`. */
+    private const val EXPERIMENT_PREFIX = "experiment."
 
     private fun onOff(value: String): Boolean? = when (value.trim().lowercase()) {
         "on", "true" -> true

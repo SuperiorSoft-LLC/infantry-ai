@@ -60,6 +60,11 @@ data class Project(
      * `project_config`. An older daemon omits the key, which a client reads as false.
      */
     val autoRemoveDoneWorkers: Boolean = false,
+    /**
+     * Contract 1.126.0 (EXPERIMENTS-1): named experiment switches, key to `on` or `off`; a key not listed is off. Set only with
+     * `project_config`. An older daemon omits the key, which a client reads as "no experiment on".
+     */
+    val experiments: Map<String, String> = emptyMap(),
 )
 
 /**
@@ -74,6 +79,8 @@ data class ProjectConfigRequest(
     val laneCaps: Map<String, Int>? = null,
     /** Contract 1.118.0: set [Project.autoRemoveDoneWorkers]; absent = unchanged. */
     val autoRemoveDoneWorkers: Boolean? = null,
+    /** Contract 1.126.0: experiment switches merged into [Project.experiments] (`on`/`off`); absent = unchanged. */
+    val experiments: Map<String, String>? = null,
 ) {
     companion object {
         fun decode(text: String): ProjectConfigRequest = StrictJson.decode(serializer(), text, "project_config payload")

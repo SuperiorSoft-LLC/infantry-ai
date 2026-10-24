@@ -787,6 +787,8 @@ class AgentHqDaemon(
             // order used to also append onto `Project.storyIds` here; it now lives entirely on
             // `Epic.storyIds`, appended below when the create named an epic).
             val projectStore = ProjectStore(persistence = SqlProjectPersistence((store as SqlAgentHqStore).database))
+            // EXPERIMENTS-1: the pi tool bridge (off unless the project setting or the env override says on). Removing it = this line.
+            com.superiorsoftllc.agenthq.experiments.pitoolbridge.PiToolBridgeRegistration.register({ projectStore.experimentOn(it, "piToolBridge") }, sessionStats)
             // BASE-1a: `project_base` checks a branch in the repo ticket starts cut in -- the board's, read at answer
             // time through [boardRef] (built further down) -- with the same resolver a cut uses.
             var boardRef: TicketBoard? = null

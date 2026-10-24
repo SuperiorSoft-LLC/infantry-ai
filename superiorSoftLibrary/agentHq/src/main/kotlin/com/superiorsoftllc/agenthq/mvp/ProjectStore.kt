@@ -124,6 +124,31 @@ class ProjectStore(
         return updated
     }
 
+    /** EXPERIMENTS-1 (contract 1.126.0): merge experiment switches (key to `on`/`off`) into project [id]; `off` removes the key. */
+    @Synchronized
+    fun setExperiments(id: String, switches: Map<String, String>): Project {
+        val existing = get(id)
+        val merged = existing.experiments.toMutableMap()
+        for ((rawKey, rawValue) in switches) {
+            val key = rawKey.trim()
+            require(Regex("[A-Za-z0-9._-]{1,60}").matches(key)) { "experiment key '${key.take(60)}' is not a plain name" }
+            when (rawValue.trim().lowercase()) {
+                "on" -> merged[key] = "on"
+                "off" -> merged.remove(key)
+                else -> throw IllegalArgumentException("experiment '$key' must be on or off, was '${rawValue.take(20)}'")
+            }
+        }
+        if (merged == existing.experiments) return existing
+        val updated = existing.copy(experiments = merged.toSortedMap())
+        projects[existing.id] = updated
+        persist(updated)
+        return updated
+    }
+
+    /** EXPERIMENTS-1: whether experiment [key] is `on` for project [projectId] (false when unset or unknown). */
+    @Synchronized
+    fun experimentOn(projectId: String?, key: String): Boolean = projects[projectId?.trim().orEmpty()]?.experiments?.get(key) == "on"
+
     /** BASICS-KILL-1: whether project [projectId] removes a done ticket's worker session (false when unset or unknown). */
     @Synchronized
     fun autoRemovesDoneWorkers(projectId: String?): Boolean = projects[projectId?.trim().orEmpty()]?.autoRemoveDoneWorkers == true
