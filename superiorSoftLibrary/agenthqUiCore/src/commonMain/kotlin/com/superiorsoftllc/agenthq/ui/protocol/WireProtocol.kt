@@ -129,6 +129,11 @@ data class Envelope(
         // Contract 1.59.0 (U1): plan-limit meters. `limits` (empty data) asks; the daemon answers `limits` (a list of
         // `ProviderLimits`) and pushes the same frame after each run's `usage`.
         const val LIMITS = "limits"
+        // Contract 1.119.0 (USAGE-PACE): `usage_get` (empty) is answered by `usage_report` (a `UsageReport`); 1.121.0 adds
+        // `usage_set` (a `UsageSet`: manual percent / override / pacing rule), also answered by `usage_report`.
+        const val USAGE_GET = "usage_get"
+        const val USAGE_REPORT = "usage_report"
+        const val USAGE_SET = "usage_set"
 
         // Contract 1.120.0 (ROGUE-1): `processes` {op: list|reap|reap_rogue, pid?} is answered by `processes`
         // (a ProcessesAnswer); `process_pressure` (a ProcessReport) is pushed when free RAM drops under the floor.
@@ -590,6 +595,56 @@ data class StatsPoint(val at: Long? = null, val contextTokens: Long, val cumulat
 /** STATS-1: one tool's share of the context; [tokensAdded] null when no single-tool step of it exists. */
 @Serializable
 data class ContextSource(val tool: String, val calls: Int, val tokensAdded: Long? = null)
+
+/** USAGE-PACE (1.119.0): below [below] percent used, [workers] ticket workers may run; [below] null = every percent left. */
+@Serializable
+data class PacingTier(val below: Double? = null, val workers: Int)
+
+/** USAGE-PACE: the pacing rule; the metric is the highest percent among a meter's windows. */
+@Serializable
+data class PacingRule(val enabled: Boolean = true, val tiers: List<PacingTier> = emptyList())
+
+/** USAGE-PACE: a hand-set allowance: [workers] null = no limit, until [until] (epoch millis). */
+@Serializable
+data class UsageOverride(val workers: Int? = null, val until: Long = 0)
+
+/** USAGE-PACE: one plan meter (`claude`, `opencode-go`, else a harness id) of a [UsageReport]. */
+@Serializable
+data class MeterUsage(
+    val meter: String,
+    val percent: Double? = null,
+    val window: String? = null,
+    val resetsAt: Long? = null,
+    val paceDelta: Double? = null,
+    /** `live`, `manual` or `none`. */
+    val source: String = "none",
+    val windows: List<LimitWindow> = emptyList(),
+    val reason: String? = null,
+    val ruleAllowance: Int? = null,
+    val override: UsageOverride? = null,
+    /** null = no limit. */
+    val allowance: Int? = null,
+    val running: Int = 0,
+    val canStart: Boolean = true,
+    val warning: String? = null,
+)
+
+/** USAGE-PACE (1.119.0): the `usage_report` frame. */
+@Serializable
+data class UsageReport(val meters: List<MeterUsage> = emptyList(), val rule: PacingRule = PacingRule(), val observedAt: Long = 0)
+
+/** USAGE-PACE (1.121.0): the `usage_set` frame; only the keys a request names are sent (no defaults encoded). */
+@Serializable
+data class UsageSet(
+    val meter: String = "",
+    val manualPercent: Double? = null,
+    val manualResetsAt: Long? = null,
+    val clearManual: Boolean = false,
+    val overrideWorkers: Int? = null,
+    val overrideUntil: Long? = null,
+    val clearOverride: Boolean = false,
+    val rule: PacingRule? = null,
+)
 
 /** Contract 1.120.0 (ROGUE-1): one process the daemon's rogue detector reports; [sessionId] null = not ours (never reaped). */
 @Serializable

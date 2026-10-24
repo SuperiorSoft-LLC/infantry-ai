@@ -359,6 +359,8 @@ object EventVocabulary {
     // **1.118.0 (BASICS-KILL-1) is ADDITIVE**: `Project.autoRemoveDoneWorkers` + `project_config` key; stale BUSY removable; one session per ticket. See CONTRACT.md.
     // **1.120.0 (ROGUE-1, ticket 8a40b481) is ADDITIVE**: the `processes` request frame (list / reap / reap_rogue) and the `process_pressure`
     // push; settings `processes.autoReap` (default false) / `processes.idleMinutes` / `processes.heavyMb` / `processes.floorMb`. See CONTRACT.md.
+    // **1.119.0 (USAGE-PACE) is ADDITIVE**: `usage_get` / `usage_report` (read-only plan meters + pacing allowance), `agenthq usage` / `agenthq_usage`. See CONTRACT.md.
+    // **1.121.0 (USAGE-PACE S2+S3) is ADDITIVE + BEHAVIOURAL**: `usage_set`, settings `usage.pacing|manual|overrides`, `agenthq usage set|clear|override|rule`; an agent's / the daemon's ticket start beyond the plan allowance is refused (1.120.0 is ROGUE-1). See CONTRACT.md.
     // **1.122.0 (WEB-1, ticket 6cb0d59e) is ADDITIVE**: the daemon serves the browser client bundle at `/` (no token; Host and
     // Origin still checked); a SAME-ORIGIN browser is admitted on `/ws` only with the bearer, which it may send as the
     // `agenthq.bearer.<base64url token>` subprotocol (the daemon answers `agenthq`); setting `AGENTHQ_WEB_HOSTS`. See CONTRACT.md.

@@ -658,6 +658,8 @@ data class AppState(
     val providerStates: Map<String, ProviderState> = emptyMap(),
     /** Contract 1.59.0 (U1): the last `limits` answer, one entry per provider in the daemon's order; null = never answered. */
     val planLimits: List<ProviderLimits>? = null,
+    /** USAGE-PACE (contract 1.119.0): the last `usage_report`, plan meters and pacing allowance; null = never answered. */
+    val usageReport: com.superiorsoftllc.agenthq.ui.protocol.UsageReport? = null,
     /** STATS-2 (contract 1.92.0): the last `session_stats` answer per AgentHQ session id; absent = never answered. */
     val sessionStats: Map<String, SessionStats> = emptyMap(),
     /**
@@ -1671,6 +1673,9 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
 
     // Contract 1.59.0 (U1): the plan-limit meters, replaced whole by each answer or push.
     Envelope.LIMITS -> s.copy(planLimits = json.decodeFromString(ListSerializer(ProviderLimits.serializer()), env.data))
+
+    // USAGE-PACE (1.119.0): the plan meters and allowances, replaced whole by each answer.
+    Envelope.USAGE_REPORT -> s.copy(usageReport = json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.UsageReport.serializer(), env.data))
 
     // STATS-2 (1.92.0): one session's statistics, replacing that session's previous answer whole.
     Envelope.SESSION_STATS -> runCatching { json.decodeFromString(SessionStats.serializer(), env.data) }

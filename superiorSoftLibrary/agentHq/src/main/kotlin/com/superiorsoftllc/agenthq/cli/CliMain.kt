@@ -442,6 +442,7 @@ internal object Cli {
                 "skill" -> skill(stream, parsed, out, err)
                 "role" -> role(stream, parsed, out, err, getenv, input)
                 "ask" -> ask(stream, parsed, out, err, getenv)
+                "usage" -> runBlocking { UsageCli.run(stream, parsed.args, out, err) }
                 else -> {
                     // Unreachable: [run] rejects an unknown command before it connects.
                     err.appendLine("error: unknown command '$command'")
@@ -4107,6 +4108,11 @@ internal object Cli {
               run [--label L] [--reader R] -- CMD   Run CMD with its output and exit code unchanged; progress done on exit 0, failed otherwise
                                   Harmless outside Infantry AI: no session or daemon = no report, exit 0 (run keeps CMD's code)
               harnesses           The harnesses (provider ids) a ticket can pin, and each one's models
+              usage [show]        Plan usage per meter (claude, opencode-go, ...): percent used, reset, pace, and how many
+                                  ticket workers the pacing rule allows (default <60%: 3, <80%: 2, else 1) vs how many run
+              usage set <meter> <pct> [<resetsInMin>] | clear <meter>   Type a percent for a meter with no readable usage
+              usage override <meter> <n|none> [<hours>] | override <meter> clear   Allowance override (default: until reset, else 2h)
+              usage rule <60:3,80:2,1|on|off|default>   The pacing rule: below:workers tiers, the last one workers alone
               processes [--all]   Rogue background processes (Gradle/Kotlin daemons, node, JVMs) left by ended or idle sessions,
                                   with MB, age and owner session; --all adds healthy ones and heavy processes that are not ours
               processes reap <pid> | --all   Kill one process (or every rogue one) that a session of this daemon started;
@@ -4954,6 +4960,7 @@ internal object Cli {
         "skill" -> skillUsageError(parsed)
         "role" -> roleUsageError(parsed)
         "ask" -> askUsageError(parsed, getenv)
+        "usage" -> UsageCli.usageError(parsed.args)
         else -> null
     }
 
@@ -5126,7 +5133,7 @@ internal object Cli {
     private val COMMANDS = setOf(
         "submit", "watch", "pods", "runs", "logs", "cancel", "tickets", "board", "ticket", "agents", "send", "inbox",
         "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
-        "trait", "skill", "role", "ask", "harnesses", "harness-status", "harness-install", "image", "session", "remote", "bg", "kill",
+        "trait", "skill", "role", "ask", "harnesses", "harness-status", "harness-install", "image", "session", "remote", "bg", "kill", "usage",
         "processes",
     )
 
