@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -87,7 +88,7 @@ fun ProgressMeter(progress: ProgressView, tagKey: String, modifier: Modifier = M
                 Text(view.detail, color = Palette.Muted, fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
             }
         }
-        Bar(view.fraction, color)
+        Bar(view.fraction, color, hatched = view.estimated)
         if (!compact && view.detail.isNotEmpty()) {
             Text(view.detail, color = if (view.tone == ProgressTone.Stale) Palette.Accent else Palette.Muted, fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
         }
@@ -95,14 +96,28 @@ fun ProgressMeter(progress: ProgressView, tagKey: String, modifier: Modifier = M
 }
 
 @Composable
-private fun Bar(fraction: Float?, color: Color) {
+private fun Bar(fraction: Float?, color: Color, hatched: Boolean = false) {
     val shape = RoundedCornerShape(2.dp)
     val track = Palette.Border
     if (fraction != null) {
         val shown by animateFloatAsState(fraction, tween(400), label = "progress")
         Canvas(Modifier.fillMaxWidth().height(4.dp).clip(shape)) {
             drawRect(track)
-            drawRect(color, size = Size(size.width * shown, size.height))
+            if (!hatched) {
+                drawRect(color, size = Size(size.width * shown, size.height))
+            } else {
+                // PROGRESS-S5: an estimate is drawn hatched (diagonal stripes over a faint fill), never as a solid measurement.
+                val w = size.width * shown
+                drawRect(color.copy(alpha = 0.25f), size = Size(w, size.height))
+                clipRect(right = w) {
+                    val step = 6.dp.toPx()
+                    var x = -size.height
+                    while (x < w) {
+                        drawLine(color, Offset(x, size.height), Offset(x + size.height, 0f), strokeWidth = 2.dp.toPx())
+                        x += step
+                    }
+                }
+            }
         }
     } else {
         // Indeterminate: a soft highlight sweeping across the track; no number is drawn or implied.

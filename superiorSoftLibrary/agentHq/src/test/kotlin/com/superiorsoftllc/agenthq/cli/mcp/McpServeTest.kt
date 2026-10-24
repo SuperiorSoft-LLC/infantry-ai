@@ -245,6 +245,21 @@ class McpServeTest {
         served.close()
     }
 
+    /** Contract 1.117.0: outside a session agenthq_progress is a no-op that says so; a bad mode is a tool error. */
+    @Test
+    fun progressToolIsHarmlessOutsideASession() {
+        val fixture = launch()
+        fixture.client.await(Envelope.READY)
+        val served = serve("--port", fixture.port.toString())
+        initialize(served)
+        val ok = served.callTool("agenthq_progress", """{"mode":"percent","percent":40}""")
+        assertEquals("false", ok["isError"]!!.jsonPrimitive.content, "$ok")
+        assertTrue(ok["content"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content.startsWith("not running inside an Infantry AI session"), "$ok")
+        val bad = served.callTool("agenthq_progress", """{"mode":"guess"}""")
+        assertEquals("true", bad["isError"]!!.jsonPrimitive.content, "$bad")
+        served.close()
+    }
+
     @Test
     fun aDaemonThatIsNotRunningIsAToolErrorWithTheFixedMessage() {
         val closedPort = ServerSocket(0).use { it.localPort }

@@ -34,6 +34,13 @@ class JvmPlatformHost(
     /** BUILD-STAMP-1: `-Dagenthq.build`, set by the packaged launcher, `run` and `runRealDaemon` (agentHqUi/build.gradle.kts). */
     override val appBuild: String? get() = System.getProperty("agenthq.build")?.trim()?.takeIf { it.isNotEmpty() }
 
+    /**
+     * MODAL-BLUR / TEST-SPEED-4: `-Dagenthq.ui.blur=off` makes this host report no blur (the dark scrim instead). The UI
+     * tests set it: their CPU renderer draws a 12 dp blur of the whole window at ~150 ms a frame, and every modal open,
+     * close and frame under a modal paid it (most of the slowest UI tests' run time). Unset, blur works as before.
+     */
+    override val supportsBlur: Boolean get() = System.getProperty("agenthq.ui.blur")?.trim()?.lowercase() != "off"
+
     /** MODAL-BLUR: UI prefs live in the per-user Java preferences store (the registry on Windows), never in the daemon's state dir. */
     private val prefs get() = java.util.prefs.Preferences.userRoot().node("com/superiorsoftllc/agenthq/ui")
     override fun uiPref(key: String): String? = runCatching { prefs.get(key, null) }.getOrNull()
