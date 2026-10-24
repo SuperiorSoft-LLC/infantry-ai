@@ -48,11 +48,35 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.await
 import kotlinx.coroutines.cancel
 import kotlin.js.Promise
+import androidx.compose.ui.platform.LocalFontFamilyResolver
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.platform.Font
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
     ComposeViewport { WebRoot() }
 }
+
+/**
+ * The browser build ships only skiko's Latin font, so the UI's symbol glyphs (▤ ▾ ⎇ ✎ ✓ ✕ ⚠ ...) drew as tofu boxes.
+ * Noto Sans Symbols2 (OFL, served next to index.html) is preloaded so Compose falls back to it for missing glyphs.
+ */
+@Composable
+private fun SymbolFontFallback() {
+    val resolver = LocalFontFamilyResolver.current
+    LaunchedEffect(Unit) {
+        val arr = fetchFontBytes("NotoSansSymbols2-Regular.ttf").await<JsAny?>() ?: return@LaunchedEffect
+        val bytes = ByteArray(jsLength(arr)) { jsByte(arr, it).toByte() }
+        resolver.preload(FontFamily(Font("NotoSansSymbols2", bytes)))
+    }
+}
+
+private fun fetchFontBytes(url: String): Promise<JsAny?> =
+    js("fetch(url).then(r => r.ok ? r.arrayBuffer().then(b => new Uint8Array(b)) : null).catch(() => null)")
+
+private fun jsLength(a: JsAny): Int = js("a.length")
+
+private fun jsByte(a: JsAny, i: Int): Int = js("a[i]")
 
 /** What the page shows: the token screen, the app on the real daemon, or the offline demo. One owner: [WebRoot]. */
 private sealed interface WebMode {
@@ -66,6 +90,7 @@ private sealed interface WebMode {
 
 @Composable
 private fun WebRoot() {
+    SymbolFontFallback()
     var mode by remember { mutableStateOf<WebMode>(BrowserStorage.get(BrowserStorage.TOKEN_KEY)?.let { WebMode.Checking(it) } ?: WebMode.Gate()) }
     when (val m = mode) {
         is WebMode.Gate -> TokenGate(
