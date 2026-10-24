@@ -743,22 +743,9 @@ class TicketBoard(
         // TRAITS-T4/T5: resolved BEFORE composing, then passed to startNew, so the frozen row is what this start rendered.
         // P10-K15: with the skill ids the row will freeze for this ticket, so the `skills` source renders exactly those.
         val instance = profiles.instanceFor(profile.id, profile.role)?.let { sessionManager.withSkills(it, id) }
-        val input = ContextInput(
-            instructions = instance?.instructions,
-            title = row.title,
-            description = row.description,
-            links = linkLines(id, initial),
-            includeLinkedOverride = row.includeLinkedTasksContext,
-            ticketId = id,
-            projectId = row.projectId,
-            role = profile.role,
-            agentId = profile.id,
-            traits = instance?.traits.orEmpty(),
-            skillIds = instance?.skillIds,
-            includeSkillsOverride = row.includeSkillsContext,
-            reportTo = startedBy?.let { starter -> reportTo(starter, sessionManager, profiles) },
-            // IMG-3: each attached image's absolute path, listed in the brief so the worker can read it.
-            images = row.images.mapNotNull { images.absolute(row.projectId, it)?.path },
+        val input = briefInput(
+            row, initial, profile.role, profile.id, instance,
+            startedBy?.let { starter -> reportTo(starter, sessionManager, profiles) },
         )
         val composed = context.compose(input)
         val started = try {
@@ -798,6 +785,47 @@ class TicketBoard(
         val weightNote = byWeight?.let { "weight ${row.weight}: ${providerId ?: "default provider"}/${model ?: "default model"} from ${WeightExecutors.SETTING}" }
         val detail = listOfNotNull(cutNote, weightNote, launchWarning?.let { TicketStart.LAUNCH_WARNING + it }).joinToString("; ").ifEmpty { null }
         return startAnswer(id, TicketStart(ok = true, reason = "started", detail = detail), outcome)
+    }
+
+    /** What a ticket start composes its brief from: the ticket [row], run as [role] / [agentId] with [instance]. */
+    private fun briefInput(
+        row: TicketRow,
+        snapshot: Snapshot,
+        role: String?,
+        agentId: String?,
+        instance: com.superiorsoftllc.agenthq.session.RoleInstance?,
+        reportTo: ReportTo?,
+    ) = ContextInput(
+        instructions = instance?.instructions,
+        title = row.title,
+        description = row.description,
+        links = linkLines(row.id, snapshot),
+        includeLinkedOverride = row.includeLinkedTasksContext,
+        ticketId = row.id,
+        projectId = row.projectId,
+        role = role,
+        agentId = agentId,
+        traits = instance?.traits.orEmpty(),
+        skillIds = instance?.skillIds,
+        includeSkillsOverride = row.includeSkillsContext,
+        reportTo = reportTo,
+        // IMG-3: each attached image's absolute path, listed in the brief so the worker can read it.
+        images = row.images.mapNotNull { images.absolute(row.projectId, it)?.path },
+    )
+
+    /**
+     * TICKET-HANDOVER: the start brief of the ticket [session] works on, composed as a fresh start of that ticket composes
+     * it ([handOut]): the same composer, the session's own role, agent and frozen instance, and the ticket's starter as
+     * who to report to. Re-read NOW, so an edit to the ticket since its start lands. Null when the session has no ticket
+     * or the ticket is gone. Takes no board monitor (the handover calls it from its own thread).
+     */
+    fun brief(session: com.superiorsoftllc.agenthq.session.SessionRecord): String? {
+        val ticketId = session.ticketId?.takeIf { it.isNotBlank() } ?: return null
+        val sessionManager = sessions ?: return null
+        val snapshot = store.transaction { load() }
+        val row = snapshot.rows[ticketId] ?: return null
+        val reportTo = row.startedBy?.let { starter -> agents?.let { reportTo(starter, sessionManager, it) } }
+        return context.compose(briefInput(row, snapshot, session.role, session.agentId, sessionManager.instance(session.id), reportTo)).prompt
     }
 
     /**

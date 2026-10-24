@@ -11,6 +11,19 @@ Android APK and publishes them to that tag's GitHub Release.
 2. Commit and push the bump to the default branch.
 3. `git tag v1.0.1 && git push origin v1.0.1` (tag = `v` + the exact `agenthqVersion`; the workflow's first job fails otherwise).
 
+## Build stamp (BUILD-STAMP-1)
+
+Every build carries one build string, `<agenthqVersion>+<UTC yyyyMMdd>.<UTC HHmm>.<short sha>[.dirty]`, e.g.
+`1.0.1+20261023.1432.e85b223` (`gradle/build-stamp.gradle.kts`). Nothing is edited per build: the version is the property
+above, the time is stamped when a packaging task runs (else HEAD's commit time), the sha and dirty flag come from git.
+
+- The desktop app gets it as `-Dagenthq.build`, the APK as its `versionName`, `agenthq` and the headless server as
+  `-Dagenthq.build` / a `BUILD` file. The footer (bottom right) and Configuration > About show it.
+- The daemon sends it in `ready` as `build=` (additive, CONTRACT.md); the app warns plainly when the daemon is another build.
+- `agenthq version` prints `agenthq <contract> build <cli build> (daemon: <contract> build <daemon build>)`.
+- The packaging guard writes `build=` into `BUILD-INFO.txt` and copies each msi/exe/apk to `<outdir>/<sha>/<name>-<build>.<ext>`.
+- Checks: `./gradlew verifyBuildStamp` (format, UTC, dirty flag) and `verifyPackagingStamp` (part of `check` in agentHqUi / agentHqAndroid).
+
 ## What lands on the Release
 
 | Asset | Source |

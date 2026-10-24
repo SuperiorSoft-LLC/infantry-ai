@@ -43,4 +43,4 @@ const val PROGRESS_STALE_APPLIES_TO = "Applies to: the progress bars agents repo
 const val AGENT_SCOPE_APPLIES_TO = "Applies to: the sidebar agent list and the top-bar avatars. Agents with no project are listed under every project. Header counters, the roster and the board are not affected."
 
 /** Shown once in the modal: how long a change lasts and whether it needs a restart. */
-const val FLAGS_LIFETIME_NOTE = "Changes apply at once and last for this window only. They reset when Infantry AI restarts."
+const val FLAGS_LIFETIME_NOTE = "Changes apply at once. A setting that says \"Remembered across launches\", or that the daemon stores, survives a restart; the others last for this window only."

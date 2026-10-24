@@ -57,6 +57,8 @@ class FinishNoticeMonitor(
 
     private fun notice(event: SessionEvent.Exit) {
         val session = sessions.get(event.sessionId) ?: return
+        // TICKET-HANDOVER: the handoff turn of a harness switch is not the worker finishing; its successor goes on.
+        if (sessions.isHeld(session.id)) return
         val ticket = session.ticketId?.let { ticketOf(it) }?.takeIf { it.sessionId == session.id } ?: return
         val starter = ticket.startedBy ?: return
         val run = session.runCount

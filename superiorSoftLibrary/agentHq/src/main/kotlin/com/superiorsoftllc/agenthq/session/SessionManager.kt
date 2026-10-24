@@ -275,6 +275,30 @@ class SessionManager(
     private val carryPending: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
     /**
+     * TICKET-HANDOVER: sessions held by a harness switch in progress ([com.superiorsoftllc.agenthq.daemon.SessionHandover]).
+     * While held, only the handover may start a turn ([resumeHeld]); every other [resume] is refused as a run in flight,
+     * so mail or a prompt cannot slip a turn onto the old harness between the handoff turn and the switch.
+     */
+    private val held: MutableSet<String> = ConcurrentHashMap.newKeySet()
+
+    /** TICKET-HANDOVER: hold [sessionId] for a switch; false when it is already held (a switch is in progress). */
+    fun hold(sessionId: String): Boolean = held.add(sessionId)
+
+    /** TICKET-HANDOVER: end the hold [hold] took. */
+    fun release(sessionId: String) {
+        held.remove(sessionId)
+    }
+
+    /** TICKET-HANDOVER: true while a harness switch holds [sessionId]. */
+    fun isHeld(sessionId: String): Boolean = sessionId in held
+
+    /** TICKET-HANDOVER: true while [sessionId] has a turn in flight. */
+    fun inFlight(sessionId: String): Boolean = runs.containsKey(sessionId) || sessions[sessionId]?.live == true
+
+    /** TICKET-HANDOVER: the visible text of [sessionId]'s latest reply as AgentHQ recorded it, or null. */
+    fun lastReply(sessionId: String): String? = conversation.history(sessionId).lastOrNull()?.reply?.takeIf { it.isNotBlank() }
+
+    /**
      * BUG-PERM-1: each session's own Tool approval, chosen at spawn. Held in memory: after a daemon restart a resumed
      * session falls back to the global value (Settings / env / deny).
      */
@@ -649,6 +673,13 @@ class SessionManager(
      */
     @Synchronized
     fun resume(sessionId: String, prompt: String): SessionRecord {
+        if (sessionId in held) throw RunInFlightException(sessionId, "session $sessionId is switching harness; send again once it has switched")
+        return resumeHeld(sessionId, prompt)
+    }
+
+    /** TICKET-HANDOVER: [resume] for the switch that holds [sessionId] (the only caller allowed past the hold). */
+    @Synchronized
+    fun resumeHeld(sessionId: String, prompt: String): SessionRecord {
         val session = sessions[sessionId] ?: error("unknown session $sessionId")
         if (runs.containsKey(sessionId)) throw RunInFlightException(sessionId, "session $sessionId already has a run in flight")
         busyTwin(sessionId, session.agentId, session.ticketId)?.let {
@@ -714,6 +745,18 @@ class SessionManager(
     }
 
     /**
+     * TICKET-HANDOVER: the checks [reharness] makes on its target ([providerId], [model], [effort]), with nothing written,
+     * so a switch that only reharnesses later (after a handoff turn) is refused NOW. Throws [IllegalArgumentException].
+     */
+    fun checkSwitch(providerId: String, model: String?, effort: String?) {
+        resolveProvider(providerId)
+        spawnModel(model)
+        effort?.trim()?.takeIf { it.isNotEmpty() }?.let {
+            require(modelProblem(it) == null) { "effort '${it.take(40)}' is not a usable level" }
+        }
+    }
+
+    /**
      * UX-HARNESS-2 (`session_swap`): restart [sessionId] on another harness ([providerId], [model], [effort]; a null
      * model / effort = that harness's default). The record keeps its id, project, working directory and history, and
      * becomes a never-run session on the new harness: its provider session id is dropped (it belonged to the old CLI),
@@ -724,7 +767,7 @@ class SessionManager(
      * changing nothing.
      */
     @Synchronized
-    fun reharness(sessionId: String, providerId: String, model: String?, effort: String?): SessionRecord {
+    fun reharness(sessionId: String, providerId: String, model: String?, effort: String?, carry: Boolean = true): SessionRecord {
         val session = sessions[sessionId] ?: throw IllegalArgumentException("unknown session '$sessionId'")
         require(!runs.containsKey(sessionId) && !session.live) { "a reply is still running; wait for it to finish or stop it, then switch" }
         val target = resolveProvider(providerId).provider.id
@@ -735,7 +778,8 @@ class SessionManager(
         }
         host.stop(sessionId)
         // HARNESS-CARRY-1: the conversation follows the session onto the new harness, seeded on its first run.
-        carryPending += sessionId
+        // TICKET-HANDOVER: [carry] false = the first run brings its own context (the ticket brief and a handoff note).
+        if (carry) carryPending += sessionId else carryPending -= sessionId
         return changeSetting(sessionId) {
             it.copy(
                 provider = target, model = wantedModel, effort = wantedEffort,

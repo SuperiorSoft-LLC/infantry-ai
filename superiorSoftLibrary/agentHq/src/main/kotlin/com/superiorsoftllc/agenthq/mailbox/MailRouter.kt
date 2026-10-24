@@ -234,6 +234,10 @@ class MailRouter(
         if (session.isBusy()) {
             return DeliveryOutcome.Retry("recipient '${session.id}' has a run in flight")
         }
+        // TICKET-HANDOVER: a session mid-switch takes its next turn on the new harness, once it has switched.
+        if (manager.isHeld(session.id)) {
+            return DeliveryOutcome.Retry("recipient '${session.id}' is switching harness")
+        }
         // BASICS-KILL-1: waking this session would run it next to another session of the same agent / ticket: queue.
         manager.busyTwin(session.id, session.agentId, session.ticketId)?.let {
             return DeliveryOutcome.Retry("session ${it.id} of the same agent / ticket has a run in flight")

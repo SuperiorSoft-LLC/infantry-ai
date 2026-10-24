@@ -2,7 +2,10 @@
 //  1. prints the git branch and short sha at the start of the build,
 //  2. refuses a dirty working tree or a checkout that is neither feature-agenthq-mvp nor a v* tag
 //     (override: -PallowAnyBranch=true, which downgrades the refusal to a warning),
-//  3. writes BUILD-INFO.txt next to what it built and adds a sha-named copy of each msi/exe/apk under <outdir>/<sha>/.
+//  3. writes BUILD-INFO.txt next to what it built and adds a copy of each msi/exe/apk under <outdir>/<sha>/, named with the
+//     BUILD-STAMP-1 build string (gradle/build-stamp.gradle.kts): InfantryAI-1.0.1.msi -> <sha>/InfantryAI-1.0.1+20261023.1432.e85b223.msi,
+//     app-debug.apk -> <sha>/app-debug-1.0.1+20261023.1432.e85b223.apk. BUILD-INFO.txt carries the same string as build=.
+//     `verifyPackagingStamp` (wired into check) runs this stamping on dummy files and checks both.
 // The original output paths stay put: .github/workflows/release.yml (tag build, no override) reads them.
 // Applied from :agentHqUi and :agentHqAndroid (apply(from = rootProject.file("gradle/packaging-guard.gradle.kts"))).
 
@@ -13,10 +16,13 @@ fun git(vararg args: String): String? = try {
 } catch (e: Exception) { null }
 
 val releaseBranch = "feature-agenthq-mvp"
-val guardedTask = Regex("""createDistributable|createReleaseDistributable|package(Release)?(Msi|Exe|Dmg|Deb)|releaseAssets|assemble(Debug|Release)?|bundle(Debug|Release)""")
+// BUILD-STAMP-1: the task names, version, sha and build string all come from gradle/build-stamp.gradle.kts (root).
+val guardedTask = rootProject.extra["agenthqPackagingTask"] as Regex
 fun isGuarded(t: Task) = guardedTask.matches(t.name)
 
-val sha: String = git("rev-parse", "--short", "HEAD") ?: "unknown"
+val sha: String = rootProject.extra["agenthqBuildSha"] as String
+val buildVersion: String = rootProject.extra["agenthqBuildVersion"] as String
+val buildStamp: String = rootProject.extra["agenthqBuild"] as String
 val branch: String = git("rev-parse", "--abbrev-ref", "HEAD") ?: "unknown"
 val tag: String? = (git("describe", "--exact-match", "--tags", "HEAD")?.takeIf { it.startsWith("v") })
     ?: System.getenv("GITHUB_REF_NAME")?.takeIf { System.getenv("GITHUB_REF_TYPE") == "tag" && it.startsWith("v") }
@@ -24,6 +30,8 @@ val dirty: List<String> = git("status", "--porcelain")?.lines()?.filter { it.isN
 val allowAny = providers.gradleProperty("allowAnyBranch").orNull == "true"
 
 val buildInfo: String = buildString {
+    appendLine("build=$buildStamp")
+    appendLine("version=$buildVersion")
     appendLine("branch=$branch")
     appendLine("sha=$sha")
     appendLine("tag=${tag ?: "-"}")
@@ -49,16 +57,45 @@ gradle.taskGraph.whenReady {
     }
 }
 
+/** BUILD-STAMP-1: the copy's name: the version suffix (if any) gives way to the whole build string, which already holds it. */
+fun stampedName(f: File): String = "${f.nameWithoutExtension.removeSuffix("-$buildVersion")}-$buildStamp.${f.extension}"
+
 fun stamp(dir: File, exts: Set<String>) {
     if (!dir.isDirectory) return
     File(dir, "BUILD-INFO.txt").writeText(buildInfo)
     val shaDir = File(dir, sha)
     dir.listFiles { f -> f.isFile && f.extension in exts }?.forEach { f ->
         shaDir.mkdirs()
-        f.copyTo(File(shaDir, "${f.nameWithoutExtension}-$sha.${f.extension}"), overwrite = true)
+        f.copyTo(File(shaDir, stampedName(f)), overwrite = true)
         File(shaDir, "BUILD-INFO.txt").writeText(buildInfo)
     }
 }
+
+// BUILD-STAMP-1 acceptance without minutes of jpackage: stamp dummy outputs in a scratch folder under build/ and check that
+// BUILD-INFO.txt and the copied file names carry the very build string the app and the daemon report.
+val verifyPackagingStamp = tasks.register("verifyPackagingStamp") {
+    group = "verification"
+    description = "BUILD-STAMP-1: the packaging guard writes the build string into BUILD-INFO.txt and the copied msi/exe/apk names."
+    val scratch = layout.buildDirectory.dir("tmp/verifyPackagingStamp")
+    doLast {
+        val dir = scratch.get().asFile.apply { deleteRecursively(); mkdirs() }
+        val outputs = listOf("InfantryAI-$buildVersion.msi", "InfantryAI-$buildVersion.exe", "app-debug.apk").map { File(dir, it).apply { writeText(name) } }
+        stamp(dir, setOf("msi", "exe", "apk"))
+        listOf(File(dir, "BUILD-INFO.txt"), File(dir, "$sha/BUILD-INFO.txt")).forEach { info ->
+            check(info.isFile) { "BUILD-STAMP-1: no ${info.path}" }
+            check("build=$buildStamp" in info.readLines()) { "BUILD-STAMP-1: ${info.path} has no build=$buildStamp:\n${info.readText()}" }
+        }
+        val expected = listOf("InfantryAI-$buildStamp.msi", "InfantryAI-$buildStamp.exe", "app-debug-$buildStamp.apk")
+        val copied = File(dir, sha).list()?.filter { !it.endsWith(".txt") }?.sorted().orEmpty()
+        check(copied == expected.sorted()) { "BUILD-STAMP-1: copies are $copied, expected $expected" }
+        expected.zip(outputs).forEach { (name, original) ->
+            check(File(dir, "$sha/$name").readText() == original.name) { "BUILD-STAMP-1: $name is not a copy of ${original.name}" }
+            check(original.isFile) { "BUILD-STAMP-1: ${original.name} must stay where release.yml reads it" }
+        }
+        logger.lifecycle("BUILD-STAMP-1: packaging stamp OK ($buildStamp)")
+    }
+}
+tasks.matching { it.name == "check" }.configureEach { dependsOn(verifyPackagingStamp) }
 
 tasks.matching { isGuarded(it) }.configureEach {
     val taskName = name

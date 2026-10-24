@@ -89,6 +89,8 @@ data class ConnectionInfo(
     val instance: String? = null,
     /** Contract 1.11.0: epoch millis from which [instance] holds replay history; null from an older daemon. */
     val historySince: Long? = null,
+    /** BUILD-STAMP-1: the daemon's build string (`ready` build=), e.g. 1.0.1+20261023.1432.e85b223; null from an older daemon. */
+    val daemonBuild: String? = null,
 ) {
     val isLive: Boolean get() = state == ConnState.CONNECTED
 
@@ -1750,6 +1752,7 @@ private fun ready(s: AppState, env: Envelope): AppState {
             daemonProvider = fields["provider"],
             instance = instance,
             historySince = fields["since"]?.toLongOrNull(),
+            daemonBuild = fields["build"]?.takeIf { it.isNotBlank() },
         ),
         // PROMPT-2: the daemon resends every prompt still open right after `ready`; one resolved while the link was
         // down must not keep its card.

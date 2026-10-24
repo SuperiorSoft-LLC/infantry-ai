@@ -70,6 +70,7 @@ class KeepAliveSettingUiTest {
                 waitUntil(timeoutMillis = 20_000) { controller.state.value.keepAliveMinutes == 30 }
 
                 onNodeWithContentDescription("Configuration").performClick()
+                onNodeWithTag(CONFIG_TAB_TAG_PREFIX + ConfigTab.GENERAL.name).performClick()
                 onNodeWithText(LifecycleSetting.TITLE).assertExists()
                 onNodeWithTag(KEEP_ALIVE_FIELD_TAG).assertTextContains(LifecycleSetting.label(30))
 

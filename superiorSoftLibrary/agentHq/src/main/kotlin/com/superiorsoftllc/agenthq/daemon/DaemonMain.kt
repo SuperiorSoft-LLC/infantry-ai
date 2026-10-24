@@ -396,6 +396,8 @@ class AgentHqDaemon(
     val chatImageRetention: com.superiorsoftllc.agenthq.images.ChatImageRetention? = null,
     /** ASK-1 (contract 1.97.0): non-blocking owner questions; [start] sweeps their `defaultAfterMin` auto-picks. */
     val ownerQuestions: com.superiorsoftllc.agenthq.questions.OwnerQuestions? = null,
+    /** TICKET-HANDOVER: switches ticket workers across harnesses with a handoff turn; stopped first by [close]. */
+    val handover: SessionHandover? = null,
 ) {
     @Volatile private var recordedPort: Int? = null
     /** ASK-1: the `defaultAfterMin` sweep, started by [start], stopped by [close]. */
@@ -469,6 +471,7 @@ class AgentHqDaemon(
         // BUG-FLAKE-1: a daemon built but never started still holds its port.
         runCatching { portReservation?.close() }
         board.stopQueueDrain()
+        runCatching { handover?.close() }
         runCatching { orchestrator.close() }
         runCatching { manager.shutdown() }
         // Everything the kills above queued is applied before the store is released; see the KDoc.
@@ -589,6 +592,8 @@ class AgentHqDaemon(
             updates: com.superiorsoftllc.agenthq.update.ServerUpdateService? = null,
             /** Contract 1.115.0 (ASSISTANT-1): where the global Assistant runs: a folder of its own under the app's data dir. */
             assistantDir: File = File(stateDir(), "assistant"),
+            /** TICKET-HANDOVER: how long a switched ticket worker's old agent gets to write its handoff note. */
+            handoffTimeoutMs: Long = SessionHandover.DEFAULT_TIMEOUT_MS,
         ): AgentHqDaemon {
             val policy = AccessPolicy.of(host, token)
             // PORT-1: FIRST, because the mail base and every session's AGENTHQ_URL below carry the port.
@@ -883,6 +888,8 @@ class AgentHqDaemon(
             )
             board.eventSink = { event -> broadcastBoard(clients, event) }
             boardRef = board
+            // TICKET-HANDOVER: a ticket worker switched to another harness hands off, then resumes with its ticket brief.
+            val handover = SessionHandover(manager, board::brief, handoffTimeoutMs)
             // E1-c (contract 1.62.0): the story frames are deprecated shims over the ticket board. An old story id
             // resolves through E1-a's `story_migration`; a create that names an epic pushes that epic's frame (its
             // storyIds now list the new ticket) to every client, exactly the frame an `epic_save` answers with.
@@ -1201,6 +1208,7 @@ class AgentHqDaemon(
                             // IMG-1 (contract 1.83.0): uploads land in the project's own directory.
                             imageUploads = com.superiorsoftllc.agenthq.images.ImageUploadHandler(projectStore, clock = clock),
                             ownerQuestions = ownerQuestions,
+                            handover = handover,
                         )
                     }
                 }
@@ -1248,6 +1256,7 @@ class AgentHqDaemon(
                 portReservation = portReservation,
                 chatImageRetention = chatImageRetention,
                 ownerQuestions = ownerQuestions,
+                handover = handover,
             )
         }
 
@@ -1726,6 +1735,8 @@ private suspend fun handleConnection(
     imageUploads: com.superiorsoftllc.agenthq.images.ImageUploadHandler? = null,
     /** ASK-1 (contract 1.97.0): `question_*`; replayed on connect as `questions`; null = this daemon serves none. */
     ownerQuestions: com.superiorsoftllc.agenthq.questions.OwnerQuestions? = null,
+    /** TICKET-HANDOVER: a ticket worker's harness switch goes through a handoff turn; null = switched at once. */
+    handover: SessionHandover? = null,
 ) {
     println("[agentHq] ws connected (provider=${manager.providerId})")
     val outgoing = Channel<Envelope>(Channel.UNLIMITED)
@@ -1829,7 +1840,9 @@ private suspend fun handleConnection(
         Envelope(
             Envelope.READY,
             "provider=${manager.providerId} contract=${EventVocabulary.VERSION} " +
-                "instance=${identity.instance} since=${identity.historySince}",
+                "instance=${identity.instance} since=${identity.historySince} " +
+                // BUILD-STAMP-1: additive key (no contract bump): the daemon's build string, e.g. 1.0.1+20261023.1432.e85b223.
+                "build=${com.superiorsoftllc.agenthq.update.BuildInfo.current}",
         ),
     )
     // Manually serialize sessions with SessionRecordSerializer to include computed `live` field
@@ -2279,7 +2292,7 @@ private suspend fun handleConnection(
                 // Contract 1.47.0 (role-first S3): one agent onto another executor. Answered by the `agent_swapped` push to
                 // EVERY client (this one included), the same fan-out as `role_binding_set`; a refusal is an `error`, nothing written.
                 Envelope.AGENT_SWAP -> try {
-                    val swapped = swapAgent(manager, agents, AgentSwap.decode(envelope.data), repo)
+                    val swapped = swapAgent(manager, agents, AgentSwap.decode(envelope.data), repo, handover)
                     val push = Envelope(Envelope.AGENT_SWAPPED, json.encodeToString(AgentSwapped.serializer(), swapped))
                     for (client in clients) client.trySend(push)
                     null
@@ -2303,7 +2316,7 @@ private suspend fun handleConnection(
                 // UX-HARNESS-2 (contract 1.83.0): one session with no agent onto another harness, in place. Answered by the
                 // `session_swapped` push to EVERY client (the session's own `session` frame follows from the manager).
                 Envelope.SESSION_SWAP -> try {
-                    val swapped = swapSession(manager, SessionSwap.decode(envelope.data), agents::roleKnown)
+                    val swapped = swapSession(manager, SessionSwap.decode(envelope.data), agents::roleKnown, handover)
                     val push = Envelope(Envelope.SESSION_SWAPPED, json.encodeToString(SessionSwapped.serializer(), swapped), swapped.sessionId)
                     for (client in clients) client.trySend(push)
                     null

@@ -155,6 +155,8 @@ class Controller(
                             // from a restarted daemon (contract 1.11.0).
                             instance = cur.instance,
                             historySince = cur.historySince,
+                            // BUILD-STAMP-1: set by `ready`, like the contract; a link-state change keeps it.
+                            daemonBuild = cur.daemonBuild,
                         ),
                     )
                 }

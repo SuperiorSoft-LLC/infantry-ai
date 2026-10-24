@@ -51,6 +51,12 @@ interface PlatformHost {
     /** SERVER-UPDATE-4: this app's own version, compared with the server's; null when the host cannot tell (then only the contract is compared). */
     val appVersion: String? get() = updates?.version
 
+    /**
+     * BUILD-STAMP-1: this app's build string (`1.0.1+20261023.1432.e85b223`, `.dirty` for a changed tree), shown in the footer and
+     * Configuration > About and compared with the daemon's `ready` build=. Null when this host cannot tell (a test, a bare run).
+     */
+    val appBuild: String? get() = null
+
     /** IMG-4: the bytes of the file at [path], or null when it cannot be read here. Never throws. */
     fun readBytes(path: String): ByteArray? = null
 
