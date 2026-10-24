@@ -209,6 +209,27 @@ class ProcessWatchTest {
         }
     }
 
+    @Test fun `the processes frame lists, reaps one, refuses a stranger, reaps all rogue`() {
+        gradleUnder("s1")
+        os.start(stranger, null, "java Unrelated", 2_000, memMb = 4_000)
+        val w = watch()
+        w.tick()
+        sessions.remove("s1")
+        val listed = ProcessFrames.answer(w, ProcessesRequest())
+        assertEquals(setOf(harness, gradlew, gradleDaemon), listed.report.rogue.map { it.pid }.toSet())
+        val refused = ProcessFrames.answer(w, ProcessesRequest("reap", stranger))
+        assertTrue(refused.refused!!.contains("never reaped"))
+        val one = ProcessFrames.answer(w, ProcessesRequest("reap", gradleDaemon))
+        assertEquals(listOf(gradleDaemon), one.reaped.map { it.pid })
+        assertFalse(one.report.tracked.any { it.pid == gradleDaemon })
+        val rest = ProcessFrames.answer(w, ProcessesRequest("reap_rogue"))
+        assertTrue(harness in rest.reaped.map { it.pid }) // its tree kill takes gradlew with it
+        assertFalse(harness in os.procs || gradlew in os.procs)
+        assertTrue(stranger in os.procs)
+        kotlin.test.assertFailsWith<IllegalArgumentException> { ProcessFrames.answer(w, ProcessesRequest("nuke")) }
+        kotlin.test.assertFailsWith<IllegalArgumentException> { ProcessFrames.answer(w, ProcessesRequest("reap")) }
+    }
+
     @Test fun `tasklist and ps output parse`() {
         val t = OsMemorySource.parseTasklist("\"java.exe\",\"1234\",\"Console\",\"1\",\"1,234,567 K\"\r\n\"x.exe\",\"9\",\"S\",\"0\",\"2.048 K\"\r\n")
         assertEquals(listOf(ProcMem(1234, "java.exe", 1205), ProcMem(9, "x.exe", 2)), t)

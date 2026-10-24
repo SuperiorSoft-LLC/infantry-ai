@@ -259,3 +259,35 @@ class ProcessWatch(
         }
     }
 }
+
+/** Contract 1.120.0: one `processes` request. [op] = `list` (default), `reap` (needs [pid]) or `reap_rogue`. */
+@Serializable
+data class ProcessesRequest(val op: String = "list", val pid: Long? = null)
+
+/** The `processes` answer: the report after the op, what it killed, and why a `reap` was refused (null = not refused). */
+@Serializable
+data class ProcessesAnswer(
+    val report: ProcessReport,
+    val reaped: List<TrackedProcess> = emptyList(),
+    val refused: String? = null,
+)
+
+/** The daemon's `processes` frame, kept apart from the socket so a test drives it with a fake [ProcessWatch]. */
+object ProcessFrames {
+    /** Throws [IllegalArgumentException] for an unknown op or a `reap` with no pid. */
+    fun answer(watch: ProcessWatch, request: ProcessesRequest): ProcessesAnswer = when (request.op) {
+        "list" -> ProcessesAnswer(watch.report())
+        "reap" -> {
+            val pid = requireNotNull(request.pid) { "reap expects a pid" }
+            when (val r = watch.reap(pid)) {
+                is ReapResult.Reaped -> ProcessesAnswer(watch.report(), listOf(r.process))
+                is ReapResult.Refused -> ProcessesAnswer(watch.report(), refused = r.reason)
+            }
+        }
+        "reap_rogue" -> {
+            val reaped = watch.reapRogue()
+            ProcessesAnswer(watch.report(), reaped)
+        }
+        else -> throw IllegalArgumentException("unknown op '${request.op.take(40)}' (list, reap, reap_rogue)")
+    }
+}
