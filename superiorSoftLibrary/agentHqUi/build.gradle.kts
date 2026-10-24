@@ -131,7 +131,7 @@ tasks.withType<Test>().configureEach {
     environment("AGENTHQ_LIMITS_LIVE", "false")
     // TEST-SPEED-4: no modal blur in the test windows (JvmPlatformHost.supportsBlur). The tests render on the CPU, where
     // blurring the whole window cost ~150 ms a frame under every open modal; the dark scrim draws in a few ms.
-    systemProperty("agenthq.ui.blur", "off")
+    systemProperty("agenthq.ui.blur", "off") // ModalBlurRenderUiTest turns it back on for itself and renders the blur
     // PERF-2: PackagedJvmCapsTest reads the packaged launcher's jvmArgs (the compose block below), lazily, '|'-separated (no flag contains '|').
     // BUILD-STAMP-1: the stamp's VALUE changes per commit (per minute when packaging); the test only checks it is there, so the
     // input carries a fixed placeholder and the tests stay cacheable.
@@ -170,6 +170,23 @@ fun Test.uiTier(desc: String, slow: Boolean) {
     filter {
         excludeTestsMatching(ownerSmokeTests)
         slowUiTestPatterns.forEach { if (slow) includeTestsMatching(it) else excludeTestsMatching(it) }
+    }
+}
+// TEST-SPEED-1: per-fork tmpdir and state dir for the parallel UI test tasks, as :agentHq does: the same TestForkAgent
+// (built by :agentHq) moves each fork into <testTmp>/fork-<pid> and <test-state-dir>/fork-<pid>. ownerSmoke (one fork,
+// its own temp layout) is left as it was. The tmp root sits OUTSIDE the repo, like :agentHq's (git fixtures).
+val uiTestTmp = File(System.getProperty("java.io.tmpdir"), "agenthq-test-tmp/" + Integer.toHexString(projectDir.absolutePath.hashCode()))
+val uiTestState = layout.buildDirectory.dir("test-state-dir").get().asFile
+val forkAgentJar = project(":superiorSoftLibrary:agentHq").layout.buildDirectory.file("testForkAgent/agenthq-test-fork-agent.jar")
+tasks.withType<Test>().matching { it.name in setOf("test", "testFast", "testSlow") }.configureEach {
+    dependsOn(":superiorSoftLibrary:agentHq:testForkAgentJar")
+    inputs.file(forkAgentJar).withPropertyName("testForkAgent").withNormalizer(ClasspathNormalizer::class.java)
+    systemProperty("AGENTHQ_STATE_DIR", uiTestState.absolutePath)
+    jvmArgs("-Djava.io.tmpdir=${uiTestTmp.absolutePath}")
+    jvmArgumentProviders += CommandLineArgumentProvider { listOf("-javaagent:${forkAgentJar.get().asFile.absolutePath}") }
+    doFirst {
+        uiTestState.deleteRecursively(); uiTestState.mkdirs()
+        uiTestTmp.deleteRecursively(); uiTestTmp.mkdirs()
     }
 }
 tasks.register<Test>("testFast") { uiTier("TEST-SPEED-3: the fast UI tier (classes NOT matched by slowUiTestPatterns).", slow = false) }
