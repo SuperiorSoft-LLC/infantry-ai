@@ -35,6 +35,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.Icon
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.foundation.hoverable
@@ -1177,7 +1178,7 @@ private fun StatusBar(state: AppState, serverMismatch: String?, appBuild: String
         Spacer(Modifier.weight(1f))
         // The shortcut hint only where there is room for it (a phone has no keyboard shortcuts and no width to spare).
         if (!state.panels.compactWindow) {
-            Text("^K search  Alt+↑↓ agents  ^J needs input  ^N new  ^R resume  ^5 roles  ^6 attention  ^L connection  ^, config", color = Palette.Muted, fontSize = 10.sp, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+            Text("^K search  Alt+Up/Down agents  ^J needs input  ^N new  ^R resume  ^5 roles  ^6 attention  ^L connection  ^, config", color = Palette.Muted, fontSize = 10.sp, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
         }
         // BUILD-STAMP-1: which build this is (and a plain warning when the daemon is another build); the cog opens About.
         FooterBuild(appBuild, if (c.isLive) c.daemonBuild else null, Modifier.padding(start = 10.dp).clickable(role = Role.Button) { onConfig(ConfigTab.ABOUT) })
@@ -1187,7 +1188,7 @@ private fun StatusBar(state: AppState, serverMismatch: String?, appBuild: String
                 .clickable(role = Role.Button) { onConfig(null) }
                 .semantics { contentDescription = "Configuration" },
             contentAlignment = Alignment.Center,
-        ) { Text("\u2699", color = Palette.Muted, fontSize = 13.sp) }
+        ) { Icon(AhqIcons.Cog, contentDescription = null, tint = Palette.Muted, modifier = Modifier.size(14.dp)) }
     }
 }
 

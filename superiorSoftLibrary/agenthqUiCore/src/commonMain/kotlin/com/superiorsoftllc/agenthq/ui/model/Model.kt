@@ -1926,6 +1926,8 @@ fun AppState.selectProject(projectId: String): AppState =
     if (projects.any { it.id == projectId }) {
         copy(
             activeProjectId = projectId,
+            // The chat pane follows the project: an agent of another project is no longer the open one.
+            selectedId = selectedId?.takeIf { id -> agents[id]?.session?.projectId.let { it == null || it == projectId } },
             // BRANCH-VIEW-2: a different project starts on its working tree.
             changesBranchPick = changesBranchPick?.takeIf { it.projectId == projectId },
             changesViewPick = changesViewPick?.takeIf { it.projectId == projectId },

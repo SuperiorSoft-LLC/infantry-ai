@@ -358,6 +358,25 @@ object AhqIcons {
         }
     }
 
+    /** Source-control branch (two nodes, a trunk and a fork). Drawn here: the glyph U+2387 is tofu in the web build. */
+    val Branch: ImageVector by lazy {
+        icon("Branch", autoMirror = false) {
+            disc(6f, 5f, 2.5f); disc(6f, 19f, 2.5f); disc(18f, 7f, 2.5f)
+            rect(5f, 6f, 7f, 18f); rect(17f, 9f, 19f, 13f); rect(7f, 11f, 19f, 13f)
+        }
+    }
+
+    /** Configuration cog (ring, eight teeth, round hole). Drawn here: the glyph U+2699 is tofu in the web build. */
+    val Cog: ImageVector by lazy {
+        icon("Cog", autoMirror = false) {
+            disc(12f, 12f, 7f)
+            rect(10.5f, 2f, 13.5f, 22f); rect(2f, 10.5f, 22f, 13.5f)
+            moveTo(5.2f, 3.1f); lineTo(20.9f, 18.8f); lineTo(18.8f, 20.9f); lineTo(3.1f, 5.2f); close()
+            moveTo(18.8f, 3.1f); lineTo(20.9f, 5.2f); lineTo(5.2f, 20.9f); lineTo(3.1f, 18.8f); close()
+            moveTo(9f, 12f); arcTo(3f, 3f, 0f, true, false, 15f, 12f); arcTo(3f, 3f, 0f, true, false, 9f, 12f); close()
+        }
+    }
+
     private fun PathBuilder.disc(cx: Float, cy: Float, r: Float) {
         moveTo(cx - r, cy)
         arcTo(r, r, 0f, true, true, cx + r, cy)

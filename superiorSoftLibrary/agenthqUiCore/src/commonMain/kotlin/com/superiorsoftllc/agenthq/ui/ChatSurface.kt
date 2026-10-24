@@ -200,6 +200,7 @@ val HEADER_TITLE_MIN_WIDTH = 160.dp
 val NARROW_HEADER_WIDTH = 600.dp
 const val AGENT_HEADER_CHIPS_TAG = "agent-header-chips"
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CenterHeader(
     a: AgentView?,
@@ -255,9 +256,9 @@ fun CenterHeader(
         }
         if (!narrow) Row(Modifier.widthIn(max = chipsMax), verticalAlignment = Alignment.CenterVertically) { chips() }
     }
-    // A phone-width header: the chips get their own row under the title, scrolling sideways, never clipped.
+    // A phone-width header: the chips get their own row under the title and wrap onto more lines, never clipped.
     if (narrow && a != null && !spawnMode) {
-        Row(Modifier.fillMaxWidth().background(Palette.Panel).horizontalScroll(rememberScrollState()).padding(12.dp, 0.dp, 12.dp, 8.dp).testTag(AGENT_HEADER_CHIPS_TAG), verticalAlignment = Alignment.CenterVertically) { chips() }
+        FlowRow(Modifier.fillMaxWidth().background(Palette.Panel).padding(12.dp, 0.dp, 12.dp, 8.dp).testTag(AGENT_HEADER_CHIPS_TAG), verticalArrangement = Arrangement.spacedBy(4.dp)) { chips() }
     }
     }
     }

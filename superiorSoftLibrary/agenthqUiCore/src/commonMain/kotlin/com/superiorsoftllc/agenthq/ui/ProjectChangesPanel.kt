@@ -10,7 +10,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -379,7 +381,7 @@ private fun WorktreeHeaderLine(status: ProjectGitWorktreeStatus?) {
         return
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("⎇", color = Palette.Muted, fontSize = 11.sp)
+        Icon(AhqIcons.Branch, contentDescription = null, tint = Palette.Muted, modifier = Modifier.size(12.dp))
         Text(
             header.branch, color = Palette.Text, fontSize = 12.sp, fontFamily = Mono, fontWeight = FontWeight.SemiBold,
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).testTag(CHANGES_BRANCH_TAG),
@@ -466,7 +468,7 @@ private fun BranchSelect(state: AppState, controller: Controller, active: Projec
                 .padding(horizontal = 8.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("⎇ ", color = Palette.Muted, fontSize = 11.sp)
+            Icon(AhqIcons.Branch, contentDescription = null, tint = Palette.Muted, modifier = Modifier.size(12.dp)); Spacer(Modifier.width(4.dp))
             Text(shown, color = Palette.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (detail != null) {
                 Text(" · ", color = Palette.Muted, fontSize = 11.sp)
