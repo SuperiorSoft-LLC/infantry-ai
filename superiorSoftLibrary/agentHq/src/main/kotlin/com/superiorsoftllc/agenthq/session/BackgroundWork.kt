@@ -25,20 +25,28 @@ data class ProcInfo(val pid: Long, val parentPid: Long?, val command: String, va
 /** The OS process tree under a root. Injected so a test can fake it. */
 interface ProcessSource {
     fun descendants(rootPid: Long): List<ProcInfo>
+
+    /** The live process [pid] itself; null when it is gone or unknown. The process ledger uses it to record a session root. */
+    fun info(pid: Long): ProcInfo? = null
 }
 
 /** Windows and POSIX alike: [ProcessHandle.descendants], no PowerShell polling. */
 object OsProcessSource : ProcessSource {
     override fun descendants(rootPid: Long): List<ProcInfo> {
         val root = ProcessHandle.of(rootPid).orElse(null) ?: return emptyList()
-        return root.descendants().filter { it.isAlive }.map { h ->
-            val info = h.info()
-            ProcInfo(
-                h.pid(), h.parent().map { it.pid() }.orElse(null),
-                info.commandLine().orElse(null) ?: info.command().orElse("") ,
-                info.startInstant().map { it.toEpochMilli() }.orElse(null),
-            )
-        }.toList()
+        return root.descendants().filter { it.isAlive }.map { h -> describe(h, parentKnown = true) }.toList()
+    }
+
+    override fun info(pid: Long): ProcInfo? =
+        ProcessHandle.of(pid).filter { it.isAlive }.map { describe(it, parentKnown = false) }.orElse(null)
+
+    private fun describe(h: ProcessHandle, parentKnown: Boolean): ProcInfo {
+        val info = h.info()
+        return ProcInfo(
+            h.pid(), if (parentKnown) h.parent().map { it.pid() }.orElse(null) else null,
+            info.commandLine().orElse(null) ?: info.command().orElse(""),
+            info.startInstant().map { it.toEpochMilli() }.orElse(null),
+        )
     }
 }
 

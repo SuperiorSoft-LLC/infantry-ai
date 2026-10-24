@@ -6,7 +6,7 @@ import com.superiorsoftllc.agenthq.ui.protocol.PacingTier
 import kotlin.math.roundToInt
 
 /**
- * USAGE-PACE (contract 1.119.0 / 1.120.0): the words the pacing panel shows and the rule text the owner types, kept pure
+ * USAGE-PACE (contract 1.119.0 / 1.121.0): the words the pacing panel shows and the rule text the owner types, kept pure
  * so they are tested without a window. The daemon validates every change again; this only catches typos early.
  */
 object PacingView {

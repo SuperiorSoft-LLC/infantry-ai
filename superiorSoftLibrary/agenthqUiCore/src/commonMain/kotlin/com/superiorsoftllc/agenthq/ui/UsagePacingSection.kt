@@ -44,7 +44,7 @@ private sealed interface PacingEdit {
 }
 
 /**
- * USAGE-PACE (contract 1.119.0 / 1.120.0): how many ticket workers each plan meter allows right now, from its percent
+ * USAGE-PACE (contract 1.119.0 / 1.121.0): how many ticket workers each plan meter allows right now, from its percent
  * used and the pacing rule. An agent's ticket start past the allowance is refused by the daemon (1.121.0). The owner can
  * edit the rule, type a percent for a meter with no readable usage, and override a meter's allowance for a while.
  */

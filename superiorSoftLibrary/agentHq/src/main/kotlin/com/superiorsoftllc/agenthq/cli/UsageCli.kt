@@ -8,7 +8,7 @@ import com.superiorsoftllc.agenthq.usage.UsageText
 import kotlinx.serialization.json.Json
 
 /**
- * USAGE-PACE: `agenthq usage` (contract 1.119.0, read) and its write forms (1.120.0: a manual percent, an allowance
+ * USAGE-PACE: `agenthq usage` (contract 1.119.0, read) and its write forms (1.121.0: a manual percent, an allowance
  * override, the pacing rule). Every form prints the report the daemon answers with. The read is shared with the MCP
  * `agenthq_usage` tool, which stays read-only.
  */

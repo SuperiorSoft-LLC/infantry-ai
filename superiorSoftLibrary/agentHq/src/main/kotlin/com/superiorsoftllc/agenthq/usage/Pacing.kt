@@ -125,7 +125,7 @@ data class MeterUsage(
 data class UsageReport(val meters: List<MeterUsage>, val rule: PacingRule, val observedAt: Long)
 
 /**
- * The `usage_set` frame (contract 1.120.0), answered by `usage_report`: a meter's manual percent and/or override set or
+ * The `usage_set` frame (contract 1.121.0), answered by `usage_report`: a meter's manual percent and/or override set or
  * cleared, and/or the pacing rule replaced. An override with [overrideUntil] set and [overrideWorkers] null = no limit.
  */
 @Serializable

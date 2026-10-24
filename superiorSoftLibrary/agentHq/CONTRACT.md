@@ -105,19 +105,16 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
 
-### What changed in 1.121.0 (USAGE-PACE S3, ticket-2d954bda) — ticket starts are paced to the plan allowance
+### What changed in 1.121.0 (USAGE-PACE S2+S3, ticket-2d954bda) — manual usage, allowance override, pacing rule; ticket starts are paced
 
-BEHAVIOURAL, no new frame; the `ready` frame reports `contract=1.121.0`.
+ADDITIVE (`usage_set`) and BEHAVIOURAL (the start gate); a 1.120.0 client keeps working. The `ready` frame reports
+`contract=1.121.0`. (S2 and S3 ship together under 1.121.0 because ROGUE-1 took 1.120.0.)
 - A ticket hand-out whose run would spend a meter with `canStart` false (see `usage_report`) is refused when an agent
   started it (`ticket_move` to in_progress with a starter session, `agenthq_ticket_start`), or the daemon did
   (`ticket_start_next`, a trigger, a queue drain): `start.ok` false, `start.reason` `start_refused`, `start.detail`
   `usage pacing: <meter> at <pct> ..., allowance <n> (rule|override), running <n>; resets <instant>. ...`.
 - The owner's own move (no starter session) still starts, with that text in `start.detail` as a warning.
 - Unknown usage never refuses (fail open); `usage override <meter> none` lifts the limit until it lapses.
-
-### What changed in 1.120.0 (USAGE-PACE S2, ticket-2d954bda) — manual usage, allowance override, pacing rule
-
-ADDITIVE; a 1.119.0 client keeps working. The `ready` frame reports `contract=1.120.0`.
 - **`usage_set`** (client -> daemon, `data` = a `UsageSet` `{meter?, manualPercent?, manualResetsAt?, clearManual?,
   overrideWorkers?, overrideUntil?, clearOverride?, rule?}`) is answered by `usage_report`. A manual percent (0..100)
   feeds a meter with no live read (`source` = `manual`) until `manualResetsAt`, else 5 h. An override (`overrideUntil`
@@ -128,6 +125,26 @@ ADDITIVE; a 1.119.0 client keeps working. The `ready` frame reports `contract=1.
 - Three new settings keys hold them: `usage.pacing`, `usage.manual`, `usage.overrides` (also writable through `settings_set`).
 - `agenthq usage set|clear|override|rule`; the MCP `agenthq_usage` stays read-only.
 
+### What changed in 1.120.0 (ROGUE-1) — the rogue background process detector
+
+ADDITIVE; a 1.118.0 client keeps working. The `ready` frame reports `contract=1.120.0`.
+- **Process ledger.** Every 10 s the daemon walks the OS process tree under each session's harness process (kept or running) and
+  under every process it already recorded, and records each process by pid AND OS start instant with its owner session
+  (`process-ledger.json` in the state dir, stamped with the state dir's instance id). A process whose parent exited (a Gradle daemon
+  after `gradlew` ends) stays attributed. Only a ledger process can ever be reaped; the daemon, its ancestors and anything run by the
+  app's own runtime are never recorded.
+- **Rogue** = a ledger process whose owner session was removed or ended (EXITED / FAILED / ORPHANED), or whose owner is idle (no
+  turn, no bg job, no output for `processes.idleMinutes`) while it holds at least `processes.heavyMb`. A live session's own harness
+  process is never rogue by idleness and is refused by `reap` (kill the session instead).
+- **`processes`** request `ProcessesRequest {op: list|reap|reap_rogue, pid?}` → `processes` answer
+  `ProcessesAnswer {report: ProcessReport, reaped: [TrackedProcess], refused?}`. `ProcessReport {freeMb?, totalMb?, floorMb,
+  underPressure, autoReap, tracked: [TrackedProcess], unattributed: [TrackedProcess]}`; `TrackedProcess {pid, command, sessionId?,
+  startedAt?, memoryMb?, rogue, reason?}`. `unattributed` lists heavy runtimes (java, node, docker, WSL...) the ledger cannot prove are
+  ours: shown, never reaped. A reap re-checks the start instant before a tree kill. A bad op is `error` `processes refused: ...`.
+- **`process_pressure`** push (a `ProcessReport`) to every client when free RAM drops under `processes.floorMb`, at most once per 10 min.
+- **Settings** `processes.autoReap` (bool, default false: reap rogue processes every minute), `processes.idleMinutes` (1..1440,
+  default 30), `processes.heavyMb` (default 500), `processes.floorMb` (default 4096).
+- CLI `agenthq processes [--all]`, `agenthq processes reap <pid> | --all`; MCP `agenthq_processes` / `agenthq_processes_reap`.
 ### What changed in 1.119.0 (USAGE-PACE S1, ticket-2d954bda) — read plan usage and the pacing allowance
 
 ADDITIVE and read-only; a 1.118.0 client keeps working. The `ready` frame reports `contract=1.119.0`.
@@ -2035,8 +2052,8 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `limits` | — (request the plan-limit meters; 1.59.0) | client → daemon |
 | `limits` | list of `ProviderLimits` (JSON), the answer and a push after each `usage` (1.59.0) | daemon → client |
 | `usage_get` | — (empty): request the plan meters and pacing allowance (1.119.0) | client → daemon |
-| `usage_report` | `UsageReport` (JSON) `{meters, rule, observedAt}`, answering `usage_get` (1.119.0) and `usage_set` (1.120.0) | daemon → client |
-| `usage_set` | `UsageSet` (JSON): a meter's manual percent / override set or cleared, and/or the pacing rule; refused = `error` `usage_set refused: ...` (1.120.0) | client → daemon |
+| `usage_report` | `UsageReport` (JSON) `{meters, rule, observedAt}`, answering `usage_get` (1.119.0) and `usage_set` (1.121.0) | daemon → client |
+| `usage_set` | `UsageSet` (JSON): a meter's manual percent / override set or cleared, and/or the pacing rule; refused = `error` `usage_set refused: ...` (1.121.0) | client → daemon |
 | `providers` | — (request the list; 1.3.0) | client → daemon |
 | `providers` | list of `ProviderInfo` (JSON), the default first (1.3.0) | daemon → client |
 | `agent_save` | one `AgentProfile` (JSON): no `id`, or one nobody has, creates; a known `id` overwrites (1.4.0); `traitIds` absent/null keeps the stored list, `[]` clears it (1.50.0); `skillIds` likewise, unknown ids refused (1.56.0) | client → daemon |
@@ -2099,6 +2116,8 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `memory_list` (scoped) | `{projectId, scope?, sessionId?, role?}` (a payload starting with `{`); answered by `memory_notes` (1.98.0) | client → daemon |
 | `memory_delete` | `{projectId, name, scope?, sessionId?, role?}`; answered by that scope's `memory_notes` index (1.98.0) | client → daemon |
 | `memory_purge_role` | `{role, confirm}`, `confirm` must equal `role`; deletes the role's notes in every project (1.98.0) | client → daemon |
+| `processes` | `ProcessesRequest` `{op: list\|reap\|reap_rogue, pid?}` → `ProcessesAnswer` `{report, reaped, refused?}`: list / reap the processes this daemon's sessions started (1.120.0) | client → daemon, daemon → client |
+| `process_pressure` | a `ProcessReport`, pushed when free RAM drops under `processes.floorMb`, at most once per 10 min (1.120.0) | daemon → client |
 | `bg_job` | `{op: beat|done|list, job?, jobId?}` with the frame sessionId; `beat` registers or heartbeats a `BgJob` (`agenthq bg run`), answered by a `bg_job` list of the session's jobs; additive, no version bump | client → daemon, daemon → client |
 | `decision_add` | `{projectId, sessionId?, summary, body?, supersedes?}` (strict); answered by a `decision_item` pushed to every client; refusals `decision_not_found`, `already_superseded`, `session_not_found` code first (1.53.0) | client → daemon |
 | `decision_list` | `{projectId, includeSuperseded = false}`; answered by `decisions` (1.53.0) | client → daemon |

@@ -14,7 +14,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** USAGE-PACE (contract 1.119.0 / 1.120.0): meter mapping, the rule, manual entries, overrides, fail open. */
+/** USAGE-PACE (contract 1.119.0 / 1.121.0): meter mapping, the rule, manual entries, overrides, fail open. */
 class UsagePacingTest {
     private val now = 1_800_000_000_000L
     private val hour = 3_600_000L

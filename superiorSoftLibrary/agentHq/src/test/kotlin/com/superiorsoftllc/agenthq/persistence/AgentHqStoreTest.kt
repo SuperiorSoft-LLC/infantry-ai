@@ -369,6 +369,23 @@ class AgentHqStoreTest {
             gone = { it.triggers.get("trg-1") == null },
         )
     }
+
+    @Test
+    fun `a trigger upsert waits for a concurrent writer instead of failing`() {
+        // ticket a8a6fd98: upsert reads the row's pending mail id, then writes it back. As a deferred transaction it
+        // failed at once with SQLITE_BUSY while the board committed the same run's end, so a finished run's
+        // `running -> armed` was lost and the trigger stayed `running` (DaemonIntegrationTest's trigger test).
+        val trigger = com.superiorsoftllc.agenthq.protocol.TriggerView(
+            id = "trg-1", name = "Pull next", kind = "manual",
+            action = com.superiorsoftllc.agenthq.protocol.TriggerAction(), enabled = true, state = "running",
+            coalesceMs = 0, ceilingRuns = 6, ceilingWindowMs = 60_000, createdAt = 100,
+        )
+        deleteUnderConcurrentWriter(
+            seed = { it.triggers.upsert(trigger, null) },
+            delete = { it.triggers.upsert(trigger.copy(state = "armed"), null); true },
+            gone = { it.triggers.get("trg-1")?.state == "armed" },
+        )
+    }
 }
 
 /**

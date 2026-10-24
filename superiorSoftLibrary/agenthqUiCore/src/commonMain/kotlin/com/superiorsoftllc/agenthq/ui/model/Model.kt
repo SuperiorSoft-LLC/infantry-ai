@@ -667,6 +667,10 @@ data class AppState(
      * daemon older than contract 1.68.0, which has no such setting): the control says so instead of guessing a value.
      */
     val keepAliveMinutes: Int? = null,
+    /** ROGUE-1 (1.120.0): the daemon's last `processes` answer or `process_pressure` push; null = never answered. */
+    val processReport: com.superiorsoftllc.agenthq.ui.protocol.ProcessReport? = null,
+    /** ROGUE-1 (1.120.0): the daemon's `processes.autoReap` as its last `settings` frame said; null = not read yet. */
+    val processAutoReap: Boolean? = null,
     /** USER-PORTRAIT (1.107.0): the daemon's `user.portrait` (base64 PNG); null = unset, the bundled default shows. */
     val userPortrait: String? = null,
     /** CLIPATH-1 (1.73.0): where the daemon runs each CLI from, as its last `cli_locations` said. Null = not read yet. */
@@ -1679,8 +1683,31 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
 
     // BUG-M2-11e: a `settings` answer (to this window's get/set, or another client's set) carries the lifecycle setting.
     // A frame without the key (a get of another key) leaves the known value alone.
+    // ROGUE-1 (1.120.0): the report replaces the last one; a reap names what it killed or why it refused.
+    Envelope.PROCESSES -> runCatching {
+        json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.ProcessesAnswer.serializer(), env.data)
+    }.getOrNull()?.let { a ->
+        val next = s.copy(processReport = a.report, processAutoReap = a.report.autoReap)
+        when {
+            a.refused != null -> next.withNotice(now, "reap refused: ${a.refused.take(160)}", null, NoticeKind.ERROR)
+            a.reaped.isNotEmpty() -> next.withNotice(now, "reaped ${a.reaped.size} process${if (a.reaped.size == 1) "" else "es"}: " +
+                a.reaped.joinToString { "pid ${it.pid}" }.take(160), null, NoticeKind.OK)
+            else -> next
+        }
+    } ?: s
+    Envelope.PROCESS_PRESSURE -> runCatching {
+        json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.ProcessReport.serializer(), env.data)
+    }.getOrNull()?.let { r ->
+        s.copy(processReport = r, processAutoReap = r.autoReap).withNotice(
+            now, "low memory: ${r.freeMb?.let(ProcessWatchView::mb) ?: "?"} free (floor ${ProcessWatchView.mb(r.floorMb)}), " +
+                "${r.rogue.size} rogue process${if (r.rogue.size == 1) "" else "es"}: see the badge in the status bar",
+            null, NoticeKind.HEADS_UP,
+        )
+    } ?: s
+
     Envelope.SETTINGS -> {
-        val withKeepAlive = LifecycleSetting.fromSettingsFrame(env.data)?.let { s.copy(keepAliveMinutes = it) } ?: s
+        val withAutoReap = ProcessWatchView.autoReapFromSettingsFrame(env.data)?.let { s.copy(processAutoReap = it) } ?: s
+        val withKeepAlive = LifecycleSetting.fromSettingsFrame(env.data)?.let { withAutoReap.copy(keepAliveMinutes = it) } ?: withAutoReap
         UserPortrait.fromSettingsFrame(env.data)?.let { withKeepAlive.copy(userPortrait = it.base64) } ?: withKeepAlive
     }
 

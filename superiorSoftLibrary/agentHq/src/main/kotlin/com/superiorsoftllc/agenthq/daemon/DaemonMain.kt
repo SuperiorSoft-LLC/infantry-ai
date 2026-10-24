@@ -195,6 +195,9 @@ import kotlin.system.exitProcess
 
 private const val DEFAULT_PORT = DaemonPort.DEFAULT
 private const val DEFAULT_DB_NAME = "agenthq.db"
+
+/** ROGUE-1: how often the process ledger walks the session trees (a ProcessHandle walk; no subprocess unless under pressure). */
+private const val PROCESS_WATCH_POLL_MS = 10_000L
 private const val SESSION_REPLAY_REQUEST_TYPE = "replay_request"
 private const val SESSION_REPLAY_GAP_TYPE = "replay_gap"
 private const val SESSION_REPLAY_BUFFER_CAPACITY = 256
@@ -650,6 +653,8 @@ class AgentHqDaemon(
             // BUG-PERM-1: every run resolves its Tool approval through this store-backed global value.
             val toolApproval = com.superiorsoftllc.agenthq.session.ToolApprovalService(store)
             val restoreToolApproval = com.superiorsoftllc.agenthq.session.ToolApprovals.install(toolApproval::stored)
+            // BUG-REAP-OWNER: no id (unwritable dir) => nothing is ever reaped, which is the safe side.
+            val instanceId = runCatching { InstanceId.loadOrCreate(com.superiorsoftllc.agenthq.session.stateDir()) }.getOrNull()
             val manager = SessionManager(
                 provider,
                 runner,
@@ -662,8 +667,7 @@ class AgentHqDaemon(
                 instances = store.sessionInstances,
                 lifecyclePolicy = { com.superiorsoftllc.agenthq.session.host.LifecyclePolicy(settings.keepAliveMinutes()) },
                 defaultWorkingDir = workingDir,
-                // BUG-REAP-OWNER: no id (unwritable dir) => nothing is ever reaped, which is the safe side.
-                instanceId = runCatching { InstanceId.loadOrCreate(com.superiorsoftllc.agenthq.session.stateDir()) }.getOrNull(),
+                instanceId = instanceId,
             )
             // BUG-M2-11f: a new keep-alive value applies to the processes already kept, not only to the next launch.
             settings.onKeepAliveChanged = manager::lifecyclePolicyChanged
@@ -683,6 +687,35 @@ class AgentHqDaemon(
                 File(com.superiorsoftllc.agenthq.session.stateDir(), com.superiorsoftllc.agenthq.session.FileProgressEstimates.FILE_NAME),
             )
             val clients = CopyOnWriteArrayList<Channel<Envelope>>()
+            // ROGUE-1 (contract 1.120.0): the rogue process detector. The ledger records only what a session tree started
+            // (pid + start instant, owned by this state dir); a slow timer feeds it and warns under memory pressure.
+            val processWatch = com.superiorsoftllc.agenthq.session.ProcessWatch(
+                com.superiorsoftllc.agenthq.session.ProcessLedger(
+                    com.superiorsoftllc.agenthq.session.OsProcessSource,
+                    com.superiorsoftllc.agenthq.session.host.OsProcessTable,
+                    File(com.superiorsoftllc.agenthq.session.stateDir(), com.superiorsoftllc.agenthq.session.ProcessLedger.FILE_NAME),
+                    instanceId,
+                    isProtected = com.superiorsoftllc.agenthq.session.ProcessWatch::isProtected,
+                ),
+                manager::list,
+                com.superiorsoftllc.agenthq.session.OsMemorySource,
+                com.superiorsoftllc.agenthq.session.host.OsProcessTable,
+                config = settings::processWatchConfig,
+                onPressure = { report ->
+                    val envelope = Envelope(
+                        Envelope.PROCESS_PRESSURE,
+                        json.encodeToString(com.superiorsoftllc.agenthq.session.ProcessReport.serializer(), report),
+                    )
+                    println("[agentHq] memory pressure: ${report.freeMb} MB free (floor ${report.floorMb}), ${report.rogue.size} rogue process(es)")
+                    for (c in clients.toList()) c.trySend(envelope)
+                },
+            )
+            java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+                Thread(r, "agenthq-process-watch").also { it.isDaemon = true }
+            }.scheduleWithFixedDelay(
+                { runCatching { processWatch.tick() }.onFailure { System.err.println("[agentHq] process watch failed: ${it.message}") } },
+                PROCESS_WATCH_POLL_MS, PROCESS_WATCH_POLL_MS, java.util.concurrent.TimeUnit.MILLISECONDS,
+            )
             // PROMPT-1: `prompts.timeoutSec` is read at every open; every request / resolution goes to every client.
             val pendingPrompts = com.superiorsoftllc.agenthq.prompts.PendingPrompts(
                 timeoutMillis = { settings.promptTimeoutSec() * 1000L },
@@ -876,7 +909,7 @@ class AgentHqDaemon(
                     ticket = ticketId?.let(store.tickets::get),
                 )
             }
-            // USAGE-PACE (1.119.0 read, 1.120.0 manual / override / rule): plan meters -> allowance of ticket workers.
+            // USAGE-PACE (1.119.0 read, 1.121.0 manual / override / rule): plan meters -> allowance of ticket workers.
             val usagePacing = UsagePacing(
                 limits = limits::cachedOrRefresh,
                 rule = settings::usagePacing,
@@ -1236,6 +1269,7 @@ class AgentHqDaemon(
                             imageUploads = com.superiorsoftllc.agenthq.images.ImageUploadHandler(projectStore, clock = clock),
                             ownerQuestions = ownerQuestions,
                             handover = handover,
+                            processWatch = processWatch,
                         )
                     }
                 }
@@ -1774,6 +1808,8 @@ private suspend fun handleConnection(
     ownerQuestions: com.superiorsoftllc.agenthq.questions.OwnerQuestions? = null,
     /** TICKET-HANDOVER: a ticket worker's harness switch goes through a handoff turn; null = switched at once. */
     handover: SessionHandover? = null,
+    /** ROGUE-1 (contract 1.120.0): `processes`; null = this daemon serves none. */
+    processWatch: com.superiorsoftllc.agenthq.session.ProcessWatch? = null,
 ) {
     println("[agentHq] ws connected (provider=${manager.providerId})")
     val outgoing = Channel<Envelope>(Channel.UNLIMITED)
@@ -2324,7 +2360,7 @@ private suspend fun handleConnection(
                     null
                 }
 
-                // USAGE-PACE (1.120.0): the owner's manual percent / override / rule; answered by the fresh report.
+                // USAGE-PACE (1.121.0): the owner's manual percent / override / rule; answered by the fresh report.
                 Envelope.USAGE_SET -> try {
                     val service = settings as? com.superiorsoftllc.agenthq.settings.SettingsService
                         ?: throw IllegalArgumentException("this daemon has no usage settings")
@@ -2750,6 +2786,19 @@ private suspend fun handleConnection(
                     Envelope(Envelope.ERROR, "session_project refused: ${e.message ?: "invalid request"}")
                 } catch (e: Exception) {
                     Envelope(Envelope.ERROR, "session_project refused: ${e.message ?: e::class.simpleName}")
+                }
+
+                // ROGUE-1 (contract 1.120.0): list / reap the processes this daemon's sessions started.
+                Envelope.PROCESSES -> try {
+                    val watch = processWatch ?: throw IllegalArgumentException("this daemon has no process watch")
+                    val req = if (envelope.data.isBlank()) com.superiorsoftllc.agenthq.session.ProcessesRequest()
+                    else json.decodeFromString(com.superiorsoftllc.agenthq.session.ProcessesRequest.serializer(), envelope.data)
+                    val answer = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        com.superiorsoftllc.agenthq.session.ProcessFrames.answer(watch, req)
+                    }
+                    Envelope(Envelope.PROCESSES, json.encodeToString(com.superiorsoftllc.agenthq.session.ProcessesAnswer.serializer(), answer))
+                } catch (e: Exception) {
+                    Envelope(Envelope.ERROR, "processes refused: ${e.message ?: e::class.simpleName}")
                 }
 
                 // `agenthq bg run`: beat (register/heartbeat), done, list. The answer is always the session's job list

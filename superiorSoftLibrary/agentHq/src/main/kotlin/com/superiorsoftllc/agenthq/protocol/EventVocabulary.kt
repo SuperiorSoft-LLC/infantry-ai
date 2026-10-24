@@ -357,9 +357,10 @@ object EventVocabulary {
     // **1.115.0 (ASSISTANT-1) is ADDITIVE**: the `assistant` frame, `SessionRecord.global`, role `assistant` is privileged across projects. See CONTRACT.md.
     // **1.117.0 (PROGRESS-1, ticket-1371d44b) is ADDITIVE**: `SessionRecord.progress`, the `progress` request frame, `agenthq progress` / `agenthq run` / `agenthq_progress`. See CONTRACT.md.
     // **1.118.0 (BASICS-KILL-1) is ADDITIVE**: `Project.autoRemoveDoneWorkers` + `project_config` key; stale BUSY removable; one session per ticket. See CONTRACT.md.
+    // **1.120.0 (ROGUE-1, ticket 8a40b481) is ADDITIVE**: the `processes` request frame (list / reap / reap_rogue) and the `process_pressure`
+    // push; settings `processes.autoReap` (default false) / `processes.idleMinutes` / `processes.heavyMb` / `processes.floorMb`. See CONTRACT.md.
     // **1.119.0 (USAGE-PACE) is ADDITIVE**: `usage_get` / `usage_report` (read-only plan meters + pacing allowance), `agenthq usage` / `agenthq_usage`. See CONTRACT.md.
-    // **1.120.0 (USAGE-PACE S2) is ADDITIVE**: `usage_set`, settings `usage.pacing|manual|overrides`, `agenthq usage set|clear|override|rule`. See CONTRACT.md.
-    // **1.121.0 (USAGE-PACE S3) is BEHAVIOURAL**: an agent's / the daemon's ticket start beyond the plan allowance is refused. See CONTRACT.md.
+    // **1.121.0 (USAGE-PACE S2+S3) is ADDITIVE + BEHAVIOURAL**: `usage_set`, settings `usage.pacing|manual|overrides`, `agenthq usage set|clear|override|rule`; an agent's / the daemon's ticket start beyond the plan allowance is refused (1.120.0 is ROGUE-1). See CONTRACT.md.
     const val VERSION = "1.121.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */

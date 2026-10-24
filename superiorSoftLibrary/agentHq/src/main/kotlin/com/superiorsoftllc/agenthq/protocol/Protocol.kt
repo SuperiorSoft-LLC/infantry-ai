@@ -242,6 +242,12 @@ data class Envelope(
 
         /** Contract 1.117.0: `agenthq progress` / `agenthq_progress`: one [com.superiorsoftllc.agenthq.session.ProgressReport] for the frame's session; answered by a `progress` frame (the session's progress, or `null`). The change reaches clients as a `session` push. */
         const val PROGRESS = "progress"
+
+        /** Contract 1.120.0 (ROGUE-1): [com.superiorsoftllc.agenthq.session.ProcessesRequest] -> [com.superiorsoftllc.agenthq.session.ProcessesAnswer]: list / reap the processes this daemon's sessions started. */
+        const val PROCESSES = "processes"
+
+        /** Contract 1.120.0 (ROGUE-1): pushed to every client when free RAM drops under `processes.floorMb` (a [com.superiorsoftllc.agenthq.session.ProcessReport]), at most once per 10 min. */
+        const val PROCESS_PRESSURE = "process_pressure"
         const val MAIL_REFUSED = "mail_refused"
 
         // Phase 9 -- the public, provider-neutral event vocabulary (see EventVocabulary).
@@ -327,7 +333,7 @@ data class Envelope(
         // plan meter's percent, reset, pace, allowance and running ticket workers, plus the pacing rule).
         const val USAGE_GET = "usage_get"
         const val USAGE_REPORT = "usage_report"
-        // Contract 1.120.0: `usage_set` (a `UsageSet`): a meter's manual percent / override, or the pacing rule; answered by `usage_report`.
+        // Contract 1.121.0: `usage_set` (a `UsageSet`): a meter's manual percent / override, or the pacing rule; answered by `usage_report`.
         const val USAGE_SET = "usage_set"
 
         // Contract 1.14.0 -- story 9.5: triggers. Changes are pushed to every client.
