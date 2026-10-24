@@ -300,6 +300,8 @@ class DaemonFixture private constructor(
             clock: () -> Long = System::currentTimeMillis,
             /** IMG-5: the retention sweep's 6-hour ticker; a test passes one it fires by hand. */
             chatImageTicker: (Long, () -> Unit) -> AutoCloseable = com.superiorsoftllc.agenthq.images.ChatImageRetention::scheduledTicker,
+            /** TICKET-HANDOVER: how long a switched ticket worker's handoff turn may run. */
+            handoffTimeoutMs: Long = SessionHandover.DEFAULT_TIMEOUT_MS,
         ): DaemonFixture {
             val opened: AgentHqStore = store ?: SqlAgentHqStore.open(storePath, holderLabel, busyTimeoutMs)
             val provider = StubProvider(script = script, delayMs = 0)
@@ -339,6 +341,7 @@ class DaemonFixture private constructor(
                 baseRef = baseRef,
                 clock = clock,
                 chatImageTicker = chatImageTicker,
+                handoffTimeoutMs = handoffTimeoutMs,
             )
             beforeStart(daemon)
             // PORT-1: the production start path: bind, then record the bound port (resolves the ephemeral 0).

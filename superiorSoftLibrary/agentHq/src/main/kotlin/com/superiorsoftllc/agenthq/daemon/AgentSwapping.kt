@@ -30,8 +30,18 @@ import java.io.File
  * `keep` is refused when the harness changes (an explicit `keep` promises the same CLI conversation); `auto` across
  * harnesses keeps the SESSION instead and carries its conversation to the new CLI ([SessionManager.reharness]); `new`
  * always cuts a fresh session bound to the agent, at rest, on the new executor. With no session at all `keep` answers `none`.
+ *
+ * TICKET-HANDOVER: a `kept` session that crosses harnesses and works on a ticket is moved by [handover] instead, after
+ * the answer: the old agent writes a handoff note, then the session moves and its first run on the new harness starts
+ * with the ticket brief and that note. The answer is the same `kept` (the session id does not change).
  */
-fun swapAgent(manager: SessionManager, agents: AgentProfiles, request: AgentSwap, repo: File?): AgentSwapped {
+fun swapAgent(
+    manager: SessionManager,
+    agents: AgentProfiles,
+    request: AgentSwap,
+    repo: File?,
+    handover: SessionHandover? = null,
+): AgentSwapped {
     val mode = request.session.trim().lowercase()
     require(mode in AgentSwap.SESSION_MODES) { "session '${mode.take(20)}' is not one of ${AgentSwap.SESSION_MODES}" }
 
@@ -46,6 +56,11 @@ fun swapAgent(manager: SessionManager, agents: AgentProfiles, request: AgentSwap
         val oldHarness = session?.provider ?: old.provider ?: manager.providerId
         val newHarness = next.provider ?: manager.providerId
         val crosses = oldHarness != newHarness
+        require(session == null || !manager.isHeld(session.id)) { "this agent's session is already switching; wait for that switch to finish" }
+        if (crosses && session != null && !session.live && mode == AgentSwap.AUTO && handover?.applies(session) == true) {
+            // Refused now, before the profile is written: the move itself only happens after the handoff turn.
+            manager.checkSwitch(newHarness, next.model, next.effort)
+        }
         require(!(mode == AgentSwap.KEEP && crosses)) {
             "session 'keep' cannot cross harnesses ('$oldHarness' -> '$newHarness'): a conversation belongs to one harness; use 'auto' or 'new'"
         }
@@ -64,8 +79,17 @@ fun swapAgent(manager: SessionManager, agents: AgentProfiles, request: AgentSwap
     val sessionId = when (outcome) {
         SwapSession.KEPT -> {
             val next = agents.executorFor(stored, null, null, null)
-            if (moves) manager.reharness(current!!.id, next.provider ?: manager.providerId, next.model, next.effort).id
-            else manager.retarget(current!!.id, next.model, next.effort).id
+            val session = current!!
+            when {
+                moves && handover?.applies(session) == true -> session.id.also {
+                    handover.begin(it) {
+                        val now = agents.get(stored.id!!)?.let { p -> agents.executorFor(p, null, null, null) } ?: next
+                        SessionHandover.Target(now.provider ?: manager.providerId, now.model, now.effort)
+                    }
+                }
+                moves -> manager.reharness(session.id, next.provider ?: manager.providerId, next.model, next.effort).id
+                else -> manager.retarget(session.id, next.model, next.effort).id
+            }
         }
         SwapSession.NEW -> bindSessionOnSpawn(manager, agents, SpawnOptions(agentId = stored.id, projectId = stored.projectId), repo)?.id
         else -> null
