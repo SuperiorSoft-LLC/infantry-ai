@@ -105,6 +105,9 @@ fun ConfigDialog(
     pair: PairEntry? = null,
     /** ROLE-EDIT-1: opens the role manager dialog; null hides the section. */
     onOpenRoles: (() -> Unit)? = null,
+    /** ASK-2: raises a sample owner question to the open session; null hides the section, [testQuestionReady] false disables the button. */
+    onSendTestQuestion: (() -> Unit)? = null,
+    testQuestionReady: Boolean = true,
     /** SERVER-UPDATE-4: the connected server's version and update state, and the client/server mismatch warning; null hides the section. */
     serverUpdate: com.superiorsoftllc.agenthq.ui.model.ServerUpdateState? = null,
     serverMismatch: String? = null,
@@ -135,6 +138,7 @@ fun ConfigDialog(
         if (onOpenRoles != null) add(ConfigEntry.ROLES)
         add(ConfigEntry.VOICE)
         add(ConfigEntry.INCOMING_SOUND)
+        if (onSendTestQuestion != null) add(ConfigEntry.QUESTIONS)
         if (voicePlugins != null) add(ConfigEntry.PLUGINS)
         if (secretActions != null && secrets != null) add(ConfigEntry.SECRETS)
         if (pair != null) add(ConfigEntry.PAIR)
@@ -235,6 +239,11 @@ fun ConfigDialog(
                             }
                             if (shows(ConfigEntry.INCOMING_SOUND)) FlagSection(ConfigEntry.INCOMING_SOUND, highlight) {
                                 com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundSection(flags.commsSound) { onFlags(flags.copy(commsSound = it)) }
+                            }
+                            if (shows(ConfigEntry.QUESTIONS) && onSendTestQuestion != null) FlagSection(ConfigEntry.QUESTIONS, highlight) {
+                                OutlinedButton(onClick = onSendTestQuestion, enabled = testQuestionReady, modifier = Modifier.testTag(TEST_QUESTION_TAG)) {
+                                    Text(if (testQuestionReady) "Send a test question" else "Open a session first")
+                                }
                             }
                             if (shows(ConfigEntry.PLUGINS) && voicePlugins != null) FlagSection(ConfigEntry.PLUGINS, highlight) {
                                 com.superiorsoftllc.agenthq.ui.voice.plugin.PluginsSection(voicePlugins)

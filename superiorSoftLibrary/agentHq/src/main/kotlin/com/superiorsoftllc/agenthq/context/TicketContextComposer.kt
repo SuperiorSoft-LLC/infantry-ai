@@ -124,8 +124,8 @@ class TicketContextComposer(
          * `agenthq` CLI, which BUG-PERM-5 allows in every Tool approval mode, so it works whatever the mode.
          * ASK-1: the line teaches the NON-BLOCKING form (`--recommend`): the agent never waits on the owner.
          */
-        const val ASK_LINE = "- To ask the owner a choice, run `agenthq ask --question \"...\" --option \"label|consequence\" --recommend <label> --reason \"...\"` " +
-            "(repeat --option; --other, --default-after <min>). It returns a question id at once and does not wait: carry on with other work; the owner's pick arrives as mail (thread question:<id>)."
+        const val ASK_LINE = "- The owner WANTS you to ask for real decisions: when a choice has 2-4 real options and their preference matters (design, priority, destructive/irreversible), run `agenthq ask --question \"...\" --option \"label|consequence\" --recommend <label> --reason \"...\"` (MCP agenthq_ask; --other, --default-after <min>). " +
+            "Always recommend one. Don't ask trivia or what is already decided. It returns an id at once and does not wait: keep working on what doesn't depend on it; the pick arrives as mail (thread question:<id>)."
 
         /**
          * BUG-MAIL-2: the starter of a ticket started from a session. The worker may sit in another project than its

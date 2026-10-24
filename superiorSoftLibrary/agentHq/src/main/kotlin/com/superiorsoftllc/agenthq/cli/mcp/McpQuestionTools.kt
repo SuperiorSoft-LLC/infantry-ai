@@ -73,7 +73,7 @@ internal class McpQuestionTools(private val getenv: (String) -> String?) {
                 put("name", ASK)
                 put(
                     "description",
-                    "Ask the owner to choose, WITHOUT waiting. Give 2-8 options (label + one-line consequence), exactly one " +
+                    "USE THIS when a decision has 2-4 real options and the owner's preference matters (design, priority, destructive or irreversible choices); the owner wants it used for those. Do NOT use it for trivia or anything already decided. Ask the owner to choose, WITHOUT waiting. Give 2-8 options (label + one-line consequence), exactly one " +
                         "recommended option and why. Returns a questionId at once: carry on with other work; the owner's pick " +
                         "arrives as mail in thread question:<id>. Optional defaultAfterMin auto-picks your recommendation if " +
                         "the owner has not answered by then (off unless set). Rate limited per agent.",

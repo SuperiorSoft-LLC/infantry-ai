@@ -234,6 +234,7 @@ fun main(args: Array<String>) {
  * agenthq skill list|show <name|id>        the daemon's skills library, read-only (P10-K14)
  * agenthq role traits <roleId> [--set a,b | --clear]   a role's ordered trait list (TRAITS-T7)
  * agenthq ask --question "..." --option "label|description" [--multi] [--other] [--timeout <sec>]   ask the owner (PROMPT-5)
+ * agenthq ask --test                                                                              raise a sample owner question to this session (ASK-2)
  * agenthq ask --question "..." --option "label|consequence" ... --recommend <label> --reason "..." [--other] [--default-after <min>]
  *                                  non-blocking owner question (ASK-1): prints {"questionId":..}, the pick arrives as mail
  * agenthq --version | version  this CLI's contract and build, and the daemon's: `agenthq <cli> build <b> (daemon: <contract> build <b>|not running)`
@@ -511,7 +512,7 @@ internal object Cli {
      * (the daemon withdraws a question whose asker went away, so it is never re-sent).
      */
     private fun ask(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable, getenv: (String) -> String?): Int =
-        if (parsed.recommend != null) askOwnerQuestion(stream, parsed, out, err, getenv) else runBlocking {
+        if (parsed.recommend != null || parsed.test) askOwnerQuestion(stream, parsed, out, err, getenv) else runBlocking {
             val session = callerSession(getenv) ?: return@runBlocking 2
             val request = askRequest(parsed)
             checkContract(stream, err)
@@ -564,7 +565,8 @@ internal object Cli {
         runBlocking {
             val session = callerSession(getenv) ?: return@runBlocking 2
             checkContract(stream, err)
-            val payload = json.encodeToString(QuestionAsk.serializer(), ownerQuestionRequest(parsed))
+            val request = if (parsed.test) QuestionAsk.sample() else ownerQuestionRequest(parsed)
+            val payload = json.encodeToString(QuestionAsk.serializer(), request)
             // Not idempotent: a re-send after a dropped connection could ask the owner twice.
             val answer = try {
                 stream.request(Envelope(Envelope.QUESTION_ASK, payload, session), Envelope.QUESTION_ASKED, "question_ask", idempotent = false)
@@ -611,6 +613,7 @@ internal object Cli {
                 "there is none, so there is no session to ask for"
         }
         if (parsed.args.isNotEmpty()) return "ask takes no positional arguments: $shape"
+        if (parsed.test) return null
         if (parsed.question?.isBlank() != false) return "ask requires a question: $shape"
         if (parsed.options.isEmpty()) return "ask requires at least one --option: $shape"
         // ASK-1: --recommend selects the non-blocking owner question; --reason / --default-after belong to it alone.
@@ -4353,6 +4356,8 @@ internal object Cli {
         val recommend: String? = null,
         val reason: String? = null,
         val defaultAfter: String? = null,
+        /** ASK-2: `ask --test` raises a canned sample owner question ([QuestionAsk.sample]). */
+        val test: Boolean = false,
         /** IMG-1: `image upload --purpose chat|ticket` (default ticket). */
         val purpose: String? = null,
         /** IMG-AGENT-1: `ticket create|update --image <file>` (repeatable): image files to attach. */
@@ -4460,6 +4465,7 @@ internal object Cli {
         var recommend: String? = null
         var reason: String? = null
         var defaultAfter: String? = null
+        var test = false
 
         var i = 0
         while (i < args.size) {
@@ -4694,6 +4700,10 @@ internal object Cli {
                     recommend = args.getOrNull(++i) ?: return fail(err, "--recommend expects the label of the recommended option")
                     i++
                 }
+                "--test" -> {
+                    test = true
+                    i++
+                }
                 "--reason" -> {
                     reason = args.getOrNull(++i) ?: return fail(err, "--reason expects why the recommended option is recommended")
                     i++
@@ -4862,6 +4872,7 @@ internal object Cli {
             recommend = recommend,
             reason = reason,
             defaultAfter = defaultAfter,
+            test = test,
             purpose = purpose,
         )
     }

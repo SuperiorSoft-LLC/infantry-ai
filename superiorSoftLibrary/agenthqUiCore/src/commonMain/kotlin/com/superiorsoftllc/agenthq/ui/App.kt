@@ -624,6 +624,8 @@ fun App(
                     import = { n -> actionScope.launch { controller.importSecret(n) } },
                 ),
                 onOpenRoles = { showRoles = true },
+                onSendTestQuestion = { state.selectedId?.let { id -> actionScope.launch { controller.sendTestQuestion(id) } } },
+                testQuestionReady = state.selectedId != null,
                 initialTab = configTab,
                 onTab = { configTab = it },
             )

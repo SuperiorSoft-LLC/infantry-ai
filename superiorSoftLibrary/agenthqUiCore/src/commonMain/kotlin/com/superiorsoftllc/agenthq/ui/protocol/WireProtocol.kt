@@ -8,6 +8,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /** Client-owned common DTOs for the published AgentHQ WebSocket contract. */
 @OptIn(ExperimentalSerializationApi::class)
@@ -190,6 +193,7 @@ data class Envelope(
         const val QUESTION_LIST = "question_list"
         const val QUESTION_ANSWER = "question_answer"
         const val QUESTION_CANCEL = "question_cancel"
+        const val QUESTION_ASK = "question_ask"
 
         // Contracts 1.5.0 / 1.6.0: the daemon-owned backlog (the scrum board). Changes are pushed to every client.
         const val TICKET_SAVE = "ticket_save"
@@ -1983,6 +1987,28 @@ object WireRequests {
     /** ASK-1 (1.97.0): the owner's pick (or override) of a question; the daemon answers with a `question` push. */
     fun questionAnswer(a: QuestionAnswerWire): Envelope =
         Envelope(Envelope.QUESTION_ANSWER, wireJson.encodeToString(QuestionAnswerWire.serializer(), a))
+
+    /**
+     * ASK-2: the owner raises a canned sample question for [sessionId] (the open session) to try the popup. It is a plain
+     * `question_ask` (no new frame); the same text as the daemon's `QuestionAsk.sample()`.
+     */
+    fun questionAskTest(sessionId: String): Envelope = Envelope(
+        Envelope.QUESTION_ASK,
+        buildJsonObject {
+            put("question", "TEST: how should this sample question be answered?")
+            put("options", buildJsonArray {
+                for ((label, description) in listOf(
+                    "Looks good" to "Nothing happens: this is only a test",
+                    "Try the keyboard" to "Press 1-9 to pick, Enter to confirm",
+                    "A deliberately long option label to check that wrapping works on a narrow phone screen" to "Also nothing happens",
+                )) add(buildJsonObject { put("label", label); put("description", description) })
+            })
+            put("recommended", "Looks good")
+            put("reason", "a test question, no real decision")
+            put("allowOther", true)
+        }.toString(),
+        sessionId,
+    )
 
     /** ASK-1 (1.97.0): the owner withdraws an open question; the daemon tells the agent and pushes `question`. */
     fun questionCancel(questionId: String): Envelope =

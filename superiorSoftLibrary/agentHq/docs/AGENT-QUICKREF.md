@@ -108,6 +108,8 @@ QA: run every gate this way.
 
 **Ask the owner a question (non-blocking, ASK-1: use this one)**
 
+The owner WANTS you to use this for real decisions: 2-4 real options where their preference matters (design, priority, destructive or irreversible choices), always with a recommended option. Not for trivia or anything already decided; never wait on it. `agenthq ask --test` raises a canned sample question to your own session (ASK-2) to see the popup.
+
 ```
 agenthq ask --question "Ship it now?" --option "yes|ship today, QA after" --option "no|wait for the QA gate" --recommend no --reason "the gate runs tonight"
 ```
@@ -231,7 +233,7 @@ Team (scoped to your project):
 - agenthq send <role|agentId> "msg": message a colleague (queued if they are busy)
 - agenthq_inbox / agenthq_read <id> (your Infantry AI MCP tools): your mail; fallback when they are not available: agenthq inbox / agenthq read <id>
 - agenthq mail: every mail command (answer one with --reply-to <id>); agenthq --help: every command, grouped. Start here: superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md, section 0
-- To ask the owner a choice, run `agenthq ask --question "..." --option "label|consequence" --recommend <label> --reason "..."` (repeat --option; --other, --default-after <min>). It returns a question id at once and does not wait: carry on with other work; the owner's pick arrives as mail (thread question:<id>).
+- The owner WANTS you to ask for real decisions: when a choice has 2-4 real options and their preference matters (design, priority, destructive/irreversible), run `agenthq ask --question "..." --option "label|consequence" --recommend <label> --reason "..."` (MCP agenthq_ask; --other, --default-after <min>). Always recommend one. Don't ask trivia or what is already decided. It returns an id at once and does not wait: keep working on what doesn't depend on it; the pick arrives as mail (thread question:<id>).
 ```
 
 - Right after this block (and the `Report to:` line) every ticket brief carries `FINISH_LINE`: when finished, run
