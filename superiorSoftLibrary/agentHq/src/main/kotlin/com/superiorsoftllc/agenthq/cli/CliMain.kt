@@ -833,6 +833,8 @@ internal object Cli {
                         err.appendLine(frame.data)
                         seen++
                     }
+                    // Contract 1.125.0: a turn from another agent / outside source is named by its typed origin.
+                    frame.type == Envelope.TURN && frame.origin != null -> out.appendLine(TurnLine.of(frame))
                     frame.type == Envelope.FINISHED -> {
                         val payload = decodeFinished(frame)
                         out.appendLine(

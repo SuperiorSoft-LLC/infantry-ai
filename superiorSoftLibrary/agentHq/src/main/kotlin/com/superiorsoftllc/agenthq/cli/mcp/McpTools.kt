@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.cli.mcp
 
+import com.superiorsoftllc.agenthq.cli.TurnLine
 import com.superiorsoftllc.agenthq.cli.AuthRefused
 import com.superiorsoftllc.agenthq.cli.BoardSummary
 import com.superiorsoftllc.agenthq.cli.shortTicketId
@@ -216,6 +217,8 @@ internal class McpTools(
                     lastWasDelta = true
                     continue
                 }
+                // Contract 1.125.0: who the turn came from, from its typed origin; the text is the model-facing rendering.
+                Envelope.TURN -> entries += StringBuilder(TurnLine.of(frame) + " " + frame.data.lineSequence().first().take(200))
                 Envelope.STDERR -> entries += StringBuilder("[stderr] ${frame.data}")
                 Envelope.ERROR -> entries += StringBuilder("[error] ${frame.data}")
                 Envelope.FINISHED -> {
