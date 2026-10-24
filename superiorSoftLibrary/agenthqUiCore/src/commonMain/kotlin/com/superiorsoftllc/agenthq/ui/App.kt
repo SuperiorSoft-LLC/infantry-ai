@@ -424,7 +424,7 @@ fun App(
                     onNew = { chat.spawnMode = false; showNewAgent = true; if (compact) controller.showCompactScreen(CompactScreen.OUTPUT) },
                     onRemove = { id -> actionScope.launch { controller.removeSession(id) } },
                     onAssign = { id, projectId -> actionScope.launch { controller.assignSessionProject(id, projectId) } },
-                    projects = { ProjectsSidebar(state) },
+                    projects = { ProjectsSidebar(state, onDismiss = { controller.dismissProjectRefusal() }) },
                     onOpenBoard = { showBoard = true },
                     width = sidebarWidthDp,
                 )

@@ -600,6 +600,11 @@ data class AppState(
     val selectedId: String? = null,
     /** Frames the daemon refused or reported that belong to no session ("unknown pod", "resume failed"). */
     val notices: List<Notice> = emptyList(),
+    /**
+     * The newest project / workspace refusal, shown inline in the sidebar. Owned here: a successful project frame,
+     * a project switch or the sidebar's dismiss clears it, so a stale refusal never stays pinned.
+     */
+    val projectRefusal: Notice? = null,
     /** Global bottom-right toasts, oldest first; the host draws the newest few. */
     val toasts: List<ToastEvent> = emptyList(),
     /**
@@ -1292,7 +1297,9 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
         val gitStatusFailure = env.data.startsWith(Envelope.PROJECT_GIT_STATUS + " ")
         // UX-HARNESS-2: a `session_swap` refusal is shown in plain words, never the wire's frame name.
         val sessionSwitchRefusal = HarnessSwitch.plainRefusal(env.data)
+        val projectFailure = env.data.startsWith("project_") || env.data.startsWith("workspace_")
         s.copy(
+            projectRefusal = if (projectFailure) Notice(now, env.data, null, daemonErrorKind(env.data)) else s.projectRefusal,
             projectGitFailure = if (gitStatusFailure) env.data else s.projectGitFailure,
             pendingSpawn = null,
             agentError = if (agentRefusal) env.data else s.agentError,
@@ -1530,6 +1537,8 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
         s.copy(
             projects = if (known) s.projects.map { if (it.id == p.id) p else it } else s.projects + p,
             activeProjectId = s.activeProjectId ?: p.id,
+            // A saved project means the last project request went through: an older refusal is no longer news.
+            projectRefusal = null,
         )
     }
 
@@ -1926,6 +1935,7 @@ fun AppState.selectProject(projectId: String): AppState =
     if (projects.any { it.id == projectId }) {
         copy(
             activeProjectId = projectId,
+            projectRefusal = null,
             // The chat pane follows the project: an agent of another project is no longer the open one.
             selectedId = selectedId?.takeIf { id -> agents[id]?.session?.projectId.let { it == null || it == projectId } },
             // BRANCH-VIEW-2: a different project starts on its working tree.
@@ -1933,6 +1943,9 @@ fun AppState.selectProject(projectId: String): AppState =
             changesViewPick = changesViewPick?.takeIf { it.projectId == projectId },
         )
     } else this
+
+/** The sidebar's refusal was dismissed: hide it until the next project refusal. */
+fun AppState.dismissProjectRefusal(): AppState = copy(projectRefusal = null)
 
 /** Local echo of what the human sent, for a daemon that does not echo turns itself (before 1.11.0). */
 fun AppState.withUserLine(sessionId: String, text: String, now: Long): AppState =

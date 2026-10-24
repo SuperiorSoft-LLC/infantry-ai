@@ -33,6 +33,7 @@ import com.superiorsoftllc.agenthq.ui.model.HistoryRequest
 import com.superiorsoftllc.agenthq.ui.model.historyRequest
 import com.superiorsoftllc.agenthq.ui.model.promptBlocker
 import com.superiorsoftllc.agenthq.ui.model.reduce
+import com.superiorsoftllc.agenthq.ui.model.dismissProjectRefusal
 import com.superiorsoftllc.agenthq.ui.model.selectProject
 import com.superiorsoftllc.agenthq.ui.model.resyncRequests
 import com.superiorsoftllc.agenthq.ui.model.NoteScope
@@ -528,6 +529,11 @@ class Controller(
     suspend fun sendTestQuestion(sessionId: String): CommandResult = report(send(WireRequests.questionAskTest(sessionId)))
 
     suspend fun cancelQuestion(questionId: String): CommandResult = report(send(WireRequests.questionCancel(questionId)))
+
+    /** The sidebar's project refusal was dismissed: hide it in this window only. */
+    fun dismissProjectRefusal() {
+        _state.update { it.dismissProjectRefusal() }
+    }
 
     /** ASK-1: "Later": hide the question window in this window only; the questions stay open (the pill brings them back). */
     fun dismissQuestions() {
