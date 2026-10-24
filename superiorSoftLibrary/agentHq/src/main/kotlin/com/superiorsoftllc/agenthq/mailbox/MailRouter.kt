@@ -228,6 +228,10 @@ class MailRouter(
         if (session.isBusy()) {
             return DeliveryOutcome.Retry("recipient '${session.id}' has a run in flight")
         }
+        // TICKET-HANDOVER: a session mid-switch takes its next turn on the new harness, once it has switched.
+        if (manager.isHeld(session.id)) {
+            return DeliveryOutcome.Retry("recipient '${session.id}' is switching harness")
+        }
         if (!session.resumable && !session.neverRun) {
             return DeliveryOutcome.Failed(
                 "recipient '${session.id}' is not resumable: state=${session.state}, " +
