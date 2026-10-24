@@ -460,12 +460,6 @@ fun App(
               }
               run {
                 Column(Modifier.weight(1f).fillMaxHeight().testTag(CENTER_PANE_TAG)) {
-                    if (compact) {
-                        CompactNavRow(
-                            onOpenLeft = { controller.showCompactScreen(CompactScreen.LIST) },
-                            onOpenRight = { controller.showCompactScreen(CompactScreen.RIGHT) },
-                        )
-                    }
                     // CHAT-PANEL-1: the main window is one host of the shared ChatPanel; the tab strip and the other tabs are its slots.
                     ChatPanel(
                         selected?.id, controller, Modifier.weight(1f).fillMaxWidth(), chat = chat,
@@ -683,30 +677,15 @@ const val CENTER_TRANSCRIPT_TAG = "center-transcript"
 const val COMPOSER_TAG = "composer"
 /** MOBILE-LAYOUT-1: the compact window's back button (output -> agent list, right panel -> output). */
 const val COMPACT_BACK_TAG = "compact-back"
-/** MOBILE-LAYOUT-1: the compact output screen's button that opens the right panel. */
-const val COMPACT_OPEN_RIGHT_TAG = "compact-open-right"
-/** MOBILE-DRAWERS-1: the compact output screen's button that opens the agent list drawer. */
-const val COMPACT_OPEN_LEFT_TAG = "compact-open-left"
 /** MOBILE-DRAWERS-1: an open compact drawer and the scrim behind it. */
 const val DRAWER_TAG = "compact-drawer"
 const val DRAWER_SCRIM_TAG = "compact-drawer-scrim"
 
-/**
- * MOBILE-LAYOUT-1: the strip above a compact screen: a back button and, on the output screen, the side-panel button
- * ([onOpenRight] null = no such button). IconAction only, so the hand cursor guard holds.
- */
+/** MOBILE-LAYOUT-1: the strip above a compact drawer: its close button. The title bar owns both panel toggles. */
 @Composable
-private fun CompactNavRow(backLabel: String = "", onBack: () -> Unit = {}, onOpenLeft: (() -> Unit)? = null, onOpenRight: (() -> Unit)? = null) {
+private fun CompactNavRow(backLabel: String, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (onOpenLeft != null) {
-            IconAction(AhqIcons.PanelLeft, "Agents", onOpenLeft, Modifier.testTag(COMPACT_OPEN_LEFT_TAG), style = IconActionStyle.TEXT)
-        } else {
-            IconAction(AhqIcons.ArrowBack, backLabel, onBack, Modifier.testTag(COMPACT_BACK_TAG), style = IconActionStyle.TEXT)
-        }
-        Spacer(Modifier.weight(1f))
-        if (onOpenRight != null) {
-            IconAction(AhqIcons.PanelRight, "Side panel", onOpenRight, Modifier.testTag(COMPACT_OPEN_RIGHT_TAG), style = IconActionStyle.TEXT)
-        }
+        IconAction(AhqIcons.ArrowBack, backLabel, onBack, Modifier.testTag(COMPACT_BACK_TAG), style = IconActionStyle.TEXT)
     }
     HorizontalDivider(color = Palette.Border)
 }

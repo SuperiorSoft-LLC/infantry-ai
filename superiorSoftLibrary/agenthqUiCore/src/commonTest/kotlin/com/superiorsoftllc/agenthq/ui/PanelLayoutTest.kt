@@ -16,6 +16,16 @@ import kotlin.test.assertTrue
 
 /** PANEL-TOGGLE-1: the docked side-panel model (docs/AGENTHQ-MOBILE-UI-PLAN.md section 2.3) and its Controller entry points. */
 class PanelLayoutTest {
+    @Test
+    fun `compact toggles open their screen and a second tap returns to the output`() {
+        val compact = PanelLayout().forWindow(true)
+        val right = compact.toggleForWindow(PanelSide.RIGHT)
+        assertEquals(CompactScreen.RIGHT, right.compactScreen(), "from the list, the right toggle shows the right panel")
+        assertEquals(CompactScreen.OUTPUT, right.toggleForWindow(PanelSide.RIGHT).compactScreen())
+        assertEquals(CompactScreen.LIST, right.toggleForWindow(PanelSide.LEFT).compactScreen())
+        assertEquals(PanelLayout().toggle(PanelSide.RIGHT), PanelLayout().toggleForWindow(PanelSide.RIGHT), "wide windows keep the plain toggle")
+    }
+
     @Test fun bothPanelsAreShownOnFirstLaunch() {
         val p = AppState().panels
         assertTrue(p.isShown(PanelSide.LEFT) && p.isShown(PanelSide.RIGHT))

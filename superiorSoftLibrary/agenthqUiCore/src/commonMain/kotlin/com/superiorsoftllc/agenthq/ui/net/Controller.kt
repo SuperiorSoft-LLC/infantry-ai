@@ -289,7 +289,7 @@ class Controller(
     fun select(id: String?) = _state.update { it.copy(selectedId = id) }
 
     /** PANEL-TOGGLE-1: the title-bar toggle for one side panel (hide it if shown, show it if hidden). */
-    fun togglePanel(side: PanelSide) = _state.update { it.copy(panels = it.panels.toggle(side)) }
+    fun togglePanel(side: PanelSide) = _state.update { it.copy(panels = it.panels.toggleForWindow(side)) }
 
     /** PANEL-TOGGLE-1: show one side panel if it is hidden; called first by anything that targets that panel. */
     fun revealPanel(side: PanelSide) = _state.update { it.copy(panels = it.panels.reveal(side)) }

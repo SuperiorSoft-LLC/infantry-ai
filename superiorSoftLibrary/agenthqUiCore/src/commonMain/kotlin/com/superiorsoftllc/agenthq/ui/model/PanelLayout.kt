@@ -33,6 +33,16 @@ data class PanelLayout(
     fun toggle(side: PanelSide): PanelLayout =
         if (side == PanelSide.LEFT) copy(leftShown = !leftShown) else copy(rightShown = !rightShown)
 
+    /**
+     * The title-bar toggle in either window class. Wide: [toggle]. Compact: the panels are drawers over one screen, so a
+     * toggle opens that side's screen, or returns to the output when it is already the one on screen.
+     */
+    fun toggleForWindow(side: PanelSide): PanelLayout {
+        if (!compactWindow) return toggle(side)
+        val target = if (side == PanelSide.LEFT) CompactScreen.LIST else CompactScreen.RIGHT
+        return showCompact(if (compactScreen() == target) CompactScreen.OUTPUT else target)
+    }
+
     /** Anything that targets a panel (a shortcut, the attention chip) shows it first; a shown panel stays as it is. */
     fun reveal(side: PanelSide): PanelLayout = if (isShown(side)) this else toggle(side)
 
