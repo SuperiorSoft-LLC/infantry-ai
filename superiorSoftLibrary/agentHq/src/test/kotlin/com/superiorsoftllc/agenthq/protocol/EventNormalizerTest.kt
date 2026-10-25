@@ -50,7 +50,7 @@ class EventNormalizerTest {
     @Test
     fun piThinkingDeltaBecomesReasoning() {
         val raw = """{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","delta":"hmm"}}"""
-        assertEquals(listOf(EventNormalizer.Line.Reasoning("hmm")), EventNormalizer.normalise(raw))
+        assertEquals(listOf(EventNormalizer.Line.Reasoning("hmm", delta = true)), EventNormalizer.normalise(raw))
     }
 
     @Test
