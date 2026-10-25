@@ -675,6 +675,8 @@ data class TrackedProcess(
     val reason: String? = null,
     /** True when the owner was inferred (ancestry or worktree path in the command line). */
     val inferred: Boolean = false,
+    /** Contract 1.132.0: share of ALL logical cores (0-100) over the daemon's last watch pass; null = not sampled. */
+    val cpuPercent: Double? = null,
 )
 
 /** Contract 1.120.0 (ROGUE-1): free RAM against the floor, the tracked processes and the heavy unattributed ones. */
@@ -687,6 +689,11 @@ data class ProcessReport(
     val autoReap: Boolean = false,
     val tracked: List<TrackedProcess> = emptyList(),
     val unattributed: List<TrackedProcess> = emptyList(),
+    /** Contract 1.132.0: total CPU of the agent processes (share of all cores), the alert rule, and since when it is high. */
+    val agentCpuPercent: Double? = null,
+    val cpuAlertPercent: Int = 90,
+    val cpuAlertMinutes: Int = 10,
+    val cpuHighSince: Long? = null,
 ) {
     val rogue: List<TrackedProcess> get() = (tracked + unattributed).filter { it.rogue }
 }

@@ -17,12 +17,15 @@ class PipedProcessRunner : ProcessRunner {
     override val id: String = "piped"
 
     override fun start(spec: ProcessSpec, listener: ProcessListener): RunningProcess {
-        val builder = ProcessBuilder(spec.command)
+        // Ticket 66153313: a worker session's spec names its build priority; the whole tree below it inherits it.
+        val priority = ProcessPriority.requested(spec)
+        val builder = ProcessBuilder(ProcessPriority.wrap(spec.command, priority))
         spec.workingDir?.let { builder.directory(it) }
         builder.environment().putAll(spec.env)
         builder.redirectErrorStream(false)
 
         val process = builder.start()
+        ProcessPriority.applyAfterStart(process.pid(), priority)
 
         // Drain concurrently, before we can possibly block on the child.
         val stdoutDrain = drain(process.inputStream.bufferedReader(), listener::onStdout, "stdout")

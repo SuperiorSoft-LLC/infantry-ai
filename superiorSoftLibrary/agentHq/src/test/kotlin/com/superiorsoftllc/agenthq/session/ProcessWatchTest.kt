@@ -519,3 +519,109 @@ class ProcessWatchTest {
         assertEquals(listOf(ProcMem(77, "node", 500)), OsMemorySource.parsePs("   77 512000 /usr/bin/node\n"))
     }
 }
+
+/** Ticket 66153313: CPU share per tracked process and the sustained-CPU alert. */
+class ProcessWatchCpuTest {
+    private class Os : ProcessSource, ProcessTable, MemorySource, CpuSource {
+        val procs = LinkedHashMap<Long, ProcInfo>()
+        val cpuNs = HashMap<Long, Long>()
+        override fun descendants(rootPid: Long): List<ProcInfo> = procs.values.filter { it.parentPid == rootPid }
+        override fun info(pid: Long) = procs[pid]?.copy(parentPid = null)
+        override fun all() = procs.values.toList()
+        override fun startInstant(pid: Long) = procs[pid]?.startedAt
+        override fun killTree(pid: Long, startedAt: Long) {}
+        override fun freeMb() = 16_000L
+        override fun totalMb() = 32_000L
+        override fun processes() = procs.values.map { ProcMem(it.pid, "java", 100) }
+        override fun cpuNanos(pid: Long) = cpuNs[pid]
+    }
+
+    private var now = 10_000_000L
+    private val os = Os()
+    private val harness = 910_100L
+    private val gradle = 910_101L
+    init {
+        os.cpuNs[harness] = 0; os.cpuNs[gradle] = 0
+    }
+    private val sessions = listOf(
+        SessionRecord(
+            id = "s1", provider = "pi", workingDir = ".", spawnedAt = 0, lastHeartbeat = now, state = SessionState.BUSY,
+            keptProcess = KeptProcess(harness, 1_000, "pi"),
+        ),
+    )
+    private var cfg = CpuAlertConfig(percent = 50, minutes = 2)
+    private val alerts = mutableListOf<ProcessReport>()
+
+    private fun watch() = ProcessWatch(
+        ProcessLedger(os, os, clock = { now }), { sessions }, os, os, clock = { now },
+        lockHolderAlive = { false }, lockHolderPid = { null }, gateLock = GateLock(dir = { null }),
+        cpu = os, cores = 4, cpuAlert = { cfg },
+    ).also { it.onCpuSustained = { r -> alerts += r } }
+
+    /** Advance [seconds]; the harness burns [harnessCores] cores and gradle [gradleCores] meanwhile. */
+    private fun pass(w: ProcessWatch, seconds: Long, harnessCores: Double, gradleCores: Double) {
+        now += seconds * 1000
+        os.cpuNs[harness] = (os.cpuNs[harness] ?: 0) + (harnessCores * seconds * 1e9).toLong()
+        os.cpuNs[gradle] = (os.cpuNs[gradle] ?: 0) + (gradleCores * seconds * 1e9).toLong()
+        w.tick()
+    }
+
+    @Test fun `each tracked process shows its share of all cores and the report sums them`() {
+        os.procs[harness] = ProcInfo(harness, null, "pi --mode rpc", 1_000)
+        os.procs[gradle] = ProcInfo(gradle, harness, "java GradleDaemon", 2_000)
+        val w = watch()
+        w.tick()
+        assertNull(w.report().agentCpuPercent, "one sample is no share yet")
+        pass(w, 10, harnessCores = 0.4, gradleCores = 2.0)
+        val r = w.report()
+        assertEquals(10.0, r.tracked.single { it.pid == harness }.cpuPercent)
+        assertEquals(50.0, r.tracked.single { it.pid == gradle }.cpuPercent)
+        assertEquals(60.0, r.agentCpuPercent)
+        assertEquals(50, r.cpuAlertPercent)
+        assertEquals(2, r.cpuAlertMinutes)
+    }
+
+    @Test fun `sustained high CPU alerts once per episode, and only after the configured minutes`() {
+        os.procs[harness] = ProcInfo(harness, null, "pi --mode rpc", 1_000)
+        os.procs[gradle] = ProcInfo(gradle, harness, "java GradleDaemon", 2_000)
+        val w = watch()
+        w.tick()
+        pass(w, 10, 0.0, 3.6) // 90 %: the episode starts
+        val since = w.report().cpuHighSince
+        assertEquals(now, since)
+        repeat(10) { pass(w, 10, 0.0, 3.6) } // 100 s in: under 2 min
+        assertTrue(alerts.isEmpty())
+        repeat(3) { pass(w, 10, 0.0, 3.6) } // 130 s in
+        assertEquals(1, alerts.size)
+        assertEquals(90.0, alerts.single().agentCpuPercent)
+        repeat(20) { pass(w, 10, 0.0, 3.6) }
+        assertEquals(1, alerts.size, "one alert per episode")
+
+        pass(w, 10, 0.0, 0.4) // drops to 10 %: rearmed
+        assertNull(w.report().cpuHighSince)
+        repeat(14) { pass(w, 10, 0.0, 3.6) }
+        assertEquals(2, alerts.size, "a new episode alerts again")
+    }
+
+    @Test fun `zero minutes turns the alert off`() {
+        cfg = CpuAlertConfig(percent = 10, minutes = 0)
+        os.procs[harness] = ProcInfo(harness, null, "pi --mode rpc", 1_000)
+        val w = watch()
+        w.tick()
+        repeat(100) { pass(w, 10, 4.0, 0.0) }
+        assertTrue(alerts.isEmpty())
+        assertNull(w.report().cpuHighSince)
+    }
+
+    @Test fun `a pid whose counter goes backwards (reused) has no share`() {
+        val m = CpuMeter({ pid -> if (pid == 1L) 5_000_000_000L else null }, cores = 2)
+        m.sample(listOf(1L), 0)
+        assertEquals(mapOf(1L to 0.0), m.sample(listOf(1L), 1_000))
+        val back = CpuMeter(object : CpuSource {
+            var n = 10_000_000_000L
+            override fun cpuNanos(pid: Long): Long = n.also { n -= 1_000_000_000L }
+        }, cores = 2)
+        back.sample(listOf(1L), 0)
+        assertTrue(back.sample(listOf(1L), 1_000).isEmpty())
+    }
+}
