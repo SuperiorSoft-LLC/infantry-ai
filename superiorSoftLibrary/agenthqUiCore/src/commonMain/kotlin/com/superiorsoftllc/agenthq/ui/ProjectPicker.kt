@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.OutlinedTextField
@@ -71,6 +73,9 @@ const val NEW_PROJECT_ICON_TAG = "title-bar-new-project-icon"
 const val NEW_PROJECT_DIALOG_TAG = "new-project-dialog"
 const val NEW_PROJECT_NAME_TAG = "new-project-name"
 const val NEW_PROJECT_DIRECTORY_TAG = "new-project-directory"
+const val PROJECT_DIRECTORY_FIELD_TAG = "project-directory-field"
+const val PROJECT_DIRECTORY_SAVE_TAG = "project-directory-save"
+const val PROJECT_DIRECTORY_CLEAR_TAG = "project-directory-clear"
 const val NEW_PROJECT_CREATE_TAG = "new-project-create"
 const val NEW_PROJECT_CANCEL_TAG = "new-project-cancel"
 
@@ -306,6 +311,7 @@ private fun ProjectConfigDialog(state: AppState, controller: Controller, project
                             modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag(NEW_PROJECT_NAME_TAG),
                         )
                         if (!live) Text("Connect to a daemon to change the project.", color = Palette.Muted, fontSize = 11.sp)
+                                        DirectorySetting(state, controller, project, live)
                         error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
                     }
                     ProjectSettingsRegistry.LANES -> LanesTab(state, controller, project, live)
@@ -401,4 +407,38 @@ private fun CapStep(label: String, enabled: Boolean, tag: String, onClick: () ->
             .clickable(enabled = enabled, role = Role.Button, onClickLabel = label, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Text(label, color = tint, fontSize = 14.sp) }
+}
+
+/**
+ * General settings: the project's directory. Save and Clear go through the same [Controller.saveProjectDirectory] the Git
+ * pane uses; the daemon's refusal (for instance a relative path) is drawn here, the stored directory stays as it was.
+ */
+@Composable
+private fun DirectorySetting(state: AppState, controller: Controller, project: ProjectView, live: Boolean) {
+    val scope = rememberCoroutineScope()
+    var draft by remember(project.id, project.directory) { mutableStateOf(project.directory) }
+    var localError by remember { mutableStateOf<String?>(null) }
+    var seenAt by remember { mutableStateOf(state.projectsRefusal()?.at ?: 0L) }
+    fun run(directory: String) {
+        state.projectsRefusal()?.let { seenAt = it.at }
+        localError = null
+        scope.launch { (controller.saveProjectDirectory(project.id, directory) as? CommandResult.Refused)?.let { localError = it.reason } }
+    }
+    OutlinedTextField(
+        draft, { draft = it; localError = null }, label = { Text("Project directory") }, singleLine = true, enabled = live,
+        supportingText = { Text(if (project.directory.isBlank()) "Not set; tickets cannot start without one." else "Path on the daemon machine.", fontSize = 10.sp) },
+        modifier = Modifier.fillMaxWidth().testTag(PROJECT_DIRECTORY_FIELD_TAG),
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(
+            onClick = { run(draft) }, enabled = live && draft.trim() != project.directory,
+            modifier = Modifier.testTag(PROJECT_DIRECTORY_SAVE_TAG),
+        ) { Text("Save directory", fontSize = 12.sp) }
+        OutlinedButton(
+            onClick = { draft = ""; run("") }, enabled = live && project.directory.isNotBlank(),
+            modifier = Modifier.testTag(PROJECT_DIRECTORY_CLEAR_TAG),
+        ) { Text("Clear directory", fontSize = 12.sp) }
+    }
+    (localError ?: state.projectsRefusal()?.takeIf { it.at > seenAt }?.text)
+        ?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
 }
