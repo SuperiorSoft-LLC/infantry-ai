@@ -102,7 +102,6 @@ class OwnerQuestionsTest {
         val questions = service()
         val q = questions.ask(worker, ask())
         assertFailsWith<IllegalArgumentException> { questions.answer(QuestionAnswer(q.id, answer = "MySQL")) }
-        assertFailsWith<IllegalArgumentException> { questions.answer(QuestionAnswer(q.id, otherText = "my own")) }
         assertFailsWith<IllegalArgumentException> { questions.answer(QuestionAnswer(q.id)) }
         assertFailsWith<IllegalArgumentException> { questions.answer(QuestionAnswer("nope", answer = "SQLite")) }
         questions.answer(QuestionAnswer(q.id, answer = "SQLite"))

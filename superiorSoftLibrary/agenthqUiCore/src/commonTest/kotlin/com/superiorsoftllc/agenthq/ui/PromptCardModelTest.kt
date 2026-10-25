@@ -63,7 +63,7 @@ class PromptCardModelTest {
             PromptCards.answer(multi, setOf("Sqlite", "Postgres"), "  Redis "),
         )
         assertEquals(listOf("Mongo"), PromptCards.answer(question, setOf("Mongo"), "ignored")!!.answers)
-        assertNull(PromptCards.answer(question, setOf("Mongo"), "ignored")!!.otherText, "no Other unless the prompt allows it")
+        assertEquals("ignored", PromptCards.answer(question, setOf("Mongo"), "ignored")!!.otherText, "Other is always allowed")
         assertNull(PromptCards.answer(question, emptySet(), ""), "the daemon refuses an empty answer, so nothing is sent")
         assertEquals(setOf("Mongo"), PromptCards.toggle(question, setOf("Postgres"), "Mongo"), "radio replaces")
         assertEquals(setOf("Postgres", "Mongo"), PromptCards.toggle(multi, setOf("Postgres"), "Mongo"), "checkbox adds")

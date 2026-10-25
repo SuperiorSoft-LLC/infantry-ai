@@ -96,10 +96,10 @@ class QuestionWindowUiTest {
         assertTrue(sent.isEmpty())
     }
 
-    @Test fun `a question that opted out has no Other row`() = runDesktopComposeUiTest(900, 700) {
+    @Test fun `a question that opted out still has an Other row`() = runDesktopComposeUiTest(900, 700) {
         val state = reduce(AppState(), Envelope(Envelope.QUESTIONS, "[" + openJson.replace("\"allowOther\":true", "\"allowOther\":false") + "]"), 1)
         setContent { QuestionPanel(state.shownQuestionsFor("s1"), {}, {}, {}) }
-        onNodeWithTag(QUESTION_OTHER_ROW_TAG).assertDoesNotExist()
+        onNodeWithTag(QUESTION_OTHER_ROW_TAG).assertExists()
     }
 
     @Test fun `Later hides the panel, the pill brings it back, and Cancel sends the id`() = runDesktopComposeUiTest(900, 700) {

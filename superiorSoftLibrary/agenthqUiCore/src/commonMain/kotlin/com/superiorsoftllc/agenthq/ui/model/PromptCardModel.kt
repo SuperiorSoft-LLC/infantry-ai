@@ -80,7 +80,7 @@ object PromptCards {
     fun answer(prompt: PromptRequestView, chosen: Set<String>, otherText: String): PromptResponseWire? {
         val labels = prompt.options.map { it.label }.filter { it in chosen }
         val answers = if (prompt.multiSelect) labels else labels.take(1)
-        val other = otherText.trim().takeIf { prompt.allowOther && it.isNotEmpty() }
+        val other = otherText.trim().takeIf { it.isNotEmpty() }
         if (answers.isEmpty() && other == null) return null
         return PromptResponseWire(prompt.promptId, answers = answers, otherText = other)
     }

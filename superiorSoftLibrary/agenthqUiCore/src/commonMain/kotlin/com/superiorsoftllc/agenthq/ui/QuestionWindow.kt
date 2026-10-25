@@ -177,7 +177,7 @@ fun QuestionPanel(
                 q.defaultAfterMin?.let {
                     Text("If you do not answer, the recommended option is picked after $it min (you can still change it).", color = Palette.Muted, fontSize = 11.sp)
                 }
-                if (q.allowOther) {
+                run {
                     OtherAnswer(
                         open = otherOpen, text = other, onText = { other = it },
                         onOpen = { otherOpen = true }, onClose = { otherOpen = false },

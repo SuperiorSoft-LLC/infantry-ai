@@ -148,7 +148,7 @@ fun PromptCard(
                         }
                     }
                 }
-                if (prompt.allowOther) {
+                run {
                     OutlinedTextField(
                         value = other, onValueChange = { other = it }, singleLine = true,
                         label = { Text("Other", fontSize = 11.sp) }, interactionSource = otherSource,

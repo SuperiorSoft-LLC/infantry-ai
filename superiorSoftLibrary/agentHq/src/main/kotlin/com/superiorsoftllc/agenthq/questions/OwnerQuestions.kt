@@ -100,7 +100,7 @@ class SqlOwnerQuestionRepository(database: AgentHQDatabase) : OwnerQuestionRepos
         options = json.decodeFromString(OPTIONS, options),
         recommended = recommended,
         reason = reason,
-        allowOther = allow_other != 0L,
+        allowOther = true,
         defaultAfterMin = default_after_min?.toInt(),
         state = state,
         answer = answer,
@@ -200,7 +200,7 @@ class OwnerQuestions(
                 options = options,
                 recommended = recommended,
                 reason = reason,
-                allowOther = request.allowOther,
+                allowOther = true, // the owner may always type an own answer
                 defaultAfterMin = request.defaultAfterMin,
                 createdAt = now,
             ).also(repository::insert)
@@ -222,7 +222,6 @@ class OwnerQuestions(
                 "question '${current.id}' is already ${current.state}"
             }
             require(label == null || current.options.any { it.label == label }) { "unknown option '${label!!.take(80)}'" }
-            require(other == null || current.allowOther) { "this question takes no otherText" }
             require(label != null || other != null) { "an answer needs 'answer' (an option label) or 'otherText'" }
             current to current.copy(
                 state = QuestionStates.ANSWERED,
