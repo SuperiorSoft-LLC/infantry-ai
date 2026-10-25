@@ -17,11 +17,14 @@ class HandCursorGuardTest {
 
     @Test
     fun `no ui file imports a clickable that bypasses the hand cursor`() {
+        // Recurse into every subpackage of ui (pair, shell, sound, voice/plugin, ...). The web entry point sits
+        // outside the ui package but renders the same screens, so it is scanned too.
         val roots = listOf("src/commonMain", "src/jvmMain", "src/androidMain")
             .map { File(it, "kotlin/com/superiorsoftllc/agenthq/ui") }
+            .plus(File("../agentHqWeb/src/wasmJsMain/kotlin"))
             .filter { it.isDirectory }
         assertTrue(roots.isNotEmpty(), "ui sources not found from ${File(".").absolutePath}")
-        val offenders = roots.flatMap { root -> root.listFiles { f -> f.extension == "kt" }.orEmpty().toList() }
+        val offenders = roots.flatMap { root -> root.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList() }
             .filter { it.name != "Clickables.kt" }
             .flatMap { f -> f.readLines().withIndex().filter { forbidden.matches(it.value) }.map { "${f.name}:${it.index + 1}: ${it.value}" } }
         if (offenders.isNotEmpty()) fail("these imports bypass the M2-10 hand cursor (use the wrappers in Clickables.kt):\n" + offenders.joinToString("\n"))

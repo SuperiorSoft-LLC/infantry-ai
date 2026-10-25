@@ -13,13 +13,13 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
+import com.superiorsoftllc.agenthq.ui.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.superiorsoftllc.agenthq.ui.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -35,7 +35,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.OutlinedButton
+import com.superiorsoftllc.agenthq.ui.OutlinedButton
 import androidx.compose.ui.window.Dialog
 import com.superiorsoftllc.agenthq.ui.net.DaemonClient
 import com.superiorsoftllc.agenthq.ui.pair.CameraQrScanner
