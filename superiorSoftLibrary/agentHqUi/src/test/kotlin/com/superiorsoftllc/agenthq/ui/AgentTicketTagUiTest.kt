@@ -41,19 +41,20 @@ class AgentTicketTagUiTest {
                     CenterHeader(withTicket, spawnMode = false, state = state)
                 }
             }
-            onNodeWithTag("agent-row-ticket-${withTicket.id}").assertIsDisplayed()
+            onNodeWithTag("agent-row-ticket-${withTicket.id}", useUnmergedTree = true).assertIsDisplayed()
             onNodeWithTag("agent-row-ticket-${without.id}").assertDoesNotExist()
             onNodeWithTag(AGENT_HEADER_TICKET_TAG).assertIsDisplayed()
         }
     }
 
     @Test
-    fun clickingTheTagOpensItsTicket() {
-        var opened: String? = null
+    fun clickingTheTagSelectsTheAgentAndDoesNotOpenTheBoard() {
+        // The sidebar tag is display-only: AgentRow has no ticket callback, so a click on the tag is the row's click.
+        var selects = 0
         runDesktopComposeUiTest(900, 400) {
-            setContent { AgentRow(withTicket, state, selected = false, onClick = {}, onRemove = {}, onOpenTicket = { opened = it }) }
-            onNodeWithTag("agent-row-ticket-${withTicket.id}").performClick()
-            assertEquals("ticket-120d0289", opened)
+            setContent { AgentRow(withTicket, state, selected = false, onClick = { selects++ }, onRemove = {}) }
+            onNodeWithTag("agent-row-ticket-${withTicket.id}", useUnmergedTree = true).performClick()
+            assertEquals(1, selects)
         }
     }
 

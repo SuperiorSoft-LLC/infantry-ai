@@ -63,7 +63,7 @@ class ProjectsSidebarUiTest {
                     // M2-7: projects are picked / created from the title bar's picker.
                     androidx.compose.foundation.layout.Column {
                         ProjectPicker(state, controller)
-                        ProjectsSidebar(state)
+                        ProjectsSidebar(state, onDismiss = { controller.dismissProjectRefusal() })
                     }
                 }
                 // Connect: `ready` makes the link live and the controller asks for the project list.

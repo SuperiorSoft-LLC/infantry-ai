@@ -761,7 +761,7 @@ private fun Sidebar(
                 }
             }
         }
-        AgentsList(state, visible, onSelect, onRemove, Modifier.weight(1f), onAssign, onOpenTicket = { onOpenBoard() })
+        AgentsList(state, visible, onSelect, onRemove, Modifier.weight(1f), onAssign)
         HorizontalDivider(color = Palette.Border)
         // UX-ICON-1: the same New agent icon as the composer, with its label (the sidebar has the room).
         IconAction(
@@ -777,7 +777,7 @@ private fun Sidebar(
  * each group under a header with its count; empty groups are not shown. Public so UI tests render the real list.
  */
 @Composable
-fun AgentsList(state: AppState, visible: List<AgentView>, onSelect: (String) -> Unit, onRemove: (String) -> Unit, modifier: Modifier = Modifier, onAssign: (String, String) -> Unit = { _, _ -> }, onOpenTicket: (String) -> Unit = {}) {
+fun AgentsList(state: AppState, visible: List<AgentView>, onSelect: (String) -> Unit, onRemove: (String) -> Unit, modifier: Modifier = Modifier, onAssign: (String, String) -> Unit = { _, _ -> }) {
     // BUG-UX-SHIFT-1: while any pointer is down on the list, keep the rows where they were when it went down. A session
     // changing group mid-click (BUSY -> IDLE takes the WORKING header with it) would move the row under the pointer, the
     // release would land off the 18dp "⋯" button and the click would be dropped. The fresh grouping lands on release.
@@ -801,7 +801,7 @@ fun AgentsList(state: AppState, visible: List<AgentView>, onSelect: (String) -> 
                 }
             }
             items(rows, key = { it.id }) { a ->
-                AgentRow(a, state, a.id == state.selectedId, { onSelect(a.id) }, onRemove, Modifier.padding(bottom = 6.dp), onAssign, onOpenTicket)
+                AgentRow(a, state, a.id == state.selectedId, { onSelect(a.id) }, onRemove, Modifier.padding(bottom = 6.dp), onAssign)
             }
         }
     }
@@ -845,7 +845,7 @@ private fun Counter(label: String, n: Int, color: Color) {
  * and a small "⋯" row menu (M2-5) on the right. The selected card gets an orange border. Public so UI tests render it.
  */
 @Composable
-fun AgentRow(a: AgentView, state: AppState, selected: Boolean, onClick: () -> Unit, onRemove: (String) -> Unit, modifier: Modifier = Modifier, onAssign: (String, String) -> Unit = { _, _ -> }, onOpenTicket: (String) -> Unit = {}) {
+fun AgentRow(a: AgentView, state: AppState, selected: Boolean, onClick: () -> Unit, onRemove: (String) -> Unit, modifier: Modifier = Modifier, onAssign: (String, String) -> Unit = { _, _ -> }) {
     val waiting = needsInput(a, state.waiting, state.openPrompts, state.openQuestionSessions)
     val now = Clock.System.now().toEpochMilliseconds()
     val roleColor = a.role?.let { r -> parseHexColor(state.role(r)?.color)?.let { Color(it) } ?: Color.hsv(roleHue(r), 0.45f, 0.72f) } ?: Palette.Muted
@@ -894,7 +894,8 @@ fun AgentRow(a: AgentView, state: AppState, selected: Boolean, onClick: () -> Un
                     )
                 }
             }
-            TicketTag(a, state, onOpenTicket, Modifier.testTag("agent-row-ticket-${a.id}"))
+            // Display-only in the row: a click anywhere on the row (tag included) selects the agent.
+            TicketTag(a, state, null, Modifier.testTag("agent-row-ticket-${a.id}"))
             // Contract 1.117.0: the agent's own progress report on its long job, as a slim live bar.
             a.session.progress?.let { ProgressMeter(it, "row-${a.id}", Modifier.padding(top = 3.dp), compact = true) }
             Spacer(Modifier.height(2.dp))

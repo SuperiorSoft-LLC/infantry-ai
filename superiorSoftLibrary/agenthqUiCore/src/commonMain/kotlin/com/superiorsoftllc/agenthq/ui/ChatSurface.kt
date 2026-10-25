@@ -305,10 +305,11 @@ const val AGENT_HEADER_TICKET_TAG = "agent-header-ticket"
 /**
  * A worker's ticket tag: short ticket id + truncated title (full title on hover), click opens the board. Nothing for
  * a session with no ticket. The title is resolved from the board; a ticket not (yet) on the board shows its id alone.
+ * [onOpen] null = display-only (the sidebar row, where the whole row selects the agent).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TicketTag(a: AgentView, state: AppState, onOpen: (String) -> Unit, modifier: Modifier = Modifier) {
+fun TicketTag(a: AgentView, state: AppState, onOpen: ((String) -> Unit)?, modifier: Modifier = Modifier) {
     val id = a.session.ticketId?.takeIf { it.isNotBlank() } ?: return
     val title = state.ticket(id)?.title
     val full = ticketTagFull(id, title)
@@ -319,7 +320,7 @@ fun TicketTag(a: AgentView, state: AppState, onOpen: (String) -> Unit, modifier:
     ) {
         Text(
             ticketTagLabel(id, title), color = Palette.Info, fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis,
-            modifier = modifier.clickable { onOpen(id) }.semantics { contentDescription = full },
+            modifier = modifier.then(if (onOpen != null) Modifier.clickable { onOpen(id) } else Modifier).semantics { contentDescription = full },
         )
     }
 }
