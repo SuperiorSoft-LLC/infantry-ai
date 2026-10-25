@@ -94,7 +94,7 @@ internal fun PacingSection(state: AppState, now: Long, controller: Controller?) 
     }
     val current = edit
     if (current != null && controller != null) {
-        PacingDialog(current, report.rule, now, controller, onDone = { edit = null })
+        PacingDialog(current, report.rule, PacingView.ceilingOf(state.limitCatalog), now, controller, onDone = { edit = null })
     }
 }
 
@@ -140,7 +140,7 @@ private fun MeterCard(m: MeterUsage, rule: PacingRule, now: Long, onManual: (() 
 
 /** One dialog for the three edits, on the shared modal wrapper ([AhqAlertDialog]). */
 @Composable
-private fun PacingDialog(edit: PacingEdit, rule: PacingRule, now: Long, controller: Controller, onDone: () -> Unit) {
+private fun PacingDialog(edit: PacingEdit, rule: PacingRule, ceiling: Int?, now: Long, controller: Controller, onDone: () -> Unit) {
     val scope = rememberCoroutineScope()
     var first by remember(edit) {
         mutableStateOf(
@@ -172,7 +172,7 @@ private fun PacingDialog(edit: PacingEdit, rule: PacingRule, now: Long, controll
 
     fun save() {
         when (edit) {
-            PacingEdit.Rule -> PacingView.buildRule(rule, enabled, first, mode, maxWorkers, okProjected, hardStop).fold(
+            PacingEdit.Rule -> PacingView.buildRule(rule, enabled, first, mode, maxWorkers, okProjected, hardStop, ceiling).fold(
                 onSuccess = { submit(UsageSet(rule = it)) },
                 onFailure = { error = it.message },
             )
@@ -182,7 +182,7 @@ private fun PacingDialog(edit: PacingEdit, rule: PacingRule, now: Long, controll
                 submit(UsageSet(meter = edit.meter.meter, manualPercent = pct, manualResetsAt = mins?.let { now + it * 60_000L }))
             }
             is PacingEdit.Override -> {
-                val workers = PacingView.parseWorkers(first) ?: run { error = "workers must be 0..${PacingView.MAX_WORKERS}, or none"; return }
+                val workers = PacingView.parseWorkers(first, ceiling) ?: run { error = "workers must be ${PacingView.rangeText(0, ceiling)}, or none"; return }
                 val hours = second.trim().takeIf { it.isNotEmpty() }?.let { it.toDoubleOrNull()?.takeIf { h -> h > 0 } ?: run { error = "hours must be a number above 0"; return } }
                 val until = hours?.let { now + (it * 3_600_000L).toLong() } ?: edit.meter.resetsAt?.takeIf { it > now } ?: (now + 2 * 3_600_000L)
                 submit(UsageSet(meter = edit.meter.meter, overrideWorkers = workers.workers, overrideUntil = until))

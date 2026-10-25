@@ -59,11 +59,12 @@ object PacingView {
         maxWorkersText: String,
         okProjectedText: String,
         hardStopText: String,
-    ): Result<PacingRule> = parseRule(tiersText, enabled).mapCatching { tiers ->
+        ceiling: Int? = null,
+    ): Result<PacingRule> = parseRule(tiersText, enabled, ceiling).mapCatching { tiers ->
         if (!hasModes(base)) return@mapCatching base.copy(enabled = enabled, tiers = tiers.tiers)
         require(mode == PacingRule.MODE_PACE || mode == PacingRule.MODE_BANDS) { "mode must be pace or bands" }
-        val max = maxWorkersText.trim().toIntOrNull()?.takeIf { it in 1..MAX_WORKERS }
-            ?: error("max workers must be a whole number 1..$MAX_WORKERS")
+        val max = maxWorkersText.trim().toIntOrNull()?.takeIf { it >= 1 && within(it, ceiling) }
+            ?: error("max workers must be a whole number " + rangeText(1, ceiling))
         val ok = okProjectedText.trim().removeSuffix("%").trim().toDoubleOrNull()?.takeIf { it > 0.0 }
             ?: error("ok projection must be a percent above 0")
         val hard = hardStopText.trim().removeSuffix("%").trim().toDoubleOrNull()?.takeIf { it > 0.0 && it <= 100.0 }
@@ -78,8 +79,11 @@ object PacingView {
     fun ruleInput(rule: PacingRule): String =
         rule.tiers.joinToString(", ") { t -> t.below?.let { "${num(it)}:${t.workers}" } ?: "${t.workers}" }
 
-    /** Parses "60:3, 80:2, 1" into tiers; the error names the problem. */
-    fun parseRule(text: String, enabled: Boolean = true): Result<PacingRule> = runCatching {
+    /**
+     * Parses "60:3, 80:2, 1" into tiers; the error names the problem. [ceiling] is the daemon's
+     * `limits.pacing.maxWorkersCeiling` ([ceilingOf]); null = not known yet, so only the daemon checks the top.
+     */
+    fun parseRule(text: String, enabled: Boolean = true, ceiling: Int? = null): Result<PacingRule> = runCatching {
         val tiers = text.split(',').map { it.trim() }.filter { it.isNotEmpty() }.map { part ->
             val bits = part.split(':').map { it.trim() }
             when (bits.size) {
@@ -97,7 +101,7 @@ object PacingView {
         val bounds = tiers.mapNotNull { it.below }
         require(bounds.all { it > 0.0 && it <= 100.0 }) { "percents must be in 1..100" }
         require(bounds.zipWithNext().all { (a, b) -> a < b }) { "percents must increase" }
-        require(tiers.all { it.workers in 0..MAX_WORKERS }) { "workers must be 0..$MAX_WORKERS" }
+        require(tiers.all { it.workers >= 0 && within(it.workers, ceiling) }) { "workers must be " + rangeText(0, ceiling) }
         PacingRule(enabled, tiers)
     }
 
@@ -129,16 +133,26 @@ object PacingView {
     /** A percent typed in the manual field, or null when it is not 0..100. */
     fun parsePercent(text: String): Double? = text.trim().removeSuffix("%").trim().toDoubleOrNull()?.takeIf { it in 0.0..100.0 }
 
-    /** Workers typed in the override field: a number 0..[MAX_WORKERS], or "none" / "" for no limit; null = invalid. */
-    fun parseWorkers(text: String): OverrideWorkers? {
+    /** Workers typed in the override field: a number 0..[ceiling] (any >= 0 when null), or "none" / "" for no limit; null = invalid. */
+    fun parseWorkers(text: String, ceiling: Int? = null): OverrideWorkers? {
         val t = text.trim().lowercase()
         if (t.isEmpty() || t == "none") return OverrideWorkers(null)
-        return t.toIntOrNull()?.takeIf { it in 0..MAX_WORKERS }?.let { OverrideWorkers(it) }
+        return t.toIntOrNull()?.takeIf { it >= 0 && within(it, ceiling) }?.let { OverrideWorkers(it) }
     }
 
     data class OverrideWorkers(val workers: Int?)
 
-    const val MAX_WORKERS = 50
+    /** The setting that bounds every worker count of the pacing rule and overrides; the daemon owns its value. */
+    const val CEILING_KEY = "limits.pacing.maxWorkersCeiling"
+
+    /** The worker ceiling the daemon reported in its `limit_catalog`; null when not read yet or the daemon predates 1.133.0. */
+    fun ceilingOf(catalog: List<LimitInfo>?): Int? =
+        catalog?.firstOrNull { it.key == CEILING_KEY }?.value?.takeIf { it in 1..Int.MAX_VALUE.toLong() }?.toInt()
+
+    /** "0..50", or "0 or more" when the ceiling is not known. */
+    fun rangeText(min: Int, ceiling: Int?): String = ceiling?.let { "$min..$it" } ?: "$min or more"
+
+    private fun within(n: Int, ceiling: Int?): Boolean = ceiling == null || n <= ceiling
 
     private fun num(d: Double): String = if (d == d.roundToInt().toDouble()) d.roundToInt().toString() else d.toString()
 
