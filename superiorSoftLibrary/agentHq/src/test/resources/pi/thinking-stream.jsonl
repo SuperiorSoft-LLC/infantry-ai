@@ -1,0 +1,8 @@
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_start","contentIndex":0}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","contentIndex":0,"delta":"The user wants the fi"}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","contentIndex":0,"delta":"le listed, so I shou"}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","contentIndex":0,"delta":"ld run ls.\n\nThen reply."}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_end","contentIndex":0}}
+{"type":"message_update","assistantMessageEvent":{"type":"text_delta","contentIndex":1,"delta":"Listing now."}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","contentIndex":2,"delta":"Second block, "}}
+{"type":"message_update","assistantMessageEvent":{"type":"thinking_delta","contentIndex":2,"delta":"never closed."}}

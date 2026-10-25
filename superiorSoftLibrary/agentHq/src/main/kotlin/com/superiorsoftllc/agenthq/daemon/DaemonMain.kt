@@ -1438,6 +1438,9 @@ class AgentHqDaemon(
     }
 }
 
+/** Holds a streamed (pi) reasoning block until it ends, so the wire and the replay carry it as ONE `reasoning` frame. */
+private val streamedReasoning = com.superiorsoftllc.agenthq.protocol.ReasoningCoalescer()
+
 /**
  * Turn one lifecycle event into frames and push them to every connected client.
  *
@@ -1486,7 +1489,7 @@ private fun broadcast(
             // Demo trick kept from Phase 1: the child's lines are visible in the daemon terminal.
             println("[${event.sessionId.take(8)}] ${event.line}")
             val raw = Envelope(Envelope.STDOUT, event.line, event.sessionId)
-            val neutral = EventNormalizer.normalise(event.line, afterInterrupt = event.afterInterrupt).flatMap { line ->
+            val neutral = streamedReasoning.process(event.sessionId, EventNormalizer.normalise(event.line, afterInterrupt = event.afterInterrupt)).flatMap { line ->
                 // 1.95.0: the line moves the run activity first; a tool call carries the change on its own status
                 // frame, any other line on a bare `status` frame after its own.
                 val moved = runActivity.line(event.sessionId, line)
@@ -1541,6 +1544,7 @@ private fun broadcast(
         }
 
         is SessionEvent.Exit -> buildList {
+            streamedReasoning.flush(event.sessionId)?.let { add(Envelope(Envelope.REASONING, it.text, event.sessionId)) }
             // Contract 1.64.0 (BUG-M2-11b-1): `exit` reports a hosted process that ended unasked; a turn's end is `finished`.
             if (event.processExited) event.code?.let { add(Envelope(Envelope.EXIT, it.toString(), event.sessionId)) }
             add(finishedEnvelope(event.sessionId, event.code, event.killOutcome))
@@ -1550,7 +1554,10 @@ private fun broadcast(
         }
 
         // Contract 1.64.0: a kept process died between turns. No turn ended, so no `finished`.
-        is SessionEvent.ProcessExit -> listOf(Envelope(Envelope.EXIT, event.code.toString(), event.sessionId))
+        is SessionEvent.ProcessExit -> listOfNotNull(
+            streamedReasoning.flush(event.sessionId)?.let { Envelope(Envelope.REASONING, it.text, event.sessionId) },
+            Envelope(Envelope.EXIT, event.code.toString(), event.sessionId),
+        )
 
         // Contract 1.11.0: what this run was asked, sequenced ahead of anything it prints.
         is SessionEvent.Turn -> listOf(

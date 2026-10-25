@@ -57,7 +57,7 @@ object EventNormalizer {
      */
     sealed interface Line {
         data class Text(val delta: String) : Line
-        data class Reasoning(val text: String) : Line
+        data class Reasoning(val text: String, val delta: Boolean = false) : Line
         data class Status(val label: String) : Line
         /** Contract 1.25.0: a provider tool call, so a UI can name the tool a run is using now. */
         data class Tool(val name: String, val activity: String? = null, val write: FileWrite? = null, val todos: List<com.superiorsoftllc.agenthq.protocol.todo.TodoItemPayload>? = null, val waitSeconds: Long? = null) : Line
@@ -232,7 +232,7 @@ object EventNormalizer {
         if (delta.isNullOrEmpty()) return emptyList()
         return when (kind) {
             "text_delta" -> listOf(Line.Text(delta))
-            "thinking_delta" -> listOf(Line.Reasoning(delta))
+            "thinking_delta" -> listOf(Line.Reasoning(delta, delta = true))
             else -> emptyList()
         }
     }

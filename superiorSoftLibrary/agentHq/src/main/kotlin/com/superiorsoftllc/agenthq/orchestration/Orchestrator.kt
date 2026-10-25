@@ -297,17 +297,26 @@ class Orchestrator(
 
     // ---- everything below runs on the worker thread ----
 
+    private val reasoning = com.superiorsoftllc.agenthq.protocol.ReasoningCoalescer()
+
+    private fun flushReasoning(sessionId: String) {
+        val text = reasoning.flush(sessionId)?.text ?: return
+        val a = bySession[sessionId] ?: return
+        store.events.append(a.runId, RunEvent.Reasoning(text), clock())
+    }
+
     private fun handle(event: SessionEvent) {
         when (event) {
             is SessionEvent.Status -> {
                 val a = bySession[event.session.id] ?: return
+                flushReasoning(event.session.id)
                 store.events.append(a.runId, RunEvent.Status(StatusPayload(event.session.state)), clock())
                 if (RunOutcomes.isAttemptOver(event.session.state)) endAttempt(a, event.session)
             }
             is SessionEvent.Stdout -> {
                 val a = bySession[event.sessionId] ?: return
                 a.stdoutLines++
-                for (l in EventNormalizer.normalise(event.line)) {
+                for (l in reasoning.process(event.sessionId, EventNormalizer.normalise(event.line))) {
                     val e = when (l) {
                         is EventNormalizer.Line.Text -> RunEvent.TextDelta(l.delta)
                         is EventNormalizer.Line.Reasoning -> RunEvent.Reasoning(l.text)
@@ -326,7 +335,7 @@ class Orchestrator(
                 val a = bySession[event.sessionId] ?: return
                 a.stderrLines++
             }
-            is SessionEvent.Exit -> Unit
+            is SessionEvent.Exit -> flushReasoning(event.sessionId)
             is SessionEvent.Activity -> Unit
             is SessionEvent.ProcessExit -> Unit
             // The run's prompt is already on its RunRecord; the turn adds nothing to the run log.
