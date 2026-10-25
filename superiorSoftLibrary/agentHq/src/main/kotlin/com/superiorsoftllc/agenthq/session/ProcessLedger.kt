@@ -147,7 +147,7 @@ class ProcessLedger(
         val known = entries[p.pid]
         if (known != null && known.startedAt == started) return false // first owner wins
         if (runCatching { isProtected(p) }.getOrDefault(true)) return false
-        entries[p.pid] = LedgerEntry(p.pid, started, shorten(p.command), sessionId, clock(), root, inferred)
+        entries[p.pid] = LedgerEntry(p.pid, started, describe(p.command), sessionId, clock(), root, inferred)
         return true
     }
 
@@ -182,8 +182,28 @@ class ProcessLedger(
         const val FILE_NAME = "process-ledger.json"
         const val COMMAND_MAX = 80
         private const val MIN_DIR = 8
-        private val HEAVY_CMD = Regex("""(?i)java|node|gradle|kotlin""")
+        private val HEAVY_CMD = Regex("""(?i)java|node|gradle|kotlin|npx|playwright|modelcontextprotocol""")
         private val JSON = Json { ignoreUnknownKeys = true }
+
+        /** An MCP server a harness starts per session (Playwright, the reference servers), matched on the FULL command line. */
+        val MCP_CMD = Regex("""(?i)@playwright/mcp|playwright-mcp|@modelcontextprotocol""")
+        private val OPENCODE_SERVE = Regex("""(?i)opencode(\.exe)?"?\s+serve\b""")
+        private val PORT = Regex("""--port\s+(\d+)""")
+
+        /** True for a process manual reap may kill although no session owns it: an MCP server or an `opencode serve`. */
+        fun isManualReapable(command: String) = MCP_CMD.containsMatchIn(command) || OPENCODE_SERVE.containsMatchIn(command)
+
+        /**
+         * What the list shows for [command]: an MCP server is named ("Playwright MCP | ..."; ProcessWatch adds the session),
+         * an `opencode serve` keeps its port (the path in front would push it past the cut), anything else is shortened.
+         */
+        fun describe(command: String): String = when {
+            MCP_CMD.containsMatchIn(command) -> (if (command.contains("playwright", true)) "Playwright MCP" else "MCP server") +
+                " | " + shorten(command).takeLast(48)
+            OPENCODE_SERVE.containsMatchIn(command) ->
+                "opencode serve" + (PORT.find(command)?.let { " --port ${it.groupValues[1]}" } ?: "")
+            else -> shorten(command)
+        }
 
         fun shorten(command: String): String = command.trim().replace(Regex("""\s+"""), " ").let {
             if (it.length <= COMMAND_MAX) it else it.take(COMMAND_MAX - 1) + "…"
