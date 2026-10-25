@@ -38,6 +38,8 @@ data class TrackedProcess(
     val rogue: Boolean = false,
     /** Why it is rogue: `session removed`, `session ended (EXITED)`, `session idle 42 min`. */
     val reason: String? = null,
+    /** True when the owner was inferred (ancestry or a worktree path in the command line), not seen as a direct child. */
+    val inferred: Boolean = false,
 )
 
 @Serializable
@@ -52,7 +54,8 @@ data class ProcessReport(
     /** Heavy runtimes we cannot prove are ours, largest first. Read-only. */
     val unattributed: List<TrackedProcess> = emptyList(),
 ) {
-    val rogue: List<TrackedProcess> get() = tracked.filter { it.rogue }
+    /** Tracked rogue ones (reapable) and unattributed orphan daemons (shown, never reaped). */
+    val rogue: List<TrackedProcess> get() = (tracked + unattributed).filter { it.rogue }
 
     /** The largest processes, tracked and not, for a pressure warning. */
     fun topOffenders(n: Int = 5): List<TrackedProcess> =
@@ -135,6 +138,8 @@ class ProcessWatch(
     private val onReaped: (TrackedProcess) -> Unit = {},
     private val pressureEveryMs: Long = 10 * 60_000L,
     private val autoReapEveryMs: Long = 60_000L,
+    /** True while the gate lock's holder pid is alive: its Gradle daemons are not orphans. */
+    private val lockHolderAlive: () -> Boolean = ::gateLockHolderAlive,
 ) {
     private var lastPressureAt: Long? = null
     private var lastAutoReapAt: Long? = null
@@ -148,6 +153,7 @@ class ProcessWatch(
     fun tick() {
         val records = sessions()
         ledger.observe(roots(records))
+        ledger.adopt(records.mapNotNull { r -> r.worktreePath?.let { r.id to it } }.toMap())
         val cfg = config()
         val now = clock()
         val free = runCatching { memory.freeMb() }.getOrNull()
@@ -172,13 +178,22 @@ class ProcessWatch(
         val tracked = ledger.entries().map { e ->
             val mb = mbByPid[e.pid]
             val reason = rogueReason(e, bySession[e.sessionId], mb, cfg, now)
-            TrackedProcess(e.pid, e.command, e.sessionId, e.startedAt, mb, reason != null, reason)
+            TrackedProcess(e.pid, e.command, e.sessionId, e.startedAt, mb, reason != null, reason, e.inferred)
         }
         val ledgerPids = tracked.mapTo(HashSet()) { it.pid }
-        val unattributed = mem.asSequence()
-            .filter { it.pid !in ledgerPids && it.pid !in protectedPids && HEAVY.matches(it.image) && it.mb >= UNATTRIBUTED_MIN_MB }
-            .sortedByDescending { it.mb }.take(UNATTRIBUTED_MAX)
-            .map { TrackedProcess(it.pid, it.image, memoryMb = it.mb) }.toList()
+        val candidates = mem.filter {
+            it.pid !in ledgerPids && it.pid !in protectedPids && HEAVY.matches(it.image) && it.mb >= UNATTRIBUTED_MIN_MB
+        }.sortedByDescending { it.mb }.take(UNATTRIBUTED_MAX)
+        val info = if (candidates.isEmpty()) emptyMap() else ledger.allProcesses().associateBy { it.pid }
+        val lockAlive = if (candidates.isEmpty()) true else runCatching(lockHolderAlive).getOrDefault(true)
+        val unattributed = candidates.map { c ->
+            val p = info[c.pid]
+            val orphan = p != null && !lockAlive && ORPHAN_DAEMON.containsMatchIn(p.command)
+            TrackedProcess(
+                c.pid, p?.command?.let(ProcessLedger::shorten) ?: c.image, null, p?.startedAt, c.mb,
+                orphan, if (orphan) "orphan Gradle/Kotlin daemon: no owning session, no live gate-lock holder" else null,
+            )
+        }
         val free = runCatching { memory.freeMb() }.getOrNull()
         return ProcessReport(
             freeMb = free, totalMb = runCatching { memory.totalMb() }.getOrNull(), floorMb = cfg.floorMb,
@@ -239,7 +254,15 @@ class ProcessWatch(
 
         /** Runtimes worth showing when unattributed. */
         private val HEAVY = Regex("""(?i)(java|javaw|node|opencode|docker.*|com\.docker.*|vmmem.*|wsl.*|kotlin.*|gradle.*|bun|pi)(\.exe)?""")
+        private val ORPHAN_DAEMON = Regex("""GradleDaemon|KotlinCompileDaemon""")
         private const val UNATTRIBUTED_MIN_MB = 200L
+
+        /** `%TEMP%\agenthq-gate.lock\pid` names the gate's holder; true when that pid is alive. */
+        fun gateLockHolderAlive(): Boolean {
+            val dir = System.getenv("TEMP") ?: System.getProperty("java.io.tmpdir") ?: return false
+            val pid = java.io.File(dir, "agenthq-gate.lock/pid").takeIf { it.isFile }?.readText()?.trim()?.toLongOrNull() ?: return false
+            return ProcessHandle.of(pid).map { it.isAlive }.orElse(false)
+        }
         private const val UNATTRIBUTED_MAX = 10
 
         /** The daemon and every ancestor (the app that launched it): never recorded, listed or killed. */

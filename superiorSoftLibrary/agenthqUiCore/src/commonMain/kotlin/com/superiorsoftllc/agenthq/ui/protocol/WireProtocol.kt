@@ -666,6 +666,8 @@ data class TrackedProcess(
     val memoryMb: Long? = null,
     val rogue: Boolean = false,
     val reason: String? = null,
+    /** True when the owner was inferred (ancestry or worktree path in the command line). */
+    val inferred: Boolean = false,
 )
 
 /** Contract 1.120.0 (ROGUE-1): free RAM against the floor, the tracked processes and the heavy unattributed ones. */
@@ -679,7 +681,7 @@ data class ProcessReport(
     val tracked: List<TrackedProcess> = emptyList(),
     val unattributed: List<TrackedProcess> = emptyList(),
 ) {
-    val rogue: List<TrackedProcess> get() = tracked.filter { it.rogue }
+    val rogue: List<TrackedProcess> get() = (tracked + unattributed).filter { it.rogue }
 }
 
 /** Contract 1.120.0 (ROGUE-1): the `processes` answer. */

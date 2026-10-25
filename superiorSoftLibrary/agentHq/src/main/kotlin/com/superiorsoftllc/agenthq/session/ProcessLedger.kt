@@ -28,6 +28,8 @@ data class LedgerEntry(
     val firstSeen: Long,
     /** True for the session's own harness process (kept or running pid), as opposed to something it launched. */
     val root: Boolean = false,
+    /** True when the owner was inferred from a live ancestor entry or a session worktree path in the command line. */
+    val inferred: Boolean = false,
 )
 
 @Serializable
@@ -57,6 +59,44 @@ class ProcessLedger(
 
     @Synchronized
     fun get(pid: Long): LedgerEntry? = entries[pid]
+
+    /** Every live OS process with its command line, for naming what the ledger does not own. */
+    fun allProcesses(): List<ProcInfo> = runCatching { source.all() }.getOrDefault(emptyList())
+
+    /**
+     * Adopt heavy runtimes the tree walk missed (their parent died before a tick saw them). Ownership is inferred only
+     * from (i) a live parent chain reaching an entry already proven ours, or (ii) the command line naming a session's
+     * worktree path (the longest path wins). No start-time guessing. [sessionDirs] = session id to worktree path.
+     */
+    @Synchronized
+    fun adopt(sessionDirs: Map<String, String>) {
+        val dirs = sessionDirs.mapValues { norm(it.value) }.filterValues { it.length >= MIN_DIR }.entries.sortedByDescending { it.value.length }
+        val all = allProcesses()
+        if (all.isEmpty()) return
+        val byPid = all.associateBy { it.pid }
+        var changed = false
+        for (p in all) {
+            if (!HEAVY_CMD.containsMatchIn(p.command)) continue
+            val started = p.startedAt ?: continue
+            if (entries[p.pid]?.startedAt == started) continue
+            var owner: String? = null
+            var up = p.parentPid
+            var hops = 0
+            while (up != null && hops++ < 32 && owner == null) {
+                val e = entries[up]
+                if (e != null && table.startInstant(up) == e.startedAt) owner = e.sessionId
+                up = byPid[up]?.parentPid
+            }
+            if (owner == null) {
+                val cmd = norm(p.command)
+                owner = dirs.firstOrNull { cmd.contains(it.value) }?.key
+            }
+            if (owner != null) changed = record(p, owner, root = false, inferred = true) || changed
+        }
+        if (changed) save()
+    }
+
+    private fun norm(s: String) = s.replace('\\', '/').trimEnd('/').lowercase()
 
     @Synchronized
     fun forget(pid: Long) {
@@ -93,12 +133,12 @@ class ProcessLedger(
         if (changed) save()
     }
 
-    private fun record(p: ProcInfo, sessionId: String, root: Boolean): Boolean {
+    private fun record(p: ProcInfo, sessionId: String, root: Boolean, inferred: Boolean = false): Boolean {
         val started = p.startedAt ?: return false // no start instant = nothing proves it is ours later
         val known = entries[p.pid]
         if (known != null && known.startedAt == started) return false // first owner wins
         if (runCatching { isProtected(p) }.getOrDefault(true)) return false
-        entries[p.pid] = LedgerEntry(p.pid, started, shorten(p.command), sessionId, clock(), root)
+        entries[p.pid] = LedgerEntry(p.pid, started, shorten(p.command), sessionId, clock(), root, inferred)
         return true
     }
 
@@ -132,6 +172,8 @@ class ProcessLedger(
     companion object {
         const val FILE_NAME = "process-ledger.json"
         const val COMMAND_MAX = 80
+        private const val MIN_DIR = 8
+        private val HEAVY_CMD = Regex("""(?i)java|node|gradle|kotlin""")
         private val JSON = Json { ignoreUnknownKeys = true }
 
         fun shorten(command: String): String = command.trim().replace(Regex("""\s+"""), " ").let {

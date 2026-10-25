@@ -28,6 +28,9 @@ interface ProcessSource {
 
     /** The live process [pid] itself; null when it is gone or unknown. The process ledger uses it to record a session root. */
     fun info(pid: Long): ProcInfo? = null
+
+    /** Every live process, parent pid known where the OS says. Empty when unsupported. */
+    fun all(): List<ProcInfo> = emptyList()
 }
 
 /** Windows and POSIX alike: [ProcessHandle.descendants], no PowerShell polling. */
@@ -36,6 +39,9 @@ object OsProcessSource : ProcessSource {
         val root = ProcessHandle.of(rootPid).orElse(null) ?: return emptyList()
         return root.descendants().filter { it.isAlive }.map { h -> describe(h, parentKnown = true) }.toList()
     }
+
+    override fun all(): List<ProcInfo> =
+        ProcessHandle.allProcesses().filter { it.isAlive }.map { describe(it, parentKnown = true) }.toList()
 
     override fun info(pid: Long): ProcInfo? =
         ProcessHandle.of(pid).filter { it.isAlive }.map { describe(it, parentKnown = false) }.orElse(null)

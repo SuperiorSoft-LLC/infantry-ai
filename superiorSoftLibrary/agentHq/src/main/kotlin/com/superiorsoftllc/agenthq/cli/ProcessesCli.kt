@@ -52,26 +52,27 @@ internal object ProcessesCli {
         val total = r.totalMb?.let { " of $it MB" } ?: ""
         val pressure = if (r.underPressure) " - UNDER the ${r.floorMb} MB floor" else ""
         appendLine("memory: $free$total$pressure; auto-reap ${if (r.autoReap) "on" else "off"}")
-        val rogue = r.tracked.filter { it.rogue }
+        val rogue = r.rogue
         appendLine("rogue (${rogue.size}):" + if (rogue.isEmpty()) " none" else "")
         rogue.forEach { appendLine("  " + line(it, now)) }
         if (rogue.isNotEmpty()) appendLine("  reap: agenthq processes reap <pid>   or all: agenthq processes reap --all")
         if (!showAll) {
-            appendLine("(${r.tracked.size - rogue.size} healthy tracked, ${r.unattributed.size} unattributed: agenthq processes --all)")
+            appendLine("(${r.tracked.count { !it.rogue }} healthy tracked, ${r.unattributed.count { !it.rogue }} unattributed: agenthq processes --all)")
             return
         }
         val healthy = r.tracked.filter { !it.rogue }
         appendLine("tracked, healthy (${healthy.size}):" + if (healthy.isEmpty()) " none" else "")
         healthy.forEach { appendLine("  " + line(it, now)) }
-        appendLine("not ours, never reaped (${r.unattributed.size}):" + if (r.unattributed.isEmpty()) " none" else "")
-        r.unattributed.forEach { appendLine("  " + line(it, now)) }
+        val others = r.unattributed.filter { !it.rogue }
+        appendLine("not ours, never reaped (${others.size}):" + if (others.isEmpty()) " none" else "")
+        others.forEach { appendLine("  " + line(it, now)) }
     }
 
     private fun line(p: TrackedProcess, now: Long): String = buildString {
         append("pid ").append(p.pid)
         append(" | ").append(p.memoryMb?.let { "$it MB" } ?: "? MB")
         p.startedAt?.let { append(" | ").append(age(now - it)) }
-        p.sessionId?.let { append(" | session ").append(it.take(8)) }
+        append(" | session ").append(p.sessionId?.take(8) ?: "none").append(if (p.inferred) " (inferred)" else "")
         append(" | ").append(p.command)
         p.reason?.let { append(" | ").append(it) }
     }

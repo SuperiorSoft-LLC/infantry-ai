@@ -35,6 +35,7 @@ class ProcessWatchTest {
             return out
         }
         override fun info(pid: Long) = procs[pid]?.copy(parentPid = null)
+        override fun all() = procs.values.toList()
         override fun startInstant(pid: Long) = procs[pid]?.startedAt
         override fun killTree(pid: Long, startedAt: Long) {
             if (procs[pid]?.startedAt != startedAt) return
@@ -60,7 +61,8 @@ class ProcessWatchTest {
         ledger: ProcessLedger = ProcessLedger(os, os, clock = { now }),
         config: ProcessWatchConfig = ProcessWatchConfig(),
         pressure: MutableList<ProcessReport> = mutableListOf(),
-    ) = ProcessWatch(ledger, { sessions.values.toList() }, os, os, { config }, { now }, onPressure = { pressure += it })
+        lockAlive: Boolean = false,
+    ) = ProcessWatch(ledger, { sessions.values.toList() }, os, os, { config }, { now }, onPressure = { pressure += it }, lockHolderAlive = { lockAlive })
 
     // Pids far above anything real, so the test JVM's own ancestry (protected) never collides.
     private val harness = 900_100L
@@ -134,6 +136,47 @@ class ProcessWatchTest {
         val rogue = w.report().rogue
         assertEquals(listOf(gradleDaemon), rogue.map { it.pid })
         assertTrue(rogue.single().reason!!.startsWith("session idle 31 min"))
+    }
+
+    @Test fun `a daemon whose parent died before any tick is adopted by the worktree path in its command line`() {
+        os.start(harness, null, "claude --session", 1_000)
+        session("s1", harness)
+        sessions["s1"] = sessions.getValue("s1").copy(worktreePath = "C:/work/.worktrees/ticket-aaa-fix")
+        os.start(gradleDaemon, 777_777L, "java GradleDaemon -Duser.dir=C:/work/.worktrees/ticket-aaa-fix", 6_000, memMb = 900)
+        val w = watch()
+        w.tick()
+        val view = w.report().tracked.single { it.pid == gradleDaemon }
+        assertEquals("s1", view.sessionId)
+        assertTrue(view.inferred)
+        assertFalse(view.rogue)
+        sessions["s1"] = sessions.getValue("s1").copy(state = SessionState.EXITED)
+        assertEquals("session ended (EXITED)", w.report().rogue.single { it.pid == gradleDaemon }.reason)
+        assertEquals(listOf(gradleDaemon, harness).toSet(), w.reapRogue().map { it.pid }.toSet())
+    }
+
+    @Test fun `a live parent chain to a proven entry attributes a heavy child by ancestry`() {
+        gradleUnder("s1")
+        val w = watch()
+        w.tick()
+        os.start(kotlinDaemon, gradleDaemon, "java KotlinCompileDaemon", 9_000, memMb = 300)
+        os.start(900_300L, kotlinDaemon, "node tool.js", 9_500, memMb = 300)
+        os.exit(gradlew)
+        w.tick()
+        assertEquals("s1", w.report().tracked.single { it.pid == 900_300L }.sessionId)
+    }
+
+    @Test fun `an unmatched orphan gradle daemon is flagged rogue but never reaped, unless the gate lock holder lives`() {
+        os.start(gradleDaemon, 777_777L, "java GradleDaemon 8.5", 6_000, memMb = 900)
+        val w = watch()
+        w.tick()
+        val rogue = w.report().rogue.single()
+        assertEquals(gradleDaemon, rogue.pid)
+        assertNull(rogue.sessionId)
+        assertTrue(rogue.command.startsWith("java GradleDaemon"))
+        assertTrue(w.reapRogue().isEmpty())
+        assertTrue(os.killed.isEmpty() && gradleDaemon in os.procs)
+        assertIs<ReapResult.Refused>(w.reap(gradleDaemon))
+        assertTrue(watch(lockAlive = true).report().rogue.isEmpty())
     }
 
     @Test fun `unrelated and recycled pids are never touched`() {
