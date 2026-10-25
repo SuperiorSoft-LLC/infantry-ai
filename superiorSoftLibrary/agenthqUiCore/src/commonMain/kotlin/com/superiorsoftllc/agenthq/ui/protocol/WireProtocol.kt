@@ -359,13 +359,17 @@ data class Envelope(
     }
 }
 
-/** The four backlog columns, in board order. `pending` is derived by the daemon and never set by a client. */
+/**
+ * The board's columns, in board order. `pending` is derived by the daemon and never set by a client. `backlog`
+ * (contract 1.131.0) is limbo before `todo` (the sprint): its tickets are never started.
+ */
 object TicketColumns {
+    const val BACKLOG = "backlog"
     const val TODO = "todo"
     const val IN_PROGRESS = "in_progress"
     const val PENDING = "pending"
     const val DONE = "done"
-    val ALL: List<String> = listOf(TODO, IN_PROGRESS, PENDING, DONE)
+    val ALL: List<String> = listOf(BACKLOG, TODO, IN_PROGRESS, PENDING, DONE)
 }
 
 /** Contracts 1.5.0 / 1.6.0: one resolved executor value and where it came from (`ticket`, `profile`, `role`, `default`). */

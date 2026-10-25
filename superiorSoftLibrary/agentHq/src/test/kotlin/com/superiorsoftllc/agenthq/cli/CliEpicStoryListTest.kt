@@ -570,7 +570,7 @@ class CliEpicStoryListTest {
         val err = StringBuilder()
         val exit = Cli.run(arrayOf("stories", "--status", "bogus", "--port", "9999"), out, err, { null })
         assertEquals(2, exit, "an unknown column must be a usage error: $err")
-        assertTrue(err.toString().contains("todo, in_progress, pending, done"), "the refusal names the columns: $err")
+        assertTrue(err.toString().contains("backlog, todo, in_progress, pending, done"), "the refusal names the columns: $err")
         assertFalse(err.toString().contains("daemon not running"), "refused before connecting: $err")
     }
 

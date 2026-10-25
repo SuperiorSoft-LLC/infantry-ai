@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.130.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.131.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -1036,7 +1036,7 @@ No frame was added or removed and every frame keeps its shape; the daemon's `rea
 ### What changed in 1.62.0 (E1-c) — the story frames are DEPRECATED shims over the ticket board
 
 No frame was added or removed; the daemon's `ready` frame now reports `contract=1.62.0` (it was `1.61.0`). No schema change. There is one work model: a story IS a ticket. The `story_*` frames stay for one release and then go; use the `ticket_*` frames (`ticket_list` takes `epicId` since 1.66.0).
-- **DEPRECATED:** `story_save`, `story_get`, `story_move`, `story_list`. Their `story` / `stories` answers are the ticket board seen through the old shape: `Story.id` IS the ticket id, `projectId` is the ticket's (`""` when it has none), and the status maps `todo`/`pending` -> `todo`, `in_progress` -> `doing`, `done` -> `done`.
+- **DEPRECATED:** `story_save`, `story_get`, `story_move`, `story_list`. Their `story` / `stories` answers are the ticket board seen through the old shape: `Story.id` IS the ticket id, `projectId` is the ticket's (`""` when it has none), and the status maps `backlog`/`todo`/`pending` -> `todo`, `in_progress` -> `doing`, `done` -> `done`.
 - `story_save` with no id creates a TICKET in `todo` (unassigned, carrying the request's `projectId` and `epicId`); it is pushed as the usual `ticket` frame and is listed by `ticket_list`. With an id it edits that ticket's title/project.
 - `story_get` / `story_move` take a ticket id or a pre-migration story id; the latter resolves through the `story_migration` table (E1-a). An id that is neither is refused (`<frame> refused: no story '<id>'`).
 - `story_move` `doing` puts the ticket in `in_progress` as a plain column change: unlike `ticket_move`, it never hands the ticket out or starts a run.
@@ -2370,7 +2370,7 @@ The daemon owns a board of tickets. The requests below edit it, and every change
 | `description` | trimmed, at most 100,000 characters; `""` when empty |
 | `ticketType` | `null`, or one of `enhancement`, `defect`, `restructure`, `upkeep`, `documentation`, `cosmetic`, `performance`, `testing`, `hardening` (case-insensitive on input; a pre-1.91.0 spelling is accepted and stored under its replacement) |
 | `epicId` | `null`, or the full id of the epic the ticket is filed under (1.31.0) |
-| `status` | the column: `todo`, `in_progress`, `pending` or `done`, in that board order |
+| `status` | the column: `backlog`, `todo`, `in_progress`, `pending` or `done`, in that board order (`backlog` since 1.131.0) |
 | `position` | the place in its column, 0 at the top; a column's positions are always 0, 1, 2… |
 | `wontFix` | `true` only on a `done` ticket closed as won't fix |
 | `links` | `{ "type", "ticketId" }`, seen from this ticket's side, oldest first |
@@ -2390,6 +2390,7 @@ The daemon owns a board of tickets. The requests below edit it, and every change
 
 **Columns and `pending`**
 
+- `backlog` (1.131.0) is limbo: potential work parked until someone deliberately promotes it to `todo` (the current sprint). The daemon never moves a ticket into or out of `backlog`; `ticket_move` does, in both directions, by hand. A backlog ticket is never started: see "What changed in 1.131.0".
 - `pending` is derived. A `todo` ticket with an open `blocked_by` prerequisite moves to `pending`. When nothing holds it any more, it moves back to the bottom of `todo` in the same change.
 - The daemon never moves an `in_progress` or `done` ticket; `heldBy` still says what holds it. A held ticket moved back to `todo` lands in `pending`.
 - A move to `pending` is refused unless an open prerequisite holds the ticket. A held ticket cannot leave `pending`, whatever the target column.
@@ -3033,3 +3034,14 @@ ADDITIVE; no new wire field (`question_answer.otherText` and `OwnerQuestion.allo
 ### What changed in 1.130.0 (TODO-PROGRESS-1, ticket-aba6cdca) — the agent's to-do list drives the progress bar
 
 ADDITIVE; `contract=1.130.0`. When a to-do tool call carries the agent's list (the 1.127.0 `status.todos`: claude `TodoWrite`, opencode `todowrite`, and now pi, whose every session loads a daemon-owned `todowrite` extension in opencode's shape), the daemon also sets the session's `progress` as `mode=count`, `done` = items done, `total` = items, `label` = `to-do`, `step` = the item in progress (else the first open one), and the new optional field **`SessionProgress.origin = "todo"`**. All items done = `state=done`; an empty list clears it. `step` may now also accompany a `count` bar (a client shows it after the count). Precedence, highest first: a RUNNING progress of the agent's own (`progress` op, `agenthq run` markers; `origin` omitted) is never overwritten by the list, and the agent's own next report replaces a `todo` bar outright (a fresh job); then the to-do bar; then the 1.123.0 sleep hint (`estimateSource=sleep`), which no longer replaces a to-do bar. Once the agent's own job finished, the next list change takes the bar back. An older daemon never sends `origin`; an older client ignores it and draws a plain count bar.
+
+### What changed in 1.131.0 (BACKLOG, ticket-39eab724) — a Backlog lane before To Do
+
+ADDITIVE; `contract=1.131.0`. A new ticket column `backlog` (`TicketStatus.BACKLOG`), first in board order: `TicketStatus.ALL` is now `backlog, todo, in_progress, pending, done`. Backlog is limbo (potential work that waits until someone promotes it); `todo` is the current sprint (committed work).
+
+- **No migration.** `tickets.status` is TEXT with no CHECK; no stored row changes column. Existing parked tickets stay where they are until moved by hand.
+- **Never started.** Every start path goes through the hand-out (`ticket_move` to `in_progress`, `agenthq ticket start` / `agenthq_ticket_start`, the UI's Start and a drop on In progress): a backlog ticket answers `start: {ok:false, reason:"start_refused", detail:"ticket is in the Backlog lane: move it to To Do (the sprint) before starting it"}` and stays in backlog. No "start next" logic (`ticket_start_next`, triggers, queue drain, lane caps) ever picks a backlog ticket: they read `todo` only.
+- **Moves.** `ticket_move` to and from `backlog` is allowed by hand from any column. A held ticket may be parked from `pending` to `backlog` (it stays held; the daemon never moves a backlog ticket to `pending`, and moved back to `todo` it settles into `pending` again). The deprecated story shim reads `backlog` as `todo`.
+- **Create.** `TicketSave.status` (new, create only): absent/null or `todo` = the sprint (unchanged default), `backlog` = the new lane; any other column, or a status on an edit, is refused. CLI: `agenthq ticket create ... --status backlog`; MCP: `agenthq_ticket_create` `status`.
+- **Listing.** `agenthq tickets --status backlog`; `agenthq board` / `agenthq_board` print the Backlog group first.
+- **Old clients.** A client built before 1.131.0 has no `backlog` column and simply does not render those tickets; nothing it sends changes meaning.

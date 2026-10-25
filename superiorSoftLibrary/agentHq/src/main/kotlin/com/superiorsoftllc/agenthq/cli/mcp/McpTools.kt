@@ -496,7 +496,7 @@ internal class McpTools(
             })
             add(tool(
                 BOARD,
-                "The board in one call: tickets grouped by column (todo, in_progress, pending, done), one line each with its " +
+                "The board in one call: tickets grouped by column (backlog, todo, in_progress, pending, done), one line each with its " +
                     "worker (role, session id), the worker's live state (busy / idle / running background process), last action, " +
                     "last output age, branch and last commit. Use this instead of tickets + sessions + transcripts.",
             ) {

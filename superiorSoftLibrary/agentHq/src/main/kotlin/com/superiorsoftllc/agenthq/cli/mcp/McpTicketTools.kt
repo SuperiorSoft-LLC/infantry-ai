@@ -62,6 +62,7 @@ internal class McpTicketTools(
             model = arguments.string("model"),
             weight = arguments.weight(),
             images = images,
+            status = arguments.string("status")?.lowercase(),
         )
         val ticket = save(stream, save, CREATE) { return it }
         return saved(ticket, save, created = true)
@@ -398,7 +399,8 @@ internal class McpTicketTools(
         fun descriptors() = buildJsonArray {
             add(tool(
                 CREATE,
-                "Create a ticket on the Infantry AI board (it lands in todo; nothing runs until $START starts it). " +
+                "Create a ticket on the Infantry AI board (it lands in todo, the current sprint, or in backlog with " +
+                    "status backlog; nothing runs until $START starts it, and a backlog ticket is never started). " +
                     "The description is stored verbatim, multi-line included. role / provider / model pin who runs " +
                     "it (agenthq_list_harnesses lists the provider ids and their models); the daemon refuses an " +
                     "unknown provider or a model that provider does not list. The answer says what was saved.",
@@ -413,6 +415,7 @@ internal class McpTicketTools(
                 put("model", prop("Model pin, one of that harness's models: see agenthq_list_harnesses."))
                 put("weight", JsonObject(mapOf("type" to JsonPrimitive("integer"), "description" to JsonPrimitive("Ticket weight 1-5 by how likely the ticket is to come back wrong, not its size: 4-5 wire/contract, daemon, auth or project scope, concurrency/SSR timing, Android build, or more than one module; 3 gate fixes, bisects, UI that depends on daemon behaviour; 1-2 copy, icons, renames, docs (mechanical, one owner file). 0 clears it on update. With no provider/model pin the ticket starts on the project's first matching routing rule (project_config routingRules), else the weight mapping (tickets.weightExecutors); an explicit pin always wins. Set a weight on every ticket before start."))))
                 put("images", pathsProp("Images to attach: local image file paths (png, jpeg, gif or webp, at most 10 MB each; each is uploaded to the project's .agenthq/uploads/ticket/), or paths already stored there. A missing, oversized or non-image file refuses the call and nothing is saved. The board shows them as attachments and the started worker's brief lists them."))
+                put("status", prop("Column the new ticket enters: todo (default, the current sprint) or backlog (parked, never started until moved to todo)."))
             })
             add(tool(
                 UPDATE,
@@ -482,6 +485,7 @@ internal class McpTicketTools(
             add(tool(
                 MOVE,
                 "Move ONE ticket to a status (full id or 8-char id), e.g. done when your work is finished, or todo, " +
+                    "or backlog (parked: never started until moved back to todo), " +
                     "and/or reorder it: ticket order inside a column is priority (the board and `tickets` list it top " +
                     "first). Give at most one of before / after (just above / below that ticket), top, bottom or " +
                     "position (0 = top); with one of them the status may be left out and the ticket is reordered in " +
@@ -493,7 +497,7 @@ internal class McpTicketTools(
                 required = listOf("ticketId"),
             ) {
                 put("ticketId", prop("Full ticket id, or its 8-char suffix."))
-                put("status", prop("Target status, e.g. done, todo. Optional when before, top or bottom is given."))
+                put("status", prop("Target status, e.g. done, todo, backlog. Optional when before, top or bottom is given."))
                 put("before", prop("Place the ticket just above this ticket (full id or 8-char suffix), which must be in the target column."))
                 put("after", prop("Place the ticket just below this ticket (full id or 8-char suffix), which must be in the target column."))
                 put("top", boolProp("Place the ticket at the top of the column (highest priority)."))

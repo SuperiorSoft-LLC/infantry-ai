@@ -40,12 +40,12 @@ import kotlinx.coroutines.launch
 
 /** Column headers, keyed by [TicketColumns]. */
 private val COLUMN_LABELS = mapOf(
-    TicketColumns.TODO to "To do", TicketColumns.IN_PROGRESS to "In progress",
+    TicketColumns.BACKLOG to "Backlog", TicketColumns.TODO to "To do", TicketColumns.IN_PROGRESS to "In progress",
     TicketColumns.PENDING to "Pending", TicketColumns.DONE to "Done",
 )
 
-/** The columns a client may move a ticket to: `pending` is derived by the daemon, never set. */
-private val MOVE_TARGETS = listOf(TicketColumns.TODO, TicketColumns.IN_PROGRESS, TicketColumns.DONE)
+/** The columns a client may move a ticket to: `pending` is derived by the daemon, never set; a backlog ticket never goes straight to In progress. */
+private val MOVE_TARGETS = listOf(TicketColumns.BACKLOG, TicketColumns.TODO, TicketColumns.IN_PROGRESS, TicketColumns.DONE)
 
 const val EPICS_ADD_BUTTON_TAG = "epics-add"
 const val EPIC_DIALOG_TAG = "epic-dialog"
@@ -182,7 +182,7 @@ private fun EpicTicketRow(t: Ticket, live: Boolean, onMove: (id: String, status:
     ) {
         Text(t.title, color = Palette.Text, fontSize = 12.sp, maxLines = 2)
         FlowRow(Modifier.padding(top = 2.dp), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            MOVE_TARGETS.filter { it != t.status }.forEach { target ->
+            MOVE_TARGETS.filter { it != t.status && !(t.status == TicketColumns.BACKLOG && it == TicketColumns.IN_PROGRESS) }.forEach { target ->
                 OutlinedButton(onClick = { onMove(t.id, target) }, enabled = live, modifier = Modifier.testTag("move-${t.id}-$target")) {
                     Text("-> ${COLUMN_LABELS[target] ?: target}", fontSize = 10.sp)
                 }
