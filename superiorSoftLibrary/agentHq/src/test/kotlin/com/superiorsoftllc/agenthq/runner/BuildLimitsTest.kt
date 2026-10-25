@@ -88,8 +88,15 @@ class BuildLimitsTest {
         try {
             val root = assertNotNull(proc.pid)
             Thread.sleep(2_500)
-            val child = waitFor { ProcessHandle.of(root).orElse(null)?.children()?.findFirst()?.orElse(null) }
-            assertNotNull(child, "cmd started its child")
+            // Pick the ping by name: when the test JVM has no console (a Gradle daemon, a worker session), Windows also gives
+            // cmd a conhost.exe child. conhost is an OS console host started with cmd, before the runner lowers it and binds
+            // the job, so it may run Normal; it is not something the session started and is not what this test checks.
+            val child = waitFor {
+                ProcessHandle.of(root).orElse(null)?.children()
+                    ?.filter { it.info().command().orElse("").substringAfterLast('\\').equals("PING.EXE", ignoreCase = true) }
+                    ?.findFirst()?.orElse(null)
+            }
+            assertNotNull(child, "cmd started its ping grandchild")
             assertEquals(BELOW_NORMAL, ProcessPriority.windowsPriorityClass(root), "the session root is lowered")
             assertEquals(BELOW_NORMAL, ProcessPriority.windowsPriorityClass(child.pid()), "a grandchild that asked for normal still runs below normal")
             // `start /normal` makes CreateProcess ask for NORMAL_PRIORITY_CLASS: the job's priority-class limit keeps the
