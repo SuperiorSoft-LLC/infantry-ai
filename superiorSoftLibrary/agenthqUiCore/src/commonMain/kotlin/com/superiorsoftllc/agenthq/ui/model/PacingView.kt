@@ -10,11 +10,69 @@ import kotlin.math.roundToInt
  * so they are tested without a window. The daemon validates every change again; this only catches typos early.
  */
 object PacingView {
-    /** "<60% -> 3 · <80% -> 2 · else -> 1", or "off". */
-    fun ruleText(rule: PacingRule): String =
-        if (!rule.enabled) "off" else rule.tiers.joinToString(" · ") { t ->
-            (t.below?.let { "<${num(it)}%" } ?: "else") + " -> ${t.workers}"
-        }
+    /**
+     * Pace: "pace · up to 5 ticket workers while projected <= 100% at reset · 1 from 95% used"; bands: "<60% -> 3 · <80% -> 2
+     * · else -> 1 ticket workers"; or "off".
+     */
+    fun ruleText(rule: PacingRule): String = when {
+        !rule.enabled -> "off"
+        isPace(rule) -> "pace · up to ${rule.maxWorkers ?: "?"} ticket workers while projected <= ${rule.okProjected?.let(::num) ?: "?"}% at reset" +
+            " · 1 from ${rule.hardStopPercent?.let(::num) ?: "?"}% used"
+        else -> tiersText(rule) + " ticket workers"
+    }
+
+    /** "<60% -> 3 · <80% -> 2 · else -> 1". */
+    fun tiersText(rule: PacingRule): String = rule.tiers.joinToString(" · ") { t ->
+        (t.below?.let { "<${num(it)}%" } ?: "else") + " -> ${t.workers}"
+    }
+
+    /** Whether the daemon judges by projected burn (contract: `mode` = `pace`). A daemon without the key is bands. */
+    fun isPace(rule: PacingRule): Boolean = rule.mode == PacingRule.MODE_PACE
+
+    /** Whether the daemon knows pace mode at all (it reports a `mode`); an older one is edited as tiers only. */
+    fun hasModes(rule: PacingRule): Boolean = rule.mode != null
+
+    /** "projected 87% at reset"; null when the meter is judged by bands or its projection is unknown. */
+    fun projectedText(m: MeterUsage): String? = m.projectedPercent?.let { "projected ${num(roundOne(it))}% at reset" }
+
+    /**
+     * Why the rule allows what it does, when that is not already on the card: "at 96% (hard stop 95%)". Null for bands and
+     * for the projection (shown beside the percent), and under an override (the rule is not what applies).
+     */
+    fun reasonText(m: MeterUsage): String? =
+        m.reasoning?.takeIf { m.override == null && it != "bands" && !it.startsWith("projected") }?.let { "rule: $it" }
+
+    /** Whether [m]'s projection runs past what the rule calls ok (else past 100%). */
+    fun projectedOver(m: MeterUsage, rule: PacingRule): Boolean =
+        m.projectedPercent?.let { it > (rule.okProjected ?: 100.0) } ?: false
+
+    /**
+     * The editor's whole rule: [base] with every field the editor shows replaced; a key the daemon never reported (an
+     * older daemon) stays null so it is not sent. Pace fields are validated in either mode (they are kept for a later
+     * switch); the error names the problem.
+     */
+    fun buildRule(
+        base: PacingRule,
+        enabled: Boolean,
+        tiersText: String,
+        mode: String?,
+        maxWorkersText: String,
+        okProjectedText: String,
+        hardStopText: String,
+    ): Result<PacingRule> = parseRule(tiersText, enabled).mapCatching { tiers ->
+        if (!hasModes(base)) return@mapCatching base.copy(enabled = enabled, tiers = tiers.tiers)
+        require(mode == PacingRule.MODE_PACE || mode == PacingRule.MODE_BANDS) { "mode must be pace or bands" }
+        val max = maxWorkersText.trim().toIntOrNull()?.takeIf { it in 1..MAX_WORKERS }
+            ?: error("max workers must be a whole number 1..$MAX_WORKERS")
+        val ok = okProjectedText.trim().removeSuffix("%").trim().toDoubleOrNull()?.takeIf { it > 0.0 }
+            ?: error("ok projection must be a percent above 0")
+        val hard = hardStopText.trim().removeSuffix("%").trim().toDoubleOrNull()?.takeIf { it > 0.0 && it <= 100.0 }
+            ?: error("hard stop must be a percent in 1..100")
+        base.copy(enabled = enabled, tiers = tiers.tiers, mode = mode, maxWorkers = max, okProjected = ok, hardStopPercent = hard)
+    }
+
+    /** A percent or count as the editor shows it ("95", "97.5"); "" when unknown. */
+    fun fieldText(d: Double?): String = d?.let(::num) ?: ""
 
     /** The editable form, "60:3, 80:2, 1". */
     fun ruleInput(rule: PacingRule): String =
@@ -83,4 +141,6 @@ object PacingView {
     const val MAX_WORKERS = 50
 
     private fun num(d: Double): String = if (d == d.roundToInt().toDouble()) d.roundToInt().toString() else d.toString()
+
+    private fun roundOne(d: Double): Double = (d * 10.0).roundToInt() / 10.0
 }

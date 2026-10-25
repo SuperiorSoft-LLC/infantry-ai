@@ -21,6 +21,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -80,11 +83,11 @@ internal fun PacingSection(state: AppState, now: Long, controller: Controller?) 
         )
         return
     }
-    Text("Rule: " + PacingView.ruleText(report.rule) + " ticket workers", color = Palette.Text, fontSize = 11.sp, modifier = Modifier.testTag("pacing-rule"))
+    Text("Rule: " + PacingView.ruleText(report.rule), color = Palette.Text, fontSize = 11.sp, modifier = Modifier.testTag("pacing-rule"))
     if (report.meters.isEmpty()) Text("No meter: no live usage source and no ticket worker running.", color = Palette.Muted, fontSize = 11.sp)
     report.meters.forEach { m ->
         MeterCard(
-            m, now,
+            m, report.rule, now,
             onManual = if (canEdit) ({ edit = PacingEdit.Manual(m) }) else null,
             onOverride = if (canEdit) ({ edit = PacingEdit.Override(m) }) else null,
         )
@@ -96,7 +99,7 @@ internal fun PacingSection(state: AppState, now: Long, controller: Controller?) 
 }
 
 @Composable
-private fun MeterCard(m: MeterUsage, now: Long, onManual: (() -> Unit)?, onOverride: (() -> Unit)?) {
+private fun MeterCard(m: MeterUsage, rule: PacingRule, now: Long, onManual: (() -> Unit)?, onOverride: (() -> Unit)?) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp).testTag("pacing-meter-${m.meter}"),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -104,6 +107,14 @@ private fun MeterCard(m: MeterUsage, now: Long, onManual: (() -> Unit)?, onOverr
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(LimitsView.providerName(m.meter), color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.weight(1f))
             Text(LimitsView.percentText(m.percent), color = if (m.percent == null) Palette.Muted else Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+            // USAGE-PACE (pace mode): where this burn lands at the window's reset, next to the percent it comes from.
+            PacingView.projectedText(m)?.let { p ->
+                Text(
+                    " \u00b7 $p", fontSize = 11.sp,
+                    color = if (PacingView.projectedOver(m, rule)) Palette.Danger else Palette.Muted,
+                    modifier = Modifier.testTag("pacing-projected-${m.meter}"),
+                )
+            }
         }
         Text(
             listOfNotNull(m.window, PacingView.sourceText(m), LimitsView.paceText(m.paceDelta), LimitsView.resetText(m.resetsAt), PacingView.updatedText(m.updatedAt, now)).joinToString(" · "),
@@ -116,6 +127,7 @@ private fun MeterCard(m: MeterUsage, now: Long, onManual: (() -> Unit)?, onOverr
         PacingView.overrideText(m)?.let { o ->
             Text(o + " · ends in " + untilText(m.override!!.until, now) + " (rule says ${m.ruleAllowance ?: "no limit"})", color = Palette.Accent, fontSize = 10.sp)
         }
+        PacingView.reasonText(m)?.let { Text(it, color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.testTag("pacing-reason-${m.meter}")) }
         m.warning?.let { Text(it, color = Palette.Muted, fontSize = 10.sp) }
         if (onManual != null || onOverride != null) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -141,6 +153,11 @@ private fun PacingDialog(edit: PacingEdit, rule: PacingRule, now: Long, controll
     }
     var second by remember(edit) { mutableStateOf("") }
     var enabled by remember(edit) { mutableStateOf(rule.enabled) }
+    // Pace keys of the rule editor, seeded from the rule the daemon reported (never from a local default).
+    var mode by remember(edit) { mutableStateOf(rule.mode) }
+    var maxWorkers by remember(edit) { mutableStateOf(rule.maxWorkers?.toString() ?: "") }
+    var okProjected by remember(edit) { mutableStateOf(PacingView.fieldText(rule.okProjected)) }
+    var hardStop by remember(edit) { mutableStateOf(PacingView.fieldText(rule.hardStopPercent)) }
     var error by remember(edit) { mutableStateOf<String?>(null) }
     val title = when (edit) {
         PacingEdit.Rule -> "Pacing rule"
@@ -155,7 +172,7 @@ private fun PacingDialog(edit: PacingEdit, rule: PacingRule, now: Long, controll
 
     fun save() {
         when (edit) {
-            PacingEdit.Rule -> PacingView.parseRule(first, enabled).fold(
+            PacingEdit.Rule -> PacingView.buildRule(rule, enabled, first, mode, maxWorkers, okProjected, hardStop).fold(
                 onSuccess = { submit(UsageSet(rule = it)) },
                 onFailure = { error = it.message },
             )
@@ -182,8 +199,21 @@ private fun PacingDialog(edit: PacingEdit, rule: PacingRule, now: Long, controll
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 when (edit) {
                     PacingEdit.Rule -> {
-                        Text("Tiers of percent:workers, lowest first; the last one is workers alone. Example: 60:3, 80:2, 1 = under 60% three ticket workers, under 80% two, else one.", color = Palette.Muted, fontSize = 11.sp)
-                        OutlinedTextField(first, { first = it; error = null }, label = { Text("Tiers") }, singleLine = true, modifier = Modifier.testTag("pacing-rule-input"))
+                        if (PacingView.hasModes(rule)) {
+                            ModePicker(mode) { mode = it; error = null }
+                            if (mode == PacingRule.MODE_PACE) {
+                                Text("Workers follow where the burn lands at the window's reset: the max while projected stays at or under the ok %, down to one at 20 points over, and one from the hard stop % used.", color = Palette.Muted, fontSize = 11.sp)
+                                OutlinedTextField(maxWorkers, { maxWorkers = it; error = null }, label = { Text("Max ticket workers") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("pacing-rule-max"))
+                                OutlinedTextField(okProjected, { okProjected = it; error = null }, label = { Text("OK projected at reset (%)") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("pacing-rule-ok"))
+                                OutlinedTextField(hardStop, { hardStop = it; error = null }, label = { Text("Hard stop at used (%)") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("pacing-rule-hardstop"))
+                            }
+                        }
+                        Text(
+                            (if (mode == PacingRule.MODE_PACE) "Fallback tiers, used when a window has no reset time. " else "") +
+                                "Tiers of percent:workers, lowest first; the last one is workers alone. Example: 60:3, 80:2, 1 = under 60% three ticket workers, under 80% two, else one.",
+                            color = Palette.Muted, fontSize = 11.sp,
+                        )
+                        OutlinedTextField(first, { first = it; error = null }, label = { Text("Tiers") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag("pacing-rule-input"))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("Pace agent ticket starts", color = Palette.Text, fontSize = 12.sp, modifier = Modifier.weight(1f))
                             Switch(enabled, { enabled = it }, modifier = Modifier.testTag("pacing-rule-enabled"))
@@ -212,6 +242,23 @@ private fun PacingDialog(edit: PacingEdit, rule: PacingRule, now: Long, controll
         confirmButton = { Button(onClick = ::save, modifier = Modifier.testTag("pacing-save")) { Text("Save") } },
         dismissButton = { TextButton(onClick = onDone) { Text("Cancel", color = Palette.Text) } },
     )
+}
+
+/** Pace or bands, as a radio group (one selectable row per mode, so a screen reader reads the pair as one choice). */
+@Composable
+private fun ModePicker(mode: String?, onPick: (String) -> Unit) {
+    Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        listOf(PacingRule.MODE_PACE to "Pace (projected burn)", PacingRule.MODE_BANDS to "Bands (percent used)").forEach { (value, label) ->
+            Row(
+                Modifier.selectable(selected = mode == value, role = Role.RadioButton, onClick = { onPick(value) })
+                    .handCursor().testTag("pacing-rule-mode-$value").padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(selected = mode == value, onClick = null)
+                Text(label, color = Palette.Text, fontSize = 12.sp)
+            }
+        }
+    }
 }
 
 private const val REFRESH_MS = 60_000L

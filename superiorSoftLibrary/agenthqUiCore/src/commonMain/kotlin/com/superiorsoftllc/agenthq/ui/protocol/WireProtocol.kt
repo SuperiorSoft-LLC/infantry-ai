@@ -614,9 +614,27 @@ data class ContextSource(val tool: String, val calls: Int, val tokensAdded: Long
 @Serializable
 data class PacingTier(val below: Double? = null, val workers: Int)
 
-/** USAGE-PACE: the pacing rule; the metric is the highest percent among a meter's windows. */
+/**
+ * USAGE-PACE: the pacing rule; the metric is the highest percent among a meter's windows. [mode] `pace`: the allowance
+ * follows the projected burn at the window's reset ([maxWorkers] while projected <= [okProjected]%, 1 from
+ * [hardStopPercent]% used; [tiers] are the fallback without reset data); `bands`: the raw-percent [tiers]. The pace keys
+ * are null from a daemon that predates them: the editor then keeps them out of the rule it sends back (`usage_set`
+ * encodes no defaults), so a save never resets a mode it was not shown.
+ */
 @Serializable
-data class PacingRule(val enabled: Boolean = true, val tiers: List<PacingTier> = emptyList())
+data class PacingRule(
+    val enabled: Boolean = true,
+    val tiers: List<PacingTier> = emptyList(),
+    val mode: String? = null,
+    val maxWorkers: Int? = null,
+    val okProjected: Double? = null,
+    val hardStopPercent: Double? = null,
+) {
+    companion object {
+        const val MODE_PACE = "pace"
+        const val MODE_BANDS = "bands"
+    }
+}
 
 /** USAGE-PACE: a hand-set allowance: [workers] null = no limit, until [until] (epoch millis). */
 @Serializable
