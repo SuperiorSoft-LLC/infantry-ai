@@ -842,7 +842,7 @@ class TicketBoard(
         val outcome = try {
             commitStarted(id, started.id, ticketWorktree, startedBy)
         } catch (e: Throwable) {
-            runCatching { sessionManager.kill(started.id, force = true) }
+            runCatching { sessionManager.kill(started.id, force = true, by = "ticket start rollback", reason = "the start could not be committed") }
                 .onFailure { e.addSuppressed(it) }
             throw e
         }

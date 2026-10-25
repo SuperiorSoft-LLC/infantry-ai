@@ -114,6 +114,10 @@ data class SessionRecord(
     val lastExitCode: Int? = null,
     /** How a kill resolved, when the session was killed. */
     val killOutcome: KillOutcome? = null,
+    /** Ticket 7e9bed2a: WHO ended the session (watchdog, client request, done-worker reaper, daemon shutdown...); set on a kill, cleared when a new run starts. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val killedBy: String? = null,
+    /** Ticket 7e9bed2a: why [killedBy] did it, in words. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val killReason: String? = null,
     /** Last daemon-side failure for this session (e.g. the process could not be started). */
     val lastError: String? = null,
     /**

@@ -55,7 +55,7 @@ class DoneWorkerReaper(
         val session = manager.get(sessionId) ?: run { pending -= sessionId; return }
         if (session.isBusy() && !manager.isStaleLive(sessionId, session)) return // its turn's end calls back here
         if (!pending.remove(sessionId)) return // another thread got here first
-        manager.kill(sessionId, force = true)
+        manager.kill(sessionId, force = true, by = "done-worker reaper", reason = "its ticket is done")
         manager.delete(sessionId)
         println("[agentHq] removed worker session $sessionId: its ticket is done (autoRemoveDoneWorkers)")
         onRemoved(sessionId)
