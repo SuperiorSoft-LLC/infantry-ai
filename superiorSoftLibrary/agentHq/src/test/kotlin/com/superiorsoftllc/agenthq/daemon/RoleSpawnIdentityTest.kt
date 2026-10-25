@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.daemon
 
+import com.superiorsoftllc.agenthq.agents.SharedKnowledge
 import com.superiorsoftllc.agenthq.mailbox.Message
 import com.superiorsoftllc.agenthq.mailbox.MessageState
 import com.superiorsoftllc.agenthq.protocol.Envelope
@@ -76,7 +77,7 @@ class RoleSpawnIdentityTest {
         assertEquals("backend", env["AGENTHQ_AGENT_ID"], "the harness env must name the bound agent: $env")
         assertEquals("backend", env["AGENTHQ_ROLE"], "the harness env must name the role: $env")
         assertEquals(
-            "You are the backend agent.\n\n$PROFILE_IDENTITY\n\nadd an endpoint",
+            "$BACKEND_PERSONA\n\n$PROFILE_IDENTITY\n\nadd an endpoint",
             runner.inner.processes.single().deliveredInput,
             "persona first, then who the agent is, then the task",
         )
@@ -163,7 +164,7 @@ class RoleSpawnIdentityTest {
 
         assertEquals("backend", runner.specs.single().env["AGENTHQ_ROLE"])
         assertEquals(
-            "You are the backend agent.\n\n$PROFILE_IDENTITY\n\nadd an endpoint",
+            "$BACKEND_PERSONA\n\n$PROFILE_IDENTITY\n\nadd an endpoint",
             runner.inner.processes.single().deliveredInput,
             "a first turn by session id: persona, then identity, then the task",
         )
@@ -182,7 +183,7 @@ class RoleSpawnIdentityTest {
         assertEquals("backend", runner.specs.single().env["AGENTHQ_ROLE"])
         val input = runner.inner.processes.single().deliveredInput
         assertTrue(
-            input.contains("You are the backend agent.\n\n$PROFILE_IDENTITY\n\nShip it\n\nthe body"),
+            input.contains("$BACKEND_PERSONA\n\n$PROFILE_IDENTITY\n\nShip it\n\nthe body"),
             "persona, then identity, then the ticket: ${input.take(800)}",
         )
     }
@@ -208,7 +209,7 @@ class RoleSpawnIdentityTest {
 
         assertEquals("backend", runner.specs.single().env["AGENTHQ_ROLE"])
         assertEquals(
-            "You are the backend agent.\n\n$PROFILE_IDENTITY\n\nsummarise the day",
+            "$BACKEND_PERSONA\n\n$PROFILE_IDENTITY\n\nsummarise the day",
             runner.inner.processes.single().deliveredInput,
             "a trigger's first turn: persona, then identity, then the prompt",
         )
@@ -257,7 +258,9 @@ class RoleSpawnIdentityTest {
 
     private companion object {
         /** ROLE-EDIT-1: a role-only spawn now carries its role's persona (the bundled qa.md) ahead of the identity. */
-        val QA_PERSONA: String = com.superiorsoftllc.agenthq.role.RoleCatalog.load().persona("qa")!!
+        // b7a55d4: every role instance's instructions end with the shipped KNOWLEDGE.md, ahead of the identity.
+        val QA_PERSONA: String = SharedKnowledge.withKnowledge(com.superiorsoftllc.agenthq.role.RoleCatalog.load().persona("qa"))!!
+        val BACKEND_PERSONA: String = SharedKnowledge.withKnowledge("You are the backend agent.")!!
         const val ROLE_ONLY_IDENTITY =
             "You are running inside Infantry AI as role 'qa'. " +
                 "Your environment carries the same identity (AGENTHQ_ROLE, AGENTHQ_SESSION_ID)."

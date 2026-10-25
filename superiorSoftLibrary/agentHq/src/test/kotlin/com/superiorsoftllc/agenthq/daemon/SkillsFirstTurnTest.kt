@@ -38,7 +38,7 @@ class SkillsFirstTurnTest {
 
         val skills = expected(fixture, listOf(tdd.id))
         val input = runner.processes.single().deliveredInput
-        assertTrue(input.contains("$PERSONA\n\n$IDENTITY\n\n$KNOWLEDGE\n\n$skills\n\nShip it\n\nthe body"), input.take(3000))
+        assertTrue(input.contains("$RENDERED\n\n$IDENTITY\n\n$KNOWLEDGE\n\n$skills\n\nShip it\n\nthe body"), input.take(3000))
         val sources = fixture.daemon.manager.get(sessionId)!!.contextSources
         assertEquals(listOf("agenthq", "team", "instructions", "identity", "knowledge", "skills", "ticket"), sources.map { it.source })
         assertEquals(skills.length, sources.single { it.source == "skills" }.chars)
@@ -69,7 +69,7 @@ class SkillsFirstTurnTest {
         val session = fixture.daemon.manager.list().single()
         awaitFirstRunFinished(fixture, session.id)
         assertEquals(
-            "$PERSONA\n\n$IDENTITY\n\n$KNOWLEDGE\n\n$ROLE_NOTES\n\n${expected(fixture, listOf(tdd.id))}\n\nadd an endpoint",
+            "$RENDERED\n\n$IDENTITY\n\n$KNOWLEDGE\n\n$ROLE_NOTES\n\n${expected(fixture, listOf(tdd.id))}\n\nadd an endpoint",
             runner.processes.single().deliveredInput,
         )
     }
@@ -83,7 +83,7 @@ class SkillsFirstTurnTest {
         other.send(Envelope(Envelope.PROMPT, "add an endpoint", bound.id))
         awaitFirstRunFinished(fixture, bound.id)
         assertEquals(
-            "$PERSONA\n\n$IDENTITY\n\n$KNOWLEDGE\n\n$ROLE_NOTES\n\n${expected(fixture, listOf(tdd.id))}\n\nadd an endpoint",
+            "$RENDERED\n\n$IDENTITY\n\n$KNOWLEDGE\n\n$ROLE_NOTES\n\n${expected(fixture, listOf(tdd.id))}\n\nadd an endpoint",
             runner.processes.single().deliveredInput,
         )
     }
@@ -97,7 +97,7 @@ class SkillsFirstTurnTest {
         fixture.send(Envelope(Envelope.PROMPT, "add an endpoint"))
         awaitFirstRunFinished(fixture, bound.id)
         val input = runner.processes.single().deliveredInput
-        assertEquals("$PERSONA\n\n$IDENTITY\n\n$KNOWLEDGE\n\n$ROLE_NOTES\n\n${expected(fixture, listOf(tdd.id))}\n\nadd an endpoint", input)
+        assertEquals("$RENDERED\n\n$IDENTITY\n\n$KNOWLEDGE\n\n$ROLE_NOTES\n\n${expected(fixture, listOf(tdd.id))}\n\nadd an endpoint", input)
         assertTrue("- ${tdd.id} (deleted)" in input, input)
     }
 
@@ -115,7 +115,7 @@ class SkillsFirstTurnTest {
         assertEquals(200, response.statusCode(), response.body())
         awaitFirstRunFinished(fixture, bound.id)
         val input = runner.processes.single().deliveredInput
-        assertTrue(input.startsWith("$PERSONA\n\n$IDENTITY\n\n$KNOWLEDGE\n\n$ROLE_NOTES\n\n${expected(fixture, listOf(tdd.id))}\n\n"), input.take(3000))
+        assertTrue(input.startsWith("$RENDERED\n\n$IDENTITY\n\n$KNOWLEDGE\n\n$ROLE_NOTES\n\n${expected(fixture, listOf(tdd.id))}\n\n"), input.take(3000))
         assertTrue(input.contains("ping from the owner"))
     }
 
@@ -166,6 +166,8 @@ class SkillsFirstTurnTest {
     private companion object {
         const val PROJECT = "proj-sk"
         const val PERSONA = "You are the backend agent."
+        /** b7a55d4: the rendered instructions are the persona plus the shipped KNOWLEDGE.md. */
+        val RENDERED: String = com.superiorsoftllc.agenthq.agents.SharedKnowledge.withKnowledge(PERSONA)!!
         const val IDENTITY =
             "You are running inside Infantry AI as role 'backend', agent id 'backend'. " +
                 "Your environment carries the same identity (AGENTHQ_ROLE, AGENTHQ_AGENT_ID, AGENTHQ_SESSION_ID)."

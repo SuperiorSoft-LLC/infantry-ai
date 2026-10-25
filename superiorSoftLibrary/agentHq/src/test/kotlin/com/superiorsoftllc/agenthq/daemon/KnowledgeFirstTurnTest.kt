@@ -37,7 +37,7 @@ class KnowledgeFirstTurnTest {
         awaitFirstRunFinished(fixture, sessionId)
 
         val input = runner.processes.single().deliveredInput
-        assertTrue(input.contains("$PERSONA\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\n$FULL\n\nShip it\n\nthe body"), "traits, knowledge, ticket: ${input.take(3000)}")
+        assertTrue(input.contains("$RENDERED\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\n$FULL\n\nShip it\n\nthe body"), "traits, knowledge, ticket: ${input.take(3000)}")
         val sources = fixture.daemon.manager.get(sessionId)!!.contextSources
         assertEquals(listOf("agenthq", "team", "instructions", "identity", "traits", "knowledge", "ticket"), sources.map { it.source })
         assertEquals(FULL.length, sources.single { it.source == "knowledge" }.chars)
@@ -56,7 +56,7 @@ class KnowledgeFirstTurnTest {
         awaitFirstRunFinished(fixture, session.id)
 
         assertEquals(PROJECT, session.projectId, "the session carries the project its knowledge section names")
-        assertEquals("$PERSONA\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\n$FULL\n\n$ROLE_NOTES\n\nadd an endpoint", runner.processes.single().deliveredInput)
+        assertEquals("$RENDERED\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\n$FULL\n\n$ROLE_NOTES\n\nadd an endpoint", runner.processes.single().deliveredInput)
     }
 
     @Test
@@ -68,7 +68,7 @@ class KnowledgeFirstTurnTest {
         other.await(Envelope.READY)
         other.send(Envelope(Envelope.PROMPT, "add an endpoint", bound.id))
         awaitFirstRunFinished(fixture, bound.id)
-        assertEquals("$PERSONA\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\n$FULL\n\n$ROLE_NOTES\n\nadd an endpoint", runner.processes.single().deliveredInput)
+        assertEquals("$RENDERED\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\n$FULL\n\n$ROLE_NOTES\n\nadd an endpoint", runner.processes.single().deliveredInput)
     }
 
     @Test
@@ -78,7 +78,7 @@ class KnowledgeFirstTurnTest {
         seedKnowledge(fixture)
         fixture.send(Envelope(Envelope.PROMPT, "add an endpoint"))
         awaitFirstRunFinished(fixture, bound.id)
-        assertEquals("$PERSONA\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\n$FULL\n\n$ROLE_NOTES\n\nadd an endpoint", runner.processes.single().deliveredInput)
+        assertEquals("$RENDERED\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\n$FULL\n\n$ROLE_NOTES\n\nadd an endpoint", runner.processes.single().deliveredInput)
     }
 
     @Test
@@ -97,7 +97,7 @@ class KnowledgeFirstTurnTest {
         assertEquals(200, response.statusCode(), response.body())
         awaitFirstRunFinished(fixture, bound.id)
         val input = runner.processes.single().deliveredInput
-        assertTrue(input.startsWith("$PERSONA\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\n$FULL\n\n$ROLE_NOTES\n\n"), "MailRouter.deliver renders the knowledge before the mail: ${input.take(3000)}")
+        assertTrue(input.startsWith("$RENDERED\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\n$FULL\n\n$ROLE_NOTES\n\n"), "MailRouter.deliver renders the knowledge before the mail: ${input.take(3000)}")
         assertTrue(input.contains("ping from the owner"))
     }
 
@@ -187,6 +187,8 @@ class KnowledgeFirstTurnTest {
     private companion object {
         const val PROJECT = "proj-kn"
         const val PERSONA = "You are the backend agent."
+        /** b7a55d4: the rendered instructions are the persona plus the shipped KNOWLEDGE.md. */
+        val RENDERED: String = com.superiorsoftllc.agenthq.agents.SharedKnowledge.withKnowledge(PERSONA)!!
         const val IDENTITY =
             "You are running inside Infantry AI as role 'backend', agent id 'backend'. " +
                 "Your environment carries the same identity (AGENTHQ_ROLE, AGENTHQ_AGENT_ID, AGENTHQ_SESSION_ID)."

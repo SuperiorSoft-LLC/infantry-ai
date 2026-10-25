@@ -132,7 +132,8 @@ class RoleDaemonTest {
         val session = fixture.daemon.manager.list().single()
         assertEquals("backend", session.role)
         assertEquals(
-            "EDITED-INSTRUCTIONS: ship small.",
+            // b7a55d4: the frozen instructions are the persona plus the shipped KNOWLEDGE.md.
+            com.superiorsoftllc.agenthq.agents.SharedKnowledge.withKnowledge("EDITED-INSTRUCTIONS: ship small."),
             fixture.daemon.manager.instance(session.id)?.instructions,
             "a session started after the save is frozen with the role's edited instructions",
         )

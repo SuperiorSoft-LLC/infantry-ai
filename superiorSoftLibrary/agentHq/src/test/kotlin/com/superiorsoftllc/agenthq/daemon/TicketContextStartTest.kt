@@ -59,7 +59,8 @@ class TicketContextStartTest {
             val agenthqSection = agenthqPrefix + "\n" + com.superiorsoftllc.agenthq.context.TicketContextComposer.ticketMoveLine(ticket.id) + "\n" + com.superiorsoftllc.agenthq.context.TicketContextComposer.MCP_LINE
             assertTrue(prompt.startsWith(agenthqSection), "the move instruction closes the agenthq section: ${prompt.take(600)}")
             assertEquals(agenthqSection.length, sources.getValue("agenthq").chars)
-            assertEquals(instructions.length, sources.getValue("instructions").chars)
+            // b7a55d4: the instance's instructions are the persona plus the shipped KNOWLEDGE.md.
+            assertEquals(com.superiorsoftllc.agenthq.agents.SharedKnowledge.withKnowledge(instructions)!!.length, sources.getValue("instructions").chars)
             assertEquals((title + "\n\n" + description).length, sources.getValue("ticket").chars)
             assertTrue(sources.getValue("linkedTickets").chars > 0, "the link lines are counted too")
         } finally {

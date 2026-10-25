@@ -46,7 +46,7 @@ class ProviderSpecTest {
             resumeSessionId = null,
         )
         assertEquals(
-            listOf("claude.exe", "-p", "--output-format", "stream-json", "--verbose", "--allowedTools", "Bash(agenthq:*),PowerShell(agenthq:*),mcp__agenthq__*"), // BUG-PERM-5
+            listOf("claude.exe", "-p", "--output-format", "stream-json", "--verbose", "--thinking", "adaptive", "--thinking-display", "summarized", "--allowedTools", "Bash(agenthq:*),PowerShell(agenthq:*),mcp__agenthq__*"), // BUG-PERM-5
             argv,
         )
     }
@@ -64,6 +64,7 @@ class ProviderSpecTest {
         assertEquals(
             listOf(
                 "claude.exe", "-p", "--output-format", "stream-json", "--verbose",
+                "--thinking", "adaptive", "--thinking-display", "summarized", // 4b02c01: summarized thinking, else empty thinking blocks
                 "--model", "haiku",
                 "--permission-mode", "default",
                 "--allowedTools", "Bash(agenthq:*),PowerShell(agenthq:*),mcp__agenthq__*", // BUG-PERM-5
@@ -85,7 +86,7 @@ class ProviderSpecTest {
             resumeSessionId = "   ",
         )
         assertEquals(
-            listOf("claude.exe", "-p", "--output-format", "stream-json", "--verbose", "--allowedTools", "Bash(agenthq:*),PowerShell(agenthq:*),mcp__agenthq__*"), // BUG-PERM-5
+            listOf("claude.exe", "-p", "--output-format", "stream-json", "--verbose", "--thinking", "adaptive", "--thinking-display", "summarized", "--allowedTools", "Bash(agenthq:*),PowerShell(agenthq:*),mcp__agenthq__*"), // BUG-PERM-5
             argv,
         )
     }

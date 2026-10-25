@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.daemon
 
+import com.superiorsoftllc.agenthq.agents.SharedKnowledge
 import com.superiorsoftllc.agenthq.mailbox.MailSendRequest
 import com.superiorsoftllc.agenthq.protocol.AgentProfile
 import com.superiorsoftllc.agenthq.protocol.AgentSwapped
@@ -285,7 +286,8 @@ class AgentSwapDaemonTest {
         assertEquals(1, r.secondScripted.processes.size)
         val input = r.secondScripted.processes.single().deliveredInput
         assertTrue(
-            input.startsWith("You are the backend persona.\n\nYou are running inside Infantry AI as role 'backend', agent id 'backend'."),
+            // b7a55d4: the shipped KNOWLEDGE.md follows the persona, ahead of the identity.
+            input.startsWith(SharedKnowledge.withKnowledge("You are the backend persona.") + "\n\nYou are running inside Infantry AI as role 'backend', agent id 'backend'."),
             "a fresh session's first turn: persona, then identity: ${input.take(300)}",
         )
         assertTrue(input.contains("after the swap"), "then the message: ${input.take(600)}")

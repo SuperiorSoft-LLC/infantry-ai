@@ -56,7 +56,7 @@ class RoleInstanceSpawnTest {
 
         assertEquals(EXPECTED, row(fixture, sessionId), "the frozen row is the agent's instance at spawn")
         val input = runner.inner.processes.single().deliveredInput
-        assertTrue(input.contains("$PERSONA\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\nShip it\n\nthe body"), "persona, identity, traits, ticket: ${input.take(1500)}")
+        assertTrue(input.contains("$RENDERED\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\nShip it\n\nthe body"), "persona, identity, traits, ticket: ${input.take(1500)}")
         val sources = fixture.daemon.manager.get(sessionId)!!.contextSources.map { it.source }
         assertEquals(listOf("instructions", "identity", "traits", "ticket"), sources.filter { it in setOf("instructions", "identity", "traits", "ticket") })
         assertEquals(TRAITS_BLOCK.length, fixture.daemon.manager.get(sessionId)!!.contextSources.single { it.source == "traits" }.chars)
@@ -76,7 +76,7 @@ class RoleInstanceSpawnTest {
         awaitFirstRunFinished(fixture, sessionId)
 
         assertEquals(EXPECTED, row(fixture, sessionId))
-        assertEquals("$PERSONA\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\nsummarise the day", runner.inner.processes.single().deliveredInput)
+        assertEquals("$RENDERED\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\nsummarise the day", runner.inner.processes.single().deliveredInput)
     }
 
     @Test
@@ -92,7 +92,7 @@ class RoleInstanceSpawnTest {
         awaitFirstRunFinished(fixture, sessionId)
 
         assertEquals(EXPECTED, row(fixture, sessionId))
-        assertEquals("$PERSONA\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\nadd an endpoint", runner.inner.processes.single().deliveredInput)
+        assertEquals("$RENDERED\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\nadd an endpoint", runner.inner.processes.single().deliveredInput)
     }
 
     @Test
@@ -144,7 +144,7 @@ class RoleInstanceSpawnTest {
         fixture.await(what = "a second bound session") { fixture.daemon.manager.list().size == fresh + 1 }
         val second = fixture.daemon.manager.list().single { it.id != bound.id }
         val now = row(fixture, second.id)!!
-        assertEquals("You are the NEW backend agent.", now.instructions)
+        assertEquals(com.superiorsoftllc.agenthq.agents.SharedKnowledge.withKnowledge("You are the NEW backend agent."), now.instructions)
         assertEquals(listOf("tdd" to 1), now.traits.map { it.id to it.version }, "the role was rebound to no traits; the addition stays")
     }
 
@@ -174,7 +174,7 @@ class RoleInstanceSpawnTest {
         assertEquals(200, response.statusCode(), response.body())
         awaitFirstRunFinished(fixture, bound.id)
         val input = runner.inner.processes.single().deliveredInput
-        assertTrue(input.startsWith("$PERSONA\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\n"), "MailRouter.deliver must render the FROZEN instance: ${input.take(1500)}")
+        assertTrue(input.startsWith("$RENDERED\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\n"), "MailRouter.deliver must render the FROZEN instance: ${input.take(1500)}")
         assertTrue(input.contains("ping from the owner"))
     }
 
@@ -187,7 +187,7 @@ class RoleInstanceSpawnTest {
         other.await(Envelope.READY)
         other.send(Envelope(Envelope.PROMPT, "add an endpoint", bound.id))
         awaitFirstRunFinished(fixture, bound.id)
-        assertEquals("$PERSONA\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\nadd an endpoint", runner.inner.processes.single().deliveredInput)
+        assertEquals("$RENDERED\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\nadd an endpoint", runner.inner.processes.single().deliveredInput)
     }
 
     @Test
@@ -197,7 +197,7 @@ class RoleInstanceSpawnTest {
         editEverything(fixture)
         fixture.send(Envelope(Envelope.PROMPT, "add an endpoint"))
         awaitFirstRunFinished(fixture, bound.id)
-        assertEquals("$PERSONA\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\nadd an endpoint", runner.inner.processes.single().deliveredInput)
+        assertEquals("$RENDERED\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\nadd an endpoint", runner.inner.processes.single().deliveredInput)
     }
 
     // --- P10-K13: the effective skill ids, frozen on the instance at spawn -----------------------------------------
@@ -287,6 +287,8 @@ class RoleInstanceSpawnTest {
 
     private companion object {
         const val PERSONA = "You are the backend agent."
+        /** b7a55d4: the frozen instance's instructions are the persona plus the shipped KNOWLEDGE.md. */
+        val RENDERED: String = com.superiorsoftllc.agenthq.agents.SharedKnowledge.withKnowledge(PERSONA)!!
         const val IDENTITY =
             "You are running inside Infantry AI as role 'backend', agent id 'backend'. " +
                 "Your environment carries the same identity (AGENTHQ_ROLE, AGENTHQ_AGENT_ID, AGENTHQ_SESSION_ID)."
@@ -300,7 +302,7 @@ class RoleInstanceSpawnTest {
         val EXPECTED = RoleInstance(
             agentId = "backend",
             role = "backend",
-            instructions = PERSONA,
+            instructions = RENDERED,
             traits = listOf(
                 TraitSnapshot("report-back", 1, "REPORT BACK", "mail the pm"),
                 TraitSnapshot("tdd", 1, "TDD", "red first"),

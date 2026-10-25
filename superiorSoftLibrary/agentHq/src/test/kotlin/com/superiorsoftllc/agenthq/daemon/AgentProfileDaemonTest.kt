@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.daemon
 
+import com.superiorsoftllc.agenthq.agents.SharedKnowledge
 import com.superiorsoftllc.agenthq.protocol.AgentProfile
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.provider.AgentProvider
@@ -134,7 +135,7 @@ class AgentProfileDaemonTest {
         assertEquals("backend", session.agentId)
         assertEquals("backend", session.role)
         assertEquals(
-            "You are the backend agent.\n\n" +
+            SharedKnowledge.withKnowledge("You are the backend agent.")!! + "\n\n" + // b7a55d4: KNOWLEDGE.md follows the persona
                 "You are running inside Infantry AI as role 'backend', agent id 'backend'. " +
                 "Your environment carries the same identity (AGENTHQ_ROLE, AGENTHQ_AGENT_ID, AGENTHQ_SESSION_ID).\n\n" +
                 "add an endpoint",
@@ -196,7 +197,8 @@ class AgentProfileDaemonTest {
         assertEquals(1, fixture.daemon.manager.list().size, "the first prompt ran the bound session; it did not spawn another")
         assertEquals(
             // ROLE-EDIT-1: a profile with no instructions of its own falls back to its role's persona (the bundled qa.md).
-            com.superiorsoftllc.agenthq.role.RoleCatalog.load().persona("qa")!! + "\n\n" +
+            // b7a55d4: the shipped KNOWLEDGE.md follows the persona.
+            SharedKnowledge.withKnowledge(com.superiorsoftllc.agenthq.role.RoleCatalog.load().persona("qa"))!! + "\n\n" +
             "You are running inside Infantry AI as role 'qa', agent id 'qa'. " +
                 "Your environment carries the same identity (AGENTHQ_ROLE, AGENTHQ_AGENT_ID, AGENTHQ_SESSION_ID).\n\n" +
                 // P10-K9: the spawn names project p1, whose knowledge base is empty, so it gets the empty form.
