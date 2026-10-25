@@ -11,6 +11,10 @@ import kotlin.test.assertTrue
  * (delete it: the list only shrinks). Also checks every registry entry is documented and listed by the settings API.
  */
 class LimitsGuardTest {
+    /** No test here may hang a fork (a spinning test burned a core for 25 min once). */
+    @get:org.junit.Rule
+    val timeout: org.junit.rules.Timeout = org.junit.rules.Timeout.seconds(60)
+
     private val main = File("src/main/kotlin")
     private val constant = Regex("""^\s*(?:(?:private|internal|public) )?(?:const )?val ([A-Z][A-Z0-9_]*)\s*(?::\s*[A-Za-z]+)?\s*=\s*[0-9]""")
     private val limitLike = Regex("[A-Z0-9_]*(MAX|LIMIT|CAP|TIMEOUT|DEADLINE|GRACE|FLOOR|THRESHOLD|STALL|QUIET|TTL|RETENTION|BUDGET|WINDOW|INTERVAL|DEFAULT_|_MS$|_MIN$|_MB$|_SEC$|_MILLIS$|KEEP|FOLD|CAPACITY|LINES|BYTES|CHARS|WIDTH)[A-Z0-9_]*")

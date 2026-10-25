@@ -124,6 +124,9 @@ internal class McpWriteTools(
         val task = arguments.string("task")
         if (agentId == null && role == null) return refused("agenthq_spawn needs a role or an agentId (or both)")
 
+        // The daemon pushes a `sessions` snapshot on every new connection: consumed FIRST, so the settings answer below
+        // cannot skip past it.
+        val snapshot = decodeSessions(stream.await(Envelope.SESSIONS))
         val limits = effectiveLimits(stream)
         val childDepth = guardrails.depth + 1
         if (childDepth > limits.maxDepth) {
@@ -134,7 +137,6 @@ internal class McpWriteTools(
             )
         }
 
-        val snapshot = decodeSessions(stream.await(Envelope.SESSIONS))
         val held = holding(snapshot)
         if (held.size >= limits.maxSpawns) {
             return refused(
@@ -494,10 +496,6 @@ internal class McpWriteTools(
         })
     }
 
-    /**
-     * The spawned sessions that hold a concurrency slot: still known to the daemon and either running, or open
-     * (not ended) and not killed by this server. A killed session that is prompted back to life counts again.
-     */
     /** The depth / spawn limits in force for this call: this connection's own (flag, mcp.json), else the daemon's settings. */
     private suspend fun effectiveLimits(stream: FrameStream): McpLimits {
         suspend fun daemon(def: LimitDef): Int {
@@ -515,6 +513,10 @@ internal class McpWriteTools(
         )
     }
 
+    /**
+     * The spawned sessions that hold a concurrency slot: still known to the daemon and either running, or open
+     * (not ended) and not killed by this server. A killed session that is prompted back to life counts again.
+     */
     private fun holding(snapshot: List<SessionRecord>): List<String> {
         val byId = snapshot.associateBy { it.id }
         return spawned.filter { id ->

@@ -52,8 +52,8 @@ object LimitRegistry {
         legacyEnv = listOf("AGENTHQ_POD_SPAWN_CAP"),
     )
     val MAX_DEPTH = LimitDef(
-        "limits.concurrency.maxDepth", 2, "levels",
-        "How deep spawns from inside sessions may nest (daemon pod guard and MCP write tools share this one value); 0 = sessions may not spawn at all, set a high number for no practical limit.",
+        "limits.concurrency.maxDepth", 1, "levels",
+        "How deep spawns from inside sessions may nest (daemon pod guard and MCP write tools share this one value); 1 = a session may spawn, its spawns may not; 0 = sessions may not spawn at all; set a high number for no practical limit.",
         zeroIsUnlimited = false,
         legacyEnv = listOf("AGENTHQ_POD_SPAWN_DEPTH"),
     )

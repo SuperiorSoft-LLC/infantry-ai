@@ -120,7 +120,7 @@ class McpServeConfigTest {
         val run = startOnly(projectDir())
         assertEquals(0, run.exit, run.stderr)
         assertTrue(
-            run.stderr.contains("agenthq mcp: depth 0/2, max 4 open spawns, kill own spawns only, no default project"),
+            run.stderr.contains("agenthq mcp: depth 0/daemon limits.concurrency.maxDepth, max daemon limits.concurrency.mcpMaxSpawns open spawns, kill own spawns only, no default project"),
             run.stderr,
         )
     }

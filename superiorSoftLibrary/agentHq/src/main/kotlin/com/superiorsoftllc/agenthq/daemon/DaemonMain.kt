@@ -1169,7 +1169,7 @@ class AgentHqDaemon(
             )
             orchestrator.sessionStartedSink = { _, sessionId, parent -> spawnGuard.record(sessionId, parent); manager.setSpawner(sessionId, parent) }
             settings.limitEnvProblems().forEach { println("[agentHq] limit ignored: $it") }
-            println("[agentHq] pod spawn cap=${podSpawnCap ?: settings.limit(LimitRegistry.MAX_PER_POD)} depth=${podSpawnDepth ?: settings.limit(LimitRegistry.MAX_DEPTH)} (0 = unlimited; settings limits.concurrency.*; session-originated spawns only)")
+            println("[agentHq] pod spawn cap=${podSpawnCap ?: settings.limit(LimitRegistry.MAX_PER_POD)} depth=${podSpawnDepth ?: settings.limit(LimitRegistry.MAX_DEPTH)} (cap 0 = unlimited; settings limits.concurrency.*; session-originated spawns only)")
 
             mailbox.load()
             mailbox.eventSink = { event -> broadcastMail(clients, event, attention) }

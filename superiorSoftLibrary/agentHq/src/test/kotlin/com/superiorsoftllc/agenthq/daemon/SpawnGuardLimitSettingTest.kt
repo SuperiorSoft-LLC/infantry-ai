@@ -9,12 +9,16 @@ import kotlin.test.assertTrue
 
 /** The pod guard reads its cap and depth live, names the setting in a refusal, and treats 0 as unlimited. */
 class SpawnGuardLimitSettingTest {
+    /** No test here may hang a fork (a spinning test burned a core for 25 min once). */
+    @get:org.junit.Rule
+    val timeout: org.junit.rules.Timeout = org.junit.rules.Timeout.seconds(60)
+
     private val noSessions: (String) -> SessionRecord? = { null }
 
     @Test
     fun defaultsComeFromTheRegistry() {
         assertEquals(4, SpawnGuard.DEFAULT_MAX_PER_POD)
-        assertEquals(2, SpawnGuard.DEFAULT_MAX_DEPTH)
+        assertEquals(1, SpawnGuard.DEFAULT_MAX_DEPTH)
         assertEquals(4, SpawnGuard(noSessions).maxPerPod)
     }
 

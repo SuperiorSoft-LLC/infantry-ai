@@ -12,6 +12,10 @@ import kotlin.test.assertTrue
 
 /** S1 of the no-hard-coded-limits rule: stored setting > environment > documented default; 0 = unlimited. */
 class LimitSettingsTest {
+    /** No test here may hang a fork (a spinning test burned a core for 25 min once). */
+    @get:org.junit.Rule
+    val timeout: org.junit.rules.Timeout = org.junit.rules.Timeout.seconds(60)
+
     private val dir: File = Files.createTempDirectory("agenthq-limits").toFile()
     private val store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath)
     private var env = mapOf<String, String>()
@@ -27,7 +31,7 @@ class LimitSettingsTest {
     fun defaultsAreListed_concurrencyIsFourAndDepthTwo() {
         val all = settings.all()
         assertEquals(JsonPrimitive(4L), all["limits.concurrency.maxPerPod"])
-        assertEquals(JsonPrimitive(2L), all["limits.concurrency.maxDepth"])
+        assertEquals(JsonPrimitive(1L), all["limits.concurrency.maxDepth"])
         assertEquals(JsonPrimitive(4L), all["limits.concurrency.mcpMaxSpawns"])
         assertEquals(JsonPrimitive(1L), all["limits.concurrency.laneDefault"])
         assertEquals(JsonPrimitive(50L), all["limits.pacing.maxWorkersCeiling"])
@@ -56,13 +60,13 @@ class LimitSettingsTest {
     @Test
     fun badEnvIsReportedAndIgnored() {
         env = mapOf("AGENTHQ_LIMIT_CONCURRENCY_MAX_DEPTH" to "deep")
-        assertEquals(2, settings.limitCap(LimitRegistry.MAX_DEPTH))
+        assertEquals(1, settings.limitCap(LimitRegistry.MAX_DEPTH))
         assertTrue(settings.limitEnvProblems().single().contains("AGENTHQ_LIMIT_CONCURRENCY_MAX_DEPTH"))
     }
 
     @Test
     fun pacingCeilingIsASetting_aServerCanRaiseIt() {
-        val rule = """{"enabled":true,"mode":"bands","maxWorkers":5,"tiers":[{"below":60.0,"workers":20},{"workers":1}]}"""
+        val rule = """{"enabled":true,"mode":"bands","maxWorkers":5,"tiers":[{"below":60.0,"workers":60},{"workers":1}]}"""
         val json = kotlinx.serialization.json.Json.parseToJsonElement(rule)
         assertFailsWith<IllegalArgumentException> { settings.set("usage.pacing", json) }
         settings.set("limits.pacing.maxWorkersCeiling", JsonPrimitive(10))
