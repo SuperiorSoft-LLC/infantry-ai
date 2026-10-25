@@ -788,6 +788,16 @@ class AgentHqDaemon(
             }
             val launchGate = LaunchGate(providerStates, budget, attention)
             manager.launchGate = { providerId, origin, ticketId -> launchGate.check(providerId, origin, ticketId = ticketId) }
+            manager.silentSink = { session, minutes ->
+                attention.raise(
+                    kind = AttentionKind.STALLED,
+                    ticketId = session.ticketId,
+                    podId = null,
+                    sessionId = session.id,
+                    outcome = "silent",
+                    detail = "Session is BUSY but has had no output for $minutes min. Not stopped: its process looks alive.",
+                )
+            }
             manager.watchdogSink = { session, expiry ->
                 // A stalled run is reported as STALLED for its provider: the stream cannot tell it from
                 // free-quota exhaustion, so it is never labelled exhausted (spec 6.3).

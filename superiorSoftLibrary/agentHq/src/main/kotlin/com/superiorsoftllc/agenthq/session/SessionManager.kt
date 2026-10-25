@@ -109,6 +109,10 @@ class SessionManager(
     private val killRetryMs: Long = DEFAULT_KILL_RETRY_MS,
     /** Ticket 7e9bed2a: the machine-wide gate lock; a live gate run for a session keeps it from counting as stalled. */
     private val gateLock: GateLock = GateLock(),
+    /** Ticket 7e9bed2a: a BUSY session with no output for this long is FLAGGED (never killed for it). */
+    private val silentMs: Long = DEFAULT_SILENT_MS,
+    /** How often [sweepSilent] runs on its own; 0 = only when a test calls it. */
+    private val silentPollMs: Long = DEFAULT_SILENT_POLL_MS,
     /** Where background work is read from: the OS process tree under each session's kept harness process. */
     private val processSource: ProcessSource = OsProcessSource,
     /** How often [scanBackgroundWork] runs on its own; 0 = only when a test calls it. */
@@ -329,6 +333,9 @@ class SessionManager(
     }.also { executor ->
         require(deadlineMs > 0 && stallMs > 0 && watchdogPollMs > 0)
         executor.scheduleWithFixedDelay(::checkUnattendedRuns, watchdogPollMs, watchdogPollMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        if (silentPollMs > 0) {
+            executor.scheduleWithFixedDelay({ runCatching { sweepSilent() } }, silentPollMs, silentPollMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        }
         if (backgroundPollMs > 0) {
             executor.scheduleWithFixedDelay(
                 { runCatching { scanBackgroundWork() } }, backgroundPollMs, backgroundPollMs, java.util.concurrent.TimeUnit.MILLISECONDS,
@@ -1024,6 +1031,41 @@ class SessionManager(
         host.runTurn(sessionId, provider, request, runEnv)
     }
 
+    /** Ticket 7e9bed2a: told once per silence when a BUSY session has had no output for [silentMs] and is not provably dead. */
+    @Volatile
+    var silentSink: ((SessionRecord, Long) -> Unit)? = null
+
+    /** The heartbeat a silent session was last flagged at, so one silence is flagged once. */
+    private val flaggedSilent = ConcurrentHashMap<String, Long>()
+
+    /**
+     * Ticket 7e9bed2a: BUSY but silent. Only FLAGS ([silentSink]); a session is ended here ONLY when it is provably dead: its
+     * record claims a turn with no run in this daemon and no live pid ([isStaleLive]), or its run names a child pid that is gone.
+     * Work that is demonstrably running (a registered bg job, a live gate run for it) is never silent. A live pid is never killed.
+     */
+    fun sweepSilent() {
+        val now = clock()
+        for (session in sessions.values.toList()) {
+            if (!session.isBusy()) { flaggedSilent.remove(session.id); continue }
+            if (now - session.lastHeartbeat < silentMs) continue
+            if (session.bgJobs.isNotEmpty() or (session.backgroundWork != null)) continue
+            if (runCatching { gateLock.liveFor(session.id, session.ticketId) }.getOrDefault(false)) continue
+            val pid = session.childPid
+            val runPresent = runs.containsKey(session.id)
+            val provablyDead = if (!runPresent) isStaleLive(session.id, session) else pid != null && !pidProbe(pid)
+            val minutes = (now - session.lastHeartbeat) / 60_000
+            if (provablyDead) {
+                println("[agentHq] silent sweeper: session ${session.id} BUSY for $minutes min with no live run or pid; marked exited")
+                runCatching { kill(session.id, by = "silent sweeper", reason = "BUSY with no output for $minutes min and no live run or process") }
+                    .onFailure { System.err.println("[agentHq] silent sweeper stop failed for ${session.id}: ${it.message}") }
+                continue
+            }
+            if (flaggedSilent.put(session.id, session.lastHeartbeat) == session.lastHeartbeat) continue
+            runCatching { silentSink?.invoke(session, minutes) }
+                .onFailure { System.err.println("[agentHq] silent flag failed for ${session.id}: ${it.message}") }
+        }
+    }
+
     private fun checkUnattendedRuns() {
         val now = clock()
         for ((sessionId, run) in runs) {
@@ -1606,6 +1648,8 @@ class SessionManager(
         const val DEFAULT_UNATTENDED_DEADLINE_MS = 60 * 60 * 1_000L
         const val DEFAULT_UNATTENDED_STALL_MS = 15 * 60 * 1_000L
         const val DEFAULT_WATCHDOG_POLL_MS = 1_000L
+        const val DEFAULT_SILENT_MS = 20 * 60 * 1_000L
+        const val DEFAULT_SILENT_POLL_MS = 60_000L
         const val DEFAULT_KILL_RETRY_MS = 5 * 60 * 1_000L
         const val DEFAULT_TICKET_DEADLINE_MS = 3 * 60 * 60 * 1_000L
         const val KILLED_BY_WATCHDOG = "watchdog"

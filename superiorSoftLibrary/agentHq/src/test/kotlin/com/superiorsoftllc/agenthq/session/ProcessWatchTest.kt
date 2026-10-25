@@ -68,9 +68,10 @@ class ProcessWatchTest {
         pressure: MutableList<ProcessReport> = mutableListOf(),
         lockAlive: Boolean = false,
         lockHolder: Long? = null,
+        gateLock: GateLock = GateLock(dir = { null }),
     ) = ProcessWatch(
         ledger, { sessions.values.toList() }, os, os, { config }, { now }, onPressure = { pressure += it },
-        lockHolderAlive = { lockAlive }, lockHolderPid = { lockHolder },
+        lockHolderAlive = { lockAlive }, lockHolderPid = { lockHolder }, gateLock = gateLock,
     )
 
     // Pids far above anything real, so the test JVM's own ancestry (protected) never collides.
@@ -335,6 +336,39 @@ class ProcessWatchTest {
         assertTrue(node in os.procs && os.procs.getValue(node).startedAt == 50_000L, "recycled pid untouched")
         assertFalse(node in os.killed || stranger in os.killed || otherChild in os.killed)
         assertTrue(bash !in os.procs)
+    }
+
+    @Test fun `close releases the gate lock its owner txt names for the session, and only that one`() {
+        busyTree()
+        val lockDir = java.io.File(kotlin.io.path.createTempDirectory("gl").toFile(), "agenthq-gate.lock").apply { mkdirs() }
+        java.io.File(lockDir, "owner.txt").writeText("session=s1 pid=$bash")
+        val lock = GateLock(dir = { lockDir }, pidAlive = { it in os.procs })
+        val w = watch(gateLock = lock)
+        w.tick()
+        close()
+        w.reapSession("s2", now)
+        assertTrue(lockDir.isDirectory, "another session closing keeps the lock")
+        w.reapSession("s1", now)
+        assertFalse(lockDir.exists(), "the owner closed, its holder was killed with it")
+    }
+
+    @Test fun `a lock owned by a live foreign holder or with no owner txt survives the close, and the catch-up frees an ended owner`() {
+        busyTree()
+        val lockDir = java.io.File(kotlin.io.path.createTempDirectory("gl").toFile(), "agenthq-gate.lock").apply { mkdirs() }
+        java.io.File(lockDir, "pid").writeText("$stranger")
+        os.start(stranger, null, "bash gate.sh", 2_000)
+        val lock = GateLock(dir = { lockDir }, pidAlive = { it in os.procs })
+        val w = watch(gateLock = lock)
+        w.tick()
+        close()
+        w.reapSession("s1", now)
+        assertTrue(lockDir.isDirectory, "no owner.txt: kept")
+        java.io.File(lockDir, "owner.txt").writeText("session=s1 pid=$stranger")
+        w.tick()
+        assertTrue(lockDir.isDirectory, "owner ended but the holder is alive: kept")
+        os.exit(stranger)
+        w.tick()
+        assertFalse(lockDir.exists(), "owner ended and holder gone: the catch-up releases it")
     }
 
     @Test fun `a kept bg job and everything under it survive, its parent goes alone`() {
