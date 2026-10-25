@@ -140,10 +140,15 @@ object EventNormalizer {
             // carries the denial notice. The serve adapter reports its own rejects (`permission_denied`) and marks the
             // forwarded part, so a serve reject is never announced twice.
             // 1.95.0: a part that is already `completed` / `error` is a call that started AND ended, so it also ends.
+            // A running tool part (serve adapter's `tool_start`): the call began, nothing more is known.
+            "tool_start" -> toolNameOf(obj)?.let { listOf(Line.Tool(it, toolActivityOf(obj))) } ?: emptyList()
+
             "tool_use", "tool" -> toolNameOf(obj)?.let { name ->
                 listOf(Line.Tool(name, toolActivityOf(obj), if (isOpenCodeFailedCall(obj)) null else fileWriteOf(name, obj), todoListOf(name, obj))) +
                     (if (isOpenCodeRejection(obj)) listOf(Line.Denial("opencode", name)) else emptyList()) +
-                    (if (isOpenCodeEndedCall(obj)) listOf(Line.ToolEnd) else emptyList())
+                    (if (isOpenCodeEndedCall(obj)) listOf(Line.ToolEnd) else emptyList()) +
+                    // This line repeats a start already counted by `tool_start`: close that one too.
+                    (if (isOpenCodeEndedCall(obj) && (obj[OPENCODE_START_REPORTED] as? JsonPrimitive)?.content == "true") listOf(Line.ToolEnd) else emptyList())
             } ?: emptyList()
 
             // 1.95.0: pi reports a tool's real execution start and end on their own records.
@@ -216,6 +221,9 @@ object EventNormalizer {
 
     /** Set (`true`) by the serve adapter on a forwarded tool part whose reject it already reported. */
     const val OPENCODE_DENIAL_REPORTED = "agenthqDenialReported"
+
+    /** Set (`true`) by the serve adapter on a finished tool part whose running start it already forwarded as `tool_start`. */
+    const val OPENCODE_START_REPORTED = "agenthqStartReported"
 
     /** BUG-PERM-1: claude's `result.permission_denials`, one [Line.Denial] per distinct tool name. */
     private fun claudeDenials(obj: JsonObject): List<Line> =

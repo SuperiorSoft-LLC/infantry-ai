@@ -279,6 +279,51 @@ class OpenCodeServeAdapterTest {
     }
 
     @Test
+    fun runningToolAndReasoningParts_areForwarded_andToolActivityBalances() {
+        val rig = rig()
+        val session = rig.manager.startNew("first", model = "fake/model")
+        rig.awaitTexts(1)
+        rig.awaitState(session.id, SessionState.IDLE)
+        val server = rig.launcher.servers.single()
+        server.answerTurns = false
+        rig.manager.resume(session.id, "scan")
+        val ses = "ses_fake1"
+        fun part(json: String) = server.push("""{"type":"message.part.updated","properties":{"sessionID":"$ses","part":$json}}""")
+        server.push("""{"type":"session.status","properties":{"sessionID":"$ses","status":{"type":"busy"}}}""")
+        part("""{"id":"r1","type":"reasoning","text":"plan","time":{"start":1}}""")
+        part("""{"id":"r1","type":"reasoning","text":"plan the scan","time":{"start":1,"end":2}}""")
+        part("""{"id":"t1","type":"tool","tool":"bash","state":{"status":"pending","input":{}}}""")
+        part("""{"id":"t1","type":"tool","tool":"bash","state":{"status":"running","input":{"command":"ls -la"}}}""")
+        part("""{"id":"t1","type":"tool","tool":"bash","state":{"status":"completed","input":{"command":"ls -la"},"output":"x"}}""")
+        val deadline = System.currentTimeMillis() + 10_000
+        while (rig.stdoutLines().none { it["type"]?.jsonPrimitive?.content == "tool_use" } && System.currentTimeMillis() < deadline) Thread.sleep(10)
+
+        val types = rig.stdoutLines().map { it["type"]!!.jsonPrimitive.content }.drop(3)
+        assertTrue(types.containsAll(listOf("reasoning", "tool_start", "tool_use")), "$types")
+        assertEquals(1, types.count { it == "reasoning" }, "reasoning is forwarded once, whole, when finished")
+        assertEquals(1, types.count { it == "tool_start" })
+        val lines = rig.stdoutLines()
+        val start = lines.first { it["type"]!!.jsonPrimitive.content == "tool_start" }
+        val running = EventNormalizer.normalise(start.toString())
+        assertTrue(running.single() is EventNormalizer.Line.Tool, "$running")
+        assertEquals("bash", (running.single() as EventNormalizer.Line.Tool).name)
+        val reasoning = EventNormalizer.normalise(lines.first { it["type"]!!.jsonPrimitive.content == "reasoning" }.toString())
+        assertEquals(listOf<EventNormalizer.Line>(EventNormalizer.Line.Reasoning("plan the scan")), reasoning)
+        assertTrue(com.superiorsoftllc.agenthq.protocol.ReasoningCoalescer().process("s", reasoning) == reasoning, "whole block untouched")
+        // Start counted once, so the finished line must end it twice-over (its own Tool + the earlier start).
+        val done = EventNormalizer.normalise(lines.first { it["type"]!!.jsonPrimitive.content == "tool_use" }.toString())
+        assertEquals(2, done.count { it is EventNormalizer.Line.ToolEnd }, "$done")
+        // What the UI reads: "Running bash: ..." while the tool works, back to thinking once it finished.
+        val tracker = com.superiorsoftllc.agenthq.protocol.RunActivityTracker()
+        tracker.turnStarted("s")
+        val whileRunning = running.mapNotNull { tracker.line("s", it) }.last()
+        assertEquals(com.superiorsoftllc.agenthq.protocol.RunPhase.TOOL_RUNNING, whileRunning.state)
+        assertTrue(whileRunning.label!!.startsWith("bash"), whileRunning.label)
+        done.forEach { tracker.line("s", it) }
+        assertEquals(com.superiorsoftllc.agenthq.protocol.RunPhase.THINKING, tracker.current("s").state)
+    }
+
+    @Test
     fun interrupt_postsAbort_andKeepsTheServer() {
         val rig = rig()
         val session = rig.manager.startNew("first", model = "fake/model")
@@ -429,7 +474,10 @@ class OpenCodeServeAdapterTest {
         assertEquals("step_finish", OpenCodeServeAdapter.runLineType(part("""{"type":"step-finish"}""")))
         assertEquals(null, OpenCodeServeAdapter.runLineType(part("""{"type":"text","time":{"start":1}}""")))
         assertEquals("text", OpenCodeServeAdapter.runLineType(part("""{"type":"text","time":{"start":1,"end":2}}""")))
-        assertEquals(null, OpenCodeServeAdapter.runLineType(part("""{"type":"tool","state":{"status":"running"}}""")))
+        assertEquals("tool_start", OpenCodeServeAdapter.runLineType(part("""{"type":"tool","state":{"status":"running"}}""")))
+        assertEquals(null, OpenCodeServeAdapter.runLineType(part("""{"type":"tool","state":{"status":"pending"}}""")))
+        assertEquals(null, OpenCodeServeAdapter.runLineType(part("""{"type":"reasoning","time":{"start":1}}""")))
+        assertEquals("reasoning", OpenCodeServeAdapter.runLineType(part("""{"type":"reasoning","time":{"start":1,"end":2}}""")))
         assertEquals("tool_use", OpenCodeServeAdapter.runLineType(part("""{"type":"tool","state":{"status":"completed"}}""")))
         assertEquals("tool_use", OpenCodeServeAdapter.runLineType(part("""{"type":"tool","state":{"status":"error"}}""")))
         assertEquals("opencode-go" to "step-5-preview-free", OpenCodeServeAdapter.splitModel("opencode-go/step-5-preview-free"))

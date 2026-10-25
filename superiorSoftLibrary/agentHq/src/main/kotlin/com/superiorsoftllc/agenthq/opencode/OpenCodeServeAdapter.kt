@@ -366,7 +366,11 @@ class OpenCodeServeAdapter(
                     sawBusy = true
                     val lineType = runLineType(part) ?: return
                     val partId = part["id"].str()
-                    if (partId != null && !emitted.add(partId)) return
+                    // A tool part is seen twice (running, then completed): the start is its own line, deduped apart.
+                    // A late `running` after the part already finished would reopen a tool nothing closes: dropped.
+                    if (lineType == "tool_start" && partId != null && partId in emitted) return
+                    if (partId != null && !emitted.add(if (lineType == "tool_start") "start:$partId" else partId)) return
+                    val startReported = lineType == "tool_use" && partId != null && "start:$partId" in emitted
                     if (lineType == "text" || lineType == "tool_use") replied = true
                     emit(buildJsonObject {
                         put("type", lineType)
@@ -376,6 +380,7 @@ class OpenCodeServeAdapter(
                         // BUG-PERM-4: this adapter already emitted `permission_denied` for its own rejects; the normaliser
                         // must not announce the same refusal again from the part's error.
                         put(com.superiorsoftllc.agenthq.protocol.EventNormalizer.OPENCODE_DENIAL_REPORTED, true)
+                        if (startReported) put(com.superiorsoftllc.agenthq.protocol.EventNormalizer.OPENCODE_START_REPORTED, true)
                     })
                 }
             }
@@ -400,7 +405,9 @@ class OpenCodeServeAdapter(
             "step-start" -> "step_start"
             "step-finish" -> "step_finish"
             "text" -> if ((part["time"] as? JsonObject)?.get("end") != null) "text" else null
+            "reasoning" -> if ((part["time"] as? JsonObject)?.get("end") != null) "reasoning" else null
             "tool" -> when ((part["state"] as? JsonObject)?.get("status").str()) {
+                "running" -> "tool_start"
                 "completed", "error" -> "tool_use"
                 else -> null
             }
