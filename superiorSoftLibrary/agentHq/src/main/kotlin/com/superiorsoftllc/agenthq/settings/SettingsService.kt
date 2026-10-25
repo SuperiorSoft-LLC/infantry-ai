@@ -105,6 +105,32 @@ class SettingsService(
     /** [limit] as a count: 0 on an unlimited-capable limit becomes [Int.MAX_VALUE] (no limit). */
     fun limitCap(def: LimitDef): Int = LimitRegistry.cap(limit(def), def)
 
+    /**
+     * Contract 1.133.0 (`limit_catalog`): every [LimitRegistry] entry with its value in force and its documentation, so the
+     * Settings UI and `agenthq settings limits` show each limit, its default and where it comes from.
+     */
+    fun limitCatalog(): JsonObject = JsonObject(
+        mapOf(
+            "limits" to JsonArray(
+                LimitRegistry.ALL.map { def ->
+                    JsonObject(
+                        buildMap {
+                            put("key", JsonPrimitive(def.key))
+                            put("value", JsonPrimitive(limit(def)))
+                            put("default", JsonPrimitive(def.default))
+                            put("unit", JsonPrimitive(def.unit))
+                            put("description", JsonPrimitive(def.description))
+                            put("min", JsonPrimitive(def.min))
+                            def.max?.let { put("max", JsonPrimitive(it)) }
+                            if (def.zeroIsUnlimited) put("zeroMeans", JsonPrimitive(def.zeroMeans))
+                            put("env", JsonPrimitive(def.env))
+                        },
+                    )
+                },
+            ),
+        ),
+    )
+
     /** One line per environment variable that holds an unusable limit (reported at daemon start, then ignored). */
     fun limitEnvProblems(): List<String> = LimitRegistry.ALL.mapNotNull { def ->
         runCatching { LimitRegistry.fromEnv(def, env) }.exceptionOrNull()?.message

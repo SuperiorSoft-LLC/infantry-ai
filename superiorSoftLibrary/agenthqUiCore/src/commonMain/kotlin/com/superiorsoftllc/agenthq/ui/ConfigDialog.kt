@@ -103,6 +103,9 @@ fun ConfigDialog(
     secretActions: SecretActions? = null,
     /** PAIR-1: the connection to share and the callback for a scanned / pasted link; null hides "Pair a device". */
     pair: PairEntry? = null,
+    /** No-hard-coded-limits (1.133.0): every daemon limit (null = not read yet) and the save callback; [onLimit] null hides the section. */
+    limits: List<com.superiorsoftllc.agenthq.ui.model.LimitInfo>? = null,
+    onLimit: ((key: String, value: Long) -> Unit)? = null,
     /** ROLE-EDIT-1: opens the role manager dialog; null hides the section. */
     onOpenRoles: (() -> Unit)? = null,
     /** ASK-2: raises a sample owner question to the open session; null hides the section, [testQuestionReady] false disables the button. */
@@ -136,6 +139,7 @@ fun ConfigDialog(
         if (onCliLocation != null) add(ConfigEntry.CLI_LOCATIONS)
         if (onToolApproval != null) add(ConfigEntry.TOOL_APPROVAL)
         if (onOpenRoles != null) add(ConfigEntry.ROLES)
+        if (onLimit != null) add(ConfigEntry.LIMITS)
         add(ConfigEntry.VOICE)
         add(ConfigEntry.INCOMING_SOUND)
         if (onSendTestQuestion != null) add(ConfigEntry.QUESTIONS)
@@ -236,6 +240,10 @@ fun ConfigDialog(
                                 FlagSection(ConfigEntry.ROLES, highlight) {
                                     OutlinedButton(onClick = onOpenRoles, modifier = Modifier.testTag(ROLE_MANAGER_OPEN_TAG)) { Text("Manage roles") }
                                 }
+                            }
+                            // No-hard-coded-limits: daemon state; the daemon validates each value and names the range on a refusal.
+                            if (shows(ConfigEntry.LIMITS) && onLimit != null) {
+                                FlagSection(ConfigEntry.LIMITS, highlight) { LimitsSection(limits, onLimit) }
                             }
                             if (shows(ConfigEntry.VOICE)) FlagSection(ConfigEntry.VOICE, highlight) {
                                 com.superiorsoftllc.agenthq.ui.voice.VoiceSettingsSection(flags.voice) { onFlags(flags.copy(voice = it)) }

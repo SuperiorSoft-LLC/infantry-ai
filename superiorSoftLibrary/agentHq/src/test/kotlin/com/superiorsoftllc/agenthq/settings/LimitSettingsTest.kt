@@ -28,7 +28,7 @@ class LimitSettingsTest {
     }
 
     @Test
-    fun defaultsAreListed_concurrencyIsFourAndDepthTwo() {
+    fun defaultsAreListed_concurrencyIsFourAndDepthOne() {
         val all = settings.all()
         assertEquals(JsonPrimitive(4L), all["limits.concurrency.maxPerPod"])
         assertEquals(JsonPrimitive(1L), all["limits.concurrency.maxDepth"])
@@ -73,5 +73,33 @@ class LimitSettingsTest {
         assertFailsWith<IllegalArgumentException> { settings.set("usage.pacing", json) }
         settings.set("limits.pacing.maxWorkersCeiling", JsonPrimitive(100))
         settings.set("usage.pacing", json)
+    }
+
+    @Test
+    fun watchdogLimitsAreSettings_zeroTurnsThemOff_legacyTicketDeadlineEnvStillWorks() {
+        assertEquals(180L, settings.limit(LimitRegistry.TICKET_DEADLINE_MINUTES))
+        assertEquals(20L, settings.limit(LimitRegistry.SILENT_MINUTES))
+        env = mapOf("AGENTHQ_TICKET_DEADLINE_MIN" to "240")
+        assertEquals(240L, settings.limit(LimitRegistry.TICKET_DEADLINE_MINUTES))
+        settings.set("limits.watchdog.stallMinutes", JsonPrimitive(0))
+        assertEquals(Long.MAX_VALUE, LimitRegistry.minutesMs(settings.limit(LimitRegistry.STALL_MINUTES), LimitRegistry.STALL_MINUTES))
+        assertEquals(15 * 60_000L, LimitRegistry.minutesMs(15, LimitRegistry.STALL_MINUTES))
+        val e = assertFailsWith<IllegalArgumentException> { settings.set("limits.watchdog.silentMinutes", JsonPrimitive(-5)) }
+        assertTrue("0 = never flagged" in e.message!!, e.message)
+    }
+
+    @Test
+    fun theCatalogDocumentsEveryLimitWithItsValueInForce() {
+        settings.set("limits.concurrency.maxPerPod", JsonPrimitive(12))
+        val limits = settings.limitCatalog()["limits"] as kotlinx.serialization.json.JsonArray
+        assertEquals(LimitRegistry.ALL.map { it.key }, limits.map { (it as kotlinx.serialization.json.JsonObject)["key"]!!.let { k -> (k as JsonPrimitive).content } })
+        val pod = limits.first() as kotlinx.serialization.json.JsonObject
+        assertEquals(JsonPrimitive(12L), pod["value"])
+        assertEquals(JsonPrimitive(4L), pod["default"])
+        assertEquals(JsonPrimitive("unlimited"), pod["zeroMeans"])
+        assertEquals(JsonPrimitive("AGENTHQ_LIMIT_CONCURRENCY_MAX_PER_POD"), pod["env"])
+        val cpu = limits.first { (it as kotlinx.serialization.json.JsonObject)["key"] == JsonPrimitive("limits.cpu.alertPercent") } as kotlinx.serialization.json.JsonObject
+        assertEquals(null, cpu["zeroMeans"], "a limit 0 does not turn off has no zeroMeans")
+        assertEquals(JsonPrimitive(100L), cpu["max"])
     }
 }

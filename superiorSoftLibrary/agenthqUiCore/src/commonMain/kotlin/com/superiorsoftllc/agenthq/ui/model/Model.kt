@@ -680,6 +680,8 @@ data class AppState(
      * daemon older than contract 1.68.0, which has no such setting): the control says so instead of guessing a value.
      */
     val keepAliveMinutes: Int? = null,
+    /** No-hard-coded-limits (1.133.0): every daemon limit, as its last `limit_catalog` said (values follow `settings`). Null = not read yet. */
+    val limitCatalog: List<LimitInfo>? = null,
     /** ROGUE-1 (1.120.0): the daemon's last `processes` answer or `process_pressure` push; null = never answered. */
     val processReport: com.superiorsoftllc.agenthq.ui.protocol.ProcessReport? = null,
     /** ROGUE-1 (1.120.0): the daemon's `processes.autoReap` as its last `settings` frame said; null = not read yet. */
@@ -1733,8 +1735,12 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     Envelope.SETTINGS -> {
         val withAutoReap = ProcessWatchView.autoReapFromSettingsFrame(env.data)?.let { s.copy(processAutoReap = it) } ?: s
         val withKeepAlive = LifecycleSetting.fromSettingsFrame(env.data)?.let { withAutoReap.copy(keepAliveMinutes = it) } ?: withAutoReap
-        UserPortrait.fromSettingsFrame(env.data)?.let { withKeepAlive.copy(userPortrait = it.base64) } ?: withKeepAlive
+        val withPortrait = UserPortrait.fromSettingsFrame(env.data)?.let { withKeepAlive.copy(userPortrait = it.base64) } ?: withKeepAlive
+        withPortrait.copy(limitCatalog = LimitsSetting.withSettingsFrame(withPortrait.limitCatalog, env.data))
     }
+
+    // No-hard-coded-limits (1.133.0): the whole catalog, replaced by each answer.
+    Envelope.LIMIT_CATALOG -> LimitsSetting.fromCatalogFrame(env.data)?.let { s.copy(limitCatalog = it) } ?: s
 
     // CLIPATH-1 (1.73.0): the whole list, replaced by each answer (a get, or this window's set).
     Envelope.CLI_LOCATIONS -> runCatching {

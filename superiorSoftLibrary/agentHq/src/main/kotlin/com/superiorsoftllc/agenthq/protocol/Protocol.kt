@@ -420,6 +420,10 @@ data class Envelope(
         const val SETTINGS_SET = "settings_set"
         const val SETTINGS = "settings"
 
+        // Contract 1.133.0 -- no hard-coded limits: `limit_catalog` (no data) is answered by a `limit_catalog` frame
+        // `{"limits":[{key, value, default, unit, description, min, max?, zeroMeans?, env}]}`; values change via [SETTINGS_SET].
+        const val LIMIT_CATALOG = "limit_catalog"
+
         // Contract 1.73.0 -- CLIPATH-1: where each CLI (claude, opencode, pi, descriptor harnesses, git) is launched
         // from. `cli_locations` (no data) and `cli_location_set` ({id, path?}; null/blank path clears) are both
         // answered by [CLI_LOCATIONS] (`CliLocations`); a bad path is refused as an `error`.

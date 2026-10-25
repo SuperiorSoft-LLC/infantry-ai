@@ -7,6 +7,7 @@ import com.superiorsoftllc.agenthq.ui.model.HarnessPickerAsk
 import com.superiorsoftllc.agenthq.ui.model.CliLocationsSetting
 import com.superiorsoftllc.agenthq.ui.model.ToolApprovalSetting
 import com.superiorsoftllc.agenthq.ui.model.LifecycleSetting
+import com.superiorsoftllc.agenthq.ui.model.LimitsSetting
 import com.superiorsoftllc.agenthq.ui.model.ProcessWatchView
 import com.superiorsoftllc.agenthq.ui.model.UserPortrait
 import kotlinx.serialization.json.JsonPrimitive
@@ -201,6 +202,10 @@ class Controller(
                         // USER-PORTRAIT: the owner's picture (1.107.0); an unset key is an error on a single-key get, so ask for all.
                         if (contractAtLeast(contract, UserPortrait.SINCE_MAJOR, UserPortrait.SINCE_MINOR)) {
                             client.send(WireRequests.settingsGet(""))
+                        }
+                        // No-hard-coded-limits: every daemon limit, shown in Configuration > Limits (1.133.0).
+                        if (contractAtLeast(contract, LimitsSetting.SINCE_MAJOR, LimitsSetting.SINCE_MINOR)) {
+                            client.send(WireRequests.limitCatalog())
                         }
                         // CLIPATH-1: where each CLI is launched from, shown in the Configuration modal (1.73.0).
                         if (contractAtLeast(contract, CliLocationsSetting.SINCE_MAJOR, CliLocationsSetting.SINCE_MINOR)) {
@@ -443,6 +448,19 @@ class Controller(
             return report(CommandResult.Refused("this daemon has no session lifecycle setting (needs contract 1.68.0)"))
         }
         return report(send(WireRequests.settingsSet(LifecycleSetting.KEY, JsonPrimitive(minutes))))
+    }
+
+    /**
+     * No-hard-coded-limits (1.133.0): store [value] as the daemon limit [key]. The shown value changes only when the
+     * daemon answers `settings`; a refusal (an `error` frame naming the range) is shown as a notice.
+     */
+    suspend fun setLimit(key: String, value: Long): CommandResult {
+        if (!contractAtLeast(_state.value.connection.contract, LimitsSetting.SINCE_MAJOR, LimitsSetting.SINCE_MINOR)) {
+            return report(CommandResult.Refused("this daemon has no limit settings (needs contract 1.133.0)"))
+        }
+        val info = _state.value.limitCatalog?.firstOrNull { it.key == key }
+        if (info != null && !info.accepts(value)) return report(CommandResult.Refused("$key must be in ${info.rangeText()}"))
+        return report(send(WireRequests.settingsSet(key, JsonPrimitive(value))))
     }
 
     /**

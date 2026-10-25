@@ -93,10 +93,42 @@ object LimitRegistry {
         max = 1440, zeroMeans = "alert off",
     )
 
+    /** S2: the unattended-run watchdog and the silent sweeper (SessionManager), read at every pass. */
+    val TICKET_DEADLINE_MINUTES = LimitDef(
+        "limits.watchdog.ticketDeadlineMinutes", 180, "minutes",
+        "How long an unattended ticket worker may run before the watchdog stops it (a gate run alone can take an hour).",
+        zeroMeans = "no deadline", legacyEnv = listOf("AGENTHQ_TICKET_DEADLINE_MIN"),
+    )
+    val UNATTENDED_DEADLINE_MINUTES = LimitDef(
+        "limits.watchdog.deadlineMinutes", 60, "minutes",
+        "How long an unattended run that is not a ticket worker (a pod node, a spawned helper) may run before the watchdog stops it.",
+        zeroMeans = "no deadline",
+    )
+    val STALL_MINUTES = LimitDef(
+        "limits.watchdog.stallMinutes", 15, "minutes",
+        "How long an unattended run may print nothing (with no bg job or gate run alive) before the watchdog stops it as stalled.",
+        zeroMeans = "never stopped for silence",
+    )
+    val KILL_RETRY_MINUTES = LimitDef(
+        "limits.watchdog.killRetryMinutes", 5, "minutes",
+        "How long after a watchdog stop that did not end the run the stop is retried, forced.",
+        zeroMeans = "never retried",
+    )
+    val SILENT_MINUTES = LimitDef(
+        "limits.watchdog.silentMinutes", 20, "minutes",
+        "How long a busy session may print nothing before it is flagged silent (flag only; a provably dead one is ended).",
+        zeroMeans = "never flagged",
+    )
+
     val ALL: List<LimitDef> = listOf(
         MAX_PER_POD, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
+        TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES,
     )
+
+    /** A minutes limit as milliseconds; 0 on an unlimited-capable one = [Long.MAX_VALUE] (never reached). */
+    fun minutesMs(value: Long, def: LimitDef): Long =
+        if (def.zeroIsUnlimited && value == 0L) Long.MAX_VALUE else value * 60_000L
 
     private val byKey = ALL.associateBy { it.key }
 

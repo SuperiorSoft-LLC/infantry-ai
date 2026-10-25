@@ -444,6 +444,7 @@ internal object Cli {
                 "role" -> role(stream, parsed, out, err, getenv, input)
                 "ask" -> ask(stream, parsed, out, err, getenv)
                 "usage" -> runBlocking { UsageCli.run(stream, parsed.args, out, err) }
+                "settings" -> runBlocking { checkContract(stream, err); SettingsCli.run(stream, parsed.args, out, err) }
                 else -> {
                     // Unreachable: [run] rejects an unknown command before it connects.
                     err.appendLine("error: unknown command '$command'")
@@ -4185,6 +4186,9 @@ internal object Cli {
               usage set <meter> <pct> [<resetsInMin>] | clear <meter>   Type a percent for a meter with no readable usage
               usage override <meter> <n|none> [<hours>] | override <meter> clear   Allowance override (default: until reset, else 2h)
               usage rule <60:3,80:2,1|on|off|default>   The pacing rule: below:workers tiers, the last one workers alone
+              settings [get [<key>]]   The daemon's durable settings, one `key = value` per line
+              settings set <key> <value>   Store one (a number, true/false, JSON, or text); a refusal names the accepted range
+              settings limits     Every limit (caps, thresholds, timeouts): value, default, range, what 0 means, its env name
               processes [--all]   Rogue background processes (Gradle/Kotlin daemons, node, JVMs) left by ended or idle sessions,
                                   with MB, age and owner session; --all adds healthy ones and heavy processes that are not ours
               processes reap <pid> | --all   Kill one process (or every rogue one) that a session of this daemon started;
@@ -5052,6 +5056,7 @@ internal object Cli {
         "role" -> roleUsageError(parsed)
         "ask" -> askUsageError(parsed, getenv)
         "usage" -> UsageCli.usageError(parsed.args)
+        "settings" -> SettingsCli.usageError(parsed.args)
         else -> null
     }
 
@@ -5235,7 +5240,7 @@ internal object Cli {
         "submit", "watch", "pods", "runs", "logs", "cancel", "tickets", "board", "ticket", "agents", "send", "inbox",
         "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
         "trait", "skill", "role", "ask", "harnesses", "harness-status", "harness-install", "image", "session", "remote", "bg", "kill", "usage",
-        "processes",
+        "processes", "settings",
     )
 
     /** `agenthq remote on|off|status`: edits `<stateDir>/network.properties`; takes effect on the next daemon restart. */

@@ -629,6 +629,8 @@ fun App(
                     import = { n -> actionScope.launch { controller.importSecret(n) } },
                 ),
                 onOpenRoles = { showRoles = true },
+                limits = state.limitCatalog,
+                onLimit = if (contractAtLeast(state.connection.contract, com.superiorsoftllc.agenthq.ui.model.LimitsSetting.SINCE_MAJOR, com.superiorsoftllc.agenthq.ui.model.LimitsSetting.SINCE_MINOR)) { key, value -> actionScope.launch { controller.setLimit(key, value) }; Unit } else null,
                 onSendTestQuestion = { state.selectedId?.let { id -> actionScope.launch { controller.sendTestQuestion(id) } } },
                 testQuestionReady = state.selectedId != null,
                 initialTab = configTab,

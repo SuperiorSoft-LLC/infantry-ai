@@ -684,6 +684,8 @@ class AgentHqDaemon(
                 instanceId = instanceId,
                 // Ticket 66153313: every worker run gets the build limits (priority, Gradle workers, forks) of the settings.
                 buildEnv = { settings.buildLimits().sessionEnv(System.getenv("GRADLE_OPTS")) },
+                // No-hard-coded-limits S2: the watchdog and silent sweeper read limits.watchdog.* live.
+                limitSource = settings::limit,
             )
             // BUG-M2-11f: a new keep-alive value applies to the processes already kept, not only to the next launch.
             settings.onKeepAliveChanged = manager::lifecyclePolicyChanged
@@ -2019,6 +2021,12 @@ private suspend fun handleConnection(
         } catch (e: Exception) {
             Envelope(Envelope.ERROR, "tool_approval failed: ${e.message ?: e::class.simpleName}")
         }
+        Envelope.LIMIT_CATALOG -> try {
+            val service = settings as? SettingsService ?: throw IllegalArgumentException("this daemon has no limit settings")
+            Envelope(Envelope.LIMIT_CATALOG, json.encodeToString(JsonObject.serializer(), service.limitCatalog()))
+        } catch (e: Exception) {
+            Envelope(Envelope.ERROR, "limit_catalog failed: ${e.message ?: e::class.simpleName}")
+        }
         else -> Envelope(Envelope.ERROR, "unexpected ready-burst frame ${envelope.type}")
     }
     val readyBurstRequests = Channel<Envelope>(Channel.UNLIMITED)
@@ -2455,7 +2463,7 @@ private suspend fun handleConnection(
                 Envelope.COMMAND_CATALOG -> SlashCommands.catalog(envelope, manager, harnesses)
 
                 // Answered by [readyBurstWorker], off this loop (PERF-3).
-                Envelope.PROVIDERS, Envelope.SETTINGS_GET, Envelope.CLI_LOCATIONS, Envelope.TOOL_APPROVAL -> {
+                Envelope.PROVIDERS, Envelope.SETTINGS_GET, Envelope.CLI_LOCATIONS, Envelope.TOOL_APPROVAL, Envelope.LIMIT_CATALOG -> {
                     readyBurstRequests.trySend(envelope)
                     null
                 }

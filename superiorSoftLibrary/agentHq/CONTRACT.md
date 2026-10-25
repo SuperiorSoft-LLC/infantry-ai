@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.132.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.133.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -2167,6 +2167,7 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `settings_get` | empty data for all settings, or one setting key (1.6.0) | client → daemon |
 | `settings_set` | `{"key": string, "value": json}` (1.6.0) | client → daemon |
 | `settings` | a JSON object of settings (1.6.0) | daemon → client |
+| `limit_catalog` | request: empty data. Answer: `{limits: [{key, value, default, unit, description, min, max?, zeroMeans?, env}]}`, every daemon limit with its value in force (1.133.0) | both |
 | `resume` | `"<sessionId>\n<prompt>"` | client → daemon |
 | `kill` | `"<sessionId> [force]"` | client → daemon |
 | `interrupt` | the session id, a bare string: stops the session's CURRENT turn and keeps the session at rest (`IDLE`), same conversation; sends NO `finished` frame; refused with `error` when no turn is in flight (1.32.1) | client → daemon |
@@ -3055,3 +3056,28 @@ ADDITIVE + BEHAVIOURAL; `contract=1.132.0`. Builds that workers start no longer 
 - **CPU in `processes`.** `TrackedProcess.cpuPercent` (this process's share of ALL logical cores over the last 10 s watch pass, 0–100; null until two samples), `ProcessReport.agentCpuPercent` (their sum), `cpuAlertPercent`, `cpuAlertMinutes`, `cpuHighSince` (epoch ms since when the sum has stayed at or above the threshold; null while below).
 - **Sustained-CPU attention.** When `agentCpuPercent` stays at or above `limits.cpu.alertPercent` (default `90`, 1–100) for `limits.cpu.alertMinutes` (default `10`; `0` = off), the daemon raises ONE attention item per episode: kind `ceiling`, outcome `cpu_sustained`, with the top processes in the detail. Falling below the threshold rearms it.
 - **Old clients.** They ignore the new fields; the attention item renders like any other `ceiling` item.
+
+### What changed in 1.133.0 (NO-HARD-CODED-LIMITS, ticket-23471801) — every cap, threshold and timeout is a documented setting
+
+ADDITIVE + BEHAVIOURAL; `contract=1.133.0`. Owner rule 2026-10-25: no hard-coded restriction. Each limit is a `LimitRegistry` entry resolved, first hit wins, from the stored daemon setting (`settings_set`, Configuration > Limits, `agenthq settings set <key> <n>`) -> the environment (`AGENTHQ_LIMIT_<GROUP>_<NAME>`, e.g. `AGENTHQ_LIMIT_CONCURRENCY_MAX_PER_POD`, plus the legacy names listed) -> the default. Values are whole numbers, read at every use (a change applies at once, no restart); a bad env value is logged at daemon start and ignored. `0` turns a limit off where it says so.
+
+| Setting | Default | 0 means | Was |
+|---|---|---|---|
+| `limits.concurrency.maxPerPod` | 4 | unlimited | `AGENTHQ_POD_SPAWN_CAP` (still read) |
+| `limits.concurrency.maxDepth` | 1 | sessions may not spawn | `AGENTHQ_POD_SPAWN_DEPTH` (still read); the MCP write tools' built-in 2 is gone, they follow this |
+| `limits.concurrency.mcpMaxSpawns` | 4 | unlimited | `McpGuardrails.DEFAULT_MAX_SPAWNS`; `--max-spawns` / `.agenthq/mcp.json` still override per connection |
+| `limits.concurrency.laneDefault` | 1 | unlimited | the built-in cap of a role a project sets no lane cap for |
+| `limits.pacing.maxWorkersCeiling` | 50 | (min 1) | `PacingRule.MAX_WORKERS`, the highest `usage.pacing` maxWorkers / tier workers / override accepted |
+| `limits.build.maxWorkers`, `limits.build.maxParallelForks`, `limits.cpu.alertPercent`, `limits.cpu.alertMinutes` | as 1.132.0 | as 1.132.0 | unchanged keys, now in the registry (catalog, env) |
+| `limits.watchdog.ticketDeadlineMinutes` | 180 | no deadline | `AGENTHQ_TICKET_DEADLINE_MIN` (still read) |
+| `limits.watchdog.deadlineMinutes` | 60 | no deadline | fixed 60 min for unattended non-ticket runs |
+| `limits.watchdog.stallMinutes` | 15 | never stopped for silence | fixed 15 min |
+| `limits.watchdog.killRetryMinutes` | 5 | never retried | fixed 5 min |
+| `limits.watchdog.silentMinutes` | 20 | never flagged | fixed 20 min silent sweep |
+
+- **`settings` / `settings_get`** list every `limits.*` key with its value in force. `settings_set` refuses a value outside the range with `setting '<key>' must be a JSON integer in <min>..<max> (<unit>; 0 = <meaning>; default <d>)`.
+- **`limit_catalog`** (new; request with empty data, answered to the requester): `{limits: [{key, value, default, unit, description, min, max?, zeroMeans?, env}]}`. Configuration > Limits renders it; `agenthq settings limits` prints it.
+- **Refusals name the limit.** A pod-cap / depth refusal (`spawn refused: ...`) and the MCP `agenthq_spawn` / `agenthq_ticket_start` refusals end with `Change it with the setting '<key>' (Settings > Limits, agenthq settings set <key> <n>, or env <ENV>)`. Watchdog kill reasons name their setting.
+- **CLI.** `agenthq settings [get [<key>]]`, `agenthq settings set <key> <value>`, `agenthq settings limits`.
+- **Pacing okProjected / hardStopPercent** stay fields of the `usage.pacing` rule (already a setting; `usage_set` / `agenthq settings set usage.pacing <json>`), not separate keys.
+- **Old clients.** They ignore the new keys and never send `limit_catalog`; nothing they send changes meaning.

@@ -157,6 +157,8 @@ data class Envelope(
         const val SETTINGS_GET = "settings_get"
         const val SETTINGS_SET = "settings_set"
         const val SETTINGS = "settings"
+        // Contract 1.133.0: every daemon limit with its value and documentation; no data, answered by `limit_catalog`.
+        const val LIMIT_CATALOG = "limit_catalog"
 
         // Contract 1.73.0 (CLIPATH-1): where the daemon runs each CLI from. `cli_locations` (no data) and
         // `cli_location_set` ({id, path}; null path clears) are both answered by `cli_locations` ([CliLocations]).
@@ -1992,6 +1994,9 @@ object WireRequests {
         Envelope.SETTINGS_SET,
         JsonObject(mapOf("key" to JsonPrimitive(key), "value" to value)).toString(),
     )
+
+    /** No-hard-coded-limits (1.133.0): ask for every limit with its value and documentation; answered by `limit_catalog`. */
+    fun limitCatalog(): Envelope = Envelope(Envelope.LIMIT_CATALOG)
 
     /** CLIPATH-1 (1.73.0): ask where each CLI is launched from; the daemon answers `cli_locations`. */
     fun cliLocations(): Envelope = Envelope(Envelope.CLI_LOCATIONS)

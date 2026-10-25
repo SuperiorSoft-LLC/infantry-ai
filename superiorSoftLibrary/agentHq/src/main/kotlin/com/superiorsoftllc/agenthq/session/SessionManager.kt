@@ -135,8 +135,22 @@ class SessionManager(
      * per run so a settings change applies to the next launch. Worker sessions only: the owner's own Gradle never sees it.
      */
     private val buildEnv: () -> Map<String, String> = { emptyMap() },
+    /**
+     * No-hard-coded-limits S2: the live `limits.watchdog.*` settings, read at every pass so a change applies at once. Null
+     * (tests) = the fixed [deadlineMs], [stallMs], [ticketDeadlineMs], [killRetryMs] and [silentMs] above.
+     */
+    private val limitSource: ((com.superiorsoftllc.agenthq.settings.LimitDef) -> Long)? = null,
 ) {
     val providerId: String get() = provider.id
+
+    /** [def] in ms from [limitSource] (0 on a disable-able limit = never reached), else [fixed]. */
+    private fun liveMs(def: com.superiorsoftllc.agenthq.settings.LimitDef, fixed: Long): Long {
+        val source = limitSource ?: return fixed
+        val minutes = runCatching { source(def) }.getOrNull() ?: return fixed
+        return com.superiorsoftllc.agenthq.settings.LimitRegistry.minutesMs(minutes, def)
+    }
+
+    private fun minutesText(ms: Long): String = if (ms == Long.MAX_VALUE) "none" else "${ms / 60_000} min"
 
     /** A configured provider and the transport its runs go through. */
     private class Configured(val provider: AgentProvider, val runner: ProcessRunner)
@@ -1066,6 +1080,7 @@ class SessionManager(
      */
     fun sweepSilent() {
         val now = clock()
+        val silentMs = liveMs(com.superiorsoftllc.agenthq.settings.LimitRegistry.SILENT_MINUTES, silentMs)
         for (session in sessions.values.toList()) {
             if (!session.isBusy()) { flaggedSilent.remove(session.id); continue }
             if (now - session.lastHeartbeat < silentMs) continue
@@ -1089,13 +1104,17 @@ class SessionManager(
 
     private fun checkUnattendedRuns() {
         val now = clock()
+        val killRetryMs = liveMs(com.superiorsoftllc.agenthq.settings.LimitRegistry.KILL_RETRY_MINUTES, killRetryMs)
+        val stallMs = liveMs(com.superiorsoftllc.agenthq.settings.LimitRegistry.STALL_MINUTES, stallMs)
+        val ticketDeadlineMs = liveMs(com.superiorsoftllc.agenthq.settings.LimitRegistry.TICKET_DEADLINE_MINUTES, ticketDeadlineMs)
+        val deadlineMs = liveMs(com.superiorsoftllc.agenthq.settings.LimitRegistry.UNATTENDED_DEADLINE_MINUTES, deadlineMs)
         for ((sessionId, run) in runs) {
             val session = sessions[sessionId] ?: continue
             if (run.watchdogFired.get()) {
                 // Ticket 7e9bed2a: a kill that left the run registered (it threw, or the process would not die) is retried once, forced.
                 val at = run.watchdogKillAt
                 if (UnattendedRunWatchdog.retryDue(at, now, killRetryMs, run.watchdogRetried.get()) && run.watchdogRetried.compareAndSet(false, true)) {
-                    runCatching { kill(sessionId, force = true, by = KILLED_BY_WATCHDOG, reason = "the first kill did not end the run within ${killRetryMs / 60_000} min; retried forced") }
+                    runCatching { kill(sessionId, force = true, by = KILLED_BY_WATCHDOG, reason = "the first kill did not end the run within ${minutesText(killRetryMs)}; retried forced (setting limits.watchdog.killRetryMinutes)") }
                         .onFailure { System.err.println("[agentHq] watchdog forced retry failed for $sessionId: ${it.message}") }
                 }
                 continue
@@ -1110,8 +1129,9 @@ class SessionManager(
             if (!run.watchdogFired.compareAndSet(false, true)) continue
             run.watchdogKillAt = now
             val why = when (expiry) {
-                WatchdogExpiry.STALLED -> "stalled: no output for ${(now - session.lastHeartbeat) / 60_000} min (limit ${stallMs / 60_000} min)"
-                WatchdogExpiry.DEADLINE -> "deadline: running for ${(now - run.startedAt) / 60_000} min (limit ${deadline / 60_000} min)"
+                WatchdogExpiry.STALLED -> "stalled: no output for ${(now - session.lastHeartbeat) / 60_000} min (limit ${minutesText(stallMs)}, setting limits.watchdog.stallMinutes)"
+                WatchdogExpiry.DEADLINE -> "deadline: running for ${(now - run.startedAt) / 60_000} min (limit ${minutesText(deadline)}, setting " +
+                    (if (session.ticketId != null) "limits.watchdog.ticketDeadlineMinutes" else "limits.watchdog.deadlineMinutes") + ")"
             }
             runCatching { watchdogSink?.invoke(session, expiry) }
                 .onFailure { System.err.println("[agentHq] watchdog attention failed: ${it.message}") }
@@ -1666,13 +1686,13 @@ class SessionManager(
 
     private companion object {
         const val HEARTBEAT_PERSIST_MS = 1_000L
-        const val DEFAULT_UNATTENDED_DEADLINE_MS = 60 * 60 * 1_000L
-        const val DEFAULT_UNATTENDED_STALL_MS = 15 * 60 * 1_000L
+        val DEFAULT_UNATTENDED_DEADLINE_MS = com.superiorsoftllc.agenthq.settings.LimitRegistry.UNATTENDED_DEADLINE_MINUTES.default * 60_000L
+        val DEFAULT_UNATTENDED_STALL_MS = com.superiorsoftllc.agenthq.settings.LimitRegistry.STALL_MINUTES.default * 60_000L
         const val DEFAULT_WATCHDOG_POLL_MS = 1_000L
-        const val DEFAULT_SILENT_MS = 20 * 60 * 1_000L
+        val DEFAULT_SILENT_MS = com.superiorsoftllc.agenthq.settings.LimitRegistry.SILENT_MINUTES.default * 60_000L
         const val DEFAULT_SILENT_POLL_MS = 60_000L
-        const val DEFAULT_KILL_RETRY_MS = 5 * 60 * 1_000L
-        const val DEFAULT_TICKET_DEADLINE_MS = 3 * 60 * 60 * 1_000L
+        val DEFAULT_KILL_RETRY_MS = com.superiorsoftllc.agenthq.settings.LimitRegistry.KILL_RETRY_MINUTES.default * 60_000L
+        val DEFAULT_TICKET_DEADLINE_MS = com.superiorsoftllc.agenthq.settings.LimitRegistry.TICKET_DEADLINE_MINUTES.default * 60_000L
         const val KILLED_BY_WATCHDOG = "watchdog"
         const val KILLED_BY_CLIENT = "client request"
 
