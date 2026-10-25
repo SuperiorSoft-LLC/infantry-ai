@@ -48,7 +48,8 @@ class UsagePacingTest {
 
     @Test
     fun defaultRuleTiers_highestWindowCounts() {
-        val rule = PacingRule.DEFAULT
+        settings.applyUsage(UsageSet(rule = UsageText.parseRule("60:3,80:2,1")), now)
+        val rule = settings.usagePacing()
         assertEquals(3, rule.allowance(59.9))
         assertEquals(2, rule.allowance(60.0))
         assertEquals(1, rule.allowance(95.0))
@@ -59,6 +60,76 @@ class UsagePacingTest {
         assertEquals(1, m.running)
         assertFalse(m.canStart)
         assertIs<PacingVerdict.Over>(pacing(listOf(live("claude", 81.0)), listOf("claude")).check("claude"))
+    }
+
+    private fun win(label: String, pct: Double, elapsed: Double, delta: Double = 0.0, minutes: Int = 10_080) =
+        LimitWindow("claude", label, minutes, pct, now + ((1 - elapsed) * minutes * 60_000).toLong(), now, "live", delta)
+
+    private fun meter(vararg w: LimitWindow, running: Int = 0) =
+        pacing(listOf(ProviderLimits("claude", "ok", w.toList(), null, now)), List(running) { "claude" }).report().meters.single()
+
+    @Test
+    fun onPace_allowsTheMax_andShowsTheProjection() {
+        val m = meter(win("Current week", 32.0, 0.32, 0.2), running = 3)
+        assertEquals(5, m.allowance)
+        assertEquals(100.0, m.projectedPercent!!, 0.01)
+        assertTrue(m.canStart)
+        assertTrue(UsageText.render(pacing(emptyList(), emptyList()).report()).contains("pace"))
+        assertTrue(UsageText.render(UsageReport(listOf(m), PacingRule.DEFAULT, now)).contains("projected 100"))
+    }
+
+    @Test
+    fun behindPace_allowsTheMax() {
+        assertEquals(5, meter(win("Current week", 20.0, 0.5, -30.0)).allowance)
+    }
+
+    @Test
+    fun aheadOfPace_isReducedSmoothly_neverBelowOne() {
+        assertEquals(3, meter(win("Current week", 21.5, 0.2, 3.0)).allowance) // projected 107.5
+        assertEquals(1, meter(win("Current week", 60.0, 0.45, 15.0)).allowance) // projected 133
+        assertEquals(1, meter(win("Current week", 70.0, 0.3, 40.0)).allowance)
+    }
+
+    @Test
+    fun nearTheLimit_isOne_evenWhenProjectionIsFine() {
+        assertEquals(1, meter(win("Current week", 96.0, 1.0, -1.0)).allowance)
+        assertEquals(1, meter(win("Current week", 91.0, 0.95, 1.0)).allowance) // >=90 and ahead
+        assertEquals(5, meter(win("Current week", 91.0, 0.95, -1.0)).allowance) // 95.8 projected, behind pace
+    }
+
+    @Test
+    fun windowsCombineAsTheTighter() {
+        val m = meter(win("5h limit", 10.0, 0.5, -40.0, 300), win("Monthly limit", 92.0, 0.5, 42.0, 43_200))
+        assertEquals(1, m.allowance)
+        assertEquals("Monthly limit", m.window)
+    }
+
+    @Test
+    fun firstMinutesOfAWindow_useAFloor() {
+        val m = meter(win("5h limit", 1.0, 0.0, 1.0, 300))
+        assertEquals(10.0, m.projectedPercent!!, 0.01) // 1% / floor 0.10, no divide by zero
+        assertEquals(5, m.allowance)
+        val past = meter(win("5h limit", 1.0, -0.5, 1.0, 300)) // resetsAt beyond the window
+        assertEquals(10.0, past.projectedPercent!!, 0.01)
+    }
+
+    @Test
+    fun overrideBeatsThePaceRule() {
+        settings.applyUsage(UsageSet(meter = "claude", overrideWorkers = 7, overrideUntil = now + hour), now)
+        val m = meter(win("Current week", 96.0, 0.5, 40.0), running = 4)
+        assertEquals(1, m.ruleAllowance)
+        assertEquals(7, m.allowance)
+        assertTrue(m.canStart)
+    }
+
+    @Test
+    fun refusalShowsTheProjection_andPaceRuleTextParses() {
+        val v = pacing(listOf(ProviderLimits("claude", "ok", listOf(win("Current week", 60.0, 0.45, 15.0)), null, now)), listOf("claude"))
+            .check("claude")
+        assertTrue((v as PacingVerdict.Over).reason.contains("projected 133.3% at reset"))
+        settings.applyUsage(UsageSet(rule = UsageText.parseRule("pace:8")), now)
+        assertEquals(8, settings.usagePacing().maxWorkers)
+        assertEquals(PacingRule.MODE_PACE, settings.usagePacing().mode)
     }
 
     @Test

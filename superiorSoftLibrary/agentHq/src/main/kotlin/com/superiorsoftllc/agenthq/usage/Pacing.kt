@@ -38,8 +38,47 @@ data class PacingTier(val below: Double? = null, val workers: Int)
 
 /** The pacing rule (setting `usage.pacing`). The metric is the HIGHEST percent among a meter's windows. */
 @Serializable
-data class PacingRule(val enabled: Boolean = true, val tiers: List<PacingTier> = DEFAULT_TIERS) {
-    /** Workers allowed at [percent]; null = no limit (rule off, or usage unknown: fail open). */
+data class PacingRule(
+    val enabled: Boolean = true,
+    val tiers: List<PacingTier> = DEFAULT_TIERS,
+    /** `pace` (default): the allowance follows the projected burn at the window's reset; `bands`: the raw-percent [tiers]. */
+    val mode: String = MODE_PACE,
+    /** Pace mode: workers allowed while the projection stays within [okProjected]. */
+    val maxWorkers: Int = DEFAULT_MAX_WORKERS,
+    /** Pace mode: projected percent at reset up to which the max is allowed; at [okProjected]+[PACE_SPAN] and beyond only 1. */
+    val okProjected: Double = 100.0,
+    /** Pace mode: at or above this percent used a meter is held to 1 worker. */
+    val hardStopPercent: Double = 95.0,
+) {
+    /** One window judged by pace: allowance, the projection (null when judged by bands) and why. */
+    data class Judgement(val allowance: Int, val projected: Double?, val reason: String)
+
+    /** Judges one live window at [now]; null = unreadable percent. Falls back to the bands without reset / length data. */
+    fun judge(w: LimitWindow, now: Long): Judgement? {
+        val percent = w.percent ?: return null
+        val resets = w.resetsAt
+        if (mode != MODE_PACE || resets == null || w.windowMinutes <= 0) {
+            return Judgement(allowance(percent) ?: 0, null, "bands")
+        }
+        val windowMs = w.windowMinutes * 60_000.0
+        val elapsed = (1.0 - (resets - now) / windowMs).coerceIn(MIN_ELAPSED, 1.0)
+        val projected = percent / elapsed
+        val max = maxWorkers.coerceAtLeast(1)
+        val byProjection = when {
+            projected <= okProjected + PACE_TOLERANCE -> max
+            projected >= okProjected + PACE_SPAN -> 1
+            else -> (max - Math.ceil((projected - okProjected) / PACE_SPAN * (max - 1))).toInt().coerceIn(1, max)
+        }
+        return when {
+            percent >= hardStopPercent -> Judgement(1, projected, "at ${fmt(percent)}% (hard stop ${fmt(hardStopPercent)}%)")
+            percent >= 90.0 && (w.paceDelta ?: 0.0) > 0.0 -> Judgement(1, projected, "at ${fmt(percent)}% and ahead of pace")
+            else -> Judgement(byProjection, projected, "projected ${fmt(projected)}% at reset")
+        }
+    }
+
+    private fun fmt(d: Double): String = if (d == Math.floor(d)) d.toLong().toString() else "%.1f".format(d)
+
+    /** Bands: workers allowed at [percent]; used in `bands` mode and as the fallback without pace data. */
     fun allowance(percent: Double?): Int? {
         if (!enabled || percent == null) return null
         return tiers.firstOrNull { it.below == null || percent < it.below }?.workers
@@ -49,6 +88,16 @@ data class PacingRule(val enabled: Boolean = true, val tiers: List<PacingTier> =
         val DEFAULT_TIERS = listOf(PacingTier(60.0, 3), PacingTier(80.0, 2), PacingTier(null, 1))
         val DEFAULT = PacingRule()
         const val MAX_WORKERS = 50
+        const val MODE_PACE = "pace"
+        const val MODE_BANDS = "bands"
+        const val DEFAULT_MAX_WORKERS = 5
+        const val PACE_SPAN = 20.0
+
+        /** Slack (percentage points) so exactly on pace is not nudged down by rounding. */
+        const val PACE_TOLERANCE = 0.5
+
+        /** Floor of the elapsed fraction: the first minutes of a window neither divide by ~0 nor flip-flop. */
+        const val MIN_ELAPSED = 0.10
 
         /** Validates [element]; throws [IllegalArgumentException] naming the problem. */
         fun parse(element: JsonElement): PacingRule {
@@ -57,6 +106,10 @@ data class PacingRule(val enabled: Boolean = true, val tiers: List<PacingTier> =
             } catch (e: Exception) {
                 throw IllegalArgumentException("must be {\"enabled\": bool, \"tiers\": [{\"below\": percent, \"workers\": n}, ..., {\"workers\": n}]}")
             }
+            require(rule.mode == MODE_PACE || rule.mode == MODE_BANDS) { "mode must be 'pace' or 'bands'" }
+            require(rule.maxWorkers in 1..MAX_WORKERS) { "maxWorkers must be in 1..$MAX_WORKERS" }
+            require(rule.okProjected > 0.0) { "okProjected must be positive" }
+            require(rule.hardStopPercent > 0.0 && rule.hardStopPercent <= 100.0) { "hardStopPercent must be in (0, 100]" }
             require(rule.tiers.isNotEmpty()) { "needs at least one tier" }
             require(rule.tiers.last().below == null) { "last tier must have no 'below' (it covers every percent left)" }
             require(rule.tiers.dropLast(1).all { it.below != null }) { "only the last tier may omit 'below'" }
@@ -120,6 +173,10 @@ data class MeterUsage(
     val warning: String? = null,
     /** Contract 1.124.0: epoch millis of the live read these numbers come from; null for a manual or unread meter. */
     val updatedAt: Long? = null,
+    /** Projected percent of the governing window at its reset (pace mode); null when judged by bands or unknown. */
+    val projectedPercent: Double? = null,
+    /** Why the rule allows [ruleAllowance] ("projected 33% at reset", "bands", ...). */
+    val reasoning: String? = null,
 )
 
 /** The `usage_report` frame (contract 1.119.0). */
@@ -159,9 +216,14 @@ object UsageText {
     fun render(report: UsageReport): String = buildString {
         val rule = report.rule
         appendLine(
-            "pacing rule: " + if (!rule.enabled) "off" else rule.tiers.joinToString(", ") { t ->
-                (t.below?.let { "<${fmt(it)}% -> " } ?: "else -> ") + "${t.workers}"
-            } + " ticket workers",
+            "pacing rule: " + when {
+                !rule.enabled -> "off"
+                rule.mode == PacingRule.MODE_PACE ->
+                    "pace (up to ${rule.maxWorkers} ticket workers while projected <= ${fmt(rule.okProjected)}% at reset, 1 from ${fmt(rule.hardStopPercent)}% used; bands fallback without reset data)"
+                else -> rule.tiers.joinToString(", ") { t ->
+                    (t.below?.let { "<${fmt(it)}% -> " } ?: "else -> ") + "${t.workers}"
+                } + " ticket workers"
+            },
         )
         if (report.meters.isEmpty()) appendLine("no meters: no live usage source and no ticket worker running")
         for (m in report.meters) {
@@ -170,6 +232,7 @@ object UsageText {
             m.window?.let { append(" (").append(it).append(")") }
             m.paceDelta?.let { append(", ").append(if (it >= 0) "+" else "").append(fmt(it)).append(" vs even pace") }
             m.resetsAt?.let { append(", resets in ").append(until(it, report.observedAt)) }
+            m.projectedPercent?.let { append(", projected ").append(fmt(it)).append("% at reset") }
             append(" [").append(m.source).append("]")
             append(" | running ").append(m.running).append(", allowance ").append(m.allowance?.toString() ?: "no limit")
             m.override?.let { o ->
@@ -201,8 +264,15 @@ object UsageText {
             "off" -> current.copy(enabled = false)
             "on" -> current.copy(enabled = true)
             "default" -> PacingRule.DEFAULT
-            else -> PacingRule(
+            "pace" -> current.copy(enabled = true, mode = PacingRule.MODE_PACE)
+            else -> if (t.startsWith("pace:")) {
+                current.copy(
+                    enabled = true, mode = PacingRule.MODE_PACE,
+                    maxWorkers = t.removePrefix("pace:").trim().toIntOrNull() ?: throw IllegalArgumentException("bad max workers in '$t'"),
+                )
+            } else PacingRule(
                 enabled = true,
+                mode = PacingRule.MODE_BANDS,
                 tiers = t.split(',').map { part ->
                     val bits = part.trim().split(':')
                     when (bits.size) {
@@ -268,7 +338,11 @@ class UsagePacing(
         now: Long,
     ): MeterUsage {
         val windows = live?.windows.orEmpty()
-        val top = windows.filter { it.percent != null }.maxByOrNull { it.percent!! }
+        // The governing window is the one that allows the fewest workers (the tighter of the windows); ties: the higher percent.
+        val judged = windows.filter { it.percent != null }.mapNotNull { w -> rule.judge(w, now)?.let { w to it } }
+        val governing = judged.minWithOrNull(compareBy<Pair<LimitWindow, PacingRule.Judgement>>({ it.second.allowance }, { -(it.first.percent ?: 0.0) }))
+        val top = governing?.first
+        val judgement = governing?.second
         val source: String
         val percent: Double?
         val label: String?
@@ -281,7 +355,8 @@ class UsagePacing(
             }
             else -> { source = "none"; percent = null; label = null; resetsAt = null; pace = null }
         }
-        val ruleAllowance = rule.allowance(percent)
+        val ruleAllowance = if (!rule.enabled || percent == null) null else judgement?.allowance ?: rule.allowance(percent)
+        val reasoning = if (ruleAllowance == null) null else judgement?.reason ?: "bands"
         val allowance = if (override != null) override.workers else ruleAllowance
         val warning = when {
             override != null -> null
@@ -293,6 +368,7 @@ class UsagePacing(
             windows = windows, reason = live?.reason, ruleAllowance = ruleAllowance, override = override,
             allowance = allowance, running = running, canStart = allowance == null || running < allowance, warning = warning,
             updatedAt = if (top != null) live?.observedAt else null,
+            projectedPercent = judgement?.projected, reasoning = reasoning,
         )
     }
 
@@ -300,8 +376,9 @@ class UsagePacing(
         val pct = m.percent?.let { "${fmt(it)}% ${m.window ?: ""}".trim() } ?: "unknown usage"
         val pace = m.paceDelta?.let { " (${if (it >= 0) "+" else ""}${fmt(it)} vs even pace)" } ?: ""
         val by = if (m.override != null) "override" else "rule"
+        val projected = if (m.override == null) m.projectedPercent?.let { ", projected ${fmt(it)}% at reset" } ?: "" else ""
         val resets = m.resetsAt?.let { "; resets ${java.time.Instant.ofEpochMilli(it)}" } ?: ""
-        return "usage pacing: ${m.meter} at $pct$pace, allowance ${m.allowance} ($by), running ${m.running}$resets. " +
+        return "usage pacing: ${m.meter} at $pct$pace$projected, allowance ${m.allowance} ($by), running ${m.running}$resets. " +
             "Wait for a worker to finish, or ask the owner for an override (agenthq usage override ${m.meter} <n|none>)."
     }
 
