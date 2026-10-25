@@ -99,6 +99,8 @@ data class BgJob(
     val lastBeat: Long = 0L,
     /** Where the wrapper tees the command's output; null when none. */
     val logPath: String? = null,
+    /** `bg run --keep`: the job (and everything under it) survives its session closing (ticket b785f383). */
+    val keep: Boolean = false,
 )
 
 /** One `bg_job` request. [op] is `beat` (register or heartbeat: an upsert), `done`, or `list`. */

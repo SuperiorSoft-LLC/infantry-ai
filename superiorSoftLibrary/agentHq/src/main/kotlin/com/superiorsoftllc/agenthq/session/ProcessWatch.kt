@@ -116,6 +116,9 @@ object OsMemorySource : MemorySource {
     private const val MB = 1024L * 1024L
 }
 
+/** Ticket b785f383: one session closing, as [SessionManager.onSessionClosed] reports it. */
+data class SessionClosed(val sessionId: String, val at: Long, val keepPids: Set<Long>, val reason: String)
+
 /** What a reap request came to. */
 sealed interface ReapResult {
     data class Reaped(val process: TrackedProcess) : ReapResult
@@ -140,6 +143,8 @@ class ProcessWatch(
     private val autoReapEveryMs: Long = 60_000L,
     /** True while the gate lock's holder pid is alive: its Gradle daemons are not orphans. */
     private val lockHolderAlive: () -> Boolean = ::gateLockHolderAlive,
+    /** The gate lock holder's pid, null when there is no lock; a shared Gradle daemon it may use is never closed with a session. */
+    private val lockHolderPid: () -> Long? = ::gateLockHolderPid,
 ) {
     private var lastPressureAt: Long? = null
     private var lastAutoReapAt: Long? = null
@@ -224,14 +229,84 @@ class ProcessWatch(
         }
     }
 
-    private fun kill(entry: LedgerEntry, view: TrackedProcess): ReapResult {
+    /**
+     * Ticket b785f383: the deterministic close-time cleanup, separate from (and regardless of) the opt-in auto reap.
+     * Kill every ledger entry of [sessionId] that started at or before [closedAt] (so a restart's fresh processes live),
+     * leaf first, each pid + start instant verified. Spared: anything not in this session's ledger; the daemon and its
+     * ancestors; [keepPids] and everything under them (kept `bg run --keep` jobs, a harness the host still holds); a
+     * shared Gradle/Kotlin daemon while a live gate-lock holder outside this session exists, or handed to another live
+     * session that runs a Gradle client. A process with a spared descendant is killed alone, never as a tree.
+     */
+    @Synchronized
+    fun reapSession(sessionId: String, closedAt: Long, keepPids: Set<Long> = emptySet(), reason: String = "session closed"): List<TrackedProcess> {
+        val records = sessions()
+        runCatching { ledger.observe(roots(records)) } // last-moment children, and drop what is already gone
+        val mine = ledger.entries().filter { it.sessionId == sessionId }
+        if (mine.isEmpty()) return emptyList()
+        val all = ledger.allProcesses().associateBy { it.pid }
+        fun ancestors(pid: Long): Sequence<Long> =
+            generateSequence(all[pid]?.parentPid) { all[it]?.parentPid }.take(64)
+        val minePids = mine.mapTo(HashSet()) { it.pid }
+        val holder = runCatching(lockHolderPid).getOrNull()
+        val holderUses = holder != null && holder !in minePids && holder !in protectedPids &&
+            runCatching { table.startInstant(holder) }.getOrNull() != null
+        val liveOthers = records.filter { it.id != sessionId && it.state !in ENDED }.mapTo(HashSet()) { it.id }
+        val otherClient = ledger.entries().firstOrNull { it.sessionId in liveOthers && GRADLE_CLIENT.containsMatchIn(it.command) }?.sessionId
+
+        val doomed = ArrayList<LedgerEntry>()
+        for (e in mine) {
+            when {
+                e.startedAt > closedAt -> Unit // started after the close: a restart's new run
+                e.pid in protectedPids -> Unit
+                e.pid in keepPids || ancestors(e.pid).any { it in keepPids } ->
+                    println("[agentHq] close cleanup: kept pid ${e.pid} (${e.command}) of session $sessionId")
+                ORPHAN_DAEMON.containsMatchIn(e.command) && holderUses ->
+                    println("[agentHq] close cleanup: spared shared daemon pid ${e.pid} of session $sessionId (gate-lock holder $holder alive)")
+                ORPHAN_DAEMON.containsMatchIn(e.command) && otherClient != null -> {
+                    ledger.reassign(e.pid, otherClient)
+                    println("[agentHq] close cleanup: shared daemon pid ${e.pid} handed from session $sessionId to $otherClient")
+                }
+                else -> doomed += e
+            }
+        }
+        val doomedPids = doomed.mapTo(HashSet()) { it.pid }
+        // Leaf first: the deepest process, then the latest started.
+        val order = doomed.sortedWith(compareByDescending<LedgerEntry> { ancestors(it.pid).count() }.thenByDescending { it.startedAt })
+        val mem = if (order.isEmpty()) emptyMap() else runCatching { memory.processes() }.getOrDefault(emptyList()).associate { it.pid to it.mb }
+        return order.mapNotNull { e ->
+            // A live descendant we do not kill (kept, foreign, newer, shared) must survive: then the process goes alone.
+            val spareBelow = all.values.any { p -> p.pid !in doomedPids && ancestors(p.pid).any { it == e.pid } }
+            val view = TrackedProcess(e.pid, e.command, e.sessionId, e.startedAt, mem[e.pid], true, reason, e.inferred)
+            (kill(e, view, tree = !spareBelow) as? ReapResult.Reaped)?.process
+        }
+    }
+
+    /**
+     * [reapSession] for every session the ledger still names that has ended or was removed: the catch-up at daemon start
+     * (a crash skipped the close-time cleanup) and the sweep at daemon shutdown. A live session's processes, its
+     * registered background jobs included, are left alone: they are designed to outlive a daemon restart.
+     */
+    @Synchronized
+    fun reapEnded(reason: String): List<TrackedProcess> {
+        val bySession = sessions().associateBy { it.id }
+        val now = clock()
+        return ledger.entries().map { it.sessionId }.distinct().flatMap { id ->
+            val owner = bySession[id]
+            if (owner != null && owner.state !in ENDED) return@flatMap emptyList()
+            // A FAILED session is resumable: its registered bg jobs stay, as at the failed turn's own close.
+            val keep = owner?.let { o -> keepPidsOf(o) + (if (o.state == SessionState.FAILED) o.bgJobs.map { it.pid } else emptyList()) }.orEmpty()
+            reapSession(id, now, keep, owner?.let { "$reason: session ended (${it.state})" } ?: "$reason: session removed")
+        }
+    }
+
+    private fun kill(entry: LedgerEntry, view: TrackedProcess, tree: Boolean = true): ReapResult {
         if (entry.pid in protectedPids) return ReapResult.Refused("pid ${entry.pid} is Infantry AI itself")
         val actual = runCatching { table.startInstant(entry.pid) }.getOrNull()
         if (actual != entry.startedAt) {
             ledger.forget(entry.pid)
             return ReapResult.Refused("pid ${entry.pid} is gone (or now another process); nothing killed")
         }
-        runCatching { table.killTree(entry.pid, entry.startedAt) }
+        runCatching { if (tree) table.killTree(entry.pid, entry.startedAt) else table.killOne(entry.pid, entry.startedAt) }
             .onFailure { return ReapResult.Refused("killing pid ${entry.pid} failed: ${it.message}") }
         ledger.forget(entry.pid)
         println("[agentHq] reaped pid ${entry.pid} (${entry.command}) of session ${entry.sessionId}: ${view.reason ?: "asked"}")
@@ -255,6 +330,17 @@ class ProcessWatch(
         /** Runtimes worth showing when unattributed. */
         private val HEAVY = Regex("""(?i)(java|javaw|node|opencode|docker.*|com\.docker.*|vmmem.*|wsl.*|kotlin.*|gradle.*|bun|pi)(\.exe)?""")
         private val ORPHAN_DAEMON = Regex("""GradleDaemon|KotlinCompileDaemon""")
+        private val GRADLE_CLIENT = Regex("""(?i)gradlew|GradleWrapperMain|GradleMain""")
+
+        /** What a closing session keeps alive: its `bg run --keep` wrappers and a harness the host still holds. */
+        fun keepPidsOf(record: SessionRecord): Set<Long> =
+            (record.bgJobs.filter { it.keep }.map { it.pid } + listOfNotNull(record.keptProcess?.pid)).toSet()
+
+        /** `%TEMP%\agenthq-gate.lock\pid`, or null when there is no lock. */
+        fun gateLockHolderPid(): Long? {
+            val dir = System.getenv("TEMP") ?: System.getProperty("java.io.tmpdir") ?: return null
+            return java.io.File(dir, "agenthq-gate.lock/pid").takeIf { it.isFile }?.readText()?.trim()?.toLongOrNull()
+        }
         private const val UNATTRIBUTED_MIN_MB = 200L
 
         /** `%TEMP%\agenthq-gate.lock\pid` names the gate's holder; true when that pid is alive. */

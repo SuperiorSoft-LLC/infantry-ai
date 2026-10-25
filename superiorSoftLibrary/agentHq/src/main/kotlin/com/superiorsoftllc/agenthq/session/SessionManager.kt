@@ -887,6 +887,7 @@ class SessionManager(
         // force means the turn is stuck: kill the process tree at once rather than waiting out the grace period.
         if (busy) killRun(sessionId, force = true)
         host.stop(sessionId)
+        closed(sessionId, "session restarted")
         val next = resolveInstance(session.agentId, session.role)?.let { withSkills(it.copy(agentId = session.agentId, role = session.role), session.ticketId) }
         instances.delete(sessionId)
         next?.let { instances.insert(sessionId, it, clock()) }
@@ -1112,6 +1113,7 @@ class SessionManager(
             )
         }
         eventSink?.invoke(SessionEvent.Exit(sessionId, exitCode, outcome, processExited = processExited))
+        if (state == SessionState.FAILED) closed(sessionId, "turn failed", resumable = true)
     }
 
     /**
@@ -1175,6 +1177,7 @@ class SessionManager(
                 isProcessAlive = false,
             )
         }
+        closed(sessionId, "turn failed", resumable = true)
     }
 
     // --- kill -----------------------------------------------------------------------------------
@@ -1201,8 +1204,32 @@ class SessionManager(
         } finally {
             // Closing a session stops the process the host keeps alive for it.
             host.stop(sessionId, force)
-            if (sessions.containsKey(sessionId)) onSessionEnded(sessionId)
+            if (sessions.containsKey(sessionId)) {
+                onSessionEnded(sessionId)
+                closed(sessionId, "session killed")
+            }
         }
+
+    /**
+     * Ticket b785f383: called when a session closes (kill, remove, restart, a turn ending FAILED), so the daemon can kill
+     * the background processes it left (see [ProcessWatch.reapSession]). Set once by the daemon; never fails the caller.
+     */
+    @Volatile
+    var onSessionClosed: (SessionClosed) -> Unit = {}
+        set(value) {
+            field = { c -> runCatching { value(c) } }
+        }
+
+    /**
+     * [resumable]: a failed turn, not a closed session: the harness the host still holds and every registered bg job (the
+     * next turn may want them) stay, with their trees; only the strays go.
+     */
+    private fun closed(sessionId: String, reason: String, record: SessionRecord? = sessions[sessionId], resumable: Boolean = false) {
+        val keep = record?.let { r ->
+            if (resumable) ProcessWatch.keepPidsOf(r) + r.bgJobs.map { it.pid } else ProcessWatch.keepPidsOf(r.copy(keptProcess = null))
+        }.orEmpty()
+        onSessionClosed(SessionClosed(sessionId, clock(), keep, reason))
+    }
 
     /**
      * NOTES-1: called when a session is killed or removed, so what is scoped to that one session (its session
@@ -1263,12 +1290,14 @@ class SessionManager(
         if (existing.live && isStaleLive(sessionId, existing)) markKilled(sessionId, KillOutcome.GRACEFUL)
         if (sessions.getValue(sessionId).live) throw IllegalArgumentException("session '$sessionId' is still running (${existing.state}); kill it first, then remove it")
         host.stop(sessionId)
+        val closing = sessions[sessionId]
         sessions.remove(sessionId)
         conversation.drop(sessionId)
         carryPending.remove(sessionId)
         lastPersisted.remove(sessionId)
         instances.delete(sessionId) // TRAITS-T4: the instance goes with its record
         onSessionEnded(sessionId)
+        closed(sessionId, "session removed", closing)
         writeAll()
     }
 

@@ -98,6 +98,15 @@ class ProcessLedger(
 
     private fun norm(s: String) = s.replace('\\', '/').trimEnd('/').lowercase()
 
+    /** Hand entry [pid] to [sessionId] (a shared Gradle daemon outliving the session that started it). */
+    @Synchronized
+    fun reassign(pid: Long, sessionId: String) {
+        val e = entries[pid] ?: return
+        if (e.sessionId == sessionId) return
+        entries[pid] = e.copy(sessionId = sessionId, root = false, inferred = true)
+        save()
+    }
+
     @Synchronized
     fun forget(pid: Long) {
         if (entries.remove(pid) != null) save()

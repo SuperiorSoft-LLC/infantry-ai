@@ -199,6 +199,9 @@ private const val DEFAULT_DB_NAME = "agenthq.db"
 
 /** ROGUE-1: how often the process ledger walks the session trees (a ProcessHandle walk; no subprocess unless under pressure). */
 private const val PROCESS_WATCH_POLL_MS = 10_000L
+
+/** Ticket b785f383: how long a closed session's own exit handlers get before its leftover processes are killed. */
+private const val SESSION_CLOSE_GRACE_MS = 3_000L
 private const val SESSION_REPLAY_REQUEST_TYPE = "replay_request"
 private const val SESSION_REPLAY_GAP_TYPE = "replay_gap"
 private const val SESSION_REPLAY_BUFFER_CAPACITY = 256
@@ -408,6 +411,8 @@ class AgentHqDaemon(
     val ownerQuestions: com.superiorsoftllc.agenthq.questions.OwnerQuestions? = null,
     /** TICKET-HANDOVER: switches ticket workers across harnesses with a handoff turn; stopped first by [close]. */
     val handover: SessionHandover? = null,
+    /** Ticket b785f383: [close] kills what ended or removed sessions left running (after the manager's own shutdown). */
+    private val processWatch: com.superiorsoftllc.agenthq.session.ProcessWatch? = null,
 ) {
     @Volatile private var recordedPort: Int? = null
     /** ASK-1: the `defaultAfterMin` sweep, started by [start], stopped by [close]. */
@@ -484,6 +489,8 @@ class AgentHqDaemon(
         runCatching { handover?.close() }
         runCatching { orchestrator.close() }
         runCatching { manager.shutdown() }
+        // Ticket b785f383: a clean stop leaves nothing of an ended or removed session behind; live sessions' bg jobs stay.
+        runCatching { processWatch?.reapEnded("daemon shutdown") }
         // Everything the kills above queued is applied before the store is released; see the KDoc.
         runCatching { board.close() }
         // CLIPATH-1: launches after this no longer read this daemon's (about to close) store for overrides.
@@ -716,11 +723,30 @@ class AgentHqDaemon(
                     for (c in clients.toList()) c.trySend(envelope)
                 },
             )
-            java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+            val processWatchExec = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
                 Thread(r, "agenthq-process-watch").also { it.isDaemon = true }
-            }.scheduleWithFixedDelay(
+            }
+            processWatchExec.scheduleWithFixedDelay(
                 { runCatching { processWatch.tick() }.onFailure { System.err.println("[agentHq] process watch failed: ${it.message}") } },
                 PROCESS_WATCH_POLL_MS, PROCESS_WATCH_POLL_MS, java.util.concurrent.TimeUnit.MILLISECONDS,
+            )
+            // Ticket b785f383: a closing session's background processes die with it, after a grace for its own exit
+            // handlers; deterministic and separate from the opt-in auto reap. The first pass catches up after a crash.
+            manager.onSessionClosed = { c ->
+                processWatchExec.schedule(
+                    {
+                        runCatching { processWatch.reapSession(c.sessionId, c.at, c.keepPids, c.reason) }
+                            .onFailure { System.err.println("[agentHq] close cleanup of ${c.sessionId} failed: ${it.message}") }
+                    },
+                    SESSION_CLOSE_GRACE_MS, java.util.concurrent.TimeUnit.MILLISECONDS,
+                )
+            }
+            processWatchExec.schedule(
+                {
+                    runCatching { processWatch.reapEnded("daemon start") }
+                        .onFailure { System.err.println("[agentHq] start-up cleanup failed: ${it.message}") }
+                },
+                PROCESS_WATCH_POLL_MS, java.util.concurrent.TimeUnit.MILLISECONDS,
             )
             // PROMPT-1: `prompts.timeoutSec` is read at every open; every request / resolution goes to every client.
             val pendingPrompts = com.superiorsoftllc.agenthq.prompts.PendingPrompts(
@@ -1364,6 +1390,7 @@ class AgentHqDaemon(
                 chatImageRetention = chatImageRetention,
                 ownerQuestions = ownerQuestions,
                 handover = handover,
+                processWatch = processWatch,
             )
         }
 

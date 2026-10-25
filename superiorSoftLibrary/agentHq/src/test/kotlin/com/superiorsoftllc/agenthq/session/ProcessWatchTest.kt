@@ -41,6 +41,11 @@ class ProcessWatchTest {
             if (procs[pid]?.startedAt != startedAt) return
             (descendants(pid).map { it.pid } + pid).forEach { killed += it; procs.remove(it) }
         }
+        val alone = mutableListOf<Long>()
+        override fun killOne(pid: Long, startedAt: Long) {
+            if (procs[pid]?.startedAt != startedAt) return
+            killed += pid; alone += pid; procs.remove(pid)
+        }
         override fun freeMb() = free
         override fun totalMb() = 32_000L
         override fun processes() = procs.values.map { ProcMem(it.pid, it.command.substringBefore(' '), mb[it.pid] ?: 0) }
@@ -62,7 +67,11 @@ class ProcessWatchTest {
         config: ProcessWatchConfig = ProcessWatchConfig(),
         pressure: MutableList<ProcessReport> = mutableListOf(),
         lockAlive: Boolean = false,
-    ) = ProcessWatch(ledger, { sessions.values.toList() }, os, os, { config }, { now }, onPressure = { pressure += it }, lockHolderAlive = { lockAlive })
+        lockHolder: Long? = null,
+    ) = ProcessWatch(
+        ledger, { sessions.values.toList() }, os, os, { config }, { now }, onPressure = { pressure += it },
+        lockHolderAlive = { lockAlive }, lockHolderPid = { lockHolder },
+    )
 
     // Pids far above anything real, so the test JVM's own ancestry (protected) never collides.
     private val harness = 900_100L
@@ -271,6 +280,159 @@ class ProcessWatchTest {
         assertTrue(stranger in os.procs)
         kotlin.test.assertFailsWith<IllegalArgumentException> { ProcessFrames.answer(w, ProcessesRequest("nuke")) }
         kotlin.test.assertFailsWith<IllegalArgumentException> { ProcessFrames.answer(w, ProcessesRequest("reap")) }
+    }
+
+    // --- ticket b785f383: close-time cleanup ---------------------------------------------------------------------
+
+    private val bash = 900_400L
+    private val conhost = 900_401L
+    private val node = 900_402L
+
+    /** s1's harness ran bash (with its conhost) running node, and gradlew whose daemon outlives it. */
+    private fun busyTree(id: String = "s1") {
+        gradleUnder(id)
+        os.start(bash, harness, "bash.exe -c npm run dev", 7_000)
+        os.start(conhost, bash, "conhost.exe 0x4", 7_001)
+        os.start(node, bash, "node server.js", 7_100)
+    }
+
+    /** The session closes: the host stopped its harness (and what still hung under it is now orphaned). */
+    private fun close(id: String = "s1", state: SessionState = SessionState.EXITED) {
+        os.exit(harness)
+        sessions[id] = sessions.getValue(id).copy(state = state, keptProcess = null)
+    }
+
+    @Test fun `closing a session kills its whole ledger tree, leaf first`() {
+        busyTree()
+        val w = watch()
+        w.tick()
+        os.exit(gradlew)
+        close()
+        val reaped = w.reapSession("s1", now, reason = "session killed").map { it.pid }
+        assertEquals(setOf(bash, conhost, node, gradleDaemon), reaped.toSet())
+        assertTrue(reaped.indexOf(node) < reaped.indexOf(bash) && reaped.indexOf(conhost) < reaped.indexOf(bash), "leaf first: $reaped")
+        assertTrue(listOf(bash, conhost, node, gradleDaemon).none { it in os.procs })
+        assertTrue(w.report().tracked.isEmpty())
+        assertTrue(w.reapSession("s1", now).isEmpty(), "a second close is a no-op")
+    }
+
+    @Test fun `close spares foreign and recycled pids and the other sessions`() {
+        busyTree()
+        os.start(stranger, null, "java Unrelated", 2_000)
+        val other = 900_500L
+        val otherChild = 900_501L
+        os.start(other, null, "claude --other", 1_500)
+        os.start(otherChild, other, "bash.exe -c sleep", 8_000)
+        session("s2", other)
+        val w = watch()
+        w.tick()
+        close()
+        // node's pid is recycled between the last tick and the close: same number, another process
+        os.exit(node)
+        os.start(node, null, "notepad.exe", 50_000)
+        w.reapSession("s1", now)
+        assertTrue(stranger in os.procs && other in os.procs && otherChild in os.procs, "other sessions and strangers untouched")
+        assertTrue(node in os.procs && os.procs.getValue(node).startedAt == 50_000L, "recycled pid untouched")
+        assertFalse(node in os.killed || stranger in os.killed || otherChild in os.killed)
+        assertTrue(bash !in os.procs)
+    }
+
+    @Test fun `a kept bg job and everything under it survive, its parent goes alone`() {
+        busyTree()
+        val wrapper = 900_600L
+        val gate = 900_601L
+        os.start(wrapper, bash, "agenthq bg run --keep -- gradlew test", 7_200)
+        os.start(gate, wrapper, "cmd /c gradle test", 7_300)
+        val w = watch()
+        w.tick()
+        sessions["s1"] = sessions.getValue("s1").copy(bgJobs = listOf(BgJob("j", "gate", wrapper, 7_200, keep = true)))
+        close()
+        val keep = ProcessWatch.keepPidsOf(sessions.getValue("s1"))
+        assertEquals(setOf(wrapper), keep)
+        w.reapSession("s1", now, keep)
+        assertTrue(wrapper in os.procs && gate in os.procs, "kept job survives")
+        assertTrue(bash !in os.procs && node !in os.procs)
+        assertTrue(bash in os.alone, "the kept job's parent is killed alone, not as a tree")
+    }
+
+    @Test fun `a shared gradle daemon is spared for a live gate-lock holder, handed to a live gradle client, else killed`() {
+        // spared: the gate-lock holder (outside this session) is alive
+        gradleUnder("s1")
+        val holder = 900_700L
+        os.start(holder, null, "bash gate.sh", 500)
+        var w = watch(lockHolder = holder)
+        w.tick()
+        os.exit(gradlew)
+        close()
+        w.reapSession("s1", now)
+        assertTrue(gradleDaemon in os.procs)
+
+        // handed over: another live session runs a gradle client
+        val ledger = ProcessLedger(os, os, clock = { now })
+        w = watch(ledger)
+        val h2 = 900_710L
+        os.start(h2, null, "claude --s2", 1_000)
+        os.start(900_711L, h2, "cmd /c gradlew build", 9_000)
+        session("s2", h2)
+        sessions["s1"] = sessions.getValue("s1").copy(state = SessionState.IDLE)
+        os.start(harness, null, "claude --session", 1_000)
+        os.procs[gradleDaemon] = os.procs.getValue(gradleDaemon).copy(parentPid = harness)
+        sessions["s1"] = sessions.getValue("s1").copy(keptProcess = KeptProcess(harness, 1_000, "claude"))
+        w.tick()
+        assertEquals("s1", ledger.get(gradleDaemon)!!.sessionId)
+        close()
+        w.reapSession("s1", now)
+        assertTrue(gradleDaemon in os.procs)
+        assertEquals("s2", ledger.get(gradleDaemon)!!.sessionId)
+
+        // nobody else uses it: killed with its session
+        sessions["s2"] = sessions.getValue("s2").copy(state = SessionState.EXITED)
+        w.reapSession("s2", now)
+        assertFalse(gradleDaemon in os.procs)
+    }
+
+    @Test fun `restart never kills the new run's fresh processes`() {
+        busyTree()
+        val w = watch()
+        w.tick()
+        val closedAt = 8_000L
+        val fresh = 900_800L
+        val freshChild = 900_801L
+        os.exit(harness)
+        os.start(fresh, null, "claude --session", 9_000)
+        os.start(freshChild, fresh, "bash.exe -c ls", 9_100)
+        sessions["s1"] = sessions.getValue("s1").copy(keptProcess = KeptProcess(fresh, 9_000, "claude"))
+        w.tick() // the new run lands in the ledger under the same session id
+        w.reapSession("s1", closedAt, reason = "session restarted")
+        assertTrue(fresh in os.procs && freshChild in os.procs)
+        assertTrue(bash !in os.procs && node !in os.procs && gradleDaemon !in os.procs)
+    }
+
+    @Test fun `the daemon's own process is never killed even when recorded`() {
+        val me = ProcessHandle.current().pid()
+        os.start(me, harness, "java AgentHqDaemon", 3_000)
+        gradleUnder("s1")
+        val w = watch()
+        w.tick()
+        close()
+        w.reapSession("s1", now)
+        assertTrue(me !in os.killed)
+    }
+
+    @Test fun `reapEnded takes ended and removed sessions only`() {
+        busyTree()
+        val other = 900_500L
+        val otherChild = 900_501L
+        os.start(other, null, "claude --other", 1_500)
+        os.start(otherChild, other, "bash.exe -c sleep", 8_000)
+        session("s2", other)
+        val w = watch()
+        w.tick()
+        os.exit(harness)
+        sessions.remove("s1")
+        w.reapEnded("daemon shutdown")
+        assertTrue(listOf(bash, node, conhost, gradlew, gradleDaemon).none { it in os.procs })
+        assertTrue(other in os.procs && otherChild in os.procs, "a live session is untouched")
     }
 
     @Test fun `tasklist and ps output parse`() {

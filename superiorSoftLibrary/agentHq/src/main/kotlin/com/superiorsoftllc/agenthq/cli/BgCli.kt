@@ -11,7 +11,7 @@ import java.io.File
 import java.util.UUID
 
 /**
- * `agenthq bg run [--name <label>] -- <cmd...>` and `bg list|status|logs|stop`: a background job the AGENT registers, so
+ * `agenthq bg run [--name <label>] [--keep] -- <cmd...>` (`--keep`: the job survives its session closing) and `bg list|status|logs|stop`: a background job the AGENT registers, so
  * the daemon knows the session is running without reading the OS process tree (which loses a detached job).
  *
  * `run` executes the command, tees its output to a log file, registers the job under `AGENTHQ_SESSION_ID`, heartbeats
@@ -23,7 +23,7 @@ internal object BgCli {
     private val json = Json { ignoreUnknownKeys = true }
 
     sealed interface Parsed {
-        data class Run(val name: String?, val command: List<String>) : Parsed
+        data class Run(val name: String?, val command: List<String>, val keep: Boolean = false) : Parsed
         data class Show(val verb: String, val id: String?) : Parsed
         data class Bad(val message: String) : Parsed
     }
@@ -38,16 +38,18 @@ internal object BgCli {
                 val opts = if (split >= 0) rest.take(split) else rest
                 val command = if (split >= 0) rest.drop(split + 1) else emptyList()
                 var name: String? = null
+                var keep = false
                 var i = 0
                 while (i < opts.size) {
                     when (opts[i]) {
                         "--name" -> name = opts.getOrNull(++i)?.takeIf { it.isNotBlank() } ?: return Parsed.Bad("--name expects a label")
+                        "--keep" -> keep = true
                         else -> return Parsed.Bad("bg run: unknown option '${opts[i]}' (put the command after --)")
                     }
                     i++
                 }
                 if (command.isEmpty()) Parsed.Bad("bg run expects a command after --, e.g. agenthq bg run --name gate -- gradlew test")
-                else Parsed.Run(name, command)
+                else Parsed.Run(name, command, keep)
             }
             "list" -> if (rest.isEmpty()) Parsed.Show("list", null) else Parsed.Bad("bg list takes no arguments")
             "status", "logs", "stop" ->
@@ -98,7 +100,7 @@ internal object BgCli {
         val log = File(logDir().also { it.mkdirs() }, "$id.log")
         val label = p.name ?: p.command.joinToString(" ").take(80)
         val child = ProcessBuilder(p.command).redirectErrorStream(true).start()
-        val job = BgJob(id, label, ProcessHandle.current().pid(), System.currentTimeMillis(), logPath = log.absolutePath)
+        val job = BgJob(id, label, ProcessHandle.current().pid(), System.currentTimeMillis(), logPath = log.absolutePath, keep = p.keep)
         // No session (run outside an agent) or no daemon: the command still runs; only the flag is missing.
         val stream = if (session == null) null else try {
             open()

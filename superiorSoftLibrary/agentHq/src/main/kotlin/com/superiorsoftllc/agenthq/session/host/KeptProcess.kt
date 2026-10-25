@@ -37,6 +37,9 @@ interface ProcessTable {
      * kills through, so the pid cannot be recycled in between.
      */
     fun killTree(pid: Long, startedAt: Long)
+
+    /** Kill [pid] alone, its descendants untouched (they may be kept). Same start-instant re-check as [killTree]. */
+    fun killOne(pid: Long, startedAt: Long) = killTree(pid, startedAt)
 }
 
 /** The real one: [ProcessHandle], which also works for a process this JVM did not start (a dead daemon's child). */
@@ -53,6 +56,12 @@ object OsProcessTable : ProcessTable {
         val handle = ProcessHandle.of(pid).orElse(null) ?: return
         if (handle.info().startInstant().map { it.toEpochMilli() }.orElse(null) != startedAt) return
         handle.descendants().forEach { runCatching { it.destroyForcibly() } }
+        runCatching { handle.destroyForcibly() }
+    }
+
+    override fun killOne(pid: Long, startedAt: Long) {
+        val handle = ProcessHandle.of(pid).orElse(null) ?: return
+        if (handle.info().startInstant().map { it.toEpochMilli() }.orElse(null) != startedAt) return
         runCatching { handle.destroyForcibly() }
     }
 }

@@ -4172,7 +4172,7 @@ internal object Cli {
               ticket link <id|prefix> <otherId|prefix> <type>   Link one ticket to another (see the link types)
               remote on|off|status  Let the daemon accept outside (Tailscale) connections; prints the ws address
                                   and token. Takes effect on the next daemon restart.
-              bg run [--name L] -- CMD  Run CMD as a registered background job (session reads Running); bg list|status|logs|stop ID
+              bg run [--name L] [--keep] -- CMD  Run CMD as a registered background job (session reads Running; --keep: survives the session closing); bg list|status|logs|stop ID
               progress <0-100> ["label"] | plan "a" "b" .. | plan N | step [name] | bytes D T | count D T | status "label" | done | fail | clear | show
                                   Report your long job's progress, shown as a live bar on your card (progress --help: all forms)
               progress --watch [--reader gradle|junit|gate]   Copy stdin to stdout unchanged, reporting ##infantry marker lines
