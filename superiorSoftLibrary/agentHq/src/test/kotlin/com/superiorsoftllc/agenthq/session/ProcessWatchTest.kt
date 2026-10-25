@@ -189,6 +189,50 @@ class ProcessWatchTest {
         assertTrue(watch(lockAlive = true).report().rogue.isEmpty())
     }
 
+    private val pwNpx = "node C:/npm/bin/npx-cli.js -y @playwright/mcp@latest --browser chrome"
+    private val pwSrv = "node C:/cache/_npx/9833/node_modules/.bin/playwright-mcp"
+
+    @Test fun `a playwright mcp pair under a live session is adopted, named for it, and killed with the session close`() {
+        os.start(harness, null, "claude --session", 1_000)
+        session("s1", harness)
+        val w = watch()
+        w.tick()
+        os.start(900_400L, harness, pwNpx, 2_000, memMb = 140)
+        os.start(900_401L, 900_400L, pwSrv, 2_100, memMb = 95)
+        w.tick()
+        val rep = w.report().tracked
+        assertTrue(rep.single { it.pid == 900_401L }.command.startsWith("Playwright MCP for session s1 | "))
+        sessions.remove("s1")
+        w.reapSession("s1", now)
+        assertTrue(900_400L in os.killed && 900_401L in os.killed)
+    }
+
+    @Test fun `an orphan playwright mcp is listed at any size, never rogue, never auto reaped, reaped only by hand`() {
+        os.start(900_500L, 777_777L, pwNpx, 3_000, memMb = 140)
+        os.start(900_501L, 900_500L, pwSrv, 3_100, memMb = 95)
+        val w = watch(config = ProcessWatchConfig(autoReap = true))
+        w.tick()
+        val un = w.report().unattributed.single { it.pid == 900_501L }
+        assertTrue(un.command.startsWith("Playwright MCP | ") && !un.rogue && un.sessionId == null)
+        assertTrue(w.reapRogue().isEmpty() && w.reapSession("none", now).isEmpty())
+        assertTrue(os.killed.isEmpty())
+        assertIs<ReapResult.Reaped>(w.reap(900_500L))
+        assertTrue(900_500L in os.killed && 900_501L in os.killed)
+    }
+
+    @Test fun `opencode serve is shown with its port and reaped only by hand, other strangers are refused`() {
+        val oc = 900_600L
+        os.start(oc, null, "opencode.exe serve --port 47123 --hostname 127.0.0.1", 3_000, memMb = 1_700)
+        os.start(900_601L, null, "node unrelated.js", 3_000, memMb = 1_700)
+        val w = watch(config = ProcessWatchConfig(autoReap = true))
+        w.tick()
+        assertEquals("opencode serve --port 47123", w.report().unattributed.single { it.pid == oc }.command)
+        assertTrue(w.reapRogue().isEmpty() && os.killed.isEmpty())
+        assertIs<ReapResult.Refused>(w.reap(900_601L))
+        assertIs<ReapResult.Reaped>(w.reap(oc))
+        assertEquals(listOf(oc), os.killed)
+    }
+
     @Test fun `unrelated and recycled pids are never touched`() {
         os.start(stranger, null, "java Unrelated", 2_000, memMb = 4_000)
         gradleUnder("s1")
