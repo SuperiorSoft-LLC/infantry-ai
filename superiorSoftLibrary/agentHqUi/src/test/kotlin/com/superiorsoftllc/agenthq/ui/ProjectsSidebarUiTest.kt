@@ -3,7 +3,12 @@ package com.superiorsoftllc.agenthq.ui
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -89,10 +94,24 @@ class ProjectsSidebarUiTest {
                 waitUntil(timeoutMillis = 10_000) { link.sentOf(Envelope.PROJECT_SAVE).isNotEmpty() }
                 assertTrue(link.sentOf(Envelope.PROJECT_SAVE).single().data.contains("\"Gamma\""), "project_save carries the typed name")
 
-                // A refusal from the daemon shows inline, in the sidebar.
-                link.push(Envelope(Envelope.ERROR, "project_save refused: a project named Gamma already exists"))
-                waitUntil(timeoutMillis = 10_000) { controller.state.value.notices.isNotEmpty() }
-                onNodeWithText("project_save refused: a project named Gamma already exists").assertExists()
+                // A refusal of the create shows inline in the New Project form, which stays open; the sidebar does
+                // not repeat it, so the message is drawn exactly once.
+                val gammaRefusal = "project_save refused: a project named Gamma already exists"
+                link.push(Envelope(Envelope.ERROR, gammaRefusal))
+                waitUntil(timeoutMillis = 10_000) { onAllNodesWithText(gammaRefusal).fetchSemanticsNodes().isNotEmpty() }
+                waitForIdle()
+                onAllNodesWithText(gammaRefusal).assertCountEquals(1)
+                onNode(hasText(gammaRefusal) and hasAnyAncestor(hasTestTag(NEW_PROJECT_DIALOG_TAG))).assertExists()
+                onNodeWithTag(NEW_PROJECT_DIALOG_TAG).assertExists()
+                onNodeWithText("Dismiss").assertDoesNotExist()
+
+                // A project refusal nobody's form is waiting for still shows inline, in the sidebar.
+                onNodeWithTag(NEW_PROJECT_CANCEL_TAG).performClick()
+                val otherRefusal = "project_delete refused: unknown project"
+                link.push(Envelope(Envelope.ERROR, otherRefusal))
+                waitUntil(timeoutMillis = 10_000) { onAllNodesWithText(otherRefusal).fetchSemanticsNodes().isNotEmpty() }
+                onAllNodesWithText(otherRefusal).assertCountEquals(1)
+                onNodeWithText("Dismiss").assertExists()
             }
         } finally {
             scope.cancel()

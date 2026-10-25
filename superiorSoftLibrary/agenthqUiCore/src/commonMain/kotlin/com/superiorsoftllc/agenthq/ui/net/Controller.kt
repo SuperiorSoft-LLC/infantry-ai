@@ -1133,7 +1133,10 @@ class Controller(
         } ?: return r
         if (answer.projects.any { it.id !in beforeIds }) return r
         pendingCreatedProject = null
-        return CommandResult.Refused(answer.projectRefusal?.text ?: "project_save refused")
+        // The New Project form shows this refusal inline; hand it over so the sidebar does not repeat the same message.
+        val refusal = answer.projectRefusal
+        _state.update { s -> if (refusal != null && s.projectRefusal == refusal) s.dismissProjectRefusal() else s }
+        return CommandResult.Refused(refusal?.text ?: "project_save refused")
     }
 
     /** Rename project [projectId] (an edit `project_save`); the daemon answers the updated `project` frame, or a refusal. */
