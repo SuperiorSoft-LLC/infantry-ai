@@ -419,6 +419,13 @@ class TicketBoard(
         val clearType = request.ticketType != null && request.ticketType.isBlank()
         val type = request.ticketType?.takeIf { it.isNotBlank() }?.let { checkType(it) }
         if (editing == null) require(title != null) { "title is required to create a ticket" }
+        // BACKLOG (1.131.0): a create enters todo (default) or backlog; an edit never changes the column.
+        val createStatus = request.status?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }?.also { wanted ->
+            require(editing == null) { "status is set on a create only; move a ticket with ticket_move" }
+            require(wanted == TicketStatus.TODO || wanted == TicketStatus.BACKLOG) {
+                "a new ticket enters ${TicketStatus.TODO} or ${TicketStatus.BACKLOG}, not '${wanted.take(40)}'"
+            }
+        } ?: TicketStatus.TODO
 
         val existing = editing?.let { wanted ->
             store.transaction { store.tickets.get(wanted) }
@@ -483,8 +490,8 @@ class TicketBoard(
                         title = title!!,
                         description = description ?: "",
                         ticketType = type,
-                        status = TicketStatus.TODO,
-                        position = 0, // renumbered to the bottom of todo
+                        status = createStatus,
+                        position = 0, // renumbered to the bottom of its column
                         createdAt = s.now,
                         updatedAt = s.now,
                         agentId = agentId,
@@ -608,7 +615,9 @@ class TicketBoard(
                         "prerequisite is open, never by hand"
                 }
             }
-            if (row.status == TicketStatus.PENDING && target != TicketStatus.PENDING) {
+            // 1.131.0: a held ticket may still be parked in backlog (it stays held there; promoted back to todo it
+            // settles into pending again), but it leaves pending for no other column by hand.
+            if (row.status == TicketStatus.PENDING && target != TicketStatus.PENDING && target != TicketStatus.BACKLOG) {
                 require(holding.isEmpty()) {
                     "ticket $id is held (${holdReason(holding)}): a held ticket leaves pending by itself, once nothing holds it"
                 }
@@ -636,6 +645,9 @@ class TicketBoard(
         val initial = store.transaction { load() }
         val row = initial.require(id)
         val initialTicket = views(initial.rows, initial.links).getValue(id)
+        // 1.131.0: a backlog ticket is limbo, never started from any path (ticket_start, a move to in_progress, the
+        // UI's Start, a drop on In progress); it must be promoted to todo first.
+        if (row.status == TicketStatus.BACKLOG) return refusedStart(initialTicket, TicketStatus.BACKLOG_START_REFUSAL)
         val holding = initial.holding(id)
         if (holding.isNotEmpty()) {
             return TicketAnswer(

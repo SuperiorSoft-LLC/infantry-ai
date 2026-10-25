@@ -185,6 +185,7 @@ private fun LabelledDropdown(
 
 /** The column's title and the colour of its chip. */
 private fun columnTitle(status: String): Pair<String, Color> = when (status) {
+    TicketColumns.BACKLOG -> "Backlog" to Palette.Muted
     TicketColumns.TODO -> "To do" to Palette.Info
     TicketColumns.IN_PROGRESS -> "In progress" to Palette.Accent
     TicketColumns.PENDING -> "Pending" to Palette.Muted
@@ -541,7 +542,12 @@ private fun TicketCard(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
             when (t.status) {
-                TicketColumns.TODO -> CardButton("Start", live) { onStart(); CommandResult.Sent }
+                // 1.131.0: a backlog card is never started; it is promoted to the sprint first.
+                TicketColumns.BACKLOG -> CardButton("To do", live, "Move to To do (the sprint)") { controller.moveTicket(t.id, TicketColumns.TODO) }
+                TicketColumns.TODO -> {
+                    CardButton("Start", live) { onStart(); CommandResult.Sent }
+                    CardButton("Backlog", live, "Park in Backlog") { controller.moveTicket(t.id, TicketColumns.BACKLOG) }
+                }
                 TicketColumns.IN_PROGRESS -> {
                     CardButton("Done", live) { controller.moveTicket(t.id, TicketColumns.DONE) }
                     CardButton("Back", live) { controller.moveTicket(t.id, TicketColumns.TODO) }
