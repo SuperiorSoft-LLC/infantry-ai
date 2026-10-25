@@ -3,7 +3,7 @@ package com.superiorsoftllc.agenthq.ui.voice.plugin
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.material3.OutlinedButton
+import com.superiorsoftllc.agenthq.ui.OutlinedButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
