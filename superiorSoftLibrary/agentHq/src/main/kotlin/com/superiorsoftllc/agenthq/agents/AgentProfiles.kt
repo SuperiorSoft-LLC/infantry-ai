@@ -70,7 +70,7 @@ class AgentProfiles(
         return RoleInstance(
             agentId = id,
             role = roleId,
-            instructions = profile?.instructions?.takeIf { it.isNotBlank() } ?: roleId?.let(rolePersona)?.takeIf { it.isNotBlank() },
+            instructions = SharedKnowledge.withKnowledge(profile?.instructions?.takeIf { it.isNotBlank() } ?: roleId?.let(rolePersona)?.takeIf { it.isNotBlank() }),
             traits = traitIds.mapNotNull { trait(it)?.let(TraitSnapshot::of) },
         )
     }
