@@ -815,6 +815,9 @@ class AgentHqDaemon(
             val projectStore = ProjectStore(persistence = SqlProjectPersistence((store as SqlAgentHqStore).database))
             // EXPERIMENTS-1: the pi tool bridge (off unless the project setting or the env override says on). Removing it = this line.
             com.superiorsoftllc.agenthq.experiments.pitoolbridge.PiToolBridgeRegistration.register({ projectStore.experimentOn(it, "piToolBridge") }, sessionStats)
+            // TODO-PROGRESS-1: every pi session loads the daemon's `todowrite` extension (pi has no to-do tool of its own).
+            com.superiorsoftllc.agenthq.harness.pi.PiLaunchExtras.builtIn =
+                com.superiorsoftllc.agenthq.harness.pi.PiTodoExtension.launchArgs(File(stateDir(), "pi"))
             // BASE-1a: `project_base` checks a branch in the repo ticket starts cut in -- the board's, read at answer
             // time through [boardRef] (built further down) -- with the same resolver a cut uses.
             var boardRef: TicketBoard? = null
@@ -1161,7 +1164,7 @@ class AgentHqDaemon(
                 broadcast(clients, event, streamSequencer, runActivity, { id, seconds ->
                     // A `sleep N` in a tool call becomes a "waiting" countdown; the call returning (or the agent moving on) ends it.
                     if (seconds != null) manager.setWait(id, com.superiorsoftllc.agenthq.session.WaitHint(seconds, System.currentTimeMillis())) else manager.clearWait(id)
-                }) { id -> manager.toolApprovalFor(id).mode }
+                }, { id, items -> manager.setTodoProgress(id, items) }) { id -> manager.toolApprovalFor(id).mode }
                 // PROMPT-1: a turn's end or a terminal session resolves its open prompts (deny / no answer).
                 pendingPrompts.onSessionEvent(event)
                 mail.onSessionEvent(event)
@@ -1448,6 +1451,8 @@ private fun broadcast(
     runActivity: com.superiorsoftllc.agenthq.protocol.RunActivityTracker,
     /** A sleep wait seen in a tool call (seconds), or null when it ended; see SleepHint. */
     onWait: (sessionId: String, seconds: Long?) -> Unit = { _, _ -> },
+    /** TODO-PROGRESS-1: a to-do tool call carried the agent's full list (text to status); it drives the progress bar. */
+    onTodos: (sessionId: String, items: List<Pair<String, String>>) -> Unit = { _, _ -> },
     /** BUG-PERM-1: the Tool approval a session runs under, named by its denial notice. */
     toolApprovalFor: (sessionId: String) -> com.superiorsoftllc.agenthq.harness.ToolApproval = { com.superiorsoftllc.agenthq.harness.ToolApproval.DENY },
 ) {
@@ -1481,7 +1486,10 @@ private fun broadcast(
                 // frame, any other line on a bare `status` frame after its own.
                 val moved = runActivity.line(event.sessionId, line)
                 when (line) {
-                    is EventNormalizer.Line.Tool -> onWait(event.sessionId, line.waitSeconds)
+                    is EventNormalizer.Line.Tool -> {
+                        onWait(event.sessionId, line.waitSeconds)
+                        line.todos?.let { t -> onTodos(event.sessionId, t.map { it.text to it.status }) }
+                    }
                     EventNormalizer.Line.ToolEnd, is EventNormalizer.Line.Text, is EventNormalizer.Line.Reasoning -> onWait(event.sessionId, null)
                     else -> Unit
                 }

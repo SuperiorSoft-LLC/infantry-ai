@@ -11,3 +11,6 @@ Rules: never invent a number; never mark a step done before or without doing it;
 Gradle test run: `agenthq run --label tests --reader gradle --reader junit -- ./gradlew test --console=plain --no-daemon`. Output markers/readers drive the bar; the exit code ends it.
 
 Browser pass (no log): plan `open app|login|create ticket|move ticket|verify board`; after each check really passes, step with its name; a failed check: `fail "ticket did not move"`; at the end `done`.
+
+## TO-DO LIST
+Keep your own to-do list current with your harness's to-do tool (claude `TodoWrite`, opencode and pi `todowrite`; always send the FULL list). Make it when the task has more than two steps, keep exactly one item `in_progress`, and mark an item `completed` as soon as it is really done, never ahead of time. The owner sees it as the to-do box next to the reasoning button, and it drives your progress bar (N of M done) whenever you are not reporting progress yourself; your own `agenthq run` markers or `agenthq_progress` reports take precedence while they run.

@@ -1053,6 +1053,8 @@ data class ProgressView(
     val labelStartedAt: Long? = null,
     val estimateSource: String? = null,
     val lastOutputAt: Long? = null,
+    /** 1.128.0 (TODO-PROGRESS-1): `todo` = the daemon derived this bar from the agent's to-do list; null = the agent reported it. */
+    val origin: String? = null,
 )
 
 @Serializable

@@ -24,6 +24,11 @@ class TodoAdapterTest {
         assertEquals(listOf(listOf(TodoItemPayload("check archive", "pending"))), lists.distinct())
     }
 
+    @Test fun `real pi todowrite capture (the daemon's extension, deepseek-flash) yields the list`() {
+        val lists = todosOf(fixture("pi-todowrite-run"))
+        assertEquals(listOf(listOf(TodoItemPayload("alpha", "done"), TodoItemPayload("beta", "in_progress"))), lists)
+    }
+
     @Test fun `real claude TodoWrite capture with string-encoded todos yields the list`() {
         val lists = todosOf(fixture("claude-run"))
         assertEquals(listOf(listOf(TodoItemPayload("check archive", "pending", "Checking archive"))), lists)

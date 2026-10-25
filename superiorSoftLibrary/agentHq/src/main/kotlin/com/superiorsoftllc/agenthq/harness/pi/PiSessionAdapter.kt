@@ -59,7 +59,7 @@ class PiSessionAdapter(
     override fun launch(request: RunRequest, env: Map<String, String>, runner: ProcessRunner, sink: AdapterSink): HostedProcess {
         val resume = request.resumeSessionId?.takeIf { it.isNotBlank() }
         val process = Process(sink)
-        process.start(runner, argv(launcher(), request, resume) + PiLaunchExtras.args(request.workingDir, env), request, env)
+        process.start(runner, argv(launcher(), request, resume) + PiLaunchExtras.all(request.workingDir, env), request, env)
         sink.detail(
             "pi rpc session (${process.pid?.let { "pid $it" } ?: "no OS process"})" +
                 (resume?.let { ", resuming provider session $it" } ?: ""),
