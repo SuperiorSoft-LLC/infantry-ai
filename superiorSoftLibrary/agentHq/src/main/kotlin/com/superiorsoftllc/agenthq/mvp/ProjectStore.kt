@@ -94,8 +94,8 @@ class ProjectStore(
     }
 
     /**
-     * LANE-CAPS: merge [caps] (role -> max agents) into project [id]'s caps. A cap below 1 is refused; 1 is the default,
-     * so it removes the entry. Nothing is written on a refusal.
+     * LANE-CAPS: merge [caps] (role -> max agents) into project [id]'s caps. A cap below 1 is refused; the lane default
+     * (setting `limits.concurrency.laneDefault`) removes the entry. Nothing is written on a refusal.
      */
     @Synchronized
     fun setLaneCaps(id: String, caps: Map<String, Int>): Project {
@@ -105,7 +105,7 @@ class ProjectStore(
             val key = role.trim()
             require(key.isNotEmpty()) { "role is blank" }
             require(cap >= 1) { "cap for role '${key.take(80)}' must be 1 or more, was $cap" }
-            if (cap == 1) merged.remove(key) else merged[key] = cap
+            if (cap == laneDefault()) merged.remove(key) else merged[key] = cap
         }
         val updated = existing.copy(laneCaps = merged.toSortedMap())
         projects[existing.id] = updated
@@ -179,7 +179,11 @@ class ProjectStore(
 
     /** LANE-CAPS: the most agents of [role] that may run at once in project [projectId] (1 when unset or unknown). */
     @Synchronized
-    fun laneCapOf(projectId: String?, role: String): Int = projects[projectId?.trim().orEmpty()]?.laneCaps?.get(role) ?: 1
+    fun laneCapOf(projectId: String?, role: String): Int = projects[projectId?.trim().orEmpty()]?.laneCaps?.get(role) ?: laneDefault()
+
+    /** The cap of a role the project sets none for (setting `limits.concurrency.laneDefault`; [Int.MAX_VALUE] = unlimited). */
+    @Volatile
+    var laneDefault: () -> Int = { com.superiorsoftllc.agenthq.settings.LimitRegistry.LANE_DEFAULT.default.toInt() }
 
     /** BASE-1a: project [id]'s base branch, or null when it has none (or there is no such project). */
     @Synchronized

@@ -53,6 +53,7 @@ import com.superiorsoftllc.agenthq.protocol.TicketMove
 import com.superiorsoftllc.agenthq.protocol.TicketReorder
 import com.superiorsoftllc.agenthq.protocol.TicketSave
 import com.superiorsoftllc.agenthq.protocol.SettingsSet
+import com.superiorsoftllc.agenthq.settings.LimitRegistry
 import com.superiorsoftllc.agenthq.settings.ProjectSettings
 import com.superiorsoftllc.agenthq.settings.SettingsService
 import com.superiorsoftllc.agenthq.mailbox.MailStore
@@ -562,11 +563,11 @@ class AgentHqDaemon(
             /** BUG-G2: the `agenthq` CLI's bin dir, prepended to every spawned session's PATH; null = PATH untouched. */
             agentHqBin: File? = AgentHqBin.resolve(),
             /**
-             * BUG-G2d: how many live sessions a session may grow its pod by (`AGENTHQ_POD_SPAWN_CAP`, default 4), and
-             * how deep spawns from inside sessions may nest (`AGENTHQ_POD_SPAWN_DEPTH`, default 1). See [SpawnGuard].
+             * BUG-G2d: how many live sessions a session may grow its pod by, and
+             * how deep spawns from inside sessions may nest. null (the real daemon) = the live settings `limits.concurrency.maxPerPod` / `maxDepth`; a test passes a fixed value. See [SpawnGuard].
              */
-            podSpawnCap: Int = SpawnGuard.limitFromEnv(SpawnGuard.MAX_PER_POD_ENV, SpawnGuard.DEFAULT_MAX_PER_POD),
-            podSpawnDepth: Int = SpawnGuard.limitFromEnv(SpawnGuard.MAX_DEPTH_ENV, SpawnGuard.DEFAULT_MAX_DEPTH),
+            podSpawnCap: Int? = null,
+            podSpawnDepth: Int? = null,
             /** U1 (contract 1.59.0): the plan-limit meters; `AGENTHQ_LIMITS_LIVE=false` turns the live HTTP reads off. */
             limits: LimitService = LimitService.fromEnv(),
             /**
@@ -823,6 +824,7 @@ class AgentHqDaemon(
             // order used to also append onto `Project.storyIds` here; it now lives entirely on
             // `Epic.storyIds`, appended below when the create named an epic).
             val projectStore = ProjectStore(persistence = SqlProjectPersistence((store as SqlAgentHqStore).database))
+            projectStore.laneDefault = { settings.limitCap(LimitRegistry.LANE_DEFAULT) }
             // EXPERIMENTS-1: the pi tool bridge (off unless the project setting or the env override says on). Removing it = this line.
             com.superiorsoftllc.agenthq.experiments.pitoolbridge.PiToolBridgeRegistration.register({ projectStore.experimentOn(it, "piToolBridge") }, sessionStats)
             // TODO-PROGRESS-1: every pi session loads the daemon's `todowrite` extension (pi has no to-do tool of its own).
@@ -1145,11 +1147,15 @@ class AgentHqDaemon(
             }
             // BUG-G2d: every spawn that names the session it comes from is charged to that session's pod.
             val spawnGuard = SpawnGuard(
-                sessions = manager::get, maxPerPod = podSpawnCap, maxDepth = podSpawnDepth,
+                sessions = manager::get,
+                maxPerPod = podSpawnCap ?: SpawnGuard.DEFAULT_MAX_PER_POD, maxDepth = podSpawnDepth ?: SpawnGuard.DEFAULT_MAX_DEPTH,
+                maxPerPodSource = if (podSpawnCap == null) ({ settings.limitCap(LimitRegistry.MAX_PER_POD) }) else null,
+                maxDepthSource = if (podSpawnDepth == null) ({ settings.limitCap(LimitRegistry.MAX_DEPTH) }) else null,
                 pendingOf = orchestrator::pendingNodes,
             )
             orchestrator.sessionStartedSink = { _, sessionId, parent -> spawnGuard.record(sessionId, parent); manager.setSpawner(sessionId, parent) }
-            println("[agentHq] pod spawn cap=$podSpawnCap depth=$podSpawnDepth (session-originated spawns only)")
+            settings.limitEnvProblems().forEach { println("[agentHq] limit ignored: $it") }
+            println("[agentHq] pod spawn cap=${podSpawnCap ?: settings.limit(LimitRegistry.MAX_PER_POD)} depth=${podSpawnDepth ?: settings.limit(LimitRegistry.MAX_DEPTH)} (0 = unlimited; settings limits.concurrency.*; session-originated spawns only)")
 
             mailbox.load()
             mailbox.eventSink = { event -> broadcastMail(clients, event, attention) }

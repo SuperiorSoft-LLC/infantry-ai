@@ -27,7 +27,11 @@ import com.superiorsoftllc.agenthq.usage.UsageSet
  * many days an unused chat upload is kept before the retention sweep deletes it, an int 0..3650, default 14; 0 = keep
  * forever.
  */
-class SettingsService(private val store: AgentHqStore) : ProjectSettings {
+class SettingsService(
+    private val store: AgentHqStore,
+    /** Where [limit] reads the environment layer (`AGENTHQ_LIMIT_*`); a test passes its own map. */
+    private val env: (String) -> String? = com.superiorsoftllc.agenthq.session.InfantryEnv::get,
+) : ProjectSettings {
     /**
      * BUG-M2-11f (plan section 8): told after `session.keepAliveMinutes` is stored, so kept processes are re-evaluated
      * against the new value at once instead of at their next launch. The daemon points it at the session manager.
@@ -55,7 +59,7 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
             PROCESSES_IDLE_MINUTES to JsonPrimitive(processWatchConfig().idleMinutes),
             PROCESSES_HEAVY_MB to JsonPrimitive(processWatchConfig().heavyMb),
             PROCESSES_FLOOR_MB to JsonPrimitive(processWatchConfig().floorMb),
-        ) + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
+        ) + LimitRegistry.ALL.associate { it.key to JsonPrimitive(limit(it)) } + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
     )
 
     /** USER-PORTRAIT (1.107.0): the stored base64 portrait, or null while unset (clients then show their bundled default). */
@@ -86,10 +90,40 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
         return runCatching { WeightExecutors.parse(Json.parseToJsonElement(stored)) }.getOrDefault(WeightExecutors.DEFAULT)
     }
 
+    /**
+     * LIMITS (S1 of the no-hard-coded-limits rule): [def]'s effective value, read at every use so a change applies at once:
+     * the stored setting, else the environment, else the default. An unreadable stored or env value falls back to the default.
+     */
+    fun limit(def: LimitDef): Long {
+        val stored = store.settings.get(def.key)?.value
+            ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> !p.isString }?.content?.toLongOrNull() }.getOrNull() }
+            ?.takeIf { def.accepts(it) }
+        return stored ?: runCatching { LimitRegistry.fromEnv(def, env) }.getOrDefault(def.default)
+    }
+
+    /** [limit] as a count: 0 on an unlimited-capable limit becomes [Int.MAX_VALUE] (no limit). */
+    fun limitCap(def: LimitDef): Int = LimitRegistry.cap(limit(def), def)
+
+    /** One line per environment variable that holds an unusable limit (reported at daemon start, then ignored). */
+    fun limitEnvProblems(): List<String> = LimitRegistry.ALL.mapNotNull { def ->
+        runCatching { LimitRegistry.fromEnv(def, env) }.exceptionOrNull()?.message
+    }
+
+    private fun pacingCeiling(): Int = limitCap(LimitRegistry.PACING_CEILING)
+
+    private fun requireLimit(def: LimitDef, value: JsonElement): Long {
+        val v = (value as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toLongOrNull()
+        require(v != null && def.accepts(v)) {
+            "setting '${def.key}' must be a JSON integer in ${def.range()} (${def.unit}" +
+                (if (def.zeroIsUnlimited) "; 0 = unlimited" else "") + "; default ${def.default})"
+        }
+        return v
+    }
+
     /** USAGE-PACE (1.121.0): the pacing rule, read at every report; an unreadable stored value falls back to the default. */
     fun usagePacing(): PacingRule {
         val stored = store.settings.get(USAGE_PACING)?.value ?: return PacingRule.DEFAULT
-        return runCatching { PacingRule.parse(Json.parseToJsonElement(stored)) }.getOrDefault(PacingRule.DEFAULT)
+        return runCatching { PacingRule.parse(Json.parseToJsonElement(stored), pacingCeiling()) }.getOrDefault(PacingRule.DEFAULT)
     }
 
     /** USAGE-AUTO (1.124.0): minutes between automatic live usage reads; default 5, 0 = off, read at every tick. */
@@ -108,7 +142,7 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
     /** USAGE-PACE: hand-set allowances per meter (expired ones included; the pacer drops them). */
     fun usageOverrides(): Map<String, UsageOverride> {
         val stored = store.settings.get(USAGE_OVERRIDES)?.value ?: return emptyMap()
-        return runCatching { UsagePacing.parseOverrides(Json.parseToJsonElement(stored)) }.getOrDefault(emptyMap())
+        return runCatching { UsagePacing.parseOverrides(Json.parseToJsonElement(stored), pacingCeiling()) }.getOrDefault(emptyMap())
     }
 
     /**
@@ -127,11 +161,11 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
         }
         request.overrideUntil?.let { until ->
             require(until > now) { "override 'until' must be in the future" }
-            require(request.overrideWorkers == null || request.overrideWorkers in 0..PacingRule.MAX_WORKERS) {
-                "workers must be in 0..${PacingRule.MAX_WORKERS} or none"
+            require(request.overrideWorkers == null || request.overrideWorkers in 0..pacingCeiling()) {
+                "workers must be in 0..${pacingCeiling()} or none (setting ${LimitRegistry.PACING_CEILING.key})"
             }
         }
-        val rule = request.rule?.let { usageSetting(USAGE_PACING) { PacingRule.parse(it) } }
+        val rule = request.rule?.let { usageSetting(USAGE_PACING) { PacingRule.parse(it, pacingCeiling()) } }
         rule?.let { set(USAGE_PACING, UsagePacing.ruleJson(it)) }
         if (request.clearManual || request.manualPercent != null) {
             val next = usageManual().filterValues { it.expiresAt > now }.toMutableMap()
@@ -183,14 +217,15 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
                 throw IllegalArgumentException("setting '$TICKET_WEIGHT_EXECUTORS' ${e.message}")
             }
             USER_PORTRAIT -> JsonPrimitive(requireUserPortrait(value))
-            USAGE_PACING -> UsagePacing.ruleJson(usageSetting(key) { PacingRule.parse(value) })
+            USAGE_PACING -> UsagePacing.ruleJson(usageSetting(key) { PacingRule.parse(value, pacingCeiling()) })
             USAGE_MANUAL -> UsagePacing.manualJson(usageSetting(key) { UsagePacing.parseManual(value) })
-            USAGE_OVERRIDES -> UsagePacing.overridesJson(usageSetting(key) { UsagePacing.parseOverrides(value) })
+            USAGE_OVERRIDES -> UsagePacing.overridesJson(usageSetting(key) { UsagePacing.parseOverrides(value, pacingCeiling()) })
             USAGE_REFRESH_MINUTES -> JsonPrimitive(requireIntIn(key, value, USAGE_REFRESH_RANGE))
             PROCESSES_AUTO_REAP -> JsonPrimitive(requireBoolean(key, value))
             PROCESSES_IDLE_MINUTES -> JsonPrimitive(requireIntIn(key, value, PROCESSES_IDLE_RANGE))
             PROCESSES_HEAVY_MB, PROCESSES_FLOOR_MB -> JsonPrimitive(requireIntIn(key, value, PROCESSES_MB_RANGE))
-            else -> throw IllegalArgumentException("unknown setting '$key'")
+            else -> LimitRegistry.get(key)?.let { JsonPrimitive(requireLimit(it, value)) }
+                ?: throw IllegalArgumentException("unknown setting '$key'")
         }
         store.settings.put(
             SettingRow(

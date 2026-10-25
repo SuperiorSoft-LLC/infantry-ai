@@ -12,6 +12,8 @@ import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.SpawnOptions
 import com.superiorsoftllc.agenthq.protocol.Ticket
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
+import com.superiorsoftllc.agenthq.settings.LimitDef
+import com.superiorsoftllc.agenthq.settings.LimitRegistry
 import com.superiorsoftllc.agenthq.session.SessionRecord
 import com.superiorsoftllc.agenthq.session.SessionState
 import kotlinx.serialization.builtins.ListSerializer
@@ -22,6 +24,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import java.io.File
 
@@ -36,15 +39,15 @@ import java.io.File
  */
 internal data class McpGuardrails(
     val depth: Int = 0,
-    val maxDepth: Int = DEFAULT_MAX_DEPTH,
-    val maxSpawns: Int = DEFAULT_MAX_SPAWNS,
+    /** Null = follow the daemon setting `limits.concurrency.maxDepth` (read at each spawn); a number is this connection's own. */
+    val maxDepth: Int? = null,
+    /** Null = follow the daemon setting `limits.concurrency.mcpMaxSpawns`; a number is this connection's own. */
+    val maxSpawns: Int? = null,
     val allowKillAny: Boolean = false,
     /** Where spawned sessions' depths are recorded so their own MCP servers can read them; null = not recorded. */
     val lineage: McpLineage? = null,
 ) {
     companion object {
-        const val DEFAULT_MAX_DEPTH = 2
-        const val DEFAULT_MAX_SPAWNS = 4
 
         /** Explicit depth of the server process (overridden by `--mcp-depth`). */
         const val DEPTH_ENV = "AGENTHQ_MCP_DEPTH"
@@ -121,21 +124,22 @@ internal class McpWriteTools(
         val task = arguments.string("task")
         if (agentId == null && role == null) return refused("agenthq_spawn needs a role or an agentId (or both)")
 
+        val limits = effectiveLimits(stream)
         val childDepth = guardrails.depth + 1
-        if (childDepth > guardrails.maxDepth) {
+        if (childDepth > limits.maxDepth) {
             return refused(
                 "agenthq_spawn refused: depth limit. This MCP server runs at depth ${guardrails.depth}, so the " +
-                    "session would be at depth $childDepth, above the maximum of ${guardrails.maxDepth} " +
-                    "(--max-depth). A session spawned through MCP may not spawn further than that.",
+                    "session would be at depth $childDepth, above the maximum of ${limits.maxDepth} " +
+                    "(${LimitRegistry.MAX_DEPTH.key}; this connection: --max-depth). A session spawned through MCP may not spawn further than that. ${LimitRegistry.MAX_DEPTH.hint()}",
             )
         }
 
         val snapshot = decodeSessions(stream.await(Envelope.SESSIONS))
         val held = holding(snapshot)
-        if (held.size >= guardrails.maxSpawns) {
+        if (held.size >= limits.maxSpawns) {
             return refused(
                 "agenthq_spawn refused: concurrency limit. This MCP server already has ${held.size} open " +
-                    "session(s) of a maximum of ${guardrails.maxSpawns} (--max-spawns): ${held.joinToString(", ")}. " +
+                    "session(s) of a maximum of ${limits.maxSpawns} (${LimitRegistry.MCP_MAX_SPAWNS.key}; this connection: --max-spawns): ${held.joinToString(", ")}. ${LimitRegistry.MCP_MAX_SPAWNS.hint()} " +
                     "Kill one with agenthq_kill, or wait for one to end, then retry.",
             )
         }
@@ -179,7 +183,7 @@ internal class McpWriteTools(
             put("depth", childDepth)
             put("taskSent", task != null)
             put("openSpawns", held.size + 1)
-            put("maxSpawns", guardrails.maxSpawns)
+            put("maxSpawns", limits.maxSpawns)
         })
     }
 
@@ -206,20 +210,21 @@ internal class McpWriteTools(
         val ticket = McpTicketTools.findTicket(stream, requested, getenv).getOrElse { return refused("$tool refused: ${it.message}") }
         if (tool == SPAWN) disagreement(ticket, arguments)?.let { return refused(it) }
 
+        val limits = effectiveLimits(stream)
         val childDepth = guardrails.depth + 1
         val held = holding(snapshot)
         if (ticket.status != TicketStatus.IN_PROGRESS) {
-            if (childDepth > guardrails.maxDepth) {
+            if (childDepth > limits.maxDepth) {
                 return refused(
                     "$tool refused: depth limit. This MCP server runs at depth ${guardrails.depth}, so the ticket's " +
-                        "worker would be at depth $childDepth, above the maximum of ${guardrails.maxDepth} " +
-                        "(--max-depth). Leave the ticket in todo for a person or a shallower agent to start.",
+                        "worker would be at depth $childDepth, above the maximum of ${limits.maxDepth} " +
+                        "(${LimitRegistry.MAX_DEPTH.key}; this connection: --max-depth). ${LimitRegistry.MAX_DEPTH.hint()} Leave the ticket in todo for a person or a shallower agent to start.",
                 )
             }
-            if (held.size >= guardrails.maxSpawns) {
+            if (held.size >= limits.maxSpawns) {
                 return refused(
                     "$tool refused: concurrency limit. This MCP server already has ${held.size} open session(s) of " +
-                        "a maximum of ${guardrails.maxSpawns} (--max-spawns): ${held.joinToString(", ")}. Kill one with " +
+                        "a maximum of ${limits.maxSpawns} (${LimitRegistry.MCP_MAX_SPAWNS.key}; this connection: --max-spawns): ${held.joinToString(", ")}. ${LimitRegistry.MCP_MAX_SPAWNS.hint()} Kill one with " +
                         "agenthq_kill, or wait for one to end, then retry.",
                 )
             }
@@ -237,7 +242,7 @@ internal class McpWriteTools(
                     put("startedBy", outcome.startedBy)
                     put("depth", childDepth)
                     put("openSpawns", held.size + if (outcome.session != null) 1 else 0)
-                    put("maxSpawns", guardrails.maxSpawns)
+                    put("maxSpawns", limits.maxSpawns)
                     outcome.warning?.let { put("warning", it) }
                     // BUG-REGRESS-1: what the worker's branch was cut from, so the agent never has to guess what it holds.
                     outcome.note?.let { put("note", it) }
@@ -493,6 +498,23 @@ internal class McpWriteTools(
      * The spawned sessions that hold a concurrency slot: still known to the daemon and either running, or open
      * (not ended) and not killed by this server. A killed session that is prompted back to life counts again.
      */
+    /** The depth / spawn limits in force for this call: this connection's own (flag, mcp.json), else the daemon's settings. */
+    private suspend fun effectiveLimits(stream: FrameStream): McpLimits {
+        suspend fun daemon(def: LimitDef): Int {
+            val answer = runCatching {
+                stream.request(Envelope(Envelope.SETTINGS_GET, def.key), Envelope.SETTINGS, "settings_get", idempotent = true)
+            }.getOrNull()
+            val fromDaemon = answer?.let {
+                runCatching { (Json.parseToJsonElement(it.data).jsonObject[def.key] as? JsonPrimitive)?.content?.toLongOrNull() }.getOrNull()
+            }?.takeIf { def.accepts(it) }
+            return LimitRegistry.cap(fromDaemon ?: runCatching { LimitRegistry.fromEnv(def, getenv) }.getOrDefault(def.default), def)
+        }
+        return McpLimits(
+            maxDepth = guardrails.maxDepth ?: daemon(LimitRegistry.MAX_DEPTH),
+            maxSpawns = guardrails.maxSpawns ?: daemon(LimitRegistry.MCP_MAX_SPAWNS),
+        )
+    }
+
     private fun holding(snapshot: List<SessionRecord>): List<String> {
         val byId = snapshot.associateBy { it.id }
         return spawned.filter { id ->
@@ -697,3 +719,6 @@ internal class McpWriteTools(
         }
     }
 }
+
+/** [McpGuardrails]' depth / spawn limits resolved for one call; [Int.MAX_VALUE] = unlimited. */
+internal data class McpLimits(val maxDepth: Int, val maxSpawns: Int)

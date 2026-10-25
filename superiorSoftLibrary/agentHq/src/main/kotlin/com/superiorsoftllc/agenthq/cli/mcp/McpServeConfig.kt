@@ -13,7 +13,7 @@ import java.io.File
  *
  * Two sources, merged by [merge]: the command line (`--project`, `--max-depth`, `--max-spawns`,
  * `--allow-kill-any`) and an OPTIONAL `.agenthq/mcp.json` in the server's working directory. A flag wins over
- * the file; a value neither sets falls back to the built-in default ([McpGuardrails.DEFAULT_MAX_DEPTH] etc.).
+ * the file; a value neither sets follows the daemon settings `limits.concurrency.maxDepth` / `mcpMaxSpawns`.
  *
  * WHY A FILE. An MCP client (Claude Code, Codex, ...) starts the server from its own config, usually checked
  * into the repo, with the repo root as the working directory. A project file lets that one shared config line

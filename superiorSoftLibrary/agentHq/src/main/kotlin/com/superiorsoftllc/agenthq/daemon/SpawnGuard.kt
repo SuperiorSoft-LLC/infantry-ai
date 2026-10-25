@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.daemon
 
+import com.superiorsoftllc.agenthq.settings.LimitRegistry
 import com.superiorsoftllc.agenthq.session.InfantryEnv
 
 import com.superiorsoftllc.agenthq.session.SessionRecord
@@ -36,15 +37,27 @@ class SpawnRefused(message: String) : IllegalArgumentException(message)
 class SpawnGuard(
     /** The daemon's sessions by id (`SessionManager::get`). */
     private val sessions: (String) -> SessionRecord?,
-    val maxPerPod: Int = DEFAULT_MAX_PER_POD,
-    val maxDepth: Int = DEFAULT_MAX_DEPTH,
+    maxPerPod: Int = DEFAULT_MAX_PER_POD,
+    maxDepth: Int = DEFAULT_MAX_DEPTH,
     /** How many nodes of an orchestrator pod have not started a session yet; 0 for an unknown or finished pod. */
     private val pendingOf: (podId: String) -> Int = { 0 },
+    /** The live pod cap / depth limit (settings `limits.concurrency.*`), read at every check; null = the fixed value above. */
+    private val maxPerPodSource: (() -> Int)? = null,
+    private val maxDepthSource: (() -> Int)? = null,
 ) {
     init {
         require(maxPerPod >= 0) { "the pod spawn cap must be 0 or more, was $maxPerPod" }
         require(maxDepth >= 0) { "the spawn depth limit must be 0 or more, was $maxDepth" }
     }
+
+    private val fixedPerPod = maxPerPod
+    private val fixedDepth = maxDepth
+
+    /** The pod cap in force now; [Int.MAX_VALUE] = unlimited. */
+    val maxPerPod: Int get() = maxPerPodSource?.invoke() ?: fixedPerPod
+
+    /** The depth limit in force now; [Int.MAX_VALUE] = unlimited. */
+    val maxDepth: Int get() = maxDepthSource?.invoke() ?: fixedDepth
 
     /** Where a session sits: the root of its pod and its depth below it. */
     data class Placement(val root: String, val depth: Int)
@@ -62,19 +75,21 @@ class SpawnGuard(
         if (sessions(from) == null) return null
         val parent = lineage[from] ?: Placement(root = from, depth = 0)
         val child = Placement(root = parent.root, depth = parent.depth + 1)
-        if (child.depth > maxDepth) {
+        val depthLimit = maxDepth
+        val podCap = maxPerPod
+        if (child.depth > depthLimit) {
             throw SpawnRefused(
                 "$REFUSED_DEPTH. Session $from is at depth ${parent.depth} of pod ${parent.root}, so its spawn would be " +
-                    "at depth ${child.depth}, above the maximum of $maxDepth ($MAX_DEPTH_ENV): a session started from " +
-                    "inside a session may not start more. Nothing was created; report back instead.",
+                    "at depth ${child.depth}, above the maximum of ${shown(depthLimit)} (${LimitRegistry.MAX_DEPTH.key}): a session started from " +
+                    "inside a session may not start more. Nothing was created; report back instead. ${LimitRegistry.MAX_DEPTH.hint()}",
             )
         }
         val held = liveIn(child.root)
-        if (held + requested > maxPerPod) {
+        if (held.toLong() + requested > podCap) {
             throw SpawnRefused(
                 "$REFUSED_CAP. Pod ${child.root} already holds $held session(s) started from inside it, of a " +
-                    "maximum of $maxPerPod ($MAX_PER_POD_ENV); this spawn asks for $requested more. Nothing was " +
-                    "created: kill one of them, or ask the user to start this work.",
+                    "maximum of ${shown(podCap)} (${LimitRegistry.MAX_PER_POD.key}); this spawn asks for $requested more. Nothing was " +
+                    "created: kill one of them, or ask the user to start this work. ${LimitRegistry.MAX_PER_POD.hint()}",
             )
         }
         return child
@@ -117,8 +132,11 @@ class SpawnGuard(
     }
 
     companion object {
-        const val DEFAULT_MAX_PER_POD = 4
-        const val DEFAULT_MAX_DEPTH = 1
+        /** The defaults live in [LimitRegistry]; these only expose them. */
+        val DEFAULT_MAX_PER_POD: Int get() = LimitRegistry.MAX_PER_POD.default.toInt()
+        val DEFAULT_MAX_DEPTH: Int get() = LimitRegistry.MAX_DEPTH.default.toInt()
+
+        private fun shown(limit: Int): String = if (limit == Int.MAX_VALUE) "unlimited" else limit.toString()
 
         /** The fixed reasons a refusal starts with. */
         const val REFUSED_CAP = "spawn refused: pod cap"
@@ -130,11 +148,5 @@ class SpawnGuard(
 
         private val ENDED = setOf(SessionState.EXITED, SessionState.FAILED, SessionState.ORPHANED)
 
-        /** [name] from [env] as a non-negative integer, else [default]; a malformed value is refused, never ignored. */
-        fun limitFromEnv(name: String, default: Int, env: (String) -> String? = InfantryEnv::get): Int {
-            val raw = env(name)?.trim()?.takeIf { it.isNotEmpty() } ?: return default
-            return raw.toIntOrNull()?.takeIf { it >= 0 }
-                ?: throw IllegalArgumentException("$name must be a whole number of 0 or more, was '$raw'")
-        }
     }
 }

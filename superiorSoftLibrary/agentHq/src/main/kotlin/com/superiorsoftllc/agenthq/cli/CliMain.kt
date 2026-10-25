@@ -380,7 +380,7 @@ internal object Cli {
                 return 2
             }
             err.appendLine(
-                "agenthq mcp: depth ${guardrails.depth}/${guardrails.maxDepth}, max ${guardrails.maxSpawns} open spawns, " +
+                "agenthq mcp: depth ${guardrails.depth}/${guardrails.maxDepth ?: "daemon limits.concurrency.maxDepth"}, max ${guardrails.maxSpawns ?: "daemon limits.concurrency.mcpMaxSpawns"} open spawns, " +
                     "kill ${if (guardrails.allowKillAny) "any session" else "own spawns only"}, " +
                     (config.projectId?.let { "project $it" } ?: "no default project"),
             )
@@ -4448,8 +4448,8 @@ internal object Cli {
         val depth = parsed.mcpDepth ?: envDepth ?: lineage.depthOf(getenv(AccessPolicy.SESSION_ID_ENV)) ?: 0
         return McpGuardrails(
             depth = depth,
-            maxDepth = config.maxDepth ?: McpGuardrails.DEFAULT_MAX_DEPTH,
-            maxSpawns = config.maxSpawns ?: McpGuardrails.DEFAULT_MAX_SPAWNS,
+            maxDepth = config.maxDepth,
+            maxSpawns = config.maxSpawns,
             allowKillAny = config.allowKillAny ?: false,
             lineage = lineage,
         )

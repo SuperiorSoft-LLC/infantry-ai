@@ -87,7 +87,8 @@ data class PacingRule(
     companion object {
         val DEFAULT_TIERS = listOf(PacingTier(60.0, 3), PacingTier(80.0, 2), PacingTier(null, 1))
         val DEFAULT = PacingRule()
-        const val MAX_WORKERS = 50
+        /** The default worker ceiling is the registry's `limits.pacing.maxWorkersCeiling`; callers with settings pass the live value. */
+        val DEFAULT_CEILING: Int get() = com.superiorsoftllc.agenthq.settings.LimitRegistry.PACING_CEILING.default.toInt()
         const val MODE_PACE = "pace"
         const val MODE_BANDS = "bands"
         const val DEFAULT_MAX_WORKERS = 5
@@ -100,14 +101,14 @@ data class PacingRule(
         const val MIN_ELAPSED = 0.10
 
         /** Validates [element]; throws [IllegalArgumentException] naming the problem. */
-        fun parse(element: JsonElement): PacingRule {
+        fun parse(element: JsonElement, ceiling: Int = DEFAULT_CEILING): PacingRule {
             val rule = try {
                 json.decodeFromJsonElement(serializer(), element)
             } catch (e: Exception) {
                 throw IllegalArgumentException("must be {\"enabled\": bool, \"tiers\": [{\"below\": percent, \"workers\": n}, ..., {\"workers\": n}]}")
             }
             require(rule.mode == MODE_PACE || rule.mode == MODE_BANDS) { "mode must be 'pace' or 'bands'" }
-            require(rule.maxWorkers in 1..MAX_WORKERS) { "maxWorkers must be in 1..$MAX_WORKERS" }
+            require(rule.maxWorkers in 1..ceiling) { "maxWorkers must be in 1..$ceiling (setting limits.pacing.maxWorkersCeiling)" }
             require(rule.okProjected > 0.0) { "okProjected must be positive" }
             require(rule.hardStopPercent > 0.0 && rule.hardStopPercent <= 100.0) { "hardStopPercent must be in (0, 100]" }
             require(rule.tiers.isNotEmpty()) { "needs at least one tier" }
@@ -116,7 +117,7 @@ data class PacingRule(
             val bounds = rule.tiers.mapNotNull { it.below }
             require(bounds.all { it > 0.0 && it <= 100.0 }) { "'below' must be in (0, 100]" }
             require(bounds.zipWithNext().all { (a, b) -> a < b }) { "'below' must increase from tier to tier" }
-            require(rule.tiers.all { it.workers in 0..MAX_WORKERS }) { "'workers' must be in 0..$MAX_WORKERS" }
+            require(rule.tiers.all { it.workers in 0..ceiling }) { "'workers' must be in 0..$ceiling (setting limits.pacing.maxWorkersCeiling)" }
             return rule
         }
     }
@@ -286,7 +287,7 @@ object UsageText {
                 },
             )
         }
-        return UsagePacing.ruleJson(PacingRule.parse(UsagePacing.ruleJson(rule)))
+        return UsagePacing.ruleJson(PacingRule.parse(UsagePacing.ruleJson(rule), Int.MAX_VALUE))
     }
 }
 
@@ -402,7 +403,7 @@ class UsagePacing(
             return map
         }
 
-        fun parseOverrides(element: JsonElement): Map<String, UsageOverride> {
+        fun parseOverrides(element: JsonElement, ceiling: Int = PacingRule.DEFAULT_CEILING): Map<String, UsageOverride> {
             val map = try {
                 json.decodeFromJsonElement(MapSerializer(String.serializer(), UsageOverride.serializer()), element)
             } catch (e: Exception) {
@@ -410,7 +411,7 @@ class UsagePacing(
             }
             map.forEach { (k, v) ->
                 require(k.isNotBlank()) { "meter name is blank" }
-                require(v.workers == null || v.workers in 0..PacingRule.MAX_WORKERS) { "workers of '$k' must be in 0..${PacingRule.MAX_WORKERS} or null" }
+                require(v.workers == null || v.workers in 0..ceiling) { "workers of '$k' must be in 0..$ceiling (setting limits.pacing.maxWorkersCeiling) or null" }
             }
             return map
         }
