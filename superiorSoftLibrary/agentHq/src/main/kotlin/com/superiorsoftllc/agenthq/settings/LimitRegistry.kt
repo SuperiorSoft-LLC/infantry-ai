@@ -120,10 +120,18 @@ object LimitRegistry {
         zeroMeans = "never flagged",
     )
 
+    /** Ticket 3b30398d: the process-watch pass (ROGUE-1 ledger, CPU sampling), read before every pass. */
+    val PROCESS_WATCH_INTERVAL_SECONDS = LimitDef(
+        "limits.processes.watchIntervalSeconds", 10, "seconds",
+        "How often the process watch walks the session process trees (rogue-process ledger, CPU sampling); also the delay of the start-up cleanup.",
+        min = 1, max = 3600, zeroIsUnlimited = false,
+    )
+
     val ALL: List<LimitDef> = listOf(
         MAX_PER_POD, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
         TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES,
+        PROCESS_WATCH_INTERVAL_SECONDS,
     )
 
     /** A minutes limit as milliseconds; 0 on an unlimited-capable one = [Long.MAX_VALUE] (never reached). */

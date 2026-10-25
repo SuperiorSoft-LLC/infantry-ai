@@ -71,6 +71,8 @@ class ProcessLedger(
     @Synchronized
     fun adopt(sessionDirs: Map<String, String>) {
         val dirs = sessionDirs.mapValues { norm(it.value) }.filterValues { it.length >= MIN_DIR }.entries.sortedByDescending { it.value.length }
+        // Ticket 3b30398d: no entry to chain to and no worktree to match = nothing can be adopted; skip the OS-wide scan.
+        if (entries.isEmpty() && dirs.isEmpty()) return
         val all = allProcesses()
         if (all.isEmpty()) return
         val byPid = all.associateBy { it.pid }

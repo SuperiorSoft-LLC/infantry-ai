@@ -3074,6 +3074,7 @@ ADDITIVE + BEHAVIOURAL; `contract=1.133.0`. Owner rule 2026-10-25: no hard-coded
 | `limits.watchdog.stallMinutes` | 15 | never stopped for silence | fixed 15 min |
 | `limits.watchdog.killRetryMinutes` | 5 | never retried | fixed 5 min |
 | `limits.watchdog.silentMinutes` | 20 | never flagged | fixed 20 min silent sweep |
+| `limits.processes.watchIntervalSeconds` | 10 | (min 1, max 3600) | fixed 10 s process-watch pass (ticket-3b30398d); read before each pass |
 
 - **`settings` / `settings_get`** list every `limits.*` key with its value in force. `settings_set` refuses a value outside the range with `setting '<key>' must be a JSON integer in <min>..<max> (<unit>; 0 = <meaning>; default <d>)`.
 - **`limit_catalog`** (new; request with empty data, answered to the requester): `{limits: [{key, value, default, unit, description, min, max?, zeroMeans?, env}]}`. Configuration > Limits renders it; `agenthq settings limits` prints it.

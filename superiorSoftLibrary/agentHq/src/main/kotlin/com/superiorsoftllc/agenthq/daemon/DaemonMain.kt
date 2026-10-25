@@ -198,9 +198,6 @@ import kotlin.system.exitProcess
 private const val DEFAULT_PORT = DaemonPort.DEFAULT
 private const val DEFAULT_DB_NAME = "agenthq.db"
 
-/** ROGUE-1: how often the process ledger walks the session trees (a ProcessHandle walk; no subprocess unless under pressure). */
-private const val PROCESS_WATCH_POLL_MS = 10_000L
-
 /** Ticket b785f383: how long a closed session's own exit handlers get before its leftover processes are killed. */
 private const val SESSION_CLOSE_GRACE_MS = 3_000L
 private const val SESSION_REPLAY_REQUEST_TYPE = "replay_request"
@@ -414,6 +411,12 @@ class AgentHqDaemon(
     val handover: SessionHandover? = null,
     /** Ticket b785f383: [close] kills what ended or removed sessions left running (after the manager's own shutdown). */
     private val processWatch: com.superiorsoftllc.agenthq.session.ProcessWatch? = null,
+    /**
+     * Ticket 3b30398d: the schedulers [build] started (usage refresh, agent watchdog), stopped early by [close]; and the
+     * process-watch scheduler, stopped by [close] after its last reap. A daemon that is closed leaves no thread running.
+     */
+    private val background: List<AutoCloseable> = emptyList(),
+    private val processWatchScheduler: AutoCloseable? = null,
 ) {
     @Volatile private var recordedPort: Int? = null
     /** ASK-1: the `defaultAfterMin` sweep, started by [start], stopped by [close]. */
@@ -481,6 +484,7 @@ class AgentHqDaemon(
         runCatching { triggers.close() }
         runCatching { chatImageRetention?.close() }
         runCatching { questionSweeper?.close() }
+        background.forEach { runCatching { it.close() } }
         // PROMPT-1: nobody can answer after this; every suspended asker gets deny / no answer.
         runCatching { pendingPrompts.closeAll() }
         releasePortFile()
@@ -492,6 +496,8 @@ class AgentHqDaemon(
         runCatching { manager.shutdown() }
         // Ticket b785f383: a clean stop leaves nothing of an ended or removed session behind; live sessions' bg jobs stay.
         runCatching { processWatch?.reapEnded("daemon shutdown") }
+        // Ticket 3b30398d: then its scheduler goes (pending close-time reaps are covered by the reap above).
+        runCatching { processWatchScheduler?.close() }
         // Everything the kills above queued is applied before the store is released; see the KDoc.
         runCatching { board.close() }
         // CLIPATH-1: launches after this no longer read this daemon's (about to close) store for overrides.
@@ -732,27 +738,44 @@ class AgentHqDaemon(
             val processWatchExec = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
                 Thread(r, "agenthq-process-watch").also { it.isDaemon = true }
             }
-            processWatchExec.scheduleWithFixedDelay(
-                { runCatching { processWatch.tick() }.onFailure { System.err.println("[agentHq] process watch failed: ${it.message}") } },
-                PROCESS_WATCH_POLL_MS, PROCESS_WATCH_POLL_MS, java.util.concurrent.TimeUnit.MILLISECONDS,
-            )
+            // Ticket 3b30398d: shut down by close() (it used to outlive every daemon); the interval is read before each pass.
+            val processWatchScheduler = AutoCloseable {
+                processWatchExec.shutdownNow()
+                runCatching { processWatchExec.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS) }
+            }
+            val watchIntervalMs = { settings.limit(com.superiorsoftllc.agenthq.settings.LimitRegistry.PROCESS_WATCH_INTERVAL_SECONDS) * 1000L }
+            fun scheduleWatchPass() {
+                runCatching {
+                    processWatchExec.schedule(
+                        {
+                            runCatching { processWatch.tick() }.onFailure { System.err.println("[agentHq] process watch failed: ${it.message}") }
+                            if (!processWatchExec.isShutdown) scheduleWatchPass()
+                        },
+                        watchIntervalMs(), java.util.concurrent.TimeUnit.MILLISECONDS,
+                    )
+                } // RejectedExecutionException once close() shut it down: nothing more to schedule.
+            }
+            scheduleWatchPass()
             // Ticket b785f383: a closing session's background processes die with it, after a grace for its own exit
             // handlers; deterministic and separate from the opt-in auto reap. The first pass catches up after a crash.
             manager.onSessionClosed = { c ->
-                processWatchExec.schedule(
-                    {
-                        runCatching { processWatch.reapSession(c.sessionId, c.at, c.keepPids, c.reason) }
-                            .onFailure { System.err.println("[agentHq] close cleanup of ${c.sessionId} failed: ${it.message}") }
-                    },
-                    SESSION_CLOSE_GRACE_MS, java.util.concurrent.TimeUnit.MILLISECONDS,
-                )
+                // After close() the scheduler refuses; the shutdown reap (reapEnded) already covered this session.
+                runCatching {
+                    processWatchExec.schedule(
+                        {
+                            runCatching { processWatch.reapSession(c.sessionId, c.at, c.keepPids, c.reason) }
+                                .onFailure { System.err.println("[agentHq] close cleanup of ${c.sessionId} failed: ${it.message}") }
+                        },
+                        SESSION_CLOSE_GRACE_MS, java.util.concurrent.TimeUnit.MILLISECONDS,
+                    )
+                }
             }
             processWatchExec.schedule(
                 {
                     runCatching { processWatch.reapEnded("daemon start") }
                         .onFailure { System.err.println("[agentHq] start-up cleanup failed: ${it.message}") }
                 },
-                PROCESS_WATCH_POLL_MS, java.util.concurrent.TimeUnit.MILLISECONDS,
+                watchIntervalMs(), java.util.concurrent.TimeUnit.MILLISECONDS,
             )
             // PROMPT-1: `prompts.timeoutSec` is read at every open; every request / resolution goes to every client.
             val pendingPrompts = com.superiorsoftllc.agenthq.prompts.PendingPrompts(
@@ -1004,14 +1027,14 @@ class AgentHqDaemon(
                 },
             )
             // USAGE-AUTO (1.124.0): every usage.refreshMinutes (default 5, 0 = off) a live read, pushed to every client.
-            com.superiorsoftllc.agenthq.usage.UsageRefresher(
+            val usageRefresher = com.superiorsoftllc.agenthq.usage.UsageRefresher(
                 read = { limits.snapshot(force = true) },
                 minutes = settings::usageRefreshMinutes,
                 onRefreshed = {
                     val frame = Envelope(Envelope.USAGE_REPORT, json.encodeToString(UsageReport.serializer(), usagePacing.report()))
                     for (c in clients.toList()) c.trySend(frame)
                 },
-            ).start()
+            ).also { it.start() }
             val board = TicketBoard(
                 store, context = ticketContext, agents = agents, sessions = manager, repo = repo,
                 // BASE-1c: the ticket's epic's base branch, then its project's (BASE-1a), then the daemon's
@@ -1187,11 +1210,11 @@ class AgentHqDaemon(
                 ticketOf = { id -> store.transaction { store.tickets.get(id) } },
             )
             // PIPELINE-WATCHDOG: derives per-agent pending/stalled/quiet state, nudges, then tells the PM and the owner.
-            com.superiorsoftllc.agenthq.mailbox.AgentWatchdog(
+            val agentWatchdog = com.superiorsoftllc.agenthq.mailbox.AgentWatchdog(
                 sessions = manager, mailbox = mailbox, send = mail::send, attention = attention,
                 config = com.superiorsoftllc.agenthq.session.WatchdogConfig.fromEnv(),
                 isEnabledFor = { projectStore.experimentOn(it, "agentWatchdog") },
-            ).start()
+            ).also { it.start() }
             manager.eventSink = { event ->
                 broadcast(clients, event, streamSequencer, runActivity, { id, seconds ->
                     // A `sleep N` in a tool call becomes a "waiting" countdown; the call returning (or the agent moving on) ends it.
@@ -1426,6 +1449,8 @@ class AgentHqDaemon(
                 ownerQuestions = ownerQuestions,
                 handover = handover,
                 processWatch = processWatch,
+                background = listOf(AutoCloseable { usageRefresher.stop() }, AutoCloseable { agentWatchdog.close() }),
+                processWatchScheduler = processWatchScheduler,
             )
         }
 

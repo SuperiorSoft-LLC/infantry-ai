@@ -17,7 +17,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 import java.time.OffsetDateTime
-import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /*
  * U1 (contract 1.59.0): plan-limit meters, read live from each provider's own usage endpoint.
@@ -280,8 +280,11 @@ class LimitService(
 ) {
     private var cached: List<ProviderLimits>? = null
     private var cachedAt = 0L
+    /** One thread at most; it ends when idle (ticket 3b30398d: a daemon's limit service never kept a thread after it stopped). */
     private val worker by lazy {
-        Executors.newSingleThreadExecutor { r -> Thread(r, "agentHq-limits").apply { isDaemon = true } }
+        java.util.concurrent.ThreadPoolExecutor(
+            1, 1, 30, TimeUnit.SECONDS, java.util.concurrent.LinkedBlockingQueue(),
+        ) { r -> Thread(r, "agentHq-limits").apply { isDaemon = true } }.apply { allowCoreThreadTimeOut(true) }
     }
 
     @Synchronized
