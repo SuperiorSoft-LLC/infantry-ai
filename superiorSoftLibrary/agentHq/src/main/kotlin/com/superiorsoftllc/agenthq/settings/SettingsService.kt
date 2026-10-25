@@ -55,6 +55,11 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
             PROCESSES_IDLE_MINUTES to JsonPrimitive(processWatchConfig().idleMinutes),
             PROCESSES_HEAVY_MB to JsonPrimitive(processWatchConfig().heavyMb),
             PROCESSES_FLOOR_MB to JsonPrimitive(processWatchConfig().floorMb),
+            LIMITS_BUILD_PRIORITY to JsonPrimitive(buildLimits().priority.key),
+            LIMITS_BUILD_MAX_WORKERS to JsonPrimitive(buildLimits().maxWorkers),
+            LIMITS_BUILD_MAX_PARALLEL_FORKS to JsonPrimitive(buildLimits().maxParallelForks),
+            LIMITS_CPU_ALERT_PERCENT to JsonPrimitive(cpuAlert().percent),
+            LIMITS_CPU_ALERT_MINUTES to JsonPrimitive(cpuAlert().minutes),
         ) + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
     )
 
@@ -190,6 +195,10 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
             PROCESSES_AUTO_REAP -> JsonPrimitive(requireBoolean(key, value))
             PROCESSES_IDLE_MINUTES -> JsonPrimitive(requireIntIn(key, value, PROCESSES_IDLE_RANGE))
             PROCESSES_HEAVY_MB, PROCESSES_FLOOR_MB -> JsonPrimitive(requireIntIn(key, value, PROCESSES_MB_RANGE))
+            LIMITS_BUILD_PRIORITY -> JsonPrimitive(requireBuildPriority(value).key)
+            LIMITS_BUILD_MAX_WORKERS, LIMITS_BUILD_MAX_PARALLEL_FORKS -> JsonPrimitive(requireIntIn(key, value, LIMITS_BUILD_COUNT_RANGE))
+            LIMITS_CPU_ALERT_PERCENT -> JsonPrimitive(requireIntIn(key, value, LIMITS_CPU_PERCENT_RANGE))
+            LIMITS_CPU_ALERT_MINUTES -> JsonPrimitive(requireIntIn(key, value, LIMITS_CPU_MINUTES_RANGE))
             else -> throw IllegalArgumentException("unknown setting '$key'")
         }
         store.settings.put(
@@ -252,6 +261,44 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
             autoReap = autoReap,
         )
     }
+
+    private fun storedInt(key: String, range: IntRange, default: Int): Int {
+        val stored = store.settings.get(key)?.value ?: return default
+        val parsed = runCatching { (Json.parseToJsonElement(stored) as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull }.getOrNull()
+        return parsed?.takeIf { it in range } ?: default
+    }
+
+    /**
+     * Ticket 66153313: what worker sessions' builds may use, read at every run launch; a bad stored value falls back to the
+     * default. Defaults: priority `belownormal`, maxWorkers = logical cores - 2 (0 = unlimited), maxParallelForks unset
+     * (0 = each build script's own default).
+     */
+    fun buildLimits(): com.superiorsoftllc.agenthq.runner.BuildLimits {
+        val priority = store.settings.get(LIMITS_BUILD_PRIORITY)?.value
+            ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.getOrNull() }
+            ?.let(com.superiorsoftllc.agenthq.runner.BuildPriority::parse)
+            ?: com.superiorsoftllc.agenthq.runner.BuildPriority.DEFAULT
+        return com.superiorsoftllc.agenthq.runner.BuildLimits(
+            priority = priority,
+            maxWorkers = storedInt(LIMITS_BUILD_MAX_WORKERS, LIMITS_BUILD_COUNT_RANGE, com.superiorsoftllc.agenthq.runner.BuildLimits.defaultMaxWorkers()),
+            maxParallelForks = storedInt(LIMITS_BUILD_MAX_PARALLEL_FORKS, LIMITS_BUILD_COUNT_RANGE, 0),
+        )
+    }
+
+    /** Ticket 66153313: the sustained-CPU attention rule, read at every process-watch pass. Default 90 % for 10 min; 0 min = off. */
+    fun cpuAlert(): com.superiorsoftllc.agenthq.session.CpuAlertConfig {
+        val d = com.superiorsoftllc.agenthq.session.CpuAlertConfig()
+        return com.superiorsoftllc.agenthq.session.CpuAlertConfig(
+            percent = storedInt(LIMITS_CPU_ALERT_PERCENT, LIMITS_CPU_PERCENT_RANGE, d.percent),
+            minutes = storedInt(LIMITS_CPU_ALERT_MINUTES, LIMITS_CPU_MINUTES_RANGE, d.minutes),
+        )
+    }
+
+    private fun requireBuildPriority(value: JsonElement): com.superiorsoftllc.agenthq.runner.BuildPriority =
+        (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.let(com.superiorsoftllc.agenthq.runner.BuildPriority::parse)
+            ?: throw IllegalArgumentException(
+                "setting '$LIMITS_BUILD_PRIORITY' must be one of ${com.superiorsoftllc.agenthq.runner.BuildPriority.KEYS.joinToString { "\"$it\"" }}",
+            )
 
     private fun requireIntIn(key: String, value: JsonElement, range: IntRange): Int {
         val v = (value as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toIntOrNull()
@@ -365,6 +412,21 @@ class SettingsService(private val store: AgentHqStore) : ProjectSettings {
         const val PROCESSES_IDLE_MINUTES = "processes.idleMinutes"
         const val PROCESSES_HEAVY_MB = "processes.heavyMb"
         const val PROCESSES_FLOOR_MB = "processes.floorMb"
+        /**
+         * Ticket 66153313 (contract 1.132.0): worker build limits. `limits.build.priority` = normal | belownormal | idle
+         * (default belownormal); `limits.build.maxWorkers` = Gradle worker cap (default logical cores - 2, 0 = unlimited);
+         * `limits.build.maxParallelForks` = test forks per test task (default 0 = the build script's own default);
+         * `limits.cpu.alertPercent` / `limits.cpu.alertMinutes` = raise an attention item when agent processes hold more
+         * than that share of all cores for that long (default 90 % for 10 min; 0 min = off).
+         */
+        const val LIMITS_BUILD_PRIORITY = "limits.build.priority"
+        const val LIMITS_BUILD_MAX_WORKERS = "limits.build.maxWorkers"
+        const val LIMITS_BUILD_MAX_PARALLEL_FORKS = "limits.build.maxParallelForks"
+        const val LIMITS_CPU_ALERT_PERCENT = "limits.cpu.alertPercent"
+        const val LIMITS_CPU_ALERT_MINUTES = "limits.cpu.alertMinutes"
+        private val LIMITS_BUILD_COUNT_RANGE = 0..4096
+        private val LIMITS_CPU_PERCENT_RANGE = 1..100
+        private val LIMITS_CPU_MINUTES_RANGE = 0..1440
         private val PROCESSES_IDLE_RANGE = 1..1440
         private val PROCESSES_MB_RANGE = 0..1_048_576
         private val QUESTION_LIMIT_RANGE = 1..100

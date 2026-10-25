@@ -94,6 +94,14 @@ fun ProcessesDialog(state: AppState, controller: Controller, onDismiss: () -> Un
                     "Memory: $free free$total (warning below ${ProcessWatchView.mb(report.floorMb)})",
                     color = if (report.underPressure) Palette.Accent else Palette.Text, fontSize = 12.sp,
                 )
+                // Contract 1.132.0: the agents' share of all cores and the sustained-CPU alert rule (limits.cpu.*).
+                report.agentCpuPercent?.let { cpu ->
+                    val rule = if (report.cpuAlertMinutes > 0) "alert at ${report.cpuAlertPercent}% for ${report.cpuAlertMinutes} min" else "alert off"
+                    Text(
+                        "Agents CPU: ${ProcessWatchView.pct(cpu)} of all cores ($rule)",
+                        color = if (ProcessWatchView.cpuHigh(report)) Palette.Accent else Palette.Text, fontSize = 12.sp,
+                    )
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Reap rogue processes automatically", color = Palette.Text, fontSize = 12.sp, modifier = Modifier.weight(1f))
                     Switch(

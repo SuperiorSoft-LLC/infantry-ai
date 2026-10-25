@@ -3,6 +3,11 @@
 # Usage: scripts/agenthq-gate.sh [--full] <commit-or-branch>   (see docs/GATE.md)
 #   --full: the promotion run. Nothing from the build cache (--no-build-cache): every module compiles fresh, once.
 # Env: GATE_MIN_FREE_GB (default 5), GATE_LOCK (lock dir), GATE_KEEP=1 keeps the worktree.
+# Build limits (ticket 66153313): inside an Infantry AI worker session the daemon already runs this whole tree at the
+# configured priority and puts AGENTHQ_BUILD_PRIORITY / AGENTHQ_BUILD_MAX_WORKERS in the env (settings limits.build.*).
+# Each Gradle stage also runs under `nice` at that priority and with --max-workers, so a gate started OUTSIDE a session
+# (no AGENTHQ_BUILD_PRIORITY) still runs below normal with logical cores - 2 workers. AGENTHQ_BUILD_PRIORITY=normal
+# turns the nice off; inside a session a missing AGENTHQ_BUILD_MAX_WORKERS means the setting is 0 (unlimited).
 # Progress (Infantry AI, docs/PROGRESS.md): the stages are declared as `##infantry plan/step` marker lines, read when the
 # gate runs under `agenthq run` (which sets AGENTHQ_PROGRESS_PIPE=1). Otherwise, when `agenthq` is on PATH, the same
 # reports go out through `agenthq progress`. The test totals are reported once, as a count, after the last stage.
@@ -15,6 +20,21 @@ REF="${1:-}"
 [ -n "$REF" ] || { echo "usage: $0 [--full] <commit-or-branch>" >&2; exit 2; }
 # TEST-SPEED-2: tests are always forced (--rerun). Only --full also bypasses the build cache for compilation.
 CACHE_FLAG=""; [ -n "$FULL" ] && CACHE_FLAG="--no-build-cache"
+
+case "${AGENTHQ_BUILD_PRIORITY:-belownormal}" in
+  normal) NICE_N=0 ;;
+  idle) NICE_N=19 ;;
+  *) NICE_N=10 ;;
+esac
+NICE_CMD=""
+if [ "$NICE_N" -gt 0 ] && command -v nice >/dev/null 2>&1; then NICE_CMD="nice -n $NICE_N"; fi
+if [ -n "${AGENTHQ_BUILD_PRIORITY:-}" ]; then
+  MAX_WORKERS="${AGENTHQ_BUILD_MAX_WORKERS:-0}"
+else
+  cores=$(nproc 2>/dev/null || echo 0)
+  MAX_WORKERS=$((cores > 3 ? cores - 2 : 1))
+fi
+WORKERS_FLAG=""; [ "$MAX_WORKERS" -gt 0 ] 2>/dev/null && WORKERS_FLAG="--max-workers=$MAX_WORKERS"
 
 REPO=$(git rev-parse --show-toplevel) || exit 2
 TMPROOT="${TEMP:-${TMP:-/tmp}}"
@@ -111,8 +131,9 @@ stage() { # name gradle-task project-dir
   if ! check_disk; then SUMMARY="$SUMMARY $name=ABORT(disk)"; FAILED=1; return; fi
   # TEST-SPEED-2: --rerun forces THIS test task to execute (never up-to-date, never FROM-CACHE), so every test really
   # runs; compilation is reused (build cache, then up-to-date) instead of recompiling all modules once per stage.
-  note "stage $name: gradlew $task --rerun --no-daemon $CACHE_FLAG"
-  (cd "$WT" && ./gradlew "$task" --rerun --no-daemon $CACHE_FLAG --console=plain) > "$OUT/$name.log" 2>&1
+  note "stage $name: ${NICE_CMD:+$NICE_CMD }gradlew $task --rerun --no-daemon $CACHE_FLAG $WORKERS_FLAG"
+  # shellcheck disable=SC2086
+  (cd "$WT" && $NICE_CMD ./gradlew "$task" --rerun --no-daemon $CACHE_FLAG $WORKERS_FLAG --console=plain) > "$OUT/$name.log" 2>&1
   rc=$?
   set -- $(tally "$dir")
   names=$(failing "$dir" | tr '\n' ',' | sed 's/,$//')

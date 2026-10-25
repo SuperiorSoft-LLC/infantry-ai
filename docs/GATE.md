@@ -65,3 +65,11 @@ Exit code is 0 only on PASS. A stage with zero tests counts as FAIL. Two stage v
   `NoSuchFileException ... in-progress-results-generic*.bin`. Wait for the holder, or use your own worktree.
 - `cleanTest` is not needed: `--rerun-tasks` (or `--rerun`) on a single run is reliable.
 - Do not edit tests to make the gate pass.
+
+## CPU priority and worker cap (ticket 66153313)
+
+Every Gradle stage runs under `nice` (below normal; `idle` = 19) with `--max-workers`. Inside an Infantry AI worker session the
+daemon has already lowered the whole session tree (Windows Job object / POSIX nice) and exported `AGENTHQ_BUILD_PRIORITY`,
+`AGENTHQ_BUILD_MAX_WORKERS` and a capped `GRADLE_OPTS` from the settings `limits.build.priority` / `limits.build.maxWorkers` /
+`limits.build.maxParallelForks`; the script follows them (`AGENTHQ_BUILD_PRIORITY=normal` turns its `nice` off, no
+`AGENTHQ_BUILD_MAX_WORKERS` = unlimited). Run outside a session, it defaults to below normal and logical cores - 2 workers.

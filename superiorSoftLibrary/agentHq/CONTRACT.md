@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.131.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.132.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -3045,3 +3045,13 @@ ADDITIVE; `contract=1.131.0`. A new ticket column `backlog` (`TicketStatus.BACKL
 - **Create.** `TicketSave.status` (new, create only): absent/null or `todo` = the sprint (unchanged default), `backlog` = the new lane; any other column, or a status on an edit, is refused. CLI: `agenthq ticket create ... --status backlog`; MCP: `agenthq_ticket_create` `status`.
 - **Listing.** `agenthq tickets --status backlog`; `agenthq board` / `agenthq_board` print the Backlog group first.
 - **Old clients.** A client built before 1.131.0 has no `backlog` column and simply does not render those tickets; nothing it sends changes meaning.
+
+### What changed in 1.132.0 (BUILD-LIMITS, ticket-66153313) — worker builds run at a lower CPU priority, with caps
+
+ADDITIVE + BEHAVIOURAL; `contract=1.132.0`. Builds that workers start no longer rely on the worker remembering to lower their priority:
+
+- **Priority, enforced by the daemon.** Every worker session's root process (the harness the daemon spawns) starts at `limits.build.priority` (`normal` | `belownormal` | `idle`, default `belownormal`), and everything below it inherits that priority: the shell, `agenthq run` / `bg run`, `./gradlew`, the Gradle JVM and its test forks. Windows: `SetPriorityClass` plus a per-session Job object with a priority-class limit only, so a child cannot raise itself back to Normal (no CPU-rate cap; `BREAKAWAY_OK` is set so a child that asks to break away starts outside the job instead of failing). POSIX: the argv runs under `nice -n 10` (`idle` = 19). Any failure is logged once and never fails the session. `normal` turns all of this off.
+- **Gradle caps in the session env.** Every worker run gets `GRADLE_OPTS` (the daemon's own value, then) `-Dorg.gradle.workers.max=<limits.build.maxWorkers>` (default logical cores − 2, minimum 1; `0` = no cap), `-Dorg.gradle.project.kotlin.compiler.execution.strategy=in-process` (the Kotlin compiler runs inside the session's lowered Gradle JVM, not in a shared Kotlin daemon that a Normal build may have started), and, when `limits.build.maxParallelForks` > 0 (default `0` = each build script's own default), `-Dorg.gradle.project.agenthq.testForks` / `agenthq.uiTestForks`. Also `AGENTHQ_BUILD_PRIORITY`, `AGENTHQ_BUILD_MAX_WORKERS`, `AGENTHQ_BUILD_MAX_FORKS`, which `scripts/agenthq-gate.sh` reads for its own fallback (`nice`, `--max-workers`). The owner's own Gradle and IDE never see any of this.
+- **CPU in `processes`.** `TrackedProcess.cpuPercent` (this process's share of ALL logical cores over the last 10 s watch pass, 0–100; null until two samples), `ProcessReport.agentCpuPercent` (their sum), `cpuAlertPercent`, `cpuAlertMinutes`, `cpuHighSince` (epoch ms since when the sum has stayed at or above the threshold; null while below).
+- **Sustained-CPU attention.** When `agentCpuPercent` stays at or above `limits.cpu.alertPercent` (default `90`, 1–100) for `limits.cpu.alertMinutes` (default `10`; `0` = off), the daemon raises ONE attention item per episode: kind `ceiling`, outcome `cpu_sustained`, with the top processes in the detail. Falling below the threshold rearms it.
+- **Old clients.** They ignore the new fields; the attention item renders like any other `ceiling` item.

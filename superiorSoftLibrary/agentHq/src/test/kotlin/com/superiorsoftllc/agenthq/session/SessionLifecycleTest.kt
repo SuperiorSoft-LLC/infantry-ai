@@ -302,6 +302,32 @@ class SessionLifecycleTest {
         )
     }
 
+    /** Ticket 66153313: every run carries the build limits env, read per run (a settings change applies to the next run). */
+    @Test
+    fun a_spawned_child_receives_the_build_limits_env_read_per_run() {
+        val (store, _) = tempStore()
+        val runner = FakeRunner()
+        var workers = 6
+        val manager = SessionManager(
+            FakeProvider(), runner, store, killGraceMs = 50,
+            buildEnv = {
+                com.superiorsoftllc.agenthq.runner.BuildLimits(
+                    com.superiorsoftllc.agenthq.runner.BuildPriority.BELOW_NORMAL, workers, 0,
+                ).sessionEnv(null)
+            },
+        )
+
+        manager.startNew("hello")
+        val env = runner.specs.last().env
+        assertEquals("belownormal", env["AGENTHQ_BUILD_PRIORITY"])
+        assertEquals("6", env["AGENTHQ_BUILD_MAX_WORKERS"])
+        assertEquals(true, env["GRADLE_OPTS"]?.contains("-Dorg.gradle.workers.max=6"))
+
+        workers = 3
+        manager.startNew("again")
+        assertEquals("3", runner.specs.last().env["AGENTHQ_BUILD_MAX_WORKERS"])
+    }
+
     @Test
     fun a_spawned_child_with_a_project_receives_its_project_id_in_the_environment() {
         val (store, _) = tempStore()
