@@ -66,7 +66,7 @@ data class QuestionSpec(
                     "timeoutSec must be ${PromptAsk.TIMEOUT_SEC_RANGE.first}..${PromptAsk.TIMEOUT_SEC_RANGE.last}, got $it"
                 }
             }
-            return QuestionSpec(question, options, ask.multiSelect, ask.allowOther, timeout?.let { it * 1_000L })
+            return QuestionSpec(question, options, ask.multiSelect, true, timeout?.let { it * 1_000L })
         }
     }
 }
@@ -293,7 +293,6 @@ class PendingPrompts(
             require(response.answers.distinct().size == response.answers.size) { "an option is answered twice" }
             require(request.multiSelect || response.answers.size <= 1) { "this question takes one answer" }
             val other = response.otherText?.trim()?.takeIf { it.isNotEmpty() }
-            require(other == null || request.allowOther) { "this question takes no 'otherText'" }
             require(response.answers.isNotEmpty() || other != null) { "an answer needs 'answers' or 'otherText'" }
             Resolution.Question(Answer(response.answers, other, answered = true))
         }

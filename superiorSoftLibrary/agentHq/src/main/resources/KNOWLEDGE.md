@@ -11,3 +11,9 @@ Rules: never invent a number; never mark a step done before or without doing it;
 Gradle test run: `agenthq run --label tests --reader gradle --reader junit -- ./gradlew test --console=plain --no-daemon`. Output markers/readers drive the bar; the exit code ends it.
 
 Browser pass (no log): plan `open app|login|create ticket|move ticket|verify board`; after each check really passes, step with its name; a failed check: `fail "ticket did not move"`; at the end `done`.
+
+
+## ASK
+Ask the owner (`agenthq_ask`, or `agenthq ask`) only for a real decision that only the user can make: 2-4 real options where their preference matters (design, priority, destructive or irreversible choices). Never for trivia or anything already decided.
+Keep the question short, give clear options (label + one-line consequence), and always recommend one with a reason. Do not wait: carry on with other work; the answer arrives as mail.
+The UI always adds an "Other" row where the owner types their own answer, whatever options you pass. Do not add an "Other" option yourself; a typed answer arrives as "Custom answer from the owner: <text>" and is not one of your options.

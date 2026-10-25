@@ -107,7 +107,7 @@ class CliAskTest {
             card.options,
         )
         assertEquals(false, card.multiSelect)
-        assertEquals(false, card.allowOther)
+        assertEquals(true, card.allowOther)
 
         fixture.answer(PromptResponse(card.promptId, answers = listOf("SQLite")))
         val result = pending.get(TestWait.defaultMs, TimeUnit.MILLISECONDS)

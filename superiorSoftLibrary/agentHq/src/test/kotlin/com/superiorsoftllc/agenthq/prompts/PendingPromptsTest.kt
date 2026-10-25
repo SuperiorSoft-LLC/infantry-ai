@@ -165,7 +165,6 @@ class PendingPromptsTest {
         for (bad in listOf(
             PromptResponse(qid, answers = listOf("mysql")),
             PromptResponse(qid, answers = listOf("sqlite", "postgres")),
-            PromptResponse(qid, otherText = "x"),
             PromptResponse(qid, decision = "deny"),
             PromptResponse(qid),
         )) {
