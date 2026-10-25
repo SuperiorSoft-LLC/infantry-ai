@@ -71,6 +71,47 @@ class UnattendedRunWatchdogTest {
         }
     }
 
+    @Test
+    fun `a registered alive signal suppresses the stall but not the deadline, and a retry is due once`() {
+        val run = UnattendedRunWatchdog.Run(startedAt = 0, lastHeartbeat = 0, unattended = true)
+        assertNull(UnattendedRunWatchdog.expiry(run, now = 59_000, deadlineMs = 60_000, stallMs = 15_000, alive = true))
+        assertEquals(WatchdogExpiry.DEADLINE, UnattendedRunWatchdog.expiry(run, now = 60_000, deadlineMs = 60_000, stallMs = 15_000, alive = true))
+        assertEquals(false, UnattendedRunWatchdog.retryDue(0, 999, 100, false))
+        assertEquals(false, UnattendedRunWatchdog.retryDue(50, 149, 100, false))
+        assertEquals(true, UnattendedRunWatchdog.retryDue(50, 150, 100, false))
+        assertEquals(false, UnattendedRunWatchdog.retryDue(50, 150, 100, true))
+    }
+
+    @Test
+    fun `a live gate run for the ticket keeps a silent worker alive, then the kill names the watchdog`() {
+        val now = AtomicLong(0)
+        val stopped = CountDownLatch(1)
+        val tmp = File.createTempFile("gate", "").apply { delete(); mkdirs() }
+        val lockDir = File(tmp, "agenthq-gate.lock").apply { mkdirs() }
+        File(lockDir, "owner.txt").writeText("ticket=ticket-abc session=x pid=77")
+        val holderAlive = java.util.concurrent.atomic.AtomicBoolean(true)
+        val manager = SessionManager(
+            provider = FakeProvider(), runner = HangingRunner(HangingProcess(stopped)),
+            store = JsonSessionStore(File.createTempFile("watchdog", ".json").apply { delete() }),
+            killGraceMs = 10, clock = now::get, deadlineMs = 100, stallMs = 50, watchdogPollMs = 5,
+            ticketDeadlineMs = 100_000, gateLock = GateLock(dir = { lockDir }, pidAlive = { holderAlive.get() }),
+        )
+        try {
+            val session = manager.startNew("gate", unattended = true, ticketId = "ticket-abc")
+            now.set(500) // past the stall AND the plain deadline: neither applies
+            Thread.sleep(150)
+            assertTrue(manager.get(session.id)?.state != SessionState.EXITED, "still running")
+            holderAlive.set(false)
+            assertTrue(stopped.await(2, TimeUnit.SECONDS), "with the gate run gone the stall applies")
+            val ended = manager.get(session.id)!!
+            assertEquals(SessionState.EXITED, ended.state)
+            assertEquals("watchdog", ended.killedBy)
+            assertTrue(ended.killReason!!.startsWith("stalled: no output"), ended.killReason)
+        } finally {
+            manager.shutdown()
+        }
+    }
+
     private class FakeProvider : AgentProvider {
         override val id = "fake"
         override fun spec(request: RunRequest) = ProcessSpec(listOf("fake"))

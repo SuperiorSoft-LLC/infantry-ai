@@ -145,6 +145,8 @@ class ProcessWatch(
     private val lockHolderAlive: () -> Boolean = ::gateLockHolderAlive,
     /** The gate lock holder's pid, null when there is no lock; a shared Gradle daemon it may use is never closed with a session. */
     private val lockHolderPid: () -> Long? = ::gateLockHolderPid,
+    /** Ticket 7e9bed2a: the gate lock a closing session's owner.txt may name; released in the same close-time cleanup. */
+    private val gateLock: GateLock = GateLock(),
 ) {
     private var lastPressureAt: Long? = null
     private var lastAutoReapAt: Long? = null
@@ -153,12 +155,26 @@ class ProcessWatch(
     private fun roots(records: List<SessionRecord>): Map<String, Collection<Long>> =
         records.associate { r -> r.id to listOfNotNull(r.keptProcess?.pid, r.childPid).distinct() }.filterValues { it.isNotEmpty() }
 
+    /**
+     * Ticket 7e9bed2a: the catch-up for a lock the close-time release could not take (its holder was still dying then, or the
+     * daemon was down): the lock's owner.txt names a session this daemon knows as ended and the holder pid is dead.
+     * An unknown session, a live holder, or a lock without owner.txt is left alone.
+     */
+    private fun releaseEndedOwnersLock(records: List<SessionRecord>) {
+        val owner = runCatching { gateLock.read() }.getOrNull() ?: return
+        val s = owner.session?.let { id -> records.firstOrNull { it.id == id } } ?: return
+        if (s.state !in ENDED) return
+        runCatching { gateLock.releaseIfOwnedBy(s.id, s.ticketId) }
+            .onSuccess { if (it != null) println("[agentHq] gate lock catch-up: $it (session ${s.id} ended)") }
+    }
+
     /** One timer pass: observe; warn under pressure; auto-reap when on. Cheap unless pressure or auto-reap fires. */
     @Synchronized
     fun tick() {
         val records = sessions()
         ledger.observe(roots(records))
         ledger.adopt(records.mapNotNull { r -> r.worktreePath?.let { r.id to it } }.toMap())
+        releaseEndedOwnersLock(records)
         val cfg = config()
         val now = clock()
         val free = runCatching { memory.freeMb() }.getOrNull()
@@ -183,21 +199,29 @@ class ProcessWatch(
         val tracked = ledger.entries().map { e ->
             val mb = mbByPid[e.pid]
             val reason = rogueReason(e, bySession[e.sessionId], mb, cfg, now)
-            TrackedProcess(e.pid, e.command, e.sessionId, e.startedAt, mb, reason != null, reason, e.inferred)
+            TrackedProcess(e.pid, forSession(e.command, e.sessionId), e.sessionId, e.startedAt, mb, reason != null, reason, e.inferred)
         }
         val ledgerPids = tracked.mapTo(HashSet()) { it.pid }
         val candidates = mem.filter {
             it.pid !in ledgerPids && it.pid !in protectedPids && HEAVY.matches(it.image) && it.mb >= UNATTRIBUTED_MIN_MB
         }.sortedByDescending { it.mb }.take(UNATTRIBUTED_MAX)
-        val info = if (candidates.isEmpty()) emptyMap() else ledger.allProcesses().associateBy { it.pid }
+        val candidatePids = candidates.mapTo(HashSet()) { it.pid }
+        val nodes = mem.filter { it.pid !in ledgerPids && it.pid !in protectedPids && it.pid !in candidatePids && NODE.matches(it.image) }
+        val info = if (candidates.isEmpty() && nodes.isEmpty()) emptyMap() else ledger.allProcesses().associateBy { it.pid }
         val lockAlive = if (candidates.isEmpty()) true else runCatching(lockHolderAlive).getOrDefault(true)
         val unattributed = candidates.map { c ->
             val p = info[c.pid]
             val orphan = p != null && !lockAlive && ORPHAN_DAEMON.containsMatchIn(p.command)
+            val manual = p != null && ProcessLedger.isManualReapable(p.command)
             TrackedProcess(
-                c.pid, p?.command?.let(ProcessLedger::shorten) ?: c.image, null, p?.startedAt, c.mb,
-                orphan, if (orphan) "orphan Gradle/Kotlin daemon: no owning session, no live gate-lock holder" else null,
+                c.pid, p?.command?.let(ProcessLedger::describe) ?: c.image, null, p?.startedAt, c.mb,
+                orphan,
+                if (orphan) "orphan Gradle/Kotlin daemon: no owning session, no live gate-lock holder" else if (manual) MANUAL_REASON else null,
             )
+        } + nodes.mapNotNull { c ->
+            // An MCP server whatever its size (the 200 MB gate hid these). Shown, never rogue, reaped only by hand.
+            val p = info[c.pid]?.takeIf { ProcessLedger.MCP_CMD.containsMatchIn(it.command) } ?: return@mapNotNull null
+            TrackedProcess(c.pid, ProcessLedger.describe(p.command), null, p.startedAt, c.mb, false, MANUAL_REASON)
         }
         val free = runCatching { memory.freeMb() }.getOrNull()
         return ProcessReport(
@@ -207,10 +231,34 @@ class ProcessWatch(
         )
     }
 
-    /** Reap one ledger entry. Refused for anything not in the ledger, a recycled pid, or a live session's own harness. */
+    /** "Playwright MCP | ..." becomes "Playwright MCP for session abcd1234 | ...". */
+    private fun forSession(command: String, sessionId: String): String =
+        if (command.startsWith("Playwright MCP | ") || command.startsWith("MCP server | "))
+            command.replaceFirst(" | ", " for session ${sessionId.take(8)} | ") else command
+
+    /**
+     * Manual reap of a process no session owns: only an MCP server or an `opencode serve`, only while the pid still has the
+     * start instant the listing showed; its whole tree goes. Never automatic, never part of a close cleanup.
+     */
+    private fun reapUnowned(pid: Long): ReapResult {
+        val p = ledger.allProcesses().firstOrNull { it.pid == pid }
+        val started = p?.startedAt
+        if (p == null || started == null || !ProcessLedger.isManualReapable(p.command) || pid in protectedPids) {
+            return ReapResult.Refused("pid $pid was not started by an Infantry AI session; it is never reaped")
+        }
+        if (runCatching { table.startInstant(pid) }.getOrNull() != started) return ReapResult.Refused("pid $pid is gone (or now another process); nothing killed")
+        val mb = runCatching { memory.processes() }.getOrDefault(emptyList()).firstOrNull { it.pid == pid }?.mb
+        val view = TrackedProcess(pid, ProcessLedger.describe(p.command), null, started, mb, false, "reaped by hand")
+        runCatching { table.killTree(pid, started) }.onFailure { return ReapResult.Refused("killing pid $pid failed: ${it.message}") }
+        println("[agentHq] reaped unowned pid $pid (${view.command}) by hand")
+        runCatching { onReaped(view) }
+        return ReapResult.Reaped(view)
+    }
+
+    /** Reap one ledger entry (or, by hand, an unowned MCP server / opencode serve). Refused for anything else, a recycled pid, or a live session's own harness. */
     @Synchronized
     fun reap(pid: Long): ReapResult {
-        val entry = ledger.get(pid) ?: return ReapResult.Refused("pid $pid was not started by an Infantry AI session; it is never reaped")
+        val entry = ledger.get(pid) ?: return reapUnowned(pid)
         val owner = sessions().firstOrNull { it.id == entry.sessionId }
         if (entry.root && owner != null && owner.state !in ENDED) {
             return ReapResult.Refused("pid $pid is session ${entry.sessionId}'s own harness; kill the session instead")
@@ -239,6 +287,16 @@ class ProcessWatch(
      */
     @Synchronized
     fun reapSession(sessionId: String, closedAt: Long, keepPids: Set<Long> = emptySet(), reason: String = "session closed"): List<TrackedProcess> {
+        val killed = reapProcesses(sessionId, closedAt, keepPids, reason)
+        // Ticket 7e9bed2a: the same close also lets go of the gate lock this session's run owned (never a lock owner.txt does not name it for).
+        val ticketId = runCatching { sessions().firstOrNull { it.id == sessionId }?.ticketId }.getOrNull()
+        runCatching { gateLock.releaseIfOwnedBy(sessionId, ticketId, killed.mapTo(HashSet()) { it.pid }) }
+            .onSuccess { line -> if (line != null) println("[agentHq] close cleanup: $line (session $sessionId)") }
+            .onFailure { System.err.println("[agentHq] close cleanup: gate lock release failed for $sessionId: ${it.message}") }
+        return killed
+    }
+
+    private fun reapProcesses(sessionId: String, closedAt: Long, keepPids: Set<Long>, reason: String): List<TrackedProcess> {
         val records = sessions()
         runCatching { ledger.observe(roots(records)) } // last-moment children, and drop what is already gone
         val mine = ledger.entries().filter { it.sessionId == sessionId }
@@ -329,6 +387,8 @@ class ProcessWatch(
 
         /** Runtimes worth showing when unattributed. */
         private val HEAVY = Regex("""(?i)(java|javaw|node|opencode|docker.*|com\.docker.*|vmmem.*|wsl.*|kotlin.*|gradle.*|bun|pi)(\.exe)?""")
+        private val NODE = Regex("""(?i)node(\.exe)?""")
+        private const val MANUAL_REASON = "not owned by an Infantry AI session: shown, reaped only by hand"
         private val ORPHAN_DAEMON = Regex("""GradleDaemon|KotlinCompileDaemon""")
         private val GRADLE_CLIENT = Regex("""(?i)gradlew|GradleWrapperMain|GradleMain""")
 

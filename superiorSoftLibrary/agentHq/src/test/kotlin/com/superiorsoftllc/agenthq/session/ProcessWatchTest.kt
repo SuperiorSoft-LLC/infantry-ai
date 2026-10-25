@@ -68,9 +68,10 @@ class ProcessWatchTest {
         pressure: MutableList<ProcessReport> = mutableListOf(),
         lockAlive: Boolean = false,
         lockHolder: Long? = null,
+        gateLock: GateLock = GateLock(dir = { null }),
     ) = ProcessWatch(
         ledger, { sessions.values.toList() }, os, os, { config }, { now }, onPressure = { pressure += it },
-        lockHolderAlive = { lockAlive }, lockHolderPid = { lockHolder },
+        lockHolderAlive = { lockAlive }, lockHolderPid = { lockHolder }, gateLock = gateLock,
     )
 
     // Pids far above anything real, so the test JVM's own ancestry (protected) never collides.
@@ -186,6 +187,50 @@ class ProcessWatchTest {
         assertTrue(os.killed.isEmpty() && gradleDaemon in os.procs)
         assertIs<ReapResult.Refused>(w.reap(gradleDaemon))
         assertTrue(watch(lockAlive = true).report().rogue.isEmpty())
+    }
+
+    private val pwNpx = "node C:/npm/bin/npx-cli.js -y @playwright/mcp@latest --browser chrome"
+    private val pwSrv = "node C:/cache/_npx/9833/node_modules/.bin/playwright-mcp"
+
+    @Test fun `a playwright mcp pair under a live session is adopted, named for it, and killed with the session close`() {
+        os.start(harness, null, "claude --session", 1_000)
+        session("s1", harness)
+        val w = watch()
+        w.tick()
+        os.start(900_400L, harness, pwNpx, 2_000, memMb = 140)
+        os.start(900_401L, 900_400L, pwSrv, 2_100, memMb = 95)
+        w.tick()
+        val rep = w.report().tracked
+        assertTrue(rep.single { it.pid == 900_401L }.command.startsWith("Playwright MCP for session s1 | "))
+        sessions.remove("s1")
+        w.reapSession("s1", now)
+        assertTrue(900_400L in os.killed && 900_401L in os.killed)
+    }
+
+    @Test fun `an orphan playwright mcp is listed at any size, never rogue, never auto reaped, reaped only by hand`() {
+        os.start(900_500L, 777_777L, pwNpx, 3_000, memMb = 140)
+        os.start(900_501L, 900_500L, pwSrv, 3_100, memMb = 95)
+        val w = watch(config = ProcessWatchConfig(autoReap = true))
+        w.tick()
+        val un = w.report().unattributed.single { it.pid == 900_501L }
+        assertTrue(un.command.startsWith("Playwright MCP | ") && !un.rogue && un.sessionId == null)
+        assertTrue(w.reapRogue().isEmpty() && w.reapSession("none", now).isEmpty())
+        assertTrue(os.killed.isEmpty())
+        assertIs<ReapResult.Reaped>(w.reap(900_500L))
+        assertTrue(900_500L in os.killed && 900_501L in os.killed)
+    }
+
+    @Test fun `opencode serve is shown with its port and reaped only by hand, other strangers are refused`() {
+        val oc = 900_600L
+        os.start(oc, null, "opencode.exe serve --port 47123 --hostname 127.0.0.1", 3_000, memMb = 1_700)
+        os.start(900_601L, null, "node unrelated.js", 3_000, memMb = 1_700)
+        val w = watch(config = ProcessWatchConfig(autoReap = true))
+        w.tick()
+        assertEquals("opencode serve --port 47123", w.report().unattributed.single { it.pid == oc }.command)
+        assertTrue(w.reapRogue().isEmpty() && os.killed.isEmpty())
+        assertIs<ReapResult.Refused>(w.reap(900_601L))
+        assertIs<ReapResult.Reaped>(w.reap(oc))
+        assertEquals(listOf(oc), os.killed)
     }
 
     @Test fun `unrelated and recycled pids are never touched`() {
@@ -335,6 +380,39 @@ class ProcessWatchTest {
         assertTrue(node in os.procs && os.procs.getValue(node).startedAt == 50_000L, "recycled pid untouched")
         assertFalse(node in os.killed || stranger in os.killed || otherChild in os.killed)
         assertTrue(bash !in os.procs)
+    }
+
+    @Test fun `close releases the gate lock its owner txt names for the session, and only that one`() {
+        busyTree()
+        val lockDir = java.io.File(kotlin.io.path.createTempDirectory("gl").toFile(), "agenthq-gate.lock").apply { mkdirs() }
+        java.io.File(lockDir, "owner.txt").writeText("session=s1 pid=$bash")
+        val lock = GateLock(dir = { lockDir }, pidAlive = { it in os.procs })
+        val w = watch(gateLock = lock)
+        w.tick()
+        close()
+        w.reapSession("s2", now)
+        assertTrue(lockDir.isDirectory, "another session closing keeps the lock")
+        w.reapSession("s1", now)
+        assertFalse(lockDir.exists(), "the owner closed, its holder was killed with it")
+    }
+
+    @Test fun `a lock owned by a live foreign holder or with no owner txt survives the close, and the catch-up frees an ended owner`() {
+        busyTree()
+        val lockDir = java.io.File(kotlin.io.path.createTempDirectory("gl").toFile(), "agenthq-gate.lock").apply { mkdirs() }
+        java.io.File(lockDir, "pid").writeText("$stranger")
+        os.start(stranger, null, "bash gate.sh", 2_000)
+        val lock = GateLock(dir = { lockDir }, pidAlive = { it in os.procs })
+        val w = watch(gateLock = lock)
+        w.tick()
+        close()
+        w.reapSession("s1", now)
+        assertTrue(lockDir.isDirectory, "no owner.txt: kept")
+        java.io.File(lockDir, "owner.txt").writeText("session=s1 pid=$stranger")
+        w.tick()
+        assertTrue(lockDir.isDirectory, "owner ended but the holder is alive: kept")
+        os.exit(stranger)
+        w.tick()
+        assertFalse(lockDir.exists(), "owner ended and holder gone: the catch-up releases it")
     }
 
     @Test fun `a kept bg job and everything under it survive, its parent goes alone`() {

@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit
  * The daemon tells the starter of a ticket when its worker's run ends, so a worker that finishes (or dies) without
  * mailing never stalls the pipeline. Layer one of "PM must be told automatically"; layer two is the finish line in the brief.
  *
- * On [SessionEvent.Exit] of a session that runs a ticket with a `startedBy`, never for an operator kill:
+ * On [SessionEvent.Exit] of a session that runs a ticket with a `startedBy`, a kill too, naming who did it (`killedBy`) unless the ticket is done or it was routine housekeeping:
  *  - ONE mail from `system`, subject `[AUTOMATIC] ...`: ticket id and title, session, branch, last commit, exit code and
  *    the first lines of the worker's last output.
  *  - A FAILURE (exit code not 0, or the ticket not in `done`) is marked `[AUTOMATIC FAILURE]` and always sent.
@@ -47,7 +47,7 @@ class FinishNoticeMonitor(
                 }
             }
             is SessionEvent.Exit -> {
-                if (event.killOutcome != null) return
+                // Ticket 7e9bed2a: a kill is noticed too (the ticket left open by it), saying who did it.
                 runCatching { notice(event) }
                     .onFailure { System.err.println("[agentHq] finish notice failed for ${event.sessionId}: ${it.message}") }
             }
@@ -63,7 +63,9 @@ class FinishNoticeMonitor(
         val starter = ticket.startedBy ?: return
         val run = session.runCount
         if (lastNoticed.put(session.id, run) == run) return
-        val failed = (event.code ?: 0) != 0
+        val killed = event.killOutcome != null
+        if (killed && (ticket.status == TicketStatus.DONE || session.killedBy in QUIET_KILLERS)) return
+        val failed = killed || (event.code ?: 0) != 0
         val done = ticket.status == TicketStatus.DONE
         val failure = failed || !done
         val since = lastNoticeAt[session.id] ?: session.spawnedAt
@@ -86,6 +88,7 @@ class FinishNoticeMonitor(
         val branch = ticket.branch ?: session.worktreeBranch
         val commit = (session.worktreePath ?: session.repoRoot)?.let { commitOf(File(it)) }
         val reason = when {
+            killed -> "killed by ${session.killedBy ?: "unknown"}${session.killReason?.let { " ($it)" }.orEmpty()}; the ticket is still ${ticket.status}"
             failed -> "exit code ${event.code}"
             !done -> "ended with the ticket still ${ticket.status}"
             else -> null
@@ -105,6 +108,7 @@ class FinishNoticeMonitor(
                     append("branch: ${branch ?: "none"}\n")
                     append("last commit: ${commit ?: "unknown"}\n")
                     append("exit code: ${event.code ?: "unknown"}\n")
+                    if (killed) append("killed by: ${session.killedBy ?: "unknown"}${session.killReason?.let { " - $it" }.orEmpty()}\n")
                     if (lines.isNotEmpty()) {
                         append("last output:\n")
                         lines.takeLast(OUTPUT_LINES).forEach { append("  ${it.take(240)}\n") }
@@ -116,6 +120,8 @@ class FinishNoticeMonitor(
 
     companion object {
         const val SYSTEM = "system"
+        /** Kills the daemon makes as routine housekeeping: no failure notice. */
+        private val QUIET_KILLERS = setOf("done-worker reaper", "ticket start rollback")
         private const val TAIL_LINES = 12
         private const val OUTPUT_LINES = 6
         const val RESUME_GRACE_MS = 5 * 60_000L
