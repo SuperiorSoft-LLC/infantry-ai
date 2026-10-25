@@ -148,7 +148,7 @@ object EventNormalizer {
 
             // 1.95.0: pi reports a tool's real execution start and end on their own records.
             "tool_execution_start" -> (obj["toolName"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf(String::isNotBlank)?.let { name ->
-                listOf(Line.Tool(name, (obj["args"] as? JsonObject)?.let { toolActivityOf(JsonObject(mapOf("input" to it))) }, waitSeconds = waitSecondsOf(name, obj["args"] as? JsonObject, claudeTimeoutMs = false)))
+                listOf(Line.Tool(name, (obj["args"] as? JsonObject)?.let { toolActivityOf(JsonObject(mapOf("input" to it))) }, todos = com.superiorsoftllc.agenthq.protocol.todo.TodoAdapters.parse(name, obj["args"] as? JsonObject), waitSeconds = waitSecondsOf(name, obj["args"] as? JsonObject, claudeTimeoutMs = false)))
             } ?: emptyList()
             "tool_execution_end" -> listOf(Line.ToolEnd)
 

@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.129.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.130.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -3029,3 +3029,7 @@ A session with no turn in flight but live background processes (`backgroundWork`
 ### What changed in 1.129.0 (ASK-OTHER) — "Other" is on by default for owner questions
 
 ADDITIVE; no new wire field (`question_answer.otherText` and `OwnerQuestion.allowOther`/`otherText` already carried free text since 1.97.0). `question_ask.allowOther` now DEFAULTS to `true` (absent = the owner may type an own answer; send `false` to keep a question option-only; MCP `agenthq_ask.allowOther`, CLI `ask --recommend ... --no-other`). An old client that sends `allowOther` explicitly is unchanged; an old UI ignores the Other row. The answer mail for a typed answer reads `Custom answer from the owner: <text>` (subject `Custom answer to question <id>: ...`), never `Chosen option`. The inline panel shows an "Other…" row at the end of the options: a multi-line field, Enter sends, Shift+Enter newline, Esc back to the options. `ready` reports `contract=1.129.0`.
+
+### What changed in 1.130.0 (TODO-PROGRESS-1, ticket-aba6cdca) — the agent's to-do list drives the progress bar
+
+ADDITIVE; `contract=1.130.0`. When a to-do tool call carries the agent's list (the 1.127.0 `status.todos`: claude `TodoWrite`, opencode `todowrite`, and now pi, whose every session loads a daemon-owned `todowrite` extension in opencode's shape), the daemon also sets the session's `progress` as `mode=count`, `done` = items done, `total` = items, `label` = `to-do`, `step` = the item in progress (else the first open one), and the new optional field **`SessionProgress.origin = "todo"`**. All items done = `state=done`; an empty list clears it. `step` may now also accompany a `count` bar (a client shows it after the count). Precedence, highest first: a RUNNING progress of the agent's own (`progress` op, `agenthq run` markers; `origin` omitted) is never overwritten by the list, and the agent's own next report replaces a `todo` bar outright (a fresh job); then the to-do bar; then the 1.123.0 sleep hint (`estimateSource=sleep`), which no longer replaces a to-do bar. Once the agent's own job finished, the next list change takes the bar back. An older daemon never sends `origin`; an older client ignores it and draws a plain count bar.

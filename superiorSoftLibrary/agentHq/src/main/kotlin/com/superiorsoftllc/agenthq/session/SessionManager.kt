@@ -405,6 +405,8 @@ class SessionManager(
         if (current.state in setOf(SessionState.EXITED, SessionState.ORPHANED, SessionState.FAILED)) return current
         val p = current.progress
         if (p != null && p.state == SessionProgress.RUNNING && p.estimateSource != SessionProgress.SOURCE_SLEEP) return current
+        // TODO-PROGRESS-1: a to-do bar outranks the sleep hint, finished or not (the list is the agent's own plan).
+        if (p?.origin == SessionProgress.ORIGIN_TODO) return current
         return update(sessionId) {
             it.copy(progress = SessionProgress(
                 mode = "indeterminate", label = SessionProgress.WAIT_LABEL, startedAt = hint.startedAt, updatedAt = hint.startedAt,
@@ -412,6 +414,19 @@ class SessionManager(
                 estimated = true, lastOutputAt = hint.startedAt,
             ))
         }
+    }
+
+    /**
+     * TODO-PROGRESS-1 (contract 1.128.0): the agent wrote its to-do list ([items] = text to status, the FULL list); the
+     * bar follows it as `count` done of total ([TodoProgress]) unless the agent's own running report holds it.
+     * A change reaches clients as a `session` push. No such session = null.
+     */
+    fun setTodoProgress(sessionId: String, items: List<Pair<String, String>>): SessionRecord? {
+        val current = sessions[sessionId] ?: return null
+        if (current.state in setOf(SessionState.EXITED, SessionState.ORPHANED, SessionState.FAILED)) return current
+        val now = clock()
+        if (TodoProgress.apply(current.progress, items, now) == current.progress) return current
+        return update(sessionId) { it.copy(progress = TodoProgress.apply(it.progress, items, now)) }
     }
 
     /** The tool call returned (or the turn moved on): drop a wait [setWait] put there; any other progress is left alone. */

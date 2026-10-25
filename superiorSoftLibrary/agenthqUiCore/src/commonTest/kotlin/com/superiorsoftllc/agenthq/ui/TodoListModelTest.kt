@@ -1,10 +1,11 @@
 package com.superiorsoftllc.agenthq.ui
 
 import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.TodoCollapseMemory
+import com.superiorsoftllc.agenthq.ui.model.SidePanel
 import com.superiorsoftllc.agenthq.ui.model.TodoStatus
 import com.superiorsoftllc.agenthq.ui.model.reduce
-import com.superiorsoftllc.agenthq.ui.model.todoCardVisible
+import com.superiorsoftllc.agenthq.ui.model.todoBoxVisible
+import com.superiorsoftllc.agenthq.ui.model.toggled
 import com.superiorsoftllc.agenthq.ui.protocol.Envelope
 import com.superiorsoftllc.agenthq.ui.protocol.SessionRecord
 import com.superiorsoftllc.agenthq.ui.protocol.SessionState
@@ -54,21 +55,26 @@ class TodoListModelTest {
         assertNull(feed(session()).agents.getValue("a").todos)
     }
 
-    @Test fun visibleOnlyWhenRunningAndNonEmpty() {
+    @Test fun theBoxShowsOnceAListExistsWhateverTheSessionState() {
         val list = feed(session(), todo(2, TodoItemPayload("a", "pending"))).agents.getValue("a").todos
-        assertTrue(todoCardVisible(list, true))
-        assertFalse(todoCardVisible(list, false))
-        assertFalse(todoCardVisible(null, true))
-        assertFalse(todoCardVisible(feed(session(), todo(2)).agents.getValue("a").todos, true))
+        assertTrue(todoBoxVisible(list))
+        assertFalse(todoBoxVisible(null))
+        assertFalse(todoBoxVisible(feed(session(), todo(2)).agents.getValue("a").todos))
     }
 
-    @Test fun collapseIsRememberedPerSessionAndFollowsTheDefaultUntilToggled() {
-        val m = TodoCollapseMemory()
-        assertTrue(m.isCollapsed("a", true))
-        assertFalse(m.isCollapsed("a", false))
-        val t = m.toggled("a", true)
-        assertFalse(t.isCollapsed("a", true))
-        assertFalse(t.isCollapsed("a", false)) // explicit now wins over the default
-        assertTrue(t.isCollapsed("b", true)) // other sessions untouched
+    @Test fun onePanelAtATime() {
+        assertEquals(SidePanel.TODO, SidePanel.NONE.toggled(SidePanel.TODO))
+        assertEquals(SidePanel.NONE, SidePanel.TODO.toggled(SidePanel.TODO))
+        assertEquals(SidePanel.REASONING, SidePanel.TODO.toggled(SidePanel.REASONING))
+        assertEquals(SidePanel.TODO, SidePanel.REASONING.toggled(SidePanel.TODO))
+    }
+
+    @Test fun aTodoBarNamesItsCurrentItem() {
+        val p = com.superiorsoftllc.agenthq.ui.protocol.ProgressView(
+            mode = "count", percent = 50.0, label = "to-do", step = "beta", done = 1, total = 2, startedAt = 0, updatedAt = 0, origin = "todo",
+        )
+        val d = com.superiorsoftllc.agenthq.ui.model.progressDisplay(p, now = 0)
+        assertTrue(d.headline.contains("1 / 2 beta"), d.headline)
+        assertEquals(0.5f, d.fraction)
     }
 }

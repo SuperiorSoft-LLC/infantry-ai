@@ -51,7 +51,7 @@ fun progressDisplay(p: ProgressView, now: Long, staleMin: Int = PROGRESS_STALE_D
                 add("step $at/$total" + (p.step?.let { " $it" } ?: ""))
             }
             "bytes" -> add(formatBytes(p.done ?: 0) + (p.total?.let { " / " + formatBytes(it) } ?: ""))
-            "count" -> add("${p.done ?: 0}" + (p.total?.let { " / $it" } ?: ""))
+            "count" -> add("${p.done ?: 0}" + (p.total?.let { " / $it" } ?: "") + (p.step?.let { " $it" } ?: "")) // 1.128.0: a to-do bar names its current item
         }
         when (p.state) {
             "done" -> add("done")

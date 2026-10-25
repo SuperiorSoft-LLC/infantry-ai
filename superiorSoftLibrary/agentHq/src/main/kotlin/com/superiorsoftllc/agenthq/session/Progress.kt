@@ -56,8 +56,16 @@ data class SessionProgress(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val labelStartedAt: Long? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val estimateSource: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER) val lastOutputAt: Long? = null,
+    /**
+     * Contract 1.128.0 (TODO-PROGRESS-1, additive): who set this value when the agent did not report it itself. `todo` =
+     * derived by the daemon from the agent's own to-do list (mode `count`, done of total items). Omitted = the agent's
+     * report (or the sleep hint, which says so in [estimateSource]). An agent report always replaces a `todo` value.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val origin: String? = null,
 ) {
     companion object {
+        const val ORIGIN_TODO = "todo"
+        const val TODO_LABEL = "to-do"
         const val RUNNING = "running"
         const val DONE = "done"
         const val FAILED = "failed"
@@ -107,9 +115,12 @@ object ProgressReducer {
         learned: (String) -> Long? = { null },
     ): SessionProgress? {
         require(report.op in OPS) { "unknown progress op '${report.op.take(40)}' (${OPS.joinToString(", ")})" }
-        val running = previous?.takeIf { it.state == SessionProgress.RUNNING }
+        if (report.op == "get") return previous
+        // TODO-PROGRESS-1: a bar derived from the to-do list is not the agent's job; its own report starts fresh over it.
+        val own = previous?.takeIf { it.origin == null }
+        val running = own?.takeIf { it.state == SessionProgress.RUNNING }
         if (report.op == "output") return running?.copy(lastOutputAt = now) ?: previous
-        val next = fold(previous, report, now)
+        val next = fold(own, report, now)
         if (next == null || report.op !in STAMPED) return next
         return stamp(running, next, report, now, learned)
     }
@@ -308,7 +319,7 @@ object ProgressReducer {
                 (p.step?.let { " $it" } ?: "")
             "bytes" -> parts += "${bytes(p.done ?: 0)}${p.total?.let { "/" + bytes(it) } ?: ""}" +
                 (p.bytesPerSec?.let { ", ${bytes(it.toLong())}/s" } ?: "")
-            "count" -> parts += "${p.done ?: 0}${p.total?.let { "/$it" } ?: ""}"
+            "count" -> parts += "${p.done ?: 0}${p.total?.let { "/$it" } ?: ""}" + (p.step?.let { " $it" } ?: "")
         }
         if (p.state == SessionProgress.RUNNING) countdownText(eta)?.let { parts += "· $it" }
         // No number and no estimate: say the job is alive (last output), never a bare elapsed counter.
@@ -332,5 +343,46 @@ object ProgressReducer {
             s < 3600 -> "${s / 60}m${(s % 60).toString().padStart(2, '0')}s"
             else -> "${s / 3600}h${((s % 3600) / 60).toString().padStart(2, '0')}m"
         }
+    }
+}
+
+/**
+ * TODO-PROGRESS-1 (contract 1.128.0): the progress bar the agent's own to-do list drives, when the agent reports nothing
+ * itself. Pure. Precedence, highest first: a RUNNING report of the agent's own (`agenthq run` markers, `agenthq_progress`),
+ * then this, then the sleep hint. A finished own report gives the bar back at the next list change.
+ */
+object TodoProgress {
+    /** N of M: how many items are done, how many there are, and the one being worked on (else the first open one). */
+    data class Counts(val done: Long, val total: Long, val current: String?) {
+        val finished: Boolean get() = total > 0 && done == total
+    }
+
+    /** THE one N-of-M rule for a to-do list ([items] = text to status `pending|in_progress|done`). */
+    fun of(items: List<Pair<String, String>>): Counts = Counts(
+        done = items.count { it.second == "done" }.toLong(),
+        total = items.size.toLong(),
+        current = items.firstOrNull { it.second == "in_progress" }?.first ?: items.firstOrNull { it.second != "done" }?.first,
+    )
+
+    /**
+     * The next value of a session's progress after the agent wrote [items] (the FULL list), or [previous] unchanged when
+     * an own running report holds the bar.
+     */
+    fun apply(previous: SessionProgress?, items: List<Pair<String, String>>, now: Long): SessionProgress? {
+        val ownRunning = previous != null && previous.origin == null && previous.state == SessionProgress.RUNNING &&
+            previous.estimateSource != SessionProgress.SOURCE_SLEEP
+        if (ownRunning) return previous
+        val mine = previous?.takeIf { it.origin == SessionProgress.ORIGIN_TODO }
+        if (items.isEmpty()) return if (mine != null) null else previous
+        val c = of(items)
+        val restart = mine == null || mine.state != SessionProgress.RUNNING
+        return SessionProgress(
+            mode = "count", state = if (c.finished) SessionProgress.DONE else SessionProgress.RUNNING,
+            percent = c.done * 100.0 / c.total, label = SessionProgress.TODO_LABEL,
+            step = if (c.finished) null else c.current?.take(ProgressReducer.MAX_STEP),
+            done = c.done, total = c.total,
+            startedAt = if (restart) now else mine!!.startedAt, updatedAt = now, lastOutputAt = now,
+            origin = SessionProgress.ORIGIN_TODO,
+        )
     }
 }

@@ -17,3 +17,6 @@ Browser pass (no log): plan `open app|login|create ticket|move ticket|verify boa
 Ask the owner (`agenthq_ask`, or `agenthq ask`) only for a real decision that only the user can make: 2-4 real options where their preference matters (design, priority, destructive or irreversible choices). Never for trivia or anything already decided.
 Keep the question short, give clear options (label + one-line consequence), and always recommend one with a reason. Do not wait: carry on with other work; the answer arrives as mail.
 The UI always adds an "Other" row where the owner types their own answer, whatever options you pass. Do not add an "Other" option yourself; a typed answer arrives as "Custom answer from the owner: <text>" and is not one of your options.
+
+## TO-DO LIST
+Keep your own to-do list current with your harness's to-do tool (claude `TodoWrite`, opencode and pi `todowrite`; always send the FULL list). Make it when the task has more than two steps, keep exactly one item `in_progress`, and mark an item `completed` as soon as it is really done, never ahead of time. The owner sees it as the to-do box next to the reasoning button, and it drives your progress bar (N of M done) whenever you are not reporting progress yourself; your own `agenthq run` markers or `agenthq_progress` reports take precedence while they run.

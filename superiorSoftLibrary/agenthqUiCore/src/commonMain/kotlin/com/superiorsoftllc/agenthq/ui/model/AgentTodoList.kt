@@ -38,17 +38,13 @@ data class AgentTodoList(val items: List<TodoItem>, val updatedAt: Long) {
 }
 
 /**
- * Whether the card is open, remembered per session. A session never opened or closed by the owner follows [defaultCollapsed]
- * (true on a narrow screen); an explicit toggle always wins afterwards.
+ * TODO-BOX-1: the to-do toggle shows only once the agent has made a list (a non-empty one); it stays after the run ends,
+ * so the owner can still read what was done.
  */
-data class TodoCollapseMemory(private val explicit: Map<String, Boolean> = emptyMap()) {
-    fun isCollapsed(sessionId: String, defaultCollapsed: Boolean): Boolean = explicit[sessionId] ?: defaultCollapsed
-    fun toggled(sessionId: String, defaultCollapsed: Boolean): TodoCollapseMemory =
-        TodoCollapseMemory(explicit + (sessionId to !isCollapsed(sessionId, defaultCollapsed)))
-}
+fun todoBoxVisible(list: AgentTodoList?): Boolean = list != null && !list.isEmpty
 
-/** What the overlay draws for a session: nothing when the list is empty or the session is not the running one. */
-fun todoCardVisible(list: AgentTodoList?, sessionRunning: Boolean): Boolean = sessionRunning && list != null && !list.isEmpty
+/** Which panel of the chat's top-right slot is open; at most one at a time. */
+enum class SidePanel { NONE, REASONING, TODO }
 
-/** Milliseconds after the last item is done before the card folds itself into the pill. */
-const val TODO_AUTO_COLLAPSE_MS = 4_000L
+/** Clicking [panel]'s button: opens it (closing the other one), or closes it when it is already open. */
+fun SidePanel.toggled(panel: SidePanel): SidePanel = if (this == panel) SidePanel.NONE else panel

@@ -1,0 +1,2 @@
+{"type":"tool_execution_start","toolCallId":"call_00_ET_wz5HLY8t4Da7nrDgAbaJ2809","toolName":"todowrite","args":{"todos":[{"content":"alpha","status":"completed"},{"content":"beta","status":"in_progress"}]}}
+{"type":"tool_execution_end","toolCallId":"call_00_ET_wz5HLY8t4Da7nrDgAbaJ2809","toolName":"todowrite","result":{"content":[{"type":"text","text":"1/2 done\n[x] alpha\n[>] beta"}],"details":{"todos":[{"content":"alpha","status":"completed"},{"content":"beta","status":"in_progress"}]}},"isError":false,"durationMs":0}

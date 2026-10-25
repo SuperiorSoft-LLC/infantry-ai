@@ -31,7 +31,11 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.superiorsoftllc.agenthq.ui.model.AgentTodoList
 import com.superiorsoftllc.agenthq.ui.model.OutputLine
+import com.superiorsoftllc.agenthq.ui.model.SidePanel
+import com.superiorsoftllc.agenthq.ui.model.todoBoxVisible
+import com.superiorsoftllc.agenthq.ui.model.toggled
 import com.superiorsoftllc.agenthq.ui.model.ReasoningPlacement
 import com.superiorsoftllc.agenthq.ui.model.reasoningCopyText
 
@@ -42,25 +46,37 @@ const val REASONING_PANEL_COPY_TAG = "reasoning-panel-copy"
 const val REASONING_PANEL_CLOSE_TAG = "reasoning-panel-close"
 const val REASONING_PLACEMENT_TAG_PREFIX = "reasoning-placement-"
 
-/** The height the top-right slot's button takes (button + its padding); a card stacked below it starts under this. */
-val REASONING_BUTTON_SLOT = 40.dp
-
 /** Where the chat draws reasoning on this device; provided by the app from the Appearance setting. */
 val LocalReasoningPlacement = staticCompositionLocalOf { ReasoningPlacement.INLINE }
 
+/** The reasoning button and panel alone (no to-do box): [ChatSideSlot] with no list. */
+@Composable
+fun BoxScope.ReasoningSlot(lines: List<OutputLine>, open: Boolean, onOpen: (Boolean) -> Unit) =
+    ChatSideSlot(lines, null, if (open) SidePanel.REASONING else SidePanel.NONE) { onOpen(it == SidePanel.REASONING) }
+
 /**
- * The top-right slot's first row: a small button that opens the reasoning panel, and the panel itself while [open].
- * Lay it out inside the transcript's Box; the to-do card is laid below it (see [REASONING_BUTTON_SLOT]).
- * Draws nothing when the session has no reasoning and the panel is closed.
+ * The chat's top-right slot: one row of toggle buttons -- the to-do box (TODO-BOX-1, only once the agent made a list)
+ * next to the reasoning button (only when there is reasoning) -- and, under it, the ONE open panel ([panel]).
+ * Lay it out inside the transcript's Box. Draws nothing when there is neither reasoning nor a list and no panel is open.
  */
 @Composable
-fun BoxScope.ReasoningSlot(lines: List<OutputLine>, open: Boolean, onOpen: (Boolean) -> Unit) {
-    if (lines.isEmpty() && !open) return
+fun BoxScope.ChatSideSlot(lines: List<OutputLine>, todos: AgentTodoList?, panel: SidePanel, onPanel: (SidePanel) -> Unit) {
+    val hasTodos = todoBoxVisible(todos)
+    if (lines.isEmpty() && !hasTodos && panel == SidePanel.NONE) return
     BoxWithConstraints(Modifier.matchParentSize()) {
         val cap = maxHeight * 0.6f
         Column(Modifier.align(Alignment.TopEnd).padding(8.dp), horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            ReasoningButton(lines.size, open) { onOpen(!open) }
-            if (open) ReasoningPanel(lines, maxHeight = cap, onClose = { onOpen(false) })
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (hasTodos && todos != null) TodoButton(todos, panel == SidePanel.TODO) { onPanel(panel.toggled(SidePanel.TODO)) }
+                if (lines.isNotEmpty() || panel == SidePanel.REASONING) {
+                    ReasoningButton(lines.size, panel == SidePanel.REASONING) { onPanel(panel.toggled(SidePanel.REASONING)) }
+                }
+            }
+            when (panel) {
+                SidePanel.REASONING -> ReasoningPanel(lines, maxHeight = cap, onClose = { onPanel(SidePanel.NONE) })
+                SidePanel.TODO -> TodoPanel(todos, maxHeight = cap, onClose = { onPanel(SidePanel.NONE) })
+                SidePanel.NONE -> Unit
+            }
         }
     }
 }
