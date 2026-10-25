@@ -30,6 +30,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
@@ -190,6 +191,13 @@ class BoardDropTest {
         assertEquals(emptyList(), ids(TicketColumns.IN_PROGRESS))
         assertEquals(1, link.moves().size, "nothing follows a refused start")
         assertFalse(session.isStarting("a"))
+    }
+
+    @Test fun `a start refused for want of a role is told apart from every other refusal`() {
+        val noRole = BoardDrop.startNote(TicketStart(false, "start_refused", "ticket has no role; set one with `agenthq ticket update <id> --role <role id>`"))
+        assertTrue(BoardDrop.isNoRoleNote(noRole))
+        assertFalse(BoardDrop.isNoRoleNote(BoardDrop.startNote(TicketStart(false, "held", "ticket-x"))))
+        assertFalse(BoardDrop.isNoRoleNote(BoardDrop.startNote(TicketStart(false, "queued", "role:qa"))))
     }
 
     @Test fun `a held or queued start also snaps back and says why`() {

@@ -1054,11 +1054,14 @@ private fun TabBar(tabs: List<Pair<String, Boolean>>, hPad: androidx.compose.ui.
             }
         }
         if (scroll.canScrollForward) {
-            Box(
-                Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(32.dp)
-                    .background(Brush.horizontalGradient(listOf(Palette.Panel.copy(alpha = 0f), Palette.Panel)))
-                    .testTag(TAB_BAR_MORE_CUE_TAG),
-            )
+            // matchParentSize keeps the overlay from stretching the bar (a fillMaxHeight child would take the whole column).
+            Box(Modifier.matchParentSize()) {
+                Box(
+                    Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(32.dp)
+                        .background(Brush.horizontalGradient(listOf(Palette.Panel.copy(alpha = 0f), Palette.Panel)))
+                        .testTag(TAB_BAR_MORE_CUE_TAG),
+                )
+            }
         }
     }
     HorizontalDivider(color = Palette.Border)

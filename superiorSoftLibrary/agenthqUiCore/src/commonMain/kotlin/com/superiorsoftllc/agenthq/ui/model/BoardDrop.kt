@@ -62,6 +62,9 @@ object BoardDrop {
         }
     }
 
+    /** A start refused for want of a role (the daemon's "ticket has no role"): the card offers the role pick, not its form. */
+    fun isNoRoleNote(note: String): Boolean = note.contains("ticket has no role")
+
     /** The line a start that did not start shows on the card that snapped back, from the daemon's answer. */
     fun startNote(start: TicketStart): String = when (start.reason) {
         "held" -> "Not started: held by ${start.detail ?: "an open prerequisite"}"

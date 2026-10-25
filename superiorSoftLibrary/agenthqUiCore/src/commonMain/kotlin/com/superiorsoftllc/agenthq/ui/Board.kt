@@ -54,6 +54,7 @@ import com.superiorsoftllc.agenthq.ui.model.DropPlan
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -115,6 +116,8 @@ const val TICKET_CARD_TAG_PREFIX = "ticket-card-"
 /** A card's six-dot drag handle, the line a card that snapped back shows, and a board column (by status). */
 const val TICKET_HANDLE_TAG_PREFIX = "ticket-handle-"
 const val TICKET_DROP_NOTE_TAG_PREFIX = "ticket-drop-note-"
+/** FIX (web, QA F11): the inline role pick a no-role Start offers, + ticket id. */
+const val TICKET_ROLE_NUDGE_TAG_PREFIX = "ticket-role-nudge-"
 const val BOARD_COLUMN_TAG_PREFIX = "board-column-"
 
 /**
@@ -524,12 +527,13 @@ private fun TicketCard(
       }
         // A drop that snapped back says why (a refused column, or the daemon's reason a start did not start).
         dropNote?.let { note ->
-            // A refusal for want of a role opens the edit form, where the role is picked.
-            LaunchedEffect(note) { if (note.contains("no role")) open = true; delay(8_000); onDismissNote() }
+            LaunchedEffect(note) { delay(8_000); onDismissNote() }
             Text(
                 note, color = Palette.Danger, fontSize = 10.sp, maxLines = 3,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag(TICKET_DROP_NOTE_TAG_PREFIX + t.id),
             )
+            // A refusal for want of a role offers the role pick inline (focused), not the whole edit form.
+            if (BoardDrop.isNoRoleNote(note) && t.agentId == null && !open) RoleNudge(t, state, controller)
         }
         if (open) {
             TicketEditForm(t, state, controller, onDone = { open = false })
@@ -549,6 +553,20 @@ private fun TicketCard(
             }
             Spacer(Modifier.weight(1f))
             if (open) TextButton(onClick = { actionScope.launch { controller.deleteTicket(t.id) } }, enabled = live) { Text("Delete", color = Palette.Danger, fontSize = 11.sp) }
+        }
+    }
+}
+
+/** FIX (web, QA F11): "pick a role first" under a card whose Start was refused for want of a role; a pick saves the assignee. */
+@Composable
+private fun RoleNudge(t: Ticket, state: AppState, controller: Controller) {
+    val actionScope = rememberCoroutineScope()
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    Column(Modifier.fillMaxWidth().testTag(TICKET_ROLE_NUDGE_TAG_PREFIX + t.id), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Pick a role first, then Start.", color = Palette.Danger, fontSize = 11.sp)
+        TicketAssigneePicker(state, null, focus) { id ->
+            if (!id.isNullOrEmpty() && state.connection.isLive) actionScope.launch { controller.editTicket(t.id, agentId = id) }
         }
     }
 }
