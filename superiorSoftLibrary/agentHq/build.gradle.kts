@@ -375,6 +375,8 @@ tasks.register<Sync>("dockerContext") {
     dependsOn(webBundleTask)
     from(webBundleDir) { into("agenthq/web") }
     from(rootProject.layout.projectDirectory.file("docker/Dockerfile"))
+    // DOCKER-2: the entrypoint (first-start token in the state volume, JAVA_OPTS).
+    from(rootProject.layout.projectDirectory.file("docker/entrypoint.sh"))
     into(layout.buildDirectory.dir("docker"))
 }
 

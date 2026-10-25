@@ -1,0 +1,70 @@
+# Infantry AI public demo on a small droplet (DOCKER-2, ticket c00d1d1c). Target: 2 GB DigitalOcean droplet + 2 GB swap.
+# Step-by-step: docs/docker-deploy.md.  The hardened variant with secrets as files and a read-only root is compose.yaml.
+#
+#   docker compose -f docker/docker-compose.yml up -d
+#   docker compose -f docker/docker-compose.yml exec infantry-ai cat /data/access-token     # the token (first start makes it)
+#
+# Every value below is a setting with a default: override it in docker/.env or the shell, never edit a cap into code.
+name: ${COMPOSE_PROJECT_NAME:-infantry-demo}
+
+services:
+  infantry-ai:
+    image: ${AGENTHQ_IMAGE:-infantryai/infantry-ai:dev}
+    init: true                      # PID 1 reaps the zombies agent CLIs leave behind
+    restart: unless-stopped
+    ports:
+      # Loopback by default. On the droplet set AGENTHQ_BIND=0.0.0.0 (firewall: this port only) or keep loopback and use
+      # Tailscale / an SSH tunnel. AGENTHQ_HOST_PORT is the port on the host; the container always listens on 8787.
+      - "${AGENTHQ_BIND:-127.0.0.1}:${AGENTHQ_HOST_PORT:-8787}:8787"
+    environment:
+      # Heap: 512 MB is enough for the daemon (idle ~140 MB RSS); the CLIs it spawns are separate processes.
+      JAVA_OPTS: ${JAVA_OPTS:--Xms32m -Xmx512m}
+      # Token: generated into the state volume on first start (/data/access-token, mode 600). To choose your own, write it
+      # to that file before the first start. AGENTHQ_TOKEN_AUTO=false = refuse to start without one.
+      AGENTHQ_TOKEN_AUTO: ${AGENTHQ_TOKEN_AUTO:-true}
+      # Same as the proven headless launch: each project runs in its own directory; sessions get this daemon's URL only.
+      AGENTHQ_PROJECT_DIRS: ${AGENTHQ_PROJECT_DIRS:-true}
+      AGENTHQ_OWN_URL_ONLY: ${AGENTHQ_OWN_URL_ONLY:-true}
+      # Host name(s)/IP the browser uses (comma separated), e.g. 203.0.113.7 or demo.example.com. Inside a container the
+      # daemon cannot see the droplet's public address, so the browser UI refuses other hosts until this is set.
+      AGENTHQ_WEB_HOSTS: ${AGENTHQ_WEB_HOSTS:-}
+      # --- Limits (settings/LimitRegistry.kt; env AGENTHQ_LIMIT_<KEY>, also changeable live in Settings > Limits) ---
+      # Sessions one session / MCP connection may grow its pod by (the worker concurrency cap). Demo: 2.
+      AGENTHQ_LIMIT_CONCURRENCY_MAX_PER_POD: ${AGENTHQ_LIMIT_CONCURRENCY_MAX_PER_POD:-2}
+      # Sessions one MCP connection may hold open at once. Demo: 2.
+      AGENTHQ_LIMIT_CONCURRENCY_MCP_MAX_SPAWNS: ${AGENTHQ_LIMIT_CONCURRENCY_MCP_MAX_SPAWNS:-2}
+      # How deep spawns may nest (1 = a session may spawn, its spawns may not).
+      AGENTHQ_LIMIT_CONCURRENCY_MAX_DEPTH: ${AGENTHQ_LIMIT_CONCURRENCY_MAX_DEPTH:-1}
+      # Agents of one role at once in a project (when the project sets no lane cap).
+      AGENTHQ_LIMIT_CONCURRENCY_LANE_DEFAULT: ${AGENTHQ_LIMIT_CONCURRENCY_LANE_DEFAULT:-1}
+      # Highest worker count the usage pacing rule accepts. Demo: 2.
+      AGENTHQ_LIMIT_PACING_MAX_WORKERS_CEILING: ${AGENTHQ_LIMIT_PACING_MAX_WORKERS_CEILING:-2}
+      # Gradle workers / test forks a worker session's build may use (a 1-vCPU droplet: 1).
+      AGENTHQ_LIMIT_BUILD_MAX_WORKERS: ${AGENTHQ_LIMIT_BUILD_MAX_WORKERS:-1}
+      AGENTHQ_LIMIT_BUILD_MAX_PARALLEL_FORKS: ${AGENTHQ_LIMIT_BUILD_MAX_PARALLEL_FORKS:-1}
+      # Watchdog: unattended ticket worker / other run deadlines, stall and silence (minutes; 0 = off).
+      AGENTHQ_LIMIT_WATCHDOG_TICKET_DEADLINE_MINUTES: ${AGENTHQ_LIMIT_WATCHDOG_TICKET_DEADLINE_MINUTES:-60}
+      AGENTHQ_LIMIT_WATCHDOG_DEADLINE_MINUTES: ${AGENTHQ_LIMIT_WATCHDOG_DEADLINE_MINUTES:-30}
+      AGENTHQ_LIMIT_WATCHDOG_STALL_MINUTES: ${AGENTHQ_LIMIT_WATCHDOG_STALL_MINUTES:-15}
+      # Harness credentials: pass through from the host environment / .env, never write them into this file.
+      OPENCODE_API_KEY: ${OPENCODE_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - infantry-data:/data         # database, token, settings, keystore, harness-tools, memory: survives image upgrades
+      - infantry-work:/work         # project directories and their git worktrees
+      - infantry-home:/home/agenthq # CLI logins and config (~/.config/opencode, ~/.pi, ~/.claude), npm cache
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    # Whole container (daemon + every CLI it runs). 2 GB droplet: leave ~400 MB for the OS and Docker.
+    mem_limit: ${AGENTHQ_MEM_LIMIT:-1600m}
+    # No docker.sock mount, ever: agents run code in this container, so the container is the sandbox.
+
+volumes:
+  infantry-data:
+  infantry-work:
+  infantry-home:
