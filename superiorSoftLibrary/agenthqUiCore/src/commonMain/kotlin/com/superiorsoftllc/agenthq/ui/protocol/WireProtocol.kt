@@ -637,6 +637,9 @@ data class MeterUsage(
     val warning: String? = null,
     /** 1.124.0: epoch ms of the live read behind these numbers; null for a manual / unread meter. */
     val updatedAt: Long? = null,
+    /** Projected percent of the governing window at its reset (pace mode); null = judged by bands. */
+    val projectedPercent: Double? = null,
+    val reasoning: String? = null,
 )
 
 /** USAGE-PACE (1.119.0): the `usage_report` frame. */
