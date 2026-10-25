@@ -20,6 +20,8 @@ data class LimitDef(
     /** Largest accepted value; null = no ceiling. */
     val max: Long? = null,
     val zeroIsUnlimited: Boolean = true,
+    /** What 0 means where [zeroIsUnlimited] (shown in hints and refusals). */
+    val zeroMeans: String = "unlimited",
     /** Extra environment names read before the default; `AGENTHQ_LIMIT_<KEY>` is always read first. */
     val legacyEnv: List<String> = emptyList(),
 ) {
@@ -32,7 +34,7 @@ data class LimitDef(
     /** The sentence every refusal ends with: which setting, where to change it. */
     fun hint(): String =
         "Change it with the setting '$key' (Settings > Limits, `agenthq settings set $key <n>`, or env $env)" +
-            (if (zeroIsUnlimited) "; 0 = unlimited" else "") + "."
+            (if (zeroIsUnlimited) "; 0 = $zeroMeans" else "") + "."
 
     fun accepts(value: Long): Boolean = value >= min && (max == null || value <= max)
 
@@ -69,7 +71,32 @@ object LimitRegistry {
         min = 1, zeroIsUnlimited = false,
     )
 
-    val ALL: List<LimitDef> = listOf(MAX_PER_POD, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING)
+    /** Ticket 66153313 (contract 1.132.0): Gradle worker cap handed to worker sessions' builds. */
+    val BUILD_MAX_WORKERS = LimitDef(
+        "limits.build.maxWorkers", com.superiorsoftllc.agenthq.runner.BuildLimits.defaultMaxWorkers().toLong(), "workers",
+        "Gradle workers (org.gradle.workers.max) a worker session's build may use; default logical cores - 2.",
+        max = 4096,
+    )
+    val BUILD_MAX_PARALLEL_FORKS = LimitDef(
+        "limits.build.maxParallelForks", 0, "forks",
+        "Test JVM forks per test task in a worker session's build.",
+        max = 4096, zeroMeans = "the build script's own default",
+    )
+    val CPU_ALERT_PERCENT = LimitDef(
+        "limits.cpu.alertPercent", 90, "%",
+        "Share of all cores agent processes may hold before the sustained-CPU attention item is raised.",
+        min = 1, max = 100, zeroIsUnlimited = false,
+    )
+    val CPU_ALERT_MINUTES = LimitDef(
+        "limits.cpu.alertMinutes", 10, "minutes",
+        "How long agent processes must stay above limits.cpu.alertPercent before the attention item is raised.",
+        max = 1440, zeroMeans = "alert off",
+    )
+
+    val ALL: List<LimitDef> = listOf(
+        MAX_PER_POD, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
+        BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
+    )
 
     private val byKey = ALL.associateBy { it.key }
 

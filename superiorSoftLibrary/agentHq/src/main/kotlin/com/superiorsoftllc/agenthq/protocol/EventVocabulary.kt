@@ -367,7 +367,9 @@ object EventVocabulary {
     // **1.123.0 (PROGRESS-COUNTDOWN, ticket 564d0e01) is ADDITIVE**: `SessionProgress` labelStartedAt / estimateSource / lastOutputAt, `ProgressReport` estimateMs and op `output`; the meter always counts down. See CONTRACT.md.
     // **1.128.0 (ROUTING-1, ticket-a5969342) is ADDITIVE**: `Project.routingRules` + `project_config.routingRules`, `EffectiveExecutor.rule`, source `rule`. See CONTRACT.md.
     // **1.130.0 (TODO-PROGRESS-1, ticket-aba6cdca) is ADDITIVE**: `SessionProgress.origin` (`todo`), a `count` bar derived from the agent's to-do list. See CONTRACT.md.
-    const val VERSION = "1.130.0"
+    // **1.131.0 (BACKLOG, ticket-39eab724) is ADDITIVE**: ticket column `backlog` (first in board order, never started), `TicketSave.status` on a create. See CONTRACT.md.
+    // **1.132.0 (BUILD-LIMITS, ticket-66153313) is ADDITIVE + BEHAVIOURAL**: settings `limits.build.priority|maxWorkers|maxParallelForks` and `limits.cpu.alertPercent|alertMinutes`; worker sessions run at the build priority (Windows Job object / POSIX nice) with Gradle caps in their env; `TrackedProcess.cpuPercent`, `ProcessReport.agentCpuPercent|cpuAlertPercent|cpuAlertMinutes|cpuHighSince`; a `ceiling` attention item (outcome `cpu_sustained`). See CONTRACT.md.
+    const val VERSION = "1.132.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA

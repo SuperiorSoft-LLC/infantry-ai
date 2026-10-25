@@ -90,6 +90,10 @@ dependencies {
     // resolves (2.0.17); a provider ahead of or behind the API is reported as a mismatch by SLF4J.
     runtimeOnly("org.slf4j:slf4j-simple:2.0.17")
 
+    // Ticket 66153313: worker sessions run at a lower CPU priority. Windows has no JVM API for a priority class or a Job
+    // object, so the daemon calls Kernel32 through JNA (SetPriorityClass + a per-session Job with a priority-class limit).
+    implementation("net.java.dev.jna:jna-platform:5.18.1")
+
     testImplementation(kotlin("test"))
     // BUILD-VB-1: VerifyBaseTaskTest runs preflight/verify-base.gradle.kts in a throwaway build.
     testImplementation(gradleTestKit())

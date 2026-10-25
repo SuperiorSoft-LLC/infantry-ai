@@ -66,4 +66,25 @@ class ProcessWatchModelTest {
             ProcessWatchView.row(TrackedProcess(7, "java GradleDaemon", "abcdef123456", 0, 1200, true, "session removed"), 90 * 60_000L),
         )
     }
+
+    /** Contract 1.132.0 (ticket 66153313): agent CPU in the badge, per row, and amber while it stays above the alert. */
+    @Test fun `agent CPU shows in the badge and rows, amber while sustained`() {
+        val r = ProcessReport(
+            freeMb = 20_000, floorMb = 4096, agentCpuPercent = 63.4,
+            tracked = listOf(TrackedProcess(7, "java GradleDaemon", "abcdef123456", null, 1200, cpuPercent = 2.46)),
+        )
+        assertEquals("RAM 19.5 GB free · agents CPU 63%", ProcessWatchView.badge(r))
+        assertFalse(ProcessWatchView.alarming(r), "high but not yet sustained")
+        assertEquals("pid 7 · 1.2 GB · CPU 2.5% · session abcdef12 · java GradleDaemon", ProcessWatchView.row(r.tracked.single(), 0))
+        assertTrue(ProcessWatchView.alarming(r.copy(cpuHighSince = 1L)))
+        assertFalse(ProcessWatchView.alarming(r.copy(cpuHighSince = 1L, cpuAlertMinutes = 0)), "alert off: never amber for CPU")
+        val wire = reduce(
+            AppState(),
+            Envelope(Envelope.PROCESSES, """{"report":{"floorMb":4096,"agentCpuPercent":12.5,"cpuAlertPercent":80,"cpuAlertMinutes":5,"cpuHighSince":null,"tracked":[{"pid":1,"command":"pi","cpuPercent":12.5}]}}"""),
+            1,
+        ).processReport!!
+        assertEquals(12.5, wire.agentCpuPercent)
+        assertEquals(80, wire.cpuAlertPercent)
+        assertEquals(12.5, wire.tracked.single().cpuPercent)
+    }
 }

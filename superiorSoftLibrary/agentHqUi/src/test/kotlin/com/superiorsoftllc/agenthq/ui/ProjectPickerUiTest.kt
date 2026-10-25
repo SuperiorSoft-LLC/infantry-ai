@@ -172,6 +172,54 @@ class ProjectPickerUiTest {
         }
     }
 
+    @Test
+    fun `a refused create keeps the form open, shows the reason and creates no project`() {
+        withApp { controller ->
+            onNodeWithTag("title-bar-new-project").performClick()
+            onNodeWithTag("new-project-name").performTextInput("QA Stale")
+            onNodeWithTag("new-project-directory").performTextInput("relative/qa-path")
+            onNodeWithTag("new-project-create").performClick()
+            waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("directory must be an absolute path", substring = true).fetchSemanticsNodes().isNotEmpty() }
+            onNodeWithTag("new-project-dialog").assertExists()
+            Thread.sleep(300)
+            assertTrue(controller.state.value.projects.none { it.name == "QA Stale" }, "a refused save creates nothing")
+
+            // The same form, fixed, creates the project WITH its directory.
+            val abs = Files.createTempDirectory("agenthq-ui-dir").toFile()
+            try {
+                onNodeWithTag("new-project-directory").performTextReplacement(abs.absolutePath)
+                onNodeWithTag("new-project-create").performClick()
+                waitUntil(timeoutMillis = 10_000) { controller.state.value.projects.any { it.name == "QA Stale" } }
+                waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag("new-project-dialog").fetchSemanticsNodes().isEmpty() }
+                assertEquals(1, controller.state.value.projects.count { it.name == "QA Stale" })
+                assertTrue(controller.state.value.projects.first { it.name == "QA Stale" }.directory.isNotBlank())
+            } finally { abs.deleteRecursively() }
+        }
+    }
+
+    @Test
+    fun `General settings edits the directory, refuses a relative one and clears it`() {
+        withApp { controller ->
+            createProject(controller, "Alpha")
+            val id = controller.idOf("Alpha")
+            val abs = Files.createTempDirectory("agenthq-ui-dir").toFile()
+            try {
+                onNodeWithTag("title-bar-edit-project").performClick()
+                onNodeWithTag("project-directory-field").performTextInput("relative/x")
+                onNodeWithTag("project-directory-save").performClick()
+                waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("directory must be an absolute path", substring = true).fetchSemanticsNodes().isNotEmpty() }
+                assertEquals("", controller.state.value.projects.first { it.id == id }.directory)
+
+                onNodeWithTag("project-directory-field").performTextReplacement(abs.absolutePath)
+                onNodeWithTag("project-directory-save").performClick()
+                waitUntil(timeoutMillis = 10_000) { controller.state.value.projects.first { it.id == id }.directory.isNotBlank() }
+
+                onNodeWithTag("project-directory-clear").performClick()
+                waitUntil(timeoutMillis = 10_000) { controller.state.value.projects.first { it.id == id }.directory.isBlank() }
+            } finally { abs.deleteRecursively() }
+        }
+    }
+
     /** Every root (window content plus each popup/dialog layer) painted onto one image. */
     private fun ComposeUiTest.shoot(path: String) {
         waitForIdle()

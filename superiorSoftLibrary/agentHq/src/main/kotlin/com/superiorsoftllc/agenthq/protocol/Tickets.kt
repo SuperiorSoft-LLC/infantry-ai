@@ -18,7 +18,14 @@ import kotlinx.serialization.json.JsonElement
 
 /** The board's columns, as the wire spells them. */
 object TicketStatus {
-    /** Ready to be worked on. */
+    /**
+     * Contract 1.131.0: limbo, potential work parked until someone deliberately promotes it to [TODO]. A backlog
+     * ticket is never started (a start is refused naming the lane), never picked by any "start next" logic and never
+     * moved by the daemon (a held backlog ticket stays in backlog, never goes to [PENDING]).
+     */
+    const val BACKLOG = "backlog"
+
+    /** The current sprint: committed work, ready to be worked on. */
     const val TODO = "todo"
 
     /** Started: contract 1.6.0 (story 9.3) starts a session for it (see the `handOut` transaction). */
@@ -29,7 +36,11 @@ object TicketStatus {
     const val DONE = "done"
 
     /** Board order: `tickets` lists column by column in this order, each column top first. */
-    val ALL: List<String> = listOf(TODO, IN_PROGRESS, PENDING, DONE)
+    val ALL: List<String> = listOf(BACKLOG, TODO, IN_PROGRESS, PENDING, DONE)
+
+    /** The refusal a start of a [BACKLOG] ticket answers with, wherever the start comes from. */
+    const val BACKLOG_START_REFUSAL =
+        "ticket is in the Backlog lane: move it to To Do (the sprint) before starting it"
 }
 
 /**
@@ -311,7 +322,7 @@ data class TicketStart(
  * `ticket_save`: create a ticket (no [id]) or edit one (the [id] of an existing ticket; an unknown id is
  * refused, so an edit racing a delete never brings the ticket back).
  *
- * On a create, [title] is required and the ticket enters `todo` at the bottom. On an edit, a null field
+ * On a create, [title] is required and the ticket enters `todo` (or [status] `backlog`) at the bottom. On an edit, a null field
  * is left as it is, and an empty [description] or [ticketType] clears it. Columns, positions and links
  * have their own frames (`ticket_move`, `ticket_reorder`, `ticket_link`).
  *
@@ -356,6 +367,12 @@ data class TicketSave(
     val images: List<String>? = null,
     /** TICKET-WEIGHT (contract 1.103.0): 1..5 sets the weight, [TicketWeight.CLEAR] (0) removes it, absent or null keeps it. */
     val weight: Int? = null,
+    /**
+     * BACKLOG (contract 1.131.0): on a CREATE only, the column the new ticket enters: [TicketStatus.TODO] (absent or
+     * null, the default) or [TicketStatus.BACKLOG]; any other column is refused. On an edit it must be absent: columns
+     * change over `ticket_move`.
+     */
+    val status: String? = null,
 ) {
     companion object {
         fun decode(text: String): TicketSave = StrictJson.decode(serializer(), text, "ticket_save payload")

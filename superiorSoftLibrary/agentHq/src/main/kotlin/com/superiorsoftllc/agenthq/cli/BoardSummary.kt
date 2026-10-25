@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
  * commit lookup, so `agenthq board` and the `agenthq_board` MCP tool print the same thing.
  */
 object BoardSummary {
-    val COLUMNS = listOf("todo", "in_progress", "pending", "done")
+    val COLUMNS = com.superiorsoftllc.agenthq.protocol.TicketStatus.ALL
 
     /** Done tickets listed in full; older ones fold into a count so a long-lived board stays compact. */
     const val DONE_SHOWN = 5

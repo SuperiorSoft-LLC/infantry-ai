@@ -26,6 +26,7 @@ sealed interface DropPlan {
 object BoardDrop {
     const val PENDING_REFUSAL = "Pending is set by the daemon while a prerequisite is open; a ticket can't be dropped there."
     const val HELD_REFUSAL = "A held ticket leaves Pending by itself once nothing holds it."
+    const val BACKLOG_START_REFUSAL = "A Backlog ticket is never started: move it to To do (the sprint) first."
 
     /** The slot a pointer at [pointer] is over: how many of the other cards' centres ([centers], top first) are above it. */
     fun slotAt(centers: List<Float>, pointer: Float): Int = centers.count { it < pointer }
@@ -34,7 +35,9 @@ object BoardDrop {
     fun refusal(from: String, to: String): String? = when {
         from == to -> null
         to == TicketColumns.PENDING -> PENDING_REFUSAL
-        from == TicketColumns.PENDING -> HELD_REFUSAL
+        // 1.131.0: a held ticket may be parked in Backlog (it stays held there), nowhere else by hand.
+        from == TicketColumns.PENDING && to != TicketColumns.BACKLOG -> HELD_REFUSAL
+        from == TicketColumns.BACKLOG && to == TicketColumns.IN_PROGRESS -> BACKLOG_START_REFUSAL
         else -> null
     }
 

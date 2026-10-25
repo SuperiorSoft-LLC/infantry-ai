@@ -229,10 +229,8 @@ class Controller(
                         val made = _state.value.projects.firstOrNull { p -> p.name == name && before.projects.none { it.id == p.id } }
                         if (name != null && made != null) {
                             pendingCreatedProject = null
-                            val dir = pendingCreatedDirectory; pendingCreatedDirectory = ""
-                            selectProject(made.id)
-                            if (dir.isNotEmpty()) saveProjectDirectory(made.id, dir)
-                        }
+                                            selectProject(made.id)
+                                        }
                     }
                     // The snapshot after `ready` says which sessions exist now: fill what the drop missed.
                     Envelope.SESSIONS -> if (resyncPending) {
@@ -1099,7 +1097,6 @@ class Controller(
     /** Create a project (`project_save`); the daemon answers a `project` frame, or an `error` that names the refusal. */
     /** M2-7: the name of a project [createProject] asked for, selected when its `project` frame arrives. */
     private var pendingCreatedProject: String? = null
-    private var pendingCreatedDirectory: String = ""
 
     /**
      * M2-7 (New Project modal): create a project (the same `project_save` as [saveProject]) and, once the daemon
@@ -1108,10 +1105,17 @@ class Controller(
     suspend fun createProject(name: String, directory: String = ""): CommandResult {
         if (name.isBlank()) return report(CommandResult.Refused("a project needs a name"))
         pendingCreatedProject = name.trim()
-        pendingCreatedDirectory = directory.trim()
-        val r = saveProject(name)
-        if (r !is CommandResult.Sent) pendingCreatedProject = null
-        return r
+        val beforeIds = _state.value.projects.map { it.id }.toSet()
+        val beforeRefusal = _state.value.projectRefusal
+        val r = report(send(WireRequests.projectSave(name.trim(), null, directory.trim().takeIf { it.isNotEmpty() })))
+        if (r !is CommandResult.Sent) { pendingCreatedProject = null; return r }
+        // One request carries name AND directory, so a refusal creates nothing. Wait for the answer so the form can stay open.
+        val answer = withTimeoutOrNull(8_000L) {
+            _state.first { s -> s.projects.any { it.id !in beforeIds } || (s.projectRefusal != null && s.projectRefusal != beforeRefusal) }
+        } ?: return r
+        if (answer.projects.any { it.id !in beforeIds }) return r
+        pendingCreatedProject = null
+        return CommandResult.Refused(answer.projectRefusal?.text ?: "project_save refused")
     }
 
     /** Rename project [projectId] (an edit `project_save`); the daemon answers the updated `project` frame, or a refusal. */

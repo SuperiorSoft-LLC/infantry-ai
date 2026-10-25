@@ -682,6 +682,8 @@ class AgentHqDaemon(
                 lifecyclePolicy = { com.superiorsoftllc.agenthq.session.host.LifecyclePolicy(settings.keepAliveMinutes()) },
                 defaultWorkingDir = workingDir,
                 instanceId = instanceId,
+                // Ticket 66153313: every worker run gets the build limits (priority, Gradle workers, forks) of the settings.
+                buildEnv = { settings.buildLimits().sessionEnv(System.getenv("GRADLE_OPTS")) },
             )
             // BUG-M2-11f: a new keep-alive value applies to the processes already kept, not only to the next launch.
             settings.onKeepAliveChanged = manager::lifecyclePolicyChanged
@@ -715,6 +717,7 @@ class AgentHqDaemon(
                 com.superiorsoftllc.agenthq.session.OsMemorySource,
                 com.superiorsoftllc.agenthq.session.host.OsProcessTable,
                 config = settings::processWatchConfig,
+                cpuAlert = settings::cpuAlert,
                 onPressure = { report ->
                     val envelope = Envelope(
                         Envelope.PROCESS_PRESSURE,
@@ -773,6 +776,17 @@ class AgentHqDaemon(
             })
             val attention = AttentionStore(store.attention)
             attention.eventSink = { item -> broadcastAttention(clients, item) }
+            // Ticket 66153313: agent processes held the CPU above `limits.cpu.alertPercent` for `limits.cpu.alertMinutes`.
+            processWatch.onCpuSustained = { report ->
+                val top = report.tracked.filter { it.cpuPercent != null }.sortedByDescending { it.cpuPercent }.take(3)
+                    .joinToString("; ") { "pid ${it.pid} ${it.cpuPercent}% ${it.command.take(60)}" }
+                val detail = "Agent processes have used ${report.agentCpuPercent}% of all CPU cores for ${report.cpuAlertMinutes}+ min " +
+                    "(threshold ${report.cpuAlertPercent}%; settings limits.cpu.alertPercent / limits.cpu.alertMinutes, 0 min = off). " +
+                    "Top: ${top.ifEmpty { "none sampled" }}"
+                println("[agentHq] sustained CPU: $detail")
+                runCatching { attention.raise(com.superiorsoftllc.agenthq.attention.AttentionKind.CEILING, outcome = "cpu_sustained", detail = detail) }
+                    .onFailure { System.err.println("[agentHq] cpu attention not raised: ${it.message}") }
+            }
             // Story 9.7b: observed limit state per provider -- persisted, pushed, and put back after a restart.
             val providerStates = ProviderStateTracker(
                 sink = { state ->

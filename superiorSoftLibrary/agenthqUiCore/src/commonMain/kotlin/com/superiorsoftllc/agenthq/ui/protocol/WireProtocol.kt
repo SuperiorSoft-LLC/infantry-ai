@@ -359,13 +359,17 @@ data class Envelope(
     }
 }
 
-/** The four backlog columns, in board order. `pending` is derived by the daemon and never set by a client. */
+/**
+ * The board's columns, in board order. `pending` is derived by the daemon and never set by a client. `backlog`
+ * (contract 1.131.0) is limbo before `todo` (the sprint): its tickets are never started.
+ */
 object TicketColumns {
+    const val BACKLOG = "backlog"
     const val TODO = "todo"
     const val IN_PROGRESS = "in_progress"
     const val PENDING = "pending"
     const val DONE = "done"
-    val ALL: List<String> = listOf(TODO, IN_PROGRESS, PENDING, DONE)
+    val ALL: List<String> = listOf(BACKLOG, TODO, IN_PROGRESS, PENDING, DONE)
 }
 
 /** Contracts 1.5.0 / 1.6.0: one resolved executor value and where it came from (`ticket`, `profile`, `role`, `default`). */
@@ -671,6 +675,8 @@ data class TrackedProcess(
     val reason: String? = null,
     /** True when the owner was inferred (ancestry or worktree path in the command line). */
     val inferred: Boolean = false,
+    /** Contract 1.132.0: share of ALL logical cores (0-100) over the daemon's last watch pass; null = not sampled. */
+    val cpuPercent: Double? = null,
 )
 
 /** Contract 1.120.0 (ROGUE-1): free RAM against the floor, the tracked processes and the heavy unattributed ones. */
@@ -683,6 +689,11 @@ data class ProcessReport(
     val autoReap: Boolean = false,
     val tracked: List<TrackedProcess> = emptyList(),
     val unattributed: List<TrackedProcess> = emptyList(),
+    /** Contract 1.132.0: total CPU of the agent processes (share of all cores), the alert rule, and since when it is high. */
+    val agentCpuPercent: Double? = null,
+    val cpuAlertPercent: Int = 90,
+    val cpuAlertMinutes: Int = 10,
+    val cpuHighSince: Long? = null,
 ) {
     val rogue: List<TrackedProcess> get() = (tracked + unattributed).filter { it.rogue }
 }
@@ -1829,9 +1840,9 @@ object WireRequests {
     fun projectList(): Envelope = Envelope(Envelope.PROJECT_LIST)
 
     /** `project_save` for a CREATE: the daemon mints the id and answers a `project` frame. */
-    fun projectSave(name: String, goal: String? = null): Envelope = Envelope(
+    fun projectSave(name: String, goal: String? = null, directory: String? = null): Envelope = Envelope(
         Envelope.PROJECT_SAVE,
-        json.encodeToString(ProjectSave.serializer(), ProjectSave(name = name, goal = goal)),
+        json.encodeToString(ProjectSave.serializer(), ProjectSave(name = name, goal = goal, directory = directory)),
     )
 
     /** `project_save` for an EDIT of [projectId]: only the name changes; the id (and so everything keyed by it) stays. */

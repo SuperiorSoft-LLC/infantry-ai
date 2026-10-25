@@ -213,9 +213,9 @@ fun main(args: Array<String>) {
  * agenthq inbox [--unread]    the messages addressed to me
  * agenthq read <msgId>        one message, printed and marked read (8-char prefix is enough)
  * agenthq ticket show <id>    one ticket in full: title, status, agent, links and the whole description
- * agenthq ticket create --title "..." [--desc "..." | --desc-file <path> | --desc -] [--project <id>] [--role <id>] [--provider <id>] [--model <id>] [--image <file>]...   a new todo ticket; prints its id
+ * agenthq ticket create --title "..." [--desc "..." | --desc-file <path> | --desc -] [--project <id>] [--role <id>] [--provider <id>] [--model <id>] [--image <file>]... [--status todo|backlog]   a new todo (or backlog) ticket; prints its id
  * agenthq ticket update <id> [--title ..] [--desc ..] [--role <id>] [--provider <id>] [--model <id>] [--image <file>]... [--remove-image <path>]...   edit one ticket
- * agenthq ticket move <id> <status>            move one ticket to a column (todo, in_progress, pending, done)
+ * agenthq ticket move <id> <status>            move one ticket to a column (backlog, todo, in_progress, pending, done)
  * agenthq ticket move <id> --before <id>|--after <id>|--top|--bottom|--position <n>   reorder inside its column (order = priority)
  * agenthq ticket start <id>                    start ticket work (never with a spawn): its role/provider/model, its own branch
  * agenthq harnesses                            the harnesses (provider ids) a ticket can pin, and each one's models
@@ -1427,6 +1427,7 @@ internal object Cli {
         val payload = json.encodeToString(
             TicketSave.serializer(),
             TicketSave(
+                status = parsed.status?.trim()?.lowercase(),
                 title = title,
                 description = parsed.description,
                 projectId = projectId,
@@ -4144,10 +4145,10 @@ internal object Cli {
               tickets             List tickets from the daemon
               tickets --project <id>         Only that project's tickets
               board [--project <id>]         One-call summary: tickets by column, each with its worker, live state, branch@commit
-              tickets --status <column>      Only that column: todo, in_progress, pending, done
+              tickets --status <column>      Only that column: backlog, todo, in_progress, pending, done
               tickets --epic <id|prefix> --project <id>   Only that epic's tickets, in board order
               ticket show <id|prefix>        One ticket in full: title, status, agent, links, description
-              ticket create --title <t> [--desc <d> | --desc-file <path> | --desc -] [--project <id>] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5] [--image <file>]...   Save a todo ticket; prints its id
+              ticket create --title <t> [--desc <d> | --desc-file <path> | --desc -] [--project <id>] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5] [--image <file>]... [--status todo|backlog]   Save a todo (or backlog) ticket; prints its id
               ticket update <id|prefix> [--title <t>] [--desc <d> | --desc-file <path> | --desc -] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5|0] [--image <file>]... [--remove-image <path>]...   Edit a ticket; flags left out keep their value
                                   --weight: how likely the ticket is to come back wrong, not its size (ROUTING-1 rubric):
                         4-5 touches the wire / contract, the daemon, auth or project scope, concurrency or SSR timing,
@@ -4162,7 +4163,7 @@ internal object Cli {
                                   or an image the ticket does not have, is refused and nothing is saved
                                   Multi-line description: use --desc-file <path> (or --desc - to read stdin). A multi-line
                                   --desc is cut at its first line on Windows (the agenthq.cmd launcher drops the rest).
-              ticket move <id|prefix> <status>   Move one ticket to a column (todo, in_progress, pending, done); a move to
+              ticket move <id|prefix> <status>   Move one ticket to a column (backlog, todo, in_progress, pending, done); a move to
                                   in_progress is a start (see ticket start): a refused or held one exits 1 with the reason
               ticket move <id|prefix> [<status>] --before <id|prefix> | --after <id|prefix> | --top | --bottom | --position <n>   Reorder: ticket order is priority
                                   (the board and `tickets` list a column in that order; new tickets go to the bottom)
@@ -4318,7 +4319,7 @@ internal object Cli {
                                   With agents --live: the project to roster
                                   REQUIRED with epics: epic_list matches the project exactly, so
                                   there is no all-projects listing to fall back to
-              --status <column>   With tickets: todo, in_progress, pending or done
+              --status <column>   With tickets: backlog, todo, in_progress, pending or done
                                   With stories: the same, or the old doing (= in_progress)
               --reply-to <msgId>  With send: answer that message, in its thread and to its sender (8-char id from inbox, or the full id)
               --unread            With inbox: only the messages that have not been read yet
@@ -5178,6 +5179,10 @@ internal object Cli {
                 "ticket create requires a title: agenthq ticket create --title \"...\" [--desc \"...\"] [--project <id>]"
             } else if (parsed.epic?.isBlank() == true) {
                 "ticket create --epic needs an epic id or prefix: agenthq ticket create --title \"...\" [--epic <id|prefix>] [--project <id>]"
+            } else if (parsed.status != null &&
+                parsed.status.trim().lowercase() !in listOf(TicketStatus.TODO, TicketStatus.BACKLOG)
+            ) {
+                "ticket create --status is ${TicketStatus.TODO} (the sprint, default) or ${TicketStatus.BACKLOG}, not '${parsed.status}'"
             } else {
                 roleUsageError(parsed.role)
             }

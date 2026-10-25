@@ -237,6 +237,36 @@ class BoardDropTest {
         assertNull(session.notes["p"])
     }
 
+    @Test fun `a card moves between to do and backlog both ways and a backlog card is never dropped on in progress`() =
+        withBoard(todo + ticket("k", TicketColumns.BACKLOG, 0)) {
+            // To do -> Backlog, at the slot it was dropped on.
+            val park = plan("b", TicketColumns.BACKLOG, 0)
+            assertEquals(DropPlan.Move("b", TicketColumns.BACKLOG, 0), park)
+            drop(park)
+            until { it.column(TicketColumns.BACKLOG).map { t -> t.id } == listOf("b", "k") }
+            // Backlog -> In progress: refused in the UI, nothing sent, the card stays.
+            val sentBefore = link.moves().size
+            val start = plan("k", TicketColumns.IN_PROGRESS, 0)
+            assertEquals(DropPlan.NotAllowed("k", BoardDrop.BACKLOG_START_REFUSAL), start)
+            drop(start)
+            assertEquals(sentBefore, link.moves().size, "a refused drop sends nothing")
+            assertEquals(BoardDrop.BACKLOG_START_REFUSAL, session.notes["k"])
+            assertEquals(TicketColumns.BACKLOG, state.ticket("k")!!.status)
+            // Backlog -> To do: a plain move.
+            val promote = plan("k", TicketColumns.TODO, 0)
+            assertEquals(DropPlan.Move("k", TicketColumns.TODO, 0), promote)
+            drop(promote)
+            until { it.column(TicketColumns.TODO).map { t -> t.id } == listOf("k", "a", "c") }
+        }
+
+    @Test fun `a held ticket may be parked from pending in backlog but nowhere else`() {
+        assertNull(BoardDrop.refusal(TicketColumns.PENDING, TicketColumns.BACKLOG))
+        assertEquals(BoardDrop.HELD_REFUSAL, BoardDrop.refusal(TicketColumns.PENDING, TicketColumns.TODO))
+        assertEquals(BoardDrop.PENDING_REFUSAL, BoardDrop.refusal(TicketColumns.BACKLOG, TicketColumns.PENDING))
+        assertNull(BoardDrop.refusal(TicketColumns.BACKLOG, TicketColumns.DONE))
+        assertEquals(TicketColumns.BACKLOG, TicketColumns.ALL.first(), "Backlog is the first lane")
+    }
+
     @Test fun `the pointer's slot counts the other cards above it`() {
         assertEquals(0, BoardDrop.slotAt(listOf(10f, 40f), 5f))
         assertEquals(1, BoardDrop.slotAt(listOf(10f, 40f), 20f))

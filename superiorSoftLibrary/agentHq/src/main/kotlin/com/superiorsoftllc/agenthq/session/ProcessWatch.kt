@@ -40,6 +40,8 @@ data class TrackedProcess(
     val reason: String? = null,
     /** True when the owner was inferred (ancestry or a worktree path in the command line), not seen as a direct child. */
     val inferred: Boolean = false,
+    /** Ticket 66153313: this process's share of ALL logical cores (0-100) over the last watch pass; null until two samples. */
+    val cpuPercent: Double? = null,
 )
 
 @Serializable
@@ -53,6 +55,13 @@ data class ProcessReport(
     val tracked: List<TrackedProcess> = emptyList(),
     /** Heavy runtimes we cannot prove are ours, largest first. Read-only. */
     val unattributed: List<TrackedProcess> = emptyList(),
+    /** Ticket 66153313: the sum of [TrackedProcess.cpuPercent] over [tracked] (share of all cores); null until sampled. */
+    val agentCpuPercent: Double? = null,
+    /** The sustained-CPU rule in force (settings `limits.cpu.alertPercent` / `limits.cpu.alertMinutes`; 0 min = off). */
+    val cpuAlertPercent: Int = CpuAlertConfig().percent,
+    val cpuAlertMinutes: Int = CpuAlertConfig().minutes,
+    /** Since when (epoch ms) agent CPU has stayed at or above [cpuAlertPercent]; null while it is below. */
+    val cpuHighSince: Long? = null,
 ) {
     /** Tracked rogue ones (reapable) and unattributed orphan daemons (shown, never reaped). */
     val rogue: List<TrackedProcess> get() = (tracked + unattributed).filter { it.rogue }
@@ -60,6 +69,70 @@ data class ProcessReport(
     /** The largest processes, tracked and not, for a pressure warning. */
     fun topOffenders(n: Int = 5): List<TrackedProcess> =
         (tracked + unattributed).filter { it.memoryMb != null }.sortedByDescending { it.memoryMb }.take(n)
+}
+
+/** Ticket 66153313: raise an attention item when agent processes hold [percent] % of all cores for [minutes] (0 = off). */
+@Serializable
+data class CpuAlertConfig(val percent: Int = 90, val minutes: Int = 10)
+
+/** Cumulative CPU time of a process, in nanoseconds; null when it is gone or the OS will not say. Injected for tests. */
+fun interface CpuSource {
+    fun cpuNanos(pid: Long): Long?
+}
+
+/** The real one: [ProcessHandle.Info.totalCpuDuration], no subprocess and no native code. */
+object OsCpuSource : CpuSource {
+    override fun cpuNanos(pid: Long): Long? =
+        ProcessHandle.of(pid).flatMap { it.info().totalCpuDuration() }.map { it.toNanos() }.orElse(null)
+}
+
+/**
+ * Ticket 66153313: per-process CPU share from two samples of cumulative CPU time: delta CPU / (delta wall x cores) x 100,
+ * so 100 means every logical core was busy. A pid seen for the first time (or whose counter went backwards: a reused pid)
+ * has no share until its next sample.
+ */
+class CpuMeter(private val source: CpuSource, private val cores: Int = Runtime.getRuntime().availableProcessors()) {
+    private var last: Map<Long, Long> = emptyMap()
+    private var lastAt: Long? = null
+
+    /** The latest shares by pid. */
+    var shares: Map<Long, Double> = emptyMap()
+        private set
+
+    /** Sample [pids] at [nowMs]; returns (and keeps) the shares since the previous sample. */
+    fun sample(pids: Collection<Long>, nowMs: Long): Map<Long, Double> {
+        val now = pids.associateWith { runCatching { source.cpuNanos(it) }.getOrNull() }.filterValues { it != null }.mapValues { it.value!! }
+        val prevAt = lastAt
+        val wallNs = prevAt?.let { (nowMs - it) * 1_000_000.0 } ?: 0.0
+        shares = if (wallNs <= 0.0) emptyMap() else now.mapNotNull { (pid, ns) ->
+            val before = last[pid] ?: return@mapNotNull null
+            val delta = ns - before
+            if (delta < 0) null else pid to (delta / (wallNs * cores.coerceAtLeast(1)) * 100.0).coerceIn(0.0, 100.0)
+        }.toMap()
+        last = now
+        lastAt = nowMs
+        return shares
+    }
+}
+
+/** Ticket 66153313: true once per episode when the total stays at or above the threshold for the configured minutes. */
+class CpuSustain {
+    var highSince: Long? = null
+        private set
+    private var alerted = false
+
+    fun update(total: Double?, cfg: CpuAlertConfig, nowMs: Long): Boolean {
+        if (total == null) return false
+        if (cfg.minutes <= 0 || total < cfg.percent) {
+            highSince = null
+            alerted = false
+            return false
+        }
+        val since = highSince ?: nowMs.also { highSince = it }
+        if (alerted || nowMs - since < cfg.minutes * 60_000L) return false
+        alerted = true
+        return true
+    }
 }
 
 /** One process's memory as the OS lists it. */
@@ -147,7 +220,19 @@ class ProcessWatch(
     private val lockHolderPid: () -> Long? = ::gateLockHolderPid,
     /** Ticket 7e9bed2a: the gate lock a closing session's owner.txt may name; released in the same close-time cleanup. */
     private val gateLock: GateLock = GateLock(),
+    /** Ticket 66153313: cumulative CPU per pid, sampled on every [tick]. */
+    cpu: CpuSource = OsCpuSource,
+    cores: Int = Runtime.getRuntime().availableProcessors(),
+    /** Ticket 66153313: the sustained-CPU rule, read on every [tick]. */
+    private val cpuAlert: () -> CpuAlertConfig = { CpuAlertConfig() },
 ) {
+    private val cpuMeter = CpuMeter(cpu, cores)
+    private val cpuSustain = CpuSustain()
+
+    /** Ticket 66153313: told once per episode when agent CPU stays high (the daemon raises an attention item). */
+    @Volatile
+    var onCpuSustained: (ProcessReport) -> Unit = {}
+
     private var lastPressureAt: Long? = null
     private var lastAutoReapAt: Long? = null
 
@@ -177,6 +262,10 @@ class ProcessWatch(
         releaseEndedOwnersLock(records)
         val cfg = config()
         val now = clock()
+        val shares = cpuMeter.sample(ledger.entries().map { it.pid }, now)
+        val total = if (shares.isEmpty() && ledger.entries().isNotEmpty()) null else shares.values.sum()
+        val cpuCfg = runCatching(cpuAlert).getOrDefault(CpuAlertConfig())
+        if (cpuSustain.update(total, cpuCfg, now)) runCatching { onCpuSustained(report()) }
         val free = runCatching { memory.freeMb() }.getOrNull()
         if (free != null && free < cfg.floorMb && lastPressureAt.let { it == null || now - it >= pressureEveryMs }) {
             lastPressureAt = now
@@ -192,6 +281,7 @@ class ProcessWatch(
     @Synchronized
     fun report(): ProcessReport {
         val cfg = config()
+        val cpuCfg = runCatching(cpuAlert).getOrDefault(CpuAlertConfig())
         val now = clock()
         val bySession = sessions().associateBy { it.id }
         val mem = runCatching { memory.processes() }.getOrDefault(emptyList())
@@ -199,7 +289,10 @@ class ProcessWatch(
         val tracked = ledger.entries().map { e ->
             val mb = mbByPid[e.pid]
             val reason = rogueReason(e, bySession[e.sessionId], mb, cfg, now)
-            TrackedProcess(e.pid, forSession(e.command, e.sessionId), e.sessionId, e.startedAt, mb, reason != null, reason, e.inferred)
+            TrackedProcess(
+                e.pid, forSession(e.command, e.sessionId), e.sessionId, e.startedAt, mb, reason != null, reason, e.inferred,
+                cpuPercent = cpuMeter.shares[e.pid]?.let(::round1),
+            )
         }
         val ledgerPids = tracked.mapTo(HashSet()) { it.pid }
         val candidates = mem.filter {
@@ -228,8 +321,12 @@ class ProcessWatch(
             freeMb = free, totalMb = runCatching { memory.totalMb() }.getOrNull(), floorMb = cfg.floorMb,
             underPressure = free != null && free < cfg.floorMb, autoReap = cfg.autoReap,
             tracked = tracked, unattributed = unattributed,
+            agentCpuPercent = cpuMeter.shares.takeIf { it.isNotEmpty() }?.values?.sum()?.let(::round1),
+            cpuAlertPercent = cpuCfg.percent, cpuAlertMinutes = cpuCfg.minutes, cpuHighSince = cpuSustain.highSince,
         )
     }
+
+    private fun round1(v: Double): Double = Math.round(v * 10.0) / 10.0
 
     /** "Playwright MCP | ..." becomes "Playwright MCP for session abcd1234 | ...". */
     private fun forSession(command: String, sessionId: String): String =

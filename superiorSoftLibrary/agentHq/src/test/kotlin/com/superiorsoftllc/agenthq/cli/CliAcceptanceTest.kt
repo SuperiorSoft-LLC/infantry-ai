@@ -520,7 +520,7 @@ class CliAcceptanceTest {
         val exit = Cli.run(arrayOf("tickets", "--status", "bogus", "--port", "9999"), out, err, CliTestEnv.getenv)
         assertEquals(2, exit, "an unknown status must be exit 2: $err")
         assertEquals(
-            "error: unknown status 'bogus'; expected one of todo, in_progress, pending, done",
+            "error: unknown status 'bogus'; expected one of backlog, todo, in_progress, pending, done",
             err.toString().trim(),
             "the refusal must name every allowed column",
         )
