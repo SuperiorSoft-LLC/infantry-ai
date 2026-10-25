@@ -207,7 +207,7 @@ class Orchestrator(
     }
 
     private fun asyncKill(sessionId: String, force: Boolean) {
-        killer.execute { runCatching { sessions.kill(sessionId, force) } }
+        killer.execute { runCatching { sessions.kill(sessionId, force, by = "pod cancel") } }
     }
 
     /** Nodes of CONVERGED pods awaiting review, oldest first. */

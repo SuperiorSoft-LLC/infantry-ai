@@ -12,7 +12,7 @@ Run it from Git Bash inside any AgentHQ checkout. Long run (tens of minutes): st
 
 ## What it does
 
-1. Takes a machine-wide lock (`$TEMP/agenthq-gate.lock`). A second run is refused with exit 3 and a message naming the holder's PID. A lock whose PID is dead is removed automatically.
+1. Takes a machine-wide lock (`$TEMP/agenthq-gate.lock`). A second run is refused with exit 3 and a message naming the holder's PID. A lock whose PID is dead is removed automatically. The lock dir also holds `owner.txt` (`ticket=<id> session=<id> pid=<n>`): when that session closes (or is seen ended later), the daemon releases the lock if its holder is gone (never a lock owner.txt does not name for it).
 2. Aborts (exit 4) if `$TEMP` has less than 5 GB free (`GATE_MIN_FREE_GB` to change). The floor is rechecked before every stage.
 3. Creates a detached temp worktree of `<ref>` under `$TEMP`, so the gate never touches your checkout or its build dirs.
 4. Runs four stages one at a time, each `<task> --rerun --no-daemon`:

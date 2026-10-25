@@ -22,8 +22,16 @@ MIN_GB="${GATE_MIN_FREE_GB:-5}"
 LOCK="${GATE_LOCK:-$TMPROOT/agenthq-gate.lock}"
 
 # --- machine-wide lock (mkdir is atomic); stale locks from dead PIDs are cleaned ---
+# Ticket 7e9bed2a: owner.txt says who holds the lock (ticket=<id> session=<id> pid=<n>), so the daemon can release it when that session ends.
+write_owner() {
+  {
+    [ -n "${AGENTHQ_TICKET_ID:-}" ] && printf 'ticket=%s ' "$AGENTHQ_TICKET_ID"
+    [ -n "${AGENTHQ_SESSION_ID:-}" ] && printf 'session=%s ' "$AGENTHQ_SESSION_ID"
+    printf 'pid=%s\n' "$$"
+  } > "$LOCK/owner.txt" 2>/dev/null || true
+}
 acquire_lock() {
-  if mkdir "$LOCK" 2>/dev/null; then echo $$ > "$LOCK/pid"; return 0; fi
+  if mkdir "$LOCK" 2>/dev/null; then echo $$ > "$LOCK/pid"; write_owner; return 0; fi
   holder=$(cat "$LOCK/pid" 2>/dev/null || true)
   if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then
     echo "GATE REFUSED: another gate run is active (pid $holder, lock $LOCK). One Gradle at a time, machine-wide." >&2
@@ -33,6 +41,7 @@ acquire_lock() {
   rm -rf "$LOCK"
   mkdir "$LOCK" 2>/dev/null || { echo "GATE REFUSED: lost the lock race" >&2; exit 3; }
   echo $$ > "$LOCK/pid"
+  write_owner
 }
 acquire_lock
 

@@ -103,6 +103,16 @@ class SessionManager(
     private val deadlineMs: Long = DEFAULT_UNATTENDED_DEADLINE_MS,
     private val stallMs: Long = DEFAULT_UNATTENDED_STALL_MS,
     private val watchdogPollMs: Long = DEFAULT_WATCHDOG_POLL_MS,
+    /** Ticket 7e9bed2a: the deadline of an unattended TICKET worker (a gate run alone takes longer than the 60 min default). Setting AGENTHQ_TICKET_DEADLINE_MIN. */
+    private val ticketDeadlineMs: Long = defaultTicketDeadlineMs(),
+    /** Ticket 7e9bed2a: how long after a watchdog kill the run may stay registered before the kill is retried with force. */
+    private val killRetryMs: Long = DEFAULT_KILL_RETRY_MS,
+    /** Ticket 7e9bed2a: the machine-wide gate lock; a live gate run for a session keeps it from counting as stalled. */
+    private val gateLock: GateLock = GateLock(),
+    /** Ticket 7e9bed2a: a BUSY session with no output for this long is FLAGGED (never killed for it). */
+    private val silentMs: Long = DEFAULT_SILENT_MS,
+    /** How often [sweepSilent] runs on its own; 0 = only when a test calls it. */
+    private val silentPollMs: Long = DEFAULT_SILENT_POLL_MS,
     /** Where background work is read from: the OS process tree under each session's kept harness process. */
     private val processSource: ProcessSource = OsProcessSource,
     /** How often [scanBackgroundWork] runs on its own; 0 = only when a test calls it. */
@@ -323,6 +333,9 @@ class SessionManager(
     }.also { executor ->
         require(deadlineMs > 0 && stallMs > 0 && watchdogPollMs > 0)
         executor.scheduleWithFixedDelay(::checkUnattendedRuns, watchdogPollMs, watchdogPollMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        if (silentPollMs > 0) {
+            executor.scheduleWithFixedDelay({ runCatching { sweepSilent() } }, silentPollMs, silentPollMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        }
         if (backgroundPollMs > 0) {
             executor.scheduleWithFixedDelay(
                 { runCatching { scanBackgroundWork() } }, backgroundPollMs, backgroundPollMs, java.util.concurrent.TimeUnit.MILLISECONDS,
@@ -441,6 +454,8 @@ class SessionManager(
         @Volatile var sawStdout = false
         val forced = AtomicBoolean(false)
         val watchdogFired = AtomicBoolean(false)
+        @Volatile var watchdogKillAt = 0L
+        val watchdogRetried = AtomicBoolean(false)
     }
 
     // --- startup / reconciliation ---------------------------------------------------------------
@@ -1009,25 +1024,77 @@ class SessionManager(
         // M2-12: the status follows the TURN, not the process. The turn was accepted above, so the agent is WORKING
         // (BUSY) from now until the turn ends; booting a process for it is plumbing and never a STARTING flip.
         update(sessionId) {
-            it.copy(state = SessionState.BUSY, childPid = null, runCount = it.runCount + 1, lastHeartbeat = clock(), isProcessAlive = true, backgroundWork = null)
+            it.copy(state = SessionState.BUSY, childPid = null, runCount = it.runCount + 1, lastHeartbeat = clock(), isProcessAlive = true, backgroundWork = null, killedBy = null, killReason = null)
         }
         // BUG-M2-11b-1: the host owns the process and the ONE chat line per launch; the per-turn plumbing is Activity.
         bootDetails.forEach { eventSink?.invoke(SessionEvent.Activity(sessionId, provider.id, it)) }
         host.runTurn(sessionId, provider, request, runEnv)
     }
 
+    /** Ticket 7e9bed2a: told once per silence when a BUSY session has had no output for [silentMs] and is not provably dead. */
+    @Volatile
+    var silentSink: ((SessionRecord, Long) -> Unit)? = null
+
+    /** The heartbeat a silent session was last flagged at, so one silence is flagged once. */
+    private val flaggedSilent = ConcurrentHashMap<String, Long>()
+
+    /**
+     * Ticket 7e9bed2a: BUSY but silent. Only FLAGS ([silentSink]); a session is ended here ONLY when it is provably dead: its
+     * record claims a turn with no run in this daemon and no live pid ([isStaleLive]), or its run names a child pid that is gone.
+     * Work that is demonstrably running (a registered bg job, a live gate run for it) is never silent. A live pid is never killed.
+     */
+    fun sweepSilent() {
+        val now = clock()
+        for (session in sessions.values.toList()) {
+            if (!session.isBusy()) { flaggedSilent.remove(session.id); continue }
+            if (now - session.lastHeartbeat < silentMs) continue
+            if (session.bgJobs.isNotEmpty() or (session.backgroundWork != null)) continue
+            if (runCatching { gateLock.liveFor(session.id, session.ticketId) }.getOrDefault(false)) continue
+            val pid = session.childPid
+            val runPresent = runs.containsKey(session.id)
+            val provablyDead = if (!runPresent) isStaleLive(session.id, session) else pid != null && !pidProbe(pid)
+            val minutes = (now - session.lastHeartbeat) / 60_000
+            if (provablyDead) {
+                println("[agentHq] silent sweeper: session ${session.id} BUSY for $minutes min with no live run or pid; marked exited")
+                runCatching { kill(session.id, by = "silent sweeper", reason = "BUSY with no output for $minutes min and no live run or process") }
+                    .onFailure { System.err.println("[agentHq] silent sweeper stop failed for ${session.id}: ${it.message}") }
+                continue
+            }
+            if (flaggedSilent.put(session.id, session.lastHeartbeat) == session.lastHeartbeat) continue
+            runCatching { silentSink?.invoke(session, minutes) }
+                .onFailure { System.err.println("[agentHq] silent flag failed for ${session.id}: ${it.message}") }
+        }
+    }
+
     private fun checkUnattendedRuns() {
         val now = clock()
         for ((sessionId, run) in runs) {
             val session = sessions[sessionId] ?: continue
+            if (run.watchdogFired.get()) {
+                // Ticket 7e9bed2a: a kill that left the run registered (it threw, or the process would not die) is retried once, forced.
+                val at = run.watchdogKillAt
+                if (UnattendedRunWatchdog.retryDue(at, now, killRetryMs, run.watchdogRetried.get()) && run.watchdogRetried.compareAndSet(false, true)) {
+                    runCatching { kill(sessionId, force = true, by = KILLED_BY_WATCHDOG, reason = "the first kill did not end the run within ${killRetryMs / 60_000} min; retried forced") }
+                        .onFailure { System.err.println("[agentHq] watchdog forced retry failed for $sessionId: ${it.message}") }
+                }
+                continue
+            }
+            val deadline = if (session.ticketId != null) ticketDeadlineMs else deadlineMs
+            // Ticket 7e9bed2a: silence is not a stall while a registered bg job or a live gate run for this session works.
+            val alive = session.bgJobs.isNotEmpty() or runCatching { gateLock.liveFor(session.id, session.ticketId) }.getOrDefault(false)
             val expiry = UnattendedRunWatchdog.expiry(
                 UnattendedRunWatchdog.Run(run.startedAt, session.lastHeartbeat, session.unattended),
-                now, deadlineMs, stallMs,
+                now, deadline, stallMs, alive,
             ) ?: continue
             if (!run.watchdogFired.compareAndSet(false, true)) continue
+            run.watchdogKillAt = now
+            val why = when (expiry) {
+                WatchdogExpiry.STALLED -> "stalled: no output for ${(now - session.lastHeartbeat) / 60_000} min (limit ${stallMs / 60_000} min)"
+                WatchdogExpiry.DEADLINE -> "deadline: running for ${(now - run.startedAt) / 60_000} min (limit ${deadline / 60_000} min)"
+            }
             runCatching { watchdogSink?.invoke(session, expiry) }
                 .onFailure { System.err.println("[agentHq] watchdog attention failed: ${it.message}") }
-            runCatching { kill(sessionId) }
+            runCatching { kill(sessionId, by = KILLED_BY_WATCHDOG, reason = why) }
                 .onFailure { System.err.println("[agentHq] watchdog stop failed for $sessionId: ${it.message}") }
         }
     }
@@ -1198,8 +1265,9 @@ class SessionManager(
      *
      * Fails loudly for an unknown id rather than returning a session that does not exist.
      */
-    fun kill(sessionId: String, force: Boolean = false): SessionRecord =
-        try {
+    fun kill(sessionId: String, force: Boolean = false, by: String = KILLED_BY_CLIENT, reason: String? = null): SessionRecord {
+        noteKill(sessionId, by, reason)
+        return try {
             killRun(sessionId, force)
         } finally {
             // Closing a session stops the process the host keeps alive for it.
@@ -1209,6 +1277,13 @@ class SessionManager(
                 closed(sessionId, "session killed")
             }
         }
+    }
+
+    /** Ticket 7e9bed2a: record WHO is ending [sessionId] before the end lands, so the exit notice can say it. A session already ended keeps its first answer. */
+    private fun noteKill(sessionId: String, by: String, reason: String?) {
+        if (!sessions.containsKey(sessionId)) return
+        update(sessionId) { if (it.state in ENDED) it else it.copy(killedBy = by, killReason = reason) }
+    }
 
     /**
      * Ticket b785f383: called when a session closes (kill, remove, restart, a turn ending FAILED), so the daemon can kill
@@ -1287,7 +1362,10 @@ class SessionManager(
     fun delete(sessionId: String) {
         val existing = sessions[sessionId] ?: throw IllegalArgumentException("unknown session '$sessionId'")
         // BASICS-KILL-1: a record that claims a run but has none in this daemon and no live process is stale: ended here.
-        if (existing.live && isStaleLive(sessionId, existing)) markKilled(sessionId, KillOutcome.GRACEFUL)
+        if (existing.live && isStaleLive(sessionId, existing)) {
+            noteKill(sessionId, "stale record cleanup", "the record claimed a run but the daemon has none and its pid is gone")
+            markKilled(sessionId, KillOutcome.GRACEFUL)
+        }
         if (sessions.getValue(sessionId).live) throw IllegalArgumentException("session '$sessionId' is still running (${existing.state}); kill it first, then remove it")
         host.stop(sessionId)
         val closing = sessions[sessionId]
@@ -1360,6 +1438,7 @@ class SessionManager(
     /** Graceful shutdown: kill every live tree so a clean stop does not leave orphans behind. */
     fun shutdown() {
         watchdog.shutdownNow()
+        for (id in runs.keys) noteKill(id, "daemon shutdown", null)
         for (run in runs.values) {
             run.killRequested.set(true)
             run.forced.set(true)
@@ -1569,6 +1648,16 @@ class SessionManager(
         const val DEFAULT_UNATTENDED_DEADLINE_MS = 60 * 60 * 1_000L
         const val DEFAULT_UNATTENDED_STALL_MS = 15 * 60 * 1_000L
         const val DEFAULT_WATCHDOG_POLL_MS = 1_000L
+        const val DEFAULT_SILENT_MS = 20 * 60 * 1_000L
+        const val DEFAULT_SILENT_POLL_MS = 60_000L
+        const val DEFAULT_KILL_RETRY_MS = 5 * 60 * 1_000L
+        const val DEFAULT_TICKET_DEADLINE_MS = 3 * 60 * 60 * 1_000L
+        const val KILLED_BY_WATCHDOG = "watchdog"
+        const val KILLED_BY_CLIENT = "client request"
+
+        /** AGENTHQ_TICKET_DEADLINE_MIN (minutes, > 0), else 3 h. */
+        fun defaultTicketDeadlineMs(): Long =
+            agentHqSetting("AGENTHQ_TICKET_DEADLINE_MIN")?.trim()?.toLongOrNull()?.takeIf { it > 0 }?.let { it * 60_000L } ?: DEFAULT_TICKET_DEADLINE_MS
         const val DEFAULT_BACKGROUND_POLL_MS = 2_000L
 
         /** A registered bg job whose heartbeat is older than this is dropped (the wrapper beats every 15 s). */

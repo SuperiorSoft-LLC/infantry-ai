@@ -145,6 +145,8 @@ class ProcessWatch(
     private val lockHolderAlive: () -> Boolean = ::gateLockHolderAlive,
     /** The gate lock holder's pid, null when there is no lock; a shared Gradle daemon it may use is never closed with a session. */
     private val lockHolderPid: () -> Long? = ::gateLockHolderPid,
+    /** Ticket 7e9bed2a: the gate lock a closing session's owner.txt may name; released in the same close-time cleanup. */
+    private val gateLock: GateLock = GateLock(),
 ) {
     private var lastPressureAt: Long? = null
     private var lastAutoReapAt: Long? = null
@@ -153,12 +155,26 @@ class ProcessWatch(
     private fun roots(records: List<SessionRecord>): Map<String, Collection<Long>> =
         records.associate { r -> r.id to listOfNotNull(r.keptProcess?.pid, r.childPid).distinct() }.filterValues { it.isNotEmpty() }
 
+    /**
+     * Ticket 7e9bed2a: the catch-up for a lock the close-time release could not take (its holder was still dying then, or the
+     * daemon was down): the lock's owner.txt names a session this daemon knows as ended and the holder pid is dead.
+     * An unknown session, a live holder, or a lock without owner.txt is left alone.
+     */
+    private fun releaseEndedOwnersLock(records: List<SessionRecord>) {
+        val owner = runCatching { gateLock.read() }.getOrNull() ?: return
+        val s = owner.session?.let { id -> records.firstOrNull { it.id == id } } ?: return
+        if (s.state !in ENDED) return
+        runCatching { gateLock.releaseIfOwnedBy(s.id, s.ticketId) }
+            .onSuccess { if (it != null) println("[agentHq] gate lock catch-up: $it (session ${s.id} ended)") }
+    }
+
     /** One timer pass: observe; warn under pressure; auto-reap when on. Cheap unless pressure or auto-reap fires. */
     @Synchronized
     fun tick() {
         val records = sessions()
         ledger.observe(roots(records))
         ledger.adopt(records.mapNotNull { r -> r.worktreePath?.let { r.id to it } }.toMap())
+        releaseEndedOwnersLock(records)
         val cfg = config()
         val now = clock()
         val free = runCatching { memory.freeMb() }.getOrNull()
@@ -239,6 +255,16 @@ class ProcessWatch(
      */
     @Synchronized
     fun reapSession(sessionId: String, closedAt: Long, keepPids: Set<Long> = emptySet(), reason: String = "session closed"): List<TrackedProcess> {
+        val killed = reapProcesses(sessionId, closedAt, keepPids, reason)
+        // Ticket 7e9bed2a: the same close also lets go of the gate lock this session's run owned (never a lock owner.txt does not name it for).
+        val ticketId = runCatching { sessions().firstOrNull { it.id == sessionId }?.ticketId }.getOrNull()
+        runCatching { gateLock.releaseIfOwnedBy(sessionId, ticketId, killed.mapTo(HashSet()) { it.pid }) }
+            .onSuccess { line -> if (line != null) println("[agentHq] close cleanup: $line (session $sessionId)") }
+            .onFailure { System.err.println("[agentHq] close cleanup: gate lock release failed for $sessionId: ${it.message}") }
+        return killed
+    }
+
+    private fun reapProcesses(sessionId: String, closedAt: Long, keepPids: Set<Long>, reason: String): List<TrackedProcess> {
         val records = sessions()
         runCatching { ledger.observe(roots(records)) } // last-moment children, and drop what is already gone
         val mine = ledger.entries().filter { it.sessionId == sessionId }
