@@ -169,6 +169,7 @@ object ClaudeCommand {
         if (streamInput) { add("--input-format"); add("stream-json") }
         add("--output-format"); add("stream-json")
         add("--verbose")
+        add("--thinking"); add("adaptive"); add("--thinking-display"); add("summarized") // the CLI otherwise emits thinking blocks with empty text
         model?.takeIf { it.isNotBlank() }?.let { add("--model"); add(it) }
         effort?.takeIf { it.isNotBlank() }?.let { add("--effort"); add(it) } // CP-4 slice d: `/effort`
         permissionMode?.takeIf { it.isNotBlank() }?.let { add("--permission-mode"); add(it) }

@@ -304,6 +304,13 @@ class ClaudeHarnessPluginTest {
     }
 
     @Test
+    fun commandLineAsksTheCliForSummarizedThinking() {
+        val cmd = ClaudeHarness.defaultSpec(req(), executable = { "claude-x" }).command
+        assertTrue(cmd.zipWithNext().contains("--thinking" to "adaptive"), cmd.toString())
+        assertTrue(cmd.zipWithNext().contains("--thinking-display" to "summarized"), cmd.toString())
+    }
+
+    @Test
     fun modelAndSessionResumeReachTheCliCommandLine() {
         val spec = ClaudeHarness.defaultSpec(req(model = "haiku", sessionId = "abc-123"), executable = { "claude-x" })
         assertEquals("claude-x", spec.command.first())
