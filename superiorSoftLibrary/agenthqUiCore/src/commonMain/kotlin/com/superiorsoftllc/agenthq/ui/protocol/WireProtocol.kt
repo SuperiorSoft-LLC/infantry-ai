@@ -1824,9 +1824,9 @@ object WireRequests {
     fun projectList(): Envelope = Envelope(Envelope.PROJECT_LIST)
 
     /** `project_save` for a CREATE: the daemon mints the id and answers a `project` frame. */
-    fun projectSave(name: String, goal: String? = null): Envelope = Envelope(
+    fun projectSave(name: String, goal: String? = null, directory: String? = null): Envelope = Envelope(
         Envelope.PROJECT_SAVE,
-        json.encodeToString(ProjectSave.serializer(), ProjectSave(name = name, goal = goal)),
+        json.encodeToString(ProjectSave.serializer(), ProjectSave(name = name, goal = goal, directory = directory)),
     )
 
     /** `project_save` for an EDIT of [projectId]: only the name changes; the id (and so everything keyed by it) stays. */
