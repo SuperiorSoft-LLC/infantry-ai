@@ -150,6 +150,9 @@ class ChangesWorktreeRealDaemonUiTest {
         File(wt, "feature.txt").writeText("one\ntwo\nnot committed yet\n")
         File(repo, "main-only.txt").writeText("only in the main checkout\n")
 
+        // SESSION-CWD-1 (02f68f4): a session naming a project with a directory runs in THAT directory, which overrides
+        // the daemon's workingDir. So the project's directory is the linked worktree: the session's checkout is `feature`,
+        // and `main` (git's first worktree) stays listed as the shared checkout.
         val port = boot(workingDir = wt)
         val c = Controller(scope)
         runDesktopComposeUiTest(1800, 1000) {
@@ -158,8 +161,8 @@ class ChangesWorktreeRealDaemonUiTest {
             assertIs<CommandResult.Sent>(runBlocking { c.saveProject("Worktree project") })
             val project = until("project listed", c) { s -> s.projects.any { it.name == "Worktree project" } }.projects.single { it.name == "Worktree project" }
             runBlocking { c.selectProject(project.id) }
-            assertIs<CommandResult.Sent>(runBlocking { c.saveProjectDirectory(project.id, repo.absolutePath) })
-            waitUntil(timeoutMillis = daemonWaitMs) { c.state.value.activeProject?.directory == repo.absolutePath }
+            assertIs<CommandResult.Sent>(runBlocking { c.saveProjectDirectory(project.id, wt.absolutePath) })
+            waitUntil(timeoutMillis = daemonWaitMs) { c.state.value.activeProject?.directory == wt.absolutePath }
             assertIs<CommandResult.Sent>(runBlocking { c.spawn("hello from the worktree test") })
             val sessionId = until("session listed", c) { it.agents.isNotEmpty() }.agents.keys.single()
             c.select(sessionId)
