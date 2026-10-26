@@ -14,12 +14,14 @@ import javax.imageio.ImageIO
  * Desktop/JVM host: settings are environment variables (as the CLI reads them), files are local files.
  *
  * PORT-1: the default daemon URL follows the port the daemon actually bound, recorded in
- * `<stateDir>/daemon.port` (state dir = `AGENTHQ_STATE_DIR`, else `~/.agenthq`, as the daemon reads it). With no
+ * `<stateDir>/daemon.port` (state dir = `AGENTHQ_STATE_DIR`, property then environment, else `~/.agenthq`, as the daemon reads it). With no
  * file it is the fixed 8787. An explicit `AGENTHQ_WS_URL` still wins over both (see `ShellConfig`).
  */
 class JvmPlatformHost(
     private val env: (String) -> String? = System::getenv,
     private val home: String? = System.getProperty("user.home"),
+    /** BUG 464d7f97: the installed app pins its settings as system properties (InstallProfile.apply); read them first. */
+    private val property: (String) -> String? = System::getProperty,
 ) : PlatformHost {
     /** VOICE-1: the OS text-to-speech through a short-lived helper process; no new dependency. */
     override val speaker: com.superiorsoftllc.agenthq.ui.voice.Speaker = com.superiorsoftllc.agenthq.ui.voice.JvmSpeaker()
@@ -151,10 +153,15 @@ class JvmPlatformHost(
 
     /** PLUGINS-1: the modules under the plugins root (`AGENTHQ_PLUGINS_ROOT`, else `<state dir>/plugins`), loaded once. */
     override val tabFactory: com.superiorsoftllc.agenthq.ui.plugin.TabFactory by lazy {
-        com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins.load(stateDir() ?: File(".agenthq"), env).factory
+        com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins.load(stateDir() ?: File(".agenthq"), env, property).factory
     }
 
-    private fun stateDir(): File? = env("AGENTHQ_STATE_DIR")?.takeIf { it.isNotBlank() }?.let(::File)
+    /**
+     * The daemon's state dir, resolved as the daemon resolves it (`agentHqSetting`): the `AGENTHQ_STATE_DIR` system
+     * property first (the installed app pins it there), then the environment variable, else `~/.agenthq`.
+     */
+    private fun stateDir(): File? = (property("AGENTHQ_STATE_DIR")?.takeIf { it.isNotBlank() } ?: env("AGENTHQ_STATE_DIR")?.takeIf { it.isNotBlank() })
+        ?.let(::File)
         ?: home?.let { File(it, ".agenthq") }
 
     private fun recordedPort(): Int? {
