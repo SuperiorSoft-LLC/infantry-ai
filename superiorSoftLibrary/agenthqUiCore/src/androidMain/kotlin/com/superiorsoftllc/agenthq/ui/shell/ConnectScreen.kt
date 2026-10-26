@@ -139,6 +139,8 @@ fun AndroidConnectGate(
         }
         when (val g = gate) {
             is Gate.Form -> {
+                // SPLASH-ALL-1: the form is a real first screen (no saved connection, or the saved one failed).
+                com.superiorsoftllc.agenthq.ui.SplashReady()
                 val saved = remember(g) { store.load() }
                 ConnectForm(
                     savedUrl = g.url ?: saved?.url.orEmpty(),

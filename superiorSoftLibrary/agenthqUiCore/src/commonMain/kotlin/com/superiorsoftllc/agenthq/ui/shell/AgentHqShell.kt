@@ -3,9 +3,13 @@ package com.superiorsoftllc.agenthq.ui.shell
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import com.superiorsoftllc.agenthq.ui.App
 import com.superiorsoftllc.agenthq.ui.LogsFolder
+import com.superiorsoftllc.agenthq.ui.SplashReady
+import com.superiorsoftllc.agenthq.ui.model.ConnState
 import com.superiorsoftllc.agenthq.ui.net.Controller
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,4 +39,15 @@ fun AgentHqShell(host: PlatformHost, controller: Controller? = null) {
             tabs = host.tabFactory,
         )
     }
+    ShellSplashReady(active)
+}
+
+/**
+ * SPLASH-ALL-1: the shell is the first real screen once the first connect has an answer: live, or a refusal or
+ * failure the window itself explains. Its own scope, so the state it reads does not recompose the shell.
+ */
+@Composable
+private fun ShellSplashReady(controller: Controller) {
+    val state by controller.state.collectAsState()
+    SplashReady(state.connection.state != ConnState.IDLE && state.connection.state != ConnState.CONNECTING)
 }

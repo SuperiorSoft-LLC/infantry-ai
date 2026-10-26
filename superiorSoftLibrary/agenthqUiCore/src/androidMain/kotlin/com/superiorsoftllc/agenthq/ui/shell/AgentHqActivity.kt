@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import com.superiorsoftllc.agenthq.ui.SplashHost
 
 /**
  * Android entry: the container for [AgentHqShell]. Intent extras (AGENTHQ_WS_URL / AGENTHQ_TOKEN / AGENTHQ_TOKEN_FILE)
@@ -27,8 +28,11 @@ class AgentHqActivity : ComponentActivity() {
         // composer's send and switch buttons above them.
         openedLink.value = pairingLinkOf(intent)
         setContent {
-            Box(Modifier.safeDrawingPadding()) {
-                AndroidConnectGate(store, extras = { intent?.getStringExtra(it) }, openedLink = openedLink.value, onOpenedLinkHandled = { openedLink.value = null })
+            // SPLASH-ALL-1: the shared splash covers the saved connection's probe and the shell's first connect.
+            SplashHost {
+                Box(Modifier.safeDrawingPadding()) {
+                    AndroidConnectGate(store, extras = { intent?.getStringExtra(it) }, openedLink = openedLink.value, onOpenedLinkHandled = { openedLink.value = null })
+                }
             }
         }
     }
