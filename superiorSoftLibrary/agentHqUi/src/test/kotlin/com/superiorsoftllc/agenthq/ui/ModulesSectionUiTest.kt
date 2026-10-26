@@ -3,6 +3,8 @@ package com.superiorsoftllc.agenthq.ui
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.getBoundsInRoot
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runDesktopComposeUiTest
@@ -13,7 +15,13 @@ import com.superiorsoftllc.agenthq.plugin.api.Tier
 import com.superiorsoftllc.agenthq.plugin.host.ModuleChange
 import com.superiorsoftllc.agenthq.plugin.host.ModuleState
 import com.superiorsoftllc.agenthq.plugin.host.ModuleStatus
+import com.superiorsoftllc.agenthq.ui.plugin.MODULE_BYLINE_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.MODULE_CASCADE_TAG
+import com.superiorsoftllc.agenthq.ui.plugin.MODULE_EMPTY_TAG
+import com.superiorsoftllc.agenthq.ui.plugin.MODULE_REASON_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.plugin.MODULE_ROW_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.plugin.MODULE_STATE_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.plugin.MODULE_TIER_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.MODULE_MESSAGE_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.MODULE_NEEDS_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.MODULE_REQUIRED_BY_TAG_PREFIX
@@ -24,6 +32,7 @@ import com.superiorsoftllc.agenthq.ui.plugin.ModulesSection
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** PLUGINS-2: Settings > Plugins > Modules shows needs / required by, and shows the rules' answer under the row. */
 @OptIn(ExperimentalTestApi::class)
@@ -45,8 +54,8 @@ class ModulesSectionUiTest {
         }
         setContent { ModulesSection(TabFactory(emptyList(), statuses = statuses, changes = changes)) }
 
-        onNodeWithTag(MODULE_NEEDS_TAG_PREFIX + "Acme_Hello").assertTextEquals("needs: Infantry_Cli >=1.0 <2")
-        onNodeWithTag(MODULE_REQUIRED_BY_TAG_PREFIX + "Infantry_Cli").assertTextEquals("required by: Acme_Hello")
+        onNodeWithTag(MODULE_NEEDS_TAG_PREFIX + "Acme_Hello").assertTextEquals("Needs: Infantry_Cli >=1.0 <2")
+        onNodeWithTag(MODULE_REQUIRED_BY_TAG_PREFIX + "Infantry_Cli").assertTextEquals("Required by: Acme_Hello")
         onNodeWithTag(MODULE_CASCADE_TAG).assertIsOff()
 
         onNodeWithTag(MODULE_TOGGLE_TAG_PREFIX + "Infantry_Cli").performClick()
@@ -59,5 +68,44 @@ class ModulesSectionUiTest {
         // Both rows now offer Enable: the change is in modules.json, waiting for a restart.
         onNodeWithTag(MODULE_TOGGLE_TAG_PREFIX + "Infantry_Cli").assertTextEquals("Enable")
         onNodeWithTag(MODULE_TOGGLE_TAG_PREFIX + "Acme_Hello").assertTextEquals("Enable")
+    }
+
+    // Ticket cb1ceb93: each module is a card: name, version, tier, author and license, state, dependencies, reason.
+    @Test
+    fun `a card names the tier, author, license and state in plain words`() = runDesktopComposeUiTest(900, 600) {
+        val refused = ModuleStatus("Acme_Broken", Tier.COMMUNITY, ModuleState.REFUSED, reason = "needs Infantry_Git, which is off", manifest = ModuleManifest("Acme_Broken", "0.2.0", author = "Acme", license = "MIT"))
+        setContent { ModulesSection(TabFactory(emptyList(), statuses = statuses + refused)) }
+        onNodeWithTag(MODULE_TIER_TAG_PREFIX + "Infantry_Cli").assertTextEquals("Core")
+        onNodeWithTag(MODULE_TIER_TAG_PREFIX + "Acme_Hello").assertTextEquals("Community")
+        onNodeWithTag(MODULE_STATE_TAG_PREFIX + "Infantry_Cli").assertTextEquals("Loaded")
+        onNodeWithTag(MODULE_STATE_TAG_PREFIX + "Acme_Broken").assertTextEquals("Refused")
+        onNodeWithTag(MODULE_BYLINE_TAG_PREFIX + "Acme_Hello").assertTextEquals("By Acme · License NOASSERTION")
+        onNodeWithTag(MODULE_REASON_TAG_PREFIX + "Acme_Broken").assertTextEquals("needs Infantry_Git, which is off")
+        // A core manifest with no author or license draws no empty byline.
+        onNodeWithTag(MODULE_BYLINE_TAG_PREFIX + "Infantry_Cli").assertDoesNotExist()
+    }
+
+    @Test
+    fun `cards sit side by side when there is room and stack when there is not`() {
+        runDesktopComposeUiTest(900, 600) {
+            setContent { ModulesSection(TabFactory(emptyList(), statuses = statuses)) }
+            val a = onNodeWithTag(MODULE_ROW_TAG_PREFIX + "Infantry_Cli").getBoundsInRoot()
+            val b = onNodeWithTag(MODULE_ROW_TAG_PREFIX + "Acme_Hello").getBoundsInRoot()
+            assertEquals(a.top, b.top, "same row")
+            assertTrue(b.left > a.right, "side by side")
+        }
+        runDesktopComposeUiTest(320, 600) {
+            setContent { ModulesSection(TabFactory(emptyList(), statuses = statuses)) }
+            val a = onNodeWithTag(MODULE_ROW_TAG_PREFIX + "Infantry_Cli").getBoundsInRoot()
+            val b = onNodeWithTag(MODULE_ROW_TAG_PREFIX + "Acme_Hello").getBoundsInRoot()
+            assertTrue(b.top >= a.bottom, "stacked")
+        }
+    }
+
+    @Test
+    fun `no modules says so instead of drawing nothing`() = runDesktopComposeUiTest(900, 600) {
+        setContent { ModulesSection(TabFactory(emptyList(), statuses = emptyList())) }
+        onNodeWithTag(MODULE_EMPTY_TAG).assertExists()
+        assertTrue(onAllNodesWithTag(MODULE_ROW_TAG_PREFIX + "Infantry_Cli").fetchSemanticsNodes().isEmpty())
     }
 }

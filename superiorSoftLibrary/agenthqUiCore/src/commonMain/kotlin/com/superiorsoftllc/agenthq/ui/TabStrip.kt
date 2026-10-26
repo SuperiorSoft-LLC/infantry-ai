@@ -23,7 +23,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -93,16 +92,7 @@ internal fun TabBar(
                     }
                 }
             }
-            if (scroll.canScrollForward) {
-                // matchParentSize keeps the overlay from stretching the bar (a fillMaxHeight child would take the whole column).
-                Box(Modifier.matchParentSize()) {
-                    Box(
-                        Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(32.dp)
-                            .background(Brush.horizontalGradient(listOf(Palette.Panel.copy(alpha = 0f), Palette.Panel)))
-                            .testTag(TAB_BAR_MORE_CUE_TAG),
-                    )
-                }
-            }
+            if (scroll.canScrollForward) EdgeFade(FadeEdge.END, Palette.Panel, TAB_BAR_MORE_CUE_TAG)
         }
         if (overflows) StripArrow(AhqIcons.ChevronRight, "Scroll tabs right", scroll.canScrollForward, TAB_BAR_ARROW_RIGHT_TAG) { scope.launch { scroll.animateScrollBy(page()) } }
     }

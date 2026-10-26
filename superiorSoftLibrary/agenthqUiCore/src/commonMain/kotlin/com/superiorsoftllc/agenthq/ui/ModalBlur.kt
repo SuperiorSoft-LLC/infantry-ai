@@ -104,10 +104,13 @@ fun AhqAlertDialog(
     title: @Composable (() -> Unit)? = null,
     text: @Composable (() -> Unit)? = null,
     containerColor: Color = AlertDialogDefaults.containerColor,
+    /** Ticket cb1ceb93: true lifts the platform's default dialog width, so [modifier] alone sizes the dialog. */
+    wide: Boolean = false,
 ) {
     RegisterModal()
     AlertDialog(
         onDismissRequest = onDismissRequest, confirmButton = confirmButton, modifier = modifier,
         dismissButton = dismissButton, title = title, text = text, containerColor = containerColor,
+        properties = if (wide) androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false) else androidx.compose.ui.window.DialogProperties(),
     )
 }
