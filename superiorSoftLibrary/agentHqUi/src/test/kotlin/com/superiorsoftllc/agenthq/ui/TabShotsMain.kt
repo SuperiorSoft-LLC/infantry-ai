@@ -33,6 +33,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.io.File
 import java.nio.file.Files
+import java.util.concurrent.atomic.AtomicInteger
 import javax.imageio.ImageIO
 import kotlin.system.exitProcess
 
@@ -74,10 +75,14 @@ fun main(args: Array<String>) {
     val env = mapOf(PluginFolders.ROOT_ENV to root.absolutePath) + (if (lock) mapOf(PluginFolders.DEMO_LOCK_ENV to "1") else emptyMap())
     val tabs = DesktopPlugins.load(dir, env = env::get, property = { null }).factory
     val provider = StubProvider(StubScript.default(), delayMs = 0)
+    val sessionCount = AtomicInteger()
     val daemon = AgentHqDaemon.build(
         port = 18797, host = "127.0.0.1", provider = provider, runner = provider.transport()!!,
         sessionStore = JsonSessionStore(File(dir, "sessions.json")), mailStore = JsonMailStore(File(dir, "mailbox.json")),
         store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath), mailBaseUrl = "http://127.0.0.1:1", token = null,
+        // TAB-SHOTS-DIFF: fixed session ids (the id shows in the header, the agent row and the composer), so two renders
+        // of the same code are pixel-identical.
+        sessionIds = { "5e55a0%02d-0000-4000-8000-000000000000".format(sessionCount.incrementAndGet()) },
     )
     daemon.start()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -88,8 +93,16 @@ fun main(args: Array<String>) {
         scope.launch { controller.spawn("say hello") }
         waitUntil(timeoutMillis = 20_000) { controller.state.value.agents.isNotEmpty() }
         waitForIdle()
+        // TAB-SHOTS-DIFF: a pane still showing its loading placeholder ("Loading skills...", the Stats pane's "Reading this
+        // session's record...") is shot once it has loaded, so a slow host does not change the picture. One that never
+        // loads is shot as it is (the diff then shows it).
+        val loading = SemanticsMatcher("a loading placeholder") { n ->
+            n.config.getOrElseNullable(SemanticsProperties.Text) { null }.orEmpty()
+                .any { it.text.startsWith("Loading") || it.text.startsWith("Reading this session") }
+        }
         fun shot(name: String) {
             waitForIdle()
+            runCatching { waitUntil(timeoutMillis = 10_000) { onAllNodes(loading).fetchSemanticsNodes().isEmpty() } }
             Thread.sleep(400)
             waitForIdle()
             // The topmost root: the window, or the dialog open over it.
