@@ -3,9 +3,12 @@ package com.superiorsoftllc.agenthq.daemon
 import com.superiorsoftllc.agenthq.session.InfantryEnv
 import io.ktor.http.CacheControl
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.http.content.LocalFileContent
 import io.ktor.server.response.cacheControl
+import io.ktor.server.response.header
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
@@ -105,15 +108,27 @@ fun Route.webBundleRoutes(bundle: WebBundle) {
                 HttpStatusCode.NotFound,
             )
         } else {
-            call.response.cacheControl(CacheControl.NoCache(null))
-            call.respond(LocalFileContent(index, WebBundle.contentType(index.name)))
+            call.respondBundleFile(index)
         }
     }
     for (path in bundle.paths) {
         val file = bundle.file(path) ?: continue
-        get(path) {
-            call.response.cacheControl(CacheControl.NoCache(null))
-            call.respond(LocalFileContent(file, WebBundle.contentType(file.name)))
-        }
+        get(path) { call.respondBundleFile(file) }
+    }
+}
+
+/**
+ * `no-cache` keeps a redeployed bundle from going stale, and the validator makes it cheap: a browser that already holds
+ * this exact file revalidates with If-None-Match and gets an empty 304 instead of the ~33 MB of wasm again.
+ */
+private suspend fun ApplicationCall.respondBundleFile(file: File) {
+    val etag = "\"${file.length().toString(16)}-${file.lastModified().toString(16)}\""
+    response.cacheControl(CacheControl.NoCache(null))
+    response.header(HttpHeaders.ETag, etag)
+    val ifNoneMatch = request.headers[HttpHeaders.IfNoneMatch]
+    if (ifNoneMatch != null && ifNoneMatch.split(',').any { it.trim().removePrefix("W/") == etag }) {
+        respond(HttpStatusCode.NotModified)
+    } else {
+        respond(LocalFileContent(file, WebBundle.contentType(file.name)))
     }
 }

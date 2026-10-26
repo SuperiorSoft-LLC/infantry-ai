@@ -23,6 +23,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -88,9 +89,22 @@ private sealed interface WebMode {
     data object Demo : WebMode
 }
 
+/** Tells index.html's splash that the app has painted its first frame, so it fades out. */
+@Composable
+private fun SplashDone() {
+    LaunchedEffect(Unit) {
+        withFrameNanos { }
+        withFrameNanos { }
+        notifySplashReady()
+    }
+}
+
+private fun notifySplashReady(): Unit = js("{ if (typeof window.infantryReady === 'function') window.infantryReady(); }")
+
 @Composable
 private fun WebRoot() {
     SymbolFontFallback()
+    SplashDone()
     var mode by remember { mutableStateOf<WebMode>(BrowserStorage.get(BrowserStorage.TOKEN_KEY)?.let { WebMode.Checking(it) } ?: WebMode.Gate()) }
     when (val m = mode) {
         is WebMode.Gate -> TokenGate(
