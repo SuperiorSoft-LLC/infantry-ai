@@ -2,7 +2,9 @@ package com.superiorsoftllc.agenthq.ui.plugin
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.superiorsoftllc.agenthq.plugin.api.EventBus
@@ -16,6 +18,7 @@ import com.superiorsoftllc.agenthq.plugin.host.AcceptedPreference
 import com.superiorsoftllc.agenthq.plugin.host.ModuleState
 import com.superiorsoftllc.agenthq.plugin.host.ModuleStatus
 import com.superiorsoftllc.agenthq.plugin.host.SimpleEventBus
+import com.superiorsoftllc.agenthq.ui.Palette
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.DiffTarget
 import com.superiorsoftllc.agenthq.ui.net.Controller
@@ -214,6 +217,13 @@ class TabFactory(
             seen.remove(p.with)
             seen[p.replace] = with.copy(id = target.id, container = target.container, order = target.order, parent = target.parent, shortcut = target.shortcut, testTag = target.testTag)
         }
+        // A tab its module offers as a replacement shows only as one: a refused preference leaves no stray tab behind.
+        for (m in modules) for (p in m.manifest.preferences) {
+            if (preferences.none { it.module == m.manifest.name && it.with == p.with } && seen[p.with]?.module == m.manifest.name) {
+                seen.remove(p.with)
+                problems += "${m.manifest.name}: tab ${p.with} only replaces ${p.replace}, which was not accepted; not shown"
+            }
+        }
         val ints = LinkedHashMap<String, MutableList<TabInterceptor>>()
         val bls = LinkedHashMap<String, MutableList<Triple<Int, String, SlotBlock>>>()
         for (m in modules) {
@@ -291,7 +301,10 @@ class TabFactory(
             slot.forEach { (owner, b) -> b.content(context.forModule(services(owner))) }
             if (community) CommunityBadge(module!!.manifest)
             hooks.forEach { it.before?.invoke(own) }
-            Box(Modifier.weight(1f)) { tab.content(own) }
+            Box(Modifier.weight(1f)) {
+                // A module's plain Text reads in the app's text colour, like the core panes.
+                CompositionLocalProvider(LocalContentColor provides Palette.Text) { tab.content(own) }
+            }
             hooks.forEach { it.after?.invoke(own) }
         }
     }

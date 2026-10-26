@@ -6,7 +6,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -83,7 +83,9 @@ fun main(args: Array<String>) {
             waitForIdle()
             Thread.sleep(400)
             waitForIdle()
-            ImageIO.write(onRoot().captureToImage().toAwtImage(), "png", File(out, "$name.png"))
+            // The topmost root: the window, or the dialog open over it.
+            val roots = onAllNodes(isRoot())
+            ImageIO.write(roots[roots.fetchSemanticsNodes().size - 1].captureToImage().toAwtImage(), "png", File(out, "$name.png"))
             println("shot ${File(out, "$name.png").path}")
         }
         // Every node tagged center-tab-* / right-tab-* is one tab; click each in strip order.
@@ -97,11 +99,21 @@ fun main(args: Array<String>) {
                 shot(tag)
             }
         }
+        // The example module's daemon access: a declared route goes through, an undeclared one is refused.
+        if (onAllNodesWithTag("center-tab-ACME_HELLO").fetchSemanticsNodes().isNotEmpty()) {
+            onAllNodesWithTag("center-tab-ACME_HELLO")[0].performClick()
+            for ((button, name) in listOf("acme-hello-sessions" to "route-refused", "acme-hello-health" to "route-declared")) {
+                onNodeWithTag(button).performClick()
+                waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag("acme-hello-reply").fetchSemanticsNodes().isNotEmpty() }
+                Thread.sleep(500)
+                shot("acme-hello-$name")
+            }
+        }
         // Settings > Plugins > Modules: every module and why it did or did not load.
         onNodeWithContentDescription("Configuration").performClick()
         onNodeWithTag(CONFIG_TAB_TAG_PREFIX + ConfigTab.PLUGINS.name).performClick()
         shot("settings-plugins")
-        for (name in listOf("Acme_Hello", "Acme_Broken")) {
+        for (name in listOf("Acme_Hello", "Acme_Broken", "Acme_Needy")) {
             val row = onAllNodesWithTag(MODULE_ROW_TAG_PREFIX + name)
             if (row.fetchSemanticsNodes().isNotEmpty()) { row[0].performScrollTo(); shot("settings-plugins-$name") }
         }

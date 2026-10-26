@@ -7,6 +7,7 @@ import com.superiorsoftllc.agenthq.plugin.api.ModuleSetting
 import com.superiorsoftllc.agenthq.plugin.api.ModulesConfig
 import com.superiorsoftllc.agenthq.plugin.api.ObserverDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.PluginEvent
+import com.superiorsoftllc.agenthq.plugin.api.PreferenceDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.Tier
 import com.superiorsoftllc.agenthq.plugin.host.AcceptedPreference
@@ -82,10 +83,15 @@ class TabFactoryTest {
     }
 
     @Test
-    fun `without an accepted preference the core tab stays`() {
-        val f = TabFactory(CoreModules.all + acme(listOf(tab("acme.git", title = "Acme Git"))))
+    fun `without an accepted preference the core tab stays and the would-be replacement is not shown`() {
+        val offered = acme(listOf(tab("acme.git", title = "Acme Git"))).let { m ->
+            AgentHqModule(m.manifest.copy(preferences = listOf(PreferenceDeclaration("infantry.git", "acme.git"))), m.tabs, tier = Tier.COMMUNITY)
+        }
+        val f = TabFactory(CoreModules.all + offered)
         assertEquals("Infantry_Git", f.find("infantry.git")?.module)
-        assertEquals("acme.git", f.find("acme.git")?.id)
+        assertNull(f.find("acme.git"))
+        assertTrue(f.problems.any { "acme.git only replaces infantry.git, which was not accepted" in it })
+        assertEquals(CoreModules.factory.tabs(TabContainers.CENTER).map { it.id }, f.tabs(TabContainers.CENTER).map { it.id })
     }
 
     @Test
