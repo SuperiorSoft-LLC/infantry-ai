@@ -620,6 +620,8 @@ class AgentHqDaemon(
             handoffTimeoutMs: Long = SessionHandover.DEFAULT_TIMEOUT_MS,
             /** WEB-1 (contract 1.122.0): the browser client bundle served at `/` (none when it is not installed). */
             webBundle: WebBundle = WebBundle.load(WebBundle.locate()),
+            /** TAB-SHOTS-DIFF: new session ids; the tab-shots renderer pins them so two renders are pixel-identical. */
+            sessionIds: () -> String = { UUID.randomUUID().toString() },
         ): AgentHqDaemon {
             val policy = AccessPolicy.of(host, token)
             // PORT-1: FIRST, because the mail base and every session's AGENTHQ_URL below carry the port.
@@ -692,6 +694,7 @@ class AgentHqDaemon(
                 buildEnv = { settings.buildLimits().sessionEnv(System.getenv("GRADLE_OPTS")) },
                 // No-hard-coded-limits S2: the watchdog and silent sweeper read limits.watchdog.* live.
                 limitSource = settings::limit,
+                idFactory = sessionIds,
             )
             // BUG-M2-11f: a new keep-alive value applies to the processes already kept, not only to the next launch.
             settings.onKeepAliveChanged = manager::lifecyclePolicyChanged

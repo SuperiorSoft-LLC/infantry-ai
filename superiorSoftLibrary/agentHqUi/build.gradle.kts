@@ -144,13 +144,70 @@ tasks.register<JavaExec>("runTabShots") {
     if (project.hasProperty("tabShotsDemoLock")) args("demo-lock")
 }
 
+// TAB-SHOTS-DIFF: enforces "nothing in the existing UI changes". diffTabShots renders the tab shots (the runTabShots
+// renderer, same window and seed data) into a clean folder and compares each PNG pixel by pixel with the committed
+// baseline (tab-shots-baseline/); it prints "name: N of M pixels differ", writes <name>.diff.png for each differing shot
+// and fails if any shot exceeds the tolerance. updateTabShotBaseline refreshes the baseline: an intended UI change is
+// a conscious baseline update in its own commit. See README.md, "Proving pixel-identical".
+// Paths are relative to the repository root.
+//   -PtabShotsBaseline=<folder>   compare against another folder (e.g. shots rendered in a worktree of the base ref)
+//   -PtabShotsCurrent=<folder>    compare an existing folder instead of rendering
+//   -PtabShotsTolerance=<n>       differing pixels allowed per shot (default 0)
+//   -PtabShotsMask=<file>         regions to ignore (default tab-shots-baseline/mask.txt when present)
+val tabShotsBaseline = layout.projectDirectory.dir("tab-shots-baseline")
+val tabShotsRendered = layout.buildDirectory.dir("tab-shots-diff/current")
+val renderTabShotsForDiff = tasks.register<JavaExec>("renderTabShotsForDiff") {
+    group = "verification"
+    description = "Renders the tab shots into a clean build/tab-shots-diff/current (input of diffTabShots and updateTabShotBaseline)."
+    mainClass.set("com.superiorsoftllc.agenthq.ui.TabShotsMainKt")
+    classpath = sourceSets["test"].runtimeClasspath
+    jvmArgs(agentHqJvmCaps) // PERF-2
+    val out = tabShotsRendered.get().asFile
+    args(out.path)
+    if (project.hasProperty("tabShotsDemoLock")) args("demo-lock")
+    // No modal blur (as in the UI tests): the blur smears the clocks behind a dialog (RAM free, ages) across the
+    // window, where a mask could not hold them. The blur itself is covered by ModalBlurRenderUiTest.
+    systemProperty("agenthq.ui.blur", "off")
+    outputs.upToDateWhen { false }
+    doFirst { out.deleteRecursively() }
+}
+tasks.register<JavaExec>("diffTabShots") {
+    group = "verification"
+    description = "Renders the tab shots and fails on any pixel difference from the baseline (tab-shots-baseline/)."
+    mainClass.set("com.superiorsoftllc.agenthq.ui.TabShotDiffKt")
+    classpath = sourceSets["test"].runtimeClasspath
+    // Folder and file arguments are relative to the repository root.
+    fun rootPath(name: String) = project.findProperty(name)?.toString()?.let { rootProject.file(it).path }
+    val current = rootPath("tabShotsCurrent")
+    if (current == null) dependsOn(renderTabShotsForDiff) else dependsOn("testClasses")
+    val baseline = rootPath("tabShotsBaseline") ?: tabShotsBaseline.asFile.path
+    val mask = rootPath("tabShotsMask") ?: tabShotsBaseline.file("mask.txt").asFile.path
+    args(
+        baseline, current ?: tabShotsRendered.get().asFile.path, layout.buildDirectory.dir("tab-shots-diff/diff").get().asFile.path,
+        project.findProperty("tabShotsTolerance")?.toString() ?: "0", mask,
+    )
+    outputs.upToDateWhen { false }
+}
+tasks.register<Sync>("updateTabShotBaseline") {
+    group = "verification"
+    description = "Renders the tab shots and replaces the baseline PNGs in tab-shots-baseline/ (commit the update on its own)."
+    dependsOn(renderTabShotsForDiff)
+    from(tabShotsRendered) { include("*.png") }
+    into(tabShotsBaseline)
+    preserve { include("mask.txt", "README.md") }
+}
+
 // PLUGINS-1: the dev runs read the repository's plugins/ folder (core + community, modules.json) and first build every
 // community module that has sources. settings.gradle.kts finds those by scanning plugins/community; none is named here.
 val repoPluginsRoot = rootProject.file("plugins")
 val communityModuleJars = rootProject.subprojects.filter { it.path.startsWith(":plugins:community:") }.map { "${it.path}:jar" }
-tasks.matching { it.name in setOf("run", "runRealDaemon", "runTabShots") }.configureEach {
+tasks.matching { it.name in setOf("run", "runRealDaemon", "runTabShots", "renderTabShotsForDiff") }.configureEach {
     (this as? JavaExec)?.systemProperty("agenthq.plugins.root", repoPluginsRoot.absolutePath)
     dependsOn(communityModuleJars)
+}
+// TAB-SHOTS-DIFF: the shots never read the real plan limits (live, per account), as the UI tests do not.
+tasks.matching { it.name in setOf("runTabShots", "renderTabShotsForDiff") }.configureEach {
+    (this as JavaExec).environment("AGENTHQ_LIMITS_LIVE", "false")
 }
 
 // U2: the UI tests boot the real daemon in-process, and the client now asks for `limits` on connect. Keep the

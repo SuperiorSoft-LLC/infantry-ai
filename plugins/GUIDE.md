@@ -94,3 +94,10 @@ community module works on the desktop app and the headless daemon (`GET /plugins
 
 With `AGENTHQ_DEMO_LOCK` set, no community module loads, Settings cannot change modules.json, and the `daemon`
 service of a core module is further limited to `demoLock.allowRoutes` in `modules.json`. Core tabs work as usual.
+
+## Proving the existing UI did not change
+
+A module or seam that must leave the rest of the window as it was proves it with
+`./gradlew :superiorSoftLibrary:agentHqUi:diffTabShots`: every tab is rendered and compared pixel by pixel with the
+committed baseline, and the task fails on any difference. See "Proving pixel-identical" in
+`superiorSoftLibrary/agentHqUi/README.md`.

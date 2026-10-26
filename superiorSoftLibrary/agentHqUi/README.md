@@ -26,6 +26,42 @@ Enter sends, Shift+Enter newline.
 * Needs-input is shown only when the daemon says so (`WAITING_INPUT` state, or `mail_waiting`). No text heuristics.
 * Resume sends `resume "<id>\n<prompt>"` naming the session; refused up front with the reason when `resumable` is false.
 
+## Proving pixel-identical
+A ticket that must not change the existing UI (a refactor, a plugin seam, a new module that adds a tab) proves it with
+`diffTabShots`. It renders every tab of every tab strip plus Settings > Plugins (the `runTabShots` renderer: 1400x860
+window, stub daemon, fixed seed data and session ids, no modal blur), compares each PNG pixel by pixel with the
+committed baseline in `tab-shots-baseline/`, and fails if any shot differs:
+
+```
+./gradlew :superiorSoftLibrary:agentHqUi:diffTabShots --max-workers=2
+center-tab-PODS: 0 of 1176380 pixels differ
+...
+diffTabShots: 27 of 27 shots pass (tolerance 0 px, mask .../tab-shots-baseline/mask.txt)
+```
+
+Paste that summary into the ticket's report: "27 of 27 shots pass, tolerance 0" is the proof. A failing shot prints
+`FAIL`, and `build/tab-shots-diff/diff/<shot>.diff.png` shows the differing pixels in red (masked regions in blue)
+over the baseline in grey. A new or missing shot fails as well.
+
+* **Mask.** `tab-shots-baseline/mask.txt` lists the only regions not compared: clocks and live readings (status bar
+  ages and free RAM, the agent row's age, chat times, Usage's "updated Ns ago"). Add a region only for text that
+  changes on its own between two renders of the same commit, never to hide a change you made. `-PtabShotsMask=<file>`
+  uses another file.
+* **Tolerance.** `-PtabShotsTolerance=<n>` allows n differing pixels per shot. The default is 0; a pixel-identical
+  claim is only made at 0.
+* **An intended UI change.** Run `updateTabShotBaseline`, look at the new PNGs, and commit them on their own
+  ("ui: refresh tab-shots baseline for <change>"), so the change is a conscious baseline update a reviewer can see.
+* **Against another ref.** The baseline was rendered on the owner's Windows host; fonts rasterise differently on
+  another OS. To compare against the base branch on your own machine, render it in a worktree of that ref (the ref
+  must include this task) and point the diff at it:
+  ```
+  git worktree add ../shots-base <base-ref>
+  (cd ../shots-base && ./gradlew :superiorSoftLibrary:agentHqUi:renderTabShotsForDiff --max-workers=2)
+  ./gradlew :superiorSoftLibrary:agentHqUi:diffTabShots -PtabShotsBaseline=../shots-base/superiorSoftLibrary/agentHqUi/build/tab-shots-diff/current
+  ```
+  `-PtabShotsCurrent=<folder>` compares an existing folder instead of rendering. Paths are relative to the
+  repository root.
+
 ## Architecture
 `model/Model.kt` is a pure `reduce(AppState, Envelope)`; `net/DaemonClient.kt` is the link; `net/Controller.kt`
 turns intent into frames; `App.kt` is presentation only. Tests: reducer unit tests plus an integration suite
