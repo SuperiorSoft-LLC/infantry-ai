@@ -1,4 +1,6 @@
 # Used by the `tls` profile of compose.yaml. {$AGENTHQ_DOMAIN} comes from the environment.
 {$AGENTHQ_DOMAIN} {
+	# The browser bundle is ~33 MB raw (wasm); compressed it is ~10 MB (gzip) or less (zstd).
+	encode zstd gzip
 	reverse_proxy infantry-ai:8787
 }
