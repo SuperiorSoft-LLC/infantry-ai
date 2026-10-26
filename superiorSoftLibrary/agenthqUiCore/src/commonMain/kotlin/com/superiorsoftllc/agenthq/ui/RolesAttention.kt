@@ -464,7 +464,7 @@ internal fun RoleIconPicker(roleId: String, selected: String, enabled: Boolean, 
  * runs, tripped triggers, conversation ceilings -- newest first, each acknowledgeable from here.
  */
 @Composable
-internal fun AttentionPane(state: AppState, controller: Controller) {
+internal fun AttentionPane(state: AppState, controller: Controller, showChat: () -> Unit = {}) {
     val actionScope = rememberCoroutineScope()
     var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(state.attention.size) { now = Clock.System.now().toEpochMilliseconds() }
@@ -474,7 +474,7 @@ internal fun AttentionPane(state: AppState, controller: Controller) {
             QuestionHistory(
                 state.questionsNewestFirst, live = state.connection.isLive,
                 onOverride = { answer -> actionScope.launch { controller.answerQuestion(answer) } },
-                onShow = controller::showQuestions,
+                onShow = { id -> controller.openQuestion(id); showChat() },
             )
         }
         WatchSection(state, now)
@@ -508,7 +508,7 @@ internal fun AttentionPane(state: AppState, controller: Controller) {
                     item.podId?.let { Chip("pod ${it.take(8)}") }
                     item.triggerId?.let { Chip("trigger ${it.take(12)}") }
                     item.sessionId?.takeIf { it in state.agents }?.let { sid ->
-                        TextButton(onClick = { controller.select(sid) }) { Text("Open agent", fontSize = 11.sp) }
+                        TextButton(onClick = { controller.openSession(sid); showChat() }) { Text("Open agent", fontSize = 11.sp) }
                     }
                 }
             }

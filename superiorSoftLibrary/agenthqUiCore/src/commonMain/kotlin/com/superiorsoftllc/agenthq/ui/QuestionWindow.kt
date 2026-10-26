@@ -202,14 +202,16 @@ fun QuestionPanel(
 
 /**
  * ASK-1: the question history at the top of the attention pane (^6), newest first. An open question offers "Show" (the
- * window again, [onShow]); an auto-picked one offers the other options as override chips ([onOverride]), while [live].
+ * window again, [onShow] with its id); an auto-picked one offers the other options as override chips ([onOverride]), while [live].
+ * BUG 14ca3437: the whole row of an open question is a tap target (a phone has no hover), and showing it needs no live
+ * link: it only opens the question on this device.
  */
 @Composable
 fun QuestionHistory(
     questions: List<OwnerQuestionView>,
     live: Boolean,
     onOverride: (QuestionAnswerWire) -> Unit,
-    onShow: () -> Unit,
+    onShow: (questionId: String) -> Unit,
 ) {
     Column(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("Questions", color = Palette.Text, fontWeight = FontWeight.Bold, fontSize = 13.sp)
@@ -217,6 +219,7 @@ fun QuestionHistory(
             val shape = RoundedCornerShape(6.dp)
             Column(
                 Modifier.fillMaxWidth().clip(shape).background(Palette.Raised).border(1.dp, Palette.Border, shape)
+                    .then(if (q.state == "open") Modifier.clickable(role = Role.Button, onClickLabel = "Show the question") { onShow(q.id) } else Modifier)
                     .testTag(QUESTION_HISTORY_TAG_PREFIX + q.id).padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
@@ -227,7 +230,7 @@ fun QuestionHistory(
                     )
                     Text(questionAsker(q), color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
                     if (q.state == "open") {
-                        TextButton(onClick = onShow, enabled = live) { Text("Show", fontSize = 11.sp) }
+                        TextButton(onClick = { onShow(q.id) }) { Text("Show", fontSize = 11.sp) }
                     }
                 }
                 Text(q.question, color = Palette.Text, fontSize = 12.sp)

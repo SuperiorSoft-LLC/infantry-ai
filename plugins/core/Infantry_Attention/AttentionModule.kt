@@ -26,6 +26,6 @@ val InfantryAttention = AgentHqModule(
             testTag = "right-tab-ATTENTION",
             shortcut = 6,
             routes = listOf("ackAttention", "answerQuestion", "select"),
-        ) { AttentionPane(it.state, it.controller) },
+        ) { AttentionPane(it.state, it.controller, it.showChat) },
     ),
 )

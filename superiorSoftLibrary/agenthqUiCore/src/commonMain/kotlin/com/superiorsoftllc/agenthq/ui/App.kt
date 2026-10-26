@@ -586,9 +586,11 @@ fun App(
         QuestionPill(
             hidden = state.openQuestions.count { q -> q.id in state.dismissedQuestions || q.sessionId != state.selectedId },
             onShow = {
-                state.openQuestions.firstOrNull { it.sessionId != state.selectedId && state.agents.containsKey(it.sessionId) }
-                    ?.let { controller.select(it.sessionId); centerTab = homeTab; chat.spawnMode = false }
-                controller.showQuestions()
+                // BUG 14ca3437: through openQuestion, so a phone also closes the drawer that covers the asker's chat.
+                val q = state.openQuestions.firstOrNull { it.sessionId != state.selectedId && state.agents.containsKey(it.sessionId) }
+                    ?: state.openQuestions.firstOrNull()
+                q?.let { controller.openQuestion(it.id) } ?: controller.showQuestions()
+                centerTab = homeTab; chat.spawnMode = false
             },
         )
       }
