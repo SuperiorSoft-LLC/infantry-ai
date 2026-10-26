@@ -315,6 +315,12 @@ data class TicketStart(
     companion object {
         /** How a launch warning in a started ticket's [detail] begins: advice, the run started anyway. */
         const val LAUNCH_WARNING = "launch warning: "
+
+        /** GAP-006b: the [reason] of a start of an in-progress ticket whose worker can carry it: nothing was started. */
+        const val ALREADY_IN_PROGRESS = "already_in_progress"
+
+        /** GAP-006b: how a restart's [detail] begins, naming why the old worker could not carry the ticket. */
+        const val RESTARTED = "restarted: "
     }
 }
 

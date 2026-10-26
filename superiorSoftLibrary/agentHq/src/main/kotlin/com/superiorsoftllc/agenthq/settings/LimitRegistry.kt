@@ -125,6 +125,13 @@ object LimitRegistry {
         zeroMeans = "never noted",
     )
 
+    /** GAP-006b: the in-progress worker invariant's grace (see TicketBoard.sweepWorkers). */
+    val UNBRIEFED_GRACE_MINUTES = LimitDef(
+        "limits.watchdog.unbriefedGraceMinutes", 3, "minutes",
+        "How long an in-progress ticket's worker may go without opening a provider session before the board restarts it (once; at rest) or flags it (busy, or no worker).",
+        zeroMeans = "never swept",
+    )
+
     /** Ticket 3b30398d: the process-watch pass (ROGUE-1 ledger, CPU sampling), read before every pass. */
     val PROCESS_WATCH_INTERVAL_SECONDS = LimitDef(
         "limits.processes.watchIntervalSeconds", 10, "seconds",
@@ -135,7 +142,7 @@ object LimitRegistry {
     val ALL: List<LimitDef> = listOf(
         MAX_PER_POD, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
-        TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, IDLE_NOTICE_MINUTES,
+        TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, IDLE_NOTICE_MINUTES, UNBRIEFED_GRACE_MINUTES,
         PROCESS_WATCH_INTERVAL_SECONDS,
     )
 

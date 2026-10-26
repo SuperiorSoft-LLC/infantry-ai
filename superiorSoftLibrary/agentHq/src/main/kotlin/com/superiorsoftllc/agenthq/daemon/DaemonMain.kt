@@ -1068,6 +1068,19 @@ class AgentHqDaemon(
             boardRef = board
             // TICKET-HANDOVER: a ticket worker switched to another harness hands off, then resumes with its ticket brief.
             val handover = SessionHandover(manager, board::brief, handoffTimeoutMs)
+            // GAP-006b: a first turn of a worker whose brief never landed carries it; the sweep enforces the in-progress invariant.
+            manager.briefFor = board::brief
+            java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+                Thread(r, "agenthq-ticket-worker-sweep").also { it.isDaemon = true }
+            }.scheduleWithFixedDelay({
+                runCatching {
+                    val graceMs = LimitRegistry.minutesMs(settings.limit(LimitRegistry.UNBRIEFED_GRACE_MINUTES), LimitRegistry.UNBRIEFED_GRACE_MINUTES)
+                    board.sweepWorkers(graceMs) { ticketId, sessionId, detail ->
+                        println("[agentHq] ticket worker sweep: $ticketId: $detail")
+                        attention.raise(kind = AttentionKind.STALLED, ticketId = ticketId, podId = null, sessionId = sessionId, outcome = "unbriefed", detail = detail)
+                    }
+                }.onFailure { System.err.println("[agentHq] ticket worker sweep failed: ${it.message}") }
+            }, 60L, 60L, java.util.concurrent.TimeUnit.SECONDS)
             // E1-c (contract 1.62.0): the story frames are deprecated shims over the ticket board. An old story id
             // resolves through E1-a's `story_migration`; a create that names an epic pushes that epic's frame (its
             // storyIds now list the new ticket) to every client, exactly the frame an `epic_save` answers with.

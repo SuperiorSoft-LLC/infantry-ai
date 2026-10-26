@@ -16,6 +16,7 @@ import com.superiorsoftllc.agenthq.settings.LimitDef
 import com.superiorsoftllc.agenthq.settings.LimitRegistry
 import com.superiorsoftllc.agenthq.session.SessionRecord
 import com.superiorsoftllc.agenthq.session.SessionState
+import com.superiorsoftllc.agenthq.session.TicketWorkerHealth
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -215,7 +216,10 @@ internal class McpWriteTools(
         val limits = effectiveLimits(stream)
         val childDepth = guardrails.depth + 1
         val held = holding(snapshot)
-        if (ticket.status != TicketStatus.IN_PROGRESS) {
+        // GAP-006b: an in-progress ticket whose worker cannot carry it is started again, so it is held to the limits too.
+        val runsWorker = ticket.status != TicketStatus.IN_PROGRESS ||
+            TicketWorkerHealth.problem(ticket.sessionId?.let { id -> snapshot.firstOrNull { it.id == id } }, ticket.sessionId) != null
+        if (runsWorker) {
             if (childDepth > limits.maxDepth) {
                 return refused(
                     "$tool refused: depth limit. This MCP server runs at depth ${guardrails.depth}, so the ticket's " +

@@ -49,6 +49,7 @@ import com.superiorsoftllc.agenthq.worktree.TicketWorktree
 import com.superiorsoftllc.agenthq.worktree.WorktreeRecord
 import com.superiorsoftllc.agenthq.session.SessionRecord
 import com.superiorsoftllc.agenthq.session.SessionState
+import com.superiorsoftllc.agenthq.session.TicketWorkerHealth
 import com.superiorsoftllc.agenthq.session.ContextSource
 import java.io.File
 import java.util.UUID
@@ -71,7 +72,8 @@ data class TicketAnswer(val ticket: Ticket, val pushed: Boolean)
 /** The answer to a whole-board request. [pushed]: it already went to every client as a [BoardEvent]. */
 data class BoardAnswer(val tickets: List<Ticket>, val pushed: Boolean)
 
-private enum class HandOutOrigin { MOVE, START_NEXT, QUEUE_DRAIN, TRIGGER }
+/** GAP-006b: [REPAIR] is the unbriefed sweep restarting a phantom worker: unattended, never queued. */
+private enum class HandOutOrigin { MOVE, START_NEXT, QUEUE_DRAIN, TRIGGER, REPAIR }
 
 /** P9.5d: what a trigger's `prompt` action got from the board -- a session id, or the reason it was refused. */
 sealed interface PromptLaunch {
@@ -603,6 +605,13 @@ class TicketBoard(
             val current = store.transaction { store.tickets.get(id) }
                 ?: throw IllegalArgumentException("no ticket '${id.take(80)}'")
             if (current.status != TicketStatus.IN_PROGRESS) return handOut(id, HandOutOrigin.MOVE, startedBy)
+            // GAP-006b: a START of a ticket already in progress (a move into its own column with no place: a board drop
+            // always names one) restarts it when its worker cannot carry it, and otherwise answers so, never silently.
+            if (request.status == TicketStatus.IN_PROGRESS && position == null) {
+                val problem = workerProblem(current)
+                    ?: return TicketAnswer(answerTicket(id).copy(start = TicketStart(ok = false, reason = TicketStart.ALREADY_IN_PROGRESS)), pushed = false)
+                return restart(id, current, problem, HandOutOrigin.MOVE, startedBy)
+            }
         }
 
         val outcome = commit { s ->
@@ -712,7 +721,7 @@ class TicketBoard(
         }
         if (assignment.busy) {
             val lane = assignment.queueLane ?: return refusedStart(initialTicket, "assigned profile is at capacity")
-            if (origin == HandOutOrigin.START_NEXT || origin == HandOutOrigin.TRIGGER) {
+            if (origin == HandOutOrigin.START_NEXT || origin == HandOutOrigin.TRIGGER || origin == HandOutOrigin.REPAIR) {
                 return refusedStart(initialTicket, "profile lane '$lane' is at capacity")
             }
             if (row.queuedFor == lane && row.queuedAt != null) {
@@ -763,7 +772,7 @@ class TicketBoard(
         }
         // Story 9.7b: a drained queue is an UNATTENDED launch (startNew refuses it over a spent budget or an
         // exhausted provider); a human move or start-next is only warned, and still starts.
-        val unattendedLaunch = origin == HandOutOrigin.QUEUE_DRAIN || origin == HandOutOrigin.TRIGGER
+        val unattendedLaunch = origin == HandOutOrigin.QUEUE_DRAIN || origin == HandOutOrigin.TRIGGER || origin == HandOutOrigin.REPAIR
         val launchWarning = if (unattendedLaunch) null else
             (sessionManager.launchCheck(providerId, LaunchOrigin.HUMAN, id) as? GateDecision.Warn)?.reason
         // USAGE-PACE: only the owner's own move (no starter session) may go past the plan allowance, with a warning.
@@ -863,6 +872,95 @@ class TicketBoard(
         val ruleNote = rule?.let { "rule '${it.name}': $providerId/$model" }
         val detail = listOfNotNull(cutNote, ruleNote, weightNote, launchWarning?.let { TicketStart.LAUNCH_WARNING + it }, pacingWarning).joinToString("; ").ifEmpty { null }
         return startAnswer(id, TicketStart(ok = true, reason = "started", detail = detail), outcome)
+    }
+
+    /** GAP-006b: why in-progress [row]'s worker cannot carry it ([TicketWorkerHealth]); null when it can, or with no session manager. */
+    private fun workerProblem(row: TicketRow): String? {
+        val sessionManager = sessions ?: return null
+        return TicketWorkerHealth.problem(row.sessionId?.let(sessionManager::get), row.sessionId)
+    }
+
+    private fun answerTicket(id: String): Ticket = store.transaction { load() }.let { views(it.rows, it.links).getValue(id) }
+
+    /**
+     * GAP-006b: start in-progress ticket [id] again because its worker cannot carry it ([problem]). The old worker is
+     * retired first -- removed outright when it never opened a provider session (nothing in it to keep or resume), so
+     * the ticket never ends up with two instances -- then the ticket is handed out exactly as a fresh start, reusing
+     * its branch. The answer's detail starts with [TicketStart.RESTARTED] and the problem.
+     */
+    private fun restart(id: String, current: TicketRow, problem: String, origin: HandOutOrigin, startedBy: String?): TicketAnswer {
+        val sessionManager = sessions ?: return refusedStart(answerTicket(id), "ticket session manager is unavailable")
+        current.sessionId?.let(sessionManager::get)?.let { old ->
+            runCatching {
+                if (old.live) sessionManager.kill(old.id, force = true, by = "ticket restart", reason = problem)
+                if (old.providerSessionId == null) sessionManager.delete(old.id)
+            }.onFailure { System.err.println("[agentHq] ticket $id: retiring worker ${old.id} failed: ${it.message}") }
+        }
+        val answer = handOut(id, origin, startedBy)
+        val start = answer.ticket.start ?: return answer
+        if (!start.ok) return answer
+        val detail = TicketStart.RESTARTED + problem + (start.detail?.let { "; $it" } ?: "")
+        return answer.copy(ticket = answer.ticket.copy(start = start.copy(detail = detail)))
+    }
+
+    /** GAP-006b: tickets the sweep already restarted once in this daemon's life; a second phantom is surfaced, not restarted. */
+    private val repairedTickets = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    /** GAP-006b: (ticket, session) pairs already surfaced, so one problem is reported once. */
+    private val surfacedWorkers = java.util.Collections.synchronizedSet(HashSet<String>())
+
+    /**
+     * GAP-006b, the in-progress invariant enforced in code: an in-progress ticket has a worker that received its brief,
+     * or it is surfaced. Run on a timer by the daemon; [graceMs] (setting `limits.watchdog.unbriefedGraceMinutes`) is how
+     * long a worker may go without a provider session id, from its last sign of life, before anything happens.
+     *
+     *  - a worker at rest that never opened a provider session (the phantom) is restarted ONCE per ticket, and [flag]
+     *    is told; a second phantom for the same ticket is only flagged, so a harness that always exits silently cannot loop;
+     *  - a BUSY worker with no provider session past the grace is flagged, never ended (a slow boot is not death);
+     *  - an in-progress ticket with no worker session at all is flagged and never started here: someone may be working
+     *    it outside the board, and a start is a person's or an agent's call (`ticket start` restarts it on demand).
+     *
+     * Returns the ids of the tickets it restarted.
+     */
+    @Synchronized
+    fun sweepWorkers(graceMs: Long, flag: (ticketId: String, sessionId: String?, detail: String) -> Unit = { _, _, _ -> }): List<String> {
+        val sessionManager = sessions ?: return emptyList()
+        if (graceMs == Long.MAX_VALUE) return emptyList()
+        val now = clock()
+        val restarted = mutableListOf<String>()
+        val inProgress = store.transaction { store.tickets.all() }.filter { it.status == TicketStatus.IN_PROGRESS }
+        for (row in inProgress) {
+            val worker = row.sessionId?.let(sessionManager::get)
+            fun surface(detail: String) {
+                if (surfacedWorkers.add("${row.id}|${row.sessionId}|${detail.take(40)}")) runCatching { flag(row.id, row.sessionId, detail) }
+            }
+            if (worker == null) {
+                if (now - row.updatedAt >= graceMs) {
+                    surface("Ticket is in progress but ${TicketWorkerHealth.problem(null, row.sessionId)}: no session - start it.")
+                }
+                continue
+            }
+            if (TicketWorkerHealth.slowToBrief(worker, now, graceMs)) {
+                surface("Worker ${worker.id} is busy but has opened no provider session for ${(now - worker.lastHeartbeat) / 60_000} min: its brief may never have landed.")
+                continue
+            }
+            val problem = TicketWorkerHealth.problem(worker) ?: continue
+            if (now - worker.lastHeartbeat < graceMs) continue
+            if (!repairedTickets.add(row.id)) {
+                surface("Ticket is in progress but $problem; it was already restarted once, so it is left for a person: start it again.")
+                continue
+            }
+            val answer = runCatching { restart(row.id, row, problem, HandOutOrigin.REPAIR, row.startedBy) }
+                .getOrElse { e -> surface("Restarting the ticket failed: ${e.message}"); continue }
+            val start = answer.ticket.start
+            if (start?.ok == true) {
+                restarted += row.id
+                runCatching { flag(row.id, answer.ticket.sessionId, "Restarted: $problem. New worker ${answer.ticket.sessionId}.") }
+            } else {
+                surface("Ticket is in progress but $problem; the restart did not start: ${start?.detail ?: start?.reason ?: "no answer"}.")
+            }
+        }
+        return restarted
     }
 
     /** What a ticket start composes its brief from: the ticket [row], run as [role] / [agentId] with [instance]. */

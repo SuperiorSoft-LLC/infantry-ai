@@ -6,6 +6,7 @@ import com.superiorsoftllc.agenthq.protocol.TicketMove
 import com.superiorsoftllc.agenthq.protocol.TicketStart
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
 import com.superiorsoftllc.agenthq.session.SessionRecord
+import com.superiorsoftllc.agenthq.session.TicketWorkerHealth
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
@@ -44,7 +45,7 @@ internal object TicketStarter {
             val note: String? = null,
         ) : Outcome
 
-        /** It was already in progress: nothing was started, [session] is the worker it already has. */
+        /** It was already in progress with a worker that can carry it: nothing was started, [session] is that worker. */
         data class AlreadyInProgress(override val ticket: Ticket, val session: SessionRecord?) : Outcome
 
         /** The board ran nothing for this start: queued, held or refused. */
@@ -66,7 +67,10 @@ internal object TicketStarter {
      */
     suspend fun start(stream: FrameStream, ticket: Ticket, origin: String?, timeoutMs: Long = stream.answerTimeoutMs): Outcome {
         if (ticket.status == TicketStatus.IN_PROGRESS) {
-            return Outcome.AlreadyInProgress(ticket, ticket.sessionId?.let { id -> sessions(stream).firstOrNull { it.id == id } })
+            // GAP-006b: an in-progress ticket whose worker cannot carry it (gone, or never briefed) is started again by
+            // the same move; one whose worker can is left alone. The daemon applies the same rule and has the last word.
+            val worker = ticket.sessionId?.let { id -> sessions(stream).firstOrNull { it.id == id } }
+            if (TicketWorkerHealth.problem(worker, ticket.sessionId) == null) return Outcome.AlreadyInProgress(ticket, worker)
         }
         val move = TicketMove(id = ticket.id, status = TicketStatus.IN_PROGRESS)
         stream.send(Envelope(Envelope.TICKET_MOVE, json.encodeToString(TicketMove.serializer(), move), origin))
@@ -109,6 +113,8 @@ internal object TicketStarter {
                 note = note,
             )
         }
+        start.reason == TicketStart.ALREADY_IN_PROGRESS ->
+            Outcome.AlreadyInProgress(answered, answered.sessionId?.let { id -> sessions(stream).firstOrNull { it.id == id } })
         start.reason == REASON_QUEUED -> Outcome.Queued(answered, start.detail)
         start.reason == REASON_HELD -> Outcome.Held(answered, start.detail)
         else -> Outcome.Refused(answered, start.detail ?: start.reason)
