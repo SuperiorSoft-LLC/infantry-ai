@@ -1042,6 +1042,7 @@ class AgentHqDaemon(
                 baseRef = TicketBaseRef.epicFirst(epics::baseBranchOf, TicketBaseRef.projectFirst(projectStore::baseBranchOf, baseRef)),
                 knowledge = knowledge, skills = skillsSource,
                 exitBehavior = settings::ticketExitBehavior,
+                autoDoneMinOutputs = { settings.limit(LimitRegistry.AUTO_DONE_MIN_OUTPUTS) },
                 weightExecutors = settings::weightExecutors,
                 // USAGE-PACE (1.121.0): an agent's / the daemon's ticket start beyond the plan allowance is refused.
                 pacing = { providerId, model ->
