@@ -785,10 +785,16 @@ class SessionManager(
         busyTwin(sessionId, session.agentId, session.ticketId)?.let {
             throw RunInFlightException(it.id, twinRefusal("resume of $sessionId", session.agentId, session.ticketId, it))
         }
-        require(session.providerSessionId != null || session.neverRun) {
+        // GAP-006b: a session AT REST (IDLE) that never opened a provider session has no conversation to lose, so its next
+        // turn is a FIRST turn (never refused as "not resumable"); a ticket worker's carries the ticket's brief ahead of the
+        // message, so typing into a phantom worker's chat starts that ticket's own work, never a blank instance. A FAILED
+        // one stays refused: its harness already failed to start once, and mail to it is a visible permanent failure.
+        require(session.providerSessionId != null || session.state == SessionState.IDLE) {
             "session $sessionId is not resumable: no provider session id was ever observed " +
                 "(state=${session.state})"
         }
+        val firstTurn = session.providerSessionId == null
+        val delivered = if (firstTurn && !session.neverRun && prompt.isNotBlank()) withBrief(session, prompt) else prompt
         require(lookup(session.provider) != null) {
             "session $sessionId runs on provider '${session.provider}', which this daemon is not " +
                 "configured with (configured: ${configured.keys.joinToString()})"
@@ -804,8 +810,23 @@ class SessionManager(
         sessions[sessionId] = revived
         persist(sessionId, force = true)
         eventSink?.invoke(SessionEvent.Status(revived))
-        if (prompt.isNotBlank()) startRun(sessionId, prompt, resuming = !session.neverRun, origin = origin)
+        if (delivered.isNotBlank()) startRun(sessionId, delivered, resuming = !firstTurn, origin = origin)
         return sessions.getValue(sessionId)
+    }
+
+    /**
+     * GAP-006b: the composed start brief of the ticket a session works on (wired to the board's own brief), or null.
+     * Read by [resumeHeld] for a first turn of a worker whose brief never landed.
+     */
+    @Volatile
+    var briefFor: ((SessionRecord) -> String?)? = null
+
+    private fun withBrief(session: SessionRecord, prompt: String): String {
+        if (session.ticketId.isNullOrBlank()) return prompt
+        val brief = runCatching { briefFor?.invoke(session) }
+            .onFailure { System.err.println("[agentHq] brief for ${session.id} not composed: ${it.message}") }
+            .getOrNull()?.takeIf { it.isNotBlank() } ?: return prompt
+        return "$brief\n\n---\n\n$prompt"
     }
 
     /**

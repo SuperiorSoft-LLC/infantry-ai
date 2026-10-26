@@ -625,6 +625,36 @@ class Controller(
     }
 
     /**
+     * GAP-006b: Apply on the start card -- start what [plan] shows, never a new unrelated instance. A ticket worker starts
+     * its TICKET (the daemon restarts a worker that never took its brief, on the ticket's own role, executor and branch);
+     * the pane then follows the ticket's new worker, and [message], when given, waits for it as its next turn. A plain
+     * session takes [message] (or [com.superiorsoftllc.agenthq.ui.model.START_DEFAULT_PROMPT]) as its first turn.
+     */
+    suspend fun startSession(plan: com.superiorsoftllc.agenthq.ui.model.StartPlan, message: String = ""): CommandResult {
+        val text = message.trim()
+        val ticketId = plan.ticketId ?: return prompt(plan.sessionId, text.ifBlank { com.superiorsoftllc.agenthq.ui.model.START_DEFAULT_PROMPT })
+        // An earlier start answer still on the ticket must not be taken for this one's.
+        _state.update { s -> s.copy(tickets = s.tickets.map { if (it.id == ticketId) it.copy(start = null) else it }) }
+        val r = moveTicket(ticketId, com.superiorsoftllc.agenthq.ui.protocol.TicketColumns.IN_PROGRESS)
+        if (r !is CommandResult.Sent) return r
+        // The answer is the ticket frame: a new worker, or a refusal, which the pane shows: the ticket did not start.
+        val answered = withTimeoutOrNull(START_FOLLOW_MS) {
+            _state.map { s -> s.tickets.firstOrNull { it.id == ticketId } to s.agents.keys }
+                .first { (t, agents) -> t?.start?.ok == false || (t?.sessionId != null && t.sessionId != plan.sessionId && t.sessionId in agents) }
+                .first
+        }
+        answered?.start?.takeIf { !it.ok && it.reason != "queued" }?.let { refused ->
+            return report(CommandResult.Refused("ticket ${ticketId.takeLast(8)} did not start: ${refused.detail ?: refused.reason}"))
+        }
+        val worker = answered?.sessionId?.takeIf { answered.start?.ok != false }
+        if (worker != null) {
+            select(worker)
+            if (text.isNotEmpty()) queueMessage(worker, text)
+        }
+        return r
+    }
+
+    /**
      * Interrupt: stop the CURRENT turn of [sessionId] with the daemon's INTERRUPT frame. Refused, with the reason,
      * for an unknown or non-busy agent. Nothing local changes: the busy-to-idle transition shows only when the
      * daemon's own session frame reports it.
@@ -1578,6 +1608,8 @@ class Controller(
 
     companion object {
         const val RESUME_DEFAULT_PROMPT = "Continue where you left off."
+        /** GAP-006b: how long a ticket start waits for the ticket's new worker before leaving the selection as it is. */
+        const val START_FOLLOW_MS = 15_000L
         /** IMG-4: how long an upload waits for the daemon's `image` answer. */
         const val IMAGE_UPLOAD_TIMEOUT_MS = 30_000L
 

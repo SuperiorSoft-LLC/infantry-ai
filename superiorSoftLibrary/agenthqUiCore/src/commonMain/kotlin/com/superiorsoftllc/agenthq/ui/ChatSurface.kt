@@ -326,7 +326,17 @@ fun TicketTag(a: AgentView, state: AppState, onOpen: ((String) -> Unit)?, modifi
 }
 
 @Composable
-internal fun OutputPane(a: AgentView?, spawnMode: Boolean, roleColor: String? = null, onStartSession: (() -> Unit)?, questionSlot: @Composable () -> Unit = {}) {
+fun OutputPane(
+    a: AgentView?,
+    spawnMode: Boolean,
+    roleColor: String? = null,
+    onStartSession: (() -> Unit)?,
+    /** GAP-006b: Start session / Resume for the session shown when it has nothing on screen (null = none to offer). */
+    paneAction: com.superiorsoftllc.agenthq.ui.model.SessionPaneAction? = null,
+    onApplyStart: (com.superiorsoftllc.agenthq.ui.model.StartPlan) -> Unit = {},
+    onResume: (String) -> Unit = {},
+    questionSlot: @Composable () -> Unit = {},
+) {
     if (a == null) {
         Box(Modifier.fillMaxSize(), Alignment.Center) {
             if (spawnMode) return@Box
@@ -352,7 +362,9 @@ internal fun OutputPane(a: AgentView?, spawnMode: Boolean, roleColor: String? = 
                     color = Palette.Muted, fontSize = 12.sp,
                 )
                 Spacer(Modifier.height(10.dp))
-                if (onStartSession != null) OutlinedButton(onClick = onStartSession) { Text("Start a session") }
+                // GAP-006b: a session on screen starts or resumes ITSELF; the New agent box would cut a second instance.
+                if (paneAction != null) SessionStartPane(paneAction, onApplyStart, onResume)
+                else if (onStartSession != null) OutlinedButton(onClick = onStartSession) { Text("Start a session") }
             }
         }
         questionSlot()

@@ -1,5 +1,8 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.ui.model.SessionPaneAction
+import com.superiorsoftllc.agenthq.ui.model.sessionPaneAction
+
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -274,6 +277,11 @@ class ChatPanelState {
                 // CMD-HARNESS-1: a client command, never a prompt: it swaps the agent's harness.
                 harness != null -> controller.switchHarness(agent!!.id, harness)
                 spawnMode || agent == null -> controller.spawn(text)
+                // GAP-006b: typing first into a ticket worker that ended before its brief landed starts THAT ticket's
+                // configured worker, then sends the message to it; never a blank instance, never a refusal.
+                !isBusy(agent) && agent.session.providerSessionId == null && agent.session.state != SessionState.IDLE ->
+                    (sessionPaneAction(agent.session, controller.state.value.tickets) as? SessionPaneAction.Start)
+                        ?.let { controller.startSession(it.plan, text) } ?: controller.prompt(agent.id, text)
                 agent.session.resumable && agent.session.state in ENDED_STATES -> controller.resume(agent.id, text)
                 isBusy(agent) -> controller.queueMessage(agent.id, text)
                 else -> controller.prompt(agent.id, text)
@@ -341,7 +349,14 @@ fun ChatPanel(
         Box(Modifier.weight(1f).fillMaxWidth().testTag(transcriptTag)) {
             content {
                 androidx.compose.runtime.CompositionLocalProvider(LocalUserPortrait provides state.userPortrait) {
-                    OutputPane(agent, chat.spawnMode, roleColor = state.role(agent?.role)?.color, onStartSession = if (allowSpawn) ({ chat.spawnMode = true; chat.focus.requestFocus() }) else null) {
+                    OutputPane(
+                        agent, chat.spawnMode, roleColor = state.role(agent?.role)?.color,
+                        onStartSession = if (allowSpawn) ({ chat.spawnMode = true; chat.focus.requestFocus() }) else null,
+                        // GAP-006b: Start session (its own settings, Apply / Cancel) or Resume, for the session on screen.
+                        paneAction = agent?.takeIf { !it.session.global }?.let { com.superiorsoftllc.agenthq.ui.model.sessionPaneAction(it.session, state.tickets) },
+                        onApplyStart = { plan -> scope.launch { controller.startSession(plan, ComposerTags.toPrompt(chat.draft, chat.attachments).trim()).let { r -> if (r is CommandResult.Sent) chat.edit("") } } },
+                        onResume = { id -> scope.launch { controller.resume(id, ComposerTags.toPrompt(chat.draft, chat.attachments).trim()).let { r -> if (r is CommandResult.Sent) chat.edit("") } } },
+                    ) {
                         // ASK-1: this session's pending question, inline above the Activity box.
                         QuestionPanel(
                             shown = agent?.let { state.shownQuestionsFor(it.id) }.orEmpty(),

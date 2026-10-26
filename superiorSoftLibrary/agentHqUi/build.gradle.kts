@@ -125,6 +125,15 @@ tasks.register<JavaExec>("runSmoke") {
     jvmArgs(agentHqJvmCaps) // PERF-2
 }
 
+// GAP-006b: dev tool, PNGs of the chat pane's Start session / Apply-Cancel / Resume states (stub daemon, temp state).
+tasks.register<JavaExec>("runStartSessionShots") {
+    group = "application"
+    mainClass.set("com.superiorsoftllc.agenthq.ui.StartSessionShotsMainKt")
+    classpath = sourceSets["test"].runtimeClasspath
+    jvmArgs(agentHqJvmCaps) // PERF-2
+    args(project.findProperty("shotsOut")?.toString() ?: layout.buildDirectory.dir("start-session-shots").get().asFile.path)
+}
+
 // PLUGINS-1: dev tool, one PNG per tab of every tab strip (stub daemon, temp state). Args: output folder.
 tasks.register<JavaExec>("runTabShots") {
     group = "application"
