@@ -21,7 +21,8 @@ import com.superiorsoftllc.agenthq.session.isBusy
  *
  * Checked on [SessionEvent.Exit] only, never for a kill ([SessionEvent.Exit.killOutcome] set), only for a session with
  * a `pending`/`unreported` [SessionRecord.report] (so unattended, with a `report` trait: D9), at most once per run, and
- * skipped while the session has an open needs-input ask. On a miss: ONE `system` re-prompt mail when the check allows it
+ * skipped while the session has an open needs-input ask or is a ticket worker whose clean turn left its ticket open
+ * (it is waiting, not finished: ticket ef3356ae). On a miss: ONE `system` re-prompt mail when the check allows it
  * and the run exited 0; otherwise (re-prompt off, failed run, re-prompt already used or refused) ONE attention item
  * `unreported` per instance (D10). A later qualifying mail still flips the status to `reported`; the attention item stays
  * until an operator acks it.
@@ -34,6 +35,8 @@ class ReportBackMonitor(
     private val attention: AttentionStore,
     /** The role of an agent profile id, null when no such profile exists. */
     private val agentRole: (String) -> String?,
+    /** True while the ticket of that id is not `done`: its worker's clean end of turn is a wait, and its report is not due yet. */
+    private val ticketOpen: (ticketId: String) -> Boolean = { false },
 ) {
 
     fun onSessionEvent(event: SessionEvent) {
@@ -72,6 +75,9 @@ class ReportBackMonitor(
             ?: return
         // A declared block is communication, not silence: the session is waiting on someone.
         if (mailbox.waiting().any { it.session == session.id }) return
+        // Ticket ef3356ae: a ticket worker that ended a turn cleanly with its ticket open is waiting for its next instruction,
+        // not finished; the report is due when the ticket is done (or the run fails).
+        if (event.code == 0 && session.ticketId?.let(ticketOpen) == true) return
 
         val candidates = mailbox.outbox(session.id).filter { it.sentAt >= session.spawnedAt }
         val found = candidates.firstOrNull { addressedTo(it.to, check.reportTo) && ReportBack.missingFields(it.body, check.fields).isEmpty() }

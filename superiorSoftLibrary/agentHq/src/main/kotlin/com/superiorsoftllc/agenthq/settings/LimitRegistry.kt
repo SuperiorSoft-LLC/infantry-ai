@@ -119,6 +119,11 @@ object LimitRegistry {
         "How long a busy session may print nothing before it is flagged silent (flag only; a provably dead one is ended).",
         zeroMeans = "never flagged",
     )
+    val IDLE_NOTICE_MINUTES = LimitDef(
+        "limits.watchdog.idleNoticeMinutes", 60, "minutes",
+        "How long a ticket worker may wait at rest (turn ended cleanly, ticket open, no mail to or from it) before its starter gets one note that it is waiting.",
+        zeroMeans = "never noted",
+    )
 
     /** Ticket 3b30398d: the process-watch pass (ROGUE-1 ledger, CPU sampling), read before every pass. */
     val PROCESS_WATCH_INTERVAL_SECONDS = LimitDef(
@@ -130,7 +135,7 @@ object LimitRegistry {
     val ALL: List<LimitDef> = listOf(
         MAX_PER_POD, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
-        TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES,
+        TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, IDLE_NOTICE_MINUTES,
         PROCESS_WATCH_INTERVAL_SECONDS,
     )
 

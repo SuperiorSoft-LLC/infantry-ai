@@ -83,7 +83,6 @@ com/superiorsoftllc/agenthq/issues/IssueStore.kt:SUMMARY_MAX|pending S2-S4 (not 
 com/superiorsoftllc/agenthq/keystore/Keystore.kt:MAX_LENGTH|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/agenthq/mailbox/FinishNoticeMonitor.kt:OUTPUT_LINES|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/agenthq/mailbox/FinishNoticeMonitor.kt:REPEAT_WINDOW_MS|pending S2-S4 (not yet routed through LimitRegistry)
-com/superiorsoftllc/agenthq/mailbox/FinishNoticeMonitor.kt:RESUME_GRACE_MS|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/agenthq/mailbox/FinishNoticeMonitor.kt:TAIL_LINES|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/agenthq/mailbox/MailStore.kt:ABSENT_LOOK_MS|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/agenthq/mailbox/MailStore.kt:LOOK_POLL_MS|pending S2-S4 (not yet routed through LimitRegistry)

@@ -241,9 +241,12 @@ Team (scoped to your project):
   then stop. Same wording for claude, opencode and pi workers; pinned by `TicketContextComposerTest`.
 - AUTOMATIC FINISH NOTICE: whatever the worker does, the daemon (`FinishNoticeMonitor`) mails the ticket's starter
   when the worker's run ends: subject `[AUTOMATIC] ...` with ticket id and title, status, worker session, branch, last
-  commit, exit code and the last lines of output. A non-zero exit, or a run that ends with the ticket not `done`, is
-  `[AUTOMATIC FAILURE]` and always sent. A clean finish is suppressed when the worker already mailed the starter
-  itself (its own report is richer). One notice per run; an operator kill sends none.
+  commit, exit code and the last lines of output. A crash, a non-zero exit or a kill is `[AUTOMATIC FAILURE]` (one per
+  ticket per 15 min). A clean finish (ticket `done`) is suppressed when the worker already mailed the starter itself
+  (its own report is richer). A clean end of turn with the ticket still open is NOT a failure: the worker is waiting
+  and nothing is sent; only after `limits.watchdog.idleNoticeMinutes` (default 60, 0 = never) at rest with no mail to
+  or from it does the starter get ONE calm `[AUTOMATIC] ticket ... is waiting for instructions` note per idle period.
+  Such a turn is not checked for REPORT BACK either (the report is due when the ticket is done).
 - The commands are scoped to the agent's own project: the CLI reads the project from its environment.
 - The block is composed once per ticket start and appears exactly once in the prompt.
 - ASK-1: `agenthq ask --recommend` is the non-blocking owner question (section 0, "Ask the owner a question"). Exit 0
