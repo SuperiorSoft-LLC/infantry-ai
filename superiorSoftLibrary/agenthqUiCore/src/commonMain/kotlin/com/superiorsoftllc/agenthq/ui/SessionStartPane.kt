@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -61,13 +62,14 @@ fun SessionStartPane(action: SessionPaneAction, onApply: (StartPlan) -> Unit, on
 private fun StartCard(plan: StartPlan, onApply: () -> Unit, onCancel: () -> Unit) {
     Column(
         Modifier.widthIn(max = 460.dp)
-            .border(1.dp, Palette.Muted.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+            .background(Palette.Raised, RoundedCornerShape(8.dp))
+            .border(1.dp, Palette.Border, RoundedCornerShape(8.dp))
             .padding(14.dp)
             .testTag(START_CARD_TAG),
     ) {
         Text(
             plan.ticketId?.let { "Start ticket ${it.takeLast(8)}${plan.ticketTitle?.let { t -> ": $t" } ?: ""}" } ?: "Start this session",
-            fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+            color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
         )
         Spacer(Modifier.padding(top = 6.dp))
         Setting("Role", plan.role ?: "-")
@@ -87,6 +89,6 @@ private fun StartCard(plan: StartPlan, onApply: () -> Unit, onCancel: () -> Unit
 private fun Setting(label: String, value: String) {
     Row(Modifier.padding(vertical = 2.dp)) {
         Text(label, color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.width(72.dp))
-        Text(value, fontSize = 12.sp)
+        Text(value, color = Palette.Text, fontSize = 12.sp)
     }
 }

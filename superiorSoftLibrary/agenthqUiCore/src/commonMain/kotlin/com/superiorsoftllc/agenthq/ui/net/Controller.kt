@@ -633,14 +633,20 @@ class Controller(
     suspend fun startSession(plan: com.superiorsoftllc.agenthq.ui.model.StartPlan, message: String = ""): CommandResult {
         val text = message.trim()
         val ticketId = plan.ticketId ?: return prompt(plan.sessionId, text.ifBlank { com.superiorsoftllc.agenthq.ui.model.START_DEFAULT_PROMPT })
+        // An earlier start answer still on the ticket must not be taken for this one's.
+        _state.update { s -> s.copy(tickets = s.tickets.map { if (it.id == ticketId) it.copy(start = null) else it }) }
         val r = moveTicket(ticketId, com.superiorsoftllc.agenthq.ui.protocol.TicketColumns.IN_PROGRESS)
         if (r !is CommandResult.Sent) return r
-        // The answer is the ticket frame: a new worker, or a refusal (shown by the board's own start handling).
-        val worker = withTimeoutOrNull(START_FOLLOW_MS) {
+        // The answer is the ticket frame: a new worker, or a refusal, which the pane shows: the ticket did not start.
+        val answered = withTimeoutOrNull(START_FOLLOW_MS) {
             _state.map { s -> s.tickets.firstOrNull { it.id == ticketId } to s.agents.keys }
                 .first { (t, agents) -> t?.start?.ok == false || (t?.sessionId != null && t.sessionId != plan.sessionId && t.sessionId in agents) }
-                .first?.takeIf { it.start?.ok != false }?.sessionId
+                .first
         }
+        answered?.start?.takeIf { !it.ok && it.reason != "queued" }?.let { refused ->
+            return report(CommandResult.Refused("ticket ${ticketId.takeLast(8)} did not start: ${refused.detail ?: refused.reason}"))
+        }
+        val worker = answered?.sessionId?.takeIf { answered.start?.ok != false }
         if (worker != null) {
             select(worker)
             if (text.isNotEmpty()) queueMessage(worker, text)
