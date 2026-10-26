@@ -36,6 +36,7 @@ JSON has no comments, so the fields are explained here. Unknown keys are ignored
 | `routes` | no | The daemon routes the `daemon` service may call, as `METHOD /path` (for example `GET /health`). Any other route is refused. |
 | `events` | no | The event names the module may publish or observe (for example `tab.opened`). |
 | `tabs` | no | `[{ "id": "...", "container": "center" or "right" }]`. These are the tabs the module registers. A registered tab that is not declared here is refused. |
+| `panels` | no | `[{ "id": "...", "panel": "left" or "right" }]`. These are the side panel sections the module registers with `registrar.panel(PanelProvider(...))`. A section stacks by `order`: on the left, below 100 sits above the agents list and 100 or more below it; on the right, the same split around the tab strip. A registered section that is not declared here is refused. For a tab in the right panel's strip, declare a tab with `"container": "right"` instead. |
 | `interceptors` | no | `[{ "target": "<tab id>", "name": "...", "kind": "around" }]`. Each one is a hook on a tab's title or content, registered under `name`. |
 | `observers` | no | `[{ "event": "...", "name": "..." }]`. Each one is a listener registered under `name`. |
 | `blocks` | no | `[{ "slot": "center.top", "name": "...", "order": 0 }]`. Each one adds content to a named slot. |

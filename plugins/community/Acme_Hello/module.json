@@ -4,7 +4,7 @@
   "apiVersion": 1,
   "author": "Acme (example)",
   "license": "NOASSERTION",
-  "description": "Example community module: a Hello tab, an interceptor on the core Epics tab, an observer of tab.opened, and an override of the core Git tab that the trust rules refuse.",
+  "description": "Example community module: a Hello tab, an interceptor on the core Epics tab, a tab in the right panel, an observer of tab.opened, and an override of the core Git tab that the trust rules refuse.",
   "tier": "core",
   "dependencies": [{ "id": "Infantry_Cli", "version": ">=1.0 <2" }],
   "entry": "com.acme.hello.HelloPlugin",
@@ -14,7 +14,8 @@
   "services": ["events", "storage", "daemon", "notifications"],
   "tabs": [
     { "id": "acme.hello", "container": "center" },
-    { "id": "acme.git", "container": "center" }
+    { "id": "acme.git", "container": "center" },
+    { "id": "acme.hello.side", "container": "right" }
   ],
   "preferences": [
     { "replace": "infantry.git", "with": "acme.git" }

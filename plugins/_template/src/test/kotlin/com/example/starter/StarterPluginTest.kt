@@ -5,6 +5,7 @@ import com.superiorsoftllc.agenthq.plugin.api.Tier
 import com.superiorsoftllc.agenthq.plugin.host.PluginJson
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.plugin.NoPluginServices
+import com.superiorsoftllc.agenthq.ui.plugin.Panels
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import com.superiorsoftllc.agenthq.ui.plugin.registerModule
@@ -18,12 +19,13 @@ class StarterPluginTest {
     private val manifest = PluginJson.decodeFromString(ModuleManifest.serializer(), File("module.json").readText())
 
     @Test
-    fun `the tab and the interceptor are declared, registered and bound`() {
+    fun `the tab, the panel section and the interceptor are declared, registered and bound`() {
         val module = registerModule(manifest, Tier.COMMUNITY, NoPluginServices, StarterPlugin())
         val factory = TabFactory(listOf(module))
         assertEquals(emptyList(), factory.problems)
         val tab = factory.tabs(TabContainers.CENTER).single()
         assertEquals("example.starter", tab.id)
         assertEquals("Starter (0)", factory.title(tab, AppState()), "the interceptor wraps the title")
+        assertEquals(listOf("example.starter.side"), factory.panels(Panels.LEFT).map { it.id })
     }
 }

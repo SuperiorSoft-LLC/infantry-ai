@@ -10,6 +10,7 @@ import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
  */
 object CoreModules {
     val all: List<AgentHqModule> = listOf(
+        InfantryAgents,
         InfantryCli,
         InfantryPods,
         InfantryRoles,
