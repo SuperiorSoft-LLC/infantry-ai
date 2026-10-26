@@ -1203,12 +1203,15 @@ class AgentHqDaemon(
             val reportBack = com.superiorsoftllc.agenthq.mailbox.ReportBackMonitor(
                 sessions = manager, mailbox = mailbox, send = mail::send, attention = attention,
                 agentRole = { id -> agents.get(id)?.role },
+                ticketOpen = { id -> store.transaction { store.tickets.get(id) }?.let { it.status != com.superiorsoftllc.agenthq.protocol.TicketStatus.DONE } == true },
             )
             // Tells a ticket's starter when its worker's run ends, so a silent or crashed worker never stalls the pipeline.
+            // Ticket ef3356ae: a clean end of turn is waiting, not failing; one calm note after limits.watchdog.idleNoticeMinutes.
             val finishNotice = com.superiorsoftllc.agenthq.mailbox.FinishNoticeMonitor(
                 sessions = manager, mailbox = mailbox, send = mail::send,
                 ticketOf = { id -> store.transaction { store.tickets.get(id) } },
-            )
+                idleNoticeMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.IDLE_NOTICE_MINUTES), LimitRegistry.IDLE_NOTICE_MINUTES) },
+            ).also { it.start() }
             // PIPELINE-WATCHDOG: derives per-agent pending/stalled/quiet state, nudges, then tells the PM and the owner.
             val agentWatchdog = com.superiorsoftllc.agenthq.mailbox.AgentWatchdog(
                 sessions = manager, mailbox = mailbox, send = mail::send, attention = attention,
@@ -1449,7 +1452,7 @@ class AgentHqDaemon(
                 ownerQuestions = ownerQuestions,
                 handover = handover,
                 processWatch = processWatch,
-                background = listOf(AutoCloseable { usageRefresher.stop() }, AutoCloseable { agentWatchdog.close() }),
+                background = listOf(AutoCloseable { usageRefresher.stop() }, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }),
                 processWatchScheduler = processWatchScheduler,
             )
         }

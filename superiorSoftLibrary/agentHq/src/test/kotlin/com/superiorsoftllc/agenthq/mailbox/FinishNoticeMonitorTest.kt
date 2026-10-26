@@ -5,16 +5,22 @@ import com.superiorsoftllc.agenthq.session.BgJob
 import com.superiorsoftllc.agenthq.session.KillOutcome
 import com.superiorsoftllc.agenthq.session.SessionEvent
 import com.superiorsoftllc.agenthq.session.SessionManager
+import com.superiorsoftllc.agenthq.session.SessionState
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
-/** False "[AUTOMATIC FAILURE]" notices: a waiting worker is silent, a real failure is sent once per window. */
+/**
+ * Ticket ef3356ae: a worker that ends its turn cleanly and waits is never a failure; it gets one calm note per idle
+ * period after the idle limit. A real failure is sent once per window.
+ */
 class FinishNoticeMonitorTest {
-    private class Rig {
+    private class Rig(idleMinutes: Long = IDLE_MIN) {
+        var now = System.currentTimeMillis() + 1_000
         val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = true), tempSessionStore(), killGraceMs = 50)
-        val mailbox = Mailbox(MemMailStore(), MailLimits())
+        val mailbox = Mailbox(MemMailStore(), MailLimits(), clock = { now })
         val sent = mutableListOf<MailSendRequest>()
-        var now = 10_000_000L
         val sessionId = manager.startNew("work", ticketId = "t1").id
         var owner = sessionId
         var status = "in_progress"
@@ -22,43 +28,115 @@ class FinishNoticeMonitorTest {
             manager, mailbox, send = { r -> sent += r; mailbox.send(r) },
             ticketOf = { TicketRow(id = "t1", title = "T", status = status, position = 0, createdAt = 1, updatedAt = 1, sessionId = owner, startedBy = "pm") },
             commitOf = { null }, clock = { now },
-        ).also { now += FinishNoticeMonitor.RESUME_GRACE_MS + 1 }
+            idleNoticeMs = { if (idleMinutes == 0L) Long.MAX_VALUE else idleMinutes * 60_000L },
+        )
         fun exit(code: Int, session: String = sessionId) = monitor.onSessionEvent(SessionEvent.Exit(session, code))
+        fun minutes(n: Long) { now += n * 60_000L }
+        /** A further run of the worker (the mail woke it), back at rest. */
+        fun turn() {
+            val before = manager.get(sessionId)!!.runCount
+            manager.resume(sessionId, "next")
+            val deadline = System.currentTimeMillis() + 10_000
+            while (manager.get(sessionId)!!.let { it.runCount == before || it.state != SessionState.IDLE }) {
+                check(System.currentTimeMillis() < deadline) { "the run did not end" }
+                Thread.sleep(10)
+            }
+        }
+    }
+
+    private fun assertCalm(r: MailSendRequest) {
+        val text = (r.subject.orEmpty() + "\n" + r.body).lowercase()
+        assertFalse(text.contains("failure") || text.contains("failed") || text.contains("did not finish cleanly"), text)
+        assertTrue(r.body.contains("Worker finished its turn and is waiting for instructions (ticket still open)."), r.body)
     }
 
     @Test
-    fun exit_zero_with_a_running_background_task_sends_nothing() {
+    fun a_clean_end_of_turn_with_the_ticket_open_sends_nothing() {
         val r = Rig()
+        r.exit(0)
+        r.exit(0)
+        assertEquals(0, r.sent.size)
+    }
+
+    @Test
+    fun a_waiting_worker_gets_one_calm_note_per_idle_period() {
+        val r = Rig()
+        r.exit(0)
+        r.minutes(IDLE_MIN - 1)
+        r.monitor.sweep()
+        assertEquals(0, r.sent.size)
+        r.minutes(1)
+        r.monitor.sweep()
+        assertEquals(1, r.sent.size)
+        assertEquals("pm", r.sent[0].to)
+        assertCalm(r.sent[0])
+        // More turns and sweeps without mail are the same period: nothing more.
+        r.exit(0)
+        r.minutes(IDLE_MIN * 3)
+        r.monitor.sweep()
+        assertEquals(1, r.sent.size)
+        // The PM mails it, it ends another turn: a new period, one more note once that one is long enough.
+        r.mailbox.send(MailSendRequest(from = "pm", to = r.sessionId, subject = "hold", body = "wait for my go"))
+        r.minutes(1)
+        r.turn()
+        r.exit(0)
+        r.minutes(IDLE_MIN)
+        r.monitor.sweep()
+        r.monitor.sweep()
+        assertEquals(2, r.sent.size)
+        assertCalm(r.sent[1])
+    }
+
+    @Test
+    fun no_note_to_a_pm_that_just_mailed_the_worker() {
+        val r = Rig()
+        r.exit(0)
+        r.minutes(IDLE_MIN - 5)
+        r.mailbox.send(MailSendRequest(from = "pm", to = r.sessionId, subject = "hold", body = "stay on hold"))
+        r.minutes(10)
+        r.monitor.sweep()
+        assertEquals(0, r.sent.size)
+    }
+
+    @Test
+    fun a_running_background_task_keeps_the_worker_out_of_the_idle_note() {
+        val r = Rig()
+        r.exit(0)
         r.manager.bgJobBeat(r.sessionId, BgJob(id = "j", label = "gradle", pid = 1, startedAt = 1))
-        r.exit(0)
+        r.minutes(IDLE_MIN * 2)
+        r.monitor.sweep()
         assertEquals(0, r.sent.size)
     }
 
     @Test
-    fun exit_zero_after_a_plan_mail_waiting_for_go_sends_nothing() {
+    fun an_idle_limit_of_zero_never_notes() {
+        val r = Rig(idleMinutes = 0)
+        r.exit(0)
+        r.minutes(100_000)
+        r.monitor.sweep()
+        assertEquals(0, r.sent.size)
+    }
+
+    @Test
+    fun a_done_ticket_sends_the_finished_notice_and_no_idle_note() {
         val r = Rig()
-        r.mailbox.send(MailSendRequest(from = r.sessionId, to = "pm", subject = "plan", body = "go?"))
+        r.status = "done"
         r.exit(0)
-        assertEquals(0, r.sent.size)
+        assertEquals(1, r.sent.size)
+        assertEquals(true, r.sent[0].subject!!.startsWith("[AUTOMATIC] ticket t1 finished"))
+        assertFalse(r.sent[0].body.contains("FAILURE"))
+        r.minutes(IDLE_MIN * 2)
+        r.monitor.sweep()
+        assertEquals(1, r.sent.size)
     }
 
     @Test
-    fun exit_zero_right_after_a_daemon_start_sends_nothing() {
-        val r = Rig()
-        r.now -= FinishNoticeMonitor.RESUME_GRACE_MS
-        r.exit(0)
-        assertEquals(0, r.sent.size)
-    }
-
-    @Test
-    fun non_zero_exit_sends_one_and_exit_zero_with_nothing_running_still_fails() {
+    fun a_non_zero_exit_is_a_failure() {
         val r = Rig()
         r.exit(1)
         assertEquals(1, r.sent.size)
         assertEquals(true, r.sent[0].subject!!.startsWith("[AUTOMATIC FAILURE]"))
-        val q = Rig()
-        q.exit(0)
-        assertEquals(1, q.sent.size)
+        assertEquals(true, r.sent[0].body.contains("FAILURE: exit code 1"))
     }
 
     @Test
@@ -98,5 +176,9 @@ class FinishNoticeMonitorTest {
         q.manager.kill(q.sessionId, force = true, by = "done-worker reaper")
         q.monitor.onSessionEvent(SessionEvent.Exit(q.sessionId, null, KillOutcome.FORCED))
         assertEquals(0, r.sent.size + q.sent.size)
+    }
+
+    private companion object {
+        const val IDLE_MIN = 60L
     }
 }

@@ -39,6 +39,7 @@ class ReportBackDaemonTest {
     @Test
     fun aReportMailToThePmMarksTheSessionReported() = withDaemon { fixture, runner ->
         val sessionId = startTicket(fixture)
+        finishTicket(fixture, sessionId)
         assertEquals(SessionReport(traitId = "report-back"), report(fixture, sessionId), "pending from spawn")
 
         val mailId = mailAs(fixture, sessionId, to = "pm", body = FULL_REPORT)
@@ -53,6 +54,7 @@ class ReportBackDaemonTest {
     @Test
     fun aMissingReportIsRepromptedOnceThenTheReportCounts() = withDaemon { fixture, runner ->
         val sessionId = startTicket(fixture)
+        finishTicket(fixture, sessionId)
         runner.release(0) // silence
 
         val reprompt = runner.awaitProcess(fixture, 1)
@@ -75,6 +77,7 @@ class ReportBackDaemonTest {
     @Test
     fun stillMissingAfterTheRepromptRaisesExactlyOneAttentionItem() = withDaemon { fixture, runner ->
         val sessionId = startTicket(fixture)
+        finishTicket(fixture, sessionId)
         runner.release(0)
         runner.awaitProcess(fixture, 1)
         // The closest mail is a status note to the pm with only some labels.
@@ -98,6 +101,20 @@ class ReportBackDaemonTest {
         assertEquals(1, unreported(fixture).size)
     }
 
+    /** Ticket ef3356ae: a clean turn with the ticket still open is a worker waiting for its next instruction, not a miss. */
+    @Test
+    fun aCleanTurnWithTheTicketOpenIsWaitingNotUnreported() = withDaemon { fixture, runner ->
+        val sessionId = startTicket(fixture)
+        mailAs(fixture, sessionId, to = "pm", body = "plan ready, waiting for your go")
+        runner.release(0)
+
+        fixture.await(what = "the run to end") { fixture.daemon.manager.get(sessionId)?.let { it.runCount == 1 && it.state == SessionState.IDLE } == true }
+        Thread.sleep(200)
+        assertEquals(SessionReport(traitId = "report-back"), report(fixture, sessionId), "still pending: the report is due when the ticket is done")
+        assertEquals(1, runner.processes.size, "no re-prompt run")
+        assertTrue(unreported(fixture).isEmpty(), "a waiting worker never needs attention")
+    }
+
     @Test
     fun aKilledRunIsNeverChecked() = withDaemon { fixture, runner ->
         val sessionId = startTicket(fixture)
@@ -113,6 +130,7 @@ class ReportBackDaemonTest {
     @Test
     fun aReportToAnotherRoleIsNotAReport() = withDaemon { fixture, runner ->
         val sessionId = startTicket(fixture)
+        finishTicket(fixture, sessionId)
         mailAs(fixture, sessionId, to = "qa", body = FULL_REPORT)
         runner.release(0)
 
@@ -124,6 +142,7 @@ class ReportBackDaemonTest {
     @Test
     fun anUnfilledPlaceholderIsNotAValue() = withDaemon { fixture, runner ->
         val sessionId = startTicket(fixture)
+        finishTicket(fixture, sessionId)
         mailAs(fixture, sessionId, to = "pm", body = FULL_REPORT.replace("commit: abc123", "commit: <sha or none>"))
         runner.release(0)
 
@@ -196,6 +215,12 @@ class ReportBackDaemonTest {
         val sessionId = started.sessionId!!
         assertTrue(fixture.daemon.manager.get(sessionId)!!.unattended)
         return sessionId
+    }
+
+    /** The worker's ticket moved to done, as a worker does before its last turn ends: its report is due now. */
+    private fun finishTicket(fixture: DaemonFixture, sessionId: String) {
+        val ticketId = fixture.daemon.manager.get(sessionId)!!.ticketId!!
+        fixture.client.moveTicket(ticketId, TicketStatus.DONE)
     }
 
     /** Sends a mail AS [sessionId] through the real `mail_send` frame and returns the stored message id. */
