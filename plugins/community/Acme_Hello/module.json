@@ -1,0 +1,28 @@
+{
+  "name": "Acme_Hello",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "author": "Acme (example)",
+  "license": "NOASSERTION",
+  "description": "Example community module: a Hello tab, an interceptor on the core Epics tab, an observer of tab.opened, and an override of the core Git tab that the trust rules refuse.",
+  "tier": "core",
+  "sequence": ["Infantry_Cli"],
+  "entry": "com.acme.hello.HelloPlugin",
+  "jar": "build/libs/Acme_Hello.jar",
+  "routes": ["GET /health"],
+  "events": ["tab.opened"],
+  "services": ["events", "storage", "daemon", "notifications"],
+  "tabs": [
+    { "id": "acme.hello", "container": "center" },
+    { "id": "acme.git", "container": "center" }
+  ],
+  "preferences": [
+    { "replace": "infantry.git", "with": "acme.git" }
+  ],
+  "interceptors": [
+    { "target": "infantry.epics", "name": "hi", "kind": "around" }
+  ],
+  "observers": [
+    { "event": "tab.opened", "name": "count" }
+  ]
+}
