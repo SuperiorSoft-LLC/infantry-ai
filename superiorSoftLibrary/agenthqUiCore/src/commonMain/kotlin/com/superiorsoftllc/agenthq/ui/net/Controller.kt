@@ -561,6 +561,24 @@ class Controller(
         _state.update { it.copy(dismissedQuestions = emptySet()) }
     }
 
+    /**
+     * BUG 14ca3437: show one session's chat. Selects it and, in a compact window, closes the drawers (list or right
+     * panel) that would cover the chat; the wide layout keeps its panels.
+     */
+    fun openSession(id: String) = _state.update { s ->
+        s.copy(selectedId = id, panels = if (s.panels.compactWindow) s.panels.showCompact(CompactScreen.OUTPUT) else s.panels)
+    }
+
+    /**
+     * BUG 14ca3437: open a pending question where it is answered, its asker's chat (the panel is inline there): brings the
+     * questions back ([showQuestions]) and opens the asking session when it is in the list ([openSession]).
+     */
+    fun openQuestion(questionId: String) {
+        showQuestions()
+        val sessionId = _state.value.questions.firstOrNull { it.id == questionId }?.sessionId ?: return
+        if (_state.value.agents.containsKey(sessionId)) openSession(sessionId)
+    }
+
     /** PROMPT-2: hide a question card in this window only (Esc); the prompt stays open on the daemon until its timeout. */
     fun dismissPrompt(promptId: String) {
         _state.update { it.copy(dismissedPrompts = it.dismissedPrompts + promptId) }
