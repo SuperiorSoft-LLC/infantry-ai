@@ -1,8 +1,9 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.RolesPane
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleManifest
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
 import com.superiorsoftllc.agenthq.ui.plugin.circle
@@ -10,10 +11,13 @@ import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
 
 /** PLUGINS-1: core module Infantry_Roles. Roles: who does what, and starting a session as one. */
 val InfantryRoles = AgentHqModule(
-    ModuleManifest(name = "Infantry_Roles", version = "1.0.0", author = "Infantry AI", description = "Roles: who does what, and starting a session as one."),
+    ModuleManifest(
+        name = "Infantry_Roles", version = "1.0.0", author = "Infantry AI", description = "Roles: who does what, and starting a session as one.",
+        tabs = listOf(TabDeclaration("infantry.roles", TabContainers.CENTER)),
+    ),
     listOf(
         TabProvider(
-            id = "infantry.roles", module = "Infantry_Roles", container = TabContainers.CENTER, order = 30,
+            id = "infantry.roles", container = TabContainers.CENTER, order = 30,
             title = { "Roles  ^5" },
             icon = tabIcon(
                 "roles",

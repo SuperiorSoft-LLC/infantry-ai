@@ -4,5 +4,11 @@
   "apiVersion": 1,
   "author": "Infantry AI",
   "description": "The selected agent's chat transcript.",
-  "sequence": []
+  "sequence": [],
+  "tabs": [
+    {
+      "id": "infantry.cli",
+      "container": "center"
+    }
+  ]
 }

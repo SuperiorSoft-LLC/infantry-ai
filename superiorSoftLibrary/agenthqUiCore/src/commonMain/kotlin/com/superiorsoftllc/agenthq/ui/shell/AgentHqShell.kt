@@ -32,6 +32,7 @@ fun AgentHqShell(host: PlatformHost, controller: Controller? = null) {
             pickFile = if (host.canPickFiles) host::pickFile else null,
             logs = host.logsDir?.let { dir -> LogsFolder(dir) { host.openFolder(dir) } },
             updates = host.updates,
+            tabs = host.tabFactory,
         )
     }
 }

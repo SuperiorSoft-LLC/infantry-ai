@@ -4,5 +4,11 @@
   "apiVersion": 1,
   "author": "Infantry AI",
   "description": "Epics and their tickets.",
-  "sequence": []
+  "sequence": [],
+  "tabs": [
+    {
+      "id": "infantry.epics",
+      "container": "center"
+    }
+  ]
 }

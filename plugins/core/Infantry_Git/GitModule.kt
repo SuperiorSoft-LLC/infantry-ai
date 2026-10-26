@@ -1,8 +1,9 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.ProjectGitPane
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleManifest
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
 import com.superiorsoftllc.agenthq.ui.plugin.circle
@@ -10,10 +11,13 @@ import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
 
 /** PLUGINS-1: core module Infantry_Git. The project's git state. */
 val InfantryGit = AgentHqModule(
-    ModuleManifest(name = "Infantry_Git", version = "1.0.0", author = "Infantry AI", description = "The project's git state."),
+    ModuleManifest(
+        name = "Infantry_Git", version = "1.0.0", author = "Infantry AI", description = "The project's git state.",
+        tabs = listOf(TabDeclaration("infantry.git", TabContainers.CENTER)),
+    ),
     listOf(
         TabProvider(
-            id = "infantry.git", module = "Infantry_Git", container = TabContainers.CENTER, order = 90,
+            id = "infantry.git", container = TabContainers.CENTER, order = 90,
             title = { "Git" },
             icon = tabIcon(
                 "git",

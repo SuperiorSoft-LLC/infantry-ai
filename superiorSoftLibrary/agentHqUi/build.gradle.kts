@@ -132,6 +132,16 @@ tasks.register<JavaExec>("runTabShots") {
     classpath = sourceSets["test"].runtimeClasspath
     jvmArgs(agentHqJvmCaps) // PERF-2
     args(project.findProperty("tabShotsOut")?.toString() ?: layout.buildDirectory.dir("tab-shots").get().asFile.path)
+    if (project.hasProperty("tabShotsDemoLock")) args("demo-lock")
+}
+
+// PLUGINS-1: the dev runs read the repository's plugins/ folder (core + community, modules.json) and first build every
+// community module that has sources. settings.gradle.kts finds those by scanning plugins/community; none is named here.
+val repoPluginsRoot = rootProject.file("plugins")
+val communityModuleJars = rootProject.subprojects.filter { it.path.startsWith(":plugins:community:") }.map { "${it.path}:jar" }
+tasks.matching { it.name in setOf("run", "runRealDaemon", "runTabShots") }.configureEach {
+    (this as? JavaExec)?.systemProperty("agenthq.plugins.root", repoPluginsRoot.absolutePath)
+    dependsOn(communityModuleJars)
 }
 
 // U2: the UI tests boot the real daemon in-process, and the client now asks for `limits` on connect. Keep the

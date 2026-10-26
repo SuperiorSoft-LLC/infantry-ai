@@ -4,5 +4,11 @@
   "apiVersion": 1,
   "author": "Infantry AI",
   "description": "Pod nodes waiting for review.",
-  "sequence": []
+  "sequence": [],
+  "tabs": [
+    {
+      "id": "infantry.review",
+      "container": "right"
+    }
+  ]
 }

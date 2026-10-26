@@ -1,18 +1,22 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.UsagePane
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleManifest
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
 import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
 
 /** PLUGINS-1: core module Infantry_Usage. Plan usage and limits. */
 val InfantryUsage = AgentHqModule(
-    ModuleManifest(name = "Infantry_Usage", version = "1.0.0", author = "Infantry AI", description = "Plan usage and limits."),
+    ModuleManifest(
+        name = "Infantry_Usage", version = "1.0.0", author = "Infantry AI", description = "Plan usage and limits.",
+        tabs = listOf(TabDeclaration("infantry.usage", TabContainers.RIGHT)),
+    ),
     listOf(
         TabProvider(
-            id = "infantry.usage", module = "Infantry_Usage", container = TabContainers.RIGHT, order = 40,
+            id = "infantry.usage", container = TabContainers.RIGHT, order = 40,
             title = { "Usage ^7" },
             icon = tabIcon(
                 "usage",

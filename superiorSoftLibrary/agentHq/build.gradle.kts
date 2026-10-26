@@ -61,6 +61,8 @@ dependencies {
     // Everything here is already in the version catalog via :superiorSoftService -- no new
     // coordinates are introduced.
     implementation(libs.kotlinx.coroutines.core)
+    // PLUGINS-1: the module manifest and loading rules, shared with the desktop UI.
+    implementation(project(":superiorSoftLibrary:agenthqPlugins"))
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)

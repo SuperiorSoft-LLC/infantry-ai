@@ -1,18 +1,22 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.PodsPane
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleManifest
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
 import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
 
 /** PLUGINS-1: core module Infantry_Pods. Pods: submit a goal, watch its nodes. */
 val InfantryPods = AgentHqModule(
-    ModuleManifest(name = "Infantry_Pods", version = "1.0.0", author = "Infantry AI", description = "Pods: submit a goal, watch its nodes."),
+    ModuleManifest(
+        name = "Infantry_Pods", version = "1.0.0", author = "Infantry AI", description = "Pods: submit a goal, watch its nodes.",
+        tabs = listOf(TabDeclaration("infantry.pods", TabContainers.CENTER)),
+    ),
     listOf(
         TabProvider(
-            id = "infantry.pods", module = "Infantry_Pods", container = TabContainers.CENTER, order = 20,
+            id = "infantry.pods", container = TabContainers.CENTER, order = 20,
             title = { "Pods  ^2" },
             icon = tabIcon(
                 "pods",

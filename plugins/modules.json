@@ -1,0 +1,10 @@
+{
+  "folders": [
+    { "path": "core", "tier": "core" },
+    { "path": "community", "tier": "community" }
+  ],
+  "modules": {},
+  "demoLock": {
+    "allowRoutes": ["GET /health"]
+  }
+}

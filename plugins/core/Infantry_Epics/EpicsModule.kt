@@ -1,18 +1,22 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.EpicsPane
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleManifest
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
 import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
 
 /** PLUGINS-1: core module Infantry_Epics. Epics and their tickets. */
 val InfantryEpics = AgentHqModule(
-    ModuleManifest(name = "Infantry_Epics", version = "1.0.0", author = "Infantry AI", description = "Epics and their tickets."),
+    ModuleManifest(
+        name = "Infantry_Epics", version = "1.0.0", author = "Infantry AI", description = "Epics and their tickets.",
+        tabs = listOf(TabDeclaration("infantry.epics", TabContainers.CENTER)),
+    ),
     listOf(
         TabProvider(
-            id = "infantry.epics", module = "Infantry_Epics", container = TabContainers.CENTER, order = 60,
+            id = "infantry.epics", container = TabContainers.CENTER, order = 60,
             title = { "Epics" },
             icon = tabIcon(
                 "epics",

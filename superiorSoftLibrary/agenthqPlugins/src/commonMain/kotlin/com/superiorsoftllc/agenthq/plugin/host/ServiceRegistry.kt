@@ -1,0 +1,107 @@
+package com.superiorsoftllc.agenthq.plugin.host
+
+import com.superiorsoftllc.agenthq.plugin.api.DaemonAccess
+import com.superiorsoftllc.agenthq.plugin.api.DaemonReply
+import com.superiorsoftllc.agenthq.plugin.api.EventBus
+import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.ModulesConfig
+import com.superiorsoftllc.agenthq.plugin.api.PluginEvent
+import com.superiorsoftllc.agenthq.plugin.api.PluginServices
+import com.superiorsoftllc.agenthq.plugin.api.ServiceKey
+import com.superiorsoftllc.agenthq.plugin.api.Services
+import com.superiorsoftllc.agenthq.plugin.api.Tier
+
+/**
+ * PLUGINS-1: the host's service registry, the extension point for platform services. A platform registers a factory
+ * per service (built per module, so storage and settings are that module's own); [forModule] hands a module only the
+ * services the gate lets through.
+ */
+class ServiceRegistry(private val config: ModulesConfig = ModulesConfig(), private val log: (String) -> Unit = {}) {
+    private val factories = LinkedHashMap<String, (ModuleStatus) -> Any>()
+
+    fun <T : Any> provide(key: ServiceKey<T>, factory: (ModuleStatus) -> T) {
+        factories[key.id] = factory
+    }
+
+    fun provided(): Set<String> = factories.keys
+
+    fun forModule(module: ModuleStatus): PluginServices = object : PluginServices {
+        private val built = HashMap<String, Any>()
+        override val module = module.name
+
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : Any> get(key: ServiceKey<T>): T? {
+            val manifest = module.manifest ?: return null
+            val refusal = ServiceGate.refusal(key.id, manifest, module.tier, config)
+            if (refusal != null) {
+                log("[plugins] ${module.name}: service ${key.id} refused: $refusal")
+                return null
+            }
+            val factory = factories[key.id] ?: return null
+            return built.getOrPut(key.id) { factory(module) } as T
+        }
+    }
+}
+
+/** The service rules: declared in module.json, not denied by the owner, and for a community module, allowed. */
+object ServiceGate {
+    fun refusal(id: String, manifest: ModuleManifest, tier: Tier, config: ModulesConfig): String? {
+        val setting = config.setting(manifest.name)
+        return when {
+            id !in manifest.services -> "not declared in module.json"
+            id in setting.deny -> "denied in modules.json"
+            tier == Tier.COMMUNITY && id !in setting.allow -> "a community module needs it allowed in modules.json"
+            else -> null
+        }
+    }
+}
+
+/** The daemon rule: a route must be declared, and under the demo lock also allowed by the lock. Null = may call. */
+object RouteGate {
+    fun refusal(route: String, declared: List<String>, demoLock: Boolean, config: ModulesConfig): String? = when {
+        route !in declared -> "route '$route' is not declared in module.json"
+        demoLock && route !in config.demoLock.allowRoutes -> "route '$route' is not allowed under the demo lock"
+        else -> null
+    }
+
+    /** Wraps a platform's raw daemon call in the rule for one module. */
+    fun gated(manifest: ModuleManifest, demoLock: Boolean, config: ModulesConfig, send: suspend (route: String, body: String?) -> DaemonReply) =
+        DaemonAccess { route, body ->
+            refusal(route, manifest.routes, demoLock, config)?.let { DaemonReply.Refused(it) } ?: send(route, body)
+        }
+}
+
+/** A plain in-process event bus. Observers run on the publisher's thread; one that throws is skipped, not fatal. */
+class SimpleEventBus(private val log: (String) -> Unit = {}) : EventBus {
+    private val observers = mutableListOf<Pair<String, (PluginEvent) -> Unit>>()
+
+    override fun publish(event: PluginEvent) {
+        val now = observers.filter { it.first == event.name }
+        for ((_, o) in now) runCatching { o(event) }.onFailure { log("[plugins] observer of ${event.name} failed: ${it.message}") }
+    }
+
+    override fun subscribe(name: String, observer: (PluginEvent) -> Unit): () -> Unit {
+        val entry = name to observer
+        observers += entry
+        return { observers.remove(entry) }
+    }
+}
+
+/** One module's view of the bus: it may publish and observe only the events it declared. */
+class GatedEventBus(private val bus: EventBus, private val module: String, private val declared: List<String>, private val log: (String) -> Unit = {}) : EventBus {
+    override fun publish(event: PluginEvent) {
+        if (event.name in declared) bus.publish(event) else log("[plugins] $module: publish ${event.name} refused: not declared")
+    }
+
+    override fun subscribe(name: String, observer: (PluginEvent) -> Unit): () -> Unit {
+        if (name !in declared) {
+            log("[plugins] $module: observe $name refused: not declared")
+            return {}
+        }
+        return bus.subscribe(name, observer)
+    }
+}
+
+/** Registers the services every platform has: the event bus (each module sees only its declared events). */
+fun ServiceRegistry.provideEvents(bus: EventBus, log: (String) -> Unit = {}) =
+    provide(Services.EVENTS) { s -> GatedEventBus(bus, s.name, s.manifest?.events.orEmpty(), log) }

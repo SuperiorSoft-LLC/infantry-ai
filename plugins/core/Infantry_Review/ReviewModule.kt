@@ -1,8 +1,9 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.ReviewPane
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleManifest
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
 import com.superiorsoftllc.agenthq.ui.plugin.circle
@@ -10,10 +11,13 @@ import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
 
 /** PLUGINS-1: core module Infantry_Review. Pod nodes waiting for review. */
 val InfantryReview = AgentHqModule(
-    ModuleManifest(name = "Infantry_Review", version = "1.0.0", author = "Infantry AI", description = "Pod nodes waiting for review."),
+    ModuleManifest(
+        name = "Infantry_Review", version = "1.0.0", author = "Infantry AI", description = "Pod nodes waiting for review.",
+        tabs = listOf(TabDeclaration("infantry.review", TabContainers.RIGHT)),
+    ),
     listOf(
         TabProvider(
-            id = "infantry.review", module = "Infantry_Review", container = TabContainers.RIGHT, order = 20,
+            id = "infantry.review", container = TabContainers.RIGHT, order = 20,
             title = { s -> "Review ${s.reviewQueue.size.takeIf { it > 0 }?.let { "($it)" } ?: ""} ^4" },
             icon = tabIcon(
                 "review",

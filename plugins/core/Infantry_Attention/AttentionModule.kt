@@ -1,18 +1,22 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.AttentionPane
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleManifest
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
 import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
 
 /** PLUGINS-1: core module Infantry_Attention. What needs the owner. */
 val InfantryAttention = AgentHqModule(
-    ModuleManifest(name = "Infantry_Attention", version = "1.0.0", author = "Infantry AI", description = "What needs the owner."),
+    ModuleManifest(
+        name = "Infantry_Attention", version = "1.0.0", author = "Infantry AI", description = "What needs the owner.",
+        tabs = listOf(TabDeclaration("infantry.attention", TabContainers.RIGHT)),
+    ),
     listOf(
         TabProvider(
-            id = "infantry.attention", module = "Infantry_Attention", container = TabContainers.RIGHT, order = 30,
+            id = "infantry.attention", container = TabContainers.RIGHT, order = 30,
             title = { s -> "Attention ${s.attentionOpenCount.takeIf { it > 0 }?.let { "($it)" } ?: ""} ^6" },
             icon = tabIcon(
                 "attention",

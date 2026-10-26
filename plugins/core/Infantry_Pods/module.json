@@ -4,5 +4,11 @@
   "apiVersion": 1,
   "author": "Infantry AI",
   "description": "Pods: submit a goal, watch its nodes.",
-  "sequence": []
+  "sequence": [],
+  "tabs": [
+    {
+      "id": "infantry.pods",
+      "container": "center"
+    }
+  ]
 }

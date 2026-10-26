@@ -1,8 +1,9 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.ProfilesPane
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleManifest
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
 import com.superiorsoftllc.agenthq.ui.plugin.circle
@@ -10,10 +11,13 @@ import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
 
 /** PLUGINS-1: core module Infantry_Profiles. Saved agent profiles. */
 val InfantryProfiles = AgentHqModule(
-    ModuleManifest(name = "Infantry_Profiles", version = "1.0.0", author = "Infantry AI", description = "Saved agent profiles."),
+    ModuleManifest(
+        name = "Infantry_Profiles", version = "1.0.0", author = "Infantry AI", description = "Saved agent profiles.",
+        tabs = listOf(TabDeclaration("infantry.profiles", TabContainers.CENTER)),
+    ),
     listOf(
         TabProvider(
-            id = "infantry.profiles", module = "Infantry_Profiles", container = TabContainers.CENTER, order = 40,
+            id = "infantry.profiles", container = TabContainers.CENTER, order = 40,
             title = { "Profiles  ^9" },
             icon = tabIcon(
                 "profiles",

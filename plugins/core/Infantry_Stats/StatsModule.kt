@@ -1,18 +1,22 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.StatsPane
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleManifest
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
 import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
 
 /** PLUGINS-1: core module Infantry_Stats. The selected session's statistics. */
 val InfantryStats = AgentHqModule(
-    ModuleManifest(name = "Infantry_Stats", version = "1.0.0", author = "Infantry AI", description = "The selected session's statistics."),
+    ModuleManifest(
+        name = "Infantry_Stats", version = "1.0.0", author = "Infantry AI", description = "The selected session's statistics.",
+        tabs = listOf(TabDeclaration("infantry.stats", TabContainers.CENTER)),
+    ),
     listOf(
         TabProvider(
-            id = "infantry.stats", module = "Infantry_Stats", container = TabContainers.CENTER, order = 100,
+            id = "infantry.stats", container = TabContainers.CENTER, order = 100,
             title = { "Stats" },
             icon = tabIcon(
                 "stats",

@@ -1,7 +1,8 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import kotlinx.serialization.json.Json
@@ -26,7 +27,8 @@ class CoreModulesTest {
         val compiled = CoreModules.all.associate { it.manifest.name to it.manifest }
         assertEquals(compiled.keys.sorted(), onDisk.keys.sorted(), "one plugins/core folder per compiled-in core module")
         for ((name, manifest) in compiled) assertEquals(manifest, onDisk[name], "plugins/core/$name/module.json")
-        for (m in CoreModules.all) assertTrue(m.tabs.all { it.module == m.manifest.name }, "${m.manifest.name}: tabs name their own module")
+        for (m in CoreModules.all) assertEquals(m.manifest.tabs.map { it.id }, m.tabs.map { it.id }, "${m.manifest.name}: declares exactly its tabs")
+        for (m in CoreModules.all) for (t in m.tabs) assertEquals(m.manifest.name, CoreModules.factory.find(t.id)?.module, "${t.id} names its own module")
     }
 
     @Test
@@ -51,7 +53,7 @@ class CoreModulesTest {
 
     @Test
     fun `a second tab with a taken id is skipped and reported`() {
-        val copy = AgentHqModule(ModuleManifest(name = "Acme_Copy", version = "1.0.0"), InfantryGit.tabs)
+        val copy = AgentHqModule(ModuleManifest(name = "Acme_Copy", version = "1.0.0", tabs = listOf(TabDeclaration("infantry.git", "center"))), InfantryGit.tabs)
         val f = TabFactory(CoreModules.all + copy)
         assertEquals(1, f.problems.size)
         assertTrue("Acme_Copy" in f.problems.single() && "infantry.git" in f.problems.single())

@@ -1,18 +1,22 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.TriggersPane
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleManifest
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
 import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
 
 /** PLUGINS-1: core module Infantry_Triggers. Triggers that start work on an event. */
 val InfantryTriggers = AgentHqModule(
-    ModuleManifest(name = "Infantry_Triggers", version = "1.0.0", author = "Infantry AI", description = "Triggers that start work on an event."),
+    ModuleManifest(
+        name = "Infantry_Triggers", version = "1.0.0", author = "Infantry AI", description = "Triggers that start work on an event.",
+        tabs = listOf(TabDeclaration("infantry.triggers", TabContainers.CENTER)),
+    ),
     listOf(
         TabProvider(
-            id = "infantry.triggers", module = "Infantry_Triggers", container = TabContainers.CENTER, order = 50,
+            id = "infantry.triggers", container = TabContainers.CENTER, order = 50,
             title = { s -> "Triggers ${s.trippedTriggerCount.takeIf { it > 0 }?.let { "($it tripped)" } ?: ""} ^0" },
             icon = tabIcon(
                 "triggers",

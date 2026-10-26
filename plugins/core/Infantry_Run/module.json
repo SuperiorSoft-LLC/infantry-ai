@@ -4,5 +4,11 @@
   "apiVersion": 1,
   "author": "Infantry AI",
   "description": "Saved commands and their runs.",
-  "sequence": []
+  "sequence": [],
+  "tabs": [
+    {
+      "id": "infantry.run",
+      "container": "center"
+    }
+  ]
 }

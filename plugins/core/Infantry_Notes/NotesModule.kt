@@ -1,18 +1,22 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.MemoryPane
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleManifest
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
 import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
 
 /** PLUGINS-1: core module Infantry_Notes. The project knowledge notes. */
 val InfantryNotes = AgentHqModule(
-    ModuleManifest(name = "Infantry_Notes", version = "1.0.0", author = "Infantry AI", description = "The project knowledge notes."),
+    ModuleManifest(
+        name = "Infantry_Notes", version = "1.0.0", author = "Infantry AI", description = "The project knowledge notes.",
+        tabs = listOf(TabDeclaration("infantry.notes", TabContainers.CENTER)),
+    ),
     listOf(
         TabProvider(
-            id = "infantry.notes", module = "Infantry_Notes", container = TabContainers.CENTER, order = 70,
+            id = "infantry.notes", container = TabContainers.CENTER, order = 70,
             title = { "Notes" },
             icon = tabIcon(
                 "notes",

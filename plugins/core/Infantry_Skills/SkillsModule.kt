@@ -1,18 +1,22 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.SkillsPane
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleManifest
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
 import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
 
 /** PLUGINS-1: core module Infantry_Skills. Saved skills to insert into the chat. */
 val InfantrySkills = AgentHqModule(
-    ModuleManifest(name = "Infantry_Skills", version = "1.0.0", author = "Infantry AI", description = "Saved skills to insert into the chat."),
+    ModuleManifest(
+        name = "Infantry_Skills", version = "1.0.0", author = "Infantry AI", description = "Saved skills to insert into the chat.",
+        tabs = listOf(TabDeclaration("infantry.skills", TabContainers.RIGHT)),
+    ),
     listOf(
         TabProvider(
-            id = "infantry.skills", module = "Infantry_Skills", container = TabContainers.RIGHT, order = 60,
+            id = "infantry.skills", container = TabContainers.RIGHT, order = 60,
             title = { "Skills" },
             icon = tabIcon(
                 "skills",

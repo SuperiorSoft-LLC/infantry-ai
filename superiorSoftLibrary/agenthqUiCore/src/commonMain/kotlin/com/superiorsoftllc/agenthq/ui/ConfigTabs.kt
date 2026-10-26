@@ -55,6 +55,7 @@ enum class ConfigEntry(val tab: ConfigTab, val title: String, val applies: Strin
     INCOMING_SOUND(ConfigTab.NOTIFICATIONS, com.superiorsoftllc.agenthq.ui.sound.INCOMING_SOUND_TITLE, com.superiorsoftllc.agenthq.ui.sound.INCOMING_SOUND_APPLIES_TO, listOf("sound", "volume", "mp3", "comms", "incoming", "audio")),
     QUESTIONS(ConfigTab.NOTIFICATIONS, TEST_QUESTION_TITLE, TEST_QUESTION_APPLIES_TO, listOf("question", "ask", "popup", "option", "menu", "test")),
     PLUGINS(ConfigTab.PLUGINS, com.superiorsoftllc.agenthq.ui.voice.plugin.PluginsSetting.TITLE, com.superiorsoftllc.agenthq.ui.voice.plugin.PluginsSetting.APPLIES_TO, listOf("plugin", "install", "voice", "piper", "natural", "download")),
+    MODULES(ConfigTab.PLUGINS, com.superiorsoftllc.agenthq.ui.plugin.ModulesSetting.TITLE, com.superiorsoftllc.agenthq.ui.plugin.ModulesSetting.APPLIES_TO, listOf("plugin", "module", "community", "core", "extension")),
     SECRETS(ConfigTab.SECRETS, SECRETS_TITLE, SECRETS_APPLIES_TO, listOf("keystore", "token", "api key", "password")),
     PAIR(ConfigTab.DEVICES, PairEntry.TITLE, PairEntry.APPLIES_TO, listOf("qr", "phone", "android", "connect")),
     ABOUT(ConfigTab.ABOUT, AboutEntry.TITLE, AboutEntry.APPLIES_TO, listOf("build", "version", "commit")),

@@ -187,6 +187,9 @@ import com.superiorsoftllc.agenthq.ui.protocol.SessionState
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabContext
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
+import com.superiorsoftllc.agenthq.ui.plugin.PluginDaemon
+import com.superiorsoftllc.agenthq.plugin.api.Events
+import com.superiorsoftllc.agenthq.plugin.api.PluginEvent
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
 import androidx.compose.runtime.staticCompositionLocalOf
 import kotlinx.coroutines.delay
@@ -332,6 +335,11 @@ fun App(
         controller.connect(url, token)
         root.requestFocus()
     }
+    // PLUGINS-1: the plugins' gated daemon access goes to the daemon this window talks to; the bus hears what is shown.
+    LaunchedEffect(url, token) { PluginDaemon.connect(url, token) }
+    LaunchedEffect(centerTab) { tabs.events.publish(PluginEvent(Events.TAB_OPENED, mapOf("id" to centerTab, "container" to TabContainers.CENTER))) }
+    LaunchedEffect(rightTab) { tabs.events.publish(PluginEvent(Events.TAB_OPENED, mapOf("id" to rightTab, "container" to TabContainers.RIGHT))) }
+    LaunchedEffect(state.selectedId) { state.selectedId?.let { tabs.events.publish(PluginEvent(Events.SESSION_SELECTED, mapOf("id" to it))) } }
     // A refused token is the one failure the human must act on: open the dialog instead of retrying.
     // MOBILE-REFUSED-1: a rejected token goes to the host's own connect screen when it has one (Android saves there;
     // the shared dialog only edits memory). Desktop has no hook and keeps the dialog.
@@ -458,7 +466,7 @@ fun App(
                     TabBar(
                         hPad = 4.dp,
                         fontSize = 11.sp,
-                        tabs = strip.map { it.title(state) to (rightTab == it.id) },
+                        tabs = strip.map { tabs.title(it, state) to (rightTab == it.id) },
                         tagOf = { strip[it].testTag },
                     ) { rightTab = strip[it].id }
                     tabs.Content(rightTab, tabContext {})
@@ -628,6 +636,7 @@ fun App(
                 testQuestionReady = state.selectedId != null,
                 initialTab = configTab,
                 onTab = { configTab = it },
+                modules = tabs.takeIf { it.loadsAtRunTime },
             )
         }
         ServerUpdateConfirm(serverUpdate)
@@ -1018,9 +1027,10 @@ const val CENTER_TAB_BAR_TAG = "center-tab-bar"
  */
 @Composable
 fun CenterTabBar(state: AppState, current: String, onPick: (String) -> Unit) {
-    val strip = LocalTabFactory.current.tabs(TabContainers.CENTER)
+    val factory = LocalTabFactory.current
+    val strip = factory.tabs(TabContainers.CENTER)
     TabBar(
-        strip.map { it.title(state) to (current == it.id) },
+        strip.map { factory.title(it, state) to (current == it.id) },
         tagOf = { strip[it].testTag },
         barTag = CENTER_TAB_BAR_TAG,
     ) { onPick(strip[it].id) }

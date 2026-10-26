@@ -123,6 +123,8 @@ fun ConfigDialog(
     initialTab: ConfigTab? = null,
     /** CONFIG-TABS-1: told when the user picks another tab, so the host can reopen there. */
     onTab: ((ConfigTab) -> Unit)? = null,
+    /** PLUGINS-1: the loaded modules, for Plugins > Modules; null = this host has only compiled-in modules (no section). */
+    modules: com.superiorsoftllc.agenthq.ui.plugin.TabFactory? = null,
 ) {
     // VOICE-PLUGIN-1: the host's installable voice plugins (desktop); null = no Plugins tab.
     val voicePlugins = com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost.current.voicePlugins
@@ -144,6 +146,7 @@ fun ConfigDialog(
         add(ConfigEntry.INCOMING_SOUND)
         if (onSendTestQuestion != null) add(ConfigEntry.QUESTIONS)
         if (voicePlugins != null) add(ConfigEntry.PLUGINS)
+        if (modules != null) add(ConfigEntry.MODULES)
         if (secretActions != null && secrets != null) add(ConfigEntry.SECRETS)
         if (pair != null) add(ConfigEntry.PAIR)
         if (updates != null) add(ConfigEntry.UPDATES)
@@ -258,6 +261,9 @@ fun ConfigDialog(
                             }
                             if (shows(ConfigEntry.PLUGINS) && voicePlugins != null) FlagSection(ConfigEntry.PLUGINS, highlight) {
                                 com.superiorsoftllc.agenthq.ui.voice.plugin.PluginsSection(voicePlugins)
+                            }
+                            if (shows(ConfigEntry.MODULES) && modules != null) FlagSection(ConfigEntry.MODULES, highlight) {
+                                com.superiorsoftllc.agenthq.ui.plugin.ModulesSection(modules)
                             }
                             // SECRETS-1: the daemon owns the secrets; this only sends "set / clear / import" and shows set / not set.
                             if (shows(ConfigEntry.SECRETS) && secretActions != null && secrets != null) {

@@ -1,18 +1,22 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.PromptsPane
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.plugin.ModuleManifest
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
 import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
 
 /** PLUGINS-1: core module Infantry_Prompts. Saved prompts to insert into the chat. */
 val InfantryPrompts = AgentHqModule(
-    ModuleManifest(name = "Infantry_Prompts", version = "1.0.0", author = "Infantry AI", description = "Saved prompts to insert into the chat."),
+    ModuleManifest(
+        name = "Infantry_Prompts", version = "1.0.0", author = "Infantry AI", description = "Saved prompts to insert into the chat.",
+        tabs = listOf(TabDeclaration("infantry.prompts", TabContainers.RIGHT)),
+    ),
     listOf(
         TabProvider(
-            id = "infantry.prompts", module = "Infantry_Prompts", container = TabContainers.RIGHT, order = 50,
+            id = "infantry.prompts", container = TabContainers.RIGHT, order = 50,
             title = { "Prompts" },
             icon = tabIcon(
                 "prompts",

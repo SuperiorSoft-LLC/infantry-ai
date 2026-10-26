@@ -1294,6 +1294,9 @@ class AgentHqDaemon(
                 },
             )
 
+            // PLUGINS-1: the daemon reads the same plugins root and rules as the desktop (no UI here); GET /plugins lists them.
+            val plugins = DaemonPlugins.resolve(stateDir())
+
             val server = embeddedServer(CIO, port = boundPort, host = host) {
                 install(WebSockets)
                 install(ContentNegotiation) { json() }
@@ -1318,6 +1321,7 @@ class AgentHqDaemon(
                         )
                     }
                     get("/attention") { call.respond(attention.list()) }
+                    get("/plugins") { call.respond(plugins) }
                     // Phase 6 agent-facing mail API: how a spawned CLI agent answers a delivered message.
                     mailRoutes(mail, mailbox)
                     // SERVER-UPDATE-3 (1.110.0): status / check / apply for the headless daemon's own updates.
