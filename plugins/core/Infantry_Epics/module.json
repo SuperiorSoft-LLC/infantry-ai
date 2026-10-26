@@ -1,0 +1,14 @@
+{
+  "name": "Infantry_Epics",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "author": "Infantry AI",
+  "description": "Epics and their tickets.",
+  "sequence": [],
+  "tabs": [
+    {
+      "id": "infantry.epics",
+      "container": "center"
+    }
+  ]
+}

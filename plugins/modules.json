@@ -1,0 +1,12 @@
+{
+  "folders": [
+    { "path": "core", "tier": "core" },
+    { "path": "community", "tier": "community" }
+  ],
+  "modules": {
+    "Acme_Hello": { "enabled": true, "allow": ["events", "storage", "daemon", "notifications"] }
+  },
+  "demoLock": {
+    "allowRoutes": ["GET /health"]
+  }
+}

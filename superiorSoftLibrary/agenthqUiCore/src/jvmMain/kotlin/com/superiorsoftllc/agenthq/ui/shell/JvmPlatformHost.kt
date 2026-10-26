@@ -149,10 +149,16 @@ class JvmPlatformHost(
         return ByteArrayOutputStream().also { ImageIO.write(buffered, "png", it) }.toByteArray()
     }
 
+    /** PLUGINS-1: the modules under the plugins root (`AGENTHQ_PLUGINS_ROOT`, else `<state dir>/plugins`), loaded once. */
+    override val tabFactory: com.superiorsoftllc.agenthq.ui.plugin.TabFactory by lazy {
+        com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins.load(stateDir() ?: File(".agenthq"), env).factory
+    }
+
+    private fun stateDir(): File? = env("AGENTHQ_STATE_DIR")?.takeIf { it.isNotBlank() }?.let(::File)
+        ?: home?.let { File(it, ".agenthq") }
+
     private fun recordedPort(): Int? {
-        val stateDir = env("AGENTHQ_STATE_DIR")?.takeIf { it.isNotBlank() }?.let(::File)
-            ?: home?.let { File(it, ".agenthq") }
-            ?: return null
+        val stateDir = stateDir() ?: return null
         return runCatching { File(stateDir, PORT_FILE).readText().trim().toInt() }.getOrNull()?.takeIf { it in 1..65535 }
     }
 

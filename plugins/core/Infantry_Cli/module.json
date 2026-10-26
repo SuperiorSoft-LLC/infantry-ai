@@ -1,0 +1,14 @@
+{
+  "name": "Infantry_Cli",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "author": "Infantry AI",
+  "description": "The selected agent's chat transcript.",
+  "sequence": [],
+  "tabs": [
+    {
+      "id": "infantry.cli",
+      "container": "center"
+    }
+  ]
+}

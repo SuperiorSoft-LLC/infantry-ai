@@ -86,7 +86,7 @@ class AgentRoleNameUiTest {
     @Test
     fun theOutputTabReadsCli() {
         runDesktopComposeUiTest(900, 200) {
-            setContent { CenterTabBar(state, CenterTab.OUTPUT) {} }
+            setContent { CenterTabBar(state, "infantry.cli") {} }
             assertEquals("CLI  ^1", onNodeWithTag("center-tab-OUTPUT").text())
         }
     }
@@ -104,7 +104,7 @@ class AgentRoleNameUiTest {
                     }
                     Column(Modifier.width(700.dp)) {
                         CenterHeader(pm, spawnMode = false, state = all)
-                        CenterTabBar(all, CenterTab.OUTPUT) {}
+                        CenterTabBar(all, "infantry.cli") {}
                     }
                 }
             }

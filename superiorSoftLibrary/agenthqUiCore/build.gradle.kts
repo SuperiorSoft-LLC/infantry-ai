@@ -23,7 +23,12 @@ kotlin {
     }
 
     sourceSets {
+        // PLUGINS-1: the core modules (the built-in tabs) live in <repo>/plugins/core, one folder per module, and are
+        // compiled into every target from there (web and Android cannot load a module at run time).
+        commonMain { kotlin.srcDir(rootProject.file("plugins/core")) }
         commonMain.dependencies {
+            // PLUGINS-1: the plugin API and its loading rules (one-way: the API knows nothing of this UI).
+            api(project(":superiorSoftLibrary:agenthqPlugins"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
