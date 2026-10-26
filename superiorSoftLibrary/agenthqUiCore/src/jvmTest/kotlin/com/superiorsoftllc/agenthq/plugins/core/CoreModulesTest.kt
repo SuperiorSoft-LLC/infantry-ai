@@ -28,6 +28,7 @@ class CoreModulesTest {
         assertEquals(compiled.keys.sorted(), onDisk.keys.sorted(), "one plugins/core folder per compiled-in core module")
         for ((name, manifest) in compiled) assertEquals(manifest, onDisk[name], "plugins/core/$name/module.json")
         for (m in CoreModules.all) assertEquals(m.manifest.tabs.map { it.id }, m.tabs.map { it.id }, "${m.manifest.name}: declares exactly its tabs")
+        for (m in CoreModules.all) assertEquals(m.manifest.panels.map { it.id }, m.panels.map { it.id }, "${m.manifest.name}: declares exactly its panel sections")
         for (m in CoreModules.all) for (t in m.tabs) assertEquals(m.manifest.name, CoreModules.factory.find(t.id)?.module, "${t.id} names its own module")
     }
 

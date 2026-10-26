@@ -1,0 +1,14 @@
+{
+  "name": "Infantry_Agents",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "author": "Infantry AI",
+  "description": "The left panel's agents list.",
+  "sequence": [],
+  "panels": [
+    {
+      "id": "infantry.agents",
+      "panel": "left"
+    }
+  ]
+}

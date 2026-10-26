@@ -184,6 +184,8 @@ import com.superiorsoftllc.agenthq.ui.model.visibleAgents
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
 import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.protocol.SessionState
+import com.superiorsoftllc.agenthq.ui.plugin.PanelSections
+import com.superiorsoftllc.agenthq.ui.plugin.Panels
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabContext
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
@@ -352,7 +354,7 @@ fun App(
     val selected = state.selected
 
     /** PLUGINS-1: what a tab may reach; [transcript] is the chat's, for the centre strip. */
-    fun tabContext(transcript: @Composable () -> Unit) = TabContext(
+    fun tabContext(transcript: @Composable () -> Unit, agentsList: @Composable () -> Unit = {}) = TabContext(
         state, controller,
         open = ::showTab,
         showChat = { centerTab = homeTab; chat.spawnMode = false },
@@ -360,6 +362,7 @@ fun App(
         diffTarget = diffTarget,
         onOpenDiff = { diffTarget = it },
         transcript = transcript,
+        agentsList = agentsList,
     )
 
     fun move(delta: Int) {
@@ -446,8 +449,10 @@ fun App(
             val panels = state.panels.forWindow(compact)
             val screen = panels.compactScreen()
             // MOBILE-DRAWERS-1: the sidebar and the right panel are the same content docked (wide) or as a drawer (compact).
+            // PLUGINS-3: the left panel is its modules' sections; Infantry_Agents' one draws the agents list below.
             val sidebar: @Composable (Float) -> Unit = { sidebarWidthDp ->
-                Sidebar(
+              Column(Modifier.width(sidebarWidthDp.dp).fillMaxHeight().background(Palette.Panel).testTag("left-sidebar")) {
+                PanelSections(tabs, Panels.LEFT, tabContext({}, agentsList = { Sidebar(
                     state, visible, query, { query = it }, roleFilter, { roleFilter = it },
                     searchFocus,
                     onSelect = { controller.select(it); chat.spawnMode = false; if (compact) controller.showCompactScreen(CompactScreen.OUTPUT) },
@@ -456,20 +461,23 @@ fun App(
                     onAssign = { id, projectId -> actionScope.launch { controller.assignSessionProject(id, projectId) } },
                     projects = { ProjectsSidebar(state, onDismiss = { controller.dismissProjectRefusal() }) },
                     onOpenBoard = { showBoard = true },
-                    width = sidebarWidthDp,
-                )
+                ) }))
+              }
             }
             val rightPanel: @Composable (Modifier, (() -> Unit)?) -> Unit = { mod, onClose ->
                 Column(mod.fillMaxHeight().testTag("right-panel")) {
                     if (onClose != null) CompactNavRow(backLabel = "Close", onBack = onClose)
-                    val strip = tabs.tabs(TabContainers.RIGHT)
-                    TabBar(
-                        hPad = 4.dp,
-                        fontSize = 11.sp,
-                        tabs = strip.map { tabs.title(it, state) to (rightTab == it.id) },
-                        tagOf = { strip[it].testTag },
-                    ) { rightTab = strip[it].id }
-                    tabs.Content(rightTab, tabContext {})
+                    // PLUGINS-3: the right panel's module sections, around its tab strip.
+                    PanelSections(tabs, Panels.RIGHT, tabContext({})) {
+                        val strip = tabs.tabs(TabContainers.RIGHT)
+                        TabBar(
+                            hPad = 4.dp,
+                            fontSize = 11.sp,
+                            tabs = strip.map { tabs.title(it, state) to (rightTab == it.id) },
+                            tagOf = { strip[it].testTag },
+                        ) { rightTab = strip[it].id }
+                        tabs.Content(rightTab, tabContext({}))
+                    }
                 }
             }
             Box(Modifier.fillMaxSize()) {
@@ -719,9 +727,9 @@ private fun Sidebar(
     onAssign: (String, String) -> Unit,
     projects: @Composable () -> Unit,
     onOpenBoard: () -> Unit,
-    width: Float = SidebarWidth.DEFAULT,
 ) {
-    Column(Modifier.width(width.dp).fillMaxHeight().background(Palette.Panel).testTag("left-sidebar")) {
+    // PLUGINS-3: the frame (width, background, tag) is the left panel's; this is Infantry_Agents' section in it.
+    Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Counter("Needs input", state.needsInputCount, if (state.needsInputCount > 0) Palette.Accent else Palette.Muted)
             Counter("To review", state.reviewQueue.size, Palette.Info)
@@ -1041,35 +1049,6 @@ private fun digitOf(key: Key): Int? = when (key) {
     Key.Zero -> 0; Key.One -> 1; Key.Two -> 2; Key.Three -> 3; Key.Four -> 4
     Key.Five -> 5; Key.Six -> 6; Key.Seven -> 7; Key.Eight -> 8; Key.Nine -> 9
     else -> null
-}
-
-const val TAB_BAR_MORE_CUE_TAG = "tab-bar-more-cue"
-
-@Composable
-private fun TabBar(tabs: List<Pair<String, Boolean>>, hPad: androidx.compose.ui.unit.Dp = 14.dp, fontSize: androidx.compose.ui.unit.TextUnit = 12.sp, tagOf: ((Int) -> String)? = null, barTag: String? = null, onPick: (Int) -> Unit) {
-    // Scrolls sideways when the labels outgrow the width, so no tab is ever squeezed or hidden. While more tabs lie
-    // off the right edge, a fade over that edge is the visible scroll cue (a scrollbar is not shown on touch or web).
-    val scroll = rememberScrollState()
-    Box(Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().let { m -> barTag?.let { m.testTag(it) } ?: m }.background(Palette.Panel).horizontalScroll(scroll)) {
-            tabs.forEachIndexed { i, (label, on) ->
-                Column(Modifier.let { m -> tagOf?.let { m.testTag(it(i)) } ?: m }.clickable { onPick(i) }.padding(horizontal = hPad, vertical = 7.dp)) {
-                    Text(label, maxLines = 1, softWrap = false, color = if (on) Palette.Accent else Palette.Muted, fontSize = fontSize, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal)
-                }
-            }
-        }
-        if (scroll.canScrollForward) {
-            // matchParentSize keeps the overlay from stretching the bar (a fillMaxHeight child would take the whole column).
-            Box(Modifier.matchParentSize()) {
-                Box(
-                    Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(32.dp)
-                        .background(Brush.horizontalGradient(listOf(Palette.Panel.copy(alpha = 0f), Palette.Panel)))
-                        .testTag(TAB_BAR_MORE_CUE_TAG),
-                )
-            }
-        }
-    }
-    HorizontalDivider(color = Palette.Border)
 }
 
 

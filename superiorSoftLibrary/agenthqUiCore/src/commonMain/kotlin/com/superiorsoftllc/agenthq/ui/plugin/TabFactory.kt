@@ -2,11 +2,14 @@ package com.superiorsoftllc.agenthq.ui.plugin
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import com.superiorsoftllc.agenthq.plugin.api.EventBus
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.PluginEvent
@@ -30,6 +33,18 @@ import com.superiorsoftllc.agenthq.ui.net.Controller
 object TabContainers {
     const val CENTER = "center"
     const val RIGHT = "right"
+}
+
+/**
+ * PLUGINS-3: the window's two side panels. A panel is a column of [PanelProvider] sections in order; the right panel
+ * also hosts the [TabContainers.RIGHT] strip, at [TABS_ORDER] (sections ordered below it draw above the strip).
+ */
+object Panels {
+    const val LEFT = "left"
+    const val RIGHT = "right"
+    val ALL = setOf(LEFT, RIGHT)
+    /** Where a panel's tab strip sits among its sections. */
+    const val TABS_ORDER = 100
 }
 
 /** PLUGINS-1: the named slots a module can add a [SlotBlock] to. A slot with no block draws nothing. */
@@ -66,6 +81,8 @@ class TabContext(
     val transcript: @Composable () -> Unit,
     /** The platform services of the module drawing this tab, as its module.json and the owner allow. */
     val services: PluginServices = NoPluginServices,
+    /** PLUGINS-3: the window's agents list (search, filters, the list, New agent). Only the left panel has one. */
+    val agentsList: @Composable () -> Unit = {},
 ) {
     /** Selects an agent and shows its chat. */
     fun openAgent(sessionId: String) {
@@ -74,7 +91,7 @@ class TabContext(
     }
 
     internal fun forModule(services: PluginServices) =
-        TabContext(state, controller, open, showChat, insertIntoChat, diffTarget, onOpenDiff, transcript, services)
+        TabContext(state, controller, open, showChat, insertIntoChat, diffTarget, onOpenDiff, transcript, services, agentsList)
 }
 
 /**
@@ -105,6 +122,24 @@ data class TabProvider(
 )
 
 /**
+ * PLUGINS-3: one section of a side panel, as a module contributes it; declared in its module.json (`panels`) or
+ * refused, like a tab. Sections stack in [order]; a [fill] section takes the panel's free height (shared if several).
+ */
+data class PanelProvider(
+    /** Unique across modules, `vendor.name`. */
+    val id: String,
+    /** [Panels.LEFT] or [Panels.RIGHT]. */
+    val panel: String,
+    /** Lower first; on the right, below [Panels.TABS_ORDER] draws above the tab strip. */
+    val order: Int,
+    val testTag: String,
+    val fill: Boolean = false,
+    /** The `Vendor_Module` that contributes it. Set by the factory; whatever is passed is ignored. */
+    val module: String = "",
+    val content: @Composable (TabContext) -> Unit,
+)
+
+/**
  * An interceptor on one tab (Magento's plugin): [title] runs around the tab's own title (call `proceed`), [before] and
  * [after] draw above and below its content. Bound to a tab by the module's module.json `interceptors` entry.
  */
@@ -128,6 +163,7 @@ class AgentHqModule(
     val blocks: Map<String, SlotBlock> = emptyMap(),
     val observers: Map<String, (PluginEvent) -> Unit> = emptyMap(),
     val tier: Tier = Tier.CORE,
+    val panels: List<PanelProvider> = emptyList(),
 )
 
 /**
@@ -142,6 +178,8 @@ interface UiRegistrar {
     /** The module's services (permission-gated). */
     val services: PluginServices
     fun tab(provider: TabProvider)
+    /** PLUGINS-3: a side panel section; declare it under `panels` in module.json. */
+    fun panel(provider: PanelProvider) {}
     fun interceptor(name: String, interceptor: TabInterceptor)
     fun block(name: String, block: SlotBlock)
     fun observer(name: String, observer: (PluginEvent) -> Unit)
@@ -150,17 +188,19 @@ interface UiRegistrar {
 /** Runs [plugin]'s registration into a module of [tier]. */
 fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginServices, plugin: UiPlugin): AgentHqModule {
     val tabs = mutableListOf<TabProvider>()
+    val panels = mutableListOf<PanelProvider>()
     val interceptors = LinkedHashMap<String, TabInterceptor>()
     val blocks = LinkedHashMap<String, SlotBlock>()
     val observers = LinkedHashMap<String, (PluginEvent) -> Unit>()
     plugin.register(object : UiRegistrar {
         override val services = services
         override fun tab(provider: TabProvider) { tabs += provider }
+        override fun panel(provider: PanelProvider) { panels += provider }
         override fun interceptor(name: String, interceptor: TabInterceptor) { interceptors[name] = interceptor }
         override fun block(name: String, block: SlotBlock) { blocks[name] = block }
         override fun observer(name: String, observer: (PluginEvent) -> Unit) { observers[name] = observer }
     })
-    return AgentHqModule(manifest, tabs, interceptors, blocks, observers, tier)
+    return AgentHqModule(manifest, tabs, interceptors, blocks, observers, tier, panels)
 }
 
 /**
@@ -191,6 +231,7 @@ class TabFactory(
     val statuses: List<ModuleStatus> = statuses ?: modules.map { ModuleStatus(it.manifest.name, it.tier, ModuleState.LOADED, manifest = it.manifest) }
     val problems: List<String>
     private val providers: List<TabProvider>
+    private val sections: List<PanelProvider>
     private val interceptors: Map<String, List<TabInterceptor>>
     private val blocks: Map<String, List<Pair<String, SlotBlock>>>
     private val byModule = modules.associateBy { it.manifest.name }
@@ -226,6 +267,21 @@ class TabFactory(
                 problems += "${m.manifest.name}: tab ${p.with} only replaces ${p.replace}, which was not accepted; not shown"
             }
         }
+        // PLUGINS-3: panel sections bind the way tabs do.
+        val placed = LinkedHashMap<String, PanelProvider>()
+        for (m in modules) for (p in m.panels) {
+            val name = m.manifest.name
+            val declared = m.manifest.panels.firstOrNull { it.id == p.id }
+            val taken = placed[p.id]
+            when {
+                declared == null -> problems += "$name: panel section ${p.id} is not declared in its module.json; refused"
+                declared.panel != p.panel -> problems += "$name: panel section ${p.id} is declared in ${declared.panel}, not ${p.panel}; refused"
+                p.panel !in Panels.ALL -> problems += "$name: panel section ${p.id} names unknown panel ${p.panel}; refused"
+                taken != null -> problems += "$name: panel section ${p.id} is already provided by ${taken.module}; skipped"
+                else -> placed[p.id] = p.copy(module = name)
+            }
+        }
+        sections = placed.values.toList()
         val ints = LinkedHashMap<String, MutableList<TabInterceptor>>()
         val bls = LinkedHashMap<String, MutableList<Triple<Int, String, SlotBlock>>>()
         for (m in modules) {
@@ -311,5 +367,43 @@ class TabFactory(
         }
     }
 
+    /** PLUGINS-3: a side panel's sections, in order. */
+    fun panels(panel: String): List<PanelProvider> =
+        sections.filter { it.panel == panel }.sortedWith(compareBy({ it.order }, { it.id }))
+
+    /** The module that draws section [id], for the Community badge. */
+    fun panelModuleOf(id: String): AgentHqModule? = sections.firstOrNull { it.id == id }?.let { byModule[it.module] }
+
+    internal fun servicesOf(module: String): PluginServices = services(module)
+
     fun hasBlocks(slot: String): Boolean = !blocks[slot].isNullOrEmpty()
+}
+
+/**
+ * PLUGINS-3: draws side panel [panel] into this column: its sections in order, with [tabs] (the panel's strip and the
+ * picked tab) at [Panels.TABS_ORDER] taking the free height. A core section draws exactly as its module draws it; a
+ * community one sits under the Community badge.
+ */
+@Composable
+fun ColumnScope.PanelSections(factory: TabFactory, panel: String, context: TabContext, tabs: (@Composable () -> Unit)? = null) {
+    val (above, below) = factory.panels(panel).partition { it.order < Panels.TABS_ORDER }
+    above.forEach { PanelSection(factory, it, context) }
+    if (tabs != null) Column(Modifier.weight(1f).fillMaxWidth()) { tabs() }
+    below.forEach { PanelSection(factory, it, context) }
+}
+
+@Composable
+private fun ColumnScope.PanelSection(factory: TabFactory, section: PanelProvider, context: TabContext) {
+    val module = factory.panelModuleOf(section.id)
+    val own = context.forModule(factory.servicesOf(section.module))
+    Box(Modifier.fillMaxWidth().testTag(section.testTag).let { if (section.fill) it.weight(1f) else it }) {
+        if (module?.tier == Tier.COMMUNITY) {
+            Column {
+                CommunityBadge(module.manifest)
+                CompositionLocalProvider(LocalContentColor provides Palette.Text) { section.content(own) }
+            }
+        } else {
+            section.content(own)
+        }
+    }
 }

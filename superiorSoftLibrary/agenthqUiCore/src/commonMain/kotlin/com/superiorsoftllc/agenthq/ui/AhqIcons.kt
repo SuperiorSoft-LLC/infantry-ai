@@ -126,6 +126,34 @@ object AhqIcons {
         }
     }
 
+    /** PLUGINS-3: Material "AutoMirrored.Filled.KeyboardArrowLeft", a tab strip's scroll-left arrow. */
+    val ChevronLeft: ImageVector by lazy {
+        icon("KeyboardArrowLeft", autoMirror = true) {
+            moveTo(15.41f, 16.59f)
+            lineTo(10.83f, 12.0f)
+            lineToRelative(4.58f, -4.59f)
+            lineTo(14.0f, 6.0f)
+            lineToRelative(-6.0f, 6.0f)
+            lineToRelative(6.0f, 6.0f)
+            lineToRelative(1.41f, -1.41f)
+            close()
+        }
+    }
+
+    /** PLUGINS-3: Material "AutoMirrored.Filled.KeyboardArrowRight", a tab strip's scroll-right arrow. */
+    val ChevronRight: ImageVector by lazy {
+        icon("KeyboardArrowRight", autoMirror = true) {
+            moveTo(8.59f, 16.59f)
+            lineTo(13.17f, 12.0f)
+            lineTo(8.59f, 7.41f)
+            lineTo(10.0f, 6.0f)
+            lineToRelative(6.0f, 6.0f)
+            lineToRelative(-6.0f, 6.0f)
+            lineToRelative(-1.41f, -1.41f)
+            close()
+        }
+    }
+
     /** MOBILE-LAYOUT-1: Material "AutoMirrored.Filled.ArrowBack", the compact window's back affordance. */
     val ArrowBack: ImageVector by lazy {
         icon("ArrowBack", autoMirror = true) {

@@ -42,6 +42,23 @@ plugins/
   `"allow": [...]`, and can take any of them away with `"deny"`. An ungranted service is `null` in your code.
   The `daemon` service calls only the routes you list under `routes`.
 
+## Where your module shows
+
+Everything is declared in `module.json` and registered under the same id. Anything not declared is refused.
+
+- **Main tabs**: `"tabs": [{ "id": "acme.notes", "container": "center" }]` plus `registrar.tab(TabProvider(...))`.
+  `order` places it in the strip. The core tabs leave gaps of 10.
+- **Right panel tabs**: the same, with `"container": "right"`. They behave exactly like main tabs: the same
+  factory, ordering, enable and disable, and Community badge.
+- **Panel sections**: `"panels": [{ "id": "acme.notes.side", "panel": "left" }]` plus
+  `registrar.panel(PanelProvider(id, panel, order, testTag) { ... })`. Use `"left"` or `"right"`. A section stacks
+  by `order`. Below 100 it sits above the agents list (left) or the tab strip (right). At 100 or more it sits below
+  them. `fill = true` makes the section share the panel's free height. The left panel's agents list is itself the
+  core module `Infantry_Agents`.
+
+Both tab strips scroll sideways when the tabs do not fit. Arrows at each end, the mouse wheel and touch all scroll
+them, so a module's tab is never hidden.
+
 ## 4. Build and drop in (3 min)
 
 ```

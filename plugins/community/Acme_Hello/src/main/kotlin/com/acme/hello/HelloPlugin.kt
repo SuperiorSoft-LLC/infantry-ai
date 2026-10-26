@@ -51,6 +51,15 @@ class HelloPlugin : UiPlugin {
                 testTag = "center-tab-ACME_HELLO",
             ) { HelloTab(it) },
         )
+        // PLUGINS-3: a tab in the right panel's strip, like any core right tab (module.json: container "right").
+        registrar.tab(
+            TabProvider(
+                id = "acme.hello.side", container = TabContainers.RIGHT, order = 35,
+                title = { "Hello" },
+                icon = tabIcon("acme-hello-side", { circle(12f, 12f, 9f) }),
+                testTag = "right-tab-ACME_HELLO",
+            ) { Text("Hello from the right panel. Tabs opened since start: $opened.", Modifier.padding(12.dp).testTag("acme-hello-side")) },
+        )
         // Offered as a replacement for the core Git tab; the trust rules refuse it unless modules.json allows the override.
         registrar.tab(
             TabProvider(

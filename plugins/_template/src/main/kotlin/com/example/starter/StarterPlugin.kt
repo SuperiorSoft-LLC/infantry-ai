@@ -10,6 +10,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.superiorsoftllc.agenthq.plugin.api.Services
+import com.superiorsoftllc.agenthq.ui.plugin.PanelProvider
+import com.superiorsoftllc.agenthq.ui.plugin.Panels
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabContext
 import com.superiorsoftllc.agenthq.ui.plugin.TabInterceptor
@@ -36,6 +38,15 @@ class StarterPlugin : UiPlugin {
                 icon = tabIcon("example-starter", { circle(12f, 12f, 8f) }),
                 testTag = "center-tab-EXAMPLE_STARTER",
             ) { StarterTab(it) },
+        )
+
+        // module.json "panels": { "id": "example.starter.side", "panel": "left" }. A section of a side panel: on the left
+        // it stacks above (order < Panels.TABS_ORDER) or below the agents list; on the right, above or below the tab
+        // strip. A tab in the right panel's strip is a tab with container "right" instead.
+        registrar.panel(
+            PanelProvider(id = "example.starter.side", panel = Panels.LEFT, order = 200, testTag = "example-starter-side") {
+                Text("Starter: ${it.state.agents.size} agents", Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+            },
         )
 
         // module.json "interceptors": { "target": "example.starter", "name": "count" }. Point "target" at any tab id

@@ -43,6 +43,8 @@ data class ModuleManifest(
     /** Platform services the module may use, by [ServiceKey.id]. */
     val services: List<String> = emptyList(),
     val tabs: List<TabDeclaration> = emptyList(),
+    /** PLUGINS-3: sections the module adds to the window's side panels (`left`, `right`). */
+    val panels: List<PanelDeclaration> = emptyList(),
     val preferences: List<PreferenceDeclaration> = emptyList(),
     val interceptors: List<InterceptorDeclaration> = emptyList(),
     val observers: List<ObserverDeclaration> = emptyList(),
@@ -56,6 +58,13 @@ data class DependencyDeclaration(val id: String, val version: String = "*")
 /** A tab the module contributes (the first contribution type; a panel or a whole screen come the same way later). */
 @Serializable
 data class TabDeclaration(val id: String, val container: String)
+
+/**
+ * PLUGINS-3: a section the module adds to side panel [panel] (`left` or `right`). Tabs in the right panel are [tabs]
+ * with container `right`; a section is a block drawn above or below them.
+ */
+@Serializable
+data class PanelDeclaration(val id: String, val panel: String)
 
 /** The module replaces contribution [replace] (by id) with its own contribution [with]. */
 @Serializable
