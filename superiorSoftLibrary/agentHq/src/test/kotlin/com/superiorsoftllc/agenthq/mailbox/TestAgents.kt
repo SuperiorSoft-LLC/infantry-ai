@@ -41,6 +41,10 @@ class ScriptedProcess(private val listener: ProcessListener) : RunningProcess {
         }
     }
     override fun awaitExit(): Int = 0
+
+    /** Prints one stdout [line], as the harness would. */
+    fun say(line: String) = listener.onStdout(line)
+
     fun exit(code: Int = 0) {
         if (alive) {
             alive = false

@@ -50,6 +50,7 @@ import com.superiorsoftllc.agenthq.worktree.WorktreeRecord
 import com.superiorsoftllc.agenthq.session.SessionRecord
 import com.superiorsoftllc.agenthq.session.SessionState
 import com.superiorsoftllc.agenthq.session.TicketWorkerHealth
+import com.superiorsoftllc.agenthq.session.isBusy
 import com.superiorsoftllc.agenthq.session.ContextSource
 import java.io.File
 import java.util.UUID
@@ -138,6 +139,12 @@ class TicketBoard(
     private val images: TicketImages = TicketImages.NONE,
     /** `tickets.exitBehavior`, read at every run end: `leave` (default) keeps a cleanly finished ticket in_progress; `done` moves it. */
     private val exitBehavior: () -> String = { "leave" },
+    /**
+     * GAP 855db590 (setting `limits.tickets.autoDoneMinOutputs`, read at every run end): the assistant outputs / tool calls a
+     * clean run must have produced, with a provider session opened, before [exitBehavior] `done` moves its ticket; 0 = any
+     * clean exit counts (the pre-855db590 rule).
+     */
+    private val autoDoneMinOutputs: () -> Long = { 1 },
     /** TICKET-WEIGHT: the weight -> executor mapping, read at every start and view. */
     private val weightExecutors: () -> WeightExecutors = { WeightExecutors.DEFAULT },
     /** LANE-CAPS: the most agents of a role that may run at once in a project (1 = one per role, today's behaviour). */
@@ -944,7 +951,17 @@ class TicketBoard(
                 surface("Worker ${worker.id} is busy but has opened no provider session for ${(now - worker.lastHeartbeat) / 60_000} min: its brief may never have landed.")
                 continue
             }
-            val problem = TicketWorkerHealth.problem(worker) ?: continue
+            val problem = TicketWorkerHealth.problem(worker)
+            if (problem == null) {
+                // GAP 855db590: a briefed worker whose clean run did no work is resumable, so it is flagged, never restarted.
+                if (!worker.isBusy() && now - worker.lastHeartbeat >= graceMs) {
+                    val run = store.transaction { store.ticketRuns.byTicket(row.id) }.lastOrNull { it.sessionId == worker.id }
+                    run?.detail?.takeIf { it.startsWith(NO_WORK_DETAIL) }?.let {
+                        surface("Ticket is in progress but its worker ${worker.id} exited cleanly having done no work (${it.removePrefix(NO_WORK_DETAIL)}): resume or start it again.")
+                    }
+                }
+                continue
+            }
             if (now - worker.lastHeartbeat < graceMs) continue
             if (!repairedTickets.add(row.id)) {
                 surface("Ticket is in progress but $problem; it was already restarted once, so it is left for a person: start it again.")
@@ -1205,20 +1222,40 @@ class TicketBoard(
         // default) so the PM or another agent decides; `done` restores the old BUG-E2E-2 auto-done. Only the ticket's
         // CURRENT run decides (an older session ending late does not), and only a SUCCEEDED one: a failed, killed or
         // orphaned run stays in_progress with lastRun showing why.
-        val autoDone = exitBehavior() == "done" && outcome == FinishedPayload.Outcome.SUCCEEDED &&
+        val eligible = exitBehavior() == "done" && outcome == FinishedPayload.Outcome.SUCCEEDED &&
             store.tickets.get(ticketId)?.let { it.status == TicketStatus.IN_PROGRESS && it.sessionId == record.id } == true
+        // GAP 855db590: exit 0 is not proof of work. A run that never opened a provider session, or produced fewer
+        // assistant outputs / tool calls than the setting asks, leaves the ticket in_progress; the worker sweep restarts
+        // an unbriefed one and flags the rest.
+        val noWork = if (eligible) noWork(record) else null
+        val autoDone = eligible && noWork == null
         store.ticketRuns.finish(
             ticketId = ticketId,
             sessionId = record.id,
             endedAt = record.lastHeartbeat,
             outcome = outcome.name,
-            detail = if (autoDone) AUTO_DONE_DETAIL else record.lastError ?: "",
+            detail = when {
+                autoDone -> AUTO_DONE_DETAIL
+                noWork != null -> NO_WORK_DETAIL + noWork
+                else -> record.lastError ?: ""
+            },
         )
         if (autoDone) {
             // The ticket frame itself goes out from publishRunUpdate, with this run as lastRun; only the transition
             // is announced here, so a ship trigger fires exactly as for a move into done by hand.
             announce(commit { s -> s.place(ticketId, TicketStatus.DONE, null) })
         }
+    }
+
+    /** GAP 855db590: why [record]'s clean run does not count as work done on its ticket; null when it does. */
+    private fun noWork(record: SessionRecord): String? {
+        val min = autoDoneMinOutputs()
+        if (min <= 0) return null
+        if (record.providerSessionId == null) return "the worker never opened a provider session, so it never received its brief"
+        val outputs = sessions?.workEvents(record.id) ?: return null
+        if (outputs >= min) return null
+        return "the worker produced $outputs assistant output(s) or tool call(s), fewer than the $min that " +
+            "'${com.superiorsoftllc.agenthq.settings.LimitRegistry.AUTO_DONE_MIN_OUTPUTS.key}' requires"
     }
 
     private fun publishRunUpdate(ticketId: String) {
@@ -1444,6 +1481,9 @@ class TicketBoard(
         /** BUG-E2E-2: lastRun.detail of a run whose ticket the daemon moved to done itself. */
         const val AUTO_DONE_DETAIL =
             "moved to done by the daemon: the run SUCCEEDED and the ticket was still in_progress"
+
+        /** GAP 855db590: lastRun.detail prefix of a SUCCEEDED run that did no work, so the ticket was NOT moved to done. */
+        const val NO_WORK_DETAIL = "not moved to done: the run exited cleanly but did no work: "
         const val MAX_DESCRIPTION_LENGTH = 100_000
         /** BUG-REGRESS-1: how many candidates' refusals a `nothing startable` names before counting the rest. */
         private const val MAX_REFUSALS_SHOWN = 3

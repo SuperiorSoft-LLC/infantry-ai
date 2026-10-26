@@ -132,6 +132,13 @@ object LimitRegistry {
         zeroMeans = "never swept",
     )
 
+    /** GAP 855db590: what a clean run must show before `tickets.exitBehavior=done` moves its ticket (see TicketBoard.finishTicketRun). */
+    val AUTO_DONE_MIN_OUTPUTS = LimitDef(
+        "limits.tickets.autoDoneMinOutputs", 1, "outputs",
+        "How many assistant outputs or tool calls a ticket worker's run must produce (with a provider session opened) before a clean exit moves its ticket to done under tickets.exitBehavior=done; below it the ticket stays in_progress for the worker sweep.",
+        zeroMeans = "any clean exit counts, silent or not",
+    )
+
     /** Ticket 3b30398d: the process-watch pass (ROGUE-1 ledger, CPU sampling), read before every pass. */
     val PROCESS_WATCH_INTERVAL_SECONDS = LimitDef(
         "limits.processes.watchIntervalSeconds", 10, "seconds",
@@ -143,7 +150,7 @@ object LimitRegistry {
         MAX_PER_POD, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
         TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, IDLE_NOTICE_MINUTES, UNBRIEFED_GRACE_MINUTES,
-        PROCESS_WATCH_INTERVAL_SECONDS,
+        AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS,
     )
 
     /** A minutes limit as milliseconds; 0 on an unlimited-capable one = [Long.MAX_VALUE] (never reached). */

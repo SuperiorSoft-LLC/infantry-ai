@@ -731,10 +731,23 @@ class TicketBoardTest {
 
     // --- BUG-E2E-2: a finished run decides the ticket's column ------------------------------------------
 
-    /** Starts one ticket on a scripted session, ends that session with [exitCode], and answers the ticket afterwards. */
-    private fun ticketAfterRunExits(exitCode: Int, exitBehavior: String = "done"): Ticket {
+    /** One assistant text line, the work a briefed worker shows. */
+    private val assistantText = "{\"type\":\"text\",\"text\":\"Done: login shipped.\"}"
+
+    /**
+     * Starts one ticket on a scripted session that prints [output] (after the provider session id, when [providerSession]),
+     * ends that session with [exitCode], and answers the ticket afterwards; [sweepFlags] gets what a worker sweep then flags.
+     */
+    private fun ticketAfterRunExits(
+        exitCode: Int,
+        exitBehavior: String = "done",
+        output: List<String> = listOf(assistantText),
+        providerSession: Boolean = true,
+        minOutputs: Long = 1,
+        sweepFlags: MutableList<String>? = null,
+    ): Ticket {
         val store = openStore()
-        val runner = ScriptedRunner(autoExit = false)
+        val runner = ScriptedRunner(autoExit = false, emitSessionId = providerSession)
         val manager = SessionManager(FakeAgentProvider(), runner, tempSessionStore(), killGraceMs = 50, defaultWorkingDir = dir)
         val profiles = AgentProfiles(store.agents, manager)
         val worker = profiles.save(AgentProfile(name = "Backend", role = "backend"))
@@ -745,17 +758,22 @@ class TicketBoardTest {
                 com.superiorsoftllc.agenthq.context.ComposedContext("Ship ${input.title}.", emptyList())
             override fun effective(override: Boolean?, skillsOverride: Boolean?): com.superiorsoftllc.agenthq.protocol.EffectiveContext? = null
         }
-        val board = TicketBoard(store, idFactory = { ids.next() }, context = prompting, agents = profiles, sessions = manager, exitBehavior = { exitBehavior })
+        val board = TicketBoard(store, idFactory = { ids.next() }, context = prompting, agents = profiles, sessions = manager,
+            exitBehavior = { exitBehavior }, autoDoneMinOutputs = { minOutputs },
+        )
         manager.eventSink = { board.onSessionEvent(it) } // the daemon's fourth arm
         val ticket = board.save(TicketSave(title = "Add login", agentId = worker.id)).ticket
         assertEquals("started", board.move(ticket.id, IN_PROGRESS).ticket.start?.reason)
 
-        runner.processes.single().exit(exitCode)
+        val process = runner.processes.single()
+        output.forEach(process::say)
+        process.exit(exitCode)
 
         // The exit is applied on the board's own session-events thread: wait (bounded) for the finished run.
         val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
         while (board.get(ticket.id).lastRun == null && System.nanoTime() < deadline) Thread.sleep(10)
         board.close()
+        sweepFlags?.let { flags -> board.sweepWorkers(graceMs = 0) { _, _, detail -> flags += detail } }
         return board.get(ticket.id)
     }
 
@@ -769,6 +787,49 @@ class TicketBoardTest {
             after.lastRun?.detail.orEmpty().contains("moved to done"),
             "the ticket must say why the daemon moved it: '${after.lastRun?.detail}'",
         )
+    }
+
+    // --- GAP 855db590: a silent clean exit is not work done -----------------------------------------------
+
+    @Test
+    fun aSilentFirstTurnThatExitsCleanlyLeavesItsTicketInProgressAndIsFlagged() {
+        val flags = mutableListOf<String>()
+        val after = ticketAfterRunExits(0, output = emptyList(), sweepFlags = flags)
+
+        assertEquals("SUCCEEDED", after.lastRun?.outcome)
+        assertEquals(IN_PROGRESS, after.status, "exit 0 with no output is not work done: the ticket must stay in_progress")
+        assertTrue(after.lastRun?.detail.orEmpty().startsWith(TicketBoard.NO_WORK_DETAIL), "lastRun says why: '${after.lastRun?.detail}'")
+        assertTrue(after.lastRun?.detail.orEmpty().contains("0 assistant output(s)"), "'${after.lastRun?.detail}'")
+        assertEquals(1, flags.size, "the sweep flags the briefed worker that did no work: $flags")
+        assertTrue(flags.single().contains("done no work"), flags.single())
+    }
+
+    @Test
+    fun aCleanExitThatNeverOpenedAProviderSessionLeavesItsTicketInProgress() {
+        val after = ticketAfterRunExits(0, output = emptyList(), providerSession = false)
+
+        assertEquals("SUCCEEDED", after.lastRun?.outcome)
+        assertEquals(IN_PROGRESS, after.status, "an unbriefed worker (no provider session id) never moves its ticket to done")
+        assertTrue(after.lastRun?.detail.orEmpty().contains("never opened a provider session"), "'${after.lastRun?.detail}'")
+    }
+
+    @Test
+    fun outputWithoutAProviderSessionIsStillNotWorkDone() {
+        val after = ticketAfterRunExits(0, providerSession = false)
+
+        assertEquals(IN_PROGRESS, after.status, "output alone, with no provider session, does not count")
+    }
+
+    @Test
+    fun theWorkThresholdIsConfigurable() {
+        val belowThree = ticketAfterRunExits(0, output = listOf(assistantText, assistantText), minOutputs = 3)
+        assertEquals(IN_PROGRESS, belowThree.status, "2 outputs are below a threshold of 3")
+        assertTrue(belowThree.lastRun?.detail.orEmpty().contains("2 assistant output(s)"), "'${belowThree.lastRun?.detail}'")
+
+        val toolCall = "{\"type\":\"tool_use\",\"name\":\"Bash\"}"
+        assertEquals(DONE, ticketAfterRunExits(0, output = listOf(assistantText, toolCall, assistantText), minOutputs = 3).status, "a tool call counts as work")
+
+        assertEquals(DONE, ticketAfterRunExits(0, output = emptyList(), minOutputs = 0).status, "0 = any clean exit counts (the old rule)")
     }
 
     @Test

@@ -18,6 +18,9 @@ class ConversationLog {
 
     private val turns = HashMap<String, ArrayDeque<Turn>>()
 
+    /** GAP 855db590: per session, how many assistant text / tool-call events it produced in all (not bounded by [MAX_TURNS]). */
+    private val workEvents = HashMap<String, Int>()
+
     /** A turn was accepted on [sessionId] with [prompt] (what the user asked, as the transcript shows it). */
     @Synchronized
     fun turn(sessionId: String, prompt: String) {
@@ -37,6 +40,7 @@ class ConversationLog {
         }
         if (visible.isEmpty()) return
         synchronized(this) {
+            workEvents.merge(sessionId, visible.size, Int::plus)
             val reply = turns[sessionId]?.lastOrNull()?.reply ?: return
             // Text deltas append as streamed (a delta may be one token); a tool line stands on its own line.
             for (text in visible) {
@@ -51,9 +55,14 @@ class ConversationLog {
     fun history(sessionId: String): List<CarriedTurn> =
         turns[sessionId].orEmpty().map { CarriedTurn(it.prompt, it.reply.toString().replace(Regex("\n{2,}"), "\n").trim()) }
 
+    /** GAP 855db590: how many assistant outputs and tool calls [sessionId] produced while this daemon watched it (0 = silent). */
+    @Synchronized
+    fun workEvents(sessionId: String): Int = workEvents[sessionId] ?: 0
+
     @Synchronized
     fun drop(sessionId: String) {
         turns.remove(sessionId)
+        workEvents.remove(sessionId)
     }
 
     companion object {

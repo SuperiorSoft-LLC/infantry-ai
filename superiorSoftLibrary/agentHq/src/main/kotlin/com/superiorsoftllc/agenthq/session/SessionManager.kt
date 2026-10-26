@@ -332,6 +332,9 @@ class SessionManager(
     /** TICKET-HANDOVER: true while [sessionId] has a turn in flight. */
     fun inFlight(sessionId: String): Boolean = runs.containsKey(sessionId) || sessions[sessionId]?.live == true
 
+    /** GAP 855db590: how many assistant outputs and tool calls [sessionId] produced in this daemon's life (0 = a silent session). */
+    fun workEvents(sessionId: String): Int = conversation.workEvents(sessionId)
+
     /** TICKET-HANDOVER: the visible text of [sessionId]'s latest reply as AgentHQ recorded it, or null. */
     fun lastReply(sessionId: String): String? = conversation.history(sessionId).lastOrNull()?.reply?.takeIf { it.isNotBlank() }
 
