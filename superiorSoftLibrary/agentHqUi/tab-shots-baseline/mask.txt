@@ -5,6 +5,8 @@
 # Status bar after "contract x.y.z": "last frame Ns ago" and the host's live "RAM x GB free". Their width moves the
 # rest of the bar's text, so the whole remainder of the bar is masked.
 * 190 838 1210 22
+# Status bar: the version digits of "contract x.y.z", so a contract bump does not fail every shot.
+* 140 838 50 22
 # Agent row: the session's age ("now", "6s", "1m").
 * 200 246 50 20
 # Usage: "updated Ns ago" over the plan limits.
