@@ -182,6 +182,8 @@ class TabFactory(
     val events: EventBus = SimpleEventBus(),
     /** Every module the loader looked at, for Settings > Plugins; defaults to [modules], all loaded. */
     statuses: List<ModuleStatus>? = null,
+    /** PLUGINS-2: how Settings > Plugins enables and disables a module; null = this host cannot change modules.json. */
+    val changes: ModuleChanges? = null,
 ) {
     val modules: List<AgentHqModule> = modules.toList()
     /** Whether a loader looked at a plugins root (the desktop); false = compiled-in modules only (web, Android, tests). */

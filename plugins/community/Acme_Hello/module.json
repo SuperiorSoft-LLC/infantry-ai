@@ -6,7 +6,7 @@
   "license": "NOASSERTION",
   "description": "Example community module: a Hello tab, an interceptor on the core Epics tab, an observer of tab.opened, and an override of the core Git tab that the trust rules refuse.",
   "tier": "core",
-  "sequence": ["Infantry_Cli"],
+  "dependencies": [{ "id": "Infantry_Cli", "version": ">=1.0 <2" }],
   "entry": "com.acme.hello.HelloPlugin",
   "jar": "build/libs/Acme_Hello.jar",
   "routes": ["GET /health"],

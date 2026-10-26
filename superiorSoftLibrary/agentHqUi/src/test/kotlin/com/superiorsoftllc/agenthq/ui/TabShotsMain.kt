@@ -17,6 +17,8 @@ import com.superiorsoftllc.agenthq.plugin.host.PluginFolders
 import com.superiorsoftllc.agenthq.plugin.host.PluginJson
 import com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins
 import com.superiorsoftllc.agenthq.ui.plugin.MODULE_ROW_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.plugin.MODULE_MESSAGE_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.plugin.MODULE_TOGGLE_TAG_PREFIX
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.superiorsoftllc.agenthq.daemon.AgentHqDaemon
 import com.superiorsoftllc.agenthq.mailbox.JsonMailStore
@@ -51,8 +53,15 @@ fun main(args: Array<String>) {
     System.getProperty(PluginFolders.ROOT_PROPERTY)?.let { File(it).copyRecursively(root) }
     File(root, "community/Acme_Broken").apply { mkdirs() }.resolve("module.json").writeText("""{ "name": "Acme_Broken", "version": """)
     File(root, "community/Acme_Needy").apply { mkdirs() }.resolve("module.json").writeText(
-        """{"name":"Acme_Needy","version":"1.0.0","author":"Acme (example)","license":"NOASSERTION","sequence":["Acme_Missing"]}""",
+        """{"name":"Acme_Needy","version":"1.0.0","author":"Acme (example)","license":"NOASSERTION","dependencies":[{"id":"Acme_Missing","version":">=1.0"}]}""",
     )
+    // PLUGINS-2 fixtures, off: Acme_Wants needs Acme_Hello >=2 (out of range), Acme_Layer needs Acme_Base (off).
+    fun fixture(name: String, needs: String) = File(root, "community/$name").apply { mkdirs() }.resolve("module.json").writeText(
+        """{"name":"$name","version":"1.0.0","author":"Acme (example)","license":"NOASSERTION","dependencies":[$needs]}""",
+    )
+    fixture("Acme_Wants", """{"id":"Acme_Hello","version":">=2"}""")
+    fixture("Acme_Layer", """{"id":"Acme_Base","version":"^1.0"}""")
+    fixture("Acme_Base", "")
     val modulesJson = File(root, "modules.json")
     val config = runCatching { PluginJson.decodeFromString(ModulesConfig.serializer(), modulesJson.readText()) }.getOrDefault(ModulesConfig())
     modulesJson.writeText(
@@ -116,6 +125,17 @@ fun main(args: Array<String>) {
         for (name in listOf("Acme_Hello", "Acme_Broken", "Acme_Needy")) {
             val row = onAllNodesWithTag(MODULE_ROW_TAG_PREFIX + name)
             if (row.fetchSemanticsNodes().isNotEmpty()) { row[0].performScrollTo(); shot("settings-plugins-$name") }
+        }
+        // PLUGINS-2: the dependency rules' refusals, as Settings shows them under the row.
+        for ((name, shotName) in listOf("Infantry_Cli" to "refused-disable", "Acme_Wants" to "refused-range", "Acme_Layer" to "refused-enable-first")) {
+            val toggle = onAllNodesWithTag(MODULE_TOGGLE_TAG_PREFIX + name)
+            if (toggle.fetchSemanticsNodes().isEmpty()) continue
+            toggle[0].performScrollTo()
+            toggle[0].performClick()
+            onAllNodesWithTag(MODULE_ROW_TAG_PREFIX + name)[0].performScrollTo()
+            shot("settings-plugins-$shotName")
+            onAllNodesWithTag(MODULE_MESSAGE_TAG_PREFIX + name).fetchSemanticsNodes().firstOrNull()
+                ?.let { println("message $name: ${it.config.getOrElseNullable(SemanticsProperties.Text) { null }?.joinToString()}") }
         }
     }
     daemon.close()

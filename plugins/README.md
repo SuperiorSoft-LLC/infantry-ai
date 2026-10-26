@@ -1,5 +1,8 @@
 # Plugins (modules)
 
+New here? [GUIDE.md](GUIDE.md) gets you from the starter template (`_template/`) to a working module in about
+10 minutes.
+
 Infantry AI is built from modules, Magento style. Every tab you see is a module's contribution. The window never
 names a tab: it asks a factory for the tabs of a container (`center`, `right`) and draws the one picked.
 
@@ -46,7 +49,8 @@ jar that will not load is skipped, with one log line saying why. It never stops 
   "author": "Acme",
   "license": "<your license id>",
   "description": "What it does.",
-  "sequence": ["Infantry_Cli"],
+  "dependencies": [{ "id": "Infantry_Cli", "version": ">=1.0 <2" }],
+  "sequence": [],
   "entry": "com.acme.hello.HelloPlugin",
   "jar": "build/libs/Acme_Hello.jar",
   "routes": ["GET /health"],
@@ -60,7 +64,13 @@ jar that will not load is skipped, with one log line saying why. It never stops 
 }
 ```
 
-- `sequence` lists the modules that must load first. The load order is a topological sort of it.
+- `dependencies` (PLUGINS-2) lists the modules this one cannot run without, each with a version range (`>=1.2 <2`,
+  `^1.2`, `~1.2.3`, `1.2`, `*`, alternatives joined by `||`). A dependency that is missing, off, refused or out of
+  range refuses the module. A core module may depend on core modules only. Settings > Plugins enforces the same
+  rules before it writes modules.json: it will not enable a module until its dependencies are enabled (it names
+  them, in enable order), and it will not disable one that enabled modules need unless cascade is ticked.
+- `sequence` sets load order only: a module named there loads first if it loads at all. The load order is a
+  topological sort of `dependencies` plus `sequence`.
 - `preferences` replace a contribution by id. If two modules replace the same id, the last one loaded wins, and the
   replacement is logged.
 - `entry` is a class implementing `com.superiorsoftllc.agenthq.ui.plugin.UiPlugin`. It registers its tabs,
@@ -86,10 +96,10 @@ The plugins root is `AGENTHQ_PLUGINS_ROOT`, else the `agenthq.plugins.root` syst
 
 ## Adding a community module
 
-Create `plugins/community/<Vendor_Module>/` containing a `module.json` and either a prebuilt jar or a
+Copy `_template/` (see [GUIDE.md](GUIDE.md)), or create `plugins/community/<Vendor_Module>/` containing a `module.json` and either a prebuilt jar or a
 `build.gradle.kts`. Nothing else in the repository changes. The build finds a module with sources by scanning this
-folder, and the loader finds every module the same way. No list anywhere names a plugin. Enable the module in
-`modules.json`. See `community/Acme_Hello` for an example.
+folder, and the loader finds every module the same way. No list anywhere names a plugin. A folder whose name starts
+with `_` is skipped by both. Enable the module in Settings > Plugins > Modules or in `modules.json`. See `community/Acme_Hello` for an example.
 
 ## Platforms
 

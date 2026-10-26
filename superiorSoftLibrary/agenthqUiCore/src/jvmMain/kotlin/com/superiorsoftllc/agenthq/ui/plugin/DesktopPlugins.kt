@@ -4,12 +4,15 @@ import com.superiorsoftllc.agenthq.plugin.api.ModulesConfig
 import com.superiorsoftllc.agenthq.plugin.api.Notifications
 import com.superiorsoftllc.agenthq.plugin.api.Services
 import com.superiorsoftllc.agenthq.plugin.api.Tier
+import com.superiorsoftllc.agenthq.plugin.host.DependencyGraph
 import com.superiorsoftllc.agenthq.plugin.host.FilePluginSettings
 import com.superiorsoftllc.agenthq.plugin.host.FilePluginStorage
 import com.superiorsoftllc.agenthq.plugin.host.ModuleCandidate
+import com.superiorsoftllc.agenthq.plugin.host.ModuleChange
 import com.superiorsoftllc.agenthq.plugin.host.ModuleResolver
 import com.superiorsoftllc.agenthq.plugin.host.ModuleState
 import com.superiorsoftllc.agenthq.plugin.host.ModuleStatus
+import com.superiorsoftllc.agenthq.plugin.host.ModulesFile
 import com.superiorsoftllc.agenthq.plugin.host.PluginFolders
 import com.superiorsoftllc.agenthq.plugin.host.Resolution
 import com.superiorsoftllc.agenthq.plugin.host.RouteGate
@@ -51,10 +54,7 @@ object DesktopPlugins {
         val root = PluginFolders.root(stateDir, env, property)
         val config = PluginFolders.config(root, say)
         val demoLock = PluginFolders.demoLock(env)
-        val onDisk = PluginFolders.scan(root, config)
-        // A compiled-in core module with no folder on disk (the installed app) still loads, as core.
-        val candidates = onDisk + compiled.filter { c -> onDisk.none { it.folderName == c.manifest.name } }
-            .map { ModuleCandidate(it.manifest.name, Tier.CORE, null, it.manifest) }
+        val candidates = candidates(root, config, compiled)
         say("[plugins] root ${root.absolutePath}${if (demoLock) " (demo lock on)" else ""}")
         var resolution = ModuleResolver.resolve(candidates, config, demoLock)
 
@@ -72,7 +72,7 @@ object DesktopPlugins {
         val refused = HashSet<String>()
         for (s in resolution.loaded) {
             val m = s.manifest!!
-            val needs = m.sequence.firstOrNull { it in refused }
+            val needs = m.dependencies.map { it.id }.firstOrNull { it in refused }
             val result = if (needs != null) Result.failure(IllegalStateException("dependency $needs is refused")) else
                 compiled.firstOrNull { it.manifest.name == s.name && s.tier == Tier.CORE }?.let { Result.success(it) }
                     ?: runCatching { loadJar(s, services.getValue(s.name)) }
@@ -83,9 +83,31 @@ object DesktopPlugins {
         }
         resolution.log.forEach(say)
         val preferences = resolution.preferences.filter { it.module !in refused }
-        val factory = TabFactory(modules, preferences, services = { services[it] ?: NoPluginServices }, events = bus, statuses = statuses(resolution))
+        val changes = ModuleChanges { request -> change(root, compiled, demoLock, request).also { c -> (c as? ModuleChange.Applied)?.log?.forEach(say); say("[plugins] ${c.message}") } }
+        val factory = TabFactory(modules, preferences, services = { services[it] ?: NoPluginServices }, events = bus, statuses = statuses(resolution), changes = changes)
         factory.problems.forEach { say("[plugins] $it") }
         return Loaded(factory, root, config, demoLock, log) { services[it] ?: NoPluginServices }
+    }
+
+    /** What is installed: every module folder under the root, plus each compiled-in core module that has none. */
+    private fun candidates(root: File, config: ModulesConfig, compiled: List<AgentHqModule>): List<ModuleCandidate> {
+        val onDisk = PluginFolders.scan(root, config)
+        // A compiled-in core module with no folder on disk (the installed app) still loads, as core.
+        return onDisk + compiled.filter { c -> onDisk.none { it.folderName == c.manifest.name } }
+            .map { ModuleCandidate(it.manifest.name, Tier.CORE, null, it.manifest) }
+    }
+
+    /**
+     * PLUGINS-2: Settings asks to enable or disable a module. modules.json is read afresh, the dependency rules decide,
+     * and only an allowed change is written (it applies at the next start). Under the demo lock nothing is written.
+     */
+    fun change(root: File, compiled: List<AgentHqModule>, demoLock: Boolean, request: ModuleRequest): ModuleChange {
+        if (demoLock) return ModuleChange.Refused("The demo lock is on: modules.json is not changed.")
+        val config = PluginFolders.config(root)
+        val graph = DependencyGraph.of(candidates(root, config, compiled), config)
+        val result = if (request.enable) graph.enable(request.module, config) else graph.disable(request.module, config, request.cascade)
+        if (result is ModuleChange.Applied && result.changed.isNotEmpty()) ModulesFile.write(root, config, result.config)
+        return result
     }
 
     /** Loaded first, in load order, then the rest by name: the order Settings > Plugins lists them. */

@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugin.host
 
+import com.superiorsoftllc.agenthq.plugin.api.DependencyDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.ModuleSetting
 import com.superiorsoftllc.agenthq.plugin.api.ModulesConfig
@@ -11,17 +12,17 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** PLUGINS-1: the loading rules, one by one. */
+/** PLUGINS-1: the loading rules, one by one (the helpers' extra names are `dependencies`, PLUGINS-2). */
 class ModuleResolverTest {
-    private fun core(name: String, vararg sequence: String, tabs: List<String> = emptyList()) =
-        ModuleCandidate(name, Tier.CORE, "/p/core/$name", ModuleManifest(name, "1.0.0", author = "Infantry AI", sequence = sequence.toList(), tabs = tabs.map { TabDeclaration(it, "center") }))
+    private fun core(name: String, vararg needs: String, tabs: List<String> = emptyList()) =
+        ModuleCandidate(name, Tier.CORE, "/p/core/$name", ModuleManifest(name, "1.0.0", author = "Infantry AI", dependencies = needs.map { DependencyDeclaration(it) }, tabs = tabs.map { TabDeclaration(it, "center") }))
 
     private fun community(
-        name: String, vararg sequence: String, author: String? = "Acme", license: String? = "NOASSERTION",
+        name: String, vararg needs: String, author: String? = "Acme", license: String? = "NOASSERTION",
         tabs: List<String> = emptyList(), preferences: List<PreferenceDeclaration> = emptyList(), tier: String? = null,
     ) = ModuleCandidate(
         name, Tier.COMMUNITY, "/p/community/$name",
-        ModuleManifest(name, "1.0.0", author = author, license = license, tier = tier, sequence = sequence.toList(), tabs = tabs.map { TabDeclaration(it, "center") }, preferences = preferences),
+        ModuleManifest(name, "1.0.0", author = author, license = license, tier = tier, dependencies = needs.map { DependencyDeclaration(it) }, tabs = tabs.map { TabDeclaration(it, "center") }, preferences = preferences),
     )
 
     private fun enabled(vararg names: String, allowOverride: List<String> = emptyList()) =
@@ -31,7 +32,7 @@ class ModuleResolverTest {
     private fun Resolution.reason(name: String) = status(name)?.reason.orEmpty()
 
     @Test
-    fun `load order follows sequence, core before community, then name`() {
+    fun `load order follows dependencies, core before community, then name`() {
         val r = ModuleResolver.resolve(
             listOf(community("Acme_B", "Infantry_Z"), core("Infantry_Z", "Infantry_A"), core("Infantry_A"), community("Acme_A")),
             enabled("Acme_A", "Acme_B"),
@@ -112,7 +113,7 @@ class ModuleResolverTest {
     @Test
     fun `a core module cannot depend on a community one`() {
         val r = ModuleResolver.resolve(listOf(core("Infantry_A", "Acme_B"), community("Acme_B")), enabled("Acme_B"))
-        assertEquals("a core module cannot depend on community module Acme_B", r.reason("Infantry_A"))
+        assertEquals("core module Infantry_A cannot depend on community module Acme_B", r.reason("Infantry_A"))
     }
 
     @Test

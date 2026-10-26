@@ -1,0 +1,17 @@
+{
+  "name": "Example_Starter",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "author": "Your name or company",
+  "license": "NOASSERTION",
+  "description": "Starter module: one tab and one interceptor. Copy this folder, rename it, and make it yours.",
+  "dependencies": [{ "id": "Infantry_Cli", "version": ">=1.0 <2" }],
+  "sequence": [],
+  "entry": "com.example.starter.StarterPlugin",
+  "jar": "build/libs/Example_Starter.jar",
+  "services": ["notifications"],
+  "routes": [],
+  "events": [],
+  "tabs": [{ "id": "example.starter", "container": "center" }],
+  "interceptors": [{ "target": "example.starter", "name": "count", "kind": "around" }]
+}

@@ -36,7 +36,13 @@ include(":superiorSoftLibrary:samples:markdownEnginePlugin")
 
 // PLUGINS-1: a community module with sources builds as its own project, found by scanning: every plugins/community/<Module>/
 // that has a build.gradle.kts. Nothing here names a module, so dropping a module's folder in is the whole install.
-file("plugins/community").listFiles { f -> f.isDirectory && java.io.File(f, "build.gradle.kts").isFile }.orEmpty().sortedBy { it.name }.forEach { dir ->
+file("plugins/community").listFiles { f -> f.isDirectory && !f.name.startsWith("_") && java.io.File(f, "build.gradle.kts").isFile }.orEmpty().sortedBy { it.name }.forEach { dir ->
     include(":plugins:community:${dir.name}")
     project(":plugins:community:${dir.name}").projectDir = dir
+}
+// PLUGINS-2: the starter template builds and tests like any community module, so a copy of it is known to build. The
+// loader never sees it: it is outside core/ and community/, and a folder starting with "_" is not a module.
+if (file("plugins/_template/build.gradle.kts").isFile) {
+    include(":plugins:_template")
+    project(":plugins:_template").projectDir = file("plugins/_template")
 }

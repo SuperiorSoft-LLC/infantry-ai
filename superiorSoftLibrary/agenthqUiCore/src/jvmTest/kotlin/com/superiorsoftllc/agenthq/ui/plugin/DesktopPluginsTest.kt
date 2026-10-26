@@ -5,6 +5,7 @@ import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.Services
 import com.superiorsoftllc.agenthq.plugin.api.Tier
 import kotlinx.coroutines.runBlocking
+import com.superiorsoftllc.agenthq.plugin.host.ModuleChange
 import com.superiorsoftllc.agenthq.plugin.host.ModuleState
 import com.superiorsoftllc.agenthq.plugin.host.PluginFolders
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
@@ -43,7 +44,7 @@ class DesktopPluginsTest {
             """{"modules":{"Acme_Broken":{"enabled":true},"Acme_Needy":{"enabled":true},"Acme_NoJar":{"enabled":true},"Acme_Git":{"enabled":true}}}""",
         )
         community("Acme_Broken", """{"name": "Acme_Broken", """)
-        community("Acme_Needy", manifest("Acme_Needy", ""","sequence":["Acme_Missing"]"""))
+        community("Acme_Needy", manifest("Acme_Needy", ""","dependencies":[{"id":"Acme_Missing"}]"""))
         community("Acme_NoJar", manifest("Acme_NoJar"))
         community("Acme_Git", manifest("Acme_Git", ""","tabs":[{"id":"acme.git","container":"center"}],"preferences":[{"replace":"infantry.git","with":"acme.git"}]"""))
         community("Acme_Off", manifest("Acme_Off"))
@@ -93,5 +94,62 @@ class DesktopPluginsTest {
     fun `the plugins root can be set by env`() {
         val other = Files.createTempDirectory("plugins-root").toFile()
         assertEquals(other.absolutePath, load(PluginFolders.ROOT_ENV to other.absolutePath).root.absolutePath)
+    }
+
+    // PLUGINS-2: the repository's plugins/ (Gradle runs the tests in agenthqUiCore; plugins/ is at the root).
+    private val repoPlugins = generateSequence(File("").absoluteFile) { it.parentFile }.map { File(it, "plugins") }.first { File(it, "_template").isDirectory }
+
+    /** The template's sources and module.json, without whatever a build left in it. */
+    private fun copyTemplate(to: File) {
+        val from = File(repoPlugins, "_template")
+        from.walkTopDown().onEnter { it.name != "build" && it.name != ".gradle" }.filter { it.isFile }
+            .forEach { it.copyTo(File(to, it.relativeTo(from).path), overwrite = true) }
+    }
+
+    @Test
+    fun `the loader ignores the starter template, wherever it is copied with its underscore name`() {
+        copyTemplate(File(root, "_template"))
+        copyTemplate(File(root, "community/_template"))
+        File(root, "modules.json").writeText("""{"modules":{"Example_Starter":{"enabled":true}}}""")
+        val loaded = load()
+        assertTrue(loaded.factory.statuses.none { it.name == "Example_Starter" }, "${loaded.factory.statuses.map { it.name }}")
+        // Copied under its module name, it is a module like any other (here refused: the copy has no built jar).
+        copyTemplate(File(root, "community/Example_Starter"))
+        val copy = load().factory.statuses.single { it.name == "Example_Starter" }
+        assertEquals("jar build/libs/Example_Starter.jar not found (build it first)", copy.reason)
+    }
+
+    @Test
+    fun `Settings changes go through the dependency rules and only an allowed one is written`() {
+        root.mkdirs()
+        File(root, "modules.json").writeText("""{"modules":{"Acme_Base":{"enabled":false},"Acme_App":{"enabled":true}},"note":"kept"}""")
+        community("Acme_Base", manifest("Acme_Base"))
+        community("Acme_App", manifest("Acme_App", ""","dependencies":[{"id":"Acme_Base","version":"^1.0"},{"id":"Infantry_Cli"}]"""))
+        val loaded = load()
+        assertEquals("dependency Acme_Base is disabled", loaded.factory.statuses.single { it.name == "Acme_App" }.reason)
+        val changes = loaded.factory.changes!!
+        val text = { File(root, "modules.json").readText() }
+
+        // Disabling core Infantry_Cli while Acme_App (enabled) needs it: refused, nothing written.
+        val before = text()
+        val refused = changes.request(ModuleRequest("Infantry_Cli", enable = false))
+        assertTrue(refused is ModuleChange.Refused && refused.dependents == listOf("Acme_App"), refused.message)
+        assertEquals(before, text())
+
+        // Enable Acme_Base, then disable it with cascade: Acme_App goes off too; other keys stay.
+        assertTrue(changes.request(ModuleRequest("Acme_Base", enable = true)) is ModuleChange.Applied)
+        assertEquals(true, PluginFolders.config(root).setting("Acme_Base").enabled)
+        val cascade = changes.request(ModuleRequest("Acme_Base", enable = false, cascade = true))
+        assertTrue(cascade is ModuleChange.Applied && cascade.changed == listOf("Acme_App", "Acme_Base"), cascade.message)
+        assertEquals(false, PluginFolders.config(root).setting("Acme_App").enabled)
+        assertTrue("\"note\"" in text())
+
+        // Now Acme_App cannot be enabled until Acme_Base is.
+        val again = changes.request(ModuleRequest("Acme_App", enable = true))
+        assertTrue(again is ModuleChange.Refused && again.mustEnableFirst == listOf("Acme_Base"), again.message)
+
+        // Under the demo lock Settings changes nothing.
+        val locked = load(PluginFolders.DEMO_LOCK_ENV to "1").factory.changes!!.request(ModuleRequest("Acme_Base", enable = true))
+        assertTrue(locked is ModuleChange.Refused && "demo lock" in locked.message)
     }
 }

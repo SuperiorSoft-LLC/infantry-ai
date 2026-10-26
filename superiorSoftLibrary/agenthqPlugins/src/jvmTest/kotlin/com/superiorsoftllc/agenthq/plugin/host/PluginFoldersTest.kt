@@ -1,6 +1,10 @@
 package com.superiorsoftllc.agenthq.plugin.host
 
+import com.superiorsoftllc.agenthq.plugin.api.ModuleSetting
 import com.superiorsoftllc.agenthq.plugin.api.Tier
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -66,5 +70,31 @@ class PluginFoldersTest {
         settings.set("greeting", "hello")
         assertEquals("hello", settings.get("greeting"))
         assertEquals(listOf("note.txt", "settings.json"), storage.list())
+    }
+
+    @Test
+    fun `a folder whose name starts with an underscore is not a module`() {
+        module("community", "_template", """{"name":"Acme_Template","version":"1.0.0","author":"a","license":"l"}""")
+        module("community", "Acme_Real", """{"name":"Acme_Real","version":"1.0.0","author":"a","license":"l"}""")
+        assertEquals(listOf("Acme_Real"), PluginFolders.scan(root, PluginFolders.config(root)).map { it.folderName })
+    }
+
+    @Test
+    fun `writing the enable list changes only enabled and keeps every other key`() {
+        val original = """{"folders":[{"path":"core","tier":"core"}],"modules":{"Acme_A":{"enabled":false,"allow":["events"]},"Acme_Gone":{"enabled":true}},"demoLock":{"allowRoutes":["GET /health"]},"note":"mine"}"""
+        File(root, "modules.json").writeText(original)
+        val before = PluginFolders.config(root)
+        val after = before.copy(
+            modules = before.modules - "Acme_Gone" + ("Acme_A" to before.setting("Acme_A").copy(enabled = true)) + ("Acme_B" to ModuleSetting(enabled = false)),
+        )
+        ModulesFile.write(root, before, after)
+        val tree = PluginJson.parseToJsonElement(File(root, "modules.json").readText()).jsonObject
+        assertEquals("mine", tree["note"]?.jsonPrimitive?.content, "an unknown key survives")
+        val modules = tree["modules"]!!.jsonObject
+        assertEquals("true", modules["Acme_A"]!!.jsonObject["enabled"]!!.jsonPrimitive.content)
+        assertEquals("events", modules["Acme_A"]!!.jsonObject["allow"]!!.jsonArray.single().jsonPrimitive.content)
+        assertEquals("false", modules["Acme_B"]!!.jsonObject["enabled"]!!.jsonPrimitive.content)
+        assertTrue("Acme_Gone" !in modules)
+        assertEquals(listOf("GET /health"), PluginFolders.config(root).demoLock.allowRoutes)
     }
 }

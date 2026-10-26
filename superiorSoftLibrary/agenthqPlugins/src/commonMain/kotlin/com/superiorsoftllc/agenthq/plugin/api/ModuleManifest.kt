@@ -22,8 +22,17 @@ data class ModuleManifest(
     val description: String = "",
     /** A tier claimed in the file. Never trusted: the folder decides the tier; a mismatch is logged and ignored. */
     val tier: String? = null,
-    /** Modules that must load before this one. */
+    /**
+     * Load order only: modules that, when they load, load before this one. A name here that is absent or off is
+     * ignored. What this module cannot run without goes in [dependencies].
+     */
     val sequence: List<String> = emptyList(),
+    /**
+     * PLUGINS-2: modules this one cannot run without, each with a version range. A missing, disabled or out-of-range
+     * dependency refuses this module at load, and Settings will not enable it until they are enabled. Each one also
+     * loads first. Separate from [sequence] (order) and from [services] (platform services).
+     */
+    val dependencies: List<DependencyDeclaration> = emptyList(),
     /** JVM only: the class implementing the module's plugin interface, and the jar (relative to the folder) holding it. */
     val entry: String? = null,
     val jar: String? = null,
@@ -39,6 +48,10 @@ data class ModuleManifest(
     val observers: List<ObserverDeclaration> = emptyList(),
     val blocks: List<BlockDeclaration> = emptyList(),
 )
+
+/** PLUGINS-2: module [id] (`Vendor_Module`) must be installed, enabled and at a version in [version] (e.g. `>=1.2 <2`). */
+@Serializable
+data class DependencyDeclaration(val id: String, val version: String = "*")
 
 /** A tab the module contributes (the first contribution type; a panel or a whole screen come the same way later). */
 @Serializable

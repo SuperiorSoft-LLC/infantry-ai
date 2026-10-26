@@ -62,8 +62,10 @@ data class Resolution(
  * - the folder decides the tier; a tier claimed in module.json is logged and ignored;
  * - a community module needs an author and a license, and stays off until modules.json enables it;
  * - under the demo lock no community module loads;
- * - load order follows `sequence`; a missing dependency or a cycle refuses the modules it touches; a core module may
- *   not depend on a community one (core never imports a module);
+ * - load order puts each module after its `dependencies` and its `sequence` (order only: an absent name is ignored);
+ * - PLUGINS-2: a dependency that is missing, off, refused or outside its version range refuses the module, and so on
+ *   down the chain; a cycle refuses the modules on it; a core module may not depend on a community one (core never
+ *   imports a module). The rules are [DependencyGraph]'s, the same ones Settings applies before it changes modules.json;
  * - a community module may not replace a core contribution unless modules.json allows that override.
  */
 object ModuleResolver {
@@ -119,18 +121,25 @@ object ModuleResolver {
             }
         }
 
-        // Dependencies: drop, until nothing changes, every module whose `sequence` names one that will not load.
+        // PLUGINS-2 dependencies: drop, until nothing changes, every module with a dependency that will not load, is
+        // out of its version range, or is community under a core module.
         val byName = eligible.associateBy { it.manifest!!.name }.toMutableMap()
+        val installed = candidates.filter { it.manifest != null }.associateBy { it.manifest!!.name }
         var changed = true
         while (changed) {
             changed = false
             for (c in byName.values.toList()) {
                 val m = c.manifest!!
-                val reason = m.sequence.firstNotNullOfOrNull { dep ->
-                    val target = byName[dep]
+                val reason = m.dependencies.firstNotNullOfOrNull { dep ->
+                    val target = byName[dep.id]
+                    val known = target ?: installed[dep.id]
+                    val problem = DependencyGraph.edgeProblem(m.name, c.tier, dep, known?.tier, known?.manifest)
                     when {
-                        target == null -> final[dep]?.let { "dependency $dep is ${it.state.name.lowercase()}" } ?: "missing dependency $dep"
-                        c.tier == Tier.CORE && target.tier == Tier.COMMUNITY -> "a core module cannot depend on community module $dep"
+                        known == null && VersionRange.parseOrNull(dep.version) != null ->
+                            final[dep.id]?.let { "dependency ${dep.id} is ${it.state.name.lowercase()}" } ?: "missing dependency ${DependencyGraph.label(dep)}"
+                        problem != null -> problem
+                        target == null -> final[dep.id]?.let { "dependency ${dep.id} is ${it.state.name.lowercase()}" }
+                            ?: "dependency ${dep.id} is not loading"
                         else -> null
                     }
                 }
@@ -148,7 +157,7 @@ object ModuleResolver {
         val remaining = byName.values.sortedWith(compareBy<ModuleCandidate>({ tierRank(it) }, { it.manifest!!.name })).toMutableList()
         val placed = HashSet<String>()
         while (remaining.isNotEmpty()) {
-            val next = remaining.firstOrNull { c -> c.manifest!!.sequence.all { it in placed } } ?: break
+            val next = remaining.firstOrNull { c -> before(c.manifest!!, byName).all { it in placed } } ?: break
             remaining.remove(next)
             order += next
             placed += next.manifest!!.name
@@ -191,11 +200,15 @@ object ModuleResolver {
         return out
     }
 
+    /** What must load before [m]: its dependencies and the `sequence` names that are loading (an absent one is ignored). */
+    private fun before(m: ModuleManifest, byName: Map<String, ModuleCandidate>): List<String> =
+        (m.dependencies.map { it.id } + m.sequence).distinct().filter { it in byName }
+
     private fun cyclePath(start: String, byName: Map<String, ModuleCandidate>): String {
         val path = mutableListOf(start)
         var at = start
         repeat(byName.size) {
-            val next = byName[at]?.manifest?.sequence?.firstOrNull { it in byName } ?: return path.joinToString(" -> ")
+            val next = byName[at]?.manifest?.let { before(it, byName) }?.firstOrNull() ?: return path.joinToString(" -> ")
             path += next
             if (next == start) return path.joinToString(" -> ")
             at = next
