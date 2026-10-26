@@ -292,6 +292,13 @@ data class Envelope(
         const val RUN_OUTPUT = "run_output"
         const val RUN_FINISHED = "run_finished"
         const val RUN_STOP = "run_stop"
+        // Contract 1.134.0 (RUN-CONSOLE): raw terminal output, the kept runs (pills), a console's replay, size and keys.
+        const val RUN_BYTES = "run_bytes"
+        const val RUN_LIST = "run_list"
+        const val RUNS = "runs"
+        const val RUN_ATTACH = "run_attach"
+        const val RUN_RESIZE = "run_resize"
+        const val RUN_INPUT = "run_input"
 
         // Contract 1.8.0 (MVP story board): a project's stories (the Story board's data).
         // `story_save` / `story_get` / `story_move` are answered by `story`; `story_list`
@@ -2117,9 +2124,37 @@ object WireRequests {
     fun runStart(commandId: String): Envelope =
         Envelope(Envelope.RUN_START, """{"commandId":${Json.encodeToString(kotlinx.serialization.serializer<String>(), commandId)}}""")
 
+    /**
+     * Contract 1.134.0 (RUN-CONSOLE): [runStart] that also says whether the run takes keys ([interactive]) and the
+     * console's size for the pty's first byte.
+     */
+    fun runStart(commandId: String, interactive: Boolean, cols: Int?, rows: Int?): Envelope =
+        Envelope(Envelope.RUN_START, JsonObject(buildMap {
+            put("commandId", JsonPrimitive(commandId))
+            if (interactive) put("interactive", JsonPrimitive(true))
+            cols?.let { put("cols", JsonPrimitive(it)) }
+            rows?.let { put("rows", JsonPrimitive(it)) }
+        }).toString())
+
     /** Contract 1.33.0: kill [runId]'s process tree; the answer is the `run_finished` frame. */
     fun runStop(runId: String, force: Boolean = false): Envelope =
         Envelope(Envelope.RUN_STOP, if (force) "$runId force" else runId)
+
+    /** Contract 1.134.0: the daemon's kept runs, answered by `runs`. */
+    fun runList(): Envelope = Envelope(Envelope.RUN_LIST)
+
+    /** Contract 1.134.0: the run's kept scrollback, answered by one replay `run_bytes`. */
+    fun runAttach(runId: String): Envelope = Envelope(Envelope.RUN_ATTACH, JsonObject(mapOf("runId" to JsonPrimitive(runId))).toString())
+
+    /** Contract 1.134.0: the console's size in cells; the daemon resizes the run's pty. */
+    fun runResize(runId: String, cols: Int, rows: Int): Envelope = Envelope(
+        Envelope.RUN_RESIZE,
+        JsonObject(mapOf("runId" to JsonPrimitive(runId), "cols" to JsonPrimitive(cols), "rows" to JsonPrimitive(rows))).toString(),
+    )
+
+    /** Contract 1.134.0: keys typed into an interactive run, [base64] encoded. */
+    fun runInput(runId: String, base64: String): Envelope =
+        Envelope(Envelope.RUN_INPUT, JsonObject(mapOf("runId" to JsonPrimitive(runId), "data" to JsonPrimitive(base64))).toString())
 
     /** `epic_list` for [projectId]: the raw id as payload; the daemon answers an `epics` frame. */
     fun epicList(projectId: String): Envelope = Envelope(Envelope.EPIC_LIST, projectId)

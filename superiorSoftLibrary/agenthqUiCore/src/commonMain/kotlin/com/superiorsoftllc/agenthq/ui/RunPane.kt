@@ -35,8 +35,11 @@ import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.CommandSpecView
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
+import com.superiorsoftllc.agenthq.ui.model.runPills
 import com.superiorsoftllc.agenthq.ui.net.Controller
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.time.Clock
 
 const val RUN_PANE_TAG = "run-pane"
 const val RUN_COMMAND_PICKER_TAG = "run-command-picker"
@@ -57,6 +60,8 @@ const val RUN_FORM_GRACE_TAG = "run-form-grace"
 const val RUN_FORM_SAVE_TAG = "run-form-save"
 const val RUN_FORM_CANCEL_TAG = "run-form-cancel"
 const val RUN_FORM_ERROR_TAG = "run-form-error"
+const val RUN_PILLS_TAG = "run-pills"
+const val RUN_INTERACTIVE_TAG = "run-interactive"
 
 /** RUN-CMD-2: the command editor's pure rules (no Compose), shared by the pane and its tests. */
 object RunCommandForm {
@@ -114,11 +119,22 @@ fun RunPane(state: AppState, controller: Controller) {
     var confirmDelete by remember { mutableStateOf(false) }
     // The `commands` revision a save was sent against: a newer list with no refusal means it was saved.
     var savedAt by remember { mutableStateOf<Int?>(null) }
+    // RUN-CONSOLE: the desktop opens a pill's console window; web and Android show its lines below instead.
+    val console = LocalRunConsole.current
+    var interactive by remember { mutableStateOf(false) }
 
     val picked = runs.commands.firstOrNull { it.id == pickedId } ?: runs.commands.firstOrNull()
     val current = runs.current
-    val inFlight = current != null && current.state != "FINISHED"
+    // The run going now (one at a time), whichever pill is selected.
+    val active = runs.runs.values.firstOrNull { it.state != "FINISHED" }
+    val inFlight = active != null
     val canEdit = live && !inFlight
+    // The pills' clock: ticks once a second while a run is going, so "running 0:42" counts.
+    var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
+    LaunchedEffect(inFlight) {
+        now = Clock.System.now().toEpochMilliseconds()
+        while (inFlight) { delay(1000); now = Clock.System.now().toEpochMilliseconds() }
+    }
 
     // The controller clears the old refusal before it sends, so the first answer after the save decides:
     // a refusal keeps the form open (its reason shows inline), a new list closes it.
@@ -179,12 +195,26 @@ fun RunPane(state: AppState, controller: Controller) {
                 }
             }
             OutlinedButton(
-                onClick = { picked?.let { c -> act { controller.startRun(c.id) } } },
+                onClick = {
+                    picked?.let { c ->
+                        act { if (interactive) controller.startRun(c.id, interactive = true) else controller.startRun(c.id) }
+                    }
+                },
                 enabled = live && !inFlight && picked != null,
                 modifier = Modifier.testTag(RUN_START_TAG),
             ) { Text("Start", fontSize = 12.sp) }
+            // Typing into a run needs a console to type in: the desktop only, on a 1.134.0 daemon.
+            if (console != null && controller.supportsRunConsole()) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = interactive, onCheckedChange = { interactive = it }, enabled = live && !inFlight,
+                        modifier = Modifier.testTag(RUN_INTERACTIVE_TAG),
+                    )
+                    Text("Interactive", color = Palette.Muted, fontSize = 12.sp)
+                }
+            }
             OutlinedButton(
-                onClick = { current?.let { r -> act { controller.stopRun(r.runId) } } },
+                onClick = { active?.let { r -> act { controller.stopRun(r.runId) } } },
                 enabled = live && inFlight,
                 modifier = Modifier.testTag(RUN_STOP_TAG),
             ) { Text("Stop", fontSize = 12.sp) }
@@ -206,6 +236,23 @@ fun RunPane(state: AppState, controller: Controller) {
                 ) { Text("Delete", fontSize = 12.sp) }
             }
             current?.let { Text(it.finished?.outcome ?: it.state, color = Palette.Muted, fontSize = 11.sp) }
+        }
+        // RUN-CONSOLE: one pill per run, newest first. A click shows that run's lines below and, on the desktop,
+        // opens its console window.
+        val pills = runPills(runs, now)
+        if (pills.isNotEmpty()) {
+            FlowRow(
+                Modifier.padding(top = 6.dp).testTag(RUN_PILLS_TAG),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                pills.forEach { p ->
+                    RunPillChip(p, selected = p.runId == runs.currentRunId, onClick = {
+                        controller.selectRun(p.runId)
+                        console?.open(p.runId, controller)
+                    })
+                }
+            }
         }
         if (confirmDelete && picked != null) {
             FlowRow(

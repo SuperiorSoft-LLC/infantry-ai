@@ -1789,7 +1789,8 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     } ?: s
 
     // Contract 1.33.0 (in-app build): saved commands and run frames, applied by the pure run model.
-    Envelope.COMMANDS, Envelope.RUN, Envelope.RUN_OUTPUT, Envelope.RUN_FINISHED ->
+    // 1.134.0: `runs` (the kept runs) fills the Run tab's pills; `run_bytes` goes to a console, not into the state.
+    Envelope.COMMANDS, Envelope.RUN, Envelope.RUN_OUTPUT, Envelope.RUN_FINISHED, Envelope.RUNS ->
         s.copy(runs = reduceRuns(s.runs, env, json))
 
     // mail bodies, worktree_remove answers, repo echo: not rendered here. A SEQUENCED session frame of a type
