@@ -1079,7 +1079,9 @@ fun promptBlocker(agent: AgentView): String? {
         turnInFlight(s) -> "the agent is still answering; send your next message when this turn has finished (or kill it)"
         // CMD-HARNESS-1: a bound-but-never-run session (what a harness switch cuts) takes its first turn, as the
         // daemon's `neverRun` rule does; only a session that ran without reporting an id has nothing to continue.
-        s.providerSessionId == null && !(s.runCount == 0 && s.state == SessionState.IDLE) -> "nothing to continue: the provider never reported a session id for this agent; start a new one"
+        // GAP-006b: and so does one AT REST whose run reported no id (its brief never landed): the daemon runs the message
+        // as its first turn, with a ticket worker's brief ahead of it. Only one that FAILED that way has nothing to continue.
+        s.providerSessionId == null && s.state != SessionState.IDLE -> "nothing to continue: the provider never reported a session id for this agent; start a new one"
         else -> null
     }
 }

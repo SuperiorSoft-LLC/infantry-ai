@@ -174,9 +174,13 @@ class ChatModelTest {
 
     @Test fun `a message is refused while the agent is answering or has nothing to continue`() {
         val ranNoId = rec("fresh", SessionState.IDLE, psid = null).copy(runCount = 1)
-        val s = feed(ready(), sessions(rec("busy", SessionState.BUSY), ranNoId, rec("bound", SessionState.IDLE, psid = null), rec("idle"), rec("failed", SessionState.FAILED)))
+        val failedNoId = rec("crashed", SessionState.FAILED, psid = null).copy(runCount = 1)
+        val s = feed(ready(), sessions(rec("busy", SessionState.BUSY), ranNoId, failedNoId, rec("bound", SessionState.IDLE, psid = null), rec("idle"), rec("failed", SessionState.FAILED)))
         assertTrue(promptBlocker(s.agents.getValue("busy"))!!.contains("still answering"))
-        assertNotNull(promptBlocker(s.agents.getValue("fresh")), "it ran and reported no id: nothing to continue")
+        // GAP-006b: at rest after a run that never reported an id (the phantom): the message is its FIRST turn, on the
+        // same session (the daemon puts a ticket worker's brief ahead of it), never refused into a second instance.
+        assertNull(promptBlocker(s.agents.getValue("fresh")), "a phantom at rest takes the message as its first turn")
+        assertNotNull(promptBlocker(s.agents.getValue("crashed")), "a run that FAILED before reporting an id stays refused, as the daemon does")
         // CMD-HARNESS-1: bound but never run (what a harness switch cuts): its first turn goes, as the daemon's neverRun.
         assertNull(promptBlocker(s.agents.getValue("bound")))
         assertNull(promptBlocker(s.agents.getValue("idle")))
