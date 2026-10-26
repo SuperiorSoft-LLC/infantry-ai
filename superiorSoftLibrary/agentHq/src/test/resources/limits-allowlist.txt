@@ -53,6 +53,8 @@ com/superiorsoftllc/agenthq/commands/CommandRegistry.kt:DEFAULT_GRACE_MILLIS|pen
 com/superiorsoftllc/agenthq/commands/CommandRegistry.kt:MAX_GRACE_MILLIS|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/agenthq/commands/RunManager.kt:MAX_LINES|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/agenthq/commands/RunManager.kt:MAX_LINE_CHARS|pending S2-S4 (not yet routed through LimitRegistry)
+com/superiorsoftllc/agenthq/commands/RunManager.kt:DEFAULT_COLS|layout: the first pty width until a console sends its size (run_start cols / run_resize), not a limit
+com/superiorsoftllc/agenthq/commands/RunManager.kt:DEFAULT_ROWS|layout: the first pty height until a console sends its size (run_start rows / run_resize), not a limit
 com/superiorsoftllc/agenthq/daemon/DaemonMain.kt:QUESTION_SWEEP_MS|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/agenthq/daemon/DaemonMain.kt:SESSION_CLOSE_GRACE_MS|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/agenthq/daemon/DaemonMain.kt:SESSION_REPLAY_BUFFER_CAPACITY|pending S2-S4 (not yet routed through LimitRegistry)

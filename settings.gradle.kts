@@ -17,6 +17,11 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
+        // RUN-CONSOLE (ticket 67f117b6): JediTerm is published only on JetBrains' IntelliJ dependencies repository,
+        // not on Maven Central. Content-filtered so nothing else can ever resolve from it.
+        maven("https://packages.jetbrains.team/maven/p/ij/intellij-dependencies") {
+            content { includeGroup("org.jetbrains.jediterm") }
+        }
     }
 }
 

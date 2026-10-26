@@ -139,6 +139,18 @@ object LimitRegistry {
         zeroMeans = "any clean exit counts, silent or not",
     )
 
+    /** RUN-CONSOLE (ticket 67f117b6, contract 1.134.0): the raw terminal output a run keeps for a console to replay. */
+    val RUN_SCROLLBACK_BYTES = LimitDef(
+        "limits.run.scrollbackBytes", 2L * 1024 * 1024, "bytes",
+        "Raw terminal output each saved-command run keeps (newest kept), what its console window replays when opened late or after the run.",
+        min = 1024, max = Int.MAX_VALUE.toLong(), zeroIsUnlimited = false,
+    )
+    val RUN_HISTORY = LimitDef(
+        "limits.run.history", 20, "runs",
+        "Saved-command runs the daemon remembers (the Run tab's pills, each with its scrollback); the oldest finished run is forgotten first.",
+        min = 1, max = 10_000, zeroIsUnlimited = false,
+    )
+
     /** Ticket 3b30398d: the process-watch pass (ROGUE-1 ledger, CPU sampling), read before every pass. */
     val PROCESS_WATCH_INTERVAL_SECONDS = LimitDef(
         "limits.processes.watchIntervalSeconds", 10, "seconds",
@@ -150,7 +162,7 @@ object LimitRegistry {
         MAX_PER_POD, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
         TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, IDLE_NOTICE_MINUTES, UNBRIEFED_GRACE_MINUTES,
-        AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS,
+        AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
     )
 
     /** A minutes limit as milliseconds; 0 on an unlimited-capable one = [Long.MAX_VALUE] (never reached). */

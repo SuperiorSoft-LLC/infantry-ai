@@ -370,7 +370,8 @@ object EventVocabulary {
     // **1.131.0 (BACKLOG, ticket-39eab724) is ADDITIVE**: ticket column `backlog` (first in board order, never started), `TicketSave.status` on a create. See CONTRACT.md.
     // **1.132.0 (BUILD-LIMITS, ticket-66153313) is ADDITIVE + BEHAVIOURAL**: settings `limits.build.priority|maxWorkers|maxParallelForks` and `limits.cpu.alertPercent|alertMinutes`; worker sessions run at the build priority (Windows Job object / POSIX nice) with Gradle caps in their env; `TrackedProcess.cpuPercent`, `ProcessReport.agentCpuPercent|cpuAlertPercent|cpuAlertMinutes|cpuHighSince`; a `ceiling` attention item (outcome `cpu_sustained`). See CONTRACT.md.
     // **1.133.0 (NO-HARD-CODED-LIMITS, ticket-23471801) is ADDITIVE + BEHAVIOURAL**: settings `limits.concurrency.*`, `limits.pacing.maxWorkersCeiling`, `limits.watchdog.*` (and `limits.build|cpu.*` now share the registry); env `AGENTHQ_LIMIT_*`; frame `limit_catalog`; refusals name the setting. See CONTRACT.md.
-    const val VERSION = "1.133.0"
+    // **1.134.0 (RUN-CONSOLE, ticket-67f117b6) is ADDITIVE + BEHAVIOURAL**: runs have a pty; frames `run_bytes`, `run_list`/`runs`, `run_attach`, `run_resize`, `run_input`; `run` name/terminal/interactive; settings `limits.run.scrollbackBytes|history`. See CONTRACT.md.
+    const val VERSION = "1.134.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA
