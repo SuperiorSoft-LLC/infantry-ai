@@ -44,4 +44,24 @@ class Pty4jTerminalRunnerTest {
         assertTrue(c.exited.await(60, TimeUnit.SECONDS), "the probe did not exit: ${c.text()}")
         assertTrue(c.text().contains("cols=133"), "expected cols=133 after the resize in: ${c.text()}")
     }
+
+    @Test fun `an argument with quotes reaches the child as given`() {
+        // The double space survives only if the quotes around it do (a bare `"` would be eaten by the child's parser).
+        val c = Capture()
+        val argv = if (windows) listOf("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", "Write-Output \"said  it\"")
+        else listOf("sh", "-c", "echo \"said  it\"")
+        Pty4jTerminalRunner().start(ProcessSpec(argv), 80, 24, c)
+        assertTrue(c.exited.await(60, TimeUnit.SECONDS), "the child did not exit: ${c.text()}")
+        assertTrue(c.text().contains("said  it"), "expected 'said  it' in: ${c.text()}")
+        assertEquals(0, c.code)
+    }
+
+    @Test fun `the windows command line quotes and escapes each argument the msvcrt way`() {
+        assertEquals("a.exe plain", windowsCommandLine(listOf("a.exe", "plain")))
+        assertEquals("a.exe \"two words\" \"\"", windowsCommandLine(listOf("a.exe", "two words", "")))
+        assertEquals("a.exe \"say \\\"hi\\\"\"", windowsCommandLine(listOf("a.exe", "say \"hi\"")))
+        assertEquals("a.exe \"C:\\dir with space\\\\\"", windowsCommandLine(listOf("a.exe", "C:\\dir with space\\")))
+        assertEquals("a.exe \"x\\\\\\\"y\"", windowsCommandLine(listOf("a.exe", "x\\\"y")))
+        assertEquals("a.exe C:\\no\\space", windowsCommandLine(listOf("a.exe", "C:\\no\\space")))
+    }
 }

@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.runner
 
+import com.pty4j.Command
 import com.pty4j.PtyProcess
 import com.pty4j.PtyProcessBuilder
 import com.pty4j.WinSize
@@ -39,7 +40,11 @@ class Pty4jTerminalRunner : TerminalRunner {
         env.putAll(spec.env)
         // The emulator on the other end is an xterm-compatible one (JediTerm, or the text fallback).
         env.putIfAbsent("TERM", "xterm-256color")
-        val process = PtyProcessBuilder(spec.command.toTypedArray())
+        // pty4j's own Windows join quotes on a space but leaves an embedded `"` bare; build the line ourselves so
+        // the child sees the same argv the piped runner (ProcessBuilder) would give it.
+        val builder = if (WINDOWS) PtyProcessBuilder(Command.RawCommandString(windowsCommandLine(spec.command)))
+        else PtyProcessBuilder(spec.command.toTypedArray())
+        val process = builder
             .setDirectory((spec.workingDir ?: File(".")).absolutePath)
             .setEnvironment(env)
             .setInitialColumns(cols)
@@ -86,4 +91,28 @@ private class Pty4jProcess(private val process: PtyProcess) : TerminalProcess {
     }
 
     override fun killTree() = ProcessTreeKiller.kill(process)
+}
+
+private val WINDOWS = System.getProperty("os.name").orEmpty().lowercase().contains("win")
+
+/**
+ * [argv] as one Windows command line under the MSVCRT rules a child's argv parser uses: an argument with a space,
+ * tab or quote (or an empty one) goes in quotes, an embedded `"` becomes `\"`, and backslashes before a quote (or
+ * the closing quote) are doubled. Each argument comes back out of CommandLineToArgvW exactly as given.
+ */
+internal fun windowsCommandLine(argv: List<String>): String = argv.joinToString(" ") { arg ->
+    if (arg.isNotEmpty() && arg.none { it == ' ' || it == '\t' || it == '"' }) return@joinToString arg
+    buildString {
+        append('"')
+        var slashes = 0
+        for (c in arg) {
+            when (c) {
+                '\\' -> slashes++
+                '"' -> { repeat(slashes * 2 + 1) { append('\\') }; append('"'); slashes = 0 }
+                else -> { repeat(slashes) { append('\\') }; append(c); slashes = 0 }
+            }
+        }
+        repeat(slashes * 2) { append('\\') }
+        append('"')
+    }
 }

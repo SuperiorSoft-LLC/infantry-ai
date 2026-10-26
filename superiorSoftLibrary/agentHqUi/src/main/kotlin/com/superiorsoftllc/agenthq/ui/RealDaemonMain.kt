@@ -85,16 +85,21 @@ fun runRealDaemonUi(
             RealDaemonLaunch.awaitStdinEof()
         } else {
             application {
+                // RUN-CONSOLE: a pill's console windows live beside the main window.
+                val consoles = remember { DesktopRunConsoles() }
                 AgentHqWindow(onCloseRequest = ::exitApplication) {
                     var shellUrl by remember { mutableStateOf(if (remote != null) "" else null) }
                     LaunchedEffect(Unit) { if (shellUrl == null) shellUrl = withContext(Dispatchers.IO) { startLocal() } }
-                    SplashHost {
-                        shellUrl?.let { url ->
-                            AgentHqShell(PinnedDaemonHost(defaultPlatformHost(), url, logsDir, updater, servers = servers, remote = remote, local = local, activeFile = activeServer, pluginsDir = File(stateDir(), "plugins")))
+                    androidx.compose.runtime.CompositionLocalProvider(LocalRunConsole provides consoles) {
+                        SplashHost {
+                            shellUrl?.let { url ->
+                                AgentHqShell(PinnedDaemonHost(defaultPlatformHost(), url, logsDir, updater, servers = servers, remote = remote, local = local, activeFile = activeServer, pluginsDir = File(stateDir(), "plugins")))
+                            }
                         }
                     }
                     if (updater != null) UpdatePrompt(updater)
                 }
+                consoles.Windows()
             }
         }
     } finally {
