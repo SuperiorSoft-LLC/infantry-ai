@@ -32,6 +32,25 @@ class JvmPlatformHostTest {
         assertEquals("ws://127.0.0.1:8790/ws", host.defaultDaemonUrl)
     }
 
+    /**
+     * BUG 464d7f97: the installed app pins AGENTHQ_STATE_DIR as a system property (InstallProfile.apply), not in the
+     * environment. The daemon reads the property first, so Settings > Plugins must read the same `<state>/plugins`,
+     * not `~/.agenthq/plugins`: a community module the daemon found is listed, off or on.
+     */
+    @Test fun thePinnedStateDirPropertyIsWherePluginsAreRead() {
+        val stateDir = Files.createTempDirectory("agenthq-state").toFile().apply { deleteOnExit() }
+        File(stateDir, "plugins/community/Acme_Probe").apply { mkdirs() }.resolve("module.json")
+            .writeText("""{"name":"Acme_Probe","version":"1.0.0","apiVersion":1,"author":"Acme","license":"MIT"}""")
+        File(stateDir, "daemon.port").writeText("8799")
+        val host = JvmPlatformHost(
+            env = { null }, home = emptyHome,
+            property = { if (it == "AGENTHQ_STATE_DIR") stateDir.absolutePath else null },
+        )
+        val probe = host.tabFactory.statuses.single { it.name == "Acme_Probe" }
+        assertEquals(com.superiorsoftllc.agenthq.plugin.api.Tier.COMMUNITY, probe.tier)
+        assertEquals("ws://127.0.0.1:8799/ws", host.defaultDaemonUrl)
+    }
+
     @Test fun anUnreadablePortFileFallsBackToTheFixedPort() {
         val home = Files.createTempDirectory("agenthq-home").toFile().apply { deleteOnExit() }
         File(home, ".agenthq").apply { mkdirs() }.resolve("daemon.port").writeText("not a port")
