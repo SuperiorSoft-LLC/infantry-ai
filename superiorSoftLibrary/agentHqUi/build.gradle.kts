@@ -125,6 +125,15 @@ tasks.register<JavaExec>("runSmoke") {
     jvmArgs(agentHqJvmCaps) // PERF-2
 }
 
+// PLUGINS-1: dev tool, one PNG per tab of every tab strip (stub daemon, temp state). Args: output folder.
+tasks.register<JavaExec>("runTabShots") {
+    group = "application"
+    mainClass.set("com.superiorsoftllc.agenthq.ui.TabShotsMainKt")
+    classpath = sourceSets["test"].runtimeClasspath
+    jvmArgs(agentHqJvmCaps) // PERF-2
+    args(project.findProperty("tabShotsOut")?.toString() ?: layout.buildDirectory.dir("tab-shots").get().asFile.path)
+}
+
 // U2: the UI tests boot the real daemon in-process, and the client now asks for `limits` on connect. Keep the
 // daemon's plan-limit meters off so a test never reads real credentials or calls a provider (as :agentHq does).
 tasks.withType<Test>().configureEach {

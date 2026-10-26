@@ -45,14 +45,14 @@ class MobileChromeUiTest {
 
     @Test
     fun at390TheTabRowShowsAScrollCueWhileTabsOverflow() = runDesktopComposeUiTest(390, 200) {
-        setContent { CenterTabBar(AppState(), CenterTab.OUTPUT) {} }
+        setContent { CenterTabBar(AppState(), "infantry.cli") {} }
         waitForIdle()
         assertTrue(onAllNodesWithTag(TAB_BAR_MORE_CUE_TAG, useUnmergedTree = true).fetchSemanticsNodes().size == 1, "scroll cue shown while tabs overflow")
     }
 
     @Test
     fun onAWideWindowTheTabRowHasNoScrollCue() = runDesktopComposeUiTest(1600, 200) {
-        setContent { CenterTabBar(AppState(), CenterTab.OUTPUT) {} }
+        setContent { CenterTabBar(AppState(), "infantry.cli") {} }
         waitForIdle()
         assertTrue(onAllNodesWithTag(TAB_BAR_MORE_CUE_TAG, useUnmergedTree = true).fetchSemanticsNodes().isEmpty(), "no scroll cue when all tabs fit")
     }

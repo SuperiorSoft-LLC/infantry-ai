@@ -1,0 +1,8 @@
+{
+  "name": "Infantry_Review",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "author": "Infantry AI",
+  "description": "Pod nodes waiting for review.",
+  "sequence": []
+}

@@ -184,16 +184,23 @@ import com.superiorsoftllc.agenthq.ui.model.visibleAgents
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
 import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.protocol.SessionState
+import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
+import com.superiorsoftllc.agenthq.ui.plugin.TabContext
+import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
+import com.superiorsoftllc.agenthq.plugins.core.CoreModules
+import androidx.compose.runtime.staticCompositionLocalOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
-enum class CenterTab { OUTPUT, PODS, ROLES, PROFILES, TRIGGERS, EPICS, MEMORY, RUN, GIT, STATS }
 /**
- * The right-hand tabs, in TabBar order (the bar maps a click to `entries[index]`). UX-CHANGES-1: the Worktree tab is
- * gone; Changes took its first place and its Ctrl+3, and shows the selected session's worktree among the project's.
+ * PLUGINS-1: the tabs come from modules through a [TabFactory]; the window never names one. The default is the core
+ * modules (plugins/core); a host passes its own factory to [App] once it loads more.
  */
-enum class RightTab { CHANGES, REVIEW, ATTENTION, USAGE, PROMPTS, SKILLS }
+val LocalTabFactory = staticCompositionLocalOf { CoreModules.factory }
+
+/** The id of the Attention tab, opened by the title bar's attention chip (a no-op when no module provides it). */
+const val ATTENTION_TAB_ID = "infantry.attention"
 
 /**
  * The whole window. Layout follows the reference: agent list left, live output + prompt centre,
@@ -203,8 +210,8 @@ enum class RightTab { CHANGES, REVIEW, ATTENTION, USAGE, PROMPTS, SKILLS }
  * Keyboard (every control also has a button):
  *  Ctrl+K search | Alt+Up/Down previous/next agent | Ctrl+J next agent needing input
  *  Ctrl+N spawn mode | Ctrl+Shift+N switch agent (SWAP-AGENT-1) | Ctrl+R resume | Ctrl+Shift+K kill | Ctrl+Alt+K force kill
- *  Ctrl+1/2/5 centre tab (output, pods, roles) | Ctrl+3/4/6/7 right tab (changes, review, attention, usage)
- *  Ctrl+8 board modal (M2-8: the sidebar Board button) | Ctrl+9/0 centre tab (profiles, triggers)
+ *  Ctrl+<digit> the tab whose provider claims that digit (core: 1/2/5/9/0 centre, 3/4/6/7 right)
+ *  Ctrl+8 board modal (M2-8: the sidebar Board button)
  *  Ctrl+L connection | Ctrl+/ focus prompt | Ctrl+, configuration (the footer cog)
  */
 @Composable
@@ -218,13 +225,16 @@ fun App(
     logs: LogsFolder? = null,
     /** UPDATE-1: the installed app's "Check for updates" for Settings > Updates; null = no section. */
     updates: UpdatesEntry? = null,
+    /** PLUGINS-1: where the tabs come from; the core modules unless the host loaded more. */
+    tabs: TabFactory = CoreModules.factory,
 ) {
     val state by controller.state.collectAsState()
     val actionScope = rememberCoroutineScope()
     var query by remember { mutableStateOf("") }
     var roleFilter by remember { mutableStateOf<String?>(null) }
-    var centerTab by remember { mutableStateOf(CenterTab.OUTPUT) }
-    var rightTab by remember { mutableStateOf(RightTab.CHANGES) }
+    val homeTab = tabs.home(TabContainers.CENTER).orEmpty()
+    var centerTab by remember { mutableStateOf(homeTab) }
+    var rightTab by remember { mutableStateOf(tabs.home(TabContainers.RIGHT).orEmpty()) }
     var rightPanelWidth by remember { mutableStateOf(RightPanelWidth.DEFAULT) } // in-memory only: no UI-prefs store exists yet
     var sidebarWidth by remember { mutableStateOf(SidebarWidth.DEFAULT) } // M2-9: in-memory only, not persisted (owner's call)
 
@@ -298,11 +308,19 @@ fun App(
         }
     }
     /** PANEL-TOGGLE-1 (plan rule 5): a right-panel tab chosen from outside the panel shows the panel first. */
-    fun showRightTab(tab: RightTab) {
+    fun showRightTab(tab: String) {
         // BUG-COMPACT-ATTN-1: in a compact window reveal() would leave the list on screen (leftShown wins in
         // compactScreen()), so every right-panel entry point (attention, Ctrl+3/4/6/7) switches to the RIGHT screen.
         if (state.panels.compactWindow) controller.showCompactScreen(CompactScreen.RIGHT) else controller.revealPanel(PanelSide.RIGHT)
         rightTab = tab
+    }
+    /** PLUGINS-1: shows a tab by id in its own container (the right one is revealed first, as above). */
+    fun showTab(id: String) {
+        val tab = tabs.find(id) ?: return
+        when (tab.container) {
+            TabContainers.CENTER -> centerTab = tab.id
+            TabContainers.RIGHT -> showRightTab(tab.id)
+        }
     }
     val root = remember { FocusRequester() }
 
@@ -324,6 +342,17 @@ fun App(
     // M2-4: the list renders status groups, so keyboard navigation walks that same order.
     val visible = state.groupedAgents(visibleAgents(state, query, roleFilter, agentScope = flags.agentScope)).flatMap { it.second }
     val selected = state.selected
+
+    /** PLUGINS-1: what a tab may reach; [transcript] is the chat's, for the centre strip. */
+    fun tabContext(transcript: @Composable () -> Unit) = TabContext(
+        state, controller,
+        open = ::showTab,
+        showChat = { centerTab = homeTab; chat.spawnMode = false },
+        insertIntoChat = { chat.insert(it) },
+        diffTarget = diffTarget,
+        onOpenDiff = { diffTarget = it },
+        transcript = transcript,
+    )
 
     fun move(delta: Int) {
         if (visible.isEmpty()) return
@@ -353,16 +382,8 @@ fun App(
                 selected?.let { a -> chat.resume(controller, actionScope, a) }
                 true
             }
-            e.isCtrlPressed && e.key == Key.One -> { centerTab = CenterTab.OUTPUT; true }
-            e.isCtrlPressed && e.key == Key.Two -> { centerTab = CenterTab.PODS; true }
-            e.isCtrlPressed && e.key == Key.Three -> { showRightTab(RightTab.CHANGES); true }
-            e.isCtrlPressed && e.key == Key.Four -> { showRightTab(RightTab.REVIEW); true }
-            e.isCtrlPressed && e.key == Key.Five -> { centerTab = CenterTab.ROLES; true }
             e.isCtrlPressed && e.key == Key.Eight -> { showBoard = true; true }
-            e.isCtrlPressed && e.key == Key.Nine -> { centerTab = CenterTab.PROFILES; true }
-            e.isCtrlPressed && e.key == Key.Zero -> { centerTab = CenterTab.TRIGGERS; true }
-            e.isCtrlPressed && e.key == Key.Six -> { showRightTab(RightTab.ATTENTION); true }
-            e.isCtrlPressed && e.key == Key.Seven -> { showRightTab(RightTab.USAGE); true }
+            e.isCtrlPressed && digitOf(e.key)?.let(tabs::byShortcut) != null -> { showTab(tabs.byShortcut(digitOf(e.key)!!)!!.id); true }
             e.isCtrlPressed && e.key == Key.L -> { showConnect = true; true }
             e.isCtrlPressed && e.key == Key.Comma -> { showConfig = true; true }
             e.isCtrlPressed && e.key == Key.Slash -> { chat.focus.requestFocus(); true }
@@ -377,6 +398,7 @@ fun App(
           LocalModalBlur provides modalBlur,
           LocalProgressStaleMin provides flags.progressStaleMin,
           LocalReasoningPlacement provides flags.reasoningPlacement,
+          LocalTabFactory provides tabs,
           LocalChatMarkdown provides remember(flags.chatMarkdownEngine) { ChatMarkdownConfig(com.superiorsoftllc.agenthq.ui.model.ChatMarkdown.engines.resolve(flags.chatMarkdownEngine), chatBlockRenderers) },
       ) {
       ImageViewerHost {
@@ -388,7 +410,7 @@ fun App(
             Modifier.fillMaxSize().modalBlur(modalBlur).background(Palette.Bg).focusRequester(root).focusable().onPreviewKeyEvent(::key),
         ) {
             TitleBar(
-                state, flags.agentScope, onConnect = { changeConnection?.invoke() ?: run { showConnect = true } }, onAttention = { showRightTab(RightTab.ATTENTION) },
+                state, flags.agentScope, onConnect = { changeConnection?.invoke() ?: run { showConnect = true } }, onAttention = { showTab(ATTENTION_TAB_ID) },
                 projectSlot = { ProjectPicker(state, controller) },
                 onTogglePanel = controller::togglePanel,
                 serverSlot = {
@@ -432,26 +454,14 @@ fun App(
             val rightPanel: @Composable (Modifier, (() -> Unit)?) -> Unit = { mod, onClose ->
                 Column(mod.fillMaxHeight().testTag("right-panel")) {
                     if (onClose != null) CompactNavRow(backLabel = "Close", onBack = onClose)
+                    val strip = tabs.tabs(TabContainers.RIGHT)
                     TabBar(
                         hPad = 4.dp,
                         fontSize = 11.sp,
-                        tabs = listOf(
-                            "Changes ^3" to (rightTab == RightTab.CHANGES),
-                            "Review ${state.reviewQueue.size.takeIf { it > 0 }?.let { "($it)" } ?: ""} ^4" to (rightTab == RightTab.REVIEW),
-                            "Attention ${state.attentionOpenCount.takeIf { it > 0 }?.let { "($it)" } ?: ""} ^6" to (rightTab == RightTab.ATTENTION),
-                            "Usage ^7" to (rightTab == RightTab.USAGE),
-                            "Prompts" to (rightTab == RightTab.PROMPTS),
-                            "Skills" to (rightTab == RightTab.SKILLS),
-                        ),
-                    ) { rightTab = RightTab.entries[it] }
-                    when (rightTab) {
-                        RightTab.CHANGES -> ProjectChangesPanel(state, controller, openDiff = diffTarget, onOpenDiff = { diffTarget = it })
-                        RightTab.REVIEW -> ReviewPane(state, controller)
-                        RightTab.ATTENTION -> AttentionPane(state, controller)
-                        RightTab.USAGE -> UsagePane(state, selected, controller)
-                        RightTab.PROMPTS -> PromptsPane(state, controller, onInsert = { chat.insert(it) })
-                        RightTab.SKILLS -> SkillsPane(state, controller, onInsert = { chat.insert(it) })
-                    }
+                        tabs = strip.map { it.title(state) to (rightTab == it.id) },
+                        tagOf = { strip[it].testTag },
+                    ) { rightTab = strip[it].id }
+                    tabs.Content(rightTab, tabContext {})
                 }
             }
             Box(Modifier.fillMaxSize()) {
@@ -470,24 +480,7 @@ fun App(
                         selected?.id, controller, Modifier.weight(1f).fillMaxWidth(), chat = chat,
                         onOpenTicket = { showBoard = true },
                         beforeContent = { CenterTabBar(state, centerTab) { centerTab = it } },
-                        content = { transcript ->
-                            when (centerTab) {
-                                CenterTab.OUTPUT -> transcript()
-                                CenterTab.PODS -> PodsPane(state, controller)
-                                CenterTab.ROLES -> RolesPane(
-                                    state, controller,
-                                    onSessionStarted = { centerTab = CenterTab.OUTPUT; chat.spawnMode = false },
-                                    onOpenAgent = { controller.select(it); centerTab = CenterTab.OUTPUT; chat.spawnMode = false },
-                                )
-                                CenterTab.PROFILES -> ProfilesPane(state, controller, onSessionStarted = { centerTab = CenterTab.OUTPUT; chat.spawnMode = false })
-                                CenterTab.TRIGGERS -> TriggersPane(state, controller)
-                                CenterTab.EPICS -> EpicsPane(state, controller)
-                                CenterTab.MEMORY -> MemoryPane(state, controller)
-                                CenterTab.RUN -> RunPane(state, controller)
-                                CenterTab.GIT -> ProjectGitPane(state, controller)
-                                CenterTab.STATS -> StatsPane(state, controller)
-                            }
-                        },
+                        content = { transcript -> tabs.Content(centerTab, tabContext(transcript)) },
                     )
                     LaunchedEffect(showNewAgent, state.connection.isLive) {
                         if (showNewAgent && state.connection.isLive) controller.refreshModelCatalog()
@@ -560,7 +553,7 @@ fun App(
             BoardModal(
                 state, controller,
                 onOpenAgent = {
-                    controller.select(it); centerTab = CenterTab.OUTPUT; chat.spawnMode = false; showBoard = false
+                    controller.select(it); centerTab = homeTab; chat.spawnMode = false; showBoard = false
                     // MOBILE-LAYOUT-2: a compact window opens the Board from the list; "Agent" lands on the output.
                     if (state.panels.compactWindow) controller.showCompactScreen(CompactScreen.OUTPUT)
                 },
@@ -578,7 +571,7 @@ fun App(
             hidden = state.openQuestions.count { q -> q.id in state.dismissedQuestions || q.sessionId != state.selectedId },
             onShow = {
                 state.openQuestions.firstOrNull { it.sessionId != state.selectedId && state.agents.containsKey(it.sessionId) }
-                    ?.let { controller.select(it.sessionId); centerTab = CenterTab.OUTPUT; chat.spawnMode = false }
+                    ?.let { controller.select(it.sessionId); centerTab = homeTab; chat.spawnMode = false }
                 controller.showQuestions()
             },
         )
@@ -1019,25 +1012,25 @@ internal fun RemoveAgentDialog(a: AgentView, state: AppState, onDismiss: () -> U
 
 const val CENTER_TAB_BAR_TAG = "center-tab-bar"
 
-/** The center pane's tab strip, one label per [CenterTab] in order. Public so UI tests can read the labels. */
+/**
+ * The center pane's tab strip: the [LocalTabFactory]'s centre tabs in order; [current] is a tab id. Public so UI
+ * tests can read the labels.
+ */
 @Composable
-fun CenterTabBar(state: AppState, current: CenterTab, onPick: (CenterTab) -> Unit) {
+fun CenterTabBar(state: AppState, current: String, onPick: (String) -> Unit) {
+    val strip = LocalTabFactory.current.tabs(TabContainers.CENTER)
     TabBar(
-        listOf(
-            "CLI  ^1" to (current == CenterTab.OUTPUT),
-            "Pods  ^2" to (current == CenterTab.PODS),
-            "Roles  ^5" to (current == CenterTab.ROLES),
-            "Profiles  ^9" to (current == CenterTab.PROFILES),
-            "Triggers ${state.trippedTriggerCount.takeIf { it > 0 }?.let { "($it tripped)" } ?: ""} ^0" to (current == CenterTab.TRIGGERS),
-            "Epics" to (current == CenterTab.EPICS),
-            "Notes" to (current == CenterTab.MEMORY),
-            "Run" to (current == CenterTab.RUN),
-            "Git" to (current == CenterTab.GIT),
-            "Stats" to (current == CenterTab.STATS),
-        ),
-        tagOf = { "center-tab-${CenterTab.entries[it].name}" },
+        strip.map { it.title(state) to (current == it.id) },
+        tagOf = { strip[it].testTag },
         barTag = CENTER_TAB_BAR_TAG,
-    ) { onPick(CenterTab.entries[it]) }
+    ) { onPick(strip[it].id) }
+}
+
+/** The digit a number-row key types, for the Ctrl+<digit> tab shortcuts; null for any other key. */
+private fun digitOf(key: Key): Int? = when (key) {
+    Key.Zero -> 0; Key.One -> 1; Key.Two -> 2; Key.Three -> 3; Key.Four -> 4
+    Key.Five -> 5; Key.Six -> 6; Key.Seven -> 7; Key.Eight -> 8; Key.Nine -> 9
+    else -> null
 }
 
 const val TAB_BAR_MORE_CUE_TAG = "tab-bar-more-cue"
@@ -1071,7 +1064,7 @@ private fun TabBar(tabs: List<Pair<String, Boolean>>, hPad: androidx.compose.ui.
 
 
 @Composable
-private fun ReviewPane(state: AppState, controller: Controller) {
+internal fun ReviewPane(state: AppState, controller: Controller) {
     val queue = state.reviewQueue
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (queue.isEmpty()) {
@@ -1101,7 +1094,7 @@ private fun ReviewPane(state: AppState, controller: Controller) {
 }
 
 @Composable
-private fun PodsPane(state: AppState, controller: Controller) {
+internal fun PodsPane(state: AppState, controller: Controller) {
     val actionScope = rememberCoroutineScope()
     var goal by remember { mutableStateOf("") }
     var nodesText by remember { mutableStateOf("") }

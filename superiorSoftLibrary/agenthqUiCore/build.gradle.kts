@@ -23,6 +23,9 @@ kotlin {
     }
 
     sourceSets {
+        // PLUGINS-1: the core modules (the built-in tabs) live in <repo>/plugins/core, one folder per module, and are
+        // compiled into every target from there (web and Android cannot load a module at run time).
+        commonMain { kotlin.srcDir(rootProject.file("plugins/core")) }
         commonMain.dependencies {
             implementation(compose.runtime)
             implementation(compose.foundation)

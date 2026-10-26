@@ -189,10 +189,10 @@ class StatsPaneUiTest {
             runDesktopComposeUiTest(1200, 900) {
                 setContent {
                     val state by controller.state.collectAsState()
-                    var tab by remember { mutableStateOf(CenterTab.OUTPUT) }
+                    var tab by remember { mutableStateOf("infantry.cli") }
                     Column {
                         CenterTabBar(state, tab) { tab = it }
-                        if (tab == CenterTab.STATS) StatsPane(state, controller)
+                        if (tab == "infantry.stats") StatsPane(state, controller)
                     }
                 }
                 link.push(Envelope(Envelope.READY, "contract=1.92.0 provider=stub instance=i1"))

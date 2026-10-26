@@ -66,7 +66,7 @@ class HandCursorUiTest {
 
     @Test
     fun `a centre tab shows the hand`() = runDesktopComposeUiTest(1000, 200) {
-        setContent { CenterTabBar(state, CenterTab.OUTPUT) {} }
+        setContent { CenterTabBar(state, "infantry.cli") {} }
         assertHand("center-tab-OUTPUT", "center-tab-GIT")
     }
 

@@ -1,0 +1,8 @@
+{
+  "name": "Infantry_Prompts",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "author": "Infantry AI",
+  "description": "Saved prompts to insert into the chat.",
+  "sequence": []
+}
