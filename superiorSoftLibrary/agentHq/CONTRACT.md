@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.133.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.134.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -2242,6 +2242,12 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `run_output` | `{runId, sequence, stream, line, truncated}`; `stream` is `stdout` or `stderr`, `sequence` starts at 1 per run (1.33.0) | daemon → client |
 | `run_finished` | `{runId, exitCode, outcome, endedAt, detail}`; sent exactly once per run, including after a stop and after a spawn failure (1.33.0) | daemon → client |
 | `run_stop` | `"<runId> [force]"`: kills the run's process tree; the answer is the `run_finished` (1.33.0) | client → daemon |
+| `run_bytes` | `{runId, sequence, data, replay, droppedBytes}`: raw terminal output of a run that has a pty, `data` base64; `sequence` counts chunks from 1 per run (apart from `run_output`'s); a `replay` chunk answers `run_attach` (1.134.0) | daemon → client |
+| `run_list` | empty data: request the kept runs; answered by `runs` (1.134.0) | client → daemon |
+| `runs` | a JSON list of `RunSummary` `{runId, commandId, name, state, startedAt, endedAt, exitCode, outcome, terminal, interactive}`, newest first (1.134.0) | daemon → client |
+| `run_attach` | `{runId}`: answered by one replay `run_bytes` with the run's kept scrollback, running or finished; `error` if the run is not kept (1.134.0) | client → daemon |
+| `run_resize` | `{runId, cols, rows}`: resizes the run's pty; no answer unless refused (1.134.0) | client → daemon |
+| `run_input` | `{runId, data}`: keys (base64) into a run started `interactive`; refused under the demo lock (1.134.0) | client → daemon |
 | `session_delete` | a session id (1.28.0); on success, no direct reply -- the daemon pushes a fresh `sessions` frame to every client; refused (unknown id, or `live`) answers `error` with `"session_delete refused: <reason>"` | client → daemon |
 | `repo` | a repository path (empty clears it) | client → daemon |
 | `sessions` | — (request the list) | client → daemon |
@@ -3056,6 +3062,21 @@ ADDITIVE + BEHAVIOURAL; `contract=1.132.0`. Builds that workers start no longer 
 - **CPU in `processes`.** `TrackedProcess.cpuPercent` (this process's share of ALL logical cores over the last 10 s watch pass, 0–100; null until two samples), `ProcessReport.agentCpuPercent` (their sum), `cpuAlertPercent`, `cpuAlertMinutes`, `cpuHighSince` (epoch ms since when the sum has stayed at or above the threshold; null while below).
 - **Sustained-CPU attention.** When `agentCpuPercent` stays at or above `limits.cpu.alertPercent` (default `90`, 1–100) for `limits.cpu.alertMinutes` (default `10`; `0` = off), the daemon raises ONE attention item per episode: kind `ceiling`, outcome `cpu_sustained`, with the top processes in the detail. Falling below the threshold rearms it.
 - **Old clients.** They ignore the new fields; the attention item renders like any other `ceiling` item.
+
+### What changed in 1.134.0 (RUN-CONSOLE, ticket-67f117b6) — runs have a terminal; pills and a console window
+
+ADDITIVE + BEHAVIOURAL; `contract=1.134.0`.
+
+- **A run has a pty.** A saved command now runs in a pseudo-terminal (pty4j: ConPTY / winpty on Windows, the POSIX pty on macOS and Linux), still from its argv (never a shell string), with `TERM=xterm-256color`; stdout and stderr are one stream. Where no pty can load, the run uses pipes as before (`terminal: false`).
+- **`run_bytes`** (new, to every client): the raw output chunks, base64, `sequence` 1..n per run. A console applies them in order.
+- **`run_output` keeps coming** for every run, so a client without a terminal emulator (web, Android, an older desktop) keeps its line pane: on a pty run each line is the plain text of the terminal line (escape sequences dropped, `\r` returns to the start of the line and what follows overwrites it, backspace and erase-line applied), sent at its `\n`. Stream is `stdout`.
+- **`run`** gains `name` (the command's name at start), `terminal` and `interactive`; a pty run also pushes a `RUNNING` `run` frame (with its `pid`) to every client once the child is up.
+- **`run_list` -> `runs`**: the runs the daemon keeps (setting `limits.run.history`, default 20, the oldest finished one forgotten first), newest first: the Run tab's pills.
+- **`run_attach {runId}`** -> one `run_bytes` with `replay: true`: the kept scrollback (setting `limits.run.scrollbackBytes`, default 2 MiB, newest kept; `droppedBytes` fell off the front) up to and including chunk `sequence`. A console resets, writes it, then applies the live chunks with a higher `sequence`. Works for a finished run while it is kept.
+- **`run_start`** accepts `interactive` (bool, default false), `cols`, `rows` (the first pty size, default 120 x 32). **`run_resize {runId, cols, rows}`** resizes the pty. **`run_input {runId, data}`** writes keys (base64) into a run started interactive; refused otherwise.
+- **Demo lock** (`AGENTHQ_DEMO_LOCK`): `run_start` with `interactive: true` and every `run_input` are refused (no raw shell). Starting and watching a saved command is unchanged.
+- **Output is untrusted.** The daemon never interprets it; the desktop console disables escape sequences that act on the host (no clipboard write by OSC 52, a link opens only on a click).
+- **Old clients.** They ignore the new fields and frames and never send the new requests; `run_output` and `run_finished` behave as before.
 
 ### What changed in 1.133.0 (NO-HARD-CODED-LIMITS, ticket-23471801) — every cap, threshold and timeout is a documented setting
 

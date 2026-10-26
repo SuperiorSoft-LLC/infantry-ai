@@ -139,6 +139,14 @@ class Controller(
     /** VOICE-1 (contract 1.104.0): every `spoken` push, in order. The shell decides what to say and show. */
     val spoken: kotlinx.coroutines.flow.SharedFlow<com.superiorsoftllc.agenthq.ui.voice.SpokenNotice> = _spoken
 
+    private val _runBytes = kotlinx.coroutines.flow.MutableSharedFlow<com.superiorsoftllc.agenthq.ui.model.RunBytesPayload>(extraBufferCapacity = 1024)
+
+    /**
+     * RUN-CONSOLE (contract 1.134.0): every `run_bytes`, in order, live chunks and replays alike. A console window
+     * collects it for its run; nothing else keeps the bytes.
+     */
+    val runBytes: kotlinx.coroutines.flow.SharedFlow<com.superiorsoftllc.agenthq.ui.model.RunBytesPayload> = _runBytes
+
     init {
         // BUG-FLAKE-4: UNDISPATCHED, so the link's CURRENT info is applied here, in the constructor, before the frame
         // collector below can reduce anything. Dispatched, the two raced: under load `ready` could be reduced first
@@ -179,6 +187,10 @@ class Controller(
                     runCatching { json.decodeFromString(com.superiorsoftllc.agenthq.ui.voice.SpokenNotice.serializer(), env.data) }
                         .getOrNull()?.let { _spoken.tryEmit(it) }
                 }
+                if (env.type == Envelope.RUN_BYTES) {
+                    runCatching { json.decodeFromString(com.superiorsoftllc.agenthq.ui.model.RunBytesPayload.serializer(), env.data) }
+                        .getOrNull()?.let { _runBytes.emit(it) }
+                }
                 when (env.type) {
                     // A mail event can change who is blocked; ask rather than guess.
                     Envelope.MAIL -> client.send(Envelope(Envelope.MAIL_WAITING))
@@ -191,6 +203,8 @@ class Controller(
                         if (contractAtLeast(contract, 1, 14)) client.send(Envelope(Envelope.TRIGGER_LIST))
                         if (contractAtLeast(contract, 1, 8)) client.send(WireRequests.projectList())
                         if (contractAtLeast(contract, 1, 33)) client.send(WireRequests.commandList())
+                        // RUN-CONSOLE: the daemon's kept runs, the Run tab's pills (1.134.0).
+                        if (supportsRunConsole()) client.send(WireRequests.runList())
                         // U2: the plan-limit meters (1.59.0); the daemon also pushes them after each run's usage.
                         if (contractAtLeast(contract, 1, 59)) client.send(Envelope(Envelope.LIMITS))
                         // USAGE-PACE: the plan meters and pacing allowance (1.119.0).
@@ -1382,6 +1396,41 @@ class Controller(
         if (commandId.isBlank()) return report(CommandResult.Refused("pick a command to run"))
         return report(send(WireRequests.runStart(commandId)))
     }
+
+    /** True when the connected daemon speaks contract 1.134.0 or later (runs with a pty, pills, the console frames). */
+    fun supportsRunConsole(): Boolean = contractAtLeast(_state.value.connection.contract, 1, 134)
+
+    /**
+     * RUN-CONSOLE: start [commandId] with a pty of [cols] x [rows]; [interactive] lets its console type into it. On a
+     * daemon older than 1.134.0 this is the plain [startRun] (no keys, no size).
+     */
+    suspend fun startRun(commandId: String, interactive: Boolean, cols: Int? = null, rows: Int? = null): CommandResult {
+        if (!supportsRunConsole()) {
+            return if (interactive) report(CommandResult.Refused("this daemon cannot run interactively (needs contract 1.134.0)")) else startRun(commandId)
+        }
+        if (commandId.isBlank()) return report(CommandResult.Refused("pick a command to run"))
+        return report(send(WireRequests.runStart(commandId, interactive, cols, rows)))
+    }
+
+    /** RUN-CONSOLE: show [runId]'s lines in the Run tab's output pane (its pill was clicked). */
+    fun selectRun(runId: String) {
+        _state.update { s -> if (runId in s.runs.runs) s.copy(runs = s.runs.copy(currentRunId = runId)) else s }
+    }
+
+    /** RUN-CONSOLE: ask for [runId]'s kept scrollback; it arrives on [runBytes] as a replay. */
+    suspend fun attachRun(runId: String): CommandResult =
+        if (!supportsRunConsole()) CommandResult.Refused("this daemon has no run console (needs contract 1.134.0)")
+        else send(WireRequests.runAttach(runId))
+
+    /** RUN-CONSOLE: the console's size changed; the daemon resizes [runId]'s pty. */
+    suspend fun resizeRun(runId: String, cols: Int, rows: Int): CommandResult =
+        if (!supportsRunConsole() || cols <= 0 || rows <= 0) CommandResult.Refused("no resize") else send(WireRequests.runResize(runId, cols, rows))
+
+    /** RUN-CONSOLE: keys typed into an interactive run's console. */
+    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+    suspend fun sendRunInput(runId: String, bytes: ByteArray): CommandResult =
+        if (!supportsRunConsole()) CommandResult.Refused("this daemon has no run console (needs contract 1.134.0)")
+        else send(WireRequests.runInput(runId, kotlin.io.encoding.Base64.encode(bytes)))
 
     /** True when the connected daemon speaks contract 1.94.0 or later (`command_save` / `command_delete`). */
     fun supportsCommandEdit(): Boolean = contractAtLeast(_state.value.connection.contract, 1, 94)

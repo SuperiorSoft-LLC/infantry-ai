@@ -24,6 +24,10 @@ dependencies {
     // compile classpath for EmbeddedServer.start; the engine and websocket modules arrive via :agentHq.
     implementation(project(":superiorSoftLibrary:agentHq"))
     implementation(libs.ktor.server.core)
+    // RUN-CONSOLE (ticket 67f117b6): the run console window is JetBrains' terminal emulator, taken under its Apache-2.0
+    // option (dual LGPL-3.0 / Apache-2.0), see THIRD-PARTY-NOTICES.md. 3.72 is the last release on kotlin-stdlib 2.1.
+    implementation("org.jetbrains.jediterm:jediterm-core:3.72")
+    implementation("org.jetbrains.jediterm:jediterm-ui:3.72")
 
     testImplementation(project(":superiorSoftLibrary:agentHq"))
     testImplementation(kotlin("test"))

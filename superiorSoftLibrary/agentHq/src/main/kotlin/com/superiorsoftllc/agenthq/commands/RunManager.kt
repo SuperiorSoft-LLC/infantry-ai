@@ -5,11 +5,25 @@ import com.superiorsoftllc.agenthq.runner.ProcessListener
 import com.superiorsoftllc.agenthq.runner.ProcessRunner
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
 import com.superiorsoftllc.agenthq.runner.RunningProcess
+import com.superiorsoftllc.agenthq.runner.TerminalListener
+import com.superiorsoftllc.agenthq.runner.TerminalProcess
+import com.superiorsoftllc.agenthq.runner.TerminalRunner
+import com.superiorsoftllc.agenthq.settings.LimitRegistry
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.intOrNull
+import java.util.Base64
 import java.util.UUID
 
-/** Contract 1.33.0 `run` frame. `state` is STARTING, RUNNING or FINISHED. */
+/**
+ * Contract 1.33.0 `run` frame. `state` is STARTING, RUNNING or FINISHED.
+ * 1.134.0 (RUN-CONSOLE): [name] (the command's name at start, for the pill), [terminal] (the run has a pty and streams
+ * `run_bytes`) and [interactive] (the run takes `run_input`).
+ */
 @Serializable
 data class RunRecord(
     val runId: String,
@@ -18,6 +32,38 @@ data class RunRecord(
     val startedAt: Long,
     val pid: Long? = null,
     val lastSequence: Long = 0,
+    val name: String? = null,
+    val terminal: Boolean = false,
+    val interactive: Boolean = false,
+)
+
+/**
+ * 1.134.0 `run_bytes`: raw terminal output, base64 in [data]. [sequence] counts chunks 1..n per run, apart from the
+ * `run_output` line sequence. A [replay] chunk is the answer to `run_attach`: the kept scrollback up to and including
+ * chunk [sequence] ([droppedBytes] fell off the front); a console resets, writes it, then applies live chunks after it.
+ */
+@Serializable
+data class RunBytes(
+    val runId: String,
+    val sequence: Long,
+    val data: String,
+    val replay: Boolean = false,
+    val droppedBytes: Long = 0,
+)
+
+/** 1.134.0 `runs`: the daemon's recent runs, newest first, the answer to `run_list` (the Run tab's pills). */
+@Serializable
+data class RunSummary(
+    val runId: String,
+    val commandId: String,
+    val name: String,
+    val state: String,
+    val startedAt: Long,
+    val endedAt: Long? = null,
+    val exitCode: Int? = null,
+    val outcome: String? = null,
+    val terminal: Boolean = false,
+    val interactive: Boolean = false,
 )
 
 @Serializable
@@ -39,10 +85,24 @@ class RunManager(
     private val runner: ProcessRunner,
     private val emit: (Envelope) -> Unit,
     private val now: () -> Long = System::currentTimeMillis,
+    /**
+     * RUN-CONSOLE: when set, a run gets a pseudo-terminal and streams `run_bytes` as well as its `run_output` lines
+     * (escape sequences stripped, `\r` applied). Null, or a terminal that cannot load here, = the [runner]'s pipes.
+     */
+    private val terminal: TerminalRunner? = null,
+    private val limits: RunLimits = RunLimits(),
+    /** Demo lock: no interactive run, no keyboard into a run (no raw shell). */
+    private val demoLock: () -> Boolean = { false },
 ) {
     /** A fixed set of commands (the tests, and any caller with no store behind it). */
     constructor(registry: CommandRegistry, runner: ProcessRunner, emit: (Envelope) -> Unit, now: () -> Long = System::currentTimeMillis) :
         this({ registry }, runner, emit, now)
+
+    /** The run limits, read at every use (settings `limits.run.*`; their registry defaults when no settings are behind). */
+    class RunLimits(
+        val scrollbackBytes: () -> Int = { LimitRegistry.cap(LimitRegistry.RUN_SCROLLBACK_BYTES.default, LimitRegistry.RUN_SCROLLBACK_BYTES) },
+        val history: () -> Int = { LimitRegistry.cap(LimitRegistry.RUN_HISTORY.default, LimitRegistry.RUN_HISTORY) },
+    )
 
     /** The answer to a `run_start`, and the thunk that actually starts the child. */
     class Started internal constructor(val reply: Envelope, private val launcher: (() -> Unit)?) {
@@ -51,23 +111,89 @@ class RunManager(
 
     private val lock = Any()
     private var inFlight: Run? = null
+    /** Newest last; finished runs past [RunLimits.history] are forgotten, their scrollback with them. */
+    private val history = ArrayDeque<Run>()
 
+    /**
+     * `run_start {"commandId", "interactive"?, "cols"?, "rows"?}`. [interactive] (1.134.0) lets a console type into the
+     * run and is refused under the demo lock; cols / rows size the pty before its first byte.
+     */
     fun start(data: String): Started {
-        val commandId = runCatching { wire.parseToJsonElement(data) }.getOrNull()
-            ?.let { (it as? kotlinx.serialization.json.JsonObject)?.get("commandId") as? kotlinx.serialization.json.JsonPrimitive }
-            ?.takeIf { it.isString }?.content
+        val obj = runCatching { wire.parseToJsonElement(data) }.getOrNull() as? JsonObject
+        val commandId = (obj?.get("commandId") as? JsonPrimitive)?.takeIf { it.isString }?.content
             ?: return refuse("run_start expects {\"commandId\":\"<id>\"}")
+        val interactive = (obj["interactive"] as? JsonPrimitive)?.booleanOrNull ?: false
+        if (interactive && demoLock()) return refuse("run_start refused: interactive runs are off under the demo lock")
+        val cols = (obj["cols"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 } ?: DEFAULT_COLS
+        val rows = (obj["rows"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 } ?: DEFAULT_ROWS
         val run: Run
         val command: SavedCommand
         // The lookup is under [lock] too, so a save or delete running in [unlessRunning] cannot slip between them.
         synchronized(lock) {
             command = registry().find(commandId) ?: return refuse("run_start refused: unknown command '$commandId'")
             if (inFlight != null) return refuse("run_start refused: a run is already in flight")
-            run = Run(UUID.randomUUID().toString(), command, now())
+            run = Run(UUID.randomUUID().toString(), command, now(), interactive, cols, rows)
             inFlight = run
+            history.addLast(run)
+            prune()
         }
-        val record = RunRecord(run.runId, command.id, "STARTING", run.startedAt)
-        return Started(Envelope(Envelope.RUN, wire.encodeToString(RunRecord.serializer(), record))) { run.launch() }
+        return Started(Envelope(Envelope.RUN, wire.encodeToString(RunRecord.serializer(), run.record("STARTING")))) { run.launch() }
+    }
+
+    /** `run_list` -> `runs`: the kept runs, newest first. */
+    fun list(): Envelope {
+        val all = synchronized(lock) { history.toList() }.asReversed().map { it.summary() }
+        return Envelope(Envelope.RUNS, wire.encodeToString(ListSerializer(RunSummary.serializer()), all))
+    }
+
+    /** `run_attach {"runId"}` -> one replay `run_bytes` (the kept scrollback), finished runs too; else an ERROR. */
+    fun attach(data: String): Envelope {
+        val runId = field(data, "runId") ?: return Envelope(Envelope.ERROR, "run_attach expects {\"runId\":\"<id>\"}")
+        val run = synchronized(lock) { history.lastOrNull { it.runId == runId } }
+            ?: return Envelope(Envelope.ERROR, "run_attach refused: no such run")
+        return run.replay()
+    }
+
+    /** `run_resize {"runId", "cols", "rows"}`: resizes the run's pty. Null when done, else an ERROR. */
+    fun resize(data: String): Envelope? {
+        val obj = runCatching { wire.parseToJsonElement(data) }.getOrNull() as? JsonObject
+        val runId = (obj?.get("runId") as? JsonPrimitive)?.takeIf { it.isString }?.content
+        val cols = (obj?.get("cols") as? JsonPrimitive)?.intOrNull
+        val rows = (obj?.get("rows") as? JsonPrimitive)?.intOrNull
+        if (runId == null || cols == null || rows == null || cols <= 0 || rows <= 0)
+            return Envelope(Envelope.ERROR, "run_resize expects {\"runId\", \"cols\" > 0, \"rows\" > 0}")
+        val run = synchronized(lock) { inFlight }?.takeIf { it.runId == runId }
+            ?: return Envelope(Envelope.ERROR, "run_resize refused: no such run in flight")
+        run.resize(cols, rows)
+        return null
+    }
+
+    /**
+     * `run_input {"runId", "data": base64}`: keyboard bytes into the run's pty. Only for a run started interactive and
+     * never under the demo lock. Null when written, else an ERROR.
+     */
+    fun input(data: String): Envelope? {
+        val runId = field(data, "runId")
+        val bytes = field(data, "data")?.let { runCatching { Base64.getDecoder().decode(it) }.getOrNull() }
+        if (runId == null || bytes == null) return Envelope(Envelope.ERROR, "run_input expects {\"runId\", \"data\": base64}")
+        if (demoLock()) return Envelope(Envelope.ERROR, "run_input refused: typing into a run is off under the demo lock")
+        val run = synchronized(lock) { inFlight }?.takeIf { it.runId == runId }
+            ?: return Envelope(Envelope.ERROR, "run_input refused: no such run in flight")
+        if (!run.interactive) return Envelope(Envelope.ERROR, "run_input refused: the run was not started interactive")
+        return if (run.write(bytes)) null else Envelope(Envelope.ERROR, "run_input refused: the run has no terminal")
+    }
+
+    private fun field(data: String, name: String): String? =
+        ((runCatching { wire.parseToJsonElement(data) }.getOrNull() as? JsonObject)?.get(name) as? JsonPrimitive)
+            ?.takeIf { it.isString }?.content
+
+    /** Under [lock]: forget the oldest runs past the history cap; the run in flight is never dropped. */
+    private fun prune() {
+        val cap = limits.history().coerceAtLeast(1)
+        while (history.size > cap) {
+            val oldest = history.firstOrNull { it !== inFlight } ?: return
+            history.remove(oldest)
+        }
     }
 
     /**
@@ -96,40 +222,116 @@ class RunManager(
 
     private fun refuse(why: String) = Started(Envelope(Envelope.ERROR, why), null)
 
-    private inner class Run(val runId: String, val command: SavedCommand, val startedAt: Long) {
+    private inner class Run(
+        val runId: String,
+        val command: SavedCommand,
+        val startedAt: Long,
+        val interactive: Boolean,
+        private val cols: Int,
+        private val rows: Int,
+    ) {
         private val outLock = Any()
         private var sequence = 0L
         private var capped = false
         private var finished = false
+        private var ended: RunFinished? = null
         @Volatile private var process: RunningProcess? = null
+        @Volatile private var pty: TerminalProcess? = null
         @Volatile private var stopMode: String? = null // null, KILLED_GRACEFUL or KILLED_FORCED
+        @Volatile private var hasTerminal = false
+        private var byteSequence = 0L
+        private val scrollback = ByteScrollback(limits.scrollbackBytes)
+        private val decoder = AnsiLineDecoder { output("stdout", it) }
+
+        fun record(state: String, pid: Long? = null) =
+            RunRecord(runId, command.id, state, startedAt, pid, name = command.name, terminal = hasTerminal, interactive = interactive)
+
+        fun summary(): RunSummary = synchronized(outLock) {
+            val state = when { finished -> "FINISHED"; pty != null || process != null -> "RUNNING"; else -> "STARTING" }
+            RunSummary(runId, command.id, command.name, state, startedAt, ended?.endedAt, ended?.exitCode, ended?.outcome, hasTerminal, interactive)
+        }
+
+        /** Under [outLock], so no live chunk lands between the snapshot and its sequence. */
+        fun replay(): Envelope = synchronized(outLock) {
+            val bytes = RunBytes(runId, byteSequence, b64(scrollback.snapshot()), replay = true, droppedBytes = scrollback.droppedBytes)
+            Envelope(Envelope.RUN_BYTES, wire.encodeToString(RunBytes.serializer(), bytes))
+        }
+
+        fun resize(cols: Int, rows: Int) { runCatching { pty?.resize(cols, rows) } }
+
+        fun write(bytes: ByteArray): Boolean {
+            val p = pty ?: return false
+            runCatching { p.write(bytes) }
+            return true
+        }
 
         fun stop(force: Boolean) {
-            val p = process ?: return // not started yet or spawn failed: finish() already owns the outcome
+            // Not started yet, or the spawn failed: finish() already owns the outcome.
+            val p = process?.let { Stoppable({ it.isAlive }, it::terminate, it::killTree) }
+                ?: pty?.let { Stoppable({ it.isAlive }, it::terminate, it::killTree) } ?: return
             synchronized(outLock) { if (finished || stopMode != null) return; stopMode = if (force) "KILLED_FORCED" else "KILLED_GRACEFUL" }
             Thread({
                 if (!force) {
                     runCatching { p.terminate() }
                     val end = System.nanoTime() + command.graceMillis * 1_000_000
-                    while (!isFinished() && p.isAlive && System.nanoTime() < end) Thread.sleep(10)
-                    if (!p.isAlive) { settle(p); return@Thread }
+                    while (!isFinished() && p.alive() && System.nanoTime() < end) Thread.sleep(10)
+                    if (!p.alive()) { settle(); return@Thread }
                     synchronized(outLock) { if (!finished) stopMode = "KILLED_FORCED" }
                 }
                 runCatching { p.killTree() }
-                settle(p)
+                settle()
             }, "agenthq-run-stop").apply { isDaemon = true }.start()
         }
 
         private fun isFinished() = synchronized(outLock) { finished }
 
         /** Give onExit a moment to report the real code; otherwise finish with a null one. Never a plain FAILED. */
-        private fun settle(p: RunningProcess) {
+        private fun settle() {
             val end = System.nanoTime() + 2_000_000_000L
             while (!isFinished() && System.nanoTime() < end) Thread.sleep(10)
             finish(null, stopMode ?: "KILLED_FORCED", null)
         }
 
         fun launch() {
+            if (terminal != null && launchTerminal(terminal)) return
+            launchPiped()
+        }
+
+        /** False when no pty can load on this host (no native library): the caller falls back to pipes. */
+        private fun launchTerminal(t: TerminalRunner): Boolean {
+            val listener = object : TerminalListener {
+                override fun onBytes(bytes: ByteArray) = terminalBytes(bytes)
+                override fun onExit(exitCode: Int) {
+                    synchronized(outLock) { decoder.flush() }
+                    finish(exitCode, stopMode ?: if (exitCode == 0) "SUCCEEDED" else "FAILED", null)
+                }
+            }
+            hasTerminal = true
+            val started = try {
+                t.start(ProcessSpec(command.argv, command.workingDir), cols, rows, listener)
+            } catch (e: LinkageError) {
+                hasTerminal = false
+                return false
+            } catch (e: Exception) {
+                // Never the argv or the message (it can quote it): the class name only.
+                finish(null, "FAILED", "spawn failed (${e::class.simpleName})")
+                return true
+            }
+            pty = started
+            // 1.134.0: every client learns the run is up (the phone's pill too), not only the one that started it.
+            emit(Envelope(Envelope.RUN, wire.encodeToString(RunRecord.serializer(), record("RUNNING", started.pid))))
+            return true
+        }
+
+        private fun terminalBytes(bytes: ByteArray) = synchronized(outLock) {
+            if (finished) return@synchronized
+            scrollback.append(bytes)
+            byteSequence += 1
+            emit(Envelope(Envelope.RUN_BYTES, wire.encodeToString(RunBytes.serializer(), RunBytes(runId, byteSequence, b64(bytes)))))
+            decoder.feed(bytes)
+        }
+
+        private fun launchPiped() {
             val listener = object : ProcessListener {
                 override fun onStdout(line: String) = lines("stdout", line)
                 override fun onStderr(line: String) = lines("stderr", line)
@@ -173,15 +375,24 @@ class RunManager(
             synchronized(outLock) {
                 if (finished) return
                 finished = true
-                synchronized(lock) { if (inFlight === this) inFlight = null }
-                emit(Envelope(Envelope.RUN_FINISHED, wire.encodeToString(RunFinished.serializer(), RunFinished(runId, exitCode, outcome, now(), detail))))
+                val end = RunFinished(runId, exitCode, outcome, now(), detail)
+                ended = end
+                synchronized(lock) { if (inFlight === this) inFlight = null; prune() }
+                emit(Envelope(Envelope.RUN_FINISHED, wire.encodeToString(RunFinished.serializer(), end)))
             }
         }
     }
 
+    /** What the stop sequence needs of a piped or a terminal child. */
+    private class Stoppable(val alive: () -> Boolean, val terminate: () -> Unit, val killTree: () -> Unit)
+
     companion object {
         const val MAX_LINES = 10_000
         const val MAX_LINE_CHARS = 8 * 1024
+        /** The pty size until a console says otherwise (layout, not a limit: any size can be asked for). */
+        const val DEFAULT_COLS = 120
+        const val DEFAULT_ROWS = 32
+        private fun b64(bytes: ByteArray): String = Base64.getEncoder().encodeToString(bytes)
         private val BREAK = Regex("\r\n|\r|\n")
         private val wire = Json { encodeDefaults = true }
     }

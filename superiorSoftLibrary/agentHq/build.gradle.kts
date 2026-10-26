@@ -95,6 +95,10 @@ dependencies {
     // Ticket 66153313: worker sessions run at a lower CPU priority. Windows has no JVM API for a priority class or a Job
     // object, so the daemon calls Kernel32 through JNA (SetPriorityClass + a per-session Job with a priority-class limit).
     implementation("net.java.dev.jna:jna-platform:5.18.1")
+    // RUN-CONSOLE (ticket 67f117b6): saved-command runs get a real pseudo-terminal (ConPTY / winpty on Windows, the
+    // POSIX pty elsewhere), so tools print their colours, spinners and  progress. EPL-1.0, see THIRD-PARTY-NOTICES.md.
+    // Pinned to 0.13.x: 0.14 needs kotlin-stdlib 2.4, this build is on 2.3.
+    implementation("org.jetbrains.pty4j:pty4j:0.13.13")
 
     testImplementation(kotlin("test"))
     // BUILD-VB-1: VerifyBaseTaskTest runs preflight/verify-base.gradle.kts in a throwaway build.

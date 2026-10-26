@@ -207,6 +207,19 @@ data class Envelope(
         const val RUN_FINISHED = "run_finished"
         /** client -> daemon: `"<runId> [force]"`; a kill of the process tree, answered by [RUN_FINISHED]. */
         const val RUN_STOP = "run_stop"
+        // RUN-CONSOLE (contract 1.134.0, additive): runs have a pty; the Run tab's pills and console window.
+        /** daemon -> client: raw terminal output `{runId, sequence, data: base64, replay, droppedBytes}`. */
+        const val RUN_BYTES = "run_bytes"
+        /** client -> daemon: empty data; answered by [RUNS], the kept runs newest first. */
+        const val RUN_LIST = "run_list"
+        /** daemon -> client: list of `RunSummary` `{runId, commandId, name, state, startedAt, endedAt, exitCode, outcome, terminal, interactive}`. */
+        const val RUNS = "runs"
+        /** client -> daemon: `{"runId"}`; answered by one replay [RUN_BYTES] (the kept scrollback), finished runs too. */
+        const val RUN_ATTACH = "run_attach"
+        /** client -> daemon: `{"runId", "cols", "rows"}`; resizes the run's pty, no answer unless refused. */
+        const val RUN_RESIZE = "run_resize"
+        /** client -> daemon: `{"runId", "data": base64}`; keys into a run started interactive; never under the demo lock. */
+        const val RUN_INPUT = "run_input"
         const val RESUME = "resume"
         const val NEW = "new"
 

@@ -799,9 +799,18 @@ class AgentHqDaemon(
             // IN-APP BUILD T3: one saved command at a time; every frame it produces goes to every client.
             // BUG-RUN-STUB-1: a saved command is a real process whatever the provider; [runner] is the stub's
             // ScriptedRunner under AGENTHQ_PROVIDER=stub and would only replay the script.
-            val runManager = com.superiorsoftllc.agenthq.commands.RunManager({ commandStore.registry }, com.superiorsoftllc.agenthq.runner.PipedProcessRunner(), emit = { env ->
-                for (c in clients.toList()) c.trySend(env)
-            })
+            // RUN-CONSOLE (1.134.0): the run gets a pty (pipes if pty4j cannot load here); its scrollback and the run
+            // history follow `limits.run.*`; the demo lock refuses interactive runs and run_input (no raw shell).
+            val runManager = com.superiorsoftllc.agenthq.commands.RunManager(
+                { commandStore.registry }, com.superiorsoftllc.agenthq.runner.PipedProcessRunner(),
+                emit = { env -> for (c in clients.toList()) c.trySend(env) },
+                terminal = com.superiorsoftllc.agenthq.runner.Pty4jTerminalRunner(),
+                limits = com.superiorsoftllc.agenthq.commands.RunManager.RunLimits(
+                    scrollbackBytes = { settings.limitCap(LimitRegistry.RUN_SCROLLBACK_BYTES) },
+                    history = { settings.limitCap(LimitRegistry.RUN_HISTORY) },
+                ),
+                demoLock = { com.superiorsoftllc.agenthq.plugin.host.PluginFolders.demoLock() },
+            )
             val attention = AttentionStore(store.attention)
             attention.eventSink = { item -> broadcastAttention(clients, item) }
             // Ticket 66153313: agent processes held the CPU above `limits.cpu.alertPercent` for `limits.cpu.alertMinutes`.
@@ -2643,6 +2652,12 @@ private suspend fun handleConnection(
 
                 // IN-APP BUILD T4: the answer to a stop is the run's run_finished; only a bad request answers here.
                 Envelope.RUN_STOP -> runManager.stop(envelope.data)
+
+                // RUN-CONSOLE (contract 1.134.0): the pills' list, a console's replay, its size and (interactive runs) keys.
+                Envelope.RUN_LIST -> runManager.list()
+                Envelope.RUN_ATTACH -> runManager.attach(envelope.data)
+                Envelope.RUN_RESIZE -> runManager.resize(envelope.data)
+                Envelope.RUN_INPUT -> runManager.input(envelope.data)
 
                 Envelope.AGENT_DELETE -> try {
                     agents.delete(envelope.data)
