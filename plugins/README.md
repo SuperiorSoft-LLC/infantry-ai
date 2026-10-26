@@ -29,7 +29,8 @@ These rules are enforced:
   community module also needs each one listed under `allow`.
 - Daemon access covers only the routes the module declares (`"GET /health"`). Under the demo lock it is also limited
   to `demoLock.allowRoutes`.
-- With `AGENTHQ_DEMO_LOCK` set, no community module loads; core is unchanged.
+- With `AGENTHQ_DEMO_LOCK` set, no community module loads; core is unchanged. The route rule applies to the `daemon`
+  service; the built-in core tabs talk to the daemon through the app's own connection, exactly as without the lock.
 - A core update never touches `community/`.
 
 A module that has invalid JSON, a missing dependency, a dependency cycle, a different `apiVersion`, a wrong name, or a

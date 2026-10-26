@@ -1,6 +1,10 @@
 package com.superiorsoftllc.agenthq.ui.plugin
 
+import com.superiorsoftllc.agenthq.plugin.api.DaemonReply
+import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.Services
 import com.superiorsoftllc.agenthq.plugin.api.Tier
+import kotlinx.coroutines.runBlocking
 import com.superiorsoftllc.agenthq.plugin.host.ModuleState
 import com.superiorsoftllc.agenthq.plugin.host.PluginFolders
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
@@ -66,6 +70,23 @@ class DesktopPluginsTest {
         assertTrue(loaded.demoLock)
         assertEquals(ModuleState.LOCKED, loaded.factory.statuses.single { it.name == "Acme_NoJar" }.state)
         assertEquals(CoreModules.factory.tabs(TabContainers.CENTER).map { it.id }, loaded.factory.tabs(TabContainers.CENTER).map { it.id })
+    }
+
+    @Test
+    fun `under the demo lock a module's daemon access is its declared routes AND the lock's`() = runBlocking {
+        root.mkdirs()
+        File(root, "modules.json").writeText("""{"demoLock":{"allowRoutes":["GET /health"]}}""")
+        val probe = AgentHqModule(ModuleManifest("Infantry_Probe", "1.0.0", services = listOf("daemon"), routes = listOf("GET /health", "POST /tickets")))
+        fun daemon(vararg env: Pair<String, String>) =
+            DesktopPlugins.load(state, env = env.toMap()::get, property = { null }, compiled = listOf(probe), print = {})
+                .services("Infantry_Probe").get(Services.DAEMON)!!
+
+        val locked = daemon(PluginFolders.DEMO_LOCK_ENV to "1")
+        val refused = locked.call("POST /tickets", "{}")
+        assertTrue(refused is DaemonReply.Refused && "demo lock" in refused.reason, "$refused")
+        assertTrue(locked.call("GET /sessions", null) is DaemonReply.Refused, "never declared")
+        assertTrue(locked.call("GET /health", null) !is DaemonReply.Refused, "declared and lock-allowed: sent (no daemon here, so it fails)")
+        assertTrue(daemon().call("POST /tickets", "{}") !is DaemonReply.Refused, "without the lock a declared route is sent")
     }
 
     @Test

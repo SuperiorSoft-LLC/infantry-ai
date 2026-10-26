@@ -29,7 +29,15 @@ import java.net.URLClassLoader
  * This is a trust label, not a sandbox: a loaded jar runs in-process with the app's full access.
  */
 object DesktopPlugins {
-    class Loaded(val factory: TabFactory, val root: File, val config: ModulesConfig, val demoLock: Boolean, val log: List<String>)
+    class Loaded(
+        val factory: TabFactory,
+        val root: File,
+        val config: ModulesConfig,
+        val demoLock: Boolean,
+        val log: List<String>,
+        /** The gated services each loaded module gets (what its tabs see as [TabContext.services]). */
+        val services: (module: String) -> com.superiorsoftllc.agenthq.plugin.api.PluginServices,
+    )
 
     fun load(
         stateDir: File,
@@ -77,7 +85,7 @@ object DesktopPlugins {
         val preferences = resolution.preferences.filter { it.module !in refused }
         val factory = TabFactory(modules, preferences, services = { services[it] ?: NoPluginServices }, events = bus, statuses = statuses(resolution))
         factory.problems.forEach { say("[plugins] $it") }
-        return Loaded(factory, root, config, demoLock, log)
+        return Loaded(factory, root, config, demoLock, log) { services[it] ?: NoPluginServices }
     }
 
     /** Loaded first, in load order, then the rest by name: the order Settings > Plugins lists them. */
