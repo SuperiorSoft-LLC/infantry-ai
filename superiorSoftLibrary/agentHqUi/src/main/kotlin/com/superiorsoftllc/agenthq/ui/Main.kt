@@ -13,7 +13,7 @@ fun main() = runDevUi()
 fun runDevUi() = application {
     AgentHqWindow(onCloseRequest = ::exitApplication) {
         CompositionLocalProvider(LocalDirectoryPicker provides SwingDirectoryPicker) {
-            AgentHqShell(defaultPlatformHost())
+            SplashHost { AgentHqShell(defaultPlatformHost()) }
         }
     }
 }

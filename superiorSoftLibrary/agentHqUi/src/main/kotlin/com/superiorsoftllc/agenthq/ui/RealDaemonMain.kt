@@ -1,5 +1,10 @@
 package com.superiorsoftllc.agenthq.ui
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.window.application
 import com.superiorsoftllc.agenthq.daemon.AccessConfigurationException
 import com.superiorsoftllc.agenthq.daemon.AgentHqDaemon
@@ -21,6 +26,8 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import java.io.InputStream
 import kotlin.system.exitProcess
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Desktop production entry (UI-REAL): starts the REAL daemon in this JVM, then opens the window against it.
@@ -57,7 +64,9 @@ fun runRealDaemonUi(
     // SWITCH-1: the window opens on the remote server last picked (the installed thin client of a headless / Docker
     // server) WITHOUT starting this machine's daemon; "This computer" starts it on demand. Headless always runs it.
     val remote = if (headless) null else activeServer.read()?.let { url -> servers.list().firstOrNull { it.url == url } }
-    val wsUrl = if (remote == null) (local.start()?.url ?: exitProcess(2)) else ""
+    // SPLASH-ALL-1: the window opens (on the splash) before this computer's daemon starts; headless starts it here.
+    val startLocal = { local.start()?.url ?: exitProcess(2) }
+    if (headless) startLocal()
     if (remote != null) println("[agentHq-ui] opening on remote server '${remote.name}' (${remote.url}); this computer's daemon is not started")
 
     val updater = updates?.invoke({ local.stop(); exitProcess(0) }, local::runningAgents)
@@ -77,7 +86,13 @@ fun runRealDaemonUi(
         } else {
             application {
                 AgentHqWindow(onCloseRequest = ::exitApplication) {
-                    AgentHqShell(PinnedDaemonHost(defaultPlatformHost(), wsUrl, logsDir, updater, servers = servers, remote = remote, local = local, activeFile = activeServer, pluginsDir = File(stateDir(), "plugins")))
+                    var shellUrl by remember { mutableStateOf(if (remote != null) "" else null) }
+                    LaunchedEffect(Unit) { if (shellUrl == null) shellUrl = withContext(Dispatchers.IO) { startLocal() } }
+                    SplashHost {
+                        shellUrl?.let { url ->
+                            AgentHqShell(PinnedDaemonHost(defaultPlatformHost(), url, logsDir, updater, servers = servers, remote = remote, local = local, activeFile = activeServer, pluginsDir = File(stateDir(), "plugins")))
+                        }
+                    }
                     if (updater != null) UpdatePrompt(updater)
                 }
             }
