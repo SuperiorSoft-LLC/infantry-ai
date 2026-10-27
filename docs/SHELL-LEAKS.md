@@ -151,3 +151,24 @@ stays). Pixel proof: `-PtabShotsExtra=run`, 4 of 4 shots at 0 px.
 | RunPills.kt | `RunPillChip`, `RunConsoleHost`, `LocalRunConsole`, `runPillTag` | stays: the desktop's console window (agentHqUi RunConsole.kt, which compiles against the shell only) draws `RunPillChip`, and App.kt provides `LocalRunConsole` to `CoreShellContext` |
 | RunPane.kt | `RunsState`, `RunState`, `CommandSpecView`, `runPills`, `CommandResult` | kit (model) |
 | RunPane.kt | `Checkbox`, `DropdownMenuItem`, `OutlinedButton`, `TextButton`, `Palette`, `Mono` | kit |
+
+## Memory (Infantry_Notes)
+
+Moved into plugins/core/Infantry_Notes: MemoryPane.kt, shell/blocks/ShellNotes.kt. Migrated: `NotesPaneFrame` and
+`NotesPaneHost` took `(state, controller)` and now take `LinkContext`, `SessionContext` and `NotesContext`. The host's
+public `state` and `controller` are gone, and `link`, `session` and `context` replace them. `NotesPaneBlock` reads
+`LocalShellContext` instead of `LocalShell`. Pixel proof: `-PtabShotsExtra=memory`, 6 of 6 shots at 0 px.
+
+| File | Symbol | Decision |
+|---|---|---|
+| ShellNotes.kt | `LocalShell.current.state / controller` (the frame's inputs) | (a) `link`, `session` + (b) `ShellContext.notes` (prep) |
+| ShellNotes.kt | `LocalShell.current.tabs.tabTree` | (b): `ShellContext.layout` (prep) |
+| ShellNotes.kt | `Block`, `BlockScope`, `Place`, `RenderPlaced`, `RenderPlain` | kit (`RenderPlain` made public in prep) |
+| MemoryPane.kt | `state.connection.isLive`, `state.activeProject` | (a): `LinkContext.live`, `SessionContext.activeProject` |
+| MemoryPane.kt | `state.selected` (the role / session scope's owner) | (b): `SessionContext.selectedAgent` (prep) |
+| MemoryPane.kt | `state.memoryNotes`, `state.memorySearch` | (b): `NotesContext.notes(key)`, `NotesContext.search` (prep) |
+| MemoryPane.kt | `controller.loadMemory / getMemory / searchMemory / saveMemory / deleteMemory` | (b): `NotesContext.load / get / search / save / delete` (prep) |
+| MemoryPane.kt | `MemoryPane(state, controller)`: `AppState`, `Controller`, `CoreLink`, `CoreSession`, `CoreNotes` | (a) through the public adapters: the outside-a-shell entry (MemoryPaneUiTest, NotesScopesUiTest) |
+| MemoryPane.kt | `EditorModal` | stays: the shared editor modal, which the role and profile panes also open |
+| MemoryPane.kt | `AgentView`, `MemoryHitView`, `MemoryNoteView`, `NoteScope`, `ProjectView`, `CommandResult` | kit (model) |
+| MemoryPane.kt | `AhqIcons`, `IconAction`, `IconActionStyle`, `Button`, `OutlinedButton`, `clickable`, `Palette` | kit |
