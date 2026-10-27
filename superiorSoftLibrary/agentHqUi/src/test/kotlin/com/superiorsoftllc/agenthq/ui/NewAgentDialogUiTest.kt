@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithTag
@@ -84,6 +85,27 @@ class NewAgentDialogUiTest {
             onNodeWithTag(NEW_AGENT_EMPTY_ROLES_TAG).assertExists()
             onNodeWithText("Loading roles...", substring = true).assertExists()
         }
+    }
+
+    /** BUG bd91ee6f: the claude catalog was fine, but the typed-for rows landed below the dialog's fold, so the search looked empty. */
+    @Test
+    fun `claude models matching the typed search are scrolled into view, not left below the fold`() = runDesktopComposeUiTest(1200, 560) {
+        val claude = AppState(
+            roles = state.roles, roleBindings = emptyMap(),
+            providers = listOf(ProviderInfo("claude", models = listOf("opus", "sonnet", "haiku")), ProviderInfo("pi")),
+            modelCatalog = listOf(
+                ProviderModels("claude", "anthropic", "Anthropic", listOf("opus", "sonnet", "haiku", "claude-opus-5-5", "claude-sonnet-5", "claude-sonnet-5-5")),
+                ProviderModels("pi", "anthropic", "anthropic", listOf("anthropic/claude-haiku-5-5")),
+            ),
+        )
+        setContent { NewAgentDialog(claude, { _, _, _ -> null }, {}) }
+        onNodeWithTag(NEW_AGENT_ROLE_TAG_PREFIX + "qa").performClick()
+        onNodeWithTag(NEW_AGENT_HARNESS_TAG_PREFIX + "claude").performClick()
+        onNodeWithTag(NEW_AGENT_MODEL_SEARCH_TAG).performTextInput("haiku")
+        onNodeWithTag(NEW_AGENT_MODEL_TAG_PREFIX + "haiku").assertIsDisplayed()
+        onNodeWithTag(NEW_AGENT_MODEL_TAG_PREFIX + "haiku").performClick()
+        onNodeWithTag(NEW_AGENT_TASK_TAG).performTextInput("go")
+        onNodeWithTag(NEW_AGENT_ADD_TAG).assertIsEnabled()
     }
 
     @Test
