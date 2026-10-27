@@ -2,11 +2,11 @@ package com.superiorsoftllc.agenthq.plugins.core
 
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.RunPane
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
 import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
+import com.superiorsoftllc.agenthq.ui.shell.blocks.RunTab
 
 /** PLUGINS-1: core module Infantry_Run. Saved commands and their runs. */
 val InfantryRun = AgentHqModule(
@@ -24,6 +24,6 @@ val InfantryRun = AgentHqModule(
             ),
             testTag = "center-tab-RUN",
             routes = listOf("saveCommand", "deleteCommand", "startRun", "stopRun"),
-        ) { RunPane(it.state, it.controller) },
+        ) { RunTab() },
     ),
 )

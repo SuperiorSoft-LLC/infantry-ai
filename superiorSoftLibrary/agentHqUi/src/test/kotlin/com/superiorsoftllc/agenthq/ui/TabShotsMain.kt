@@ -84,24 +84,38 @@ fun main(args: Array<String>) {
     val port = System.getProperty("agenthq.tabshots.port")?.toIntOrNull() ?: java.net.ServerSocket(0).use { it.localPort }
     val provider = StubProvider(StubScript.default(), delayMs = 0)
     val sessionCount = AtomicInteger()
-    val daemon = AgentHqDaemon.build(
+    val sessionStore = JsonSessionStore(File(dir, "sessions.json"))
+    val mailStore = JsonMailStore(File(dir, "mailbox.json"))
+    val store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath)
+    // TAB-SHOTS-DIFF: fixed session ids (the id shows in the header, the agent row and the composer), so two renders
+    // of the same code are pixel-identical.
+    val sessionIds = { "5e55a0%02d-0000-4000-8000-000000000000".format(sessionCount.incrementAndGet()) }
+    // TAB-SHOTS-DIFF: a fixed 8 GB free of 16 GB, so a host under the 4 GB floor never pushes the "low memory" notice
+    // (a 36 px row over the composer) into a shot.
+    val memory = object : MemorySource {
+        override fun freeMb(): Long = 8192
+        override fun totalMb(): Long = 16384
+        override fun processes(): List<ProcMem> = emptyList()
+    }
+    // BLOCKS-LAYOUT L15: -PtabShotsExtra=run gives the daemon a repository (a saved command needs one) and its own
+    // commands.json in the temp state, and its own owner credential (saved commands and runs need one), so the Run tab has a
+    // command to draw. The default run keeps the daemon's defaults.
+    val runShots = System.getProperty("agenthq.tabshots.extra") == "run"
+    val runOwner = "tab-shots-run-owner-0123456789abcdef"
+    val daemon = if (runShots) AgentHqDaemon.build(
         port = port, host = "127.0.0.1", provider = provider, runner = provider.transport()!!,
-        sessionStore = JsonSessionStore(File(dir, "sessions.json")), mailStore = JsonMailStore(File(dir, "mailbox.json")),
-        store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath), mailBaseUrl = "http://127.0.0.1:1", token = null,
-        // TAB-SHOTS-DIFF: fixed session ids (the id shows in the header, the agent row and the composer), so two renders
-        // of the same code are pixel-identical.
-        sessionIds = { "5e55a0%02d-0000-4000-8000-000000000000".format(sessionCount.incrementAndGet()) },
-        // TAB-SHOTS-DIFF: a fixed 8 GB free of 16 GB, so a host under the 4 GB floor never pushes the "low memory" notice
-        // (a 36 px row over the composer) into a shot.
-        memory = object : MemorySource {
-            override fun freeMb(): Long = 8192
-            override fun totalMb(): Long = 16384
-            override fun processes(): List<ProcMem> = emptyList()
-        },
+        repo = File(dir, "run-repo").apply { mkdirs() }, commandsFile = File(dir, "commands.json"), ownerToken = runOwner,
+        sessionStore = sessionStore, mailStore = mailStore, store = store, mailBaseUrl = "http://127.0.0.1:1", token = null,
+        sessionIds = sessionIds, memory = memory,
+    ) else AgentHqDaemon.build(
+        port = port, host = "127.0.0.1", provider = provider, runner = provider.transport()!!,
+        sessionStore = sessionStore, mailStore = mailStore, store = store, mailBaseUrl = "http://127.0.0.1:1", token = null,
+        sessionIds = sessionIds, memory = memory,
     )
     daemon.start()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val controller = Controller(scope)
+    if (runShots) controller.client.ownerFor("ws://127.0.0.1:$port/ws", runOwner)
     runDesktopComposeUiTest(1400, 860) {
         setContent { App(controller, "ws://127.0.0.1:$port/ws", null, tabs = tabs) }
         waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
@@ -132,6 +146,29 @@ fun main(args: Array<String>) {
             snap(out, "roles-edit")
             onNodeWithTag(ROLE_MANAGER_SAVE_TAG).performScrollTo()
             snap(out, "roles-edit-end")
+            daemon.close()
+            exitProcess(0)
+        }
+        // BLOCKS-LAYOUT L15: -PtabShotsExtra=run renders only the Run tab with a saved command (the default shot has none):
+        // the toolbar, the delete confirm, the editor, and a finished run's pill and output. The default run is unchanged.
+        if (runShots) {
+            val argv = if (System.getProperty("os.name").startsWith("Windows")) listOf("cmd", "/c", "echo", "hello from the run shot")
+            else listOf("echo", "hello from the run shot")
+            kotlinx.coroutines.runBlocking { controller.saveCommand("echo-shot", "Echo shot", argv, null, 5000L) }
+            waitUntil(timeoutMillis = 20_000) { controller.state.value.runs.commands.any { it.id == "echo-shot" } }
+            onAllNodesWithTag("center-tab-RUN")[0].performClick()
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithText("Echo shot").fetchSemanticsNodes().isNotEmpty() }
+            snap(out, "run-toolbar")
+            onNodeWithTag(RUN_DELETE_TAG).performClick()
+            snap(out, "run-delete")
+            onNodeWithTag(RUN_DELETE_CANCEL_TAG).performClick()
+            onNodeWithTag(RUN_EDIT_TAG).performClick()
+            snap(out, "run-editor")
+            onNodeWithTag(RUN_FORM_CANCEL_TAG).performScrollTo().performClick()
+            onNodeWithTag(RUN_START_TAG).performClick()
+            waitUntil(timeoutMillis = 20_000) { controller.state.value.runs.runs.values.any { it.finished != null } }
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithText("hello from the run shot", substring = true).fetchSemanticsNodes().isNotEmpty() }
+            snap(out, "run-output")
             daemon.close()
             exitProcess(0)
         }

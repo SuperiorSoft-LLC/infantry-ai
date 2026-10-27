@@ -471,6 +471,43 @@ infantry.shell.sound      IncomingCommsSoundEffect 15 lines; it draws nothing
 - If a toast card is ever made overridable, it needs a per-item template node (a node drawn once per toast with the
   toast in a local), which is a new resolver shape, not an L-step split.
 
+### 6l. As built in L15 (2352af94): the Run tab
+
+The Run tab (Infantry_Run) is the second core tab tree (docs/BLOCKS-NEXT-SPLITS.md, top-8 item 4), built as 6j:
+`CoreShell.tabs` is now `ShellGit, ShellRun`, `TabFactory` resolves each with the shell overrides that name its nodes, and
+the tab draws `tabTree("infantry.shell.run")`.
+
+```
+infantry.shell.run   runPane    RunPaneFrame (the column, "RUN", the watch that closes the editor once a save is answered);
+                                children top to bottom, straight into the column:
+  empty      runEmpty      "No saved commands on this daemon." and Add command, with none saved and no editor open
+  toolbar    runToolbar    the command picker and its menu, Start, Interactive (desktop, 1.134.0), Stop, Add / Edit /
+                           Delete, the shown run's state
+  pills      runPills      one pill per run, newest first, and their clock; nothing with no run
+  confirm    runConfirm    the inline delete confirm, while it is asked
+  editor     runEditor     the add / edit form (CommandEditor), while it is open; weight 1
+  notices    runNotices    the last refusal, an output gap, the hidden-lines count; nothing while the editor is open
+  output     runOutput     the shown run's lines; nothing while the editor is open; weight 1
+```
+
+- `RunPane(state, controller)` keeps its signature and draws `RunPaneFrame` and the same sections (`RunEmptySection` ...
+  `RunOutputSection`), so the pane's own tests host it as before.
+- The frame owns the state the sections share: the picked command, the editor's draft, the delete confirm, the save in
+  flight and the last refusal. Sections read it through `RunPaneHost` (a composition local) and change it only through its
+  callbacks (`pick`, `start`, `stop`, `openRun`, `openNew`, `editPicked`, `saveDraft`, `cancelEdit`, `askDelete`,
+  `deletePicked`, ...). The dropdown and the Interactive tick are the toolbar's own, the pills' clock the pills' own. A
+  section drawn outside the pane draws nothing.
+- Each section owns the gap above it, as the pane drew it. `editor` and `output` ask for `weight = 1` in their `place` (an
+  override keeps it); they never draw at once.
+- A section's placement goes on its outermost item (the first notice for `notices`). `notices` can draw several items into
+  the column, so a module that wraps it draws `inner` in a Column (a Box would stack them).
+- None of these nodes is locked. Run enablement (the demo keeps run and terminal off) is unchanged.
+- 0 px: the default Run shot has no saved command. `-PtabShotsExtra=run` gives the in-process daemon a temp repository,
+  its own commands.json and owner credential, saves one command and renders `run-toolbar`, `run-delete`, `run-editor` and
+  `run-output` (a finished run's pill and line). The step matched its base render 4/4 at 0 px (step 0 of L15), plus
+  diffTabShots 32/32.
+
+
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 
 | part | bucket |

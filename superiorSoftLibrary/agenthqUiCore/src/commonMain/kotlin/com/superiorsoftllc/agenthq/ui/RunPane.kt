@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -20,6 +21,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,9 +36,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.CommandSpecView
+import com.superiorsoftllc.agenthq.ui.model.RunState
+import com.superiorsoftllc.agenthq.ui.model.RunsState
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
 import com.superiorsoftllc.agenthq.ui.model.runPills
 import com.superiorsoftllc.agenthq.ui.net.Controller
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
@@ -82,7 +87,7 @@ object RunCommandForm {
 }
 
 /** The editor's fields. [editingId] is null for a new command; an edited command keeps its id. */
-private data class CommandDraft(
+internal data class CommandDraft(
     val editingId: String? = null,
     val name: String = "",
     val id: String = "",
@@ -111,225 +116,352 @@ private data class CommandDraft(
  * inline under the form, and the form closes once the new `commands` list arrives. Delete asks for an inline confirm
  * (never an OS dialog) and sends `command_delete`. Both are off while a run is in flight or the link is not live.
  * The button rows wrap and the form scrolls, so the compact (phone) layout fits.
+ *
+ * BLOCKS-LAYOUT L15: drawn as [RunPaneFrame] (the column, its title, the save watch) and its sections, which the Run tab's
+ * `infantry.shell.run` node draws as child blocks.
+ */
+@Composable
+fun RunPane(state: AppState, controller: Controller) {
+    RunPaneFrame(state, controller) { run ->
+        RunEmptySection(run)
+        RunToolbarSection(run)
+        RunPillsSection(run)
+        RunConfirmSection(run)
+        RunEditorSection(run, Modifier.weight(1f))
+        RunNoticesSection(run)
+        RunOutputSection(run, Modifier.weight(1f))
+    }
+}
+
+/**
+ * BLOCKS-LAYOUT L15: the Run pane as its sections read it: the runs, whether the link is [live], the [picked] command, the
+ * run in flight ([active]) and the one shown ([current]), the open editor, the delete confirm and the last refusal. The
+ * frame owns this state; a section changes it only through these callbacks.
+ */
+class RunPaneHost internal constructor(
+    val state: AppState,
+    val controller: Controller,
+    /** RUN-CONSOLE: the desktop opens a pill's console window; null on web and Android, which show its lines below. */
+    val console: RunConsoleHost?,
+    private val scope: CoroutineScope,
+    private val pickedId: MutableState<String?>,
+    private val draftState: MutableState<CommandDraft?>,
+    private val confirming: MutableState<Boolean>,
+    private val localError: MutableState<String?>,
+    private val savedAt: MutableState<Int?>,
+) {
+    val runs: RunsState = state.runs
+    val live: Boolean = state.connection.isLive
+    val picked: CommandSpecView? = runs.commands.firstOrNull { it.id == pickedId.value } ?: runs.commands.firstOrNull()
+    val current: RunState? = runs.current
+    /** The run going now (one at a time), whichever pill is selected. */
+    val active: RunState? = runs.runs.values.firstOrNull { it.state != "FINISHED" }
+    val inFlight: Boolean = active != null
+    val canEdit: Boolean = live && !inFlight
+    internal val draft: CommandDraft? get() = draftState.value
+    /** The add / edit form is open. */
+    val editing: Boolean get() = draftState.value != null
+    val confirmDelete: Boolean get() = confirming.value
+    /** A save is out, not yet answered. */
+    val saving: Boolean get() = savedAt.value != null
+    /** The daemon's refusal of a command edit, else the last refusal here. */
+    val error: String? get() = runs.commandError ?: localError.value
+
+    /** Sends [request] and keeps its refusal. */
+    fun act(request: suspend () -> CommandResult) {
+        localError.value = null
+        scope.launch {
+            val r = request()
+            if (r is CommandResult.Refused) localError.value = r.reason
+        }
+    }
+
+    fun pick(id: String) { pickedId.value = id; confirming.value = false }
+
+    fun start(interactive: Boolean) {
+        picked?.let { c -> act { if (interactive) controller.startRun(c.id, interactive = true) else controller.startRun(c.id) } }
+    }
+
+    fun stop() { active?.let { r -> act { controller.stopRun(r.runId) } } }
+
+    /** Shows [runId]'s lines and, on the desktop, opens its console window. */
+    fun openRun(runId: String) {
+        controller.selectRun(runId)
+        console?.open(runId, controller)
+    }
+
+    fun openNew() {
+        draftState.value = CommandDraft()
+        confirming.value = false
+        localError.value = null
+    }
+
+    fun editPicked() { picked?.let { draftState.value = CommandDraft.of(it) }; confirming.value = false; localError.value = null }
+
+    internal fun change(draft: CommandDraft) { draftState.value = draft }
+
+    fun cancelEdit() { draftState.value = null; savedAt.value = null; localError.value = null }
+
+    fun saveDraft() {
+        val d = draftState.value ?: return
+        val grace = d.grace.trim().toLongOrNull()
+        if (grace == null) {
+            localError.value = "Grace ms must be a whole number of milliseconds."
+        } else {
+            localError.value = null
+            savedAt.value = runs.commandsRevision
+            scope.launch {
+                val r = controller.saveCommand(
+                    d.id.trim(), d.name.trim(), RunCommandForm.argvOf(d.argv), RunCommandForm.cwdOf(d.cwd), grace,
+                    RunCommandForm.secretsOf(d.secrets),
+                )
+                if (r is CommandResult.Refused) { localError.value = r.reason; savedAt.value = null }
+            }
+        }
+    }
+
+    fun askDelete() { confirming.value = true }
+
+    fun cancelDelete() { confirming.value = false }
+
+    fun deletePicked() {
+        val c = picked ?: return
+        confirming.value = false
+        act { controller.deleteCommand(c.id) }
+    }
+}
+
+/**
+ * The Run pane's frame: the column, its title, and the watch that closes the editor once a save is answered by a new
+ * `commands` list. [content] gets the host and draws straight into the column. [modifier] goes on the column.
+ */
+@Composable
+fun RunPaneFrame(state: AppState, controller: Controller, modifier: Modifier = Modifier, content: @Composable ColumnScope.(RunPaneHost) -> Unit) {
+    val scope = rememberCoroutineScope()
+    val runs = state.runs
+    val pickedId = remember { mutableStateOf<String?>(null) }
+    val localError = remember { mutableStateOf<String?>(null) }
+    val draft = remember { mutableStateOf<CommandDraft?>(null) }
+    val confirmDelete = remember { mutableStateOf(false) }
+    // The `commands` revision a save was sent against: a newer list with no refusal means it was saved.
+    val savedAt = remember { mutableStateOf<Int?>(null) }
+    // RUN-CONSOLE: the desktop opens a pill's console window; web and Android show its lines below instead.
+    val console = LocalRunConsole.current
+
+    // The controller clears the old refusal before it sends, so the first answer after the save decides:
+    // a refusal keeps the form open (its reason shows inline), a new list closes it.
+    LaunchedEffect(runs.commandsRevision) {
+        val sent = savedAt.value ?: return@LaunchedEffect
+        if (runs.commandsRevision > sent) {
+            savedAt.value = null
+            if (runs.commandError == null) draft.value = null
+        }
+    }
+
+    Column(modifier.fillMaxSize().padding(12.dp).testTag(RUN_PANE_TAG)) {
+        Text("RUN", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(bottom = 6.dp))
+        content(RunPaneHost(state, controller, console, scope, pickedId, draft, confirmDelete, localError, savedAt))
+    }
+}
+
+/** With no saved command and no editor open: says so, with Add command. [modifier] goes on the row. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun RunEmptySection(run: RunPaneHost, modifier: Modifier = Modifier) {
+    if (run.runs.commands.isNotEmpty() || run.editing) return
+    FlowRow(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("No saved commands on this daemon.", color = Palette.Muted, fontSize = 12.sp)
+        OutlinedButton(onClick = run::openNew, enabled = run.canEdit, modifier = Modifier.testTag(RUN_ADD_TAG)) {
+            Text("Add command", fontSize = 12.sp)
+        }
+    }
+}
+
+/**
+ * The command picker, Start, Interactive (the desktop, on a 1.134.0 daemon), Stop, Add / Edit / Delete and the shown run's
+ * state. The dropdown and the Interactive tick are its own. [modifier] goes on the row.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun RunPane(state: AppState, controller: Controller) {
-    val scope = rememberCoroutineScope()
-    val runs = state.runs
-    val live = state.connection.isLive
-    var pickedId by remember { mutableStateOf<String?>(null) }
+fun RunToolbarSection(run: RunPaneHost, modifier: Modifier = Modifier) {
+    val runs = run.runs
+    val live = run.live
+    val inFlight = run.inFlight
+    val picked = run.picked
     var menuOpen by remember { mutableStateOf(false) }
-    var localError by remember { mutableStateOf<String?>(null) }
-    var draft by remember { mutableStateOf<CommandDraft?>(null) }
-    var confirmDelete by remember { mutableStateOf(false) }
-    // The `commands` revision a save was sent against: a newer list with no refusal means it was saved.
-    var savedAt by remember { mutableStateOf<Int?>(null) }
-    // RUN-CONSOLE: the desktop opens a pill's console window; web and Android show its lines below instead.
-    val console = LocalRunConsole.current
     var interactive by remember { mutableStateOf(false) }
+    FlowRow(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box {
+            OutlinedButton(
+                onClick = { menuOpen = true },
+                enabled = live && !inFlight && runs.commands.isNotEmpty(),
+                modifier = Modifier.testTag(RUN_COMMAND_PICKER_TAG),
+            ) { Text(picked?.name ?: "Pick a command", fontSize = 12.sp) }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                runs.commands.forEach { c ->
+                    DropdownMenuItem(
+                        text = { Text(c.name, fontSize = 12.sp) },
+                        onClick = { run.pick(c.id); menuOpen = false },
+                        modifier = Modifier.testTag("run-command-${c.id}"),
+                    )
+                }
+            }
+        }
+        OutlinedButton(
+            onClick = { run.start(interactive) },
+            enabled = live && !inFlight && picked != null,
+            modifier = Modifier.testTag(RUN_START_TAG),
+        ) { Text("Start", fontSize = 12.sp) }
+        // Typing into a run needs a console to type in: the desktop only, on a 1.134.0 daemon.
+        if (run.console != null && run.controller.supportsRunConsole()) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = interactive, onCheckedChange = { interactive = it }, enabled = live && !inFlight,
+                    modifier = Modifier.testTag(RUN_INTERACTIVE_TAG),
+                )
+                Text("Interactive", color = Palette.Muted, fontSize = 12.sp)
+            }
+        }
+        OutlinedButton(
+            onClick = run::stop,
+            enabled = live && inFlight,
+            modifier = Modifier.testTag(RUN_STOP_TAG),
+        ) { Text("Stop", fontSize = 12.sp) }
+        if (runs.commands.isNotEmpty()) {
+            OutlinedButton(
+                onClick = run::openNew,
+                enabled = run.canEdit && !run.editing,
+                modifier = Modifier.testTag(RUN_ADD_TAG),
+            ) { Text("Add", fontSize = 12.sp) }
+            OutlinedButton(
+                onClick = run::editPicked,
+                enabled = run.canEdit && !run.editing && picked != null,
+                modifier = Modifier.testTag(RUN_EDIT_TAG),
+            ) { Text("Edit", fontSize = 12.sp) }
+            OutlinedButton(
+                onClick = run::askDelete,
+                enabled = run.canEdit && !run.editing && picked != null && !run.confirmDelete,
+                modifier = Modifier.testTag(RUN_DELETE_TAG),
+            ) { Text("Delete", fontSize = 12.sp) }
+        }
+        run.current?.let { Text(it.finished?.outcome ?: it.state, color = Palette.Muted, fontSize = 11.sp) }
+    }
+}
 
-    val picked = runs.commands.firstOrNull { it.id == pickedId } ?: runs.commands.firstOrNull()
-    val current = runs.current
-    // The run going now (one at a time), whichever pill is selected.
-    val active = runs.runs.values.firstOrNull { it.state != "FINISHED" }
-    val inFlight = active != null
-    val canEdit = live && !inFlight
-    // The pills' clock: ticks once a second while a run is going, so "running 0:42" counts.
+/**
+ * RUN-CONSOLE: one pill per run, newest first. A click shows that run's lines below and, on the desktop, opens its console
+ * window. The pills' clock is its own: it ticks once a second while a run is going, so "running 0:42" counts. [modifier]
+ * goes on the row.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun RunPillsSection(run: RunPaneHost, modifier: Modifier = Modifier) {
+    val inFlight = run.inFlight
     var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(inFlight) {
         now = Clock.System.now().toEpochMilliseconds()
         while (inFlight) { delay(1000); now = Clock.System.now().toEpochMilliseconds() }
     }
-
-    // The controller clears the old refusal before it sends, so the first answer after the save decides:
-    // a refusal keeps the form open (its reason shows inline), a new list closes it.
-    LaunchedEffect(runs.commandsRevision) {
-        val sent = savedAt ?: return@LaunchedEffect
-        if (runs.commandsRevision > sent) {
-            savedAt = null
-            if (runs.commandError == null) draft = null
+    val pills = runPills(run.runs, now)
+    if (pills.isEmpty()) return
+    FlowRow(
+        modifier.padding(top = 6.dp).testTag(RUN_PILLS_TAG),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        pills.forEach { p ->
+            RunPillChip(p, selected = p.runId == run.runs.currentRunId, onClick = { run.openRun(p.runId) })
         }
     }
+}
 
-    fun act(request: suspend () -> CommandResult) {
-        localError = null
-        scope.launch {
-            val r = request()
-            if (r is CommandResult.Refused) localError = r.reason
+/** The inline delete confirm (never an OS dialog), while it is asked. [modifier] goes on the row. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun RunConfirmSection(run: RunPaneHost, modifier: Modifier = Modifier) {
+    val picked = run.picked
+    if (!run.confirmDelete || picked == null) return
+    FlowRow(
+        modifier.padding(top = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("Delete \"${picked.name}\"?", color = Palette.Danger, fontSize = 12.sp)
+        OutlinedButton(
+            onClick = run::deletePicked,
+            enabled = run.canEdit,
+            modifier = Modifier.testTag(RUN_DELETE_CONFIRM_TAG),
+        ) { Text("Delete", fontSize = 12.sp, color = Palette.Danger) }
+        TextButton(onClick = run::cancelDelete, modifier = Modifier.testTag(RUN_DELETE_CANCEL_TAG)) {
+            Text("Cancel", fontSize = 12.sp)
         }
     }
+}
 
-    fun openNew() {
-        draft = CommandDraft()
-        confirmDelete = false
-        localError = null
+/** The add / edit form while it is open. In the pane it takes the rest of the height. [modifier] goes on the form. */
+@Composable
+fun RunEditorSection(run: RunPaneHost, modifier: Modifier = Modifier) {
+    val d = run.draft ?: return
+    CommandEditor(
+        draft = d,
+        // SECRETS-2: the field shows only against a daemon that injects secrets (1.135.0).
+        secretNames = if (run.controller.supportsKeyValueSecrets()) run.state.secrets?.entries?.map { it.name }.orEmpty() else null,
+        enabled = run.canEdit && !run.saving,
+        error = run.error,
+        onChange = run::change,
+        onCancel = run::cancelEdit,
+        onSave = run::saveDraft,
+        modifier = modifier,
+    )
+}
+
+/**
+ * While no editor is open: the last refusal, an output gap, and how many earlier lines are hidden, each when there is one.
+ * [modifier] goes on the first of them.
+ */
+@Composable
+fun RunNoticesSection(run: RunPaneHost, modifier: Modifier = Modifier) {
+    if (run.editing) return
+    val current = run.current
+    val notices = listOfNotNull(
+        run.error?.let { it to Palette.Danger },
+        current?.gap?.let { "Output gap: expected line ${it.expected}, got ${it.got}. Later lines are not shown." to Palette.Danger },
+        current?.takeIf { it.droppedLines > 0 }?.let { "${it.droppedLines} earlier lines hidden" to Palette.Muted },
+    )
+    notices.forEachIndexed { i, (text, color) ->
+        Text(text, color = color, fontSize = 11.sp, modifier = (if (i == 0) modifier else Modifier).padding(top = 6.dp))
     }
+}
 
-    Column(Modifier.fillMaxSize().padding(12.dp).testTag(RUN_PANE_TAG)) {
-        Text("RUN", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(bottom = 6.dp))
-        if (runs.commands.isEmpty() && draft == null) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                itemVerticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("No saved commands on this daemon.", color = Palette.Muted, fontSize = 12.sp)
-                OutlinedButton(onClick = ::openNew, enabled = canEdit, modifier = Modifier.testTag(RUN_ADD_TAG)) {
-                    Text("Add command", fontSize = 12.sp)
-                }
-            }
-        }
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            itemVerticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box {
-                OutlinedButton(
-                    onClick = { menuOpen = true },
-                    enabled = live && !inFlight && runs.commands.isNotEmpty(),
-                    modifier = Modifier.testTag(RUN_COMMAND_PICKER_TAG),
-                ) { Text(picked?.name ?: "Pick a command", fontSize = 12.sp) }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    runs.commands.forEach { c ->
-                        DropdownMenuItem(
-                            text = { Text(c.name, fontSize = 12.sp) },
-                            onClick = { pickedId = c.id; menuOpen = false; confirmDelete = false },
-                            modifier = Modifier.testTag("run-command-${c.id}"),
-                        )
-                    }
-                }
-            }
-            OutlinedButton(
-                onClick = {
-                    picked?.let { c ->
-                        act { if (interactive) controller.startRun(c.id, interactive = true) else controller.startRun(c.id) }
-                    }
-                },
-                enabled = live && !inFlight && picked != null,
-                modifier = Modifier.testTag(RUN_START_TAG),
-            ) { Text("Start", fontSize = 12.sp) }
-            // Typing into a run needs a console to type in: the desktop only, on a 1.134.0 daemon.
-            if (console != null && controller.supportsRunConsole()) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(
-                        checked = interactive, onCheckedChange = { interactive = it }, enabled = live && !inFlight,
-                        modifier = Modifier.testTag(RUN_INTERACTIVE_TAG),
-                    )
-                    Text("Interactive", color = Palette.Muted, fontSize = 12.sp)
-                }
-            }
-            OutlinedButton(
-                onClick = { active?.let { r -> act { controller.stopRun(r.runId) } } },
-                enabled = live && inFlight,
-                modifier = Modifier.testTag(RUN_STOP_TAG),
-            ) { Text("Stop", fontSize = 12.sp) }
-            if (runs.commands.isNotEmpty()) {
-                OutlinedButton(
-                    onClick = ::openNew,
-                    enabled = canEdit && draft == null,
-                    modifier = Modifier.testTag(RUN_ADD_TAG),
-                ) { Text("Add", fontSize = 12.sp) }
-                OutlinedButton(
-                    onClick = { picked?.let { draft = CommandDraft.of(it) }; confirmDelete = false; localError = null },
-                    enabled = canEdit && draft == null && picked != null,
-                    modifier = Modifier.testTag(RUN_EDIT_TAG),
-                ) { Text("Edit", fontSize = 12.sp) }
-                OutlinedButton(
-                    onClick = { confirmDelete = true },
-                    enabled = canEdit && draft == null && picked != null && !confirmDelete,
-                    modifier = Modifier.testTag(RUN_DELETE_TAG),
-                ) { Text("Delete", fontSize = 12.sp) }
-            }
-            current?.let { Text(it.finished?.outcome ?: it.state, color = Palette.Muted, fontSize = 11.sp) }
-        }
-        // RUN-CONSOLE: one pill per run, newest first. A click shows that run's lines below and, on the desktop,
-        // opens its console window.
-        val pills = runPills(runs, now)
-        if (pills.isNotEmpty()) {
-            FlowRow(
-                Modifier.padding(top = 6.dp).testTag(RUN_PILLS_TAG),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                pills.forEach { p ->
-                    RunPillChip(p, selected = p.runId == runs.currentRunId, onClick = {
-                        controller.selectRun(p.runId)
-                        console?.open(p.runId, controller)
-                    })
-                }
-            }
-        }
-        if (confirmDelete && picked != null) {
-            FlowRow(
-                Modifier.padding(top = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                itemVerticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Delete \"${picked.name}\"?", color = Palette.Danger, fontSize = 12.sp)
-                OutlinedButton(
-                    onClick = { confirmDelete = false; act { controller.deleteCommand(picked.id) } },
-                    enabled = canEdit,
-                    modifier = Modifier.testTag(RUN_DELETE_CONFIRM_TAG),
-                ) { Text("Delete", fontSize = 12.sp, color = Palette.Danger) }
-                TextButton(onClick = { confirmDelete = false }, modifier = Modifier.testTag(RUN_DELETE_CANCEL_TAG)) {
-                    Text("Cancel", fontSize = 12.sp)
-                }
-            }
-        }
-        val d = draft
-        if (d != null) {
-            CommandEditor(
-                draft = d,
-                // SECRETS-2: the field shows only against a daemon that injects secrets (1.135.0).
-                secretNames = if (controller.supportsKeyValueSecrets()) state.secrets?.entries?.map { it.name }.orEmpty() else null,
-                enabled = canEdit && savedAt == null,
-                error = runs.commandError ?: localError,
-                onChange = { draft = it },
-                onCancel = { draft = null; savedAt = null; localError = null },
-                onSave = {
-                    val grace = d.grace.trim().toLongOrNull()
-                    if (grace == null) {
-                        localError = "Grace ms must be a whole number of milliseconds."
-                    } else {
-                        localError = null
-                        savedAt = runs.commandsRevision
-                        scope.launch {
-                            val r = controller.saveCommand(
-                                d.id.trim(), d.name.trim(), RunCommandForm.argvOf(d.argv), RunCommandForm.cwdOf(d.cwd), grace,
-                                RunCommandForm.secretsOf(d.secrets),
-                            )
-                            if (r is CommandResult.Refused) { localError = r.reason; savedAt = null }
-                        }
-                    }
-                },
-                modifier = Modifier.weight(1f),
+/**
+ * While no editor is open: the shown run's lines in monospace, stderr in red, kept scrolled to the newest. In the pane it
+ * takes the rest of the height. [modifier] goes on the list.
+ */
+@Composable
+fun RunOutputSection(run: RunPaneHost, modifier: Modifier = Modifier) {
+    if (run.editing) return
+    val lines = run.current?.lines.orEmpty()
+    val listState = rememberLazyListState()
+    LaunchedEffect(lines.size) { if (lines.isNotEmpty()) listState.scrollToItem(lines.lastIndex) }
+    LazyColumn(
+        state = listState,
+        modifier = modifier.fillMaxWidth().padding(top = 8.dp).background(Palette.Panel).padding(8.dp).testTag(RUN_OUTPUT_TAG),
+    ) {
+        items(lines) { l ->
+            Text(
+                l.text, fontFamily = Mono, fontSize = 12.sp,
+                color = if (l.stream == "stderr") Palette.Danger else Palette.Text,
+                fontWeight = FontWeight.Normal,
             )
-            return@Column
-        }
-        (runs.commandError ?: localError)?.let {
-            Text(it, color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
-        }
-        current?.gap?.let {
-            Text("Output gap: expected line ${it.expected}, got ${it.got}. Later lines are not shown.", color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
-        }
-        current?.takeIf { it.droppedLines > 0 }?.let {
-            Text("${it.droppedLines} earlier lines hidden", color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
-        }
-        val lines = current?.lines.orEmpty()
-        val listState = rememberLazyListState()
-        LaunchedEffect(lines.size) { if (lines.isNotEmpty()) listState.scrollToItem(lines.lastIndex) }
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxWidth().weight(1f).padding(top = 8.dp).background(Palette.Panel).padding(8.dp).testTag(RUN_OUTPUT_TAG),
-        ) {
-            items(lines) { l ->
-                Text(
-                    l.text, fontFamily = Mono, fontSize = 12.sp,
-                    color = if (l.stream == "stderr") Palette.Danger else Palette.Text,
-                    fontWeight = FontWeight.Normal,
-                )
-            }
         }
     }
 }

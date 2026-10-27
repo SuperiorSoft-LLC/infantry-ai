@@ -55,7 +55,7 @@ class HandCursorGuardTest {
 
     /** Kinds without a wrapper yet: raw call counts may only go down. Lower the number when you migrate a kind. */
     private val rawBaseline = mapOf(
-        "Text" to 1051,
+        "Text" to 1049,
         "DropdownMenu" to 9,
         "OutlinedTextField" to 99,
         "BasicTextField" to 2,
