@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.ui.shell.blocks
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -91,7 +92,20 @@ object RightPanelStrip : Block("tabStrip", "$BODY.strip") {
     }
 }
 
-private val RightPanelBody = RightPanelBodyBlock(listOf(RightPanelStrip))
+/**
+ * The picked tab's content (TabFactory.Content: its container's slots, interceptors and badge included). The module
+ * draws it with no node of its own, so a placement other than the default gets a Box to wear it.
+ */
+object RightPanelTab : Block("tabContent", "$BODY.tab") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val s = LocalShell.current
+        if (scope.modifier == Modifier) s.tabs.Content(s.ui.rightTab, s.tabContext({}))
+        else Box(scope.modifier) { s.tabs.Content(s.ui.rightTab, s.tabContext({})) }
+    }
+}
+
+private val RightPanelBody = RightPanelBodyBlock(listOf(RightPanelStrip, RightPanelTab))
 
 val ShellRightPanel = RightPanelBlock(listOf(RightPanelResize, RightPanelBody))
 
@@ -121,7 +135,6 @@ internal fun RightPanelContent(s: Shell, mod: Modifier, onClose: (() -> Unit)?, 
         // PLUGINS-3: the right panel's module sections, around its tab strip.
         PanelSections(s.tabs, Panels.RIGHT, s.tabContext({})) {
             RenderPlaced(area)
-            s.tabs.Content(s.ui.rightTab, s.tabContext({}))
         }
     }
 }
