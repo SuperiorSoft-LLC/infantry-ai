@@ -76,10 +76,12 @@ fun main(args: Array<String>) {
     val lock = args.getOrNull(1) == "demo-lock"
     val env = mapOf(PluginFolders.ROOT_ENV to root.absolutePath) + (if (lock) mapOf(PluginFolders.DEMO_LOCK_ENV to "1") else emptyMap())
     val tabs = DesktopPlugins.load(dir, env = env::get, property = { null }).factory
+    // Own port per render (concurrent renders must not share a daemon): agenthq.tabshots.port pins one, else a free ephemeral one.
+    val port = System.getProperty("agenthq.tabshots.port")?.toIntOrNull() ?: java.net.ServerSocket(0).use { it.localPort }
     val provider = StubProvider(StubScript.default(), delayMs = 0)
     val sessionCount = AtomicInteger()
     val daemon = AgentHqDaemon.build(
-        port = 18797, host = "127.0.0.1", provider = provider, runner = provider.transport()!!,
+        port = port, host = "127.0.0.1", provider = provider, runner = provider.transport()!!,
         sessionStore = JsonSessionStore(File(dir, "sessions.json")), mailStore = JsonMailStore(File(dir, "mailbox.json")),
         store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath), mailBaseUrl = "http://127.0.0.1:1", token = null,
         // TAB-SHOTS-DIFF: fixed session ids (the id shows in the header, the agent row and the composer), so two renders
@@ -90,7 +92,7 @@ fun main(args: Array<String>) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val controller = Controller(scope)
     runDesktopComposeUiTest(1400, 860) {
-        setContent { App(controller, "ws://127.0.0.1:18797/ws", null, tabs = tabs) }
+        setContent { App(controller, "ws://127.0.0.1:$port/ws", null, tabs = tabs) }
         waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
         scope.launch { controller.spawn("say hello") }
         waitUntil(timeoutMillis = 20_000) { controller.state.value.agents.isNotEmpty() }
@@ -144,7 +146,7 @@ fun main(args: Array<String>) {
     }
     for ((name, size) in listOf("chrome-desktop-1400" to (1400 to 860), "chrome-compact-800" to (800 to 860), "chrome-compact-360" to (360 to 860))) {
         runDesktopComposeUiTest(size.first, size.second) {
-            setContent { ChromeApp(controller, tabs) }
+            setContent { ChromeApp(controller, tabs, port) }
             waitForIdle()
             snap(out, name)
             if (size.first < 840) {
@@ -166,9 +168,9 @@ private object ShotChrome : WindowChrome {
 }
 
 @androidx.compose.runtime.Composable
-private fun ChromeApp(controller: Controller, tabs: TabFactory) {
+private fun ChromeApp(controller: Controller, tabs: TabFactory, port: Int) {
     androidx.compose.runtime.CompositionLocalProvider(LocalWindowChrome provides ShotChrome) {
-        App(controller, "ws://127.0.0.1:18797/ws", null, tabs = tabs)
+        App(controller, "ws://127.0.0.1:$port/ws", null, tabs = tabs)
     }
 }
 
