@@ -16,6 +16,7 @@ import com.superiorsoftllc.agenthq.ui.BoardPaneFrame
 import com.superiorsoftllc.agenthq.ui.BoardPaneHost
 import com.superiorsoftllc.agenthq.ui.BoardUnassignedSection
 import com.superiorsoftllc.agenthq.ui.LocalShell
+import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 import com.superiorsoftllc.agenthq.ui.TicketCardActionsSection
 import com.superiorsoftllc.agenthq.ui.TicketCardBadgesSection
 import com.superiorsoftllc.agenthq.ui.TicketCardDetailsSection
@@ -28,7 +29,6 @@ import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.Place
 import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
-import com.superiorsoftllc.agenthq.ui.model.CompactScreen
 
 private const val BOARD = "infantry.shell.board"
 private const val PANE = "$BOARD.pane"
@@ -57,18 +57,10 @@ private val LocalBoardCardHost = compositionLocalOf<BoardCardHost?> { null }
 class BoardBlock(children: List<Block>, place: Place = Place()) : Block("boardModal", BOARD, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
-        val ui = s.ui
-        if (!ui.showBoard) return
-        val onDismiss: () -> Unit = { ui.showBoard = false; s.root.requestFocus() }
-        val host = BoardHost(
-            onOpenAgent = {
-                s.controller.select(it); ui.centerTab = s.homeTab; s.chat.spawnMode = false; ui.showBoard = false
-                // MOBILE-LAYOUT-2: a compact window opens the Board from the list; "Agent" lands on the output.
-                if (s.state.panels.compactWindow) s.controller.showCompactScreen(CompactScreen.OUTPUT)
-            },
-            onDismiss = onDismiss,
-        )
+        val board = LocalShellContext.current?.board ?: return
+        if (!board.open) return
+        val onDismiss: () -> Unit = board::close
+        val host = BoardHost(onOpenAgent = board::openAgent, onDismiss = onDismiss)
         BoardModalFrame(onDismiss) {
             CompositionLocalProvider(LocalBoardHost provides host) {
                 RenderPlaced(children)
@@ -84,7 +76,7 @@ object BoardHeader : Block("boardHeader", "$BOARD.header") {
     @Composable
     override fun Render(scope: BlockScope) {
         val host = LocalBoardHost.current ?: return
-        BoardModalHeader(LocalShell.current.state, host.onDismiss, scope.modifier)
+        BoardModalHeader(LocalShellContext.current?.session?.activeProject, host.onDismiss, scope.modifier)
     }
 }
 

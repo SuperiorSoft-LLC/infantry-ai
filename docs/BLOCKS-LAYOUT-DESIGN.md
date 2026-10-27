@@ -705,6 +705,55 @@ infantry.shell.windowLayer  placeholder   default: group             the dialogs
   `roles` 4/4 and `board` 4/4 against a render of the base ref. HandCursorGuardTest baseline unchanged (no raw calls
   added or removed).
 
+### 6q. As built in SHELL-EMPTY-DROPIN S2 (4c8f56c3): the ShellContext
+
+Gap 2 of the feasibility doc: the open nodes read `App`, `Shell` and `Controller` directly, so a block compiled outside
+core has nothing stable to compile against. `ui.shell.ShellContext` (agenthqUiCore, commonMain) is that surface; the
+shell provides it once, through `LocalShellContext`, next to `LocalShell`.
+
+```
+ShellContext { link, session, git, run, board, roles, toast, config }
+  LinkContext     live, contract, contractAtLeast(major, minor)
+  SessionContext  activeProject, notices, projectRefusal
+  GitContext      status/patch/history/branches/checkoutResult/pipeline(projectId), failure;
+                  load, loadDiff, loadBranches, checkout, setBaseBranch, saveDirectory, loadPipeline, configurePipeline
+  RunContext      runs, secretNames, hasConsoleWindow, interactiveSupported; start, stop, open, saveCommand, deleteCommand
+  BoardContext    open; close, openAgent(sessionId)
+  RolesContext    managerOpen, roles, bindings, traits; closeManager
+  ToastContext    service (ToastService), events; open(event)
+  ConfigContext   values(nodeId): ConfigValues {keys, string, int, double, boolean}; implementation(type, key)
+```
+
+- **Derived, not designed.** Every member is something a migrated section called (grep of `state.`/`controller.` in
+  ProjectGitPane, ProjectPipelineSection, RunPane, RoleManager list, BoardModal header, the toast block and the five
+  shell blocks). Nothing is in it "because a plugin might want it"; memory, settings and a fuller roles/board domain
+  come when the code that needs them migrates (S4), as additions.
+- **Small sub-interfaces per domain**, so a block depends on the ones it reads (`GitPaneFrame(link, session, git)`,
+  `RunPaneFrame(link, run)`), and a fake for one domain is a page, not all of Controller (ShellContextTest).
+- **Values are composition snapshots, not flows.** `App` already collects `Controller.state` once; `CoreShellContext`
+  wraps that snapshot and is provided anew when it changes, exactly as `LocalShell` is, so recomposition is unchanged.
+  Trade-off: non-composable code (a `LaunchedEffect` that must see the newest state, like the board drag's
+  `controller.state.collect`) has no flow yet; one would be an addition (`val changes: Flow<...>` with a default).
+- **Actions answer `CommandResult`** and delegate one-to-one to the Controller call the section made before (same
+  overload, same defaults: `startRun(id)` vs `startRun(id, interactive = true)`, `configurePipeline(.., exclusiveCheck =
+  false)`). Window effects (board open/close, the toast tap, roles close) are the core's to perform, so a block asks for
+  them by intent and never writes `ShellState`.
+- **Config slot (owner, 2026-10-27).** Read-only: `values(nodeId)` resolves child, parent, root, plugin default and
+  returns typed values (null for unset or another type, never coerced); `implementation(type, key)` returns what is
+  registered under a registry key (the JSON stores keys, never class names). The core answers `EmptyConfig` until P1
+  (f60f4d97) builds schema, tree and storage behind these signatures.
+- **Migrated as the proof:** the Git tab (frame, host, all seven sections, branch switcher, base picker, pipeline), the
+  Run tab (frame, host, all sections), the toast block, the board block and its header, the roles block and its list.
+  Their `(state, controller)` entry points (`ProjectGitPane`, `RunPane`, `BoardModalHeader`, `RoleManagerList`,
+  `ToastHost`) stay and adapt through `CoreLink`/`CoreSession`/`CoreGit`/`CoreRun`, so unmigrated callers and tests are
+  untouched. **Not migrated** (S4): `BoardPaneFrame` and the ticket forms, `RoleManagerForm`/`RoleFormFrame`, which still
+  read `LocalShell`; and `GitTab`/`RunTab` still resolve their tree through `LocalShell.tabs` (tab wiring, not state).
+- Outside a shell (no `LocalShellContext`) every migrated block draws nothing.
+- **Stability rule: additions only.** The interfaces, their member names and types, and the model types they return
+  (`ProjectView`, `Notice`, `RunsState`, `ToastEvent`, the `ProjectGit*` and `Role*` wire types) are plugin API under
+  `apiVersion`. A member is never renamed, retyped or removed; a new member on an interface a plugin might implement
+  (a fake, a wrapper) gets a default. Too wide is a leak forever; S4's compile errors decide each widening.
+
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 
 | part | bucket |
@@ -741,7 +790,9 @@ while the core bucket stays the primitives plus the skeleton, which is small and
 2. **`Place` field names and meanings in the JSON schema.** Every plugin tree depends on them. Add fields freely; never
    repurpose one.
 3. **Primitive types being core-locked.** Opening them later is easy, but closing them after plugins rely on it is not.
-4. Cheap to reverse: the choice of composition over `dock`, the starting set itself, and where `measure` sits.
+4. **The `ShellContext` surface (6q).** Every member and every model type it returns is a compatibility promise; it
+   only grows. Changing a value to a flow, or a domain split, later means a v2 next to v1.
+5. Cheap to reverse: the choice of composition over `dock`, the starting set itself, and where `measure` sits.
 
 ## Impact on LAYOUT-1
 

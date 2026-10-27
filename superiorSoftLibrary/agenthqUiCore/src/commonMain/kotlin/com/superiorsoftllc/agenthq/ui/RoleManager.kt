@@ -110,10 +110,18 @@ fun RoleManagerHint(modifier: Modifier = Modifier) {
 
 /** The list page (New role, then a row per role); nothing while a role is open. [modifier] goes on New role. */
 @Composable
-fun RoleManagerList(state: AppState, nav: RoleManagerNav, modifier: Modifier = Modifier) {
+fun RoleManagerList(state: AppState, nav: RoleManagerNav, modifier: Modifier = Modifier) =
+    RoleManagerList(state.roles, state.roleBindings, state.roleTraits, state.connection.isLive, nav, modifier)
+
+/** S2: [RoleManagerList] over the shell context's [roles], their [bindings] and [traits]; [live] enables New role. */
+@Composable
+fun RoleManagerList(
+    roles: List<Role>, bindings: Map<String, RoleBinding>, traits: Map<String, List<String>>, live: Boolean, nav: RoleManagerNav,
+    modifier: Modifier = Modifier,
+) {
     if (nav.editing != null) return
-    Button(onClick = { nav.open("") }, enabled = state.connection.isLive, modifier = modifier.testTag(ROLE_MANAGER_NEW_TAG)) { Text("New role") }
-    state.roles.forEach { r ->
+    Button(onClick = { nav.open("") }, enabled = live, modifier = modifier.testTag(ROLE_MANAGER_NEW_TAG)) { Text("New role") }
+    roles.forEach { r ->
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised)
                 .clickable { nav.open(r.id) }.padding(8.dp).testTag(ROLE_MANAGER_ROW_TAG_PREFIX + r.id),
@@ -125,7 +133,7 @@ fun RoleManagerList(state: AppState, nav: RoleManagerNav, modifier: Modifier = M
                 Chip(if (r.source == "CUSTOM") "custom" else "built-in")
             }
             if (r.description.isNotBlank()) Text(r.description, color = Palette.Muted, fontSize = 11.sp)
-            Text("${bindingSummary(state.roleBindings[r.id])} · ${state.roleTraits[r.id].orEmpty().size} traits", color = Palette.Muted, fontSize = 10.sp)
+            Text("${bindingSummary(bindings[r.id])} · ${traits[r.id].orEmpty().size} traits", color = Palette.Muted, fontSize = 10.sp)
         }
     }
 }

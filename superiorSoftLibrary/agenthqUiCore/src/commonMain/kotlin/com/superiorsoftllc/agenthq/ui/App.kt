@@ -400,6 +400,8 @@ fun App(
           LocalTabFactory provides tabs,
           LocalChatMarkdown provides remember(flags.chatMarkdownEngine) { ChatMarkdownConfig(com.superiorsoftllc.agenthq.ui.model.ChatMarkdown.engines.resolve(flags.chatMarkdownEngine), chatBlockRenderers) },
           LocalShell provides shell,
+          // S2: what the blocks read instead of [shell]'s App/Controller internals.
+          com.superiorsoftllc.agenthq.ui.shell.LocalShellContext provides com.superiorsoftllc.agenthq.ui.shell.CoreShellContext(shell, LocalRunConsole.current),
           // TOAST-1: every block can toast; a subtree may provide its own (nearest wins).
           LocalToast provides controller.toasts,
       ) {

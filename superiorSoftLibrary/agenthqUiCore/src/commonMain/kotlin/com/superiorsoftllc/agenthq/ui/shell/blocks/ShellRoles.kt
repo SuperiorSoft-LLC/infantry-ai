@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import com.superiorsoftllc.agenthq.ui.LocalShell
+import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 import com.superiorsoftllc.agenthq.ui.RoleFormActions
 import com.superiorsoftllc.agenthq.ui.RoleFormDraft
 import com.superiorsoftllc.agenthq.ui.RoleFormExecutor
@@ -39,9 +40,9 @@ private val LocalRoleFormDraft = compositionLocalOf<RoleFormDraft?> { null }
 class RolesBlock(children: List<Block>, place: Place = Place()) : Block(ROLES, ROLES, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
-        if (!s.ui.showRoles) return
-        RoleManagerFrame(onDismiss = { s.ui.showRoles = false }) { nav ->
+        val roles = LocalShellContext.current?.roles ?: return
+        if (!roles.managerOpen) return
+        RoleManagerFrame(onDismiss = roles::closeManager) { nav ->
             CompositionLocalProvider(LocalRoleManagerNav provides nav) { RenderPlaced(children) }
         }
     }
@@ -62,8 +63,9 @@ object RolesHint : Block("roleManagerHint", "$ROLES.hint") {
 object RolesList : Block("roleList", "$ROLES.list") {
     @Composable
     override fun Render(scope: BlockScope) {
+        val ctx = LocalShellContext.current ?: return
         val nav = LocalRoleManagerNav.current ?: return
-        RoleManagerList(LocalShell.current.state, nav, scope.modifier)
+        RoleManagerList(ctx.roles.roles, ctx.roles.bindings, ctx.roles.traits, ctx.link.live, nav, scope.modifier)
     }
 }
 
