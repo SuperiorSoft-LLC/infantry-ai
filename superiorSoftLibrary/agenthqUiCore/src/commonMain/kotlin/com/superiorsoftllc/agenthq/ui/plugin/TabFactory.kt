@@ -47,12 +47,35 @@ object Panels {
     const val TABS_ORDER = 100
 }
 
-/** PLUGINS-1: the named slots a module can add a [SlotBlock] to. A slot with no block draws nothing. */
+/**
+ * PLUGINS-1: the named slots a module can add a [SlotBlock] to. A slot with no block draws nothing. Every tab container
+ * declares two: `<container>.top` above its tab content and `<container>.bottom` below it, on every tab of it. A block
+ * bound to any other slot name is refused with one line in [TabFactory.problems] (HOOKS-1: never a silent drop).
+ */
 object Slots {
     /** Above a container's tab content, on every tab of it: `<container>.top`. */
     fun top(container: String) = "$container.top"
+    /** HOOKS-1: below a container's tab content, on every tab of it: `<container>.bottom`. */
+    fun bottom(container: String) = "$container.bottom"
     val CENTER_TOP = top(TabContainers.CENTER)
     val RIGHT_TOP = top(TabContainers.RIGHT)
+    val CENTER_BOTTOM = bottom(TabContainers.CENTER)
+    val RIGHT_BOTTOM = bottom(TabContainers.RIGHT)
+    /** Every slot a container declares. */
+    val ALL = listOf(CENTER_TOP, CENTER_BOTTOM, RIGHT_TOP, RIGHT_BOTTOM)
+}
+
+/**
+ * HOOKS-1: an interceptor's module.json `kind`, which decides the parts of its [TabInterceptor] the host runs:
+ * [BEFORE] draws only `before` (above the content), [AFTER] only `after` (below it), [AROUND] runs every part (`title`
+ * and `content` wrap the tab's own through `proceed`; `before` and `after` draw). A registered part its kind does not
+ * run is logged and not run; an unknown kind refuses the interceptor.
+ */
+object InterceptorKinds {
+    const val BEFORE = "before"
+    const val AFTER = "after"
+    const val AROUND = "around"
+    val ALL = setOf(BEFORE, AFTER, AROUND)
 }
 
 /** A module's services when it has none (compiled-in core on web and Android, and tests). */
@@ -140,14 +163,29 @@ data class PanelProvider(
 )
 
 /**
- * An interceptor on one tab (Magento's plugin): [title] runs around the tab's own title (call `proceed`), [before] and
- * [after] draw above and below its content. Bound to a tab by the module's module.json `interceptors` entry.
+ * An interceptor on one tab (Magento's plugin): [title] runs around the tab's own title (call `proceed`), [content]
+ * runs around the tab's own content (call `proceed` to draw it, or don't to replace it), [before] and [after] draw
+ * above and below its content. Bound to a tab by the module's module.json `interceptors` entry, whose `kind` decides
+ * which parts run (see [InterceptorKinds]).
  */
 class TabInterceptor(
     val title: ((state: AppState, proceed: () -> String) -> String)? = null,
     val before: (@Composable (TabContext) -> Unit)? = null,
     val after: (@Composable (TabContext) -> Unit)? = null,
-)
+    val content: (@Composable (context: TabContext, proceed: @Composable () -> Unit) -> Unit)? = null,
+) {
+    /** The parts [kind] runs; null for an unknown kind. */
+    internal fun forKind(kind: String): TabInterceptor? = when (kind) {
+        InterceptorKinds.BEFORE -> TabInterceptor(before = before)
+        InterceptorKinds.AFTER -> TabInterceptor(after = after)
+        InterceptorKinds.AROUND -> this
+        else -> null
+    }
+
+    /** The names of the parts this one registers. */
+    internal val parts: List<String>
+        get() = listOfNotNull(title?.let { "title" }, before?.let { "before" }, after?.let { "after" }, content?.let { "content" })
+}
 
 /** A block a module adds to a named slot (see [Slots]); bound by the module.json `blocks` entry. */
 class SlotBlock(val content: @Composable (TabContext) -> Unit)
@@ -209,8 +247,10 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
  * - a second tab with an id already taken is refused (replacing one on purpose is a [preferences] entry, which the
  *   loader's trust rules have already let through);
  * - a preference puts the replacing tab in the replaced one's place (id, container, order, shortcut, tag); the
- *   replacing tab is not shown under its own id;
+ *   replacing tab is not shown under its own id. HOOKS-1: a panel section replaces a panel section the same way (id,
+ *   panel, order, tag, fill);
  * - interceptors, blocks and observers are bound by their declared names; an undeclared or unknown one is refused.
+ *   An interceptor runs only the parts its `kind` names; a block binds only to a slot in [Slots.ALL].
  * Everything refused is in [problems]; nothing here throws.
  */
 class TabFactory(
@@ -250,23 +290,6 @@ class TabFactory(
                 else -> seen[t.id] = t.copy(module = name)
             }
         }
-        for (p in preferences) {
-            val target = seen[p.replace]
-            val with = seen[p.with]?.takeIf { it.module == p.module }
-            if (target == null || with == null) {
-                problems += "${p.module}: preference ${p.replace} -> ${p.with} has no tab to apply to; skipped"
-                continue
-            }
-            seen.remove(p.with)
-            seen[p.replace] = with.copy(id = target.id, container = target.container, order = target.order, parent = target.parent, shortcut = target.shortcut, testTag = target.testTag)
-        }
-        // A tab its module offers as a replacement shows only as one: a refused preference leaves no stray tab behind.
-        for (m in modules) for (p in m.manifest.preferences) {
-            if (preferences.none { it.module == m.manifest.name && it.with == p.with } && seen[p.with]?.module == m.manifest.name) {
-                seen.remove(p.with)
-                problems += "${m.manifest.name}: tab ${p.with} only replaces ${p.replace}, which was not accepted; not shown"
-            }
-        }
         // PLUGINS-3: panel sections bind the way tabs do.
         val placed = LinkedHashMap<String, PanelProvider>()
         for (m in modules) for (p in m.panels) {
@@ -281,6 +304,36 @@ class TabFactory(
                 else -> placed[p.id] = p.copy(module = name)
             }
         }
+        for (p in preferences) {
+            val target = seen[p.replace]
+            val with = seen[p.with]?.takeIf { it.module == p.module }
+            val targetSection = placed[p.replace]
+            val withSection = placed[p.with]?.takeIf { it.module == p.module }
+            when {
+                target != null && with != null -> {
+                    seen.remove(p.with)
+                    seen[p.replace] = with.copy(id = target.id, container = target.container, order = target.order, parent = target.parent, shortcut = target.shortcut, testTag = target.testTag)
+                }
+                // HOOKS-1: a panel section takes the replaced section's place the same way.
+                targetSection != null && withSection != null -> {
+                    placed.remove(p.with)
+                    placed[p.replace] = withSection.copy(id = targetSection.id, panel = targetSection.panel, order = targetSection.order, testTag = targetSection.testTag, fill = targetSection.fill)
+                }
+                else -> problems += "${p.module}: preference ${p.replace} -> ${p.with} has no tab or panel section to apply to; skipped"
+            }
+        }
+        // A tab or section its module offers as a replacement shows only as one: a refused preference leaves no stray behind.
+        for (m in modules) for (p in m.manifest.preferences) {
+            if (preferences.any { it.module == m.manifest.name && it.with == p.with }) continue
+            if (seen[p.with]?.module == m.manifest.name) {
+                seen.remove(p.with)
+                problems += "${m.manifest.name}: tab ${p.with} only replaces ${p.replace}, which was not accepted; not shown"
+            }
+            if (placed[p.with]?.module == m.manifest.name) {
+                placed.remove(p.with)
+                problems += "${m.manifest.name}: panel section ${p.with} only replaces ${p.replace}, which was not accepted; not shown"
+            }
+        }
         sections = placed.values.toList()
         val ints = LinkedHashMap<String, MutableList<TabInterceptor>>()
         val bls = LinkedHashMap<String, MutableList<Triple<Int, String, SlotBlock>>>()
@@ -288,16 +341,26 @@ class TabFactory(
             val name = m.manifest.name
             for (d in m.manifest.interceptors) {
                 val i = m.interceptors[d.name]
+                val bound = i?.forKind(d.kind)
                 when {
                     i == null -> problems += "$name: interceptor ${d.name} is declared but not registered; skipped"
+                    bound == null -> problems += "$name: interceptor ${d.name} has unknown kind '${d.kind}' (${InterceptorKinds.ALL.joinToString()}); skipped"
                     d.target !in seen -> problems += "$name: interceptor ${d.name} targets ${d.target}, which no loaded module provides; skipped"
-                    else -> ints.getOrPut(d.target) { mutableListOf() } += i
+                    else -> {
+                        val unused = i.parts - bound.parts.toSet()
+                        if (unused.isNotEmpty()) problems += "$name: interceptor ${d.name} is kind ${d.kind}; its ${unused.joinToString()} not run"
+                        ints.getOrPut(d.target) { mutableListOf() } += bound
+                    }
                 }
             }
             for (n in m.interceptors.keys - m.manifest.interceptors.map { it.name }.toSet()) problems += "$name: interceptor $n is not declared in its module.json; refused"
             for (d in m.manifest.blocks) {
                 val b = m.blocks[d.name]
-                if (b == null) problems += "$name: block ${d.name} is declared but not registered; skipped" else bls.getOrPut(d.slot) { mutableListOf() } += Triple(d.order, name, b)
+                when {
+                    b == null -> problems += "$name: block ${d.name} is declared but not registered; skipped"
+                    d.slot !in Slots.ALL -> problems += "$name: block ${d.name} names unknown slot ${d.slot} (${Slots.ALL.joinToString()}); not drawn"
+                    else -> bls.getOrPut(d.slot) { mutableListOf() } += Triple(d.order, name, b)
+                }
             }
             for (n in m.blocks.keys - m.manifest.blocks.map { it.name }.toSet()) problems += "$name: block $n is not declared in its module.json; refused"
             for (d in m.manifest.observers) {
@@ -341,29 +404,35 @@ class TabFactory(
 
     /**
      * Draws the tab [id]: its container's top slot, then a community module's badge, its interceptors' before, the
-     * content, their after. A tab with none of these draws exactly as its module draws it; an unknown id draws nothing.
+     * content (inside their content wrappers, the first loaded outermost), their after, the container's bottom slot.
+     * A tab with none of these draws exactly as its module draws it; an unknown id draws nothing.
      */
     @Composable
     fun Content(id: String, context: TabContext) {
         val tab = find(id) ?: return
         val module = byModule[tab.module]
         val own = context.forModule(services(tab.module))
-        val hooks = interceptors[id].orEmpty().filter { it.before != null || it.after != null }
-        val slot = blocks[Slots.top(tab.container)].orEmpty()
+        val hooks = interceptors[id].orEmpty().filter { it.before != null || it.after != null || it.content != null }
+        val top = blocks[Slots.top(tab.container)].orEmpty()
+        val bottom = blocks[Slots.bottom(tab.container)].orEmpty()
         val community = module?.tier == Tier.COMMUNITY
-        if (!community && hooks.isEmpty() && slot.isEmpty()) {
+        if (!community && hooks.isEmpty() && top.isEmpty() && bottom.isEmpty()) {
             tab.content(own)
             return
         }
+        val inner = hooks.foldRight<TabInterceptor, @Composable () -> Unit>({ tab.content(own) }) { i, proceed ->
+            i.content?.let { wrap -> { wrap(own, proceed) } } ?: proceed
+        }
         Column {
-            slot.forEach { (owner, b) -> b.content(context.forModule(services(owner))) }
+            top.forEach { (owner, b) -> b.content(context.forModule(services(owner))) }
             if (community) CommunityBadge(module!!.manifest)
             hooks.forEach { it.before?.invoke(own) }
             Box(Modifier.weight(1f)) {
                 // A module's plain Text reads in the app's text colour, like the core panes.
-                CompositionLocalProvider(LocalContentColor provides Palette.Text) { tab.content(own) }
+                CompositionLocalProvider(LocalContentColor provides Palette.Text) { inner() }
             }
             hooks.forEach { it.after?.invoke(own) }
+            bottom.forEach { (owner, b) -> b.content(context.forModule(services(owner))) }
         }
     }
 
