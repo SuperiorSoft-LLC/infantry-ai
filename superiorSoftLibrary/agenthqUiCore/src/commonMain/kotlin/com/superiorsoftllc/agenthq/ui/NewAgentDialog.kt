@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -67,6 +68,31 @@ fun NewAgentDialog(
     onAdd: suspend (roleId: String, picked: PickedModel?, task: String) -> String?,
     onDismiss: () -> Unit,
 ) {
+    NewAgentDialogFrame(state, onAdd, onDismiss) { draft ->
+        NewAgentRoleStep(draft)
+        NewAgentExecutorStep(draft)
+        NewAgentError(draft)
+        NewAgentTaskStep(draft)
+    }
+}
+
+/**
+ * BLOCKS-LAYOUT L11: the New agent modal's draft, as its steps read it: the current model (catalogs folded in), its
+ * update, and the last refusal of Add.
+ */
+class NewAgentDraft(val model: NewAgentModalModel, val update: (NewAgentModalModel) -> Unit, val error: String?)
+
+/**
+ * The New agent modal's frame: the dialog (title, Add with its hint, Cancel) and the draft it owns. [content] gets the
+ * draft and goes straight into the dialog's scrolling column, top to bottom (10dp apart).
+ */
+@Composable
+fun NewAgentDialogFrame(
+    state: AppState,
+    onAdd: suspend (roleId: String, picked: PickedModel?, task: String) -> String?,
+    onDismiss: () -> Unit,
+    content: @Composable ColumnScope.(NewAgentDraft) -> Unit,
+) {
     val scope = rememberCoroutineScope()
     var error by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf(false) }
@@ -89,16 +115,7 @@ fun NewAgentDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
             ) {
-                RoleStep(cur, update)
-                ExecutorStep(cur, update)
-                error?.let { e -> Text("Could not add the agent: $e", color = Palette.Danger, fontSize = 12.sp, modifier = Modifier.testTag(NEW_AGENT_ERROR_TAG)) }
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("3. First task", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    OutlinedTextField(
-                        cur.task, { update(cur.withTask(it)) }, placeholder = { Text("What should this agent do first?") },
-                        modifier = Modifier.fillMaxWidth().testTag(NEW_AGENT_TASK_TAG), minLines = 2, maxLines = 4, colors = visibleBorderFieldColors(),
-                    )
-                }
+                content(NewAgentDraft(cur, update, error))
             }
         },
         confirmButton = {
@@ -119,9 +136,36 @@ fun NewAgentDialog(
     )
 }
 
+/** Step 1: the role catalog (search, then the grid of roles); [modifier] goes on the step's column. */
 @Composable
-private fun RoleStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+fun NewAgentRoleStep(draft: NewAgentDraft, modifier: Modifier = Modifier) = RoleStep(draft.model, draft.update, modifier)
+
+/** Step 2: harness, provider and model, closed until a role is chosen; [modifier] goes on the step's column. */
+@Composable
+fun NewAgentExecutorStep(draft: NewAgentDraft, modifier: Modifier = Modifier) = ExecutorStep(draft.model, draft.update, modifier)
+
+/** Add's last refusal, while there is one. */
+@Composable
+fun NewAgentError(draft: NewAgentDraft, modifier: Modifier = Modifier) {
+    draft.error?.let { e -> Text("Could not add the agent: $e", color = Palette.Danger, fontSize = 12.sp, modifier = modifier.testTag(NEW_AGENT_ERROR_TAG)) }
+}
+
+/** Step 3: the first task; [modifier] goes on the step's column. */
+@Composable
+fun NewAgentTaskStep(draft: NewAgentDraft, modifier: Modifier = Modifier) {
+    val cur = draft.model
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("3. First task", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        OutlinedTextField(
+            cur.task, { draft.update(cur.withTask(it)) }, placeholder = { Text("What should this agent do first?") },
+            modifier = Modifier.fillMaxWidth().testTag(NEW_AGENT_TASK_TAG), minLines = 2, maxLines = 4, colors = visibleBorderFieldColors(),
+        )
+    }
+}
+
+@Composable
+private fun RoleStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> Unit, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("1. Role", fontWeight = FontWeight.Bold, fontSize = 13.sp)
         OutlinedTextField(
             m.roleQuery, { update(m.withRoleQuery(it)) }, placeholder = { Text("Search roles...") }, singleLine = true,
@@ -179,8 +223,8 @@ private val NEW_AGENT_EXECUTOR_TAGS = ExecutorPickerTags(
 
 /** Step 2: closed until a role is chosen (its binding seeds the choice), then the shared [ExecutorPicker]. */
 @Composable
-private fun ExecutorStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+private fun ExecutorStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> Unit, modifier: Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("2. Harness, provider and model", fontWeight = FontWeight.Bold, fontSize = 13.sp)
         if (!m.executorOpen) {
             Text("Pick a role first: its binding seeds these choices.", color = Palette.Muted, fontSize = 11.sp)

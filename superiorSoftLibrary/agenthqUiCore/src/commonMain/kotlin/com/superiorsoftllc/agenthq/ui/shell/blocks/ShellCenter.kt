@@ -16,7 +16,12 @@ import com.superiorsoftllc.agenthq.ui.ChatPanelHost
 import com.superiorsoftllc.agenthq.ui.Composer
 import com.superiorsoftllc.agenthq.ui.Header
 import com.superiorsoftllc.agenthq.ui.LocalShell
-import com.superiorsoftllc.agenthq.ui.NewAgentDialog
+import com.superiorsoftllc.agenthq.ui.NewAgentDialogFrame
+import com.superiorsoftllc.agenthq.ui.NewAgentDraft
+import com.superiorsoftllc.agenthq.ui.NewAgentError
+import com.superiorsoftllc.agenthq.ui.NewAgentExecutorStep
+import com.superiorsoftllc.agenthq.ui.NewAgentRoleStep
+import com.superiorsoftllc.agenthq.ui.NewAgentTaskStep
 import com.superiorsoftllc.agenthq.ui.Notices
 import com.superiorsoftllc.agenthq.ui.SpawnRows
 import com.superiorsoftllc.agenthq.ui.SwitchPicker
@@ -160,8 +165,17 @@ object CenterChatComposer : Block("promptBox", "$CHAT.composer") {
 
 private val CenterChat = CenterChatBlock(listOf(CenterChatHeader, CenterChatTabs, CenterChatTranscript, CenterChatNotices, CenterChatSpawn, CenterChatSwitch, CenterChatComposer))
 
-/** The New agent modal and its catalog refresh. A dialog has no node in the column, so the placement has nothing to wear. */
-object CenterNewAgent : Block("newAgentDialog", "$CENTER.newAgent") {
+private const val NEW_AGENT = "$CENTER.newAgent"
+
+/** The open New agent modal's draft; null outside [NewAgentBlock] (a child moved elsewhere draws nothing). */
+private val LocalNewAgentDraft = compositionLocalOf<NewAgentDraft?> { null }
+
+/**
+ * The New agent modal and its catalog refresh. A dialog has no node in the column, so the placement has nothing to wear.
+ * BLOCKS-LAYOUT L11: a container of child blocks `infantry.shell.center.newAgent.<name>`, the modal's steps, top to
+ * bottom, drawn straight into its scrolling column. The frame (dialog, title, Add, Cancel) and the draft stay its own.
+ */
+class NewAgentBlock(children: List<Block>, place: Place = Place()) : Block("newAgentDialog", NEW_AGENT, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
         val s = LocalShell.current
@@ -172,7 +186,7 @@ object CenterNewAgent : Block("newAgentDialog", "$CENTER.newAgent") {
             if (ui.showNewAgent && state.connection.isLive) controller.refreshModelCatalog()
         }
         if (ui.showNewAgent) {
-            NewAgentDialog(
+            NewAgentDialogFrame(
                 state,
                 onAdd = { role, picked, task ->
                     controller.pickSpawnRole(role)
@@ -181,9 +195,47 @@ object CenterNewAgent : Block("newAgentDialog", "$CENTER.newAgent") {
                     if (r is CommandResult.Refused) r.reason else { ui.showNewAgent = false; null }
                 },
                 onDismiss = { ui.showNewAgent = false },
-            )
+            ) { draft ->
+                CompositionLocalProvider(LocalNewAgentDraft provides draft) { RenderPlaced(children) }
+            }
         }
     }
+
+    override fun withChildren(children: List<Block>) = NewAgentBlock(children, place)
 }
+
+/** Step 1: the role catalog (search, then the grid of roles); its placement goes on the step's column. */
+object NewAgentRole : Block("newAgentRoles", "$NEW_AGENT.role") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        NewAgentRoleStep(LocalNewAgentDraft.current ?: return, scope.modifier)
+    }
+}
+
+/** Step 2: harness, provider and model, closed until a role is chosen (its binding seeds them). */
+object NewAgentExecutor : Block("newAgentExecutor", "$NEW_AGENT.executor") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        NewAgentExecutorStep(LocalNewAgentDraft.current ?: return, scope.modifier)
+    }
+}
+
+/** Add's last refusal, while there is one (nothing otherwise). */
+object NewAgentErrorLine : Block("newAgentError", "$NEW_AGENT.error") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        NewAgentError(LocalNewAgentDraft.current ?: return, scope.modifier)
+    }
+}
+
+/** Step 3: the first task. */
+object NewAgentTask : Block("newAgentTask", "$NEW_AGENT.task") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        NewAgentTaskStep(LocalNewAgentDraft.current ?: return, scope.modifier)
+    }
+}
+
+private val CenterNewAgent = NewAgentBlock(listOf(NewAgentRole, NewAgentExecutor, NewAgentErrorLine, NewAgentTask))
 
 val ShellCenter = CenterBlock(listOf(CenterChat, CenterNewAgent))
