@@ -39,6 +39,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.superiorsoftllc.agenthq.ui.shell.CoreExecutor
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.ExecutorPickerModel
 import com.superiorsoftllc.agenthq.ui.model.PickedModel
@@ -349,7 +350,7 @@ private fun ProfileEditorModal(role: Role, initial: AgentProfile, state: AppStat
         saveTag = PROFILE_SAVE_TAG, cancelTag = PROFILE_CANCEL_TAG,
     ) {
         OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag(PROFILE_NAME_TAG))
-        ProfileExecutorField(state, key, provider, model) { p, m -> provider = p; model = m }
+        ProfileExecutorField(CoreExecutor(state), key, provider, model) { p, m -> provider = p; model = m }
         OutlinedTextField(
             instructions, { instructions = it }, label = { Text("Instructions (start of every first message)") },
             minLines = 3, maxLines = 10, modifier = Modifier.fillMaxWidth().testTag(PROFILE_INSTRUCTIONS_TAG),

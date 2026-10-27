@@ -16,7 +16,7 @@ internal fun msToMinutesText(ms: Long): String {
 }
 
 /** A friendly label for a period: "30 min", "2 h", "1 d"; legacy rows below a minute still read ("45 s"). */
-// S4 bridge (docs/SHELL-LEAKS.md): public only until Triggers' tests move with it (S4b); Infantry_Triggers uses it.
+// S4c: kit (docs/SHELL-LEAKS.md), a duration formatter on core's internal msToMinutesText; Infantry_Triggers draws it.
 fun humanDuration(ms: Long): String = when {
     ms <= 0L -> "none"
     ms < 1000L -> "$ms ms"

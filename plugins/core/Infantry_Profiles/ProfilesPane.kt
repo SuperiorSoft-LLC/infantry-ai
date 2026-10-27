@@ -30,6 +30,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.superiorsoftllc.agenthq.ui.shell.CoreExecutor
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
 import com.superiorsoftllc.agenthq.ui.net.Controller
@@ -131,7 +132,7 @@ private fun ProfileForm(existing: AgentProfile?, state: AppState, controller: Co
             Text("Role", color = Palette.Muted, fontSize = 11.sp)
             state.roles.forEach { r -> Chip(r.id, if (role == r.id) Palette.Accent else Palette.Muted, Modifier.clickable { role = r.id }) }
         }
-        ProfileExecutorField(state, existing?.id, provider, model) { p, m -> provider = p; model = m }
+        ProfileExecutorField(CoreExecutor(state), existing?.id, provider, model) { p, m -> provider = p; model = m }
         val chosenProvider = state.providers.firstOrNull { it.id == provider } ?: state.providers.firstOrNull { it.default }
         if (chosenProvider?.modelsStale == true) {
             Text(
