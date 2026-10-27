@@ -23,6 +23,8 @@ import com.superiorsoftllc.agenthq.ui.plugin.MODULE_TOGGLE_TAG_PREFIX
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.superiorsoftllc.agenthq.daemon.AgentHqDaemon
+import com.superiorsoftllc.agenthq.persistence.SettingRow
+import com.superiorsoftllc.agenthq.settings.SettingsService
 import com.superiorsoftllc.agenthq.mailbox.JsonMailStore
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
 import com.superiorsoftllc.agenthq.provider.StubProvider
@@ -80,10 +82,13 @@ fun main(args: Array<String>) {
     val port = System.getProperty("agenthq.tabshots.port")?.toIntOrNull() ?: java.net.ServerSocket(0).use { it.localPort }
     val provider = StubProvider(StubScript.default(), delayMs = 0)
     val sessionCount = AtomicInteger()
+    val store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath)
+    // TAB-SHOTS-DIFF: no memory floor, so the host's free RAM never adds the "low memory" notice to the window.
+    store.settings.put(SettingRow(SettingsService.PROCESSES_FLOOR_MB, "0", System.currentTimeMillis()))
     val daemon = AgentHqDaemon.build(
         port = port, host = "127.0.0.1", provider = provider, runner = provider.transport()!!,
         sessionStore = JsonSessionStore(File(dir, "sessions.json")), mailStore = JsonMailStore(File(dir, "mailbox.json")),
-        store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath), mailBaseUrl = "http://127.0.0.1:1", token = null,
+        store = store, mailBaseUrl = "http://127.0.0.1:1", token = null,
         // TAB-SHOTS-DIFF: fixed session ids (the id shows in the header, the agent row and the composer), so two renders
         // of the same code are pixel-identical.
         sessionIds = { "5e55a0%02d-0000-4000-8000-000000000000".format(sessionCount.incrementAndGet()) },
