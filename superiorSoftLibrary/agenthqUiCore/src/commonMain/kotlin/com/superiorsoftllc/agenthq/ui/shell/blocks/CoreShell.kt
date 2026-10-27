@@ -42,7 +42,7 @@ object CoreShell {
                                             RowBlock(
                                                 "infantry.shell.panes", place = Place(size = Size.FillMax),
                                                 children = listOf(
-                                                    Legacy(ShellLeftPanel),
+                                                    ShellLeftPanel,
                                                     Legacy(ShellCenter, Place(weight = 1f)),
                                                     Legacy(ShellRightPanel),
                                                 ),
