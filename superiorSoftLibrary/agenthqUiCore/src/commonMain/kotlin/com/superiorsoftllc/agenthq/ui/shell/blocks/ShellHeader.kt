@@ -12,7 +12,10 @@ import com.superiorsoftllc.agenthq.ui.LocalWindowChrome
 import com.superiorsoftllc.agenthq.ui.ProjectPicker
 import com.superiorsoftllc.agenthq.ui.ServerSwitcherChip
 import com.superiorsoftllc.agenthq.ui.TitleBarFrame
-import com.superiorsoftllc.agenthq.ui.TitleBarLead
+import com.superiorsoftllc.agenthq.ui.TitleBarAgents
+import com.superiorsoftllc.agenthq.ui.TitleBarBrand
+import com.superiorsoftllc.agenthq.ui.TitleBarProject
+import com.superiorsoftllc.agenthq.ui.TitleBarToggleLeft
 import com.superiorsoftllc.agenthq.ui.TitleBarAttention
 import com.superiorsoftllc.agenthq.ui.TitleBarRightToggle
 import com.superiorsoftllc.agenthq.ui.TitleBarConnection
@@ -39,26 +42,50 @@ class TitleBarBlock(id: String, children: List<Block> = emptyList(), place: Plac
 
 private const val HEADER = "infantry.shell.header"
 
+private const val LEAD = "$HEADER.lead"
+
 /**
- * The left toggle, logo + name, project slot and avatar strip (L7 splits it). Its items, the drag area's weight included,
- * go straight into the bar's row ([BlockScope.row]); drawn outside a row they get a row of their own.
+ * BLOCKS-LAYOUT L7: the bar's left and middle, a container of child blocks `infantry.shell.header.lead.<name>`. Its
+ * children, the drag area's weight included, go straight into the bar's row ([BlockScope.row]); drawn outside a row they
+ * get a row of their own.
  */
-object HeaderLead : Block("titleBarLead", "$HEADER.lead") {
+class HeaderLeadBlock(children: List<Block>, place: Place = Place()) : Block("titleBarLead", LEAD, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
         val row = scope.row
-        if (row == null) Row(verticalAlignment = Alignment.CenterVertically) { Lead(scope.modifier) } else row.Lead(scope.modifier)
+        if (row == null) Row(scope.modifier, verticalAlignment = Alignment.CenterVertically) { RenderPlaced(children) } else with(row) { RenderPlaced(children) }
+    }
+
+    override fun withChildren(children: List<Block>) = HeaderLeadBlock(children, place)
+}
+
+/** PANEL-TOGGLE-1: the agent list toggle at the bar's left edge, with the 6dp before it. */
+object HeaderToggleLeft : Block("panelToggle", "$LEAD.toggleLeft") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val s = LocalShell.current
+        TitleBarToggleLeft(s.state, scope.modifier) { s.controller.togglePanel(PanelSide.LEFT) }
+    }
+}
+
+/** L7 interim: the logo + name, the project slot and the agent strip, until they are children of their own. */
+private object HeaderLeadRest : Block("titleBarLeadRest", "$LEAD.rest") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val row = scope.row
+        if (row == null) Row(verticalAlignment = Alignment.CenterVertically) { Rest(scope.modifier) } else row.Rest(scope.modifier)
     }
 
     @Composable
-    private fun RowScope.Lead(modifier: Modifier) {
+    private fun RowScope.Rest(modifier: Modifier) {
         val s = LocalShell.current
         val state = s.state
-        TitleBarLead(
+        TitleBarBrand(LocalWindowChrome.current, modifier = modifier)
+        TitleBarProject({ ProjectPicker(state, s.controller) })
+        TitleBarAgents(
             state, s.ui.flags.agentScope, onConnect = { s.changeConnection?.invoke() ?: run { s.ui.showConnect = true } }, onAttention = { s.showTab(ATTENTION_TAB_ID) },
             chrome = LocalWindowChrome.current,
             projectSlot = { ProjectPicker(state, s.controller) },
-            onTogglePanel = s.controller::togglePanel,
             // ASSISTANT-1: the last member of the team strip; a tap toggles the popup (the daemon makes the session on the first open).
             assistantSlot = {
                 if (state.connection.hasAssistant || state.assistant != null) {
@@ -68,10 +95,11 @@ object HeaderLead : Block("titleBarLead", "$HEADER.lead") {
                     ) { s.assistantPanel.toggle() }
                 }
             },
-            modifier = modifier,
         )
     }
 }
+
+val HeaderLead = HeaderLeadBlock(listOf(HeaderToggleLeft, HeaderLeadRest))
 
 /** M2-6: minimize / maximize-restore / close where the platform has a window, else the bar's 12dp end. */
 object HeaderWindowControls : Block("windowControls", "$HEADER.windowControls") {
