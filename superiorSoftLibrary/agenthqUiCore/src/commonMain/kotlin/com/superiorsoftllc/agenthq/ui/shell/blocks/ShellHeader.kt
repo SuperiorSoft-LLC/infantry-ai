@@ -13,6 +13,7 @@ import com.superiorsoftllc.agenthq.ui.ProjectPicker
 import com.superiorsoftllc.agenthq.ui.ServerSwitcherChip
 import com.superiorsoftllc.agenthq.ui.TitleBarFrame
 import com.superiorsoftllc.agenthq.ui.TitleBarLead
+import com.superiorsoftllc.agenthq.ui.TitleBarAttention
 import com.superiorsoftllc.agenthq.ui.TitleBarRightToggle
 import com.superiorsoftllc.agenthq.ui.TitleBarConnection
 import com.superiorsoftllc.agenthq.ui.TitleBarWindowControls
@@ -106,5 +107,14 @@ object HeaderToggleRight : Block("panelToggle", "$HEADER.toggleRight") {
     }
 }
 
+/** Contract 1.9.0: the open attention count (wide only; a compact bar lists it in the overflow); a tap opens Attention. */
+object HeaderAttention : Block("attentionChip", "$HEADER.attention") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val s = LocalShell.current
+        TitleBarAttention(s.state, { s.showTab(ATTENTION_TAB_ID) }, scope.modifier)
+    }
+}
+
 /** BLOCKS-SHELL-1: the window's title bar, on top. */
-val ShellHeader = TitleBarBlock(HEADER, listOf(HeaderLead, HeaderToggleRight, HeaderServer, HeaderConnection, HeaderWindowControls))
+val ShellHeader = TitleBarBlock(HEADER, listOf(HeaderLead, HeaderAttention, HeaderToggleRight, HeaderServer, HeaderConnection, HeaderWindowControls))
