@@ -7,9 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,7 +21,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.superiorsoftllc.agenthq.ui.FilterChip
 import com.superiorsoftllc.agenthq.ui.Palette
+import com.superiorsoftllc.agenthq.ui.Switch
 import com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow

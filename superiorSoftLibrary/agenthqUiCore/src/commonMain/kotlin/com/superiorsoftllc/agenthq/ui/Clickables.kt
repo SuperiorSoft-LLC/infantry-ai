@@ -18,7 +18,7 @@ import androidx.compose.ui.semantics.semantics
 
 /**
  * M2-10: every clickable element shows the hand cursor on hover. This file is the one place that applies it:
- * same-named wrappers for `Modifier.clickable` and the Material buttons, menu items, checkboxes and radio buttons. They shadow
+ * same-named wrappers for `Modifier.clickable` and the Material buttons, menu items, checkboxes, radio buttons, switches and filter chips. They shadow
  * `androidx.compose.foundation.clickable` / `androidx.compose.material3.*` for this package, because a declaration
  * in the same package wins over the default and star imports, so every call site picks them up unchanged. That
  * only holds while no file imports the originals explicitly (an explicit import wins over the package);
@@ -128,6 +128,28 @@ fun RadioButton(
 ) = androidx.compose.material3.RadioButton(
     selected = selected, onClick = onClick,
     modifier = modifier.handCursor(enabled && onClick != null), enabled = enabled,
+)
+
+@Composable
+fun Switch(
+    checked: Boolean,
+    onCheckedChange: ((Boolean) -> Unit)?,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) = androidx.compose.material3.Switch(
+    checked = checked, onCheckedChange = onCheckedChange,
+    modifier = modifier.handCursor(enabled && onCheckedChange != null), enabled = enabled,
+)
+
+@Composable
+fun FilterChip(
+    selected: Boolean,
+    onClick: () -> Unit,
+    label: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) = androidx.compose.material3.FilterChip(
+    selected = selected, onClick = onClick, label = label, modifier = modifier.handCursor(enabled), enabled = enabled,
 )
 
 /** The platform's grab cursor (an open hand over something that can be dragged): the hand on desktop, Android's grab. */
