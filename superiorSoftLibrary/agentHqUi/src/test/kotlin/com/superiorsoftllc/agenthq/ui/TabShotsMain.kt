@@ -16,6 +16,7 @@ import com.superiorsoftllc.agenthq.plugin.api.ModulesConfig
 import com.superiorsoftllc.agenthq.plugin.host.PluginFolders
 import com.superiorsoftllc.agenthq.plugin.host.PluginJson
 import com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins
+import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import com.superiorsoftllc.agenthq.ui.plugin.MODULE_ROW_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.MODULE_MESSAGE_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.MODULE_TOGGLE_TAG_PREFIX
@@ -165,7 +166,7 @@ private object ShotChrome : WindowChrome {
 }
 
 @androidx.compose.runtime.Composable
-private fun ChromeApp(controller: Controller, tabs: com.superiorsoftllc.agenthq.ui.plugin.TabFactory?) {
+private fun ChromeApp(controller: Controller, tabs: TabFactory) {
     androidx.compose.runtime.CompositionLocalProvider(LocalWindowChrome provides ShotChrome) {
         App(controller, "ws://127.0.0.1:18797/ws", null, tabs = tabs)
     }
