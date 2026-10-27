@@ -189,6 +189,8 @@ object ShellKeys {
     const val WS_URL = "AGENTHQ_WS_URL"
     const val TOKEN_FILE = "AGENTHQ_TOKEN_FILE"
     const val TOKEN = "AGENTHQ_TOKEN"
+    /** SEC-FIX-1 (contract 1.136.0): the owner credential of the daemon at [WS_URL] (its `owner.token`); never an agent's. */
+    const val OWNER_TOKEN = "AGENTHQ_OWNER_TOKEN"
 }
 
 /** First non-blank value across ordered sources (e.g. Intent extras, then saved preferences). */

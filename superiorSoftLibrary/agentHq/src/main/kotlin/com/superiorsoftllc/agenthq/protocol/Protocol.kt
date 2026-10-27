@@ -621,6 +621,12 @@ data class Envelope(
         const val SECRET_IMPORT = "secret_import"
         const val SECRET_STATUS = "secret_status"
         const val SECRET_STATE = "secret_state"
+        // SECRETS-2 (contract 1.135.0): the user's key/value secrets. `secret_field_set` ({name, field, value}),
+        // `secret_field_delete` ({name, field}: the secret goes with its last field) and `secret_delete` ({name}) are answered
+        // by `secret_state`, which gains `entries` ([{name, fields:[{name, tail}]}]) and `locked`. Refused under the demo lock.
+        const val SECRET_FIELD_SET = "secret_field_set"
+        const val SECRET_FIELD_DELETE = "secret_field_delete"
+        const val SECRET_DELETE = "secret_delete"
         // P10-K6 (contract 1.54.0): the project's append-only issues log. `issue_open`
         // ({projectId, sessionId?, summary, location, ticketId?}), `issue_attempt` ({projectId, sessionId?, summary,
         // outcome?, location?, issue?}) and `issue_fix` ({projectId, sessionId?, summary, issue?}) are answered by an

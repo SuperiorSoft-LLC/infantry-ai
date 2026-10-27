@@ -148,6 +148,136 @@ class KeystoreTest {
         assertEquals(Envelope.ERROR, nothing.type)
     }
 
+    // SECRETS-2 (ticket e5d1b57f): key/value secrets.
+
+    @Test
+    fun `a secret holds named fields, each sealed, never in clear on disk`() {
+        val d = dir()
+        val ks = Keystore(d, env = { null }, vault = null)
+        ks.setField("android-signing", "storePassword", secret)
+        ks.setField("android-signing", "keyAlias", "release-key")
+        assertEquals(mapOf("keyAlias" to "release-key", "storePassword" to secret), ks.fields("android-signing"))
+        assertEquals(secret, Keystore(d, env = { null }, vault = null).field("android-signing", "storePassword"))
+        assertFalse(everyFileText(d).contains(secret))
+        assertFalse(everyFileText(d).contains("release-key"))
+        assertEquals(listOf("android-signing"), ks.names())
+        val described = ks.describe("android-signing")
+        assertEquals(listOf("keyAlias", "storePassword"), described.map { it.name })
+        assertEquals("••••WXYZ", described.last().tail)
+        assertFalse(described.toString().contains(secret))
+    }
+
+    @Test
+    fun `a field copied under another field or secret does not open`() {
+        val d = dir()
+        Keystore(d, env = { null }, vault = null).setField("s", "A", secret)
+        val file = File(d, Keystore.FILE_NAME)
+        val text = file.readText()
+        file.writeText(text.replace("\"A\"", "\"B\""))
+        assertNull(Keystore(d, env = { null }, vault = null).field("s", "B"), "the field is authenticated data")
+        file.writeText(text.replace("\"s\"", "\"t\""))
+        assertNull(Keystore(d, env = { null }, vault = null).field("t", "A"), "the secret name is authenticated data")
+    }
+
+    @Test
+    fun `deleting the last field removes the secret, and clear removes every field`() {
+        val ks = Keystore(dir(), env = { null }, vault = null)
+        ks.setField("env-set", "A", "one-value")
+        ks.setField("env-set", "B", "two-value")
+        assertTrue(ks.deleteField("env-set", "A"))
+        assertFalse(ks.deleteField("env-set", "A"))
+        assertEquals(listOf("B"), ks.fields("env-set")!!.keys.toList())
+        assertTrue(ks.deleteField("env-set", "B"))
+        assertNull(ks.fields("env-set"))
+        assertEquals(emptyList(), ks.names())
+        ks.setField("env-set", "A", "one-value")
+        assertTrue(ks.clear("env-set"))
+        assertNull(ks.fields("env-set"))
+    }
+
+    @Test
+    fun `a SECRETS-1 entry reads as one field named value and is re-sealed as v2 on the next write`() {
+        val d = dir()
+        val ks = Keystore(d, env = { null }, vault = null)
+        ks.set(Keystore.UPDATE_TOKEN, secret)
+        // Turn the file back into the v1 shape: one sealed value per name, the name alone as the AAD.
+        val v1Dir = dir()
+        File(d, Keystore.KEY_FILE_NAME).copyTo(File(v1Dir, Keystore.KEY_FILE_NAME))
+        val nonce = ByteArray(12) { it.toByte() }
+        val key = java.util.Base64.getDecoder().decode(File(d, Keystore.KEY_FILE_NAME).readText().trim())
+        val ct = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding").apply {
+            init(javax.crypto.Cipher.ENCRYPT_MODE, javax.crypto.spec.SecretKeySpec(key, "AES"), javax.crypto.spec.GCMParameterSpec(128, nonce))
+            updateAAD("legacy".toByteArray())
+        }.doFinal(secret.toByteArray())
+        val b64 = java.util.Base64.getEncoder()
+        File(v1Dir, Keystore.FILE_NAME).writeText("""{"v":1,"entries":{"legacy":{"nonce":"${b64.encodeToString(nonce)}","ct":"${b64.encodeToString(ct)}"}}}""")
+
+        val old = Keystore(v1Dir, env = { null }, vault = null)
+        assertEquals(secret, old.get("legacy"))
+        assertEquals(mapOf(Keystore.VALUE_FIELD to secret), old.fields("legacy"))
+        old.setField("legacy", "extra", "another-one")
+        val text = File(v1Dir, Keystore.FILE_NAME).readText()
+        assertTrue(text.contains("\"secrets\"") && text.contains("\"v\":2"), text)
+        assertFalse(text.contains("\"entries\":{\"legacy\""), "the v1 entry moved into v2")
+        assertEquals(mapOf("extra" to "another-one", Keystore.VALUE_FIELD to secret), Keystore(v1Dir, env = { null }, vault = null).fields("legacy"))
+    }
+
+    @Test
+    fun `bad field names are refused without echoing the value`() {
+        val ks = Keystore(dir(), env = { null }, vault = null)
+        assertFailsWithMessageWithout(secret) { ks.setField("ok", "1bad", secret) }
+        assertFailsWithMessageWithout(secret) { ks.setField("ok", "has space", secret) }
+        assertFailsWithMessageWithout(secret) { ks.setField("ok", "fine", "  ") }
+    }
+
+    @Test
+    fun `field frames edit user secrets, never return a value, and leave built-ins alone`() {
+        val ks = Keystore(dir(), env = { null }, vault = null)
+        val pushed = mutableListOf<Envelope>()
+        val h = KeystoreHandler(ks, env = { null }, push = { pushed += it })
+        val set = h.answer(Envelope(Envelope.SECRET_FIELD_SET, """{"name":"android-signing","field":"storePassword","value":"$secret"}"""))!!
+        assertEquals(Envelope.SECRET_STATE, set.type, set.data)
+        assertFalse(set.data.contains(secret))
+        assertTrue(set.data.contains(""""entries":[{"name":"android-signing","fields":[{"name":"storePassword","tail":"••••WXYZ"}]}]"""), set.data)
+        assertEquals(1, pushed.size)
+
+        val builtIn = h.answer(Envelope(Envelope.SECRET_FIELD_SET, """{"name":"update-token","field":"x","value":"$secret"}"""))!!
+        assertEquals(Envelope.ERROR, builtIn.type)
+        assertFalse(builtIn.data.contains(secret))
+        val malformed = h.answer(Envelope(Envelope.SECRET_FIELD_SET, """{"name":"a","field":"b","value":"$secret","x":1}"""))!!
+        assertEquals(Envelope.ERROR, malformed.type)
+        assertFalse(malformed.data.contains(secret))
+        assertFalse(SecretFieldSet("a", "b", secret).toString().contains(secret))
+
+        h.answer(Envelope(Envelope.SECRET_FIELD_SET, """{"name":"android-signing","field":"keyAlias","value":"rel"}"""))
+        val del = h.answer(Envelope(Envelope.SECRET_FIELD_DELETE, """{"name":"android-signing","field":"keyAlias"}"""))!!
+        assertTrue(del.data.contains("storePassword") && !del.data.contains("keyAlias"), del.data)
+        val gone = h.answer(Envelope(Envelope.SECRET_DELETE, """{"name":"android-signing"}"""))!!
+        assertTrue(gone.data.contains(""""entries":[]"""), gone.data)
+        assertEquals(Envelope.ERROR, h.answer(Envelope(Envelope.SECRET_DELETE, """{"name":"android-signing"}"""))!!.type)
+    }
+
+    @Test
+    fun `the demo lock refuses every change and says so in the state`() {
+        val ks = Keystore(dir(), env = { null }, vault = null)
+        ks.setField("deploy", "TOKEN", secret)
+        val h = KeystoreHandler(ks, env = { null }, demoLock = { true })
+        for (frame in listOf(
+            Envelope(Envelope.SECRET_FIELD_SET, """{"name":"deploy","field":"TOKEN","value":"x-y-z-w"}"""),
+            Envelope(Envelope.SECRET_FIELD_DELETE, """{"name":"deploy","field":"TOKEN"}"""),
+            Envelope(Envelope.SECRET_DELETE, """{"name":"deploy"}"""),
+            Envelope(Envelope.SECRET_SET, """{"name":"update-token","value":"$secret"}"""),
+        )) {
+            val reply = h.answer(frame)!!
+            assertEquals(Envelope.ERROR, reply.type, frame.type)
+            assertTrue(reply.data.contains("demo lock"))
+        }
+        assertEquals(secret, ks.field("deploy", "TOKEN"))
+        val status = h.answer(Envelope(Envelope.SECRET_STATUS, "{}"))!!
+        assertTrue(status.data.contains(""""locked":true"""))
+        assertFalse(status.data.contains(secret))
+    }
+
     @Test
     fun `update token comes from env first then the keystore then the git credential store`() {
         fun token(env: String?, keystore: String?, git: String?): String? {

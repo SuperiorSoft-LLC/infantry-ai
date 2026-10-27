@@ -58,6 +58,12 @@ open class DaemonClient(private val scope: CoroutineScope) {
     private var lastUrl: String? = null
     private var lastToken: String? = null
 
+    /** SEC-FIX-1: the owner credential and the one URL it belongs to; sent to that daemon only, never to another server. */
+    @kotlin.concurrent.Volatile private var owner: Pair<String, String>? = null
+
+    /** SEC-FIX-1: present [token] as the owner when (and only when) this client connects to [url]. */
+    fun ownerFor(url: String, token: String) { owner = url to token }
+
     open fun connect(url: String, token: String?) {
         disconnect()
         lastUrl = url
@@ -104,6 +110,7 @@ open class DaemonClient(private val scope: CoroutineScope) {
         while (true) {
             attempt++
             try {
+                val ownerToken = owner?.takeIf { it.first == url }?.second
                 val current = http.webSocketSession(urlString = url) {
                     if (token != null) {
                         if (tokenAsSubprotocol) {
@@ -112,6 +119,15 @@ open class DaemonClient(private val scope: CoroutineScope) {
                             header(HttpHeaders.SecWebSocketProtocol, bearerSubprotocol(token))
                         } else {
                             header(HttpHeaders.Authorization, "Bearer $token")
+                        }
+                    }
+                    // SEC-FIX-1: the owner credential, to its own daemon only (saved commands, secrets and runs need it).
+                    if (ownerToken != null) {
+                        if (tokenAsSubprotocol) {
+                            if (token == null) header(HttpHeaders.SecWebSocketProtocol, WEB_PROTOCOL)
+                            header(HttpHeaders.SecWebSocketProtocol, ownerSubprotocol(ownerToken))
+                        } else {
+                            header(OWNER_HEADER, ownerToken)
                         }
                     }
                 }

@@ -91,8 +91,13 @@ class RunManager(
      */
     private val terminal: TerminalRunner? = null,
     private val limits: RunLimits = RunLimits(),
-    /** Demo lock: no interactive run, no keyboard into a run (no raw shell). */
+    /** Demo lock: no interactive run, no keyboard into a run (no raw shell), and no run gets a secret (SECRETS-2). */
     private val demoLock: () -> Boolean = { false },
+    /**
+     * SECRETS-2: a keystore secret's fields by name (null = no such secret). Read on the daemon's side at `run_start`;
+     * the values go only into the child's environment and are masked in everything it prints.
+     */
+    private val secrets: (String) -> Map<String, String>? = { null },
 ) {
     /** A fixed set of commands (the tests, and any caller with no store behind it). */
     constructor(registry: CommandRegistry, runner: ProcessRunner, emit: (Envelope) -> Unit, now: () -> Long = System::currentTimeMillis) :
@@ -102,6 +107,15 @@ class RunManager(
     class RunLimits(
         val scrollbackBytes: () -> Int = { LimitRegistry.cap(LimitRegistry.RUN_SCROLLBACK_BYTES.default, LimitRegistry.RUN_SCROLLBACK_BYTES) },
         val history: () -> Int = { LimitRegistry.cap(LimitRegistry.RUN_HISTORY.default, LimitRegistry.RUN_HISTORY) },
+        /** SEC-FIX-1 M2: `limits.run.inputBytesPerSecond` (0 = unlimited), the per-run keyboard rate. */
+        val inputBytesPerSecond: () -> Int = { LimitRegistry.cap(LimitRegistry.RUN_INPUT_BYTES_PER_SECOND.default, LimitRegistry.RUN_INPUT_BYTES_PER_SECOND) },
+        /** SEC-FIX-1 M2: `limits.run.inputMaxFrameBytes`, the largest single `run_input`. */
+        val inputMaxFrameBytes: () -> Int = { LimitRegistry.cap(LimitRegistry.RUN_INPUT_MAX_FRAME_BYTES.default, LimitRegistry.RUN_INPUT_MAX_FRAME_BYTES) },
+        /** SEC-FIX-1 M2: `limits.run.inputQueueBytes`, input waiting for the pty writer. */
+        val inputQueueBytes: () -> Int = { LimitRegistry.cap(LimitRegistry.RUN_INPUT_QUEUE_BYTES.default, LimitRegistry.RUN_INPUT_QUEUE_BYTES) },
+        /** SEC-FIX-1 M2: `limits.run.maxCols` / `limits.run.maxRows`, the clamp on a pty size. */
+        val maxCols: () -> Int = { LimitRegistry.cap(LimitRegistry.RUN_MAX_COLS.default, LimitRegistry.RUN_MAX_COLS) },
+        val maxRows: () -> Int = { LimitRegistry.cap(LimitRegistry.RUN_MAX_ROWS.default, LimitRegistry.RUN_MAX_ROWS) },
     )
 
     /** The answer to a `run_start`, and the thunk that actually starts the child. */
@@ -115,8 +129,9 @@ class RunManager(
     private val history = ArrayDeque<Run>()
 
     /**
-     * `run_start {"commandId", "interactive"?, "cols"?, "rows"?}`. [interactive] (1.134.0) lets a console type into the
-     * run and is refused under the demo lock; cols / rows size the pty before its first byte.
+     * `run_start {"commandId", "interactive"?, "cols"?, "rows"?}`. [interactive] (1.134.0) lets a console type
+     * into the run and is refused under the demo lock; cols / rows size the pty before its first byte (clamped, 1.136.0).
+     * The run gets its saved command's secrets (1.135.0) and no others: a `secrets` override is refused (1.136.0, SEC-FIX-1).
      */
     fun start(data: String): Started {
         val obj = runCatching { wire.parseToJsonElement(data) }.getOrNull() as? JsonObject
@@ -124,15 +139,18 @@ class RunManager(
             ?: return refuse("run_start expects {\"commandId\":\"<id>\"}")
         val interactive = (obj["interactive"] as? JsonPrimitive)?.booleanOrNull ?: false
         if (interactive && demoLock()) return refuse("run_start refused: interactive runs are off under the demo lock")
-        val cols = (obj["cols"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 } ?: DEFAULT_COLS
-        val rows = (obj["rows"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 } ?: DEFAULT_ROWS
+        val cols = clampCols((obj["cols"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 } ?: DEFAULT_COLS)
+        val rows = clampRows((obj["rows"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 } ?: DEFAULT_ROWS)
+        // SEC-FIX-1 H1(a): a run gets its SAVED command's secrets only; a request naming more is refused, never merged.
+        if (obj.containsKey("secrets")) return refuse("run_start refused: a run gets only its saved command's secrets; \"secrets\" is not accepted here")
         val run: Run
         val command: SavedCommand
         // The lookup is under [lock] too, so a save or delete running in [unlessRunning] cannot slip between them.
         synchronized(lock) {
             command = registry().find(commandId) ?: return refuse("run_start refused: unknown command '$commandId'")
             if (inFlight != null) return refuse("run_start refused: a run is already in flight")
-            run = Run(UUID.randomUUID().toString(), command, now(), interactive, cols, rows)
+            val env = secretEnv(command.secrets.distinct()).getOrElse { return refuse("run_start refused: ${it.message}") }
+            run = Run(UUID.randomUUID().toString(), command, now(), interactive, cols, rows, env)
             inFlight = run
             history.addLast(run)
             prune()
@@ -164,24 +182,39 @@ class RunManager(
             return Envelope(Envelope.ERROR, "run_resize expects {\"runId\", \"cols\" > 0, \"rows\" > 0}")
         val run = synchronized(lock) { inFlight }?.takeIf { it.runId == runId }
             ?: return Envelope(Envelope.ERROR, "run_resize refused: no such run in flight")
-        run.resize(cols, rows)
+        run.resize(clampCols(cols), clampRows(rows))
         return null
     }
 
+    /** SEC-FIX-1 M2: a pty size is clamped to 1..`limits.run.maxCols` / `maxRows`, never refused. */
+    private fun clampCols(cols: Int): Int = cols.coerceIn(1, limits.maxCols().coerceAtLeast(1))
+    private fun clampRows(rows: Int): Int = rows.coerceIn(1, limits.maxRows().coerceAtLeast(1))
+
     /**
      * `run_input {"runId", "data": base64}`: keyboard bytes into the run's pty. Only for a run started interactive and
-     * never under the demo lock. Null when written, else an ERROR.
+     * never under the demo lock. SEC-FIX-1 M2: at most `limits.run.inputMaxFrameBytes` per frame and
+     * `limits.run.inputBytesPerSecond` per run; the bytes are queued (at most `limits.run.inputQueueBytes`) for the
+     * run's own writer thread, so a slow pty never holds the WebSocket loop. Null when queued, else an ERROR.
      */
     fun input(data: String): Envelope? {
         val runId = field(data, "runId")
-        val bytes = field(data, "data")?.let { runCatching { Base64.getDecoder().decode(it) }.getOrNull() }
-        if (runId == null || bytes == null) return Envelope(Envelope.ERROR, "run_input expects {\"runId\", \"data\": base64}")
+        val encoded = field(data, "data")
+        if (runId == null || encoded == null) return Envelope(Envelope.ERROR, "run_input expects {\"runId\", \"data\": base64}")
+        // Measured before decoding, so a huge frame is never decoded at all (base64 is 4 characters per 3 bytes).
+        val maxFrame = limits.inputMaxFrameBytes()
+        if (encoded.length / 4L * 3 > maxFrame + 2L) return inputTooBig(maxFrame)
+        val bytes = runCatching { Base64.getDecoder().decode(encoded) }.getOrNull()
+            ?: return Envelope(Envelope.ERROR, "run_input expects {\"runId\", \"data\": base64}")
+        if (bytes.size > maxFrame) return inputTooBig(maxFrame)
         if (demoLock()) return Envelope(Envelope.ERROR, "run_input refused: typing into a run is off under the demo lock")
         val run = synchronized(lock) { inFlight }?.takeIf { it.runId == runId }
             ?: return Envelope(Envelope.ERROR, "run_input refused: no such run in flight")
         if (!run.interactive) return Envelope(Envelope.ERROR, "run_input refused: the run was not started interactive")
-        return if (run.write(bytes)) null else Envelope(Envelope.ERROR, "run_input refused: the run has no terminal")
+        return run.write(bytes)?.let { Envelope(Envelope.ERROR, "run_input refused: $it") }
     }
+
+    private fun inputTooBig(max: Int) =
+        Envelope(Envelope.ERROR, "run_input refused: one frame may carry at most $max bytes. ${LimitRegistry.RUN_INPUT_MAX_FRAME_BYTES.hint()}")
 
     private fun field(data: String, name: String): String? =
         ((runCatching { wire.parseToJsonElement(data) }.getOrNull() as? JsonObject)?.get(name) as? JsonPrimitive)
@@ -222,6 +255,29 @@ class RunManager(
 
     private fun refuse(why: String) = Started(Envelope(Envelope.ERROR, why), null)
 
+    /**
+     * The environment [names] give a run: every field of each secret, under its field name (a later secret's field of the
+     * same name wins). A refusal names the secret or the field, never a value.
+     */
+    private fun secretEnv(names: List<String>): Result<Map<String, String>> {
+        fun no(why: String) = Result.failure<Map<String, String>>(IllegalArgumentException(why))
+        if (names.isEmpty()) return Result.success(emptyMap())
+        if (names.size > MAX_RUN_SECRETS) return no("a run takes at most $MAX_RUN_SECRETS secrets")
+        if (demoLock()) return no("secrets are locked under the demo lock")
+        val env = LinkedHashMap<String, String>()
+        for (name in names) {
+            if (!com.superiorsoftllc.agenthq.keystore.Keystore.isName(name)) return no("invalid secret name")
+            // SEC-FIX-1 H1(b): the lookup refuses a built-in (the update token) with its own reason, kept here.
+            val fields = try { secrets(name) } catch (e: IllegalArgumentException) { return no(e.message ?: "secret '$name' is refused") } catch (e: Exception) { null }
+                ?: return no("secret '$name' is not in the keystore")
+            for ((field, value) in fields) {
+                if (field.uppercase().startsWith("AGENTHQ_")) return no("secret '$name' field '$field' would override a daemon setting")
+                env[field] = value
+            }
+        }
+        return Result.success(env)
+    }
+
     private inner class Run(
         val runId: String,
         val command: SavedCommand,
@@ -229,7 +285,10 @@ class RunManager(
         val interactive: Boolean,
         private val cols: Int,
         private val rows: Int,
+        private val env: Map<String, String> = emptyMap(),
     ) {
+        /** SECRETS-2: the injected values never reach a frame, the scrollback or a line. */
+        private val scrubber = SecretScrubber(env.values)
         private val outLock = Any()
         private var sequence = 0L
         private var capped = false
@@ -259,10 +318,49 @@ class RunManager(
 
         fun resize(cols: Int, rows: Int) { runCatching { pty?.resize(cols, rows) } }
 
-        fun write(bytes: ByteArray): Boolean {
-            val p = pty ?: return false
-            runCatching { p.write(bytes) }
-            return true
+        // SEC-FIX-1 M2: the keyboard rate (a token bucket of [RunLimits.inputBytesPerSecond]) and the queue the
+        // writer thread drains. Guarded by [inputLock]; the writer starts with the first input.
+        private val inputLock = Any()
+        private val inputQueue = java.util.concurrent.LinkedBlockingQueue<ByteArray>()
+        private var queuedBytes = 0L
+        private var allowance = -1.0 // bytes the bucket holds; -1 = not filled yet
+        private var allowanceAt = 0L
+        private var writer: Thread? = null
+
+        /** Queues [bytes] for the pty: null when queued, else why not (no terminal, over the rate, queue full). */
+        fun write(bytes: ByteArray): String? {
+            val p = pty ?: return "the run has no terminal"
+            synchronized(inputLock) {
+                val rate = limits.inputBytesPerSecond()
+                if (rate > 0) {
+                    val t = now()
+                    allowance = if (allowance < 0) rate.toDouble()
+                    else (allowance + (t - allowanceAt).coerceAtLeast(0) * rate / 1000.0).coerceAtMost(rate.toDouble())
+                    allowanceAt = t
+                    if (bytes.size > allowance) {
+                        return "over ${rate} input bytes per second. ${LimitRegistry.RUN_INPUT_BYTES_PER_SECOND.hint()}"
+                    }
+                    allowance -= bytes.size
+                }
+                val cap = limits.inputQueueBytes()
+                if (queuedBytes + bytes.size > cap) {
+                    return "the terminal is not keeping up ($queuedBytes bytes waiting). ${LimitRegistry.RUN_INPUT_QUEUE_BYTES.hint()}"
+                }
+                queuedBytes += bytes.size
+                inputQueue.add(bytes)
+                if (writer == null) writer = Thread({ drain(p) }, "agenthq-run-input").apply { isDaemon = true; start() }
+            }
+            return null
+        }
+
+        /** The writer thread: one pty write at a time, in arrival order, until the run is finished. */
+        private fun drain(p: TerminalProcess) {
+            while (true) {
+                val next = inputQueue.poll(200, java.util.concurrent.TimeUnit.MILLISECONDS)
+                if (next == null) { if (isFinished()) return else continue }
+                runCatching { p.write(next) }
+                synchronized(inputLock) { queuedBytes -= next.size }
+            }
         }
 
         fun stop(force: Boolean) {
@@ -302,13 +400,13 @@ class RunManager(
             val listener = object : TerminalListener {
                 override fun onBytes(bytes: ByteArray) = terminalBytes(bytes)
                 override fun onExit(exitCode: Int) {
-                    synchronized(outLock) { decoder.flush() }
+                    synchronized(outLock) { cleanBytes(scrubber.flush()); decoder.flush() }
                     finish(exitCode, stopMode ?: if (exitCode == 0) "SUCCEEDED" else "FAILED", null)
                 }
             }
             hasTerminal = true
             val started = try {
-                t.start(ProcessSpec(command.argv, command.workingDir), cols, rows, listener)
+                t.start(ProcessSpec(command.argv, command.workingDir, env), cols, rows, listener)
             } catch (e: LinkageError) {
                 hasTerminal = false
                 return false
@@ -323,8 +421,14 @@ class RunManager(
             return true
         }
 
-        private fun terminalBytes(bytes: ByteArray) = synchronized(outLock) {
+        private fun terminalBytes(raw: ByteArray) = synchronized(outLock) {
             if (finished) return@synchronized
+            cleanBytes(scrubber.bytes(raw))
+        }
+
+        /** Under [outLock]: bytes already scrubbed, into the scrollback, a `run_bytes` frame and the line decoder. */
+        private fun cleanBytes(bytes: ByteArray) {
+            if (bytes.isEmpty() || finished) return
             scrollback.append(bytes)
             byteSequence += 1
             emit(Envelope(Envelope.RUN_BYTES, wire.encodeToString(RunBytes.serializer(), RunBytes(runId, byteSequence, b64(bytes)))))
@@ -338,7 +442,7 @@ class RunManager(
                 override fun onExit(exitCode: Int) = finish(exitCode, stopMode ?: if (exitCode == 0) "SUCCEEDED" else "FAILED", null)
             }
             val started: RunningProcess = try {
-                runner.start(ProcessSpec(command.argv, command.workingDir), listener)
+                runner.start(ProcessSpec(command.argv, command.workingDir, env), listener)
             } catch (e: Exception) {
                 // Never the argv or the message (it can quote it): the class name only.
                 finish(null, "FAILED", "spawn failed (${e::class.simpleName})")
@@ -350,7 +454,7 @@ class RunManager(
 
         /** Split on \n, \r and \r\n; a trailing break does not make an empty extra line. */
         private fun lines(stream: String, text: String) {
-            val parts = text.split(BREAK)
+            val parts = scrubber.line(text).split(BREAK)
             val usable = if (parts.size > 1 && parts.last().isEmpty()) parts.dropLast(1) else parts
             for (p in usable) output(stream, p)
         }

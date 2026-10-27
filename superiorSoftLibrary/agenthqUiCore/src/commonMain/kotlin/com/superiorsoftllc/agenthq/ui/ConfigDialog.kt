@@ -578,8 +578,31 @@ private fun LogsSection(logs: LogsFolder) {
 const val SECRETS_TITLE = "Secrets"
 const val SECRETS_APPLIES_TO = "Stored encrypted by the Infantry AI daemon. A saved secret is never shown again, only whether it is set"
 
-/** SECRETS-1: what the Secrets section can ask of the daemon. */
-class SecretActions(val set: (name: String, value: String) -> Unit, val clear: (name: String) -> Unit, val import: (name: String) -> Unit)
+/**
+ * SECRETS-1: what the Secrets section can ask of the daemon. SECRETS-2: [setField] / [deleteField] / [delete] edit the user's
+ * key/value secrets; null (an older daemon) hides that part.
+ */
+class SecretActions(
+    val set: (name: String, value: String) -> Unit,
+    val clear: (name: String) -> Unit,
+    val import: (name: String) -> Unit,
+    val setField: ((name: String, field: String, value: String) -> Unit)? = null,
+    val deleteField: ((name: String, field: String) -> Unit)? = null,
+    val delete: ((name: String) -> Unit)? = null,
+)
+
+/** SECRETS-2: what the add forms accept, the daemon's own rules, so a bad name is caught before it is sent. */
+object SecretForm {
+    private val NAME = Regex("""^[a-z0-9][a-z0-9._-]{0,63}$""")
+    private val FIELD = Regex("""^[A-Za-z_][A-Za-z0-9_]{0,63}$""")
+    fun nameOk(name: String) = NAME.matches(name)
+    fun fieldOk(field: String) = FIELD.matches(field)
+    const val NAME_HINT = "Lowercase letters, digits, '.', '_' and '-', e.g. android-signing"
+    const val FIELD_HINT = "Becomes the environment variable's name: letters, digits and '_', e.g. storePassword"
+    const val TITLE = "Your secrets"
+    const val APPLIES_TO = "Each secret holds named fields. A saved command that names a secret gets every field as an environment variable, masked in its output"
+    const val LOCKED = "Locked: the daemon's demo lock is on, so secrets cannot be changed and no run gets one"
+}
 
 /** The text a row shows: set (with its masked tail) or not set. Never a value. */
 fun secretStatusText(row: SecretRow): String = when {
@@ -614,8 +637,150 @@ private fun SecretsSection(state: SecretState, actions: SecretActions) {
                 }
             }
         }
+        if (actions.setField != null) KeyValueSecrets(state, actions, actions.setField)
         Text("Protected by: ${protectionText(state.protection)}", color = Palette.Muted, fontSize = 11.sp)
     }
+}
+
+/** SECRETS-2: the user's key/value secrets: each with its fields (name + masked tail), and forms to add, replace, delete. */
+@Composable
+private fun KeyValueSecrets(state: SecretState, actions: SecretActions, setField: (String, String, String) -> Unit) {
+    val editable = !state.locked
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag(SECRET_ENTRIES_TAG)) {
+        Text(SecretForm.TITLE, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text(SecretForm.APPLIES_TO, color = Palette.Muted, fontSize = 11.sp)
+        if (state.locked) Text(SecretForm.LOCKED, color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.testTag(SECRET_LOCKED_TAG))
+        for (entry in state.entries) {
+            androidx.compose.runtime.key(entry.name) { SecretEntryCard(entry, editable, actions, setField) }
+        }
+        if (editable) NewSecretForm(state.entries.map { it.name }.toSet(), setField)
+    }
+}
+
+@Composable
+private fun SecretEntryCard(
+    entry: com.superiorsoftllc.agenthq.ui.protocol.SecretEntryRow,
+    editable: Boolean,
+    actions: SecretActions,
+    setField: (String, String, String) -> Unit,
+) {
+    var confirmDelete by remember { mutableStateOf(false) }
+    var replacing by remember { mutableStateOf<String?>(null) }
+    var draft by remember { mutableStateOf("") }
+    Column(
+        Modifier.fillMaxWidth().border(1.dp, Palette.Border, androidx.compose.foundation.shape.RoundedCornerShape(6.dp)).padding(8.dp)
+            .testTag("$SECRET_ENTRY_TAG-${entry.name}"),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(entry.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            val delete = actions.delete
+            if (editable && delete != null && !confirmDelete) {
+                TextButton(onClick = { confirmDelete = true }, modifier = Modifier.testTag("$SECRET_ENTRY_DELETE_TAG-${entry.name}")) {
+                    Text("Delete secret", fontSize = 12.sp)
+                }
+            }
+            if (confirmDelete && delete != null) {
+                Text("Delete it and its ${entry.fields.size} fields?", color = Palette.Danger, fontSize = 12.sp)
+                OutlinedButton(onClick = { confirmDelete = false; delete(entry.name) }, modifier = Modifier.testTag("$SECRET_ENTRY_DELETE_CONFIRM_TAG-${entry.name}")) {
+                    Text("Delete", fontSize = 12.sp, color = Palette.Danger)
+                }
+                TextButton(onClick = { confirmDelete = false }) { Text("Cancel", fontSize = 12.sp) }
+            }
+        }
+        for (field in entry.fields) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.testTag("$SECRET_FIELD_TAG-${entry.name}-${field.name}")) {
+                Text(field.name, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Text(field.tail.ifEmpty { "set" }, color = Palette.Muted, fontSize = 12.sp)
+                if (editable) {
+                    TextButton(onClick = { replacing = if (replacing == field.name) null else field.name; draft = "" }, modifier = Modifier.testTag("$SECRET_FIELD_REPLACE_TAG-${entry.name}-${field.name}")) {
+                        Text("Replace", fontSize = 12.sp)
+                    }
+                    actions.deleteField?.let { del ->
+                        TextButton(onClick = { del(entry.name, field.name) }, modifier = Modifier.testTag("$SECRET_FIELD_DELETE_TAG-${entry.name}-${field.name}")) {
+                            Text("Delete", fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+            if (editable && replacing == field.name) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    MaskedInput(draft, { draft = it }, "New value for ${field.name}", Modifier.weight(1f).testTag("$SECRET_FIELD_INPUT_TAG-${entry.name}-${field.name}"))
+                    OutlinedButton(
+                        onClick = { setField(entry.name, field.name, draft); draft = ""; replacing = null }, enabled = draft.isNotBlank(),
+                        modifier = Modifier.testTag("$SECRET_FIELD_SAVE_TAG-${entry.name}-${field.name}"),
+                    ) {
+                        Text("Save", fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+        if (editable) AddFieldRow(entry, setField)
+    }
+}
+
+@Composable
+private fun AddFieldRow(entry: com.superiorsoftllc.agenthq.ui.protocol.SecretEntryRow, setField: (String, String, String) -> Unit) {
+    var field by remember { mutableStateOf("") }
+    var value by remember { mutableStateOf("") }
+    val taken = entry.fields.any { it.name == field.trim() }
+    val ok = SecretForm.fieldOk(field.trim()) && !taken && value.isNotBlank()
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = field, onValueChange = { field = it }, singleLine = true, label = { Text("Field") },
+            isError = field.isNotBlank() && (!SecretForm.fieldOk(field.trim()) || taken),
+            modifier = Modifier.weight(1f).testTag("$SECRET_ADD_FIELD_NAME_TAG-${entry.name}"),
+        )
+        MaskedInput(value, { value = it }, "Value", Modifier.weight(1f).testTag("$SECRET_ADD_FIELD_VALUE_TAG-${entry.name}"))
+        OutlinedButton(
+            onClick = { setField(entry.name, field.trim(), value); field = ""; value = "" }, enabled = ok,
+            modifier = Modifier.testTag("$SECRET_ADD_FIELD_TAG-${entry.name}"),
+        ) { Text("Add field", fontSize = 12.sp) }
+    }
+}
+
+@Composable
+private fun NewSecretForm(existing: Set<String>, setField: (String, String, String) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var field by remember { mutableStateOf("") }
+    var value by remember { mutableStateOf("") }
+    val n = name.trim()
+    val nameBad = n.isNotEmpty() && (!SecretForm.nameOk(n) || n in existing)
+    val fieldBad = field.isNotBlank() && !SecretForm.fieldOk(field.trim())
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.testTag(SECRET_NEW_TAG)) {
+        Text("New secret", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        OutlinedTextField(
+            value = name, onValueChange = { name = it }, singleLine = true, label = { Text("Secret name") }, isError = nameBad,
+            supportingText = { Text(if (n in existing) "A secret with this name exists; add a field to it above" else SecretForm.NAME_HINT, fontSize = 11.sp) },
+            modifier = Modifier.fillMaxWidth().testTag(SECRET_NEW_NAME_TAG),
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = field, onValueChange = { field = it }, singleLine = true, label = { Text("First field") }, isError = fieldBad,
+                modifier = Modifier.weight(1f).testTag(SECRET_NEW_FIELD_TAG),
+            )
+            MaskedInput(value, { value = it }, "Value", Modifier.weight(1f).testTag(SECRET_NEW_VALUE_TAG))
+        }
+        Text(SecretForm.FIELD_HINT, color = Palette.Muted, fontSize = 11.sp)
+        OutlinedButton(
+            onClick = { setField(n, field.trim(), value); name = ""; field = ""; value = "" },
+            enabled = SecretForm.nameOk(n) && n !in existing && SecretForm.fieldOk(field.trim()) && value.isNotBlank(),
+            modifier = Modifier.testTag(SECRET_NEW_SAVE_TAG),
+        ) { Text("Add secret", fontSize = 12.sp) }
+    }
+}
+
+/** A value input that never shows what is typed (no reveal: the owner's rule). */
+@Composable
+private fun MaskedInput(value: String, onChange: (String) -> Unit, label: String, modifier: Modifier) {
+    OutlinedTextField(
+        value = value, onValueChange = onChange, singleLine = true, label = { Text(label) },
+        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+            keyboardType = androidx.compose.ui.text.input.KeyboardType.Password, autoCorrectEnabled = false,
+        ),
+        modifier = modifier,
+    )
 }
 
 private fun protectionText(wire: String): String = when (wire) {
@@ -630,6 +795,24 @@ const val SECRET_INPUT_TAG = "secret-input"
 const val SECRET_SAVE_TAG = "secret-save"
 const val SECRET_DELETE_TAG = "secret-delete"
 const val SECRET_IMPORT_TAG = "secret-import"
+const val SECRET_ENTRIES_TAG = "secret-entries"
+const val SECRET_LOCKED_TAG = "secret-locked"
+const val SECRET_ENTRY_TAG = "secret-entry"
+const val SECRET_ENTRY_DELETE_TAG = "secret-entry-delete"
+const val SECRET_ENTRY_DELETE_CONFIRM_TAG = "secret-entry-delete-confirm"
+const val SECRET_FIELD_TAG = "secret-field"
+const val SECRET_FIELD_REPLACE_TAG = "secret-field-replace"
+const val SECRET_FIELD_DELETE_TAG = "secret-field-delete"
+const val SECRET_FIELD_INPUT_TAG = "secret-field-input"
+const val SECRET_FIELD_SAVE_TAG = "secret-field-save"
+const val SECRET_ADD_FIELD_NAME_TAG = "secret-add-field-name"
+const val SECRET_ADD_FIELD_VALUE_TAG = "secret-add-field-value"
+const val SECRET_ADD_FIELD_TAG = "secret-add-field"
+const val SECRET_NEW_TAG = "secret-new"
+const val SECRET_NEW_NAME_TAG = "secret-new-name"
+const val SECRET_NEW_FIELD_TAG = "secret-new-field"
+const val SECRET_NEW_VALUE_TAG = "secret-new-value"
+const val SECRET_NEW_SAVE_TAG = "secret-new-save"
 
 /** UPDATE-1: Configuration > Updates. [check] asks the installed app's updater to look for a newer release now. */
 class UpdatesEntry(val version: String, val check: () -> Unit) {

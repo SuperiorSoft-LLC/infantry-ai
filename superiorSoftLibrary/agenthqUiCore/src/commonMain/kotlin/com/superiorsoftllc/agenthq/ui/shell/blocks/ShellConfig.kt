@@ -71,6 +71,10 @@ object ShellConfig : Block("infantry.shell.config", "infantry.shell.config", Edg
                 set = { n, v -> actionScope.launch { controller.setSecret(n, v) } },
                 clear = { n -> actionScope.launch { controller.clearSecret(n) } },
                 import = { n -> actionScope.launch { controller.importSecret(n) } },
+                // SECRETS-2: the key/value part only against a daemon that has it (1.135.0).
+                setField = if (controller.supportsKeyValueSecrets()) { n, f, v -> actionScope.launch { controller.setSecretField(n, f, v) }; Unit } else null,
+                deleteField = { n, f -> actionScope.launch { controller.deleteSecretField(n, f) } },
+                delete = { n -> actionScope.launch { controller.deleteSecret(n) } },
             ),
             onOpenRoles = { ui.showRoles = true },
             limits = state.limitCatalog,

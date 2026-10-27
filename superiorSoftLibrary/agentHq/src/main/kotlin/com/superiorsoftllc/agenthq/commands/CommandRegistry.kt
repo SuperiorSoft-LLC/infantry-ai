@@ -10,7 +10,8 @@ import java.io.File
  * What a client sees of a saved command (contract `commands` frame): id, name, cwd (1.33.0), and since 1.94.0
  * (RUN-CMD-1, owner decision) the argv and grace window too, so the Run tab's editor can show what it edits. The
  * bearer token is already the whole credential (CONTRACT section 5), so the argv is no secret from a client; it
- * still never reaches a LOG line, hence [toString].
+ * still never reaches a LOG line, hence [toString]. 1.135.0 (SECRETS-2): [secrets], the keystore secrets whose fields
+ * the run gets as environment variables (names only; a value never leaves the daemon).
  */
 @Serializable
 data class CommandSpec(
@@ -19,6 +20,7 @@ data class CommandSpec(
     val cwd: String? = null,
     val argv: List<String> = emptyList(),
     val graceMillis: Long = DEFAULT_GRACE_MILLIS,
+    val secrets: List<String> = emptyList(),
 ) {
     override fun toString(): String = "CommandSpec(id=$id)"
 }
@@ -31,6 +33,7 @@ internal data class CommandFileEntry(
     val argv: List<String> = emptyList(),
     val cwd: String? = null,
     @SerialName("graceMillis") val graceMillis: Long = DEFAULT_GRACE_MILLIS,
+    val secrets: List<String> = emptyList(),
 )
 
 /** A validated command, as the run manager (T3) will execute it. [workingDir] is canonical and inside the repo. */
@@ -41,10 +44,11 @@ class SavedCommand internal constructor(
     val cwd: String?,
     val workingDir: File,
     val graceMillis: Long,
+    val secrets: List<String> = emptyList(),
 ) {
-    fun toSpec(): CommandSpec = CommandSpec(id, name, cwd, argv, graceMillis)
+    fun toSpec(): CommandSpec = CommandSpec(id, name, cwd, argv, graceMillis, secrets)
 
-    internal fun toFileEntry(): CommandFileEntry = CommandFileEntry(id, name, argv, cwd, graceMillis)
+    internal fun toFileEntry(): CommandFileEntry = CommandFileEntry(id, name, argv, cwd, graceMillis, secrets)
 
     // argv must never reach a log line by accident.
     override fun toString(): String = "SavedCommand(id=$id)"
@@ -54,6 +58,9 @@ const val DEFAULT_GRACE_MILLIS = 5_000L
 
 /** The longest grace window a command may ask for (RUN-CMD-1): a stop never waits more than ten minutes to escalate. */
 const val MAX_GRACE_MILLIS = 600_000L
+
+/** SECRETS-2: the most secrets one command (or one run_start) may name. */
+const val MAX_RUN_SECRETS = 16
 
 /**
  * The daemon's saved commands, loaded once from `<AGENTHQ_HOME>/commands.json` (design sections 2-3).
@@ -124,9 +131,11 @@ class CommandRegistry private constructor(
             if (e.argv.isEmpty() || e.argv.any { it.isBlank() }) return no("$where ('${e.id}') has an empty argv")
             if (e.graceMillis <= 0) return no("$where ('${e.id}') has a non-positive graceMillis")
             if (e.graceMillis > MAX_GRACE_MILLIS) return no("$where ('${e.id}') has a graceMillis over $MAX_GRACE_MILLIS")
+            if (e.secrets.size > MAX_RUN_SECRETS) return no("$where ('${e.id}') names more than $MAX_RUN_SECRETS secrets")
+            if (e.secrets.any { !com.superiorsoftllc.agenthq.keystore.Keystore.isName(it) }) return no("$where ('${e.id}') names an invalid secret")
             val cwd = e.cwd?.takeIf { it.isNotBlank() }
             val dir = resolveCwd(root, cwd) ?: return no("$where ('${e.id}') has a cwd outside the repo")
-            return Result.success(SavedCommand(e.id, e.name?.takeIf { it.isNotBlank() } ?: e.id, e.argv.toList(), cwd, dir, e.graceMillis))
+            return Result.success(SavedCommand(e.id, e.name?.takeIf { it.isNotBlank() } ?: e.id, e.argv.toList(), cwd, dir, e.graceMillis, e.secrets.distinct()))
         }
 
         /** The file text for [commands], in order: what `commands.json` holds after a save or a delete. */

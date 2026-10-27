@@ -29,6 +29,8 @@ fun AgentHqShell(host: PlatformHost, controller: Controller? = null) {
         if (controller == null) CoroutineScope(SupervisorJob() + Dispatchers.Default) else null
     }
     val active = remember(controller, owned) { controller ?: Controller(owned!!) }
+    // SEC-FIX-1: the owner credential goes with the launch URL only, so a switch to another server never carries it.
+    remember(active, config) { config.ownerToken?.let { active.client.ownerFor(config.url, it) } }
     DisposableEffect(owned) { onDispose { owned?.cancel() } }
     CompositionLocalProvider(LocalPlatformHost provides host) {
         App(

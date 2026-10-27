@@ -26,10 +26,12 @@ class RunManagerTerminalTest {
     private val frames = CopyOnWriteArrayList<Envelope>()
 
     /** A pty the test drives by hand: [listener] is the run's, [size] / [typed] what the run asked of it. */
-    private class FakeTerminal(private val failWith: Throwable? = null) : TerminalRunner {
+    private class FakeTerminal(private val failWith: Throwable? = null, private val writeGate: java.util.concurrent.CountDownLatch? = null) : TerminalRunner {
         lateinit var listener: TerminalListener
         var size: Pair<Int, Int>? = null
-        val typed = mutableListOf<String>()
+        val typed = CopyOnWriteArrayList<String>()
+        /** SEC-FIX-1: the thread each write ran on (it must never be the caller of run_input). */
+        val writers = CopyOnWriteArrayList<Thread>()
         var alive = true
         override fun start(spec: ProcessSpec, cols: Int, rows: Int, listener: TerminalListener): TerminalProcess {
             failWith?.let { throw it }
@@ -38,7 +40,7 @@ class RunManagerTerminalTest {
             return object : TerminalProcess {
                 override val isAlive get() = alive
                 override val pid: Long = 42
-                override fun write(bytes: ByteArray) { typed += String(bytes) }
+                override fun write(bytes: ByteArray) { writers += Thread.currentThread(); writeGate?.await(); typed += String(bytes) }
                 override fun resize(cols: Int, rows: Int) { size = cols to rows }
                 override fun terminate() { alive = false; listener.onExit(130) }
                 override fun killTree() { alive = false }
@@ -47,9 +49,19 @@ class RunManagerTerminalTest {
         fun out(text: String) = listener.onBytes(text.toByteArray())
     }
 
-    private fun manager(t: TerminalRunner, history: Int = 20, scrollback: Int = 1 shl 20, demo: Boolean = false) = RunManager(
-        { registry }, ScriptedRunner(StubScript(stdoutLines = listOf("piped line"))), { frames += it },
-        terminal = t, limits = RunManager.RunLimits({ scrollback }, { history }), demoLock = { demo },
+    private var clock = 1_000_000L
+
+    private fun manager(
+        t: TerminalRunner, history: Int = 20, scrollback: Int = 1 shl 20, demo: Boolean = false,
+        rate: Int = 0, maxFrame: Int = 1 shl 14, queue: Int = 1 shl 18, maxCols: Int = 1000, maxRows: Int = 1000,
+    ) = RunManager(
+        { registry }, ScriptedRunner(StubScript(stdoutLines = listOf("piped line"))), { frames += it }, now = { clock },
+        terminal = t,
+        limits = RunManager.RunLimits(
+            scrollbackBytes = { scrollback }, history = { history }, inputBytesPerSecond = { rate }, inputMaxFrameBytes = { maxFrame },
+            inputQueueBytes = { queue }, maxCols = { maxCols }, maxRows = { maxRows },
+        ),
+        demoLock = { demo },
     )
 
     private fun start(m: RunManager, data: String = """{"commandId":"build"}"""): String {
@@ -123,7 +135,67 @@ class RunManagerTerminalTest {
         val m = manager(t)
         val id = start(m, """{"commandId":"build","interactive":true}""")
         assertNull(m.input("""{"runId":"$id","data":"${"y\r".b64()}"}"""))
-        assertEquals(listOf("y\r"), t.typed)
+        awaitTyped(t, listOf("y\r"))
+        assertTrue(t.writers.none { it === Thread.currentThread() }, "the pty was written on the run_input caller's thread")
+    }
+
+    private fun awaitTyped(t: FakeTerminal, expected: List<String>) {
+        val end = System.nanoTime() + 5_000_000_000L
+        while (t.typed.toList() != expected && System.nanoTime() < end) Thread.sleep(5)
+        assertEquals(expected, t.typed.toList())
+    }
+
+    private fun input(m: RunManager, id: String, text: String) = m.input("""{"runId":"$id","data":"${text.b64()}"}""")
+
+    @Test fun `SEC-FIX-1 a run_input over limits_run_inputMaxFrameBytes is refused whole`() {
+        val t = FakeTerminal()
+        val m = manager(t, maxFrame = 4)
+        val id = start(m, """{"commandId":"build","interactive":true}""")
+        val refused = input(m, id, "12345")
+        assertTrue(refused!!.data.contains("at most 4 bytes") && refused.data.contains("limits.run.inputMaxFrameBytes"), refused.data)
+        // A frame far over the cap is refused on its length, before it is decoded.
+        assertEquals(Envelope.ERROR, input(m, id, "x".repeat(100_000))?.type)
+        assertNull(input(m, id, "1234"))
+        awaitTyped(t, listOf("1234"))
+    }
+
+    @Test fun `SEC-FIX-1 input over limits_run_inputBytesPerSecond is refused until the allowance refills`() {
+        val t = FakeTerminal()
+        val m = manager(t, rate = 10)
+        val id = start(m, """{"commandId":"build","interactive":true}""")
+        assertNull(input(m, id, "0123456789"))
+        val refused = input(m, id, "a")
+        assertTrue(refused!!.data.contains("limits.run.inputBytesPerSecond"), refused.data)
+        clock += 100 // 100 ms at 10 bytes/s = 1 byte back
+        assertNull(input(m, id, "b"))
+        assertEquals(Envelope.ERROR, input(m, id, "c")?.type)
+        awaitTyped(t, listOf("0123456789", "b"))
+    }
+
+    @Test fun `SEC-FIX-1 a stuck pty never blocks run_input, and the waiting input is bounded by limits_run_inputQueueBytes`() {
+        val gate = java.util.concurrent.CountDownLatch(1)
+        val t = FakeTerminal(writeGate = gate)
+        val m = manager(t, queue = 8)
+        val id = start(m, """{"commandId":"build","interactive":true}""")
+        val began = System.nanoTime()
+        assertNull(input(m, id, "aaaa"))
+        assertNull(input(m, id, "bbbb"))
+        val refused = input(m, id, "c")
+        assertTrue(System.nanoTime() - began < 2_000_000_000L, "run_input waited for the pty")
+        assertTrue(refused!!.data.contains("not keeping up") && refused.data.contains("limits.run.inputQueueBytes"), refused.data)
+        gate.countDown()
+        awaitTyped(t, listOf("aaaa", "bbbb"))
+        assertNull(input(m, id, "c"))
+        awaitTyped(t, listOf("aaaa", "bbbb", "c"))
+    }
+
+    @Test fun `SEC-FIX-1 cols and rows are clamped to limits_run_maxCols and maxRows at start and on resize`() {
+        val t = FakeTerminal()
+        val m = manager(t, maxCols = 1000, maxRows = 500)
+        val id = start(m, """{"commandId":"build","cols":100000,"rows":100000}""")
+        assertEquals(1000 to 500, t.size)
+        assertNull(m.resize("""{"runId":"$id","cols":100000,"rows":3}"""))
+        assertEquals(1000 to 3, t.size)
     }
 
     @Test fun `the demo lock refuses an interactive start and any input`() {

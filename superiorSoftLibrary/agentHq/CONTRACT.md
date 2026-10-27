@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.134.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.136.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,15 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+
+### What changed in 1.136.0 (SEC-FIX-1, ticket-61e8f4ac) - one frame gate, the owner credential, run input limits
+
+Behavioural; `contract=1.136.0` (1.135.0 is SECRETS-2). Every client frame passes ONE gate before the dispatch, a bare non-JSON text frame (read as `prompt`) included. A refusal is an `error` frame (`<type> refused: ...`, echoing the request's `requestId`) and nothing runs.
+
+- **Demo lock.** Under `AGENTHQ_DEMO_LOCK` only the read-only frames on `FrameGate.DEMO_LOCK_ALLOWED` get through (list/get/search queries, `replay_request`, `sessions`, `providers`, `models`, `settings_get`, `project_git_*` reads; `FrameGateDaemonTest` pins the list). Every other frame is refused, a frame added later included, the owner's too: `prompt`, `new`, `command_*`, `run_*`, `secret_*`, every write.
+- **Owner credential.** `command_save`, `command_delete`, `secret_set`, `secret_clear`, `secret_import`, `secret_field_set`, `secret_field_delete`, `secret_delete`, `run_start`, `run_stop`, `run_attach`, `run_resize` and `run_input` need an owner connection. A connection is the owner when its handshake carries the owner token as the `X-AgentHQ-Owner` header, or (a browser) as the `agenthq.owner.<base64url token>` subprotocol offered next to `agenthq`. The token is generated once into `<stateDir>/owner.token`; it is apart from the access token (`AGENTHQ_TOKEN`, which every agent is handed) and never handed to a spawned agent. A daemon refuses to start when both are the same. Caveat: an agent runs as the same OS user, so it can still read `owner.token` (and the keystore key) from disk; run agents as another OS user to close that.
+- **Run secrets (H1).** A run gets its SAVED command's secrets only: a `run_start` carrying `secrets` (the 1.135.0 override) is refused, never merged. A built-in secret (the update token) never reaches a run, even when a saved command names it. Adding secrets to a command goes through `command_save`, which needs the owner credential.
+- **Run input.** `run_input` carries at most `limits.run.inputMaxFrameBytes` (16 KiB) decoded bytes, at most `limits.run.inputBytesPerSecond` (64 KiB/s, 0 = unlimited) per run, and is written to the pty by the run's own thread from a queue of at most `limits.run.inputQueueBytes` (256 KiB); over any of them the input is refused, not queued. `run_start` / `run_resize` sizes are clamped to 1..`limits.run.maxCols` / `limits.run.maxRows` (1000 each).
 
 ### Note (no version bump): the `agentWatchdog` project switch (ticket-4e1d52c6)
 
@@ -2237,7 +2246,7 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `commands` | a JSON list of `CommandSpec` `{id, name, cwd, argv, graceMillis}` (1.33.0; `argv` + `graceMillis` since 1.94.0); also pushed to every client after a `command_save` / `command_delete` | daemon → client |
 | `command_save` | `{id, name?, argv: [..], cwd?, graceMillis?}`: upsert a saved command into commands.json; answered by `commands` to every client, refused with `error` `command_save refused: ...` (1.94.0) | client → daemon |
 | `command_delete` | `{id}`: remove a saved command; answered by `commands` to every client, refused with `error` `command_delete refused: ...` (1.94.0) | client → daemon |
-| `run_start` | `{"commandId": "<id>"}`; refused with `error` if the id is unknown or a run is already in flight (1.33.0) | client → daemon |
+| `run_start` | `{"commandId": "<id>"}`; refused with `error` if the id is unknown or a run is already in flight (1.33.0); owner credential only, no `secrets` override (1.136.0) | client → daemon |
 | `run` | one `RunRecord` `{runId, commandId, state, startedAt, pid, lastSequence}`, the answer to `run_start`; `state` is `STARTING`, `RUNNING` or `FINISHED` (1.33.0) | daemon → client |
 | `run_output` | `{runId, sequence, stream, line, truncated}`; `stream` is `stdout` or `stderr`, `sequence` starts at 1 per run (1.33.0) | daemon → client |
 | `run_finished` | `{runId, exitCode, outcome, endedAt, detail}`; sent exactly once per run, including after a stop and after a spawn failure (1.33.0) | daemon → client |
@@ -2246,8 +2255,8 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `run_list` | empty data: request the kept runs; answered by `runs` (1.134.0) | client → daemon |
 | `runs` | a JSON list of `RunSummary` `{runId, commandId, name, state, startedAt, endedAt, exitCode, outcome, terminal, interactive}`, newest first (1.134.0) | daemon → client |
 | `run_attach` | `{runId}`: answered by one replay `run_bytes` with the run's kept scrollback, running or finished; `error` if the run is not kept (1.134.0) | client → daemon |
-| `run_resize` | `{runId, cols, rows}`: resizes the run's pty; no answer unless refused (1.134.0) | client → daemon |
-| `run_input` | `{runId, data}`: keys (base64) into a run started `interactive`; refused under the demo lock (1.134.0) | client → daemon |
+| `run_resize` | `{runId, cols, rows}`: resizes the run's pty; no answer unless refused (1.134.0); sizes clamped to `limits.run.maxCols`/`maxRows`, owner only (1.136.0) | client → daemon |
+| `run_input` | `{runId, data}`: keys (base64) into a run started `interactive`; refused under the demo lock (1.134.0); owner only, bounded by `limits.run.input*` (1.136.0) | client → daemon |
 | `session_delete` | a session id (1.28.0); on success, no direct reply -- the daemon pushes a fresh `sessions` frame to every client; refused (unknown id, or `live`) answers `error` with `"session_delete refused: <reason>"` | client → daemon |
 | `repo` | a repository path (empty clears it) | client → daemon |
 | `sessions` | — (request the list) | client → daemon |
@@ -2285,7 +2294,10 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `secret_clear` | `{name}`: remove that secret from the keystore (since 1.102.0); answered by `secret_state`, pushed to every client; an unknown name is an `error` `"secret_clear refused: ..."` | client → daemon |
 | `secret_import` | `{name}`: copy the older environment variable (e.g. `AGENTHQ_UPDATE_TOKEN` for `update-token`) into the keystore, deleting nothing (since 1.102.0); answered by `secret_state`, pushed to every client; an unknown name or nothing to import is an `error` `"secret_import refused: ..."` | client → daemon |
 | `secret_status` | `{}` (or empty): read the keystore's state (since 1.102.0); answered by `secret_state` | client → daemon |
-| `secret_state` | `{protection: external-key\|os\|key-file, secrets:[{name, label, set, tail, importable, overriddenByEnv}]}`: the answer to every `secret_*` request, and pushed to every client after a change; never carries a stored value (`tail` is `••••` plus the last 4 characters of a 16+ character value, else `••••`) (since 1.102.0) | daemon → client |
+| `secret_field_set` | `{name, field, value}`: seal `value` as field `field` of the user secret `name`, creating it (since 1.135.0); `name` is lowercase `[a-z0-9._-]`, `field` an environment-variable name `[A-Za-z_][A-Za-z0-9_]*`; a built-in name, a bad name or the demo lock is an `error` that never echoes the value; answered by `secret_state`, pushed to every client | client → daemon |
+| `secret_field_delete` | `{name, field}`: remove one field; the secret goes with its last field (since 1.135.0); answered by `secret_state`, pushed to every client | client → daemon |
+| `secret_delete` | `{name}`: remove a user secret and all its fields (since 1.135.0); answered by `secret_state`, pushed to every client | client → daemon |
+| `secret_state` | `{protection: external-key\|os\|key-file, secrets:[{name, label, set, tail, importable, overriddenByEnv}], entries:[{name, fields:[{name, tail}]}], locked}` (`entries`, `locked` since 1.135.0): the answer to every `secret_*` request, and pushed to every client after a change; never carries a stored value (`tail` is `••••` plus the last 4 characters of a 16+ character value, else `••••`) (since 1.102.0) | daemon → client |
 | `tool_approval` | — (request, no data) / one `ToolApprovalInfo` `{mode?, effective, source, choices[]}` (reply): the global Tool approval and what a run without a session override gets (since 1.76.0) | client → daemon (request), daemon → client (reply) |
 | `tool_approval_set` | `{mode?}`: stores the global Tool approval (`deny` / `allowEdits` / `allowAll`), or clears it when `mode` is null or blank (since 1.76.0); answered by `tool_approval`; an unknown mode is an `error` `"tool_approval_set refused: ..."` | client → daemon |
 | `prompt_request` | one `PromptRequest` `{promptId, sessionId, kind, createdAt, tool?, input?, question?, options[], multiSelect, allowOther}`: a harness asks the owner (pushed when opened, and replayed after the connect burst while open; since 1.77.0) | daemon → client |
@@ -3062,6 +3074,19 @@ ADDITIVE + BEHAVIOURAL; `contract=1.132.0`. Builds that workers start no longer 
 - **CPU in `processes`.** `TrackedProcess.cpuPercent` (this process's share of ALL logical cores over the last 10 s watch pass, 0–100; null until two samples), `ProcessReport.agentCpuPercent` (their sum), `cpuAlertPercent`, `cpuAlertMinutes`, `cpuHighSince` (epoch ms since when the sum has stayed at or above the threshold; null while below).
 - **Sustained-CPU attention.** When `agentCpuPercent` stays at or above `limits.cpu.alertPercent` (default `90`, 1–100) for `limits.cpu.alertMinutes` (default `10`; `0` = off), the daemon raises ONE attention item per episode: kind `ceiling`, outcome `cpu_sustained`, with the top processes in the detail. Falling below the threshold rearms it.
 - **Old clients.** They ignore the new fields; the attention item renders like any other `ceiling` item.
+
+### What changed in 1.135.0 (SECRETS-2, ticket-e5d1b57f) — key/value secrets, injected into runs
+
+ADDITIVE + BEHAVIOURAL; `contract=1.135.0`.
+
+- **A secret holds named fields.** `android-signing` can hold `storeFile`, `storePassword`, `keyAlias`, `keyPassword`; any environment-style set works the same way. Each field is sealed on its own (AES-256-GCM, the AAD is the secret name, a NUL, and the field name), so a field copied under another field or secret does not open. Field names are environment-variable names.
+- **Migration.** `keystore.json` becomes `v: 2` (`secrets: {name: {field: sealed}}`). A 1.102.0 entry reads as one field named `value` and is re-sealed into v2 at the next write; one that does not open (another key) is kept unchanged, never dropped. The built-in single-value secrets (`update-token`) keep their frames and read the `value` field.
+- **New frames** `secret_field_set`, `secret_field_delete`, `secret_delete` edit the user's secrets (any valid name except a built-in's). `secret_state` gains `entries` (each user secret, its field names and masked tails) and `locked`. **No frame returns a value.** A refusal names the secret or field, never the value.
+- **Runs get secrets as environment variables.** `CommandSpec` / `command_save` gain `secrets` (a list of secret names, at most 16). (`run_start` accepted `secrets` too in 1.135.0; since 1.136.0 that override is refused, see SEC-FIX-1.) At start the daemon puts every field of each secret into the child's environment under its field name (a later secret's field of the same name wins). An unknown secret, or a field named `AGENTHQ_*`, refuses the run.
+- **Output scrubbing.** Every injected value of 4 or more characters is replaced with `••••` in the run's `run_bytes`, its scrollback (`run_attach`) and its `run_output` lines, including a value split across two chunks (the bytes that could start a value wait for the next chunk). A value the child transforms (encodes, splits with other text in between) is not caught.
+- **Demo lock** (`AGENTHQ_DEMO_LOCK`): every `secret_*` change is refused, `secret_state.locked` is true, and a `run_start` that would inject any secret is refused. A run with no secret is unchanged.
+- **Not covered.** `agenthq run` starts its child in the CLI process, not the daemon, so it gets no secrets (injecting there would mean sending values to a client).
+- **Old clients.** They ignore `entries`, `locked` and `secrets`; a command saved by an old client keeps no secrets (a save replaces the entry).
 
 ### What changed in 1.134.0 (RUN-CONSOLE, ticket-67f117b6) — runs have a terminal; pills and a console window
 

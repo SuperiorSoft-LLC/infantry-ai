@@ -18,7 +18,10 @@ import kotlinx.serialization.json.Json
  */
 const val MAX_RUN_LINES = 2000
 
-/** A saved command as the daemon lists it. [argv] and [graceMillis] arrive from contract 1.94.0 (RUN-CMD-1) for the editor. */
+/**
+ * A saved command as the daemon lists it. [argv] and [graceMillis] arrive from contract 1.94.0 (RUN-CMD-1) for the editor;
+ * [secrets] from 1.135.0 (SECRETS-2): the keystore secrets whose fields the run gets as environment variables (names only).
+ */
 @Serializable
 data class CommandSpecView(
     val id: String,
@@ -26,6 +29,7 @@ data class CommandSpecView(
     val cwd: String? = null,
     val argv: List<String> = emptyList(),
     val graceMillis: Long? = null,
+    val secrets: List<String> = emptyList(),
 )
 
 @Serializable

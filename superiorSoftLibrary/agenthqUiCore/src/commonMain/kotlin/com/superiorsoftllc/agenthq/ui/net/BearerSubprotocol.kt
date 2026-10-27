@@ -8,3 +8,12 @@ internal const val WEB_PROTOCOL = "agenthq"
 fun bearerSubprotocol(token: String): String =
     "agenthq.bearer." + kotlin.io.encoding.Base64.UrlSafe.withPadding(kotlin.io.encoding.Base64.PaddingOption.ABSENT)
         .encode(token.encodeToByteArray())
+
+/** SEC-FIX-1 (contract 1.136.0): the header that carries the owner credential (a JVM / Android socket). */
+const val OWNER_HEADER = "X-AgentHQ-Owner"
+
+/** SEC-FIX-1: [token] as the owner subprotocol a browser offers: `agenthq.owner.` + base64url, no padding. */
+@OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+fun ownerSubprotocol(token: String): String =
+    "agenthq.owner." + kotlin.io.encoding.Base64.UrlSafe.withPadding(kotlin.io.encoding.Base64.PaddingOption.ABSENT)
+        .encode(token.encodeToByteArray())

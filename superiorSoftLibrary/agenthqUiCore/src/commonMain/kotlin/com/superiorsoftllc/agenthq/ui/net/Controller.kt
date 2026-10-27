@@ -617,6 +617,21 @@ class Controller(
     /** SECRETS-1: copy the older environment variable of [name] into the keystore (daemon side; no file is deleted). */
     suspend fun importSecret(name: String): CommandResult = secretFrame(WireRequests.secretImport(name))
 
+    /** True when the connected daemon speaks contract 1.135.0 or later (SECRETS-2: key/value secrets, run injection). */
+    fun supportsKeyValueSecrets(): Boolean = contractAtLeast(_state.value.connection.contract, 1, 135)
+
+    /** SECRETS-2: store [value] as field [field] of the user secret [name] (add or replace). The value is never kept here. */
+    suspend fun setSecretField(name: String, field: String, value: String): CommandResult = keyValueFrame(WireRequests.secretFieldSet(name, field, value))
+
+    suspend fun deleteSecretField(name: String, field: String): CommandResult = keyValueFrame(WireRequests.secretFieldDelete(name, field))
+
+    suspend fun deleteSecret(name: String): CommandResult = keyValueFrame(WireRequests.secretDelete(name))
+
+    private suspend fun keyValueFrame(frame: Envelope): CommandResult {
+        if (!supportsKeyValueSecrets()) return report(CommandResult.Refused("this daemon has no key/value secrets (needs contract 1.135.0)"))
+        return report(send(frame))
+    }
+
     private suspend fun secretFrame(frame: Envelope): CommandResult {
         if (!contractAtLeast(_state.value.connection.contract, 1, 102)) {
             return report(CommandResult.Refused("this daemon has no keystore (needs contract 1.102.0)"))
@@ -1439,12 +1454,15 @@ class Controller(
      * RUN-CMD-2: save (upsert) the command [id] (`command_save`). The daemon answers with the new `commands` list, or
      * an `error` that lands in [RunsState.commandError]; a previous refusal is cleared before sending.
      */
-    suspend fun saveCommand(id: String, name: String, argv: List<String>, cwd: String?, graceMillis: Long): CommandResult {
+    suspend fun saveCommand(
+        id: String, name: String, argv: List<String>, cwd: String?, graceMillis: Long, secrets: List<String> = emptyList(),
+    ): CommandResult {
         if (!supportsCommandEdit()) return CommandResult.Refused("this daemon cannot edit commands (needs contract 1.94.0)")
         if (id.isBlank()) return CommandResult.Refused("the command needs an id")
         if (argv.isEmpty()) return CommandResult.Refused("the command needs at least one argument (the program)")
+        if (secrets.isNotEmpty() && !supportsKeyValueSecrets()) return CommandResult.Refused("this daemon cannot give a run secrets (needs contract 1.135.0)")
         _state.update { it.copy(runs = it.runs.copy(commandError = null)) }
-        return send(WireRequests.commandSave(id, name, argv, cwd, graceMillis))
+        return send(WireRequests.commandSave(id, name, argv, cwd, graceMillis, secrets))
     }
 
     /** RUN-CMD-2: delete the saved command [id] (`command_delete`); answered like [saveCommand]. */

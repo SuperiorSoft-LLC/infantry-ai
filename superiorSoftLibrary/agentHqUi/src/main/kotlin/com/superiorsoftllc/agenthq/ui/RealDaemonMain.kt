@@ -197,6 +197,8 @@ internal class PinnedDaemonHost(
     updater: UpdateService? = null,
     /** The token this machine can read itself (the stored remote.token while remote access is on), else null. */
     private val storedToken: () -> String? = { RemoteAccess.clientToken() },
+    /** SEC-FIX-1: the local daemon's owner token (`<stateDir>/owner.token`, made once, shared with the in-process daemon). */
+    private val ownerToken: () -> String? = { runCatching { com.superiorsoftllc.agenthq.daemon.OwnerCredential.ensure(stateDir()) }.getOrNull() },
     /** PAIR-1: where a paired server and its sealed token are kept; null = none (tests). */
     servers: com.superiorsoftllc.agenthq.ui.pair.SavedServers? = null,
     /** SWITCH-1: the saved server the window opens on instead of the local daemon; its URL and token replace [wsUrl]. */
@@ -230,6 +232,9 @@ internal class PinnedDaemonHost(
         // A remote server's token is the one sealed for it, never this machine's own.
         ShellKeys.TOKEN -> if (remote != null) remote.token else base.setting(key)?.takeIf { it.isNotBlank() } ?: storedToken()
         ShellKeys.TOKEN_FILE -> if (remote != null) null else base.setting(key)
+        // SEC-FIX-1: this machine's daemon's owner credential, from its state dir only (never the environment, which agents
+        // inherit); a remote server's window gets none.
+        ShellKeys.OWNER_TOKEN -> if (remote != null) null else ownerToken()
         else -> base.setting(key)
     }
 

@@ -540,6 +540,13 @@ class AgentHqDaemon(
              */
             token: String? = RemoteAccess.resolveToken(stateDir()),
             /**
+             * SEC-FIX-1 (1.136.0): the OWNER credential (`<stateDir>/owner.token`, generated once), apart from [token]. Never
+             * handed to a spawned agent; only a connection presenting it may send [FrameGate.OWNER_ONLY] frames.
+             */
+            ownerToken: String = OwnerCredential.ensure(stateDir()),
+            /** SEC-FIX-1: the demo lock (`AGENTHQ_DEMO_LOCK`), read per frame; a test passes its own. */
+            demoLock: () -> Boolean = { com.superiorsoftllc.agenthq.plugin.host.PluginFolders.demoLock() },
+            /**
              * Contract 1.3.0: the providers a spawn may name besides [provider], from `AGENTHQ_PROVIDERS`.
              * Empty (the default when the variable is unset) = this daemon serves [provider] only.
              */
@@ -624,6 +631,8 @@ class AgentHqDaemon(
             sessionIds: () -> String = { UUID.randomUUID().toString() },
         ): AgentHqDaemon {
             val policy = AccessPolicy.of(host, token)
+            // SEC-FIX-1: built once; refused when it equals the access token every agent is handed.
+            val ownerCredential = OwnerCredential.forDaemon(ownerToken, token)
             // PORT-1: FIRST, because the mail base and every session's AGENTHQ_URL below carry the port.
             // BUG-FLAKE-1: and HELD from here until start(), so no other socket on the host can take it meanwhile.
             val portReservation = DaemonPort.reserve(port, host, strictPort)
@@ -801,6 +810,8 @@ class AgentHqDaemon(
             // ScriptedRunner under AGENTHQ_PROVIDER=stub and would only replay the script.
             // RUN-CONSOLE (1.134.0): the run gets a pty (pipes if pty4j cannot load here); its scrollback and the run
             // history follow `limits.run.*`; the demo lock refuses interactive runs and run_input (no raw shell).
+            // SECRETS-1: the daemon-owned keystore, in the state dir. SECRETS-2: a run reads its secrets' fields from it.
+            val keystore = Keystore(stateDir())
             val runManager = com.superiorsoftllc.agenthq.commands.RunManager(
                 { commandStore.registry }, com.superiorsoftllc.agenthq.runner.PipedProcessRunner(),
                 emit = { env -> for (c in clients.toList()) c.trySend(env) },
@@ -808,8 +819,15 @@ class AgentHqDaemon(
                 limits = com.superiorsoftllc.agenthq.commands.RunManager.RunLimits(
                     scrollbackBytes = { settings.limitCap(LimitRegistry.RUN_SCROLLBACK_BYTES) },
                     history = { settings.limitCap(LimitRegistry.RUN_HISTORY) },
+                    inputBytesPerSecond = { settings.limitCap(LimitRegistry.RUN_INPUT_BYTES_PER_SECOND) },
+                    inputMaxFrameBytes = { settings.limitCap(LimitRegistry.RUN_INPUT_MAX_FRAME_BYTES) },
+                    inputQueueBytes = { settings.limitCap(LimitRegistry.RUN_INPUT_QUEUE_BYTES) },
+                    maxCols = { settings.limitCap(LimitRegistry.RUN_MAX_COLS) },
+                    maxRows = { settings.limitCap(LimitRegistry.RUN_MAX_ROWS) },
                 ),
-                demoLock = { com.superiorsoftllc.agenthq.plugin.host.PluginFolders.demoLock() },
+                demoLock = demoLock,
+                // SEC-FIX-1 H1(b): user secrets only; a built-in (the update token) never reaches a run.
+                secrets = com.superiorsoftllc.agenthq.keystore.KeystoreHandler.runSecrets(keystore::fields),
             )
             val attention = AttentionStore(store.attention)
             attention.eventSink = { item -> broadcastAttention(clients, item) }
@@ -973,9 +991,9 @@ class AgentHqDaemon(
                 projectName = { id -> projectStore.get(id).name },
                 push = { envelope -> for (client in clients) client.trySend(envelope) },
             )
-            // SECRETS-1: the daemon-owned keystore, in the state dir.
+            // SECRETS-1 / SECRETS-2: the keystore's frames; the demo lock refuses every change.
             val keystoreFrames = KeystoreHandler(
-                keystore = Keystore(stateDir()),
+                keystore = keystore,
                 push = { envelope -> for (client in clients) client.trySend(envelope) },
             )
             // P10-K6: the issues log, over the same file. The declared session is the author AND the scope of the active
@@ -1432,6 +1450,8 @@ class AgentHqDaemon(
                             ownerQuestions = ownerQuestions,
                             handover = handover,
                             processWatch = processWatch,
+                            ownerCredential = ownerCredential,
+                            demoLock = demoLock,
                         )
                     }
                 }
@@ -1996,8 +2016,17 @@ private suspend fun handleConnection(
     handover: SessionHandover? = null,
     /** ROGUE-1 (contract 1.120.0): `processes`; null = this daemon serves none. */
     processWatch: com.superiorsoftllc.agenthq.session.ProcessWatch? = null,
+    /** SEC-FIX-1 (1.136.0): who is the owner ([FrameGate.OWNER_ONLY]); null = no connection is. */
+    ownerCredential: OwnerCredential? = null,
+    /** SEC-FIX-1 (1.136.0): the demo lock, read per frame ([FrameGate.DEMO_LOCK_ALLOWED]). */
+    demoLock: () -> Boolean = { false },
 ) {
     println("[agentHq] ws connected (provider=${manager.providerId})")
+    // SEC-FIX-1: decided once, at the handshake, from what this connection presented.
+    val owner = ownerCredential?.presentedBy(
+        session.call.request.headers[OwnerCredential.HEADER],
+        session.call.request.headers.getAll(io.ktor.http.HttpHeaders.SecWebSocketProtocol)?.joinToString(","),
+    ) == true
     val outgoing = Channel<Envelope>(Channel.UNLIMITED)
     clients.add(outgoing)
     val sender = session.launch {
@@ -2161,6 +2190,11 @@ private suspend fun handleConnection(
             val text = (frame as? Frame.Text)?.readText() ?: continue
             val envelope = runCatching { json.decodeFromString(Envelope.serializer(), text) }.getOrNull()
                 ?: Envelope(Envelope.PROMPT, text)
+            // SEC-FIX-1: the one gate, before every branch below (the bare-text prompt and the replay included).
+            FrameGate.refusal(envelope.type, demoLock(), owner)?.let { why ->
+                outgoing.trySend(Envelope(Envelope.ERROR, why, requestId = envelope.requestId))
+                continue
+            }
             if (envelope.type == SESSION_REPLAY_REQUEST_TYPE) {
                 val sessionId = envelope.sessionId
                 val request = runCatching {
@@ -3307,8 +3341,9 @@ private suspend fun handleConnection(
                 Envelope.NOTIFY -> notifyFrames.answer(envelope)
 
                 // SECRETS-1 (contract 1.100.0): the keystore. Answered by `secret_state`; a value never travels back.
-                Envelope.SECRET_SET, Envelope.SECRET_CLEAR, Envelope.SECRET_IMPORT,
-                Envelope.SECRET_STATUS -> keystoreFrames.answer(envelope)
+                // SECRETS-2 (1.135.0): and the user's key/value secrets.
+                Envelope.SECRET_SET, Envelope.SECRET_CLEAR, Envelope.SECRET_IMPORT, Envelope.SECRET_STATUS,
+                Envelope.SECRET_FIELD_SET, Envelope.SECRET_FIELD_DELETE, Envelope.SECRET_DELETE -> keystoreFrames.answer(envelope)
 
                 // P10-K6 (contract 1.54.0): the issues log. An open / attempt / fix is pushed to every client (no direct reply).
                 Envelope.ISSUE_OPEN, Envelope.ISSUE_ATTEMPT, Envelope.ISSUE_FIX,

@@ -41,7 +41,7 @@ class CommandStore(
             strict.decodeFromString(CommandFileEntry.serializer(), data)
         } catch (e: Exception) {
             // A decode message can quote the offending text (the argv): the class name only.
-            return "expects {\"id\",\"name\"?,\"argv\":[...],\"cwd\"?,\"graceMillis\"?} (${e::class.simpleName})"
+            return "expects {\"id\",\"name\"?,\"argv\":[...],\"cwd\"?,\"graceMillis\"?,\"secrets\"?:[...]} (${e::class.simpleName})"
         }
         val root = CommandRegistry.canonicalRoot(repo)
             ?: return "AGENTHQ_REPO is not set or cannot be resolved, so no working directory can be checked"
