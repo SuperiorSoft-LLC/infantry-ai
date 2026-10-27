@@ -2,6 +2,11 @@ package com.superiorsoftllc.agenthq.ui.shell
 
 import androidx.compose.runtime.compositionLocalOf
 import com.superiorsoftllc.agenthq.ui.ToastService
+import com.superiorsoftllc.agenthq.ui.block.layout.Block
+import com.superiorsoftllc.agenthq.ui.model.AgentView
+import com.superiorsoftllc.agenthq.ui.model.MemoryNoteView
+import com.superiorsoftllc.agenthq.ui.model.MemorySearchView
+import com.superiorsoftllc.agenthq.ui.model.NoteScope
 import com.superiorsoftllc.agenthq.ui.model.Notice
 import com.superiorsoftllc.agenthq.ui.model.ProjectView
 import com.superiorsoftllc.agenthq.ui.model.RunsState
@@ -9,11 +14,14 @@ import com.superiorsoftllc.agenthq.ui.model.ToastEvent
 import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
 import com.superiorsoftllc.agenthq.ui.protocol.PipelineStateView
+import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitBranchDiffstat
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitBranchList
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitCheckoutResult
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitHistory
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitPatch
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitStatus
+import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitWorktreeList
+import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitWorktreeStatus
 import com.superiorsoftllc.agenthq.ui.protocol.Role
 import com.superiorsoftllc.agenthq.ui.protocol.RoleBinding
 import kotlin.reflect.KClass
@@ -36,6 +44,12 @@ interface ShellContext {
     val roles: RolesContext
     val toast: ToastContext
     val config: ConfigContext
+    /** S4b (docs/SHELL-LEAKS.md): the tab trees as the window resolved them. */
+    val layout: LayoutContext get() = NoLayout
+    /** S4b: the project knowledge notes. */
+    val notes: NotesContext get() = NoNotes
+    /** S4b: the Changes tab's worktrees, branch changes and polls. */
+    val changes: ChangesContext get() = NoChanges
 }
 
 /** The daemon link: whether it is up and which contract the daemon announced. */
@@ -53,6 +67,10 @@ interface SessionContext {
     val notices: List<Notice>
     /** The newest project / workspace refusal, until a success, a switch or a dismiss clears it. */
     val projectRefusal: Notice?
+    /** S4b: the selected session's id, even before its agent row arrives; null with none selected. */
+    val selectedAgentId: String? get() = null
+    /** S4b: the selected session's agent; null with none selected or its row not known yet. */
+    val selectedAgent: AgentView? get() = null
 }
 
 /** The active project's git, by project id, and the requests that load or change it. */
@@ -93,6 +111,96 @@ interface RunContext {
     fun open(runId: String)
     suspend fun saveCommand(id: String, name: String, argv: List<String>, cwd: String?, graceMillis: Long, secrets: List<String>): CommandResult
     suspend fun deleteCommand(id: String): CommandResult
+}
+
+/** S4b: the tab trees ([com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule.tabTrees]) with the modules' overrides in. */
+interface LayoutContext {
+    /** The resolved tree whose root id is [id]; null when no module contributes it. */
+    fun tabTree(id: String): Block?
+}
+
+/** No tab tree resolved: a tab draws its own default tree. */
+object NoLayout : LayoutContext {
+    override fun tabTree(id: String): Block? = null
+}
+
+/** S4b: why a shell without the notes or changes domain refuses their requests. */
+const val SHELL_DOMAIN_MISSING = "this shell does not provide it"
+
+/** S4b: the project knowledge notes (contracts 1.20.0 / 1.21.0 / 1.51.0), per state key ([NoteScope.key]). */
+interface NotesContext {
+    /** The note index of [key] (a project and scope); empty before it loads. */
+    fun notes(key: String): List<MemoryNoteView>
+    /** The newest search answer; its `projectId` is the key it was asked for. */
+    val search: MemorySearchView?
+    suspend fun load(projectId: String, at: NoteScope): CommandResult
+    /** Fetches note [name]'s body, which the index withholds. */
+    suspend fun get(projectId: String, name: String, at: NoteScope): CommandResult
+    suspend fun search(projectId: String, query: String, at: NoteScope): CommandResult
+    suspend fun save(projectId: String, name: String, description: String, body: String, at: NoteScope): CommandResult
+    suspend fun delete(projectId: String, name: String, at: NoteScope): CommandResult
+}
+
+/** No notes: an empty index, and every request refused. */
+object NoNotes : NotesContext {
+    override fun notes(key: String): List<MemoryNoteView> = emptyList()
+    override val search: MemorySearchView? get() = null
+    override suspend fun load(projectId: String, at: NoteScope): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun get(projectId: String, name: String, at: NoteScope): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun search(projectId: String, query: String, at: NoteScope): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun save(projectId: String, name: String, description: String, body: String, at: NoteScope): CommandResult =
+        CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun delete(projectId: String, name: String, at: NoteScope): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+}
+
+/**
+ * S4b: the Changes tab (UX-CHANGES-1, BRANCH-VIEW-2): the project's worktrees, the one shown and its status, a branch's
+ * changes, and the requests that load or pick them. The working tree itself and the branch list are [GitContext]'s.
+ */
+interface ChangesContext {
+    fun worktrees(projectId: String): ProjectGitWorktreeList?
+    /** The worktree the header shows (contract 1.88.0); null before the list arrives. */
+    val worktree: String?
+    val worktreeStatus: ProjectGitWorktreeStatus?
+    /** The branch picked in the inner picker before 1.88.0; null is the working tree. */
+    val branch: String?
+    /** From 1.88.0: the branch of the worktree the header shows, which the inner picker follows. */
+    val shownBranch: String?
+    fun branchChanges(projectId: String): ProjectGitBranchDiffstat?
+    /** The directory's working tree (before 1.88.0). */
+    suspend fun loadTree(projectId: String): CommandResult
+    /** [sessionId] names the selected session, so the daemon opens the view on its checkout. */
+    suspend fun loadWorktrees(projectId: String, sessionId: String?): CommandResult
+    suspend fun loadWorktreeStatus(projectId: String, path: String): CommandResult
+    suspend fun loadBranchChanges(projectId: String, branch: String): CommandResult
+    fun selectWorktree(projectId: String, path: String)
+    /** [branch] null is the working tree. */
+    fun selectBranch(projectId: String, branch: String?)
+    /**
+     * BUG-CHANGES-BRANCH-1: one worktree-list poll that returns only once the daemon replied to it (or refused it, or a
+     * new link came up), bounded by [timeoutMs], so polls never pile up behind a slow git.
+     */
+    suspend fun pollWorktrees(projectId: String, sessionId: String?, timeoutMs: Long)
+    /** The same for the shown worktree's status. */
+    suspend fun pollWorktreeStatus(projectId: String, path: String, timeoutMs: Long)
+}
+
+/** No changes domain: nothing known, every request refused, every poll returns at once. */
+object NoChanges : ChangesContext {
+    override fun worktrees(projectId: String): ProjectGitWorktreeList? = null
+    override val worktree: String? get() = null
+    override val worktreeStatus: ProjectGitWorktreeStatus? get() = null
+    override val branch: String? get() = null
+    override val shownBranch: String? get() = null
+    override fun branchChanges(projectId: String): ProjectGitBranchDiffstat? = null
+    override suspend fun loadTree(projectId: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun loadWorktrees(projectId: String, sessionId: String?): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun loadWorktreeStatus(projectId: String, path: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun loadBranchChanges(projectId: String, branch: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override fun selectWorktree(projectId: String, path: String) {}
+    override fun selectBranch(projectId: String, branch: String?) {}
+    override suspend fun pollWorktrees(projectId: String, sessionId: String?, timeoutMs: Long) {}
+    override suspend fun pollWorktreeStatus(projectId: String, path: String, timeoutMs: Long) {}
 }
 
 /** The board modal. */

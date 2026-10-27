@@ -45,7 +45,6 @@ const val ROLE_MANAGER_SAVE_TAG = "role-manager-save"
 const val ROLE_MANAGER_DELETE_TAG = "role-manager-delete"
 const val ROLE_MANAGER_DELETE_CONFIRM_TAG = "role-manager-delete-confirm"
 const val ROLE_MANAGER_DESCRIPTION_TAG = "role-manager-description"
-const val ROLE_MANAGER_OPEN_TAG = "role-manager-open"
 
 /**
  * ROLE-EDIT-1: the role manager, a dialog opened from Configuration (kept self-contained so it can move into a

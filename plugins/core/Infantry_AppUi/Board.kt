@@ -104,7 +104,6 @@ internal fun assigneeRole(state: AppState, agentId: String): String? =
         ?: state.agents[agentId]?.role
 
 /** What a ticket's assignee reads as: a profile's name when the id is one, else the raw `role:<role>` / id. */
-// S4 bridge (docs/SHELL-LEAKS.md): public only until Board moves to the app UI (S4b); Infantry_Triggers uses it.
 fun assigneeLabel(state: AppState, agentId: String?): String = when {
     agentId == null -> "unassigned"
     else -> state.visibleProfiles.firstOrNull { it.id == agentId }?.name ?: agentId
@@ -578,23 +577,6 @@ private fun DragGhost(t: Ticket, drag: BoardDrag, origin: Offset) {
             .clip(shape).background(Palette.Raised).border(1.dp, Palette.Accent, shape).padding(8.dp),
     ) {
         Text(t.title, color = Palette.Text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 2)
-    }
-}
-
-/** PIPELINE-WATCHDOG: the watchdog flag; urgent states in the attention colour. */
-// S4 bridge (docs/SHELL-LEAKS.md): public only until Board and the sidebar move to the app UI (S4b/S4c); Infantry_Attention uses it.
-@Composable
-fun WatchFlagChip(flag: WatchFlag?, modifier: Modifier = Modifier) {
-    if (flag != null) Chip(flag.label, if (flag.urgent) Palette.Accent else Palette.Info, modifier)
-}
-
-/** TRAITS-T9: the REPORT BACK flag; `unreported` in the attention colour, `reported` muted, nothing otherwise. */
-@Composable
-internal fun ReportFlagChip(flag: ReportFlag?, modifier: Modifier = Modifier) {
-    when (flag) {
-        ReportFlag.UNREPORTED -> Chip(flag.label, Palette.Accent, modifier)
-        ReportFlag.REPORTED -> Chip(flag.label, Palette.Muted, modifier)
-        null -> Unit
     }
 }
 

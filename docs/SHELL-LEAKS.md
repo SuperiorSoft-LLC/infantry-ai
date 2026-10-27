@@ -74,3 +74,188 @@ None of these additions is on `ShellContext`; they all belong to the module cont
   - Untested on a minified (R8) Android release: a keep rule for `ModuleSource` implementations may be needed.
 - **coreController is gated on tier, not on the classloader.** A module declared core in its manifest gets the
   controller.
+
+# S4b: the panes (ticket 8724e046)
+
+S4b moves the pane groups git, run, roles, board, memory and changes into agenthqAppUi, one commit each, after one
+prep commit that holds everything two groups share. That way any pane commit can be dropped or reverted on its own.
+The compiler only catches `internal` leaks. `Controller`, `LocalShell` and `AppState` are public, so each moved file
+gets a symbol audit: every core symbol it touches, and a decision for each one. S4b uses the ticket's letters:
+
+- **(a)** already on `ShellContext`
+- **(b)** added to `ShellContext` as an addition-only member with a default
+- **(c)** belongs to the app UI and moves too
+- **kit**: the shell's public toolkit, which any block may use and which stays in core as it is. That covers the
+  theme (`Palette`, `Mono`), the controls (`Clickables.kt`, `Chip`, `IconAction`, `AhqAlertDialog`, `SearchableSelect`,
+  `LocalDirectoryPicker`), the block contract (`Block`, `BlockScope`, `Place`, `RenderPlaced`), and the model views and
+  wire types (`model/*`, `protocol/*`, `CommandResult` and the `*_UNSUPPORTED` reasons). They are not leaks: they hold
+  no window state.
+- **stays**: core still uses it, so it stays in core (public where the moved code needs it)
+- **bridge**: as in S4a. Public only until its last core user moves, marked `// S4 bridge (docs/SHELL-LEAKS.md)`.
+
+Each pane keeps its `(state, controller)` entry (`ProjectGitPane`, `RunPane`, `MemoryPane`, `ProjectChangesPanel`) for
+tests and for drawing outside a shell. It builds the shell's public adapters (`CoreLink`, `CoreSession`, `CoreGit`,
+`CoreRun`, `CoreNotes`, `CoreChanges`) and hands them to the same frame the block draws, so the frames and sections
+read the context only. Only that one line names `Controller` or `AppState`.
+
+## Prep commit (shared by the pane commits)
+
+| File | Symbol | Why | Decision |
+|---|---|---|---|
+| shell/ShellContext.kt | `ShellContext.layout` (`LayoutContext.tabTree`, default `NoLayout`) | the Git, Run, Notes and Changes tabs read their resolved tree through `LocalShell.current.tabs.tabTree` | (b) |
+| shell/ShellContext.kt | `ShellContext.notes` (`NotesContext`, default `NoNotes`) | the Notes pane reads `state.memoryNotes`, `memorySearch` and calls 5 `controller.*Memory` | (b) |
+| shell/ShellContext.kt | `ShellContext.changes` (`ChangesContext`, default `NoChanges`) | the Changes pane reads `projectWorktrees`, `changesWorktree(Status)`, `changes(Shown)Branch`, `projectGitBranchChanges`, calls 6 controller requests and polls on `controller.client.frames` | (b): `pollWorktrees` and `pollWorktreeStatus` hide the frame wait (BUG-CHANGES-BRANCH-1) in the core adapter |
+| shell/ShellContext.kt | `SessionContext.selectedAgentId`, `selectedAgent` (default null) | Notes (role / session scope) and Changes (the worktree of the selected session) read `state.selected` / `selectedId` | (b) |
+| shell/CoreShellContext.kt | `CoreNotes`, `CoreChanges`, `pollOnce` | the core's implementations; `pollOnce` moved here from ProjectChangesPanel.kt (it reads `controller.client`) | stays |
+| ProjectGitPane.kt -> ChangesSection.kt | `ChangeGroup`, `ChangedFileRow`, `GIT_LIST_TOGGLE_TAG` (were internal) | the Git and Changes panes both draw them | bridge: they go to (c) once both panes are in agenthqAppUi |
+| ChangesSection.kt | `ChangedPathText` (was internal) | the Git and Changes panes and core's `ChangesSection` draw it | bridge |
+| block/layout/Placement.kt | `RenderPlaced` (Row, Column, Box; were internal) | every moved container block draws its children with it | kit: the block contract's own function, made public (no new surface, only visibility) |
+| block/layout/Placement.kt | `RenderPlain` (was internal) | the moved Notes and Changes trees draw their axis-less groups with it | kit: as `RenderPlaced` |
+
+A shell built without these domains (a third-party `ShellContext`) compiles unchanged: `NoNotes` and `NoChanges` refuse
+every request with `SHELL_DOMAIN_MISSING`, and `NoLayout` makes each tab draw its default tree.
+
+## Git (Infantry_Git)
+
+Moved into plugins/core/Infantry_Git (`git mv`, packages unchanged): ProjectGitPane.kt, ProjectPipelineSection.kt,
+shell/blocks/ShellGit.kt. Nothing of the group stays in core. Pixel proof: `-PtabShotsExtra=git` against the
+pre-move render, 4 of 4 shots at 0 px.
+
+| File | Symbol | Decision |
+|---|---|---|
+| ShellGit.kt | `LocalShell.current.tabs.tabTree` (the resolved Git tree) | (b): `LocalShellContext.current?.layout?.tabTree` (prep) |
+| ShellGit.kt | `LocalShellContext`, `ShellContext.link / session / git` | (a) |
+| ShellGit.kt | `Block`, `BlockScope`, `Place`, `RenderPlaced` | kit (`RenderPlaced` made public in prep) |
+| ProjectGitPane.kt | `GitContext`, `LinkContext`, `SessionContext` (`GitPaneFrame`, `GitPaneHost`, every section) | (a) |
+| ProjectGitPane.kt | `ProjectGitPane(state, controller)`: `AppState`, `Controller`, `CoreLink`, `CoreSession`, `CoreGit` | (a) through the public adapters: the outside-a-shell entry (ProjectGitPaneUiTest, ProjectGitRealDaemonUiTest, ProjectBaseBranchRealDaemonUiTest) |
+| ProjectGitPane.kt | `ChangeGroup`, `ChangedFileRow`, `ChangedPathText`, `GIT_LIST_TOGGLE_TAG` | bridge (prep) |
+| ProjectGitPane.kt | `LocalDirectoryPicker` | kit: the platform's folder picker, which the host provides |
+| ProjectGitPane.kt | `SearchableSelect`, `OutlinedButton`, `clickable`, `Palette`, `Mono` | kit |
+| ProjectGitPane.kt | `BASE_BRANCH_DEFAULT_LABEL`, `baseBranchChoices`, `isCurrentBase`, `projectChangesView`, `projectHistoryView`, `projectPatchView`, `ChangesView`, `HistoryView`, `PatchView`, `headline`, `whenText`, `badge`, `display`, `label`, `summary`, `ProjectView`, `Notice`, `contractAtLeast`, `ChangeKind`, `ChangedFile`, `CommandResult`, `PROJECT_GIT_UNSUPPORTED`, `PROJECT_GIT_BRANCHES_UNSUPPORTED`, `PROJECT_GIT_CHECKOUT_UNSUPPORTED`, `PROJECT_BASE_UNSUPPORTED` | kit (model views, wire types, refusal reasons) |
+| ProjectPipelineSection.kt | `GitContext`, `LinkContext` | (a) |
+| ProjectPipelineSection.kt | `AhqAlertDialog`, `TextButton`, `OutlinedButton`, `Palette`, `Mono`, `PipelineSectionView`, `pipelineSectionView`, `shortCommit`, `silentMs`, `PipelineCheckView`, `PipelineEntryView`, `parseStageNames`, `PIPELINE_UNSUPPORTED`, `CommandResult` | kit |
+
+## Run (Infantry_Run)
+
+Moved into plugins/core/Infantry_Run: RunPane.kt, shell/blocks/ShellRun.kt. The form-rules test moves with
+`RunCommandForm` (agenthqAppUi commonTest RunCommandFormTest; the rest of RunModelTest tests the core model and
+stays). Pixel proof: `-PtabShotsExtra=run`, 4 of 4 shots at 0 px.
+
+| File | Symbol | Decision |
+|---|---|---|
+| ShellRun.kt | `LocalShell.current.tabs.tabTree` | (b): `ShellContext.layout` (prep) |
+| ShellRun.kt | `LocalShellContext`, `ShellContext.link / run` | (a) |
+| ShellRun.kt | `Block`, `BlockScope`, `Place`, `RenderPlaced` | kit |
+| RunPane.kt | `RunContext`, `LinkContext` (`RunPaneFrame`, `RunPaneHost`, every section) | (a) |
+| RunPane.kt | `RunPane(state, controller)`: `AppState`, `Controller`, `CoreLink`, `CoreRun`, `LocalRunConsole` | (a) through the public adapters: the outside-a-shell entry (RunPaneUiTest, RunCommandEditorUiTest) |
+| RunPills.kt | `RunPillChip`, `RunConsoleHost`, `LocalRunConsole`, `runPillTag` | stays: the desktop's console window (agentHqUi RunConsole.kt, which compiles against the shell only) draws `RunPillChip`, and App.kt provides `LocalRunConsole` to `CoreShellContext` |
+| RunPane.kt | `RunsState`, `RunState`, `CommandSpecView`, `runPills`, `CommandResult` | kit (model) |
+| RunPane.kt | `Checkbox`, `DropdownMenuItem`, `OutlinedButton`, `TextButton`, `Palette`, `Mono` | kit |
+
+## Memory (Infantry_Notes)
+
+Moved into plugins/core/Infantry_Notes: MemoryPane.kt, shell/blocks/ShellNotes.kt. Migrated: `NotesPaneFrame` and
+`NotesPaneHost` took `(state, controller)` and now take `LinkContext`, `SessionContext` and `NotesContext`. The host's
+public `state` and `controller` are gone, and `link`, `session` and `context` replace them. `NotesPaneBlock` reads
+`LocalShellContext` instead of `LocalShell`. Pixel proof: `-PtabShotsExtra=memory`, 6 of 6 shots at 0 px.
+
+| File | Symbol | Decision |
+|---|---|---|
+| ShellNotes.kt | `LocalShell.current.state / controller` (the frame's inputs) | (a) `link`, `session` + (b) `ShellContext.notes` (prep) |
+| ShellNotes.kt | `LocalShell.current.tabs.tabTree` | (b): `ShellContext.layout` (prep) |
+| ShellNotes.kt | `Block`, `BlockScope`, `Place`, `RenderPlaced`, `RenderPlain` | kit (`RenderPlain` made public in prep) |
+| MemoryPane.kt | `state.connection.isLive`, `state.activeProject` | (a): `LinkContext.live`, `SessionContext.activeProject` |
+| MemoryPane.kt | `state.selected` (the role / session scope's owner) | (b): `SessionContext.selectedAgent` (prep) |
+| MemoryPane.kt | `state.memoryNotes`, `state.memorySearch` | (b): `NotesContext.notes(key)`, `NotesContext.search` (prep) |
+| MemoryPane.kt | `controller.loadMemory / getMemory / searchMemory / saveMemory / deleteMemory` | (b): `NotesContext.load / get / search / save / delete` (prep) |
+| MemoryPane.kt | `MemoryPane(state, controller)`: `AppState`, `Controller`, `CoreLink`, `CoreSession`, `CoreNotes` | (a) through the public adapters: the outside-a-shell entry (MemoryPaneUiTest, NotesScopesUiTest) |
+| MemoryPane.kt | `EditorModal` | stays: the shared editor modal, which the role and profile panes also open |
+| MemoryPane.kt | `AgentView`, `MemoryHitView`, `MemoryNoteView`, `NoteScope`, `ProjectView`, `CommandResult` | kit (model) |
+| MemoryPane.kt | `AhqIcons`, `IconAction`, `IconActionStyle`, `Button`, `OutlinedButton`, `clickable`, `Palette` | kit |
+
+## Changes (Infantry_Changes)
+
+Moved into plugins/core/Infantry_Changes: ProjectChangesPanel.kt, shell/blocks/ShellChanges.kt. The not-a-git-repository
+test moves with `isNotGitRepository` (agenthqAppUi commonTest NotGitRepositoryTest). Migrated: `ChangesPaneFrame` and
+`ChangesPaneHost` took `(state, controller)` and now take `LinkContext`, `SessionContext`, `GitContext` and
+`ChangesContext`. The host's `state` and `controller` become `link`, `session`, `git` and `context`, and the private
+`pollOnce` is gone (it lives in `CoreChanges`, prep). Pixel proof: `-PtabShotsExtra=changespane`, 6 of 6 shots at 0 px.
+
+| File | Symbol | Decision |
+|---|---|---|
+| ShellChanges.kt | `LocalShell.current.state / controller` | (a) `link`, `session`, `git` + (b) `ShellContext.changes` (prep) |
+| ShellChanges.kt | `LocalShell.current.tabs.tabTree` | (b): `ShellContext.layout` (prep) |
+| ShellChanges.kt | `Block`, `BlockScope`, `Place`, `RenderPlaced`, `RenderPlain` | kit |
+| ProjectChangesPanel.kt | `state.connection` (live, contract) | (a): `LinkContext.live`, `contractAtLeast` |
+| ProjectChangesPanel.kt | `state.activeProject` | (a): `SessionContext.activeProject` |
+| ProjectChangesPanel.kt | `state.selectedId` (the worktree list names the selected session) | (b): `SessionContext.selectedAgentId` (prep) |
+| ProjectChangesPanel.kt | `state.projectGit`, `projectGitFailure`, `projectGitBranches`, `controller.loadProjectBranches` | (a): `GitContext.status / failure / branches / loadBranches` |
+| ProjectChangesPanel.kt | `state.projectWorktrees`, `changesWorktree`, `changesWorktreeStatus`, `changesBranch`, `changesShownBranch`, `projectGitBranchChanges` | (b): `ChangesContext.worktrees / worktree / worktreeStatus / branch / shownBranch / branchChanges` (prep) |
+| ProjectChangesPanel.kt | `controller.loadProjectTree / loadProjectWorktrees / loadWorktreeStatus / loadBranchChanges / selectChangesWorktree / selectChangesBranch` | (b): `ChangesContext.loadTree / loadWorktrees / loadWorktreeStatus / loadBranchChanges / selectWorktree / selectBranch` (prep) |
+| ProjectChangesPanel.kt | `pollOnce` on `controller.client.frames`, `Envelope` | (b): `ChangesContext.pollWorktrees / pollWorktreeStatus` (prep); the frame wait stays in core |
+| ProjectChangesPanel.kt | `ProjectChangesPanel(state, controller, ...)`: `AppState`, `Controller`, `CoreLink`, `CoreSession`, `CoreGit`, `CoreChanges` | (a) through the public adapters: the outside-a-shell entry (ProjectChangesPanelUiTest, IconButtonsUiTest) |
+| ProjectChangesPanel.kt | `ChangeGroup`, `ChangedFileRow`, `ChangedPathText` | bridge (prep). With Git moved too, their only core user is core's own `ChangesSection`, so they can go to (c) when it does |
+| ProjectChangesPanel.kt | `DiffTarget`, the change views (`worktreeChangesView`, `branchChangesView`, `projectChangesView`, `worktreeHeader`, `worktreeHistoryView`, `aheadHint`, `markers`, `optionKey`, ...), the wire types, `PROJECT_GIT_UNSUPPORTED`, `PROJECT_GIT_BRANCHES_UNSUPPORTED` | kit |
+
+## Roles (Infantry_Roles)
+
+Moved into plugins/core/Infantry_Roles: RolesAttention.kt (`RolesPane`; Attention left in S4a), RoleManager.kt,
+TraitsEditor.kt, shell/blocks/ShellRoles.kt. Pixel proof: `-PtabShotsExtra=roles`, 4 of 4 shots at 0 px, and the default
+set 32 of 32.
+
+PM mail (2026-10-27): move without stopping, and list any big `ShellContext` addition in the report. Roles is not
+migrated in S4b. `RolesPane`, `RoleManagerForm`, `RoleFormFrame` and `RoleTraitsEditor` still take `(state, controller)`
+through the tab's `appController` and `LocalShell`. Every one of those uses is listed below as **hole (S4c)**, with the
+member it needs. They wait for S4c because `ShellContext` can only ever grow. The same executor and profile helpers
+(`ProfileExecutorField`, `ExecutorPicker`) serve the New agent dialog, which moves in S4c, so `RolesContext` should be
+shaped once, there, for both.
+
+| File | Symbol | Decision |
+|---|---|---|
+| TraitsEditor.kt | the whole file (`RoleTraitsEditor`, `TraitLibrary`, `TraitForm`, the trait tags) | (c): only the role editor uses it |
+| RolesAttention.kt | `bindingSummary` | stays: the New agent box (ChatSurface) shows it too; it moved to core Profiles.kt |
+| RoleManager.kt | `ROLE_MANAGER_OPEN_TAG` | stays: the tag of the Manage roles button, which is ConfigDialog's (core); it moved to ConfigDialog.kt |
+| ShellRoles.kt | `LocalShellContext`, `RolesContext.managerOpen / closeManager / roles` | (a) |
+| ShellRoles.kt | `LocalShell.current.state / controller` (into `RoleManagerForm`) | hole (S4c): `RolesContext` needs the actions below |
+| RolesAttention.kt, RoleManager.kt | `state.roles`, `roleBindings`, `roleTraits` | (a) already on `RolesContext` (`roles`, `bindings`, `traits`), not wired yet: the readers take `AppState` until the actions move too |
+| RolesAttention.kt | `state.orderedAgents`, `agentError`, `role(id)`, `profilesFor(role)`, `providers`, `modelCatalog`, `activeProjectId`, `connection` | hole (S4c): `RolesContext.agents`, `agentError`, `profilesFor`; a shared `ExecutorContext` (`providers`, `modelCatalog`) for the role editor, the profile form and the New agent dialog; `link` and `session` exist |
+| RolesAttention.kt | `controller.saveRole`, `saveRoleBinding`, `saveProfile`, `deleteProfile`, `spawnAs` | hole (S4c): `RolesContext.saveRole / saveBinding / saveProfile / deleteProfile / spawnAs` |
+| RoleManager.kt | `controller.deleteRole`, `setRoleTraits`, `loadMemory` (the role's notes count), `state.memoryNotes`, `state.traits` | hole (S4c): `RolesContext.deleteRole / setTraits`; the notes go through `NotesContext` (prep) |
+| TraitsEditor.kt | `controller.saveTrait`, `deleteTrait`, `setRoleTraits`, `state.traits`, `traitsLoading`, `traitError`, `rolesBinding`, `traitIdsFor` | hole (S4c): a `TraitsContext` (the library, its load state and error, save / delete / bind) |
+| RolesAttention.kt, RoleManager.kt | `ProfileExecutorField` | bridge (S4a), still used by the New agent dialog (core until S4c) |
+| RolesAttention.kt | `EditorModal`, `ExecutorPicker`, `ExecutorPickerTags`, `AgentAvatar`, `RoleIcon`, `RoleIconSite` | stays: shared with panes still in core (Epics, Prompts, Skills, the New agent dialog, the chat) |
+| all four | `Role`, `RoleBinding`, `AgentProfile`, `ExecutorPickerModel`, `PickedModel`, `RoleIcons`, `TraitLimits`, `TraitDraft` and the trait model functions, `NoteScope`, `watchFlagOf`, `stateLabel`, `stateColor`, `AhqIcons`, `IconAction`, `AhqAlertDialog`, the controls, `Palette`, `Mono` | kit |
+
+Estimated S4c addition for roles: about 12 members on `RolesContext`, plus `TraitsContext` (about 7) and
+`ExecutorContext` (2), which the New agent dialog needs as well.
+
+## Board (Infantry_AppUi)
+
+Moved into plugins/core/Infantry_AppUi: Board.kt, BoardModal.kt, BoardDropSession.kt, TicketExecutorField.kt,
+shell/blocks/ShellBoard.kt. BoardDropTest moves to agenthqAppUi commonTest with `BoardDropSession`. Pixel proof:
+`-PtabShotsExtra=board`, 4 of 4 shots at 0 px, and the default set 32 of 32.
+
+Like Roles, the board is moved but not migrated in S4b. `BoardPaneFrame` and `BoardModal` still take
+`(state, controller)` through `LocalShell`. Each of those uses is listed below as **hole (S4c)**. The open/close and
+open-agent path already goes through `ShellContext.board` (a).
+
+| File | Symbol | Decision |
+|---|---|---|
+| Board.kt, BoardModal.kt, BoardDropSession.kt, TicketExecutorField.kt | `BoardPane`, its frames and sections, `assigneeRole`, `boardEpics`, `EpicFilter`, `ticketCountLabel`, `BoardDrag`, `BoardModal*`, `BOARD_MODAL_TAG`, `BOARD_MODAL_CLOSE_TAG`, `TicketMoves`, `Controller.ticketMoves`, `BoardDropSession`, `TicketAssigneePicker`, `TicketExecutorField`, `TICKET_EXECUTOR_LINE_TAG_PREFIX` | (c): only the board uses them |
+| Board.kt | `assigneeLabel` | (c): its users (the board, Infantry_Triggers) are both in the app UI now; its S4a bridge is closed |
+| Board.kt | `WatchFlagChip` | stays, still a bridge: the sidebar (App.kt) draws it; it moved to core BoardSidebar.kt |
+| Board.kt | `ReportFlagChip` | stays, new bridge: the sidebar and the chat (ChatSurface) draw it; made public in core BoardSidebar.kt |
+| BoardModal.kt | `SidebarBoardButton`, `SIDEBAR_BOARD_BUTTON_TAG` | stays: the sidebar's own entry to the board (App.kt); moved to core BoardSidebar.kt |
+| Board.kt | `TicketImagesSection`, `ImageViewerHost`, `LocalImageViewer`, `rememberImage` (TicketImages.kt) | stays: the shell hosts the image viewer (CoreShell) and the chat shows attachments; the two internals are now public |
+| ShellBoard.kt | `LocalShellContext`, `BoardContext.open / close / openAgent`, `session.activeProject` | (a) |
+| ShellBoard.kt | `LocalShell.current.state / controller` (into `BoardPaneFrame`) | hole (S4c): `BoardContext` needs the members below |
+| Board.kt, BoardModal.kt | `state.tickets`, `visibleTickets`, `ticket(id)`, `column()`, `epics`, `ticketError`, `reportFlagFor`, `agents`, `role(id)`, `visibleProfiles`, `projects`, `activeProjectId`, `connection`, `panels.compactWindow`, `controller.state` (the flow the drop session collects) | hole (S4c): `BoardContext.tickets / epics / ticketError / reportFlag`, the agents and profiles a card can be assigned to, `LayoutContext.compact`; `link` and `session` exist |
+| Board.kt, BoardDropSession.kt, TicketExecutorField.kt | `controller.createTicket`, `editTicket`, `deleteTicket`, `moveTicket`, `startNextTicket`, `loadEpics`, `uploadTicketImage`, `ticketMoves` | hole (S4c): `BoardContext.create / edit / delete / move / startNext / loadEpics / uploadImage` |
+| all five | `EditorModal`, `ExecutorPicker`, `ExecutorPickerTags`, `ProfileExecutorField`, `AgentAvatar`, `RoleIcon` | stays: shared with panes still in core (see Roles) |
+| all five | `Ticket`, `TicketColumns`, `Epic`, `WatchFlag`, `ReportFlag`, `watchFlagOf`, `AhqIcons`, `IconAction`, the controls, `Palette`, `Mono`, `Block`, `BlockScope`, `Place`, `RenderPlaced` | kit |
+
+`humanDuration`, `nextFireLabel` and `lastFireLabel` (S4a bridges) are not used by the board after all. Their only
+users are Infantry_Triggers and core tests, so they go (b) or (c) with Triggers in S4c, not here.
+
+Estimated S4c addition for the board: about 14 members on `BoardContext` (the state above and 7 actions), plus
+`LayoutContext.compact`.

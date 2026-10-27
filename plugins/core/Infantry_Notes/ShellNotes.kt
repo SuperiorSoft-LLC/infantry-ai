@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
-import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.NotesBannerSection
 import com.superiorsoftllc.agenthq.ui.NotesEmptySection
 import com.superiorsoftllc.agenthq.ui.NotesErrorSection
@@ -16,6 +15,7 @@ import com.superiorsoftllc.agenthq.ui.NotesModalSection
 import com.superiorsoftllc.agenthq.ui.NotesNoOwnerSection
 import com.superiorsoftllc.agenthq.ui.NotesNoteRow
 import com.superiorsoftllc.agenthq.ui.NotesPaneFrame
+import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 import com.superiorsoftllc.agenthq.ui.NotesPaneHost
 import com.superiorsoftllc.agenthq.ui.NotesScopesSection
 import com.superiorsoftllc.agenthq.ui.NotesSearchSection
@@ -48,10 +48,10 @@ private val LocalNotesNote = compositionLocalOf<MemoryNoteView?> { null }
 class NotesPaneBlock(children: List<Block>, place: Place = Place()) : Block("notesPane", NOTES, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val ctx = LocalShellContext.current ?: return
         val (overlay, column) = children.partition { it.id == MODAL }
         NotesPaneFrame(
-            s.state, s.controller, scope.modifier,
+            ctx.link, ctx.session, ctx.notes, scope.modifier,
             content = { notes -> CompositionLocalProvider(LocalNotesPaneHost provides notes) { RenderPlaced(column) } },
             overlay = { notes -> CompositionLocalProvider(LocalNotesPaneHost provides notes) { RenderPlaced(overlay) } },
         )
@@ -183,5 +183,5 @@ val ShellNotes = NotesPaneBlock(
 /** The Notes tab's content: [ShellNotes] as the window resolved it (a module's override in), filling the tab. */
 @Composable
 fun NotesTab() {
-    (LocalShell.current.tabs.tabTree(NOTES) ?: ShellNotes).Render(BlockScope(Modifier, null))
+    (LocalShellContext.current?.layout?.tabTree(NOTES) ?: ShellNotes).Render(BlockScope(Modifier, null))
 }

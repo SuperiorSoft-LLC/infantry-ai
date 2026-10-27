@@ -39,6 +39,12 @@ import com.superiorsoftllc.agenthq.ui.model.NoteScope
 import com.superiorsoftllc.agenthq.ui.model.ProjectView
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
 import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.agenthq.ui.shell.CoreLink
+import com.superiorsoftllc.agenthq.ui.shell.CoreNotes
+import com.superiorsoftllc.agenthq.ui.shell.CoreSession
+import com.superiorsoftllc.agenthq.ui.shell.LinkContext
+import com.superiorsoftllc.agenthq.ui.shell.NotesContext
+import com.superiorsoftllc.agenthq.ui.shell.SessionContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -84,7 +90,7 @@ internal data class NoteDraft(
 @Composable
 fun MemoryPane(state: AppState, controller: Controller) {
     NotesPaneFrame(
-        state, controller,
+        CoreLink(state), CoreSession(state), CoreNotes(state, controller),
         content = { notes ->
             NotesHeaderSection(notes)
             NotesEmptySection(notes)
@@ -105,17 +111,19 @@ fun MemoryPane(state: AppState, controller: Controller) {
  * query, the scope tab, the modal's draft and the last refusal; a section changes them only through these callbacks.
  */
 class NotesPaneHost internal constructor(
-    val state: AppState,
-    val controller: Controller,
+    val link: LinkContext,
+    val session: SessionContext,
+    /** S4b: the notes and their requests (the shell's [com.superiorsoftllc.agenthq.ui.shell.ShellContext.notes]). */
+    val context: NotesContext,
     private val scope: CoroutineScope,
     private val queryState: MutableState<String>,
     private val draftState: MutableState<NoteDraft?>,
     private val localError: MutableState<String?>,
     private val scopeState: MutableState<String>,
 ) {
-    val live: Boolean get() = state.connection.isLive
-    val active: ProjectView? get() = state.activeProject
-    val picked: AgentView? get() = state.selected
+    val live: Boolean get() = link.live
+    val active: ProjectView? get() = session.activeProject
+    val picked: AgentView? get() = session.selectedAgent
 
     /** NOTES-1: the scope tab. Role = the selected session's role, Session = the selected session. */
     val scopeName: String get() = scopeState.value
@@ -164,7 +172,7 @@ class NotesPaneHost internal constructor(
         val a = active ?: return
         val at = at
         val q = query
-        run { controller.searchMemory(a.id, q, at) }
+        run { context.search(a.id, q, at) }
     }
 
     fun openNew() = openDraft(NoteDraft())
@@ -173,7 +181,7 @@ class NotesPaneHost internal constructor(
         val a = active ?: return
         val at = at
         openDraft(NoteDraft(editing = note.name, name = note.name, description = note.description, body = note.body))
-        run { controller.getMemory(a.id, note.name, at) }
+        run { context.get(a.id, note.name, at) }
     }
 
     internal fun change(d: NoteDraft) { draftState.value = d }
@@ -182,14 +190,14 @@ class NotesPaneHost internal constructor(
         val a = active ?: return
         val d = draft ?: return
         val at = at
-        run(onSent = { draftState.value = null }) { controller.saveMemory(a.id, d.name, d.description, d.body, at) }
+        run(onSent = { draftState.value = null }) { context.save(a.id, d.name, d.description, d.body, at) }
     }
 
     fun deleteEditing() {
         val a = active ?: return
         val name = draft?.editing ?: return
         val at = at
-        run(onSent = { draftState.value = null }) { controller.deleteMemory(a.id, name, at) }
+        run(onSent = { draftState.value = null }) { context.delete(a.id, name, at) }
     }
 
     fun cancelDraft() { draftState.value = null; localError.value = null }
@@ -203,31 +211,32 @@ class NotesPaneHost internal constructor(
  */
 @Composable
 fun NotesPaneFrame(
-    state: AppState,
-    controller: Controller,
+    link: LinkContext,
+    session: SessionContext,
+    ctx: NotesContext,
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.(NotesPaneHost) -> Unit,
     overlay: @Composable BoxScope.(NotesPaneHost) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val active = state.activeProject
+    val active = session.activeProject
     val query = remember(active?.id) { mutableStateOf("") }
     val draft = remember(active?.id) { mutableStateOf<NoteDraft?>(null) }
     val localError = remember { mutableStateOf<String?>(null) }
     val scopeName = remember { mutableStateOf(NoteScope.PROJECT) }
-    val notes = NotesPaneHost(state, controller, scope, query, draft, localError, scopeName)
+    val notes = NotesPaneHost(link, session, ctx, scope, query, draft, localError, scopeName)
     val live = notes.live
     val at = notes.at
     val ownerMissing = notes.ownerMissing
 
     LaunchedEffect(active?.id, live, at) {
-        if (live && active != null && !ownerMissing) controller.loadMemory(active.id, at)
+        if (live && active != null && !ownerMissing) ctx.load(active.id, at)
     }
 
     val open = draft.value
     if (active != null && open != null) {
         // The `memory_get` answer upserts the whole note; fill the body in unless the user already typed one.
-        val stored = open.editing?.let { name -> state.memoryNotes[notes.key]?.firstOrNull { it.name == name } }
+        val stored = open.editing?.let { name -> notes.key?.let(ctx::notes)?.firstOrNull { it.name == name } }
         LaunchedEffect(stored?.body) {
             val d = draft.value ?: return@LaunchedEffect
             if (stored != null && !d.bodyTouched && stored.body.isNotEmpty()) {
@@ -333,7 +342,7 @@ fun NotesSearchSection(notes: NotesPaneHost, modifier: Modifier = Modifier) {
 @Composable
 fun NotesHitsSection(notes: NotesPaneHost, modifier: Modifier = Modifier, hit: @Composable (MemoryHitView) -> Unit) {
     if (!notes.showsNotes) return
-    val search = notes.state.memorySearch?.takeIf { it.projectId == notes.key } ?: return
+    val search = notes.context.search?.takeIf { it.projectId == notes.key } ?: return
     if (search.hits.isEmpty()) {
         Text("No hits for “${search.query}”.", color = Palette.Muted, fontSize = 11.sp, modifier = modifier.padding(top = 6.dp))
     } else {
@@ -370,7 +379,7 @@ fun NotesErrorSection(notes: NotesPaneHost, modifier: Modifier = Modifier) {
 @Composable
 fun NotesListSection(notes: NotesPaneHost, modifier: Modifier = Modifier, note: @Composable (MemoryNoteView) -> Unit) {
     if (!notes.showsNotes) return
-    val list = notes.state.memoryNotes[notes.key].orEmpty()
+    val list = notes.key?.let(notes.context::notes).orEmpty()
     NotesPlaced(modifier) {
         HorizontalDivider(color = Palette.Border, modifier = Modifier.padding(vertical = 8.dp))
         if (list.isEmpty()) Text("No notes yet.", color = Palette.Muted, fontSize = 12.sp)

@@ -217,11 +217,6 @@ private val ROLE_BINDING_EXECUTOR_TAGS = ExecutorPickerTags(
 /** The reasoning-effort levels a binding may pin (contract 1.40.0); null = the harness default. */
 val ROLE_EFFORT_LEVELS = listOf("low", "medium", "high", "xhigh", "max")
 
-/** One line saying what a binding pins, for the role detail and the New agent box. */
-fun bindingSummary(b: RoleBinding?): String =
-    if (b == null || (b.provider == null && b.model == null && b.effort == null)) "daemon default"
-    else listOfNotNull(b.provider, b.model, b.effort?.let { "effort $it" }).joinToString(" / ")
-
 /**
  * ROLE-1c: what the ROLE runs on. Provider chips come from the live `providers` frame (code plugins and JSON
  * descriptors alike), models from the live `models` catalogue; Save writes the role's binding, never a profile.

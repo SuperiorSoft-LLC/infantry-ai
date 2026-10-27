@@ -85,7 +85,7 @@ internal val LocalImageViewer = staticCompositionLocalOf<(ImageBitmap, String) -
  * on it toggles actual size (scrollable when larger than the window). Esc, Close, or a click outside the image closes it.
  */
 @Composable
-internal fun ImageViewerHost(content: @Composable () -> Unit) {
+fun ImageViewerHost(content: @Composable () -> Unit) {
     var viewing by remember { mutableStateOf<Pair<ImageBitmap, String>?>(null) }
     Box(Modifier.fillMaxSize()) {
         CompositionLocalProvider(LocalImageViewer provides { bitmap, name -> viewing = bitmap to name }) { content() }
@@ -146,7 +146,7 @@ private fun ImageViewer(bitmap: ImageBitmap, name: String, onClose: () -> Unit) 
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-internal fun TicketImagesSection(
+fun TicketImagesSection(
     images: List<String>,
     projectDirectory: String?,
     uploaded: Map<String, ByteArray>,

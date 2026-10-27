@@ -44,34 +44,8 @@ import com.superiorsoftllc.agenthq.ui.model.ProjectView
 import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
 
-const val SIDEBAR_BOARD_BUTTON_TAG = "sidebar-board-button"
 const val BOARD_MODAL_TAG = "board-modal"
 const val BOARD_MODAL_CLOSE_TAG = "board-modal-close"
-
-/**
- * M2-8: the compact sidebar entry to the Board (it replaced the centre "Board" tab). Shows how many tickets are
- * in progress, like the old tab label did. Ctrl+8 does the same.
- */
-@Composable
-fun SidebarBoardButton(state: AppState, onOpen: () -> Unit, modifier: Modifier = Modifier) {
-    val inProgress = state.column(TicketColumns.IN_PROGRESS).size
-    Row(
-        modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(6.dp)).background(Palette.Raised)
-            .border(1.dp, Palette.Border, RoundedCornerShape(6.dp))
-            .clickable(onClickLabel = "Open the board", role = Role.Button, onClick = onOpen)
-            .testTag(SIDEBAR_BOARD_BUTTON_TAG)
-            .padding(horizontal = 10.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("▦", color = Palette.Accent, fontSize = 13.sp)
-        Spacer(Modifier.width(8.dp))
-        Text("Board", color = Palette.Text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        if (inProgress > 0) Chip("$inProgress", Palette.Accent)
-        Spacer(Modifier.width(6.dp))
-        Text("^8", color = Palette.Muted, fontSize = 10.sp)
-    }
-}
 
 /**
  * M2-8: the existing [BoardPane], unchanged, inside a near-full-screen modal: a header

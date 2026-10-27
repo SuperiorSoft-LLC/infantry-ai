@@ -22,7 +22,7 @@ import com.superiorsoftllc.agenthq.ui.ChangesPaneHost
 import com.superiorsoftllc.agenthq.ui.ChangesTitleSection
 import com.superiorsoftllc.agenthq.ui.ChangesUnsupportedSection
 import com.superiorsoftllc.agenthq.ui.ChangesWorktreeSection
-import com.superiorsoftllc.agenthq.ui.LocalShell
+import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.Place
@@ -60,9 +60,9 @@ private val LocalChangesCommit = compositionLocalOf<GitCommit?> { null }
 class ChangesPaneBlock(children: List<Block>, place: Place = Place()) : Block("changesPane", CHANGES, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val ctx = LocalShellContext.current ?: return
         val diff = LocalChangesTabDiff.current
-        ChangesPaneFrame(s.state, s.controller, openDiff = diff?.openDiff, onOpenDiff = diff?.onOpenDiff, modifier = scope.modifier) { changes ->
+        ChangesPaneFrame(ctx.link, ctx.session, ctx.git, ctx.changes, openDiff = diff?.openDiff, onOpenDiff = diff?.onOpenDiff, modifier = scope.modifier) { changes ->
             CompositionLocalProvider(LocalChangesPaneHost provides changes) { RenderPlaced(children) }
         }
     }
@@ -230,6 +230,6 @@ val ShellChanges = ChangesPaneBlock(
 @Composable
 fun ChangesTab(openDiff: DiffTarget?, onOpenDiff: ((DiffTarget) -> Unit)?) {
     CompositionLocalProvider(LocalChangesTabDiff provides ChangesTabDiff(openDiff, onOpenDiff)) {
-        (LocalShell.current.tabs.tabTree(CHANGES) ?: ShellChanges).Render(BlockScope(Modifier, null))
+        (LocalShellContext.current?.layout?.tabTree(CHANGES) ?: ShellChanges).Render(BlockScope(Modifier, null))
     }
 }
