@@ -53,6 +53,8 @@ class CoreShellTreeTest {
             "      infantry.shell.toast",
             "      infantry.shell.board",
             "      infantry.shell.diff",
+            "        infantry.shell.diff.header",
+            "        infantry.shell.diff.body",
             "      infantry.shell.sound",
             "      infantry.shell.voice",
             "      infantry.shell.questions",

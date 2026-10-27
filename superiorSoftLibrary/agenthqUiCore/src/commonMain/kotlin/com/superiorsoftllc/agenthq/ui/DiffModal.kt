@@ -8,6 +8,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -90,8 +91,20 @@ fun DiffModal(
     onNext: (() -> Unit)?,
     status: String = "",
 ) {
-    val focus = remember { FocusRequester() }
     val body = diffBody(patch)
+    DiffModalFrame(onClose) {
+        DiffModalHeader(path, status, body, onClose, onPrev, onNext)
+        DiffModalBody(body, Modifier.weight(1f).fillMaxWidth())
+    }
+}
+
+/**
+ * BLOCKS-LAYOUT L11: the diff modal's frame: the scrim (a tap closes), the rounded panel tagged [DIFF_MODAL_TAG], Esc and
+ * focus. [content] goes straight into the panel's column, top to bottom.
+ */
+@Composable
+fun DiffModalFrame(onClose: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+    val focus = remember { FocusRequester() }
     ModalBackdrop(Modifier.pointerInput(onClose) { detectTapGestures { onClose() } }) {
         Box(Modifier.fillMaxSize().padding(24.dp)) {
             Column(
@@ -105,46 +118,64 @@ fun DiffModal(
                     }
                     .focusable()
                     .pointerInput(Unit) { detectTapGestures { } },
-            ) {
-                Row(Modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(path, color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, fontFamily = Mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (status.isNotBlank()) Text(status, color = Palette.Muted, fontSize = 11.sp)
-                    }
-                    if (body is DiffBody.Lines) {
-                        Row(Modifier.testTag(DIFF_MODAL_COUNTS_TAG).semantics(mergeDescendants = true) {}.padding(horizontal = 10.dp)) {
-                            Text("+${body.added}", color = Palette.Ok, fontFamily = Mono, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            Spacer(Modifier.width(6.dp))
-                            Text("−${body.removed}", color = Palette.Danger, fontFamily = Mono, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    HeaderButton("‹", "Previous file", DIFF_MODAL_PREV_TAG, onPrev)
-                    HeaderButton("›", "Next file", DIFF_MODAL_NEXT_TAG, onNext)
-                    HeaderButton("✕", "Close the diff", DIFF_MODAL_CLOSE_TAG, onClose)
-                }
-                HorizontalDivider(color = Palette.Border)
-                Box(Modifier.weight(1f).fillMaxWidth()) {
-                    when (body) {
-                        DiffBody.Loading -> Notice("Loading diff…")
-                        is DiffBody.Unknown -> Notice("Diff unknown: ${body.reason}")
-                        DiffBody.Binary -> Notice("Binary file, no text diff.")
-                        is DiffBody.Lines -> Column(Modifier.fillMaxSize()) {
-                            if (body.truncated) Notice("Diff truncated: the daemon cut it, the file has more changes than shown.")
-                            if (body.rows.isEmpty()) Notice("Empty diff on this side.")
-                            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-                                // Rows are as wide as the longest line but never narrower than the body, so the
-                                // add/remove bands reach the edge; only this box scrolls sideways.
-                                val viewport = maxWidth
-                                Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState())) {
-                                    Column(Modifier.widthIn(min = viewport).width(IntrinsicSize.Max).padding(vertical = 6.dp)) { body.rows.forEach { DiffLine(it) } }
-                                }
-                            }
-                        }
+                content = content,
+            )
+        }
+        LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    }
+}
+
+/** The title row (path, status, +/− counts, ‹ › ✕) and the divider under it; [modifier] goes on the row. */
+@Composable
+fun DiffModalHeader(
+    path: String,
+    status: String,
+    body: DiffBody,
+    onClose: () -> Unit,
+    onPrev: (() -> Unit)?,
+    onNext: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(path, color = Palette.Text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, fontFamily = Mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (status.isNotBlank()) Text(status, color = Palette.Muted, fontSize = 11.sp)
+        }
+        if (body is DiffBody.Lines) {
+            Row(Modifier.testTag(DIFF_MODAL_COUNTS_TAG).semantics(mergeDescendants = true) {}.padding(horizontal = 10.dp)) {
+                Text("+${body.added}", color = Palette.Ok, fontFamily = Mono, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(6.dp))
+                Text("−${body.removed}", color = Palette.Danger, fontFamily = Mono, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
+        HeaderButton("‹", "Previous file", DIFF_MODAL_PREV_TAG, onPrev)
+        HeaderButton("›", "Next file", DIFF_MODAL_NEXT_TAG, onNext)
+        HeaderButton("✕", "Close the diff", DIFF_MODAL_CLOSE_TAG, onClose)
+    }
+    HorizontalDivider(color = Palette.Border)
+}
+
+/** The diff view (gutters, bands; long lines scroll sideways inside it) or its notice; its Box wears [modifier]. */
+@Composable
+fun DiffModalBody(body: DiffBody, modifier: Modifier) {
+    Box(modifier) {
+        when (body) {
+            DiffBody.Loading -> Notice("Loading diff…")
+            is DiffBody.Unknown -> Notice("Diff unknown: ${body.reason}")
+            DiffBody.Binary -> Notice("Binary file, no text diff.")
+            is DiffBody.Lines -> Column(Modifier.fillMaxSize()) {
+                if (body.truncated) Notice("Diff truncated: the daemon cut it, the file has more changes than shown.")
+                if (body.rows.isEmpty()) Notice("Empty diff on this side.")
+                BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                    // Rows are as wide as the longest line but never narrower than the body, so the
+                    // add/remove bands reach the edge; only this box scrolls sideways.
+                    val viewport = maxWidth
+                    Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState())) {
+                        Column(Modifier.widthIn(min = viewport).width(IntrinsicSize.Max).padding(vertical = 6.dp)) { body.rows.forEach { DiffLine(it) } }
                     }
                 }
             }
         }
-        LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     }
 }
 
@@ -196,7 +227,27 @@ private fun Gutter(n: Int?) = Text(
  */
 @Composable
 fun ProjectDiffModal(state: AppState, controller: Controller, target: DiffTarget, onTarget: (DiffTarget?) -> Unit) {
-    val active = state.activeProject ?: return
+    val open = openDiff(state, controller, target, onTarget) ?: return
+    DiffModal(patch = open.patch, path = open.path, status = open.status, onClose = open.onClose, onPrev = open.onPrev, onNext = open.onNext)
+}
+
+/** BLOCKS-LAYOUT L11: what the diff modal shows for a target, and its close / prev / next. */
+class OpenDiff(
+    val patch: PatchView,
+    val path: String,
+    val status: String,
+    val onClose: () -> Unit,
+    val onPrev: (() -> Unit)?,
+    val onNext: (() -> Unit)?,
+)
+
+/**
+ * [ProjectDiffModal] without drawing: asks for [target]'s diff (its effects run here) and returns what the modal shows,
+ * or null with no active project.
+ */
+@Composable
+fun openDiff(state: AppState, controller: Controller, target: DiffTarget, onTarget: (DiffTarget?) -> Unit): OpenDiff? {
+    val active = state.activeProject ?: return null
     val branch = target.branch
     if (branch != null) {
         val view = branchChangesView(state.projectGitBranchChanges[active.id], branch)
@@ -206,7 +257,7 @@ fun ProjectDiffModal(state: AppState, controller: Controller, target: DiffTarget
         val file = files.firstOrNull { it.path == target.path }
         val base = (view as? BranchChangesView.Files)?.base?.ifBlank { null }
         val label = listOfNotNull(file?.status?.label(), base?.let { "$branch vs $it" } ?: branch).joinToString(" · ")
-        DiffModal(
+        return OpenDiff(
             patch = projectPatchView(state.projectGitPatch[active.id], target.path, false, branch),
             path = target.path,
             status = label,
@@ -214,7 +265,6 @@ fun ProjectDiffModal(state: AppState, controller: Controller, target: DiffTarget
             onPrev = order.step(target, -1)?.let { t -> { onTarget(t) } },
             onNext = order.step(target, 1)?.let { t -> { onTarget(t) } },
         )
-        return
     }
     // UX-CHANGES-1: a target in a worktree follows that worktree's own status; otherwise the project directory's.
     val worktree = target.worktree
@@ -228,7 +278,7 @@ fun ProjectDiffModal(state: AppState, controller: Controller, target: DiffTarget
     LaunchedEffect(active.id, target, status) { controller.loadProjectDiff(active.id, target.path, target.staged, worktree) }
     val file = listed.firstOrNull { it.first == target }?.second
     val label = listOfNotNull(file?.status?.label(), if (target.staged) "staged" else "not staged").joinToString(" · ")
-    DiffModal(
+    return OpenDiff(
         patch = projectPatchView(state.projectGitPatch[active.id], target.path, target.staged, worktree = worktree),
         path = target.path,
         status = label,
