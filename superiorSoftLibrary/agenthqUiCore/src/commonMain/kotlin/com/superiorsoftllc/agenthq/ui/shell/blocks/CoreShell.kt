@@ -35,7 +35,7 @@ object CoreShell {
                             ColumnBlock(
                                 "infantry.shell.frame", surface = true,
                                 children = listOf(
-                                    Legacy(ShellHeader),
+                                    ShellHeader,
                                     StackBlock(
                                         "infantry.shell.body", measure = true, place = Place(weight = 1f, size = Size.FillWidth),
                                         children = listOf(
