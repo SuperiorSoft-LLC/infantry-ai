@@ -1,0 +1,5 @@
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_01","name":"TaskCreate","input":{"subject":"Read README","description":"Read the README","activeForm":"Reading README"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"Task #1 created successfully: Read README","tool_use_id":"toolu_01"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_02","name":"TaskUpdate","input":{"taskId":"1","status":"in_progress"}}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","content":"Updated task #1 status","tool_use_id":"toolu_02"}]}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_03","name":"TaskUpdate","input":{"taskId":"1","status":"deleted"}}]}}

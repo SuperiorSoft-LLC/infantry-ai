@@ -1545,6 +1545,7 @@ class AgentHqDaemon(
 
 /** Holds a streamed (pi) reasoning block until it ends, so the wire and the replay carry it as ONE `reasoning` frame. */
 private val streamedReasoning = com.superiorsoftllc.agenthq.protocol.ReasoningCoalescer()
+private val claudeTasks = com.superiorsoftllc.agenthq.protocol.todo.ClaudeTaskTools()
 
 /**
  * Turn one lifecycle event into frames and push them to every connected client.
@@ -1596,7 +1597,11 @@ private fun broadcast(
             // Demo trick kept from Phase 1: the child's lines are visible in the daemon terminal.
             println("[${event.sessionId.take(8)}] ${event.line}")
             val raw = Envelope(Envelope.STDOUT, event.line, event.sessionId)
-            val neutral = streamedReasoning.process(event.sessionId, EventNormalizer.normalise(event.line, afterInterrupt = event.afterInterrupt)).flatMap { line ->
+            val taskTodos = claudeTasks.feed(event.sessionId, event.line)
+            val normalised = EventNormalizer.normalise(event.line, afterInterrupt = event.afterInterrupt).map { l ->
+                if (taskTodos != null && l is EventNormalizer.Line.Tool && l.todos == null && l.name.startsWith("Task")) l.copy(todos = taskTodos) else l
+            }
+            val neutral = streamedReasoning.process(event.sessionId, normalised).flatMap { line ->
                 // 1.95.0: the line moves the run activity first; a tool call carries the change on its own status
                 // frame, any other line on a bare `status` frame after its own.
                 val moved = runActivity.line(event.sessionId, line)
