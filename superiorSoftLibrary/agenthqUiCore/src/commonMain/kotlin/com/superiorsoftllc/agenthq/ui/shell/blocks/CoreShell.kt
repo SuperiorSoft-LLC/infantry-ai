@@ -43,11 +43,11 @@ object CoreShell {
                                                 "infantry.shell.panes", place = Place(size = Size.FillMax),
                                                 children = listOf(
                                                     ShellLeftPanel,
-                                                    Legacy(ShellCenter, Place(weight = 1f)),
+                                                    ShellCenter,
                                                     Legacy(ShellRightPanel),
                                                 ),
                                             ),
-                                            Legacy(ShellCompactDrawer),
+                                            ShellCompactDrawer,
                                         ),
                                     ),
                                     Legacy(ShellStatusBar),

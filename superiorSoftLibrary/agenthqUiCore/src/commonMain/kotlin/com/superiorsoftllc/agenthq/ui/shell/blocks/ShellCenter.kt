@@ -12,15 +12,15 @@ import com.superiorsoftllc.agenthq.ui.CenterTabBar
 import com.superiorsoftllc.agenthq.ui.ChatPanel
 import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.NewAgentDialog
-import com.superiorsoftllc.agenthq.ui.block.Block
-import com.superiorsoftllc.agenthq.ui.block.DockScope
-import com.superiorsoftllc.agenthq.ui.block.Edge
+import com.superiorsoftllc.agenthq.ui.block.layout.Block
+import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
+import com.superiorsoftllc.agenthq.ui.block.layout.Place
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
 
 /** BLOCKS-SHELL-1: the centre column (chat, centre tabs, the New agent dialog); it fills what the side panels leave. */
-object ShellCenter : Block("infantry.shell.center", "infantry.shell.center", Edge.FILL) {
+object ShellCenter : Block("infantry.shell.center", "infantry.shell.center", Place(weight = 1f)) {
     @Composable
-    override fun Render(dock: DockScope) {
+    override fun Render(scope: BlockScope) {
         val s = LocalShell.current
         val state = s.state
         val controller = s.controller
@@ -30,7 +30,7 @@ object ShellCenter : Block("infantry.shell.center", "infantry.shell.center", Edg
         // back the other class's, so compact navigation never rewrites the wide layout. The panels render from
         // forWindow(compact) straight away; the effect then stores the same swap, so no frame shows stale flags.
         LaunchedEffect(compact) { controller.setCompactWindow(compact) }
-        Column(dock.modifier.fillMaxHeight().testTag(CENTER_PANE_TAG)) {
+        Column(scope.modifier.fillMaxHeight().testTag(CENTER_PANE_TAG)) {
             // CHAT-PANEL-1: the main window is one host of the shared ChatPanel; the tab strip and the other tabs are its slots.
             ChatPanel(
                 s.selected?.id, controller, Modifier.weight(1f).fillMaxWidth(), chat = s.chat,
