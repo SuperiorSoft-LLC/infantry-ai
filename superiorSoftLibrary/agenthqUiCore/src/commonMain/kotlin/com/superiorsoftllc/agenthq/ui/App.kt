@@ -903,41 +903,6 @@ private fun nodeColor(s: String) = when (s) {
 }
 
 @Composable
-internal fun StatusBar(state: AppState, serverMismatch: String?, appBuild: String?, onConfig: (ConfigTab?) -> Unit, children: List<com.superiorsoftllc.agenthq.ui.block.Block> = emptyList(), leading: List<com.superiorsoftllc.agenthq.ui.block.Block> = emptyList()) {
-    val c = state.connection
-    var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
-    LaunchedEffect(Unit) { while (true) { delay(1000); now = Clock.System.now().toEpochMilliseconds() } }
-    HorizontalDivider(color = Palette.Border)
-    Row(Modifier.fillMaxWidth().height(24.dp).background(Palette.Panel).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        val color = if (c.isLive) Palette.Ok else if (c.state == ConnState.RECONNECTING || c.state == ConnState.CONNECTING) Palette.Accent else Palette.Danger
-        Text(
-            if (c.isLive) "● daemon ${c.daemonProvider ?: "?"}  contract ${c.contract ?: "?"}" else "● ${c.state.name.lowercase()}: ${c.detail}",
-            color = color, fontSize = 11.sp, maxLines = 1, modifier = Modifier.weight(1f, fill = false),
-        )
-        c.lastFrameAt?.let { Text("   last frame ${ago(it, now)} ago", color = Palette.Muted, fontSize = 11.sp) }
-        if (c.isLive && c.contract?.substringBefore('.') != "1") Text("   unexpected contract version", color = Palette.Danger, fontSize = 11.sp)
-        // SERVER-UPDATE-4: client and server differ by more than a patch; the full text is in Configuration > Server.
-        if (c.isLive && serverMismatch != null) Text("   version mismatch (see Configuration)", color = Palette.Accent, fontSize = 11.sp, modifier = Modifier.testTag(SERVER_MISMATCH_TAG))
-        // BLOCKS-SHELL-3: ROGUE-1's processes badge (now the processesBadge child block) sits right after the status text.
-        leading.Render()
-        Spacer(Modifier.weight(1f))
-        // The shortcut hint only where there is room for it (a phone has no keyboard shortcuts and no width to spare).
-        if (!state.panels.compactWindow) {
-            Text("^K search  Alt+Up/Down agents  ^J needs input  ^N new  ^R resume  ^5 roles  ^6 attention  ^L connection  ^, config", color = Palette.Muted, fontSize = 10.sp, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
-        }
-        // BUILD-STAMP-1 (now the buildStamp child block, StatusBuildStamp): which build this is; the cog opens About.
-        children.Render()
-        // The footer cog, bottom-right. It opens the configuration modal (flags).
-        Box(
-            Modifier.padding(start = 10.dp).size(24.dp)
-                .clickable(role = Role.Button) { onConfig(null) }
-                .semantics { contentDescription = "Configuration" },
-            contentAlignment = Alignment.Center,
-        ) { Icon(AhqIcons.Cog, contentDescription = null, tint = Palette.Muted, modifier = Modifier.size(14.dp)) }
-    }
-}
-
-@Composable
 internal fun ConnectDialog(
     url: String, token: String, state: AppState, onReconnect: () -> Unit,
     onChange: (String, String) -> Unit, onDismiss: () -> Unit, onConnect: () -> Unit,
