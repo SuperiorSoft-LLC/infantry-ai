@@ -57,18 +57,24 @@ class RowBlock(
     override fun withChildren(children: List<Block>) = RowBlock(id, verticalAlignment, children, place)
 }
 
-/** `column`: `Column`; children are placed by `place.weight/weightFill`. */
+/**
+ * `column`: `Column`; children are placed by `place.weight/weightFill`. With [surface] (core only) it also wears the
+ * host's [LocalHostSurface] modifier.
+ */
 class ColumnBlock(
     id: String,
     val horizontalAlignment: Alignment.Horizontal = Alignment.Start,
     children: List<Block> = emptyList(),
     place: Place = Place(),
+    internal val surface: Boolean = false,
 ) : Block("column", id, place, children) {
     @Composable
-    override fun Render(scope: BlockScope) =
-        Column(scope.modifier, horizontalAlignment = horizontalAlignment) { RenderPlaced(children) }
+    override fun Render(scope: BlockScope) {
+        val mod = if (surface) scope.modifier.then(LocalHostSurface.current) else scope.modifier
+        Column(mod, horizontalAlignment = horizontalAlignment) { RenderPlaced(children) }
+    }
 
-    override fun withChildren(children: List<Block>) = ColumnBlock(id, horizontalAlignment, children, place)
+    override fun withChildren(children: List<Block>) = ColumnBlock(id, horizontalAlignment, children, place, surface)
 }
 
 /** `spacer`: a leaf; with `place.weight` it is the flexible gap, [width]/[height] fix its size. */

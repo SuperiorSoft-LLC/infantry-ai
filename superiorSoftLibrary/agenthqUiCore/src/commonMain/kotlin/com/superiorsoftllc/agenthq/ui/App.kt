@@ -59,7 +59,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
-import com.superiorsoftllc.agenthq.ui.block.Render
 import com.superiorsoftllc.agenthq.ui.net.ImageUploadOutcome
 import com.superiorsoftllc.agenthq.ui.protocol.ImageUploadWire
 import com.superiorsoftllc.agenthq.ui.pair.applyPairing
@@ -195,8 +194,8 @@ import com.superiorsoftllc.agenthq.ui.plugin.PluginDaemon
 import com.superiorsoftllc.agenthq.plugin.api.Events
 import com.superiorsoftllc.agenthq.plugin.api.PluginEvent
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
-import com.superiorsoftllc.agenthq.ui.block.DockHost
-import com.superiorsoftllc.agenthq.ui.block.DockWindow
+import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
+import com.superiorsoftllc.agenthq.ui.block.layout.LocalHostSurface
 import com.superiorsoftllc.agenthq.ui.shell.blocks.CoreShell
 import androidx.compose.runtime.staticCompositionLocalOf
 import kotlinx.coroutines.delay
@@ -401,17 +400,13 @@ fun App(
           LocalChatMarkdown provides remember(flags.chatMarkdownEngine) { ChatMarkdownConfig(com.superiorsoftllc.agenthq.ui.model.ChatMarkdown.engines.resolve(flags.chatMarkdownEngine), chatBlockRenderers) },
           LocalShell provides shell,
       ) {
-      // BLOCKS-SHELL-1: the window is an ordered array of blocks; the dock only knows the edge each one takes.
-      ImageViewerHost {
-        DockHost(
-            CoreShell.blocks,
-            // BUG-PANEL-TOGGLE-1: the docked column is itself the focus target. A requester on a non-focusable node hands
-            // focus to its first focusable child (the title bar's left panel toggle), which opened that toggle's tooltip
-            // at launch. focusable() draws no indication, so focusing the root shows nothing.
-            Modifier.fillMaxSize().modalBlur(modalBlur).background(Palette.Bg).focusRequester(root).focusable().onPreviewKeyEvent(::key),
-        )
-      }
-        DockWindow(CoreShell.blocks)
+      // BLOCKS-LAYOUT L3: the window is one block tree; the docked column (`infantry.shell.frame`) wears the surface.
+      // BUG-PANEL-TOGGLE-1: the docked column is itself the focus target. A requester on a non-focusable node hands
+      // focus to its first focusable child (the title bar's left panel toggle), which opened that toggle's tooltip
+      // at launch. focusable() draws no indication, so focusing the root shows nothing.
+      androidx.compose.runtime.CompositionLocalProvider(
+          LocalHostSurface provides Modifier.fillMaxSize().modalBlur(modalBlur).background(Palette.Bg).focusRequester(root).focusable().onPreviewKeyEvent(::key),
+      ) { CoreShell.root.Render(BlockScope(Modifier, null)) }
       }
     }
 }
