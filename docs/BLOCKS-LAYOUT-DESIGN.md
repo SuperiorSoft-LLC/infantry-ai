@@ -507,6 +507,54 @@ infantry.shell.run   runPane    RunPaneFrame (the column, "RUN", the watch that 
   `run-output` (a finished run's pill and line). The step matched its base render 4/4 at 0 px (step 0 of L15), plus
   diffTabShots 32/32.
 
+### 6n. As built in L17 (b0eaa699): the Notes tab
+
+The Notes tab (Infantry_Notes, `MemoryPane` 152 lines; docs/BLOCKS-NEXT-SPLITS.md, top-8 item 6) is the third core tab
+tree, built as 6j and 6l: `CoreShell.tabs` is now `ShellGit, ShellRun, ShellNotes`, and the tab (`infantry.notes`) draws
+`tabTree("infantry.shell.notes")`.
+
+```
+infantry.shell.notes   notesPane   NotesPaneFrame (the box the modal dims, the scrolled padded column, the memory load, the
+                                   body fill-in of an opened note); children top to bottom, straight into the column:
+  header     notesHeader    "NOTES · project" and Add note
+  empty      notesEmpty     "Select a project to see its notes.", with no project
+  scopes     notesScopes    the Project / Role / Session tabs, with a project
+  banner     notesBanner    whose notes these are (a session's in red: temporary), with a project
+  noOwner    notesNoOwner   "Select a session to see ...", for a role / session scope with no session selected
+  search     notesSearch    the search box and Search; nothing with no project or no owner (as below)
+  hits       notesHits      "No hits for ..." or one hit row per hit, for the last search of this scope
+    hit      notesHit       the hit TEMPLATE: name, description, snippet
+  error      notesError     the last refusal (a refused search), while the modal is closed
+  list       notesList      the divider, then "No notes yet." or one note row per note
+    note     notesNote      the note TEMPLATE: name, description; a click opens it in the modal
+  modal      notesModal     the add / edit modal (NoteModal on EditorModal), while it is open: drawn in the box, over the column
+```
+
+- `MemoryPane(state, controller)` keeps its signature and draws `NotesPaneFrame` and the same sections
+  (`NotesHeaderSection` ... `NotesModalSection`, with `NotesHitRow` and `NotesNoteRow` as the rows), so the pane's own
+  tests (MemoryPaneUiTest, NotesScopesUiTest) host it as before.
+- The frame owns the state the sections share: the search query and the modal's draft (both reset with the project), the
+  scope tab and the last refusal. Sections read it through `NotesPaneHost` (a composition local) and change it only
+  through its callbacks (`pickScope`, `changeQuery`, `search`, `openNew`, `openNote`, `saveDraft`, `deleteEditing`,
+  `cancelDraft`). A section drawn outside the pane, and a row drawn outside its list, draws nothing.
+- The pane's early returns are now each section's own condition: no project draws the header and `empty` only; a scope
+  with no owner draws header, scopes, banner and `noOwner` only. The modal keeps its old condition (a project and an open
+  draft).
+- `modal` is the one child that does not go into the column: `NotesPaneBlock` draws the children whose id is
+  `infantry.shell.notes.modal` (an override of it keeps the id) in the pane's box after the column, every other child
+  (an injected one too) into the column. Its placement goes on the modal's panel.
+- Templates (as the L16 card): `hits` and `list` draw their children once per hit / note, with that item in a composition
+  local, so one override of `infantry.shell.notes.hit` or `.note` applies to every row. Rows go straight into the pane's
+  column; each row owns its gap (a hit the 6 dp above it, a note the 6 dp under it).
+- `hits` and `list` draw several items: a placement other than the default gets a Column to wear it (as L16's
+  `Placed`), so a module that wraps one draws `inner` in a Column (a Box would stack them). "No hits" wears the
+  placement itself.
+- None of these nodes is locked. HandCursorGuardTest baseline unchanged (the raw calls moved, none added or removed).
+- 0 px: the default Notes shot has no project. `-PtabShotsExtra=memory` creates a project with two notes and renders
+  `memory-list`, `memory-search` (the search goes through the controller, so no caret blinks in the shot), `memory-edit`,
+  `memory-add`, `memory-role` and `memory-session` (no session selected: the no-owner line). The step matched its base
+  render (step 0 of L17) 6/6 at 0 px, plus diffTabShots 32/32.
+
 
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 

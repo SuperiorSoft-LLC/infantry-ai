@@ -2,7 +2,7 @@ package com.superiorsoftllc.agenthq.plugins.core
 
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.MemoryPane
+import com.superiorsoftllc.agenthq.ui.shell.blocks.NotesTab
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
@@ -27,6 +27,6 @@ val InfantryNotes = AgentHqModule(
             ),
             testTag = "center-tab-MEMORY",
             routes = listOf("loadMemory", "getMemory", "searchMemory", "saveMemory", "deleteMemory"),
-        ) { MemoryPane(it.state, it.controller) },
+        ) { NotesTab() },
     ),
 )
