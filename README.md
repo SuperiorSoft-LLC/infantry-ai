@@ -19,6 +19,12 @@
 
 ---
 
+## An AI framework, not just a board
+
+**Your AI doesn't just run your workflow. It builds your workflow.**
+
+Infantry AI is an AI framework. It is no longer only a project-management app: it is the components to build something else. You can build a completely new application with it, or use the platform itself to build the application you want. The AI is no longer just the builder: the agents are the cells of the body, and they evolve the application into something else. The project-management board is one app built on this framework. See [docs/VISION.md](docs/VISION.md).
+
 Infantry AI (formerly AgentHQ) is a command post for coding agents. You file tickets on a board, give each one a role
 (full-stack engineer, QA, PM, ...) and a provider (Claude Code, opencode, pi, or any CLI you describe in a JSON file),
 and Infantry AI starts the agent on its own git branch and worktree, keeps its mail, progress and shared project
