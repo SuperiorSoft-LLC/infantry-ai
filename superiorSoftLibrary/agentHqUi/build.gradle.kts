@@ -205,7 +205,7 @@ tasks.register<Sync>("updateTabShotBaseline") {
     dependsOn(renderTabShotsForDiff)
     from(tabShotsRendered) { include("*.png") }
     into(tabShotsBaseline)
-    preserve { include("mask.txt", "README.md") }
+    preserve { include("mask.txt", "README.md", "empty-shell/**") } // S4: the opt-in empty-shell reference
 }
 
 // PLUGINS-1: the dev runs read the repository's plugins/ folder (core + community, modules.json) and first build every
