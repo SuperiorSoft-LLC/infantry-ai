@@ -343,7 +343,7 @@ private fun ConfigTabRow(tabs: List<ConfigTab>, selected: ConfigTab?, onPick: (C
             androidx.compose.material3.Tab(
                 selected = on,
                 onClick = { onPick(t) },
-                modifier = Modifier.testTag(CONFIG_TAB_TAG_PREFIX + t.name),
+                modifier = Modifier.handCursor().testTag(CONFIG_TAB_TAG_PREFIX + t.name),
                 text = {
                     Text(
                         t.label, fontSize = 12.sp,
