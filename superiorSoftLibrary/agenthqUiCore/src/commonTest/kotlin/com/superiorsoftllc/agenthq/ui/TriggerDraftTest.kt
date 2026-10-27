@@ -119,14 +119,4 @@ class TriggerDraftTest {
         assertTrue(TriggerDraft.from(null, "project-1").enabled)
         assertEquals("project-1", TriggerDraft.from(null, "project-1").projectId)
     }
-
-    @Test
-    fun cardTimes() {
-        val now = 10_000_000L
-        assertEquals("in 12m", nextFireLabel(now + 12 * 60_000L, now))
-        assertEquals("due now", nextFireLabel(now - 1_000, now))
-        assertNull(nextFireLabel(null, now))
-        assertEquals("5m ago", lastFireLabel(now - 5 * 60_000L, now))
-        assertEquals("never", lastFireLabel(null, now))
-    }
 }

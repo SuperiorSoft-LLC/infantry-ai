@@ -72,7 +72,6 @@ private fun FileGroup(title: String, files: List<ChangedFile>) {
  * (`2026-10-10-koo….md`). The cell carries the full path as its text, so tests and screen readers get the whole
  * path rather than the truncated drawing.
  */
-// S4 bridge (docs/SHELL-LEAKS.md)
 @Composable
 fun RowScope.ChangedPathText(path: String, color: Color) {
     val (stem, ext) = splitExtension(path)
@@ -92,7 +91,6 @@ private fun kindColor(kind: ChangeKind): Color = when (kind) {
 const val GIT_LIST_TOGGLE_TAG = "git-list-toggle-"
 
 /** A group of changed files under its title; [row] (BLOCKS-LAYOUT L18: the Changes tab's file template) draws each file in place of [ChangedFileRow]. */
-// S4 bridge (docs/SHELL-LEAKS.md)
 @Composable
 fun ChangeGroup(
     title: String, files: List<ChangedFile>, staged: Boolean, picked: Pair<String, Boolean>?, collapseOver: Int = Int.MAX_VALUE,
@@ -114,7 +112,6 @@ fun ChangeGroup(
 }
 
 /** One changed file: its status badge, its path ([open] highlights it) and its status; [modifier] goes on the row. */
-// S4 bridge (docs/SHELL-LEAKS.md)
 @Composable
 fun ChangedFileRow(f: ChangedFile, open: Boolean, onPick: (() -> Unit)?, modifier: Modifier = Modifier) {
     Row(

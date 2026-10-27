@@ -29,6 +29,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.superiorsoftllc.agenthq.ui.shell.CoreExecutor
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.NoteScope
 import com.superiorsoftllc.agenthq.ui.model.TraitLimits
@@ -263,7 +264,7 @@ fun RoleFormIdentity(draft: RoleFormDraft, modifier: Modifier = Modifier) {
 fun RoleFormExecutor(draft: RoleFormDraft, modifier: Modifier = Modifier) {
     val f = draft.fields
     Text("Default provider and model", modifier = modifier, color = Palette.Muted, fontSize = 10.sp)
-    ProfileExecutorField(draft.state, draft.key, f.provider, f.model) { p, m -> f.provider = p; f.model = m }
+    ProfileExecutorField(CoreExecutor(draft.state), draft.key, f.provider, f.model) { p, m -> f.provider = p; f.model = m }
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("Effort", color = Palette.Muted, fontSize = 10.sp)
         (listOf<String?>(null) + ROLE_EFFORT_LEVELS).forEach { level ->

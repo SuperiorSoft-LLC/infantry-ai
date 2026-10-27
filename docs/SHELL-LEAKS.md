@@ -400,3 +400,23 @@ the group and its sections (ConfigDialogOverridesUiTest, NodeRegistryTest) addre
 | ConfigDialog.kt | `ConfigThemeSection` ... `ConfigQuestionsSection` (the 15 settings composables), `ConfigSections`, `ConfigDialogHost` | stays: the dialog's default body (`ConfigSections`, which the dialog's own UI tests draw without a shell) calls them, and they read only `ConfigDialogHost`, the dialog's contract. They hold no window state. Moving them means the dialog's default body becomes the trust half only, which changes 11 dialog tests; that is a follow-up, not a leak |
 | ShellConfig.kt | `ConfigBlock`, the frame's inputs (`state.cliLocations`, `harnessInstall*`, `toolApproval`, `limitCatalog`, `keepAliveMinutes`, `userPortrait`, `controller.set*`) | stays: the frame is locked core (the trust half's inputs come through it too) |
 | sound/IncomingCommsSoundUi.kt, voice/VoiceUi.kt | `IncomingCommsSoundSection`, `VoiceSettingsSection` (and `IncomingCommsSoundEffect`, `VoiceAlerts`, see Overlays) | stays: the settings sections above draw them |
+
+## Leak test (S4c)
+
+Without agenthqAppUi the shell is the skeleton: the frame, connect/servers, and the Config dialog's trust half. The
+dialog offers only the tabs whose sections are among its children (`ConfigDialog(drawn = ...)`), so a bare shell shows
+Secrets / Devices / About (Plugins too where modules load at run time), never an empty Appearance tab. Shots:
+`-PtabShotsExtra=empty` renders shell-empty-1400 and shell-empty-config-1400 (tab-shots-baseline/empty-shell/).
+
+## Bridges closed (S4c)
+
+| Bridge | Was | Now |
+|---|---|---|
+| `WatchFlagChip` | core, public for the sidebar | (c) moved with the sidebar (SidebarBoardButton.kt) |
+| `ProfileExecutorField(state, ...)` | core Profiles.kt, public for Roles / Profiles | (c) Infantry_Profiles/ProfileExecutorField.kt, `internal`, reads an `ExecutorContext` (new, (b)) |
+| `ChangeGroup`, `ChangedFileRow`, `ChangedPathText` (ChangesSection.kt) | core, public for Changes / Git | (c) the whole file moved to Infantry_Changes; core drew none of it (only a UI test) |
+| `nextFireLabel`, `lastFireLabel` | core TriggerDraft.kt, public for Triggers | (c) Infantry_Triggers/TriggerLabels.kt, `internal`; their test moved to agenthqAppUi (TriggerLabelsTest) |
+| `humanDuration` | core TriggerDuration.kt, "bridge" | kit: a pure formatter over core's internal `msToMinutesText` (which `TriggerDraft`, core, uses), so it stays public |
+| `bindingSummary` | core Profiles.kt | kit: the chat (ChatSurface.kt, core) uses it |
+| `ReportFlagChip` | core BoardSidebar.kt | **still a bridge**: ChatSurface.kt draws it; closes with the ChatSurface move (S4d) |
+| `PromptBox`, `SpawnRoleRow` | core ChatSurface.kt | **still bridges**: ChatPanel (app) composes them; close with the ChatSurface move (S4d) |

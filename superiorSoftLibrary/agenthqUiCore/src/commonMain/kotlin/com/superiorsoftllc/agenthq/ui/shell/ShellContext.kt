@@ -22,6 +22,8 @@ import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitPatch
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitStatus
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitWorktreeList
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitWorktreeStatus
+import com.superiorsoftllc.agenthq.ui.protocol.ProviderInfo
+import com.superiorsoftllc.agenthq.ui.protocol.ProviderModels
 import com.superiorsoftllc.agenthq.ui.protocol.Role
 import com.superiorsoftllc.agenthq.ui.protocol.RoleBinding
 import kotlin.reflect.KClass
@@ -50,6 +52,8 @@ interface ShellContext {
     val notes: NotesContext get() = NoNotes
     /** S4b: the Changes tab's worktrees, branch changes and polls. */
     val changes: ChangesContext get() = NoChanges
+    /** S4c: the daemon's harnesses and model catalog, for the executor pickers. */
+    val executor: ExecutorContext get() = NoExecutor
 }
 
 /** The daemon link: whether it is up and which contract the daemon announced. */
@@ -267,3 +271,15 @@ object EmptyConfig : ConfigContext, ConfigValues {
 
 /** S2: the [ShellContext] of the window being composed; null outside a shell, where a migrated section draws nothing. */
 val LocalShellContext = compositionLocalOf<ShellContext?> { null }
+
+/** S4c: the daemon's harnesses and their models, for the executor pickers (profile, role, ticket, New agent). */
+interface ExecutorContext {
+    val providers: List<ProviderInfo>
+    val modelCatalog: List<ProviderModels>
+}
+
+/** S4c: the [ShellContext.executor] of a shell without a daemon catalog. */
+object NoExecutor : ExecutorContext {
+    override val providers: List<ProviderInfo> get() = emptyList()
+    override val modelCatalog: List<ProviderModels> get() = emptyList()
+}

@@ -21,6 +21,8 @@ import com.superiorsoftllc.agenthq.ui.net.CommandResult
 import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.protocol.Envelope
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitWorktreeStatus
+import com.superiorsoftllc.agenthq.ui.protocol.ProviderInfo
+import com.superiorsoftllc.agenthq.ui.protocol.ProviderModels
 import com.superiorsoftllc.agenthq.ui.protocol.Role
 import com.superiorsoftllc.agenthq.ui.protocol.RoleBinding
 import com.superiorsoftllc.agenthq.ui.toastEvents
@@ -51,6 +53,7 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
     }
     override val notes: NotesContext = CoreNotes(state, shell.controller)
     override val changes: ChangesContext = CoreChanges(state, shell.controller)
+    override val executor: ExecutorContext = CoreExecutor(state)
 
     override val board: BoardContext = object : BoardContext {
         override val open: Boolean get() = ui.showBoard
@@ -198,4 +201,10 @@ class CoreRun(private val state: AppState, private val controller: Controller, p
     override suspend fun saveCommand(id: String, name: String, argv: List<String>, cwd: String?, graceMillis: Long, secrets: List<String>) =
         controller.saveCommand(id, name, argv, cwd, graceMillis, secrets)
     override suspend fun deleteCommand(id: String) = controller.deleteCommand(id)
+}
+
+/** S4c: [state]'s harnesses and model catalog, for a pane drawn outside a shell. */
+class CoreExecutor(private val state: AppState) : ExecutorContext {
+    override val providers: List<ProviderInfo> get() = state.providers
+    override val modelCatalog: List<ProviderModels> get() = state.modelCatalog
 }
