@@ -17,6 +17,8 @@ import com.superiorsoftllc.agenthq.ui.Sidebar
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.LocalBlockSize
+import com.superiorsoftllc.agenthq.ui.block.layout.Place
+import com.superiorsoftllc.agenthq.ui.block.layout.Show
 import com.superiorsoftllc.agenthq.ui.model.CompactScreen
 import com.superiorsoftllc.agenthq.ui.model.PanelLayout
 import com.superiorsoftllc.agenthq.ui.model.SidebarWidth
@@ -25,17 +27,17 @@ import com.superiorsoftllc.agenthq.ui.plugin.Panels
 import kotlinx.coroutines.launch
 
 /**
- * BLOCKS-SHELL-1: the left panel and its resize handle, docked at the start of the middle region. Below
- * PanelLayout.COMPACT_BELOW_DP it docks nothing: the compact drawer shows the same content.
+ * BLOCKS-SHELL-1: the left panel and its resize handle, docked at the start of the middle region. BLOCKS-LAYOUT L4: it is
+ * `show Wide`, so below PanelLayout.COMPACT_BELOW_DP its parent leaves it out; the compact drawer shows the same content.
  */
-object ShellLeftPanel : Block("infantry.shell.left", "infantry.shell.left") {
+object ShellLeftPanel : Block("infantry.shell.left", "infantry.shell.left", Place(show = Show.Wide)) {
     @Composable
     override fun Render(scope: BlockScope) {
         val s = LocalShell.current
         val compact = dockCompact()
         // PANEL-TOGGLE-1: a hidden side panel and its resize handle leave the composition; the centre column's
         // weight then takes the whole width.
-        if (!compact && s.state.panels.forWindow(compact).leftShown) {
+        if (s.state.panels.forWindow(compact).leftShown) {
             LeftPanelContent(s, compact, s.ui.sidebarWidth)
             // M2-9: the left edge drags like the right one (drag right = wider).
             ResizeHandle("sidebar-resize-handle") { s.ui.sidebarWidth = SidebarWidth.dragged(s.ui.sidebarWidth, it) }

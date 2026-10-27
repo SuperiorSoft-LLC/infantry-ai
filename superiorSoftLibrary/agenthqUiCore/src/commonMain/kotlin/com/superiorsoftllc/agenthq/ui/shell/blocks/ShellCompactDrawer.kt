@@ -22,20 +22,22 @@ import com.superiorsoftllc.agenthq.ui.Palette
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.LocalBlockSize
+import com.superiorsoftllc.agenthq.ui.block.layout.Place
+import com.superiorsoftllc.agenthq.ui.block.layout.Show
 import com.superiorsoftllc.agenthq.ui.model.CompactScreen
 
 /**
  * BLOCKS-SHELL-1 / MOBILE-DRAWERS-1: in a compact window the sidebar or the right panel slides over the middle
- * region as a drawer, with a scrim; at full width it draws nothing.
+ * region as a drawer, with a scrim. BLOCKS-LAYOUT L4: it is `show Compact`, so at full width its parent leaves it out.
  */
-object ShellCompactDrawer : Block("infantry.shell.drawer", "infantry.shell.drawer") {
+object ShellCompactDrawer : Block("infantry.shell.drawer", "infantry.shell.drawer", Place(show = Show.Compact)) {
     @Composable
     override fun Render(scope: BlockScope) {
         val s = LocalShell.current
         val windowWidthDp = LocalBlockSize.current.width.value
         val compact = dockCompact()
         val screen = s.state.panels.forWindow(compact).compactScreen()
-        if (compact && screen != CompactScreen.OUTPUT) with(scope) {
+        if (screen != CompactScreen.OUTPUT) with(scope) {
             val drawerWidth = minOf(windowWidthDp * 0.88f, 420f).dp
             val close = { s.controller.showCompactScreen(CompactScreen.OUTPUT) }
             // Scrim: a tap outside closes the drawer.

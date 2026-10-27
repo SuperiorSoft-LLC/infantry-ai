@@ -15,21 +15,22 @@ import com.superiorsoftllc.agenthq.ui.Shell
 import com.superiorsoftllc.agenthq.ui.TabBar
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
+import com.superiorsoftllc.agenthq.ui.block.layout.Place
+import com.superiorsoftllc.agenthq.ui.block.layout.Show
 import com.superiorsoftllc.agenthq.ui.model.RightPanelWidth
 import com.superiorsoftllc.agenthq.ui.plugin.PanelSections
 import com.superiorsoftllc.agenthq.ui.plugin.Panels
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 
 /**
- * BLOCKS-SHELL-1: the right panel and its resize handle, docked at the end of the middle region. Below
- * PanelLayout.COMPACT_BELOW_DP it docks nothing: the compact drawer shows the same content.
+ * BLOCKS-SHELL-1: the right panel and its resize handle, docked at the end of the middle region. BLOCKS-LAYOUT L4: it is
+ * `show Wide`, so below PanelLayout.COMPACT_BELOW_DP its parent leaves it out; the compact drawer shows the same content.
  */
-object ShellRightPanel : Block("infantry.shell.right", "infantry.shell.right") {
+object ShellRightPanel : Block("infantry.shell.right", "infantry.shell.right", Place(show = Show.Wide)) {
     @Composable
     override fun Render(scope: BlockScope) {
         val s = LocalShell.current
-        val compact = dockCompact()
-        if (!compact && s.state.panels.forWindow(compact).rightShown) {
+        if (s.state.panels.forWindow(dockCompact()).rightShown) {
             // M2-9: the ↔ cursor and a grip, not the hand (drag left = wider).
             ResizeHandle("right-panel-resize-handle") { s.ui.rightPanelWidth = RightPanelWidth.dragged(s.ui.rightPanelWidth, it) }
             RightPanelContent(s, Modifier.width(s.ui.rightPanelWidth.dp), null)
