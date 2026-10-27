@@ -13,12 +13,14 @@ import com.superiorsoftllc.agenthq.ui.ProjectPicker
 import com.superiorsoftllc.agenthq.ui.ServerSwitcherChip
 import com.superiorsoftllc.agenthq.ui.TitleBarFrame
 import com.superiorsoftllc.agenthq.ui.TitleBarLead
+import com.superiorsoftllc.agenthq.ui.TitleBarRightToggle
 import com.superiorsoftllc.agenthq.ui.TitleBarConnection
 import com.superiorsoftllc.agenthq.ui.TitleBarWindowControls
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.Place
 import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
+import com.superiorsoftllc.agenthq.ui.model.PanelSide
 import com.superiorsoftllc.agenthq.ui.model.needsInput
 
 /**
@@ -95,5 +97,14 @@ object HeaderServer : Block("serverSwitcher", "$HEADER.server") {
     }
 }
 
+/** PANEL-TOGGLE-1: the side panel toggle, in view at every width. */
+object HeaderToggleRight : Block("panelToggle", "$HEADER.toggleRight") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val s = LocalShell.current
+        TitleBarRightToggle(s.state, scope.modifier) { s.controller.togglePanel(PanelSide.RIGHT) }
+    }
+}
+
 /** BLOCKS-SHELL-1: the window's title bar, on top. */
-val ShellHeader = TitleBarBlock(HEADER, listOf(HeaderLead, HeaderServer, HeaderConnection, HeaderWindowControls))
+val ShellHeader = TitleBarBlock(HEADER, listOf(HeaderLead, HeaderToggleRight, HeaderServer, HeaderConnection, HeaderWindowControls))
