@@ -19,6 +19,14 @@ import com.superiorsoftllc.agenthq.ui.protocol.AttentionItem
 import com.superiorsoftllc.agenthq.ui.protocol.Role
 import com.superiorsoftllc.agenthq.ui.protocol.SessionRecord
 import com.superiorsoftllc.agenthq.ui.protocol.SessionState
+import com.superiorsoftllc.agenthq.ui.sound.INCOMING_SOUND_ENABLED_TAG
+import com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundSection
+import com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundSettings
+import com.superiorsoftllc.agenthq.ui.voice.VOICE_ENABLED_TAG
+import com.superiorsoftllc.agenthq.ui.voice.VoiceSettings
+import com.superiorsoftllc.agenthq.ui.voice.VoiceSettingsSection
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onParent
 import kotlin.test.Test
 
 /**
@@ -97,5 +105,19 @@ class HandCursorUiTest {
     fun `the sidebar Board button shows the hand`() = runDesktopComposeUiTest(300, 100) {
         setContent { SidebarBoardButton(state, onOpen = {}) }
         assertHand("sidebar-board-button")
+    }
+
+    @Test
+    fun `the voice settings switch and level chips show the hand`() = runDesktopComposeUiTest(600, 800) {
+        setContent { VoiceSettingsSection(VoiceSettings(), onChange = {}) }
+        assertHand(VOICE_ENABLED_TAG)
+        // The level chips are FilterChips; the Urgent chip carries the hand.
+        onAllNodesWithText("Urgent", useUnmergedTree = true)[0].onParent().assert(hasHandCursor())
+    }
+
+    @Test
+    fun `the incoming comms sound switch shows the hand`() = runDesktopComposeUiTest(600, 600) {
+        setContent { IncomingCommsSoundSection(IncomingCommsSoundSettings(), onChange = {}) }
+        assertHand(INCOMING_SOUND_ENABLED_TAG)
     }
 }
