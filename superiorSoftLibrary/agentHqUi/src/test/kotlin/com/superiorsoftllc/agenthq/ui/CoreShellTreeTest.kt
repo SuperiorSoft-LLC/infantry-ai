@@ -99,7 +99,7 @@ class CoreShellTreeTest {
         assertEquals(tree.size, tree.map { it.trim() }.toSet().size, "node ids are unique")
     }
 
-    /** BLOCKS-LAYOUT L14, L15, L17: the core tab trees (drawn by their tab, not in the window tree) are pinned the same way. */
+    /** BLOCKS-LAYOUT L14, L15, L17, L18: the core tab trees (drawn by their tab, not in the window tree) are pinned the same way. */
     @Test fun `the core tab trees keep every node id, in order, unique across the window tree`() {
         val git = "infantry.shell.git"
         val run = "infantry.shell.run"
@@ -121,10 +121,30 @@ class CoreShellTreeTest {
             "    $notes.note",
             "  $notes.modal",
         )
-        assertEquals(listOf(git, run, notes), CoreShell.tabs.map { it.id })
+        val changes = "infantry.shell.changes"
+        val expectedChanges = listOf(
+            changes,
+            "  $changes.empty",
+            "  $changes.title",
+            "  $changes.unsupported",
+            "  $changes.notGit",
+            "  $changes.worktree",
+            "  $changes.header",
+            "  $changes.mode",
+            "  $changes.branch",
+            "  $changes.hint",
+            "  $changes.files",
+            "    $changes.file",
+            "  $changes.branchFiles",
+            "    $changes.branchFile",
+            "  $changes.history",
+            "    $changes.commit",
+        )
+        assertEquals(listOf(git, run, notes, changes), CoreShell.tabs.map { it.id })
         assertEquals(expectedGit.joinToString("\n"), CoreShell.tabs[0].walk().joinToString("\n"))
         assertEquals(expectedRun.joinToString("\n"), CoreShell.tabs[1].walk().joinToString("\n"))
         assertEquals(expectedNotes.joinToString("\n"), CoreShell.tabs[2].walk().joinToString("\n"))
+        assertEquals(expectedChanges.joinToString("\n"), CoreShell.tabs[3].walk().joinToString("\n"))
         val all = (listOf(CoreShell.root) + CoreShell.tabs).flatMap { it.walk() }.map { it.trim() }
         assertEquals(all.size, all.toSet().size, "node ids are unique across the trees")
     }

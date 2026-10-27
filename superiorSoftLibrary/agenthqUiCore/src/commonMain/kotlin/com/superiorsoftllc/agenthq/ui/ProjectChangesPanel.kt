@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +22,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,9 +71,12 @@ import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.net.PROJECT_GIT_BRANCHES_UNSUPPORTED
 import com.superiorsoftllc.agenthq.ui.net.PROJECT_GIT_UNSUPPORTED
 import com.superiorsoftllc.agenthq.ui.protocol.BranchChangedFile
+import com.superiorsoftllc.agenthq.ui.protocol.ChangedFile
 import com.superiorsoftllc.agenthq.ui.protocol.Envelope
+import com.superiorsoftllc.agenthq.ui.protocol.GitCommit
 import com.superiorsoftllc.agenthq.ui.protocol.GitWorktree
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitWorktreeStatus
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -92,6 +97,9 @@ const val PROJECT_CHANGES_POLL_MS = 5_000L
 const val PROJECT_CHANGES_POLL_TIMEOUT_MS = 60_000L
 
 const val PROJECT_CHANGES_REFRESH_TAG = "project-changes-refresh"
+
+/** BLOCKS-LAYOUT L18: the Changes tab's scrolled column, which its sections draw into. */
+const val CHANGES_PANE_TAG = "changes-pane"
 
 /** BRANCH-VIEW-2: the branch selector's anchor; each entry is [BRANCH_SELECT_OPTION_TAG] + branch name. */
 const val BRANCH_SELECT_TAG = "branch-select"
@@ -190,6 +198,9 @@ private fun Envelope.endsPoll(request: String, reply: String, projectId: String)
  *
  * DIFF-MODAL: clicking a file calls [onOpenDiff] (the window opens [ProjectDiffModal] over everything); [openDiff]
  * is the file shown there, highlighted in the list. With no callback the rows are not clickable.
+ *
+ * BLOCKS-LAYOUT L18: [ChangesPaneFrame] and its sections, top to bottom, as the Changes tab's tree draws them
+ * (`infantry.shell.changes`, ShellChanges.kt).
  */
 @Composable
 fun ProjectChangesPanel(
@@ -199,16 +210,113 @@ fun ProjectChangesPanel(
     openDiff: DiffTarget? = null,
     onOpenDiff: ((DiffTarget) -> Unit)? = null,
 ) {
+    ChangesPaneFrame(state, controller, pollMs, openDiff, onOpenDiff) { changes ->
+        ChangesEmptySection(changes)
+        ChangesTitleSection(changes)
+        ChangesUnsupportedSection(changes)
+        ChangesNotGitSection(changes)
+        ChangesWorktreeSection(changes)
+        ChangesHeaderSection(changes)
+        ChangesModeSection(changes)
+        ChangesBranchSection(changes)
+        ChangesHintSection(changes)
+        ChangesFilesSection(changes) { ChangesFileRow(changes, it) }
+        ChangesBranchFilesSection(changes) { ChangesBranchFileRow(changes, it) }
+        ChangesHistorySection(changes) { ChangesCommitRow(it) }
+    }
+}
+
+/** BLOCKS-LAYOUT L18: one working-tree file as the file template draws it: the file and the group it is listed in. */
+data class ChangesFileItem(val file: ChangedFile, val staged: Boolean)
+
+/**
+ * BLOCKS-LAYOUT L18: what the Changes tab's sections read and act on. The frame ([ChangesPaneFrame]) owns the Working
+ * tree | History mode; a section changes it, the shown worktree or branch, or the open diff only through these callbacks.
+ */
+class ChangesPaneHost internal constructor(
+    val state: AppState,
+    val controller: Controller,
+    private val scope: CoroutineScope,
+    private val modeState: MutableState<ChangesMode>,
+    /** The file the diff modal shows, highlighted in the lists. */
+    val openDiff: DiffTarget?,
+    private val onOpenDiff: ((DiffTarget) -> Unit)?,
+) {
+    val live: Boolean get() = state.connection.isLive
+    val supported: Boolean get() = contractAtLeast(state.connection.contract, 1, 36)
+    val branchesSupported: Boolean get() = contractAtLeast(state.connection.contract, 1, 65)
+    val worktreesSupported: Boolean get() = contractAtLeast(state.connection.contract, 1, 88)
+    val active: ProjectView? get() = state.activeProject
+    val worktree: String? get() = if (worktreesSupported) state.changesWorktree else null
+
+    /** BUG-CHANGES-WRONG-BRANCH: from 1.88.0 the inner picker follows the worktree the header shows. */
+    val branch: String? get() = if (worktreesSupported) state.changesShownBranch else state.changesBranch
+    val mode: ChangesMode get() = modeState.value
+    val status: ProjectGitWorktreeStatus? get() = state.changesWorktreeStatus
+
+    /** A daemon from 1.36.0, older than 1.88.0: the branch line and its list, no worktrees. */
+    val showsOlder: Boolean get() = active != null && supported && !worktreesSupported
+
+    /** A 1.88.0 daemon answered that the project folder is not a git checkout. */
+    val notGit: Boolean get() = active?.let { supported && worktreesSupported && isNotGitRepository(state.projectWorktrees[it.id]) } ?: false
+
+    /** A 1.88.0 daemon on a git checkout: the worktree picker, its header line and the mode toggle. */
+    val showsWorktrees: Boolean get() = active != null && supported && worktreesSupported && !notGit
+
+    /** The branch line and the list under it show: an older daemon, or the Working tree mode. */
+    val showsList: Boolean get() = showsOlder || (showsWorktrees && mode == ChangesMode.WORKING_TREE)
+
+    /** A click on a file opens it in the diff modal; false leaves the rows unclickable. */
+    val opensDiff: Boolean get() = onOpenDiff != null
+
+    fun refresh() {
+        val a = active ?: return
+        val worktree = worktree
+        val branch = branch
+        scope.launch {
+            if (worktreesSupported) {
+                controller.loadProjectWorktrees(a.id, state.selectedId)
+                worktree?.let { controller.loadWorktreeStatus(a.id, it) }
+                if (branch != null) controller.loadBranchChanges(a.id, branch)
+            } else if (branch == null) controller.loadProjectTree(a.id) else controller.loadBranchChanges(a.id, branch)
+            if (branchesSupported) controller.loadProjectBranches(a.id)
+        }
+    }
+
+    fun pickMode(mode: ChangesMode) { modeState.value = mode }
+
+    fun selectWorktree(path: String) { active?.let { controller.selectChangesWorktree(it.id, path) } }
+
+    /** Null is "Working tree (current)". */
+    fun selectBranch(name: String?) { active?.let { controller.selectChangesBranch(it.id, name) } }
+
+    fun open(target: DiffTarget) { onOpenDiff?.invoke(target) }
+}
+
+/**
+ * BLOCKS-LAYOUT L18: the Changes tab's frame: the scrolled padded column its sections draw straight into ([content]), 6 dp
+ * apart. It owns the Working tree | History mode and the polling (below), which leaves composition with the tab.
+ */
+@Composable
+fun ChangesPaneFrame(
+    state: AppState,
+    controller: Controller,
+    pollMs: Long = PROJECT_CHANGES_POLL_MS,
+    openDiff: DiffTarget? = null,
+    onOpenDiff: ((DiffTarget) -> Unit)? = null,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.(ChangesPaneHost) -> Unit,
+) {
     val scope = rememberCoroutineScope()
-    val live = state.connection.isLive
-    val supported = contractAtLeast(state.connection.contract, 1, 36)
-    val branchesSupported = contractAtLeast(state.connection.contract, 1, 65)
-    val worktreesSupported = contractAtLeast(state.connection.contract, 1, 88)
-    val active = state.activeProject
-    val worktree = if (worktreesSupported) state.changesWorktree else null
-    // BUG-CHANGES-WRONG-BRANCH: from 1.88.0 the inner picker follows the worktree the header shows.
-    val branch = if (worktreesSupported) state.changesShownBranch else state.changesBranch
-    var mode by remember { mutableStateOf(ChangesMode.WORKING_TREE) }
+    val mode = remember { mutableStateOf(ChangesMode.WORKING_TREE) }
+    val changes = ChangesPaneHost(state, controller, scope, mode, openDiff, onOpenDiff)
+    val live = changes.live
+    val supported = changes.supported
+    val branchesSupported = changes.branchesSupported
+    val worktreesSupported = changes.worktreesSupported
+    val active = changes.active
+    val worktree = changes.worktree
+    val branch = changes.branch
 
     // Before 1.88.0: the project directory's working tree, polled only while it is the one shown (a branch's changes
     // do not move under the panel). From 1.88.0 the shown worktree's own status replaces it (below).
@@ -252,67 +360,151 @@ fun ProjectChangesPanel(
         if (live && branchesSupported && branch != null) controller.loadBranchChanges(id, branch)
     }
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (active == null) {
-            Text("Select a project to see its changes.", color = Palette.Muted, fontSize = 12.sp)
-            return@Column
-        }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("CHANGES · ${active.name}", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.weight(1f), maxLines = 1)
-            // UX-ICON-1: a refresh icon in place of the "Refresh" text button.
-            IconAction(
-                AhqIcons.Refresh, "Refresh",
-                onClick = {
-                    scope.launch {
-                        if (worktreesSupported) {
-                            controller.loadProjectWorktrees(active.id, state.selectedId)
-                            worktree?.let { controller.loadWorktreeStatus(active.id, it) }
-                            if (branch != null) controller.loadBranchChanges(active.id, branch)
-                        } else if (branch == null) controller.loadProjectTree(active.id) else controller.loadBranchChanges(active.id, branch)
-                        if (branchesSupported) controller.loadProjectBranches(active.id)
-                    }
-                },
-                enabled = live && supported,
-                modifier = Modifier.testTag(PROJECT_CHANGES_REFRESH_TAG),
-            )
-        }
-        if (!supported) {
-            Text(PROJECT_GIT_UNSUPPORTED, color = Palette.Muted, fontSize = 12.sp)
-            return@Column
-        }
-        if (!worktreesSupported) {
-            BranchSelect(state, controller, active, branch, branchesSupported)
-            if (branch == null) WorkingTreeChanges(projectChangesView(state.projectGit[active.id], state.projectGitFailure), null, openDiff, onOpenDiff)
-            else BranchChanges(state, active, branch, openDiff, onOpenDiff)
-            return@Column
-        }
-        if (isNotGitRepository(state.projectWorktrees[active.id])) {
-            Text(NOT_A_GIT_REPOSITORY, color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag(NOT_A_GIT_REPOSITORY_TAG))
-            return@Column
-        }
-        val status = state.changesWorktreeStatus
-        WorktreeSelect(state, controller, active, worktree)
-        WorktreeHeaderLine(status)
-        ModeToggle(mode) { mode = it }
-        when (mode) {
-            ChangesMode.WORKING_TREE -> {
-                BranchSelect(state, controller, active, branch, branchesSupported)
-                if (branch == null) {
-                    aheadHint(status)?.let { Text(it, color = Palette.Muted, fontSize = 11.sp) }
-                    WorkingTreeChanges(worktreeChangesView(status), worktree, openDiff, onOpenDiff)
-                }
-                else BranchChanges(state, active, branch, openDiff, onOpenDiff)
-            }
-            ChangesMode.HISTORY -> WorktreeHistory(status)
-        }
+    Column(modifier.fillMaxSize().testTag(CHANGES_PANE_TAG).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        content(changes)
     }
+}
+
+/** BLOCKS-LAYOUT L18: what the tab says with no project selected; [modifier] goes on the line. */
+@Composable
+fun ChangesEmptySection(changes: ChangesPaneHost, modifier: Modifier = Modifier) {
+    if (changes.active != null) return
+    Text("Select a project to see its changes.", color = Palette.Muted, fontSize = 12.sp, modifier = modifier)
+}
+
+/** BLOCKS-LAYOUT L18: "CHANGES · project" and the refresh icon, with a project selected; [modifier] goes on the row. */
+@Composable
+fun ChangesTitleSection(changes: ChangesPaneHost, modifier: Modifier = Modifier) {
+    val active = changes.active ?: return
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+        Text("CHANGES · ${active.name}", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.weight(1f), maxLines = 1)
+        // UX-ICON-1: a refresh icon in place of the "Refresh" text button.
+        IconAction(
+            AhqIcons.Refresh, "Refresh",
+            onClick = { changes.refresh() },
+            enabled = changes.live && changes.supported,
+            modifier = Modifier.testTag(PROJECT_CHANGES_REFRESH_TAG),
+        )
+    }
+}
+
+/** BLOCKS-LAYOUT L18: the line for a daemon older than 1.36.0, with a project selected; [modifier] goes on the line. */
+@Composable
+fun ChangesUnsupportedSection(changes: ChangesPaneHost, modifier: Modifier = Modifier) {
+    if (changes.active == null || changes.supported) return
+    Text(PROJECT_GIT_UNSUPPORTED, color = Palette.Muted, fontSize = 12.sp, modifier = modifier)
+}
+
+/** BLOCKS-LAYOUT L18: [NOT_A_GIT_REPOSITORY], when the daemon says so; [modifier] goes on the line. */
+@Composable
+fun ChangesNotGitSection(changes: ChangesPaneHost, modifier: Modifier = Modifier) {
+    if (!changes.notGit) return
+    Text(NOT_A_GIT_REPOSITORY, color = Palette.Muted, fontSize = 12.sp, modifier = modifier.testTag(NOT_A_GIT_REPOSITORY_TAG))
+}
+
+/**
+ * BLOCKS-LAYOUT L18: the worktree picker (and why the worktrees are unknown), from 1.88.0. A placement other than the
+ * default gets a Column to wear it.
+ */
+@Composable
+fun ChangesWorktreeSection(changes: ChangesPaneHost, modifier: Modifier = Modifier) {
+    if (!changes.showsWorktrees) return
+    ChangesPlaced(modifier) { WorktreeSelect(changes) }
+}
+
+/** BLOCKS-LAYOUT L18: the shown worktree's branch, ahead/behind, base and uncommitted count; [modifier] goes on the row. */
+@Composable
+fun ChangesHeaderSection(changes: ChangesPaneHost, modifier: Modifier = Modifier) {
+    if (!changes.showsWorktrees) return
+    WorktreeHeaderLine(changes.status, modifier)
+}
+
+/** BLOCKS-LAYOUT L18: the Working tree | History toggle; [modifier] goes on the row. */
+@Composable
+fun ChangesModeSection(changes: ChangesPaneHost, modifier: Modifier = Modifier) {
+    if (!changes.showsWorktrees) return
+    ModeToggle(changes.mode, modifier) { changes.pickMode(it) }
+}
+
+/** BLOCKS-LAYOUT L18: the branch line (Working tree (current) or a local branch) as a drop-down; [modifier] goes on its box. */
+@Composable
+fun ChangesBranchSection(changes: ChangesPaneHost, modifier: Modifier = Modifier) {
+    if (!changes.showsList) return
+    BranchSelect(changes, modifier)
+}
+
+/** BLOCKS-LAYOUT L18: "N commits ahead" over a clean shown worktree; [modifier] goes on the line. */
+@Composable
+fun ChangesHintSection(changes: ChangesPaneHost, modifier: Modifier = Modifier) {
+    if (!changes.showsWorktrees || !changes.showsList || changes.branch != null) return
+    aheadHint(changes.status)?.let { Text(it, color = Palette.Muted, fontSize = 11.sp, modifier = modifier) }
+}
+
+/**
+ * BLOCKS-LAYOUT L18: the working tree's files: unknown, clean, or the summary then the Staged and Not staged groups, each
+ * file drawn by [file] straight into the tab's column. With files, a placement other than the default gets a Column.
+ */
+@Composable
+fun ChangesFilesSection(changes: ChangesPaneHost, modifier: Modifier = Modifier, file: @Composable (ChangesFileItem) -> Unit) {
+    if (!changes.showsList || changes.branch != null) return
+    val active = changes.active ?: return
+    val state = changes.state
+    val view = if (changes.worktreesSupported) worktreeChangesView(changes.status) else projectChangesView(state.projectGit[active.id], state.projectGitFailure)
+    WorkingTreeChanges(view, modifier, file)
+}
+
+/**
+ * BLOCKS-LAYOUT L18: what the picked branch changed vs its base: unknown, or the header, each file drawn by [row]
+ * straight into the tab's column, and the truncation line. With files, a placement other than the default gets a Column.
+ */
+@Composable
+fun ChangesBranchFilesSection(changes: ChangesPaneHost, modifier: Modifier = Modifier, row: @Composable (BranchChangedFile) -> Unit) {
+    if (!changes.showsList) return
+    val active = changes.active ?: return
+    val branch = changes.branch ?: return
+    BranchChanges(changes.state, active, branch, modifier, row)
+}
+
+/**
+ * BLOCKS-LAYOUT L18: the shown worktree's recent commits in the History mode, each drawn by [commit] straight into the
+ * tab's column. With commits, a placement other than the default gets a Column.
+ */
+@Composable
+fun ChangesHistorySection(changes: ChangesPaneHost, modifier: Modifier = Modifier, commit: @Composable (GitCommit) -> Unit) {
+    if (!changes.showsWorktrees || changes.mode != ChangesMode.HISTORY) return
+    WorktreeHistory(changes.status, modifier, commit)
+}
+
+/** BLOCKS-LAYOUT L18: one working-tree file (badge, path, status); a click opens its diff. [modifier] goes on the row. */
+@Composable
+fun ChangesFileRow(changes: ChangesPaneHost, item: ChangesFileItem, modifier: Modifier = Modifier) {
+    val worktree = changes.worktree
+    val picked = changes.openDiff?.takeIf { it.branch == null && it.worktree == worktree }?.let { it.path to it.staged }
+    val target = DiffTarget(item.file.path, item.staged, worktree = worktree)
+    ChangedFileRow(item.file, open = picked == (item.file.path to item.staged), onPick = if (changes.opensDiff) { { changes.open(target) } } else null, modifier = modifier)
+}
+
+/** BLOCKS-LAYOUT L18: one file the picked branch changed; a click opens its diff. [modifier] goes on the row. */
+@Composable
+fun ChangesBranchFileRow(changes: ChangesPaneHost, f: BranchChangedFile, modifier: Modifier = Modifier) {
+    val branch = changes.branch ?: return
+    val target = DiffTarget(f.path, false, branch)
+    BranchChangeRow(f, picked = changes.openDiff == target, onPick = if (changes.opensDiff) { { changes.open(target) } } else null, modifier = modifier)
+}
+
+/** A section that draws several items: a placement other than the default gets a Column (6 dp apart, as the tab) to wear it. */
+@Composable
+private fun ChangesPlaced(modifier: Modifier, content: @Composable () -> Unit) {
+    if (modifier == Modifier) content() else Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) { content() }
 }
 
 /** UX-CHANGES-1: the worktree picker: the shown worktree (branch and whose checkout it is), then every worktree. */
 @Composable
-private fun WorktreeSelect(state: AppState, controller: Controller, active: ProjectView, worktree: String?) {
+private fun WorktreeSelect(changes: ChangesPaneHost) {
+    val active = changes.active ?: return
+    val worktree = changes.worktree
     var open by remember { mutableStateOf(false) }
-    val list = state.projectWorktrees[active.id]
+    val list = changes.state.projectWorktrees[active.id]
     val shown = list?.worktrees?.firstOrNull { it.path == worktree }
     val label = when {
         list == null -> "Loading worktrees…"
@@ -341,7 +533,7 @@ private fun WorktreeSelect(state: AppState, controller: Controller, active: Proj
                 else -> list.worktrees.filter { !it.bare }.forEach { w ->
                     DropdownMenuItem(
                         text = { WorktreeOptionLabel(w, selected = w.path == worktree) },
-                        onClick = { open = false; controller.selectChangesWorktree(active.id, w.path) },
+                        onClick = { open = false; changes.selectWorktree(w.path) },
                         modifier = Modifier.testTag(WORKTREE_SELECT_OPTION_TAG + w.optionKey()),
                     )
                 }
@@ -373,14 +565,14 @@ private fun WorktreeOptionLabel(w: GitWorktree, selected: Boolean) {
 
 /** The shown worktree's branch, ahead/behind its base and uncommitted count; the daemon's reason when it is unknown. */
 @Composable
-private fun WorktreeHeaderLine(status: ProjectGitWorktreeStatus?) {
+private fun WorktreeHeaderLine(status: ProjectGitWorktreeStatus?, modifier: Modifier = Modifier) {
     val header = worktreeHeader(status)
     if (header == null) {
         val why = if (status == null) "Reading the worktree…" else "Git unknown: ${status.reason.ifBlank { "the daemon could not read the worktree" }}"
-        Text(why, color = Palette.Muted, fontSize = 11.sp)
+        Text(why, color = Palette.Muted, fontSize = 11.sp, modifier = modifier)
         return
     }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(AhqIcons.Branch, contentDescription = null, tint = Palette.Muted, modifier = Modifier.size(12.dp))
         Text(
             header.branch, color = Palette.Text, fontSize = 12.sp, fontFamily = Mono, fontWeight = FontWeight.SemiBold,
@@ -403,8 +595,8 @@ private fun WorktreeHeaderLine(status: ProjectGitWorktreeStatus?) {
 
 /** The Working tree | History segmented toggle: the panel's full width, each segment half of it. */
 @Composable
-private fun ModeToggle(mode: ChangesMode, onMode: (ChangesMode) -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+private fun ModeToggle(mode: ChangesMode, modifier: Modifier = Modifier, onMode: (ChangesMode) -> Unit) {
+    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         Segment("Working tree", mode == ChangesMode.WORKING_TREE, CHANGES_MODE_WORKING_TREE_TAG) { onMode(ChangesMode.WORKING_TREE) }
         Segment("History", mode == ChangesMode.HISTORY, CHANGES_MODE_HISTORY_TAG) { onMode(ChangesMode.HISTORY) }
     }
@@ -429,37 +621,44 @@ private fun RowScope.Segment(label: String, selected: Boolean, tag: String, onCl
 
 /** The shown worktree's recent commits, newest first: short hash, subject, author and time. Read-only. */
 @Composable
-private fun WorktreeHistory(status: ProjectGitWorktreeStatus?) {
+private fun WorktreeHistory(status: ProjectGitWorktreeStatus?, modifier: Modifier, commit: @Composable (GitCommit) -> Unit) {
     when (val history = worktreeHistoryView(status)) {
-        is HistoryView.Unknown -> Text("History unknown: ${history.reason}", color = Palette.Muted, fontSize = 11.sp)
-        HistoryView.Empty -> Text("No commits yet.", color = Palette.Muted, fontSize = 11.sp)
-        is HistoryView.Commits -> {
-            history.commits.forEach { c ->
-                Row(
-                    Modifier.fillMaxWidth().testTag(CHANGES_HISTORY_ROW_TAG + c.shortHash).padding(vertical = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(c.shortHash, color = Palette.Accent, fontFamily = Mono, fontSize = 11.sp)
-                    Column(Modifier.weight(1f)) {
-                        Text(c.subject, color = Palette.Text, fontSize = 12.sp)
-                        Text("${c.author} · ${c.whenText()}", color = Palette.Muted, fontSize = 10.sp)
-                    }
-                }
-            }
+        is HistoryView.Unknown -> Text("History unknown: ${history.reason}", color = Palette.Muted, fontSize = 11.sp, modifier = modifier)
+        HistoryView.Empty -> Text("No commits yet.", color = Palette.Muted, fontSize = 11.sp, modifier = modifier)
+        is HistoryView.Commits -> ChangesPlaced(modifier) {
+            history.commits.forEach { commit(it) }
             if (history.truncated) Text("Older commits exist; showing the newest ${history.commits.size}.", color = Palette.Muted, fontSize = 10.sp)
+        }
+    }
+}
+
+/** BLOCKS-LAYOUT L18: one commit (short hash, subject, author and time); [modifier] goes on the row. */
+@Composable
+fun ChangesCommitRow(c: GitCommit, modifier: Modifier = Modifier) {
+    Row(
+        modifier.fillMaxWidth().testTag(CHANGES_HISTORY_ROW_TAG + c.shortHash).padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(c.shortHash, color = Palette.Accent, fontFamily = Mono, fontSize = 11.sp)
+        Column(Modifier.weight(1f)) {
+            Text(c.subject, color = Palette.Text, fontSize = 12.sp)
+            Text("${c.author} · ${c.whenText()}", color = Palette.Muted, fontSize = 10.sp)
         }
     }
 }
 
 /** The branch line as a drop-down: "Working tree (current)" first, then the project's local branches. */
 @Composable
-private fun BranchSelect(state: AppState, controller: Controller, active: ProjectView, branch: String?, supported: Boolean) {
+private fun BranchSelect(changes: ChangesPaneHost, modifier: Modifier) {
+    val active = changes.active ?: return
+    val branch = changes.branch
+    val supported = changes.branchesSupported
     var open by remember { mutableStateOf(false) }
-    val status = state.projectGit[active.id]
-    val list = state.projectGitBranches[active.id]
+    val status = changes.state.projectGit[active.id]
+    val list = changes.state.projectGitBranches[active.id]
     val shown = branch ?: "Working tree (current)"
     val detail = if (branch == null && status?.available == true) status.headline() else null
-    Box {
+    Box(modifier) {
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised)
                 .clickable(role = Role.Button, onClickLabel = "Choose what the Changes panel shows") { open = true }
@@ -480,7 +679,7 @@ private fun BranchSelect(state: AppState, controller: Controller, active: Projec
         DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.widthIn(max = BRANCH_MENU_MAX_WIDTH).background(Palette.Raised)) {
             DropdownMenuItem(
                 text = { Text("Working tree (current)", color = Palette.Text, fontSize = 12.sp, fontWeight = if (branch == null) FontWeight.SemiBold else FontWeight.Normal) },
-                onClick = { open = false; controller.selectChangesBranch(active.id, null) },
+                onClick = { open = false; changes.selectBranch(null) },
                 modifier = Modifier.testTag(BRANCH_SELECT_OPTION_TAG + WORKING_TREE_KEY),
             )
             when {
@@ -493,7 +692,7 @@ private fun BranchSelect(state: AppState, controller: Controller, active: Projec
                         val tail = listOfNotNull("checked out".takeIf { b.name == list.current }, "worktree".takeIf { b.isWorktree }).joinToString(", ")
                         DropdownMenuItem(
                             text = { BranchOptionLabel(b.name, tail, selected = b.name == branch) },
-                            onClick = { open = false; controller.selectChangesBranch(active.id, b.name) },
+                            onClick = { open = false; changes.selectBranch(b.name) },
                             modifier = Modifier.testTag(BRANCH_SELECT_OPTION_TAG + b.name),
                         )
                     }
@@ -529,37 +728,36 @@ private fun Note(text: String) = Text(text, color = Palette.Muted, fontSize = 11
 
 /** A working tree's files; [worktree] null is the project's directory (pre-1.88.0), a path is that worktree. */
 @Composable
-private fun WorkingTreeChanges(changes: ChangesView, worktree: String?, openDiff: DiffTarget?, onOpenDiff: ((DiffTarget) -> Unit)?) {
+private fun WorkingTreeChanges(changes: ChangesView, modifier: Modifier, file: @Composable (ChangesFileItem) -> Unit) {
     when (changes) {
-        is ChangesView.Unknown -> Text("Git unknown: ${changes.reason}", color = Palette.Muted, fontSize = 11.sp)
-        ChangesView.Clean -> Text("Working tree clean. Nothing to commit.", color = Palette.Ok, fontSize = 11.sp)
-        is ChangesView.Files -> {
+        is ChangesView.Unknown -> Text("Git unknown: ${changes.reason}", color = Palette.Muted, fontSize = 11.sp, modifier = modifier)
+        ChangesView.Clean -> Text("Working tree clean. Nothing to commit.", color = Palette.Ok, fontSize = 11.sp, modifier = modifier)
+        is ChangesView.Files -> ChangesPlaced(modifier) {
             Text(changes.summary(), color = Palette.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-            val picked = openDiff?.takeIf { it.branch == null && it.worktree == worktree }?.let { it.path to it.staged }
-            ChangeGroup("Staged", changes.staged, staged = true, picked = picked, onPick = onOpenDiff?.let { open -> { f -> open(DiffTarget(f.path, true, worktree = worktree)) } })
-            ChangeGroup("Not staged", changes.unstaged, staged = false, picked = picked, onPick = onOpenDiff?.let { open -> { f -> open(DiffTarget(f.path, false, worktree = worktree)) } })
+            ChangeGroup("Staged", changes.staged, staged = true, picked = null, row = { file(ChangesFileItem(it, staged = true)) }, onPick = null)
+            ChangeGroup("Not staged", changes.unstaged, staged = false, picked = null, row = { file(ChangesFileItem(it, staged = false)) }, onPick = null)
         }
     }
 }
 
 /** What [branch] changed vs its base. Unknown shows the daemon's reason; an available empty list is a known "no changes". */
 @Composable
-private fun BranchChanges(state: AppState, active: ProjectView, branch: String, openDiff: DiffTarget?, onOpenDiff: ((DiffTarget) -> Unit)?) {
+private fun BranchChanges(state: AppState, active: ProjectView, branch: String, modifier: Modifier, row: @Composable (BranchChangedFile) -> Unit) {
     when (val view = branchChangesView(state.projectGitBranchChanges[active.id], branch)) {
-        is BranchChangesView.Unknown -> Text("Branch unknown: ${view.reason}", color = Palette.Muted, fontSize = 11.sp)
-        is BranchChangesView.Files -> {
+        is BranchChangesView.Unknown -> Text("Branch unknown: ${view.reason}", color = Palette.Muted, fontSize = 11.sp, modifier = modifier)
+        is BranchChangesView.Files -> ChangesPlaced(modifier) {
             Text(view.header(), color = Palette.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, fontFamily = Mono)
             if (view.files.isEmpty()) Text("No changes vs ${view.base}.", color = Palette.Ok, fontSize = 11.sp)
-            view.files.forEach { f -> BranchChangeRow(f, picked = openDiff == DiffTarget(f.path, false, branch), onPick = onOpenDiff?.let { open -> { open(DiffTarget(f.path, false, branch)) } }) }
+            view.files.forEach { row(it) }
             if (view.truncated) Text("More files changed than are listed.", color = Palette.Muted, fontSize = 10.sp)
         }
     }
 }
 
 @Composable
-private fun BranchChangeRow(f: BranchChangedFile, picked: Boolean, onPick: (() -> Unit)?) {
+private fun BranchChangeRow(f: BranchChangedFile, picked: Boolean, onPick: (() -> Unit)?, modifier: Modifier = Modifier) {
     Row(
-        Modifier.fillMaxWidth().then(if (onPick != null) Modifier.clickable(role = Role.Button, onClick = onPick) else Modifier)
+        modifier.fillMaxWidth().then(if (onPick != null) Modifier.clickable(role = Role.Button, onClick = onPick) else Modifier)
             .testTag(BRANCH_CHANGE_ROW_TAG + f.path).padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
