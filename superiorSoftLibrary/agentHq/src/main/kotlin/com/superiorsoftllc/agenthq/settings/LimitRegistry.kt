@@ -151,6 +151,32 @@ object LimitRegistry {
         min = 1, max = 10_000, zeroIsUnlimited = false,
     )
 
+    /** SEC-FIX-1 M2 (contract 1.136.0): what a console may type into an interactive run, and how big its terminal may be. */
+    val RUN_INPUT_BYTES_PER_SECOND = LimitDef(
+        "limits.run.inputBytesPerSecond", 64L * 1024, "bytes/s",
+        "Keyboard bytes per second one run accepts through run_input (a paste included); input over it is refused, not queued.",
+    )
+    val RUN_INPUT_MAX_FRAME_BYTES = LimitDef(
+        "limits.run.inputMaxFrameBytes", 16L * 1024, "bytes",
+        "Largest single run_input frame (decoded bytes); a bigger one is refused whole.",
+        min = 1, max = Int.MAX_VALUE.toLong(), zeroIsUnlimited = false,
+    )
+    val RUN_INPUT_QUEUE_BYTES = LimitDef(
+        "limits.run.inputQueueBytes", 256L * 1024, "bytes",
+        "Input waiting to reach a run's terminal (written off the WebSocket loop); while this much waits, more input is refused.",
+        min = 1, max = Int.MAX_VALUE.toLong(), zeroIsUnlimited = false,
+    )
+    val RUN_MAX_COLS = LimitDef(
+        "limits.run.maxCols", 1000, "columns",
+        "Widest terminal a run_start or run_resize may ask for; a wider one is clamped to it.",
+        min = 1, max = 10_000, zeroIsUnlimited = false,
+    )
+    val RUN_MAX_ROWS = LimitDef(
+        "limits.run.maxRows", 1000, "rows",
+        "Tallest terminal a run_start or run_resize may ask for; a taller one is clamped to it.",
+        min = 1, max = 10_000, zeroIsUnlimited = false,
+    )
+
     /** Ticket 3b30398d: the process-watch pass (ROGUE-1 ledger, CPU sampling), read before every pass. */
     val PROCESS_WATCH_INTERVAL_SECONDS = LimitDef(
         "limits.processes.watchIntervalSeconds", 10, "seconds",
@@ -163,6 +189,7 @@ object LimitRegistry {
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
         TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, IDLE_NOTICE_MINUTES, UNBRIEFED_GRACE_MINUTES,
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
+        RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
     )
 
     /** A minutes limit as milliseconds; 0 on an unlimited-capable one = [Long.MAX_VALUE] (never reached). */

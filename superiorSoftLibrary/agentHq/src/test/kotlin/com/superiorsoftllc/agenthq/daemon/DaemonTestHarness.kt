@@ -74,6 +74,12 @@ class WsTestClient : WebSocket.Listener {
 
     fun send(type: String, data: String) = send(Envelope(type, data))
 
+    /** SEC-FIX-1: a text frame exactly as given, not an envelope (the daemon reads a non-JSON one as a prompt). */
+    fun sendRaw(text: String) {
+        val socket = link ?: error("socket not open yet")
+        runCatching { socket.sendText(text, true).join() }
+    }
+
     fun close() {
         runCatching { link?.sendClose(WebSocket.NORMAL_CLOSURE, "bye")?.join() }
     }
@@ -130,6 +136,8 @@ class DaemonFixture private constructor(
     val connectHost: String = "127.0.0.1",
     /** The bearer token every client must send, or null when the daemon requires none. */
     val token: String? = null,
+    /** SEC-FIX-1: the owner credential (`<stateDir>/owner.token`) an owner client presents. */
+    val ownerToken: String? = null,
 ) {
     val client: WsTestClient = WsTestClient()
     private var socket: WebSocket? = null
@@ -153,18 +161,22 @@ class DaemonFixture private constructor(
      * frame before returning it. The fixture keeps it so [stop] can close it; a test that needs more
      * than two clients just calls this again.
      */
-    fun connectClient(): WsTestClient {
+    fun connectClient(owner: Boolean = true): WsTestClient {
         val extra = WsTestClient()
-        openSocket(extra)
+        openSocket(extra, owner)
         extra.await(Envelope.READY)
         extraClients += extra
         return extra
     }
 
-    /** Build the `ws://…/ws` socket for [wsClient], carrying the bearer token when one is required. */
-    private fun openSocket(wsClient: WsTestClient): WebSocket {
+    /**
+     * Build the `ws://…/ws` socket for [wsClient], carrying the bearer token when one is required, and (SEC-FIX-1)
+     * the owner credential when [owner]; without it the client is what an agent is.
+     */
+    private fun openSocket(wsClient: WsTestClient, owner: Boolean = true): WebSocket {
         val builder = HttpClient.newHttpClient().newWebSocketBuilder()
         token?.let { builder.header("Authorization", "Bearer $it") }
+        if (owner) ownerToken?.let { builder.header(OwnerCredential.HEADER, it) }
         return builder.buildAsync(URI.create("ws://$connectHost:$port/ws"), wsClient).join()
     }
 
@@ -304,6 +316,10 @@ class DaemonFixture private constructor(
             handoffTimeoutMs: Long = SessionHandover.DEFAULT_TIMEOUT_MS,
             /** WEB-1: the browser bundle served at `/`; none by default, so the operator's AGENTHQ_WEB_DIR never leaks in. */
             webBundle: WebBundle = WebBundle.EMPTY,
+            /** SEC-FIX-1: the main [client] presents the owner credential; false connects it as an agent would. */
+            owner: Boolean = true,
+            /** SEC-FIX-1: the demo lock, off unless a test sets it, so the operator's AGENTHQ_DEMO_LOCK never leaks in. */
+            demoLock: Boolean = false,
         ): DaemonFixture {
             val opened: AgentHqStore = store ?: SqlAgentHqStore.open(storePath, holderLabel, busyTimeoutMs)
             val provider = StubProvider(script = script, delayMs = 0)
@@ -345,12 +361,14 @@ class DaemonFixture private constructor(
                 chatImageTicker = chatImageTicker,
                 handoffTimeoutMs = handoffTimeoutMs,
                 webBundle = webBundle,
+                ownerToken = OwnerCredential.ensure(stateDir),
+                demoLock = { demoLock },
             )
             beforeStart(daemon)
             // PORT-1: the production start path: bind, then record the bound port (resolves the ephemeral 0).
             val boundPort = startServer(daemon)
-            val fixture = DaemonFixture(stateDir, daemon, boundPort, connectHost, token)
-            fixture.socket = fixture.openSocket(fixture.client)
+            val fixture = DaemonFixture(stateDir, daemon, boundPort, connectHost, token, OwnerCredential.ensure(stateDir))
+            fixture.socket = fixture.openSocket(fixture.client, owner)
             return fixture
         }
     }

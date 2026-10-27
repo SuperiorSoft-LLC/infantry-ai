@@ -102,6 +102,15 @@ class RunManager(
     class RunLimits(
         val scrollbackBytes: () -> Int = { LimitRegistry.cap(LimitRegistry.RUN_SCROLLBACK_BYTES.default, LimitRegistry.RUN_SCROLLBACK_BYTES) },
         val history: () -> Int = { LimitRegistry.cap(LimitRegistry.RUN_HISTORY.default, LimitRegistry.RUN_HISTORY) },
+        /** SEC-FIX-1 M2: `limits.run.inputBytesPerSecond` (0 = unlimited), the per-run keyboard rate. */
+        val inputBytesPerSecond: () -> Int = { LimitRegistry.cap(LimitRegistry.RUN_INPUT_BYTES_PER_SECOND.default, LimitRegistry.RUN_INPUT_BYTES_PER_SECOND) },
+        /** SEC-FIX-1 M2: `limits.run.inputMaxFrameBytes`, the largest single `run_input`. */
+        val inputMaxFrameBytes: () -> Int = { LimitRegistry.cap(LimitRegistry.RUN_INPUT_MAX_FRAME_BYTES.default, LimitRegistry.RUN_INPUT_MAX_FRAME_BYTES) },
+        /** SEC-FIX-1 M2: `limits.run.inputQueueBytes`, input waiting for the pty writer. */
+        val inputQueueBytes: () -> Int = { LimitRegistry.cap(LimitRegistry.RUN_INPUT_QUEUE_BYTES.default, LimitRegistry.RUN_INPUT_QUEUE_BYTES) },
+        /** SEC-FIX-1 M2: `limits.run.maxCols` / `limits.run.maxRows`, the clamp on a pty size. */
+        val maxCols: () -> Int = { LimitRegistry.cap(LimitRegistry.RUN_MAX_COLS.default, LimitRegistry.RUN_MAX_COLS) },
+        val maxRows: () -> Int = { LimitRegistry.cap(LimitRegistry.RUN_MAX_ROWS.default, LimitRegistry.RUN_MAX_ROWS) },
     )
 
     /** The answer to a `run_start`, and the thunk that actually starts the child. */
@@ -124,8 +133,8 @@ class RunManager(
             ?: return refuse("run_start expects {\"commandId\":\"<id>\"}")
         val interactive = (obj["interactive"] as? JsonPrimitive)?.booleanOrNull ?: false
         if (interactive && demoLock()) return refuse("run_start refused: interactive runs are off under the demo lock")
-        val cols = (obj["cols"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 } ?: DEFAULT_COLS
-        val rows = (obj["rows"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 } ?: DEFAULT_ROWS
+        val cols = clampCols((obj["cols"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 } ?: DEFAULT_COLS)
+        val rows = clampRows((obj["rows"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 } ?: DEFAULT_ROWS)
         val run: Run
         val command: SavedCommand
         // The lookup is under [lock] too, so a save or delete running in [unlessRunning] cannot slip between them.
@@ -164,24 +173,39 @@ class RunManager(
             return Envelope(Envelope.ERROR, "run_resize expects {\"runId\", \"cols\" > 0, \"rows\" > 0}")
         val run = synchronized(lock) { inFlight }?.takeIf { it.runId == runId }
             ?: return Envelope(Envelope.ERROR, "run_resize refused: no such run in flight")
-        run.resize(cols, rows)
+        run.resize(clampCols(cols), clampRows(rows))
         return null
     }
 
+    /** SEC-FIX-1 M2: a pty size is clamped to 1..`limits.run.maxCols` / `maxRows`, never refused. */
+    private fun clampCols(cols: Int): Int = cols.coerceIn(1, limits.maxCols().coerceAtLeast(1))
+    private fun clampRows(rows: Int): Int = rows.coerceIn(1, limits.maxRows().coerceAtLeast(1))
+
     /**
      * `run_input {"runId", "data": base64}`: keyboard bytes into the run's pty. Only for a run started interactive and
-     * never under the demo lock. Null when written, else an ERROR.
+     * never under the demo lock. SEC-FIX-1 M2: at most `limits.run.inputMaxFrameBytes` per frame and
+     * `limits.run.inputBytesPerSecond` per run; the bytes are queued (at most `limits.run.inputQueueBytes`) for the
+     * run's own writer thread, so a slow pty never holds the WebSocket loop. Null when queued, else an ERROR.
      */
     fun input(data: String): Envelope? {
         val runId = field(data, "runId")
-        val bytes = field(data, "data")?.let { runCatching { Base64.getDecoder().decode(it) }.getOrNull() }
-        if (runId == null || bytes == null) return Envelope(Envelope.ERROR, "run_input expects {\"runId\", \"data\": base64}")
+        val encoded = field(data, "data")
+        if (runId == null || encoded == null) return Envelope(Envelope.ERROR, "run_input expects {\"runId\", \"data\": base64}")
+        // Measured before decoding, so a huge frame is never decoded at all (base64 is 4 characters per 3 bytes).
+        val maxFrame = limits.inputMaxFrameBytes()
+        if (encoded.length / 4L * 3 > maxFrame + 2L) return inputTooBig(maxFrame)
+        val bytes = runCatching { Base64.getDecoder().decode(encoded) }.getOrNull()
+            ?: return Envelope(Envelope.ERROR, "run_input expects {\"runId\", \"data\": base64}")
+        if (bytes.size > maxFrame) return inputTooBig(maxFrame)
         if (demoLock()) return Envelope(Envelope.ERROR, "run_input refused: typing into a run is off under the demo lock")
         val run = synchronized(lock) { inFlight }?.takeIf { it.runId == runId }
             ?: return Envelope(Envelope.ERROR, "run_input refused: no such run in flight")
         if (!run.interactive) return Envelope(Envelope.ERROR, "run_input refused: the run was not started interactive")
-        return if (run.write(bytes)) null else Envelope(Envelope.ERROR, "run_input refused: the run has no terminal")
+        return run.write(bytes)?.let { Envelope(Envelope.ERROR, "run_input refused: $it") }
     }
+
+    private fun inputTooBig(max: Int) =
+        Envelope(Envelope.ERROR, "run_input refused: one frame may carry at most $max bytes. ${LimitRegistry.RUN_INPUT_MAX_FRAME_BYTES.hint()}")
 
     private fun field(data: String, name: String): String? =
         ((runCatching { wire.parseToJsonElement(data) }.getOrNull() as? JsonObject)?.get(name) as? JsonPrimitive)
@@ -259,10 +283,49 @@ class RunManager(
 
         fun resize(cols: Int, rows: Int) { runCatching { pty?.resize(cols, rows) } }
 
-        fun write(bytes: ByteArray): Boolean {
-            val p = pty ?: return false
-            runCatching { p.write(bytes) }
-            return true
+        // SEC-FIX-1 M2: the keyboard rate (a token bucket of [RunLimits.inputBytesPerSecond]) and the queue the
+        // writer thread drains. Guarded by [inputLock]; the writer starts with the first input.
+        private val inputLock = Any()
+        private val inputQueue = java.util.concurrent.LinkedBlockingQueue<ByteArray>()
+        private var queuedBytes = 0L
+        private var allowance = -1.0 // bytes the bucket holds; -1 = not filled yet
+        private var allowanceAt = 0L
+        private var writer: Thread? = null
+
+        /** Queues [bytes] for the pty: null when queued, else why not (no terminal, over the rate, queue full). */
+        fun write(bytes: ByteArray): String? {
+            val p = pty ?: return "the run has no terminal"
+            synchronized(inputLock) {
+                val rate = limits.inputBytesPerSecond()
+                if (rate > 0) {
+                    val t = now()
+                    allowance = if (allowance < 0) rate.toDouble()
+                    else (allowance + (t - allowanceAt).coerceAtLeast(0) * rate / 1000.0).coerceAtMost(rate.toDouble())
+                    allowanceAt = t
+                    if (bytes.size > allowance) {
+                        return "over ${rate} input bytes per second. ${LimitRegistry.RUN_INPUT_BYTES_PER_SECOND.hint()}"
+                    }
+                    allowance -= bytes.size
+                }
+                val cap = limits.inputQueueBytes()
+                if (queuedBytes + bytes.size > cap) {
+                    return "the terminal is not keeping up ($queuedBytes bytes waiting). ${LimitRegistry.RUN_INPUT_QUEUE_BYTES.hint()}"
+                }
+                queuedBytes += bytes.size
+                inputQueue.add(bytes)
+                if (writer == null) writer = Thread({ drain(p) }, "agenthq-run-input").apply { isDaemon = true; start() }
+            }
+            return null
+        }
+
+        /** The writer thread: one pty write at a time, in arrival order, until the run is finished. */
+        private fun drain(p: TerminalProcess) {
+            while (true) {
+                val next = inputQueue.poll(200, java.util.concurrent.TimeUnit.MILLISECONDS)
+                if (next == null) { if (isFinished()) return else continue }
+                runCatching { p.write(next) }
+                synchronized(inputLock) { queuedBytes -= next.size }
+            }
         }
 
         fun stop(force: Boolean) {

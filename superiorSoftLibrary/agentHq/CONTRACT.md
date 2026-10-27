@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.134.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.136.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,14 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+
+### What changed in 1.136.0 (SEC-FIX-1, ticket-61e8f4ac) - one frame gate, the owner credential, run input limits
+
+Behavioural; `contract=1.136.0` (1.135.0 is SECRETS-2). Every client frame passes ONE gate before the dispatch, a bare non-JSON text frame (read as `prompt`) included. A refusal is an `error` frame (`<type> refused: ...`, echoing the request's `requestId`) and nothing runs.
+
+- **Demo lock.** Under `AGENTHQ_DEMO_LOCK` only the read-only frames on `FrameGate.DEMO_LOCK_ALLOWED` get through (list/get/search queries, `replay_request`, `sessions`, `providers`, `models`, `settings_get`, `project_git_*` reads; `FrameGateDaemonTest` pins the list). Every other frame is refused, a frame added later included, the owner's too: `prompt`, `new`, `command_*`, `run_*`, `secret_*`, every write.
+- **Owner credential.** `command_save`, `command_delete`, `secret_set`, `secret_clear`, `secret_import`, `run_start`, `run_stop`, `run_attach`, `run_resize` and `run_input` need an owner connection. A connection is the owner when its handshake carries the owner token as the `X-AgentHQ-Owner` header, or (a browser) as the `agenthq.owner.<base64url token>` subprotocol offered next to `agenthq`. The token is generated once into `<stateDir>/owner.token`; it is apart from the access token (`AGENTHQ_TOKEN`, which every agent is handed) and never handed to a spawned agent. A daemon refuses to start when both are the same. Caveat: an agent runs as the same OS user, so it can still read `owner.token` (and the keystore key) from disk; run agents as another OS user to close that.
+- **Run input.** `run_input` carries at most `limits.run.inputMaxFrameBytes` (16 KiB) decoded bytes, at most `limits.run.inputBytesPerSecond` (64 KiB/s, 0 = unlimited) per run, and is written to the pty by the run's own thread from a queue of at most `limits.run.inputQueueBytes` (256 KiB); over any of them the input is refused, not queued. `run_start` / `run_resize` sizes are clamped to 1..`limits.run.maxCols` / `limits.run.maxRows` (1000 each).
 
 ### Note (no version bump): the `agentWatchdog` project switch (ticket-4e1d52c6)
 

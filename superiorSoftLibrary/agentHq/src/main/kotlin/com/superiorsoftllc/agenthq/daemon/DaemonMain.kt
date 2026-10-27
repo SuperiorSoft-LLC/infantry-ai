@@ -540,6 +540,13 @@ class AgentHqDaemon(
              */
             token: String? = RemoteAccess.resolveToken(stateDir()),
             /**
+             * SEC-FIX-1 (1.136.0): the OWNER credential (`<stateDir>/owner.token`, generated once), apart from [token]. Never
+             * handed to a spawned agent; only a connection presenting it may send [FrameGate.OWNER_ONLY] frames.
+             */
+            ownerToken: String = OwnerCredential.ensure(stateDir()),
+            /** SEC-FIX-1: the demo lock (`AGENTHQ_DEMO_LOCK`), read per frame; a test passes its own. */
+            demoLock: () -> Boolean = { com.superiorsoftllc.agenthq.plugin.host.PluginFolders.demoLock() },
+            /**
              * Contract 1.3.0: the providers a spawn may name besides [provider], from `AGENTHQ_PROVIDERS`.
              * Empty (the default when the variable is unset) = this daemon serves [provider] only.
              */
@@ -624,6 +631,8 @@ class AgentHqDaemon(
             sessionIds: () -> String = { UUID.randomUUID().toString() },
         ): AgentHqDaemon {
             val policy = AccessPolicy.of(host, token)
+            // SEC-FIX-1: built once; refused when it equals the access token every agent is handed.
+            val ownerCredential = OwnerCredential.forDaemon(ownerToken, token)
             // PORT-1: FIRST, because the mail base and every session's AGENTHQ_URL below carry the port.
             // BUG-FLAKE-1: and HELD from here until start(), so no other socket on the host can take it meanwhile.
             val portReservation = DaemonPort.reserve(port, host, strictPort)
@@ -808,8 +817,13 @@ class AgentHqDaemon(
                 limits = com.superiorsoftllc.agenthq.commands.RunManager.RunLimits(
                     scrollbackBytes = { settings.limitCap(LimitRegistry.RUN_SCROLLBACK_BYTES) },
                     history = { settings.limitCap(LimitRegistry.RUN_HISTORY) },
+                    inputBytesPerSecond = { settings.limitCap(LimitRegistry.RUN_INPUT_BYTES_PER_SECOND) },
+                    inputMaxFrameBytes = { settings.limitCap(LimitRegistry.RUN_INPUT_MAX_FRAME_BYTES) },
+                    inputQueueBytes = { settings.limitCap(LimitRegistry.RUN_INPUT_QUEUE_BYTES) },
+                    maxCols = { settings.limitCap(LimitRegistry.RUN_MAX_COLS) },
+                    maxRows = { settings.limitCap(LimitRegistry.RUN_MAX_ROWS) },
                 ),
-                demoLock = { com.superiorsoftllc.agenthq.plugin.host.PluginFolders.demoLock() },
+                demoLock = demoLock,
             )
             val attention = AttentionStore(store.attention)
             attention.eventSink = { item -> broadcastAttention(clients, item) }
@@ -1432,6 +1446,8 @@ class AgentHqDaemon(
                             ownerQuestions = ownerQuestions,
                             handover = handover,
                             processWatch = processWatch,
+                            ownerCredential = ownerCredential,
+                            demoLock = demoLock,
                         )
                     }
                 }
@@ -1996,8 +2012,17 @@ private suspend fun handleConnection(
     handover: SessionHandover? = null,
     /** ROGUE-1 (contract 1.120.0): `processes`; null = this daemon serves none. */
     processWatch: com.superiorsoftllc.agenthq.session.ProcessWatch? = null,
+    /** SEC-FIX-1 (1.136.0): who is the owner ([FrameGate.OWNER_ONLY]); null = no connection is. */
+    ownerCredential: OwnerCredential? = null,
+    /** SEC-FIX-1 (1.136.0): the demo lock, read per frame ([FrameGate.DEMO_LOCK_ALLOWED]). */
+    demoLock: () -> Boolean = { false },
 ) {
     println("[agentHq] ws connected (provider=${manager.providerId})")
+    // SEC-FIX-1: decided once, at the handshake, from what this connection presented.
+    val owner = ownerCredential?.presentedBy(
+        session.call.request.headers[OwnerCredential.HEADER],
+        session.call.request.headers.getAll(io.ktor.http.HttpHeaders.SecWebSocketProtocol)?.joinToString(","),
+    ) == true
     val outgoing = Channel<Envelope>(Channel.UNLIMITED)
     clients.add(outgoing)
     val sender = session.launch {
@@ -2161,6 +2186,11 @@ private suspend fun handleConnection(
             val text = (frame as? Frame.Text)?.readText() ?: continue
             val envelope = runCatching { json.decodeFromString(Envelope.serializer(), text) }.getOrNull()
                 ?: Envelope(Envelope.PROMPT, text)
+            // SEC-FIX-1: the one gate, before every branch below (the bare-text prompt and the replay included).
+            FrameGate.refusal(envelope.type, demoLock(), owner)?.let { why ->
+                outgoing.trySend(Envelope(Envelope.ERROR, why, requestId = envelope.requestId))
+                continue
+            }
             if (envelope.type == SESSION_REPLAY_REQUEST_TYPE) {
                 val sessionId = envelope.sessionId
                 val request = runCatching {
