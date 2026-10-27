@@ -30,6 +30,52 @@ class HandCursorGuardTest {
         if (offenders.isNotEmpty()) fail("these imports bypass the M2-10 hand cursor (use the wrappers in Clickables.kt):\n" + offenders.joinToString("\n"))
     }
 
+    private val wrappedKinds = listOf("clickable", "combinedClickable", "Button", "OutlinedButton", "TextButton", "Switch", "Checkbox", "RadioButton", "FilterChip", "DropdownMenuItem")
+
+    private fun sourceFiles(): List<File> {
+        val roots = listOf("src/commonMain", "src/jvmMain", "src/androidMain")
+            .map { File(it, "kotlin/com/superiorsoftllc/agenthq/ui") }
+            .plus(File("../agentHqWeb/src/wasmJsMain/kotlin"))
+            .filter { it.isDirectory }
+        assertTrue(roots.isNotEmpty(), "ui sources not found from ${File(".").absolutePath}")
+        return roots.flatMap { root -> root.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList() }
+            .filter { it.name != "Clickables.kt" }
+    }
+
+    private fun codeLines(f: File) = f.readLines().withIndex().filter { val t = it.value.trimStart(); !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*") }
+
+    @Test
+    fun `no ui file calls a wrapped kind fully qualified`() {
+        val qualified = Regex("""androidx\.compose\.(material3|foundation)\.(${wrappedKinds.joinToString("|")})\b""")
+        val offenders = sourceFiles().flatMap { f ->
+            codeLines(f).filter { !it.value.startsWith("import ") && qualified.containsMatchIn(it.value) }.map { "${f.name}:${it.index + 1}: ${it.value.trim()}" }
+        }
+        if (offenders.isNotEmpty()) fail("fully qualified calls skip the hand cursor (use the wrappers in Clickables.kt):\n" + offenders.joinToString("\n"))
+    }
+
+    /** Kinds without a wrapper yet: raw call counts may only go down. Lower the number when you migrate a kind. */
+    private val rawBaseline = mapOf(
+        "Text" to 1054,
+        "DropdownMenu" to 9,
+        "OutlinedTextField" to 99,
+        "BasicTextField" to 2,
+        "Icon" to 18,
+        "HorizontalDivider" to 31,
+    )
+
+    @Test
+    fun `raw calls of the kinds not wrapped yet never grow`() {
+        val files = sourceFiles()
+        val counts = rawBaseline.keys.associateWith { kind ->
+            val call = Regex("""(?<![\w.])$kind\(|androidx\.compose\.(material3|foundation\.text)\.$kind\(""")
+            files.sumOf { f -> codeLines(f).count { !it.value.contains("fun $kind(") && call.containsMatchIn(it.value) } }
+        }
+        val grown = counts.filter { (k, n) -> n > rawBaseline.getValue(k) }
+        val shrunk = counts.filter { (k, n) -> n < rawBaseline.getValue(k) }
+        if (grown.isNotEmpty()) fail("raw calls grew (wrap them or reuse a wrapper): " + grown.map { (k, n) -> "$k ${rawBaseline[k]} -> $n" })
+        if (shrunk.isNotEmpty()) fail("raw calls shrank, lower rawBaseline to lock it in: " + shrunk.map { (k, n) -> "$k ${rawBaseline[k]} -> $n" })
+    }
+
     @Test
     fun `the board's drag handle takes its grab cursor from the Clickables wrapper`() {
         val ui = File("src/commonMain/kotlin/com/superiorsoftllc/agenthq/ui")
