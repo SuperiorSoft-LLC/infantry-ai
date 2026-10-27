@@ -155,6 +155,17 @@ class ModuleResolverTest {
     }
 
     @Test
+    fun `S1 a community module replaces the frame placeholder only when modules json allows that node`() {
+        val decl = ShellOverrideDeclaration("infantry.shell.frame", "frame")
+        val acme = community("Acme_Ui").let { it.copy(manifest = it.manifest!!.copy(shell = listOf(decl))) }
+        val refused = ModuleResolver.resolve(listOf(acme), enabled("Acme_Ui"))
+        assertEquals(emptyList(), refused.shellOverrides)
+        assertTrue(refused.log.any { "cannot override core shell node infantry.shell.frame" in it })
+        val allowed = ModuleResolver.resolve(listOf(acme), enabled("Acme_Ui", allowOverride = listOf("infantry.shell.frame")))
+        assertEquals(listOf(AcceptedShellOverride("Acme_Ui", "infantry.shell.frame", "frame", "replace")), allowed.shellOverrides)
+    }
+
+    @Test
     fun `community may replace community and the last loaded wins`() {
         val a = community("Acme_A", tabs = listOf("acme.a"))
         val b = community("Acme_B", tabs = listOf("acme.b"), preferences = listOf(PreferenceDeclaration("acme.a", "acme.b")))

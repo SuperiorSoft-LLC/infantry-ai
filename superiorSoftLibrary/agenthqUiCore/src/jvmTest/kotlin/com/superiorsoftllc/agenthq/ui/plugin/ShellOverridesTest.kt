@@ -9,10 +9,13 @@ import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockOverride
 import com.superiorsoftllc.agenthq.ui.block.layout.OverrideBlock
 import com.superiorsoftllc.agenthq.ui.block.layout.OverrideModes
+import com.superiorsoftllc.agenthq.ui.block.layout.PlaceholderBlock
 import com.superiorsoftllc.agenthq.ui.shell.blocks.CoreShell
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -63,12 +66,45 @@ class ShellOverridesTest {
             module(
                 "Acme_Bar",
                 ShellOverrideDeclaration("infantry.shell.connect", "token"),
-                ShellOverrideDeclaration("infantry.shell.frame", "frame", OverrideModes.WRAP),
+                ShellOverrideDeclaration("infantry.shell.dock", "dock", OverrideModes.WRAP),
             ),
         )
         assertSame(CoreShell.root, f.shellRoot)
         assertTrue("Acme_Bar: shell override (replace) of infantry.shell.connect refused: infantry.shell.connect is locked" in f.problems, f.problems.toString())
-        assertTrue(f.problems.any { "(wrap) of infantry.shell.frame refused: infantry.shell.frame is locked" in it }, f.problems.toString())
+        assertTrue(f.problems.any { "(wrap) of infantry.shell.dock refused: infantry.shell.dock is locked" in it }, f.problems.toString())
+    }
+
+    /** SHELL-EMPTY-DROPIN S1: frame, body, panes and windowLayer are placeholders, open slots with a core default. */
+    @Test fun `a placeholder with no override draws its core default, with the node id, place and children`() {
+        CoreShell.placeholders.forEach { id ->
+            val p = assertIs<PlaceholderBlock>(CoreShell.root.find(id), id)
+            val default = assertNotNull(p.default, id)
+            assertNotEquals("placeholder", default.blockType, id)
+            assertSame(default.children, p.children, id)
+            assertTrue(id !in CoreShell.locked, "$id is a placeholder, not locked")
+        }
+        assertTrue(assertIs<PlaceholderBlock>(CoreShell.root.find("infantry.shell.frame")).wearsHostSurface, "the frame default wears the host surface")
+    }
+
+    @Test fun `a module replaces a placeholder with its block, in the placeholder id and place`() {
+        listOf("infantry.shell.frame", "infantry.shell.body", "infantry.shell.panes").forEach { id ->
+            val f = factory(module("Acme_Slot", ShellOverrideDeclaration(id, "slot")))
+            assertEquals(emptyList(), f.problems, id)
+            val node = assertIs<OverrideBlock>(f.shellRoot.find(id), id)
+            assertEquals(OverrideModes.REPLACE, node.mode)
+            assertSame(CoreShell.root.find(id)!!.place, node.place, id)
+            assertSame(CoreShell.root.find(id), node.inner, id)
+            // A replace of the frame hands the host surface (focus target, key handler) on to the module's block.
+            assertEquals(id == "infantry.shell.frame", node.wearsHostSurface, id)
+            // The locked dialog layer beside it is untouched.
+            assertSame(CoreShell.root.find("infantry.shell.windowLayer"), f.shellRoot.find("infantry.shell.windowLayer"), id)
+        }
+    }
+
+    @Test fun `the windowLayer placeholder refuses a replace that would remove the locked dialogs in it`() {
+        val f = factory(module("Acme_Layer", ShellOverrideDeclaration("infantry.shell.windowLayer", "layer")))
+        assertSame(CoreShell.root, f.shellRoot)
+        assertEquals(listOf("Acme_Layer: shell override (replace) of infantry.shell.windowLayer refused: it would remove locked node infantry.shell.config"), f.problems)
     }
 
     @Test fun `every locked id is a node of the core tree`() {

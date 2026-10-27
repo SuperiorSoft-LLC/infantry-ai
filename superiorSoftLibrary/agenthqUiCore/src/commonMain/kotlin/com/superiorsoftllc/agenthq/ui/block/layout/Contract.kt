@@ -28,6 +28,13 @@ abstract class Block(
 
     /** The decomposition / override hook. The default refuses visibly; a block that accepts children overrides it. */
     open fun withChildren(children: List<Block>): Block = refuse("$blockType takes no children yet")
+
+    /**
+     * SHELL-EMPTY-DROPIN S1: this node wears [LocalHostSurface] (core only: `column(surface)`, or a placeholder or override
+     * of one), so a replace of it hands the surface on in the scope's modifier instead of dropping the window's focus
+     * target and key handler.
+     */
+    internal open val wearsHostSurface: Boolean get() = false
 }
 
 /** A refusal is loud: resolvers list it (Settings > Plugins, L5); nothing is dropped silently. */

@@ -63,8 +63,10 @@ Everything is declared in `module.json` and registered under the same id. Anythi
     you get as `inner`; call `inner.Render(scope)` where it goes. Apply `scope.modifier` exactly once, on your
     outermost node: it carries the placement the parent gave the node (a weight, a fill).
   - Several modules on one node apply in load order: wraps nest with the last loaded outermost, the last replace wins.
-  - **Locked** nodes cannot be replaced or wrapped: the skeleton (`window, images, dock, frame, body, panes,
-    windowLayer`) and `connect, servers, switchError, serverUpdate, config`. An unknown id, an unknown mode or a locked
+  - **Locked** nodes cannot be replaced or wrapped: the skeleton (`window, images, dock`) and `connect, servers,
+    switchError, serverUpdate, config`. The **placeholders** `frame, body, panes, windowLayer` are open slots: each draws
+    its core default until a module replaces it, in the same id and place (`windowLayer` takes injections only, as it
+    holds locked dialogs). A replace of `frame` gets the window's surface in `scope.modifier`. An unknown id, an unknown mode or a locked
     node is ignored, and the reason is one line in Settings > Plugins and the log. A community module needs the node
     id in its `allowOverride` in `modules.json`.
   - **Node ids are API.** They are never renamed; a module may rely on them. Ids not in the pinned list are not

@@ -13,8 +13,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.isSpecified
 import com.superiorsoftllc.agenthq.ui.model.PanelLayout
 
-/** A group is transparent: a container places a group's children as its own (recursively). */
-fun List<Block>.flattened(): List<Block> = flatMap { if (it is GroupBlock) it.children.flattened() else listOf(it) }
+/** A group is transparent: a container places a group's children as its own (recursively); so is a placeholder that draws a group (S1). */
+fun List<Block>.flattened(): List<Block> = flatMap {
+    if (it is GroupBlock || (it is PlaceholderBlock && it.default is GroupBlock)) it.children.flattened() else listOf(it)
+}
 
 internal fun Modifier.sized(size: Size): Modifier = when (size) {
     Size.Wrap -> this

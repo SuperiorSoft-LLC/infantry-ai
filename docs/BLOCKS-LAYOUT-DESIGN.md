@@ -666,6 +666,44 @@ infantry.shell.changes   changesPane   ChangesPaneFrame (the scrolled padded col
   diff masks them (the default mask only masks them for the shots named after the chat tab). The step matched its base
   render (step 0 of L18) 6/6 at 0 px, plus diffTabShots 32/32.
 
+### 6p. As built in SHELL-EMPTY-DROPIN S1 (9c69dee6): placeholder containers
+
+The drop-in path (docs/SHELL-EMPTY-DROPIN-FEASIBILITY.md, gap 1) needs a dropped plugin to fill an empty shell, and the
+locked containers refused every override and injection. Four of them are now **placeholders**, open slots:
+
+```
+infantry.shell.frame        placeholder   default: column(surface)   header, body, footer
+infantry.shell.body         placeholder   default: stack(measure)    panes, drawer
+infantry.shell.panes        placeholder   default: row               left, center, right
+infantry.shell.windowLayer  placeholder   default: group             the dialogs (config ... connect)
+```
+
+- `PlaceholderBlock(id, default, place)` (block/layout/Placeholder.kt, built with `Block.asPlaceholder()`) keeps the
+  node's id and place, so its parent places it as before, and draws its core-provided **default** (the block the node
+  was) with the same scope: with no override the window is pixel-identical. With no default it draws nothing (the
+  empty shell's slot, for later steps).
+- Its children are the default's, so every node below keeps its id and address (the tree walk in CoreShellTreeTest is
+  unchanged) and an injection into a placeholder goes in among them, drawn by the default (`withChildren` rebuilds the
+  default; an empty placeholder takes a group). A placeholder of a group flattens like a group.
+- A replace draws the module's block in the placeholder's id and place (`OverrideBlock`, as any node). A replace of the
+  frame, whose default wears the host surface (fill, modal blur, background, the window's focus target, the key
+  handler), gets that surface in its scope's modifier (`wearsHostSurface`), so the window still starts and keys still
+  work; the block must apply the modifier exactly once, as every block does. A wrap leaves the surface to `inner`.
+- `windowLayer` takes injections, but its replace is still refused: it would remove the locked dialogs in it. That is
+  the rule as it was, and it is what keeps the trust kernel reachable.
+- Still locked: the true skeleton `window`, `images`, `dock`, and `connect`, `servers`, `switchError`, `serverUpdate`,
+  `config`. `CoreShell.placeholders` lists the four; both lists are pinned in CoreShellTreeTest (plugin API, 3d of the
+  feasibility doc).
+- Trust is unchanged: a community module needs `allowOverride` (replace, wrap) or `allowInject` for a placeholder like
+  any core node (ModuleResolverTest, BlockInjectorTest).
+- Deviation from the feasibility doc's S1 row: the doc has the open children become empty placeholders that a
+  compiled-in `Infantry_AppUi` core module fills back through `shell(replace)`. S1 instead keeps the current UI as the
+  placeholders' in-tree defaults: replacing the open children would take every node below them (header.lead...,
+  footer chips, the board card...) out of the tree, breaking their published ids, and the window would no longer be
+  `CoreShell.root` itself with no module. Moving the defaults out into a module is S4's job (the module split).
+- 0 px: diffTabShots 32/32; the S0 set (`-PtabShotsExtra=config,changes,compact` against tab-shots-baseline-s0) 22/22;
+  `roles` 4/4 and `board` 4/4 against a render of the base ref. HandCursorGuardTest baseline unchanged (no raw calls
+  added or removed).
 
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 
@@ -673,7 +711,8 @@ infantry.shell.changes   changesPane   ChangesPaneFrame (the scrolled padded col
 |---|---|
 | `Block`/`Place`/`BlockScope`/`LocalBlockSize` contract, primitive type names + fields (the JSON schema) | **plugin API** (what a plugin composes against; candidate for the permissive API module) |
 | primitive implementations, resolver, `surface`, `imageViewerHost` | **core**, not overridable as types |
-| skeleton nodes `window, images, dock, frame, body, panes, windowLayer` | core, `locked` (children insertable) |
+| skeleton nodes `window, images, dock` | core, `locked` (children insertable) |
+| placeholders `frame, body, panes, windowLayer` (S1, 6p) | core default, **overridable per node** (windowLayer: injections only, it holds locked dialogs) |
 | `connect`, `servers`, `switchError`, `serverUpdate`, `config` | core, `locked`: a plugin must not replace where a token is typed, an update is approved or a plugin is disabled |
 | titleBar, panels, center, statusBar and its children, toast/assistant/board/diff/voice/sound/questions | core-shipped, **overridable per node** |
 

@@ -171,10 +171,36 @@ class InjectorUiTest {
     }
 
     @Test fun `an injection into a locked node is refused with a line and nothing draws`() {
-        val tabs = factory(module("Infantry_Lock", Tier.CORE, Inj("infantry.shell.windowLayer", "fake")))
-        assertEquals(listOf("Infantry_Lock: injection fake into infantry.shell.windowLayer (last) refused: infantry.shell.windowLayer is locked"), tabs.problems)
+        val tabs = factory(module("Infantry_Lock", Tier.CORE, Inj("infantry.shell.dock", "fake")))
+        assertEquals(listOf("Infantry_Lock: injection fake into infantry.shell.dock (last) refused: infantry.shell.dock is locked"), tabs.problems)
         assertSame(CoreShell.root, tabs.shellRoot)
         withWindow(tabs) { onNodeWithTag("fake").assertDoesNotExist() }
+    }
+
+    /** SHELL-EMPTY-DROPIN S1: the placeholder containers are open slots in the real window. */
+    @Test fun `a module replaces the frame placeholder and only its block draws there, the overlays stay`() {
+        val frame = "infantry.shell.frame"
+        // A marker in the footer, inside the frame: with no override the placeholder draws its default, the core frame.
+        val marker = module("Infantry_Marker", Tier.CORE, Inj("infantry.shell.footer", "marker"))
+        withWindow(factory(marker)) { onNodeWithTag("marker").assertExists() }
+        val tabs = factory(
+            marker,
+            module("Infantry_Frame", Tier.CORE, shell = listOf(ShellOverrideDeclaration(frame, "frame")), overrides = mapOf("frame" to BlockOverride { scope, _ -> Text("frame", scope.modifier.testTag("frame")) })),
+            shellOverrides = listOf(AcceptedShellOverride("Infantry_Frame", frame, "frame", OverrideModes.REPLACE)),
+        )
+        assertEquals(listOf("Infantry_Marker: injection marker into infantry.shell.footer not drawn: $frame is replaced by Infantry_Frame"), tabs.problems)
+        // The window still starts (its focus target rides on the replacement's modifier) and draws the block, not the core frame.
+        withWindow(tabs) {
+            onNodeWithTag("frame").assertExists()
+            onNodeWithTag("marker").assertDoesNotExist()
+        }
+    }
+
+    @Test fun `a core module injects into the windowLayer placeholder and it draws`() {
+        val tabs = factory(module("Infantry_Layer", Tier.CORE, Inj("infantry.shell.windowLayer", "layer")))
+        assertEquals(emptyList(), tabs.problems)
+        assertEquals("Infantry_Layer.layer", tabs.shellRoot.find("infantry.shell.windowLayer")!!.children.last().id)
+        withWindow(tabs) { onNodeWithTag("layer").assertExists() }
     }
 
     @Test fun `an injection into the right panel body shows docked and in the compact drawer`() {

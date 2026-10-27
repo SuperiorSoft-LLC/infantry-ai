@@ -97,6 +97,33 @@ class BlockInjectorTest {
         }
     }
 
+    /** SHELL-EMPTY-DROPIN S1: a placeholder takes injections among its default's children; a community module needs allowInject. */
+    @Test fun `the placeholders take an injection last, drawn by their default, and a community module needs allowInject`() {
+        CoreShell.placeholders.forEach { id ->
+            val r = BlockResolver.resolve(CoreShell.root, emptyList(), CoreShell.locked, injections = listOf(NodeInjection("m", "x", id, injection = nothing)))
+            assertEquals(emptyList(), r.problems, id)
+            val p = assertIs<PlaceholderBlock>(r.root.find(id), id)
+            assertEquals(CoreShell.root.find(id)!!.children.map { it.id } + "m.x", p.children.map { it.id }, id)
+            assertEquals(CoreShell.root.find(id)!!.place, p.place, id)
+            assertSame(p.children, p.default!!.children, id)
+        }
+        val problems = mutableListOf<String>()
+        val js = CoreShell.placeholders.map { NodeInjection("Acme_Ui", it.substringAfterLast('.'), it, injection = nothing) }
+        assertEquals(listOf("infantry.shell.panes"), admitInjections(js, isCore = { false }, allowInject = { listOf("infantry.shell.panes") }, problems).map { it.target })
+        assertEquals(3, problems.size, problems.toString())
+    }
+
+    @Test fun `an empty placeholder draws nothing and an injection into it goes into a group default`() {
+        val slot = PlaceholderBlock("t.slot")
+        val tree = StackBlock("t", children = listOf(slot))
+        val r = BlockResolver.resolve(tree, emptyList(), emptySet(), "t", listOf(NodeInjection("m", "x", "t.slot", injection = nothing)))
+        val p = assertIs<PlaceholderBlock>(r.root.find("t.slot"))
+        assertIs<GroupBlock>(p.default)
+        assertEquals(listOf("m.x"), p.children.map { it.id })
+        assertNull(slot.default)
+        assertEquals(emptyList(), slot.children)
+    }
+
     @Test fun `on the core tree the footer takes an injection last and the board header leaf refuses one`() {
         val footer = "infantry.shell.footer"
         val r = BlockResolver.resolve(
