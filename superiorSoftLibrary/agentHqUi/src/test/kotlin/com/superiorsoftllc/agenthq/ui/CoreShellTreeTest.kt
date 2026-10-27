@@ -18,7 +18,7 @@ class CoreShellTreeTest {
             "    infantry.shell.dock",
             "      infantry.shell.frame",
             "        $header",
-        ) + listOf("lead")
+        ) + listOf("lead", "windowControls")
             .map { "          $header.$it" } + listOf(
             "        infantry.shell.body",
             "          infantry.shell.panes",

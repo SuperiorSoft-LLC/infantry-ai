@@ -1,6 +1,10 @@
 package com.superiorsoftllc.agenthq.ui.shell.blocks
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import com.superiorsoftllc.agenthq.ui.ATTENTION_TAB_ID
 import com.superiorsoftllc.agenthq.ui.AssistantEntry
 import com.superiorsoftllc.agenthq.ui.LocalShell
@@ -9,6 +13,7 @@ import com.superiorsoftllc.agenthq.ui.ProjectPicker
 import com.superiorsoftllc.agenthq.ui.ServerSwitcherChip
 import com.superiorsoftllc.agenthq.ui.TitleBarFrame
 import com.superiorsoftllc.agenthq.ui.TitleBarLead
+import com.superiorsoftllc.agenthq.ui.TitleBarWindowControls
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.Place
@@ -30,10 +35,19 @@ class TitleBarBlock(id: String, children: List<Block> = emptyList(), place: Plac
 
 private const val HEADER = "infantry.shell.header"
 
-/** The left toggle, logo + name, project slot and avatar strip (L7 splits it); it takes the width the items after it leave. */
-object HeaderLead : Block("titleBarLead", "$HEADER.lead", Place(weight = 1f)) {
+/**
+ * The left toggle, logo + name, project slot and avatar strip (L7 splits it). Its items, the drag area's weight included,
+ * go straight into the bar's row ([BlockScope.row]); drawn outside a row they get a row of their own.
+ */
+object HeaderLead : Block("titleBarLead", "$HEADER.lead") {
     @Composable
     override fun Render(scope: BlockScope) {
+        val row = scope.row
+        if (row == null) Row(verticalAlignment = Alignment.CenterVertically) { Lead(scope.modifier) } else row.Lead(scope.modifier)
+    }
+
+    @Composable
+    private fun RowScope.Lead(modifier: Modifier) {
         val s = LocalShell.current
         val state = s.state
         val switcher = s.switcher
@@ -54,10 +68,16 @@ object HeaderLead : Block("titleBarLead", "$HEADER.lead", Place(weight = 1f)) {
             serverSlot = {
                 if (switcher != null) ServerSwitcherChip(switcher, onSelect = s.switchTo, onManage = { s.ui.showServers = true })
             },
-            modifier = scope.modifier,
+            modifier = modifier,
         )
     }
 }
 
+/** M2-6: minimize / maximize-restore / close where the platform has a window, else the bar's 12dp end. */
+object HeaderWindowControls : Block("windowControls", "$HEADER.windowControls") {
+    @Composable
+    override fun Render(scope: BlockScope) = TitleBarWindowControls(LocalWindowChrome.current, scope.modifier)
+}
+
 /** BLOCKS-SHELL-1: the window's title bar, on top. */
-val ShellHeader = TitleBarBlock(HEADER, listOf(HeaderLead))
+val ShellHeader = TitleBarBlock(HEADER, listOf(HeaderLead, HeaderWindowControls))

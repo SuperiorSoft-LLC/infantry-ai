@@ -115,7 +115,8 @@ fun TitleBar(
 ) {
     // BLOCKS-LAYOUT L6: the same frame and items the shell header (`infantry.shell.header`) composes as child blocks.
     TitleBarFrame {
-        TitleBarLead(state, agentScope, onConnect, onAttention, chrome, projectSlot, onTogglePanel, assistantSlot, serverSlot, Modifier.weight(1f))
+        TitleBarLead(state, agentScope, onConnect, onAttention, chrome, projectSlot, onTogglePanel, assistantSlot, serverSlot)
+        TitleBarWindowControls(chrome)
     }
 }
 
@@ -145,10 +146,11 @@ private fun dragModifier(chrome: WindowChrome?): Modifier = if (chrome == null) 
 
 /**
  * BLOCKS-LAYOUT L6: the bar's left and middle (L7 splits it): the left toggle, the logo + name, and the project slot +
- * avatar strip (wide) or the drag area + Assistant + overflow (compact). It takes the space the right-hand items leave.
+ * avatar strip (wide) or the drag area + Assistant + overflow (compact). Its items go straight into the bar's row, so
+ * the row measures them in the same order as the items after them (an overflowing 360dp bar clips at its right end).
  */
 @Composable
-fun TitleBarLead(
+fun RowScope.TitleBarLead(
     state: AppState,
     agentScope: AgentScope,
     onConnect: () -> Unit,
@@ -165,45 +167,42 @@ fun TitleBarLead(
     // MOBILE-TITLEBAR-1: below PanelLayout.COMPACT_BELOW_DP the bar keeps the left toggle, the logo + name and the
     // connection chip (state only); the project picker, the attention entry, the side-panel toggle and the connection URL
     // move into an overflow menu, and the avatar strip gives way to a plain drag area. At or above it the bar is unchanged.
-    Row(modifier.fillMaxHeight(), verticalAlignment = Alignment.CenterVertically) {
-        if (onTogglePanel != null) {
-            Spacer(Modifier.width(6.dp))
-            PanelToggle(PanelSide.LEFT, state.panels.leftShown, compact) { onTogglePanel(PanelSide.LEFT) }
-        }
-        Row(drag.fillMaxHeight().padding(start = if (onTogglePanel != null) 6.dp else 12.dp, end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Logo()
-            Spacer(Modifier.width(8.dp))
-            Text("Infantry AI", color = Palette.Accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-        }
-        if (compact) {
-            // A narrow desktop window still moves by its bar: the free space is the drag area.
-            Spacer(drag.weight(1f).fillMaxHeight().testTag(TITLE_BAR_DRAG_TAG))
-            assistantSlot()
-            TitleBarOverflow(state, onConnect, onAttention, projectSlot)
-        } else {
-            // M2-7: the project drop-down and the "+" New Project box ([ProjectPicker]).
-            Box(Modifier.fillMaxHeight().testTag(TITLE_BAR_PROJECT_SLOT_TAG), contentAlignment = Alignment.Center) { projectSlot() }
-            Row(
-                drag.weight(1f).fillMaxHeight().padding(start = 10.dp).testTag(TITLE_BAR_DRAG_TAG),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                // The strip of agent avatars: one per session, the selected one outlined, needs-input ones in amber.
-                visibleAgents(state, "", null, agentScope = agentScope).take(14).forEach { a ->
-                    val ring = if (a.id == state.selectedId) Palette.Text else if (needsInput(a, state.waiting, state.openPrompts, state.openQuestionSessions)) Palette.Accent else Color.Transparent
-                    Box(Modifier.padding(end = 4.dp).clip(CircleShape).border(2.dp, ring, CircleShape).padding(1.dp).testTag(TITLE_BAR_AVATAR_TAG_PREFIX + a.id)) {
-                        AgentAvatar(a, state, 22)
-                    }
-                }
-                // ASSISTANT-1: the Assistant is the LAST portrait of the team.
-                assistantSlot()
-            }
-        }
-        TitleBarAttention(state, onAttention)
-        if (onTogglePanel != null) TitleBarRightToggle(state) { onTogglePanel(PanelSide.RIGHT) } else if (compact) Spacer(Modifier.width(4.dp))
-        serverSlot()
-        TitleBarConnection(state, onConnect)
-        TitleBarWindowControls(chrome)
+    if (onTogglePanel != null) {
+        Spacer(modifier.width(6.dp))
+        PanelToggle(PanelSide.LEFT, state.panels.leftShown, compact) { onTogglePanel(PanelSide.LEFT) }
     }
+    Row((if (onTogglePanel != null) drag else modifier.then(drag)).fillMaxHeight().padding(start = if (onTogglePanel != null) 6.dp else 12.dp, end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Logo()
+        Spacer(Modifier.width(8.dp))
+        Text("Infantry AI", color = Palette.Accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+    }
+    if (compact) {
+        // A narrow desktop window still moves by its bar: the free space is the drag area.
+        Spacer(drag.weight(1f).fillMaxHeight().testTag(TITLE_BAR_DRAG_TAG))
+        assistantSlot()
+        TitleBarOverflow(state, onConnect, onAttention, projectSlot)
+    } else {
+        // M2-7: the project drop-down and the "+" New Project box ([ProjectPicker]).
+        Box(Modifier.fillMaxHeight().testTag(TITLE_BAR_PROJECT_SLOT_TAG), contentAlignment = Alignment.Center) { projectSlot() }
+        Row(
+            drag.weight(1f).fillMaxHeight().padding(start = 10.dp).testTag(TITLE_BAR_DRAG_TAG),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // The strip of agent avatars: one per session, the selected one outlined, needs-input ones in amber.
+            visibleAgents(state, "", null, agentScope = agentScope).take(14).forEach { a ->
+                val ring = if (a.id == state.selectedId) Palette.Text else if (needsInput(a, state.waiting, state.openPrompts, state.openQuestionSessions)) Palette.Accent else Color.Transparent
+                Box(Modifier.padding(end = 4.dp).clip(CircleShape).border(2.dp, ring, CircleShape).padding(1.dp).testTag(TITLE_BAR_AVATAR_TAG_PREFIX + a.id)) {
+                    AgentAvatar(a, state, 22)
+                }
+            }
+            // ASSISTANT-1: the Assistant is the LAST portrait of the team.
+            assistantSlot()
+        }
+    }
+    TitleBarAttention(state, onAttention)
+    if (onTogglePanel != null) TitleBarRightToggle(state) { onTogglePanel(PanelSide.RIGHT) } else if (compact) Spacer(Modifier.width(4.dp))
+    serverSlot()
+    TitleBarConnection(state, onConnect)
 }
 
 /** Contract 1.9.0: open attention is a durable signal from the daemon, so it is always in view (wide; compact has it in the overflow). Owns its 10dp gap. */
