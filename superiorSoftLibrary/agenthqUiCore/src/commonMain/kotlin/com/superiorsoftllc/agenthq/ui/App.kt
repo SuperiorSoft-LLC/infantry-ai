@@ -185,6 +185,7 @@ import com.superiorsoftllc.agenthq.ui.model.visibleAgents
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
 import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.protocol.SessionState
+import com.superiorsoftllc.agenthq.ui.plugin.HostEvents
 import com.superiorsoftllc.agenthq.ui.plugin.PanelSections
 import com.superiorsoftllc.agenthq.ui.plugin.Panels
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
@@ -329,6 +330,13 @@ fun App(
     LaunchedEffect(ui.centerTab) { tabs.events.publish(PluginEvent(Events.TAB_OPENED, mapOf("id" to ui.centerTab, "container" to TabContainers.CENTER))) }
     LaunchedEffect(ui.rightTab) { tabs.events.publish(PluginEvent(Events.TAB_OPENED, mapOf("id" to ui.rightTab, "container" to TabContainers.RIGHT))) }
     LaunchedEffect(state.selectedId) { state.selectedId?.let { tabs.events.publish(PluginEvent(Events.SESSION_SELECTED, mapOf("id" to it))) } }
+    // HOOKS-1: modules.loaded once the factory has bound its modules; ticket.changed for each ticket a board update changes.
+    LaunchedEffect(tabs) { tabs.events.publish(HostEvents.modulesLoaded(tabs)) }
+    val lastTickets = remember { arrayOf(state.tickets) }
+    LaunchedEffect(state.tickets) {
+        HostEvents.ticketChanges(lastTickets[0], state.tickets).forEach { tabs.events.publish(it) }
+        lastTickets[0] = state.tickets
+    }
     // A refused token is the one failure the human must act on: open the dialog instead of retrying.
     // MOBILE-REFUSED-1: a rejected token goes to the host's own connect screen when it has one (Android saves there;
     // the shared dialog only edits memory). Desktop has no hook and keeps the dialog.

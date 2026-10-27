@@ -1,11 +1,13 @@
 package com.superiorsoftllc.agenthq.ui.plugin
 
+import com.superiorsoftllc.agenthq.plugin.api.BlockDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.Events
 import com.superiorsoftllc.agenthq.plugin.api.InterceptorDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.ModuleSetting
 import com.superiorsoftllc.agenthq.plugin.api.ModulesConfig
 import com.superiorsoftllc.agenthq.plugin.api.ObserverDeclaration
+import com.superiorsoftllc.agenthq.plugin.api.PanelDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.PluginEvent
 import com.superiorsoftllc.agenthq.plugin.api.PreferenceDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
@@ -125,6 +127,64 @@ class TabFactoryTest {
         f.events.publish(PluginEvent(Events.TAB_OPENED, mapOf("id" to "infantry.git")))
         assertEquals(listOf("infantry.git"), heard)
         assertEquals(emptyList(), f.problems)
+    }
+
+    @Test
+    fun `HOOKS-1 an interceptor runs only the parts its kind names, and says which it drops`() {
+        val parts = TabInterceptor(title = { _, proceed -> proceed() + " +hi" }, before = {}, after = {})
+        fun factory(kind: String) = TabFactory(
+            CoreModules.all + acme(emptyList(), interceptors = mapOf("hi" to parts), declaredInterceptors = listOf(InterceptorDeclaration("infantry.epics", "hi", kind))),
+        )
+        val epics = { f: TabFactory -> f.title(f.find("infantry.epics")!!, AppState()) }
+        assertEquals("Epics +hi", epics(factory(InterceptorKinds.AROUND)), "around wraps the title")
+        val before = factory(InterceptorKinds.BEFORE)
+        assertEquals("Epics", epics(before), "a before interceptor does not touch the title")
+        assertTrue(before.problems.any { "interceptor hi is kind before; its title, after not run" in it }, before.problems.joinToString())
+        val after = factory(InterceptorKinds.AFTER)
+        assertEquals("Epics", epics(after))
+        assertTrue(after.problems.any { "its title, before not run" in it }, after.problems.joinToString())
+        val odd = factory("sideways")
+        assertEquals("Epics", epics(odd))
+        assertTrue(odd.problems.any { "interceptor hi has unknown kind 'sideways'" in it }, odd.problems.joinToString())
+    }
+
+    @Test
+    fun `HOOKS-1 a block binds to every slot a container declares and an unknown slot is logged, not dropped silently`() {
+        val m = acme(emptyList()).let {
+            AgentHqModule(
+                it.manifest.copy(blocks = Slots.ALL.map { s -> BlockDeclaration(s, s) } + BlockDeclaration("center.middle", "lost")),
+                blocks = (Slots.ALL + "lost").associateWith { SlotBlock {} }, tier = Tier.COMMUNITY,
+            )
+        }
+        val f = TabFactory(CoreModules.all + m)
+        Slots.ALL.forEach { assertTrue(f.hasBlocks(it), it) }
+        assertTrue(!f.hasBlocks("center.middle"))
+        assertEquals(1, f.problems.count { "block lost names unknown slot center.middle" in it }, f.problems.joinToString())
+    }
+
+    @Test
+    fun `HOOKS-1 an accepted preference puts a panel section in the replaced section's place`() {
+        val mine = PanelProvider("acme.agents", Panels.LEFT, order = 999, testTag = "acme-agents") {}
+        val m = acme(emptyList()).let {
+            AgentHqModule(
+                it.manifest.copy(panels = listOf(PanelDeclaration("acme.agents", Panels.LEFT)), preferences = listOf(PreferenceDeclaration("infantry.agents", "acme.agents"))),
+                tier = Tier.COMMUNITY, panels = listOf(mine),
+            )
+        }
+        val core = CoreModules.factory.panels(Panels.LEFT).single { it.id == "infantry.agents" }
+        val f = TabFactory(CoreModules.all + m, preferences = listOf(AcceptedPreference("Acme_Hello", "infantry.agents", "acme.agents")))
+        val placed = f.panels(Panels.LEFT).single { it.id == "infantry.agents" }
+        assertEquals("Acme_Hello", placed.module)
+        assertEquals(core.testTag, placed.testTag)
+        assertEquals(core.order, placed.order)
+        assertEquals(core.fill, placed.fill)
+        assertTrue(f.panels(Panels.LEFT).none { it.id == "acme.agents" }, "shown only as the replacement")
+        assertEquals(emptyList(), f.problems)
+
+        val refused = TabFactory(CoreModules.all + m)
+        assertEquals("Infantry_Agents", refused.panels(Panels.LEFT).single { it.id == "infantry.agents" }.module)
+        assertTrue(refused.panels(Panels.LEFT).none { it.id == "acme.agents" })
+        assertTrue(refused.problems.any { "panel section acme.agents only replaces infantry.agents, which was not accepted" in it })
     }
 
     @Test

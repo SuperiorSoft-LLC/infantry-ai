@@ -57,6 +57,7 @@ jar that will not load is skipped, with one log line saying why. It never stops 
   "events": ["tab.opened"],
   "services": ["events", "storage", "daemon", "notifications"],
   "tabs": [{ "id": "acme.hello", "container": "center" }],
+  "panels": [{ "id": "acme.side", "panel": "left" }],
   "preferences": [{ "replace": "acme.other", "with": "acme.hello" }],
   "interceptors": [{ "target": "infantry.epics", "name": "hi", "kind": "around" }],
   "observers": [{ "event": "tab.opened", "name": "log" }],
@@ -71,13 +72,34 @@ jar that will not load is skipped, with one log line saying why. It never stops 
   them, in enable order), and it will not disable one that enabled modules need unless cascade is ticked.
 - `sequence` sets load order only: a module named there loads first if it loads at all. The load order is a
   topological sort of `dependencies` plus `sequence`.
-- `preferences` replace a contribution by id. If two modules replace the same id, the last one loaded wins, and the
-  replacement is logged.
-- `entry` is a class implementing `com.superiorsoftllc.agenthq.ui.plugin.UiPlugin`. It registers its tabs,
-  interceptors, blocks and observers by the names declared above. Anything it registers without declaring is refused.
+- `tabs` go in a container: `center` or `right` (the right panel's strip). `panels` add a section to a side panel:
+  `left` or `right`.
+- `preferences` replace a contribution by id: a tab with one of your tabs, or a panel section (for example the core
+  `infantry.agents` list) with one of your panel sections. The replacement takes the replaced one's place (id, order,
+  shortcut, test tag; for a section also its panel and fill). If two modules replace the same id, the last one loaded
+  wins, and the replacement is logged. A tab cannot replace a section, or the other way round.
+- `interceptors` hook a tab. `kind` decides which parts of the registered `TabInterceptor` run:
+  - `before`: only `before`, drawn above the tab's content;
+  - `after`: only `after`, drawn below it;
+  - `around` (the default): every part. `title` wraps the tab's title and `content` wraps its content (call `proceed`
+    to draw the original, or leave it out to replace it); `before` and `after` draw as above.
+
+  A part that the kind does not run is not run, and the log says which. An unknown kind refuses the interceptor.
+- `blocks` add content to a slot. Every tab container has two slots: `center.top`, `center.bottom`, `right.top` and
+  `right.bottom`. They draw above or below the content of every tab in that container, in `order`. A block in any
+  other slot is not drawn, and the log names the slot once at load.
+- `events` the window publishes, for `observers` (each one needs the `events` service and the event in `events`):
+  - `tab.opened` (`id`, `container`): a tab is shown;
+  - `session.selected` (`id`): an agent is selected;
+  - `modules.loaded` (`modules`, comma-separated in load order; `count`): once, when the window has bound its modules;
+  - `ticket.changed` (`id`, `status`, `title`, `change` = `created`, `updated` or `removed`): one per ticket that a
+    board update changes. The first board a window receives is the baseline, so it publishes nothing.
+- `entry` is a class implementing `com.superiorsoftllc.agenthq.ui.plugin.UiPlugin`. It registers its tabs, panel
+  sections, interceptors, blocks and observers by the names declared above. Anything it registers without declaring
+  is refused.
 - The API (manifest, services, events, the loading rules) lives in `superiorSoftLibrary/agenthqPlugins`. It depends
-  on nothing in the app. Panels, whole screens, a module's own state, and background work are reserved contribution
-  types and will come the same way.
+  on nothing in the app. Whole screens, a module's own state, and background work are reserved contribution types and
+  will come the same way.
 
 ## modules.json
 

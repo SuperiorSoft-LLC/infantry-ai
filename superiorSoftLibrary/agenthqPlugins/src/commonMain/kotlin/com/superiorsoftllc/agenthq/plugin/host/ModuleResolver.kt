@@ -178,16 +178,20 @@ object ModuleResolver {
 
     /** The preferences of the loaded modules that the trust rules allow, in load order (the last one wins). */
     private fun preferences(loaded: List<ModuleStatus>, config: ModulesConfig, log: MutableList<String>): List<AcceptedPreference> {
-        // Who declares each contribution id.
+        // Who declares each contribution id. HOOKS-1: tabs and panel sections; a tab replaces a tab, a section a section.
         val owner = HashMap<String, ModuleStatus>()
+        val ownerSection = HashMap<String, ModuleStatus>()
         for (s in loaded) for (t in s.manifest!!.tabs) if (t.id !in owner) owner[t.id] = s
+        for (s in loaded) for (p in s.manifest!!.panels) if (p.id !in ownerSection) ownerSection[p.id] = s
         val out = mutableListOf<AcceptedPreference>()
         for (s in loaded) for (p: PreferenceDeclaration in s.manifest!!.preferences) {
-            val target = owner[p.replace]
-            val mine = s.manifest.tabs.any { it.id == p.with }
+            val myTab = s.manifest.tabs.any { it.id == p.with }
+            val mySection = s.manifest.panels.any { it.id == p.with }
+            val target = if (myTab) owner[p.replace] else ownerSection[p.replace]
             when {
-                !mine -> log += "[plugins] ${s.name}: preference ${p.replace} -> ${p.with} refused: ${p.with} is not a tab it declares"
-                target == null -> log += "[plugins] ${s.name}: preference ${p.replace} -> ${p.with} refused: no loaded module provides ${p.replace}"
+                !myTab && !mySection -> log += "[plugins] ${s.name}: preference ${p.replace} -> ${p.with} refused: ${p.with} is not a tab or panel section it declares"
+                target == null -> log += "[plugins] ${s.name}: preference ${p.replace} -> ${p.with} refused: no loaded module provides " +
+                    "${if (myTab) "tab" else "panel section"} ${p.replace}"
                 s.tier == Tier.COMMUNITY && target.tier == Tier.CORE && p.replace !in config.setting(s.name).allowOverride ->
                     log += "[plugins] ${s.name}: preference ${p.replace} -> ${p.with} refused: a community module cannot replace core ${p.replace} (${target.name}) unless modules.json allows it"
                 else -> {

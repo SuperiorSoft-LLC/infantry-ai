@@ -34,13 +34,13 @@ JSON has no comments, so the fields are explained here. Unknown keys are ignored
 | `jar` | community: yes | The path of the built jar, relative to the module folder. It must stay inside the folder. |
 | `services` | no | The platform services the module uses: `notifications`, `storage`, `settings`, `events`, `daemon`. A service that is not listed here is `null` at run time. A community module also needs each one under `allow` in modules.json. |
 | `routes` | no | The daemon routes the `daemon` service may call, as `METHOD /path` (for example `GET /health`). Any other route is refused. |
-| `events` | no | The event names the module may publish or observe (for example `tab.opened`). |
+| `events` | no | The event names the module may publish or observe. The window publishes `tab.opened`, `session.selected`, `modules.loaded` and `ticket.changed` (see [../README.md](../README.md) for each one's data). |
 | `tabs` | no | `[{ "id": "...", "container": "center" or "right" }]`. These are the tabs the module registers. A registered tab that is not declared here is refused. |
 | `panels` | no | `[{ "id": "...", "panel": "left" or "right" }]`. These are the side panel sections the module registers with `registrar.panel(PanelProvider(...))`. A section stacks by `order`: on the left, below 100 sits above the agents list and 100 or more below it; on the right, the same split around the tab strip. A registered section that is not declared here is refused. For a tab in the right panel's strip, declare a tab with `"container": "right"` instead. |
-| `interceptors` | no | `[{ "target": "<tab id>", "name": "...", "kind": "around" }]`. Each one is a hook on a tab's title or content, registered under `name`. |
+| `interceptors` | no | `[{ "target": "<tab id>", "name": "...", "kind": "around" }]`. Each one is a hook on a tab, registered under `name`. `kind` decides what runs: `before` draws only `before` above the content, `after` draws only `after` below it, `around` (the default) runs every part (`title` and `content` wrap the tab's own through `proceed`). An unknown kind is refused. |
 | `observers` | no | `[{ "event": "...", "name": "..." }]`. Each one is a listener registered under `name`. |
-| `blocks` | no | `[{ "slot": "center.top", "name": "...", "order": 0 }]`. Each one adds content to a named slot. |
-| `preferences` | no | `[{ "replace": "<tab id>", "with": "<your tab id>" }]`. Each one replaces another module's tab. A community module may replace a core tab only if modules.json lists that tab under its `allowOverride`. |
+| `blocks` | no | `[{ "slot": "center.top", "name": "...", "order": 0 }]`. Each one adds content to a slot: `center.top`, `center.bottom`, `right.top` or `right.bottom` (above or below every tab of that container). Any other slot is logged and not drawn. |
+| `preferences` | no | `[{ "replace": "<tab or panel section id>", "with": "<your tab or section id>" }]`. Each one replaces another module's tab with your tab, or its panel section with your section. A community module may replace a core one only if modules.json lists its id under `allowOverride`. |
 
 ## What is in here
 

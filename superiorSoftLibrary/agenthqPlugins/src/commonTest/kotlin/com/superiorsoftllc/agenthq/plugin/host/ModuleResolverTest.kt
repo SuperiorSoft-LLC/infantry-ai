@@ -4,6 +4,7 @@ import com.superiorsoftllc.agenthq.plugin.api.DependencyDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.ModuleSetting
 import com.superiorsoftllc.agenthq.plugin.api.ModulesConfig
+import com.superiorsoftllc.agenthq.plugin.api.PanelDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.PreferenceDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.Tier
@@ -152,7 +153,39 @@ class ModuleResolverTest {
             listOf(core("Infantry_Git", tabs = listOf("infantry.git")), core("Infantry_X", preferences = listOf(PreferenceDeclaration("infantry.git", "nope")))),
         )
         assertNull(r.preferences.firstOrNull())
-        assertTrue(r.log.any { "nope is not a tab it declares" in it })
+        assertTrue(r.log.any { "nope is not a tab or panel section it declares" in it })
+    }
+
+    @Test
+    fun `HOOKS-1 a panel section replaces a panel section, under the same override rule as a tab`() {
+        val agents = ModuleCandidate("Infantry_Agents", Tier.CORE, "/p/core/Infantry_Agents", ModuleManifest("Infantry_Agents", "1.0.0", panels = listOf(PanelDeclaration("infantry.agents", "left"))))
+        val acme = ModuleCandidate(
+            "Acme_Side", Tier.COMMUNITY, "/p/community/Acme_Side",
+            ModuleManifest(
+                "Acme_Side", "1.0.0", author = "Acme", license = "NOASSERTION", panels = listOf(PanelDeclaration("acme.agents", "left")),
+                preferences = listOf(PreferenceDeclaration("infantry.agents", "acme.agents")),
+            ),
+        )
+        val refused = ModuleResolver.resolve(listOf(agents, acme), enabled("Acme_Side"))
+        assertEquals(emptyList(), refused.preferences)
+        assertTrue(refused.log.any { "cannot replace core infantry.agents" in it }, refused.log.joinToString("\n"))
+
+        val allowed = ModuleResolver.resolve(listOf(agents, acme), enabled("Acme_Side", allowOverride = listOf("infantry.agents")))
+        assertEquals(listOf(AcceptedPreference("Acme_Side", "infantry.agents", "acme.agents")), allowed.preferences)
+    }
+
+    @Test
+    fun `HOOKS-1 a panel section cannot replace a tab`() {
+        val acme = ModuleCandidate(
+            "Acme_Side", Tier.COMMUNITY, "/p/community/Acme_Side",
+            ModuleManifest(
+                "Acme_Side", "1.0.0", author = "Acme", license = "NOASSERTION", panels = listOf(PanelDeclaration("acme.agents", "left")),
+                preferences = listOf(PreferenceDeclaration("infantry.git", "acme.agents")),
+            ),
+        )
+        val r = ModuleResolver.resolve(listOf(core("Infantry_Git", tabs = listOf("infantry.git")), acme), enabled("Acme_Side", allowOverride = listOf("infantry.git")))
+        assertEquals(emptyList(), r.preferences)
+        assertTrue(r.log.any { "no loaded module provides panel section infantry.git" in it })
     }
 
     private fun core(name: String, preferences: List<PreferenceDeclaration>) =

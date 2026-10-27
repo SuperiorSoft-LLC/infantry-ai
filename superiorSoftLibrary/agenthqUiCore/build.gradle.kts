@@ -86,4 +86,10 @@ tasks.named<Test>("jvmTest") {
     val pluginJar = project(":superiorSoftLibrary:samples:markdownEnginePlugin").tasks.named("pluginJar")
     dependsOn(pluginJar)
     systemProperty("markdown.example.jar", pluginJar.map { it.outputs.files.singleFile.absolutePath }.get())
+    // HOOKS-1: DesktopPluginsJarTest loads the example community module from its real jar (never on this classpath).
+    val acme = rootProject.findProject(":plugins:community:Acme_Hello")
+    if (acme != null) {
+        dependsOn("${acme.path}:jar")
+        systemProperty("acme.hello.dir", acme.projectDir.absolutePath)
+    }
 }
