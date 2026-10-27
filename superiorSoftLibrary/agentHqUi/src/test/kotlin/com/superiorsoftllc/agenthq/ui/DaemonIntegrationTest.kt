@@ -453,14 +453,13 @@ class DaemonIntegrationTest {
         val started = until("the profile's session answered", c) { s ->
             s.selected?.role == "data-wrangler" && s.selected!!.output.any { it.kind == LineKind.FINISHED }
         }
-        assertEquals(
-            LineKind.USER to "You clean data.\n\n" +
-                "You are running inside Infantry AI as role 'data-wrangler', agent id '${profile.id}'. " +
-                "Your environment carries the same identity (AGENTHQ_ROLE, AGENTHQ_AGENT_ID, AGENTHQ_SESSION_ID).\n\n" +
-                "tidy this table",
-            started.selected!!.output.first().let { it.kind to it.text },
-            "the profile's instructions lead the first turn, then who the agent runs as (BUG-808ce596), as the daemon delivered it",
-        )
+        val first = started.selected!!.output.first()
+        assertEquals(LineKind.USER, first.kind)
+        val identity = "You are running inside Infantry AI as role 'data-wrangler', agent id '${profile.id}'. " +
+            "Your environment carries the same identity (AGENTHQ_ROLE, AGENTHQ_AGENT_ID, AGENTHQ_SESSION_ID)."
+        // the profile's instructions now carry the shipped shared-knowledge block, so only the order is fixed: instructions, identity, prompt
+        assertTrue(first.text.startsWith("You clean data.\n\n"), "the profile's instructions lead the first turn: ${first.text.take(200)}")
+        assertTrue(first.text.endsWith("\n\n" + identity + "\n\ntidy this table"), "who the agent runs as (BUG-808ce596) then the prompt close the first turn: ${first.text.takeLast(400)}")
         assertEquals(profile.id, started.selected!!.session.agentId)
     }
 
