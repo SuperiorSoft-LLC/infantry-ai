@@ -108,6 +108,19 @@ class CompactLayoutUiTest {
 
     private fun ComposeUiTest.shown(tag: String) = onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty()
 
+    /**
+     * Opens the overflow menu. It is a popup with its own composition (waitForIdle can return before its items exist), and a
+     * click that lands while the bar is still recomposing for the window width is lost with the bar's state, so the click is
+     * repeated until the menu is up (flaked 3 of 10 runs).
+     */
+    private fun ComposeUiTest.openOverflowMenu() {
+        var tries = 0
+        waitUntil(timeoutMillis = 10_000) {
+            if (!shown("title-bar-overflow-attention") && tries++ % 20 == 0) click("title-bar-overflow")
+            shown("title-bar-overflow-attention")
+        }
+    }
+
     private fun ComposeUiTest.width(tag: String): Float = onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.width
 
     private fun ComposeUiTest.click(tag: String) {
@@ -276,7 +289,7 @@ class CompactLayoutUiTest {
     fun `at 360dp the overflow menu holds the project picker and the attention entry`() = withWindow(360) { controller ->
         pushAttention(controller)
         assertTrue(!shown("title-bar-project-slot") && !shown("title-bar-attention-chip"), "secondary items are not in the bar")
-        click("title-bar-overflow")
+        openOverflowMenu()
         listOf("title-bar-project-slot", "title-bar-overflow-attention").forEach { onNodeWithTag(it).assertIsDisplayed() }
     }
 
@@ -304,7 +317,7 @@ class CompactLayoutUiTest {
     fun `at 360dp the overflow attention entry shows the right panel instead of the list`() = withWindow(360) { controller ->
         pushAttention(controller)
         assertTrue(!shown("left-sidebar") && !shown("right-panel"), "drawers start closed")
-        click("title-bar-overflow")
+        openOverflowMenu()
         click("title-bar-overflow-attention")
         val panes = listOf("left-sidebar", "center-pane", "right-panel").associateWith { shown(it) }
         assertEquals(mapOf("left-sidebar" to false, "center-pane" to true, "right-panel" to true), panes, "compact: the screen after attention")
