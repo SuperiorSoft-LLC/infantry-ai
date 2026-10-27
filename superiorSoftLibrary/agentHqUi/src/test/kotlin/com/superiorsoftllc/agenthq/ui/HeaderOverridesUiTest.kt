@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -28,7 +29,10 @@ import kotlinx.coroutines.cancel
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** BLOCKS-LAYOUT L6: a header child (`infantry.shell.header.<name>`) is replaced or wrapped by a module, in the real window. */
+/**
+ * BLOCKS-LAYOUT L6/L7: a header child (`infantry.shell.header.<name>`, and since L7 a lead child
+ * `infantry.shell.header.lead.<name>`) is replaced or wrapped by a module, in the real window.
+ */
 @OptIn(ExperimentalTestApi::class)
 class HeaderOverridesUiTest {
     private fun factory(node: String, mode: String, override: BlockOverride): TabFactory {
@@ -80,5 +84,28 @@ class HeaderOverridesUiTest {
         onNode(hasTestTag(TITLE_BAR_TOGGLE_RIGHT_TAG) and hasAnyAncestor(hasTestTag("acme-frame"))).assertExists()
         onNode(hasTestTag("acme-frame") and inBar).assertExists()
         onNodeWithTag(TITLE_BAR_CONNECTION_CHIP_TAG).assertExists()
+    }
+
+    @Test fun replacingTheProjectSlotDrawsTheModuleBlockBetweenTheBrandAndTheAgentStrip() = withWindow(
+        factory("infantry.shell.header.lead.project", OverrideModes.REPLACE, BlockOverride { scope, inner ->
+            Text(if (inner == null) "acme project" else "bad", scope.modifier.testTag("acme-project"))
+        }),
+    ) {
+        onNode(hasTestTag("acme-project") and inBar).assertExists()
+        onNodeWithTag(TITLE_BAR_PROJECT_SLOT_TAG).assertDoesNotExist()
+        // The lead's other children stay: the left toggle, the logo and the drag area (the agent strip).
+        onNode(hasTestTag(TITLE_BAR_TOGGLE_LEFT_TAG) and inBar).assertExists()
+        onNode(hasTestTag(TITLE_BAR_LOGO_TAG) and inBar).assertExists()
+        onNode(hasTestTag(TITLE_BAR_DRAG_TAG) and inBar).assertExists()
+    }
+
+    @Test fun wrappingTheLeftToggleDrawsTheCoreToggleInsideTheModuleFrame() = withWindow(
+        factory("infantry.shell#infantry.shell.header.lead.toggleLeft", OverrideModes.WRAP, BlockOverride { scope, inner ->
+            Row(Modifier.testTag("acme-frame")) { inner!!.Render(scope) }
+        }),
+    ) {
+        onNode(hasTestTag(TITLE_BAR_TOGGLE_LEFT_TAG) and hasAnyAncestor(hasTestTag("acme-frame"))).assertExists()
+        onNode(hasTestTag("acme-frame") and inBar).assertExists()
+        onNode(hasTestTag(TITLE_BAR_PROJECT_SLOT_TAG) and inBar).assertExists()
     }
 }
