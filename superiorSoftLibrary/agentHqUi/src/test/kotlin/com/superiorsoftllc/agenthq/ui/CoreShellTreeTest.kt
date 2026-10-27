@@ -19,8 +19,9 @@ class CoreShellTreeTest {
             "      infantry.shell.frame",
             "        $header",
             "          $header.lead",
-        ) + listOf("toggleLeft", "brand", "project", "agents")
-            .map { "            $header.lead.$it" } + listOf("attention", "toggleRight", "server", "connection", "windowControls")
+        ) + listOf("toggleLeft", "brand", "project", "agents", "overflow")
+            .map { "            $header.lead.$it" } + listOf("project", "attention", "connection")
+            .map { "              $header.lead.overflow.$it" } + listOf("attention", "toggleRight", "server", "connection", "windowControls")
             .map { "          $header.$it" } + listOf(
             "        infantry.shell.body",
             "          infantry.shell.panes",

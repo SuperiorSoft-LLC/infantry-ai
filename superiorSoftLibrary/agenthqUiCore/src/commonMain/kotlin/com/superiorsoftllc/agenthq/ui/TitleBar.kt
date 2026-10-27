@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -45,7 +46,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import com.superiorsoftllc.agenthq.ui.block.layout.LocalBlockSize
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.model.AgentScope
 import com.superiorsoftllc.agenthq.ui.model.AppState
@@ -126,13 +129,15 @@ fun TitleBar(
 
 /**
  * BLOCKS-LAYOUT L6: the bar's frame: the 36dp Panel row (its items in order, left to right) and the divider under it.
- * Below PanelLayout.COMPACT_BELOW_DP it provides [LocalTitleBarCompact] = true; the items read it.
+ * Below PanelLayout.COMPACT_BELOW_DP it provides [LocalTitleBarCompact] = true; the items read it. It also provides
+ * [LocalBlockSize] (L8), so a child block's `place.show` splits at the same width.
  */
 @Composable
 fun TitleBarFrame(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
     BoxWithConstraints(modifier.fillMaxWidth()) {
     val compact = PanelLayout.isCompact(maxWidth.value)
-    androidx.compose.runtime.CompositionLocalProvider(LocalTitleBarCompact provides compact) {
+    // BLOCKS-LAYOUT L8: the bar is measured, so its items' `show Wide|Compact` reads the bar's own width.
+    CompositionLocalProvider(LocalTitleBarCompact provides compact, LocalBlockSize provides DpSize(maxWidth, TITLE_BAR_HEIGHT)) {
     Row(
         Modifier.fillMaxWidth().height(TITLE_BAR_HEIGHT).background(Palette.Panel).testTag(TITLE_BAR_TAG),
         verticalAlignment = Alignment.CenterVertically,
@@ -150,7 +155,7 @@ private fun dragModifier(chrome: WindowChrome?): Modifier = if (chrome == null) 
 
 /**
  * BLOCKS-LAYOUT L6/L7: the bar's left and middle, in order: the left toggle, the logo + name, the project slot and the
- * avatar strip (wide) or the drag area + Assistant + overflow (compact). The shell header composes the same items as the
+ * avatar strip (wide) or the drag area + Assistant (compact), then the overflow (compact only). The shell header composes the same items as the
  * child blocks of `infantry.shell.header.lead`. They go straight into the bar's row, so the row measures them in the same
  * order as the items after them (an overflowing 360dp bar clips at its right end).
  */
@@ -172,7 +177,14 @@ fun RowScope.TitleBarLead(
     if (onTogglePanel != null) TitleBarToggleLeft(state, modifier) { onTogglePanel(PanelSide.LEFT) }
     TitleBarBrand(chrome, afterToggle = onTogglePanel != null, if (onTogglePanel != null) Modifier else modifier)
     TitleBarProject(projectSlot)
-    TitleBarAgents(state, agentScope, onConnect, onAttention, chrome, projectSlot, assistantSlot)
+    TitleBarAgents(state, agentScope, chrome, assistantSlot)
+    if (LocalTitleBarCompact.current) {
+        TitleBarOverflow {
+            TitleBarOverflowProject(projectSlot)
+            TitleBarOverflowAttention(state, onAttention)
+            TitleBarOverflowConnection(state, onConnect)
+        }
+    }
 }
 
 /** PANEL-TOGGLE-1: the agent list toggle at the bar's left edge; it owns the 6dp before it. */
@@ -205,16 +217,13 @@ fun TitleBarProject(projectSlot: @Composable () -> Unit, modifier: Modifier = Mo
 
 /**
  * The bar's free middle, a drag area that takes the remaining width (`weight(1f)`): wide, the avatar strip with the
- * Assistant last; compact, the plain drag area, then the Assistant and the overflow button (L8 splits the overflow off).
+ * Assistant last; compact, the plain drag area, then the Assistant (the overflow button after it is its own item, L8).
  */
 @Composable
 fun RowScope.TitleBarAgents(
     state: AppState,
     agentScope: AgentScope,
-    onConnect: () -> Unit,
-    onAttention: () -> Unit,
     chrome: WindowChrome?,
-    projectSlot: @Composable () -> Unit,
     assistantSlot: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -223,7 +232,6 @@ fun RowScope.TitleBarAgents(
         // A narrow desktop window still moves by its bar: the free space is the drag area.
         Spacer(drag.weight(1f).fillMaxHeight().testTag(TITLE_BAR_DRAG_TAG))
         assistantSlot()
-        TitleBarOverflow(state, onConnect, onAttention, projectSlot)
     } else {
         Row(
             drag.weight(1f).fillMaxHeight().padding(start = 10.dp).testTag(TITLE_BAR_DRAG_TAG),
@@ -287,18 +295,15 @@ val TITLE_BAR_HEIGHT = 36.dp
 val LocalTitleBarCompact = androidx.compose.runtime.compositionLocalOf { false }
 
 /**
- * MOBILE-TITLEBAR-1: the compact bar's overflow button and its menu: the project picker slot, the attention entry (while
- * any is open), and the connection URL the chip no longer has room for (a tap opens the connection).
+ * MOBILE-TITLEBAR-1 / BLOCKS-LAYOUT L8: the compact bar's overflow button and its menu. The menu's [entries] are its own
+ * items, in order (the shell's `infantry.shell.header.lead.overflow.<name>` children): the project picker slot, the
+ * attention entry (while any is open), and the connection URL the chip no longer has room for. An entry closes the menu
+ * through [LocalTitleBarOverflowDismiss].
  */
 @Composable
-private fun TitleBarOverflow(
-    state: AppState,
-    onConnect: () -> Unit,
-    onAttention: () -> Unit,
-    projectSlot: @Composable () -> Unit,
-) {
+fun TitleBarOverflow(modifier: Modifier = Modifier, entries: @Composable ColumnScope.() -> Unit) {
     var open by remember { mutableStateOf(false) }
-    Box {
+    Box(modifier) {
         IconActionTooltipBox("More", modifier = Modifier.size(28.dp).testTag(TITLE_BAR_OVERFLOW_TAG)) { m ->
             Box(
                 m.clip(RoundedCornerShape(5.dp)).clickable(role = Role.Button, onClickLabel = "More", onClick = { open = true }),
@@ -309,26 +314,46 @@ private fun TitleBarOverflow(
             expanded = open, onDismissRequest = { open = false },
             modifier = Modifier.background(Palette.Raised).testTag(TITLE_BAR_OVERFLOW_MENU_TAG),
         ) {
-            // M2-7: the same project picker the wide bar shows inline.
-            Box(
-                Modifier.padding(horizontal = 8.dp).height(TITLE_BAR_HEIGHT).testTag(TITLE_BAR_PROJECT_SLOT_TAG),
-                contentAlignment = Alignment.CenterStart,
-            ) { projectSlot() }
-            if (state.attentionOpenCount > 0) {
-                DropdownMenuItem(
-                    text = { Text("${state.attentionOpenCount} need attention", color = Palette.Accent, fontSize = 12.sp) },
-                    onClick = { open = false; onAttention() },
-                    modifier = Modifier.testTag(TITLE_BAR_OVERFLOW_ATTENTION_TAG),
-                )
-            }
-            HorizontalDivider(color = Palette.Border)
-            DropdownMenuItem(
-                text = { Text(state.connection.url.ifBlank { "Connect..." }, color = Palette.Muted, fontSize = 11.sp) },
-                onClick = { open = false; onConnect() },
-                modifier = Modifier.testTag(TITLE_BAR_OVERFLOW_CONNECTION_TAG),
-            )
+            CompositionLocalProvider(LocalTitleBarOverflowDismiss provides { open = false }) { entries() }
         }
     }
+}
+
+/** L8: closes the overflow menu an entry sits in (a no-op outside one). */
+val LocalTitleBarOverflowDismiss = staticCompositionLocalOf<() -> Unit> { {} }
+
+/** M2-7: the overflow's project entry, the same project picker the wide bar shows inline. */
+@Composable
+fun TitleBarOverflowProject(projectSlot: @Composable () -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier.padding(horizontal = 8.dp).height(TITLE_BAR_HEIGHT).testTag(TITLE_BAR_PROJECT_SLOT_TAG),
+        contentAlignment = Alignment.CenterStart,
+    ) { projectSlot() }
+}
+
+/** The overflow's attention entry, while any attention is open; a tap closes the menu and opens Attention. */
+@Composable
+fun TitleBarOverflowAttention(state: AppState, onAttention: () -> Unit, modifier: Modifier = Modifier) {
+    if (state.attentionOpenCount > 0) {
+        val dismiss = LocalTitleBarOverflowDismiss.current
+        DropdownMenuItem(
+            text = { Text("${state.attentionOpenCount} need attention", color = Palette.Accent, fontSize = 12.sp) },
+            onClick = { dismiss(); onAttention() },
+            modifier = modifier.testTag(TITLE_BAR_OVERFLOW_ATTENTION_TAG),
+        )
+    }
+}
+
+/** The overflow's connection URL, with the divider before it (it owns that gap); a tap closes the menu and opens the connection. */
+@Composable
+fun TitleBarOverflowConnection(state: AppState, onConnect: () -> Unit, modifier: Modifier = Modifier) {
+    val dismiss = LocalTitleBarOverflowDismiss.current
+    HorizontalDivider(modifier, color = Palette.Border)
+    DropdownMenuItem(
+        text = { Text(state.connection.url.ifBlank { "Connect..." }, color = Palette.Muted, fontSize = 11.sp) },
+        onClick = { dismiss(); onConnect() },
+        modifier = Modifier.testTag(TITLE_BAR_OVERFLOW_CONNECTION_TAG),
+    )
 }
 private val CloseHover = Color(0xFFC42B1C)
 
