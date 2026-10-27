@@ -78,7 +78,6 @@ class CenterChatBlock(children: List<Block>, place: Place = Place(weight = 1f)) 
         CompositionLocalProvider(LocalChatPanelHost provides host) {
             Column(scope.modifier.fillMaxWidth()) {
                 RenderPlaced(children)
-                host.Transcript(Modifier.weight(1f))
                 host.Notices()
                 host.SpawnRows()
                 host.SwitchPicker()
@@ -115,7 +114,19 @@ object CenterChatTabs : Block("tabStrip", "$CHAT.tabs") {
     }
 }
 
-private val CenterChat = CenterChatBlock(listOf(CenterChatHeader, CenterChatTabs))
+/**
+ * The picked centre tab (the Chat tab is the transcript, its inline pending question and the Activity box) with the to-do /
+ * reasoning side slot; it takes the free height, and its Box wears the placement.
+ */
+object CenterChatTranscript : Block("chatTranscript", "$CHAT.transcript", Place(weight = 1f)) {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val host = LocalChatPanelHost.current ?: return
+        host.Transcript(scope.modifier)
+    }
+}
+
+private val CenterChat = CenterChatBlock(listOf(CenterChatHeader, CenterChatTabs, CenterChatTranscript))
 
 /** The New agent modal and its catalog refresh. A dialog has no node in the column, so the placement has nothing to wear. */
 object CenterNewAgent : Block("newAgentDialog", "$CENTER.newAgent") {
