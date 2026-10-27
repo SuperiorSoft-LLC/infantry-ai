@@ -507,6 +507,58 @@ infantry.shell.run   runPane    RunPaneFrame (the column, "RUN", the watch that 
   `run-output` (a finished run's pill and line). The step matched its base render 4/4 at 0 px (step 0 of L15), plus
   diffTabShots 32/32.
 
+### 6m. As built in L16 (983f1936): the board pane and the ticket card template
+
+The board's pane (6g) stops being a leaf (docs/BLOCKS-NEXT-SPLITS.md, top-8 item 3). `infantry.shell.board.pane` keeps
+its id, its block type and its `weight = 1`, and becomes a container. The ticket card becomes the first **template node**
+(BLOCKS-NEXT-SPLITS section 4). The tree is in `CoreShell.root`, under `infantry.shell.board`, not a tab tree.
+
+```
+infantry.shell.board.pane  boardPane   BoardModalPaneBox (the padded box, which wears the placement) and BoardPaneFrame (the
+                                       image viewer host, the drag box and its ghost, the epics load, the Epic filter, the
+                                       new-ticket flag, the drop session); children top to bottom, straight into its column:
+  pane.filters     boardFilters     Epic, the ticket count, Start next, + New ticket
+  pane.unassigned  boardUnassigned  "N unassigned tickets (no project) not shown", with a project selected
+  pane.newTicket   boardNewTicket   the new-ticket form, while it is open
+  pane.empty       boardEmpty       "The backlog is empty." (or "Connect to a daemon..."), with no ticket and no form
+  pane.columns     boardColumns     weight 1: the status columns (title, count, drop border, drop line); its children are
+                                    drawn once per ticket into the column's card list:
+    infantry.shell.board.card  ticketCard  TEMPLATE: TicketCardFrame (the raised rounded column, the drag look, the
+                                           edit form's open flag); children top to bottom, straight into its column:
+      card.summary          ticketCardSummary  the drag handle and the clickable summary (it opens / closes the form);
+                                               its children go straight into the summary's column:
+        card.summary.title    ticketCardTitle    the title
+        card.summary.badges   ticketCardBadges   type, assignee (avatar, chip), epic, won't fix, queued, report flag
+        card.summary.details  ticketCardDetails  hold reason, runs on, branch, progress, last run
+      card.note             ticketCardNote     why a drop snapped back, and the role pick; nothing otherwise
+      card.edit             ticketCardEdit     the edit form and the links, while open
+      card.actions          ticketCardActions  the column's moves, Agent, Delete while open
+```
+
+- `BoardPane(state, controller, onOpenAgent)` and `BoardModalPane(...)` keep their signatures and draw `BoardPaneFrame`, the
+  same sections (`BoardFiltersSection` ... `BoardColumnsSection`) and per ticket `TicketCardFrame` and its sections
+  (`TicketCardSummarySection` ... `TicketCardActionsSection`), so the board's own tests host it as before.
+- The pane frame owns what the sections share and hands it to them as `BoardPaneHost` (a composition local): the filter in
+  force, the new-ticket flag, the drag and the drop session. Sections change it only through its callbacks
+  (`pickFilter`, `toggleCreating`, `closeCreating`, `startNext`, `drop`).
+- The template: the columns hand each ticket to their children as a `BoardCardItem` (the ticket, its drag look, its handle,
+  its drop note, its start) through a second local; the card frame owns the edit form's open flag and hands its sections
+  a `BoardCardHost` through a third (`toggleOpen`, `close`, `move`, `start`, `delete`, `openAgent`, `dismissNote`). The
+  card node is resolved once like any node; an override of `infantry.shell.board.card` or of one of its sections applies
+  to every card. Overrides address the template id, never a ticket; the columns own the list, its order and its length,
+  and an override cannot change them. The template's id is `infantry.shell.board.card`, not under `pane.columns`, as the
+  toast card's would be `infantry.shell.toast.card`.
+- The card's placement goes first, then the drag look (where the card is measured for a drop, the drop line, the faded
+  copy while dragged). A module that replaces the whole card draws its own and loses the handle and the drag with it.
+- A section's placement goes on its outermost item (the row, the text, the column). `newTicket`, `details`, `note` and
+  `edit` draw several items or an untagged form, so any placement other than the default gets a Column to wear it (as
+  6f), and a module that wraps one draws `inner` in a Column (a Box would stack them).
+- A section drawn outside its pane, a card drawn outside the columns, or a card section drawn outside a card draws nothing.
+- None of these nodes is locked.
+- 0 px: the default run never opens the board, and `board-open` (6g) has an empty backlog. Step 0 of L16 adds to
+  `-PtabShotsExtra=board`, after `board-open`: `board-new` (the form), `board-cards` (three tickets in Backlog, To do and
+  Done, one with a role assignee) and `board-card-open` (a card on its edit form). The step matched the step-0 render 4/4
+  at 0 px, plus diffTabShots 32/32.
 
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 
