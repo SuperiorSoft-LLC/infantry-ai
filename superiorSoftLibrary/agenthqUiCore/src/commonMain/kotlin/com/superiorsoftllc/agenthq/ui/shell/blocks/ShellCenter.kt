@@ -78,7 +78,6 @@ class CenterChatBlock(children: List<Block>, place: Place = Place(weight = 1f)) 
         CompositionLocalProvider(LocalChatPanelHost provides host) {
             Column(scope.modifier.fillMaxWidth()) {
                 RenderPlaced(children)
-                CenterTabBar(s.state, ui.centerTab) { ui.centerTab = it }
                 host.Transcript(Modifier.weight(1f))
                 host.Notices()
                 host.SpawnRows()
@@ -106,7 +105,17 @@ object CenterChatHeader : Block("chatHeader", "$CHAT.header") {
     }
 }
 
-private val CenterChat = CenterChatBlock(listOf(CenterChatHeader))
+/** The centre tab strip; its placement goes on the strip's row. */
+object CenterChatTabs : Block("tabStrip", "$CHAT.tabs") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val s = LocalShell.current
+        val ui = s.ui
+        CenterTabBar(s.state, ui.centerTab, scope.modifier) { ui.centerTab = it }
+    }
+}
+
+private val CenterChat = CenterChatBlock(listOf(CenterChatHeader, CenterChatTabs))
 
 /** The New agent modal and its catalog refresh. A dialog has no node in the column, so the placement has nothing to wear. */
 object CenterNewAgent : Block("newAgentDialog", "$CENTER.newAgent") {
