@@ -13,8 +13,8 @@ class ChatPanelOneSourceTest {
     private val ui = "../agenthqUiCore/src/commonMain/kotlin/com/superiorsoftllc/agenthq/ui"
     private fun src(name: String) = File("$ui/$name").readText()
 
-    @Test fun `the main window and the assistant popup both host ChatPanel`() {
-        assertTrue(Regex("""\bChatPanel\(""").containsMatchIn(src("App.kt")), "App.kt hosts ChatPanel")
+    @Test fun `the main window centre block and the assistant popup both host ChatPanel`() {
+        assertTrue(Regex("""\bChatPanel\(""").containsMatchIn(src("shell/blocks/ShellCenter.kt")), "ShellCenter.kt (the main window centre block) hosts ChatPanel")
         assertTrue(Regex("""\bChatPanel\(""").containsMatchIn(src("AssistantPopup.kt")), "AssistantPopup.kt hosts ChatPanel")
     }
 
