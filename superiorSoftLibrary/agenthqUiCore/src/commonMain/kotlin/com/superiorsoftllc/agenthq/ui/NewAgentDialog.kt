@@ -84,7 +84,7 @@ class NewAgentDraft(val model: NewAgentModalModel, val update: (NewAgentModalMod
 
 /**
  * The New agent modal's frame: the dialog (title, Add with its hint, Cancel) and the draft it owns. [content] gets the
- * draft and goes straight into the dialog's scrolling column, top to bottom (10dp apart).
+ * draft and goes straight into the dialog's scrolling column, top to bottom (16dp apart).
  */
 @Composable
 fun NewAgentDialogFrame(
