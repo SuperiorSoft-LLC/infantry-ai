@@ -446,10 +446,10 @@ internal fun ChatPanelHost.SpawnRows() {
         // PICKER 2/2: which provider+model the new agent runs on (from the `models` frame; none picked = daemon defaults).
         // PICKER-ALL-2: the shared Harness -> Provider -> Model picker; untouched, the stored pick is left as is.
         // The picker bounds its own lists; no outer scroll, so a row is never clipped under a second scroller.
-        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
             SeededExecutorPicker(
                 state.providers, state.modelCatalog, state.pickedModel, key = chat.spawnMode, tags = CONFIG_EXECUTOR_TAGS,
-                onPick = { controller.pickModel(it) },
+                onPick = { controller.pickModel(it) }, preselectSole = true,
             )
         }
     }

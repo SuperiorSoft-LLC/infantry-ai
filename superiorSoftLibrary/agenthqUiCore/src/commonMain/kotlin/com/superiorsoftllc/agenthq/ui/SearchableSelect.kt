@@ -1,9 +1,19 @@
 package com.superiorsoftllc.agenthq.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -107,21 +117,43 @@ fun <T> SearchableSelect(
             "${shown.size} of $totalCount", color = Palette.Muted, fontSize = 10.sp,
             modifier = Modifier.align(Alignment.End).testTag(searchTag + SELECT_COUNT_SUFFIX),
         )
-        LazyColumn(Modifier.fillMaxWidth().heightIn(max = maxListHeight), state = listState) {
+        LazyColumn(Modifier.fillMaxWidth().heightIn(max = maxListHeight), state = listState, verticalArrangement = Arrangement.spacedBy(3.dp)) {
             itemsIndexed(shown, key = { _, it -> key(it) }) { index, item ->
                 val on = isSelected(item)
                 val lit = index == highlight
+                // PICKER-UX: a row reads as an option, not a banner: a bordered box with a radio mark, a hover state,
+                // and the keyboard highlight as a faint tint only (a lone row is always highlighted).
+                val hover = remember { MutableInteractionSource() }
+                val hovered by hover.collectIsHoveredAsState()
+                val shape = RoundedCornerShape(4.dp)
                 Row(
-                    Modifier.fillMaxWidth()
-                        .background(if (lit) Palette.Accent.copy(alpha = 0.14f) else Color.Transparent)
+                    Modifier.fillMaxWidth().hoverable(hover).clip(shape)
+                        .border(
+                            if (on) 1.5.dp else 1.dp,
+                            when {
+                                on -> Palette.Accent
+                                hovered -> Palette.Accent.copy(alpha = 0.7f)
+                                else -> textColor.copy(alpha = 0.25f)
+                            },
+                            shape,
+                        )
+                        .background(
+                            when {
+                                on -> Palette.Accent.copy(alpha = 0.14f)
+                                hovered -> Palette.Accent.copy(alpha = 0.10f)
+                                lit -> Palette.Accent.copy(alpha = 0.05f)
+                                else -> Color.Transparent
+                            },
+                        )
                         .semantics { selected = lit }
                         .clickable { onPick(item) }
-                        .padding(horizontal = 4.dp, vertical = 3.dp)
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
                         .testTag(itemTag(item)),
                     horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    RadioMark(on, if (on || hovered) Palette.Accent else textColor.copy(alpha = 0.6f))
                     Text(
-                        (if (on) "● " else "") + label(item), fontFamily = Mono, fontSize = 12.sp,
+                        label(item), fontFamily = Mono, fontSize = 12.sp,
                         color = if (on) Palette.Accent else textColor, modifier = Modifier.weight(1f),
                     )
                     badge(item)?.let { Text(it, fontSize = 10.sp, color = Palette.Muted) }
@@ -130,3 +162,17 @@ fun <T> SearchableSelect(
         }
     }
 }
+
+/** PICKER-UX: a drawn radio mark (no glyph, so no tofu on the web build); the picked one says "picked" to a reader. */
+@Composable
+private fun RadioMark(on: Boolean, color: Color) {
+    Box(
+        Modifier.size(12.dp).border(1.5.dp, color, CircleShape).semantics { if (on) contentDescription = RADIO_PICKED },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (on) Box(Modifier.size(6.dp).background(color, CircleShape))
+    }
+}
+
+/** The content description of a picked [SearchableSelect] row's radio mark. */
+const val RADIO_PICKED = "picked"

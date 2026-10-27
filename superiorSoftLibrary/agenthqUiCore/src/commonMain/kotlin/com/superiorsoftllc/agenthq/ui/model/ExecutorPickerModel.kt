@@ -113,6 +113,20 @@ data class ExecutorPickerModel(
 
     fun withModelQuery(q: String): ExecutorPickerModel = copy(modelQuery = q)
 
+    /**
+     * PICKER-UX: the chosen harness's catalog lists exactly one model across every vendor (a deployment that allows
+     * one model): that model, else null. Not narrowed by the vendor or the search.
+     */
+    val soleModel: ModelOption?
+        get() = listedRows.flatMap { row -> row.models.map { ModelOption(it, row.group, it.substringAfterLast('/')) } }
+            .distinctBy { it.id }.singleOrNull()
+
+    /** PICKER-UX: with nothing picked and a [soleModel], pick it (there is no other choice to make). */
+    fun withSoleModel(): ExecutorPickerModel {
+        val sole = soleModel ?: return this
+        return if (model == null) withModel(sole.id, sole.group) else this
+    }
+
     companion object {
         /**
          * PICKER-ALL-2: the `models` frame, plus a row per vendor for any harness the frame does not list but whose
