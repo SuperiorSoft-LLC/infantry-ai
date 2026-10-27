@@ -450,7 +450,7 @@ infantry.shell.git   gitPane   GitPaneFrame (the scrolling column, "GIT · <proj
   unchanged, still 32. The step matched its base render 4/4 at 0 px (base f38ebb5, step 0 of L14), plus diffTabShots 32/32.
 
 
-### 6j. L13 (79c66a61): the small overlays stay leaves
+### 6k. L13 (79c66a61): the small overlays stay leaves
 
 The L13 survey (base 5958392) looked at the overlays left in the dock after L11 and found none worth splitting: each one
 is one small composable, below the ~60-line bar, so the nodes stay leaves (`replace` / `wrap` of the whole node already
