@@ -28,6 +28,8 @@ import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
 import com.superiorsoftllc.agenthq.provider.StubProvider
 import com.superiorsoftllc.agenthq.runner.StubScript
 import com.superiorsoftllc.agenthq.session.JsonSessionStore
+import com.superiorsoftllc.agenthq.session.MemorySource
+import com.superiorsoftllc.agenthq.session.ProcMem
 import com.superiorsoftllc.agenthq.ui.net.Controller
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -87,6 +89,13 @@ fun main(args: Array<String>) {
         // TAB-SHOTS-DIFF: fixed session ids (the id shows in the header, the agent row and the composer), so two renders
         // of the same code are pixel-identical.
         sessionIds = { "5e55a0%02d-0000-4000-8000-000000000000".format(sessionCount.incrementAndGet()) },
+        // TAB-SHOTS-DIFF: a fixed 8 GB free of 16 GB, so a host under the 4 GB floor never pushes the "low memory" notice
+        // (a 36 px row over the composer) into a shot.
+        memory = object : MemorySource {
+            override fun freeMb(): Long = 8192
+            override fun totalMb(): Long = 16384
+            override fun processes(): List<ProcMem> = emptyList()
+        },
     )
     daemon.start()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)

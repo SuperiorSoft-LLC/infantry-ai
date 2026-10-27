@@ -629,6 +629,8 @@ class AgentHqDaemon(
             webBundle: WebBundle = WebBundle.load(WebBundle.locate()),
             /** TAB-SHOTS-DIFF: new session ids; the tab-shots renderer pins them so two renders are pixel-identical. */
             sessionIds: () -> String = { UUID.randomUUID().toString() },
+            /** ROGUE-1: free RAM for the process watch; the tab-shots renderer pins it so the host's RAM never adds a low-memory notice. */
+            memory: com.superiorsoftllc.agenthq.session.MemorySource = com.superiorsoftllc.agenthq.session.OsMemorySource,
         ): AgentHqDaemon {
             val policy = AccessPolicy.of(host, token)
             // SEC-FIX-1: built once; refused when it equals the access token every agent is handed.
@@ -734,7 +736,7 @@ class AgentHqDaemon(
                     isProtected = com.superiorsoftllc.agenthq.session.ProcessWatch::isProtected,
                 ),
                 manager::list,
-                com.superiorsoftllc.agenthq.session.OsMemorySource,
+                memory,
                 com.superiorsoftllc.agenthq.session.host.OsProcessTable,
                 config = settings::processWatchConfig,
                 cpuAlert = settings::cpuAlert,
