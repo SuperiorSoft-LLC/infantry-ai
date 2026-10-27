@@ -198,7 +198,7 @@ L5 ships `replace` and `wrap` only; `remove | before | after | move | into | pla
 `LocalTitleBarCompact`) plus the divider, and its items are children, left to right, `infantry.shell.header.<name>`:
 
 ```
-lead            titleBarLead    left toggle, logo + name, project slot, avatar strip / compact drag + Assistant + overflow (children since L7, 6c)
+lead            titleBarLead    left toggle, logo + name, project slot, avatar strip / compact drag + Assistant, then the overflow (children since L7, 6c; overflow L8, 6d)
 attention       attentionChip   "N need attention" + its 10dp gap; wide only (compact lists it in the overflow)
 toggleRight     panelToggle     side panel toggle + its gap (8dp wide, 4dp compact)
 server          serverSwitcher  SWITCH-1 dropdown (nothing without a switcher)
@@ -223,7 +223,8 @@ toggleLeft  panelToggle  6dp + the agent list toggle
 brand       brand        logo + name, a drag area; owns 6dp before (after the toggle) and 10dp after
 project     projectSlot  M2-7 project picker + "+" New Project; wide only (compact lists it in the overflow)
 agents      agentStrip   the drag area with weight(1f): wide, the avatar strip with the Assistant last;
-                         compact, the plain drag area + Assistant + overflow button (L8 splits the overflow off)
+                         compact, the plain drag area + Assistant (the overflow button is its own node since L8, 6d)
+overflow    titleBarOverflow  since L8: the compact "More" button and its menu, show Compact (6d)
 ```
 
 - The lead draws no node of its own: in the bar's row it renders its children straight into that row
@@ -231,6 +232,24 @@ agents      agentStrip   the drag area with weight(1f): wide, the avatar strip w
 - The window drag modifier sits on the same boxes as before (`brand`'s row, `agents`' drag area).
 - None of these nodes is locked. The Assistant stays inside `agents` in the wide bar: a node of its own would move it
   out of the weighted strip to the strip's right end.
+
+### 6d. As built in L8 (099cee2f)
+
+`infantry.shell.header.lead.overflow` (`titleBarOverflow`, `place.show = Compact`) is the compact bar's "More" button,
+after `agents`. Its menu entries are its own children, top to bottom, `infantry.shell.header.lead.overflow.<name>`:
+
+```
+project     projectSlot      the M2-7 project picker
+attention   attentionEntry   "N need attention", while any is open
+connection  connectionEntry  the divider before it (it owns that gap) + the connection URL
+```
+
+- The `titleBar` frame now provides `LocalBlockSize` (the bar's width), so `show Wide|Compact` on a header node splits
+  at the same width as `LocalTitleBarCompact`. The header sits outside the measured body, so before L8 a header node's
+  `show` always read "wide".
+- An entry closes the menu through `LocalTitleBarOverflowDismiss`; an entry a plugin adds can do the same.
+- A replace or wrap keeps the node's `show Compact` (the override keeps the id and `place`). None of these nodes is locked.
+- The Assistant stays inside `agents`; the drag modifier stays on the same boxes. 0 px: diffTabShots 32/32.
 
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 

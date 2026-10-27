@@ -13,6 +13,10 @@ import com.superiorsoftllc.agenthq.ui.ProjectPicker
 import com.superiorsoftllc.agenthq.ui.ServerSwitcherChip
 import com.superiorsoftllc.agenthq.ui.TitleBarFrame
 import com.superiorsoftllc.agenthq.ui.TitleBarAgents
+import com.superiorsoftllc.agenthq.ui.TitleBarOverflow
+import com.superiorsoftllc.agenthq.ui.TitleBarOverflowAttention
+import com.superiorsoftllc.agenthq.ui.TitleBarOverflowConnection
+import com.superiorsoftllc.agenthq.ui.TitleBarOverflowProject
 import com.superiorsoftllc.agenthq.ui.TitleBarBrand
 import com.superiorsoftllc.agenthq.ui.TitleBarProject
 import com.superiorsoftllc.agenthq.ui.TitleBarToggleLeft
@@ -24,6 +28,7 @@ import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.Place
 import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
+import com.superiorsoftllc.agenthq.ui.block.layout.Show
 import com.superiorsoftllc.agenthq.ui.model.PanelSide
 import com.superiorsoftllc.agenthq.ui.model.needsInput
 
@@ -85,7 +90,7 @@ object HeaderProject : Block("projectSlot", "$LEAD.project") {
 
 /**
  * The bar's free middle, a drag area with `weight(1f)` in the bar's row: wide, the avatar strip with the Assistant last;
- * compact, the plain drag area, the Assistant and the overflow button (L8 splits the overflow off).
+ * compact, the plain drag area and the Assistant (the overflow button after it is [HeaderOverflowBlock], L8).
  */
 object HeaderAgents : Block("agentStrip", "$LEAD.agents") {
     @Composable
@@ -99,9 +104,8 @@ object HeaderAgents : Block("agentStrip", "$LEAD.agents") {
         val s = LocalShell.current
         val state = s.state
         TitleBarAgents(
-            state, s.ui.flags.agentScope, onConnect = { s.changeConnection?.invoke() ?: run { s.ui.showConnect = true } }, onAttention = { s.showTab(ATTENTION_TAB_ID) },
+            state, s.ui.flags.agentScope,
             chrome = LocalWindowChrome.current,
-            projectSlot = { ProjectPicker(state, s.controller) },
             // ASSISTANT-1: the last member of the team strip; a tap toggles the popup (the daemon makes the session on the first open).
             assistantSlot = {
                 if (state.connection.hasAssistant || state.assistant != null) {
@@ -116,7 +120,50 @@ object HeaderAgents : Block("agentStrip", "$LEAD.agents") {
     }
 }
 
-val HeaderLead = HeaderLeadBlock(listOf(HeaderToggleLeft, HeaderBrand, HeaderProject, HeaderAgents))
+private const val OVERFLOW = "$LEAD.overflow"
+
+/**
+ * BLOCKS-LAYOUT L8 (design section 5): the compact bar's "More" button, `show Compact`. Its menu entries are its own
+ * children, top to bottom, `infantry.shell.header.lead.overflow.<name>`; each entry owns its gap (the connection entry
+ * the divider before it). A plugin header item that should overflow adds one node `show Wide` in the bar and one here.
+ */
+class HeaderOverflowBlock(children: List<Block>, place: Place = Place(show = Show.Compact)) : Block("titleBarOverflow", OVERFLOW, place, children) {
+    @Composable
+    override fun Render(scope: BlockScope) = TitleBarOverflow(scope.modifier) { RenderPlaced(children) }
+
+    override fun withChildren(children: List<Block>) = HeaderOverflowBlock(children, place)
+}
+
+/** M2-7: the project picker, the overflow's first entry. */
+object HeaderOverflowProject : Block("projectSlot", "$OVERFLOW.project") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val s = LocalShell.current
+        TitleBarOverflowProject({ ProjectPicker(s.state, s.controller) }, scope.modifier)
+    }
+}
+
+/** "N need attention", while any is open; a tap opens Attention. */
+object HeaderOverflowAttention : Block("attentionEntry", "$OVERFLOW.attention") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val s = LocalShell.current
+        TitleBarOverflowAttention(s.state, { s.showTab(ATTENTION_TAB_ID) }, scope.modifier)
+    }
+}
+
+/** The connection URL the compact chip has no room for, after a divider; a tap opens the connection. */
+object HeaderOverflowConnection : Block("connectionEntry", "$OVERFLOW.connection") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val s = LocalShell.current
+        TitleBarOverflowConnection(s.state, { s.changeConnection?.invoke() ?: run { s.ui.showConnect = true } }, scope.modifier)
+    }
+}
+
+val HeaderOverflow = HeaderOverflowBlock(listOf(HeaderOverflowProject, HeaderOverflowAttention, HeaderOverflowConnection))
+
+val HeaderLead = HeaderLeadBlock(listOf(HeaderToggleLeft, HeaderBrand, HeaderProject, HeaderAgents, HeaderOverflow))
 
 /** M2-6: minimize / maximize-restore / close where the platform has a window, else the bar's 12dp end. */
 object HeaderWindowControls : Block("windowControls", "$HEADER.windowControls") {
