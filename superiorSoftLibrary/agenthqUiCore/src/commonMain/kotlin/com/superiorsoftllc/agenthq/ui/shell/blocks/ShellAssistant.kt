@@ -8,17 +8,16 @@ import androidx.compose.ui.unit.dp
 import com.superiorsoftllc.agenthq.ui.AssistantPopup
 import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.TITLE_BAR_HEIGHT
-import com.superiorsoftllc.agenthq.ui.block.Block
-import com.superiorsoftllc.agenthq.ui.block.DockScope
-import com.superiorsoftllc.agenthq.ui.block.Edge
+import com.superiorsoftllc.agenthq.ui.block.layout.Block
+import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 
 /**
  * ASSISTANT-1: the global Assistant's popup, docked top right under the title bar (a full-screen sheet when compact). The
  * window owns its state, so closing it keeps the draft, the width and the model; it is one more host of ChatPanel.
  */
-object ShellAssistant : Block("infantry.shell.assistant", "infantry.shell.assistant", Edge.OVERLAY) {
+object ShellAssistant : Block("infantry.shell.assistant", "infantry.shell.assistant") {
     @Composable
-    override fun Render(dock: DockScope) = with(dock) {
+    override fun Render(scope: BlockScope) = with(scope) {
         val s = LocalShell.current
         if (s.assistantPanel.open) {
             val compactWindow = s.state.panels.compactWindow

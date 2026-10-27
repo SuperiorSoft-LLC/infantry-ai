@@ -3,14 +3,13 @@ package com.superiorsoftllc.agenthq.ui.shell.blocks
 import androidx.compose.runtime.Composable
 import com.superiorsoftllc.agenthq.ui.ConnectDialog
 import com.superiorsoftllc.agenthq.ui.LocalShell
-import com.superiorsoftllc.agenthq.ui.block.Block
-import com.superiorsoftllc.agenthq.ui.block.DockScope
-import com.superiorsoftllc.agenthq.ui.block.Edge
+import com.superiorsoftllc.agenthq.ui.block.layout.Block
+import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 
 /** BLOCKS-SHELL-1: the connection dialog (Ctrl+L, a refused token), while it is open. */
-object ShellConnect : Block("infantry.shell.connect", "infantry.shell.connect", Edge.WINDOW) {
+object ShellConnect : Block("infantry.shell.connect", "infantry.shell.connect") {
     @Composable
-    override fun Render(dock: DockScope) {
+    override fun Render(scope: BlockScope) {
         val s = LocalShell.current
         val ui = s.ui
         if (ui.showConnect) {

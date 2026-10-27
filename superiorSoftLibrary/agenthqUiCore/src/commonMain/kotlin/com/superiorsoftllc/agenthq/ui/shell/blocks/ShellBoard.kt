@@ -3,15 +3,14 @@ package com.superiorsoftllc.agenthq.ui.shell.blocks
 import androidx.compose.runtime.Composable
 import com.superiorsoftllc.agenthq.ui.BoardModal
 import com.superiorsoftllc.agenthq.ui.LocalShell
-import com.superiorsoftllc.agenthq.ui.block.Block
-import com.superiorsoftllc.agenthq.ui.block.DockScope
-import com.superiorsoftllc.agenthq.ui.block.Edge
+import com.superiorsoftllc.agenthq.ui.block.layout.Block
+import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.model.CompactScreen
 
 /** M2-8: the board, a near-full-screen modal opened from the sidebar; "Agent" on a card closes it on the chat. */
-object ShellBoard : Block("infantry.shell.board", "infantry.shell.board", Edge.OVERLAY) {
+object ShellBoard : Block("infantry.shell.board", "infantry.shell.board") {
     @Composable
-    override fun Render(dock: DockScope) {
+    override fun Render(scope: BlockScope) {
         val s = LocalShell.current
         val ui = s.ui
         if (ui.showBoard) {

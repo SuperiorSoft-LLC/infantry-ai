@@ -5,14 +5,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.TextButton
-import com.superiorsoftllc.agenthq.ui.block.Block
-import com.superiorsoftllc.agenthq.ui.block.DockScope
-import com.superiorsoftllc.agenthq.ui.block.Edge
+import com.superiorsoftllc.agenthq.ui.block.layout.Block
+import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 
 /** SWITCH-1: a server switch that failed, until it is acknowledged. */
-object ShellSwitchError : Block("infantry.shell.switchError", "infantry.shell.switchError", Edge.WINDOW) {
+object ShellSwitchError : Block("infantry.shell.switchError", "infantry.shell.switchError") {
     @Composable
-    override fun Render(dock: DockScope) {
+    override fun Render(scope: BlockScope) {
         val ui = LocalShell.current.ui
         ui.switchError?.let { msg ->
             AlertDialog(
