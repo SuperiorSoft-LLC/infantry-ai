@@ -419,7 +419,6 @@ private fun BranchSwitcher(link: LinkContext, ctx: GitContext, projectId: String
 /** Test tags of the base-branch control (BASE-1b). */
 const val GIT_BASE_TOGGLE_TAG = "git-base-toggle"
 const val GIT_BASE_SUMMARY_TAG = "git-base-summary"
-const val GIT_LIST_TOGGLE_TAG = "git-list-toggle-"
 /** A changed-file list longer than this starts collapsed so it cannot push other content out of view. */
 const val GIT_LIST_COLLAPSE_OVER = 20
 const val GIT_BASE_SEARCH_TAG = "git-base-search"
@@ -527,47 +526,6 @@ private fun BaseBranchPicker(link: LinkContext, session: SessionContext, ctx: Gi
         else -> null to Palette.Muted
     }
     text?.let { Text(it, color = color, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp).testTag(GIT_BASE_RESULT_TAG)) }
-}
-
-/** A group of changed files under its title; [row] (BLOCKS-LAYOUT L18: the Changes tab's file template) draws each file in place of [ChangedFileRow]. */
-@Composable
-internal fun ChangeGroup(
-    title: String, files: List<ChangedFile>, staged: Boolean, picked: Pair<String, Boolean>?, collapseOver: Int = Int.MAX_VALUE,
-    row: (@Composable (ChangedFile) -> Unit)? = null, onPick: ((ChangedFile) -> Unit)?,
-) {
-    if (files.isEmpty()) return
-    val collapsible = files.size > collapseOver
-    var expanded by remember(title, collapsible) { mutableStateOf(!collapsible) }
-    Text(
-        "$title (${files.size})${if (collapsible) if (expanded) " ▾" else " ▸" else ""}", color = Palette.Muted, fontSize = 10.sp,
-        modifier = Modifier.padding(top = 4.dp).then(
-            if (collapsible) Modifier.testTag(GIT_LIST_TOGGLE_TAG + title).clickable { expanded = !expanded } else Modifier,
-        ),
-    )
-    if (!expanded) return
-    files.forEach { f ->
-        if (row != null) row(f) else ChangedFileRow(f, open = picked == (f.path to staged), onPick = onPick?.let { pick -> { pick(f) } })
-    }
-}
-
-/** One changed file: its status badge, its path ([open] highlights it) and its status; [modifier] goes on the row. */
-@Composable
-internal fun ChangedFileRow(f: ChangedFile, open: Boolean, onPick: (() -> Unit)?, modifier: Modifier = Modifier) {
-    Row(
-        modifier.fillMaxWidth().then(if (onPick != null) Modifier.clickable { onPick() } else Modifier).padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(f.status.badge(), color = kindColor(f.status), fontFamily = Mono, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(12.dp))
-        ChangedPathText(f.display(), if (open) Palette.Accent else Palette.Text)
-        Spacer(Modifier.width(2.dp))
-        Text(f.status.label(), color = Palette.Muted, fontSize = 9.sp, maxLines = 1, softWrap = false)
-    }
-}
-
-private fun kindColor(kind: ChangeKind): Color = when (kind) {
-    ChangeKind.ADDED, ChangeKind.UNTRACKED -> Palette.Ok
-    ChangeKind.DELETED, ChangeKind.CONFLICTED -> Palette.Danger
-    ChangeKind.MODIFIED, ChangeKind.RENAMED -> Palette.Accent
 }
 
 /** Unified-diff colouring: additions green, removals red, hunk headers accented, everything else plain. */

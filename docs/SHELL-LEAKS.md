@@ -74,3 +74,43 @@ None of these additions is on `ShellContext`; they all belong to the module cont
   - Untested on a minified (R8) Android release: a keep rule for `ModuleSource` implementations may be needed.
 - **coreController is gated on tier, not on the classloader.** A module declared core in its manifest gets the
   controller.
+
+# S4b: the panes (ticket 8724e046)
+
+S4b moves the pane groups git, run, roles, board, memory and changes into agenthqAppUi, one commit each, after one
+prep commit that holds everything two groups share. That way any pane commit can be dropped or reverted on its own.
+The compiler only catches `internal` leaks. `Controller`, `LocalShell` and `AppState` are public, so each moved file
+gets a symbol audit: every core symbol it touches, and a decision for each one. S4b uses the ticket's letters:
+
+- **(a)** already on `ShellContext`
+- **(b)** added to `ShellContext` as an addition-only member with a default
+- **(c)** belongs to the app UI and moves too
+- **kit**: the shell's public toolkit, which any block may use and which stays in core as it is. That covers the
+  theme (`Palette`, `Mono`), the controls (`Clickables.kt`, `Chip`, `IconAction`, `AhqAlertDialog`, `SearchableSelect`,
+  `LocalDirectoryPicker`), the block contract (`Block`, `BlockScope`, `Place`, `RenderPlaced`), and the model views and
+  wire types (`model/*`, `protocol/*`, `CommandResult` and the `*_UNSUPPORTED` reasons). They are not leaks: they hold
+  no window state.
+- **stays**: core still uses it, so it stays in core (public where the moved code needs it)
+- **bridge**: as in S4a. Public only until its last core user moves, marked `// S4 bridge (docs/SHELL-LEAKS.md)`.
+
+Each pane keeps its `(state, controller)` entry (`ProjectGitPane`, `RunPane`, `MemoryPane`, `ProjectChangesPanel`) for
+tests and for drawing outside a shell. It builds the shell's public adapters (`CoreLink`, `CoreSession`, `CoreGit`,
+`CoreRun`, `CoreNotes`, `CoreChanges`) and hands them to the same frame the block draws, so the frames and sections
+read the context only. Only that one line names `Controller` or `AppState`.
+
+## Prep commit (shared by the pane commits)
+
+| File | Symbol | Why | Decision |
+|---|---|---|---|
+| shell/ShellContext.kt | `ShellContext.layout` (`LayoutContext.tabTree`, default `NoLayout`) | the Git, Run, Notes and Changes tabs read their resolved tree through `LocalShell.current.tabs.tabTree` | (b) |
+| shell/ShellContext.kt | `ShellContext.notes` (`NotesContext`, default `NoNotes`) | the Notes pane reads `state.memoryNotes`, `memorySearch` and calls 5 `controller.*Memory` | (b) |
+| shell/ShellContext.kt | `ShellContext.changes` (`ChangesContext`, default `NoChanges`) | the Changes pane reads `projectWorktrees`, `changesWorktree(Status)`, `changes(Shown)Branch`, `projectGitBranchChanges`, calls 6 controller requests and polls on `controller.client.frames` | (b): `pollWorktrees` and `pollWorktreeStatus` hide the frame wait (BUG-CHANGES-BRANCH-1) in the core adapter |
+| shell/ShellContext.kt | `SessionContext.selectedAgentId`, `selectedAgent` (default null) | Notes (role / session scope) and Changes (the worktree of the selected session) read `state.selected` / `selectedId` | (b) |
+| shell/CoreShellContext.kt | `CoreNotes`, `CoreChanges`, `pollOnce` | the core's implementations; `pollOnce` moved here from ProjectChangesPanel.kt (it reads `controller.client`) | stays |
+| ProjectGitPane.kt -> ChangesSection.kt | `ChangeGroup`, `ChangedFileRow`, `GIT_LIST_TOGGLE_TAG` (were internal) | the Git and Changes panes both draw them | bridge: they go to (c) once both panes are in agenthqAppUi |
+| ChangesSection.kt | `ChangedPathText` (was internal) | the Git and Changes panes and core's `ChangesSection` draw it | bridge |
+| block/layout/Placement.kt | `RenderPlaced` (Row, Column, Box; were internal) | every moved container block draws its children with it | kit: the block contract's own function, made public (no new surface, only visibility) |
+| block/layout/Placement.kt | `RenderPlain` (was internal) | the moved Notes and Changes trees draw their axis-less groups with it | kit: as `RenderPlaced` |
+
+A shell built without these domains (a third-party `ShellContext`) compiles unchanged: `NoNotes` and `NoChanges` refuse
+every request with `SHELL_DOMAIN_MISSING`, and `NoLayout` makes each tab draw its default tree.

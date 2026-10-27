@@ -48,22 +48,23 @@ internal fun placement(
     return m.sized(place.size)
 }
 
+/** A container's [children] in its row, column or box, each with its placement; S4b: public, a block outside core is a container too. */
 @Composable
-internal fun RowScope.RenderPlaced(children: List<Block>) {
+fun RowScope.RenderPlaced(children: List<Block>) {
     for (c in children.flattened()) key(c.id) {
         if (c.place.visible()) c.Render(BlockScope(placement(c.place, { w, f -> Modifier.weight(w, f) }, null), null, this))
     }
 }
 
 @Composable
-internal fun ColumnScope.RenderPlaced(children: List<Block>) {
+fun ColumnScope.RenderPlaced(children: List<Block>) {
     for (c in children.flattened()) key(c.id) {
         if (c.place.visible()) c.Render(BlockScope(placement(c.place, { w, f -> Modifier.weight(w, f) }, null), null))
     }
 }
 
 @Composable
-internal fun BoxScope.RenderPlaced(children: List<Block>) {
+fun BoxScope.RenderPlaced(children: List<Block>) {
     for (c in children.flattened()) key(c.id) {
         if (c.place.visible()) c.Render(BlockScope(placement(c.place, null, { a -> Modifier.align(a) }), this))
     }
@@ -71,7 +72,7 @@ internal fun BoxScope.RenderPlaced(children: List<Block>) {
 
 /** A container with no axis (a group at the root): children get only their `size`. */
 @Composable
-internal fun RenderPlain(children: List<Block>) {
+fun RenderPlain(children: List<Block>) {
     for (c in children.flattened()) key(c.id) {
         if (c.place.visible()) c.Render(BlockScope(placement(c.place, null, null), null))
     }
