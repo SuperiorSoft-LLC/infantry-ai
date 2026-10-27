@@ -142,6 +142,8 @@ object IhqInstaller {
         root.listFiles { f -> f.isDirectory && f.name.startsWith("_install-") }.orEmpty().forEach { it.deleteRecursively() }
     }
 
+    private val RESERVED_NAMES = setOf("CON", "PRN", "AUX", "NUL") + (1..9).flatMap { listOf("COM$it", "LPT$it") }
+
     private fun checkName(name: String) {
         val bad = name.isEmpty() || name.startsWith("/") || name.contains('\\') || name.contains('\u0000') ||
             Regex("^[A-Za-z]:").containsMatchIn(name) || name.split('/').any { it == ".." || it == "." }
@@ -150,6 +152,8 @@ object IhqInstaller {
 
     private fun checkManifest(m: ModuleManifest, stage: File) {
         if (!Regex("[A-Za-z0-9][A-Za-z0-9_.-]{0,63}").matches(m.name)) throw Refusal(IhqRefusal.BAD_MANIFEST, "name '${m.name.take(80)}' is not a valid folder name")
+        if (m.name.endsWith(".")) throw Refusal(IhqRefusal.BAD_MANIFEST, "name '${m.name}' must not end with a dot")
+        if (m.name.substringBefore('.').uppercase() in RESERVED_NAMES) throw Refusal(IhqRefusal.BAD_MANIFEST, "name '${m.name}' is a reserved device name")
         if (m.entry.isNullOrBlank()) throw Refusal(IhqRefusal.BAD_MANIFEST, "module.json has no entry class")
         val jar = m.jar?.takeIf { it.isNotBlank() } ?: throw Refusal(IhqRefusal.BAD_MANIFEST, "module.json has no jar")
         val f = File(stage, jar)

@@ -184,6 +184,31 @@ class IhqInstallerTest {
         assertRefused(IhqInstaller.install(p, root, settings = InstallSettings(allowUnsigned = true)), IhqRefusal.BAD_MANIFEST)
     }
 
+    @Test fun `a module json that is not json is refused`() {
+        val p = zip("nojson.ihq", mapOf("module.json" to "this is { not json".toByteArray(), "lib/Test_Mod.jar" to byteArrayOf(1)))
+        val r = IhqInstaller.install(p, root, settings = InstallSettings(allowUnsigned = true))
+        assertRefused(r, IhqRefusal.BAD_MANIFEST)
+        assertTrue((r as IhqResult.Refused).message.contains("module.json"), r.message)
+        assertTrue(root.list().orEmpty().isEmpty(), "left ${root.list()?.toList()}")
+        assertTrue(PluginFolders.scan(root, PluginFolders.config(root)).isEmpty())
+        noHalfInstall()
+    }
+
+    @Test fun `an invalid module name is refused and leaves no folder`() {
+        val bad = listOf("", "a/b", "a\\b", "..", ".", "...", "CON", "nul", "Com1.txt", "LPT9", "_hidden", ".hidden", "trailing.", "x".repeat(65), "sp ace")
+        for (name in bad) {
+            val json = """{"name":${quote(name)},"version":"1.0.0","entry":"x.Y","jar":"lib/a.jar"}"""
+            val p = zip("badname.ihq", mapOf("module.json" to json.toByteArray(), "lib/a.jar" to byteArrayOf(1)))
+            val r = IhqInstaller.install(p, root, settings = InstallSettings(allowUnsigned = true))
+            assertRefused(r, IhqRefusal.BAD_MANIFEST)
+            assertTrue((r as IhqResult.Refused).message.isNotBlank(), "'$name'")
+        }
+        assertTrue(root.list().orEmpty().isEmpty(), "left ${root.list()?.toList()}")
+        assertTrue(PluginFolders.scan(root, PluginFolders.config(root)).isEmpty())
+    }
+
+    private fun quote(s: String) = "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
     @Test fun `oversize is refused by every limit`() {
         val open = InstallSettings(allowUnsigned = true)
         val p = good()
