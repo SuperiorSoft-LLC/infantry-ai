@@ -110,9 +110,8 @@ fun main(args: Array<String>) {
         // change is diffed against a render of its base (-PtabShotsBaseline). The default run is unchanged.
         if (System.getProperty("agenthq.tabshots.extra") == "board") {
             onNodeWithTag(SIDEBAR_BOARD_BUTTON_TAG).performClick()
+            // Open only: the window without the board is the baseline shots' (its message clocks are masked per shot name).
             snap(out, "board-open")
-            onNodeWithTag(BOARD_MODAL_CLOSE_TAG).performClick()
-            snap(out, "board-closed")
             daemon.close()
             exitProcess(0)
         }
