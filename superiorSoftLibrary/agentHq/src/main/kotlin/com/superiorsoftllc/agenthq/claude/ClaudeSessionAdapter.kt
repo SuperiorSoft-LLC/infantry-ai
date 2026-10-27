@@ -77,7 +77,8 @@ class ClaudeSessionAdapter(
         val resume = request.resumeSessionId?.takeIf { it.isNotBlank() }
         val command = argv(executable(), request, resume, env)
         val process = Process(sink)
-        process.start(runner, command, request, env)
+        // Claude Code 2.1.30x has no TodoWrite headless; this enables TaskCreate/TaskUpdate (mapped to `todos` by ClaudeTaskTools).
+        process.start(runner, command, request, env + ("CLAUDE_CODE_ENABLE_TODO_TOOLS" to "1"))
         sink.detail(
             "claude stream-json session (${process.pid?.let { "pid $it" } ?: "no OS process"})" +
                 (resume?.let { ", resuming provider session $it" } ?: ""),
