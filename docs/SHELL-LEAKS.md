@@ -289,3 +289,19 @@ Moved: shell/blocks/ShellHeader.kt (`ShellHeader`, `TitleBarBlock`, `HeaderLead*
 | ShellHeader.kt | `ATTENTION_TAB_ID`, `needsInput`, `PanelSide` | kit (model) |
 | ShellHeader.kt | `LocalShell.current.state` (connection, assistant, waiting, openPrompts, openQuestionSessions, the agents) | hole: `LinkContext` (has the connection), a `ChatContext` / `AgentsContext` for the strip |
 | ShellHeader.kt | `controller.togglePanel`, `s.showTab`, `s.changeConnection`, `ui.showConnect`, `ui.showServers`, `s.switcher`, `s.switchTo`, `s.assistantPanel`, `ui.flags.agentScope` | hole: a `WindowContext` (panels, tabs, the shell's dialogs) |
+
+## Status bar (Infantry_AppUi)
+
+Moved: shell/blocks/StatusBarBlocks.kt (`CoreStatusBar`, `StatusBarBlock`, the 8 `Status*` items) and ProcessesBadge.kt
+(`ProcessesBadge`, `ProcessesDialog`, the `PROCESSES_*` tags), which only the status bar draws.
+
+| File | Symbol | Decision |
+|---|---|---|
+| ProcessesBadge.kt | the whole file | (c): only `StatusProcessesBadge` uses it |
+| StatusBarBlocks.kt | `FooterBuild` | stays: the About section (trust half) draws it too |
+| StatusBarBlocks.kt | `SERVER_MISMATCH_TAG` | stays: ServerUpdateSection.kt (trust half) owns it |
+| StatusBarBlocks.kt | `ConfigTab` | stays: the Config dialog's tabs (core) |
+| StatusBarBlocks.kt | `ago`, `ConnState`, `AhqIcons`, `clickable`, `Palette`, `SpacerBlock`, `Block`, `BlockScope`, `Place`, `RenderPlaced` | kit |
+| StatusBarBlocks.kt | `state.connection` (`isLive`, its state, `lastFrameAt`, the contract) | (a) in part: `LinkContext.live`, `contract`; hole: the connection state and the last frame time |
+| StatusBarBlocks.kt | `s.serverMismatch`, `s.host.appBuild`, `state.panels.compactWindow`, `ui.showConfig`, `ui.configTab` | hole: the `WindowContext` (see Header) |
+| ProcessesBadge.kt | `state.processReport`, `processAutoReap`, `controller.refreshProcesses / reapProcesses / setProcessAutoReap` | hole: a `ProcessesContext` (5 members) |
