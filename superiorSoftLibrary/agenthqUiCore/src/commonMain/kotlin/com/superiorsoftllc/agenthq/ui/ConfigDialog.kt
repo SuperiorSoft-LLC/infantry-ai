@@ -197,7 +197,7 @@ fun ConfigDialog(
                             }
                             if (shows(ConfigEntry.BLUR)) FlagSection(ConfigEntry.BLUR, highlight) {
                                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    androidx.compose.material3.Switch(
+                                    Switch(
                                         checked = flags.blurBehindDialogs,
                                         onCheckedChange = { onFlags(flags.copy(blurBehindDialogs = it)) },
                                         modifier = Modifier.testTag(BLUR_SWITCH_TAG),
@@ -949,7 +949,7 @@ private fun UserPortraitSection(portrait: String?, onSave: (ByteArray?) -> Unit)
         UserAvatar(size = 64, portrait = portrait)
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                androidx.compose.material3.OutlinedButton(
+                OutlinedButton(
                     onClick = {
                         val path = host.pickFile("Choose your portrait") ?: return@OutlinedButton
                         val size = host.fileSize(path)
@@ -962,7 +962,7 @@ private fun UserPortraitSection(portrait: String?, onSave: (ByteArray?) -> Unit)
                     enabled = host.canPickFiles,
                     modifier = Modifier.testTag(PORTRAIT_CHANGE_TAG),
                 ) { Text("Change portrait") }
-                androidx.compose.material3.TextButton(
+                TextButton(
                     onClick = { error = null; onSave(null) },
                     enabled = portrait != null,
                     modifier = Modifier.testTag(PORTRAIT_RESET_TAG),
@@ -1000,7 +1000,7 @@ private fun ThemeSection(theme: ThemeSettings, onPick: (ThemeSettings) -> Unit) 
         }
         Text("Accent: ${theme.accent.label}", fontSize = 12.sp)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            androidx.compose.material3.Switch(
+            Switch(
                 checked = theme.dark,
                 onCheckedChange = { onPick(theme.copy(dark = it)) },
                 modifier = Modifier.testTag(THEME_DARK_SWITCH_TAG),

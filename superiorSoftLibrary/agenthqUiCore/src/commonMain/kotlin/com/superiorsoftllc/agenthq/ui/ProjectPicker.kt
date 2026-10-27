@@ -382,7 +382,7 @@ private fun ToggleSection(state: AppState, controller: Controller, project: Proj
     var error by remember { mutableStateOf<String?>(null) }
     ProjectSettingsRegistry.togglesFor(sectionId, state.connection).forEach { toggle ->
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            androidx.compose.material3.Checkbox(
+            Checkbox(
                 checked = toggle.isOn(project),
                 enabled = live,
                 onCheckedChange = { on ->
