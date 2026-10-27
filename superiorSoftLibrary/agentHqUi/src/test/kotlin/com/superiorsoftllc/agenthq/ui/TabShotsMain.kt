@@ -9,6 +9,8 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import com.superiorsoftllc.agenthq.plugin.api.ModuleSetting
@@ -106,6 +108,63 @@ fun main(args: Array<String>) {
         scope.launch { controller.spawn("say hello") }
         waitUntil(timeoutMillis = 20_000) { controller.state.value.agents.isNotEmpty() }
         waitForIdle()
+        // BLOCKS-LAYOUT L10: -PtabShotsExtra=board renders only the open board (no baseline shot opens it), so a board
+        // change is diffed against a render of its base (-PtabShotsBaseline). The default run is unchanged.
+        if (System.getProperty("agenthq.tabshots.extra") == "board") {
+            onNodeWithTag(SIDEBAR_BOARD_BUTTON_TAG).performClick()
+            // Open only: the window without the board is the baseline shots' (its message clocks are masked per shot name).
+            snap(out, "board-open")
+            daemon.close()
+            exitProcess(0)
+        }
+        // BLOCKS-LAYOUT L11: -PtabShotsExtra=assistant,newAgent,diff (any of them, comma-separated) renders only those
+        // overlays open, as the board's shot does (the default run is unchanged). The diff comes last: it adds a project.
+        val l11 = System.getProperty("agenthq.tabshots.extra")?.split(',')?.map { it.trim() }.orEmpty()
+        if (l11.any { it in setOf("assistant", "newAgent", "diff") }) {
+            if ("assistant" in l11) {
+                onNodeWithTag(TITLE_BAR_ASSISTANT_TAG).performClick()
+                waitUntil(timeoutMillis = 20_000) { onAllNodesWithTag(ASSISTANT_STARTING_TAG).fetchSemanticsNodes().isEmpty() }
+                snap(out, "assistant-docked")
+                onNodeWithTag(ASSISTANT_EXPAND_TAG).performClick()
+                snap(out, "assistant-full")
+                onNodeWithTag(ASSISTANT_EXPAND_TAG).performClick()
+                onNodeWithTag(ASSISTANT_CLOSE_TAG).performClick()
+                waitForIdle()
+            }
+            if ("newAgent" in l11) {
+                onNodeWithTag(SIDEBAR_NEW_AGENT_TAG).performClick()
+                snap(out, "newAgent-open")
+                val role = SemanticsMatcher("a role card") { n ->
+                    n.config.getOrElseNullable(SemanticsProperties.TestTag) { null }?.startsWith(NEW_AGENT_ROLE_TAG_PREFIX) == true
+                }
+                onAllNodes(role).fetchSemanticsNodes().firstOrNull()?.let { onAllNodes(role)[0].performClick(); snap(out, "newAgent-role") }
+                onNodeWithText("Cancel").performClick()
+                waitForIdle()
+            }
+            if ("diff" in l11) {
+                // A temp git repository with one modified file, as DiffModalRealDaemonUiTest builds it.
+                val repo = File(dir, "diff-repo").apply { mkdirs() }
+                fun git(vararg a: String) = ProcessBuilder(listOf("git", "-c", "user.name=Shots", "-c", "user.email=shots@test.invalid") + a)
+                    .directory(repo).redirectErrorStream(true).start().apply { inputStream.readBytes(); waitFor() }
+                git("init", "-b", "main")
+                File(repo, "README.md").writeText("hello\nsecond line\n")
+                git("add", "README.md")
+                git("commit", "-m", "add the readme")
+                File(repo, "README.md").writeText("hello from the diff shot\nsecond line\n")
+                kotlinx.coroutines.runBlocking { controller.saveProject("Diff shot project") }
+                waitUntil(timeoutMillis = 20_000) { controller.state.value.projects.any { it.name == "Diff shot project" } }
+                val project = controller.state.value.projects.single { it.name == "Diff shot project" }
+                kotlinx.coroutines.runBlocking { controller.selectProject(project.id); controller.saveProjectDirectory(project.id, repo.absolutePath) }
+                waitUntil(timeoutMillis = 20_000) { controller.state.value.activeProject?.directory == repo.absolutePath }
+                onAllNodesWithTag("right-tab-CHANGES")[0].performClick()
+                waitUntil(timeoutMillis = 20_000) { onAllNodesWithText("README.md", substring = true).fetchSemanticsNodes().isNotEmpty() }
+                onAllNodesWithText("README.md", substring = true)[0].performClick()
+                waitUntil(timeoutMillis = 20_000) { controller.state.value.projectGitPatch[project.id]?.path == "README.md" }
+                snap(out, "diff-open")
+            }
+            daemon.close()
+            exitProcess(0)
+        }
         // TAB-SHOTS-DIFF: a pane still showing its loading placeholder ("Loading skills...", the Stats pane's "Reading this
         // session's record...") is shot once it has loaded, so a slow host does not change the picture. One that never
         // loads is shot as it is (the diff then shows it).
