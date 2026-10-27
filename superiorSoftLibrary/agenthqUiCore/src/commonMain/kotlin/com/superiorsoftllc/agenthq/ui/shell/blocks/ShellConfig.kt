@@ -21,6 +21,7 @@ import com.superiorsoftllc.agenthq.ui.ConfigMarkdownEngineSection
 import com.superiorsoftllc.agenthq.ui.ConfigModulesSection
 import com.superiorsoftllc.agenthq.ui.ConfigPairSection
 import com.superiorsoftllc.agenthq.ui.ConfigPluginsSection
+import com.superiorsoftllc.agenthq.ui.ConfigRegistrySection
 import com.superiorsoftllc.agenthq.ui.ConfigProgressStaleSection
 import com.superiorsoftllc.agenthq.ui.ConfigQuestionsSection
 import com.superiorsoftllc.agenthq.ui.ConfigReasoningSection
@@ -177,12 +178,14 @@ val ShellConfigSettings = GroupBlock(
 
 /**
  * The trust kernel (docs/SHELL-EMPTY-DROPIN-FEASIBILITY.md, 3d): where a plugin is disabled, a secret is typed, a device
- * is paired, an update is checked or approved and the logs are found. Each is in [CoreShell.locked], so no module
+ * is paired, an update is checked or approved and the logs are found; P1 (f60f4d97) adds where plugins are registered
+ * (`registry`), which step 2 makes where a registered child is turned off. Each is in [CoreShell.locked], so no module
  * replaces or wraps one, and a bad drop can always be undone from Configuration > Plugins.
  */
 val ShellConfigTrust: List<ConfigSectionBlock> = listOf(
     ConfigSectionBlock(ConfigEntry.PLUGINS, "plugins") { c, m -> ConfigPluginsSection(c, m) },
     ConfigSectionBlock(ConfigEntry.MODULES, "modules") { c, m -> ConfigModulesSection(c, m) },
+    ConfigSectionBlock(ConfigEntry.REGISTRY, "registry") { c, m -> ConfigRegistrySection(c, m) },
     ConfigSectionBlock(ConfigEntry.SECRETS, "secrets") { c, m -> ConfigSecretsSection(c, m) },
     ConfigSectionBlock(ConfigEntry.PAIR, "pair") { c, m -> ConfigPairSection(c, m) },
     ConfigSectionBlock(ConfigEntry.ABOUT, "about") { c, m -> ConfigAboutSection(c, m) },

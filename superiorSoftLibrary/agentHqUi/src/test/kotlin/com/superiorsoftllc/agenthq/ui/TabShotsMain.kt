@@ -23,6 +23,7 @@ import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import com.superiorsoftllc.agenthq.ui.plugin.MODULE_ROW_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.MODULE_MESSAGE_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.MODULE_TOGGLE_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.plugin.REGISTRY_CHILD_TAG_PREFIX
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.superiorsoftllc.agenthq.daemon.AgentHqDaemon
@@ -405,7 +406,8 @@ fun main(args: Array<String>) {
         // search, the Changes panel over a project with and without a repository, and (compact) the board, a config section and
         // the new-agent dialog at the 800 and 360 px widths. The default run is unchanged.
         val s0 = System.getProperty("agenthq.tabshots.extra")?.split(',')?.map { it.trim() }.orEmpty()
-        val s0Sets = setOf("config", "changes", "compact")
+        // P1 (f60f4d97): -PtabShotsExtra=registry shoots Configuration > Plugins scrolled to the Registered view (centre strip picked).
+        val s0Sets = setOf("config", "changes", "compact", "registry")
         if (s0.any { it in s0Sets }) {
             if ("config" in s0) {
                 onNodeWithContentDescription("Configuration").performClick()
@@ -415,6 +417,17 @@ fun main(args: Array<String>) {
                 }
                 onNodeWithTag(CONFIG_SEARCH_TAG).performClick()
                 snap(out, "config-search")
+                onNodeWithContentDescription("Configuration").performClick()
+                waitForIdle()
+            }
+            if ("registry" in s0) {
+                onNodeWithContentDescription("Configuration").performClick()
+                onNodeWithTag(CONFIG_TAB_TAG_PREFIX + ConfigTab.PLUGINS.name).performClick()
+                onNodeWithTag(CONFIG_SECTION_TAG_PREFIX + ConfigEntry.REGISTRY.name).performScrollTo()
+                // Down to the example community module's tab, so the shot shows the strip's rows, not only the picker.
+                onAllNodesWithTag(REGISTRY_CHILD_TAG_PREFIX + "acme.hello").fetchSemanticsNodes().firstOrNull()?.let { onNodeWithTag(REGISTRY_CHILD_TAG_PREFIX + "acme.hello").performScrollTo() }
+                waitForIdle()
+                snap(out, "config-registry")
                 onNodeWithContentDescription("Configuration").performClick()
                 waitForIdle()
             }

@@ -814,6 +814,139 @@ infantry.shell.config   config (LOCKED)   the frame: AhqAlertDialog, title, life
 - 0 px: S0's opt-in set (`-PtabShotsExtra=config,compact`: the nine Configuration tabs and the search, and the compact
   board, new-agent and config shots) rendered on the base before the split matched after it, plus diffTabShots 32/32.
 
+### 6s. P1 (f60f4d97): plugin configuration, step 1 (read-only registry view) and the config layer design
+
+Owner request 2026-10-27: open a container node and see the plugins registered in it, tabs first; then (step 2, after a
+PM check) change what is registered there; and the Payload-CMS-style configuration layer (A-G below), design only.
+
+**For the owner, in ten lines.**
+
+```
+1. Every node may declare config fields (a schema): text, number, checkbox, select, multiSelect, implementation; plugins add types.
+2. Defaults come from JSON: core's file plus each installed plugin's, merged into ONE tree keyed by node id and hierarchy.
+3. That JSON seeds the database on first load; afterwards the database is the live copy, and the view edits it.
+4. A value resolves child -> parent -> root -> the declaring plugin's default; the first one set wins; unset is never an error.
+5. The block gets the resolved values as parameters (ShellContext.config.values(nodeId)); it never knows where they came from.
+6. An implementation field stores a registry KEY ("sorter": "byDueDate"), never a class name; no code is loaded from config.
+7. The keys come from a registry installed plugins add to; a user may swap one only where the node marks the field exposed.
+8. A newly installed helper becomes the selection only if the node allows it and the user never picked one.
+9. Locked core nodes and trust fields never show as editable; a community plugin edits only what allowOverride/allowInject grant.
+10. The configuration view renders that same tree: pick a node, see its registered children and its fields; field groups are tabs.
+```
+
+**What counts as a container node that hosts children.** A node whose children are *registered* by modules (through
+module.json and the loader), or resolved over the core tree by them, so that "who put this here" has an answer. Two
+kinds exist today, and the read model (`NodeRegistry`, below) answers both the same way:
+
+- **Tab strips** (kind `tabs`): the children are the `TabProvider`s modules declare under `tabs` in module.json, resolved
+  by `TabFactory` (a preference replaces a tab in its place). Hosted by `infantry.shell.center.chat.tabs` (container
+  `center`) and `infantry.shell.right.body.strip` (container `right`). A tab that draws a core tab tree
+  (`CoreShell.tabs`) says which (`CoreShell.tabTreeTabs`). Wired in step 1.
+- **Shell tree containers** (kind `tree`): every node of `CoreShell.root` or of a core tab tree that has children, as
+  `BlockResolver` resolved it: a core child as shipped, an `InjectedBlock` (module, injection) or an `OverrideBlock`
+  (module, replace or wrap; a wrapped container still lists the children inside it). Listed in step 1, read-only.
+- **Not in step 1:** the side panels' `PanelProvider` sections (`infantry.shell.left`, `infantry.shell.right.body`) have
+  the same shape as tabs and are the next to wire; the toast area (`infantry.shell.toast`) holds runtime events, not
+  registered plugins; the slots (`center.top` ...) and interceptors decorate a tab, they are not children of a node.
+
+Node ids found (the view lists them in this order: the two strips, then every tree container in tree order; (L) =
+locked, listed but never editable; `NodeRegistryTest` pins the list):
+
+```
+tabs   infantry.shell.center.chat.tabs        infantry.shell.right.body.strip
+tree   infantry.shell.window (L)  .images (L)  .dock (L)  .frame  .header  .header.lead  .header.lead.overflow  .body
+       .panes  .center  .center.chat  .center.newAgent  .right  .right.body  .footer  .assistant  .assistant.body  .board
+       .board.pane  .board.pane.columns  .board.card  .board.card.summary  .diff  .windowLayer  .config (L)
+       .config.settings  .roles  .roles.form
+tree   infantry.shell.git  .run  .notes  .notes.hits  .notes.list  .changes  .changes.files  .changes.branchFiles
+       .changes.history (the core tab trees)
+```
+
+**Step 1 as built (read model + view).**
+
+```
+NodeRegistry.of(factory): List<HostNode>      core, commonMain (ui.plugin); built from TabFactory, nothing duplicated
+  HostNode        id, title, kind (TABS | TREE), locked, children
+  RegisteredChild id, name, module, version, tier (core/community), order, source, by, locked, enabled
+  ChildSource     TAB | CORE_TAB_TREE (a tab drawing CoreShell.tabs) | REPLACE | WRAP | INJECTION | SHELL (core, as shipped)
+infantry.shell.config.registry   configSection (LOCKED)   Plugins: where plugins are registered
+```
+
+- **Reused, not duplicated.** The tabs come from `TabFactory.tabs(container)`; a preference that replaced a tab is what
+  `TabFactory` recorded when it applied it (`replacedTabs`); replace, wrap and injection are read off the resolved trees
+  (`OverrideBlock.module/mode`, `InjectedBlock.module`), so the view shows exactly what is drawn.
+- **Enabled.** A tab drawn now is enabled. A tab a module declares in its module.json while the module is not loaded (off
+  in modules.json, refused, locked) is listed as disabled, with no order (its order is in code that did not run). Step 2
+  adds a per-node disable on top.
+- **The view** is one trust section, `infantry.shell.config.registry`, after Modules on the Plugins tab: a node picker
+  (chips: the strips, then the tree containers), then the picked node's children, one row each: name, id, module and
+  version, Core/Community, source, order, Locked, Enabled/Disabled. Read-only; a locked node says so above its list. It
+  reads the dialog's host (`ConfigDialogHost`) through the section's composition local, as every config section does;
+  drawn outside the dialog it draws nothing. It shows where Modules shows (a host that loads modules at run time: the
+  desktop); web and Android have no Plugins > Modules and so no registry view yet.
+- **Why locked (the one new locked node).** Step 2 makes this where a child plugin is disabled, so it belongs to the
+  trust kernel (6r): a module must not replace the view that turns it off. No other node is locked.
+- **Pixels.** The section sits below Modules, under the fold of every existing Plugins shot, so those stay 0 px. New
+  opt-in shot `-PtabShotsExtra=registry`: `config-registry` (the Plugins tab scrolled to the view, the centre strip
+  picked).
+
+**Step 2 (NOT built; after a PM check of step 1).** Per-node settings from this view: enable or disable a registered
+child, reorder a strip's tabs. Stored as per-node settings (B below; modules.json `ModuleSetting` unchanged) and read
+when the factory is built: a disabled child is not drawn, a reordered strip uses the stored order (ties by id). Never
+editable: locked nodes and the trust sections; a community module's child only where its `allowOverride` (tabs,
+replace, wrap) or `allowInject` (injections) grants the node. Restart rule as Modules today, until the factory can
+rebuild live.
+
+**A. Schema per node.** A module declares fields per node id it owns or is granted, in module.json:
+
+```json
+"config": [
+  { "node": "infantry.shell.board.pane", "group": "Board",
+    "fields": [
+      { "key": "showEmpty", "type": "checkbox", "label": "Show empty columns", "default": true },
+      { "key": "columns", "type": "multiSelect", "options": ["todo", "in_progress", "done"], "default": ["todo", "in_progress", "done"] },
+      { "key": "sorter", "type": "implementation", "registry": "board.sorter", "default": "byOrder", "exposed": true }
+    ] }
+]
+```
+
+Built-in types: `text`, `number` (min, max, step), `checkbox`, `select`, `multiSelect`, `implementation`. A type is a
+key in a field-type registry (validate a JSON value, draw an editor); a module registers more (`color`, `duration`). An
+unknown type is shown read-only with one line in Problems, never dropped.
+
+**B. One unified tree.** At start the loader merges core's `config.json` and every loaded module's `config` into one tree
+keyed by node id; the hierarchy is the block tree's (a node's parent is its parent in `CoreShell.root` or its tab tree),
+so `infantry.shell.board.pane` sits under `infantry.shell.board`. Merge: core first, then modules in load order; a module
+declares fields only on its own nodes or nodes its modules.json grants name; a second declaration of a key is refused
+with a line. Storage: the daemon's database, `node_config(node_id, key, value_json, set_by, updated_at)`; the first load
+inserts only keys not there yet (the JSON seeds, never overwrites); after that the database is the live copy. The view
+reads and writes it through the daemon (one route), so desktop, web and Android see the same values.
+
+**C. Resolution.** `values(nodeId).string(key)` (ShellContext's `ConfigContext`, 6q) looks at the node, then its parent,
+up to the root, then the declaring module's default; the first value set wins. Typed: a value of another type is null,
+never coerced. The core passes the resolved values to the block as parameters (`LocalShellContext.config`); the block
+never asks who set them. Resolution runs once per change of the tree, not per frame.
+
+**D. Implementation fields.** The stored value is a registry key; `implementation(type, key)` returns what a module
+registered under that key (a future `UiRegistrar.implementation(registry, key, value)`), or null. Firm rules: no class
+names or paths in JSON, ever; the options are the keys registered now (a stored key whose module is gone falls back to the
+default, with a line); a user may swap one only if the field is declared `exposed`; the fields of locked nodes and trust
+sections are never offered; a newly installed module's key becomes the selection only if the field is `exposed`, allows
+it (`autoSelectNew`), and `set_by` is not `user`.
+
+**E. Children control.** For a container (tabs, tree) the view offers add, remove and reorder. Add offers only children a
+loaded module declares as belonging to that node (its module.json `tabs[].container`, `inject[].into`, or a later
+`children[].into`), so a container never takes a stranger. Remove is disable (the module stays loaded). A locked
+container offers nothing; community children obey allowOverride and allowInject.
+
+**F. Config groups as tabs.** Each field set names a `group`; the configuration dialog's tab strip is the list of groups
+in order (today's nine `ConfigTab`s are core's groups). A module's group with a core group's name joins that tab; a new
+name adds a tab after core's, before About. Inside the registry view, a node's own groups render as a sub-strip above its
+fields.
+
+**G. Other platforms.** Same JSON format and resolution on web (wasm) and Android; the registry is filled at compile time
+from the compiled-in modules (`CoreModules.all`). Only Windows has the drop-in (run-time loading).
+
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 
 | part | bucket |

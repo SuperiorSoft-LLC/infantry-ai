@@ -15,7 +15,7 @@ class CoreShellTreeTest {
         "theme", "blur", "markdownEngine", "reasoning", "userPortrait", "agentScope", "progressStale", "lifecycle",
         "cliLocations", "toolApproval", "roles", "limits", "voice", "incomingSound", "questions",
     )
-    private val configTrust = listOf("plugins", "modules", "secrets", "pair", "about", "updates", "serverUpdate", "logs")
+    private val configTrust = listOf("plugins", "modules", "registry", "secrets", "pair", "about", "updates", "serverUpdate", "logs")
 
     @Test fun `the core tree keeps every node id, in order, each unique`() {
         val header = "infantry.shell.header"
@@ -123,6 +123,8 @@ class CoreShellTreeTest {
                 "infantry.shell.serverUpdate", "infantry.shell.config",
                 // S3: the trust half of Configuration (plugins, secrets, pairing, updates, about, logs).
                 "infantry.shell.config.plugins", "infantry.shell.config.modules", "infantry.shell.config.secrets",
+                // P1 (f60f4d97): where plugins are registered (step 2: where a registered child is turned off).
+                "infantry.shell.config.registry",
                 "infantry.shell.config.pair", "infantry.shell.config.about", "infantry.shell.config.updates",
                 "infantry.shell.config.serverUpdate", "infantry.shell.config.logs",
             ),
@@ -181,5 +183,10 @@ class CoreShellTreeTest {
         assertEquals(expectedChanges.joinToString("\n"), CoreShell.tabs[3].walk().joinToString("\n"))
         val all = (listOf(CoreShell.root) + CoreShell.tabs).flatMap { it.walk() }.map { it.trim() }
         assertEquals(all.size, all.toSet().size, "node ids are unique across the trees")
+        // P1 (f60f4d97): the tab that draws each tree, as Configuration > Plugins > Registered names it.
+        assertEquals(
+            mapOf(git to "infantry.git", run to "infantry.run", notes to "infantry.notes", changes to "infantry.changes"),
+            CoreShell.tabTreeTabs,
+        )
     }
 }

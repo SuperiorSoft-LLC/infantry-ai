@@ -153,6 +153,7 @@ fun ConfigDialog(
         if (onSendTestQuestion != null) add(ConfigEntry.QUESTIONS)
         if (voicePlugins != null) add(ConfigEntry.PLUGINS)
         if (modules != null) add(ConfigEntry.MODULES)
+        if (modules != null) add(ConfigEntry.REGISTRY)
         if (secretActions != null && secrets != null) add(ConfigEntry.SECRETS)
         if (pair != null) add(ConfigEntry.PAIR)
         if (updates != null) add(ConfigEntry.UPDATES)
@@ -276,6 +277,7 @@ fun ConfigSections(config: ConfigDialogHost) {
     ConfigQuestionsSection(config)
     ConfigPluginsSection(config)
     ConfigModulesSection(config)
+    ConfigRegistrySection(config)
     ConfigSecretsSection(config)
     ConfigPairSection(config)
     ConfigAboutSection(config)
@@ -451,6 +453,16 @@ fun ConfigModulesSection(config: ConfigDialogHost, modifier: Modifier = Modifier
     if (!config.shows(ConfigEntry.MODULES)) return
     FlagSection(ConfigEntry.MODULES, config.highlight, modifier) {
         com.superiorsoftllc.agenthq.ui.plugin.ModulesSection(modules)
+    }
+}
+
+/** P1 (f60f4d97): the container nodes and what is registered in each, read-only (Plugins > Registered). */
+@Composable
+fun ConfigRegistrySection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    val modules = config.modules ?: return
+    if (!config.shows(ConfigEntry.REGISTRY)) return
+    FlagSection(ConfigEntry.REGISTRY, config.highlight, modifier) {
+        com.superiorsoftllc.agenthq.ui.plugin.RegistrySection(modules)
     }
 }
 
