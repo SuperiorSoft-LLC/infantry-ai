@@ -5,7 +5,7 @@ import com.superiorsoftllc.agenthq.ui.shell.blocks.CoreShell
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** BLOCKS-LAYOUT L3: the core tree's node ids are the override address (they become API at L5); this pins them. */
+/** BLOCKS-LAYOUT L3: the core tree's node ids are the override address and, since L5, plugin API (plugins/GUIDE.md); this pins them. */
 class CoreShellTreeTest {
     private fun Block.walk(depth: Int = 0): List<String> = listOf("  ".repeat(depth) + id) + children.flatMap { it.walk(depth + 1) }
 

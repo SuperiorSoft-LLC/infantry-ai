@@ -18,13 +18,20 @@ import com.superiorsoftllc.agenthq.plugin.api.ServiceKey
 import com.superiorsoftllc.agenthq.plugin.api.Services
 import com.superiorsoftllc.agenthq.plugin.api.Tier
 import com.superiorsoftllc.agenthq.plugin.host.AcceptedPreference
+import com.superiorsoftllc.agenthq.plugin.host.AcceptedShellOverride
 import com.superiorsoftllc.agenthq.plugin.host.ModuleState
 import com.superiorsoftllc.agenthq.plugin.host.ModuleStatus
 import com.superiorsoftllc.agenthq.plugin.host.SimpleEventBus
 import com.superiorsoftllc.agenthq.ui.Palette
+import com.superiorsoftllc.agenthq.ui.block.layout.Block
+import com.superiorsoftllc.agenthq.ui.block.layout.BlockOverride
+import com.superiorsoftllc.agenthq.ui.block.layout.BlockResolver
+import com.superiorsoftllc.agenthq.ui.block.layout.NodeOverride
+import com.superiorsoftllc.agenthq.ui.block.layout.Resolved
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.DiffTarget
 import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.agenthq.ui.shell.blocks.CoreShell
 
 /**
  * PLUGINS-1: the named places tabs go. A container is any id; these are the window's two strips. A tab with a
@@ -202,6 +209,8 @@ class AgentHqModule(
     val observers: Map<String, (PluginEvent) -> Unit> = emptyMap(),
     val tier: Tier = Tier.CORE,
     val panels: List<PanelProvider> = emptyList(),
+    /** BLOCKS-LAYOUT L5: shell node overrides, by the names module.json `shell` uses. */
+    val shell: Map<String, BlockOverride> = emptyMap(),
 )
 
 /**
@@ -221,6 +230,8 @@ interface UiRegistrar {
     fun interceptor(name: String, interceptor: TabInterceptor)
     fun block(name: String, block: SlotBlock)
     fun observer(name: String, observer: (PluginEvent) -> Unit)
+    /** BLOCKS-LAYOUT L5: an override of a core shell node; declare it under `shell` in module.json (node, name, mode). */
+    fun shell(name: String, override: BlockOverride) {}
 }
 
 /** Runs [plugin]'s registration into a module of [tier]. */
@@ -230,6 +241,7 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
     val interceptors = LinkedHashMap<String, TabInterceptor>()
     val blocks = LinkedHashMap<String, SlotBlock>()
     val observers = LinkedHashMap<String, (PluginEvent) -> Unit>()
+    val shell = LinkedHashMap<String, BlockOverride>()
     plugin.register(object : UiRegistrar {
         override val services = services
         override fun tab(provider: TabProvider) { tabs += provider }
@@ -237,8 +249,9 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
         override fun interceptor(name: String, interceptor: TabInterceptor) { interceptors[name] = interceptor }
         override fun block(name: String, block: SlotBlock) { blocks[name] = block }
         override fun observer(name: String, observer: (PluginEvent) -> Unit) { observers[name] = observer }
+        override fun shell(name: String, override: BlockOverride) { shell[name] = override }
     })
-    return AgentHqModule(manifest, tabs, interceptors, blocks, observers, tier, panels)
+    return AgentHqModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell)
 }
 
 /**
@@ -250,7 +263,10 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
  *   replacing tab is not shown under its own id. HOOKS-1: a panel section replaces a panel section the same way (id,
  *   panel, order, tag, fill);
  * - interceptors, blocks and observers are bound by their declared names; an undeclared or unknown one is refused.
- *   An interceptor runs only the parts its `kind` names; a block binds only to a slot in [Slots.ALL].
+ *   An interceptor runs only the parts its `kind` names; a block binds only to a slot in [Slots.ALL];
+ * - BLOCKS-LAYOUT L5: [shellOverrides] (the loader's trust rules already let them through) bind to the module's
+ *   registered [AgentHqModule.shell] by name and go into [CoreShell.root] through [BlockResolver]; [shellRoot] is
+ *   the tree the window draws ([CoreShell.root] itself when none applies).
  * Everything refused is in [problems]; nothing here throws.
  */
 class TabFactory(
@@ -264,12 +280,21 @@ class TabFactory(
     statuses: List<ModuleStatus>? = null,
     /** PLUGINS-2: how Settings > Plugins enables and disables a module; null = this host cannot change modules.json. */
     val changes: ModuleChanges? = null,
+    /** BLOCKS-LAYOUT L5: the shell overrides the loader accepted, in load order. */
+    shellOverrides: List<AcceptedShellOverride> = emptyList(),
 ) {
     val modules: List<AgentHqModule> = modules.toList()
     /** Whether a loader looked at a plugins root (the desktop); false = compiled-in modules only (web, Android, tests). */
     val loadsAtRunTime: Boolean = statuses != null
     val statuses: List<ModuleStatus> = statuses ?: modules.map { ModuleStatus(it.manifest.name, it.tier, ModuleState.LOADED, manifest = it.manifest) }
-    val problems: List<String>
+    private val bindProblems: List<String>
+    private val nodeOverrides: List<NodeOverride>
+    /** BLOCKS-LAYOUT L5: the core tree with the overrides in, resolved once (lazily: the tree is not built at init). */
+    private val shell: Resolved by lazy { BlockResolver.resolve(CoreShell.root, nodeOverrides, CoreShell.locked) }
+    /** The tree the window draws. */
+    val shellRoot: Block get() = shell.root
+    /** Everything refused or ignored, one line each. */
+    val problems: List<String> get() = bindProblems + shell.problems
     private val providers: List<TabProvider>
     private val sections: List<PanelProvider>
     private val interceptors: Map<String, List<TabInterceptor>>
@@ -373,11 +398,17 @@ class TabFactory(
                 }
             }
             for (n in m.observers.keys - m.manifest.observers.map { it.name }.toSet()) problems += "$name: observer $n is not declared in its module.json; refused"
+            for (n in m.shell.keys - m.manifest.shell.map { it.name }.toSet()) problems += "$name: shell override $n is not declared in its module.json; refused"
+        }
+        nodeOverrides = shellOverrides.mapNotNull { a ->
+            val o = byModule[a.module]?.shell?.get(a.name)
+            if (o == null) problems += "${a.module}: shell override ${a.name} is declared but not registered; skipped"
+            o?.let { NodeOverride(a.module, a.node, a.mode, it) }
         }
         providers = seen.values.toList()
         interceptors = ints
         blocks = bls.mapValues { (_, v) -> v.sortedBy { it.first }.map { it.second to it.third } }
-        this.problems = problems
+        bindProblems = problems
     }
 
     /** A container's top-level tabs, in strip order. */

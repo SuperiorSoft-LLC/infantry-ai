@@ -6,6 +6,7 @@ import com.superiorsoftllc.agenthq.plugin.api.ModuleSetting
 import com.superiorsoftllc.agenthq.plugin.api.ModulesConfig
 import com.superiorsoftllc.agenthq.plugin.api.PanelDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.PreferenceDeclaration
+import com.superiorsoftllc.agenthq.plugin.api.ShellOverrideDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.Tier
 import kotlin.test.Test
@@ -135,6 +136,22 @@ class ModuleResolverTest {
 
         val allowed = ModuleResolver.resolve(listOf(git, acme), enabled("Acme_Hello", allowOverride = listOf("infantry.git")))
         assertEquals(listOf(AcceptedPreference("Acme_Hello", "infantry.git", "acme.git")), allowed.preferences)
+    }
+
+    @Test
+    fun `L5 community overrides a core shell node only when modules json allows that node`() {
+        val decl = ShellOverrideDeclaration("infantry.shell#infantry.shell.footer", "bar", "wrap")
+        val acme = community("Acme_Bar").let { it.copy(manifest = it.manifest!!.copy(shell = listOf(decl))) }
+        val refused = ModuleResolver.resolve(listOf(acme), enabled("Acme_Bar"))
+        assertEquals(emptyList(), refused.shellOverrides)
+        assertTrue(refused.log.any { "cannot override core shell node infantry.shell.footer" in it })
+        assertEquals(ModuleState.LOADED, refused.state("Acme_Bar"), "the module loads; only its override is refused")
+
+        val allowed = ModuleResolver.resolve(listOf(acme), enabled("Acme_Bar", allowOverride = listOf("infantry.shell.footer")))
+        assertEquals(listOf(AcceptedShellOverride("Acme_Bar", "infantry.shell.footer", "bar", "wrap")), allowed.shellOverrides)
+
+        val core = core("Infantry_Bar").let { it.copy(manifest = it.manifest!!.copy(shell = listOf(decl))) }
+        assertEquals(1, ModuleResolver.resolve(listOf(core)).shellOverrides.size, "core needs no allowOverride")
     }
 
     @Test

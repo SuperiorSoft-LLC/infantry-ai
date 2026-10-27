@@ -83,8 +83,9 @@ object DesktopPlugins {
         }
         resolution.log.forEach(say)
         val preferences = resolution.preferences.filter { it.module !in refused }
+        val shellOverrides = resolution.shellOverrides.filter { it.module !in refused }
         val changes = ModuleChanges { request -> change(root, compiled, demoLock, request).also { c -> (c as? ModuleChange.Applied)?.log?.forEach(say); say("[plugins] ${c.message}") } }
-        val factory = TabFactory(modules, preferences, services = { services[it] ?: NoPluginServices }, events = bus, statuses = statuses(resolution), changes = changes)
+        val factory = TabFactory(modules, preferences, services = { services[it] ?: NoPluginServices }, events = bus, statuses = statuses(resolution), changes = changes, shellOverrides = shellOverrides)
         factory.problems.forEach { say("[plugins] $it") }
         return Loaded(factory, root, config, demoLock, log) { services[it] ?: NoPluginServices }
     }

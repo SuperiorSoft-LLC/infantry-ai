@@ -49,6 +49,8 @@ data class ModuleManifest(
     val interceptors: List<InterceptorDeclaration> = emptyList(),
     val observers: List<ObserverDeclaration> = emptyList(),
     val blocks: List<BlockDeclaration> = emptyList(),
+    /** BLOCKS-LAYOUT L5: overrides of core shell nodes (`infantry.shell.*`), by node id. Node ids are API. */
+    val shell: List<ShellOverrideDeclaration> = emptyList(),
 )
 
 /** PLUGINS-2: module [id] (`Vendor_Module`) must be installed, enabled and at a version in [version] (e.g. `>=1.2 <2`). */
@@ -81,3 +83,14 @@ data class ObserverDeclaration(val event: String, val name: String)
 /** A block named [name] the module adds to slot [slot]. */
 @Serializable
 data class BlockDeclaration(val slot: String, val name: String, val order: Int = 0)
+
+/**
+ * BLOCKS-LAYOUT L5: the module's code [name] (registered with `UiRegistrar.shell`) takes over core shell node [node]
+ * (a node id such as `infantry.shell.footer`, or its address `infantry.shell#infantry.shell.footer`). [mode] is
+ * `replace` (the core block is not drawn) or `wrap` (the module draws around the core block, which it gets as `inner`).
+ */
+@Serializable
+data class ShellOverrideDeclaration(val node: String, val name: String, val mode: String = "replace") {
+    /** The bare node id, whichever form [node] uses. */
+    val nodeId: String get() = node.removePrefix("infantry.shell#")
+}

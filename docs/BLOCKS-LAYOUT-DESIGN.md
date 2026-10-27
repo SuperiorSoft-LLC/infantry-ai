@@ -172,6 +172,26 @@ rejected because an inserted plugin node would then need a second edit on its pa
   everything.
 - `locked` nodes refuse remove/replace/move/wrap. Inserting before/after or into them is still allowed.
 
+### 6a. As built in L5 (80690a98)
+
+L5 ships `replace` and `wrap` only; `remove | before | after | move | into | place` come later on the same resolver.
+
+- **Node ids are API from L5 on.** The ids pinned by `CoreShellTreeTest` (section 2's tree plus the footer's
+  `infantry.shell.footer.<name>` children) are never renamed. The test also checks that every id is unique.
+- module.json: `"shell": [{ "node": "<id or infantry.shell#<id>>", "name": "<registered name>", "mode": "replace|wrap" }]`;
+  the Kotlin entry registers `UiRegistrar.shell(name, BlockOverride { scope, inner -> })`. `inner` is the block being
+  wrapped (null for a replace).
+- Trust (`ModuleResolver`, plugin side): a community module needs the node id in its `allowOverride`; core needs no
+  grant. The rest (`BlockResolver`, UI side, which holds the tree): an unknown id or mode is ignored, a `locked` node
+  (`CoreShell.locked`, the two locked rows of section 7) is refused, and so is a replace that would remove a locked node
+  below it. Each one is a line in `TabFactory.problems` (Settings > Plugins, and the `[plugins]` log).
+- Resolution: once per `TabFactory` (the module set), bottom-up: a node's children first, the node rebuilt through
+  `withChildren` only if a child changed, then its own overrides in load order. A wrap wraps what is there (the last
+  loaded is outermost); a replace drops it (the last replace wins, logged as "overriding"). The override node keeps the
+  id and `place`, so its parent places it as before.
+- No flag: with no override the resolver returns `CoreShell.root` itself (the same object), so the window is the L4
+  window by construction. The `blocks.enabled` switch of the L5 row in section 8 was not needed.
+
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 
 | part | bucket |

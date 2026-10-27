@@ -36,14 +36,19 @@ data class ModuleStatus(
 /** A preference the rules let through: [module] replaces [replace] with its own [with]. */
 data class AcceptedPreference(val module: String, val replace: String, val with: String)
 
+/** BLOCKS-LAYOUT L5: an override of core shell node [node] the trust rules let through ([mode] `replace` or `wrap`). */
+data class AcceptedShellOverride(val module: String, val node: String, val name: String, val mode: String)
+
 /**
  * The outcome of one load: every module's status (in load order for the loaded ones, then the rest), the preferences
- * that apply, and the log lines (one per module, plus one per ignored claim or refused preference).
+ * and shell overrides that apply (in load order), and the log lines (one per module, plus one per ignored claim or
+ * refused preference or override).
  */
 data class Resolution(
     val statuses: List<ModuleStatus>,
     val preferences: List<AcceptedPreference>,
     val log: List<String>,
+    val shellOverrides: List<AcceptedShellOverride> = emptyList(),
 ) {
     val loaded: List<ModuleStatus> get() = statuses.filter { it.state == ModuleState.LOADED }
     fun status(name: String): ModuleStatus? = statuses.firstOrNull { it.name == name }
@@ -66,7 +71,10 @@ data class Resolution(
  * - PLUGINS-2: a dependency that is missing, off, refused or outside its version range refuses the module, and so on
  *   down the chain; a cycle refuses the modules on it; a core module may not depend on a community one (core never
  *   imports a module). The rules are [DependencyGraph]'s, the same ones Settings applies before it changes modules.json;
- * - a community module may not replace a core contribution unless modules.json allows that override.
+ * - a community module may not replace a core contribution unless modules.json allows that override;
+ * - BLOCKS-LAYOUT L5: the same goes for a core shell node (every shell node is core): a community module overrides
+ *   one only if modules.json lists the node id in its `allowOverride`. Locked nodes and unknown ids are the UI's
+ *   to refuse (it holds the tree).
  */
 object ModuleResolver {
     private val NAME = Regex("^[A-Z][A-Za-z0-9]*_[A-Z][A-Za-z0-9]*$")
@@ -173,8 +181,21 @@ object ModuleResolver {
         statuses.forEach { log += it.logLine }
 
         val preferences = preferences(loaded, config, log)
-        return Resolution(statuses, preferences, log)
+        return Resolution(statuses, preferences, log, shellOverrides(loaded, config, log))
     }
+
+    /** BLOCKS-LAYOUT L5: the shell overrides of the loaded modules that the trust rules allow, in load order. */
+    private fun shellOverrides(loaded: List<ModuleStatus>, config: ModulesConfig, log: MutableList<String>): List<AcceptedShellOverride> =
+        loaded.flatMap { s ->
+            s.manifest!!.shell.mapNotNull { d ->
+                if (s.tier == Tier.COMMUNITY && d.nodeId !in config.setting(s.name).allowOverride) {
+                    log += "[plugins] ${s.name}: shell override ${d.name} of ${d.nodeId} refused: a community module cannot override core shell node ${d.nodeId} unless modules.json allows it"
+                    null
+                } else {
+                    AcceptedShellOverride(s.name, d.nodeId, d.name, d.mode)
+                }
+            }
+        }
 
     /** The preferences of the loaded modules that the trust rules allow, in load order (the last one wins). */
     private fun preferences(loaded: List<ModuleStatus>, config: ModulesConfig, log: MutableList<String>): List<AcceptedPreference> {
