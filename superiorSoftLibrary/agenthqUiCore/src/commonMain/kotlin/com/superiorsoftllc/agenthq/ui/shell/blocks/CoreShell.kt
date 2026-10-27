@@ -19,8 +19,8 @@ import com.superiorsoftllc.agenthq.ui.block.layout.StackBlock
  */
 object CoreShell {
     /**
-     * BLOCKS-LAYOUT L5 (design section 7): the nodes no module may replace or wrap. The skeleton (children stay
-     * insertable once inserts land), and where a token is typed, an update is approved or a plugin is disabled.
+     * BLOCKS-LAYOUT L5 (design section 7): the nodes no module may replace, wrap or inject into (BLOCKS-INJECTORS J1;
+     * an unlocked child is an open slot). The skeleton, and where a token is typed, an update is approved or a plugin is disabled.
      */
     val locked: Set<String> = setOf(
         "infantry.shell.window", "infantry.shell.images", "infantry.shell.dock", "infantry.shell.frame",
