@@ -228,3 +228,34 @@ shaped once, there, for both.
 
 Estimated S4c addition for roles: about 12 members on `RolesContext`, plus `TraitsContext` (about 7) and
 `ExecutorContext` (2), which the New agent dialog needs as well.
+
+## Board (Infantry_AppUi)
+
+Moved into plugins/core/Infantry_AppUi: Board.kt, BoardModal.kt, BoardDropSession.kt, TicketExecutorField.kt,
+shell/blocks/ShellBoard.kt. BoardDropTest moves to agenthqAppUi commonTest with `BoardDropSession`. Pixel proof:
+`-PtabShotsExtra=board`, 4 of 4 shots at 0 px, and the default set 32 of 32.
+
+Like Roles, the board is moved but not migrated in S4b. `BoardPaneFrame` and `BoardModal` still take
+`(state, controller)` through `LocalShell`. Each of those uses is listed below as **hole (S4c)**. The open/close and
+open-agent path already goes through `ShellContext.board` (a).
+
+| File | Symbol | Decision |
+|---|---|---|
+| Board.kt, BoardModal.kt, BoardDropSession.kt, TicketExecutorField.kt | `BoardPane`, its frames and sections, `assigneeRole`, `boardEpics`, `EpicFilter`, `ticketCountLabel`, `BoardDrag`, `BoardModal*`, `BOARD_MODAL_TAG`, `BOARD_MODAL_CLOSE_TAG`, `TicketMoves`, `Controller.ticketMoves`, `BoardDropSession`, `TicketAssigneePicker`, `TicketExecutorField`, `TICKET_EXECUTOR_LINE_TAG_PREFIX` | (c): only the board uses them |
+| Board.kt | `assigneeLabel` | (c): its users (the board, Infantry_Triggers) are both in the app UI now; its S4a bridge is closed |
+| Board.kt | `WatchFlagChip` | stays, still a bridge: the sidebar (App.kt) draws it; it moved to core BoardSidebar.kt |
+| Board.kt | `ReportFlagChip` | stays, new bridge: the sidebar and the chat (ChatSurface) draw it; made public in core BoardSidebar.kt |
+| BoardModal.kt | `SidebarBoardButton`, `SIDEBAR_BOARD_BUTTON_TAG` | stays: the sidebar's own entry to the board (App.kt); moved to core BoardSidebar.kt |
+| Board.kt | `TicketImagesSection`, `ImageViewerHost`, `LocalImageViewer`, `rememberImage` (TicketImages.kt) | stays: the shell hosts the image viewer (CoreShell) and the chat shows attachments; the two internals are now public |
+| ShellBoard.kt | `LocalShellContext`, `BoardContext.open / close / openAgent`, `session.activeProject` | (a) |
+| ShellBoard.kt | `LocalShell.current.state / controller` (into `BoardPaneFrame`) | hole (S4c): `BoardContext` needs the members below |
+| Board.kt, BoardModal.kt | `state.tickets`, `visibleTickets`, `ticket(id)`, `column()`, `epics`, `ticketError`, `reportFlagFor`, `agents`, `role(id)`, `visibleProfiles`, `projects`, `activeProjectId`, `connection`, `panels.compactWindow`, `controller.state` (the flow the drop session collects) | hole (S4c): `BoardContext.tickets / epics / ticketError / reportFlag`, the agents and profiles a card can be assigned to, `LayoutContext.compact`; `link` and `session` exist |
+| Board.kt, BoardDropSession.kt, TicketExecutorField.kt | `controller.createTicket`, `editTicket`, `deleteTicket`, `moveTicket`, `startNextTicket`, `loadEpics`, `uploadTicketImage`, `ticketMoves` | hole (S4c): `BoardContext.create / edit / delete / move / startNext / loadEpics / uploadImage` |
+| all five | `EditorModal`, `ExecutorPicker`, `ExecutorPickerTags`, `ProfileExecutorField`, `AgentAvatar`, `RoleIcon` | stays: shared with panes still in core (see Roles) |
+| all five | `Ticket`, `TicketColumns`, `Epic`, `WatchFlag`, `ReportFlag`, `watchFlagOf`, `AhqIcons`, `IconAction`, the controls, `Palette`, `Mono`, `Block`, `BlockScope`, `Place`, `RenderPlaced` | kit |
+
+`humanDuration`, `nextFireLabel` and `lastFireLabel` (S4a bridges) are not used by the board after all. Their only
+users are Infantry_Triggers and core tests, so they go (b) or (c) with Triggers in S4c, not here.
+
+Estimated S4c addition for the board: about 14 members on `BoardContext` (the state above and 7 actions), plus
+`LayoutContext.compact`.
