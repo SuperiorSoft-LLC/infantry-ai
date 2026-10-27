@@ -106,6 +106,15 @@ fun main(args: Array<String>) {
         scope.launch { controller.spawn("say hello") }
         waitUntil(timeoutMillis = 20_000) { controller.state.value.agents.isNotEmpty() }
         waitForIdle()
+        // BLOCKS-LAYOUT L10: -PtabShotsExtra=board renders only the open board (no baseline shot opens it), so a board
+        // change is diffed against a render of its base (-PtabShotsBaseline). The default run is unchanged.
+        if (System.getProperty("agenthq.tabshots.extra") == "board") {
+            onNodeWithTag(SIDEBAR_BOARD_BUTTON_TAG).performClick()
+            // Open only: the window without the board is the baseline shots' (its message clocks are masked per shot name).
+            snap(out, "board-open")
+            daemon.close()
+            exitProcess(0)
+        }
         // TAB-SHOTS-DIFF: a pane still showing its loading placeholder ("Loading skills...", the Stats pane's "Reading this
         // session's record...") is shot once it has loaded, so a slow host does not change the picture. One that never
         // loads is shot as it is (the diff then shows it).

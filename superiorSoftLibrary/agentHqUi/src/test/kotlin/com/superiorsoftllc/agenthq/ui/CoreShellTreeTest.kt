@@ -48,6 +48,8 @@ class CoreShellTreeTest {
             "      infantry.shell.assistant",
             "      infantry.shell.toast",
             "      infantry.shell.board",
+            "        infantry.shell.board.header",
+            "        infantry.shell.board.pane",
             "      infantry.shell.diff",
             "      infantry.shell.sound",
             "      infantry.shell.voice",

@@ -103,7 +103,7 @@ infantry.shell.window            group                       (App root, inside t
 │   │ │ │ └ infantry.shell.right   rightPanel  place{show Wide}
 │   │ │ └ infantry.shell.drawer  compactDrawer place{show Compact}
 │   │ └ infantry.shell.footer    statusBar   (section 3)
-│   └ assistant, toast, board, diff, sound, voice, questions   (CoreShell order; they align themselves, as today)
+│   └ assistant, toast, board, diff, sound, voice, questions   (CoreShell order; they align themselves, as today; board: 6g)
 └ infantry.shell.windowLayer     group       config, serverUpdate, roles, servers, switchError, connect (DockWindow order)
 ```
 
@@ -305,6 +305,33 @@ newAgent     newAgentDialog   the New agent modal and its catalog refresh (a dia
   tab's content is a module tab (TabFactory), as the right panel's `body.tab` is.
 - A replace or wrap of a `chat.*` node applies at every width; the compact window draws the same centre.
 - None of these nodes is locked. 0 px: diffTabShots 32/32 after every step.
+
+### 6g. As built in L10 (76ac155c): the board modal's insides
+
+`infantry.shell.board` is a container (`boardModal`, an overlay in the dock): while the board is open it draws the
+modal's frame (backdrop, scrim tap = close, the rounded panel tagged `board-modal`, Esc, focus), and its children go
+straight into the panel's column, top to bottom, `infantry.shell.board.<name>`:
+
+```
+header   boardHeader   the title row (title, active project, close) and the divider under it; its placement goes on the row
+pane     boardPane     weight 1: BoardPane (filters, columns, tickets) in its padded box, which wears the placement
+```
+
+- The frame stays the board's own. `BoardModal(...)` keeps its signature and draws the same three pieces
+  (`BoardModalFrame`, `BoardModalHeader`, `BoardModalPane` in BoardModal.kt). The node hands its children "open this
+  agent" and "close" through a composition local; a board child drawn outside the board draws nothing.
+- A module's child can close the board the same way the header does: the close it gets is the frame's dismiss.
+- None of these nodes is locked.
+- 0 px: none of the 32 shots opens the board, so the board has its own opt-in shot: `renderTabShotsForDiff
+  -PtabShotsExtra=board` renders only `board-open` (the default run is unchanged, still 32). Each step diffed that shot
+  against a render of the base (e016c3f) with `diffTabShots -PtabShotsCurrent=... -PtabShotsBaseline=...`: 0 px, plus
+  diffTabShots 32/32.
+- The L10 survey's other candidates, for later slices: the Assistant popup (resize edge, title row, the shared ChatPanel;
+  its full and docked modes), the diff modal, the New agent dialog and the role manager. None of them is in the 32 shots
+  either, so each one needs an opt-in shot like the board's. `config` is locked and large (its Plugins tab must stay
+  locked). `connect`, `servers`, `switchError` and `serverUpdate` stay locked and are not split. The centre and right
+  tab contents are module tabs (TabFactory), and the left panel has only module sections (6e), so neither has core
+  structure to make nodes of.
 
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 

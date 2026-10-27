@@ -6,6 +6,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -79,6 +80,18 @@ fun SidebarBoardButton(state: AppState, onOpen: () -> Unit, modifier: Modifier =
  */
 @Composable
 fun BoardModal(state: AppState, controller: Controller, onOpenAgent: (String) -> Unit, onDismiss: () -> Unit) {
+    BoardModalFrame(onDismiss) {
+        BoardModalHeader(state, onDismiss)
+        BoardModalPane(state, controller, onOpenAgent, Modifier.weight(1f))
+    }
+}
+
+/**
+ * BLOCKS-LAYOUT L10: the board modal's frame (backdrop, scrim, the rounded panel, Esc, focus); [content] goes straight
+ * into the panel's column, top to bottom.
+ */
+@Composable
+fun BoardModalFrame(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     val focus = remember { FocusRequester() }
     // MODAL-BLUR: the backdrop blurs the app behind (or dims it when blur is off).
     ModalBackdrop(
@@ -100,28 +113,39 @@ fun BoardModal(state: AppState, controller: Controller, onOpenAgent: (String) ->
                     // The panel swallows its own taps so they never reach the scrim's dismiss (no semantics merge, unlike clickable).
                     .pointerInput(Unit) { detectTapGestures { } },
             ) {
-                Row(Modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("▦", color = Palette.Accent, fontSize = 16.sp)
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Board", color = Palette.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                        Text(state.activeProject?.name ?: "All projects", color = Palette.Muted, fontSize = 11.sp)
-                    }
-                    Box(
-                        Modifier.size(28.dp).clip(RoundedCornerShape(6.dp))
-                            .clickable(role = Role.Button, onClick = onDismiss)
-                            .semantics { contentDescription = "Close the board" }
-                            .testTag(BOARD_MODAL_CLOSE_TAG),
-                        contentAlignment = Alignment.Center,
-                    ) { Text("✕", color = Palette.Muted, fontSize = 14.sp) }
-                }
-                HorizontalDivider(color = Palette.Border)
-                Box(Modifier.weight(1f).fillMaxWidth().padding(vertical = 6.dp)) {
-                    BoardPane(state, controller, onOpenAgent)
-                }
+                content()
             }
         }
         // Focus lands in the modal so Esc reaches it straight away.
         LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    }
+}
+
+/** BLOCKS-LAYOUT L10: the board's title row (title, active project, close) and the divider under it; [modifier] goes on the row. */
+@Composable
+fun BoardModalHeader(state: AppState, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("▦", color = Palette.Accent, fontSize = 16.sp)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text("Board", color = Palette.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Text(state.activeProject?.name ?: "All projects", color = Palette.Muted, fontSize = 11.sp)
+        }
+        Box(
+            Modifier.size(28.dp).clip(RoundedCornerShape(6.dp))
+                .clickable(role = Role.Button, onClick = onDismiss)
+                .semantics { contentDescription = "Close the board" }
+                .testTag(BOARD_MODAL_CLOSE_TAG),
+            contentAlignment = Alignment.Center,
+        ) { Text("✕", color = Palette.Muted, fontSize = 14.sp) }
+    }
+    HorizontalDivider(color = Palette.Border)
+}
+
+/** BLOCKS-LAYOUT L10: [BoardPane] in its padded box; the modal gives it the free height through [modifier]. */
+@Composable
+fun BoardModalPane(state: AppState, controller: Controller, onOpenAgent: (String) -> Unit, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        BoardPane(state, controller, onOpenAgent)
     }
 }

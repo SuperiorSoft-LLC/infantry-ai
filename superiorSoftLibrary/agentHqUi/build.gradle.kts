@@ -169,6 +169,8 @@ val renderTabShotsForDiff = tasks.register<JavaExec>("renderTabShotsForDiff") {
     val out = tabShotsRendered.get().asFile
     args(out.path)
     if (project.hasProperty("tabShotsDemoLock")) args("demo-lock")
+    // BLOCKS-LAYOUT L10: -PtabShotsExtra=board renders only the open board, for a before/after diff (TabShotsMain).
+    project.findProperty("tabShotsExtra")?.let { systemProperty("agenthq.tabshots.extra", it.toString()) }
     // No modal blur (as in the UI tests): the blur smears the clocks behind a dialog (RAM free, ages) across the
     // window, where a mask could not hold them. The blur itself is covered by ModalBlurRenderUiTest.
     systemProperty("agenthq.ui.blur", "off")
