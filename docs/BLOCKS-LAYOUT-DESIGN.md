@@ -277,6 +277,35 @@ body         rightPanelBody  the column at the dragged width (tag right-panel): 
   the core has no fixed structure there to make nodes of.
 - None of these nodes is locked.
 
+### 6f. As built in L9b (da799855): the centre pane's insides
+
+`infantry.shell.center` is a container (`center`, `weight 1` in the panes' row): the column tagged `center-pane`, whose
+children it draws straight into that column, top to bottom. It keeps the MOBILE-LAYOUT-2 compact-window effect.
+
+```
+chat         chatPanel        weight 1: the main window's chat (CHAT-PANEL-1) and its effects; children top to bottom:
+  chat.header      chatHeader         the session header with its Switch agent chip
+  chat.tabs        tabStrip           the centre tab strip (its placement goes on the strip's row)
+  chat.transcript  chatTranscript     weight 1: the picked centre tab (Chat = transcript, the inline pending question,
+                                      the Activity box) and the to-do / reasoning side slot; its Box wears the placement
+  chat.notices     noticeStrip        the latest notice for this session or the window
+  chat.spawn       spawnRows          New agent mode only: the spawn role row, then the provider and model picker
+  chat.switch      switchAgentPicker  the inline Switch agent picker, while open for this session
+  chat.composer    promptBox          the composer (PromptBox)
+newAgent     newAgentDialog   the New agent modal and its catalog refresh (a dialog: no node in the column)
+```
+
+- The chat keeps one implementation. `ChatPanel(...)` keeps its signature (the Assistant popup and the tests host it as
+  before) and draws the same sections, which live in ChatPanel.kt on a `ChatPanelHost` (`chatPanelHost(...)` reads the
+  session and runs the panel's effects). The `chat` node builds the host and hands it to its children through a
+  composition local; a chat child drawn outside `chat` draws nothing.
+- Sections that had no node of their own (header, notices, spawn, switch, composer) draw exactly as before with the
+  default placement; any other placement gets a Column to wear it (`spawn` has two rows, so not a Box).
+- The question panel stays inside `chat.transcript` (it is the transcript's slot in OutputPane), not a node: the Chat
+  tab's content is a module tab (TabFactory), as the right panel's `body.tab` is.
+- A replace or wrap of a `chat.*` node applies at every width; the compact window draws the same centre.
+- None of these nodes is locked. 0 px: diffTabShots 32/32 after every step.
+
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 
 | part | bucket |
