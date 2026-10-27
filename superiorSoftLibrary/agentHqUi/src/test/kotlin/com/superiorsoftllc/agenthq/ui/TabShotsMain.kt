@@ -135,6 +135,46 @@ fun main(args: Array<String>) {
             daemon.close()
             exitProcess(0)
         }
+        // BLOCKS-LAYOUT L14: -PtabShotsExtra=git renders only the Git tab over a project with a real repository (the default
+        // shot has no project): its top, a picked file's diff, and scrolled to the history heading and to its oldest commit.
+        // The repository has a fixed path (the directory is drawn) and fixed commit dates (the history is drawn). The default
+        // run is unchanged.
+        if (System.getProperty("agenthq.tabshots.extra") == "git") {
+            val repo = File(System.getProperty("java.io.tmpdir"), "agenthq-tab-shots-git").apply { deleteRecursively(); mkdirs() }
+            fun git(vararg a: String) = ProcessBuilder(listOf("git", "-c", "user.name=Shots", "-c", "user.email=shots@test.invalid") + a)
+                .directory(repo).redirectErrorStream(true)
+                .apply { environment()["GIT_AUTHOR_DATE"] = "2026-01-02T03:04:05Z"; environment()["GIT_COMMITTER_DATE"] = "2026-01-02T03:04:05Z" }
+                .start().apply { inputStream.readBytes(); waitFor() }
+            git("init", "-b", "main")
+            File(repo, "README.md").writeText("hello\nsecond line\n")
+            git("add", "README.md")
+            git("commit", "-m", "add the readme")
+            File(repo, "notes.txt").writeText("one\n")
+            git("add", "notes.txt")
+            git("commit", "-m", "add the notes")
+            git("branch", "feature-shots")
+            File(repo, "README.md").writeText("hello from the git shot\nsecond line\n")
+            File(repo, "new.txt").writeText("untracked\n")
+            kotlinx.coroutines.runBlocking { controller.saveProject("Git shot project") }
+            waitUntil(timeoutMillis = 20_000) { controller.state.value.projects.any { it.name == "Git shot project" } }
+            val project = controller.state.value.projects.single { it.name == "Git shot project" }
+            kotlinx.coroutines.runBlocking { controller.selectProject(project.id); controller.saveProjectDirectory(project.id, repo.absolutePath) }
+            waitUntil(timeoutMillis = 20_000) { controller.state.value.activeProject?.directory == repo.absolutePath }
+            onAllNodesWithTag("center-tab-GIT")[0].performClick()
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithText("README.md", substring = true).fetchSemanticsNodes().isNotEmpty() }
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithText("add the notes").fetchSemanticsNodes().isNotEmpty() }
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithTag(GIT_SWITCH_TAG + "feature-shots").fetchSemanticsNodes().isNotEmpty() }
+            snap(out, "git-top")
+            onAllNodesWithText("README.md", substring = true)[0].performClick()
+            waitUntil(timeoutMillis = 20_000) { controller.state.value.projectGitPatch[project.id]?.path == "README.md" }
+            snap(out, "git-diff")
+            onNodeWithText("HISTORY").performScrollTo()
+            snap(out, "git-history")
+            onNodeWithText("add the readme").performScrollTo()
+            snap(out, "git-end")
+            daemon.close()
+            exitProcess(0)
+        }
         // BLOCKS-LAYOUT L11: -PtabShotsExtra=assistant,newAgent,diff (any of them, comma-separated) renders only those
         // overlays open, as the board's shot does (the default run is unchanged). The diff comes last: it adds a project.
         val l11 = System.getProperty("agenthq.tabshots.extra")?.split(',')?.map { it.trim() }.orEmpty()
