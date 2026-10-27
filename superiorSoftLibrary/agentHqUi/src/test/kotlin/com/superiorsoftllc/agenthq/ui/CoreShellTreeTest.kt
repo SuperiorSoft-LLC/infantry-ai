@@ -31,6 +31,7 @@ class CoreShellTreeTest {
             "                infantry.shell.center.chat.header",
             "                infantry.shell.center.chat.tabs",
             "                infantry.shell.center.chat.transcript",
+            "                infantry.shell.center.chat.notices",
             "              infantry.shell.center.newAgent",
             "            infantry.shell.right",
             "              infantry.shell.right.resize",

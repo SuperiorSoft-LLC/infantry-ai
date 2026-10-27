@@ -78,7 +78,6 @@ class CenterChatBlock(children: List<Block>, place: Place = Place(weight = 1f)) 
         CompositionLocalProvider(LocalChatPanelHost provides host) {
             Column(scope.modifier.fillMaxWidth()) {
                 RenderPlaced(children)
-                host.Notices()
                 host.SpawnRows()
                 host.SwitchPicker()
                 host.Composer()
@@ -126,7 +125,16 @@ object CenterChatTranscript : Block("chatTranscript", "$CHAT.transcript", Place(
     }
 }
 
-private val CenterChat = CenterChatBlock(listOf(CenterChatHeader, CenterChatTabs, CenterChatTranscript))
+/** The latest notice for this session or the window (NoticeStrip); it hides itself after 8 s. */
+object CenterChatNotices : Block("noticeStrip", "$CHAT.notices") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val host = LocalChatPanelHost.current ?: return
+        Placed(scope.modifier) { host.Notices() }
+    }
+}
+
+private val CenterChat = CenterChatBlock(listOf(CenterChatHeader, CenterChatTabs, CenterChatTranscript, CenterChatNotices))
 
 /** The New agent modal and its catalog refresh. A dialog has no node in the column, so the placement has nothing to wear. */
 object CenterNewAgent : Block("newAgentDialog", "$CENTER.newAgent") {
