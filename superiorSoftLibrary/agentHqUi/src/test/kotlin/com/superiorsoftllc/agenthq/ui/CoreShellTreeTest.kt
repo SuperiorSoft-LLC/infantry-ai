@@ -10,6 +10,13 @@ import kotlin.test.assertEquals
 class CoreShellTreeTest {
     private fun Block.walk(depth: Int = 0): List<String> = listOf("  ".repeat(depth) + id) + children.flatMap { it.walk(depth + 1) }
 
+    /** SHELL-EMPTY-DROPIN S3: the config dialog's open settings sections (under `.settings`) and its locked trust sections. */
+    private val configSettings = listOf(
+        "theme", "blur", "markdownEngine", "reasoning", "userPortrait", "agentScope", "progressStale", "lifecycle",
+        "cliLocations", "toolApproval", "roles", "limits", "voice", "incomingSound", "questions",
+    )
+    private val configTrust = listOf("plugins", "modules", "secrets", "pair", "about", "updates", "serverUpdate", "logs")
+
     @Test fun `the core tree keeps every node id, in order, each unique`() {
         val header = "infantry.shell.header"
         val footer = "infantry.shell.footer"
@@ -80,6 +87,9 @@ class CoreShellTreeTest {
             "      infantry.shell.questions",
             "  infantry.shell.windowLayer",
             "    infantry.shell.config",
+            "      infantry.shell.config.settings",
+        ) + configSettings.map { "        infantry.shell.config.$it" } +
+            configTrust.map { "      infantry.shell.config.$it" } + listOf(
             "    infantry.shell.serverUpdate",
             "    infantry.shell.roles",
             "      infantry.shell.roles.hint",
@@ -111,9 +121,16 @@ class CoreShellTreeTest {
                 "infantry.shell.window", "infantry.shell.images", "infantry.shell.dock",
                 "infantry.shell.connect", "infantry.shell.servers", "infantry.shell.switchError",
                 "infantry.shell.serverUpdate", "infantry.shell.config",
+                // S3: the trust half of Configuration (plugins, secrets, pairing, updates, about, logs).
+                "infantry.shell.config.plugins", "infantry.shell.config.modules", "infantry.shell.config.secrets",
+                "infantry.shell.config.pair", "infantry.shell.config.about", "infantry.shell.config.updates",
+                "infantry.shell.config.serverUpdate", "infantry.shell.config.logs",
             ),
             CoreShell.locked,
         )
+        // Every config section is either open (under .settings) or locked, never both.
+        assertEquals(emptyList(), configSettings.map { "infantry.shell.config.$it" }.filter { it in CoreShell.locked })
+        assertEquals(false, "infantry.shell.config.settings" in CoreShell.locked)
     }
 
     /** BLOCKS-LAYOUT L14, L15, L17, L18: the core tab trees (drawn by their tab, not in the window tree) are pinned the same way. */
