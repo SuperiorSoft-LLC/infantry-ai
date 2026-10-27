@@ -50,6 +50,16 @@ class DockScope internal constructor(val modifier: Modifier, val box: BoxScope?)
     fun Modifier.aligned(alignment: Alignment): Modifier = box?.run { this@aligned.align(alignment) } ?: this
 }
 
+/**
+ * BLOCKS-SHELL-2: renders a static block's [children] in list order, where the parent calls it. A child is handed the
+ * plain scope (no edge placement of its own) and keeps its own modifiers; it knows nothing of its siblings.
+ */
+@Composable
+fun List<Block>.Render() {
+    val plain = DockScope(Modifier, null)
+    for (b in this) key(b.id) { b.Render(plain) }
+}
+
 /** The middle region's maximum size, for blocks that shape themselves by it (e.g. a compact window). */
 val LocalDockSize = staticCompositionLocalOf { DpSize.Unspecified }
 

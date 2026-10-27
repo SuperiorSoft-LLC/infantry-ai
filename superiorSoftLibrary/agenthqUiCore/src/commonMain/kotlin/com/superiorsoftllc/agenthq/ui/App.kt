@@ -59,6 +59,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.foundation.draganddrop.dragAndDropTarget
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
+import com.superiorsoftllc.agenthq.ui.block.Render
 import com.superiorsoftllc.agenthq.ui.net.ImageUploadOutcome
 import com.superiorsoftllc.agenthq.ui.protocol.ImageUploadWire
 import com.superiorsoftllc.agenthq.ui.pair.applyPairing
@@ -894,7 +895,7 @@ private fun nodeColor(s: String) = when (s) {
 }
 
 @Composable
-internal fun StatusBar(state: AppState, serverMismatch: String?, appBuild: String?, onConfig: (ConfigTab?) -> Unit, processes: @Composable () -> Unit = {}) {
+internal fun StatusBar(state: AppState, serverMismatch: String?, appBuild: String?, onConfig: (ConfigTab?) -> Unit, children: List<com.superiorsoftllc.agenthq.ui.block.Block> = emptyList(), processes: @Composable () -> Unit = {}) {
     val c = state.connection
     var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(Unit) { while (true) { delay(1000); now = Clock.System.now().toEpochMilliseconds() } }
@@ -915,8 +916,8 @@ internal fun StatusBar(state: AppState, serverMismatch: String?, appBuild: Strin
         if (!state.panels.compactWindow) {
             Text("^K search  Alt+Up/Down agents  ^J needs input  ^N new  ^R resume  ^5 roles  ^6 attention  ^L connection  ^, config", color = Palette.Muted, fontSize = 10.sp, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
         }
-        // BUILD-STAMP-1: which build this is (and a plain warning when the daemon is another build); the cog opens About.
-        FooterBuild(appBuild, if (c.isLive) c.daemonBuild else null, Modifier.padding(start = 10.dp).clickable(role = Role.Button) { onConfig(ConfigTab.ABOUT) })
+        // BUILD-STAMP-1 (now the buildStamp child block, StatusBuildStamp): which build this is; the cog opens About.
+        children.Render()
         // The footer cog, bottom-right. It opens the configuration modal (flags).
         Box(
             Modifier.padding(start = 10.dp).size(24.dp)

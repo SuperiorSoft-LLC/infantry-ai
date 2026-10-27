@@ -13,7 +13,7 @@ object ShellStatusBar : Block("infantry.shell.footer", "infantry.shell.footer", 
     @Composable
     override fun Render(dock: DockScope) {
         val s = LocalShell.current
-        StatusBar(s.state, s.serverMismatch, s.host.appBuild, onConfig = { tab -> if (tab != null) s.ui.configTab = tab; s.ui.showConfig = true }) {
+        StatusBar(s.state, s.serverMismatch, s.host.appBuild, onConfig = { tab -> if (tab != null) s.ui.configTab = tab; s.ui.showConfig = true }, CoreShell.statusBarChildren) {
             // ROGUE-1 (1.120.0): rogue background processes / low memory; hidden while nothing is wrong.
             ProcessesBadge(s.state, s.controller)
         }

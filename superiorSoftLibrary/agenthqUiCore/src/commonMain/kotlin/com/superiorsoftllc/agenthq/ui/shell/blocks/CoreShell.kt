@@ -28,4 +28,7 @@ object CoreShell {
         ShellSwitchError,
         ShellConnect,
     )
+
+    /** BLOCKS-SHELL-2: the status bar's children, in the order they sit in the bar (only the build stamp so far). */
+    val statusBarChildren: List<Block> = listOf(StatusBuildStamp)
 }
