@@ -2,12 +2,12 @@ package com.superiorsoftllc.agenthq.plugins.core
 
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.ProjectGitPane
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
 import com.superiorsoftllc.agenthq.ui.plugin.circle
 import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
+import com.superiorsoftllc.agenthq.ui.shell.blocks.GitTab
 
 /** PLUGINS-1: core module Infantry_Git. The project's git state. */
 val InfantryGit = AgentHqModule(
@@ -29,6 +29,6 @@ val InfantryGit = AgentHqModule(
             ),
             testTag = "center-tab-GIT",
             routes = listOf("loadProjectGit", "loadProjectBranches", "loadProjectDiff", "checkoutProjectBranch", "setProjectBaseBranch", "saveProjectDirectory"),
-        ) { ProjectGitPane(it.state, it.controller) },
+        ) { GitTab() },
     ),
 )
