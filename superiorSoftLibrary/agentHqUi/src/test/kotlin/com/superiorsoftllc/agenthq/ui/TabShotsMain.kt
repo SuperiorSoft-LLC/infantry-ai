@@ -114,6 +114,31 @@ fun main(args: Array<String>) {
             onNodeWithTag(SIDEBAR_BOARD_BUTTON_TAG).performClick()
             // Open only: the window without the board is the baseline shots' (its message clocks are masked per shot name).
             snap(out, "board-open")
+            // BLOCKS-LAYOUT L16: then the board with cards (the empty backlog draws none): the new-ticket form, cards in
+            // Backlog, To do and Done (one with a role assignee), and one card opened on its edit form.
+            onNodeWithText("+ New ticket").performClick()
+            snap(out, "board-new")
+            onNodeWithText("Close").performClick()
+            kotlinx.coroutines.runBlocking {
+                controller.createTicket("Shot ticket one", "first", "feature", "role:frontend")
+                controller.createTicket("Shot ticket two with a longer title that wraps onto a second line", "", "bug", null)
+                controller.createTicket("Shot ticket three", "", null, null)
+            }
+            waitUntil(timeoutMillis = 20_000) { controller.state.value.visibleTickets.size == 3 }
+            val shotTickets = controller.state.value.visibleTickets.associateBy { it.title }
+            kotlinx.coroutines.runBlocking {
+                controller.moveTicket(shotTickets.getValue("Shot ticket one").id, com.superiorsoftllc.agenthq.ui.protocol.TicketColumns.TODO)
+                controller.moveTicket(shotTickets.getValue("Shot ticket two with a longer title that wraps onto a second line").id, com.superiorsoftllc.agenthq.ui.protocol.TicketColumns.BACKLOG)
+                controller.moveTicket(shotTickets.getValue("Shot ticket three").id, com.superiorsoftllc.agenthq.ui.protocol.TicketColumns.DONE)
+            }
+            waitUntil(timeoutMillis = 20_000) {
+                controller.state.value.visibleTickets.map { it.status }.toSet() ==
+                    with(com.superiorsoftllc.agenthq.ui.protocol.TicketColumns) { setOf(TODO, BACKLOG, DONE) }
+            }
+            waitForIdle()
+            snap(out, "board-cards")
+            onNodeWithTag(TICKET_CARD_TAG_PREFIX + shotTickets.getValue("Shot ticket one").id).performClick()
+            snap(out, "board-card-open")
             daemon.close()
             exitProcess(0)
         }
