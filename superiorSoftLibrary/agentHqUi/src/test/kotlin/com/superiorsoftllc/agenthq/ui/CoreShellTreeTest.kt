@@ -27,6 +27,8 @@ class CoreShellTreeTest {
             "            infantry.shell.left",
             "            infantry.shell.center",
             "            infantry.shell.right",
+            "              infantry.shell.right.resize",
+            "              infantry.shell.right.body",
             "          infantry.shell.drawer",
             "        $footer",
         ) + listOf("connStatus", "lastFrame", "contractWarning", "versionMismatch", "processesBadge", "gap", "shortcutHint", "buildStamp", "configCog")

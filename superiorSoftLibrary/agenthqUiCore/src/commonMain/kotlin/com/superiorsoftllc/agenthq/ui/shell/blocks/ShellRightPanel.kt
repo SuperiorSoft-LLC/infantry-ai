@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.ui.shell.blocks
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -16,27 +17,54 @@ import com.superiorsoftllc.agenthq.ui.TabBar
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.Place
+import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
 import com.superiorsoftllc.agenthq.ui.block.layout.Show
 import com.superiorsoftllc.agenthq.ui.model.RightPanelWidth
 import com.superiorsoftllc.agenthq.ui.plugin.PanelSections
 import com.superiorsoftllc.agenthq.ui.plugin.Panels
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 
+private const val RIGHT = "infantry.shell.right"
+
 /**
  * BLOCKS-SHELL-1: the right panel and its resize handle, docked at the end of the middle region. BLOCKS-LAYOUT L4: it is
  * `show Wide`, so below PanelLayout.COMPACT_BELOW_DP its parent leaves it out; the compact drawer shows the same content.
+ * BLOCKS-LAYOUT L9a: a container of child blocks `infantry.shell.right.<name>`, left to right. It draws no node of its own:
+ * in the panes' row its children go straight into that row ([BlockScope.row]); drawn outside a row they get a row of
+ * their own.
  */
-object ShellRightPanel : Block("infantry.shell.right", "infantry.shell.right", Place(show = Show.Wide)) {
+class RightPanelBlock(children: List<Block>, place: Place = Place(show = Show.Wide)) : Block("rightPanel", RIGHT, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
         val s = LocalShell.current
-        if (s.state.panels.forWindow(dockCompact()).rightShown) {
-            // M2-9: the ↔ cursor and a grip, not the hand (drag left = wider).
-            ResizeHandle("right-panel-resize-handle") { s.ui.rightPanelWidth = RightPanelWidth.dragged(s.ui.rightPanelWidth, it) }
-            RightPanelContent(s, Modifier.width(s.ui.rightPanelWidth.dp), null)
-        }
+        // PANEL-TOGGLE-1: a hidden side panel and its resize handle leave the composition.
+        if (!s.state.panels.forWindow(dockCompact()).rightShown) return
+        val row = scope.row
+        if (row == null) Row(scope.modifier) { RenderPlaced(children) } else with(row) { RenderPlaced(children) }
+    }
+
+    override fun withChildren(children: List<Block>) = RightPanelBlock(children, place)
+}
+
+/** M2-9: the ↔ cursor and a grip, not the hand (drag left = wider). */
+object RightPanelResize : Block("resizeHandle", "$RIGHT.resize") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val s = LocalShell.current
+        ResizeHandle("right-panel-resize-handle", scope.modifier) { s.ui.rightPanelWidth = RightPanelWidth.dragged(s.ui.rightPanelWidth, it) }
     }
 }
+
+/** The panel's column at the dragged width: its module sections around the tab strip and the picked tab. */
+object RightPanelBody : Block("rightPanelBody", "$RIGHT.body") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val s = LocalShell.current
+        RightPanelContent(s, scope.modifier.width(s.ui.rightPanelWidth.dp), null)
+    }
+}
+
+val ShellRightPanel = RightPanelBlock(listOf(RightPanelResize, RightPanelBody))
 
 /** MOBILE-DRAWERS-1: the right panel, docked (wide, [onClose] null) or in the compact drawer. */
 @Composable
