@@ -149,9 +149,10 @@ private fun dragModifier(chrome: WindowChrome?): Modifier = if (chrome == null) 
 }
 
 /**
- * BLOCKS-LAYOUT L6: the bar's left and middle (L7 splits it): the left toggle, the logo + name, and the project slot +
- * avatar strip (wide) or the drag area + Assistant + overflow (compact). Its items go straight into the bar's row, so
- * the row measures them in the same order as the items after them (an overflowing 360dp bar clips at its right end).
+ * BLOCKS-LAYOUT L6/L7: the bar's left and middle, in order: the left toggle, the logo + name, the project slot and the
+ * avatar strip (wide) or the drag area + Assistant + overflow (compact). The shell header composes the same items as the
+ * child blocks of `infantry.shell.header.lead`. They go straight into the bar's row, so the row measures them in the same
+ * order as the items after them (an overflowing 360dp bar clips at its right end).
  */
 @Composable
 fun RowScope.TitleBarLead(
@@ -165,28 +166,65 @@ fun RowScope.TitleBarLead(
     assistantSlot: @Composable () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val drag = dragModifier(chrome)
-    val compact = LocalTitleBarCompact.current
     // MOBILE-TITLEBAR-1: below PanelLayout.COMPACT_BELOW_DP the bar keeps the left toggle, the logo + name and the
     // connection chip (state only); the project picker, the attention entry, the side-panel toggle and the connection URL
     // move into an overflow menu, and the avatar strip gives way to a plain drag area. At or above it the bar is unchanged.
-    if (onTogglePanel != null) {
-        Spacer(modifier.width(6.dp))
-        PanelToggle(PanelSide.LEFT, state.panels.leftShown, compact) { onTogglePanel(PanelSide.LEFT) }
-    }
-    Row((if (onTogglePanel != null) drag else modifier.then(drag)).fillMaxHeight().padding(start = if (onTogglePanel != null) 6.dp else 12.dp, end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+    if (onTogglePanel != null) TitleBarToggleLeft(state, modifier) { onTogglePanel(PanelSide.LEFT) }
+    TitleBarBrand(chrome, afterToggle = onTogglePanel != null, if (onTogglePanel != null) Modifier else modifier)
+    TitleBarProject(projectSlot)
+    TitleBarAgents(state, agentScope, onConnect, onAttention, chrome, projectSlot, assistantSlot)
+}
+
+/** PANEL-TOGGLE-1: the agent list toggle at the bar's left edge; it owns the 6dp before it. */
+@Composable
+fun TitleBarToggleLeft(state: AppState, modifier: Modifier = Modifier, onToggle: () -> Unit) {
+    Spacer(modifier.width(6.dp))
+    PanelToggle(PanelSide.LEFT, state.panels.leftShown, LocalTitleBarCompact.current, onClick = onToggle)
+}
+
+/**
+ * The logo + name, a drag area; it owns its gaps: 6dp after the left toggle ([afterToggle]) or the bar's 12dp start, and
+ * 10dp after it.
+ */
+@Composable
+fun TitleBarBrand(chrome: WindowChrome?, afterToggle: Boolean = true, modifier: Modifier = Modifier) {
+    Row(modifier.then(dragModifier(chrome)).fillMaxHeight().padding(start = if (afterToggle) 6.dp else 12.dp, end = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Logo()
         Spacer(Modifier.width(8.dp))
         Text("Infantry AI", color = Palette.Accent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
     }
-    if (compact) {
+}
+
+/** M2-7: the project drop-down and the "+" New Project box ([ProjectPicker]); wide only (compact has it in the overflow). */
+@Composable
+fun TitleBarProject(projectSlot: @Composable () -> Unit, modifier: Modifier = Modifier) {
+    if (!LocalTitleBarCompact.current) {
+        Box(modifier.fillMaxHeight().testTag(TITLE_BAR_PROJECT_SLOT_TAG), contentAlignment = Alignment.Center) { projectSlot() }
+    }
+}
+
+/**
+ * The bar's free middle, a drag area that takes the remaining width (`weight(1f)`): wide, the avatar strip with the
+ * Assistant last; compact, the plain drag area, then the Assistant and the overflow button (L8 splits the overflow off).
+ */
+@Composable
+fun RowScope.TitleBarAgents(
+    state: AppState,
+    agentScope: AgentScope,
+    onConnect: () -> Unit,
+    onAttention: () -> Unit,
+    chrome: WindowChrome?,
+    projectSlot: @Composable () -> Unit,
+    assistantSlot: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val drag = modifier.then(dragModifier(chrome))
+    if (LocalTitleBarCompact.current) {
         // A narrow desktop window still moves by its bar: the free space is the drag area.
         Spacer(drag.weight(1f).fillMaxHeight().testTag(TITLE_BAR_DRAG_TAG))
         assistantSlot()
         TitleBarOverflow(state, onConnect, onAttention, projectSlot)
     } else {
-        // M2-7: the project drop-down and the "+" New Project box ([ProjectPicker]).
-        Box(Modifier.fillMaxHeight().testTag(TITLE_BAR_PROJECT_SLOT_TAG), contentAlignment = Alignment.Center) { projectSlot() }
         Row(
             drag.weight(1f).fillMaxHeight().padding(start = 10.dp).testTag(TITLE_BAR_DRAG_TAG),
             verticalAlignment = Alignment.CenterVertically,
