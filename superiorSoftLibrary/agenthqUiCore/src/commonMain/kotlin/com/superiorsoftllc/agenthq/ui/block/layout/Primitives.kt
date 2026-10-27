@@ -75,6 +75,8 @@ class ColumnBlock(
     }
 
     override fun withChildren(children: List<Block>) = ColumnBlock(id, horizontalAlignment, children, place, surface)
+
+    override val wearsHostSurface: Boolean get() = surface
 }
 
 /** `spacer`: a leaf; with `place.weight` it is the flexible gap, [width]/[height] fix its size. */

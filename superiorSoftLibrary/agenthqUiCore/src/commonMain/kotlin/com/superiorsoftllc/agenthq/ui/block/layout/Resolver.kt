@@ -21,11 +21,22 @@ class BlockOverride(val content: @Composable (scope: BlockScope, inner: Block?) 
 /** One override of node [node] by [module], already through the trust rules. */
 class NodeOverride(val module: String, val node: String, val mode: String, val override: BlockOverride)
 
-/** The block drawn for an overridden node: it keeps the node's id and place, so its parent places it the same way. */
+/**
+ * The block drawn for an overridden node: it keeps the node's id and place, so its parent places it the same way. A
+ * replace of a node that wears the host surface (S1: `infantry.shell.frame`) gets the surface in its scope's modifier;
+ * a wrap leaves it to `inner`.
+ */
 class OverrideBlock(val module: String, val mode: String, val inner: Block, private val override: BlockOverride) :
     Block("override", inner.id, inner.place) {
     @Composable
-    override fun Render(scope: BlockScope) = override.content(scope, if (mode == OverrideModes.WRAP) inner else null)
+    override fun Render(scope: BlockScope) = if (mode == OverrideModes.WRAP) {
+        override.content(scope, inner)
+    } else {
+        val s = if (inner.wearsHostSurface) BlockScope(scope.modifier.then(LocalHostSurface.current), scope.box, scope.row) else scope
+        override.content(s, null)
+    }
+
+    override val wearsHostSurface: Boolean get() = inner.wearsHostSurface
 }
 
 /**

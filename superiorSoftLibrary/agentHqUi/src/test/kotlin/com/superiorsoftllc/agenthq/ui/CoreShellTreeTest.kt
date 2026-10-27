@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
+import com.superiorsoftllc.agenthq.ui.block.layout.PlaceholderBlock
 import com.superiorsoftllc.agenthq.ui.shell.blocks.CoreShell
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -97,6 +98,22 @@ class CoreShellTreeTest {
         val tree = CoreShell.root.walk()
         assertEquals(expected.joinToString("\n"), tree.joinToString("\n"))
         assertEquals(tree.size, tree.map { it.trim() }.toSet().size, "node ids are unique")
+    }
+
+    /** SHELL-EMPTY-DROPIN S1: the placeholder ids (open slots a dropped plugin fills) and the locked set are plugin API too. */
+    @Test fun `the placeholder ids and the locked ids are pinned`() {
+        fun Block.all(): List<Block> = listOf(this) + children.flatMap { it.all() }
+        val placeholders = listOf("infantry.shell.frame", "infantry.shell.body", "infantry.shell.panes", "infantry.shell.windowLayer")
+        assertEquals(placeholders, CoreShell.placeholders)
+        assertEquals(placeholders, CoreShell.root.all().filterIsInstance<PlaceholderBlock>().map { it.id })
+        assertEquals(
+            setOf(
+                "infantry.shell.window", "infantry.shell.images", "infantry.shell.dock",
+                "infantry.shell.connect", "infantry.shell.servers", "infantry.shell.switchError",
+                "infantry.shell.serverUpdate", "infantry.shell.config",
+            ),
+            CoreShell.locked,
+        )
     }
 
     /** BLOCKS-LAYOUT L14, L15, L17: the core tab trees (drawn by their tab, not in the window tree) are pinned the same way. */

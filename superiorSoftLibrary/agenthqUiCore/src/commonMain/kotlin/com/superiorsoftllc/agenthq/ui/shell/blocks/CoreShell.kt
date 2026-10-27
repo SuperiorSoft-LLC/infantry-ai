@@ -6,10 +6,12 @@ import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.ColumnBlock
 import com.superiorsoftllc.agenthq.ui.block.layout.GroupBlock
+import com.superiorsoftllc.agenthq.ui.block.layout.PlaceholderBlock
 import com.superiorsoftllc.agenthq.ui.block.layout.Place
 import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlain
 import com.superiorsoftllc.agenthq.ui.block.layout.RowBlock
 import com.superiorsoftllc.agenthq.ui.block.layout.Size
+import com.superiorsoftllc.agenthq.ui.block.layout.asPlaceholder
 import com.superiorsoftllc.agenthq.ui.block.layout.StackBlock
 
 /**
@@ -20,11 +22,11 @@ import com.superiorsoftllc.agenthq.ui.block.layout.StackBlock
 object CoreShell {
     /**
      * BLOCKS-LAYOUT L5 (design section 7): the nodes no module may replace, wrap or inject into (BLOCKS-INJECTORS J1;
-     * an unlocked child is an open slot). The skeleton, and where a token is typed, an update is approved or a plugin is disabled.
+     * an unlocked child is an open slot). The true skeleton, and where a token is typed, an update is approved or a
+     * plugin is disabled. Since S1 frame, body, panes and windowLayer are [placeholders] instead.
      */
     val locked: Set<String> = setOf(
-        "infantry.shell.window", "infantry.shell.images", "infantry.shell.dock", "infantry.shell.frame",
-        "infantry.shell.body", "infantry.shell.panes", "infantry.shell.windowLayer",
+        "infantry.shell.window", "infantry.shell.images", "infantry.shell.dock",
         "infantry.shell.connect", "infantry.shell.servers", "infantry.shell.switchError",
         "infantry.shell.serverUpdate", "infantry.shell.config",
     )
@@ -35,6 +37,14 @@ object CoreShell {
      * nodes by id the same way; [locked] applies to them too.
      */
     val tabs: List<Block> = listOf(ShellGit, ShellRun, ShellNotes)
+
+    /**
+     * SHELL-EMPTY-DROPIN S1 (docs/BLOCKS-LAYOUT-DESIGN.md section 13): the containers that are open slots
+     * ([PlaceholderBlock]): each keeps its id and place and draws its core default (what it drew before) until a module
+     * replaces it; a community module still needs `allowOverride` / `allowInject` for it. windowLayer's replace is
+     * still refused, as it would remove the locked dialogs in it; it takes injections.
+     */
+    val placeholders: List<String> = listOf("infantry.shell.frame", "infantry.shell.body", "infantry.shell.panes", "infantry.shell.windowLayer")
 
     val root: Block = GroupBlock(
         "infantry.shell.window",
@@ -59,13 +69,13 @@ object CoreShell {
                                                     ShellCenter,
                                                     ShellRightPanel,
                                                 ),
-                                            ),
+                                            ).asPlaceholder(),
                                             ShellCompactDrawer,
                                         ),
-                                    ),
+                                    ).asPlaceholder(),
                                     CoreStatusBar,
                                 ),
-                            ),
+                            ).asPlaceholder(),
                             // The overlays, over the whole dock; they align themselves.
                             ShellAssistant, ShellToast, ShellBoard, ShellDiff,
                             ShellSound, ShellVoice, ShellQuestionPill,
@@ -80,7 +90,7 @@ object CoreShell {
                     ShellConfig, ShellServerUpdate, ShellRoles, ShellServers,
                     ShellSwitchError, ShellConnect,
                 ),
-            ),
+            ).asPlaceholder(),
         ),
     )
 }
