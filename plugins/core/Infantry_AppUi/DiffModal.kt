@@ -70,9 +70,6 @@ const val DIFF_MODAL_CLOSE_TAG = "diff-modal-close"
 const val DIFF_MODAL_PREV_TAG = "diff-modal-prev"
 const val DIFF_MODAL_NEXT_TAG = "diff-modal-next"
 const val DIFF_MODAL_COUNTS_TAG = "diff-modal-counts"
-const val DIFF_LINE_ADD_TAG = "diff-line-add"
-const val DIFF_LINE_DEL_TAG = "diff-line-del"
-const val DIFF_LINE_HUNK_TAG = "diff-line-hunk"
 
 /**
  * DIFF-MODAL: one file's unified diff as a near-full-screen in-window overlay (the [BoardModal] pattern, so
@@ -192,32 +189,6 @@ private fun HeaderButton(glyph: String, description: String, tag: String, onClic
 
 @Composable
 private fun Notice(text: String) = Text(text, color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
-
-/**
- * One diff row as the Changes panel draws it: the add/remove/hunk band, the gutters, the line. Shared with the chat's
- * change box (UX-WRITE-1), which passes [oldGutter] false for a created file (there is no old side to number).
- */
-@Composable
-internal fun DiffLine(row: DiffRow, oldGutter: Boolean = true) {
-    val (bg, fg, tag) = when (row.kind) {
-        DiffLineKind.ADD -> Triple(Palette.Ok.copy(alpha = 0.14f), Palette.Ok, DIFF_LINE_ADD_TAG)
-        DiffLineKind.DEL -> Triple(Palette.Danger.copy(alpha = 0.14f), Palette.Danger, DIFF_LINE_DEL_TAG)
-        DiffLineKind.HUNK -> Triple(Palette.Raised, Palette.Muted, DIFF_LINE_HUNK_TAG)
-        DiffLineKind.META -> Triple(Color.Transparent, Palette.Muted, "diff-line-meta")
-        DiffLineKind.CONTEXT -> Triple(Color.Transparent, Palette.Text, "diff-line-context")
-    }
-    Row(Modifier.fillMaxWidth().background(bg).testTag(tag).semantics(mergeDescendants = true) {}) {
-        if (oldGutter) Gutter(row.oldNo)
-        Gutter(row.newNo)
-        Text(row.text.ifEmpty { " " }, color = fg, fontFamily = Mono, fontSize = 12.sp, softWrap = false, maxLines = 1, modifier = Modifier.padding(start = 8.dp, end = 16.dp))
-    }
-}
-
-@Composable
-private fun Gutter(n: Int?) = Text(
-    n?.toString() ?: "", color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp, textAlign = TextAlign.End, maxLines = 1,
-    modifier = Modifier.width(44.dp).padding(end = 6.dp),
-)
 
 /**
  * The Changes panel's host for [DiffModal]: asks for [target]'s diff (again whenever the tree status changes, so

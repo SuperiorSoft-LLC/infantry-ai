@@ -305,3 +305,28 @@ Moved: shell/blocks/StatusBarBlocks.kt (`CoreStatusBar`, `StatusBarBlock`, the 8
 | StatusBarBlocks.kt | `state.connection` (`isLive`, its state, `lastFrameAt`, the contract) | (a) in part: `LinkContext.live`, `contract`; hole: the connection state and the last frame time |
 | StatusBarBlocks.kt | `s.serverMismatch`, `s.host.appBuild`, `state.panels.compactWindow`, `ui.showConfig`, `ui.configTab` | hole: the `WindowContext` (see Header) |
 | ProcessesBadge.kt | `state.processReport`, `processAutoReap`, `controller.refreshProcesses / reapProcesses / setProcessAutoReap` | hole: a `ProcessesContext` (5 members) |
+
+## Overlays (Infantry_AppUi)
+
+Moved: shell/blocks/ShellAssistant.kt, ShellToast.kt, ShellDiff.kt, ShellSound.kt, ShellVoice.kt, ShellQuestionPill.kt,
+and the composables only they draw: AssistantPopup.kt, ToastHost.kt, DiffModal.kt. Two pieces of those files stay in
+core in files of their own, because core still uses them.
+
+| File | Symbol | Decision |
+|---|---|---|
+| Contract.kt | `BlockScope.box` (was internal) | kit: as `row` (Header). The toast and the question pill align themselves in the dock with it |
+| ResizeHandle.kt | `ResizeHandle` (was internal) | kit: a control, made public (only visibility). The assistant's drag edge uses it, and later the side panels |
+| AssistantPopup.kt | `AssistantPopup`, `AssistantPopupFrame / Resize / Header / Chat`, `AssistantEntry`, the `ASSISTANT_*` and `TITLE_BAR_ASSISTANT_TAG` tags | (c) |
+| AssistantPopup.kt -> AssistantPanelState.kt | `AssistantPanelState` | stays: the window owns it (`Shell.assistantPanel`, App.kt), so the popup keeps its width and draft while closed |
+| ToastHost.kt | `ToastHost`, `toastColour`, the `TOAST_*` tags | (c) |
+| ToastHost.kt -> ToastService.kt | `toastEvents` | stays: `CoreShellContext` serves it as `ToastContext.events` |
+| DiffModal.kt | `DiffModal`, `DiffModalFrame / Header / Body`, `ProjectDiffModal`, `OpenDiff`, `openDiff`, the `DIFF_MODAL_*` tags | (c). `openDiff` and `ProjectDiffModal` were already only used by the moved Changes pane |
+| DiffModal.kt -> DiffLine.kt | `DiffLine` (was internal), `DIFF_LINE_*` tags | stays: the chat's change box (ChangeBox.kt) draws it; made public for the moved `DiffModalBody` |
+| AssistantPopup.kt | `ChatPanel`, `ChatPanelState`, `TITLE_BAR_HEIGHT` | stays for now: ChatPanel goes with the center (see Center), TitleBar.kt is the window chrome |
+| ShellToast.kt | `LocalShellContext`, `ToastContext.service / events / open`, `LocalToast` | (a): the toast was migrated in S2 |
+| ShellSound.kt, ShellVoice.kt | `IncomingCommsSoundEffect`, `VoiceAlerts` | stays: their files hold the Settings sections too (see Settings) |
+| ShellQuestionPill.kt | `QuestionPill` | stays: QuestionWindow.kt holds `QuestionPanel`, which the chat draws (see Center) |
+| ShellAssistant.kt, AssistantPopup.kt | `s.assistantPanel`, `s.assistantChat`, `state.assistant`, `connection.hasAssistant`, `controller.openAssistant` | hole: an `AssistantContext` (the panel, the session, open) |
+| ShellDiff.kt, DiffModal.kt | `ui.diffTarget`, `s.root.requestFocus`, `state.projectGit*`, `worktreeStatus`, `controller.loadProjectDiff / loadBranchDiff` | (a) in part: `GitContext.patch / loadDiff`, `ChangesContext.branchChanges / worktreeStatus`; hole: the diff target, `loadBranchDiff`, the window's focus |
+| ShellSound.kt, ShellVoice.kt | `controller.state`, `controller.spoken`, `ui.flags` | hole: the comms feed and the spoken lines, the UI flags (`WindowContext`) |
+| ShellQuestionPill.kt | `state.openQuestions`, `dismissedQuestions`, `selectedId`, `agents`, `controller.openQuestion / showQuestions`, `s.homeTab`, `ui.centerTab`, `s.chat.spawnMode` | hole: a `QuestionsContext` (about 4 members) and the `WindowContext` |

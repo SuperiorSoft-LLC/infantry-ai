@@ -1,8 +1,11 @@
 package com.superiorsoftllc.agenthq.ui
 
 import androidx.compose.runtime.staticCompositionLocalOf
+import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.ToastEvent
 import com.superiorsoftllc.agenthq.ui.model.ToastKind
+import com.superiorsoftllc.agenthq.ui.model.crossProjectNotices
+import com.superiorsoftllc.agenthq.ui.model.toToast
 import kotlin.time.Clock
 
 /**
@@ -37,3 +40,9 @@ object NoToastService : ToastService {
 
 /** TOAST-1: the nearest [ToastService]; [NoToastService] when nothing provides one. */
 val LocalToast = staticCompositionLocalOf<ToastService> { NoToastService }
+
+// S4c: the toast list stays in core (CoreShellContext serves it as ToastContext.events); the host that draws it is app UI.
+/** S2: the state's toasts plus its notices about OTHER projects, oldest first: what [ToastHost] shows. */
+fun toastEvents(state: AppState): List<ToastEvent> =
+    (state.toasts + state.crossProjectNotices().map { n -> n.toToast(state.projects.firstOrNull { it.id == n.projectId }?.name) })
+        .sortedBy { it.at }

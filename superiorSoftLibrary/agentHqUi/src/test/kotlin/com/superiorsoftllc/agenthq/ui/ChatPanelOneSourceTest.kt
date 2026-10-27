@@ -11,7 +11,9 @@ import kotlin.test.assertTrue
  */
 class ChatPanelOneSourceTest {
     private val ui = "../agenthqUiCore/src/commonMain/kotlin/com/superiorsoftllc/agenthq/ui"
-    private fun src(name: String) = File("$ui/$name").readText()
+    // S4c: a host that moved to the app UI (plugins/core/Infantry_AppUi) is read from there.
+    private val app = "../../plugins/core/Infantry_AppUi"
+    private fun src(name: String) = (File("$ui/$name").takeIf { it.exists() } ?: File("$app/${name.substringAfterLast('/')}")).readText()
 
     @Test fun `the main window centre block and the assistant popup both host ChatPanel`() {
         // BLOCKS-LAYOUT L9b: the centre block hosts ChatPanel's own sections, one node each, through chatPanelHost.
