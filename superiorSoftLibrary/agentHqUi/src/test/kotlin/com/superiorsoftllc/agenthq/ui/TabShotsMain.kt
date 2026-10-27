@@ -238,6 +238,66 @@ fun main(args: Array<String>) {
             daemon.close()
             exitProcess(0)
         }
+        // BLOCKS-LAYOUT L18: -PtabShotsExtra=changespane renders only the Changes tab over a project with a real repository (the
+        // default shot has no project): the working tree, the worktree and branch menus, a branch's changes, the history,
+        // and a folder that is not a git checkout. Fixed path and commit dates, as the Git shots. The default run is unchanged.
+        if (System.getProperty("agenthq.tabshots.extra") == "changespane") {
+            val repo = File(System.getProperty("java.io.tmpdir"), "agenthq-tab-shots-changes").apply { deleteRecursively(); mkdirs() }
+            fun git(vararg a: String) = ProcessBuilder(listOf("git", "-c", "user.name=Shots", "-c", "user.email=shots@test.invalid") + a)
+                .directory(repo).redirectErrorStream(true)
+                .apply { environment()["GIT_AUTHOR_DATE"] = "2026-01-02T03:04:05Z"; environment()["GIT_COMMITTER_DATE"] = "2026-01-02T03:04:05Z" }
+                .start().apply { inputStream.readBytes(); waitFor() }
+            git("init", "-b", "main")
+            File(repo, "README.md").writeText("hello\nsecond line\n")
+            git("add", "README.md")
+            git("commit", "-m", "add the readme")
+            File(repo, "notes.txt").writeText("one\n")
+            git("add", "notes.txt")
+            git("commit", "-m", "add the notes")
+            git("checkout", "-b", "feature-shots")
+            File(repo, "feature.txt").writeText("a feature\n")
+            git("add", "feature.txt")
+            git("commit", "-m", "add the feature")
+            git("checkout", "main")
+            File(repo, "README.md").writeText("hello from the changes shot\nsecond line\n")
+            File(repo, "staged.txt").writeText("staged\n")
+            git("add", "staged.txt")
+            kotlinx.coroutines.runBlocking { controller.saveProject("Changes shot project") }
+            waitUntil(timeoutMillis = 20_000) { controller.state.value.projects.any { it.name == "Changes shot project" } }
+            val project = controller.state.value.projects.single { it.name == "Changes shot project" }
+            kotlinx.coroutines.runBlocking { controller.selectProject(project.id); controller.saveProjectDirectory(project.id, repo.absolutePath) }
+            waitUntil(timeoutMillis = 20_000) { controller.state.value.activeProject?.directory == repo.absolutePath }
+            onAllNodesWithTag("right-tab-CHANGES")[0].performClick()
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithText("README.md", substring = true).fetchSemanticsNodes().isNotEmpty() }
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithText("staged.txt", substring = true).fetchSemanticsNodes().isNotEmpty() }
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithTag(CHANGES_BRANCH_TAG).fetchSemanticsNodes().isNotEmpty() }
+            snap(out, "changespane-top")
+            onNodeWithTag(WORKTREE_SELECT_TAG).performClick()
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithTag(WORKTREE_SELECT_OPTION_TAG + "main").fetchSemanticsNodes().isNotEmpty() }
+            snap(out, "changespane-worktrees")
+            onNodeWithTag(WORKTREE_SELECT_OPTION_TAG + "main").performClick()
+            waitForIdle()
+            onNodeWithTag(BRANCH_SELECT_TAG).performClick()
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithTag(BRANCH_SELECT_OPTION_TAG + "feature-shots").fetchSemanticsNodes().isNotEmpty() }
+            snap(out, "changespane-branches")
+            onNodeWithTag(BRANCH_SELECT_OPTION_TAG + "feature-shots").performClick()
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithTag(BRANCH_CHANGE_ROW_TAG + "feature.txt").fetchSemanticsNodes().isNotEmpty() }
+            snap(out, "changespane-branch")
+            onNodeWithTag(BRANCH_SELECT_TAG).performClick()
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithTag(BRANCH_SELECT_OPTION_TAG + WORKING_TREE_KEY).fetchSemanticsNodes().isNotEmpty() }
+            onNodeWithTag(BRANCH_SELECT_OPTION_TAG + WORKING_TREE_KEY).performClick()
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithText("staged.txt", substring = true).fetchSemanticsNodes().isNotEmpty() }
+            onNodeWithTag(CHANGES_MODE_HISTORY_TAG).performClick()
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithText("add the notes").fetchSemanticsNodes().isNotEmpty() }
+            snap(out, "changespane-history")
+            onNodeWithTag(CHANGES_MODE_WORKING_TREE_TAG).performClick()
+            val plain = File(System.getProperty("java.io.tmpdir"), "agenthq-tab-shots-changes-plain").apply { deleteRecursively(); mkdirs() }
+            kotlinx.coroutines.runBlocking { controller.saveProjectDirectory(project.id, plain.absolutePath) }
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithTag(NOT_A_GIT_REPOSITORY_TAG).fetchSemanticsNodes().isNotEmpty() }
+            snap(out, "changespane-not-git")
+            daemon.close()
+            exitProcess(0)
+        }
         // BLOCKS-LAYOUT L14: -PtabShotsExtra=git renders only the Git tab over a project with a real repository (the default
         // shot has no project): its top, a picked file's diff, and scrolled to the history heading and to its oldest commit.
         // The repository has a fixed path (the directory is drawn) and fixed commit dates (the history is drawn). The default

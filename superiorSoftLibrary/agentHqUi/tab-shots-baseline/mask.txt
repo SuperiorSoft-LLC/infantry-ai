@@ -57,3 +57,16 @@ compact-800-newAgent 710 278 80 16
 # Configuration > Devices: the host's own addresses and the ephemeral port (address pills and the "ws://..." line).
 config-devices 246 356 700 42
 config-devices 262 436 300 20
+# L18 opt-in shots (-PtabShotsExtra=changespane): the chat messages' time of day.
+changespane-top 965 164 92 16
+changespane-top 965 278 92 16
+changespane-worktrees 965 164 92 16
+changespane-worktrees 965 278 92 16
+changespane-branches 965 164 92 16
+changespane-branches 965 278 92 16
+changespane-branch 965 164 92 16
+changespane-branch 965 278 92 16
+changespane-history 965 164 92 16
+changespane-history 965 278 92 16
+changespane-not-git 965 164 92 16
+changespane-not-git 965 278 92 16

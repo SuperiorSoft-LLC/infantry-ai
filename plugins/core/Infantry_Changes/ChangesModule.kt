@@ -2,7 +2,7 @@ package com.superiorsoftllc.agenthq.plugins.core
 
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
-import com.superiorsoftllc.agenthq.ui.ProjectChangesPanel
+import com.superiorsoftllc.agenthq.ui.shell.blocks.ChangesTab
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
@@ -27,6 +27,6 @@ val InfantryChanges = AgentHqModule(
             testTag = "right-tab-CHANGES",
             shortcut = 3,
             routes = listOf("loadProjectWorktrees", "loadProjectBranches", "loadBranchChanges", "loadProjectTree", "loadWorktreeStatus", "selectChangesBranch", "selectChangesWorktree", "pollOnce"),
-        ) { ProjectChangesPanel(it.state, it.controller, openDiff = it.diffTarget, onOpenDiff = it.onOpenDiff) },
+        ) { ChangesTab(it.diffTarget, it.onOpenDiff) },
     ),
 )

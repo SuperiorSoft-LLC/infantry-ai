@@ -607,6 +607,65 @@ infantry.shell.notes   notesPane   NotesPaneFrame (the box the modal dims, the s
   `memory-add`, `memory-role` and `memory-session` (no session selected: the no-owner line). The step matched its base
   render (step 0 of L17) 6/6 at 0 px, plus diffTabShots 32/32.
 
+### 6o. As built in L18 (2f33c612): the Changes tab
+
+The Changes tab (Infantry_Changes, `ProjectChangesPanel` 115 lines; docs/BLOCKS-NEXT-SPLITS.md, top-8 item 8) is the
+fourth core tab tree, built as 6j, 6l and 6n: `CoreShell.tabs` is now `ShellGit, ShellRun, ShellNotes, ShellChanges`, and
+the tab (`infantry.changes`, right container) draws `ChangesTab(diffTarget, onOpenDiff)`, which draws
+`tabTree("infantry.shell.changes")`. The panel was not in the Git tab's tree (`infantry.shell.git` is `ProjectGitPane`), so
+the container is a new id.
+
+```
+infantry.shell.changes   changesPane   ChangesPaneFrame (the scrolled padded column, 6 dp between items, the Working tree |
+                                       History mode, the polling); children top to bottom, straight into the column:
+  empty        changesEmpty        "Select a project to see its changes.", with no project
+  title        changesTitle        "CHANGES · project" and the refresh icon, with a project
+  unsupported  changesUnsupported  the line for a daemon older than 1.36.0
+  notGit       changesNotGit       "Not a git repository: ...", when a 1.88.0 daemon says so
+  worktree     changesWorktree     the worktree picker and its menu, and "Worktrees unknown: ..." (1.88.0)
+  header       changesHeader       the shown worktree's branch, ahead/behind, base, uncommitted (or why it is unknown)
+  mode         changesMode         the Working tree | History toggle
+  branch       changesBranch       the branch line and its menu: an older daemon, or the Working tree mode
+  hint         changesHint         "N commits ahead; see Compare/History" over a clean worktree, on the working tree
+  files        changesFiles        the working tree's files: unknown, clean, or the summary and the Staged / Not staged groups
+    file       changesFile         the file TEMPLATE: badge, path, status; a click opens its diff
+  branchFiles  changesBranchFiles  what the picked branch changed vs its base: unknown, or the header, the rows, "More files"
+    branchFile changesBranchFile   the branch file TEMPLATE: badge, path, +/-, status; a click opens its diff
+  history      changesHistory      the History mode's commits: unknown, "No commits yet." or the rows and "Older commits"
+    commit     changesCommit       the commit TEMPLATE: short hash, subject, author and time
+```
+
+- `ProjectChangesPanel(state, controller, pollMs, openDiff, onOpenDiff)` keeps its signature and draws `ChangesPaneFrame`
+  and the same sections (`ChangesEmptySection` ... `ChangesHistorySection`, with `ChangesFileRow`, `ChangesBranchFileRow`
+  and `ChangesCommitRow` as the rows), so the panel's own tests (ProjectChangesPanelUiTest, IconButtonsUiTest, the real
+  daemon tests) host it as before.
+- The frame owns the mode and the five polling effects; the worktree and branch picks stay in `AppState` as before.
+  Sections read them through `ChangesPaneHost` (a composition local) and change them only through its callbacks
+  (`refresh`, `pickMode`, `selectWorktree`, `selectBranch`, `open`). The two menus' open flags are their sections' own. A
+  section drawn outside the pane, and a row drawn outside its list, draws nothing.
+- The diff modal's file and the click that opens one come from the tab (`TabContext.diffTarget`, `onOpenDiff`), not from
+  `LocalShell`: `ChangesTab` hands them to the pane block through a private composition local.
+- The panel's early returns are now each section's own condition (`showsOlder`, `notGit`, `showsWorktrees`, `showsList`
+  on the host): no project draws `empty` only; an old daemon draws title, `branch` and one list; a non-git folder draws
+  title and `notGit` only.
+- The column keeps `spacedBy(6 dp)`, so items own no gap of their own here: every item a section draws goes straight into
+  the column and gets the column's gap, as it did. A section that draws nothing adds no gap.
+- Templates (as 6m, 6n): `files`, `branchFiles` and `history` draw their children once per file / commit, with the item
+  in a composition local (`ChangesFileItem` = the file and whether it is listed as staged), so one override of
+  `infantry.shell.changes.file`, `.branchFile` or `.commit` applies to every row. The working tree's rows still go
+  through `ChangeGroup` (shared with the Git tab), which now takes an optional `row`; the Git tab passes none and draws
+  `ChangedFileRow`, the same row the file template draws.
+- `worktree`, `files`, `branchFiles` and `history` can draw several items: a placement other than the default gets a
+  Column (6 dp apart, as the tab) to wear it, so a module that wraps one draws `inner` in a Column (a Box would stack
+  them). Their single-line states (unknown, clean, empty) wear the placement themselves.
+- None of these nodes is locked. HandCursorGuardTest baseline unchanged (the raw calls moved, none added or removed).
+- 0 px: the default Changes shot has no project. `-PtabShotsExtra=changes` gives a project a real repository (fixed path
+  and commit dates, a staged and an unstaged file, a branch with one commit) and renders `changes-top`,
+  `changes-worktrees` (the worktree menu), `changes-branches` (the branch menu), `changes-branch` (the branch's changes),
+  `changes-history` and `changes-not-git`. The chat's message clocks are on screen in these shots, so the before/after
+  diff masks them (the default mask only masks them for the shots named after the chat tab). The step matched its base
+  render (step 0 of L18) 6/6 at 0 px, plus diffTabShots 32/32.
+
 
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 
