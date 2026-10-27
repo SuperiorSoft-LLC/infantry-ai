@@ -35,3 +35,4 @@ tasks.jar {
 tasks.test {
     useJUnitPlatform()
 }
+apply(from = rootProject.file("gradle/ihq.gradle.kts"))
