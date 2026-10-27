@@ -91,8 +91,13 @@ class RunManager(
      */
     private val terminal: TerminalRunner? = null,
     private val limits: RunLimits = RunLimits(),
-    /** Demo lock: no interactive run, no keyboard into a run (no raw shell). */
+    /** Demo lock: no interactive run, no keyboard into a run (no raw shell), and no run gets a secret (SECRETS-2). */
     private val demoLock: () -> Boolean = { false },
+    /**
+     * SECRETS-2: a keystore secret's fields by name (null = no such secret). Read on the daemon's side at `run_start`;
+     * the values go only into the child's environment and are masked in everything it prints.
+     */
+    private val secrets: (String) -> Map<String, String>? = { null },
 ) {
     /** A fixed set of commands (the tests, and any caller with no store behind it). */
     constructor(registry: CommandRegistry, runner: ProcessRunner, emit: (Envelope) -> Unit, now: () -> Long = System::currentTimeMillis) :
@@ -124,8 +129,9 @@ class RunManager(
     private val history = ArrayDeque<Run>()
 
     /**
-     * `run_start {"commandId", "interactive"?, "cols"?, "rows"?}`. [interactive] (1.134.0) lets a console type into the
-     * run and is refused under the demo lock; cols / rows size the pty before its first byte.
+     * `run_start {"commandId", "interactive"?, "cols"?, "rows"?}`. [interactive] (1.134.0) lets a console type
+     * into the run and is refused under the demo lock; cols / rows size the pty before its first byte (clamped, 1.136.0).
+     * The run gets its saved command's secrets (1.135.0) and no others: a `secrets` override is refused (1.136.0, SEC-FIX-1).
      */
     fun start(data: String): Started {
         val obj = runCatching { wire.parseToJsonElement(data) }.getOrNull() as? JsonObject
@@ -135,13 +141,16 @@ class RunManager(
         if (interactive && demoLock()) return refuse("run_start refused: interactive runs are off under the demo lock")
         val cols = clampCols((obj["cols"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 } ?: DEFAULT_COLS)
         val rows = clampRows((obj["rows"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 } ?: DEFAULT_ROWS)
+        // SEC-FIX-1 H1(a): a run gets its SAVED command's secrets only; a request naming more is refused, never merged.
+        if (obj.containsKey("secrets")) return refuse("run_start refused: a run gets only its saved command's secrets; \"secrets\" is not accepted here")
         val run: Run
         val command: SavedCommand
         // The lookup is under [lock] too, so a save or delete running in [unlessRunning] cannot slip between them.
         synchronized(lock) {
             command = registry().find(commandId) ?: return refuse("run_start refused: unknown command '$commandId'")
             if (inFlight != null) return refuse("run_start refused: a run is already in flight")
-            run = Run(UUID.randomUUID().toString(), command, now(), interactive, cols, rows)
+            val env = secretEnv(command.secrets.distinct()).getOrElse { return refuse("run_start refused: ${it.message}") }
+            run = Run(UUID.randomUUID().toString(), command, now(), interactive, cols, rows, env)
             inFlight = run
             history.addLast(run)
             prune()
@@ -246,6 +255,29 @@ class RunManager(
 
     private fun refuse(why: String) = Started(Envelope(Envelope.ERROR, why), null)
 
+    /**
+     * The environment [names] give a run: every field of each secret, under its field name (a later secret's field of the
+     * same name wins). A refusal names the secret or the field, never a value.
+     */
+    private fun secretEnv(names: List<String>): Result<Map<String, String>> {
+        fun no(why: String) = Result.failure<Map<String, String>>(IllegalArgumentException(why))
+        if (names.isEmpty()) return Result.success(emptyMap())
+        if (names.size > MAX_RUN_SECRETS) return no("a run takes at most $MAX_RUN_SECRETS secrets")
+        if (demoLock()) return no("secrets are locked under the demo lock")
+        val env = LinkedHashMap<String, String>()
+        for (name in names) {
+            if (!com.superiorsoftllc.agenthq.keystore.Keystore.isName(name)) return no("invalid secret name")
+            // SEC-FIX-1 H1(b): the lookup refuses a built-in (the update token) with its own reason, kept here.
+            val fields = try { secrets(name) } catch (e: IllegalArgumentException) { return no(e.message ?: "secret '$name' is refused") } catch (e: Exception) { null }
+                ?: return no("secret '$name' is not in the keystore")
+            for ((field, value) in fields) {
+                if (field.uppercase().startsWith("AGENTHQ_")) return no("secret '$name' field '$field' would override a daemon setting")
+                env[field] = value
+            }
+        }
+        return Result.success(env)
+    }
+
     private inner class Run(
         val runId: String,
         val command: SavedCommand,
@@ -253,7 +285,10 @@ class RunManager(
         val interactive: Boolean,
         private val cols: Int,
         private val rows: Int,
+        private val env: Map<String, String> = emptyMap(),
     ) {
+        /** SECRETS-2: the injected values never reach a frame, the scrollback or a line. */
+        private val scrubber = SecretScrubber(env.values)
         private val outLock = Any()
         private var sequence = 0L
         private var capped = false
@@ -365,13 +400,13 @@ class RunManager(
             val listener = object : TerminalListener {
                 override fun onBytes(bytes: ByteArray) = terminalBytes(bytes)
                 override fun onExit(exitCode: Int) {
-                    synchronized(outLock) { decoder.flush() }
+                    synchronized(outLock) { cleanBytes(scrubber.flush()); decoder.flush() }
                     finish(exitCode, stopMode ?: if (exitCode == 0) "SUCCEEDED" else "FAILED", null)
                 }
             }
             hasTerminal = true
             val started = try {
-                t.start(ProcessSpec(command.argv, command.workingDir), cols, rows, listener)
+                t.start(ProcessSpec(command.argv, command.workingDir, env), cols, rows, listener)
             } catch (e: LinkageError) {
                 hasTerminal = false
                 return false
@@ -386,8 +421,14 @@ class RunManager(
             return true
         }
 
-        private fun terminalBytes(bytes: ByteArray) = synchronized(outLock) {
+        private fun terminalBytes(raw: ByteArray) = synchronized(outLock) {
             if (finished) return@synchronized
+            cleanBytes(scrubber.bytes(raw))
+        }
+
+        /** Under [outLock]: bytes already scrubbed, into the scrollback, a `run_bytes` frame and the line decoder. */
+        private fun cleanBytes(bytes: ByteArray) {
+            if (bytes.isEmpty() || finished) return
             scrollback.append(bytes)
             byteSequence += 1
             emit(Envelope(Envelope.RUN_BYTES, wire.encodeToString(RunBytes.serializer(), RunBytes(runId, byteSequence, b64(bytes)))))
@@ -401,7 +442,7 @@ class RunManager(
                 override fun onExit(exitCode: Int) = finish(exitCode, stopMode ?: if (exitCode == 0) "SUCCEEDED" else "FAILED", null)
             }
             val started: RunningProcess = try {
-                runner.start(ProcessSpec(command.argv, command.workingDir), listener)
+                runner.start(ProcessSpec(command.argv, command.workingDir, env), listener)
             } catch (e: Exception) {
                 // Never the argv or the message (it can quote it): the class name only.
                 finish(null, "FAILED", "spawn failed (${e::class.simpleName})")
@@ -413,7 +454,7 @@ class RunManager(
 
         /** Split on \n, \r and \r\n; a trailing break does not make an empty extra line. */
         private fun lines(stream: String, text: String) {
-            val parts = text.split(BREAK)
+            val parts = scrubber.line(text).split(BREAK)
             val usable = if (parts.size > 1 && parts.last().isEmpty()) parts.dropLast(1) else parts
             for (p in usable) output(stream, p)
         }

@@ -181,6 +181,11 @@ data class Envelope(
         const val SECRET_IMPORT = "secret_import"
         const val SECRET_STATUS = "secret_status"
         const val SECRET_STATE = "secret_state"
+        // Contract 1.135.0 (SECRETS-2): the user's key/value secrets. `secret_field_set` ({name, field, value}),
+        // `secret_field_delete` ({name, field}) and `secret_delete` ({name}) are answered by `secret_state`.
+        const val SECRET_FIELD_SET = "secret_field_set"
+        const val SECRET_FIELD_DELETE = "secret_field_delete"
+        const val SECRET_DELETE = "secret_delete"
 
         // Contract 1.77.0 (PROMPT-1): a harness asks the owner mid-run. `prompt_request` (daemon -> every client,
         // [PromptRequestView], envelope sessionId = the asking session) opens a card; `prompt_response` (client ->
@@ -949,9 +954,25 @@ data class SecretRow(
     val overriddenByEnv: Boolean = false,
 )
 
-/** Contract 1.102.0 (SECRETS-1): the `secret_state` frame. */
+/** Contract 1.135.0 (SECRETS-2): one field of a user secret: its name and a masked tail, never the value. */
 @Serializable
-data class SecretState(val protection: String = "", val secrets: List<SecretRow> = emptyList())
+data class SecretFieldRow(val name: String, val tail: String = "")
+
+/** Contract 1.135.0 (SECRETS-2): one user secret and its fields. */
+@Serializable
+data class SecretEntryRow(val name: String, val fields: List<SecretFieldRow> = emptyList())
+
+/**
+ * Contract 1.102.0 (SECRETS-1): the `secret_state` frame. 1.135.0 (SECRETS-2): [entries] the user's key/value secrets;
+ * [locked] the daemon's demo lock is on, so nothing can be changed.
+ */
+@Serializable
+data class SecretState(
+    val protection: String = "",
+    val secrets: List<SecretRow> = emptyList(),
+    val entries: List<SecretEntryRow> = emptyList(),
+    val locked: Boolean = false,
+)
 
 /**
  * Contract 1.76.0 (BUG-PERM-1): the `tool_approval` frame. [mode] is the stored global value (null = none); [effective]
@@ -2092,6 +2113,17 @@ object WireRequests {
 
     fun secretImport(name: String): Envelope = Envelope(Envelope.SECRET_IMPORT, JsonObject(mapOf("name" to JsonPrimitive(name))).toString())
 
+    /** Contract 1.135.0 (SECRETS-2): store [value] as field [field] of the user secret [name]. Never read back. */
+    fun secretFieldSet(name: String, field: String, value: String): Envelope = Envelope(
+        Envelope.SECRET_FIELD_SET,
+        JsonObject(mapOf("name" to JsonPrimitive(name), "field" to JsonPrimitive(field), "value" to JsonPrimitive(value))).toString(),
+    )
+
+    fun secretFieldDelete(name: String, field: String): Envelope =
+        Envelope(Envelope.SECRET_FIELD_DELETE, JsonObject(mapOf("name" to JsonPrimitive(name), "field" to JsonPrimitive(field))).toString())
+
+    fun secretDelete(name: String): Envelope = Envelope(Envelope.SECRET_DELETE, JsonObject(mapOf("name" to JsonPrimitive(name))).toString())
+
     /** BUG-PERM-1 (1.76.0): set the global Tool approval to [mode] (`deny` / `allowEdits` / `allowAll`). */
     fun toolApprovalSet(mode: String): Envelope = Envelope(
         Envelope.TOOL_APPROVAL_SET,
@@ -2105,7 +2137,7 @@ object WireRequests {
      * Contract 1.94.0 (RUN-CMD-1): upsert the saved command [id]. [argv] is one element per argument, never a shell
      * string; [cwd] is relative to the daemon's repo (null = the repo root). The daemon answers a `commands` frame.
      */
-    fun commandSave(id: String, name: String, argv: List<String>, cwd: String?, graceMillis: Long): Envelope {
+    fun commandSave(id: String, name: String, argv: List<String>, cwd: String?, graceMillis: Long, secrets: List<String> = emptyList()): Envelope {
         val fields = linkedMapOf<String, JsonElement>(
             "id" to JsonPrimitive(id),
             "name" to JsonPrimitive(name),
@@ -2113,6 +2145,8 @@ object WireRequests {
         )
         if (cwd != null) fields["cwd"] = JsonPrimitive(cwd)
         fields["graceMillis"] = JsonPrimitive(graceMillis)
+        // 1.135.0 (SECRETS-2): only when there are any, so an older daemon (strict decode) still takes the save.
+        if (secrets.isNotEmpty()) fields["secrets"] = kotlinx.serialization.json.JsonArray(secrets.map { JsonPrimitive(it) })
         return Envelope(Envelope.COMMAND_SAVE, JsonObject(fields).toString())
     }
 
