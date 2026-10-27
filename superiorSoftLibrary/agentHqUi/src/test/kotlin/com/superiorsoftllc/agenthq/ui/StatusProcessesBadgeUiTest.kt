@@ -56,9 +56,22 @@ class StatusProcessesBadgeUiTest {
         assertTrue(hint.left - badge.right > 0.dp, "the flexible gap sits between the badge and the hint")
 
         link.sent.clear()
-        onNodeWithTag(PROCESSES_BADGE_TAG).performClick()
-        waitForIdle()
-        waitUntil(timeoutMillis = 5_000) { onAllNodesWithTagCount(PROCESSES_PANEL_TAG) == 1 }
+        // The App still dials the dead ws url for real; when that failure lands it flips the connection to not-live, which drops
+        // the badge and any open panel. So: re-announce the daemon when the badge is gone, and re-click until the panel exists.
+        var attempts = 0
+        waitUntil(timeoutMillis = 10_000) {
+            if (onAllNodesWithTagCount(PROCESSES_PANEL_TAG) >= 1) true
+            else {
+                if (onAllNodesWithTagCount(PROCESSES_BADGE_TAG) == 0) {
+                    link.push(ready)
+                    link.push(processes)
+                } else if (attempts++ % 10 == 0) {
+                    onNodeWithTag(PROCESSES_BADGE_TAG).performClick()
+                    waitForIdle()
+                }
+                false
+            }
+        }
         waitUntil(timeoutMillis = 5_000) { link.sentOf(Envelope.PROCESSES).isNotEmpty() }
     }
 
