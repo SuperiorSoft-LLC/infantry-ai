@@ -1,18 +1,67 @@
 package com.superiorsoftllc.agenthq.ui.shell.blocks
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import com.superiorsoftllc.agenthq.ui.DiffModalBody
+import com.superiorsoftllc.agenthq.ui.DiffModalFrame
+import com.superiorsoftllc.agenthq.ui.DiffModalHeader
 import com.superiorsoftllc.agenthq.ui.LocalShell
-import com.superiorsoftllc.agenthq.ui.ProjectDiffModal
+import com.superiorsoftllc.agenthq.ui.OpenDiff
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
+import com.superiorsoftllc.agenthq.ui.block.layout.Place
+import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
+import com.superiorsoftllc.agenthq.ui.block.layout.Size
+import com.superiorsoftllc.agenthq.ui.model.DiffBody
+import com.superiorsoftllc.agenthq.ui.model.diffBody
+import com.superiorsoftllc.agenthq.ui.openDiff
 
-/** DIFF-MODAL: the changed file's diff over the window, while one is open. */
-object ShellDiff : Block("infantry.shell.diff", "infantry.shell.diff") {
+private const val DIFF = "infantry.shell.diff"
+
+/** What the diff modal's children draw: the open file's diff, its parsed body, close / prev / next. */
+private class DiffHost(val open: OpenDiff, val body: DiffBody)
+
+/** The open diff; null outside [DiffBlock] (a child moved elsewhere draws nothing). */
+private val LocalDiffHost = compositionLocalOf<DiffHost?> { null }
+
+/**
+ * DIFF-MODAL: the changed file's diff over the window, while one is open.
+ * BLOCKS-LAYOUT L11: a container of child blocks `infantry.shell.diff.<name>`, top to bottom, drawn straight into the
+ * modal's panel column. The frame (scrim, scrim tap = close, Esc, focus) stays the modal's own.
+ */
+class DiffBlock(children: List<Block>, place: Place = Place()) : Block("diffModal", DIFF, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
         val s = LocalShell.current
-        s.ui.diffTarget?.let { target ->
-            ProjectDiffModal(s.state, s.controller, target, onTarget = { next -> s.ui.diffTarget = next; if (next == null) s.root.requestFocus() })
+        val target = s.ui.diffTarget ?: return
+        val open = openDiff(s.state, s.controller, target, onTarget = { next -> s.ui.diffTarget = next; if (next == null) s.root.requestFocus() }) ?: return
+        val host = DiffHost(open, diffBody(open.patch))
+        DiffModalFrame(open.onClose) {
+            CompositionLocalProvider(LocalDiffHost provides host) { RenderPlaced(children) }
         }
     }
+
+    override fun withChildren(children: List<Block>) = DiffBlock(children, place)
 }
+
+/** The title row (path, status, +/− counts, ‹ › ✕) and the divider under it; its placement goes on the row. */
+object DiffHeader : Block("diffHeader", "$DIFF.header") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val host = LocalDiffHost.current ?: return
+        val open = host.open
+        DiffModalHeader(open.path, open.status, host.body, open.onClose, open.onPrev, open.onNext, scope.modifier)
+    }
+}
+
+/** Weight 1: the diff view (gutters, add/remove bands, sideways scroll) or its notice; its Box wears the placement. */
+object DiffView : Block("diffView", "$DIFF.body", Place(weight = 1f, size = Size.FillWidth)) {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val host = LocalDiffHost.current ?: return
+        DiffModalBody(host.body, scope.modifier)
+    }
+}
+
+val ShellDiff = DiffBlock(listOf(DiffHeader, DiffView))

@@ -306,6 +306,7 @@ newAgent     newAgentDialog   the New agent modal and its catalog refresh (a dia
 - A replace or wrap of a `chat.*` node applies at every width; the compact window draws the same centre.
 - None of these nodes is locked. 0 px: diffTabShots 32/32 after every step.
 
+
 ### 6g. As built in L10 (76ac155c): the board modal's insides
 
 `infantry.shell.board` is a container (`boardModal`, an overlay in the dock): while the board is open it draws the
@@ -332,6 +333,53 @@ pane     boardPane     weight 1: BoardPane (filters, columns, tickets) in its pa
   locked). `connect`, `servers`, `switchError` and `serverUpdate` stay locked and are not split. The centre and right
   tab contents are module tabs (TabFactory), and the left panel has only module sections (6e), so neither has core
   structure to make nodes of.
+
+### 6h. As built in L11 (9376cac5): the Assistant popup, the diff modal and the New agent dialog
+
+Three more overlays become containers, as the board did in L10 (6g). In each one the frame stays the overlay's own,
+the children are drawn straight into the overlay's row or column, and the node hands its children what they read
+(render-time values) through a composition local. A child drawn outside its container draws nothing. Actions (close,
+Add, prev / next) stay explicit callbacks.
+
+```
+infantry.shell.assistant  assistantPopup  open only: AssistantPopupFrame (the row at the dragged width, or full size
+                                          expanded or compact; border; the first ask that makes the Assistant); children
+                                          left to right in that row:
+  resize       resizeHandle     the docked popup's drag edge; expanded or compact it draws nothing
+  body         assistantBody    weight 1, fill height: the popup's column; children top to bottom:
+    body.header  assistantHeader  the title row (name, expand / dock, close) and the divider; its placement goes on the row
+    body.chat    assistantChat    weight 1: the shared ChatPanel, or "Starting the Assistant..." until the daemon made it
+
+infantry.shell.diff       diffModal       while a diff is open: DiffModalFrame (scrim, scrim tap = close, the rounded panel
+                                          tagged diff-modal, Esc, focus); children top to bottom in its column:
+  header       diffHeader       the title row (path, status, +/- counts, prev / next / close) and the divider
+  body         diffView         weight 1: the diff (gutters, bands, sideways scroll) or its notice; its Box wears the placement
+
+infantry.shell.center.newAgent  newAgentDialog  while open: NewAgentDialogFrame (dialog, title, Add and its hint, Cancel,
+                                          and the draft); children top to bottom in its scrolling column (10dp apart):
+  role         newAgentRoles    step 1: the role catalog (search, the grid)
+  executor     newAgentExecutor step 2: harness, provider and model (closed until a role is picked)
+  error        newAgentError    Add's last refusal, nothing otherwise
+  task         newAgentTask     step 3: the first task
+```
+
+- The public composables keep their signatures and draw the same pieces: `AssistantPopup` (AssistantPopupFrame / Resize /
+  Header / Chat), `DiffModal` (DiffModalFrame / Header / Body) and `NewAgentDialog` (NewAgentDialogFrame and the four
+  steps). `ProjectDiffModal` reads `openDiff(...)`, which runs the diff's load effects and returns what the modal shows.
+  The `diff` node uses the same function.
+- The Assistant follows the right panel's shape (6e), `resize` + `body` with `body.*`, because its header and chat share
+  a column inside the popup's row.
+- The diff modal has no file list of its own (the Changes tab lists the files and opens the modal), so its children are
+  the title row and the diff view.
+- The New agent draft (model, update, last refusal) lives in the frame, because Add reads it too. The steps read it
+  through `LocalNewAgentDraft`.
+- None of these nodes is locked.
+- 0 px: none of the 32 shots opens these overlays, so they have opt-in shots, as the board does: `renderTabShotsForDiff
+  -PtabShotsExtra=assistant,newAgent,diff` renders `assistant-docked`, `assistant-full`, `newAgent-open`,
+  `newAgent-role` and `diff-open` (a temp git repository with one modified file). The default run is unchanged, still 32.
+  mask.txt masks the chat's message clocks behind the New agent dialog for the two `newAgent-*` shots, by name. Each step
+  matched its base render 5/5 at 0 px (base f63fb27, step 0 of L11), plus diffTabShots 32/32.
+
 
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 
