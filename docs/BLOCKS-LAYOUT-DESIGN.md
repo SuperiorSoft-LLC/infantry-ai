@@ -95,7 +95,7 @@ infantry.shell.window            group                       (App root, inside t
 ├ infantry.shell.images          imageViewerHost
 │ └ infantry.shell.dock          stack       place{FillMax}                           (DockHost's outer Box)
 │   ├ infantry.shell.frame       column      surface                                  (DockHost's Column)
-│   │ ├ infantry.shell.header    titleBar (leaf)
+│   │ ├ infantry.shell.header    titleBar    (section 6b: children since L6)
 │   │ ├ infantry.shell.body      stack measure place{weight 1, FillWidth}              (BoxWithConstraints + Box)
 │   │ │ ├ infantry.shell.panes   row         place{FillMax}
 │   │ │ │ ├ infantry.shell.left    leftPanel   place{show Wide}
@@ -177,7 +177,7 @@ rejected because an inserted plugin node would then need a second edit on its pa
 L5 ships `replace` and `wrap` only; `remove | before | after | move | into | place` come later on the same resolver.
 
 - **Node ids are API from L5 on.** The ids pinned by `CoreShellTreeTest` (section 2's tree plus the footer's
-  `infantry.shell.footer.<name>` children) are never renamed. The test also checks that every id is unique.
+  `infantry.shell.footer.<name>` children, and since L6 the header's `infantry.shell.header.<name>`) are never renamed. The test also checks that every id is unique.
 - module.json: `"shell": [{ "node": "<id or infantry.shell#<id>>", "name": "<registered name>", "mode": "replace|wrap" }]`;
   the Kotlin entry registers `UiRegistrar.shell(name, BlockOverride { scope, inner -> })`. `inner` is the block being
   wrapped (null for a replace).
@@ -191,6 +191,27 @@ L5 ships `replace` and `wrap` only; `remove | before | after | move | into | pla
   id and `place`, so its parent places it as before.
 - No flag: with no override the resolver returns `CoreShell.root` itself (the same object), so the window is the L4
   window by construction. The `blocks.enabled` switch of the L5 row in section 8 was not needed.
+
+### 6b. As built in L6 (032b2c61)
+
+`infantry.shell.header` is a `titleBar` layout block: its frame is the 36dp Panel row (it provides
+`LocalTitleBarCompact`) plus the divider, and its items are children, left to right, `infantry.shell.header.<name>`:
+
+```
+lead            titleBarLead    left toggle, logo + name, project slot + avatar strip / compact drag + Assistant + overflow (L7, L8 split it)
+attention       attentionChip   "N need attention" + its 10dp gap; wide only (compact lists it in the overflow)
+toggleRight     panelToggle     side panel toggle + its gap (8dp wide, 4dp compact)
+server          serverSwitcher  SWITCH-1 dropdown (nothing without a switcher)
+connection      connectionChip  state + URL (wide) / state only (compact)
+windowControls  windowControls  8dp + minimize/maximize/close with a window chrome, else the 12dp end
+```
+
+- Each item owns the gap next to it, so a replaced or wrapped child keeps the bar's spacing.
+- `lead` is not a weighted wrapper. Its items, the drag area's `weight(1f)` included, go straight into the bar's row
+  through `BlockScope.row` (core only, set by a row parent). A weighted wrapper measured the right-hand items first and
+  moved the clipping of the overflowing 360dp bar from the window controls to the lead (`chrome-compact-360*` shots).
+- None of these nodes is locked: the header root and every child stay overridable (section 7).
+- The standalone `TitleBar(...)` composable draws the same frame and items in the same order (tests use it).
 
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 

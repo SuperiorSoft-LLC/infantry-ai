@@ -10,13 +10,16 @@ class CoreShellTreeTest {
     private fun Block.walk(depth: Int = 0): List<String> = listOf("  ".repeat(depth) + id) + children.flatMap { it.walk(depth + 1) }
 
     @Test fun `the core tree keeps every node id, in order, each unique`() {
+        val header = "infantry.shell.header"
         val footer = "infantry.shell.footer"
         val expected = listOf(
             "infantry.shell.window",
             "  infantry.shell.images",
             "    infantry.shell.dock",
             "      infantry.shell.frame",
-            "        infantry.shell.header",
+            "        $header",
+        ) + listOf("lead", "attention", "toggleRight", "server", "connection", "windowControls")
+            .map { "          $header.$it" } + listOf(
             "        infantry.shell.body",
             "          infantry.shell.panes",
             "            infantry.shell.left",

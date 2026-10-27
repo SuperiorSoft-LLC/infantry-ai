@@ -49,7 +49,7 @@ internal fun placement(
 @Composable
 internal fun RowScope.RenderPlaced(children: List<Block>) {
     for (c in children.flattened()) key(c.id) {
-        if (c.place.visible()) c.Render(BlockScope(placement(c.place, { w, f -> Modifier.weight(w, f) }, null), null))
+        if (c.place.visible()) c.Render(BlockScope(placement(c.place, { w, f -> Modifier.weight(w, f) }, null), null, this))
     }
 }
 
