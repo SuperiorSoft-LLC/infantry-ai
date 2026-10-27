@@ -4,7 +4,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
-import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 import com.superiorsoftllc.agenthq.ui.RunConfirmSection
 import com.superiorsoftllc.agenthq.ui.RunEditorSection
@@ -104,5 +103,5 @@ val ShellRun = RunPaneBlock(listOf(RunEmpty, RunToolbar, RunPills, RunConfirm, R
 /** The Run tab's content: [ShellRun] as the window resolved it (a module's override in), filling the tab. */
 @Composable
 fun RunTab() {
-    (LocalShell.current.tabs.tabTree(RUN) ?: ShellRun).Render(BlockScope(Modifier, null))
+    (LocalShellContext.current?.layout?.tabTree(RUN) ?: ShellRun).Render(BlockScope(Modifier, null))
 }

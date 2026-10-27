@@ -134,3 +134,20 @@ pre-move render, 4 of 4 shots at 0 px.
 | ProjectGitPane.kt | `BASE_BRANCH_DEFAULT_LABEL`, `baseBranchChoices`, `isCurrentBase`, `projectChangesView`, `projectHistoryView`, `projectPatchView`, `ChangesView`, `HistoryView`, `PatchView`, `headline`, `whenText`, `badge`, `display`, `label`, `summary`, `ProjectView`, `Notice`, `contractAtLeast`, `ChangeKind`, `ChangedFile`, `CommandResult`, `PROJECT_GIT_UNSUPPORTED`, `PROJECT_GIT_BRANCHES_UNSUPPORTED`, `PROJECT_GIT_CHECKOUT_UNSUPPORTED`, `PROJECT_BASE_UNSUPPORTED` | kit (model views, wire types, refusal reasons) |
 | ProjectPipelineSection.kt | `GitContext`, `LinkContext` | (a) |
 | ProjectPipelineSection.kt | `AhqAlertDialog`, `TextButton`, `OutlinedButton`, `Palette`, `Mono`, `PipelineSectionView`, `pipelineSectionView`, `shortCommit`, `silentMs`, `PipelineCheckView`, `PipelineEntryView`, `parseStageNames`, `PIPELINE_UNSUPPORTED`, `CommandResult` | kit |
+
+## Run (Infantry_Run)
+
+Moved into plugins/core/Infantry_Run: RunPane.kt, shell/blocks/ShellRun.kt. The form-rules test moves with
+`RunCommandForm` (agenthqAppUi commonTest RunCommandFormTest; the rest of RunModelTest tests the core model and
+stays). Pixel proof: `-PtabShotsExtra=run`, 4 of 4 shots at 0 px.
+
+| File | Symbol | Decision |
+|---|---|---|
+| ShellRun.kt | `LocalShell.current.tabs.tabTree` | (b): `ShellContext.layout` (prep) |
+| ShellRun.kt | `LocalShellContext`, `ShellContext.link / run` | (a) |
+| ShellRun.kt | `Block`, `BlockScope`, `Place`, `RenderPlaced` | kit |
+| RunPane.kt | `RunContext`, `LinkContext` (`RunPaneFrame`, `RunPaneHost`, every section) | (a) |
+| RunPane.kt | `RunPane(state, controller)`: `AppState`, `Controller`, `CoreLink`, `CoreRun`, `LocalRunConsole` | (a) through the public adapters: the outside-a-shell entry (RunPaneUiTest, RunCommandEditorUiTest) |
+| RunPills.kt | `RunPillChip`, `RunConsoleHost`, `LocalRunConsole`, `runPillTag` | stays: the desktop's console window (agentHqUi RunConsole.kt, which compiles against the shell only) draws `RunPillChip`, and App.kt provides `LocalRunConsole` to `CoreShellContext` |
+| RunPane.kt | `RunsState`, `RunState`, `CommandSpecView`, `runPills`, `CommandResult` | kit (model) |
+| RunPane.kt | `Checkbox`, `DropdownMenuItem`, `OutlinedButton`, `TextButton`, `Palette`, `Mono` | kit |
