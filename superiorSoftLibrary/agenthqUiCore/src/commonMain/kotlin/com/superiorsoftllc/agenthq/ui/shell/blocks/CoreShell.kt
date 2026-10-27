@@ -29,6 +29,12 @@ object CoreShell {
         "infantry.shell.serverUpdate", "infantry.shell.config",
     )
 
+    /**
+     * BLOCKS-LAYOUT L14: core tabs whose content is a tree of its own, drawn by the tab, not in [root] (the Git tab's
+     * [ShellGit]). A shell override addresses their nodes by id the same way; [locked] applies to them too.
+     */
+    val tabs: List<Block> = listOf(ShellGit)
+
     val root: Block = GroupBlock(
         "infantry.shell.window",
         listOf(

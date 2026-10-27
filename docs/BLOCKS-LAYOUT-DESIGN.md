@@ -412,6 +412,43 @@ infantry.shell.roles   infantry.shell.roles  open only: RoleManagerFrame (dialog
   `roles-list`, `roles-new`, `roles-edit` and `roles-edit-end` (scrolled to Save). The default run is unchanged, still 32.
   The step matched its base render 4/4 at 0 px (base 30262e4, step 0 of L12), plus diffTabShots 32/32.
 
+### 6j. As built in L14 (194e27d8): the Git tab
+
+The Git tab (Infantry_Git) is the first module tab whose content becomes a tree (docs/BLOCKS-NEXT-SPLITS.md, top-8 item
+2). Its tree is not in `CoreShell.root`: the tab draws it. `CoreShell.tabs` lists such core tab trees (only `ShellGit`
+now). `TabFactory` resolves each one once with the shell overrides that name one of its nodes, and the rest go into the
+window tree as before. The tab draws `tabTree("infantry.shell.git")`. A module addresses these nodes as it does any shell
+node (`infantry.shell.git.tree` or `infantry.shell#infantry.shell.git.tree`), and the same trust rules apply.
+
+```
+infantry.shell.git   gitPane   GitPaneFrame (the scrolling column, "GIT · <project>", the tree load when the project, its
+                               directory or the link changes; with no project "Select a project..." and no section);
+                               children top to bottom, straight into the column:
+  base        gitBase        the base branch for new tasks (BaseBranchPicker)
+  directory   gitDirectory   divider, the directory line, field, Open / Save / Clear, the last refusal
+  tree        gitTree        divider, WORKING TREE and Refresh, the branch line, the changed files; on a daemon older
+                             than 1.36.0 the line that says so instead
+  diff        gitDiff        the picked file's diff; nothing while none is picked
+  branches    gitBranches    divider, the local branches, Switch, New branch from current (BranchSwitcher)
+  pipeline    gitPipeline    divider, the verification pipeline (ProjectPipelineSection)
+  history     gitHistory     divider, HISTORY and a row per commit
+```
+
+- `ProjectGitPane(state, controller)` keeps its signature and draws `GitPaneFrame` and the same sections
+  (`GitBaseSection` ... `GitHistorySection`), so the pane's own tests and the real-daemon tests host it as before.
+- The frame owns the state the sections share: the picked file, the last refusal and the time up to which refusals are
+  dismissed. Sections read it through `GitPaneHost` (a composition local). They change it only through
+  `GitPaneHost.picked` and `run` (send a request, keep its refusal). A section drawn outside the pane draws nothing.
+- Each section owns the divider above it, so replacing one keeps the others' gaps. `diff` has none: the tree and its diff
+  read as one part. Below the tree, a section draws nothing on a daemon older than 1.36.0, as the pane did.
+- A section's placement goes on its heading (the directory line for `directory`); the frame's goes on the column.
+  A section draws several items into the column, so a module that wraps one draws `inner` in a Column (a Box would
+  stack them).
+- None of these nodes is locked.
+- 0 px: the default Git shot has no project, so it shows only the frame. `-PtabShotsExtra=git` renders `git-top`,
+  `git-diff`, `git-history` and `git-end` over a real repository (fixed path, fixed commit dates). The default run is
+  unchanged, still 32. The step matched its base render 4/4 at 0 px (base f38ebb5, step 0 of L14), plus diffTabShots 32/32.
+
 
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 

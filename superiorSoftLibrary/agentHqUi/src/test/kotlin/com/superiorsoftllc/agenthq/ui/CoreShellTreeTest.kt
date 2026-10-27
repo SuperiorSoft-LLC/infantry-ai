@@ -85,4 +85,14 @@ class CoreShellTreeTest {
         assertEquals(expected.joinToString("\n"), tree.joinToString("\n"))
         assertEquals(tree.size, tree.map { it.trim() }.toSet().size, "node ids are unique")
     }
+
+    /** BLOCKS-LAYOUT L14: the core tab trees (drawn by their tab, not in the window tree) are pinned the same way. */
+    @Test fun `the core tab trees keep every node id, in order, unique across the window tree`() {
+        val git = "infantry.shell.git"
+        val expected = listOf(git) + listOf("base", "directory", "tree", "diff", "branches", "pipeline", "history").map { "  $git.$it" }
+        assertEquals(listOf(git), CoreShell.tabs.map { it.id })
+        assertEquals(expected.joinToString("\n"), CoreShell.tabs.single().walk().joinToString("\n"))
+        val all = (listOf(CoreShell.root) + CoreShell.tabs).flatMap { it.walk() }.map { it.trim() }
+        assertEquals(all.size, all.toSet().size, "node ids are unique across the trees")
+    }
 }

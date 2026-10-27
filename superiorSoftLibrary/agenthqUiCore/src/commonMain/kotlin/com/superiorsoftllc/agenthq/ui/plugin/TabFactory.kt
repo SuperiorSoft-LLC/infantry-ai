@@ -290,11 +290,19 @@ class TabFactory(
     private val bindProblems: List<String>
     private val nodeOverrides: List<NodeOverride>
     /** BLOCKS-LAYOUT L5: the core tree with the overrides in, resolved once (lazily: the tree is not built at init). */
-    private val shell: Resolved by lazy { BlockResolver.resolve(CoreShell.root, nodeOverrides, CoreShell.locked) }
+    private val shell: Resolved by lazy {
+        BlockResolver.resolve(CoreShell.root, nodeOverrides.filter { o -> CoreShell.tabs.none { o.node in it.ids() } }, CoreShell.locked)
+    }
+    /** BLOCKS-LAYOUT L14: each core tab tree ([CoreShell.tabs]) with the overrides of its own nodes in, resolved once. */
+    private val tabTrees: List<Resolved> by lazy {
+        CoreShell.tabs.map { t -> val ids = t.ids(); BlockResolver.resolve(t, nodeOverrides.filter { it.node in ids }, CoreShell.locked, t.id) }
+    }
     /** The tree the window draws. */
     val shellRoot: Block get() = shell.root
+    /** BLOCKS-LAYOUT L14: the core tab tree with root [id] as resolved (e.g. `infantry.shell.git`), or null if there is none. */
+    fun tabTree(id: String): Block? = tabTrees.firstOrNull { it.root.id == id }?.root
     /** Everything refused or ignored, one line each. */
-    val problems: List<String> get() = bindProblems + shell.problems
+    val problems: List<String> get() = bindProblems + shell.problems + tabTrees.flatMap { it.problems }
     private val providers: List<TabProvider>
     private val sections: List<PanelProvider>
     private val interceptors: Map<String, List<TabInterceptor>>
@@ -507,3 +515,6 @@ private fun ColumnScope.PanelSection(factory: TabFactory, section: PanelProvider
         }
     }
 }
+
+/** Every node id in the tree under (and including) this block. */
+private fun Block.ids(): Set<String> = setOf(id) + children.flatMap { it.ids() }

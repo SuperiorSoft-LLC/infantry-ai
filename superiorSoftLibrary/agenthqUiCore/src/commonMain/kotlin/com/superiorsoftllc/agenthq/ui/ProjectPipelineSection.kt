@@ -57,7 +57,7 @@ const val PIPELINE_REMOVE_TAG = "pipeline-remove"
  * on every change, so nothing here polls; only the ages tick.
  */
 @Composable
-fun ProjectPipelineSection(state: AppState, controller: Controller, projectId: String, live: Boolean) {
+fun ProjectPipelineSection(state: AppState, controller: Controller, projectId: String, live: Boolean, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val supported = contractAtLeast(state.connection.contract, 1, 99)
     var editing by remember(projectId) { mutableStateOf(false) }
@@ -67,7 +67,7 @@ fun ProjectPipelineSection(state: AppState, controller: Controller, projectId: S
     LaunchedEffect(projectId, live, supported) { if (live && supported) controller.loadPipeline(projectId) }
 
     val view = pipelineSectionView(state.pipelines[projectId])
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text("PIPELINE", color = Palette.Muted, fontSize = 10.sp)
         if (supported) OutlinedButton(
             onClick = { error = null; editing = true }, enabled = live, modifier = Modifier.testTag(PIPELINE_CONFIGURE_TAG),
