@@ -895,7 +895,7 @@ private fun nodeColor(s: String) = when (s) {
 }
 
 @Composable
-internal fun StatusBar(state: AppState, serverMismatch: String?, appBuild: String?, onConfig: (ConfigTab?) -> Unit, children: List<com.superiorsoftllc.agenthq.ui.block.Block> = emptyList(), processes: @Composable () -> Unit = {}) {
+internal fun StatusBar(state: AppState, serverMismatch: String?, appBuild: String?, onConfig: (ConfigTab?) -> Unit, children: List<com.superiorsoftllc.agenthq.ui.block.Block> = emptyList(), leading: List<com.superiorsoftllc.agenthq.ui.block.Block> = emptyList()) {
     val c = state.connection
     var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(Unit) { while (true) { delay(1000); now = Clock.System.now().toEpochMilliseconds() } }
@@ -910,7 +910,8 @@ internal fun StatusBar(state: AppState, serverMismatch: String?, appBuild: Strin
         if (c.isLive && c.contract?.substringBefore('.') != "1") Text("   unexpected contract version", color = Palette.Danger, fontSize = 11.sp)
         // SERVER-UPDATE-4: client and server differ by more than a patch; the full text is in Configuration > Server.
         if (c.isLive && serverMismatch != null) Text("   version mismatch (see Configuration)", color = Palette.Accent, fontSize = 11.sp, modifier = Modifier.testTag(SERVER_MISMATCH_TAG))
-        processes()
+        // BLOCKS-SHELL-3: ROGUE-1's processes badge (now the processesBadge child block) sits right after the status text.
+        leading.Render()
         Spacer(Modifier.weight(1f))
         // The shortcut hint only where there is room for it (a phone has no keyboard shortcuts and no width to spare).
         if (!state.panels.compactWindow) {
