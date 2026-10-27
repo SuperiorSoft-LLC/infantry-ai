@@ -58,9 +58,10 @@ enum class Show { Always, Wide, Compact }
 
 /**
  * What a parent hands a child: its placement [modifier], in a stack the [box] it can align itself in, and in a row the
- * [row] (core only, L6): a block not yet decomposed that emits several items with their own weights into its parent row.
+ * [row] (L6): a block not yet decomposed that emits several items with their own weights into its parent row (public
+ * since S4c: the title bar and the right panel, which emit into the panes' row, are app UI now).
  */
-class BlockScope(val modifier: Modifier, internal val box: BoxScope?, internal val row: RowScope? = null) {
+class BlockScope(val modifier: Modifier, internal val box: BoxScope?, val row: RowScope? = null) {
     /** Aligns in the parent stack's Box; outside a stack it is the modifier unchanged. */
     fun Modifier.aligned(alignment: Alignment): Modifier = box?.run { this@aligned.align(alignment) } ?: this
 }

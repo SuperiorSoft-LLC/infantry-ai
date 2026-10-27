@@ -259,3 +259,33 @@ users are Infantry_Triggers and core tests, so they go (b) or (c) with Triggers 
 
 Estimated S4c addition for the board: about 14 members on `BoardContext` (the state above and 7 actions), plus
 `LayoutContext.compact`.
+
+# S4c: the shell blocks and the settings (ticket d7825a52)
+
+S4c moves the rest of the app UI that S4a left in core: the slot fills (header, center/chat, left/right panels, compact
+drawer, status bar, overlays) and the open settings group of the Config dialog (`infantry.shell.config.settings`, S3).
+One commit per group, `git mv` with the package unchanged, the same letters as S4b (a / b / c / kit / stays / bridge,
+and **hole** for a `LocalShell` use a `ShellContext` member should replace).
+
+Like Roles and the Board in S4b, the blocks are **moved, not migrated**. They read `LocalShell.current` (`Shell`,
+`AppState`, `Controller`, `UiState`), which is public, so the compiler lets them through. Each such use is a hole below.
+Migrating them all at once means growing `ShellContext` by roughly 60 members across a dozen domains (see the estimate at
+the end). `ShellContext` can only grow, so that shape is worth one design pass of its own rather than being grown block by
+block here.
+
+What stays in core, and why, is listed in "What stayed in core" at the end.
+
+## Header (Infantry_AppUi)
+
+Moved: shell/blocks/ShellHeader.kt (`ShellHeader`, `TitleBarBlock`, `HeaderLead*`, `HeaderOverflow*`, the 13 item blocks).
+
+| File | Symbol | Decision |
+|---|---|---|
+| Contract.kt | `BlockScope.row` (was internal) | kit: the block contract's own field, made public (only visibility). The title bar's lead and agent strip emit into the bar's row with it |
+| ShellHeader.kt | `TitleBarFrame`, `TitleBarToggleLeft`, `TitleBarBrand`, `TitleBarProject`, `TitleBarAgents`, `TitleBarOverflow*`, `TitleBarWindowControls`, `TitleBarConnection`, `TitleBarRightToggle`, `TitleBarAttention`, `LocalWindowChrome` | stays: TitleBar.kt is the window's chrome. The desktop window (agentHqUi AgentHqWindow.kt) and the splash draw `TitleBar` without the app UI, and the frame pieces are its parts |
+| ShellHeader.kt | `ProjectPicker` | stays: the old `TitleBar` and the projects sidebar draw it |
+| ShellHeader.kt | `ServerSwitcherChip` | stays: connect/servers is core |
+| ShellHeader.kt | `AssistantEntry` | stays with AssistantPopup.kt (see Overlays) |
+| ShellHeader.kt | `ATTENTION_TAB_ID`, `needsInput`, `PanelSide` | kit (model) |
+| ShellHeader.kt | `LocalShell.current.state` (connection, assistant, waiting, openPrompts, openQuestionSessions, the agents) | hole: `LinkContext` (has the connection), a `ChatContext` / `AgentsContext` for the strip |
+| ShellHeader.kt | `controller.togglePanel`, `s.showTab`, `s.changeConnection`, `ui.showConnect`, `ui.showServers`, `s.switcher`, `s.switchTo`, `s.assistantPanel`, `ui.flags.agentScope` | hole: a `WindowContext` (panels, tabs, the shell's dialogs) |
