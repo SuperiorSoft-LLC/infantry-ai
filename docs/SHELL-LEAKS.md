@@ -382,3 +382,21 @@ the sidebar's board entry out of BoardSidebar.kt (SidebarBoardButton.kt: `Sideba
 | ShellLeftPanel.kt | `ResizeHandle`, `PanelSections`, `Panels`, `TabContainers`, `SidebarWidth`, `RightPanelWidth`, `PanelLayout`, `CompactScreen` | kit (`ResizeHandle` made public in Overlays) |
 | ShellLeftPanel.kt, Sidebar.kt | `s.visible`, `ui.query`, `ui.roleFilter`, `s.searchFocus`, `state.agents / groupedAgents / selectedId / waiting / openPrompts / openQuestionSessions / reviewQueue / workingCount / needsInputCount`, `controller.select / removeSession / assignSessionProject / dismissProjectRefusal` | hole: an `AgentsContext` (the list, its filter and selection, remove / assign; about 12 members) |
 | all three | `s.tabs`, `s.tabContext`, `ui.rightTab`, `ui.sidebarWidth`, `ui.rightPanelWidth`, `state.panels`, `controller.showCompactScreen`, `ui.showBoard`, `ui.showNewAgent` | hole: the `WindowContext` |
+
+## Settings (Infantry_AppUi)
+
+Moved: the open settings group of the Config dialog, `ShellConfigSettings` (`infantry.shell.config.settings`, its 15
+section blocks), from core shell/blocks/ShellConfig.kt to Infantry_AppUi/ShellConfigSettings.kt. In core the group is an
+empty slot now (`CONFIG_SETTINGS`, added to `CoreShell.slots`) inside the locked `infantry.shell.config` container, and
+Infantry_AppUi fills it (module.json `fills`). The fill goes in before overrides and injections, so the S3 overrides of
+the group and its sections (ConfigDialogOverridesUiTest, NodeRegistryTest) address the same ids as before.
+
+| File | Symbol | Decision |
+|---|---|---|
+| ShellConfig.kt | `ShellConfigSettings` | (c) |
+| ShellConfig.kt | `ConfigSectionBlock` (constructor was internal) | (d): the section block is the dialog's own contract, so it is public as it is; the app UI builds its sections with it |
+| ShellConfig.kt | `sectionEntries` (read the settings group) | stays, rewritten: derived from `ConfigEntry` (`infantry.shell.config.<entry in lowerCamelCase>`), so core no longer names the app UI's blocks. Every section id already followed that rule |
+| CoreShell.kt | `CoreShell.slots` + `infantry.shell.config.settings`, `CONFIG_SETTINGS` | (a): an addition to the slot list (tree order: before `infantry.shell.roles`) |
+| ConfigDialog.kt | `ConfigThemeSection` ... `ConfigQuestionsSection` (the 15 settings composables), `ConfigSections`, `ConfigDialogHost` | stays: the dialog's default body (`ConfigSections`, which the dialog's own UI tests draw without a shell) calls them, and they read only `ConfigDialogHost`, the dialog's contract. They hold no window state. Moving them means the dialog's default body becomes the trust half only, which changes 11 dialog tests; that is a follow-up, not a leak |
+| ShellConfig.kt | `ConfigBlock`, the frame's inputs (`state.cliLocations`, `harnessInstall*`, `toolApproval`, `limitCatalog`, `keepAliveMinutes`, `userPortrait`, `controller.set*`) | stays: the frame is locked core (the trust half's inputs come through it too) |
+| sound/IncomingCommsSoundUi.kt, voice/VoiceUi.kt | `IncomingCommsSoundSection`, `VoiceSettingsSection` (and `IncomingCommsSoundEffect`, `VoiceAlerts`, see Overlays) | stays: the settings sections above draw them |

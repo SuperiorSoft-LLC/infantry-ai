@@ -7,32 +7,17 @@ import androidx.compose.ui.Modifier
 import com.superiorsoftllc.agenthq.ui.AboutEntry
 import com.superiorsoftllc.agenthq.ui.BLUR_PREF_KEY
 import com.superiorsoftllc.agenthq.ui.ConfigAboutSection
-import com.superiorsoftllc.agenthq.ui.ConfigAgentScopeSection
-import com.superiorsoftllc.agenthq.ui.ConfigBlurSection
-import com.superiorsoftllc.agenthq.ui.ConfigCliLocationsSection
 import com.superiorsoftllc.agenthq.ui.ConfigDialog
 import com.superiorsoftllc.agenthq.ui.ConfigDialogHost
 import com.superiorsoftllc.agenthq.ui.ConfigEntry
-import com.superiorsoftllc.agenthq.ui.ConfigIncomingSoundSection
-import com.superiorsoftllc.agenthq.ui.ConfigLifecycleSection
-import com.superiorsoftllc.agenthq.ui.ConfigLimitsSection
 import com.superiorsoftllc.agenthq.ui.ConfigLogsSection
-import com.superiorsoftllc.agenthq.ui.ConfigMarkdownEngineSection
 import com.superiorsoftllc.agenthq.ui.ConfigModulesSection
 import com.superiorsoftllc.agenthq.ui.ConfigPairSection
 import com.superiorsoftllc.agenthq.ui.ConfigPluginsSection
 import com.superiorsoftllc.agenthq.ui.ConfigRegistrySection
-import com.superiorsoftllc.agenthq.ui.ConfigProgressStaleSection
-import com.superiorsoftllc.agenthq.ui.ConfigQuestionsSection
-import com.superiorsoftllc.agenthq.ui.ConfigReasoningSection
-import com.superiorsoftllc.agenthq.ui.ConfigRolesSection
 import com.superiorsoftllc.agenthq.ui.ConfigSecretsSection
 import com.superiorsoftllc.agenthq.ui.ConfigServerUpdateSection
-import com.superiorsoftllc.agenthq.ui.ConfigThemeSection
-import com.superiorsoftllc.agenthq.ui.ConfigToolApprovalSection
 import com.superiorsoftllc.agenthq.ui.ConfigUpdatesSection
-import com.superiorsoftllc.agenthq.ui.ConfigUserPortraitSection
-import com.superiorsoftllc.agenthq.ui.ConfigVoiceSection
 import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.PairEntry
 import com.superiorsoftllc.agenthq.ui.Palette
@@ -40,7 +25,7 @@ import com.superiorsoftllc.agenthq.ui.SecretActions
 import com.superiorsoftllc.agenthq.ui.THEME_PREF_KEY
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
-import com.superiorsoftllc.agenthq.ui.block.layout.GroupBlock
+import com.superiorsoftllc.agenthq.ui.block.layout.PlaceholderBlock
 import com.superiorsoftllc.agenthq.ui.block.layout.Place
 import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
 import com.superiorsoftllc.agenthq.ui.block.layout.flattened
@@ -59,7 +44,7 @@ private val LocalConfigDialogHost = compositionLocalOf<ConfigDialogHost?> { null
  * SHELL-EMPTY-DROPIN S3: a container of child blocks `infantry.shell.config.<entry>`, one per section, drawn straight into
  * the selected tab's scrolled column, top to bottom. The frame (dialog, title, lifetime note, search and its results, tab
  * strip, Done) stays its own. The container is locked, and so are its trust sections ([ShellConfigTrust]); the settings
- * ([ShellConfigSettings]) are open. A child whose id is a section's ([ConfigSectionBlock.entry]) is drawn only on that
+ * (the `infantry.shell.config.settings` slot, S4c: Infantry_AppUi fills it) are open. A child whose id is a section's ([ConfigSectionBlock.entry]) is drawn only on that
  * section's tab, an override of it too (it keeps the id); any other child (an injected one) on every tab.
  */
 class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG, CONFIG, place, children) {
@@ -140,7 +125,7 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
 }
 
 /** One section of the dialog ([entry]); its placement goes on the section's column. */
-class ConfigSectionBlock internal constructor(
+class ConfigSectionBlock(
     val entry: ConfigEntry,
     name: String,
     private val draw: @Composable (ConfigDialogHost, Modifier) -> Unit,
@@ -150,31 +135,6 @@ class ConfigSectionBlock internal constructor(
         draw(LocalConfigDialogHost.current ?: return, scope.modifier)
     }
 }
-
-/**
- * The settings: app UI, open to a module (replace, wrap, and inject into this group). A group is transparent, so its
- * children are drawn as the container's own.
- */
-val ShellConfigSettings = GroupBlock(
-    "$CONFIG.settings",
-    listOf(
-        ConfigSectionBlock(ConfigEntry.THEME, "theme") { c, m -> ConfigThemeSection(c, m) },
-        ConfigSectionBlock(ConfigEntry.BLUR, "blur") { c, m -> ConfigBlurSection(c, m) },
-        ConfigSectionBlock(ConfigEntry.MARKDOWN_ENGINE, "markdownEngine") { c, m -> ConfigMarkdownEngineSection(c, m) },
-        ConfigSectionBlock(ConfigEntry.REASONING, "reasoning") { c, m -> ConfigReasoningSection(c, m) },
-        ConfigSectionBlock(ConfigEntry.USER_PORTRAIT, "userPortrait") { c, m -> ConfigUserPortraitSection(c, m) },
-        ConfigSectionBlock(ConfigEntry.AGENT_SCOPE, "agentScope") { c, m -> ConfigAgentScopeSection(c, m) },
-        ConfigSectionBlock(ConfigEntry.PROGRESS_STALE, "progressStale") { c, m -> ConfigProgressStaleSection(c, m) },
-        ConfigSectionBlock(ConfigEntry.LIFECYCLE, "lifecycle") { c, m -> ConfigLifecycleSection(c, m) },
-        ConfigSectionBlock(ConfigEntry.CLI_LOCATIONS, "cliLocations") { c, m -> ConfigCliLocationsSection(c, m) },
-        ConfigSectionBlock(ConfigEntry.TOOL_APPROVAL, "toolApproval") { c, m -> ConfigToolApprovalSection(c, m) },
-        ConfigSectionBlock(ConfigEntry.ROLES, "roles") { c, m -> ConfigRolesSection(c, m) },
-        ConfigSectionBlock(ConfigEntry.LIMITS, "limits") { c, m -> ConfigLimitsSection(c, m) },
-        ConfigSectionBlock(ConfigEntry.VOICE, "voice") { c, m -> ConfigVoiceSection(c, m) },
-        ConfigSectionBlock(ConfigEntry.INCOMING_SOUND, "incomingSound") { c, m -> ConfigIncomingSoundSection(c, m) },
-        ConfigSectionBlock(ConfigEntry.QUESTIONS, "questions") { c, m -> ConfigQuestionsSection(c, m) },
-    ),
-)
 
 /**
  * The trust kernel (docs/SHELL-EMPTY-DROPIN-FEASIBILITY.md, 3d): where a plugin is disabled, a secret is typed, a device
@@ -194,8 +154,15 @@ val ShellConfigTrust: List<ConfigSectionBlock> = listOf(
     ConfigSectionBlock(ConfigEntry.LOGS, "logs") { c, m -> ConfigLogsSection(c, m) },
 )
 
-/** Section node id -> its entry, for the container's tab filter. */
-private val sectionEntries: Map<String, ConfigEntry> =
-    (ShellConfigSettings.children.filterIsInstance<ConfigSectionBlock>() + ShellConfigTrust).associate { it.id to it.entry }
+/**
+ * Section node id -> its entry, for the container's tab filter: `infantry.shell.config.<entry in lowerCamelCase>`. S4c:
+ * derived from [ConfigEntry], since the open sections' blocks are the app UI's (Infantry_AppUi's ShellConfigSettings).
+ */
+private val sectionEntries: Map<String, ConfigEntry> = ConfigEntry.entries.associateBy { e ->
+    "$CONFIG." + e.name.lowercase().split('_').mapIndexed { i, w -> if (i == 0) w else w.replaceFirstChar { it.uppercase() } }.joinToString("")
+}
 
-val ShellConfig = ConfigBlock(listOf(ShellConfigSettings) + ShellConfigTrust)
+/** S4c: the open settings group, an empty slot ([CoreShell.slots]) that Infantry_AppUi fills; the trust sections are the shell's. */
+const val CONFIG_SETTINGS = "$CONFIG.settings"
+
+val ShellConfig = ConfigBlock(listOf(PlaceholderBlock(CONFIG_SETTINGS, null)) + ShellConfigTrust)

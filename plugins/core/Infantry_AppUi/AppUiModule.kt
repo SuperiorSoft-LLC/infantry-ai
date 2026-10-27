@@ -9,6 +9,7 @@ import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellBoard
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellCenter
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellChanges
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellCompactDrawer
+import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellConfigSettings
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellDiff
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellGit
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellHeader
@@ -26,7 +27,7 @@ import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellVoice
 private val fills: List<Block> = listOf(
     ShellHeader, ShellLeftPanel, ShellCenter, ShellRightPanel, ShellCompactDrawer, CoreStatusBar,
     ShellAssistant, ShellToast, ShellBoard, ShellDiff, ShellSound, ShellVoice, ShellQuestionPill,
-    ShellRoles,
+    ShellConfigSettings, ShellRoles,
 )
 
 /**
@@ -36,7 +37,7 @@ private val fills: List<Block> = listOf(
 val InfantryAppUi = AgentHqModule(
     ModuleManifest(
         name = "Infantry_AppUi", version = "1.0.0", author = "Infantry AI",
-        description = "The app's UI in the shell's empty slots: title bar, side panels, chat, status bar, overlays and the roles window.",
+        description = "The app's UI in the shell's empty slots: title bar, side panels, chat, status bar, overlays, the roles window and the settings.",
         fills = fills.map { it.id },
     ),
     fills = fills.associateBy { it.id },

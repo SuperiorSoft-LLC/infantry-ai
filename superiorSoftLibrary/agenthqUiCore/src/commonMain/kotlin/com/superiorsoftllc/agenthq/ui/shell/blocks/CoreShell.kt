@@ -37,14 +37,16 @@ object CoreShell {
      * S4 (drop-in path): the shell's empty slots, the nodes the app UI draws. Each is an empty [PlaceholderBlock] that
      * draws nothing until a core module fills it (module.json `fills`, [TabFactory.baseRoot]); the fill is a tree of the
      * module's with the slot's id, and goes in before overrides and injections, so their node ids stay addressable.
-     * Since S4 the tab trees (Git, Run, Notes, Changes) are module contributions too ([TabFactory.tabTreeRoots]).
+     * Since S4 the tab trees (Git, Run, Notes, Changes) are module contributions too ([TabFactory.tabTreeRoots]). Since S4c
+     * the Config dialog's open settings group (`infantry.shell.config.settings`, [CONFIG_SETTINGS]) is a slot too, inside
+     * the locked dialog: without the app UI the dialog shows its trust sections only.
      */
     val slots: List<String> = listOf(
         "infantry.shell.header", "infantry.shell.left", "infantry.shell.center", "infantry.shell.right",
         "infantry.shell.drawer", "infantry.shell.footer",
         "infantry.shell.assistant", "infantry.shell.toast", "infantry.shell.board", "infantry.shell.diff",
         "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions",
-        "infantry.shell.roles",
+        "infantry.shell.config.settings", "infantry.shell.roles",
     )
 
     /**
