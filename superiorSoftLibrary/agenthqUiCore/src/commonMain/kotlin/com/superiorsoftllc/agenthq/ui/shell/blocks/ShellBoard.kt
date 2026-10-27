@@ -3,7 +3,6 @@ package com.superiorsoftllc.agenthq.ui.shell.blocks
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.ui.Modifier
 import com.superiorsoftllc.agenthq.ui.BoardModalFrame
 import com.superiorsoftllc.agenthq.ui.BoardModalHeader
 import com.superiorsoftllc.agenthq.ui.BoardModalPane
@@ -45,7 +44,6 @@ class BoardBlock(children: List<Block>, place: Place = Place()) : Block("boardMo
         BoardModalFrame(onDismiss) {
             CompositionLocalProvider(LocalBoardHost provides host) {
                 RenderPlaced(children)
-                BoardModalPane(s.state, s.controller, host.onOpenAgent, Modifier.weight(1f))
             }
         }
     }
@@ -62,4 +60,14 @@ object BoardHeader : Block("boardHeader", "$BOARD.header") {
     }
 }
 
-val ShellBoard = BoardBlock(listOf(BoardHeader))
+/** The board itself (BoardPane: columns, filters, tickets) in its padded box; it takes the free height, and its Box wears the placement. */
+object BoardBody : Block("boardPane", "$BOARD.pane", Place(weight = 1f)) {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val host = LocalBoardHost.current ?: return
+        val s = LocalShell.current
+        BoardModalPane(s.state, s.controller, host.onOpenAgent, scope.modifier)
+    }
+}
+
+val ShellBoard = BoardBlock(listOf(BoardHeader, BoardBody))
