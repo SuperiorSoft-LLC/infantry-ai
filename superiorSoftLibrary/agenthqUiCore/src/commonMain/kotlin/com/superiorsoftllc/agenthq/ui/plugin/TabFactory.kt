@@ -329,6 +329,8 @@ class TabFactory(
     /** Everything refused or ignored, one line each. */
     val problems: List<String> get() = bindProblems + shell.problems + tabTrees.flatMap { it.problems }
     private val providers: List<TabProvider>
+    /** P1 (f60f4d97): each tab id a preference replaced, and the module whose tab it replaced. */
+    internal val replacedTabs: Map<String, String>
     private val sections: List<PanelProvider>
     private val interceptors: Map<String, List<TabInterceptor>>
     private val blocks: Map<String, List<Pair<String, SlotBlock>>>
@@ -336,6 +338,7 @@ class TabFactory(
 
     init {
         val problems = mutableListOf<String>()
+        val replaced = LinkedHashMap<String, String>()
         val seen = LinkedHashMap<String, TabProvider>()
         for (m in modules) for (t in m.tabs) {
             val name = m.manifest.name
@@ -369,6 +372,7 @@ class TabFactory(
             val withSection = placed[p.with]?.takeIf { it.module == p.module }
             when {
                 target != null && with != null -> {
+                    replaced[p.replace] = target.module
                     seen.remove(p.with)
                     seen[p.replace] = with.copy(id = target.id, container = target.container, order = target.order, parent = target.parent, shortcut = target.shortcut, testTag = target.testTag)
                 }
@@ -454,6 +458,7 @@ class TabFactory(
             o?.let { NodeOverride(a.module, a.node, a.mode, it) }
         }
         providers = seen.values.toList()
+        replacedTabs = replaced
         interceptors = ints
         blocks = bls.mapValues { (_, v) -> v.sortedBy { it.first }.map { it.second to it.third } }
         bindProblems = problems

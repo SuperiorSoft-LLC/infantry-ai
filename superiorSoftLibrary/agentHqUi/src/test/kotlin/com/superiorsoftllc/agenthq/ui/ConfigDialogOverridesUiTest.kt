@@ -146,7 +146,7 @@ class ConfigDialogOverridesUiTest {
     }
 
     @Test fun aCommunityModuleCannotReplaceOrWrapATrustSectionOrTheDialog() {
-        for (id in listOf("plugins", "modules", "secrets", "pair", "about", "updates", "serverUpdate", "logs")) {
+        for (id in listOf("plugins", "modules", "registry", "secrets", "pair", "about", "updates", "serverUpdate", "logs")) {
             val node = "infantry.shell.config.$id"
             for (mode in listOf(OverrideModes.REPLACE, OverrideModes.WRAP)) {
                 val f = factory(node, mode, BlockOverride { scope, _ -> Text("acme", scope.modifier) })
@@ -190,7 +190,7 @@ class ConfigDialogOverridesUiTest {
     @Test fun aSectionDrawnOutsideTheDialogDrawsNothingAndDoesNotCrash() = runDesktopComposeUiTest(400, 300) {
         fun Block.all(): List<Block> = children + children.flatMap { it.all() }
         val sections = ShellConfig.all().filter { it.children.isEmpty() }
-        assertEquals(23, sections.size)
+        assertEquals(24, sections.size)
         setContent { Column { for (b in sections) b.Render(BlockScope(Modifier, null)) } }
         waitForIdle()
         for (e in ConfigEntry.entries) onNodeWithTag(CONFIG_SECTION_TAG_PREFIX + e.name).assertDoesNotExist()

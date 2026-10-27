@@ -39,6 +39,12 @@ object CoreShell {
      */
     val tabs: List<Block> = listOf(ShellGit, ShellRun, ShellNotes, ShellChanges)
 
+    /** P1 (f60f4d97): the tab (its `TabProvider` id) that draws each tree of [tabs], for Configuration > Plugins > Registered. */
+    val tabTreeTabs: Map<String, String> = mapOf(
+        "infantry.shell.git" to "infantry.git", "infantry.shell.run" to "infantry.run",
+        "infantry.shell.notes" to "infantry.notes", "infantry.shell.changes" to "infantry.changes",
+    )
+
     /**
      * SHELL-EMPTY-DROPIN S1 (docs/BLOCKS-LAYOUT-DESIGN.md section 13): the containers that are open slots
      * ([PlaceholderBlock]): each keeps its id and place and draws its core default (what it drew before) until a module
