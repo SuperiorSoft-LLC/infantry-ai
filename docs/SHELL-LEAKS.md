@@ -357,3 +357,28 @@ are bridges until then.
 | ShellCenter.kt | `s.tabs`, `s.tabContext`, `ui.centerTab`, `ui.showBoard`, `ui.showNewAgent`, `controller.setCompactWindow` | hole: the `WindowContext` |
 | ShellCenter.kt, ChatPanel.kt | `s.chat` / `ChatPanelState`, `s.selected`, `state.agents`, `role`, `roles`, `tickets`, `providers`, `modelCatalog`, `pickedModel`, `harnessPickerAsk`, `shownQuestionsFor`, `userPortrait`, `connection`, `controller.resume / startSession / switchAgent / spawn / pickModel / pickSpawnRole / refreshModelCatalog / answerQuestion / cancelQuestion / dismissQuestions` | hole: a `ChatContext` (about 20 members: the session, its transcript and questions, send / start / switch / spawn) plus the shared `ExecutorContext` (Roles) |
 | NewAgentDialog.kt | `state.roles`, `roleBindings`, `providers`, `modelCatalog` | (a) in part: `RolesContext.roles / bindings`; hole: `ExecutorContext` |
+
+## Side panels and compact drawer (Infantry_AppUi)
+
+Moved: shell/blocks/ShellLeftPanel.kt, ShellRightPanel.kt, ShellCompactDrawer.kt (one commit, because the drawer draws
+the two panels' content and all three read `dockCompact`). Moved with them: the agent list out of App.kt (Sidebar.kt in
+the app UI: `Sidebar`, `AgentsList`, `AgentRow`, the row menu, `SidebarSpacing`, `CenterTabBar`), ProjectsSidebar.kt, and
+the sidebar's board entry out of BoardSidebar.kt (SidebarBoardButton.kt: `SidebarBoardButton`, `WatchFlagChip`,
+`SIDEBAR_BOARD_BUTTON_TAG`).
+
+| File | Symbol | Decision |
+|---|---|---|
+| ShellLeftPanel.kt | `dockCompact` | (c): its bridge (Center) closes, internal again in the app UI |
+| ShellLeftPanel.kt, ShellRightPanel.kt | `LeftPanelContent`, `RightPanelContent`, `rightPanelArea` (internal) | (c): internal in the app UI (the drawer is the only other user) |
+| App.kt -> Sidebar.kt | `Sidebar` (was internal), `AgentsList`, `AgentRow`, `AgentRowMenu`, `AgentGroupHeader`, `Counter`, `SidebarSpacing`, `SIDEBAR_SEARCH_TAG`, `AGENT_GROUP_DIVIDER_TAG_PREFIX`, `NO_PROJECT_LABEL`, `SESSION_NO_PROJECT_TAG_PREFIX`, `SESSION_ASSIGN_TAG_PREFIX` | (c) |
+| App.kt -> Sidebar.kt | `CenterTabBar`, `CENTER_TAB_BAR_TAG` | (c): only the moved center draws it |
+| App.kt | `RemoveAgentDialog` (was internal), `SESSION_REMOVE_*`, `PROMPT_BOX_TAG`, `COMPOSER_TAG` | stays: the chat's composer (ChatSurface.kt) opens the dialog too; public |
+| App.kt | `CompactNavRow` (was internal), `COMPACT_BACK_TAG`, `CENTER_PANE_TAG`, `CENTER_TRANSCRIPT_TAG`, `DRAWER_TAG`, `DRAWER_SCRIM_TAG` | kit: a control and test tags, public |
+| TabStrip.kt | `TabBar` (was internal) | kit: the tab strip control (core's tab strip and `CenterTabBar`), public |
+| BoardSidebar.kt -> SidebarBoardButton.kt | `SidebarBoardButton`, `WatchFlagChip`, `SIDEBAR_BOARD_BUTTON_TAG` | (c): the sidebar and Attention (app UI) are their users; the `WatchFlagChip` bridge (S4a) closes |
+| BoardSidebar.kt | `ReportFlagChip` | stays, still a bridge: the chat (ChatSurface.kt) draws it |
+| ProjectsSidebar.kt | `ProjectsSidebar` | (c) |
+| ProjectsSidebar.kt -> ProjectRefusal.kt | `projectsRefusal` (was internal) | stays: the project picker (core) reads it; public |
+| ShellLeftPanel.kt | `ResizeHandle`, `PanelSections`, `Panels`, `TabContainers`, `SidebarWidth`, `RightPanelWidth`, `PanelLayout`, `CompactScreen` | kit (`ResizeHandle` made public in Overlays) |
+| ShellLeftPanel.kt, Sidebar.kt | `s.visible`, `ui.query`, `ui.roleFilter`, `s.searchFocus`, `state.agents / groupedAgents / selectedId / waiting / openPrompts / openQuestionSessions / reviewQueue / workingCount / needsInputCount`, `controller.select / removeSession / assignSessionProject / dismissProjectRefusal` | hole: an `AgentsContext` (the list, its filter and selection, remove / assign; about 12 members) |
+| all three | `s.tabs`, `s.tabContext`, `ui.rightTab`, `ui.sidebarWidth`, `ui.rightPanelWidth`, `state.panels`, `controller.showCompactScreen`, `ui.showBoard`, `ui.showNewAgent` | hole: the `WindowContext` |

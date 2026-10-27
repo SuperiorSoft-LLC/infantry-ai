@@ -47,8 +47,7 @@ object ShellLeftPanel : Block("infantry.shell.left", "infantry.shell.left", Plac
 
 /** MOBILE-LAYOUT-1: below PanelLayout.COMPACT_BELOW_DP (600dp) of the middle region the window shows ONE pane. */
 @Composable
-// S4 bridge (docs/SHELL-LEAKS.md): the centre (app UI) reads it until the side panels move too.
-fun dockCompact(): Boolean = PanelLayout.isCompact(LocalBlockSize.current.width.value)
+internal fun dockCompact(): Boolean = PanelLayout.isCompact(LocalBlockSize.current.width.value)
 
 /**
  * MOBILE-DRAWERS-1: the sidebar, docked (wide) or in the compact drawer.

@@ -51,7 +51,7 @@ private val WheelStep = 48.dp
  * L9a); the strip's divider under it does not wear it.
  */
 @Composable
-internal fun TabBar(
+fun TabBar(
     tabs: List<Pair<String, Boolean>>,
     hPad: Dp = 14.dp,
     fontSize: TextUnit = 12.sp,
