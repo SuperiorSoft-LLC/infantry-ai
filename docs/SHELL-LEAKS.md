@@ -330,3 +330,30 @@ core in files of their own, because core still uses them.
 | ShellDiff.kt, DiffModal.kt | `ui.diffTarget`, `s.root.requestFocus`, `state.projectGit*`, `worktreeStatus`, `controller.loadProjectDiff / loadBranchDiff` | (a) in part: `GitContext.patch / loadDiff`, `ChangesContext.branchChanges / worktreeStatus`; hole: the diff target, `loadBranchDiff`, the window's focus |
 | ShellSound.kt, ShellVoice.kt | `controller.state`, `controller.spoken`, `ui.flags` | hole: the comms feed and the spoken lines, the UI flags (`WindowContext`) |
 | ShellQuestionPill.kt | `state.openQuestions`, `dismissedQuestions`, `selectedId`, `agents`, `controller.openQuestion / showQuestions`, `s.homeTab`, `ui.centerTab`, `s.chat.spawnMode` | hole: a `QuestionsContext` (about 4 members) and the `WindowContext` |
+
+## Center and chat (Infantry_AppUi)
+
+Moved: shell/blocks/ShellCenter.kt (`ShellCenter`, `CenterBlock`, `CenterChat*`, `NewAgentBlock`, `NewAgent*`), and
+the composables only it and the moved Assistant draw: ChatPanel.kt (`ChatPanel`, `ChatPanelHost`, `chatPanelHost`,
+`chatPanelHeader` and its sections), NewAgentDialog.kt and QuestionWindow.kt.
+
+**ChatSurface.kt stays in core in S4c.** It is the chat's whole drawing tree (60 KB: transcript, composer, status row,
+cards), and it pulls about ten helper files with it (ChatAttachments, ChangeBox, OriginRenderer, CommsCardStyle,
+SessionStartPane, SwitchAgentPicker, ChatTableView, ChatBlockRenderers, PromptCard, ProgressMeter, ReasoningPanelUi).
+Several of them are also drawn by core panes and the sidebar (App.kt uses `TicketTag`, `NEW_AGENT_LABEL`,
+`NEW_AGENT_SHORTCUT`, `SIDEBAR_NEW_AGENT_TAG`; ChatBlockRenderers and ChatTableView use `spansText`). Moving it is a
+split of its own. It is the largest piece of app UI still compiled into core. The two internals that ChatPanel composes
+are bridges until then.
+
+| File | Symbol | Decision |
+|---|---|---|
+| ChatPanel.kt | `ChatPanel`, `ChatPanelHost`, `chatPanelHost`, `chatPanelHeader`, `Header / Transcript / Notices / SpawnRows / SwitchPicker / Composer` (were internal) | (c): the center and the Assistant are their only users |
+| ChatPanel.kt -> ChatPanelState.kt | `ChatPanelState`, `rememberChatPanelState` | stays: the window owns the main chat's state (`Shell.chat`, App.kt) |
+| NewAgentDialog.kt | `NewAgentDialog`, `NewAgentDialogFrame`, `NewAgentDraft`, the steps, `NEW_AGENT_*` tags | (c) |
+| NewAgentDialog.kt -> ModalFieldColors.kt | `visibleBorderFieldColors` (was internal) | stays (kit): the executor picker and the searchable select (core) use it; public |
+| QuestionWindow.kt | the whole file (`QuestionPanel`, `QuestionPill`, `QuestionHistory`, the `QUESTION_*` tags) | (c): the chat, the pill and Attention (all app UI) are its users |
+| ChatSurface.kt | `PromptBox`, `SpawnRoleRow` (were internal) | bridge: ChatPanel composes them; they go back to internal when ChatSurface.kt moves |
+| ShellLeftPanel.kt | `dockCompact` (was internal) | bridge: closed by the next commit (side panels) |
+| ShellCenter.kt | `s.tabs`, `s.tabContext`, `ui.centerTab`, `ui.showBoard`, `ui.showNewAgent`, `controller.setCompactWindow` | hole: the `WindowContext` |
+| ShellCenter.kt, ChatPanel.kt | `s.chat` / `ChatPanelState`, `s.selected`, `state.agents`, `role`, `roles`, `tickets`, `providers`, `modelCatalog`, `pickedModel`, `harnessPickerAsk`, `shownQuestionsFor`, `userPortrait`, `connection`, `controller.resume / startSession / switchAgent / spawn / pickModel / pickSpawnRole / refreshModelCatalog / answerQuestion / cancelQuestion / dismissQuestions` | hole: a `ChatContext` (about 20 members: the session, its transcript and questions, send / start / switch / spawn) plus the shared `ExecutorContext` (Roles) |
+| NewAgentDialog.kt | `state.roles`, `roleBindings`, `providers`, `modelCatalog` | (a) in part: `RolesContext.roles / bindings`; hole: `ExecutorContext` |

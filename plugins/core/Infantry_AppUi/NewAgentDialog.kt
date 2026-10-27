@@ -234,12 +234,3 @@ private fun ExecutorStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> 
         ExecutorPicker(m.executor, { update(m.withExecutor(it)) }, tags = NEW_AGENT_EXECUTOR_TAGS, textColor = AlertDialogDefaults.textContentColor)
     }
 }
-
-/**
- * The theme's outline is the panel border colour, which vanishes on the dialog surface: give modal fields a visible rest
- * border and an accent focus border. THEME-1: both come from the live colour scheme, so they follow the chosen accent and mode.
- */
-@Composable
-internal fun visibleBorderFieldColors() = OutlinedTextFieldDefaults.colors(
-    unfocusedBorderColor = MaterialTheme.colorScheme.onSurfaceVariant, focusedBorderColor = MaterialTheme.colorScheme.primary,
-)
