@@ -68,9 +68,15 @@ object StatusConnStatus : Block("connStatus", "$FOOTER.connStatus", Place(weight
     override fun Render(scope: BlockScope) {
         val c = LocalShell.current.state.connection
         val color = if (c.isLive) Palette.Ok else if (c.state == ConnState.RECONNECTING || c.state == ConnState.CONNECTING) Palette.Accent else Palette.Danger
+        // A compact window has no width for the sentence: it would be chopped mid-word ("● dae"), so show the dot (live) or the bare state.
+        val compact = LocalShell.current.state.panels.compactWindow
         Text(
-            if (c.isLive) "● daemon ${c.daemonProvider ?: "?"}  contract ${c.contract ?: "?"}" else "● ${c.state.name.lowercase()}: ${c.detail}",
-            color = color, fontSize = 11.sp, maxLines = 1, modifier = scope.modifier,
+            when {
+                compact -> if (c.isLive) "●" else "● ${c.state.name.lowercase()}"
+                c.isLive -> "● daemon ${c.daemonProvider ?: "?"}  contract ${c.contract ?: "?"}"
+                else -> "● ${c.state.name.lowercase()}: ${c.detail}"
+            },
+            color = color, fontSize = 11.sp, maxLines = 1, softWrap = false, modifier = scope.modifier,
         )
     }
 }
