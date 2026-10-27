@@ -44,6 +44,7 @@ import kotlin.time.Clock
 const val RUN_PANE_TAG = "run-pane"
 const val RUN_COMMAND_PICKER_TAG = "run-command-picker"
 const val RUN_START_TAG = "run-start"
+const val RUN_FORM_SECRETS_TAG = "run-form-secrets"
 const val RUN_STOP_TAG = "run-stop"
 const val RUN_OUTPUT_TAG = "run-output"
 const val RUN_ADD_TAG = "run-add"
@@ -75,6 +76,9 @@ object RunCommandForm {
 
     /** The working directory as sent: null (the repo root) when left blank. */
     fun cwdOf(text: String): String? = text.trim().takeIf { it.isNotEmpty() }
+
+    /** SECRETS-2: secret names, one per line or comma-separated; blanks and repeats dropped. */
+    fun secretsOf(text: String): List<String> = text.split('\n', ',').map { it.trim() }.filter { it.isNotEmpty() }.distinct()
 }
 
 /** The editor's fields. [editingId] is null for a new command; an edited command keeps its id. */
@@ -86,12 +90,14 @@ private data class CommandDraft(
     val argv: String = "",
     val cwd: String = "",
     val grace: String = RunCommandForm.DEFAULT_GRACE_MILLIS.toString(),
+    val secrets: String = "",
 ) {
     companion object {
         fun of(c: CommandSpecView) = CommandDraft(
             editingId = c.id, name = c.name, id = c.id, idTouched = true,
             argv = c.argv.joinToString("\n"), cwd = c.cwd.orEmpty(),
             grace = (c.graceMillis ?: RunCommandForm.DEFAULT_GRACE_MILLIS).toString(),
+            secrets = c.secrets.joinToString("\n"),
         )
     }
 }
@@ -275,6 +281,8 @@ fun RunPane(state: AppState, controller: Controller) {
         if (d != null) {
             CommandEditor(
                 draft = d,
+                // SECRETS-2: the field shows only against a daemon that injects secrets (1.135.0).
+                secretNames = if (controller.supportsKeyValueSecrets()) state.secrets?.entries?.map { it.name }.orEmpty() else null,
                 enabled = canEdit && savedAt == null,
                 error = runs.commandError ?: localError,
                 onChange = { draft = it },
@@ -289,6 +297,7 @@ fun RunPane(state: AppState, controller: Controller) {
                         scope.launch {
                             val r = controller.saveCommand(
                                 d.id.trim(), d.name.trim(), RunCommandForm.argvOf(d.argv), RunCommandForm.cwdOf(d.cwd), grace,
+                                RunCommandForm.secretsOf(d.secrets),
                             )
                             if (r is CommandResult.Refused) { localError = r.reason; savedAt = null }
                         }
@@ -329,6 +338,8 @@ fun RunPane(state: AppState, controller: Controller) {
 @Composable
 private fun CommandEditor(
     draft: CommandDraft,
+    /** SECRETS-2: the keystore's user secrets to name; null hides the field (an older daemon). */
+    secretNames: List<String>?,
     enabled: Boolean,
     error: String?,
     onChange: (CommandDraft) -> Unit,
@@ -387,6 +398,22 @@ private fun CommandEditor(
             supportingText = { Text("How long Stop waits before it kills the process tree.", fontSize = 11.sp) },
             modifier = Modifier.fillMaxWidth().testTag(RUN_FORM_GRACE_TAG),
         )
+        if (secretNames != null) {
+            OutlinedTextField(
+                value = draft.secrets,
+                onValueChange = { onChange(draft.copy(secrets = it)) },
+                label = { Text("Secrets (optional)") }, minLines = 1,
+                textStyle = TextStyle(fontFamily = Mono, fontSize = 12.sp),
+                supportingText = {
+                    Text(
+                        "One secret name per line; the run gets each of its fields as an environment variable, masked in its output. " +
+                            (if (secretNames.isEmpty()) "Add secrets in Configuration > Secrets." else "Yours: ${secretNames.joinToString(", ")}."),
+                        fontSize = 11.sp,
+                    )
+                },
+                modifier = Modifier.fillMaxWidth().testTag(RUN_FORM_SECRETS_TAG),
+            )
+        }
         error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.testTag(RUN_FORM_ERROR_TAG)) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
