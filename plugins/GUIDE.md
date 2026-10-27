@@ -55,6 +55,20 @@ Everything is declared in `module.json` and registered under the same id. Anythi
   by `order`. Below 100 it sits above the agents list (left) or the tab strip (right). At 100 or more it sits below
   them. `fill = true` makes the section share the panel's free height. The left panel's agents list is itself the
   core module `Infantry_Agents`.
+- **Shell nodes** (replace or wrap a piece of the window itself): `"shell": [{ "node": "infantry.shell.footer",
+  "name": "myBar", "mode": "wrap" }]` plus `registrar.shell("myBar", BlockOverride { scope, inner -> ... })`. The
+  window is a tree of blocks, each with a node id (the list is pinned in `CoreShellTreeTest`; the tree is in
+  `docs/BLOCKS-LAYOUT-DESIGN.md` section 2). `node` takes the id or its address `infantry.shell#<id>`.
+  - `replace`: your block draws in the node's place (`inner` is null). `wrap`: you draw around the core block, which
+    you get as `inner`; call `inner.Render(scope)` where it goes. Apply `scope.modifier` exactly once, on your
+    outermost node: it carries the placement the parent gave the node (a weight, a fill).
+  - Several modules on one node apply in load order: wraps nest with the last loaded outermost, the last replace wins.
+  - **Locked** nodes cannot be replaced or wrapped: the skeleton (`window, images, dock, frame, body, panes,
+    windowLayer`) and `connect, servers, switchError, serverUpdate, config`. An unknown id, an unknown mode or a locked
+    node is ignored, and the reason is one line in Settings > Plugins and the log. A community module needs the node
+    id in its `allowOverride` in `modules.json`.
+  - **Node ids are API.** They are never renamed; a module may rely on them. Ids not in the pinned list are not
+    stable.
 
 Both tab strips scroll sideways when the tabs do not fit. Arrows at each end, the mouse wheel and touch all scroll
 them, so a module's tab is never hidden.
@@ -81,7 +95,7 @@ Open Settings > Plugins > Modules and press Enable on your module, then restart.
 
 The folder decides the tier. **Core** is what ships with the app. **Community** is anything dropped into
 `community/`. A community module is off until it is enabled, must name its author and license, is labelled
-Community wherever it shows, and may not replace a core tab unless `allowOverride` permits it. A loaded jar still
+Community wherever it shows, and may not replace a core tab or a shell node unless `allowOverride` permits it. A loaded jar still
 runs inside the app with the app's full access to the machine. The tier is a trust label, not a sandbox: enable only
 modules whose authors you trust.
 
