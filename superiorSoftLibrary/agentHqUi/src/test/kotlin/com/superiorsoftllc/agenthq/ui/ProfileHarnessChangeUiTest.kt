@@ -55,6 +55,7 @@ class ProfileHarnessChangeUiTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val opencode = Opencode(listOf("opencode/space-bunny-free", "deepseek/deepseek-chat"))
         val daemon = AgentHqDaemon.build(
+            memory = FixedMemory,
             port = 0, host = "127.0.0.1", provider = opencode, runner = opencode.transport()!!,
             sessionStore = JsonSessionStore(File(dir, "sessions.json")),
             mailStore = JsonMailStore(File(dir, "mailbox.json")),

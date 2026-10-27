@@ -72,6 +72,7 @@ class DaemonIntegrationTest {
         val dir = Files.createTempDirectory("agenthq-ui-test").toFile()
         val provider = StubProvider(script, delayMs = delayMs)
         val daemon = AgentHqDaemon.build(
+            memory = FixedMemory,
             port = 0, host = host, provider = provider, runner = runner ?: provider.transport()!!,
             sessionStore = JsonSessionStore(File(dir, "sessions.json")),
             mailStore = JsonMailStore(File(dir, "mailbox.json")),

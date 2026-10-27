@@ -80,6 +80,7 @@ class LiveDemoFlowE2ETest {
         val daemon = try {
             System.setProperty("user.dir", dir.absolutePath)
             AgentHqDaemon.build(
+                memory = FixedMemory,
                 port = 0, host = "127.0.0.1",
                 provider = ModelPinned(model), runner = RunnerFactory.fromFlag(),
                 sessionStore = sessionStore,

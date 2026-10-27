@@ -85,6 +85,7 @@ class SwitchAgentUiTest {
         val stub = StubProvider(script, delayMs = stubDelayMs, modelIds = listOf("stub-one", "stub-two"))
         val secondRunner = ScriptedRunner(script, 0)
         val daemon = AgentHqDaemon.build(
+            memory = FixedMemory,
             port = 0, host = "127.0.0.1", provider = stub, runner = stub.transport()!!,
             sessionStore = JsonSessionStore(File(dir, "sessions.json")),
             mailStore = JsonMailStore(File(dir, "mailbox.json")),
