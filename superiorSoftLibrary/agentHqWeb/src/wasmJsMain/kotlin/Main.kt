@@ -38,7 +38,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.ComposeViewport
+import com.superiorsoftllc.agenthq.plugins.core.CoreModules
 import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.agenthq.ui.plugin.CompiledModules
 import com.superiorsoftllc.agenthq.ui.shell.AgentHqShell
 import com.superiorsoftllc.agenthq.ui.shell.BrowserStorage
 import com.superiorsoftllc.agenthq.ui.shell.WasmPlatformHost
@@ -55,6 +57,8 @@ import androidx.compose.ui.text.platform.Font
 
 @OptIn(ExperimentalComposeUiApi::class)
 fun main() {
+    // S4: the app UI is compiled in; the shell takes its modules from here (wasm has no service loader).
+    CompiledModules.install(CoreModules.all)
     ComposeViewport { WebRoot() }
 }
 

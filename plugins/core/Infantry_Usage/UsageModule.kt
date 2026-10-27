@@ -25,6 +25,6 @@ val InfantryUsage = AgentHqModule(
             ),
             testTag = "right-tab-USAGE",
             shortcut = 7,
-        ) { UsagePane(it.state, it.state.selected, it.controller) },
+        ) { UsagePane(it.state, it.state.selected, it.appController) },
     ),
 )

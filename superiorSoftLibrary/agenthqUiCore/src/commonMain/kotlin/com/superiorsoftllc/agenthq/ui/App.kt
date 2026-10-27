@@ -193,7 +193,7 @@ import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import com.superiorsoftllc.agenthq.ui.plugin.PluginDaemon
 import com.superiorsoftllc.agenthq.plugin.api.Events
 import com.superiorsoftllc.agenthq.plugin.api.PluginEvent
-import com.superiorsoftllc.agenthq.plugins.core.CoreModules
+import com.superiorsoftllc.agenthq.ui.plugin.CompiledModules
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.LocalHostSurface
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -202,10 +202,10 @@ import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
 /**
- * PLUGINS-1: the tabs come from modules through a [TabFactory]; the window never names one. The default is the core
+ * PLUGINS-1: the tabs come from modules through a [TabFactory]; the window never names one. The default is the compiled-in
  * modules (plugins/core); a host passes its own factory to [App] once it loads more.
  */
-val LocalTabFactory = staticCompositionLocalOf { CoreModules.factory }
+val LocalTabFactory = staticCompositionLocalOf { CompiledModules.factory }
 
 /** The id of the Attention tab, opened by the title bar's attention chip (a no-op when no module provides it). */
 const val ATTENTION_TAB_ID = "infantry.attention"
@@ -234,7 +234,7 @@ fun App(
     /** UPDATE-1: the installed app's "Check for updates" for Settings > Updates; null = no section. */
     updates: UpdatesEntry? = null,
     /** PLUGINS-1: where the tabs come from; the core modules unless the host loaded more. */
-    tabs: TabFactory = CoreModules.factory,
+    tabs: TabFactory = CompiledModules.factory,
 ) {
     val state by controller.state.collectAsState()
     val actionScope = rememberCoroutineScope()
@@ -795,113 +795,6 @@ private fun digitOf(key: Key): Int? = when (key) {
 }
 
 
-@Composable
-internal fun ReviewPane(state: AppState, controller: Controller) {
-    val queue = state.reviewQueue
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (queue.isEmpty()) {
-            Text("Nothing is waiting for review.", color = Palette.Text)
-            Text(
-                "Converged pods queue their nodes here. The client only sees pods it submitted or queried by id " +
-                    "(the daemon has no pod-list frame).",
-                color = Palette.Muted, fontSize = 11.sp,
-            )
-            return
-        }
-        queue.forEach { e ->
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp)) {
-                Text(e.nodeName, color = Palette.Text, fontWeight = FontWeight.SemiBold)
-                Text(e.podGoal, color = Palette.Muted, fontSize = 11.sp, maxLines = 2)
-                e.branch?.let { Text(it, color = Palette.Accent, fontFamily = Mono, fontSize = 11.sp) }
-                e.workingDir?.let { Text(it, color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp) }
-                Row {
-                    e.sessionId?.takeIf { it in state.agents }?.let { sid ->
-                        TextButton(onClick = { controller.select(sid) }) { Text("Open agent") }
-                    }
-                }
-            }
-        }
-        Text("Approve/reject is not on the daemon protocol yet, so a verdict cannot be recorded from here.", color = Palette.Muted, fontSize = 11.sp)
-    }
-}
-
-@Composable
-internal fun PodsPane(state: AppState, controller: Controller) {
-    val actionScope = rememberCoroutineScope()
-    var goal by remember { mutableStateOf("") }
-    var nodesText by remember { mutableStateOf("") }
-    var podId by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        if (state.pods.isEmpty()) Text("No pods yet. Submit one below, or load one by id.", color = Palette.Muted)
-        state.pods.values.sortedByDescending { it.pod.createdAt }.forEach { p ->
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(p.pod.goal, color = Palette.Text, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 2)
-                    Chip(p.pod.state, podColor(p.pod.state))
-                    if (p.pod.endedAt == null) {
-                        TextButton(onClick = { actionScope.launch { controller.cancelPod(p.pod.id) } }) { Text("Cancel", color = Palette.Danger) }
-                    }
-                }
-                Text(p.pod.id, color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp)
-                Spacer(Modifier.height(6.dp))
-                p.nodes.sortedBy { it.specIndex }.forEach { n ->
-                    val blocked = n.state == "PENDING" && p.pod.endedAt == null
-                    val runs = p.runs[n.id].orEmpty()
-                    Row(Modifier.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(8.dp).clip(CircleShape).background(nodeColor(n.state)))
-                        Spacer(Modifier.width(8.dp))
-                        Text(n.name, color = Palette.Text, fontSize = 12.sp, modifier = Modifier.width(110.dp), maxLines = 1)
-                        Chip(if (blocked) "blocked / queued" else n.state.lowercase(), nodeColor(n.state))
-                        Spacer(Modifier.width(6.dp))
-                        Text("try ${n.attempts}/${n.maxAttempts}", color = Palette.Muted, fontSize = 10.sp)
-                        runs.lastOrNull()?.sessionId?.takeIf { it in state.agents }?.let { sid ->
-                            TextButton(onClick = { controller.select(sid) }) { Text("agent", fontSize = 11.sp) }
-                        }
-                    }
-                    n.detail?.takeIf { it.isNotBlank() }?.let { Text(it, color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(start = 16.dp)) }
-                }
-                Text("Which node blocks which is not on the wire (no dependency edges), so a pending node is shown as queued.", color = Palette.Muted, fontSize = 10.sp)
-            }
-        }
-        HorizontalDivider(color = Palette.Border)
-        Text("Submit a pod", color = Palette.Muted, fontSize = 10.sp)
-        OutlinedTextField(goal, { goal = it }, label = { Text("Goal") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(
-            nodesText, { nodesText = it }, label = { Text("Nodes: name [after a,b] [x3]: prompt   (one per line)") },
-            minLines = 3, maxLines = 8, modifier = Modifier.fillMaxWidth(), textStyle = TextStyle(fontFamily = Mono, fontSize = 12.sp),
-        )
-        error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
-        Button(
-            enabled = state.connection.isLive && goal.isNotBlank(),
-            onClick = {
-                parseNodes(nodesText).fold(
-                    { nodes -> actionScope.launch { controller.submitPod(goal.trim(), nodes) }; error = null },
-                    { error = it.message },
-                )
-            },
-        ) { Text("Submit pod") }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(podId, { podId = it }, label = { Text("Load pod by id") }, singleLine = true, modifier = Modifier.weight(1f))
-            OutlinedButton(onClick = { actionScope.launch { controller.queryPod(podId) } }, enabled = state.connection.isLive && podId.isNotBlank()) { Text("Load") }
-        }
-    }
-}
-
-private fun podColor(s: String) = when (s) {
-    "RUNNING", "CANCELLING" -> Palette.Info
-    "CONVERGED" -> Palette.Ok
-    "FAILED" -> Palette.Danger
-    else -> Palette.Muted
-}
-
-private fun nodeColor(s: String) = when (s) {
-    "RUNNING" -> Palette.Info
-    "SUCCEEDED" -> Palette.Ok
-    "FAILED" -> Palette.Danger
-    "PENDING" -> Palette.Accent
-    else -> Palette.Muted
-}
 
 @Composable
 internal fun ConnectDialog(

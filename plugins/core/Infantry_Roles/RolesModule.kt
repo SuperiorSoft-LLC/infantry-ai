@@ -27,6 +27,6 @@ val InfantryRoles = AgentHqModule(
             testTag = "center-tab-ROLES",
             shortcut = 5,
             routes = listOf("saveRole", "saveRoleBinding", "saveProfile", "deleteProfile", "spawnAs", "select"),
-        ) { RolesPane(it.state, it.controller, onSessionStarted = it.showChat, onOpenAgent = it::openAgent) },
+        ) { RolesPane(it.state, it.appController, onSessionStarted = it.showChat, onOpenAgent = it::openAgent) },
     ),
 )

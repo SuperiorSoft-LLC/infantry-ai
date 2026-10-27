@@ -118,6 +118,18 @@ fun main(args: Array<String>) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val controller = Controller(scope)
     if (runShots) controller.client.ownerFor("ws://127.0.0.1:$port/ws", runOwner)
+    // S4 (drop-in path): -PtabShotsExtra=empty shoots the shell with no module at all (TabFactory(emptyList())): every app
+    // slot is an empty placeholder, the locked dialogs and the trust half of Configuration are the core's. Its reference is
+    // tab-shots-baseline/empty-shell/ (-PtabShotsBaseline=superiorSoftLibrary/agentHqUi/tab-shots-baseline/empty-shell).
+    if (System.getProperty("agenthq.tabshots.extra") == "empty") {
+        runDesktopComposeUiTest(1400, 860) {
+            setContent { ChromeApp(controller, TabFactory(emptyList()), port) }
+            waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
+            snap(out, "shell-empty-1400")
+        }
+        daemon.close()
+        exitProcess(0)
+    }
     runDesktopComposeUiTest(1400, 860) {
         setContent { App(controller, "ws://127.0.0.1:$port/ws", null, tabs = tabs) }
         waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }

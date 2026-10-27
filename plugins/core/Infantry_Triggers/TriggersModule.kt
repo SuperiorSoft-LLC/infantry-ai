@@ -25,6 +25,6 @@ val InfantryTriggers = AgentHqModule(
             testTag = "center-tab-TRIGGERS",
             shortcut = 0,
             routes = listOf("saveTrigger", "deleteTrigger", "armTrigger", "disableTrigger", "fireTrigger", "loadTriggerEvents"),
-        ) { TriggersPane(it.state, it.controller) },
+        ) { TriggersPane(it.state, it.appController) },
     ),
 )

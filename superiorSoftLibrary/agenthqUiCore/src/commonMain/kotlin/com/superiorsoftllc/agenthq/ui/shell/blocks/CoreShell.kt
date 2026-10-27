@@ -10,6 +10,7 @@ import com.superiorsoftllc.agenthq.ui.block.layout.PlaceholderBlock
 import com.superiorsoftllc.agenthq.ui.block.layout.Place
 import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlain
 import com.superiorsoftllc.agenthq.ui.block.layout.RowBlock
+import com.superiorsoftllc.agenthq.ui.block.layout.Show
 import com.superiorsoftllc.agenthq.ui.block.layout.Size
 import com.superiorsoftllc.agenthq.ui.block.layout.asPlaceholder
 import com.superiorsoftllc.agenthq.ui.block.layout.StackBlock
@@ -33,16 +34,17 @@ object CoreShell {
     ) + ShellConfigTrust.map { it.id }
 
     /**
-     * BLOCKS-LAYOUT L14: core tabs whose content is a tree of its own, drawn by the tab, not in [root] (the Git tab's
-     * [ShellGit]; L15 the Run tab's [ShellRun]; L17 the Notes tab's [ShellNotes]; L18 the Changes tab's [ShellChanges]). A shell
-     * override addresses their nodes by id the same way; [locked] applies to them too.
+     * S4 (drop-in path): the shell's empty slots, the nodes the app UI draws. Each is an empty [PlaceholderBlock] that
+     * draws nothing until a core module fills it (module.json `fills`, [TabFactory.baseRoot]); the fill is a tree of the
+     * module's with the slot's id, and goes in before overrides and injections, so their node ids stay addressable.
+     * Since S4 the tab trees (Git, Run, Notes, Changes) are module contributions too ([TabFactory.tabTreeRoots]).
      */
-    val tabs: List<Block> = listOf(ShellGit, ShellRun, ShellNotes, ShellChanges)
-
-    /** P1 (f60f4d97): the tab (its `TabProvider` id) that draws each tree of [tabs], for Configuration > Plugins > Registered. */
-    val tabTreeTabs: Map<String, String> = mapOf(
-        "infantry.shell.git" to "infantry.git", "infantry.shell.run" to "infantry.run",
-        "infantry.shell.notes" to "infantry.notes", "infantry.shell.changes" to "infantry.changes",
+    val slots: List<String> = listOf(
+        "infantry.shell.header", "infantry.shell.left", "infantry.shell.center", "infantry.shell.right",
+        "infantry.shell.drawer", "infantry.shell.footer",
+        "infantry.shell.assistant", "infantry.shell.toast", "infantry.shell.board", "infantry.shell.diff",
+        "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions",
+        "infantry.shell.roles",
     )
 
     /**
@@ -65,27 +67,27 @@ object CoreShell {
                             ColumnBlock(
                                 "infantry.shell.frame", surface = true,
                                 children = listOf(
-                                    ShellHeader,
+                                    slot("infantry.shell.header"),
                                     StackBlock(
                                         "infantry.shell.body", measure = true, place = Place(weight = 1f, size = Size.FillWidth),
                                         children = listOf(
                                             RowBlock(
                                                 "infantry.shell.panes", place = Place(size = Size.FillMax),
                                                 children = listOf(
-                                                    ShellLeftPanel,
-                                                    ShellCenter,
-                                                    ShellRightPanel,
+                                                    slot("infantry.shell.left", Place(show = Show.Wide)),
+                                                    slot("infantry.shell.center", Place(weight = 1f)),
+                                                    slot("infantry.shell.right", Place(show = Show.Wide)),
                                                 ),
                                             ).asPlaceholder(),
-                                            ShellCompactDrawer,
+                                            slot("infantry.shell.drawer", Place(show = Show.Compact)),
                                         ),
                                     ).asPlaceholder(),
-                                    CoreStatusBar,
+                                    slot("infantry.shell.footer"),
                                 ),
                             ).asPlaceholder(),
                             // The overlays, over the whole dock; they align themselves.
-                            ShellAssistant, ShellToast, ShellBoard, ShellDiff,
-                            ShellSound, ShellVoice, ShellQuestionPill,
+                            slot("infantry.shell.assistant"), slot("infantry.shell.toast"), slot("infantry.shell.board"), slot("infantry.shell.diff"),
+                            slot("infantry.shell.sound"), slot("infantry.shell.voice"), slot("infantry.shell.questions"),
                         ),
                     ),
                 ),
@@ -94,13 +96,16 @@ object CoreShell {
             GroupBlock(
                 "infantry.shell.windowLayer",
                 listOf(
-                    ShellConfig, ShellServerUpdate, ShellRoles, ShellServers,
+                    ShellConfig, ShellServerUpdate, slot("infantry.shell.roles"), ShellServers,
                     ShellSwitchError, ShellConnect,
                 ),
             ).asPlaceholder(),
         ),
     )
 }
+
+/** S4: an empty slot [id] of [CoreShell.slots] (the place is the one its usual fill has; an empty slot draws nothing). */
+private fun slot(id: String, place: Place = Place()) = PlaceholderBlock(id, null, place)
 
 /** `imageViewerHost` (core): IMG-VIEW-1's viewer host; its children are its content. */
 class ImageViewerHostBlock(id: String, children: List<Block> = emptyList(), place: Place = Place()) :

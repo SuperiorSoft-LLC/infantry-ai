@@ -53,7 +53,7 @@ interface PlatformHost {
      * PLUGINS-1: the tabs this host draws. Web and Android have the compiled-in core modules only (they cannot load a
      * module at run time); the desktop host scans its plugins root.
      */
-    val tabFactory: com.superiorsoftllc.agenthq.ui.plugin.TabFactory get() = com.superiorsoftllc.agenthq.plugins.core.CoreModules.factory
+    val tabFactory: com.superiorsoftllc.agenthq.ui.plugin.TabFactory get() = com.superiorsoftllc.agenthq.ui.plugin.CompiledModules.factory
 
     /** VOICE-1: whether the app window has focus right now; true when the host cannot tell. */
     fun windowFocused(): Boolean = true

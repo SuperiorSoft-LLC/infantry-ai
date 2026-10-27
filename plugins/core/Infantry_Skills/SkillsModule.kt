@@ -24,6 +24,6 @@ val InfantrySkills = AgentHqModule(
             ),
             testTag = "right-tab-SKILLS",
             routes = listOf("loadSkills", "saveSkill", "deleteSkill"),
-        ) { SkillsPane(it.state, it.controller, onInsert = it.insertIntoChat) },
+        ) { SkillsPane(it.state, it.appController, onInsert = it.insertIntoChat) },
     ),
 )

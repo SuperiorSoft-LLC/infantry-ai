@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.core.CoreModules
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.PlaceholderBlock
 import com.superiorsoftllc.agenthq.ui.shell.blocks.CoreShell
@@ -105,7 +106,8 @@ class CoreShellTreeTest {
             "    infantry.shell.switchError",
             "    infantry.shell.connect",
         )
-        val tree = CoreShell.root.walk()
+        // S4: the window tree as drawn, the app UI's fills in the shell's empty slots.
+        val tree = CoreModules.factory.baseRoot.walk()
         assertEquals(expected.joinToString("\n"), tree.joinToString("\n"))
         assertEquals(tree.size, tree.map { it.trim() }.toSet().size, "node ids are unique")
     }
@@ -115,7 +117,19 @@ class CoreShellTreeTest {
         fun Block.all(): List<Block> = listOf(this) + children.flatMap { it.all() }
         val placeholders = listOf("infantry.shell.frame", "infantry.shell.body", "infantry.shell.panes", "infantry.shell.windowLayer")
         assertEquals(placeholders, CoreShell.placeholders)
-        assertEquals(placeholders, CoreShell.root.all().filterIsInstance<PlaceholderBlock>().map { it.id })
+        assertEquals(placeholders, CoreShell.root.all().filterIsInstance<PlaceholderBlock>().filter { it.default != null }.map { it.id })
+        // S4: the empty slots, in tree order; each empty in the shell, filled by Infantry_AppUi, nothing left empty.
+        val slots = listOf(
+            "infantry.shell.header", "infantry.shell.left", "infantry.shell.center", "infantry.shell.right",
+            "infantry.shell.drawer", "infantry.shell.footer",
+            "infantry.shell.assistant", "infantry.shell.toast", "infantry.shell.board", "infantry.shell.diff",
+            "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions",
+            "infantry.shell.roles",
+        )
+        assertEquals(slots, CoreShell.slots)
+        assertEquals(slots, CoreShell.root.all().filterIsInstance<PlaceholderBlock>().filter { it.default == null }.map { it.id })
+        assertEquals(emptyList(), CoreModules.factory.baseRoot.all().filter { it is PlaceholderBlock && it.default == null }.map { it.id })
+        assertEquals(emptyList(), CoreModules.factory.problems)
         assertEquals(
             setOf(
                 "infantry.shell.window", "infantry.shell.images", "infantry.shell.dock",
@@ -176,17 +190,19 @@ class CoreShellTreeTest {
             "  $changes.history",
             "    $changes.commit",
         )
-        assertEquals(listOf(git, run, notes, changes), CoreShell.tabs.map { it.id })
-        assertEquals(expectedGit.joinToString("\n"), CoreShell.tabs[0].walk().joinToString("\n"))
-        assertEquals(expectedRun.joinToString("\n"), CoreShell.tabs[1].walk().joinToString("\n"))
-        assertEquals(expectedNotes.joinToString("\n"), CoreShell.tabs[2].walk().joinToString("\n"))
-        assertEquals(expectedChanges.joinToString("\n"), CoreShell.tabs[3].walk().joinToString("\n"))
-        val all = (listOf(CoreShell.root) + CoreShell.tabs).flatMap { it.walk() }.map { it.trim() }
+        // S4: the tab trees are the app UI's contributions now (TabFactory.tabTreeRoots), no longer CoreShell.tabs.
+        val tabs = CoreModules.factory.tabTreeRoots
+        assertEquals(listOf(git, run, notes, changes), tabs.map { it.id })
+        assertEquals(expectedGit.joinToString("\n"), tabs[0].walk().joinToString("\n"))
+        assertEquals(expectedRun.joinToString("\n"), tabs[1].walk().joinToString("\n"))
+        assertEquals(expectedNotes.joinToString("\n"), tabs[2].walk().joinToString("\n"))
+        assertEquals(expectedChanges.joinToString("\n"), tabs[3].walk().joinToString("\n"))
+        val all = (listOf(CoreModules.factory.baseRoot) + tabs).flatMap { it.walk() }.map { it.trim() }
         assertEquals(all.size, all.toSet().size, "node ids are unique across the trees")
         // P1 (f60f4d97): the tab that draws each tree, as Configuration > Plugins > Registered names it.
         assertEquals(
             mapOf(git to "infantry.git", run to "infantry.run", notes to "infantry.notes", changes to "infantry.changes"),
-            CoreShell.tabTreeTabs,
+            CoreModules.factory.tabTreeTabs,
         )
     }
 }

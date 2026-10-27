@@ -77,7 +77,7 @@ class MemoryPaneOverridesUiTest {
         val f = TabFactory(CoreModules.all + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Notes", decl.nodeId, decl.name, decl.mode)))
         assertEquals(emptyList(), f.problems)
         // The override goes into the Notes tab's tree, not the window's.
-        assertSame(CoreShell.root, f.shellRoot)
+        assertSame(f.baseRoot, f.shellRoot)
         return f
     }
 

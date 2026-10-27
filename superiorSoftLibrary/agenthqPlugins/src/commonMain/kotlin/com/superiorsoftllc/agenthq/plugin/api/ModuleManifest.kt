@@ -53,6 +53,11 @@ data class ModuleManifest(
     val shell: List<ShellOverrideDeclaration> = emptyList(),
     /** BLOCKS-INJECTORS J2: blocks the module adds among a node's children (`infantry.shell.*`), by node id. */
     val inject: List<InjectDeclaration> = emptyList(),
+    /**
+     * S4 (drop-in path): the shell's empty slots (`infantry.shell.*` node ids) this module fills with a tree of its own.
+     * Core tier only; a fill goes in before the overrides and injections, so their node ids are addressable as if core drew them.
+     */
+    val fills: List<String> = emptyList(),
 )
 
 /** PLUGINS-2: module [id] (`Vendor_Module`) must be installed, enabled and at a version in [version] (e.g. `>=1.2 <2`). */

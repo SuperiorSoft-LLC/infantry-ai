@@ -27,6 +27,6 @@ val InfantryReview = AgentHqModule(
             testTag = "right-tab-REVIEW",
             shortcut = 4,
             routes = listOf("select"),
-        ) { ReviewPane(it.state, it.controller) },
+        ) { ReviewPane(it.state, it.appController) },
     ),
 )

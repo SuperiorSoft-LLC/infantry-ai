@@ -21,7 +21,7 @@ enum class HostKind {
 enum class ChildSource(val label: String) {
     /** A module's tab. */
     TAB("Tab"),
-    /** A core module's tab that draws a core tab tree ([CoreShell.tabs]). */
+    /** A core module's tab that draws a core tab tree ([TabFactory.tabTreeRoots]; the label is the pre-S4 name). */
     CORE_TAB_TREE("CoreShell.tabs"),
     /** A tab replaced through a preference, or a node a module's shell override replaces. */
     REPLACE("Replace"),
@@ -76,7 +76,7 @@ object NodeRegistry {
         val strips = strips.map { (node, container) -> tabHost(factory, node, stripTitles[container] ?: container, factory.tabs(container), container) }
         val parents = strips.flatMap { it.children }.filter { factory.children(it.id).isNotEmpty() }
             .map { tabHost(factory, it.id, it.name, factory.children(it.id), container = null) }
-        val trees = listOf(factory.shellRoot) + CoreShell.tabs.map { factory.tabTree(it.id) ?: it }
+        val trees = listOf(factory.shellRoot) + factory.tabTreeRoots.map { factory.tabTree(it.id) ?: it }
         return strips + parents + trees.flatMap { treeHosts(factory, it) }
     }
 
@@ -84,7 +84,7 @@ object NodeRegistry {
     fun host(factory: TabFactory, id: String): HostNode? = of(factory).firstOrNull { it.id == id }
 
     private fun tabHost(factory: TabFactory, node: String, title: String, tabs: List<TabProvider>, container: String?): HostNode {
-        val trees = CoreShell.tabTreeTabs.entries.associate { (tree, tab) -> tab to tree }
+        val trees = factory.tabTreeTabs.entries.associate { (tree, tab) -> tab to tree }
         val drawn = tabs.map { t ->
             val replaced = factory.replacedTabs[t.id]
             // A module's override of the tab's core tree draws the tab now, over the tab's own module.

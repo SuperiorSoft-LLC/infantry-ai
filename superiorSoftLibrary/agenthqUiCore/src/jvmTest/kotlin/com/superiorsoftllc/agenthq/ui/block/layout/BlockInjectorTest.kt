@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.ui.block.layout
 
+import com.superiorsoftllc.agenthq.plugins.core.CoreModules
 import androidx.compose.runtime.Composable
 import com.superiorsoftllc.agenthq.ui.shell.blocks.CoreShell
 import kotlin.test.Test
@@ -127,10 +128,10 @@ class BlockInjectorTest {
     @Test fun `on the core tree the footer takes an injection last and the board header leaf refuses one`() {
         val footer = "infantry.shell.footer"
         val r = BlockResolver.resolve(
-            CoreShell.root, emptyList(), CoreShell.locked,
+            CoreModules.factory.baseRoot, emptyList(), CoreShell.locked,
             injections = listOf(NodeInjection("m", "chip", footer, injection = nothing), NodeInjection("m", "x", "infantry.shell.board.header", injection = nothing)),
         )
-        assertEquals(CoreShell.root.find(footer)!!.children.map { it.id } + "m.chip", r.root.find(footer)!!.children.map { it.id })
+        assertEquals(CoreModules.factory.baseRoot.find(footer)!!.children.map { it.id } + "m.chip", r.root.find(footer)!!.children.map { it.id })
         assertNull(r.root.find("m.x"))
         assertEquals(1, r.problems.size, r.problems.toString())
         assertTrue(r.problems.single().startsWith("m: injection x into infantry.shell.board.header (last) refused: infantry.shell.board.header takes no children"))

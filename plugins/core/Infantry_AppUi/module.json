@@ -1,0 +1,24 @@
+{
+  "name": "Infantry_AppUi",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "author": "Infantry AI",
+  "description": "The app's UI in the shell's empty slots: title bar, side panels, chat, status bar, overlays and the roles window.",
+  "sequence": [],
+  "fills": [
+    "infantry.shell.header",
+    "infantry.shell.left",
+    "infantry.shell.center",
+    "infantry.shell.right",
+    "infantry.shell.drawer",
+    "infantry.shell.footer",
+    "infantry.shell.assistant",
+    "infantry.shell.toast",
+    "infantry.shell.board",
+    "infantry.shell.diff",
+    "infantry.shell.sound",
+    "infantry.shell.voice",
+    "infantry.shell.questions",
+    "infantry.shell.roles"
+  ]
+}

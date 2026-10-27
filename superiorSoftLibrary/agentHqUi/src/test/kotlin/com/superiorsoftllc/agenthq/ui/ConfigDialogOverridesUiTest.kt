@@ -151,7 +151,7 @@ class ConfigDialogOverridesUiTest {
             for (mode in listOf(OverrideModes.REPLACE, OverrideModes.WRAP)) {
                 val f = factory(node, mode, BlockOverride { scope, _ -> Text("acme", scope.modifier) })
                 assertEquals(listOf("Acme_Config: shell override ($mode) of $node refused: $node is locked"), f.problems)
-                assertSame(CoreShell.root, f.shellRoot)
+                assertSame(f.baseRoot, f.shellRoot)
             }
         }
         val dialog = factory("infantry.shell.config", OverrideModes.REPLACE, BlockOverride { scope, _ -> Text("acme", scope.modifier) })

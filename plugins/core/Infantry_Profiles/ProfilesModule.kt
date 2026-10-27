@@ -29,6 +29,6 @@ val InfantryProfiles = AgentHqModule(
             testTag = "center-tab-PROFILES",
             shortcut = 9,
             routes = listOf("saveProfile", "deleteProfile", "spawnAs"),
-        ) { ProfilesPane(it.state, it.controller, onSessionStarted = it.showChat) },
+        ) { ProfilesPane(it.state, it.appController, onSessionStarted = it.showChat) },
     ),
 )
