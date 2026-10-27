@@ -13,7 +13,6 @@ import com.superiorsoftllc.agenthq.ui.GitPaneFrame
 import com.superiorsoftllc.agenthq.ui.GitPaneHost
 import com.superiorsoftllc.agenthq.ui.GitPipelineSection
 import com.superiorsoftllc.agenthq.ui.GitTreeSection
-import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
@@ -104,5 +103,5 @@ val ShellGit = GitPaneBlock(listOf(GitBase, GitDirectory, GitTree, GitDiff, GitB
 /** The Git tab's content: [ShellGit] as the window resolved it (a module's override in), filling the tab. */
 @Composable
 fun GitTab() {
-    (LocalShell.current.tabs.tabTree(GIT) ?: ShellGit).Render(BlockScope(Modifier, null))
+    (LocalShellContext.current?.layout?.tabTree(GIT) ?: ShellGit).Render(BlockScope(Modifier, null))
 }

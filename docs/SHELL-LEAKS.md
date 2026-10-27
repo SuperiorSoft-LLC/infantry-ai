@@ -114,3 +114,23 @@ read the context only. Only that one line names `Controller` or `AppState`.
 
 A shell built without these domains (a third-party `ShellContext`) compiles unchanged: `NoNotes` and `NoChanges` refuse
 every request with `SHELL_DOMAIN_MISSING`, and `NoLayout` makes each tab draw its default tree.
+
+## Git (Infantry_Git)
+
+Moved into plugins/core/Infantry_Git (`git mv`, packages unchanged): ProjectGitPane.kt, ProjectPipelineSection.kt,
+shell/blocks/ShellGit.kt. Nothing of the group stays in core. Pixel proof: `-PtabShotsExtra=git` against the
+pre-move render, 4 of 4 shots at 0 px.
+
+| File | Symbol | Decision |
+|---|---|---|
+| ShellGit.kt | `LocalShell.current.tabs.tabTree` (the resolved Git tree) | (b): `LocalShellContext.current?.layout?.tabTree` (prep) |
+| ShellGit.kt | `LocalShellContext`, `ShellContext.link / session / git` | (a) |
+| ShellGit.kt | `Block`, `BlockScope`, `Place`, `RenderPlaced` | kit (`RenderPlaced` made public in prep) |
+| ProjectGitPane.kt | `GitContext`, `LinkContext`, `SessionContext` (`GitPaneFrame`, `GitPaneHost`, every section) | (a) |
+| ProjectGitPane.kt | `ProjectGitPane(state, controller)`: `AppState`, `Controller`, `CoreLink`, `CoreSession`, `CoreGit` | (a) through the public adapters: the outside-a-shell entry (ProjectGitPaneUiTest, ProjectGitRealDaemonUiTest, ProjectBaseBranchRealDaemonUiTest) |
+| ProjectGitPane.kt | `ChangeGroup`, `ChangedFileRow`, `ChangedPathText`, `GIT_LIST_TOGGLE_TAG` | bridge (prep) |
+| ProjectGitPane.kt | `LocalDirectoryPicker` | kit: the platform's folder picker, which the host provides |
+| ProjectGitPane.kt | `SearchableSelect`, `OutlinedButton`, `clickable`, `Palette`, `Mono` | kit |
+| ProjectGitPane.kt | `BASE_BRANCH_DEFAULT_LABEL`, `baseBranchChoices`, `isCurrentBase`, `projectChangesView`, `projectHistoryView`, `projectPatchView`, `ChangesView`, `HistoryView`, `PatchView`, `headline`, `whenText`, `badge`, `display`, `label`, `summary`, `ProjectView`, `Notice`, `contractAtLeast`, `ChangeKind`, `ChangedFile`, `CommandResult`, `PROJECT_GIT_UNSUPPORTED`, `PROJECT_GIT_BRANCHES_UNSUPPORTED`, `PROJECT_GIT_CHECKOUT_UNSUPPORTED`, `PROJECT_BASE_UNSUPPORTED` | kit (model views, wire types, refusal reasons) |
+| ProjectPipelineSection.kt | `GitContext`, `LinkContext` | (a) |
+| ProjectPipelineSection.kt | `AhqAlertDialog`, `TextButton`, `OutlinedButton`, `Palette`, `Mono`, `PipelineSectionView`, `pipelineSectionView`, `shortCommit`, `silentMs`, `PipelineCheckView`, `PipelineEntryView`, `parseStageNames`, `PIPELINE_UNSUPPORTED`, `CommandResult` | kit |
