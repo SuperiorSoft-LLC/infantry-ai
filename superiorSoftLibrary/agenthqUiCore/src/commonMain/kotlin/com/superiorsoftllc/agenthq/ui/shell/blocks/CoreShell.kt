@@ -44,7 +44,7 @@ object CoreShell {
                                                 children = listOf(
                                                     ShellLeftPanel,
                                                     ShellCenter,
-                                                    Legacy(ShellRightPanel),
+                                                    ShellRightPanel,
                                                 ),
                                             ),
                                             ShellCompactDrawer,
