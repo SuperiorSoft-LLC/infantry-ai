@@ -31,10 +31,10 @@ object CoreShell {
 
     /**
      * BLOCKS-LAYOUT L14: core tabs whose content is a tree of its own, drawn by the tab, not in [root] (the Git tab's
-     * [ShellGit]; L15 the Run tab's [ShellRun]). A shell override addresses their nodes by id the same way; [locked]
-     * applies to them too.
+     * [ShellGit]; L15 the Run tab's [ShellRun]; L17 the Notes tab's [ShellNotes]). A shell override addresses their
+     * nodes by id the same way; [locked] applies to them too.
      */
-    val tabs: List<Block> = listOf(ShellGit, ShellRun)
+    val tabs: List<Block> = listOf(ShellGit, ShellRun, ShellNotes)
 
     val root: Block = GroupBlock(
         "infantry.shell.window",

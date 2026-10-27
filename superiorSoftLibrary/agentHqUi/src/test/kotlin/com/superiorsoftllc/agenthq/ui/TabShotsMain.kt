@@ -197,6 +197,46 @@ fun main(args: Array<String>) {
             daemon.close()
             exitProcess(0)
         }
+        // BLOCKS-LAYOUT L17: -PtabShotsExtra=memory renders only the Notes tab over a project with two notes (the default
+        // shot has no project): the list, a search's hits, a note open in the modal, the empty add modal, and the role and
+        // session scopes. The default run is unchanged.
+        if (System.getProperty("agenthq.tabshots.extra") == "memory") {
+            kotlinx.coroutines.runBlocking { controller.saveProject("Notes shot project") }
+            waitUntil(timeoutMillis = 20_000) { controller.state.value.projects.any { it.name == "Notes shot project" } }
+            val project = controller.state.value.projects.single { it.name == "Notes shot project" }
+            kotlinx.coroutines.runBlocking {
+                controller.selectProject(project.id)
+                controller.saveMemory(project.id, "cart-notes", "cart rules", "The cart keeps its items for a day.")
+                controller.saveMemory(project.id, "deploy", "", "Deploy from main only.")
+            }
+            waitUntil(timeoutMillis = 20_000) { controller.state.value.activeProject?.id == project.id }
+            onAllNodesWithTag("center-tab-MEMORY")[0].performClick()
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithText("deploy").fetchSemanticsNodes().isNotEmpty() }
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithText("cart-notes").fetchSemanticsNodes().isNotEmpty() }
+            snap(out, "memory-list")
+            // Searched through the controller, not typed: a focused field's caret blinks into the shot.
+            kotlinx.coroutines.runBlocking { controller.searchMemory(project.id, "cart") }
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithText("cart-notes").fetchSemanticsNodes().size > 1 }
+            snap(out, "memory-search")
+            // The last "cart-notes" is the note row (the hits are drawn above the list).
+            onAllNodesWithText("cart-notes").fetchSemanticsNodes().size.let { n -> onAllNodesWithText("cart-notes")[n - 1].performClick() }
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithTag(MEMORY_NOTE_DIALOG_TAG).fetchSemanticsNodes().isNotEmpty() }
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithText("The cart keeps its items for a day.").fetchSemanticsNodes().isNotEmpty() }
+            snap(out, "memory-edit")
+            onNodeWithTag(MEMORY_NOTE_CANCEL_TAG).performClick()
+            onNodeWithTag(MEMORY_ADD_NOTE_BUTTON_TAG).performClick()
+            waitUntil(timeoutMillis = 20_000) { onAllNodesWithTag(MEMORY_NOTE_DIALOG_TAG).fetchSemanticsNodes().isNotEmpty() }
+            snap(out, "memory-add")
+            onNodeWithTag(MEMORY_NOTE_CANCEL_TAG).performClick()
+            onNodeWithTag(NOTES_SCOPE_ROLE_TAG).performClick()
+            waitForIdle()
+            snap(out, "memory-role")
+            onNodeWithTag(NOTES_SCOPE_SESSION_TAG).performClick()
+            waitForIdle()
+            snap(out, "memory-session")
+            daemon.close()
+            exitProcess(0)
+        }
         // BLOCKS-LAYOUT L14: -PtabShotsExtra=git renders only the Git tab over a project with a real repository (the default
         // shot has no project): its top, a picked file's diff, and scrolled to the history heading and to its oldest commit.
         // The repository has a fixed path (the directory is drawn) and fixed commit dates (the history is drawn). The default
