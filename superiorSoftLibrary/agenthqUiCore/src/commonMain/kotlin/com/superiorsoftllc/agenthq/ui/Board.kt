@@ -5,6 +5,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -20,6 +21,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +54,7 @@ import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.zIndex
 import com.superiorsoftllc.agenthq.ui.model.BoardDrop
 import com.superiorsoftllc.agenthq.ui.model.DropPlan
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -196,14 +200,76 @@ private fun columnTitle(status: String): Pair<String, Color> = when (status) {
  * The scrum board (contracts 1.5.0 / 1.6.0): the daemon's backlog in its four columns. The daemon owns the
  * columns, `pending` and the hand-out; this screen only renders them and sends the requests a click means
  * (create, start, finish, reopen, delete, start next).
+ * BLOCKS-LAYOUT L16: [BoardPaneFrame] and its sections, as the `infantry.shell.board.pane` node draws them; every card is
+ * [TicketCardFrame] and its sections, as the `infantry.shell.board.card` template draws them.
  */
 @Composable
 fun BoardPane(state: AppState, controller: Controller, onOpenAgent: (String) -> Unit) {
+    BoardPaneFrame(state, controller, onOpenAgent) { board ->
+        BoardFiltersSection(board)
+        BoardUnassignedSection(board)
+        BoardNewTicketSection(board)
+        BoardEmptySection(board)
+        BoardColumnsSection(board, Modifier.weight(1f)) { item ->
+            TicketCardFrame(board, item) { card ->
+                TicketCardSummarySection(card) {
+                    TicketCardTitleSection(card)
+                    TicketCardBadgesSection(card)
+                    TicketCardDetailsSection(card)
+                }
+                TicketCardNoteSection(card)
+                TicketCardEditSection(card)
+                TicketCardActionsSection(card)
+            }
+        }
+    }
+}
+
+/**
+ * BLOCKS-LAYOUT L16: what the board pane's sections share, owned by [BoardPaneFrame]: the Epic filter, whether the
+ * new-ticket form is open, the drag in flight and the drop session. Sections read it and change it only through its
+ * callbacks.
+ */
+class BoardPaneHost internal constructor(
+    val state: AppState,
+    val controller: Controller,
+    val onOpenAgent: (String) -> Unit,
+    private val scope: CoroutineScope,
+    private val filterState: MutableState<EpicFilter>,
+    private val creatingState: MutableState<Boolean>,
+    internal val epics: List<EpicView>,
+    /** The filter in force: an epic no longer listed falls back to every ticket. */
+    internal val active: EpicFilter,
+    /** The board's view of one column, top first: what a drop's slot is counted in. */
+    internal val columnOf: (String) -> List<Ticket>,
+    internal val drag: BoardDrag,
+    internal val session: BoardDropSession,
+    private val hoverState: State<DragHover?>,
+) {
+    val live: Boolean get() = state.connection.isLive
+    val creating: Boolean get() = creatingState.value
+    internal val hover: DragHover? get() = hoverState.value
+
+    internal fun pickFilter(f: EpicFilter) { filterState.value = f }
+    fun toggleCreating() { creatingState.value = !creatingState.value }
+    fun closeCreating() { creatingState.value = false }
+    fun startNext() { scope.launch { controller.startNextTicket() } }
+    internal fun drop(t: Ticket, plan: DropPlan) { scope.launch { session.drop(plan, state.ticket(t.id) ?: t) } }
+}
+
+/**
+ * BLOCKS-LAYOUT L16: the board pane's frame: the image viewer host (IMG-4), the box the drag ghost follows the pointer
+ * in, the epics load, the Epic filter, the new-ticket flag and the drop session; [content] goes straight into its
+ * column, top to bottom.
+ */
+@Composable
+fun BoardPaneFrame(state: AppState, controller: Controller, onOpenAgent: (String) -> Unit, content: @Composable ColumnScope.(BoardPaneHost) -> Unit) {
     val actionScope = rememberCoroutineScope()
-    var creating by remember { mutableStateOf(false) }
+    val creating = remember { mutableStateOf(false) }
     val live = state.connection.isLive
     // M2-14: the Epic filter lives in memory only, and resets when the shell switches project.
-    var filter by remember(state.activeProjectId) { mutableStateOf<EpicFilter>(EpicFilter.All) }
+    val filterState = remember(state.activeProjectId) { mutableStateOf<EpicFilter>(EpicFilter.All) }
+    val filter by filterState
     val epics = boardEpics(state)
     // M2-14: the board loads the project's epics itself, so the filter and the form work without the Epics pane.
     LaunchedEffect(state.activeProjectId, live) {
@@ -211,7 +277,6 @@ fun BoardPane(state: AppState, controller: Controller, onOpenAgent: (String) -> 
     }
     // An epic no longer listed falls back to every ticket rather than an empty board.
     val active: EpicFilter = (filter as? EpicFilter.Only)?.takeIf { f -> epics.none { it.id == f.epicId } }?.let { EpicFilter.All } ?: filter
-    val shown = state.visibleTickets.count { active.matches(it) }
     // The board's view of one column, top first: what a drop's slot is counted in.
     val columnOf: (String) -> List<Ticket> = { status -> state.column(status).filter { active.matches(it) } }
     val drag = remember { BoardDrag() }
@@ -219,9 +284,9 @@ fun BoardPane(state: AppState, controller: Controller, onOpenAgent: (String) -> 
     val currentColumnOf by rememberUpdatedState(columnOf)
     // Every board change is read for a start's answer, in order, so a follow-up placement is never cancelled midway.
     LaunchedEffect(session) { controller.state.collect { s -> session.observe(s.visibleTickets, currentColumnOf) } }
-    val hover by remember(state, active) { derivedStateOf { drag.hover(columnOf) } }
-    fun drop(t: Ticket, plan: DropPlan) { actionScope.launch { session.drop(plan, state.ticket(t.id) ?: t) } }
+    val hover = remember(state, active) { derivedStateOf { drag.hover(columnOf) } }
     var origin by remember { mutableStateOf(Offset.Zero) }
+    val board = BoardPaneHost(state, controller, onOpenAgent, actionScope, filterState, creating, epics, active, columnOf, drag, session, hover)
     // IMG-4: a ticket's thumbnail opens full size over the whole board.
     ImageViewerHost {
     Box(
@@ -230,103 +295,169 @@ fun BoardPane(state: AppState, controller: Controller, onOpenAgent: (String) -> 
             .then(if (drag.ticket != null) Modifier.dragHandleCursor(dragging = true) else Modifier),
     ) {
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            LabelledDropdown(
-                label = "Epic",
-                selected = when (active) {
-                    EpicFilter.All -> "All epics"
-                    EpicFilter.NoEpic -> "No epic"
-                    is EpicFilter.Only -> epics.firstOrNull { it.id == active.epicId }?.name ?: "All epics"
-                },
-                options = listOf("all" to "All epics") + epics.map { it.id to it.name } + ("none" to "No epic"),
-                anchorTag = BOARD_EPIC_FILTER_TAG,
-                optionTagPrefix = BOARD_EPIC_FILTER_OPTION_TAG_PREFIX,
-            ) { key -> filter = when (key) { "all" -> EpicFilter.All; "none" -> EpicFilter.NoEpic; else -> EpicFilter.Only(key) } }
-            Spacer(Modifier.width(8.dp))
-            Text(
-                ticketCountLabel(shown, state.visibleTickets.size, active == EpicFilter.All),
-                color = Palette.Muted, fontSize = 11.sp, maxLines = 1, softWrap = false, modifier = Modifier.weight(1f),
-            )
-            OutlinedButton(onClick = { actionScope.launch { controller.startNextTicket() } }, enabled = state.connection.isLive && state.column(TicketColumns.TODO).isNotEmpty()) {
-                Text("Start next", fontSize = 12.sp)
-            }
-            Spacer(Modifier.width(6.dp))
-            Button(onClick = { creating = !creating }, enabled = state.connection.isLive) { Text(if (creating) "Close" else "+ New ticket", fontSize = 12.sp) }
+        content(board)
+    }
+    drag.ticket?.let { DragGhost(it, drag, origin) }
+    }
+    }
+}
+
+/** A section that draws several items, or one it cannot tag: a placement other than the default gets a Column to wear it. */
+@Composable
+private fun Placed(modifier: Modifier, content: @Composable () -> Unit) {
+    if (modifier == Modifier) content() else Column(modifier) { content() }
+}
+
+/** BLOCKS-LAYOUT L16: the filter row (Epic, the ticket count, Start next, + New ticket); [modifier] goes on the row. */
+@Composable
+fun BoardFiltersSection(board: BoardPaneHost, modifier: Modifier = Modifier) {
+    val state = board.state
+    val active = board.active
+    val epics = board.epics
+    val shown = state.visibleTickets.count { active.matches(it) }
+    Row(modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        LabelledDropdown(
+            label = "Epic",
+            selected = when (active) {
+                EpicFilter.All -> "All epics"
+                EpicFilter.NoEpic -> "No epic"
+                is EpicFilter.Only -> epics.firstOrNull { it.id == active.epicId }?.name ?: "All epics"
+            },
+            options = listOf("all" to "All epics") + epics.map { it.id to it.name } + ("none" to "No epic"),
+            anchorTag = BOARD_EPIC_FILTER_TAG,
+            optionTagPrefix = BOARD_EPIC_FILTER_OPTION_TAG_PREFIX,
+        ) { key -> board.pickFilter(when (key) { "all" -> EpicFilter.All; "none" -> EpicFilter.NoEpic; else -> EpicFilter.Only(key) }) }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            ticketCountLabel(shown, state.visibleTickets.size, active == EpicFilter.All),
+            color = Palette.Muted, fontSize = 11.sp, maxLines = 1, softWrap = false, modifier = Modifier.weight(1f),
+        )
+        OutlinedButton(onClick = { board.startNext() }, enabled = state.connection.isLive && state.column(TicketColumns.TODO).isNotEmpty()) {
+            Text("Start next", fontSize = 12.sp)
         }
-        // Tickets with no project are not in a selected project's view; say so rather than look like an empty board.
-        val unassigned = if (state.activeProjectId == null) 0 else state.tickets.count { it.projectId == null }
-        if (unassigned > 0) {
-            Text(
-                "$unassigned unassigned ticket${if (unassigned == 1) "" else "s"} (no project) not shown; deselect the project to see all.",
-                color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 10.dp),
-            )
+        Spacer(Modifier.width(6.dp))
+        Button(onClick = { board.toggleCreating() }, enabled = state.connection.isLive) { Text(if (board.creating) "Close" else "+ New ticket", fontSize = 12.sp) }
+    }
+}
+
+/** BLOCKS-LAYOUT L16: the "N unassigned tickets not shown" line, with a project selected; [modifier] goes on the line. */
+@Composable
+fun BoardUnassignedSection(board: BoardPaneHost, modifier: Modifier = Modifier) {
+    val state = board.state
+    // Tickets with no project are not in a selected project's view; say so rather than look like an empty board.
+    val unassigned = if (state.activeProjectId == null) 0 else state.tickets.count { it.projectId == null }
+    if (unassigned > 0) {
+        Text(
+            "$unassigned unassigned ticket${if (unassigned == 1) "" else "s"} (no project) not shown; deselect the project to see all.",
+            color = Palette.Muted, fontSize = 11.sp, modifier = modifier.padding(horizontal = 10.dp),
+        )
+    }
+}
+
+/** BLOCKS-LAYOUT L16: the new-ticket form, while it is open (+ New ticket). */
+@Composable
+fun BoardNewTicketSection(board: BoardPaneHost, modifier: Modifier = Modifier) {
+    if (!board.creating) return
+    Placed(modifier) {
+        TicketForm(board.state, board.controller, initialEpicId = (board.active as? EpicFilter.Only)?.epicId, onDone = { board.closeCreating() })
+    }
+}
+
+/** BLOCKS-LAYOUT L16: what an empty backlog says (or that there is no daemon yet); [modifier] goes on its column. */
+@Composable
+fun BoardEmptySection(board: BoardPaneHost, modifier: Modifier = Modifier) {
+    val state = board.state
+    if (state.visibleTickets.isEmpty() && !board.creating) {
+        Column(modifier.padding(16.dp)) {
+            Text(if (state.connection.isLive) "The backlog is empty." else "Connect to a daemon to load its backlog.", color = Palette.Text)
+            Text("Create a ticket, give it an assignee (a profile or a role), then start it to hand it to that agent.", color = Palette.Muted, fontSize = 11.sp)
         }
-        if (creating) TicketForm(state, controller, initialEpicId = (active as? EpicFilter.Only)?.epicId, onDone = { creating = false })
-        if (state.visibleTickets.isEmpty() && !creating) {
-            Column(Modifier.padding(16.dp)) {
-                Text(if (state.connection.isLive) "The backlog is empty." else "Connect to a daemon to load its backlog.", color = Palette.Text)
-                Text("Create a ticket, give it an assignee (a profile or a role), then start it to hand it to that agent.", color = Palette.Muted, fontSize = 11.sp)
-            }
-        }
-        // MOBILE-LAYOUT-2: a compact window gives each column a fixed width in a row that scrolls sideways; at 600dp and
-        // above the columns share the width as before.
-        val compact = state.panels.compactWindow
-        val columnsScroll = rememberScrollState()
-        Row(
-            Modifier.weight(1f).fillMaxWidth().then(if (compact) Modifier.horizontalScroll(columnsScroll) else Modifier).padding(horizontal = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            TicketColumns.ALL.forEach { status ->
-                val tickets = columnOf(status)
-                val (title, color) = columnTitle(status)
-                val target = hover?.takeIf { it.column == status }
-                val refused = target?.plan is DropPlan.NotAllowed
-                val shape = RoundedCornerShape(6.dp)
-                Column(
-                    (if (compact) Modifier.width(BoardCompactColumnWidth) else Modifier.weight(1f)).fillMaxHeight()
-                        .onGloballyPositioned { drag.columns[status] = it.boundsInRoot() }
-                        .clip(shape).background(Palette.Panel)
-                        // The column the pointer is over: the accent when it takes the card, the danger colour when not.
-                        .then(if (target != null) Modifier.border(2.dp, if (refused) Palette.Danger else Palette.Accent, shape) else Modifier)
-                        .testTag(BOARD_COLUMN_TAG_PREFIX + status),
-                ) {
-                    Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(title.uppercase(), color = color, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                        if (refused) Text("can't drop here", color = Palette.Danger, fontSize = 10.sp, modifier = Modifier.padding(end = 6.dp))
-                        Chip("${tickets.size}", color)
-                    }
-                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        // The drop indicator: a line in the gap at the slot the card would land in.
-                        val slot = target?.slot?.takeIf { target.plan !is DropPlan.NotAllowed && target.plan !is DropPlan.Stay }
-                        val others = tickets.filter { it.id != drag.ticket?.id }
-                        val lineAbove = slot?.let { others.getOrNull(it)?.id }
-                        val lineBelow = slot?.takeIf { it >= others.size }?.let { tickets.lastOrNull()?.id }
-                        if (slot != null && tickets.isEmpty()) DropLine(Modifier)
-                        tickets.forEachIndexed { index, t ->
-                            val handle = @Composable {
-                                DragHandle(t, live, drag, cardMoves(t, index, columnOf, ::drop)) {
-                                    val plan = drag.hover(columnOf)?.plan ?: DropPlan.Stay(t.id)
-                                    drag.end()
-                                    drop(t, plan)
-                                }
+    }
+}
+
+/**
+ * BLOCKS-LAYOUT L16: one ticket's place on the board, as the columns hand it to its card: the ticket, the card's drag
+ * look (where it is measured, the drop line, the faded copy while dragged), its drag handle, and the line a card that
+ * snapped back shows.
+ */
+class BoardCardItem internal constructor(
+    val ticket: Ticket,
+    internal val look: Modifier,
+    internal val handle: @Composable () -> Unit,
+    internal val dropNote: String?,
+    internal val onDismissNote: () -> Unit,
+    internal val onStart: () -> Unit,
+)
+
+/**
+ * BLOCKS-LAYOUT L16: the status columns (title, count, the drop target's border and the cards); [modifier] goes on the
+ * row, and the board gives it the free height. [card] draws one ticket's card into its column's card list.
+ */
+@Composable
+fun BoardColumnsSection(board: BoardPaneHost, modifier: Modifier = Modifier, card: @Composable ColumnScope.(BoardCardItem) -> Unit) {
+    val state = board.state
+    val live = board.live
+    val drag = board.drag
+    val session = board.session
+    val columnOf = board.columnOf
+    val hover = board.hover
+    // MOBILE-LAYOUT-2: a compact window gives each column a fixed width in a row that scrolls sideways; at 600dp and
+    // above the columns share the width as before.
+    val compact = state.panels.compactWindow
+    val columnsScroll = rememberScrollState()
+    Row(
+        modifier.fillMaxWidth().then(if (compact) Modifier.horizontalScroll(columnsScroll) else Modifier).padding(horizontal = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        TicketColumns.ALL.forEach { status ->
+            val tickets = columnOf(status)
+            val (title, color) = columnTitle(status)
+            val target = hover?.takeIf { it.column == status }
+            val refused = target?.plan is DropPlan.NotAllowed
+            val shape = RoundedCornerShape(6.dp)
+            Column(
+                (if (compact) Modifier.width(BoardCompactColumnWidth) else Modifier.weight(1f)).fillMaxHeight()
+                    .onGloballyPositioned { drag.columns[status] = it.boundsInRoot() }
+                    .clip(shape).background(Palette.Panel)
+                    // The column the pointer is over: the accent when it takes the card, the danger colour when not.
+                    .then(if (target != null) Modifier.border(2.dp, if (refused) Palette.Danger else Palette.Accent, shape) else Modifier)
+                    .testTag(BOARD_COLUMN_TAG_PREFIX + status),
+            ) {
+                Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(title.uppercase(), color = color, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    if (refused) Text("can't drop here", color = Palette.Danger, fontSize = 10.sp, modifier = Modifier.padding(end = 6.dp))
+                    Chip("${tickets.size}", color)
+                }
+                Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // The drop indicator: a line in the gap at the slot the card would land in.
+                    val slot = target?.slot?.takeIf { target.plan !is DropPlan.NotAllowed && target.plan !is DropPlan.Stay }
+                    val others = tickets.filter { it.id != drag.ticket?.id }
+                    val lineAbove = slot?.let { others.getOrNull(it)?.id }
+                    val lineBelow = slot?.takeIf { it >= others.size }?.let { tickets.lastOrNull()?.id }
+                    if (slot != null && tickets.isEmpty()) DropLine(Modifier)
+                    tickets.forEachIndexed { index, t ->
+                        val handle = @Composable {
+                            DragHandle(t, live, drag, cardMoves(t, index, columnOf, board::drop)) {
+                                val plan = drag.hover(columnOf)?.plan ?: DropPlan.Stay(t.id)
+                                drag.end()
+                                board.drop(t, plan)
                             }
-                            val look = Modifier
-                                // Unclipped: a card half scrolled out of its column still has its true centre.
-                                .onGloballyPositioned { drag.cards[t.id] = Rect(it.positionInRoot(), it.size.toSize()) }
-                                .dropLine(above = lineAbove == t.id, below = lineBelow == t.id)
-                                .then(if (drag.ticket?.id == t.id) Modifier.graphicsLayer { alpha = 0.4f } else Modifier)
-                            TicketCard(
-                                t, state, controller, onOpenAgent, look, handle, session.notes[t.id], { session.dismiss(t.id) },
-                                onStart = { drop(t, DropPlan.Start(t.id, state.column(TicketColumns.IN_PROGRESS).size)) },
-                            )
                         }
+                        val look = Modifier
+                            // Unclipped: a card half scrolled out of its column still has its true centre.
+                            .onGloballyPositioned { drag.cards[t.id] = Rect(it.positionInRoot(), it.size.toSize()) }
+                            .dropLine(above = lineAbove == t.id, below = lineBelow == t.id)
+                            .then(if (drag.ticket?.id == t.id) Modifier.graphicsLayer { alpha = 0.4f } else Modifier)
+                        card(
+                            BoardCardItem(
+                                t, look, handle, session.notes[t.id], { session.dismiss(t.id) },
+                                onStart = { board.drop(t, DropPlan.Start(t.id, state.column(TicketColumns.IN_PROGRESS).size)) },
+                            ),
+                        )
                     }
                 }
             }
         }
-    }
-    drag.ticket?.let { DragGhost(it, drag, origin) }
-    }
     }
 }
 
@@ -334,7 +465,7 @@ fun BoardPane(state: AppState, controller: Controller, onOpenAgent: (String) -> 
  * The one drag in flight on the board: the card, where the pointer is and what each column and card covers (all in
  * root coordinates). It only follows the pointer; a drop's meaning is [BoardDrop.plan].
  */
-private class BoardDrag {
+internal class BoardDrag {
     var ticket by mutableStateOf<Ticket?>(null)
         private set
     var pointer by mutableStateOf(Offset.Zero)
@@ -362,7 +493,7 @@ private class BoardDrag {
     }
 }
 
-private data class DragHover(val column: String, val slot: Int, val plan: DropPlan)
+internal data class DragHover(val column: String, val slot: Int, val plan: DropPlan)
 
 /**
  * The keyboard / screen-reader route to what a drag does, as the handle's custom actions: up, down, and to the end of
@@ -465,53 +596,107 @@ internal fun ReportFlagChip(flag: ReportFlag?, modifier: Modifier = Modifier) {
     }
 }
 
-@Composable
-private fun TicketCard(
-    t: Ticket,
-    state: AppState,
-    controller: Controller,
-    onOpenAgent: (String) -> Unit,
-    modifier: Modifier,
-    handle: @Composable () -> Unit,
-    dropNote: String?,
-    onDismissNote: () -> Unit,
-    onStart: () -> Unit,
+/**
+ * BLOCKS-LAYOUT L16: what one card's sections share, owned by [TicketCardFrame]: the ticket, whether its edit form is
+ * open, the drop note. Sections read it and change state only through its callbacks.
+ */
+class BoardCardHost internal constructor(
+    private val board: BoardPaneHost,
+    private val item: BoardCardItem,
+    private val scope: CoroutineScope,
+    private val openState: MutableState<Boolean>,
 ) {
+    val ticket: Ticket get() = item.ticket
+    val state: AppState get() = board.state
+    val controller: Controller get() = board.controller
+    val live: Boolean get() = board.live
+    /** The edit form is open (the summary toggles it). */
+    val open: Boolean get() = openState.value
+    val dropNote: String? get() = item.dropNote
+    internal val handle: @Composable () -> Unit get() = item.handle
+
+    fun toggleOpen() { openState.value = !openState.value }
+    fun close() { openState.value = false }
+    fun dismissNote() = item.onDismissNote()
+    fun start() = item.onStart()
+    suspend fun move(status: String): CommandResult = controller.moveTicket(ticket.id, status)
+    fun delete() { scope.launch { controller.deleteTicket(ticket.id) } }
+    fun openAgent(sessionId: String) = board.onOpenAgent(sessionId)
+}
+
+/**
+ * BLOCKS-LAYOUT L16: one ticket's card frame (the rounded raised column, the drag look, the edit form's open flag);
+ * [content] goes straight into its column, top to bottom. [modifier] (the card's placement) comes before the drag look.
+ */
+@Composable
+fun TicketCardFrame(board: BoardPaneHost, item: BoardCardItem, modifier: Modifier = Modifier, content: @Composable ColumnScope.(BoardCardHost) -> Unit) {
     val actionScope = rememberCoroutineScope()
-    var open by remember(t.id) { mutableStateOf(false) }
-    val live = state.connection.isLive
+    val open = remember(item.ticket.id) { mutableStateOf(false) }
+    val card = BoardCardHost(board, item, actionScope, open)
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(8.dp),
+        modifier.then(item.look).fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(8.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-      Row(verticalAlignment = Alignment.Top) {
-      handle()
-      Spacer(Modifier.width(4.dp))
-      // M2-17: the summary is what opens (and closes) the card's edit form; the form itself is not a click target.
-      Column(
-        Modifier.weight(1f)
-            .clickable(role = Role.Button, onClickLabel = if (open) "Close the ticket" else "Edit the ticket") { open = !open }
-            .testTag(TICKET_CARD_TAG_PREFIX + t.id),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-      ) {
-        Text(t.title, color = Palette.Text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = if (open) 6 else 2)
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            t.ticketType?.let { Chip(ticketTypeLabel(it)) }
-            // M2-1: the assignee's avatar, the same portrait its agent shows in the list and the chat.
-            t.agentId?.let { id ->
-                val role = assigneeRole(state, id)
-                AgentAvatar(role, id, 16, state.role(role)?.color, Modifier.testTag("ticket-avatar-${t.id}"))
-            }
-            Chip(assigneeLabel(state, t.agentId), if (t.agentId == null) Palette.Muted else Palette.Info)
-            // M2-14: the epic the ticket is filed under, by name (its short id until the epics have loaded).
-            t.epicId?.takeIf { it.isNotBlank() }?.let { eid ->
-                Chip(state.epics.values.flatten().firstOrNull { it.id == eid }?.name ?: eid.takeLast(8), Palette.Ok, Modifier.testTag("ticket-epic-${t.id}"))
-            }
-            if (t.wontFix) Chip("won't fix", Palette.Danger)
-            if (t.queuedFor != null) Chip("queued", Palette.Accent)
-            ReportFlagChip(state.reportFlagFor(t), Modifier.testTag("ticket-report-${t.id}"))
+        content(card)
+    }
+}
+
+/**
+ * BLOCKS-LAYOUT L16: the drag handle and the clickable summary (M2-17: it opens and closes the edit form; the form itself
+ * is not a click target); [modifier] goes on the row, and [content] goes straight into the summary's column.
+ */
+@Composable
+fun TicketCardSummarySection(card: BoardCardHost, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Row(modifier, verticalAlignment = Alignment.Top) {
+        card.handle()
+        Spacer(Modifier.width(4.dp))
+        Column(
+            Modifier.weight(1f)
+                .clickable(role = Role.Button, onClickLabel = if (card.open) "Close the ticket" else "Edit the ticket") { card.toggleOpen() }
+                .testTag(TICKET_CARD_TAG_PREFIX + card.ticket.id),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            content()
         }
-        t.holdReason?.let { Text(it, color = Palette.Muted, fontSize = 10.sp, maxLines = if (open) 6 else 2) }
+    }
+}
+
+/** BLOCKS-LAYOUT L16: the card's title (six lines while open, else two); [modifier] goes on the text. */
+@Composable
+fun TicketCardTitleSection(card: BoardCardHost, modifier: Modifier = Modifier) {
+    Text(card.ticket.title, color = Palette.Text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = if (card.open) 6 else 2, modifier = modifier)
+}
+
+/** BLOCKS-LAYOUT L16: the type, the assignee (avatar and chip), the epic, won't fix, queued and the report flag; [modifier] goes on the row. */
+@Composable
+fun TicketCardBadgesSection(card: BoardCardHost, modifier: Modifier = Modifier) {
+    val t = card.ticket
+    val state = card.state
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        t.ticketType?.let { Chip(ticketTypeLabel(it)) }
+        // M2-1: the assignee's avatar, the same portrait its agent shows in the list and the chat.
+        t.agentId?.let { id ->
+            val role = assigneeRole(state, id)
+            AgentAvatar(role, id, 16, state.role(role)?.color, Modifier.testTag("ticket-avatar-${t.id}"))
+        }
+        Chip(assigneeLabel(state, t.agentId), if (t.agentId == null) Palette.Muted else Palette.Info)
+        // M2-14: the epic the ticket is filed under, by name (its short id until the epics have loaded).
+        t.epicId?.takeIf { it.isNotBlank() }?.let { eid ->
+            Chip(state.epics.values.flatten().firstOrNull { it.id == eid }?.name ?: eid.takeLast(8), Palette.Ok, Modifier.testTag("ticket-epic-${t.id}"))
+        }
+        if (t.wontFix) Chip("won't fix", Palette.Danger)
+        if (t.queuedFor != null) Chip("queued", Palette.Accent)
+        ReportFlagChip(state.reportFlagFor(t), Modifier.testTag("ticket-report-${t.id}"))
+    }
+}
+
+/** BLOCKS-LAYOUT L16: the hold reason, what the ticket runs on, its branch, the worker's progress and the last run. */
+@Composable
+fun TicketCardDetailsSection(card: BoardCardHost, modifier: Modifier = Modifier) {
+    val t = card.ticket
+    val state = card.state
+    Placed(modifier) {
+        t.holdReason?.let { Text(it, color = Palette.Muted, fontSize = 10.sp, maxLines = if (card.open) 6 else 2) }
         // TICKET-EXEC-UI: what the ticket will run on, and where each value comes from (ticket / profile / role / default).
         executorLine(t.effectiveExecutor)?.let {
             Text("runs on $it", color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp, maxLines = 2, modifier = Modifier.testTag(TICKET_EXECUTOR_LINE_TAG_PREFIX + t.id))
@@ -524,42 +709,63 @@ private fun TicketCard(
             val outcome = run.outcome ?: "running"
             Text("last run: ${outcome.lowercase().replace('_', ' ')}", color = if (run.outcome == null || run.outcome == "SUCCEEDED") Palette.Muted else Palette.Danger, fontSize = 10.sp)
         }
-      }
-      }
-        // A drop that snapped back says why (a refused column, or the daemon's reason a start did not start).
-        dropNote?.let { note ->
-            LaunchedEffect(note) { delay(8_000); onDismissNote() }
-            Text(
-                note, color = Palette.Danger, fontSize = 10.sp, maxLines = 3,
-                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag(TICKET_DROP_NOTE_TAG_PREFIX + t.id),
-            )
-            // A refusal for want of a role offers the role pick inline (focused), not the whole edit form.
-            if (BoardDrop.isNoRoleNote(note) && t.agentId == null && !open) RoleNudge(t, state, controller)
-        }
-        if (open) {
-            TicketEditForm(t, state, controller, onDone = { open = false })
-            if (t.links.isNotEmpty()) Text(t.links.joinToString(", ") { "${it.type.replace('_', ' ')} ${it.ticketId.takeLast(8)}" }, color = Palette.Muted, fontSize = 10.sp)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-            when (t.status) {
-                // 1.131.0: a backlog card is never started; it is promoted to the sprint first.
-                TicketColumns.BACKLOG -> CardButton("To do", live, "Move to To do (the sprint)") { controller.moveTicket(t.id, TicketColumns.TODO) }
-                TicketColumns.TODO -> {
-                    CardButton("Start", live) { onStart(); CommandResult.Sent }
-                    CardButton("Backlog", live, "Park in Backlog") { controller.moveTicket(t.id, TicketColumns.BACKLOG) }
-                }
-                TicketColumns.IN_PROGRESS -> {
-                    CardButton("Done", live) { controller.moveTicket(t.id, TicketColumns.DONE) }
-                    CardButton("Back", live) { controller.moveTicket(t.id, TicketColumns.TODO) }
-                }
-                TicketColumns.DONE -> CardButton("Reopen", live) { controller.moveTicket(t.id, TicketColumns.TODO) }
+    }
+}
+
+/**
+ * BLOCKS-LAYOUT L16: why a drop snapped back (a refused column, or the daemon's reason a start did not start), and the
+ * role pick a refusal for want of a role offers.
+ */
+@Composable
+fun TicketCardNoteSection(card: BoardCardHost, modifier: Modifier = Modifier) {
+    val t = card.ticket
+    val note = card.dropNote ?: return
+    Placed(modifier) {
+        LaunchedEffect(note) { delay(8_000); card.dismissNote() }
+        Text(
+            note, color = Palette.Danger, fontSize = 10.sp, maxLines = 3,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag(TICKET_DROP_NOTE_TAG_PREFIX + t.id),
+        )
+        // A refusal for want of a role offers the role pick inline (focused), not the whole edit form.
+        if (BoardDrop.isNoRoleNote(note) && t.agentId == null && !card.open) RoleNudge(t, card.state, card.controller)
+    }
+}
+
+/** BLOCKS-LAYOUT L16: the edit form and the ticket's links, while the card is open. */
+@Composable
+fun TicketCardEditSection(card: BoardCardHost, modifier: Modifier = Modifier) {
+    val t = card.ticket
+    if (!card.open) return
+    Placed(modifier) {
+        TicketEditForm(t, card.state, card.controller, onDone = { card.close() })
+        if (t.links.isNotEmpty()) Text(t.links.joinToString(", ") { "${it.type.replace('_', ' ')} ${it.ticketId.takeLast(8)}" }, color = Palette.Muted, fontSize = 10.sp)
+    }
+}
+
+/** BLOCKS-LAYOUT L16: the card's buttons (the column's moves, Agent, and Delete while open); [modifier] goes on the row. */
+@Composable
+fun TicketCardActionsSection(card: BoardCardHost, modifier: Modifier = Modifier) {
+    val t = card.ticket
+    val live = card.live
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+        when (t.status) {
+            // 1.131.0: a backlog card is never started; it is promoted to the sprint first.
+            TicketColumns.BACKLOG -> CardButton("To do", live, "Move to To do (the sprint)") { card.move(TicketColumns.TODO) }
+            TicketColumns.TODO -> {
+                CardButton("Start", live) { card.start(); CommandResult.Sent }
+                CardButton("Backlog", live, "Park in Backlog") { card.move(TicketColumns.BACKLOG) }
             }
-            t.sessionId?.takeIf { it in state.agents }?.let { sid ->
-                TextButton(onClick = { onOpenAgent(sid) }) { Text("Agent", fontSize = 11.sp) }
+            TicketColumns.IN_PROGRESS -> {
+                CardButton("Done", live) { card.move(TicketColumns.DONE) }
+                CardButton("Back", live) { card.move(TicketColumns.TODO) }
             }
-            Spacer(Modifier.weight(1f))
-            if (open) TextButton(onClick = { actionScope.launch { controller.deleteTicket(t.id) } }, enabled = live) { Text("Delete", color = Palette.Danger, fontSize = 11.sp) }
+            TicketColumns.DONE -> CardButton("Reopen", live) { card.move(TicketColumns.TODO) }
         }
+        t.sessionId?.takeIf { it in card.state.agents }?.let { sid ->
+            TextButton(onClick = { card.openAgent(sid) }) { Text("Agent", fontSize = 11.sp) }
+        }
+        Spacer(Modifier.weight(1f))
+        if (card.open) TextButton(onClick = { card.delete() }, enabled = live) { Text("Delete", color = Palette.Danger, fontSize = 11.sp) }
     }
 }
 

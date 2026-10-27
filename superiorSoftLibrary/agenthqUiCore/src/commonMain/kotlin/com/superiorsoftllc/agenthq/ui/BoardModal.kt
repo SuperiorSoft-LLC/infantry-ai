@@ -145,7 +145,13 @@ fun BoardModalHeader(state: AppState, onDismiss: () -> Unit, modifier: Modifier 
 /** BLOCKS-LAYOUT L10: [BoardPane] in its padded box; the modal gives it the free height through [modifier]. */
 @Composable
 fun BoardModalPane(state: AppState, controller: Controller, onOpenAgent: (String) -> Unit, modifier: Modifier = Modifier) {
+    BoardModalPaneBox(modifier) { BoardPane(state, controller, onOpenAgent) }
+}
+
+/** BLOCKS-LAYOUT L16: the board pane's padded box; [modifier] goes on it, [content] is the pane. */
+@Composable
+fun BoardModalPaneBox(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Box(modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-        BoardPane(state, controller, onOpenAgent)
+        content()
     }
 }
