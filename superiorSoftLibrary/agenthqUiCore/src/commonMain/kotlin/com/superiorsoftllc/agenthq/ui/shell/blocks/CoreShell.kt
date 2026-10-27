@@ -15,9 +15,20 @@ import com.superiorsoftllc.agenthq.ui.block.layout.StackBlock
 /**
  * BLOCKS-LAYOUT L3 (docs/BLOCKS-LAYOUT-DESIGN.md section 2): the window is one tree of blocks, placed by the layout
  * primitives. Every node maps to the Compose call the old dock emitted, with the same modifiers in the same order.
- * Node ids are the override address (BLOCKS-1); never rename one.
+ * Node ids are the override address (BLOCKS-1); since L5 they are plugin API: never rename one.
  */
 object CoreShell {
+    /**
+     * BLOCKS-LAYOUT L5 (design section 7): the nodes no module may replace or wrap. The skeleton (children stay
+     * insertable once inserts land), and where a token is typed, an update is approved or a plugin is disabled.
+     */
+    val locked: Set<String> = setOf(
+        "infantry.shell.window", "infantry.shell.images", "infantry.shell.dock", "infantry.shell.frame",
+        "infantry.shell.body", "infantry.shell.panes", "infantry.shell.windowLayer",
+        "infantry.shell.connect", "infantry.shell.servers", "infantry.shell.switchError",
+        "infantry.shell.serverUpdate", "infantry.shell.config",
+    )
+
     val root: Block = GroupBlock(
         "infantry.shell.window",
         listOf(
