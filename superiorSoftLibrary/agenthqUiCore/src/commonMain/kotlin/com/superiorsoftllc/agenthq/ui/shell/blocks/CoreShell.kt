@@ -50,7 +50,7 @@ object CoreShell {
                                             ShellCompactDrawer,
                                         ),
                                     ),
-                                    Legacy(ShellStatusBar),
+                                    CoreStatusBar,
                                 ),
                             ),
                             // The overlays, over the whole dock; they align themselves.
