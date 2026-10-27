@@ -172,3 +172,27 @@ public `state` and `controller` are gone, and `link`, `session` and `context` re
 | MemoryPane.kt | `EditorModal` | stays: the shared editor modal, which the role and profile panes also open |
 | MemoryPane.kt | `AgentView`, `MemoryHitView`, `MemoryNoteView`, `NoteScope`, `ProjectView`, `CommandResult` | kit (model) |
 | MemoryPane.kt | `AhqIcons`, `IconAction`, `IconActionStyle`, `Button`, `OutlinedButton`, `clickable`, `Palette` | kit |
+
+## Changes (Infantry_Changes)
+
+Moved into plugins/core/Infantry_Changes: ProjectChangesPanel.kt, shell/blocks/ShellChanges.kt. The not-a-git-repository
+test moves with `isNotGitRepository` (agenthqAppUi commonTest NotGitRepositoryTest). Migrated: `ChangesPaneFrame` and
+`ChangesPaneHost` took `(state, controller)` and now take `LinkContext`, `SessionContext`, `GitContext` and
+`ChangesContext`. The host's `state` and `controller` become `link`, `session`, `git` and `context`, and the private
+`pollOnce` is gone (it lives in `CoreChanges`, prep). Pixel proof: `-PtabShotsExtra=changespane`, 6 of 6 shots at 0 px.
+
+| File | Symbol | Decision |
+|---|---|---|
+| ShellChanges.kt | `LocalShell.current.state / controller` | (a) `link`, `session`, `git` + (b) `ShellContext.changes` (prep) |
+| ShellChanges.kt | `LocalShell.current.tabs.tabTree` | (b): `ShellContext.layout` (prep) |
+| ShellChanges.kt | `Block`, `BlockScope`, `Place`, `RenderPlaced`, `RenderPlain` | kit |
+| ProjectChangesPanel.kt | `state.connection` (live, contract) | (a): `LinkContext.live`, `contractAtLeast` |
+| ProjectChangesPanel.kt | `state.activeProject` | (a): `SessionContext.activeProject` |
+| ProjectChangesPanel.kt | `state.selectedId` (the worktree list names the selected session) | (b): `SessionContext.selectedAgentId` (prep) |
+| ProjectChangesPanel.kt | `state.projectGit`, `projectGitFailure`, `projectGitBranches`, `controller.loadProjectBranches` | (a): `GitContext.status / failure / branches / loadBranches` |
+| ProjectChangesPanel.kt | `state.projectWorktrees`, `changesWorktree`, `changesWorktreeStatus`, `changesBranch`, `changesShownBranch`, `projectGitBranchChanges` | (b): `ChangesContext.worktrees / worktree / worktreeStatus / branch / shownBranch / branchChanges` (prep) |
+| ProjectChangesPanel.kt | `controller.loadProjectTree / loadProjectWorktrees / loadWorktreeStatus / loadBranchChanges / selectChangesWorktree / selectChangesBranch` | (b): `ChangesContext.loadTree / loadWorktrees / loadWorktreeStatus / loadBranchChanges / selectWorktree / selectBranch` (prep) |
+| ProjectChangesPanel.kt | `pollOnce` on `controller.client.frames`, `Envelope` | (b): `ChangesContext.pollWorktrees / pollWorktreeStatus` (prep); the frame wait stays in core |
+| ProjectChangesPanel.kt | `ProjectChangesPanel(state, controller, ...)`: `AppState`, `Controller`, `CoreLink`, `CoreSession`, `CoreGit`, `CoreChanges` | (a) through the public adapters: the outside-a-shell entry (ProjectChangesPanelUiTest, IconButtonsUiTest) |
+| ProjectChangesPanel.kt | `ChangeGroup`, `ChangedFileRow`, `ChangedPathText` | bridge (prep). With Git moved too, their only core user is core's own `ChangesSection`, so they can go to (c) when it does |
+| ProjectChangesPanel.kt | `DiffTarget`, the change views (`worktreeChangesView`, `branchChangesView`, `projectChangesView`, `worktreeHeader`, `worktreeHistoryView`, `aheadHint`, `markers`, `optionKey`, ...), the wire types, `PROJECT_GIT_UNSUPPORTED`, `PROJECT_GIT_BRANCHES_UNSUPPORTED` | kit |

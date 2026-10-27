@@ -49,10 +49,6 @@ import com.superiorsoftllc.agenthq.ui.model.ProjectView
 import com.superiorsoftllc.agenthq.ui.model.badge
 import com.superiorsoftllc.agenthq.ui.model.branchChangesView
 import com.superiorsoftllc.agenthq.ui.model.aheadHint
-import com.superiorsoftllc.agenthq.ui.model.changesBranch
-import com.superiorsoftllc.agenthq.ui.model.changesShownBranch
-import com.superiorsoftllc.agenthq.ui.model.changesWorktree
-import com.superiorsoftllc.agenthq.ui.model.changesWorktreeStatus
 import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
 import com.superiorsoftllc.agenthq.ui.model.headline
 import com.superiorsoftllc.agenthq.ui.model.label
@@ -68,24 +64,25 @@ import com.superiorsoftllc.agenthq.ui.model.worktreeHeader
 import com.superiorsoftllc.agenthq.ui.model.worktreeHistoryView
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
 import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.agenthq.ui.shell.ChangesContext
+import com.superiorsoftllc.agenthq.ui.shell.CoreChanges
+import com.superiorsoftllc.agenthq.ui.shell.CoreGit
+import com.superiorsoftllc.agenthq.ui.shell.CoreLink
+import com.superiorsoftllc.agenthq.ui.shell.CoreSession
+import com.superiorsoftllc.agenthq.ui.shell.GitContext
+import com.superiorsoftllc.agenthq.ui.shell.LinkContext
+import com.superiorsoftllc.agenthq.ui.shell.SessionContext
 import com.superiorsoftllc.agenthq.ui.net.PROJECT_GIT_BRANCHES_UNSUPPORTED
 import com.superiorsoftllc.agenthq.ui.net.PROJECT_GIT_UNSUPPORTED
 import com.superiorsoftllc.agenthq.ui.protocol.BranchChangedFile
 import com.superiorsoftllc.agenthq.ui.protocol.ChangedFile
-import com.superiorsoftllc.agenthq.ui.protocol.Envelope
 import com.superiorsoftllc.agenthq.ui.protocol.GitCommit
 import com.superiorsoftllc.agenthq.ui.protocol.GitWorktree
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitWorktreeStatus
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 
 /** How often the open Changes panel re-reads the active project's working tree. */
 const val PROJECT_CHANGES_POLL_MS = 5_000L
@@ -146,37 +143,6 @@ private const val WORKTREE_LIST_POLLS = 6
 enum class ChangesMode { WORKING_TREE, HISTORY }
 
 /**
- * BUG-CHANGES-BRANCH-1: one Changes poll, which returns only once the daemon replied to it, so the panel never has more
- * than one of each poll waiting. The daemon answers a connection's frames in order: polls that went out on every tick
- * without waiting piled up behind a slow git (409 unanswered under load) and a branch pick queued behind all of them.
- *
- * The wait ends on a [reply] frame naming [projectId], on the daemon's `<request> refused|failed: ...` error for it, or
- * on a `ready`: nothing asked on the old link is answered on a new one. A drop the panel sees cancels the polling
- * effects (`live` keys them), but a Connect to the same daemon keeps the link live throughout, so only that `ready`
- * ends this wait then. A send the controller refused waits for nothing, and [timeoutMs] bounds the wait.
- */
-private suspend fun Controller.pollOnce(request: String, reply: String, projectId: String, timeoutMs: Long, ask: suspend () -> CommandResult) {
-    coroutineScope {
-        // Listening starts before the request goes out, so a fast reply cannot slip past.
-        val replied = launch(start = CoroutineStart.UNDISPATCHED) { client.frames.first { it.endsPoll(request, reply, projectId) } }
-        if (ask() !is CommandResult.Sent) return@coroutineScope replied.cancel()
-        // A delay() timer, not withTimeoutOrNull: it runs on the poll interval's own clock. In a Compose UI test the
-        // effects' delay() follows the test clock, and a withTimeoutOrNull wait there was never released by it.
-        val timeout = launch { delay(timeoutMs); replied.cancel() }
-        replied.join()
-        timeout.cancel()
-    }
-}
-
-/** True when this frame ends the wait for a [request] about [projectId]: its [reply] answer, its error, or a new link. */
-private fun Envelope.endsPoll(request: String, reply: String, projectId: String): Boolean = when (type) {
-    reply -> runCatching { Json.parseToJsonElement(data).jsonObject["projectId"]?.jsonPrimitive?.contentOrNull }.getOrNull() == projectId
-    Envelope.ERROR -> data.startsWith("$request ")
-    Envelope.READY -> true
-    else -> false
-}
-
-/**
  * UX-CHANGES-1: the right-hand Changes tab, which also took over the old Worktree tab's job. On a 1.88.0 daemon its
  * header is a worktree picker (the project's worktrees; it opens on the SELECTED SESSION's checkout, its worktree or the
  * shared one, as the daemon decides), the branch with ahead/behind its base and the uncommitted count, then a Working
@@ -210,7 +176,7 @@ fun ProjectChangesPanel(
     openDiff: DiffTarget? = null,
     onOpenDiff: ((DiffTarget) -> Unit)? = null,
 ) {
-    ChangesPaneFrame(state, controller, pollMs, openDiff, onOpenDiff) { changes ->
+    ChangesPaneFrame(CoreLink(state), CoreSession(state), CoreGit(state, controller), CoreChanges(state, controller), pollMs, openDiff, onOpenDiff) { changes ->
         ChangesEmptySection(changes)
         ChangesTitleSection(changes)
         ChangesUnsupportedSection(changes)
@@ -234,31 +200,35 @@ data class ChangesFileItem(val file: ChangedFile, val staged: Boolean)
  * tree | History mode; a section changes it, the shown worktree or branch, or the open diff only through these callbacks.
  */
 class ChangesPaneHost internal constructor(
-    val state: AppState,
-    val controller: Controller,
+    val link: LinkContext,
+    val session: SessionContext,
+    /** S4b: the working tree and the branch list (the shell's [com.superiorsoftllc.agenthq.ui.shell.ShellContext.git]). */
+    val git: GitContext,
+    /** S4b: the worktrees, branch changes and polls (the shell's [com.superiorsoftllc.agenthq.ui.shell.ShellContext.changes]). */
+    val context: ChangesContext,
     private val scope: CoroutineScope,
     private val modeState: MutableState<ChangesMode>,
     /** The file the diff modal shows, highlighted in the lists. */
     val openDiff: DiffTarget?,
     private val onOpenDiff: ((DiffTarget) -> Unit)?,
 ) {
-    val live: Boolean get() = state.connection.isLive
-    val supported: Boolean get() = contractAtLeast(state.connection.contract, 1, 36)
-    val branchesSupported: Boolean get() = contractAtLeast(state.connection.contract, 1, 65)
-    val worktreesSupported: Boolean get() = contractAtLeast(state.connection.contract, 1, 88)
-    val active: ProjectView? get() = state.activeProject
-    val worktree: String? get() = if (worktreesSupported) state.changesWorktree else null
+    val live: Boolean get() = link.live
+    val supported: Boolean get() = link.contractAtLeast(1, 36)
+    val branchesSupported: Boolean get() = link.contractAtLeast(1, 65)
+    val worktreesSupported: Boolean get() = link.contractAtLeast(1, 88)
+    val active: ProjectView? get() = session.activeProject
+    val worktree: String? get() = if (worktreesSupported) context.worktree else null
 
     /** BUG-CHANGES-WRONG-BRANCH: from 1.88.0 the inner picker follows the worktree the header shows. */
-    val branch: String? get() = if (worktreesSupported) state.changesShownBranch else state.changesBranch
+    val branch: String? get() = if (worktreesSupported) context.shownBranch else context.branch
     val mode: ChangesMode get() = modeState.value
-    val status: ProjectGitWorktreeStatus? get() = state.changesWorktreeStatus
+    val status: ProjectGitWorktreeStatus? get() = context.worktreeStatus
 
     /** A daemon from 1.36.0, older than 1.88.0: the branch line and its list, no worktrees. */
     val showsOlder: Boolean get() = active != null && supported && !worktreesSupported
 
     /** A 1.88.0 daemon answered that the project folder is not a git checkout. */
-    val notGit: Boolean get() = active?.let { supported && worktreesSupported && isNotGitRepository(state.projectWorktrees[it.id]) } ?: false
+    val notGit: Boolean get() = active?.let { supported && worktreesSupported && isNotGitRepository(context.worktrees(it.id)) } ?: false
 
     /** A 1.88.0 daemon on a git checkout: the worktree picker, its header line and the mode toggle. */
     val showsWorktrees: Boolean get() = active != null && supported && worktreesSupported && !notGit
@@ -275,20 +245,20 @@ class ChangesPaneHost internal constructor(
         val branch = branch
         scope.launch {
             if (worktreesSupported) {
-                controller.loadProjectWorktrees(a.id, state.selectedId)
-                worktree?.let { controller.loadWorktreeStatus(a.id, it) }
-                if (branch != null) controller.loadBranchChanges(a.id, branch)
-            } else if (branch == null) controller.loadProjectTree(a.id) else controller.loadBranchChanges(a.id, branch)
-            if (branchesSupported) controller.loadProjectBranches(a.id)
+                context.loadWorktrees(a.id, session.selectedAgentId)
+                worktree?.let { context.loadWorktreeStatus(a.id, it) }
+                if (branch != null) context.loadBranchChanges(a.id, branch)
+            } else if (branch == null) context.loadTree(a.id) else context.loadBranchChanges(a.id, branch)
+            if (branchesSupported) git.loadBranches(a.id)
         }
     }
 
     fun pickMode(mode: ChangesMode) { modeState.value = mode }
 
-    fun selectWorktree(path: String) { active?.let { controller.selectChangesWorktree(it.id, path) } }
+    fun selectWorktree(path: String) { active?.let { context.selectWorktree(it.id, path) } }
 
     /** Null is "Working tree (current)". */
-    fun selectBranch(name: String?) { active?.let { controller.selectChangesBranch(it.id, name) } }
+    fun selectBranch(name: String?) { active?.let { context.selectBranch(it.id, name) } }
 
     fun open(target: DiffTarget) { onOpenDiff?.invoke(target) }
 }
@@ -299,8 +269,10 @@ class ChangesPaneHost internal constructor(
  */
 @Composable
 fun ChangesPaneFrame(
-    state: AppState,
-    controller: Controller,
+    link: LinkContext,
+    session: SessionContext,
+    git: GitContext,
+    ctx: ChangesContext,
     pollMs: Long = PROJECT_CHANGES_POLL_MS,
     openDiff: DiffTarget? = null,
     onOpenDiff: ((DiffTarget) -> Unit)? = null,
@@ -309,7 +281,7 @@ fun ChangesPaneFrame(
 ) {
     val scope = rememberCoroutineScope()
     val mode = remember { mutableStateOf(ChangesMode.WORKING_TREE) }
-    val changes = ChangesPaneHost(state, controller, scope, mode, openDiff, onOpenDiff)
+    val changes = ChangesPaneHost(link, session, git, ctx, scope, mode, openDiff, onOpenDiff)
     val live = changes.live
     val supported = changes.supported
     val branchesSupported = changes.branchesSupported
@@ -324,18 +296,17 @@ fun ChangesPaneFrame(
         val id = active?.id ?: return@LaunchedEffect
         if (!live || !supported || branch != null || worktreesSupported) return@LaunchedEffect
         while (true) {
-            controller.loadProjectTree(id)
+            ctx.loadTree(id)
             delay(pollMs)
         }
     }
     // UX-CHANGES-1: the project's worktrees, naming the selected session so the daemon opens the view on its checkout.
-    LaunchedEffect(active?.id, active?.directory, live, worktreesSupported, state.selectedId) {
+    val selectedId = session.selectedAgentId
+    LaunchedEffect(active?.id, active?.directory, live, worktreesSupported, selectedId) {
         val id = active?.id ?: return@LaunchedEffect
         if (!live || !worktreesSupported) return@LaunchedEffect
         while (true) {
-            controller.pollOnce(Envelope.PROJECT_GIT_WORKTREES, Envelope.PROJECT_GIT_WORKTREE_LIST, id, PROJECT_CHANGES_POLL_TIMEOUT_MS) {
-                controller.loadProjectWorktrees(id, state.selectedId)
-            }
+            ctx.pollWorktrees(id, selectedId, PROJECT_CHANGES_POLL_TIMEOUT_MS)
             delay(pollMs * WORKTREE_LIST_POLLS)
         }
     }
@@ -345,19 +316,17 @@ fun ChangesPaneFrame(
         val path = worktree ?: return@LaunchedEffect
         if (!live) return@LaunchedEffect
         while (true) {
-            controller.pollOnce(Envelope.PROJECT_GIT_WORKTREE_STATUS, Envelope.PROJECT_GIT_WORKTREE, id, PROJECT_CHANGES_POLL_TIMEOUT_MS) {
-                controller.loadWorktreeStatus(id, path)
-            }
+            ctx.pollWorktreeStatus(id, path, PROJECT_CHANGES_POLL_TIMEOUT_MS)
             delay(pollMs)
         }
     }
     LaunchedEffect(active?.id, active?.directory, live, branchesSupported) {
         val id = active?.id ?: return@LaunchedEffect
-        if (live && branchesSupported) controller.loadProjectBranches(id)
+        if (live && branchesSupported) git.loadBranches(id)
     }
     LaunchedEffect(active?.id, active?.directory, live, branch) {
         val id = active?.id ?: return@LaunchedEffect
-        if (live && branchesSupported && branch != null) controller.loadBranchChanges(id, branch)
+        if (live && branchesSupported && branch != null) ctx.loadBranchChanges(id, branch)
     }
 
     Column(modifier.fillMaxSize().testTag(CHANGES_PANE_TAG).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -448,8 +417,7 @@ fun ChangesHintSection(changes: ChangesPaneHost, modifier: Modifier = Modifier) 
 fun ChangesFilesSection(changes: ChangesPaneHost, modifier: Modifier = Modifier, file: @Composable (ChangesFileItem) -> Unit) {
     if (!changes.showsList || changes.branch != null) return
     val active = changes.active ?: return
-    val state = changes.state
-    val view = if (changes.worktreesSupported) worktreeChangesView(changes.status) else projectChangesView(state.projectGit[active.id], state.projectGitFailure)
+    val view = if (changes.worktreesSupported) worktreeChangesView(changes.status) else projectChangesView(changes.git.status(active.id), changes.git.failure)
     WorkingTreeChanges(view, modifier, file)
 }
 
@@ -462,7 +430,7 @@ fun ChangesBranchFilesSection(changes: ChangesPaneHost, modifier: Modifier = Mod
     if (!changes.showsList) return
     val active = changes.active ?: return
     val branch = changes.branch ?: return
-    BranchChanges(changes.state, active, branch, modifier, row)
+    BranchChanges(changes.context, active, branch, modifier, row)
 }
 
 /**
@@ -504,7 +472,7 @@ private fun WorktreeSelect(changes: ChangesPaneHost) {
     val active = changes.active ?: return
     val worktree = changes.worktree
     var open by remember { mutableStateOf(false) }
-    val list = changes.state.projectWorktrees[active.id]
+    val list = changes.context.worktrees(active.id)
     val shown = list?.worktrees?.firstOrNull { it.path == worktree }
     val label = when {
         list == null -> "Loading worktrees…"
@@ -654,8 +622,8 @@ private fun BranchSelect(changes: ChangesPaneHost, modifier: Modifier) {
     val branch = changes.branch
     val supported = changes.branchesSupported
     var open by remember { mutableStateOf(false) }
-    val status = changes.state.projectGit[active.id]
-    val list = changes.state.projectGitBranches[active.id]
+    val status = changes.git.status(active.id)
+    val list = changes.git.branches(active.id)
     val shown = branch ?: "Working tree (current)"
     val detail = if (branch == null && status?.available == true) status.headline() else null
     Box(modifier) {
@@ -742,8 +710,8 @@ private fun WorkingTreeChanges(changes: ChangesView, modifier: Modifier, file: @
 
 /** What [branch] changed vs its base. Unknown shows the daemon's reason; an available empty list is a known "no changes". */
 @Composable
-private fun BranchChanges(state: AppState, active: ProjectView, branch: String, modifier: Modifier, row: @Composable (BranchChangedFile) -> Unit) {
-    when (val view = branchChangesView(state.projectGitBranchChanges[active.id], branch)) {
+private fun BranchChanges(ctx: ChangesContext, active: ProjectView, branch: String, modifier: Modifier, row: @Composable (BranchChangedFile) -> Unit) {
+    when (val view = branchChangesView(ctx.branchChanges(active.id), branch)) {
         is BranchChangesView.Unknown -> Text("Branch unknown: ${view.reason}", color = Palette.Muted, fontSize = 11.sp, modifier = modifier)
         is BranchChangesView.Files -> ChangesPlaced(modifier) {
             Text(view.header(), color = Palette.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, fontFamily = Mono)
