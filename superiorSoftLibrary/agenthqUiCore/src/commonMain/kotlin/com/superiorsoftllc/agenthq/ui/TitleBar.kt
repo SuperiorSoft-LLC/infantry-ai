@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -112,20 +113,59 @@ fun TitleBar(
     /** ASSISTANT-1: the Assistant's portrait, the LAST member of the team strip (and a button before the overflow in a compact bar); empty = none. */
     assistantSlot: @Composable () -> Unit = {},
 ) {
-    // The empty areas move the window (desktop drag) and a double-click there toggles maximize, like a native bar.
-    val drag = if (chrome == null) Modifier else chrome.dragArea.pointerInput(chrome) {
-        detectTapGestures(onDoubleTap = { chrome.toggleMaximize() })
+    // BLOCKS-LAYOUT L6: the same frame and items the shell header (`infantry.shell.header`) composes as child blocks.
+    TitleBarFrame {
+        TitleBarLead(state, agentScope, onConnect, onAttention, chrome, projectSlot, onTogglePanel, assistantSlot, serverSlot, Modifier.weight(1f))
     }
-    // MOBILE-TITLEBAR-1: below PanelLayout.COMPACT_BELOW_DP the bar keeps the left toggle, the logo + name and the
-    // connection chip (state only); the project picker, the attention entry, the side-panel toggle and the connection URL
-    // move into an overflow menu, and the avatar strip gives way to a plain drag area. At or above it the bar is unchanged.
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
+}
+
+/**
+ * BLOCKS-LAYOUT L6: the bar's frame: the 36dp Panel row (its items in order, left to right) and the divider under it.
+ * Below PanelLayout.COMPACT_BELOW_DP it provides [LocalTitleBarCompact] = true; the items read it.
+ */
+@Composable
+fun TitleBarFrame(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
+    BoxWithConstraints(modifier.fillMaxWidth()) {
     val compact = PanelLayout.isCompact(maxWidth.value)
     androidx.compose.runtime.CompositionLocalProvider(LocalTitleBarCompact provides compact) {
     Row(
         Modifier.fillMaxWidth().height(TITLE_BAR_HEIGHT).background(Palette.Panel).testTag(TITLE_BAR_TAG),
         verticalAlignment = Alignment.CenterVertically,
-    ) {
+        content = content,
+    )
+    }
+    }
+    HorizontalDivider(color = Palette.Border)
+}
+
+/** The empty areas move the window (desktop drag) and a double-click there toggles maximize, like a native bar. */
+private fun dragModifier(chrome: WindowChrome?): Modifier = if (chrome == null) Modifier else chrome.dragArea.pointerInput(chrome) {
+    detectTapGestures(onDoubleTap = { chrome.toggleMaximize() })
+}
+
+/**
+ * BLOCKS-LAYOUT L6: the bar's left and middle (L7 splits it): the left toggle, the logo + name, and the project slot +
+ * avatar strip (wide) or the drag area + Assistant + overflow (compact). It takes the space the right-hand items leave.
+ */
+@Composable
+fun TitleBarLead(
+    state: AppState,
+    agentScope: AgentScope,
+    onConnect: () -> Unit,
+    onAttention: () -> Unit,
+    chrome: WindowChrome?,
+    projectSlot: @Composable () -> Unit,
+    onTogglePanel: ((PanelSide) -> Unit)?,
+    assistantSlot: @Composable () -> Unit,
+    serverSlot: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val drag = dragModifier(chrome)
+    val compact = LocalTitleBarCompact.current
+    // MOBILE-TITLEBAR-1: below PanelLayout.COMPACT_BELOW_DP the bar keeps the left toggle, the logo + name and the
+    // connection chip (state only); the project picker, the attention entry, the side-panel toggle and the connection URL
+    // move into an overflow menu, and the avatar strip gives way to a plain drag area. At or above it the bar is unchanged.
+    Row(modifier.fillMaxHeight(), verticalAlignment = Alignment.CenterVertically) {
         if (onTogglePanel != null) {
             Spacer(Modifier.width(6.dp))
             PanelToggle(PanelSide.LEFT, state.panels.leftShown, compact) { onTogglePanel(PanelSide.LEFT) }
@@ -140,9 +180,6 @@ fun TitleBar(
             Spacer(drag.weight(1f).fillMaxHeight().testTag(TITLE_BAR_DRAG_TAG))
             assistantSlot()
             TitleBarOverflow(state, onConnect, onAttention, projectSlot)
-            // The right-panel toggle stays in view on a phone (the owner's ask): it replaces the old strip under the bar.
-            if (onTogglePanel != null) PanelToggle(PanelSide.RIGHT, state.panels.rightShown, compact = true) { onTogglePanel(PanelSide.RIGHT) }
-            Spacer(Modifier.width(4.dp))
         } else {
             // M2-7: the project drop-down and the "+" New Project box ([ProjectPicker]).
             Box(Modifier.fillMaxHeight().testTag(TITLE_BAR_PROJECT_SLOT_TAG), contentAlignment = Alignment.Center) { projectSlot() }
@@ -160,33 +197,52 @@ fun TitleBar(
                 // ASSISTANT-1: the Assistant is the LAST portrait of the team.
                 assistantSlot()
             }
-            // Contract 1.9.0: open attention is a durable signal from the daemon, so it is always in view.
-            if (state.attentionOpenCount > 0) {
-                Chip("${state.attentionOpenCount} need attention", Palette.Accent, Modifier.clickable(onClick = onAttention).testTag(TITLE_BAR_ATTENTION_CHIP_TAG))
-                Spacer(Modifier.width(10.dp))
-            }
-            if (onTogglePanel != null) {
-                PanelToggle(PanelSide.RIGHT, state.panels.rightShown, compact = false) { onTogglePanel(PanelSide.RIGHT) }
-                Spacer(Modifier.width(8.dp))
-            }
         }
+        TitleBarAttention(state, onAttention)
+        if (onTogglePanel != null) TitleBarRightToggle(state) { onTogglePanel(PanelSide.RIGHT) } else if (compact) Spacer(Modifier.width(4.dp))
         serverSlot()
-        ConnChip(state, onConnect, showUrl = !compact)
-        if (chrome == null) {
-            Spacer(Modifier.width(12.dp))
-        } else {
-            Spacer(Modifier.width(8.dp))
-            WindowButton(TITLE_BAR_MINIMIZE_TAG, "Minimize", Palette.Raised, chrome::minimize) { MinimizeGlyph() }
-            val maximized = chrome.isMaximized
-            WindowButton(TITLE_BAR_MAXIMIZE_TAG, if (maximized) "Restore" else "Maximize", Palette.Raised, chrome::toggleMaximize) {
-                if (maximized) RestoreGlyph() else MaximizeGlyph()
-            }
-            WindowButton(TITLE_BAR_CLOSE_TAG, "Close", CloseHover, chrome::close) { CloseGlyph() }
+        TitleBarConnection(state, onConnect)
+        TitleBarWindowControls(chrome)
+    }
+}
+
+/** Contract 1.9.0: open attention is a durable signal from the daemon, so it is always in view (wide; compact has it in the overflow). Owns its 10dp gap. */
+@Composable
+fun TitleBarAttention(state: AppState, onAttention: () -> Unit, modifier: Modifier = Modifier) {
+    if (!LocalTitleBarCompact.current && state.attentionOpenCount > 0) {
+        Chip("${state.attentionOpenCount} need attention", Palette.Accent, modifier.clickable(onClick = onAttention).testTag(TITLE_BAR_ATTENTION_CHIP_TAG))
+        Spacer(Modifier.width(10.dp))
+    }
+}
+
+/** PANEL-TOGGLE-1: the side panel toggle; it owns its gap (8dp wide, 4dp compact, where it stays in view: the owner's ask). */
+@Composable
+fun TitleBarRightToggle(state: AppState, modifier: Modifier = Modifier, onToggle: () -> Unit) {
+    val compact = LocalTitleBarCompact.current
+    PanelToggle(PanelSide.RIGHT, state.panels.rightShown, compact, modifier, onToggle)
+    Spacer(Modifier.width(if (compact) 4.dp else 8.dp))
+}
+
+/** The connection chip: state + URL (wide) or state only (compact). */
+@Composable
+fun TitleBarConnection(state: AppState, onConnect: () -> Unit, modifier: Modifier = Modifier) {
+    ConnChip(state, onConnect, showUrl = !LocalTitleBarCompact.current, modifier)
+}
+
+/** M2-6: minimize / maximize-restore / close where there is a window (with their 8dp lead), else the bar's 12dp end. */
+@Composable
+fun TitleBarWindowControls(chrome: WindowChrome?, modifier: Modifier = Modifier) {
+    if (chrome == null) {
+        Spacer(modifier.width(12.dp))
+    } else {
+        Spacer(modifier.width(8.dp))
+        WindowButton(TITLE_BAR_MINIMIZE_TAG, "Minimize", Palette.Raised, chrome::minimize) { MinimizeGlyph() }
+        val maximized = chrome.isMaximized
+        WindowButton(TITLE_BAR_MAXIMIZE_TAG, if (maximized) "Restore" else "Maximize", Palette.Raised, chrome::toggleMaximize) {
+            if (maximized) RestoreGlyph() else MaximizeGlyph()
         }
+        WindowButton(TITLE_BAR_CLOSE_TAG, "Close", CloseHover, chrome::close) { CloseGlyph() }
     }
-    }
-    }
-    HorizontalDivider(color = Palette.Border)
 }
 
 val TITLE_BAR_HEIGHT = 36.dp
@@ -252,11 +308,11 @@ private fun Logo() {
  * panel is shown, muted while hidden.
  */
 @Composable
-private fun PanelToggle(side: PanelSide, shown: Boolean, compact: Boolean, onClick: () -> Unit) {
+private fun PanelToggle(side: PanelSide, shown: Boolean, compact: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val left = side == PanelSide.LEFT
     val label = (if (shown) "Hide " else "Show ") + (if (left) "agent list" else "side panel")
     val tag = if (left) TITLE_BAR_TOGGLE_LEFT_TAG else TITLE_BAR_TOGGLE_RIGHT_TAG
-    IconActionTooltipBox(label, modifier = (if (compact) Modifier.size(width = 40.dp, height = TITLE_BAR_HEIGHT) else Modifier.size(28.dp)).testTag(tag)) { m ->
+    IconActionTooltipBox(label, modifier = modifier.then(if (compact) Modifier.size(width = 40.dp, height = TITLE_BAR_HEIGHT) else Modifier.size(28.dp)).testTag(tag)) { m ->
         Box(
             m.clip(RoundedCornerShape(5.dp)).clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
             contentAlignment = Alignment.Center,
@@ -330,7 +386,7 @@ private fun CloseGlyph() {
 }
 
 @Composable
-private fun ConnChip(state: AppState, onClick: () -> Unit, showUrl: Boolean = true) {
+private fun ConnChip(state: AppState, onClick: () -> Unit, showUrl: Boolean = true, modifier: Modifier = Modifier) {
     val c = state.connection
     val now = rememberTickingNow(c.state == ConnState.RECONNECTING)
     val (label, color) = when (c.state) {
@@ -341,7 +397,7 @@ private fun ConnChip(state: AppState, onClick: () -> Unit, showUrl: Boolean = tr
         ConnState.FAILED -> "failed" to Palette.Danger
         ConnState.IDLE -> "not connected" to Palette.Muted
     }
-    Row(Modifier.clickable(onClick = onClick).testTag(TITLE_BAR_CONNECTION_CHIP_TAG).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier.clickable(onClick = onClick).testTag(TITLE_BAR_CONNECTION_CHIP_TAG).padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(8.dp).clip(CircleShape).background(color))
         Spacer(Modifier.width(6.dp))
         Text(if (showUrl) "$label  ${c.url}" else label, color = color, fontSize = 11.sp, maxLines = 1)
