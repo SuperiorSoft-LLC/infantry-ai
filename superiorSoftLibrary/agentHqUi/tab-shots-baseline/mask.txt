@@ -14,3 +14,15 @@ right-tab-USAGE 1240 92 92 18
 # Chat: each message's time of day.
 center-tab-OUTPUT 965 164 92 16
 center-tab-OUTPUT 965 278 92 16
+
+# LAYOUT-1 P0 chrome shots (window chrome, compact widths): each chat message's time of day.
+chrome-desktop-1400 965 164 92 16
+chrome-desktop-1400 965 278 92 16
+chrome-compact-800 710 164 80 16
+chrome-compact-800 710 278 80 16
+chrome-compact-800-overflow 710 164 80 16
+chrome-compact-800-overflow 710 278 80 16
+chrome-compact-360 270 198 80 16
+chrome-compact-360 270 328 80 16
+chrome-compact-360-overflow 270 198 80 16
+chrome-compact-360-overflow 270 328 80 16

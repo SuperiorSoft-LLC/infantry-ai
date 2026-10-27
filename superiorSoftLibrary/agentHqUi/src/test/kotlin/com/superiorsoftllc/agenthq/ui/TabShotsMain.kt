@@ -16,9 +16,11 @@ import com.superiorsoftllc.agenthq.plugin.api.ModulesConfig
 import com.superiorsoftllc.agenthq.plugin.host.PluginFolders
 import com.superiorsoftllc.agenthq.plugin.host.PluginJson
 import com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins
+import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import com.superiorsoftllc.agenthq.ui.plugin.MODULE_ROW_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.MODULE_MESSAGE_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.MODULE_TOGGLE_TAG_PREFIX
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.superiorsoftllc.agenthq.daemon.AgentHqDaemon
 import com.superiorsoftllc.agenthq.mailbox.JsonMailStore
@@ -96,20 +98,7 @@ fun main(args: Array<String>) {
         // TAB-SHOTS-DIFF: a pane still showing its loading placeholder ("Loading skills...", the Stats pane's "Reading this
         // session's record...") is shot once it has loaded, so a slow host does not change the picture. One that never
         // loads is shot as it is (the diff then shows it).
-        val loading = SemanticsMatcher("a loading placeholder") { n ->
-            n.config.getOrElseNullable(SemanticsProperties.Text) { null }.orEmpty()
-                .any { it.text.startsWith("Loading") || it.text.startsWith("Reading this session") }
-        }
-        fun shot(name: String) {
-            waitForIdle()
-            runCatching { waitUntil(timeoutMillis = 10_000) { onAllNodes(loading).fetchSemanticsNodes().isEmpty() } }
-            Thread.sleep(400)
-            waitForIdle()
-            // The topmost root: the window, or the dialog open over it.
-            val roots = onAllNodes(isRoot())
-            ImageIO.write(roots[roots.fetchSemanticsNodes().size - 1].captureToImage().toAwtImage(), "png", File(out, "$name.png"))
-            println("shot ${File(out, "$name.png").path}")
-        }
+        fun shot(name: String) = snap(out, name)
         // Every node tagged center-tab-* / right-tab-* is one tab; click each in strip order.
         for (prefix in listOf("center-tab-", "right-tab-")) {
             val tagged = SemanticsMatcher("tag starts with $prefix") { n ->
@@ -150,7 +139,54 @@ fun main(args: Array<String>) {
             onAllNodesWithTag(MODULE_MESSAGE_TAG_PREFIX + name).fetchSemanticsNodes().firstOrNull()
                 ?.let { println("message $name: ${it.config.getOrElseNullable(SemanticsProperties.Text) { null }?.joinToString()}") }
         }
+        // LAYOUT-1 P0: the same window with the title bar's window controls (header + footer visible), then compact widths and
+        // the header's overflow menu, so a later shell change can prove the header and footer unchanged.
+    }
+    for ((name, size) in listOf("chrome-desktop-1400" to (1400 to 860), "chrome-compact-800" to (800 to 860), "chrome-compact-360" to (360 to 860))) {
+        runDesktopComposeUiTest(size.first, size.second) {
+            setContent { ChromeApp(controller, tabs) }
+            waitForIdle()
+            snap(out, name)
+            if (size.first < 840) {
+                onNodeWithTag(TITLE_BAR_OVERFLOW_TAG).performClick()
+                waitForIdle()
+                snap(out, "$name-overflow")
+            }
+        }
     }
     daemon.close()
     exitProcess(0)
+}
+
+private object ShotChrome : WindowChrome {
+    override val isMaximized: Boolean = false
+    override fun minimize() {}
+    override fun toggleMaximize() {}
+    override fun close() {}
+}
+
+@androidx.compose.runtime.Composable
+private fun ChromeApp(controller: Controller, tabs: TabFactory) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalWindowChrome provides ShotChrome) {
+        App(controller, "ws://127.0.0.1:18797/ws", null, tabs = tabs)
+    }
+}
+
+/** Waits out loading placeholders, then writes the topmost root (the window, or a dialog over it) as `<name>.png`. */
+@OptIn(ExperimentalTestApi::class)
+private fun ComposeUiTest.snap(out: File, name: String) {
+    // TAB-SHOTS-DIFF: a pane still showing its loading placeholder ("Loading skills...", the Stats pane's "Reading this
+    // session's record...") is shot once it has loaded, so a slow host does not change the picture. One that never
+    // loads is shot as it is (the diff then shows it).
+    val loading = SemanticsMatcher("a loading placeholder") { n ->
+        n.config.getOrElseNullable(SemanticsProperties.Text) { null }.orEmpty()
+            .any { it.text.startsWith("Loading") || it.text.startsWith("Reading this session") }
+    }
+    waitForIdle()
+    runCatching { waitUntil(timeoutMillis = 10_000) { onAllNodes(loading).fetchSemanticsNodes().isEmpty() } }
+    Thread.sleep(400)
+    waitForIdle()
+    val roots = onAllNodes(isRoot())
+    ImageIO.write(roots[roots.fetchSemanticsNodes().size - 1].captureToImage().toAwtImage(), "png", File(out, "$name.png"))
+    println("shot ${File(out, "$name.png").path}")
 }
