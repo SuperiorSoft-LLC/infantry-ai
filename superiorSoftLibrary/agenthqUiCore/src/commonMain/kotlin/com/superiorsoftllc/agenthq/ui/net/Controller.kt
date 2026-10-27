@@ -1166,7 +1166,8 @@ class Controller(
     }
 
     /** TRIGGER-NUDGE (contract 1.105.0): save the trigger form as drafted -- any kind, action, interval and project. */
-    internal suspend fun saveTrigger(id: String?, draft: com.superiorsoftllc.agenthq.ui.TriggerDraft): CommandResult {
+    // S4 (docs/SHELL-LEAKS.md): public like every other Controller action; the app UI's Triggers tab calls it.
+    suspend fun saveTrigger(id: String?, draft: com.superiorsoftllc.agenthq.ui.TriggerDraft): CommandResult {
         draft.problem()?.let { return report(CommandResult.Refused(it)) }
         return report(send(Envelope(Envelope.TRIGGER_SAVE, draft.toSave(id).toString())))
     }

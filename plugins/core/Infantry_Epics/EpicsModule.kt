@@ -26,6 +26,6 @@ val InfantryEpics = AgentHqModule(
             ),
             testTag = "center-tab-EPICS",
             routes = listOf("loadEpics", "saveEpic", "addEpicTask", "moveTicket"),
-        ) { EpicsPane(it.state, it.controller) },
+        ) { EpicsPane(it.state, it.appController) },
     ),
 )

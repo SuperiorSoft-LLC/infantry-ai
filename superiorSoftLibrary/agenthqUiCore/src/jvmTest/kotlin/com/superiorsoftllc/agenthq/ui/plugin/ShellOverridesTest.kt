@@ -39,7 +39,7 @@ class ShellOverridesTest {
 
     @Test fun `with no override the window draws the core tree itself`() {
         val f = TabFactory(CoreModules.all)
-        assertSame(CoreShell.root, f.shellRoot)
+        assertSame(f.baseRoot, f.shellRoot)
         assertEquals(emptyList(), f.problems)
     }
 
@@ -48,17 +48,17 @@ class ShellOverridesTest {
         val node = assertIs<OverrideBlock>(f.shellRoot.find(footer))
         assertEquals(OverrideModes.REPLACE, node.mode)
         assertEquals("Acme_Bar", node.module)
-        assertSame(CoreShell.root.find(footer)!!.place, node.place)
+        assertSame(f.baseRoot.find(footer)!!.place, node.place)
         assertEquals(emptyList(), f.problems)
         // Only the path down to the node is rebuilt; a sibling subtree stays the same object.
-        assertSame(CoreShell.root.find("infantry.shell.windowLayer"), f.shellRoot.find("infantry.shell.windowLayer"))
+        assertSame(f.baseRoot.find("infantry.shell.windowLayer"), f.shellRoot.find("infantry.shell.windowLayer"))
     }
 
     @Test fun `wrap keeps the core block as inner`() {
         val f = factory(module("Acme_Bar", ShellOverrideDeclaration("infantry.shell#infantry.shell.center", "frame", OverrideModes.WRAP)))
         val node = assertIs<OverrideBlock>(f.shellRoot.find("infantry.shell.center"))
         assertEquals(OverrideModes.WRAP, node.mode)
-        assertSame(CoreShell.root.find("infantry.shell.center"), node.inner)
+        assertSame(f.baseRoot.find("infantry.shell.center"), node.inner)
     }
 
     @Test fun `a locked node refuses replace and wrap with the reason`() {
@@ -69,7 +69,7 @@ class ShellOverridesTest {
                 ShellOverrideDeclaration("infantry.shell.dock", "dock", OverrideModes.WRAP),
             ),
         )
-        assertSame(CoreShell.root, f.shellRoot)
+        assertSame(f.baseRoot, f.shellRoot)
         assertTrue("Acme_Bar: shell override (replace) of infantry.shell.connect refused: infantry.shell.connect is locked" in f.problems, f.problems.toString())
         assertTrue(f.problems.any { "(wrap) of infantry.shell.dock refused: infantry.shell.dock is locked" in it }, f.problems.toString())
     }
@@ -92,18 +92,18 @@ class ShellOverridesTest {
             assertEquals(emptyList(), f.problems, id)
             val node = assertIs<OverrideBlock>(f.shellRoot.find(id), id)
             assertEquals(OverrideModes.REPLACE, node.mode)
-            assertSame(CoreShell.root.find(id)!!.place, node.place, id)
-            assertSame(CoreShell.root.find(id), node.inner, id)
+            assertSame(f.baseRoot.find(id)!!.place, node.place, id)
+            assertSame(f.baseRoot.find(id), node.inner, id)
             // A replace of the frame hands the host surface (focus target, key handler) on to the module's block.
             assertEquals(id == "infantry.shell.frame", node.wearsHostSurface, id)
             // The locked dialog layer beside it is untouched.
-            assertSame(CoreShell.root.find("infantry.shell.windowLayer"), f.shellRoot.find("infantry.shell.windowLayer"), id)
+            assertSame(f.baseRoot.find("infantry.shell.windowLayer"), f.shellRoot.find("infantry.shell.windowLayer"), id)
         }
     }
 
     @Test fun `the windowLayer placeholder refuses a replace that would remove the locked dialogs in it`() {
         val f = factory(module("Acme_Layer", ShellOverrideDeclaration("infantry.shell.windowLayer", "layer")))
-        assertSame(CoreShell.root, f.shellRoot)
+        assertSame(f.baseRoot, f.shellRoot)
         assertEquals(listOf("Acme_Layer: shell override (replace) of infantry.shell.windowLayer refused: it would remove locked node infantry.shell.config"), f.problems)
     }
 
@@ -119,14 +119,14 @@ class ShellOverridesTest {
                 ShellOverrideDeclaration(footer, "b", "remove"),
             ),
         )
-        assertSame(CoreShell.root, f.shellRoot)
+        assertSame(f.baseRoot, f.shellRoot)
         assertTrue(f.problems.any { "of infantry.shell.nope ignored: infantry.shell has no node infantry.shell.nope" in it }, f.problems.toString())
         assertTrue(f.problems.any { "of $footer ignored: unknown mode 'remove'" in it }, f.problems.toString())
     }
 
     @Test fun `declared but not registered, and registered but not declared, are both reported`() {
         val f = factory(module("Acme_Bar", ShellOverrideDeclaration(footer, "bar"), registered = setOf("stray")))
-        assertSame(CoreShell.root, f.shellRoot)
+        assertSame(f.baseRoot, f.shellRoot)
         assertTrue("Acme_Bar: shell override bar is declared but not registered; skipped" in f.problems, f.problems.toString())
         assertTrue("Acme_Bar: shell override stray is not declared in its module.json; refused" in f.problems, f.problems.toString())
     }
@@ -138,7 +138,7 @@ class ShellOverridesTest {
         assertEquals("Acme_B", outer.module)
         val innerWrap = assertIs<OverrideBlock>(outer.inner)
         assertEquals("Acme_A", innerWrap.module)
-        assertSame(CoreShell.root.find(footer), innerWrap.inner)
+        assertSame(CoreModules.factory.baseRoot.find(footer), innerWrap.inner)
 
         val r1 = module("Acme_R1", ShellOverrideDeclaration(footer, "r"))
         val r2 = module("Acme_R2", ShellOverrideDeclaration(footer, "r"))

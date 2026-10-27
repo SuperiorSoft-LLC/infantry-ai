@@ -27,6 +27,6 @@ val InfantryStats = AgentHqModule(
             ),
             testTag = "center-tab-STATS",
             routes = listOf("requestSessionStats"),
-        ) { StatsPane(it.state, it.controller) },
+        ) { StatsPane(it.state, it.appController) },
     ),
 )

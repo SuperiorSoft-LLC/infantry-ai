@@ -7,7 +7,8 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 
 /** The schedule floor the daemon enforces (`TriggerService.MIN_INTERVAL_MS`): one minute. */
-internal const val MIN_TRIGGER_INTERVAL_MINUTES = 1L
+// S4 (docs/SHELL-LEAKS.md): shell API, TriggerDraft's lower bound, shown by the trigger form.
+const val MIN_TRIGGER_INTERVAL_MINUTES = 1L
 
 /** A schedule interval typed in whole minutes, at least [MIN_TRIGGER_INTERVAL_MINUTES]; null when it is not one. */
 internal fun parseIntervalMinutes(text: String): Long? =
@@ -22,7 +23,8 @@ internal fun parseIntervalMinutes(text: String): Long? =
  * An edit starts from the trigger as stored ([from]), so saving it never changes its kind or its interval unless the
  * owner changed them in the form.
  */
-internal data class TriggerDraft(
+// S4 (docs/SHELL-LEAKS.md): shell API, the input of the public Controller.saveTrigger.
+data class TriggerDraft(
     val name: String = "",
     val kind: String = "manual",
     val action: String = "start_next",
@@ -93,8 +95,10 @@ internal data class TriggerDraft(
 }
 
 /** "in 12m" / "due now" -- a schedule's next slot, for the trigger card. */
-internal fun nextFireLabel(nextFireAt: Long?, now: Long): String? =
+// S4 bridge (docs/SHELL-LEAKS.md): public only until Triggers' tests move with it (S4b); Infantry_Triggers uses it.
+fun nextFireLabel(nextFireAt: Long?, now: Long): String? =
     nextFireAt?.let { ago(now, it).takeUnless { label -> it <= now || label == "now" }?.let { label -> "in $label" } ?: "due now" }
 
 /** "5m ago" / "never" -- the trigger's last accepted fire, for the trigger card. */
-internal fun lastFireLabel(lastFiredAt: Long?, now: Long): String = lastFiredAt?.let { ago(it, now) + " ago" } ?: "never"
+// S4 bridge (docs/SHELL-LEAKS.md): public only until Triggers' tests move with it (S4b); Infantry_Triggers uses it.
+fun lastFireLabel(lastFiredAt: Long?, now: Long): String = lastFiredAt?.let { ago(it, now) + " ago" } ?: "never"

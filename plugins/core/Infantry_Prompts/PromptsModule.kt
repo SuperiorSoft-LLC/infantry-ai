@@ -24,6 +24,6 @@ val InfantryPrompts = AgentHqModule(
             ),
             testTag = "right-tab-PROMPTS",
             routes = listOf("loadPrompts", "savePrompt", "deletePrompt"),
-        ) { PromptsPane(it.state, it.controller, onInsert = it.insertIntoChat) },
+        ) { PromptsPane(it.state, it.appController, onInsert = it.insertIntoChat) },
     ),
 )

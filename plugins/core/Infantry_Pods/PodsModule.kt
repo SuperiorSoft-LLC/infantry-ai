@@ -27,6 +27,6 @@ val InfantryPods = AgentHqModule(
             testTag = "center-tab-PODS",
             shortcut = 2,
             routes = listOf("submitPod", "queryPod", "cancelPod", "select"),
-        ) { PodsPane(it.state, it.controller) },
+        ) { PodsPane(it.state, it.appController) },
     ),
 )

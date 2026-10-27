@@ -17,6 +17,8 @@ kotlin {
     sourceSets {
         wasmJsMain.dependencies {
             implementation(project(":superiorSoftLibrary:agenthqUiCore"))
+            // S4: the app UI, compiled in (Main.kt installs its modules; wasm loads nothing at run time).
+            implementation(project(":superiorSoftLibrary:agenthqAppUi"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)

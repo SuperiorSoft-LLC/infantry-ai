@@ -23,9 +23,7 @@ kotlin {
     }
 
     sourceSets {
-        // PLUGINS-1: the core modules (the built-in tabs) live in <repo>/plugins/core, one folder per module, and are
-        // compiled into every target from there (web and Android cannot load a module at run time).
-        commonMain { kotlin.srcDir(rootProject.file("plugins/core")) }
+        // S4: the core modules (plugins/core) are compiled into :agenthqAppUi, the app UI, not into this shell.
         commonMain.dependencies {
             // PLUGINS-1: the plugin API and its loading rules (one-way: the API knows nothing of this UI).
             api(project(":superiorSoftLibrary:agenthqPlugins"))
@@ -42,6 +40,11 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(kotlin("test"))
+        }
+        // S4: the loader, factory and shell-tree tests run against the real core modules, which live in the app UI.
+        // Test-only: the shell's main code never sees :agenthqAppUi (it depends on this module, not the reverse).
+        jvmTest.dependencies {
+            implementation(project(":superiorSoftLibrary:agenthqAppUi"))
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)

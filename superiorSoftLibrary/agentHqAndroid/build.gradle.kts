@@ -139,6 +139,8 @@ tasks.register("printReleaseSigningResolved") {
 
 dependencies {
     implementation(project(":superiorSoftLibrary:agenthqUiCore"))
+    // S4: the app UI, compiled in; the shell finds its modules through ServiceLoader (META-INF/services in its jar).
+    implementation(project(":superiorSoftLibrary:agenthqAppUi"))
     testImplementation(libs.kotlin.testJunit)
     testImplementation(libs.junit)
     // MOBILE-PROBE-TEST-1: a real in-test daemon for probeDaemon (MockEngine has no WebSocket capability).

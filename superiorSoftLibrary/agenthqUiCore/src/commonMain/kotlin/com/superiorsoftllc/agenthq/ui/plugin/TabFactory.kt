@@ -30,6 +30,7 @@ import com.superiorsoftllc.agenthq.ui.block.layout.BlockResolver
 import com.superiorsoftllc.agenthq.ui.block.layout.InjectAt
 import com.superiorsoftllc.agenthq.ui.block.layout.NodeInjection
 import com.superiorsoftllc.agenthq.ui.block.layout.NodeOverride
+import com.superiorsoftllc.agenthq.ui.block.layout.PlaceholderBlock
 import com.superiorsoftllc.agenthq.ui.block.layout.admitInjections
 import com.superiorsoftllc.agenthq.ui.block.layout.Resolved
 import com.superiorsoftllc.agenthq.ui.model.AppState
@@ -97,8 +98,8 @@ object NoPluginServices : PluginServices {
 
 /**
  * What a tab's content may reach. The window builds one per strip; a tab never sees the window's own variables, it
- * asks through these. [controller] is internal: core modules (compiled into this library) use it, a community module
- * reaches the daemon only through the gated [services].
+ * asks through these. A core module reaches the window's controller ([coreController]); a community module reaches
+ * the daemon only through the gated [services].
  */
 class TabContext(
     val state: AppState,
@@ -117,15 +118,23 @@ class TabContext(
     val services: PluginServices = NoPluginServices,
     /** PLUGINS-3: the window's agents list (search, filters, the list, New agent). Only the left panel has one. */
     val agentsList: @Composable () -> Unit = {},
+    /** S4: whether the module this context is for is core tier ([forModule] sets it from the module's tier). */
+    private val core: Boolean = true,
 ) {
+    /**
+     * S4 (drop-in path, docs/SHELL-LEAKS.md): the window's controller, for a core module's content only; null in a
+     * community module's. Since S4 the core modules compile outside this library, so `internal` no longer marks them.
+     */
+    val coreController: Controller? get() = controller.takeIf { core }
+
     /** Selects an agent and shows its chat. */
     fun openAgent(sessionId: String) {
         controller.select(sessionId)
         showChat()
     }
 
-    internal fun forModule(services: PluginServices) =
-        TabContext(state, controller, open, showChat, insertIntoChat, diffTarget, onOpenDiff, transcript, services, agentsList)
+    internal fun forModule(services: PluginServices, core: Boolean) =
+        TabContext(state, controller, open, showChat, insertIntoChat, diffTarget, onOpenDiff, transcript, services, agentsList, core)
 }
 
 /**
@@ -217,6 +226,10 @@ class AgentHqModule(
     val shell: Map<String, BlockOverride> = emptyMap(),
     /** BLOCKS-INJECTORS J2: blocks added among a node's children, by the names module.json `inject` uses. */
     val inject: Map<String, BlockInjection> = emptyMap(),
+    /** S4: the trees drawn in the shell's empty slots ([CoreShell.slots]), by slot id (module.json `fills`); core tier only. */
+    val fills: Map<String, Block> = emptyMap(),
+    /** S4: the tab trees the module's tabs draw ([TabFactory.tabTree]), by the id of the tab that draws each; core tier only. */
+    val tabTrees: Map<String, Block> = emptyMap(),
 )
 
 /**
@@ -240,6 +253,10 @@ interface UiRegistrar {
     fun shell(name: String, override: BlockOverride) {}
     /** BLOCKS-INJECTORS J2: a block added among a node's children; declare it under `inject` in module.json (into, name, at, order). */
     fun inject(name: String, injection: BlockInjection) {}
+    /** S4: the tree drawn in empty shell slot [node] (its id is the block's); declare it under `fills` in module.json. */
+    fun fill(node: String, block: Block) {}
+    /** S4: the tab tree tab [tab] draws (`TabFactory.tabTree(root.id)`). */
+    fun tabTree(tab: String, root: Block) {}
 }
 
 /** Runs [plugin]'s registration into a module of [tier]. */
@@ -251,6 +268,8 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
     val observers = LinkedHashMap<String, (PluginEvent) -> Unit>()
     val shell = LinkedHashMap<String, BlockOverride>()
     val inject = LinkedHashMap<String, BlockInjection>()
+    val fills = LinkedHashMap<String, Block>()
+    val tabTrees = LinkedHashMap<String, Block>()
     plugin.register(object : UiRegistrar {
         override val services = services
         override fun tab(provider: TabProvider) { tabs += provider }
@@ -260,8 +279,10 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
         override fun observer(name: String, observer: (PluginEvent) -> Unit) { observers[name] = observer }
         override fun shell(name: String, override: BlockOverride) { shell[name] = override }
         override fun inject(name: String, injection: BlockInjection) { inject[name] = injection }
+        override fun fill(node: String, block: Block) { fills[node] = block }
+        override fun tabTree(tab: String, root: Block) { tabTrees[tab] = root }
     })
-    return AgentHqModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell, inject)
+    return AgentHqModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell, inject, fills, tabTrees)
 }
 
 /**
@@ -279,7 +300,11 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
  *   the tree the window draws ([CoreShell.root] itself when none applies);
  * - BLOCKS-INJECTORS J2: each module's module.json `inject` entries bind to its registered [AgentHqModule.inject] by
  *   name, pass the trust rule ([admitInjections]: a core module freely, a community one only into a target its
- *   [allowInject] lists) and go into the tree that holds their target, through [BlockResolver] like the overrides.
+ *   [allowInject] lists) and go into the tree that holds their target, through [BlockResolver] like the overrides;
+ * - S4 (drop-in path): a core module's declared [AgentHqModule.fills] go into [CoreShell.root]'s empty slots before
+ *   anything else ([baseRoot]), so the overrides and injections address their nodes as if the core drew them; an
+ *   undeclared fill, one of a community module, of a node that is no slot or of a slot already filled is refused.
+ *   The tab trees ([tabTreeRoots]) are the modules' [AgentHqModule.tabTrees], in load order.
  * Everything refused is in [problems]; nothing here throws.
  */
 class TabFactory(
@@ -307,17 +332,24 @@ class TabFactory(
     private val bindProblems: List<String>
     private val nodeOverrides: List<NodeOverride>
     private val nodeInjections: List<NodeInjection>
+    private val slotFills: Map<String, Block>
+    /** S4: the core tree with the modules' fills in, before any override or injection (the core's empty tree when none fills). */
+    val baseRoot: Block by lazy { CoreShell.root.filled(slotFills) }
+    /** S4: the tab trees the loaded modules draw, unresolved, in load order. */
+    val tabTreeRoots: List<Block>
+    /** S4 (P1 f60f4d97's map): the tab (its `TabProvider` id) that draws each tree of [tabTreeRoots], by tree id. */
+    val tabTreeTabs: Map<String, String>
     /** BLOCKS-LAYOUT L5: the core tree with the overrides (and J2 injections) in, resolved once (lazily: the tree is not built at init). */
     private val shell: Resolved by lazy {
-        val inTabs = CoreShell.tabs.flatMap { it.ids() }.toSet()
+        val inTabs = tabTreeRoots.flatMap { it.ids() }.toSet()
         BlockResolver.resolve(
-            CoreShell.root, nodeOverrides.filter { it.node !in inTabs }, CoreShell.locked,
+            baseRoot, nodeOverrides.filter { it.node !in inTabs }, CoreShell.locked,
             injections = nodeInjections.filter { it.target !in inTabs },
         )
     }
-    /** BLOCKS-LAYOUT L14: each core tab tree ([CoreShell.tabs]) with the overrides and injections of its own nodes in, resolved once. */
+    /** BLOCKS-LAYOUT L14: each tab tree ([tabTreeRoots]) with the overrides and injections of its own nodes in, resolved once. */
     private val tabTrees: List<Resolved> by lazy {
-        CoreShell.tabs.map { t ->
+        tabTreeRoots.map { t ->
             val ids = t.ids()
             BlockResolver.resolve(t, nodeOverrides.filter { it.node in ids }, CoreShell.locked, t.id, nodeInjections.filter { it.target in ids })
         }
@@ -457,6 +489,29 @@ class TabFactory(
             if (o == null) problems += "${a.module}: shell override ${a.name} is declared but not registered; skipped"
             o?.let { NodeOverride(a.module, a.node, a.mode, it) }
         }
+        // S4: the fills and the tab trees, core tier only.
+        val fills = LinkedHashMap<String, Block>()
+        val trees = LinkedHashMap<String, Pair<String, Block>>()
+        for (m in modules) {
+            val name = m.manifest.name
+            for ((node, b) in m.fills) when {
+                m.tier == Tier.COMMUNITY -> problems += "$name: fill of $node refused: only a core module fills a shell slot"
+                node !in m.manifest.fills -> problems += "$name: fill of $node is not declared in its module.json; refused"
+                node !in CoreShell.slots -> problems += "$name: fill of $node refused: it is not an empty shell slot"
+                b.id != node -> problems += "$name: fill of $node refused: its block's id is ${b.id}"
+                node in fills -> problems += "$name: fill of $node skipped: already filled"
+                else -> fills[node] = b
+            }
+            for (node in m.manifest.fills - m.fills.keys) problems += "$name: fill of $node is declared but not registered; skipped"
+            for ((tab, root) in m.tabTrees) when {
+                m.tier == Tier.COMMUNITY -> problems += "$name: tab tree ${root.id} refused: only a core module adds a tab tree"
+                root.id in trees -> problems += "$name: tab tree ${root.id} skipped: already provided by ${trees.getValue(root.id).first}"
+                else -> trees[root.id] = tab to root
+            }
+        }
+        slotFills = fills
+        tabTreeRoots = trees.values.map { it.second }
+        tabTreeTabs = trees.mapValues { it.value.first }
         providers = seen.values.toList()
         replacedTabs = replaced
         interceptors = ints
@@ -495,7 +550,7 @@ class TabFactory(
     fun Content(id: String, context: TabContext) {
         val tab = find(id) ?: return
         val module = byModule[tab.module]
-        val own = context.forModule(services(tab.module))
+        val own = context.forModule(services(tab.module), module?.tier != Tier.COMMUNITY)
         val hooks = interceptors[id].orEmpty().filter { it.before != null || it.after != null || it.content != null }
         val top = blocks[Slots.top(tab.container)].orEmpty()
         val bottom = blocks[Slots.bottom(tab.container)].orEmpty()
@@ -508,7 +563,7 @@ class TabFactory(
             i.content?.let { wrap -> { wrap(own, proceed) } } ?: proceed
         }
         Column {
-            top.forEach { (owner, b) -> b.content(context.forModule(services(owner))) }
+            top.forEach { (owner, b) -> b.content(context.forModule(services(owner), byModule[owner]?.tier != Tier.COMMUNITY)) }
             if (community) CommunityBadge(module!!.manifest)
             hooks.forEach { it.before?.invoke(own) }
             Box(Modifier.weight(1f)) {
@@ -516,7 +571,7 @@ class TabFactory(
                 CompositionLocalProvider(LocalContentColor provides Palette.Text) { inner() }
             }
             hooks.forEach { it.after?.invoke(own) }
-            bottom.forEach { (owner, b) -> b.content(context.forModule(services(owner))) }
+            bottom.forEach { (owner, b) -> b.content(context.forModule(services(owner), byModule[owner]?.tier != Tier.COMMUNITY)) }
         }
     }
 
@@ -548,7 +603,7 @@ fun ColumnScope.PanelSections(factory: TabFactory, panel: String, context: TabCo
 @Composable
 private fun ColumnScope.PanelSection(factory: TabFactory, section: PanelProvider, context: TabContext) {
     val module = factory.panelModuleOf(section.id)
-    val own = context.forModule(factory.servicesOf(section.module))
+    val own = context.forModule(factory.servicesOf(section.module), module?.tier != Tier.COMMUNITY)
     Box(Modifier.fillMaxWidth().testTag(section.testTag).let { if (section.fill) it.weight(1f) else it }) {
         if (module?.tier == Tier.COMMUNITY) {
             Column {
@@ -563,3 +618,11 @@ private fun ColumnScope.PanelSection(factory: TabFactory, section: PanelProvider
 
 /** Every node id in the tree under (and including) this block. */
 private fun Block.ids(): Set<String> = setOf(id) + children.flatMap { it.ids() }
+
+/** S4: this tree with each empty slot that [fills] names replaced by its fill; the very same object when none applies. */
+private fun Block.filled(fills: Map<String, Block>): Block {
+    if (fills.isEmpty()) return this
+    if (this is PlaceholderBlock && default == null) return fills[id] ?: this
+    val kids = children.map { it.filled(fills) }
+    return if (kids.indices.all { kids[it] === children[it] }) this else withChildren(kids)
+}

@@ -19,7 +19,7 @@ import com.superiorsoftllc.agenthq.plugin.host.RouteGate
 import com.superiorsoftllc.agenthq.plugin.host.ServiceRegistry
 import com.superiorsoftllc.agenthq.plugin.host.SimpleEventBus
 import com.superiorsoftllc.agenthq.plugin.host.provideEvents
-import com.superiorsoftllc.agenthq.plugins.core.CoreModules
+
 import com.superiorsoftllc.agenthq.ui.model.ToastKind
 import java.io.File
 import java.net.URLClassLoader
@@ -47,7 +47,7 @@ object DesktopPlugins {
         stateDir: File,
         env: (String) -> String? = System::getenv,
         property: (String) -> String? = System::getProperty,
-        compiled: List<AgentHqModule> = CoreModules.all,
+        compiled: List<AgentHqModule> = CompiledModules.all,
         print: (String) -> Unit = { System.err.println(it) },
     ): Loaded {
         val log = mutableListOf<String>()

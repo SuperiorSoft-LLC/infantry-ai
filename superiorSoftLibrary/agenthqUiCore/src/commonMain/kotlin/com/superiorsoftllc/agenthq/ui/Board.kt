@@ -104,7 +104,8 @@ internal fun assigneeRole(state: AppState, agentId: String): String? =
         ?: state.agents[agentId]?.role
 
 /** What a ticket's assignee reads as: a profile's name when the id is one, else the raw `role:<role>` / id. */
-internal fun assigneeLabel(state: AppState, agentId: String?): String = when {
+// S4 bridge (docs/SHELL-LEAKS.md): public only until Board moves to the app UI (S4b); Infantry_Triggers uses it.
+fun assigneeLabel(state: AppState, agentId: String?): String = when {
     agentId == null -> "unassigned"
     else -> state.visibleProfiles.firstOrNull { it.id == agentId }?.name ?: agentId
 }
@@ -581,8 +582,9 @@ private fun DragGhost(t: Ticket, drag: BoardDrag, origin: Offset) {
 }
 
 /** PIPELINE-WATCHDOG: the watchdog flag; urgent states in the attention colour. */
+// S4 bridge (docs/SHELL-LEAKS.md): public only until Board and the sidebar move to the app UI (S4b/S4c); Infantry_Attention uses it.
 @Composable
-internal fun WatchFlagChip(flag: WatchFlag?, modifier: Modifier = Modifier) {
+fun WatchFlagChip(flag: WatchFlag?, modifier: Modifier = Modifier) {
     if (flag != null) Chip(flag.label, if (flag.urgent) Palette.Accent else Palette.Info, modifier)
 }
 

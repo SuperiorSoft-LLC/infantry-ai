@@ -16,7 +16,8 @@ internal fun msToMinutesText(ms: Long): String {
 }
 
 /** A friendly label for a period: "30 min", "2 h", "1 d"; legacy rows below a minute still read ("45 s"). */
-internal fun humanDuration(ms: Long): String = when {
+// S4 bridge (docs/SHELL-LEAKS.md): public only until Triggers' tests move with it (S4b); Infantry_Triggers uses it.
+fun humanDuration(ms: Long): String = when {
     ms <= 0L -> "none"
     ms < 1000L -> "$ms ms"
     ms < 60_000L -> "${ms / 1000} s"

@@ -29,6 +29,7 @@ dependencyResolutionManagement {
 include(":superiorSoftLibrary")
 include(":superiorSoftLibrary:agentHq")
 include(":superiorSoftLibrary:agenthqUiCore")
+include(":superiorSoftLibrary:agenthqAppUi")
 // PLUGINS-1: the plugin API and the host's loading rules (no Compose, shared by the UI and the daemon).
 include(":superiorSoftLibrary:agenthqPlugins")
 include(":superiorSoftLibrary:agentHqUi")

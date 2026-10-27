@@ -16,6 +16,11 @@ kotlin {
 
 dependencies {
     implementation(project(":superiorSoftLibrary:agenthqUiCore"))
+    // S4 (drop-in path): the app UI is a plugin of this shell: on the run-time classpath only, found through
+    // ServiceLoader, never compiled against (a compile error here is a leak; see docs/SHELL-LEAKS.md). The tests
+    // compile against it: they drive the app UI's panes.
+    runtimeOnly(project(":superiorSoftLibrary:agenthqAppUi"))
+    testImplementation(project(":superiorSoftLibrary:agenthqAppUi"))
     implementation(compose.desktop.currentOs)
     // UPDATE-1: the update dialog (UpdatePrompt.kt); the same material3 :agenthqUiCore already ships.
     implementation(compose.material3)

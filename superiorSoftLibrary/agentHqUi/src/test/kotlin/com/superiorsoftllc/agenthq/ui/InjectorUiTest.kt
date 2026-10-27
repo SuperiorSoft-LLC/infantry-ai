@@ -117,14 +117,14 @@ class InjectorUiTest {
     private fun Block.find(id: String): Block? = if (this.id == id) this else children.firstNotNullOfOrNull { it.find(id) }
 
     @Test fun `with no injection the window draws the core tree itself`() {
-        assertSame(CoreShell.root, factory().shellRoot)
-        assertSame(CoreShell.root, factory(module("Acme_Idle", Tier.COMMUNITY)).shellRoot)
+        factory().let { assertSame(it.baseRoot, it.shellRoot) }
+        factory(module("Acme_Idle", Tier.COMMUNITY)).let { assertSame(it.baseRoot, it.shellRoot) }
     }
 
     @Test fun `a core module injects a button first and last into the header and both draw and click`() {
         val tabs = factory(module("Infantry_Sample", Tier.CORE, Inj("infantry.shell.header", "first", "first"), Inj("infantry.shell#infantry.shell.header", "last")))
         assertEquals(emptyList(), tabs.problems)
-        assertNotSame(CoreShell.root, tabs.shellRoot)
+        assertNotSame(tabs.baseRoot, tabs.shellRoot)
         val header = tabs.shellRoot.find("infantry.shell.header")!!
         assertEquals(listOf("Infantry_Sample.first", "infantry.shell.header.lead"), header.children.take(2).map { it.id })
         assertEquals("Infantry_Sample.last", header.children.last().id)
@@ -162,7 +162,7 @@ class InjectorUiTest {
             listOf("Acme_Pill: injection pill into infantry.shell.header refused: a community module cannot inject into infantry.shell.header unless modules.json allowInject lists it"),
             refused.problems,
         )
-        assertSame(CoreShell.root, refused.shellRoot)
+        assertSame(refused.baseRoot, refused.shellRoot)
         withWindow(refused) { onNodeWithTag("pill").assertDoesNotExist() }
 
         val granted = factory(acme, allowInject = mapOf("Acme_Pill" to listOf("infantry.shell.header")))
@@ -173,7 +173,7 @@ class InjectorUiTest {
     @Test fun `an injection into a locked node is refused with a line and nothing draws`() {
         val tabs = factory(module("Infantry_Lock", Tier.CORE, Inj("infantry.shell.dock", "fake")))
         assertEquals(listOf("Infantry_Lock: injection fake into infantry.shell.dock (last) refused: infantry.shell.dock is locked"), tabs.problems)
-        assertSame(CoreShell.root, tabs.shellRoot)
+        assertSame(tabs.baseRoot, tabs.shellRoot)
         withWindow(tabs) { onNodeWithTag("fake").assertDoesNotExist() }
     }
 
