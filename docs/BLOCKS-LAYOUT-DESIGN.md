@@ -198,7 +198,7 @@ L5 ships `replace` and `wrap` only; `remove | before | after | move | into | pla
 `LocalTitleBarCompact`) plus the divider, and its items are children, left to right, `infantry.shell.header.<name>`:
 
 ```
-lead            titleBarLead    left toggle, logo + name, project slot + avatar strip / compact drag + Assistant + overflow (L7, L8 split it)
+lead            titleBarLead    left toggle, logo + name, project slot, avatar strip / compact drag + Assistant + overflow (children since L7, 6c)
 attention       attentionChip   "N need attention" + its 10dp gap; wide only (compact lists it in the overflow)
 toggleRight     panelToggle     side panel toggle + its gap (8dp wide, 4dp compact)
 server          serverSwitcher  SWITCH-1 dropdown (nothing without a switcher)
@@ -212,6 +212,25 @@ windowControls  windowControls  8dp + minimize/maximize/close with a window chro
   moved the clipping of the overflowing 360dp bar from the window controls to the lead (`chrome-compact-360*` shots).
 - None of these nodes is locked: the header root and every child stay overridable (section 7).
 - The standalone `TitleBar(...)` composable draws the same frame and items in the same order (tests use it).
+
+### 6c. As built in L7 (b1e819fb)
+
+`infantry.shell.header.lead` is a container (`titleBarLead`) of child blocks, left to right,
+`infantry.shell.header.lead.<name>`:
+
+```
+toggleLeft  panelToggle  6dp + the agent list toggle
+brand       brand        logo + name, a drag area; owns 6dp before (after the toggle) and 10dp after
+project     projectSlot  M2-7 project picker + "+" New Project; wide only (compact lists it in the overflow)
+agents      agentStrip   the drag area with weight(1f): wide, the avatar strip with the Assistant last;
+                         compact, the plain drag area + Assistant + overflow button (L8 splits the overflow off)
+```
+
+- The lead draws no node of its own: in the bar's row it renders its children straight into that row
+  (`BlockScope.row`), so `agents` keeps its `weight(1f)` and the 360dp bar still clips at its right end.
+- The window drag modifier sits on the same boxes as before (`brand`'s row, `agents`' drag area).
+- None of these nodes is locked. The Assistant stays inside `agents` in the wide bar: a node of its own would move it
+  out of the weighted strip to the strip's right end.
 
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 
