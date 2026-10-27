@@ -754,6 +754,66 @@ ShellContext { link, session, git, run, board, roles, toast, config }
   `apiVersion`. A member is never renamed, retyped or removed; a new member on an interface a plugin might implement
   (a fake, a wrapper) gets a default. Too wide is a leak forever; S4's compile errors decide each widening.
 
+### 6r. As built in SHELL-EMPTY-DROPIN S3 (b06cc897): Configuration split into a trust kernel and open settings
+
+Gap 3 of the feasibility doc: `ConfigDialog` (239 lines) was one locked leaf, so the "empty" shell still held every
+setting. `infantry.shell.config` is now a container, built as 6j-6o; it and its trust sections stay locked, the settings
+are open.
+
+```
+infantry.shell.config   config (LOCKED)   the frame: AhqAlertDialog, title, lifetime note, search box and results, tab strip,
+                                          Done; children straight into the selected tab's scrolled column, top to bottom:
+  settings        group (open)      app UI; transparent, so its children are drawn as the container's own
+    theme           configSection   Appearance: accent and dark mode
+    blur            configSection   Appearance: blur behind dialogs
+    markdownEngine  configSection   Appearance: chat markdown engine
+    reasoning       configSection   Appearance: where reasoning shows
+    userPortrait    configSection   Appearance: the user's portrait
+    agentScope      configSection   General
+    progressStale   configSection   General
+    lifecycle       configSection   General: session keep-alive (daemon state)
+    cliLocations    configSection   Agents: CLI paths and harness install
+    toolApproval    configSection   Agents
+    roles           configSection   Agents: opens the role manager
+    limits          configSection   Limits
+    voice           configSection   Notifications
+    incomingSound   configSection   Notifications
+    questions       configSection   Notifications: send a test question
+  plugins         configSection (LOCKED)   Plugins: voice plugins
+  modules         configSection (LOCKED)   Plugins: modules, where a plugin is disabled
+  secrets         configSection (LOCKED)   Secrets: the daemon keystore
+  pair            configSection (LOCKED)   Devices: pair a device (a server address and its token)
+  about           configSection (LOCKED)   About: app and daemon build
+  updates         configSection (LOCKED)   About: check for app updates
+  serverUpdate    configSection (LOCKED)   About: the daemon's version and updater
+  logs            configSection (LOCKED)   About: the log folder
+```
+
+- **What is locked, and why.** `config` itself (frame, tab strip, search) and the eight trust sections are in
+  `CoreShell.locked` (`ShellConfigTrust`): they are where a plugin is disabled (plugins, modules), a secret or a token is
+  typed (secrets, pair), an update is checked or approved (updates, serverUpdate) and a problem is reported from (about,
+  logs). No module replaces or wraps one, and a replace of `windowLayer` is still refused, so a bad drop can always be
+  undone from Configuration > Plugins (feasibility doc 3d). `serverUpdate` and `modules` are not named in the doc's list;
+  they are locked for the same reasons as `updates` and Plugins. The fifteen settings and their group are open.
+- **Adding a section.** The container is locked, so it takes no injection; `settings` is open, so a module adds a section
+  by injecting into `infantry.shell.config.settings` (a community module needs `allowInject` for it). An injected child
+  has no `ConfigEntry`, so it shows on every tab and the search does not find it; a registry for plugin sections (tab,
+  title, keywords) is a later addition, not part of S3. Replacing `settings` drops every setting and keeps the trust half.
+- `ConfigDialog(...)` keeps its signature plus one trailing parameter, `sections` (default `ConfigSections`, every section
+  in order), so its own tests (ConfigTabsUiTest, ConfigDialogLayoutUiTest, SecretsKeyValueUiTest, ...) host it as before.
+  `ConfigBlock` passes its children instead.
+- The dialog owns the tab, the query and the highlight; sections read them, with the dialog's inputs, through
+  `ConfigDialogHost` (a composition local) and change settings only through its callbacks (`onFlags`, `onTheme`,
+  `onLimit`, ...). A section drawn outside the dialog draws nothing.
+- Each section's old `if (shows(entry) && input != null)` is its own condition (`ConfigThemeSection` ...
+  `ConfigLogsSection`); it draws nothing off its tab, so it adds no 14 dp gap, as before. The container also draws a child
+  whose id is a section's only on that section's tab, so a module's replace or wrap of `theme` shows on Appearance only.
+- Each section draws one `FlagSection` column that wears its placement (`scope.modifier` first, then the section's tag,
+  the bring-into-view requester and the highlight outline), so a wrap needs no Column of its own beyond the module's.
+- HandCursorGuardTest baseline unchanged (the raw calls moved, none added or removed).
+- 0 px: S0's opt-in set (`-PtabShotsExtra=config,compact`: the nine Configuration tabs and the search, and the compact
+  board, new-agent and config shots) rendered on the base before the split matched after it, plus diffTabShots 32/32.
+
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 
 | part | bucket |
@@ -762,7 +822,8 @@ ShellContext { link, session, git, run, board, roles, toast, config }
 | primitive implementations, resolver, `surface`, `imageViewerHost` | **core**, not overridable as types |
 | skeleton nodes `window, images, dock` | core, `locked` (children insertable) |
 | placeholders `frame, body, panes, windowLayer` (S1, 6p) | core default, **overridable per node** (windowLayer: injections only, it holds locked dialogs) |
-| `connect`, `servers`, `switchError`, `serverUpdate`, `config` | core, `locked`: a plugin must not replace where a token is typed, an update is approved or a plugin is disabled |
+| `connect`, `servers`, `switchError`, `serverUpdate`, `config` and config's trust sections (S3, 6r) | core, `locked`: a plugin must not replace where a token is typed, an update is approved or a plugin is disabled |
+| `config.settings` and its fifteen sections (S3, 6r) | core-shipped, **overridable per node** |
 | titleBar, panels, center, statusBar and its children, toast/assistant/board/diff/voice/sound/questions | core-shipped, **overridable per node** |
 
 LICENSE-0 §4 asks how the percentages move. The overridable bucket grows with each decomposition step (section 8),

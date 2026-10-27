@@ -126,6 +126,11 @@ fun ConfigDialog(
     onTab: ((ConfigTab) -> Unit)? = null,
     /** PLUGINS-1: the loaded modules, for Plugins > Modules; null = this host has only compiled-in modules (no section). */
     modules: com.superiorsoftllc.agenthq.ui.plugin.TabFactory? = null,
+    /**
+     * SHELL-EMPTY-DROPIN S3: what goes in the selected tab's scrolled body; the default draws every section in order
+     * ([ConfigSections]). The shell's `infantry.shell.config` passes its child blocks instead.
+     */
+    sections: @Composable androidx.compose.foundation.layout.ColumnScope.(ConfigDialogHost) -> Unit = { ConfigSections(it) },
 ) {
     // VOICE-PLUGIN-1: the host's installable voice plugins (desktop); null = no Plugins tab.
     val voicePlugins = com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost.current.voicePlugins
@@ -165,8 +170,13 @@ fun ConfigDialog(
         if (highlight != null) { kotlinx.coroutines.delay(CONFIG_HIGHLIGHT_MS); highlight = null }
     }
     val results = searchConfig(query, present)
-    // A section shows when its tab is the selected one and this host has it.
-    val shows: (ConfigEntry) -> Boolean = { it.tab == tab && it in present }
+    val config = ConfigDialogHost(
+        flags, onFlags, keepAliveMinutes, userPortrait, onKeepAliveMinutes, cliLocations, onCliLocation,
+        harnessInstall, harnessInstallBusy, harnessInstallLog, onHarnessCheck, onHarnessInstall, onBrowse,
+        toolApproval, onToolApproval, logs, updates, secrets, secretActions, pair, limits, onLimit, onOpenRoles,
+        onSendTestQuestion, testQuestionReady, serverUpdate, serverMismatch, theme, onTheme, about, modules,
+        voicePlugins, present, tab, highlight,
+    )
     // Ticket cb1ceb93: the scroll cue fades into the dialog's own surface.
     val surface = androidx.compose.material3.AlertDialogDefaults.containerColor
     AhqAlertDialog(
@@ -191,125 +201,315 @@ fun ConfigDialog(
                         Modifier.fillMaxWidth().heightIn(min = 360.dp, max = 480.dp).testTag(CONFIG_TAB_BODY_TAG),
                         fade = surface,
                         verticalArrangement = Arrangement.spacedBy(14.dp),
-                    ) {
-                            if (shows(ConfigEntry.THEME) && theme != null && onTheme != null) {
-                                FlagSection(ConfigEntry.THEME, highlight) { ThemeSection(theme, onTheme) }
-                            }
-                            if (shows(ConfigEntry.BLUR)) FlagSection(ConfigEntry.BLUR, highlight) {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Switch(
-                                        checked = flags.blurBehindDialogs,
-                                        onCheckedChange = { onFlags(flags.copy(blurBehindDialogs = it)) },
-                                        modifier = Modifier.testTag(BLUR_SWITCH_TAG),
-                                    )
-                                    Text(if (flags.blurBehindDialogs) "On" else "Off", fontSize = 12.sp)
-                                }
-                            }
-                            if (shows(ConfigEntry.MARKDOWN_ENGINE)) FlagSection(ConfigEntry.MARKDOWN_ENGINE, highlight) {
-                                MarkdownEngineDropdown(flags.chatMarkdownEngine) { onFlags(flags.copy(chatMarkdownEngine = it)) }
-                            }
-                            if (shows(ConfigEntry.REASONING)) FlagSection(ConfigEntry.REASONING, highlight) {
-                                ReasoningPlacementChoice(flags.reasoningPlacement) { onFlags(flags.copy(reasoningPlacement = it)) }
-                            }
-                            if (shows(ConfigEntry.USER_PORTRAIT) && userPortrait != null) {
-                                FlagSection(ConfigEntry.USER_PORTRAIT, highlight) { UserPortraitSection(userPortrait.first, userPortrait.second) }
-                            }
-                            if (shows(ConfigEntry.AGENT_SCOPE)) FlagSection(ConfigEntry.AGENT_SCOPE, highlight) {
-                                AgentScopeDropdown(flags.agentScope) { onFlags(flags.copy(agentScope = it)) }
-                            }
-                            if (shows(ConfigEntry.PROGRESS_STALE)) FlagSection(ConfigEntry.PROGRESS_STALE, highlight) {
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_CHOICES.forEach { min ->
-                                        val picked = flags.progressStaleMin == min
-                                        OutlinedButton(
-                                            onClick = { onFlags(flags.copy(progressStaleMin = min)) },
-                                            modifier = Modifier.testTag(PROGRESS_STALE_CHOICE_TAG_PREFIX + min),
-                                        ) { Text("$min min", fontSize = 11.sp, color = if (picked) Palette.Accent else Palette.Text, fontWeight = if (picked) FontWeight.Bold else FontWeight.Normal) }
-                                    }
-                                }
-                            }
-                            // BUG-M2-11e: daemon state, not a window flag: it is stored by the daemon and survives a restart.
-                            if (shows(ConfigEntry.LIFECYCLE) && onKeepAliveMinutes != null) {
-                                FlagSection(ConfigEntry.LIFECYCLE, highlight) { KeepAliveDropdown(keepAliveMinutes, onKeepAliveMinutes) }
-                            }
-                            // CLIPATH-1: daemon state too: the daemon validates and stores each path, and says where each CLI resolved.
-                            if (shows(ConfigEntry.CLI_LOCATIONS) && onCliLocation != null) {
-                                FlagSection(ConfigEntry.CLI_LOCATIONS, highlight) {
-                                    CliLocationsSection(cliLocations, onCliLocation, onBrowse, harnessInstall, harnessInstallBusy, onHarnessInstall)
-                                    if (harnessInstall != null && onHarnessCheck != null && onHarnessInstall != null) {
-                                        HarnessInstallControls(harnessInstall, harnessInstallBusy, harnessInstallLog, onHarnessCheck, onHarnessInstall)
-                                    }
-                                }
-                            }
-                            // BUG-PERM-1: daemon state: no harness can relay an approval prompt yet, so this decides what tools may run.
-                            if (shows(ConfigEntry.TOOL_APPROVAL) && onToolApproval != null) {
-                                FlagSection(ConfigEntry.TOOL_APPROVAL, highlight) { ToolApprovalDropdown(toolApproval, onToolApproval) }
-                            }
-                            // ROLE-EDIT-1: the role manager is its own dialog (shared modal).
-                            if (shows(ConfigEntry.ROLES) && onOpenRoles != null) {
-                                FlagSection(ConfigEntry.ROLES, highlight) {
-                                    OutlinedButton(onClick = onOpenRoles, modifier = Modifier.testTag(ROLE_MANAGER_OPEN_TAG)) { Text("Manage roles") }
-                                }
-                            }
-                            // No-hard-coded-limits: daemon state; the daemon validates each value and names the range on a refusal.
-                            if (shows(ConfigEntry.LIMITS) && onLimit != null) {
-                                FlagSection(ConfigEntry.LIMITS, highlight) { LimitsSection(limits, onLimit) }
-                            }
-                            if (shows(ConfigEntry.VOICE)) FlagSection(ConfigEntry.VOICE, highlight) {
-                                com.superiorsoftllc.agenthq.ui.voice.VoiceSettingsSection(flags.voice) { onFlags(flags.copy(voice = it)) }
-                            }
-                            if (shows(ConfigEntry.INCOMING_SOUND)) FlagSection(ConfigEntry.INCOMING_SOUND, highlight) {
-                                com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundSection(flags.commsSound) { onFlags(flags.copy(commsSound = it)) }
-                            }
-                            if (shows(ConfigEntry.QUESTIONS) && onSendTestQuestion != null) FlagSection(ConfigEntry.QUESTIONS, highlight) {
-                                OutlinedButton(onClick = onSendTestQuestion, enabled = testQuestionReady, modifier = Modifier.testTag(TEST_QUESTION_TAG)) {
-                                    Text(if (testQuestionReady) "Send a test question" else "Open a session first")
-                                }
-                            }
-                            if (shows(ConfigEntry.PLUGINS) && voicePlugins != null) FlagSection(ConfigEntry.PLUGINS, highlight) {
-                                com.superiorsoftllc.agenthq.ui.voice.plugin.PluginsSection(voicePlugins)
-                            }
-                            if (shows(ConfigEntry.MODULES) && modules != null) FlagSection(ConfigEntry.MODULES, highlight) {
-                                com.superiorsoftllc.agenthq.ui.plugin.ModulesSection(modules)
-                            }
-                            // SECRETS-1: the daemon owns the secrets; this only sends "set / clear / import" and shows set / not set.
-                            if (shows(ConfigEntry.SECRETS) && secretActions != null && secrets != null) {
-                                FlagSection(ConfigEntry.SECRETS, highlight) { SecretsSection(secrets, secretActions) }
-                            }
-                            // PAIR-1: show this connection as a QR / link, or connect to another server from one.
-                            if (shows(ConfigEntry.PAIR) && pair != null) {
-                                FlagSection(ConfigEntry.PAIR, highlight) {
-                                    com.superiorsoftllc.agenthq.ui.pair.PairDeviceSection(pair.url, pair.token, pair.name, pair.onLink)
-                                }
-                            }
-                            // BUILD-STAMP-1: first in About, it answers "which build am I running?".
-                            if (shows(ConfigEntry.ABOUT) && about != null) {
-                                FlagSection(ConfigEntry.ABOUT, highlight) { AboutSection(about) }
-                            }
-                            // UPDATE-1: the check itself runs in the daemon side's updater; this only asks for it.
-                            if (shows(ConfigEntry.UPDATES) && updates != null) {
-                                FlagSection(ConfigEntry.UPDATES, highlight) {
-                                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        Text("Running ${updates.version}", fontSize = 12.sp, modifier = Modifier.testTag(UPDATES_VERSION_TAG))
-                                        OutlinedButton(onClick = updates.check, modifier = Modifier.testTag(UPDATES_CHECK_TAG)) { Text("Check for updates") }
-                                    }
-                                }
-                            }
-                            // SERVER-UPDATE-4: the daemon's own version and updater, over the existing connection.
-                            if (shows(ConfigEntry.SERVER_UPDATE) && serverUpdate != null) {
-                                FlagSection(ConfigEntry.SERVER_UPDATE, highlight) { ServerUpdateSection(serverUpdate, serverMismatch) }
-                            }
-                            // PKG-3: where the installed app writes its log, so a Start-menu launch (no console) can still report a problem.
-                            if (shows(ConfigEntry.LOGS) && logs != null) {
-                                FlagSection(ConfigEntry.LOGS, highlight) { LogsSection(logs) }
-                            }
-                    }
+                    ) { sections(config) }
                 }
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
     )
 }
+
+/**
+ * SHELL-EMPTY-DROPIN S3: what the configuration dialog's sections read and act on: the dialog's inputs, which sections
+ * this host has ([present]), the selected [tab] and the search result just picked ([highlight]). The dialog owns the tab,
+ * the query and the highlight; a section only reads them, and changes settings only through the callbacks here
+ * ([onFlags], [onTheme], [onLimit], ...), as it did when it was inline.
+ */
+class ConfigDialogHost internal constructor(
+    val flags: UiFlags,
+    val onFlags: (UiFlags) -> Unit,
+    val keepAliveMinutes: Int?,
+    val userPortrait: Pair<String?, (ByteArray?) -> Unit>?,
+    val onKeepAliveMinutes: ((Int) -> Unit)?,
+    val cliLocations: List<CliLocation>?,
+    val onCliLocation: ((id: String, path: String?) -> Unit)?,
+    val harnessInstall: HarnessInstallReport?,
+    val harnessInstallBusy: Boolean,
+    val harnessInstallLog: List<String>,
+    val onHarnessCheck: ((checkLatest: Boolean) -> Unit)?,
+    val onHarnessInstall: ((ids: List<String>, update: Boolean) -> Unit)?,
+    val onBrowse: ((title: String) -> String?)?,
+    val toolApproval: ToolApprovalInfo?,
+    val onToolApproval: ((String) -> Unit)?,
+    val logs: LogsFolder?,
+    val updates: UpdatesEntry?,
+    val secrets: SecretState?,
+    val secretActions: SecretActions?,
+    val pair: PairEntry?,
+    val limits: List<com.superiorsoftllc.agenthq.ui.model.LimitInfo>?,
+    val onLimit: ((key: String, value: Long) -> Unit)?,
+    val onOpenRoles: (() -> Unit)?,
+    val onSendTestQuestion: (() -> Unit)?,
+    val testQuestionReady: Boolean,
+    val serverUpdate: com.superiorsoftllc.agenthq.ui.model.ServerUpdateState?,
+    val serverMismatch: String?,
+    val theme: ThemeSettings?,
+    val onTheme: ((ThemeSettings) -> Unit)?,
+    val about: AboutEntry?,
+    val modules: com.superiorsoftllc.agenthq.ui.plugin.TabFactory?,
+    val voicePlugins: com.superiorsoftllc.agenthq.ui.voice.plugin.VoicePlugins?,
+    val present: Set<ConfigEntry>,
+    val tab: ConfigTab?,
+    val highlight: ConfigEntry?,
+) {
+    /** A section shows when its tab is the selected one and this host has it. */
+    fun shows(entry: ConfigEntry): Boolean = entry.tab == tab && entry in present
+}
+
+/** SHELL-EMPTY-DROPIN S3: every section, in display order (each draws nothing off its tab or when this host lacks it). */
+@Composable
+fun ConfigSections(config: ConfigDialogHost) {
+    ConfigThemeSection(config)
+    ConfigBlurSection(config)
+    ConfigMarkdownEngineSection(config)
+    ConfigReasoningSection(config)
+    ConfigUserPortraitSection(config)
+    ConfigAgentScopeSection(config)
+    ConfigProgressStaleSection(config)
+    ConfigLifecycleSection(config)
+    ConfigCliLocationsSection(config)
+    ConfigToolApprovalSection(config)
+    ConfigRolesSection(config)
+    ConfigLimitsSection(config)
+    ConfigVoiceSection(config)
+    ConfigIncomingSoundSection(config)
+    ConfigQuestionsSection(config)
+    ConfigPluginsSection(config)
+    ConfigModulesSection(config)
+    ConfigSecretsSection(config)
+    ConfigPairSection(config)
+    ConfigAboutSection(config)
+    ConfigUpdatesSection(config)
+    ConfigServerUpdateSection(config)
+    ConfigLogsSection(config)
+}
+
+// SHELL-EMPTY-DROPIN S3: one composable per section. Each draws nothing unless it shows ([ConfigDialogHost.shows]) and
+// its inputs are there; its placement goes on the section's column, before the section's own tag.
+
+@Composable
+fun ConfigThemeSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    val theme = config.theme ?: return
+    val onTheme = config.onTheme ?: return
+    if (!config.shows(ConfigEntry.THEME)) return
+    FlagSection(ConfigEntry.THEME, config.highlight, modifier) { ThemeSection(theme, onTheme) }
+}
+
+@Composable
+fun ConfigBlurSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    if (!config.shows(ConfigEntry.BLUR)) return
+    val flags = config.flags
+    FlagSection(ConfigEntry.BLUR, config.highlight, modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Switch(
+                checked = flags.blurBehindDialogs,
+                onCheckedChange = { config.onFlags(flags.copy(blurBehindDialogs = it)) },
+                modifier = Modifier.testTag(BLUR_SWITCH_TAG),
+            )
+            Text(if (flags.blurBehindDialogs) "On" else "Off", fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+fun ConfigMarkdownEngineSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    if (!config.shows(ConfigEntry.MARKDOWN_ENGINE)) return
+    FlagSection(ConfigEntry.MARKDOWN_ENGINE, config.highlight, modifier) {
+        MarkdownEngineDropdown(config.flags.chatMarkdownEngine) { config.onFlags(config.flags.copy(chatMarkdownEngine = it)) }
+    }
+}
+
+@Composable
+fun ConfigReasoningSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    if (!config.shows(ConfigEntry.REASONING)) return
+    FlagSection(ConfigEntry.REASONING, config.highlight, modifier) {
+        ReasoningPlacementChoice(config.flags.reasoningPlacement) { config.onFlags(config.flags.copy(reasoningPlacement = it)) }
+    }
+}
+
+@Composable
+fun ConfigUserPortraitSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    val userPortrait = config.userPortrait ?: return
+    if (!config.shows(ConfigEntry.USER_PORTRAIT)) return
+    FlagSection(ConfigEntry.USER_PORTRAIT, config.highlight, modifier) { UserPortraitSection(userPortrait.first, userPortrait.second) }
+}
+
+@Composable
+fun ConfigAgentScopeSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    if (!config.shows(ConfigEntry.AGENT_SCOPE)) return
+    FlagSection(ConfigEntry.AGENT_SCOPE, config.highlight, modifier) {
+        AgentScopeDropdown(config.flags.agentScope) { config.onFlags(config.flags.copy(agentScope = it)) }
+    }
+}
+
+@Composable
+fun ConfigProgressStaleSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    if (!config.shows(ConfigEntry.PROGRESS_STALE)) return
+    val flags = config.flags
+    FlagSection(ConfigEntry.PROGRESS_STALE, config.highlight, modifier) {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_CHOICES.forEach { min ->
+                val picked = flags.progressStaleMin == min
+                OutlinedButton(
+                    onClick = { config.onFlags(flags.copy(progressStaleMin = min)) },
+                    modifier = Modifier.testTag(PROGRESS_STALE_CHOICE_TAG_PREFIX + min),
+                ) { Text("$min min", fontSize = 11.sp, color = if (picked) Palette.Accent else Palette.Text, fontWeight = if (picked) FontWeight.Bold else FontWeight.Normal) }
+            }
+        }
+    }
+}
+
+/** BUG-M2-11e: daemon state, not a window flag: it is stored by the daemon and survives a restart. */
+@Composable
+fun ConfigLifecycleSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    val onKeepAliveMinutes = config.onKeepAliveMinutes ?: return
+    if (!config.shows(ConfigEntry.LIFECYCLE)) return
+    FlagSection(ConfigEntry.LIFECYCLE, config.highlight, modifier) { KeepAliveDropdown(config.keepAliveMinutes, onKeepAliveMinutes) }
+}
+
+/** CLIPATH-1: daemon state too: the daemon validates and stores each path, and says where each CLI resolved. */
+@Composable
+fun ConfigCliLocationsSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    val onCliLocation = config.onCliLocation ?: return
+    if (!config.shows(ConfigEntry.CLI_LOCATIONS)) return
+    val harnessInstall = config.harnessInstall
+    val onHarnessCheck = config.onHarnessCheck
+    val onHarnessInstall = config.onHarnessInstall
+    FlagSection(ConfigEntry.CLI_LOCATIONS, config.highlight, modifier) {
+        CliLocationsSection(config.cliLocations, onCliLocation, config.onBrowse, harnessInstall, config.harnessInstallBusy, onHarnessInstall)
+        if (harnessInstall != null && onHarnessCheck != null && onHarnessInstall != null) {
+            HarnessInstallControls(harnessInstall, config.harnessInstallBusy, config.harnessInstallLog, onHarnessCheck, onHarnessInstall)
+        }
+    }
+}
+
+/** BUG-PERM-1: daemon state: no harness can relay an approval prompt yet, so this decides what tools may run. */
+@Composable
+fun ConfigToolApprovalSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    val onToolApproval = config.onToolApproval ?: return
+    if (!config.shows(ConfigEntry.TOOL_APPROVAL)) return
+    FlagSection(ConfigEntry.TOOL_APPROVAL, config.highlight, modifier) { ToolApprovalDropdown(config.toolApproval, onToolApproval) }
+}
+
+/** ROLE-EDIT-1: the role manager is its own dialog (shared modal). */
+@Composable
+fun ConfigRolesSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    val onOpenRoles = config.onOpenRoles ?: return
+    if (!config.shows(ConfigEntry.ROLES)) return
+    FlagSection(ConfigEntry.ROLES, config.highlight, modifier) {
+        OutlinedButton(onClick = onOpenRoles, modifier = Modifier.testTag(ROLE_MANAGER_OPEN_TAG)) { Text("Manage roles") }
+    }
+}
+
+/** No-hard-coded-limits: daemon state; the daemon validates each value and names the range on a refusal. */
+@Composable
+fun ConfigLimitsSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    val onLimit = config.onLimit ?: return
+    if (!config.shows(ConfigEntry.LIMITS)) return
+    FlagSection(ConfigEntry.LIMITS, config.highlight, modifier) { LimitsSection(config.limits, onLimit) }
+}
+
+@Composable
+fun ConfigVoiceSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    if (!config.shows(ConfigEntry.VOICE)) return
+    FlagSection(ConfigEntry.VOICE, config.highlight, modifier) {
+        com.superiorsoftllc.agenthq.ui.voice.VoiceSettingsSection(config.flags.voice) { config.onFlags(config.flags.copy(voice = it)) }
+    }
+}
+
+@Composable
+fun ConfigIncomingSoundSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    if (!config.shows(ConfigEntry.INCOMING_SOUND)) return
+    FlagSection(ConfigEntry.INCOMING_SOUND, config.highlight, modifier) {
+        com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundSection(config.flags.commsSound) { config.onFlags(config.flags.copy(commsSound = it)) }
+    }
+}
+
+@Composable
+fun ConfigQuestionsSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    val onSendTestQuestion = config.onSendTestQuestion ?: return
+    if (!config.shows(ConfigEntry.QUESTIONS)) return
+    FlagSection(ConfigEntry.QUESTIONS, config.highlight, modifier) {
+        OutlinedButton(onClick = onSendTestQuestion, enabled = config.testQuestionReady, modifier = Modifier.testTag(TEST_QUESTION_TAG)) {
+            Text(if (config.testQuestionReady) "Send a test question" else "Open a session first")
+        }
+    }
+}
+
+@Composable
+fun ConfigPluginsSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    val voicePlugins = config.voicePlugins ?: return
+    if (!config.shows(ConfigEntry.PLUGINS)) return
+    FlagSection(ConfigEntry.PLUGINS, config.highlight, modifier) {
+        com.superiorsoftllc.agenthq.ui.voice.plugin.PluginsSection(voicePlugins)
+    }
+}
+
+@Composable
+fun ConfigModulesSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    val modules = config.modules ?: return
+    if (!config.shows(ConfigEntry.MODULES)) return
+    FlagSection(ConfigEntry.MODULES, config.highlight, modifier) {
+        com.superiorsoftllc.agenthq.ui.plugin.ModulesSection(modules)
+    }
+}
+
+/** SECRETS-1: the daemon owns the secrets; this only sends "set / clear / import" and shows set / not set. */
+@Composable
+fun ConfigSecretsSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    val secretActions = config.secretActions ?: return
+    val secrets = config.secrets ?: return
+    if (!config.shows(ConfigEntry.SECRETS)) return
+    FlagSection(ConfigEntry.SECRETS, config.highlight, modifier) { SecretsSection(secrets, secretActions) }
+}
+
+/** PAIR-1: show this connection as a QR / link, or connect to another server from one. */
+@Composable
+fun ConfigPairSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    val pair = config.pair ?: return
+    if (!config.shows(ConfigEntry.PAIR)) return
+    FlagSection(ConfigEntry.PAIR, config.highlight, modifier) {
+        com.superiorsoftllc.agenthq.ui.pair.PairDeviceSection(pair.url, pair.token, pair.name, pair.onLink)
+    }
+}
+
+/** BUILD-STAMP-1: first in About, it answers "which build am I running?". */
+@Composable
+fun ConfigAboutSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    val about = config.about ?: return
+    if (!config.shows(ConfigEntry.ABOUT)) return
+    FlagSection(ConfigEntry.ABOUT, config.highlight, modifier) { AboutSection(about) }
+}
+
+/** UPDATE-1: the check itself runs in the daemon side's updater; this only asks for it. */
+@Composable
+fun ConfigUpdatesSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    val updates = config.updates ?: return
+    if (!config.shows(ConfigEntry.UPDATES)) return
+    FlagSection(ConfigEntry.UPDATES, config.highlight, modifier) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Running ${updates.version}", fontSize = 12.sp, modifier = Modifier.testTag(UPDATES_VERSION_TAG))
+            OutlinedButton(onClick = updates.check, modifier = Modifier.testTag(UPDATES_CHECK_TAG)) { Text("Check for updates") }
+        }
+    }
+}
+
+/** SERVER-UPDATE-4: the daemon's own version and updater, over the existing connection. */
+@Composable
+fun ConfigServerUpdateSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    val serverUpdate = config.serverUpdate ?: return
+    if (!config.shows(ConfigEntry.SERVER_UPDATE)) return
+    FlagSection(ConfigEntry.SERVER_UPDATE, config.highlight, modifier) { ServerUpdateSection(serverUpdate, config.serverMismatch) }
+}
+
+/** PKG-3: where the installed app writes its log, so a Start-menu launch (no console) can still report a problem. */
+@Composable
+fun ConfigLogsSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    val logs = config.logs ?: return
+    if (!config.shows(ConfigEntry.LOGS)) return
+    FlagSection(ConfigEntry.LOGS, config.highlight, modifier) { LogsSection(logs) }
+}
+
 
 /** Ticket cb1ceb93: the title, after the same drawn cog as the footer button that opens this dialog. */
 @Composable
@@ -362,11 +562,11 @@ private fun ConfigTabRow(tabs: List<ConfigTab>, selected: ConfigTab?, onPick: (C
  * scrolled into view.
  */
 @Composable
-private fun FlagSection(entry: ConfigEntry, highlight: ConfigEntry?, control: @Composable () -> Unit) {
+private fun FlagSection(entry: ConfigEntry, highlight: ConfigEntry?, modifier: Modifier, control: @Composable () -> Unit) {
     val lit = entry == highlight
     val requester = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
     androidx.compose.runtime.LaunchedEffect(lit) { if (lit) requester.bringIntoView() }
-    val mod = Modifier.testTag(CONFIG_SECTION_TAG_PREFIX + entry.name)
+    val mod = modifier.testTag(CONFIG_SECTION_TAG_PREFIX + entry.name)
         .bringIntoViewRequester(requester)
         .then(if (lit) Modifier.border(2.dp, Palette.Accent, androidx.compose.foundation.shape.RoundedCornerShape(6.dp)).padding(8.dp) else Modifier)
         .semantics { if (lit) stateDescription = CONFIG_HIGHLIGHT_STATE }

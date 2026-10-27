@@ -23,13 +23,14 @@ object CoreShell {
     /**
      * BLOCKS-LAYOUT L5 (design section 7): the nodes no module may replace, wrap or inject into (BLOCKS-INJECTORS J1;
      * an unlocked child is an open slot). The true skeleton, and where a token is typed, an update is approved or a
-     * plugin is disabled. Since S1 frame, body, panes and windowLayer are [placeholders] instead.
+     * plugin is disabled. Since S1 frame, body, panes and windowLayer are [placeholders] instead. Since S3 the config
+     * dialog's settings sections are open; its frame and its trust sections ([ShellConfigTrust]) stay locked.
      */
     val locked: Set<String> = setOf(
         "infantry.shell.window", "infantry.shell.images", "infantry.shell.dock",
         "infantry.shell.connect", "infantry.shell.servers", "infantry.shell.switchError",
         "infantry.shell.serverUpdate", "infantry.shell.config",
-    )
+    ) + ShellConfigTrust.map { it.id }
 
     /**
      * BLOCKS-LAYOUT L14: core tabs whose content is a tree of its own, drawn by the tab, not in [root] (the Git tab's
