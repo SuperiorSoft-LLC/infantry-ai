@@ -14,10 +14,9 @@ import com.superiorsoftllc.agenthq.ui.ProjectsSidebar
 import com.superiorsoftllc.agenthq.ui.ResizeHandle
 import com.superiorsoftllc.agenthq.ui.Shell
 import com.superiorsoftllc.agenthq.ui.Sidebar
-import com.superiorsoftllc.agenthq.ui.block.Block
-import com.superiorsoftllc.agenthq.ui.block.DockScope
-import com.superiorsoftllc.agenthq.ui.block.Edge
-import com.superiorsoftllc.agenthq.ui.block.LocalDockSize
+import com.superiorsoftllc.agenthq.ui.block.layout.Block
+import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
+import com.superiorsoftllc.agenthq.ui.block.layout.LocalBlockSize
 import com.superiorsoftllc.agenthq.ui.model.CompactScreen
 import com.superiorsoftllc.agenthq.ui.model.PanelLayout
 import com.superiorsoftllc.agenthq.ui.model.SidebarWidth
@@ -29,9 +28,9 @@ import kotlinx.coroutines.launch
  * BLOCKS-SHELL-1: the left panel and its resize handle, docked at the start of the middle region. Below
  * PanelLayout.COMPACT_BELOW_DP it docks nothing: the compact drawer shows the same content.
  */
-object ShellLeftPanel : Block("infantry.shell.left", "infantry.shell.left", Edge.START) {
+object ShellLeftPanel : Block("infantry.shell.left", "infantry.shell.left") {
     @Composable
-    override fun Render(dock: DockScope) {
+    override fun Render(scope: BlockScope) {
         val s = LocalShell.current
         val compact = dockCompact()
         // PANEL-TOGGLE-1: a hidden side panel and its resize handle leave the composition; the centre column's
@@ -46,7 +45,7 @@ object ShellLeftPanel : Block("infantry.shell.left", "infantry.shell.left", Edge
 
 /** MOBILE-LAYOUT-1: below PanelLayout.COMPACT_BELOW_DP (600dp) of the middle region the window shows ONE pane. */
 @Composable
-internal fun dockCompact(): Boolean = PanelLayout.isCompact(LocalDockSize.current.width.value)
+internal fun dockCompact(): Boolean = PanelLayout.isCompact(LocalBlockSize.current.width.value)
 
 /**
  * MOBILE-DRAWERS-1: the sidebar, docked (wide) or in the compact drawer.

@@ -9,18 +9,17 @@ import com.superiorsoftllc.agenthq.ui.PairEntry
 import com.superiorsoftllc.agenthq.ui.Palette
 import com.superiorsoftllc.agenthq.ui.SecretActions
 import com.superiorsoftllc.agenthq.ui.THEME_PREF_KEY
-import com.superiorsoftllc.agenthq.ui.block.Block
-import com.superiorsoftllc.agenthq.ui.block.DockScope
-import com.superiorsoftllc.agenthq.ui.block.Edge
+import com.superiorsoftllc.agenthq.ui.block.layout.Block
+import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.model.UserPortrait
 import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
 import com.superiorsoftllc.agenthq.ui.pair.applyPairing
 import kotlinx.coroutines.launch
 
 /** BLOCKS-SHELL-1: the configuration dialog (the footer cog, Ctrl+,), while it is open. */
-object ShellConfig : Block("infantry.shell.config", "infantry.shell.config", Edge.WINDOW) {
+object ShellConfig : Block("infantry.shell.config", "infantry.shell.config") {
     @Composable
-    override fun Render(dock: DockScope) {
+    override fun Render(scope: BlockScope) {
         val s = LocalShell.current
         val ui = s.ui
         if (!ui.showConfig) return

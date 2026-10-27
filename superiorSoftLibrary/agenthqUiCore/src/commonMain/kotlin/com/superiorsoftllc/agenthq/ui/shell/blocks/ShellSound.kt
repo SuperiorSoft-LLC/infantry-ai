@@ -2,15 +2,14 @@ package com.superiorsoftllc.agenthq.ui.shell.blocks
 
 import androidx.compose.runtime.Composable
 import com.superiorsoftllc.agenthq.ui.LocalShell
-import com.superiorsoftllc.agenthq.ui.block.Block
-import com.superiorsoftllc.agenthq.ui.block.DockScope
-import com.superiorsoftllc.agenthq.ui.block.Edge
+import com.superiorsoftllc.agenthq.ui.block.layout.Block
+import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundEffect
 
 /** BLOCKS-SHELL-1: the incoming-comms sound; it draws nothing. */
-object ShellSound : Block("infantry.shell.sound", "infantry.shell.sound", Edge.OVERLAY) {
+object ShellSound : Block("infantry.shell.sound", "infantry.shell.sound") {
     @Composable
-    override fun Render(dock: DockScope) {
+    override fun Render(scope: BlockScope) {
         val s = LocalShell.current
         IncomingCommsSoundEffect(s.controller.state, s.ui.flags.commsSound)
     }

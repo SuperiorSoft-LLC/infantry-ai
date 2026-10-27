@@ -5,15 +5,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.ToastHost
-import com.superiorsoftllc.agenthq.ui.block.Block
-import com.superiorsoftllc.agenthq.ui.block.DockScope
-import com.superiorsoftllc.agenthq.ui.block.Edge
+import com.superiorsoftllc.agenthq.ui.block.layout.Block
+import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import kotlinx.coroutines.launch
 
 /** BLOCKS-SHELL-1: the toasts, bottom right over the window; a tap opens what a toast is about. */
-object ShellToast : Block("infantry.shell.toast", "infantry.shell.toast", Edge.OVERLAY) {
+object ShellToast : Block("infantry.shell.toast", "infantry.shell.toast") {
     @Composable
-    override fun Render(dock: DockScope) = with(dock) {
+    override fun Render(scope: BlockScope) = with(scope) {
         val s = LocalShell.current
         val state = s.state
         ToastHost(

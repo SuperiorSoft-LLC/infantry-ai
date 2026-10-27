@@ -7,15 +7,14 @@ import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.ProjectPicker
 import com.superiorsoftllc.agenthq.ui.ServerSwitcherChip
 import com.superiorsoftllc.agenthq.ui.TitleBar
-import com.superiorsoftllc.agenthq.ui.block.Block
-import com.superiorsoftllc.agenthq.ui.block.DockScope
-import com.superiorsoftllc.agenthq.ui.block.Edge
+import com.superiorsoftllc.agenthq.ui.block.layout.Block
+import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.model.needsInput
 
 /** BLOCKS-SHELL-1: the window's title bar, on top. */
-object ShellHeader : Block("infantry.shell.header", "infantry.shell.header", Edge.TOP) {
+object ShellHeader : Block("infantry.shell.header", "infantry.shell.header") {
     @Composable
-    override fun Render(dock: DockScope) {
+    override fun Render(scope: BlockScope) {
         val s = LocalShell.current
         val state = s.state
         val switcher = s.switcher
