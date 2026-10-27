@@ -2,10 +2,13 @@ package com.superiorsoftllc.agenthq.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -63,6 +66,7 @@ const val SELECT_COUNT_SUFFIX = "-count"
  * (the previous step). Status lines are tagged `searchTag` + [SELECT_EMPTY_SUFFIX] / [SELECT_NO_HIT_SUFFIX] /
  * [SELECT_COUNT_SUFFIX], every row with [itemTag]; a highlighted row reports `selected` in semantics.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun <T> SearchableSelect(
     items: List<T>,
@@ -89,6 +93,10 @@ fun <T> SearchableSelect(
     var highlight by remember(query, shown.size) { mutableIntStateOf(0) }
     val listState = rememberLazyListState()
     LaunchedEffect(highlight, shown.size) { if (highlight in shown.indices) listState.scrollToItem(highlight) }
+    // The list sits below the box: inside a scrolling dialog the hits of a typed search can land under the fold, so
+    // the search looked empty. Typing scrolls the host so the rows show.
+    val rowsInView = remember { BringIntoViewRequester() }
+    LaunchedEffect(query, shown.isEmpty()) { if (query.isNotEmpty() && shown.isNotEmpty()) rowsInView.bringIntoView() }
 
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (totalCount == 0 && query.isEmpty()) {
@@ -117,7 +125,7 @@ fun <T> SearchableSelect(
             "${shown.size} of $totalCount", color = Palette.Muted, fontSize = 10.sp,
             modifier = Modifier.align(Alignment.End).testTag(searchTag + SELECT_COUNT_SUFFIX),
         )
-        LazyColumn(Modifier.fillMaxWidth().heightIn(max = maxListHeight), state = listState, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        LazyColumn(Modifier.fillMaxWidth().heightIn(max = maxListHeight).bringIntoViewRequester(rowsInView), state = listState, verticalArrangement = Arrangement.spacedBy(3.dp)) {
             itemsIndexed(shown, key = { _, it -> key(it) }) { index, item ->
                 val on = isSelected(item)
                 val lit = index == highlight
