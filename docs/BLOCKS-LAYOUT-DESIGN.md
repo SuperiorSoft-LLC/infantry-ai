@@ -381,6 +381,27 @@ infantry.shell.center.newAgent  newAgentDialog  while open: NewAgentDialogFrame 
   matched its base render 5/5 at 0 px (base f63fb27, step 0 of L11), plus diffTabShots 32/32.
 
 
+### 6j. L13 (79c66a61): the small overlays stay leaves
+
+The L13 survey (base 5958392) looked at the overlays left in the dock after L11 and found none worth splitting: each one
+is one small composable, below the ~60-line bar, so the nodes stay leaves (`replace` / `wrap` of the whole node already
+works). No node id changed or was added.
+
+```
+infantry.shell.toast      ToastHost 18 lines (a column of 0-3 toasts) + the private Toast card 39 lines; the toasts
+                          are a runtime list, not fixed children, so they are no tree of nodes
+infantry.shell.questions  QuestionPill 10 lines: one Text, absent with no hidden question
+infantry.shell.voice      VoiceAlerts 32 lines, mostly the speech effect; what it draws is an 8-line Box
+infantry.shell.sound      IncomingCommsSoundEffect 15 lines; it draws nothing
+```
+
+- The Attention list is not a shell overlay: it is the Infantry_Attention module's tab (`AttentionPane`), and module
+  tabs are not split (6e, 6f). Its header chip and overflow entry are nodes already (6b, 6d).
+- The settings sections for voice and sound (`VoiceSettingsSection`, `IncomingCommsSoundSection`) live inside `config`,
+  which is locked.
+- If a toast card is ever made overridable, it needs a per-item template node (a node drawn once per toast with the
+  toast in a local), which is a new resolver shape, not an L-step split.
+
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 
 | part | bucket |
