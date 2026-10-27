@@ -170,7 +170,7 @@ rejected because an inserted plugin node would then need a second edit on its pa
   wins). An unknown target, a refused `withChildren`, a duplicate id or a locked node is refused and listed in Settings >
   Plugins, never applied silently. Community modules need `allowOverride` to touch the core tree. The demo lock freezes
   everything.
-- `locked` nodes refuse remove/replace/move/wrap. Inserting before/after or into them is still allowed.
+- `locked` nodes refuse remove/replace/move/wrap, and nothing is ever injected into them (docs/BLOCKS-INJECTORS.md 2b, since J1: a locked node such as `windowLayer` or `config` would otherwise let a plugin draw a fake prompt over the real one). A locked node offers a place to add things only through an explicit unlocked child, an open slot.
 
 ### 6a. As built in L5 (80690a98)
 
