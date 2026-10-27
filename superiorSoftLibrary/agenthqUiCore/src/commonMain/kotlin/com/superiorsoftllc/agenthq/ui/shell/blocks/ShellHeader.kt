@@ -1,30 +1,64 @@
 package com.superiorsoftllc.agenthq.ui.shell.blocks
 
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import com.superiorsoftllc.agenthq.ui.ATTENTION_TAB_ID
 import com.superiorsoftllc.agenthq.ui.AssistantEntry
 import com.superiorsoftllc.agenthq.ui.LocalShell
+import com.superiorsoftllc.agenthq.ui.LocalWindowChrome
 import com.superiorsoftllc.agenthq.ui.ProjectPicker
 import com.superiorsoftllc.agenthq.ui.ServerSwitcherChip
-import com.superiorsoftllc.agenthq.ui.TitleBar
+import com.superiorsoftllc.agenthq.ui.TitleBarFrame
+import com.superiorsoftllc.agenthq.ui.TitleBarLead
+import com.superiorsoftllc.agenthq.ui.TitleBarAttention
+import com.superiorsoftllc.agenthq.ui.TitleBarRightToggle
+import com.superiorsoftllc.agenthq.ui.TitleBarConnection
+import com.superiorsoftllc.agenthq.ui.TitleBarWindowControls
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
+import com.superiorsoftllc.agenthq.ui.block.layout.Place
+import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
+import com.superiorsoftllc.agenthq.ui.model.PanelSide
 import com.superiorsoftllc.agenthq.ui.model.needsInput
 
-/** BLOCKS-SHELL-1: the window's title bar, on top. */
-object ShellHeader : Block("infantry.shell.header", "infantry.shell.header") {
+/**
+ * BLOCKS-LAYOUT L6 (docs/BLOCKS-LAYOUT-DESIGN.md section 8): the window's title bar as a `titleBar` layout block. Its
+ * frame is the 36dp Panel row plus the divider; its items are children, left to right, ids `infantry.shell.header.<name>`.
+ * Each item owns the gap next to it, so a replaced child keeps the bar's spacing.
+ */
+class TitleBarBlock(id: String, children: List<Block> = emptyList(), place: Place = Place()) :
+    Block("titleBar", id, place, children) {
+    @Composable
+    override fun Render(scope: BlockScope) = TitleBarFrame(scope.modifier) { RenderPlaced(children) }
+
+    override fun withChildren(children: List<Block>) = TitleBarBlock(id, children, place)
+}
+
+private const val HEADER = "infantry.shell.header"
+
+/**
+ * The left toggle, logo + name, project slot and avatar strip (L7 splits it). Its items, the drag area's weight included,
+ * go straight into the bar's row ([BlockScope.row]); drawn outside a row they get a row of their own.
+ */
+object HeaderLead : Block("titleBarLead", "$HEADER.lead") {
     @Composable
     override fun Render(scope: BlockScope) {
+        val row = scope.row
+        if (row == null) Row(verticalAlignment = Alignment.CenterVertically) { Lead(scope.modifier) } else row.Lead(scope.modifier)
+    }
+
+    @Composable
+    private fun RowScope.Lead(modifier: Modifier) {
         val s = LocalShell.current
         val state = s.state
-        val switcher = s.switcher
-        TitleBar(
+        TitleBarLead(
             state, s.ui.flags.agentScope, onConnect = { s.changeConnection?.invoke() ?: run { s.ui.showConnect = true } }, onAttention = { s.showTab(ATTENTION_TAB_ID) },
+            chrome = LocalWindowChrome.current,
             projectSlot = { ProjectPicker(state, s.controller) },
             onTogglePanel = s.controller::togglePanel,
-            serverSlot = {
-                if (switcher != null) ServerSwitcherChip(switcher, onSelect = s.switchTo, onManage = { s.ui.showServers = true })
-            },
             // ASSISTANT-1: the last member of the team strip; a tap toggles the popup (the daemon makes the session on the first open).
             assistantSlot = {
                 if (state.connection.hasAssistant || state.assistant != null) {
@@ -34,6 +68,53 @@ object ShellHeader : Block("infantry.shell.header", "infantry.shell.header") {
                     ) { s.assistantPanel.toggle() }
                 }
             },
+            modifier = modifier,
         )
     }
 }
+
+/** M2-6: minimize / maximize-restore / close where the platform has a window, else the bar's 12dp end. */
+object HeaderWindowControls : Block("windowControls", "$HEADER.windowControls") {
+    @Composable
+    override fun Render(scope: BlockScope) = TitleBarWindowControls(LocalWindowChrome.current, scope.modifier)
+}
+
+/** The connection chip; a tap opens the connection (or the host's own connect screen, MOBILE-CONNCHIP-1). */
+object HeaderConnection : Block("connectionChip", "$HEADER.connection") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val s = LocalShell.current
+        TitleBarConnection(s.state, { s.changeConnection?.invoke() ?: run { s.ui.showConnect = true } }, scope.modifier)
+    }
+}
+
+/** SWITCH-1: the server dropdown, where the host has a server switcher; its menu also opens Servers. */
+object HeaderServer : Block("serverSwitcher", "$HEADER.server") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val s = LocalShell.current
+        val switcher = s.switcher
+        if (switcher != null) ServerSwitcherChip(switcher, onSelect = s.switchTo, onManage = { s.ui.showServers = true }, modifier = scope.modifier)
+    }
+}
+
+/** PANEL-TOGGLE-1: the side panel toggle, in view at every width. */
+object HeaderToggleRight : Block("panelToggle", "$HEADER.toggleRight") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val s = LocalShell.current
+        TitleBarRightToggle(s.state, scope.modifier) { s.controller.togglePanel(PanelSide.RIGHT) }
+    }
+}
+
+/** Contract 1.9.0: the open attention count (wide only; a compact bar lists it in the overflow); a tap opens Attention. */
+object HeaderAttention : Block("attentionChip", "$HEADER.attention") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val s = LocalShell.current
+        TitleBarAttention(s.state, { s.showTab(ATTENTION_TAB_ID) }, scope.modifier)
+    }
+}
+
+/** BLOCKS-SHELL-1: the window's title bar, on top. */
+val ShellHeader = TitleBarBlock(HEADER, listOf(HeaderLead, HeaderAttention, HeaderToggleRight, HeaderServer, HeaderConnection, HeaderWindowControls))

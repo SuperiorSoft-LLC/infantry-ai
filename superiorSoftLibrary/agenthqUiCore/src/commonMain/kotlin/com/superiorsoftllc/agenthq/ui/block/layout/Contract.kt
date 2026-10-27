@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.ui.block.layout
 
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -48,8 +49,11 @@ enum class Size { Wrap, FillMax, FillWidth, FillHeight }
 /** Pure show/hide, applied by the parent: [Wide] and [Compact] split at `PanelLayout.COMPACT_BELOW_DP`. */
 enum class Show { Always, Wide, Compact }
 
-/** What a parent hands a child: its placement [modifier], and in a stack the [box] it can align itself in. */
-class BlockScope(val modifier: Modifier, internal val box: BoxScope?) {
+/**
+ * What a parent hands a child: its placement [modifier], in a stack the [box] it can align itself in, and in a row the
+ * [row] (core only, L6): a block not yet decomposed that emits several items with their own weights into its parent row.
+ */
+class BlockScope(val modifier: Modifier, internal val box: BoxScope?, internal val row: RowScope? = null) {
     /** Aligns in the parent stack's Box; outside a stack it is the modifier unchanged. */
     fun Modifier.aligned(alignment: Alignment): Modifier = box?.run { this@aligned.align(alignment) } ?: this
 }
