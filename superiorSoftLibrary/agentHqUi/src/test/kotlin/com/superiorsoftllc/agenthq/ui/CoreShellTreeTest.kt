@@ -27,6 +27,8 @@ class CoreShellTreeTest {
             "          infantry.shell.panes",
             "            infantry.shell.left",
             "            infantry.shell.center",
+            "              infantry.shell.center.chat",
+            "              infantry.shell.center.newAgent",
             "            infantry.shell.right",
             "              infantry.shell.right.resize",
             "              infantry.shell.right.body",
