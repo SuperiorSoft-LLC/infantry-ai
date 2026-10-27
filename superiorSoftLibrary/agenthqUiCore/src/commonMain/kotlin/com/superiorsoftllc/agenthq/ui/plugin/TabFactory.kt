@@ -284,6 +284,8 @@ class TabFactory(
     shellOverrides: List<AcceptedShellOverride> = emptyList(),
 ) {
     val modules: List<AgentHqModule> = modules.toList()
+    /** TOAST-1: where a module's `Notifications.notify` lands in the window; the window sets it to its controller's. */
+    var toasts: com.superiorsoftllc.agenthq.ui.ToastService = com.superiorsoftllc.agenthq.ui.NoToastService
     /** Whether a loader looked at a plugins root (the desktop); false = compiled-in modules only (web, Android, tests). */
     val loadsAtRunTime: Boolean = statuses != null
     val statuses: List<ModuleStatus> = statuses ?: modules.map { ModuleStatus(it.manifest.name, it.tier, ModuleState.LOADED, manifest = it.manifest) }

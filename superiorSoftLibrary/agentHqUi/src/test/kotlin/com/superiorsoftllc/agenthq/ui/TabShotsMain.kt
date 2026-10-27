@@ -175,6 +175,20 @@ fun main(args: Array<String>) {
             daemon.close()
             exitProcess(0)
         }
+        // TOAST-1: -PtabShotsExtra=toast renders one fixed toast over the window, then the same with the board open (the
+        // toast sits under the board's modal), for a before/after diff of the toast block. The default run is unchanged.
+        if (System.getProperty("agenthq.tabshots.extra") == "toast") {
+            controller.postToast(com.superiorsoftllc.agenthq.ui.model.ToastEvent(
+                "shot-toast", Long.MAX_VALUE / 2, com.superiorsoftllc.agenthq.ui.model.ToastKind.SUCCESS,
+                "Toast shot", "A visible toast, for the before/after diff", durationMs = 600_000,
+            ))
+            waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag(TOAST_TAG).fetchSemanticsNodes().isNotEmpty() }
+            snap(out, "toast-visible")
+            onNodeWithTag(SIDEBAR_BOARD_BUTTON_TAG).performClick()
+            snap(out, "toast-board")
+            daemon.close()
+            exitProcess(0)
+        }
         // BLOCKS-LAYOUT L11: -PtabShotsExtra=assistant,newAgent,diff (any of them, comma-separated) renders only those
         // overlays open, as the board's shot does (the default run is unchanged). The diff comes last: it adds a project.
         val l11 = System.getProperty("agenthq.tabshots.extra")?.split(',')?.map { it.trim() }.orEmpty()

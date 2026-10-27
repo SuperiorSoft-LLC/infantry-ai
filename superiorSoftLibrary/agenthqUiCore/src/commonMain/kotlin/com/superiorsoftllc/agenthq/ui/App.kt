@@ -383,6 +383,8 @@ fun App(
         }
     }
 
+    // TOAST-1: a module's Notifications.notify toasts in this window.
+    remember(tabs, controller) { tabs.toasts = controller.toasts }
     val shell = Shell(
         state, controller, actionScope, tabs, homeTab, ui, chat, assistantPanel, assistantChat, host, modalBlur,
         switcher, serverUpdate, serverMismatch, changeConnection, pairStore, searchFocus, root, pickFile, logs, updates,
@@ -398,6 +400,8 @@ fun App(
           LocalTabFactory provides tabs,
           LocalChatMarkdown provides remember(flags.chatMarkdownEngine) { ChatMarkdownConfig(com.superiorsoftllc.agenthq.ui.model.ChatMarkdown.engines.resolve(flags.chatMarkdownEngine), chatBlockRenderers) },
           LocalShell provides shell,
+          // TOAST-1: every block can toast; a subtree may provide its own (nearest wins).
+          LocalToast provides controller.toasts,
       ) {
       // BLOCKS-LAYOUT L3: the window is one block tree (L5: with the modules' overrides in); the docked column (`infantry.shell.frame`) wears the surface.
       // BUG-PANEL-TOGGLE-1: the docked column is itself the focus target. A requester on a non-focusable node hands

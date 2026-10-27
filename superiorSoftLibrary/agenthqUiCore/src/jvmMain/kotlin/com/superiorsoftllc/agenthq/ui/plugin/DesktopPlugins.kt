@@ -20,6 +20,7 @@ import com.superiorsoftllc.agenthq.plugin.host.ServiceRegistry
 import com.superiorsoftllc.agenthq.plugin.host.SimpleEventBus
 import com.superiorsoftllc.agenthq.plugin.host.provideEvents
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
+import com.superiorsoftllc.agenthq.ui.model.ToastKind
 import java.io.File
 import java.net.URLClassLoader
 
@@ -58,10 +59,17 @@ object DesktopPlugins {
         say("[plugins] root ${root.absolutePath}${if (demoLock) " (demo lock on)" else ""}")
         var resolution = ModuleResolver.resolve(candidates, config, demoLock)
 
+        var built: TabFactory? = null
         val bus = SimpleEventBus(say)
         val registry = ServiceRegistry(config, say).apply {
             provideEvents(bus, say)
-            provide(Services.NOTIFICATIONS) { s -> Notifications { title, body -> say("[plugins] ${s.name} notifies: $title - $body") } }
+            provide(Services.NOTIFICATIONS) { s ->
+                Notifications { title, body ->
+                    say("[plugins] ${s.name} notifies: $title - $body")
+                    // TOAST-1: and the window's toast (a no-op until a window has set its controller's).
+                    built?.toasts?.post(body, ToastKind.INFO, title)
+                }
+            }
             provide(Services.STORAGE) { s -> FilePluginStorage(dataDir(stateDir, s.name)) }
             provide(Services.SETTINGS) { s -> FilePluginSettings(FilePluginStorage(dataDir(stateDir, s.name))) }
             provide(Services.DAEMON) { s -> RouteGate.gated(s.manifest!!, demoLock, config, PluginDaemon::send) }
@@ -86,6 +94,7 @@ object DesktopPlugins {
         val shellOverrides = resolution.shellOverrides.filter { it.module !in refused }
         val changes = ModuleChanges { request -> change(root, compiled, demoLock, request).also { c -> (c as? ModuleChange.Applied)?.log?.forEach(say); say("[plugins] ${c.message}") } }
         val factory = TabFactory(modules, preferences, services = { services[it] ?: NoPluginServices }, events = bus, statuses = statuses(resolution), changes = changes, shellOverrides = shellOverrides)
+        built = factory
         factory.problems.forEach { say("[plugins] $it") }
         return Loaded(factory, root, config, demoLock, log) { services[it] ?: NoPluginServices }
     }
