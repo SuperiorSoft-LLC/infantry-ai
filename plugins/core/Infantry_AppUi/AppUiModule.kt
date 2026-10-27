@@ -37,7 +37,7 @@ private val fills: List<Block> = listOf(
 val InfantryAppUi = AgentHqModule(
     ModuleManifest(
         name = "Infantry_AppUi", version = "1.0.0", author = "Infantry AI",
-        description = "The app's UI in the shell's empty slots: title bar, side panels, chat, status bar, overlays, the roles window and the settings.",
+        description = "The app's UI in the shell's empty slots: title bar, side panels, chat, status bar, overlays and the roles window.",
         fills = fills.map { it.id },
     ),
     fills = fills.associateBy { it.id },

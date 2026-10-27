@@ -13,6 +13,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.performScrollTo
 import com.superiorsoftllc.agenthq.plugin.api.ModuleSetting
 import com.superiorsoftllc.agenthq.plugin.api.ModulesConfig
@@ -126,6 +130,11 @@ fun main(args: Array<String>) {
             setContent { ChromeApp(controller, TabFactory(emptyList()), port) }
             waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
             snap(out, "shell-empty-1400")
+            // S4c: Configuration (Ctrl+, the surface's own shortcut; the footer cog is app UI) as it opens, on Appearance: the frame
+            // and the tab strip are the core's, the settings body is empty (`infantry.shell.config.settings` is an empty slot).
+            onRoot().performKeyInput { keyDown(Key.CtrlLeft); pressKey(Key.Comma); keyUp(Key.CtrlLeft) }
+            waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag(CONFIG_DIALOG_TAG).fetchSemanticsNodes().isNotEmpty() }
+            snap(out, "shell-empty-config-1400")
         }
         daemon.close()
         exitProcess(0)

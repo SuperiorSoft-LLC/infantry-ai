@@ -134,6 +134,11 @@ fun ConfigDialog(
      * ([ConfigSections]). The shell's `infantry.shell.config` passes its child blocks instead.
      */
     sections: @Composable androidx.compose.foundation.layout.ColumnScope.(ConfigDialogHost) -> Unit = { ConfigSections(it) },
+    /**
+     * S4c: the sections [sections] draws; null = every one. The shell passes the sections among its child blocks, so a
+     * shell without the app UI (whose fill holds the open settings) offers only the trust tabs.
+     */
+    drawn: Set<ConfigEntry>? = null,
 ) {
     // VOICE-PLUGIN-1: the host's installable voice plugins (desktop); null = no Plugins tab.
     val voicePlugins = com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost.current.voicePlugins
@@ -162,7 +167,7 @@ fun ConfigDialog(
         if (updates != null) add(ConfigEntry.UPDATES)
         if (serverUpdate != null) add(ConfigEntry.SERVER_UPDATE)
         if (logs != null) add(ConfigEntry.LOGS)
-    }
+    }.let { all -> drawn?.let(all::intersect) ?: all }
     val tabs = visibleConfigTabs(present)
     var wanted by remember { mutableStateOf(initialTab) }
     val tab = pickConfigTab(wanted, present)

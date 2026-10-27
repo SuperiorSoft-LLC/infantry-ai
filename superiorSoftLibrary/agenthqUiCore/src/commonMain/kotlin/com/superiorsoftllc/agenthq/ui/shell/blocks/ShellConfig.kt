@@ -113,6 +113,8 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
             initialTab = ui.configTab,
             onTab = { ui.configTab = it },
             modules = s.tabs.takeIf { it.loadsAtRunTime },
+            // S4c: only the sections among the children are offered; an unfilled settings slot leaves the trust tabs.
+            drawn = children.flattened().mapNotNull { sectionEntries[it.id] }.toSet(),
             sections = { config ->
                 CompositionLocalProvider(LocalConfigDialogHost provides config) {
                     RenderPlaced(children.flattened().filter { c -> sectionEntries[c.id]?.let(config::shows) ?: true })

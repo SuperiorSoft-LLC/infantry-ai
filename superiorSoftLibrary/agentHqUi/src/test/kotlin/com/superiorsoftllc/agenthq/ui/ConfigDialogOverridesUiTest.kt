@@ -35,7 +35,9 @@ import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import com.superiorsoftllc.agenthq.ui.protocol.Envelope
 import com.superiorsoftllc.agenthq.ui.shell.blocks.CoreShell
+import com.superiorsoftllc.agenthq.ui.block.layout.PlaceholderBlock
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellConfig
+import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellConfigSettings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -189,7 +191,8 @@ class ConfigDialogOverridesUiTest {
 
     @Test fun aSectionDrawnOutsideTheDialogDrawsNothingAndDoesNotCrash() = runDesktopComposeUiTest(400, 300) {
         fun Block.all(): List<Block> = children + children.flatMap { it.all() }
-        val sections = ShellConfig.all().filter { it.children.isEmpty() }
+        // S4c: the open settings are the app UI's fill of the dialog's settings slot; the trust sections are core's.
+        val sections = (ShellConfigSettings.all() + ShellConfig.all()).filter { it.children.isEmpty() && it !is PlaceholderBlock }
         assertEquals(24, sections.size)
         setContent { Column { for (b in sections) b.Render(BlockScope(Modifier, null)) } }
         waitForIdle()
