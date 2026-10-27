@@ -32,15 +32,16 @@ var SemanticsPropertyReceiver.resizeCursor by ResizeCursor
 
 /**
  * M2-9: a vertical drag edge between two panes: the 1dp divider line plus a small grip, the ↔ cursor on hover,
- * and horizontal drags reported to [onDragDp] in dp (positive = pointer moved right).
+ * and horizontal drags reported to [onDragDp] in dp (positive = pointer moved right). [modifier] goes first (a block's
+ * placement, BLOCKS-LAYOUT L9a).
  */
 @Composable
-internal fun ResizeHandle(tag: String, onDragDp: (Float) -> Unit) {
+internal fun ResizeHandle(tag: String, modifier: Modifier = Modifier, onDragDp: (Float) -> Unit) {
     val density = LocalDensity.current
     val onDrag by rememberUpdatedState(onDragDp)
     val icon = HorizontalResizeIcon
     Box(
-        Modifier.width(7.dp).fillMaxHeight().testTag(tag)
+        modifier.width(7.dp).fillMaxHeight().testTag(tag)
             .semantics { resizeCursor = icon }
             .pointerHoverIcon(icon)
             .pointerInput(density) {

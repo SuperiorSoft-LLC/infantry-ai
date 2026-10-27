@@ -481,11 +481,11 @@ class TabFactory(
 
 /**
  * PLUGINS-3: draws side panel [panel] into this column: its sections in order, with [tabs] (the panel's strip and the
- * picked tab) at [Panels.TABS_ORDER] taking the free height. A core section draws exactly as its module draws it; a
+ * picked tab, drawn into a column) at [Panels.TABS_ORDER] taking the free height. A core section draws exactly as its module draws it; a
  * community one sits under the Community badge.
  */
 @Composable
-fun ColumnScope.PanelSections(factory: TabFactory, panel: String, context: TabContext, tabs: (@Composable () -> Unit)? = null) {
+fun ColumnScope.PanelSections(factory: TabFactory, panel: String, context: TabContext, tabs: (@Composable ColumnScope.() -> Unit)? = null) {
     val (above, below) = factory.panels(panel).partition { it.order < Panels.TABS_ORDER }
     above.forEach { PanelSection(factory, it, context) }
     if (tabs != null) Column(Modifier.weight(1f).fillMaxWidth()) { tabs() }

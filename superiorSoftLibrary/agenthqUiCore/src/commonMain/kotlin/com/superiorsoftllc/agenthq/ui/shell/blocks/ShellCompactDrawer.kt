@@ -53,7 +53,7 @@ object ShellCompactDrawer : Block("infantry.shell.drawer", "infantry.shell.drawe
                     }
                     .testTag(DRAWER_TAG),
             ) {
-                if (screen == CompactScreen.LIST) LeftPanelContent(s, compact, drawerWidth.value) else RightPanelContent(s, Modifier.fillMaxWidth(), close)
+                if (screen == CompactScreen.LIST) LeftPanelContent(s, compact, drawerWidth.value) else RightPanelContent(s, Modifier.fillMaxWidth(), close, rightPanelArea(s))
             }
         }
     }

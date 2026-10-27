@@ -177,7 +177,8 @@ rejected because an inserted plugin node would then need a second edit on its pa
 L5 ships `replace` and `wrap` only; `remove | before | after | move | into | place` come later on the same resolver.
 
 - **Node ids are API from L5 on.** The ids pinned by `CoreShellTreeTest` (section 2's tree plus the footer's
-  `infantry.shell.footer.<name>` children, and since L6 the header's `infantry.shell.header.<name>`) are never renamed. The test also checks that every id is unique.
+  `infantry.shell.footer.<name>` children, since L6 the header's `infantry.shell.header.<name>`, since L9a the right panel's `infantry.shell.right.<name>`)
+  are never renamed. The test also checks that every id is unique.
 - module.json: `"shell": [{ "node": "<id or infantry.shell#<id>>", "name": "<registered name>", "mode": "replace|wrap" }]`;
   the Kotlin entry registers `UiRegistrar.shell(name, BlockOverride { scope, inner -> })`. `inner` is the block being
   wrapped (null for a replace).
@@ -250,6 +251,31 @@ connection  connectionEntry  the divider before it (it owns that gap) + the conn
 - An entry closes the menu through `LocalTitleBarOverflowDismiss`; an entry a plugin adds can do the same.
 - A replace or wrap keeps the node's `show Compact` (the override keeps the id and `place`). None of these nodes is locked.
 - The Assistant stays inside `agents`; the drag modifier stays on the same boxes. 0 px: diffTabShots 32/32.
+### 6e. As built in L9a (31521aed): the right panel's insides
+
+`infantry.shell.right` is a container (`rightPanel`, `show Wide`) of child blocks. It draws nothing while the panel is
+hidden (PANEL-TOGGLE-1), and no node of its own while shown: in the panes' row its children go straight into that row
+(`BlockScope.row`), as the header lead's do (6c).
+
+```
+resize       resizeHandle    the 7dp drag edge (↔ cursor, grip); drag left = wider
+body         rightPanelBody  the column at the dragged width (tag right-panel): the module sections (PLUGINS-3) around
+                             the tab area, which takes the free height and holds body's children, top to bottom:
+  body.strip   tabStrip      the right tab strip (scroll arrows, fade) and the divider under it
+  body.tab     tabContent    the picked tab: TabFactory.Content (container slots, interceptors, Community badge)
+```
+
+- The module sections stay what they were: `PanelSections` entries, ordered around the tab area by `Panels.TABS_ORDER`.
+  They are not nodes (a module adds them through its manifest, not by node id).
+- `strip` owns its divider. Its placement modifier goes on the strip's row, not on the divider.
+- `tab` has no node of its own (the module draws its tab's content as it is). A placement other than the default gets a
+  Box to wear it; with the default the content is drawn exactly as before.
+- The compact drawer draws the same panel: its tab area renders the window's resolved `body.strip` and `body.tab`, found
+  by id in `TabFactory.shellRoot` (inside wraps too), so a module's strip or tab shows in the drawer as well. An override
+  of `body` itself, or of `resize`, applies to the docked panel only. The drawer has its own frame (Close row, width).
+- The left panel is not split: its insides are only module sections (the agent list is Infantry_Agents' section), so
+  the core has no fixed structure there to make nodes of.
+- None of these nodes is locked.
 
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 

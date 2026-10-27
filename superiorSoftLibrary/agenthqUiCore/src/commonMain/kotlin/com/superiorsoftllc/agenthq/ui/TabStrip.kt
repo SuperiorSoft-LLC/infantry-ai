@@ -47,7 +47,8 @@ private val WheelStep = 48.dp
  * A tab strip (the centre strip and the right panel's). Scrolls sideways when the labels outgrow the width, so no tab
  * is ever squeezed or hidden. While it overflows, PLUGINS-3's arrows sit at either end (each disabled once there is
  * nothing left to scroll that way) and a fade over the right edge marks the tabs off it. Touch drag scrolls it, and a
- * vertical mouse wheel scrolls it sideways.
+ * vertical mouse wheel scrolls it sideways. [modifier] goes first on the strip's row (a block's placement, BLOCKS-LAYOUT
+ * L9a); the strip's divider under it does not wear it.
  */
 @Composable
 internal fun TabBar(
@@ -56,6 +57,7 @@ internal fun TabBar(
     fontSize: TextUnit = 12.sp,
     tagOf: ((Int) -> String)? = null,
     barTag: String? = null,
+    modifier: Modifier = Modifier,
     onPick: (Int) -> Unit,
 ) {
     val scroll = rememberScrollState()
@@ -64,7 +66,7 @@ internal fun TabBar(
     // One page per press, less a margin so the tab cut at the edge stays in view.
     val page = { (scroll.viewportSize * 0.8f).coerceAtLeast(1f) }
     val overflows = scroll.maxValue > 0
-    Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).background(Palette.Panel)) {
+    Row(modifier.fillMaxWidth().height(IntrinsicSize.Min).background(Palette.Panel)) {
         if (overflows) StripArrow(AhqIcons.ChevronLeft, "Scroll tabs left", scroll.canScrollBackward, TAB_BAR_ARROW_LEFT_TAG) { scope.launch { scroll.animateScrollBy(-page()) } }
         Box(Modifier.weight(1f)) {
             Row(
