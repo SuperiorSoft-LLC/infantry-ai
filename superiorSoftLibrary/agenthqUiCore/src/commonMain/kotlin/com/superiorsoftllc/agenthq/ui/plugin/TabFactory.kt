@@ -24,9 +24,13 @@ import com.superiorsoftllc.agenthq.plugin.host.ModuleStatus
 import com.superiorsoftllc.agenthq.plugin.host.SimpleEventBus
 import com.superiorsoftllc.agenthq.ui.Palette
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
+import com.superiorsoftllc.agenthq.ui.block.layout.BlockInjection
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockOverride
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockResolver
+import com.superiorsoftllc.agenthq.ui.block.layout.InjectAt
+import com.superiorsoftllc.agenthq.ui.block.layout.NodeInjection
 import com.superiorsoftllc.agenthq.ui.block.layout.NodeOverride
+import com.superiorsoftllc.agenthq.ui.block.layout.admitInjections
 import com.superiorsoftllc.agenthq.ui.block.layout.Resolved
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.DiffTarget
@@ -211,6 +215,8 @@ class AgentHqModule(
     val panels: List<PanelProvider> = emptyList(),
     /** BLOCKS-LAYOUT L5: shell node overrides, by the names module.json `shell` uses. */
     val shell: Map<String, BlockOverride> = emptyMap(),
+    /** BLOCKS-INJECTORS J2: blocks added among a node's children, by the names module.json `inject` uses. */
+    val inject: Map<String, BlockInjection> = emptyMap(),
 )
 
 /**
@@ -232,6 +238,8 @@ interface UiRegistrar {
     fun observer(name: String, observer: (PluginEvent) -> Unit)
     /** BLOCKS-LAYOUT L5: an override of a core shell node; declare it under `shell` in module.json (node, name, mode). */
     fun shell(name: String, override: BlockOverride) {}
+    /** BLOCKS-INJECTORS J2: a block added among a node's children; declare it under `inject` in module.json (into, name, at, order). */
+    fun inject(name: String, injection: BlockInjection) {}
 }
 
 /** Runs [plugin]'s registration into a module of [tier]. */
@@ -242,6 +250,7 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
     val blocks = LinkedHashMap<String, SlotBlock>()
     val observers = LinkedHashMap<String, (PluginEvent) -> Unit>()
     val shell = LinkedHashMap<String, BlockOverride>()
+    val inject = LinkedHashMap<String, BlockInjection>()
     plugin.register(object : UiRegistrar {
         override val services = services
         override fun tab(provider: TabProvider) { tabs += provider }
@@ -250,8 +259,9 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
         override fun block(name: String, block: SlotBlock) { blocks[name] = block }
         override fun observer(name: String, observer: (PluginEvent) -> Unit) { observers[name] = observer }
         override fun shell(name: String, override: BlockOverride) { shell[name] = override }
+        override fun inject(name: String, injection: BlockInjection) { inject[name] = injection }
     })
-    return AgentHqModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell)
+    return AgentHqModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell, inject)
 }
 
 /**
@@ -266,7 +276,10 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
  *   An interceptor runs only the parts its `kind` names; a block binds only to a slot in [Slots.ALL];
  * - BLOCKS-LAYOUT L5: [shellOverrides] (the loader's trust rules already let them through) bind to the module's
  *   registered [AgentHqModule.shell] by name and go into [CoreShell.root] through [BlockResolver]; [shellRoot] is
- *   the tree the window draws ([CoreShell.root] itself when none applies).
+ *   the tree the window draws ([CoreShell.root] itself when none applies);
+ * - BLOCKS-INJECTORS J2: each module's module.json `inject` entries bind to its registered [AgentHqModule.inject] by
+ *   name, pass the trust rule ([admitInjections]: a core module freely, a community one only into a target its
+ *   [allowInject] lists) and go into the tree that holds their target, through [BlockResolver] like the overrides.
  * Everything refused is in [problems]; nothing here throws.
  */
 class TabFactory(
@@ -282,6 +295,8 @@ class TabFactory(
     val changes: ModuleChanges? = null,
     /** BLOCKS-LAYOUT L5: the shell overrides the loader accepted, in load order. */
     shellOverrides: List<AcceptedShellOverride> = emptyList(),
+    /** BLOCKS-INJECTORS J2: the node ids modules.json `allowInject` grants each community module. */
+    allowInject: (module: String) -> Collection<String> = { emptyList() },
 ) {
     val modules: List<AgentHqModule> = modules.toList()
     /** TOAST-1: where a module's `Notifications.notify` lands in the window; the window sets it to its controller's. */
@@ -291,13 +306,21 @@ class TabFactory(
     val statuses: List<ModuleStatus> = statuses ?: modules.map { ModuleStatus(it.manifest.name, it.tier, ModuleState.LOADED, manifest = it.manifest) }
     private val bindProblems: List<String>
     private val nodeOverrides: List<NodeOverride>
-    /** BLOCKS-LAYOUT L5: the core tree with the overrides in, resolved once (lazily: the tree is not built at init). */
+    private val nodeInjections: List<NodeInjection>
+    /** BLOCKS-LAYOUT L5: the core tree with the overrides (and J2 injections) in, resolved once (lazily: the tree is not built at init). */
     private val shell: Resolved by lazy {
-        BlockResolver.resolve(CoreShell.root, nodeOverrides.filter { o -> CoreShell.tabs.none { o.node in it.ids() } }, CoreShell.locked)
+        val inTabs = CoreShell.tabs.flatMap { it.ids() }.toSet()
+        BlockResolver.resolve(
+            CoreShell.root, nodeOverrides.filter { it.node !in inTabs }, CoreShell.locked,
+            injections = nodeInjections.filter { it.target !in inTabs },
+        )
     }
-    /** BLOCKS-LAYOUT L14: each core tab tree ([CoreShell.tabs]) with the overrides of its own nodes in, resolved once. */
+    /** BLOCKS-LAYOUT L14: each core tab tree ([CoreShell.tabs]) with the overrides and injections of its own nodes in, resolved once. */
     private val tabTrees: List<Resolved> by lazy {
-        CoreShell.tabs.map { t -> val ids = t.ids(); BlockResolver.resolve(t, nodeOverrides.filter { it.node in ids }, CoreShell.locked, t.id) }
+        CoreShell.tabs.map { t ->
+            val ids = t.ids()
+            BlockResolver.resolve(t, nodeOverrides.filter { it.node in ids }, CoreShell.locked, t.id, nodeInjections.filter { it.target in ids })
+        }
     }
     /** The tree the window draws. */
     val shellRoot: Block get() = shell.root
@@ -409,7 +432,22 @@ class TabFactory(
             }
             for (n in m.observers.keys - m.manifest.observers.map { it.name }.toSet()) problems += "$name: observer $n is not declared in its module.json; refused"
             for (n in m.shell.keys - m.manifest.shell.map { it.name }.toSet()) problems += "$name: shell override $n is not declared in its module.json; refused"
+            for (n in m.inject.keys - m.manifest.inject.map { it.name }.toSet()) problems += "$name: injection $n is not declared in its module.json; refused"
         }
+        // BLOCKS-INJECTORS J2: modules are in load order, so a module's index is its load index (the tie-break after order).
+        val declared = modules.flatMapIndexed { loadIndex, m ->
+            val name = m.manifest.name
+            m.manifest.inject.mapNotNull { d ->
+                val j = m.inject[d.name]
+                val at = InjectAt.parse(d.at)
+                when {
+                    j == null -> { problems += "$name: injection ${d.name} is declared but not registered; skipped"; null }
+                    at == null -> { problems += "$name: injection ${d.name} into ${d.targetId} has unknown at '${d.at}' (first, last, before:<id>, after:<id>); skipped"; null }
+                    else -> NodeInjection(name, d.name, d.targetId, at, d.order, loadIndex, j)
+                }
+            }
+        }
+        nodeInjections = admitInjections(declared, isCore = { byModule[it]?.tier != Tier.COMMUNITY }, allowInject = allowInject, problems = problems)
         nodeOverrides = shellOverrides.mapNotNull { a ->
             val o = byModule[a.module]?.shell?.get(a.name)
             if (o == null) problems += "${a.module}: shell override ${a.name} is declared but not registered; skipped"

@@ -21,6 +21,8 @@ data class ModuleSetting(
     val deny: List<String> = emptyList(),
     /** Core contributions (by id) this community module may replace. */
     val allowOverride: List<String> = emptyList(),
+    /** BLOCKS-INJECTORS J2: node ids this community module may inject into (a smaller grant than [allowOverride]). */
+    val allowInject: List<String> = emptyList(),
 )
 
 /** What the demo lock lets a module's daemon access through, on top of the routes the module declared. */

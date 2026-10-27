@@ -91,6 +91,22 @@ release would not be possible.
 - A replace drops the injections of its whole subtree, not only of its own node. Each one gets one
   `not drawn: X is replaced by <r>` line, written by the lowest replace that drops it.
 
+**As built in J2 (ticket 91ee3dd0):**
+- module.json: `ModuleManifest.inject: List<InjectDeclaration(into, name, at = "last", order = 0)>`; `into` takes the
+  bare id or `infantry.shell#<id>` (`targetId`). modules.json: `ModuleSetting.allowInject: List<String>`.
+- Kotlin: `UiRegistrar.inject(name, BlockInjection)`, kept in `AgentHqModule.inject` (by name).
+- **The trust rule runs in `TabFactory`, not `ModuleResolver`.** `admitInjections` and `NodeInjection` live in
+  agenthqUiCore, which agenthqPlugins cannot see. `TabFactory` takes `allowInject: (module) -> Collection<String>`
+  (the desktop loader passes `config.setting(it).allowInject`), binds each module's `inject` entries by name (load
+  index = the module's position in load order), refuses an undeclared registration, a declaration with no
+  registration and an `at` outside the grammar, then calls `admitInjections` (core = tier is not community). Every
+  refusal is in `TabFactory.problems`: Settings > Plugins and the `[plugins]` log, as for overrides.
+- `TabFactory` splits injections between `CoreShell.root` and `CoreShell.tabs` by target id and passes them as the
+  last argument of `BlockResolver.resolve`.
+- `rightPanelArea` reads the resolved body's children (`root.find(BODY)` when it is still a `RightPanelBodyBlock`,
+  a wrap looked into); a replaced body or panel falls back to the per-id lookup as before.
+- No built-in injector is registered; the sample is test-only (`InjectorUiTest`). The `_template` sample stays J3.
+
 ### 2b. Trust rules (same shape as L5)
 
 1. **Loader (`ModuleResolver`, plugin side):** core modules inject freely. A community module needs the target id in

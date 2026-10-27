@@ -51,6 +51,8 @@ data class ModuleManifest(
     val blocks: List<BlockDeclaration> = emptyList(),
     /** BLOCKS-LAYOUT L5: overrides of core shell nodes (`infantry.shell.*`), by node id. Node ids are API. */
     val shell: List<ShellOverrideDeclaration> = emptyList(),
+    /** BLOCKS-INJECTORS J2: blocks the module adds among a node's children (`infantry.shell.*`), by node id. */
+    val inject: List<InjectDeclaration> = emptyList(),
 )
 
 /** PLUGINS-2: module [id] (`Vendor_Module`) must be installed, enabled and at a version in [version] (e.g. `>=1.2 <2`). */
@@ -93,4 +95,16 @@ data class BlockDeclaration(val slot: String, val name: String, val order: Int =
 data class ShellOverrideDeclaration(val node: String, val name: String, val mode: String = "replace") {
     /** The bare node id, whichever form [node] uses. */
     val nodeId: String get() = node.removePrefix("infantry.shell#")
+}
+
+/**
+ * BLOCKS-INJECTORS J2 (docs/BLOCKS-INJECTORS.md section 2a): the module's code [name] (registered with
+ * `UiRegistrar.inject`) is drawn as a child `<module>.<name>` of node [into] (a node id, or its address
+ * `infantry.shell#<id>`). [at] is `first | last | before:<child id> | after:<child id>`; within one anchor a lower
+ * [order] goes first, then load order, then name.
+ */
+@Serializable
+data class InjectDeclaration(val into: String, val name: String, val at: String = "last", val order: Int = 0) {
+    /** The bare node id, whichever form [into] uses. */
+    val targetId: String get() = into.removePrefix("infantry.shell#")
 }

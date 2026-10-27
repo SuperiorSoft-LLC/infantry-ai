@@ -110,14 +110,15 @@ private val RightPanelBody = RightPanelBodyBlock(listOf(RightPanelStrip, RightPa
 val ShellRightPanel = RightPanelBlock(listOf(RightPanelResize, RightPanelBody))
 
 /**
- * The tab area's children for the compact drawer: the window's own nodes (overrides applied), each found by id in
- * [com.superiorsoftllc.agenthq.ui.plugin.TabFactory.shellRoot], so a module's strip or tab shows in the drawer too. A node
- * the window no longer has (its body was replaced) falls back to the core one.
+ * The tab area's children for the compact drawer: the window's own body's children (overrides and injections applied),
+ * read from [com.superiorsoftllc.agenthq.ui.plugin.TabFactory.shellRoot], so a module's strip, tab or injected block
+ * shows in the drawer too (BLOCKS-INJECTORS J2). If the window has no body of its own (it, or the panel, was replaced),
+ * each core child is looked up by id, falling back to the core one.
  */
 @Composable
 internal fun rightPanelArea(s: Shell): List<Block> = remember(s.tabs) {
     val root = s.tabs.shellRoot
-    RightPanelBody.children.map { root.find(it.id) ?: it }
+    (root.find(BODY) as? RightPanelBodyBlock)?.children ?: RightPanelBody.children.map { root.find(it.id) ?: it }
 }
 
 /** The first node [id] in this tree, the outermost override for an overridden node; a wrap's own block is still looked into. */
