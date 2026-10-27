@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
+import androidx.compose.ui.unit.dp
+
 import com.superiorsoftllc.agenthq.ui.model.REASONING_APPLIES_TO
 import com.superiorsoftllc.agenthq.ui.model.REASONING_TITLE
 
@@ -106,6 +108,11 @@ const val CONFIG_TAB_TAG_PREFIX = "config-tab-"
 const val CONFIG_SECTION_TAG_PREFIX = "config-section-"
 const val CONFIG_TAB_ROW_TAG = "config-tab-row"
 const val CONFIG_TAB_BODY_TAG = "config-tab-body"
+const val CONFIG_DIALOG_TAG = "config-dialog"
+const val CONFIG_HEADER_ICON_TAG = "config-header-icon"
+/** Ticket cb1ceb93: the configuration modal takes this share of the window's width, up to [CONFIG_DIALOG_MAX_WIDTH]. */
+const val CONFIG_DIALOG_WIDTH_FRACTION = 0.92f
+val CONFIG_DIALOG_MAX_WIDTH = 1040.dp
 const val CONFIG_SEARCH_TAG = "config-search"
 const val CONFIG_SEARCH_RESULTS_TAG = "config-search-results"
 const val CONFIG_SEARCH_EMPTY_TAG = "config-search-empty"

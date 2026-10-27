@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -166,23 +167,29 @@ fun ConfigDialog(
     val results = searchConfig(query, present)
     // A section shows when its tab is the selected one and this host has it.
     val shows: (ConfigEntry) -> Boolean = { it.tab == tab && it in present }
+    // Ticket cb1ceb93: the scroll cue fades into the dialog's own surface.
+    val surface = androidx.compose.material3.AlertDialogDefaults.containerColor
     AhqAlertDialog(
         onDismissRequest = onDismiss,
         // CONFIG-TABS-1: one width whatever the tab, so switching tabs does not resize the dialog.
-        modifier = Modifier.fillMaxWidth(),
-        title = { Text("Configuration", fontWeight = FontWeight.Bold) },
+        // Ticket cb1ceb93: most of the window's width (past Material's 560dp default), capped on very wide windows.
+        modifier = Modifier.widthIn(max = CONFIG_DIALOG_MAX_WIDTH).fillMaxWidth(CONFIG_DIALOG_WIDTH_FRACTION).testTag(CONFIG_DIALOG_TAG),
+        containerColor = surface,
+        wide = true,
+        title = { ConfigHeader() },
         text = {
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(FLAGS_LIFETIME_NOTE, color = Palette.Muted, fontSize = 11.sp)
                 ConfigSearchField(query) { query = it }
                 ConfigTabRow(tabs, tab) { picked -> query = ""; wanted = picked; onTab?.invoke(picked) }
                 if (query.isNotBlank()) {
-                    ConfigSearchResults(results) { e -> query = ""; wanted = e.tab; onTab?.invoke(e.tab); highlight = e }
+                    ConfigSearchResults(results, surface) { e -> query = ""; wanted = e.tab; onTab?.invoke(e.tab); highlight = e }
                 } else
                 // Each tab scrolls on its own, from the top: the key gives each tab a fresh scroll state.
                 androidx.compose.runtime.key(tab) {
-                    Column(
-                        Modifier.fillMaxWidth().heightIn(min = 360.dp, max = 480.dp).verticalScroll(rememberScrollState()).testTag(CONFIG_TAB_BODY_TAG),
+                    ScrollCueColumn(
+                        Modifier.fillMaxWidth().heightIn(min = 360.dp, max = 480.dp).testTag(CONFIG_TAB_BODY_TAG),
+                        fade = surface,
                         verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
                             if (shows(ConfigEntry.THEME) && theme != null && onTheme != null) {
@@ -304,6 +311,18 @@ fun ConfigDialog(
     )
 }
 
+/** Ticket cb1ceb93: the title, after the same drawn cog as the footer button that opens this dialog. */
+@Composable
+private fun ConfigHeader() {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        androidx.compose.material3.Icon(
+            AhqIcons.Cog, contentDescription = null, tint = Palette.Accent,
+            modifier = Modifier.size(22.dp).testTag(CONFIG_HEADER_ICON_TAG),
+        )
+        Text("Configuration", fontWeight = FontWeight.Bold)
+    }
+}
+
 /**
  * CONFIG-TABS-1: the tab strip. Scrollable, so a phone can swipe through tabs that do not fit;
  * each tab carries CONFIG_TAB_TAG_PREFIX + its name.
@@ -369,9 +388,10 @@ private fun ConfigSearchField(query: String, onQuery: (String) -> Unit) {
 
 /** CONFIG-SEARCH-1: the sections matching the query, each with its tab; picking one opens it. */
 @Composable
-private fun ConfigSearchResults(results: List<ConfigEntry>, onPick: (ConfigEntry) -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().heightIn(min = 360.dp, max = 480.dp).verticalScroll(rememberScrollState()).testTag(CONFIG_SEARCH_RESULTS_TAG),
+private fun ConfigSearchResults(results: List<ConfigEntry>, fade: androidx.compose.ui.graphics.Color, onPick: (ConfigEntry) -> Unit) {
+    ScrollCueColumn(
+        Modifier.fillMaxWidth().heightIn(min = 360.dp, max = 480.dp).testTag(CONFIG_SEARCH_RESULTS_TAG),
+        fade = fade,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         if (results.isEmpty()) {
