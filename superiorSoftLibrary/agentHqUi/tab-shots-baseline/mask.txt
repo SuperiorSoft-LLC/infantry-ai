@@ -32,3 +32,9 @@ chrome-compact-360-overflow 270 328 80 16
 * 1176 10 224 18
 chrome-compact-800-overflow 514 110 130 16
 chrome-compact-360-overflow 40 110 130 16
+
+# BLOCKS-LAYOUT L11 opt-in shots (-PtabShotsExtra=newAgent): the chat messages' time of day behind the New agent dialog.
+newAgent-open 965 164 92 16
+newAgent-open 965 278 92 16
+newAgent-role 965 164 92 16
+newAgent-role 965 278 92 16

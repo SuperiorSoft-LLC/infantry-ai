@@ -46,6 +46,10 @@ class CoreShellTreeTest {
         ) + listOf("connStatus", "lastFrame", "contractWarning", "versionMismatch", "processesBadge", "gap", "shortcutHint", "buildStamp", "configCog")
             .map { "          $footer.$it" } + listOf(
             "      infantry.shell.assistant",
+            "        infantry.shell.assistant.resize",
+            "        infantry.shell.assistant.body",
+            "          infantry.shell.assistant.body.header",
+            "          infantry.shell.assistant.body.chat",
             "      infantry.shell.toast",
             "      infantry.shell.board",
             "      infantry.shell.diff",

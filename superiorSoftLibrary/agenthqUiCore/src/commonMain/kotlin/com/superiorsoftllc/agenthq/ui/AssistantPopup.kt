@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -215,6 +216,8 @@ class AssistantPanelState {
  * main window renders, bound to the one global session ([AppState.assistant]): the role chip is the fixed `assistant`, the
  * model is picked with the Switch agent picker (its role row is locked), and nothing here is a second chat implementation.
  * Expanded, or in a compact window (Android), it fills its host as a full-screen sheet.
+ * BLOCKS-LAYOUT L11: drawn as [AssistantPopupFrame], [AssistantPopupResize], then a column of [AssistantPopupHeader] and
+ * [AssistantPopupChat]; the shell's `infantry.shell.assistant` node draws the same pieces as child blocks.
  */
 @Composable
 fun AssistantPopup(
@@ -225,6 +228,28 @@ fun AssistantPopup(
     compact: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    AssistantPopupFrame(state, controller, panel, compact, modifier) {
+        AssistantPopupResize(panel, compact)
+        Column(Modifier.weight(1f).fillMaxHeight()) {
+            AssistantPopupHeader(panel, compact)
+            AssistantPopupChat(state, controller, chat, Modifier.weight(1f).fillMaxWidth())
+        }
+    }
+}
+
+/**
+ * The popup's frame: the row at the dragged width (or full size, expanded or compact), its border, and the first ask that
+ * makes the Assistant; [content] goes straight into the row, left to right.
+ */
+@Composable
+fun AssistantPopupFrame(
+    state: AppState,
+    controller: Controller,
+    panel: AssistantPanelState,
+    compact: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
     val assistant = state.assistant
     // The daemon makes the Assistant on the first ask; a later ask (after a reconnect) answers the same session.
     LaunchedEffect(assistant == null, state.connection.isLive) {
@@ -234,29 +259,43 @@ fun AssistantPopup(
     Row(
         (if (full) modifier.fillMaxSize() else modifier.width(panel.width.dp).fillMaxHeight())
             .background(Palette.Bg).border(1.dp, Palette.Border).testTag(ASSISTANT_POPUP_TAG),
-    ) {
-        if (!full) ResizeHandle(ASSISTANT_RESIZE_TAG) { panel.width = AssistantPanelWidth.dragged(panel.width, it) }
-        Column(Modifier.weight(1f).fillMaxHeight()) {
-            Row(Modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(ASSISTANT_NAME, color = Palette.Accent, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                if (!compact) {
-                    PopupButton(if (panel.expanded) "\u2921" else "\u2922", if (panel.expanded) "Dock the Assistant" else "Expand the Assistant", ASSISTANT_EXPAND_TAG) { panel.expanded = !panel.expanded }
-                }
-                PopupButton("\u2715", "Close the Assistant", ASSISTANT_CLOSE_TAG) { panel.open = false }
-            }
-            HorizontalDivider(color = Palette.Border)
-            if (assistant == null) {
-                Box(Modifier.weight(1f).fillMaxWidth().testTag(ASSISTANT_STARTING_TAG), contentAlignment = Alignment.Center) {
-                    Text(
-                        if (state.connection.isLive && !state.connection.hasAssistant) "This server is too old for the Assistant. Update Infantry AI on it."
-                        else "Starting the Assistant...",
-                        color = Palette.Muted, fontSize = 12.sp,
-                    )
-                }
-            } else {
-                ChatPanel(assistant.id, controller, Modifier.weight(1f).fillMaxWidth(), chat = chat, allowSpawn = false, transcriptTag = ASSISTANT_TRANSCRIPT_TAG)
-            }
+        content = content,
+    )
+}
+
+/** The docked popup's drag edge (drag left = wider); expanded or compact it draws nothing. */
+@Composable
+fun AssistantPopupResize(panel: AssistantPanelState, compact: Boolean, modifier: Modifier = Modifier) {
+    if (!(compact || panel.expanded)) ResizeHandle(ASSISTANT_RESIZE_TAG, modifier) { panel.width = AssistantPanelWidth.dragged(panel.width, it) }
+}
+
+/** The title row (name, expand or dock, close) and the divider under it; [modifier] goes on the row. */
+@Composable
+fun AssistantPopupHeader(panel: AssistantPanelState, compact: Boolean, modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(ASSISTANT_NAME, color = Palette.Accent, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        if (!compact) {
+            PopupButton(if (panel.expanded) "\u2921" else "\u2922", if (panel.expanded) "Dock the Assistant" else "Expand the Assistant", ASSISTANT_EXPAND_TAG) { panel.expanded = !panel.expanded }
         }
+        PopupButton("\u2715", "Close the Assistant", ASSISTANT_CLOSE_TAG) { panel.open = false }
+    }
+    HorizontalDivider(color = Palette.Border)
+}
+
+/** The Assistant's chat (the shared [ChatPanel]), or "Starting the Assistant..." until the daemon has made it; it wears [modifier]. */
+@Composable
+fun AssistantPopupChat(state: AppState, controller: Controller, chat: ChatPanelState, modifier: Modifier) {
+    val assistant = state.assistant
+    if (assistant == null) {
+        Box(modifier.testTag(ASSISTANT_STARTING_TAG), contentAlignment = Alignment.Center) {
+            Text(
+                if (state.connection.isLive && !state.connection.hasAssistant) "This server is too old for the Assistant. Update Infantry AI on it."
+                else "Starting the Assistant...",
+                color = Palette.Muted, fontSize = 12.sp,
+            )
+        }
+    } else {
+        ChatPanel(assistant.id, controller, modifier, chat = chat, allowSpawn = false, transcriptTag = ASSISTANT_TRANSCRIPT_TAG)
     }
 }
 
