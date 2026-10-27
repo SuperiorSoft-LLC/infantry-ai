@@ -78,7 +78,6 @@ class CenterChatBlock(children: List<Block>, place: Place = Place(weight = 1f)) 
         CompositionLocalProvider(LocalChatPanelHost provides host) {
             Column(scope.modifier.fillMaxWidth()) {
                 RenderPlaced(children)
-                host.SwitchPicker()
                 host.Composer()
             }
         }
@@ -142,7 +141,16 @@ object CenterChatSpawn : Block("spawnRows", "$CHAT.spawn") {
     }
 }
 
-private val CenterChat = CenterChatBlock(listOf(CenterChatHeader, CenterChatTabs, CenterChatTranscript, CenterChatNotices, CenterChatSpawn))
+/** SWAP-AGENT-1: the inline Switch agent picker, while it is open for this session. */
+object CenterChatSwitch : Block("switchAgentPicker", "$CHAT.switch") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val host = LocalChatPanelHost.current ?: return
+        Placed(scope.modifier) { host.SwitchPicker() }
+    }
+}
+
+private val CenterChat = CenterChatBlock(listOf(CenterChatHeader, CenterChatTabs, CenterChatTranscript, CenterChatNotices, CenterChatSpawn, CenterChatSwitch))
 
 /** The New agent modal and its catalog refresh. A dialog has no node in the column, so the placement has nothing to wear. */
 object CenterNewAgent : Block("newAgentDialog", "$CENTER.newAgent") {
