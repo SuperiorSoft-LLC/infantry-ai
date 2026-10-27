@@ -30,6 +30,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.superiorsoftllc.agenthq.ui.protocol.RoleBinding
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.PickedModel
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
@@ -51,3 +52,8 @@ fun ProfileExecutorField(state: AppState, key: Any?, provider: String?, model: S
         onPick = { picked -> onChange(picked?.provider ?: provider, picked?.model.orEmpty()) },
     )
 }
+
+/** One line saying what a binding pins, for the role detail and the New agent box (S4b: in core, which the box still is). */
+fun bindingSummary(b: RoleBinding?): String =
+    if (b == null || (b.provider == null && b.model == null && b.effort == null)) "daemon default"
+    else listOfNotNull(b.provider, b.model, b.effort?.let { "effort $it" }).joinToString(" / ")

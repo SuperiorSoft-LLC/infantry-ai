@@ -57,6 +57,9 @@ import com.superiorsoftllc.agenthq.ui.model.UiFlags
 import com.superiorsoftllc.agenthq.ui.model.ThemeAccent
 import com.superiorsoftllc.agenthq.ui.model.ThemeSettings
 
+/** S4b: the Manage roles button (Configuration > Agents); stays with it in core when the role manager moves out. */
+const val ROLE_MANAGER_OPEN_TAG = "role-manager-open"
+
 /** PAIR-1: the connection "Pair a device" shares ([url], [token]) and what a link scanned or pasted there does. */
 class PairEntry(val url: String, val token: String?, val name: String?, val onLink: (com.superiorsoftllc.agenthq.ui.pair.PairingLink) -> Unit) {
     companion object {

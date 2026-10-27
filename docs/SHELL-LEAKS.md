@@ -196,3 +196,35 @@ test moves with `isNotGitRepository` (agenthqAppUi commonTest NotGitRepositoryTe
 | ProjectChangesPanel.kt | `ProjectChangesPanel(state, controller, ...)`: `AppState`, `Controller`, `CoreLink`, `CoreSession`, `CoreGit`, `CoreChanges` | (a) through the public adapters: the outside-a-shell entry (ProjectChangesPanelUiTest, IconButtonsUiTest) |
 | ProjectChangesPanel.kt | `ChangeGroup`, `ChangedFileRow`, `ChangedPathText` | bridge (prep). With Git moved too, their only core user is core's own `ChangesSection`, so they can go to (c) when it does |
 | ProjectChangesPanel.kt | `DiffTarget`, the change views (`worktreeChangesView`, `branchChangesView`, `projectChangesView`, `worktreeHeader`, `worktreeHistoryView`, `aheadHint`, `markers`, `optionKey`, ...), the wire types, `PROJECT_GIT_UNSUPPORTED`, `PROJECT_GIT_BRANCHES_UNSUPPORTED` | kit |
+
+## Roles (Infantry_Roles)
+
+Moved into plugins/core/Infantry_Roles: RolesAttention.kt (`RolesPane`; Attention left in S4a), RoleManager.kt,
+TraitsEditor.kt, shell/blocks/ShellRoles.kt. Pixel proof: `-PtabShotsExtra=roles`, 4 of 4 shots at 0 px, and the default
+set 32 of 32.
+
+PM mail (2026-10-27): move without stopping, and list any big `ShellContext` addition in the report. Roles is not
+migrated in S4b. `RolesPane`, `RoleManagerForm`, `RoleFormFrame` and `RoleTraitsEditor` still take `(state, controller)`
+through the tab's `appController` and `LocalShell`. Every one of those uses is listed below as **hole (S4c)**, with the
+member it needs. They wait for S4c because `ShellContext` can only ever grow. The same executor and profile helpers
+(`ProfileExecutorField`, `ExecutorPicker`) serve the New agent dialog, which moves in S4c, so `RolesContext` should be
+shaped once, there, for both.
+
+| File | Symbol | Decision |
+|---|---|---|
+| TraitsEditor.kt | the whole file (`RoleTraitsEditor`, `TraitLibrary`, `TraitForm`, the trait tags) | (c): only the role editor uses it |
+| RolesAttention.kt | `bindingSummary` | stays: the New agent box (ChatSurface) shows it too; it moved to core Profiles.kt |
+| RoleManager.kt | `ROLE_MANAGER_OPEN_TAG` | stays: the tag of the Manage roles button, which is ConfigDialog's (core); it moved to ConfigDialog.kt |
+| ShellRoles.kt | `LocalShellContext`, `RolesContext.managerOpen / closeManager / roles` | (a) |
+| ShellRoles.kt | `LocalShell.current.state / controller` (into `RoleManagerForm`) | hole (S4c): `RolesContext` needs the actions below |
+| RolesAttention.kt, RoleManager.kt | `state.roles`, `roleBindings`, `roleTraits` | (a) already on `RolesContext` (`roles`, `bindings`, `traits`), not wired yet: the readers take `AppState` until the actions move too |
+| RolesAttention.kt | `state.orderedAgents`, `agentError`, `role(id)`, `profilesFor(role)`, `providers`, `modelCatalog`, `activeProjectId`, `connection` | hole (S4c): `RolesContext.agents`, `agentError`, `profilesFor`; a shared `ExecutorContext` (`providers`, `modelCatalog`) for the role editor, the profile form and the New agent dialog; `link` and `session` exist |
+| RolesAttention.kt | `controller.saveRole`, `saveRoleBinding`, `saveProfile`, `deleteProfile`, `spawnAs` | hole (S4c): `RolesContext.saveRole / saveBinding / saveProfile / deleteProfile / spawnAs` |
+| RoleManager.kt | `controller.deleteRole`, `setRoleTraits`, `loadMemory` (the role's notes count), `state.memoryNotes`, `state.traits` | hole (S4c): `RolesContext.deleteRole / setTraits`; the notes go through `NotesContext` (prep) |
+| TraitsEditor.kt | `controller.saveTrait`, `deleteTrait`, `setRoleTraits`, `state.traits`, `traitsLoading`, `traitError`, `rolesBinding`, `traitIdsFor` | hole (S4c): a `TraitsContext` (the library, its load state and error, save / delete / bind) |
+| RolesAttention.kt, RoleManager.kt | `ProfileExecutorField` | bridge (S4a), still used by the New agent dialog (core until S4c) |
+| RolesAttention.kt | `EditorModal`, `ExecutorPicker`, `ExecutorPickerTags`, `AgentAvatar`, `RoleIcon`, `RoleIconSite` | stays: shared with panes still in core (Epics, Prompts, Skills, the New agent dialog, the chat) |
+| all four | `Role`, `RoleBinding`, `AgentProfile`, `ExecutorPickerModel`, `PickedModel`, `RoleIcons`, `TraitLimits`, `TraitDraft` and the trait model functions, `NoteScope`, `watchFlagOf`, `stateLabel`, `stateColor`, `AhqIcons`, `IconAction`, `AhqAlertDialog`, the controls, `Palette`, `Mono` | kit |
+
+Estimated S4c addition for roles: about 12 members on `RolesContext`, plus `TraitsContext` (about 7) and
+`ExecutorContext` (2), which the New agent dialog needs as well.
