@@ -34,8 +34,17 @@ interface OsVault {
     fun store(value: String): Boolean
 }
 
+/**
+ * The file. v1 held one sealed value per name in [entries] (AAD = the name). v2 (SECRETS-2) holds named fields per secret
+ * in [secrets] (AAD = name, NUL, field). A v1 entry reads as one field named [Keystore.VALUE_FIELD] and is re-sealed as v2
+ * on the next write; one that does not open (another key) stays in [entries] untouched.
+ */
 @Serializable
-private class StoreFile(val v: Int = 1, val entries: Map<String, Sealed> = emptyMap())
+private class StoreFile(
+    val v: Int = 2,
+    val entries: Map<String, Sealed> = emptyMap(),
+    val secrets: Map<String, Map<String, Sealed>> = emptyMap(),
+)
 
 @Serializable
 private class Sealed(val nonce: String, val ct: String)
@@ -43,17 +52,22 @@ private class Sealed(val nonce: String, val ct: String)
 /** What a client may learn about one secret: whether it is set and a masked tail. Never the value. */
 data class SecretInfo(val name: String, val set: Boolean, val tail: String)
 
+/** SECRETS-2: one field of a secret as a client may see it: its name and a masked tail. Never the value. */
+data class FieldInfo(val name: String, val tail: String)
+
 /**
- * SECRETS-1: the daemon-owned keystore. Values are AES-256-GCM sealed (the entry name is the AAD) in `<stateDir>/keystore.json`.
- * [get] is for in-process consumers on the daemon's side only; no wire frame returns a value. Nothing here ever puts a value in
- * an exception message or [toString].
+ * SECRETS-1: the daemon-owned keystore, AES-256-GCM sealed in `<stateDir>/keystore.json`.
+ * SECRETS-2: a secret is a set of named fields (`android-signing` -> storeFile, storePassword, ...), each sealed with the
+ * secret's name and the field's name as the AAD, so a field copied under another field or secret does not open.
+ * [get] / [field] / [fields] are for in-process consumers on the daemon's side only; no wire frame returns a value.
+ * Nothing here ever puts a value in an exception message or [toString].
  */
 class Keystore(
     private val dir: File,
     private val env: (String) -> String? = InfantryEnv::get,
     private val vault: OsVault? = OsVaults.detect(dir),
 ) {
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val file = File(dir, FILE_NAME)
     private val random = SecureRandom()
     private var key: ByteArray? = null
@@ -62,32 +76,78 @@ class Keystore(
     @Synchronized
     fun protection(): Protection = ensureKey().second
 
+    /** The [VALUE_FIELD] field: the single-value secrets of SECRETS-1 (the update token, a saved server's token). */
     @Synchronized
-    fun get(name: String): String? {
-        checkName(name)
-        val sealed = read().entries[name] ?: return null
-        return runCatching { open(sealed, name) }.getOrNull()
-    }
+    fun get(name: String): String? = field(name, VALUE_FIELD)
 
     @Synchronized
-    fun set(name: String, value: String) {
-        checkName(name)
-        val clean = value.trim()
-        require(clean.isNotEmpty()) { "the secret is empty" }
-        require(clean.length <= MAX_LENGTH) { "the secret is longer than $MAX_LENGTH characters" }
-        val nonce = ByteArray(12).also(random::nextBytes)
-        val ct = cipher(Cipher.ENCRYPT_MODE, nonce, name).doFinal(clean.toByteArray())
-        write(StoreFile(entries = read().entries + (name to Sealed(b64(nonce), b64(ct)))))
-    }
+    fun set(name: String, value: String) = setField(name, VALUE_FIELD, value)
 
+    /** Removes the whole secret, every field of it. */
     @Synchronized
     fun clear(name: String): Boolean {
         checkName(name)
         val current = read()
-        if (name !in current.entries) return false
-        write(StoreFile(entries = current.entries - name))
+        if (name !in current.secrets && name !in current.entries) return false
+        write(current, current.secrets - name, current.entries - name)
         return true
     }
+
+    @Synchronized
+    fun field(name: String, field: String): String? {
+        checkName(name)
+        checkField(field)
+        return opened(read())[name]?.get(field)
+    }
+
+    /** Every field of [name] that opens, in name order; null when there is no such secret. Daemon side only. */
+    @Synchronized
+    fun fields(name: String): Map<String, String>? {
+        checkName(name)
+        return opened(read())[name]?.toSortedMap()
+    }
+
+    @Synchronized
+    fun setField(name: String, field: String, value: String) {
+        checkName(name)
+        checkField(field)
+        val clean = value.trim()
+        require(clean.isNotEmpty()) { "the secret is empty" }
+        require(clean.length <= MAX_LENGTH) { "the secret is longer than $MAX_LENGTH characters" }
+        val current = read()
+        val fields = current.secrets[name].orEmpty()
+        require(field in fields || fields.size < MAX_FIELDS) { "a secret holds at most $MAX_FIELDS fields" }
+        require(name in current.secrets || name in current.entries || current.secrets.size < MAX_SECRETS) {
+            "the keystore holds at most $MAX_SECRETS secrets"
+        }
+        write(current, current.secrets + (name to fields + (field to seal(name, field, clean))))
+    }
+
+    /** Removes one field; the secret goes with its last field. */
+    @Synchronized
+    fun deleteField(name: String, field: String): Boolean {
+        checkName(name)
+        checkField(field)
+        val current = read()
+        val legacyOnly = field == VALUE_FIELD && name in current.entries && current.secrets[name]?.containsKey(field) != true
+        if (legacyOnly) {
+            write(current, current.secrets, current.entries - name)
+            return true
+        }
+        val fields = current.secrets[name] ?: return false
+        if (field !in fields) return false
+        val rest = fields - field
+        write(current, if (rest.isEmpty()) current.secrets - name else current.secrets + (name to rest))
+        return true
+    }
+
+    /** The names of every stored secret, sorted. */
+    @Synchronized
+    fun names(): List<String> = read().let { (it.secrets.keys + it.entries.keys).toSortedSet().toList() }
+
+    /** Each field of [name] with a masked tail (fields that do not open are left out); empty when there is no such secret. */
+    @Synchronized
+    fun describe(name: String): List<FieldInfo> = fields(name).orEmpty().map { (f, v) -> FieldInfo(f, maskedTail(v)) }
 
     /** Set / not set and a masked tail for each of [names]. */
     @Synchronized
@@ -96,23 +156,56 @@ class Keystore(
         SecretInfo(name, value != null, value?.let(::maskedTail).orEmpty())
     }
 
+    /** Every secret's fields that open: v2 fields, then any v1 entry as its [VALUE_FIELD] field. */
+    private fun opened(content: StoreFile): Map<String, Map<String, String>> {
+        val out = LinkedHashMap<String, MutableMap<String, String>>()
+        for ((name, fields) in content.secrets) for ((f, sealed) in fields) {
+            runCatching { open(sealed, aad(name, f)) }.getOrNull()?.let { out.getOrPut(name) { LinkedHashMap() }[f] = it }
+        }
+        for ((name, sealed) in content.entries) {
+            if (out[name]?.containsKey(VALUE_FIELD) == true) continue
+            runCatching { open(sealed, name) }.getOrNull()?.let { out.getOrPut(name) { LinkedHashMap() }[VALUE_FIELD] = it }
+        }
+        return out
+    }
+
     private fun read(): StoreFile =
         if (!file.isFile) StoreFile() else runCatching { json.decodeFromString(StoreFile.serializer(), file.readText()) }.getOrElse { StoreFile() }
 
-    private fun write(content: StoreFile) {
+    /**
+     * Writes v2: [secrets] plus every [legacy] v1 entry that opens, re-sealed as its [VALUE_FIELD] field. A v1 entry that
+     * does not open (another key) is kept as it was, never dropped.
+     */
+    private fun write(current: StoreFile, secrets: Map<String, Map<String, Sealed>>, legacy: Map<String, Sealed> = current.entries) {
+        val merged = secrets.toMutableMap()
+        val kept = LinkedHashMap<String, Sealed>()
+        for ((name, sealed) in legacy) {
+            if (merged[name]?.containsKey(VALUE_FIELD) == true) continue
+            val value = runCatching { open(sealed, name) }.getOrNull()
+            if (value == null) { kept[name] = sealed; continue }
+            merged[name] = merged[name].orEmpty() + (VALUE_FIELD to seal(name, VALUE_FIELD, value))
+        }
         dir.mkdirs()
         val tmp = File(dir, "$FILE_NAME.tmp")
-        tmp.writeText(json.encodeToString(StoreFile.serializer(), content))
+        tmp.writeText(json.encodeToString(StoreFile.serializer(), StoreFile(entries = kept, secrets = merged)))
         restrict(tmp)
         Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
     }
 
-    private fun open(sealed: Sealed, name: String): String =
-        String(cipher(Cipher.DECRYPT_MODE, Base64.getDecoder().decode(sealed.nonce), name).doFinal(Base64.getDecoder().decode(sealed.ct)))
+    private fun seal(name: String, field: String, value: String): Sealed {
+        val nonce = ByteArray(12).also(random::nextBytes)
+        return Sealed(b64(nonce), b64(cipher(Cipher.ENCRYPT_MODE, nonce, aad(name, field)).doFinal(value.toByteArray())))
+    }
 
-    private fun cipher(mode: Int, nonce: ByteArray, name: String): Cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
+    private fun open(sealed: Sealed, aad: String): String =
+        String(cipher(Cipher.DECRYPT_MODE, Base64.getDecoder().decode(sealed.nonce), aad).doFinal(Base64.getDecoder().decode(sealed.ct)))
+
+    /** NUL never occurs in a name or a field, so no two (name, field) pairs share an AAD. */
+    private fun aad(name: String, field: String) = name + '\u0000' + field
+
+    private fun cipher(mode: Int, nonce: ByteArray, aad: String): Cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
         init(mode, SecretKeySpec(ensureKey().first, "AES"), GCMParameterSpec(128, nonce))
-        updateAAD(name.toByteArray())
+        updateAAD(aad.toByteArray())
     }
 
     /** Resolution order: mounted/env key, then the OS vault, then the key file. Never silently plaintext. */
@@ -162,13 +255,25 @@ class Keystore(
         const val KEY_ENV = "AGENTHQ_KEYSTORE_KEY"
         const val KEY_FILE_ENV = "AGENTHQ_KEYSTORE_KEY_FILE"
         const val MAX_LENGTH = 4096
+        const val MAX_FIELDS = 64
+        const val MAX_SECRETS = 256
+
+        /** The one field of a single-value secret, and what a SECRETS-1 entry migrates to. */
+        const val VALUE_FIELD = "value"
 
         /** The update token (the first consumer; `AGENTHQ_UPDATE_TOKEN` still overrides it). */
         const val UPDATE_TOKEN = "update-token"
 
         private val NAME = Regex("""^[a-z0-9][a-z0-9._-]{0,63}$""")
 
+        /** SECRETS-2: field names are environment-variable names, since a run gets each field as one. */
+        private val FIELD = Regex("""^[A-Za-z_][A-Za-z0-9_]{0,63}$""")
+
         fun checkName(name: String) = require(NAME.matches(name)) { "secret names are lowercase letters, digits, '.', '_' and '-'" }
+
+        fun checkField(field: String) = require(FIELD.matches(field)) { "field names are letters, digits and '_', not starting with a digit" }
+
+        fun isName(name: String): Boolean = NAME.matches(name)
 
         /** The last 4 characters, and only for a value long enough that 4 reveal little; shorter values show only dots. */
         fun maskedTail(value: String): String = if (value.length >= 16) "••••${value.takeLast(4)}" else "••••"

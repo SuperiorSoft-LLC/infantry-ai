@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.134.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.135.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -2285,7 +2285,10 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `secret_clear` | `{name}`: remove that secret from the keystore (since 1.102.0); answered by `secret_state`, pushed to every client; an unknown name is an `error` `"secret_clear refused: ..."` | client → daemon |
 | `secret_import` | `{name}`: copy the older environment variable (e.g. `AGENTHQ_UPDATE_TOKEN` for `update-token`) into the keystore, deleting nothing (since 1.102.0); answered by `secret_state`, pushed to every client; an unknown name or nothing to import is an `error` `"secret_import refused: ..."` | client → daemon |
 | `secret_status` | `{}` (or empty): read the keystore's state (since 1.102.0); answered by `secret_state` | client → daemon |
-| `secret_state` | `{protection: external-key\|os\|key-file, secrets:[{name, label, set, tail, importable, overriddenByEnv}]}`: the answer to every `secret_*` request, and pushed to every client after a change; never carries a stored value (`tail` is `••••` plus the last 4 characters of a 16+ character value, else `••••`) (since 1.102.0) | daemon → client |
+| `secret_field_set` | `{name, field, value}`: seal `value` as field `field` of the user secret `name`, creating it (since 1.135.0); `name` is lowercase `[a-z0-9._-]`, `field` an environment-variable name `[A-Za-z_][A-Za-z0-9_]*`; a built-in name, a bad name or the demo lock is an `error` that never echoes the value; answered by `secret_state`, pushed to every client | client → daemon |
+| `secret_field_delete` | `{name, field}`: remove one field; the secret goes with its last field (since 1.135.0); answered by `secret_state`, pushed to every client | client → daemon |
+| `secret_delete` | `{name}`: remove a user secret and all its fields (since 1.135.0); answered by `secret_state`, pushed to every client | client → daemon |
+| `secret_state` | `{protection: external-key\|os\|key-file, secrets:[{name, label, set, tail, importable, overriddenByEnv}], entries:[{name, fields:[{name, tail}]}], locked}` (`entries`, `locked` since 1.135.0): the answer to every `secret_*` request, and pushed to every client after a change; never carries a stored value (`tail` is `••••` plus the last 4 characters of a 16+ character value, else `••••`) (since 1.102.0) | daemon → client |
 | `tool_approval` | — (request, no data) / one `ToolApprovalInfo` `{mode?, effective, source, choices[]}` (reply): the global Tool approval and what a run without a session override gets (since 1.76.0) | client → daemon (request), daemon → client (reply) |
 | `tool_approval_set` | `{mode?}`: stores the global Tool approval (`deny` / `allowEdits` / `allowAll`), or clears it when `mode` is null or blank (since 1.76.0); answered by `tool_approval`; an unknown mode is an `error` `"tool_approval_set refused: ..."` | client → daemon |
 | `prompt_request` | one `PromptRequest` `{promptId, sessionId, kind, createdAt, tool?, input?, question?, options[], multiSelect, allowOther}`: a harness asks the owner (pushed when opened, and replayed after the connect burst while open; since 1.77.0) | daemon → client |
@@ -3062,6 +3065,19 @@ ADDITIVE + BEHAVIOURAL; `contract=1.132.0`. Builds that workers start no longer 
 - **CPU in `processes`.** `TrackedProcess.cpuPercent` (this process's share of ALL logical cores over the last 10 s watch pass, 0–100; null until two samples), `ProcessReport.agentCpuPercent` (their sum), `cpuAlertPercent`, `cpuAlertMinutes`, `cpuHighSince` (epoch ms since when the sum has stayed at or above the threshold; null while below).
 - **Sustained-CPU attention.** When `agentCpuPercent` stays at or above `limits.cpu.alertPercent` (default `90`, 1–100) for `limits.cpu.alertMinutes` (default `10`; `0` = off), the daemon raises ONE attention item per episode: kind `ceiling`, outcome `cpu_sustained`, with the top processes in the detail. Falling below the threshold rearms it.
 - **Old clients.** They ignore the new fields; the attention item renders like any other `ceiling` item.
+
+### What changed in 1.135.0 (SECRETS-2, ticket-e5d1b57f) — key/value secrets, injected into runs
+
+ADDITIVE + BEHAVIOURAL; `contract=1.135.0`.
+
+- **A secret holds named fields.** `android-signing` can hold `storeFile`, `storePassword`, `keyAlias`, `keyPassword`; any environment-style set works the same way. Each field is sealed on its own (AES-256-GCM, the AAD is the secret name, a NUL, and the field name), so a field copied under another field or secret does not open. Field names are environment-variable names.
+- **Migration.** `keystore.json` becomes `v: 2` (`secrets: {name: {field: sealed}}`). A 1.102.0 entry reads as one field named `value` and is re-sealed into v2 at the next write; one that does not open (another key) is kept unchanged, never dropped. The built-in single-value secrets (`update-token`) keep their frames and read the `value` field.
+- **New frames** `secret_field_set`, `secret_field_delete`, `secret_delete` edit the user's secrets (any valid name except a built-in's). `secret_state` gains `entries` (each user secret, its field names and masked tails) and `locked`. **No frame returns a value.** A refusal names the secret or field, never the value.
+- **Runs get secrets as environment variables.** `CommandSpec` / `command_save` gain `secrets` (a list of secret names, at most 16). `run_start` accepts `secrets` too, added on top of the command's own. At start the daemon puts every field of each secret into the child's environment under its field name (a later secret's field of the same name wins). An unknown secret, or a field named `AGENTHQ_*`, refuses the run.
+- **Output scrubbing.** Every injected value of 4 or more characters is replaced with `••••` in the run's `run_bytes`, its scrollback (`run_attach`) and its `run_output` lines, including a value split across two chunks (the bytes that could start a value wait for the next chunk). A value the child transforms (encodes, splits with other text in between) is not caught.
+- **Demo lock** (`AGENTHQ_DEMO_LOCK`): every `secret_*` change is refused, `secret_state.locked` is true, and a `run_start` that would inject any secret is refused. A run with no secret is unchanged.
+- **Not covered.** `agenthq run` starts its child in the CLI process, not the daemon, so it gets no secrets (injecting there would mean sending values to a client).
+- **Old clients.** They ignore `entries`, `locked` and `secrets`; a command saved by an old client keeps no secrets (a save replaces the entry).
 
 ### What changed in 1.134.0 (RUN-CONSOLE, ticket-67f117b6) — runs have a terminal; pills and a console window
 

@@ -801,6 +801,8 @@ class AgentHqDaemon(
             // ScriptedRunner under AGENTHQ_PROVIDER=stub and would only replay the script.
             // RUN-CONSOLE (1.134.0): the run gets a pty (pipes if pty4j cannot load here); its scrollback and the run
             // history follow `limits.run.*`; the demo lock refuses interactive runs and run_input (no raw shell).
+            // SECRETS-1: the daemon-owned keystore, in the state dir. SECRETS-2: a run reads its secrets' fields from it.
+            val keystore = Keystore(stateDir())
             val runManager = com.superiorsoftllc.agenthq.commands.RunManager(
                 { commandStore.registry }, com.superiorsoftllc.agenthq.runner.PipedProcessRunner(),
                 emit = { env -> for (c in clients.toList()) c.trySend(env) },
@@ -810,6 +812,7 @@ class AgentHqDaemon(
                     history = { settings.limitCap(LimitRegistry.RUN_HISTORY) },
                 ),
                 demoLock = { com.superiorsoftllc.agenthq.plugin.host.PluginFolders.demoLock() },
+                secrets = keystore::fields,
             )
             val attention = AttentionStore(store.attention)
             attention.eventSink = { item -> broadcastAttention(clients, item) }
@@ -973,10 +976,11 @@ class AgentHqDaemon(
                 projectName = { id -> projectStore.get(id).name },
                 push = { envelope -> for (client in clients) client.trySend(envelope) },
             )
-            // SECRETS-1: the daemon-owned keystore, in the state dir.
+            // SECRETS-1 / SECRETS-2: the keystore's frames; the demo lock refuses every change.
             val keystoreFrames = KeystoreHandler(
-                keystore = Keystore(stateDir()),
+                keystore = keystore,
                 push = { envelope -> for (client in clients) client.trySend(envelope) },
+                demoLock = { com.superiorsoftllc.agenthq.plugin.host.PluginFolders.demoLock() },
             )
             // P10-K6: the issues log, over the same file. The declared session is the author AND the scope of the active
             // issue an attempt or a fix without an issue ref goes to.
@@ -3307,8 +3311,9 @@ private suspend fun handleConnection(
                 Envelope.NOTIFY -> notifyFrames.answer(envelope)
 
                 // SECRETS-1 (contract 1.100.0): the keystore. Answered by `secret_state`; a value never travels back.
-                Envelope.SECRET_SET, Envelope.SECRET_CLEAR, Envelope.SECRET_IMPORT,
-                Envelope.SECRET_STATUS -> keystoreFrames.answer(envelope)
+                // SECRETS-2 (1.135.0): and the user's key/value secrets.
+                Envelope.SECRET_SET, Envelope.SECRET_CLEAR, Envelope.SECRET_IMPORT, Envelope.SECRET_STATUS,
+                Envelope.SECRET_FIELD_SET, Envelope.SECRET_FIELD_DELETE, Envelope.SECRET_DELETE -> keystoreFrames.answer(envelope)
 
                 // P10-K6 (contract 1.54.0): the issues log. An open / attempt / fix is pushed to every client (no direct reply).
                 Envelope.ISSUE_OPEN, Envelope.ISSUE_ATTEMPT, Envelope.ISSUE_FIX,
