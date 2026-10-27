@@ -78,7 +78,6 @@ class CenterChatBlock(children: List<Block>, place: Place = Place(weight = 1f)) 
         CompositionLocalProvider(LocalChatPanelHost provides host) {
             Column(scope.modifier.fillMaxWidth()) {
                 RenderPlaced(children)
-                host.Composer()
             }
         }
     }
@@ -150,7 +149,16 @@ object CenterChatSwitch : Block("switchAgentPicker", "$CHAT.switch") {
     }
 }
 
-private val CenterChat = CenterChatBlock(listOf(CenterChatHeader, CenterChatTabs, CenterChatTranscript, CenterChatNotices, CenterChatSpawn, CenterChatSwitch))
+/** The composer: PromptBox (attachments, paste, voice, commands, model picker, stop / resume / send). */
+object CenterChatComposer : Block("promptBox", "$CHAT.composer") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val host = LocalChatPanelHost.current ?: return
+        Placed(scope.modifier) { host.Composer() }
+    }
+}
+
+private val CenterChat = CenterChatBlock(listOf(CenterChatHeader, CenterChatTabs, CenterChatTranscript, CenterChatNotices, CenterChatSpawn, CenterChatSwitch, CenterChatComposer))
 
 /** The New agent modal and its catalog refresh. A dialog has no node in the column, so the placement has nothing to wear. */
 object CenterNewAgent : Block("newAgentDialog", "$CENTER.newAgent") {

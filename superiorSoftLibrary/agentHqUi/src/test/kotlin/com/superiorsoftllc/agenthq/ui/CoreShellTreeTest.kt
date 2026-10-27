@@ -34,6 +34,7 @@ class CoreShellTreeTest {
             "                infantry.shell.center.chat.notices",
             "                infantry.shell.center.chat.spawn",
             "                infantry.shell.center.chat.switch",
+            "                infantry.shell.center.chat.composer",
             "              infantry.shell.center.newAgent",
             "            infantry.shell.right",
             "              infantry.shell.right.resize",
