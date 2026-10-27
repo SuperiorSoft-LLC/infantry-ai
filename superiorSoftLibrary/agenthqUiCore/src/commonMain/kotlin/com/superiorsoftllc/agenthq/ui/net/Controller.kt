@@ -14,6 +14,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import com.superiorsoftllc.agenthq.ui.model.withChangesBranch
 import com.superiorsoftllc.agenthq.ui.model.withChangesView
 import com.superiorsoftllc.agenthq.ui.model.withChangesWorktree
+import com.superiorsoftllc.agenthq.ui.model.withToast
 import com.superiorsoftllc.agenthq.ui.model.followWorkerBranch
 import com.superiorsoftllc.agenthq.ui.model.QueueSend
 import com.superiorsoftllc.agenthq.ui.model.QueuedPrompt
@@ -306,6 +307,9 @@ class Controller(
     fun reconnectNow() = client.reconnectNow()
 
     fun select(id: String?) = _state.update { it.copy(selectedId = id) }
+
+    /** TOAST-1: the non-UI way to toast (plugin logic, daemon events); the reducer's own toasts land in the same list. */
+    fun postToast(toast: com.superiorsoftllc.agenthq.ui.model.ToastEvent) = _state.update { it.withToast(toast) }
 
     /** PANEL-TOGGLE-1: the title-bar toggle for one side panel (hide it if shown, show it if hidden). */
     fun togglePanel(side: PanelSide) = _state.update { it.copy(panels = it.panels.toggleForWindow(side)) }
