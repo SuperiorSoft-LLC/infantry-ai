@@ -2,7 +2,9 @@ package com.superiorsoftllc.agenthq.ui
 
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -54,10 +56,17 @@ class StatusBarBlocksUiTest {
         assertTrue(badge.left >= status.right && hint.left >= badge.right && stamp.left >= hint.right && cog.left >= stamp.right)
     }
 
-    @Test fun `the hint hides at compact width while badge, stamp and cog still render`() = withWindow(400) {
+    @Test fun `the hint and build stamp hide at compact width while badge and cog still render`() = withWindow(400) {
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("^K search", substring = true)).fetchSemanticsNodes().isEmpty() }
         onNodeWithTag(PROCESSES_BADGE_TAG).assertExists()
-        onNodeWithTag(FOOTER_BUILD_TAG).assertExists()
+        onNodeWithTag(FOOTER_BUILD_TAG).assertDoesNotExist()
         onNode(hasContentDescription("Configuration")).assertExists()
+    }
+
+    @Test fun `the config cog is displayed at 360 dp`() = withWindow(360) {
+        waitForIdle()
+        onNode(hasContentDescription("Configuration")).assertIsDisplayed()
+        val cog = onNode(hasContentDescription("Configuration")).getUnclippedBoundsInRoot()
+        assertTrue(cog.right <= 360.dp, "cog must sit inside the 360 dp window: ${cog.right}")
     }
 }

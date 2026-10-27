@@ -130,6 +130,8 @@ object StatusBuildStamp : Block("buildStamp", "$FOOTER.buildStamp") {
     @Composable
     override fun Render(scope: BlockScope) {
         val s = LocalShell.current
+        // Compact windows have no width to spare: the stamp would crowd out the config cog, which must stay reachable.
+        if (s.state.panels.compactWindow) return
         val c = s.state.connection
         FooterBuild(
             s.host.appBuild, if (c.isLive) c.daemonBuild else null,
