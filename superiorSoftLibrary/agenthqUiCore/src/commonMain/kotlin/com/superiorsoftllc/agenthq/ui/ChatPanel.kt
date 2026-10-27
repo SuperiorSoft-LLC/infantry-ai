@@ -328,13 +328,59 @@ fun ChatPanel(
     allowSpawn: Boolean = true,
     onOpenTicket: (String) -> Unit = {},
     /** The panel's header; the default is the session header with its Switch agent chip. */
-    header: @Composable (agent: AgentView?, openSwitch: (() -> Unit)?) -> Unit = { a, open ->
-        CenterHeader(a, chat.spawnMode, controller.state.collectAsState().value, onOpenSwitch = open, onOpenTicket = onOpenTicket)
-    },
+    header: @Composable (agent: AgentView?, openSwitch: (() -> Unit)?) -> Unit = chatPanelHeader(chat, controller, onOpenTicket),
     beforeContent: @Composable () -> Unit = {},
     content: @Composable (transcript: @Composable () -> Unit) -> Unit = { it() },
     transcriptTag: String = CENTER_TRANSCRIPT_TAG,
 ) {
+    val host = chatPanelHost(sessionId, controller, chat, allowSpawn, header, content, transcriptTag)
+    Column(modifier) {
+        host.Header()
+        beforeContent()
+        host.Transcript(Modifier.weight(1f))
+        host.Notices()
+        host.SpawnRows()
+        host.SwitchPicker()
+        host.Composer()
+    }
+}
+
+/** The default [ChatPanel] header: the session header with its Switch agent chip. */
+fun chatPanelHeader(
+    chat: ChatPanelState,
+    controller: Controller,
+    onOpenTicket: (String) -> Unit,
+): @Composable (agent: AgentView?, openSwitch: (() -> Unit)?) -> Unit = { a, open ->
+    CenterHeader(a, chat.spawnMode, controller.state.collectAsState().value, onOpenSwitch = open, onOpenTicket = onOpenTicket)
+}
+
+/**
+ * BLOCKS-LAYOUT L9b: one [ChatPanel]'s inputs and what it reads this frame, shared by its sections. [ChatPanel] draws the
+ * sections in its own column; the main window's centre block (`infantry.shell.center.chat`) makes each one a node.
+ */
+class ChatPanelHost internal constructor(
+    val controller: Controller,
+    val chat: ChatPanelState,
+    val allowSpawn: Boolean,
+    val state: AppState,
+    val agent: AgentView?,
+    internal val scope: CoroutineScope,
+    internal val header: @Composable (agent: AgentView?, openSwitch: (() -> Unit)?) -> Unit,
+    internal val content: @Composable (transcript: @Composable () -> Unit) -> Unit,
+    internal val transcriptTag: String,
+)
+
+/** Reads the session [sessionId] from [controller] and runs the panel's effects (the Switch agent ask, the catalog refresh). */
+@Composable
+fun chatPanelHost(
+    sessionId: String?,
+    controller: Controller,
+    chat: ChatPanelState,
+    allowSpawn: Boolean,
+    header: @Composable (agent: AgentView?, openSwitch: (() -> Unit)?) -> Unit,
+    content: @Composable (transcript: @Composable () -> Unit) -> Unit,
+    transcriptTag: String,
+): ChatPanelHost {
     val state by controller.state.collectAsState()
     val scope = rememberCoroutineScope()
     val agent = sessionId?.let { state.agents[it] }
@@ -343,69 +389,93 @@ fun ChatPanel(
     LaunchedEffect(chat.spawnMode || chat.switchAsk != null, state.connection.isLive) {
         if ((chat.spawnMode || chat.switchAsk != null) && state.connection.isLive) controller.refreshModelCatalog()
     }
-    Column(modifier) {
-        header(agent, agent?.let { a -> { chat.openSwitch(a.id) } })
-        beforeContent()
-        Box(Modifier.weight(1f).fillMaxWidth().testTag(transcriptTag)) {
-            content {
-                androidx.compose.runtime.CompositionLocalProvider(LocalUserPortrait provides state.userPortrait) {
-                    OutputPane(
-                        agent, chat.spawnMode, roleColor = state.role(agent?.role)?.color,
-                        onStartSession = if (allowSpawn) ({ chat.spawnMode = true; chat.focus.requestFocus() }) else null,
-                        // GAP-006b: Start session (its own settings, Apply / Cancel) or Resume, for the session on screen.
-                        paneAction = agent?.takeIf { !it.session.global }?.let { com.superiorsoftllc.agenthq.ui.model.sessionPaneAction(it.session, state.tickets) },
-                        onApplyStart = { plan -> scope.launch { controller.startSession(plan, ComposerTags.toPrompt(chat.draft, chat.attachments).trim()).let { r -> if (r is CommandResult.Sent) chat.edit("") } } },
-                        onResume = { id -> scope.launch { controller.resume(id, ComposerTags.toPrompt(chat.draft, chat.attachments).trim()).let { r -> if (r is CommandResult.Sent) chat.edit("") } } },
-                    ) {
-                        // ASK-1: this session's pending question, inline above the Activity box.
-                        QuestionPanel(
-                            shown = agent?.let { state.shownQuestionsFor(it.id) }.orEmpty(),
-                            onAnswer = { answer -> scope.launch { controller.answerQuestion(answer) } },
-                            onCancel = { id -> scope.launch { controller.cancelQuestion(id) } },
-                            onLater = { controller.dismissQuestions(); chat.focus.requestFocus() },
-                        )
-                    }
+    return ChatPanelHost(controller, chat, allowSpawn, state, agent, scope, header, content, transcriptTag)
+}
+
+@Composable
+internal fun ChatPanelHost.Header() {
+    header(agent, agent?.let { a -> { chat.openSwitch(a.id) } })
+}
+
+/** The host's content (the transcript, or the tab that replaces it) and the to-do / reasoning side slot; [modifier] carries the weight. */
+@Composable
+internal fun ChatPanelHost.Transcript(modifier: Modifier) {
+    Box(modifier.fillMaxWidth().testTag(transcriptTag)) {
+        content {
+            androidx.compose.runtime.CompositionLocalProvider(LocalUserPortrait provides state.userPortrait) {
+                OutputPane(
+                    agent, chat.spawnMode, roleColor = state.role(agent?.role)?.color,
+                    onStartSession = if (allowSpawn) ({ chat.spawnMode = true; chat.focus.requestFocus() }) else null,
+                    // GAP-006b: Start session (its own settings, Apply / Cancel) or Resume, for the session on screen.
+                    paneAction = agent?.takeIf { !it.session.global }?.let { com.superiorsoftllc.agenthq.ui.model.sessionPaneAction(it.session, state.tickets) },
+                    onApplyStart = { plan -> scope.launch { controller.startSession(plan, ComposerTags.toPrompt(chat.draft, chat.attachments).trim()).let { r -> if (r is CommandResult.Sent) chat.edit("") } } },
+                    onResume = { id -> scope.launch { controller.resume(id, ComposerTags.toPrompt(chat.draft, chat.attachments).trim()).let { r -> if (r is CommandResult.Sent) chat.edit("") } } },
+                ) {
+                    // ASK-1: this session's pending question, inline above the Activity box.
+                    QuestionPanel(
+                        shown = agent?.let { state.shownQuestionsFor(it.id) }.orEmpty(),
+                        onAnswer = { answer -> scope.launch { controller.answerQuestion(answer) } },
+                        onCancel = { id -> scope.launch { controller.cancelQuestion(id) } },
+                        onLater = { controller.dismissQuestions(); chat.focus.requestFocus() },
+                    )
                 }
             }
-            if (agent != null && !chat.spawnMode) {
-                // One top-right row: the to-do box (TODO-BOX-1, once the agent made a list) next to the reasoning button; one panel open at a time.
-                val reasoning = remember(agent.output) { com.superiorsoftllc.agenthq.ui.model.reasoningLines(agent.output) }
-                var sidePanel by remember(agent.id) { mutableStateOf(com.superiorsoftllc.agenthq.ui.model.SidePanel.NONE) }
-                ChatSideSlot(reasoning, agent.todos, sidePanel) { sidePanel = it }
-            }
         }
-        NoticeStrip(state, agent?.id)
-        if (chat.spawnMode && state.roles.isNotEmpty()) {
-            // ROLE-1c: the role a new agent spawns as. Its binding is the DEFAULT below; the picker still overrides it for this spawn.
-            SpawnRoleRow(state, controller)
+        if (agent != null && !chat.spawnMode) {
+            // One top-right row: the to-do box (TODO-BOX-1, once the agent made a list) next to the reasoning button; one panel open at a time.
+            val reasoning = remember(agent.output) { com.superiorsoftllc.agenthq.ui.model.reasoningLines(agent.output) }
+            var sidePanel by remember(agent.id) { mutableStateOf(com.superiorsoftllc.agenthq.ui.model.SidePanel.NONE) }
+            ChatSideSlot(reasoning, agent.todos, sidePanel) { sidePanel = it }
         }
-        if (chat.spawnMode && state.modelCatalog.isNotEmpty()) {
-            // PICKER 2/2: which provider+model the new agent runs on (from the `models` frame; none picked = daemon defaults).
-            // PICKER-ALL-2: the shared Harness -> Provider -> Model picker; untouched, the stored pick is left as is.
-            // The picker bounds its own lists; no outer scroll, so a row is never clipped under a second scroller.
-            Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-                SeededExecutorPicker(
-                    state.providers, state.modelCatalog, state.pickedModel, key = chat.spawnMode, tags = CONFIG_EXECUTOR_TAGS,
-                    onPick = { controller.pickModel(it) },
-                )
-            }
-        }
-        // SWAP-AGENT-1: the one Switch agent picker, inline above the composer like the New agent rows.
-        chat.switchAsk?.takeIf { !chat.spawnMode && agent?.id == it.sessionId }?.let { ask ->
-            SwitchAgentPicker(
-                state, agent!!, ask,
-                onApply = { role, picked -> controller.switchAgent(agent.id, role, picked) },
-                onClose = { chat.switchAsk = null },
+    }
+}
+
+@Composable
+internal fun ChatPanelHost.Notices() {
+    NoticeStrip(state, agent?.id)
+}
+
+/** The New agent mode's rows above the composer: the role, then the provider and model. */
+@Composable
+internal fun ChatPanelHost.SpawnRows() {
+    if (chat.spawnMode && state.roles.isNotEmpty()) {
+        // ROLE-1c: the role a new agent spawns as. Its binding is the DEFAULT below; the picker still overrides it for this spawn.
+        SpawnRoleRow(state, controller)
+    }
+    if (chat.spawnMode && state.modelCatalog.isNotEmpty()) {
+        // PICKER 2/2: which provider+model the new agent runs on (from the `models` frame; none picked = daemon defaults).
+        // PICKER-ALL-2: the shared Harness -> Provider -> Model picker; untouched, the stored pick is left as is.
+        // The picker bounds its own lists; no outer scroll, so a row is never clipped under a second scroller.
+        Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+            SeededExecutorPicker(
+                state.providers, state.modelCatalog, state.pickedModel, key = chat.spawnMode, tags = CONFIG_EXECUTOR_TAGS,
+                onPick = { controller.pickModel(it) },
             )
         }
-        PromptBox(
-            chat.draft, chat::edit, { chat.submit(controller, scope, agent) }, chat.focus, chat.spawnMode, agent, controller,
-            onSpawnToggle = { if (allowSpawn) chat.spawnMode = !chat.spawnMode },
-            onSwitchAgent = { agent?.let { if (chat.switchAsk?.sessionId == it.id) chat.switchAsk = null else chat.openSwitch(it.id) } },
-            attachments = chat.attachments, attachBusy = chat.attachBusy, attachError = chat.attachError,
-            onAttach = { chat.attach(it, controller, scope, agent, state) },
-            onRemoveAttachment = chat::removeAttachment,
-            wire = chat::wire,
+    }
+}
+
+@Composable
+internal fun ChatPanelHost.SwitchPicker() {
+    // SWAP-AGENT-1: the one Switch agent picker, inline above the composer like the New agent rows.
+    chat.switchAsk?.takeIf { !chat.spawnMode && agent?.id == it.sessionId }?.let { ask ->
+        SwitchAgentPicker(
+            state, agent!!, ask,
+            onApply = { role, picked -> controller.switchAgent(agent.id, role, picked) },
+            onClose = { chat.switchAsk = null },
         )
     }
+}
+
+@Composable
+internal fun ChatPanelHost.Composer() {
+    PromptBox(
+        chat.draft, chat::edit, { chat.submit(controller, scope, agent) }, chat.focus, chat.spawnMode, agent, controller,
+        onSpawnToggle = { if (allowSpawn) chat.spawnMode = !chat.spawnMode },
+        onSwitchAgent = { agent?.let { if (chat.switchAsk?.sessionId == it.id) chat.switchAsk = null else chat.openSwitch(it.id) } },
+        attachments = chat.attachments, attachBusy = chat.attachBusy, attachError = chat.attachError,
+        onAttach = { chat.attach(it, controller, scope, agent, state) },
+        onRemoveAttachment = chat::removeAttachment,
+        wire = chat::wire,
+    )
 }

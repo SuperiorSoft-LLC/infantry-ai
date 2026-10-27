@@ -14,12 +14,13 @@ class ChatPanelOneSourceTest {
     private fun src(name: String) = File("$ui/$name").readText()
 
     @Test fun `the main window centre block and the assistant popup both host ChatPanel`() {
-        assertTrue(Regex("""\bChatPanel\(""").containsMatchIn(src("shell/blocks/ShellCenter.kt")), "ShellCenter.kt (the main window centre block) hosts ChatPanel")
+        // BLOCKS-LAYOUT L9b: the centre block hosts ChatPanel's own sections, one node each, through chatPanelHost.
+        assertTrue(Regex("""\bchatPanelHost\(""").containsMatchIn(src("shell/blocks/ShellCenter.kt")), "ShellCenter.kt (the main window centre block) hosts ChatPanel's sections")
         assertTrue(Regex("""\bChatPanel\(""").containsMatchIn(src("AssistantPopup.kt")), "AssistantPopup.kt hosts ChatPanel")
     }
 
     @Test fun `neither host builds its own chat parts`() {
-        for (host in listOf("App.kt", "AssistantPopup.kt")) {
+        for (host in listOf("App.kt", "AssistantPopup.kt", "shell/blocks/ShellCenter.kt")) {
             val text = src(host)
             for (part in listOf("PromptBox(", "AgentChat(", "CenterHeader(", "ActivityBox(", "SlashSuggestions(")) {
                 assertTrue(!text.contains(part), "$host must not compose $part itself; ChatPanel does")
