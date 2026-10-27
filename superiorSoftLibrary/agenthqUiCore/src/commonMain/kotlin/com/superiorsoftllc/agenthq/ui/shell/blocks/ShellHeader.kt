@@ -13,6 +13,7 @@ import com.superiorsoftllc.agenthq.ui.ProjectPicker
 import com.superiorsoftllc.agenthq.ui.ServerSwitcherChip
 import com.superiorsoftllc.agenthq.ui.TitleBarFrame
 import com.superiorsoftllc.agenthq.ui.TitleBarLead
+import com.superiorsoftllc.agenthq.ui.TitleBarConnection
 import com.superiorsoftllc.agenthq.ui.TitleBarWindowControls
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
@@ -79,5 +80,14 @@ object HeaderWindowControls : Block("windowControls", "$HEADER.windowControls") 
     override fun Render(scope: BlockScope) = TitleBarWindowControls(LocalWindowChrome.current, scope.modifier)
 }
 
+/** The connection chip; a tap opens the connection (or the host's own connect screen, MOBILE-CONNCHIP-1). */
+object HeaderConnection : Block("connectionChip", "$HEADER.connection") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val s = LocalShell.current
+        TitleBarConnection(s.state, { s.changeConnection?.invoke() ?: run { s.ui.showConnect = true } }, scope.modifier)
+    }
+}
+
 /** BLOCKS-SHELL-1: the window's title bar, on top. */
-val ShellHeader = TitleBarBlock(HEADER, listOf(HeaderLead, HeaderWindowControls))
+val ShellHeader = TitleBarBlock(HEADER, listOf(HeaderLead, HeaderConnection, HeaderWindowControls))

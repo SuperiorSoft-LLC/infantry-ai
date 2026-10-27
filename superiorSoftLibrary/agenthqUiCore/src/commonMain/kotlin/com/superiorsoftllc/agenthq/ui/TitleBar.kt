@@ -116,6 +116,7 @@ fun TitleBar(
     // BLOCKS-LAYOUT L6: the same frame and items the shell header (`infantry.shell.header`) composes as child blocks.
     TitleBarFrame {
         TitleBarLead(state, agentScope, onConnect, onAttention, chrome, projectSlot, onTogglePanel, assistantSlot, serverSlot)
+        TitleBarConnection(state, onConnect)
         TitleBarWindowControls(chrome)
     }
 }
@@ -202,7 +203,6 @@ fun RowScope.TitleBarLead(
     TitleBarAttention(state, onAttention)
     if (onTogglePanel != null) TitleBarRightToggle(state) { onTogglePanel(PanelSide.RIGHT) } else if (compact) Spacer(Modifier.width(4.dp))
     serverSlot()
-    TitleBarConnection(state, onConnect)
 }
 
 /** Contract 1.9.0: open attention is a durable signal from the daemon, so it is always in view (wide; compact has it in the overflow). Owns its 10dp gap. */
