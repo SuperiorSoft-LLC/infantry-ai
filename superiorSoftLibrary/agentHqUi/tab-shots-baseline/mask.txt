@@ -42,3 +42,18 @@ newAgent-role 965 278 92 16
 # TOAST-1 opt-in shot (-PtabShotsExtra=toast): the chat messages' time of day beside the toast.
 toast-visible 965 164 92 16
 toast-visible 965 278 92 16
+
+# S0 opt-in shots (-PtabShotsExtra=config,changes,compact): the chat messages' time of day behind the dialogs and panels.
+changes-no-directory 965 164 92 16
+changes-no-directory 965 278 92 16
+changes-not-a-repository 965 164 92 16
+changes-not-a-repository 965 278 92 16
+changes-working-tree 965 164 92 16
+changes-working-tree 965 278 92 16
+changes-history 965 164 92 16
+changes-history 965 278 92 16
+compact-800-newAgent 710 164 80 16
+compact-800-newAgent 710 278 80 16
+# Configuration > Devices: the host's own addresses and the ephemeral port (address pills and the "ws://..." line).
+config-devices 246 356 700 42
+config-devices 262 436 300 20

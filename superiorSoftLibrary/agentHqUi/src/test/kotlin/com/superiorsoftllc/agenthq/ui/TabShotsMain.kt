@@ -7,6 +7,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.isRoot
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -299,6 +300,58 @@ fun main(args: Array<String>) {
             daemon.close()
             exitProcess(0)
         }
+        // S0 (drop-in path): -PtabShotsExtra=config,changes,compact (any of them, comma-separated) shoots what the 32 default
+        // shots and the other opt-in sets miss, before any of it moves out of core: every Configuration section, the config
+        // search, the Changes panel over a project with and without a repository, and (compact) the board, a config section and
+        // the new-agent dialog at the 800 and 360 px widths. The default run is unchanged.
+        val s0 = System.getProperty("agenthq.tabshots.extra")?.split(',')?.map { it.trim() }.orEmpty()
+        val s0Sets = setOf("config", "changes", "compact")
+        if (s0.any { it in s0Sets }) {
+            if ("config" in s0) {
+                onNodeWithContentDescription("Configuration").performClick()
+                for (tab in ConfigTab.values()) {
+                    onNodeWithTag(CONFIG_TAB_TAG_PREFIX + tab.name).performClick()
+                    snap(out, "config-" + tab.name.lowercase())
+                }
+                onNodeWithTag(CONFIG_SEARCH_TAG).performClick()
+                snap(out, "config-search")
+                onNodeWithContentDescription("Configuration").performClick()
+                waitForIdle()
+            }
+            if ("changes" in s0) {
+                // No project directory yet: the panel's not-a-repository state; then a repository with a modified and an untracked file.
+                kotlinx.coroutines.runBlocking { controller.saveProject("Changes shot project") }
+                waitUntil(timeoutMillis = 20_000) { controller.state.value.projects.any { it.name == "Changes shot project" } }
+                val project = controller.state.value.projects.single { it.name == "Changes shot project" }
+                kotlinx.coroutines.runBlocking { controller.selectProject(project.id) }
+                onAllNodesWithTag("right-tab-CHANGES")[0].performClick()
+                snap(out, "changes-no-directory")
+                val repo = File(System.getProperty("java.io.tmpdir"), "agenthq-tab-shots-changes").apply { deleteRecursively(); mkdirs() }
+                kotlinx.coroutines.runBlocking { controller.saveProjectDirectory(project.id, repo.absolutePath) }
+                waitUntil(timeoutMillis = 20_000) { controller.state.value.activeProject?.directory == repo.absolutePath }
+                snap(out, "changes-not-a-repository")
+                fun git(vararg a: String) = ProcessBuilder(listOf("git", "-c", "user.name=Shots", "-c", "user.email=shots@test.invalid") + a)
+                    .directory(repo).redirectErrorStream(true)
+                    .apply { environment()["GIT_AUTHOR_DATE"] = "2026-01-02T03:04:05Z"; environment()["GIT_COMMITTER_DATE"] = "2026-01-02T03:04:05Z" }
+                    .start().apply { inputStream.readBytes(); waitFor() }
+                git("init", "-b", "main")
+                File(repo, "README.md").writeText("hello\nsecond line\n")
+                git("add", "README.md")
+                git("commit", "-m", "add the readme")
+                File(repo, "README.md").writeText("hello from the changes shot\nsecond line\n")
+                File(repo, "new.txt").writeText("untracked\n")
+                onNodeWithTag(PROJECT_CHANGES_REFRESH_TAG).performClick()
+                waitUntil(timeoutMillis = 20_000) { onAllNodesWithText("README.md", substring = true).fetchSemanticsNodes().isNotEmpty() }
+                snap(out, "changes-working-tree")
+                onNodeWithTag(CHANGES_MODE_HISTORY_TAG).performClick()
+                snap(out, "changes-history")
+            }
+            if ("compact" !in s0) {
+                daemon.close()
+                exitProcess(0)
+            }
+            return@runDesktopComposeUiTest
+        }
         // TAB-SHOTS-DIFF: a pane still showing its loading placeholder ("Loading skills...", the Stats pane's "Reading this
         // session's record...") is shot once it has loaded, so a slow host does not change the picture. One that never
         // loads is shot as it is (the diff then shows it).
@@ -345,6 +398,32 @@ fun main(args: Array<String>) {
         }
         // LAYOUT-1 P0: the same window with the title bar's window controls (header + footer visible), then compact widths and
         // the header's overflow menu, so a later shell change can prove the header and footer unchanged.
+    }
+    if ("compact" in System.getProperty("agenthq.tabshots.extra").orEmpty().split(',').map { it.trim() }) {
+        // One fresh window per overlay (the compact board has no "Close" text to click back out with).
+        for ((name, width) in listOf("compact-800" to 800, "compact-360" to 360)) {
+            for (overlay in listOf("board", "newAgent", "config")) {
+                runDesktopComposeUiTest(width, 860) {
+                    setContent { ChromeApp(controller, tabs, port) }
+                    waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
+                    waitForIdle()
+                    // The sidebar lives in the compact drawer, opened from the title bar's left toggle.
+                    if (overlay != "config" && onAllNodesWithTag(DRAWER_TAG).fetchSemanticsNodes().isEmpty()) { onNodeWithTag(TITLE_BAR_TOGGLE_LEFT_TAG).performClick(); waitForIdle(); Thread.sleep(800); waitForIdle() }
+                    when (overlay) {
+                        "board" -> onNodeWithText("Board").performClick()
+                        "newAgent" -> onNodeWithText("New agent").performClick()
+                        "config" -> onNodeWithContentDescription("Configuration").performClick()
+                    }
+                    snap(out, "$name-$overlay")
+                    if (overlay == "config") {
+                        onNodeWithTag(CONFIG_TAB_TAG_PREFIX + ConfigTab.AGENTS.name).performClick()
+                        snap(out, "$name-config-agents")
+                    }
+                }
+            }
+        }
+        daemon.close()
+        exitProcess(0)
     }
     for ((name, size) in listOf("chrome-desktop-1400" to (1400 to 860), "chrome-compact-800" to (800 to 860), "chrome-compact-360" to (360 to 860))) {
         runDesktopComposeUiTest(size.first, size.second) {
