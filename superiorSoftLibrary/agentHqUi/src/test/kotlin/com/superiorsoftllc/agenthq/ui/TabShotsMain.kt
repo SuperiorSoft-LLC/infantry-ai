@@ -117,6 +117,24 @@ fun main(args: Array<String>) {
             daemon.close()
             exitProcess(0)
         }
+        // BLOCKS-LAYOUT L12: -PtabShotsExtra=roles renders only the role manager (Configuration > Agents > Manage roles): its
+        // list, a new role's form, and a built-in role's form at the top and scrolled to Save. The default run is unchanged.
+        if (System.getProperty("agenthq.tabshots.extra") == "roles") {
+            waitUntil(timeoutMillis = 20_000) { controller.state.value.roles.isNotEmpty() }
+            onNodeWithContentDescription("Configuration").performClick()
+            onNodeWithTag(CONFIG_TAB_TAG_PREFIX + ConfigTab.AGENTS.name).performClick()
+            onNodeWithTag(ROLE_MANAGER_OPEN_TAG).performScrollTo().performClick()
+            snap(out, "roles-list")
+            onNodeWithTag(ROLE_MANAGER_NEW_TAG).performClick()
+            snap(out, "roles-new")
+            onNodeWithText("Back").performScrollTo().performClick()
+            onNodeWithTag(ROLE_MANAGER_ROW_TAG_PREFIX + controller.state.value.roles.first().id).performScrollTo().performClick()
+            snap(out, "roles-edit")
+            onNodeWithTag(ROLE_MANAGER_SAVE_TAG).performScrollTo()
+            snap(out, "roles-edit-end")
+            daemon.close()
+            exitProcess(0)
+        }
         // BLOCKS-LAYOUT L11: -PtabShotsExtra=assistant,newAgent,diff (any of them, comma-separated) renders only those
         // overlays open, as the board's shot does (the default run is unchanged). The diff comes last: it adds a project.
         val l11 = System.getProperty("agenthq.tabshots.extra")?.split(',')?.map { it.trim() }.orEmpty()

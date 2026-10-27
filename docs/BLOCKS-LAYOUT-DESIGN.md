@@ -380,6 +380,38 @@ infantry.shell.center.newAgent  newAgentDialog  while open: NewAgentDialogFrame 
   mask.txt masks the chat's message clocks behind the New agent dialog for the two `newAgent-*` shots, by name. Each step
   matched its base render 5/5 at 0 px (base f63fb27, step 0 of L11), plus diffTabShots 32/32.
 
+### 6i. As built in L12 (9dfbf408): the role manager
+
+The role manager (Configuration > Agents > Manage roles) becomes a container, as the overlays of 6h did. The frame stays
+the dialog's own, the pieces are drawn straight into its scrolling column (8dp apart), and the page shown (list or
+form) reaches them through a composition local. The form is itself a container: its frame owns the fields as typed, the
+load of the project's notes for the role, and save / delete; its pieces read the draft through a second local.
+
+```
+infantry.shell.roles   infantry.shell.roles  open only: RoleManagerFrame (dialog, title "Roles", Done, the page shown);
+                                            children top to bottom in its column:
+  hint           roleManagerHint   the line on when changes apply
+  list           roleList          the list page: New role and a row per role; nothing while a role is open
+  form           roleForm          the form page while a role is open (nothing on the list): RoleFormFrame (fields,
+                                   notes load, save, delete, draws nothing itself); children straight into the same column:
+    form.title     roleFormTitle     "New role" / "Edit <name>", and the older-daemon notice
+    form.identity  roleFormIdentity  id (a new role only), name, description, role notes, colour, icon
+    form.executor  roleFormExecutor  default provider and model, effort
+    form.traits    roleFormTraits    the trait checkboxes
+    form.notes     roleFormNotes     the project's notes for the role, read-only (an existing role only)
+    form.actions   roleFormActions   the last refusal, Delete / Back / Save, and Delete's confirmation
+```
+
+- `RoleManagerDialog` keeps its signature and draws `RoleManagerFrame` and the same pieces (`RoleManagerHint`,
+  `RoleManagerList`, `RoleManagerForm` with `RoleFormTitle` ... `RoleFormActions`).
+- A piece that draws several items into the column puts its placement on one item that is always drawn: New role, the
+  form title, the name field, the executor, traits and notes headings, the button row.
+- Save, delete and back are callbacks on the draft (`RoleFormDraft.onSave / onDelete / onDone`); the frame runs them.
+- None of these nodes is locked.
+- 0 px: none of the 32 shots opens the role manager, so it has an opt-in shot set: `-PtabShotsExtra=roles` renders
+  `roles-list`, `roles-new`, `roles-edit` and `roles-edit-end` (scrolled to Save). The default run is unchanged, still 32.
+  The step matched its base render 4/4 at 0 px (base 30262e4, step 0 of L12), plus diffTabShots 32/32.
+
 
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 

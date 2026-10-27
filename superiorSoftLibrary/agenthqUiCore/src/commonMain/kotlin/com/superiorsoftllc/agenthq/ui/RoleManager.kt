@@ -3,6 +3,7 @@ package com.superiorsoftllc.agenthq.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -14,6 +15,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +35,7 @@ import com.superiorsoftllc.agenthq.ui.model.TraitLimits
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
 import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.protocol.Role
+import com.superiorsoftllc.agenthq.ui.protocol.RoleBinding
 import kotlinx.coroutines.launch
 
 const val ROLE_MANAGER_TAG = "role-manager"
@@ -52,9 +55,35 @@ const val ROLE_MANAGER_OPEN_TAG = "role-manager-open"
  * has it) or resets a customised built-in to its bundled definition; a pure built-in cannot be deleted.
  *
  * Everything is an existing [Controller] command (`role_save`, `role_binding_set`, `role_traits_set`) plus `role_delete`.
+ *
+ * BLOCKS-LAYOUT L12: drawn as [RoleManagerFrame] (dialog, title, Done, the page shown) and its pieces, which the shell's
+ * `infantry.shell.roles` node draws as child blocks.
  */
 @Composable
 fun RoleManagerDialog(state: AppState, controller: Controller, onDismiss: () -> Unit) {
+    RoleManagerFrame(onDismiss) { nav ->
+        RoleManagerHint()
+        RoleManagerList(state, nav)
+        RoleManagerForm(state, controller, nav) { draft ->
+            RoleFormTitle(draft)
+            RoleFormIdentity(draft)
+            RoleFormExecutor(draft)
+            RoleFormTraits(draft)
+            RoleFormNotes(draft)
+            RoleFormActions(draft)
+        }
+    }
+}
+
+/**
+ * BLOCKS-LAYOUT L12: the page the role manager shows: [editing] null = the list, "" = a new role, else the id being
+ * edited; [open] switches it. [column] is the dialog's scrolling column, which the pieces draw straight into.
+ */
+class RoleManagerNav(val editing: String?, val open: (String?) -> Unit, internal val column: ColumnScope)
+
+/** The role manager's frame: the dialog (title, Done) and the page shown. [content] goes straight into its scrolling column (8dp apart). */
+@Composable
+fun RoleManagerFrame(onDismiss: () -> Unit, content: @Composable ColumnScope.(RoleManagerNav) -> Unit) {
     // null = the list; "" = a new role; else the id being edited.
     var editing by remember { mutableStateOf<String?>(null) }
     AhqAlertDialog(
@@ -63,29 +92,31 @@ fun RoleManagerDialog(state: AppState, controller: Controller, onDismiss: () -> 
         title = { Text("Roles", fontWeight = FontWeight.Bold) },
         text = {
             Column(Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    "Changes apply to sessions started after you save; a running session keeps what it started with.",
-                    color = Palette.Muted, fontSize = 11.sp,
-                )
-                val id = editing
-                if (id == null) {
-                    RoleList(state, onNew = { editing = "" }, onEdit = { editing = it })
-                } else {
-                    RoleForm(state, controller, existing = state.roles.firstOrNull { it.id == id }, onDone = { editing = null })
-                }
+                content(RoleManagerNav(editing, { editing = it }, this))
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
     )
 }
 
+/** The line on when changes apply. */
 @Composable
-private fun RoleList(state: AppState, onNew: () -> Unit, onEdit: (String) -> Unit) {
-    Button(onClick = onNew, enabled = state.connection.isLive, modifier = Modifier.testTag(ROLE_MANAGER_NEW_TAG)) { Text("New role") }
+fun RoleManagerHint(modifier: Modifier = Modifier) {
+    Text(
+        "Changes apply to sessions started after you save; a running session keeps what it started with.",
+        modifier = modifier, color = Palette.Muted, fontSize = 11.sp,
+    )
+}
+
+/** The list page (New role, then a row per role); nothing while a role is open. [modifier] goes on New role. */
+@Composable
+fun RoleManagerList(state: AppState, nav: RoleManagerNav, modifier: Modifier = Modifier) {
+    if (nav.editing != null) return
+    Button(onClick = { nav.open("") }, enabled = state.connection.isLive, modifier = modifier.testTag(ROLE_MANAGER_NEW_TAG)) { Text("New role") }
     state.roles.forEach { r ->
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised)
-                .clickable { onEdit(r.id) }.padding(8.dp).testTag(ROLE_MANAGER_ROW_TAG_PREFIX + r.id),
+                .clickable { nav.open(r.id) }.padding(8.dp).testTag(ROLE_MANAGER_ROW_TAG_PREFIX + r.id),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -99,25 +130,60 @@ private fun RoleList(state: AppState, onNew: () -> Unit, onEdit: (String) -> Uni
     }
 }
 
+/** The form page while a role is open (nothing on the list): [RoleFormFrame] for the role [nav] names. */
 @Composable
-private fun RoleForm(state: AppState, controller: Controller, existing: Role?, onDone: () -> Unit) {
+fun RoleManagerForm(state: AppState, controller: Controller, nav: RoleManagerNav, content: @Composable (RoleFormDraft) -> Unit) {
+    val id = nav.editing ?: return
+    RoleFormFrame(state, controller, existing = state.roles.firstOrNull { it.id == id }, onDone = { nav.open(null) }, content)
+}
+
+/** The form's fields as typed, from the role (or empty for a new one) when the form opens. */
+@Stable
+class RoleFormFields(existing: Role?, binding: RoleBinding?, storedTraits: List<String>) {
+    var id by mutableStateOf(existing?.id.orEmpty())
+    var name by mutableStateOf(existing?.name.orEmpty())
+    var description by mutableStateOf(existing?.description.orEmpty())
+    var persona by mutableStateOf(existing?.persona.orEmpty())
+    var color by mutableStateOf(existing?.color.orEmpty())
+    var icon by mutableStateOf(existing?.icon.orEmpty())
+    var provider by mutableStateOf(binding?.provider)
+    var model by mutableStateOf(binding?.model.orEmpty())
+    var effort by mutableStateOf(binding?.effort)
+    var traits by mutableStateOf(storedTraits)
+    var error by mutableStateOf<String?>(null)
+    var confirmDelete by mutableStateOf(false)
+}
+
+/**
+ * BLOCKS-LAYOUT L12: the open form as its pieces read it: the role ([existing], null for a new one), what it is stored
+ * with, the [fields] as typed, and the actions (save, delete, back), which the frame runs.
+ */
+class RoleFormDraft(
+    val state: AppState,
+    val existing: Role?,
+    val key: String,
+    val binding: RoleBinding?,
+    val storedTraits: List<String>,
+    val fields: RoleFormFields,
+    val onSave: () -> Unit,
+    val onDelete: () -> Unit,
+    val onDone: () -> Unit,
+) {
+    val live: Boolean get() = state.connection.isLive
+    val canEdit: Boolean get() = state.connection.sendsRoleEdit
+}
+
+/**
+ * The form's frame: the fields (kept per role), the load of the project's notes for the role, and save / delete. [content]
+ * gets the draft and draws straight into the dialog's column; the frame draws nothing of its own.
+ */
+@Composable
+fun RoleFormFrame(state: AppState, controller: Controller, existing: Role?, onDone: () -> Unit, content: @Composable (RoleFormDraft) -> Unit) {
     val scope = rememberCoroutineScope()
     val key = existing?.id ?: "new"
     val binding = existing?.let { state.roleBindings[it.id] }
     val storedTraits = existing?.let { state.roleTraits[it.id] }.orEmpty()
-    var id by remember(key) { mutableStateOf(existing?.id.orEmpty()) }
-    var name by remember(key) { mutableStateOf(existing?.name.orEmpty()) }
-    var description by remember(key) { mutableStateOf(existing?.description.orEmpty()) }
-    var persona by remember(key) { mutableStateOf(existing?.persona.orEmpty()) }
-    var color by remember(key) { mutableStateOf(existing?.color.orEmpty()) }
-    var icon by remember(key) { mutableStateOf(existing?.icon.orEmpty()) }
-    var provider by remember(key) { mutableStateOf(binding?.provider) }
-    var model by remember(key) { mutableStateOf(binding?.model.orEmpty()) }
-    var effort by remember(key) { mutableStateOf(binding?.effort) }
-    var traits by remember(key) { mutableStateOf(storedTraits) }
-    var error by remember(key) { mutableStateOf<String?>(null) }
-    var confirmDelete by remember(key) { mutableStateOf(false) }
-    val live = state.connection.isLive
+    val f = remember(key) { RoleFormFields(existing, binding, storedTraits) }
     val canEdit = state.connection.sendsRoleEdit
 
     // The project's own notes for this role, read-only here (they are edited in the Memory pane).
@@ -126,89 +192,133 @@ private fun RoleForm(state: AppState, controller: Controller, existing: Role?, o
         if (existing != null && projectId != null) controller.loadMemory(projectId, NoteScope(NoteScope.ROLE, existing.id))
     }
 
-    Text(if (existing == null) "New role" else "Edit ${existing.name}", color = Palette.Text, fontWeight = FontWeight.SemiBold)
-    if (!canEdit) Text("This daemon is older than contract 1.108.0: descriptions and deleting roles are unavailable.", color = Palette.Muted, fontSize = 10.sp)
-    if (existing == null) {
-        OutlinedTextField(id, { id = it.lowercase() }, label = { Text("Role id (a-z, 0-9, -)") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag(ROLE_EDITOR_ID_TAG))
+    val save: () -> Unit = {
+        f.error = null
+        scope.launch {
+            val iconChanged = f.icon.takeIf { it != existing?.icon.orEmpty() }
+            val descChanged = f.description.trim().takeIf { canEdit && it != existing?.description.orEmpty() }
+            val saved = controller.saveRole(f.id, f.name, f.color, f.persona, iconChanged, descChanged)
+            if (saved is CommandResult.Refused) { f.error = saved.reason; return@launch }
+            val rid = f.id.trim()
+            if (f.provider != binding?.provider || f.model.trim() != binding?.model.orEmpty() || f.effort != binding?.effort) {
+                val r = controller.saveRoleBinding(rid, f.provider, f.model, f.effort)
+                if (r is CommandResult.Refused) { f.error = r.reason; return@launch }
+            }
+            if (f.traits != storedTraits) {
+                val r = controller.setRoleTraits(rid, f.traits)
+                if (r is CommandResult.Refused) { f.error = r.reason; return@launch }
+            }
+            onDone()
+        }
     }
-    OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag(ROLE_EDITOR_NAME_TAG))
-    OutlinedTextField(
-        description, { description = it.replace("\n", " ") }, label = { Text("Description (one line, not sent to sessions)") },
-        singleLine = true, enabled = canEdit, modifier = Modifier.fillMaxWidth().testTag(ROLE_MANAGER_DESCRIPTION_TAG),
-    )
-    OutlinedTextField(
-        persona, { persona = it }, label = { Text("Role notes: every new session of this role receives these at start") }, minLines = 4, maxLines = 14,
-        modifier = Modifier.fillMaxWidth().testTag(ROLE_EDITOR_PERSONA_TAG), textStyle = TextStyle(fontFamily = Mono, fontSize = 12.sp),
-    )
-    OutlinedTextField(color, { color = it }, label = { Text("Colour #rrggbb (empty = keep / generated)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-    RoleIconPicker(roleId = id.trim(), selected = icon, enabled = state.connection.sendsRoleIcon, onPick = { icon = it })
-
-    Text("Default provider and model", color = Palette.Muted, fontSize = 10.sp)
-    ProfileExecutorField(state, key, provider, model) { p, m -> provider = p; model = m }
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("Effort", color = Palette.Muted, fontSize = 10.sp)
-        (listOf<String?>(null) + ROLE_EFFORT_LEVELS).forEach { level ->
-            TextButton(onClick = { effort = level }) {
-                Text(level ?: "default", fontSize = 11.sp, fontWeight = if (effort == level) FontWeight.Bold else FontWeight.Normal, color = if (effort == level) Palette.Accent else Palette.Muted)
+    val delete: () -> Unit = {
+        f.confirmDelete = false
+        if (existing != null) {
+            scope.launch {
+                val r = controller.deleteRole(existing.id)
+                if (r is CommandResult.Refused) f.error = r.reason else onDone()
             }
         }
     }
+    content(RoleFormDraft(state, existing, key, binding, storedTraits, f, save, delete, onDone))
+}
 
-    Text("Traits (up to ${TraitLimits.PER_ROLE_MAX})", color = Palette.Muted, fontSize = 10.sp)
+/** The form's title, and the notice when the daemon is too old to edit descriptions or delete. [modifier] goes on the title. */
+@Composable
+fun RoleFormTitle(draft: RoleFormDraft, modifier: Modifier = Modifier) {
+    val existing = draft.existing
+    Text(if (existing == null) "New role" else "Edit ${existing.name}", modifier = modifier, color = Palette.Text, fontWeight = FontWeight.SemiBold)
+    if (!draft.canEdit) Text("This daemon is older than contract 1.108.0: descriptions and deleting roles are unavailable.", color = Palette.Muted, fontSize = 10.sp)
+}
+
+/** Id (a new role only), name, description, role notes, colour and icon. [modifier] goes on the name field. */
+@Composable
+fun RoleFormIdentity(draft: RoleFormDraft, modifier: Modifier = Modifier) {
+    val f = draft.fields
+    if (draft.existing == null) {
+        OutlinedTextField(f.id, { f.id = it.lowercase() }, label = { Text("Role id (a-z, 0-9, -)") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag(ROLE_EDITOR_ID_TAG))
+    }
+    OutlinedTextField(f.name, { f.name = it }, label = { Text("Name") }, singleLine = true, modifier = modifier.fillMaxWidth().testTag(ROLE_EDITOR_NAME_TAG))
+    OutlinedTextField(
+        f.description, { f.description = it.replace("\n", " ") }, label = { Text("Description (one line, not sent to sessions)") },
+        singleLine = true, enabled = draft.canEdit, modifier = Modifier.fillMaxWidth().testTag(ROLE_MANAGER_DESCRIPTION_TAG),
+    )
+    OutlinedTextField(
+        f.persona, { f.persona = it }, label = { Text("Role notes: every new session of this role receives these at start") }, minLines = 4, maxLines = 14,
+        modifier = Modifier.fillMaxWidth().testTag(ROLE_EDITOR_PERSONA_TAG), textStyle = TextStyle(fontFamily = Mono, fontSize = 12.sp),
+    )
+    OutlinedTextField(f.color, { f.color = it }, label = { Text("Colour #rrggbb (empty = keep / generated)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+    RoleIconPicker(roleId = f.id.trim(), selected = f.icon, enabled = draft.state.connection.sendsRoleIcon, onPick = { f.icon = it })
+}
+
+/** Default provider, model and effort. [modifier] goes on the heading. */
+@Composable
+fun RoleFormExecutor(draft: RoleFormDraft, modifier: Modifier = Modifier) {
+    val f = draft.fields
+    Text("Default provider and model", modifier = modifier, color = Palette.Muted, fontSize = 10.sp)
+    ProfileExecutorField(draft.state, draft.key, f.provider, f.model) { p, m -> f.provider = p; f.model = m }
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Effort", color = Palette.Muted, fontSize = 10.sp)
+        (listOf<String?>(null) + ROLE_EFFORT_LEVELS).forEach { level ->
+            TextButton(onClick = { f.effort = level }) {
+                Text(level ?: "default", fontSize = 11.sp, fontWeight = if (f.effort == level) FontWeight.Bold else FontWeight.Normal, color = if (f.effort == level) Palette.Accent else Palette.Muted)
+            }
+        }
+    }
+}
+
+/** The role's traits, a checkbox each (up to the limit). [modifier] goes on the heading. */
+@Composable
+fun RoleFormTraits(draft: RoleFormDraft, modifier: Modifier = Modifier) {
+    val f = draft.fields
+    val state = draft.state
+    Text("Traits (up to ${TraitLimits.PER_ROLE_MAX})", modifier = modifier, color = Palette.Muted, fontSize = 10.sp)
     if (state.traits.isEmpty()) Text("No traits defined yet.", color = Palette.Muted, fontSize = 11.sp)
     state.traits.forEach { t ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(
-                checked = t.id in traits,
-                onCheckedChange = { on -> traits = if (on) (traits + t.id).distinct().take(TraitLimits.PER_ROLE_MAX) else traits - t.id },
+                checked = t.id in f.traits,
+                onCheckedChange = { on -> f.traits = if (on) (f.traits + t.id).distinct().take(TraitLimits.PER_ROLE_MAX) else f.traits - t.id },
             )
             Text(t.name, fontSize = 12.sp)
         }
     }
+}
 
-    if (existing != null) {
-        val notes = projectId?.let { state.memoryNotes[NoteScope(NoteScope.ROLE, existing.id).key(it)] }.orEmpty()
-        Text("This project's notes for the role (read-only; edit them in Memory)", color = Palette.Muted, fontSize = 10.sp)
-        if (notes.isEmpty()) Text("None.", color = Palette.Muted, fontSize = 11.sp)
-        notes.forEach { n -> Text("• ${n.name}${if (n.description.isNotBlank()) ": ${n.description}" else ""}", fontSize = 11.sp, color = Palette.Text) }
-    }
+/** The active project's notes for the role, read-only (an existing role only; nothing for a new one). [modifier] goes on the heading. */
+@Composable
+fun RoleFormNotes(draft: RoleFormDraft, modifier: Modifier = Modifier) {
+    val existing = draft.existing ?: return
+    val state = draft.state
+    val notes = state.activeProjectId?.let { state.memoryNotes[NoteScope(NoteScope.ROLE, existing.id).key(it)] }.orEmpty()
+    Text("This project's notes for the role (read-only; edit them in Memory)", modifier = modifier, color = Palette.Muted, fontSize = 10.sp)
+    if (notes.isEmpty()) Text("None.", color = Palette.Muted, fontSize = 11.sp)
+    notes.forEach { n -> Text("• ${n.name}${if (n.description.isNotBlank()) ": ${n.description}" else ""}", fontSize = 11.sp, color = Palette.Text) }
+}
 
-    error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
+/** The last refusal, Delete (a custom role), Back and Save, and Delete's confirmation. [modifier] goes on the button row. */
+@Composable
+fun RoleFormActions(draft: RoleFormDraft, modifier: Modifier = Modifier) {
+    val f = draft.fields
+    val existing = draft.existing
+    f.error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
         if (existing != null && existing.source == "CUSTOM") {
-            TextButton(onClick = { confirmDelete = true }, enabled = live && canEdit, modifier = Modifier.testTag(ROLE_MANAGER_DELETE_TAG)) {
+            TextButton(onClick = { f.confirmDelete = true }, enabled = draft.live && draft.canEdit, modifier = Modifier.testTag(ROLE_MANAGER_DELETE_TAG)) {
                 Text("Delete", color = Palette.Danger, fontSize = 12.sp)
             }
         }
-        TextButton(onClick = onDone) { Text("Back", fontSize = 12.sp) }
+        TextButton(onClick = draft.onDone) { Text("Back", fontSize = 12.sp) }
         Button(
-            enabled = live && id.isNotBlank() && name.isNotBlank(),
+            enabled = draft.live && f.id.isNotBlank() && f.name.isNotBlank(),
             modifier = Modifier.testTag(ROLE_MANAGER_SAVE_TAG),
-            onClick = {
-                error = null
-                scope.launch {
-                    val iconChanged = icon.takeIf { it != existing?.icon.orEmpty() }
-                    val descChanged = description.trim().takeIf { canEdit && it != existing?.description.orEmpty() }
-                    val saved = controller.saveRole(id, name, color, persona, iconChanged, descChanged)
-                    if (saved is CommandResult.Refused) { error = saved.reason; return@launch }
-                    val rid = id.trim()
-                    if (provider != binding?.provider || model.trim() != binding?.model.orEmpty() || effort != binding?.effort) {
-                        val r = controller.saveRoleBinding(rid, provider, model, effort)
-                        if (r is CommandResult.Refused) { error = r.reason; return@launch }
-                    }
-                    if (traits != storedTraits) {
-                        val r = controller.setRoleTraits(rid, traits)
-                        if (r is CommandResult.Refused) { error = r.reason; return@launch }
-                    }
-                    onDone()
-                }
-            },
+            onClick = draft.onSave,
         ) { Text("Save role", fontSize = 12.sp) }
     }
 
-    if (confirmDelete && existing != null) {
+    if (f.confirmDelete && existing != null) {
         AhqAlertDialog(
-            onDismissRequest = { confirmDelete = false },
+            onDismissRequest = { f.confirmDelete = false },
             title = { Text("Delete ${existing.name}?") },
             text = {
                 Text(
@@ -218,18 +328,9 @@ private fun RoleForm(state: AppState, controller: Controller, existing: Role?, o
                 )
             },
             confirmButton = {
-                TextButton(
-                    modifier = Modifier.testTag(ROLE_MANAGER_DELETE_CONFIRM_TAG),
-                    onClick = {
-                        confirmDelete = false
-                        scope.launch {
-                            val r = controller.deleteRole(existing.id)
-                            if (r is CommandResult.Refused) error = r.reason else onDone()
-                        }
-                    },
-                ) { Text("Delete", color = Palette.Danger) }
+                TextButton(modifier = Modifier.testTag(ROLE_MANAGER_DELETE_CONFIRM_TAG), onClick = draft.onDelete) { Text("Delete", color = Palette.Danger) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { f.confirmDelete = false }) { Text("Cancel") } },
         )
     }
 }
