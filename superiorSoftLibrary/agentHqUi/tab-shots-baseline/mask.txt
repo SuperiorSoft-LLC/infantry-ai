@@ -38,3 +38,7 @@ newAgent-open 965 164 92 16
 newAgent-open 965 278 92 16
 newAgent-role 965 164 92 16
 newAgent-role 965 278 92 16
+
+# TOAST-1 opt-in shot (-PtabShotsExtra=toast): the chat messages' time of day beside the toast.
+toast-visible 965 164 92 16
+toast-visible 965 278 92 16
