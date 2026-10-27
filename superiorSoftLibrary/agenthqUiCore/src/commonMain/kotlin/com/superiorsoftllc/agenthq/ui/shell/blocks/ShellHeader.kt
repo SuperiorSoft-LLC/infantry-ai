@@ -68,7 +68,13 @@ object HeaderToggleLeft : Block("panelToggle", "$LEAD.toggleLeft") {
     }
 }
 
-/** L7 interim: the logo + name, the project slot and the agent strip, until they are children of their own. */
+/** The logo + name, a drag area (a double-click toggles maximize), with the 6dp after the left toggle and 10dp after it. */
+object HeaderBrand : Block("brand", "$LEAD.brand") {
+    @Composable
+    override fun Render(scope: BlockScope) = TitleBarBrand(LocalWindowChrome.current, modifier = scope.modifier)
+}
+
+/** L7 interim: the project slot and the agent strip, until they are children of their own. */
 private object HeaderLeadRest : Block("titleBarLeadRest", "$LEAD.rest") {
     @Composable
     override fun Render(scope: BlockScope) {
@@ -80,8 +86,7 @@ private object HeaderLeadRest : Block("titleBarLeadRest", "$LEAD.rest") {
     private fun RowScope.Rest(modifier: Modifier) {
         val s = LocalShell.current
         val state = s.state
-        TitleBarBrand(LocalWindowChrome.current, modifier = modifier)
-        TitleBarProject({ ProjectPicker(state, s.controller) })
+        TitleBarProject({ ProjectPicker(state, s.controller) }, modifier)
         TitleBarAgents(
             state, s.ui.flags.agentScope, onConnect = { s.changeConnection?.invoke() ?: run { s.ui.showConnect = true } }, onAttention = { s.showTab(ATTENTION_TAB_ID) },
             chrome = LocalWindowChrome.current,
@@ -99,7 +104,7 @@ private object HeaderLeadRest : Block("titleBarLeadRest", "$LEAD.rest") {
     }
 }
 
-val HeaderLead = HeaderLeadBlock(listOf(HeaderToggleLeft, HeaderLeadRest))
+val HeaderLead = HeaderLeadBlock(listOf(HeaderToggleLeft, HeaderBrand, HeaderLeadRest))
 
 /** M2-6: minimize / maximize-restore / close where the platform has a window, else the bar's 12dp end. */
 object HeaderWindowControls : Block("windowControls", "$HEADER.windowControls") {
