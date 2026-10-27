@@ -193,6 +193,9 @@ import com.superiorsoftllc.agenthq.ui.plugin.PluginDaemon
 import com.superiorsoftllc.agenthq.plugin.api.Events
 import com.superiorsoftllc.agenthq.plugin.api.PluginEvent
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
+import com.superiorsoftllc.agenthq.ui.block.DockHost
+import com.superiorsoftllc.agenthq.ui.block.DockWindow
+import com.superiorsoftllc.agenthq.ui.shell.blocks.CoreShell
 import androidx.compose.runtime.staticCompositionLocalOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -235,36 +238,21 @@ fun App(
 ) {
     val state by controller.state.collectAsState()
     val actionScope = rememberCoroutineScope()
-    var query by remember { mutableStateOf("") }
-    var roleFilter by remember { mutableStateOf<String?>(null) }
     val homeTab = tabs.home(TabContainers.CENTER).orEmpty()
-    var centerTab by remember { mutableStateOf(homeTab) }
-    var rightTab by remember { mutableStateOf(tabs.home(TabContainers.RIGHT).orEmpty()) }
-    var rightPanelWidth by remember { mutableStateOf(RightPanelWidth.DEFAULT) } // in-memory only: no UI-prefs store exists yet
-    var sidebarWidth by remember { mutableStateOf(SidebarWidth.DEFAULT) } // M2-9: in-memory only, not persisted (owner's call)
-
-    var showConnect by remember { mutableStateOf(false) }
     // MOBILE-CONNCHIP-1: a host may route the connection chip to its own connect screen (Android).
     val changeConnection = LocalPlatformHost.current.onChangeConnection
     val pairStore = LocalPlatformHost.current.savedServers
-    var showConfig by remember { mutableStateOf(false) }
-    // CONFIG-TABS-1: the configuration tab last shown, so the modal reopens where the user left it (while the app runs).
-    var configTab by remember { mutableStateOf<ConfigTab?>(null) }
-    var showRoles by remember { mutableStateOf(false) }
-    var showNewAgent by remember { mutableStateOf(false) }
     // CHAT-PANEL-1: the main window's chat state (draft, attachments, New agent mode, Switch picker); one per window, as before.
     val chat = remember { ChatPanelState() }
     // ASSISTANT-1: the Assistant popup (open / expanded / width) and its chat state; both live in the window so a close keeps them.
     val assistantPanel = remember { AssistantPanelState() }
     val assistantChat = rememberChatPanelState(state.assistant?.id)
-    var showBoard by remember { mutableStateOf(false) }
-    // DIFF-MODAL: the changed file whose diff is open over the window; another project closes it.
-    var diffTarget by remember { mutableStateOf<DiffTarget?>(null) }
-    LaunchedEffect(state.activeProject?.id) { diffTarget = null }
     // MODAL-BLUR: the one blur state every dialog reports into; the setting is remembered by the host.
     val host = LocalPlatformHost.current
-    var flags by remember {
-        mutableStateOf(
+    // BLOCKS-SHELL-1: the window's presentation state, owned here and read by the shell blocks.
+    val ui = remember {
+        ShellState(
+            homeTab, tabs.home(TabContainers.RIGHT).orEmpty(),
             UiFlags(
                 commsSound = com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundSettings.load(host),
                 blurBehindDialogs = host.uiPref(BLUR_PREF_KEY) != "off",
@@ -272,15 +260,18 @@ fun App(
                 reasoningPlacement = com.superiorsoftllc.agenthq.ui.model.ReasoningPlacement.fromId(host.uiPref(com.superiorsoftllc.agenthq.ui.model.REASONING_PLACEMENT_PREF_KEY)),
                 progressStaleMin = host.uiPref(com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_PREF_KEY)?.toIntOrNull()?.takeIf { it > 0 } ?: com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_DEFAULT_MIN,
             ),
+            initialUrl, initialToken.orEmpty(),
         )
     }
+    LaunchedEffect(state.activeProject?.id) { ui.diffTarget = null }
+    val flags = ui.flags
     val modalBlur = remember { ModalBlurState(supported = host.supportsBlur) }
     val chatBlockRenderers = remember { ChatBlockRenderers().also { it.override("callout", CalloutBlockRenderer) } }
     // THEME-1: the stored theme, applied once before the first themed frame; Palette.theme is its only owner from here on.
     remember(host) { Palette.theme = com.superiorsoftllc.agenthq.ui.model.ThemeSettings.decode(host.uiPref(THEME_PREF_KEY)) }
     modalBlur.enabled = flags.blurBehindDialogs
-    var url by remember { mutableStateOf(initialUrl) }
-    var token by remember { mutableStateOf(initialToken.orEmpty()) }
+    val url = ui.url
+    val token = ui.token
     // SWITCH-1: "This computer" + saved servers; a host with neither a local daemon nor a store has no switcher.
     val platformHost = LocalPlatformHost.current
     val switcher = remember(platformHost) {
@@ -294,18 +285,13 @@ fun App(
     val serverView by serverUpdate.view.collectAsState()
     LaunchedEffect(serverUpdate, state.connection.isLive) { if (state.connection.isLive) serverUpdate.onReconnected() }
     val serverMismatch = com.superiorsoftllc.agenthq.ui.model.ServerVersionCheck.mismatch(host.appVersion, serverView.status?.version, state.connection.contract)
-    var showServers by remember { mutableStateOf(false) }
-    var switchError by remember { mutableStateOf<String?>(null) }
     fun switchTo(c: ServerChoice) {
-        switchError = switcher?.select(c) { u, t -> url = u; token = t.orEmpty(); controller.connect(u, t) }
+        ui.switchError = switcher?.select(c) { u, t -> ui.url = u; ui.token = t.orEmpty(); controller.connect(u, t) }
     }
     val searchFocus = remember { FocusRequester() }
-    // PANEL-TOGGLE-1 (plan rule 6): Ctrl+K on a hidden sidebar shows it first; its search box is focused only once the
-    // sidebar is composed again, because focusing a requester whose node is not attached throws.
-    var focusSearchPending by remember { mutableStateOf(false) }
-    LaunchedEffect(focusSearchPending, state.panels.leftShown) {
-        if (focusSearchPending && state.panels.leftShown) {
-            focusSearchPending = false
+    LaunchedEffect(ui.focusSearchPending, state.panels.leftShown) {
+        if (ui.focusSearchPending && state.panels.leftShown) {
+            ui.focusSearchPending = false
             // MOBILE-LAYOUT-1: the panes sit in a BoxWithConstraints, which composes the sidebar during layout, after
             // this effect starts; the search box's requester is attached only once a frame has gone by.
             withFrameNanos { }
@@ -317,13 +303,13 @@ fun App(
         // BUG-COMPACT-ATTN-1: in a compact window reveal() would leave the list on screen (leftShown wins in
         // compactScreen()), so every right-panel entry point (attention, Ctrl+3/4/6/7) switches to the RIGHT screen.
         if (state.panels.compactWindow) controller.showCompactScreen(CompactScreen.RIGHT) else controller.revealPanel(PanelSide.RIGHT)
-        rightTab = tab
+        ui.rightTab = tab
     }
     /** PLUGINS-1: shows a tab by id in its own container (the right one is revealed first, as above). */
     fun showTab(id: String) {
         val tab = tabs.find(id) ?: return
         when (tab.container) {
-            TabContainers.CENTER -> centerTab = tab.id
+            TabContainers.CENTER -> ui.centerTab = tab.id
             TabContainers.RIGHT -> showRightTab(tab.id)
         }
     }
@@ -339,31 +325,19 @@ fun App(
     }
     // PLUGINS-1: the plugins' gated daemon access goes to the daemon this window talks to; the bus hears what is shown.
     LaunchedEffect(url, token) { PluginDaemon.connect(url, token) }
-    LaunchedEffect(centerTab) { tabs.events.publish(PluginEvent(Events.TAB_OPENED, mapOf("id" to centerTab, "container" to TabContainers.CENTER))) }
-    LaunchedEffect(rightTab) { tabs.events.publish(PluginEvent(Events.TAB_OPENED, mapOf("id" to rightTab, "container" to TabContainers.RIGHT))) }
+    LaunchedEffect(ui.centerTab) { tabs.events.publish(PluginEvent(Events.TAB_OPENED, mapOf("id" to ui.centerTab, "container" to TabContainers.CENTER))) }
+    LaunchedEffect(ui.rightTab) { tabs.events.publish(PluginEvent(Events.TAB_OPENED, mapOf("id" to ui.rightTab, "container" to TabContainers.RIGHT))) }
     LaunchedEffect(state.selectedId) { state.selectedId?.let { tabs.events.publish(PluginEvent(Events.SESSION_SELECTED, mapOf("id" to it))) } }
     // A refused token is the one failure the human must act on: open the dialog instead of retrying.
     // MOBILE-REFUSED-1: a rejected token goes to the host's own connect screen when it has one (Android saves there;
     // the shared dialog only edits memory). Desktop has no hook and keeps the dialog.
     LaunchedEffect(state.connection.state) {
-        if (state.connection.state == ConnState.REFUSED) changeConnection?.invoke() ?: run { showConnect = true }
+        if (state.connection.state == ConnState.REFUSED) changeConnection?.invoke() ?: run { ui.showConnect = true }
     }
 
     // M2-4: the list renders status groups, so keyboard navigation walks that same order.
-    val visible = state.groupedAgents(visibleAgents(state, query, roleFilter, agentScope = flags.agentScope)).flatMap { it.second }
+    val visible = state.groupedAgents(visibleAgents(state, ui.query, ui.roleFilter, agentScope = flags.agentScope)).flatMap { it.second }
     val selected = state.selected
-
-    /** PLUGINS-1: what a tab may reach; [transcript] is the chat's, for the centre strip. */
-    fun tabContext(transcript: @Composable () -> Unit, agentsList: @Composable () -> Unit = {}) = TabContext(
-        state, controller,
-        open = ::showTab,
-        showChat = { centerTab = homeTab; chat.spawnMode = false },
-        insertIntoChat = { chat.insert(it) },
-        diffTarget = diffTarget,
-        onOpenDiff = { diffTarget = it },
-        transcript = transcript,
-        agentsList = agentsList,
-    )
 
     fun move(delta: Int) {
         if (visible.isEmpty()) return
@@ -378,7 +352,7 @@ fun App(
             e.isCtrlPressed && e.isAltPressed && e.key == Key.K -> { selected?.let { a -> actionScope.launch { controller.kill(a.id, force = true) } }; true }
             e.isCtrlPressed && e.key == Key.K -> {
                 if (state.panels.leftShown) searchFocus.requestFocus()
-                else { controller.revealPanel(PanelSide.LEFT); focusSearchPending = true }
+                else { controller.revealPanel(PanelSide.LEFT); ui.focusSearchPending = true }
                 true
             }
             e.isAltPressed && e.key == Key.DirectionDown -> { move(1); true }
@@ -393,17 +367,22 @@ fun App(
                 selected?.let { a -> chat.resume(controller, actionScope, a) }
                 true
             }
-            e.isCtrlPressed && e.key == Key.Eight -> { showBoard = true; true }
+            e.isCtrlPressed && e.key == Key.Eight -> { ui.showBoard = true; true }
             e.isCtrlPressed && digitOf(e.key)?.let(tabs::byShortcut) != null -> { showTab(tabs.byShortcut(digitOf(e.key)!!)!!.id); true }
-            e.isCtrlPressed && e.key == Key.L -> { showConnect = true; true }
-            e.isCtrlPressed && e.key == Key.Comma -> { showConfig = true; true }
+            e.isCtrlPressed && e.key == Key.L -> { ui.showConnect = true; true }
+            e.isCtrlPressed && e.key == Key.Comma -> { ui.showConfig = true; true }
             e.isCtrlPressed && e.key == Key.Slash -> { chat.focus.requestFocus(); true }
             else -> false
         }
     }
 
+    val shell = Shell(
+        state, controller, actionScope, tabs, homeTab, ui, chat, assistantPanel, assistantChat, host, modalBlur,
+        switcher, serverUpdate, serverMismatch, changeConnection, pairStore, searchFocus, root, pickFile, logs, updates,
+        visible, selected, showTab = ::showTab, switchTo = ::switchTo,
+    )
     AgentHqTheme {
-      // M2-8: a Box so the Board modal overlay stacks over the window.
+      // M2-8: the dock's overlay layer stacks the Board modal over the window.
       // IMG-VIEW-1: chat images open full size over the whole window (the Board keeps its own host, above it).
       androidx.compose.runtime.CompositionLocalProvider(
           LocalModalBlur provides modalBlur,
@@ -411,267 +390,19 @@ fun App(
           LocalReasoningPlacement provides flags.reasoningPlacement,
           LocalTabFactory provides tabs,
           LocalChatMarkdown provides remember(flags.chatMarkdownEngine) { ChatMarkdownConfig(com.superiorsoftllc.agenthq.ui.model.ChatMarkdown.engines.resolve(flags.chatMarkdownEngine), chatBlockRenderers) },
+          LocalShell provides shell,
       ) {
+      // BLOCKS-SHELL-1: the window is an ordered array of blocks; the dock only knows the edge each one takes.
       ImageViewerHost {
-      Box(Modifier.fillMaxSize()) {
-        Column(
-            // BUG-PANEL-TOGGLE-1: the root Column is itself the focus target. A requester on a non-focusable node hands
+        DockHost(
+            CoreShell.blocks,
+            // BUG-PANEL-TOGGLE-1: the docked column is itself the focus target. A requester on a non-focusable node hands
             // focus to its first focusable child (the title bar's left panel toggle), which opened that toggle's tooltip
             // at launch. focusable() draws no indication, so focusing the root shows nothing.
             Modifier.fillMaxSize().modalBlur(modalBlur).background(Palette.Bg).focusRequester(root).focusable().onPreviewKeyEvent(::key),
-        ) {
-            TitleBar(
-                state, flags.agentScope, onConnect = { changeConnection?.invoke() ?: run { showConnect = true } }, onAttention = { showTab(ATTENTION_TAB_ID) },
-                projectSlot = { ProjectPicker(state, controller) },
-                onTogglePanel = controller::togglePanel,
-                serverSlot = {
-                    if (switcher != null) ServerSwitcherChip(switcher, onSelect = ::switchTo, onManage = { showServers = true })
-                },
-                // ASSISTANT-1: the last member of the team strip; a tap toggles the popup (the daemon makes the session on the first open).
-                assistantSlot = {
-                    if (state.connection.hasAssistant || state.assistant != null) {
-                        AssistantEntry(
-                            assistantPanel.open,
-                            state.assistant?.let { needsInput(it, state.waiting, state.openPrompts, state.openQuestionSessions) } == true,
-                        ) { assistantPanel.toggle() }
-                    }
-                },
-            )
-            // MOBILE-LAYOUT-1: below PanelLayout.COMPACT_BELOW_DP (600dp) the window shows ONE pane at full width, picked
-            // by PanelLayout.compactScreen() from the same two panel flags; at or above it this is the 3-pane Row as before.
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            val windowWidthDp = maxWidth.value
-            val compact = PanelLayout.isCompact(windowWidthDp)
-            // MOBILE-LAYOUT-2: crossing 600dp (a resize, a rotation) parks this window class's panel flags and brings
-            // back the other class's, so compact navigation never rewrites the wide layout. The Row renders from
-            // forWindow(compact) straight away; the effect then stores the same swap, so no frame shows stale flags.
-            LaunchedEffect(compact) { controller.setCompactWindow(compact) }
-            val panels = state.panels.forWindow(compact)
-            val screen = panels.compactScreen()
-            // MOBILE-DRAWERS-1: the sidebar and the right panel are the same content docked (wide) or as a drawer (compact).
-            // PLUGINS-3: the left panel is its modules' sections; Infantry_Agents' one draws the agents list below.
-            val sidebar: @Composable (Float) -> Unit = { sidebarWidthDp ->
-              Column(Modifier.width(sidebarWidthDp.dp).fillMaxHeight().background(Palette.Panel).testTag("left-sidebar")) {
-                PanelSections(tabs, Panels.LEFT, tabContext({}, agentsList = { Sidebar(
-                    state, visible, query, { query = it }, roleFilter, { roleFilter = it },
-                    searchFocus,
-                    onSelect = { controller.select(it); chat.spawnMode = false; if (compact) controller.showCompactScreen(CompactScreen.OUTPUT) },
-                    onNew = { chat.spawnMode = false; showNewAgent = true; if (compact) controller.showCompactScreen(CompactScreen.OUTPUT) },
-                    onRemove = { id -> actionScope.launch { controller.removeSession(id) } },
-                    onAssign = { id, projectId -> actionScope.launch { controller.assignSessionProject(id, projectId) } },
-                    projects = { ProjectsSidebar(state, onDismiss = { controller.dismissProjectRefusal() }) },
-                    onOpenBoard = { showBoard = true },
-                ) }))
-              }
-            }
-            val rightPanel: @Composable (Modifier, (() -> Unit)?) -> Unit = { mod, onClose ->
-                Column(mod.fillMaxHeight().testTag("right-panel")) {
-                    if (onClose != null) CompactNavRow(backLabel = "Close", onBack = onClose)
-                    // PLUGINS-3: the right panel's module sections, around its tab strip.
-                    PanelSections(tabs, Panels.RIGHT, tabContext({})) {
-                        val strip = tabs.tabs(TabContainers.RIGHT)
-                        TabBar(
-                            hPad = 4.dp,
-                            fontSize = 11.sp,
-                            tabs = strip.map { tabs.title(it, state) to (rightTab == it.id) },
-                            tagOf = { strip[it].testTag },
-                        ) { rightTab = strip[it].id }
-                        tabs.Content(rightTab, tabContext({}))
-                    }
-                }
-            }
-            Box(Modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxSize()) {
-              // PANEL-TOGGLE-1: a hidden side panel and its resize handle leave the composition; the centre column's
-              // weight then takes the whole width.
-              if (!compact && panels.leftShown) {
-                sidebar(sidebarWidth)
-                // M2-9: the left edge drags like the right one (drag right = wider).
-                ResizeHandle("sidebar-resize-handle") { sidebarWidth = SidebarWidth.dragged(sidebarWidth, it) }
-              }
-              run {
-                Column(Modifier.weight(1f).fillMaxHeight().testTag(CENTER_PANE_TAG)) {
-                    // CHAT-PANEL-1: the main window is one host of the shared ChatPanel; the tab strip and the other tabs are its slots.
-                    ChatPanel(
-                        selected?.id, controller, Modifier.weight(1f).fillMaxWidth(), chat = chat,
-                        onOpenTicket = { showBoard = true },
-                        beforeContent = { CenterTabBar(state, centerTab) { centerTab = it } },
-                        content = { transcript -> tabs.Content(centerTab, tabContext(transcript)) },
-                    )
-                    LaunchedEffect(showNewAgent, state.connection.isLive) {
-                        if (showNewAgent && state.connection.isLive) controller.refreshModelCatalog()
-                    }
-                    if (showNewAgent) {
-                        NewAgentDialog(
-                            state,
-                            onAdd = { role, picked, task ->
-                                controller.pickSpawnRole(role)
-                                controller.pickModel(picked)
-                                val r = controller.spawn(task)
-                                if (r is CommandResult.Refused) r.reason else { showNewAgent = false; null }
-                            },
-                            onDismiss = { showNewAgent = false },
-                        )
-                    }
-                }
-              }
-              if (!compact && panels.rightShown) {
-                // M2-9: the ↔ cursor and a grip, not the hand (drag left = wider).
-                ResizeHandle("right-panel-resize-handle") { rightPanelWidth = RightPanelWidth.dragged(rightPanelWidth, it) }
-                rightPanel(Modifier.width(rightPanelWidth.dp), null)
-              }
-            }
-            if (compact && screen != CompactScreen.OUTPUT) {
-                val drawerWidth = minOf(windowWidthDp * 0.88f, 420f).dp
-                val close = { controller.showCompactScreen(CompactScreen.OUTPUT) }
-                // Scrim: a tap outside closes the drawer.
-                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)).pointerInput(Unit) { detectTapGestures { close() } }.testTag(DRAWER_SCRIM_TAG))
-                // A swipe toward the screen edge it came from closes it too.
-                val toEdge = if (screen == CompactScreen.LIST) -1f else 1f
-                Box(
-                    Modifier.align(if (screen == CompactScreen.LIST) Alignment.CenterStart else Alignment.CenterEnd).width(drawerWidth).fillMaxHeight()
-                        .background(Palette.Bg)
-                        .pointerInput(screen) {
-                            var dx = 0f
-                            detectHorizontalDragGestures(onDragStart = { dx = 0f }, onDragEnd = { if (dx * toEdge > 80f) close() }) { _, d -> dx += d }
-                        }
-                        .testTag(DRAWER_TAG),
-                ) {
-                    if (screen == CompactScreen.LIST) sidebar(drawerWidth.value) else rightPanel(Modifier.fillMaxWidth(), close)
-                }
-            }
-            }
-            }
-            StatusBar(state, serverMismatch, host.appBuild, onConfig = { tab -> if (tab != null) configTab = tab; showConfig = true }) {
-                // ROGUE-1 (1.120.0): rogue background processes / low memory; hidden while nothing is wrong.
-                ProcessesBadge(state, controller)
-            }
-        }
-        // ASSISTANT-1: the global Assistant's popup, docked top right under the title bar (a full-screen sheet when compact). The
-        // window owns its state, so closing it keeps the draft, the width and the model; it is one more host of ChatPanel.
-        if (assistantPanel.open) {
-            val compactWindow = state.panels.compactWindow
-            AssistantPopup(
-                state, controller, assistantPanel, assistantChat, compact = compactWindow,
-                modifier = Modifier.align(Alignment.TopEnd).then(if (compactWindow) Modifier else Modifier.padding(top = TITLE_BAR_HEIGHT + 1.dp, bottom = 28.dp)),
-            )
-        }
-        ToastHost(
-            state,
-            onOpen = { n ->
-                n.projectId?.let { id -> actionScope.launch { controller.selectProject(id) } }
-                if (n.sessionId != null && state.agents.containsKey(n.sessionId)) controller.select(n.sessionId) else showBoard = true
-            },
-            modifier = Modifier.align(Alignment.BottomEnd),
-        )
-        if (showBoard) {
-            // M2-8: the board is a near-full-screen modal opened from the sidebar; "Agent" on a card closes it on the chat.
-            BoardModal(
-                state, controller,
-                onOpenAgent = {
-                    controller.select(it); centerTab = homeTab; chat.spawnMode = false; showBoard = false
-                    // MOBILE-LAYOUT-2: a compact window opens the Board from the list; "Agent" lands on the output.
-                    if (state.panels.compactWindow) controller.showCompactScreen(CompactScreen.OUTPUT)
-                },
-                onDismiss = { showBoard = false; root.requestFocus() },
-            )
-        }
-        diffTarget?.let { target ->
-            ProjectDiffModal(state, controller, target, onTarget = { next -> diffTarget = next; if (next == null) root.requestFocus() })
-        }
-        // VOICE-1: spoken attention alerts (and their toast) over every pane.
-        com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundEffect(controller.state, flags.commsSound)
-        com.superiorsoftllc.agenthq.ui.voice.VoiceAlerts(controller.spoken, flags.voice, Modifier.align(Alignment.BottomStart))
-        // ASK-1: questions the owner cannot see inline (another session, or put off with Later): a pill that opens the asker.
-        QuestionPill(
-            hidden = state.openQuestions.count { q -> q.id in state.dismissedQuestions || q.sessionId != state.selectedId },
-            onShow = {
-                // BUG 14ca3437: through openQuestion, so a phone also closes the drawer that covers the asker's chat.
-                val q = state.openQuestions.firstOrNull { it.sessionId != state.selectedId && state.agents.containsKey(it.sessionId) }
-                    ?: state.openQuestions.firstOrNull()
-                q?.let { controller.openQuestion(it.id) } ?: controller.showQuestions()
-                centerTab = homeTab; chat.spawnMode = false
-            },
         )
       }
-      }
-        if (showConfig) {
-            ConfigDialog(
-                flags,
-                onFlags = { next ->
-                    if (next.blurBehindDialogs != flags.blurBehindDialogs) host.saveUiPref(BLUR_PREF_KEY, if (next.blurBehindDialogs) "on" else "off")
-                    if (next.progressStaleMin != flags.progressStaleMin) host.saveUiPref(com.superiorsoftllc.agenthq.ui.model.PROGRESS_STALE_PREF_KEY, next.progressStaleMin.toString())
-                    if (next.chatMarkdownEngine != flags.chatMarkdownEngine) host.saveUiPref(com.superiorsoftllc.agenthq.ui.model.CHAT_MARKDOWN_PREF_KEY, next.chatMarkdownEngine)
-                    if (next.reasoningPlacement != flags.reasoningPlacement) host.saveUiPref(com.superiorsoftllc.agenthq.ui.model.REASONING_PLACEMENT_PREF_KEY, next.reasoningPlacement.name)
-                    next.commsSound.save(host, flags.commsSound)
-                    flags = next
-                }, onDismiss = { showConfig = false },
-                keepAliveMinutes = state.keepAliveMinutes,
-                userPortrait = if (contractAtLeast(state.connection.contract, UserPortrait.SINCE_MAJOR, UserPortrait.SINCE_MINOR)) state.userPortrait to { png: ByteArray? -> actionScope.launch { controller.setUserPortrait(png) }; Unit } else null,
-                onKeepAliveMinutes = { minutes -> actionScope.launch { controller.setKeepAliveMinutes(minutes) } },
-                cliLocations = state.cliLocations,
-                onCliLocation = { id, path -> actionScope.launch { controller.setCliLocation(id, path) } },
-                harnessInstall = state.harnessInstall,
-                harnessInstallBusy = state.harnessInstallBusy,
-                harnessInstallLog = state.harnessInstallLog,
-                onHarnessCheck = { latest -> actionScope.launch { controller.checkHarnesses(latest) } },
-                onHarnessInstall = { ids, update -> actionScope.launch { controller.installHarnesses(ids, update) } },
-                toolApproval = state.toolApproval,
-                onToolApproval = { mode -> actionScope.launch { controller.setToolApproval(mode) } },
-                onBrowse = pickFile,
-                logs = logs,
-                updates = updates,
-                serverUpdate = serverUpdate,
-                serverMismatch = serverMismatch,
-                theme = Palette.theme,
-                onTheme = { next -> Palette.theme = next; host.saveUiPref(THEME_PREF_KEY, next.encode()) },
-                about = AboutEntry(host.appBuild, state.connection.daemonBuild, state.connection.isLive),
-                secrets = state.secrets,
-                pair = PairEntry(url, token.ifBlank { null }, null) { link ->
-                    // PAIR-1: save the server + token through the host's store, then connect with the bearer.
-                    applyPairing(link, pairStore) { u, t ->
-                        url = u; token = t.orEmpty(); showConfig = false
-                        controller.connect(u, t.orEmpty())
-                    }
-                },
-                secretActions = SecretActions(
-                    set = { n, v -> actionScope.launch { controller.setSecret(n, v) } },
-                    clear = { n -> actionScope.launch { controller.clearSecret(n) } },
-                    import = { n -> actionScope.launch { controller.importSecret(n) } },
-                ),
-                onOpenRoles = { showRoles = true },
-                limits = state.limitCatalog,
-                onLimit = if (contractAtLeast(state.connection.contract, com.superiorsoftllc.agenthq.ui.model.LimitsSetting.SINCE_MAJOR, com.superiorsoftllc.agenthq.ui.model.LimitsSetting.SINCE_MINOR)) { key, value -> actionScope.launch { controller.setLimit(key, value) }; Unit } else null,
-                onSendTestQuestion = { state.selectedId?.let { id -> actionScope.launch { controller.sendTestQuestion(id) } } },
-                testQuestionReady = state.selectedId != null,
-                initialTab = configTab,
-                onTab = { configTab = it },
-                modules = tabs.takeIf { it.loadsAtRunTime },
-            )
-        }
-        ServerUpdateConfirm(serverUpdate)
-        if (showRoles) RoleManagerDialog(state, controller, onDismiss = { showRoles = false })
-        if (showServers && switcher != null) {
-            ServersDialog(
-                switcher,
-                onRemoved = { wasActive -> if (wasActive) switcher.active()?.let(::switchTo) },
-                onEdited = { c -> if (c.url == switcher.active()?.url) switchTo(c) },
-                onDismiss = { showServers = false },
-            )
-        }
-        switchError?.let { msg ->
-            AlertDialog(
-                onDismissRequest = { switchError = null }, title = { Text("Could not switch server") }, text = { Text(msg) },
-                confirmButton = { TextButton({ switchError = null }) { Text("OK") } },
-            )
-        }
-        if (showConnect) {
-            ConnectDialog(url, token, state, controller::reconnectNow, { u, t -> url = u; token = t }, onDismiss = { showConnect = false }) {
-                showConnect = false
-                controller.connect(url, token)
-                root.requestFocus()
-            }
-        }
+        DockWindow(CoreShell.blocks)
       }
     }
 }
@@ -707,7 +438,7 @@ const val DRAWER_SCRIM_TAG = "compact-drawer-scrim"
 
 /** MOBILE-LAYOUT-1: the strip above a compact drawer: its close button. The title bar owns both panel toggles. */
 @Composable
-private fun CompactNavRow(backLabel: String, onBack: () -> Unit) {
+internal fun CompactNavRow(backLabel: String, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
         IconAction(AhqIcons.ArrowBack, backLabel, onBack, Modifier.testTag(COMPACT_BACK_TAG), style = IconActionStyle.TEXT)
     }
@@ -715,7 +446,7 @@ private fun CompactNavRow(backLabel: String, onBack: () -> Unit) {
 }
 
 @Composable
-private fun Sidebar(
+internal fun Sidebar(
     state: AppState,
     visible: List<AgentView>,
     query: String,
@@ -1163,7 +894,7 @@ private fun nodeColor(s: String) = when (s) {
 }
 
 @Composable
-private fun StatusBar(state: AppState, serverMismatch: String?, appBuild: String?, onConfig: (ConfigTab?) -> Unit, processes: @Composable () -> Unit = {}) {
+internal fun StatusBar(state: AppState, serverMismatch: String?, appBuild: String?, onConfig: (ConfigTab?) -> Unit, processes: @Composable () -> Unit = {}) {
     val c = state.connection
     var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(Unit) { while (true) { delay(1000); now = Clock.System.now().toEpochMilliseconds() } }
@@ -1197,7 +928,7 @@ private fun StatusBar(state: AppState, serverMismatch: String?, appBuild: String
 }
 
 @Composable
-private fun ConnectDialog(
+internal fun ConnectDialog(
     url: String, token: String, state: AppState, onReconnect: () -> Unit,
     onChange: (String, String) -> Unit, onDismiss: () -> Unit, onConnect: () -> Unit,
 ) {
