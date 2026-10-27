@@ -51,7 +51,6 @@ object HeaderLead : Block("titleBarLead", "$HEADER.lead") {
     private fun RowScope.Lead(modifier: Modifier) {
         val s = LocalShell.current
         val state = s.state
-        val switcher = s.switcher
         TitleBarLead(
             state, s.ui.flags.agentScope, onConnect = { s.changeConnection?.invoke() ?: run { s.ui.showConnect = true } }, onAttention = { s.showTab(ATTENTION_TAB_ID) },
             chrome = LocalWindowChrome.current,
@@ -65,9 +64,6 @@ object HeaderLead : Block("titleBarLead", "$HEADER.lead") {
                         state.assistant?.let { needsInput(it, state.waiting, state.openPrompts, state.openQuestionSessions) } == true,
                     ) { s.assistantPanel.toggle() }
                 }
-            },
-            serverSlot = {
-                if (switcher != null) ServerSwitcherChip(switcher, onSelect = s.switchTo, onManage = { s.ui.showServers = true })
             },
             modifier = modifier,
         )
@@ -89,5 +85,15 @@ object HeaderConnection : Block("connectionChip", "$HEADER.connection") {
     }
 }
 
+/** SWITCH-1: the server dropdown, where the host has a server switcher; its menu also opens Servers. */
+object HeaderServer : Block("serverSwitcher", "$HEADER.server") {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val s = LocalShell.current
+        val switcher = s.switcher
+        if (switcher != null) ServerSwitcherChip(switcher, onSelect = s.switchTo, onManage = { s.ui.showServers = true }, modifier = scope.modifier)
+    }
+}
+
 /** BLOCKS-SHELL-1: the window's title bar, on top. */
-val ShellHeader = TitleBarBlock(HEADER, listOf(HeaderLead, HeaderConnection, HeaderWindowControls))
+val ShellHeader = TitleBarBlock(HEADER, listOf(HeaderLead, HeaderServer, HeaderConnection, HeaderWindowControls))
