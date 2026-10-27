@@ -1039,9 +1039,10 @@ const val SPAWN_ROLE_DEFAULT_TAG = "spawn-role-default"
 /** The New agent box's role row: pick the role to spawn as and see what its binding makes the default (pick another model to override). */
 @Composable
 internal fun SpawnRoleRow(state: AppState, controller: Controller) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp)) {
+    // PICKER-UX: room above the role tags (they sat flat against the banner) and a bold section label.
+    Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("Role", color = Palette.Muted, fontSize = 11.sp)
+            SectionLabel("Role", Palette.Text, Modifier.padding(end = 4.dp), topGap = false)
             Chip("none", if (state.spawnRole == null) Palette.Accent else Palette.Muted, Modifier.clickable { controller.pickSpawnRole(null) })
             state.roles.forEach { r ->
                 Chip(r.id, if (state.spawnRole == r.id) Palette.Accent else Palette.Muted, Modifier.testTag(SPAWN_ROLE_TAG_PREFIX + r.id).clickable { controller.pickSpawnRole(r.id) })

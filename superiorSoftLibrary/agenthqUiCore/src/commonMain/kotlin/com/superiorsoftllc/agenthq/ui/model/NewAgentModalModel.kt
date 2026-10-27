@@ -42,15 +42,18 @@ data class NewAgentModalModel(
 
     val canAdd: Boolean get() = addBlockedReason == null
 
-    /** Choose a role (an unknown id changes nothing); the executor re-seeds from that role's binding. */
+    /**
+     * Choose a role (an unknown id changes nothing); the executor re-seeds from that role's binding. PICKER-UX: a
+     * harness that lists one model has it picked, so Add is not blocked on a choice there is none of.
+     */
     fun withRole(id: String): NewAgentModalModel {
         if (roles.none { it.id == id }) return this
-        return copy(roleId = id, executor = ExecutorPickerModel.seeded(harnesses, catalog, bindings[id]?.let { PickedModel.fromBinding(it) }))
+        return copy(roleId = id, executor = ExecutorPickerModel.seeded(harnesses, catalog, bindings[id]?.let { PickedModel.fromBinding(it) }).withSoleModel())
     }
 
     fun withRoleQuery(q: String): NewAgentModalModel = copy(roleQuery = q)
 
-    fun withExecutor(next: ExecutorPickerModel): NewAgentModalModel = copy(executor = next)
+    fun withExecutor(next: ExecutorPickerModel): NewAgentModalModel = copy(executor = next.withSoleModel())
 
     fun withTask(text: String): NewAgentModalModel = copy(task = text)
 

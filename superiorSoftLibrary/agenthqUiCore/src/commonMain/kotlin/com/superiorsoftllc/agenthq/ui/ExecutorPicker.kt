@@ -18,6 +18,7 @@ import com.superiorsoftllc.agenthq.ui.model.ExecutorPickerModel
 import com.superiorsoftllc.agenthq.ui.model.ProviderOption
 
 const val EXECUTOR_LOADING_TAG = "executor-loading"
+const val EXECUTOR_MODEL_LABEL_TAG = "executor-model-label"
 const val EXECUTOR_NOTE_TAG = "executor-note"
 const val EXECUTOR_PROVIDER_LABEL_TAG = "executor-provider-label"
 const val EXECUTOR_MODEL_MISSING_TAG = "executor-model-missing"
@@ -65,7 +66,7 @@ fun ExecutorPicker(
     noHarnessText: String = "No harness chosen: the daemon's default harness runs this agent.",
 ) {
     val ex = model
-    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (ex.harnesses.isEmpty()) {
             Text(
                 "Loading harnesses... (the daemon's defaults apply if none load)", color = Palette.Muted, fontSize = 11.sp,
@@ -73,7 +74,7 @@ fun ExecutorPicker(
             )
             return@Column
         }
-        Text("Harness", color = Palette.Muted, fontSize = 11.sp)
+        SectionLabel("Harness", textColor)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             onDaemonDefault?.let { clear ->
                 Chip(
@@ -103,7 +104,7 @@ fun ExecutorPicker(
             return@Column
         }
 
-        Text("Provider", color = Palette.Muted, fontSize = 11.sp)
+        SectionLabel("Provider", textColor)
         if (ex.providerCollapsed) {
             Text(
                 ex.providerOptions.firstOrNull()?.label.orEmpty(), fontSize = 12.sp, color = textColor,
@@ -125,7 +126,16 @@ fun ExecutorPicker(
             )
         }
 
-        Text("Model" + (ex.model?.let { ": $it" } ?: " (none picked: harness default)"), color = Palette.Muted, fontSize = 11.sp)
+        // PICKER-UX: a lone model is named as the only one on offer, so nobody hunts for another choice.
+        val sole = ex.soleModel?.id
+        SectionLabel(
+            when {
+                sole != null && ex.model == sole -> "Model: $sole (only one allowed in this deployment)"
+                ex.model != null -> "Model: ${ex.model}"
+                else -> "Model (none picked: harness default)"
+            },
+            textColor, Modifier.testTag(EXECUTOR_MODEL_LABEL_TAG),
+        )
         if (ex.modelMissing) {
             Text(
                 "\"${ex.model}\" is no longer in this harness's catalog; it is kept as stored until you pick another.",

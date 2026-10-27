@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.assertContentDescriptionContains
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsSelected
@@ -47,12 +48,12 @@ class ExecutorPickerUiTest {
     fun `picking a model on All selects its provider, the reverse arrow`() = runDesktopComposeUiTest(900, 900) {
         host()
         onNodeWithTag("executor-harness-opencode").performClick()
-        onNodeWithTag("executor-provider-all").assertTextContains("●", substring = true)
+        onNodeWithTag("executor-provider-all").assertContentDescriptionContains(RADIO_PICKED)
         onNodeWithTag("executor-model-anthropic/claude-sonnet-4").performClick()
         waitForIdle()
         assertEquals(PickedModel("opencode", "anthropic/claude-sonnet-4"), current.picked)
         assertEquals("anthropic", current.selectedGroup)
-        onNodeWithTag("executor-provider-anthropic").assertTextContains("●", substring = true)
+        onNodeWithTag("executor-provider-anthropic").assertContentDescriptionContains(RADIO_PICKED)
         // The provider narrows the model list.
         onNodeWithTag("executor-model-deepseek/deepseek-chat").assertDoesNotExist()
     }

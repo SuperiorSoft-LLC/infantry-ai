@@ -69,3 +69,12 @@ fun ago(then: Long, now: Long): String {
         else -> "${s / 86_400}d"
     }
 }
+
+/**
+ * PICKER-UX: the heading of one picker section (Role, Harness, Provider, Model): bold, in the host's text color, with
+ * room above it so a section never touches the one before it or a banner.
+ */
+@Composable
+fun SectionLabel(text: String, color: Color = Palette.Text, modifier: Modifier = Modifier, topGap: Boolean = true) {
+    Text(text, color = color, fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = if (topGap) modifier.padding(top = 4.dp) else modifier)
+}

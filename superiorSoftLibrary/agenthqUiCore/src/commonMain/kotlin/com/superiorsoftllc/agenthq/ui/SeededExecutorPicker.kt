@@ -54,6 +54,11 @@ fun SeededExecutorPicker(
     onPick: (PickedModel?) -> Unit,
     modifier: Modifier = Modifier,
     textColor: androidx.compose.ui.graphics.Color = Palette.Text,
+    /**
+     * PICKER-UX: a harness whose catalog lists one model has it picked and reported through [onPick] (the New agent
+     * spawn row); off for the editors, where a Save must send the stored value unchanged.
+     */
+    preselectSole: Boolean = false,
 ) {
     val full = ExecutorPickerModel.catalogWithProviderLists(harnesses, catalog)
     var touched by remember(key) { mutableStateOf(false) }
@@ -64,6 +69,15 @@ fun SeededExecutorPicker(
         draft.harnesses != harnesses || draft.catalog != full ->
             ExecutorPickerModel.seeded(harnesses, full, draft.picked).let { s -> draft.group?.let { g -> s.withGroup(g) } ?: s }
         else -> draft
+    }
+    if (preselectSole) {
+        val withSole = shown.withSoleModel()
+        androidx.compose.runtime.LaunchedEffect(withSole.picked) {
+            if (withSole.picked != shown.picked) {
+                if (touched) draft = withSole
+                onPick(withSole.picked)
+            }
+        }
     }
     ExecutorPicker(
         shown,

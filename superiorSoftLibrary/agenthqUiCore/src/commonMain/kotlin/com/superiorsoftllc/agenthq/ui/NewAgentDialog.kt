@@ -99,7 +99,7 @@ fun NewAgentDialogFrame(
     var draft by remember { mutableStateOf(NewAgentModalModel(state.roles, state.roleBindings, state.providers, state.modelCatalog)) }
     // The catalogs arrive after the window opens (opening triggers the refresh): fold them in without losing the user's draft.
     val executor = if (state.providers != draft.harnesses || state.modelCatalog != draft.catalog) {
-        ExecutorPickerModel.seeded(state.providers, state.modelCatalog, draft.executor.picked)
+        ExecutorPickerModel.seeded(state.providers, state.modelCatalog, draft.executor.picked).let { if (draft.roleId != null) it.withSoleModel() else it }
     } else draft.executor
     val cur = draft.copy(roles = state.roles, bindings = state.roleBindings, harnesses = state.providers, catalog = state.modelCatalog, executor = executor)
     val update: (NewAgentModalModel) -> Unit = { draft = it }
@@ -112,8 +112,8 @@ fun NewAgentDialogFrame(
             // Four steps only, so a plain scrolling Column: every step stays composed (a lazy list dropped the task
             // field once the searchable provider/model lists made step 2 taller than the viewport).
             Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()).padding(horizontal = 2.dp, vertical = 4.dp),
             ) {
                 content(NewAgentDraft(cur, update, error))
             }

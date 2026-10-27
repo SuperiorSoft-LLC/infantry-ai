@@ -7,6 +7,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertContentDescriptionContains
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
@@ -57,7 +61,9 @@ class SearchableSelectUiTest {
     @Test
     fun `the chosen row is marked and the badge shows beside it`() = runDesktopComposeUiTest(800, 600) {
         host(ids)
-        onNodeWithTag("sel:gpt-5", useUnmergedTree = false).assertTextContains("● gpt-5", substring = true)
+        // PICKER-UX: the chosen row carries the radio mark ("picked"), the others do not.
+        onNodeWithTag("sel:gpt-5").assertTextContains("gpt-5", substring = true).assertContentDescriptionContains(RADIO_PICKED)
+        onNodeWithTag("sel:claude-opus-4").assert(SemanticsMatcher.keyNotDefined(SemanticsProperties.ContentDescription))
         onNodeWithTag("sel:claude-opus-4").assertTextContains("anthropic", substring = true)
     }
 
