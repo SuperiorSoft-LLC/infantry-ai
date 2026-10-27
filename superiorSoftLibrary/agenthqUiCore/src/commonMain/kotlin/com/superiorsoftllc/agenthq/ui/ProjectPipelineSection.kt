@@ -25,14 +25,13 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.PipelineSectionView
-import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
 import com.superiorsoftllc.agenthq.ui.model.pipelineSectionView
 import com.superiorsoftllc.agenthq.ui.model.shortCommit
 import com.superiorsoftllc.agenthq.ui.model.silentMs
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.agenthq.ui.shell.GitContext
+import com.superiorsoftllc.agenthq.ui.shell.LinkContext
 import com.superiorsoftllc.agenthq.ui.net.PIPELINE_UNSUPPORTED
 import com.superiorsoftllc.agenthq.ui.protocol.PipelineCheckView
 import com.superiorsoftllc.agenthq.ui.protocol.PipelineEntryView
@@ -57,16 +56,16 @@ const val PIPELINE_REMOVE_TAG = "pipeline-remove"
  * on every change, so nothing here polls; only the ages tick.
  */
 @Composable
-fun ProjectPipelineSection(state: AppState, controller: Controller, projectId: String, live: Boolean, modifier: Modifier = Modifier) {
+fun ProjectPipelineSection(link: LinkContext, ctx: GitContext, projectId: String, live: Boolean, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
-    val supported = contractAtLeast(state.connection.contract, 1, 99)
+    val supported = link.contractAtLeast(1, 99)
     var editing by remember(projectId) { mutableStateOf(false) }
     var error by remember(projectId) { mutableStateOf<String?>(null) }
     var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(Unit) { while (true) { delay(1_000); now = Clock.System.now().toEpochMilliseconds() } }
-    LaunchedEffect(projectId, live, supported) { if (live && supported) controller.loadPipeline(projectId) }
+    LaunchedEffect(projectId, live, supported) { if (live && supported) ctx.loadPipeline(projectId) }
 
-    val view = pipelineSectionView(state.pipelines[projectId])
+    val view = pipelineSectionView(ctx.pipeline(projectId))
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text("PIPELINE", color = Palette.Muted, fontSize = 10.sp)
         if (supported) OutlinedButton(
@@ -96,13 +95,13 @@ fun ProjectPipelineSection(state: AppState, controller: Controller, projectId: S
             onDismiss = { editing = false },
             onSave = { stages ->
                 scope.launch {
-                    val r = controller.configurePipeline(projectId, stages)
+                    val r = ctx.configurePipeline(projectId, stages)
                     if (r is CommandResult.Refused) error = r.reason else editing = false
                 }
             },
             onRemove = {
                 scope.launch {
-                    val r = controller.configurePipeline(projectId, null)
+                    val r = ctx.configurePipeline(projectId, null)
                     if (r is CommandResult.Refused) error = r.reason else editing = false
                 }
             },

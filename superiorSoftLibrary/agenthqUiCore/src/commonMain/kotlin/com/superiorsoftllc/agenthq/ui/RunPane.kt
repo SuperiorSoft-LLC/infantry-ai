@@ -41,6 +41,10 @@ import com.superiorsoftllc.agenthq.ui.model.RunsState
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
 import com.superiorsoftllc.agenthq.ui.model.runPills
 import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.agenthq.ui.shell.CoreLink
+import com.superiorsoftllc.agenthq.ui.shell.CoreRun
+import com.superiorsoftllc.agenthq.ui.shell.LinkContext
+import com.superiorsoftllc.agenthq.ui.shell.RunContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -122,7 +126,7 @@ internal data class CommandDraft(
  */
 @Composable
 fun RunPane(state: AppState, controller: Controller) {
-    RunPaneFrame(state, controller) { run ->
+    RunPaneFrame(CoreLink(state), CoreRun(state, controller, LocalRunConsole.current)) { run ->
         RunEmptySection(run)
         RunToolbarSection(run)
         RunPillsSection(run)
@@ -139,10 +143,9 @@ fun RunPane(state: AppState, controller: Controller) {
  * frame owns this state; a section changes it only through these callbacks.
  */
 class RunPaneHost internal constructor(
-    val state: AppState,
-    val controller: Controller,
-    /** RUN-CONSOLE: the desktop opens a pill's console window; null on web and Android, which show its lines below. */
-    val console: RunConsoleHost?,
+    val link: LinkContext,
+    /** S2: the runs and their requests (the shell's [com.superiorsoftllc.agenthq.ui.shell.ShellContext.run]). */
+    val context: RunContext,
     private val scope: CoroutineScope,
     private val pickedId: MutableState<String?>,
     private val draftState: MutableState<CommandDraft?>,
@@ -150,8 +153,8 @@ class RunPaneHost internal constructor(
     private val localError: MutableState<String?>,
     private val savedAt: MutableState<Int?>,
 ) {
-    val runs: RunsState = state.runs
-    val live: Boolean = state.connection.isLive
+    val runs: RunsState = context.runs
+    val live: Boolean = link.live
     val picked: CommandSpecView? = runs.commands.firstOrNull { it.id == pickedId.value } ?: runs.commands.firstOrNull()
     val current: RunState? = runs.current
     /** The run going now (one at a time), whichever pill is selected. */
@@ -179,15 +182,14 @@ class RunPaneHost internal constructor(
     fun pick(id: String) { pickedId.value = id; confirming.value = false }
 
     fun start(interactive: Boolean) {
-        picked?.let { c -> act { if (interactive) controller.startRun(c.id, interactive = true) else controller.startRun(c.id) } }
+        picked?.let { c -> act { context.start(c.id, interactive) } }
     }
 
-    fun stop() { active?.let { r -> act { controller.stopRun(r.runId) } } }
+    fun stop() { active?.let { r -> act { context.stop(r.runId) } } }
 
     /** Shows [runId]'s lines and, on the desktop, opens its console window. */
     fun openRun(runId: String) {
-        controller.selectRun(runId)
-        console?.open(runId, controller)
+        context.open(runId)
     }
 
     fun openNew() {
@@ -211,7 +213,7 @@ class RunPaneHost internal constructor(
             localError.value = null
             savedAt.value = runs.commandsRevision
             scope.launch {
-                val r = controller.saveCommand(
+                val r = context.saveCommand(
                     d.id.trim(), d.name.trim(), RunCommandForm.argvOf(d.argv), RunCommandForm.cwdOf(d.cwd), grace,
                     RunCommandForm.secretsOf(d.secrets),
                 )
@@ -227,7 +229,7 @@ class RunPaneHost internal constructor(
     fun deletePicked() {
         val c = picked ?: return
         confirming.value = false
-        act { controller.deleteCommand(c.id) }
+        act { context.deleteCommand(c.id) }
     }
 }
 
@@ -236,17 +238,15 @@ class RunPaneHost internal constructor(
  * `commands` list. [content] gets the host and draws straight into the column. [modifier] goes on the column.
  */
 @Composable
-fun RunPaneFrame(state: AppState, controller: Controller, modifier: Modifier = Modifier, content: @Composable ColumnScope.(RunPaneHost) -> Unit) {
+fun RunPaneFrame(link: LinkContext, ctx: RunContext, modifier: Modifier = Modifier, content: @Composable ColumnScope.(RunPaneHost) -> Unit) {
     val scope = rememberCoroutineScope()
-    val runs = state.runs
+    val runs = ctx.runs
     val pickedId = remember { mutableStateOf<String?>(null) }
     val localError = remember { mutableStateOf<String?>(null) }
     val draft = remember { mutableStateOf<CommandDraft?>(null) }
     val confirmDelete = remember { mutableStateOf(false) }
     // The `commands` revision a save was sent against: a newer list with no refusal means it was saved.
     val savedAt = remember { mutableStateOf<Int?>(null) }
-    // RUN-CONSOLE: the desktop opens a pill's console window; web and Android show its lines below instead.
-    val console = LocalRunConsole.current
 
     // The controller clears the old refusal before it sends, so the first answer after the save decides:
     // a refusal keeps the form open (its reason shows inline), a new list closes it.
@@ -260,7 +260,7 @@ fun RunPaneFrame(state: AppState, controller: Controller, modifier: Modifier = M
 
     Column(modifier.fillMaxSize().padding(12.dp).testTag(RUN_PANE_TAG)) {
         Text("RUN", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(bottom = 6.dp))
-        content(RunPaneHost(state, controller, console, scope, pickedId, draft, confirmDelete, localError, savedAt))
+        content(RunPaneHost(link, ctx, scope, pickedId, draft, confirmDelete, localError, savedAt))
     }
 }
 
@@ -322,7 +322,7 @@ fun RunToolbarSection(run: RunPaneHost, modifier: Modifier = Modifier) {
             modifier = Modifier.testTag(RUN_START_TAG),
         ) { Text("Start", fontSize = 12.sp) }
         // Typing into a run needs a console to type in: the desktop only, on a 1.134.0 daemon.
-        if (run.console != null && run.controller.supportsRunConsole()) {
+        if (run.context.hasConsoleWindow && run.context.interactiveSupported) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
                     checked = interactive, onCheckedChange = { interactive = it }, enabled = live && !inFlight,
@@ -414,7 +414,7 @@ fun RunEditorSection(run: RunPaneHost, modifier: Modifier = Modifier) {
     CommandEditor(
         draft = d,
         // SECRETS-2: the field shows only against a daemon that injects secrets (1.135.0).
-        secretNames = if (run.controller.supportsKeyValueSecrets()) run.state.secrets?.entries?.map { it.name }.orEmpty() else null,
+        secretNames = run.context.secretNames,
         enabled = run.canEdit && !run.saving,
         error = run.error,
         onChange = run::change,

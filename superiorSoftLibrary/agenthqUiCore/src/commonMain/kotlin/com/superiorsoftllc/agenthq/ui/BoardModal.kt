@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.model.AppState
+import com.superiorsoftllc.agenthq.ui.model.ProjectView
 import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
 
@@ -123,13 +124,18 @@ fun BoardModalFrame(onDismiss: () -> Unit, content: @Composable ColumnScope.() -
 
 /** BLOCKS-LAYOUT L10: the board's title row (title, active project, close) and the divider under it; [modifier] goes on the row. */
 @Composable
-fun BoardModalHeader(state: AppState, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+fun BoardModalHeader(state: AppState, onDismiss: () -> Unit, modifier: Modifier = Modifier) =
+    BoardModalHeader(state.activeProject, onDismiss, modifier)
+
+/** S2: [BoardModalHeader] for [activeProject] (null: all projects), as the shell's context gives it. */
+@Composable
+fun BoardModalHeader(activeProject: ProjectView?, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("▦", color = Palette.Accent, fontSize = 16.sp)
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text("Board", color = Palette.Text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            Text(state.activeProject?.name ?: "All projects", color = Palette.Muted, fontSize = 11.sp)
+            Text(activeProject?.name ?: "All projects", color = Palette.Muted, fontSize = 11.sp)
         }
         Box(
             Modifier.size(28.dp).clip(RoundedCornerShape(6.dp))

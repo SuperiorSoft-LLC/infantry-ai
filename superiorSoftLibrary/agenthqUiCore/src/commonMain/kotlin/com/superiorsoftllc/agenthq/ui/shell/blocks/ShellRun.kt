@@ -5,6 +5,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import com.superiorsoftllc.agenthq.ui.LocalShell
+import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 import com.superiorsoftllc.agenthq.ui.RunConfirmSection
 import com.superiorsoftllc.agenthq.ui.RunEditorSection
 import com.superiorsoftllc.agenthq.ui.RunEmptySection
@@ -33,8 +34,8 @@ private val LocalRunPaneHost = compositionLocalOf<RunPaneHost?> { null }
 class RunPaneBlock(children: List<Block>, place: Place = Place()) : Block("runPane", RUN, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
-        RunPaneFrame(s.state, s.controller, scope.modifier) { run ->
+        val ctx = LocalShellContext.current ?: return
+        RunPaneFrame(ctx.link, ctx.run, scope.modifier) { run ->
             CompositionLocalProvider(LocalRunPaneHost provides run) { RenderPlaced(children) }
         }
     }

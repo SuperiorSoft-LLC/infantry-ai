@@ -14,6 +14,7 @@ import com.superiorsoftllc.agenthq.ui.GitPaneHost
 import com.superiorsoftllc.agenthq.ui.GitPipelineSection
 import com.superiorsoftllc.agenthq.ui.GitTreeSection
 import com.superiorsoftllc.agenthq.ui.LocalShell
+import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.Place
@@ -33,8 +34,8 @@ private val LocalGitPaneHost = compositionLocalOf<GitPaneHost?> { null }
 class GitPaneBlock(children: List<Block>, place: Place = Place()) : Block("gitPane", GIT, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
-        GitPaneFrame(s.state, s.controller, scope.modifier) { git ->
+        val ctx = LocalShellContext.current ?: return
+        GitPaneFrame(ctx.link, ctx.session, ctx.git, scope.modifier) { git ->
             CompositionLocalProvider(LocalGitPaneHost provides git) { RenderPlaced(children) }
         }
     }

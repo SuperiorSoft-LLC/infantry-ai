@@ -43,7 +43,6 @@ import com.superiorsoftllc.agenthq.ui.model.HistoryView
 import com.superiorsoftllc.agenthq.ui.model.PatchView
 import com.superiorsoftllc.agenthq.ui.model.ProjectView
 import com.superiorsoftllc.agenthq.ui.model.badge
-import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
 import com.superiorsoftllc.agenthq.ui.model.display
 import com.superiorsoftllc.agenthq.ui.model.headline
 import com.superiorsoftllc.agenthq.ui.model.label
@@ -60,6 +59,12 @@ import com.superiorsoftllc.agenthq.ui.net.PROJECT_GIT_CHECKOUT_UNSUPPORTED
 import com.superiorsoftllc.agenthq.ui.net.PROJECT_GIT_UNSUPPORTED
 import com.superiorsoftllc.agenthq.ui.protocol.ChangeKind
 import com.superiorsoftllc.agenthq.ui.protocol.ChangedFile
+import com.superiorsoftllc.agenthq.ui.shell.CoreGit
+import com.superiorsoftllc.agenthq.ui.shell.CoreLink
+import com.superiorsoftllc.agenthq.ui.shell.CoreSession
+import com.superiorsoftllc.agenthq.ui.shell.GitContext
+import com.superiorsoftllc.agenthq.ui.shell.LinkContext
+import com.superiorsoftllc.agenthq.ui.shell.SessionContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -77,7 +82,7 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun ProjectGitPane(state: AppState, controller: Controller) {
-    GitPaneFrame(state, controller) { git ->
+    GitPaneFrame(CoreLink(state), CoreSession(state), CoreGit(state, controller)) { git ->
         GitBaseSection(git)
         GitDirectorySection(git)
         GitTreeSection(git)
@@ -94,8 +99,10 @@ fun ProjectGitPane(state: AppState, controller: Controller) {
  * [run], which sends a request and keeps its refusal. The frame owns this state; a section changes it only through these.
  */
 class GitPaneHost(
-    val state: AppState,
-    val controller: Controller,
+    val link: LinkContext,
+    val session: SessionContext,
+    /** S2: the project's git and its requests (the shell's [com.superiorsoftllc.agenthq.ui.shell.ShellContext.git]). */
+    val context: GitContext,
     val project: ProjectView,
     val live: Boolean,
     val supported: Boolean,
@@ -111,7 +118,7 @@ class GitPaneHost(
 
     fun run(onSent: () -> Unit = {}, request: suspend () -> CommandResult) {
         error.value = null
-        state.projectsRefusal()?.let { dismissed.longValue = it.at }
+        session.projectRefusal?.let { dismissed.longValue = it.at }
         scope.launch {
             when (val r = request()) {
                 is CommandResult.Sent -> onSent()
@@ -128,18 +135,18 @@ class GitPaneHost(
  * into the column. [modifier] goes on the column.
  */
 @Composable
-fun GitPaneFrame(state: AppState, controller: Controller, modifier: Modifier = Modifier, content: @Composable ColumnScope.(GitPaneHost) -> Unit) {
+fun GitPaneFrame(link: LinkContext, session: SessionContext, ctx: GitContext, modifier: Modifier = Modifier, content: @Composable ColumnScope.(GitPaneHost) -> Unit) {
     val scope = rememberCoroutineScope()
-    val live = state.connection.isLive
-    val supported = contractAtLeast(state.connection.contract, 1, 36)
-    val active = state.activeProject
+    val live = link.live
+    val supported = link.contractAtLeast(1, 36)
+    val active = session.activeProject
     val localError = remember { mutableStateOf<String?>(null) }
     val dismissedAt = remember { mutableLongStateOf(0L) }
     // The changed file whose diff is open (path, staged side); a new project or directory closes it.
     val picked = remember(active?.id, active?.directory) { mutableStateOf<Pair<String, Boolean>?>(null) }
 
     LaunchedEffect(active?.id, active?.directory, live, supported) {
-        if (live && supported && active != null) controller.loadProjectGit(active.id)
+        if (live && supported && active != null) ctx.load(active.id)
     }
 
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
@@ -148,21 +155,21 @@ fun GitPaneFrame(state: AppState, controller: Controller, modifier: Modifier = M
             Text("Select a project to see its git tree.", color = Palette.Muted, fontSize = 12.sp)
             return@Column
         }
-        content(GitPaneHost(state, controller, active, live, supported, scope, picked, localError, dismissedAt))
+        content(GitPaneHost(link, session, ctx, active, live, supported, scope, picked, localError, dismissedAt))
     }
 }
 
 /** The branch new tickets are cut from (BASE-1b), first so a long list below never buries it. [modifier] goes on its heading. */
 @Composable
 fun GitBaseSection(git: GitPaneHost, modifier: Modifier = Modifier) {
-    BaseBranchPicker(git.state, git.controller, git.project.id, git.project.baseBranch, git.live, modifier)
+    BaseBranchPicker(git.link, git.session, git.context, git.project.id, git.project.baseBranch, git.live, modifier)
 }
 
 /** The project's directory (project-scoped settings) and the last refusal, under a divider. [modifier] goes on the directory line. */
 @Composable
 fun GitDirectorySection(git: GitPaneHost, modifier: Modifier = Modifier) {
-    val state = git.state
-    val controller = git.controller
+    val session = git.session
+    val ctx = git.context
     val active = git.project
     HorizontalDivider(color = Palette.Border, modifier = Modifier.padding(vertical = 10.dp))
     var draft by remember(active.id, active.directory) { mutableStateOf(active.directory) }
@@ -181,7 +188,7 @@ fun GitDirectorySection(git: GitPaneHost, modifier: Modifier = Modifier) {
                         val chosen = picker.pick(draft.ifBlank { active.directory })?.trim().orEmpty()
                         if (chosen.isNotEmpty()) {
                             draft = chosen
-                            git.run { controller.saveProjectDirectory(active.id, chosen) }
+                            git.run { ctx.saveDirectory(active.id, chosen) }
                         }
                     }
                 },
@@ -189,16 +196,16 @@ fun GitDirectorySection(git: GitPaneHost, modifier: Modifier = Modifier) {
             ) { Text("Open directory…", fontSize = 12.sp) }
         }
         OutlinedButton(
-            onClick = { git.run { controller.saveProjectDirectory(active.id, draft) } },
+            onClick = { git.run { ctx.saveDirectory(active.id, draft) } },
             enabled = canEdit && draft.trim() != active.directory,
         ) { Text("Save directory", fontSize = 12.sp) }
         OutlinedButton(
-            onClick = { git.run { controller.saveProjectDirectory(active.id, "") } },
+            onClick = { git.run { ctx.saveDirectory(active.id, "") } },
             enabled = canEdit && active.directory.isNotBlank(),
         ) { Text("Clear directory", fontSize = 12.sp) }
     }
     // A `project_base` refusal is drawn by the base-branch control, next to the choice it refused.
-    (git.localError ?: state.projectsRefusal()?.takeIf { it.at > git.dismissedAt && !it.text.startsWith(PROJECT_BASE_REFUSED) }?.text)
+    (git.localError ?: session.projectRefusal?.takeIf { it.at > git.dismissedAt && !it.text.startsWith(PROJECT_BASE_REFUSED) }?.text)
         ?.let { Text(it, color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp)) }
 }
 
@@ -208,23 +215,23 @@ fun GitDirectorySection(git: GitPaneHost, modifier: Modifier = Modifier) {
  */
 @Composable
 fun GitTreeSection(git: GitPaneHost, modifier: Modifier = Modifier) {
-    val state = git.state
-    val controller = git.controller
+    val session = git.session
+    val ctx = git.context
     val active = git.project
     HorizontalDivider(color = Palette.Border, modifier = Modifier.padding(vertical = 10.dp))
     if (!git.supported) {
         Text(PROJECT_GIT_UNSUPPORTED, modifier = modifier, color = Palette.Muted, fontSize = 12.sp)
         return
     }
-    val status = state.projectGit[active.id]
+    val status = ctx.status(active.id)
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text("WORKING TREE", color = Palette.Muted, fontSize = 10.sp)
         OutlinedButton(
             onClick = {
                 git.run {
-                    val tree = controller.loadProjectGit(active.id)
+                    val tree = ctx.load(active.id)
                     // A refresh also re-reads the diff that is open, so it is never older than the list beside it.
-                    git.picked?.let { (path, staged) -> controller.loadProjectDiff(active.id, path, staged) } ?: tree
+                    git.picked?.let { (path, staged) -> ctx.loadDiff(active.id, path, staged) } ?: tree
                 }
             },
             enabled = git.live,
@@ -233,7 +240,7 @@ fun GitTreeSection(git: GitPaneHost, modifier: Modifier = Modifier) {
     if (status?.available == true) {
         Text(status.headline(), color = Palette.Text, fontSize = 12.sp, fontFamily = Mono, modifier = Modifier.padding(vertical = 4.dp))
     }
-    val changes = projectChangesView(status, state.projectGitFailure)
+    val changes = projectChangesView(status, ctx.failure)
     when (changes) {
         // Unknown is stated as unknown. It is never drawn as "clean".
         is ChangesView.Unknown -> Text("Git unknown: ${changes.reason}", color = Palette.Muted, fontSize = 11.sp)
@@ -242,11 +249,11 @@ fun GitTreeSection(git: GitPaneHost, modifier: Modifier = Modifier) {
             Text(changes.summary(), color = Palette.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             ChangeGroup("Staged", changes.staged, staged = true, picked = git.picked, collapseOver = GIT_LIST_COLLAPSE_OVER) { f ->
                 git.picked = f.path to true
-                git.run { controller.loadProjectDiff(active.id, f.path, true) }
+                git.run { ctx.loadDiff(active.id, f.path, true) }
             }
             ChangeGroup("Not staged", changes.unstaged, staged = false, picked = git.picked, collapseOver = GIT_LIST_COLLAPSE_OVER) { f ->
                 git.picked = f.path to false
-                git.run { controller.loadProjectDiff(active.id, f.path, false) }
+                git.run { ctx.loadDiff(active.id, f.path, false) }
             }
             if (git.picked == null) Text("Pick a changed file to see its diff.", color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
         }
@@ -262,7 +269,7 @@ fun GitDiffSection(git: GitPaneHost, modifier: Modifier = Modifier) {
         "Diff: $path${if (staged) " (staged)" else ""}", color = Palette.Muted, fontSize = 10.sp,
         modifier = modifier.padding(top = 8.dp, bottom = 2.dp),
     )
-    when (val patch = projectPatchView(git.state.projectGitPatch[git.project.id], path, staged)) {
+    when (val patch = projectPatchView(git.context.patch(git.project.id), path, staged)) {
         PatchView.None -> Text("Loading diff…", color = Palette.Muted, fontSize = 11.sp)
         is PatchView.Unknown -> Text("Diff unknown: ${patch.reason}", color = Palette.Muted, fontSize = 11.sp)
         PatchView.Binary -> Text("Binary file: no text diff.", color = Palette.Muted, fontSize = 11.sp)
@@ -278,7 +285,7 @@ fun GitDiffSection(git: GitPaneHost, modifier: Modifier = Modifier) {
 fun GitBranchesSection(git: GitPaneHost, modifier: Modifier = Modifier) {
     if (!git.supported) return
     HorizontalDivider(color = Palette.Border, modifier = Modifier.padding(vertical = 10.dp))
-    BranchSwitcher(git.state, git.controller, git.project.id, git.state.projectGit[git.project.id]?.branch, git.live, modifier)
+    BranchSwitcher(git.link, git.context, git.project.id, git.context.status(git.project.id)?.branch, git.live, modifier)
 }
 
 /** The optional verification pipeline (PIPE-2) under a divider. [modifier] goes on its heading row. */
@@ -286,7 +293,7 @@ fun GitBranchesSection(git: GitPaneHost, modifier: Modifier = Modifier) {
 fun GitPipelineSection(git: GitPaneHost, modifier: Modifier = Modifier) {
     if (!git.supported) return
     HorizontalDivider(color = Palette.Border, modifier = Modifier.padding(vertical = 10.dp))
-    ProjectPipelineSection(git.state, git.controller, git.project.id, git.live, modifier)
+    ProjectPipelineSection(git.link, git.context, git.project.id, git.live, modifier)
 }
 
 /** The history under a divider: a row per commit, newest first. [modifier] goes on its heading. */
@@ -295,7 +302,7 @@ fun GitHistorySection(git: GitPaneHost, modifier: Modifier = Modifier) {
     if (!git.supported) return
     HorizontalDivider(color = Palette.Border, modifier = Modifier.padding(vertical = 10.dp))
     Text("HISTORY", color = Palette.Muted, fontSize = 10.sp, modifier = modifier.padding(bottom = 4.dp))
-    when (val history = projectHistoryView(git.state.projectGitHistory[git.project.id])) {
+    when (val history = projectHistoryView(git.context.history(git.project.id))) {
         is HistoryView.Unknown -> Text("History unknown: ${history.reason}", color = Palette.Muted, fontSize = 11.sp)
         HistoryView.Empty -> Text("No commits yet.", color = Palette.Muted, fontSize = 11.sp)
         is HistoryView.Commits -> {
@@ -326,21 +333,21 @@ const val GIT_CHECKOUT_RESULT_TAG = "git-checkout-result"
  * branch changes, which a switch makes happen through the `project_git` push that follows it.
  */
 @Composable
-private fun BranchSwitcher(state: AppState, controller: Controller, projectId: String, currentBranch: String?, live: Boolean, modifier: Modifier = Modifier) {
+private fun BranchSwitcher(link: LinkContext, ctx: GitContext, projectId: String, currentBranch: String?, live: Boolean, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
-    val listSupported = contractAtLeast(state.connection.contract, 1, 65)
-    val switchSupported = contractAtLeast(state.connection.contract, 1, 74)
+    val listSupported = link.contractAtLeast(1, 65)
+    val switchSupported = link.contractAtLeast(1, 74)
     var localError by remember(projectId) { mutableStateOf<String?>(null) }
     var newName by remember(projectId) { mutableStateOf("") }
 
     LaunchedEffect(projectId, currentBranch, live, listSupported) {
-        if (live && listSupported) controller.loadProjectBranches(projectId)
+        if (live && listSupported) ctx.loadBranches(projectId)
     }
 
     fun checkout(branch: String, create: Boolean) {
         localError = null
         scope.launch {
-            val r = controller.checkoutProjectBranch(projectId, branch, create)
+            val r = ctx.checkout(projectId, branch, create)
             if (r is CommandResult.Refused) localError = r.reason
             else if (create && r is CommandResult.Sent) newName = ""
         }
@@ -351,7 +358,7 @@ private fun BranchSwitcher(state: AppState, controller: Controller, projectId: S
         Text(PROJECT_GIT_BRANCHES_UNSUPPORTED, color = Palette.Muted, fontSize = 11.sp)
         return
     }
-    val list = state.projectGitBranches[projectId]
+    val list = ctx.branches(projectId)
     when {
         list == null -> Text("Loading branches…", color = Palette.Muted, fontSize = 11.sp)
         !list.available -> Text("Branches unknown: ${list.reason.ifBlank { "the daemon could not list them" }}", color = Palette.Muted, fontSize = 11.sp)
@@ -397,7 +404,7 @@ private fun BranchSwitcher(state: AppState, controller: Controller, projectId: S
     }
 
     // The newest answer for this project: a refusal's reason in red, a switch that happened in green.
-    val result = state.projectGitCheckout[projectId]
+    val result = ctx.checkoutResult(projectId)
     val (text, color) = when {
         localError != null -> localError to Palette.Danger
         result == null -> null to Palette.Muted
@@ -433,9 +440,9 @@ internal const val PROJECT_BASE_REFUSED = "project_base refused"
  * drawn here, inline. The branch list is the one [BranchSwitcher] asks for when the Git tab opens.
  */
 @Composable
-private fun BaseBranchPicker(state: AppState, controller: Controller, projectId: String, baseBranch: String, live: Boolean, modifier: Modifier = Modifier) {
+private fun BaseBranchPicker(link: LinkContext, session: SessionContext, ctx: GitContext, projectId: String, baseBranch: String, live: Boolean, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
-    val supported = contractAtLeast(state.connection.contract, 1, 81)
+    val supported = link.contractAtLeast(1, 81)
     var open by remember(projectId) { mutableStateOf(false) }
     var query by remember(projectId) { mutableStateOf("") }
     var localError by remember(projectId) { mutableStateOf<String?>(null) }
@@ -444,7 +451,7 @@ private fun BaseBranchPicker(state: AppState, controller: Controller, projectId:
     // The choice sent and not yet answered: the label it should become (null = nothing pending).
     var pending by remember(projectId) { mutableStateOf<String?>(null) }
 
-    val refusal = state.notices.lastOrNull { it.sessionId == null && it.text.startsWith(PROJECT_BASE_REFUSED) }
+    val refusal = session.notices.lastOrNull { it.sessionId == null && it.text.startsWith(PROJECT_BASE_REFUSED) }
     val newRefusal = refusal?.takeIf { it !== seenRefusal }
     val saving = pending != null && pending != baseBranch && newRefusal == null
 
@@ -475,7 +482,7 @@ private fun BaseBranchPicker(state: AppState, controller: Controller, projectId:
     }
 
     if (open) {
-        val list = state.projectGitBranches[projectId]
+        val list = ctx.branches(projectId)
         val names = list?.takeIf { it.available }?.branches?.map { it.name }.orEmpty()
         val all = baseBranchChoices(names, list?.current, "")
         val shown = baseBranchChoices(names, list?.current, query)
@@ -491,7 +498,7 @@ private fun BaseBranchPicker(state: AppState, controller: Controller, projectId:
                 seenRefusal = refusal
                 pending = choice.branch.orEmpty()
                 scope.launch {
-                    val r = controller.setProjectBaseBranch(projectId, choice.branch)
+                    val r = ctx.setBaseBranch(projectId, choice.branch)
                     if (r is CommandResult.Refused) { localError = r.reason; pending = null }
                 }
             },
