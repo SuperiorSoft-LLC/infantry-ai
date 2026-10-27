@@ -11,6 +11,9 @@ import kotlin.test.fail
  * original wins over the package and silently drops the hand, so no file of the `ui` package may import one.
  */
 class HandCursorGuardTest {
+    /** The app UI's sources (agenthqAppUi's commonMain): the panes moved out of core, same `ui` package. */
+    private val appUi = File("../../plugins/core")
+
     private val forbidden = Regex(
         """^import androidx\.compose\.(foundation\.clickable|foundation\.combinedClickable|material3\.(Button|OutlinedButton|TextButton|IconButton|DropdownMenuItem|Checkbox|FilledTonalButton|ElevatedButton|RadioButton|Switch|FilterChip))(\s+as\s+\w+)?\s*$""",
     )
@@ -18,10 +21,12 @@ class HandCursorGuardTest {
     @Test
     fun `no ui file imports a clickable that bypasses the hand cursor`() {
         // Recurse into every subpackage of ui (pair, shell, sound, voice/plugin, ...). The web entry point sits
-        // outside the ui package but renders the same screens, so it is scanned too.
+        // outside the ui package but renders the same screens, so it is scanned too, and so are the panes that moved
+        // to the app UI (S4b), so the guard and its ratchet keep covering the same files.
         val roots = listOf("src/commonMain", "src/jvmMain", "src/androidMain")
             .map { File(it, "kotlin/com/superiorsoftllc/agenthq/ui") }
             .plus(File("../agentHqWeb/src/wasmJsMain/kotlin"))
+            .plus(appUi)
             .filter { it.isDirectory }
         assertTrue(roots.isNotEmpty(), "ui sources not found from ${File(".").absolutePath}")
         val offenders = roots.flatMap { root -> root.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList() }
@@ -36,6 +41,7 @@ class HandCursorGuardTest {
         val roots = listOf("src/commonMain", "src/jvmMain", "src/androidMain")
             .map { File(it, "kotlin/com/superiorsoftllc/agenthq/ui") }
             .plus(File("../agentHqWeb/src/wasmJsMain/kotlin"))
+            .plus(appUi)
             .filter { it.isDirectory }
         assertTrue(roots.isNotEmpty(), "ui sources not found from ${File(".").absolutePath}")
         return roots.flatMap { root -> root.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList() }
@@ -80,10 +86,10 @@ class HandCursorGuardTest {
     fun `the board's drag handle takes its grab cursor from the Clickables wrapper`() {
         val ui = File("src/commonMain/kotlin/com/superiorsoftllc/agenthq/ui")
         assertTrue(ui.isDirectory, "ui sources not found from ${File(".").absolutePath}")
-        val board = File(ui, "Board.kt").readText()
+        val board = File(appUi, "Infantry_AppUi/Board.kt").readText()
         assertTrue(Regex("""\.dragHandleCursor\(enabled, dragging\)""").containsMatchIn(board), "the drag handle must use Modifier.dragHandleCursor")
         // A cursor set by hand is one the semantics (and the tests reading them) cannot see.
-        val raw = ui.listFiles { f -> f.extension == "kt" }.orEmpty()
+        val raw = (ui.listFiles { f -> f.extension == "kt" }.orEmpty().toList() + appUi.walkTopDown().filter { it.isFile && it.extension == "kt" })
             .filter { it.name !in setOf("Clickables.kt", "ResizeHandle.kt") && it.readText().contains("pointerHoverIcon") }
         if (raw.isNotEmpty()) fail("set the cursor through Clickables.kt, not pointerHoverIcon: ${raw.joinToString { it.name }}")
     }
