@@ -41,6 +41,7 @@ object FrameGate {
         Envelope.COMMAND_SAVE, Envelope.COMMAND_DELETE,
         Envelope.RUN_START, Envelope.RUN_STOP, Envelope.RUN_ATTACH, Envelope.RUN_RESIZE, Envelope.RUN_INPUT,
         Envelope.SECRET_SET, Envelope.SECRET_CLEAR, Envelope.SECRET_IMPORT,
+        Envelope.SECRET_FIELD_SET, Envelope.SECRET_FIELD_DELETE, Envelope.SECRET_DELETE,
     )
 
     /** Why a frame of [type] is refused on this connection, or null when it may be dispatched. */

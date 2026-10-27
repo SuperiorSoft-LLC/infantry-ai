@@ -141,5 +141,14 @@ class KeystoreHandler(
 
     companion object {
         val DEFAULT = listOf(KnownSecret(Keystore.UPDATE_TOKEN, "Update token", "AGENTHQ_UPDATE_TOKEN"))
+
+        /**
+         * SEC-FIX-1 H1(b): the secrets a saved command may hand its run: the user's key/value secrets through [fields], never a
+         * built-in ([known]: the update token, the daemon's own credentials). A built-in name is refused with a reason.
+         */
+        fun runSecrets(fields: (String) -> Map<String, String>?, known: List<KnownSecret> = DEFAULT): (String) -> Map<String, String>? = { name ->
+            require(known.none { it.name == name }) { "secret '$name' is built in and never goes to a run" }
+            fields(name)
+        }
     }
 }

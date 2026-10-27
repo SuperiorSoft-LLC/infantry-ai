@@ -35,6 +35,7 @@ import kotlin.test.assertTrue
  * Windows-only: the saved commands are `cmd.exe /c ...`.
  */
 class RunLiveEvidenceTest {
+    private companion object { val OWNER = "o".repeat(44) }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val closers = mutableListOf<() -> Unit>()
 
@@ -60,6 +61,8 @@ class RunLiveEvidenceTest {
             mailStore = JsonMailStore(File(dir, "mailbox.json")),
             store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath),
             mailBaseUrl = "http://127.0.0.1:1", token = null,
+            // SEC-FIX-1: runs need the owner credential; this test's own, never the operator's owner.token.
+            ownerToken = OWNER,
             storyStore = JsonStoryStore(File(dir, "stories.json")),
             commandsFile = commands,
             // Hermetic (BUG-ModelsHeadOfLine): not build()'s builtIn(), which runs this host's `pi --list-models`.
@@ -90,7 +93,9 @@ class RunLiveEvidenceTest {
         // Subscribed BEFORE connect so no frame can be missed.
         scope.launch { c.client.frames.collect { frames += it } }
         Thread.sleep(100)
-        c.connect("ws://127.0.0.1:${boot()}/ws", null)
+        val url = "ws://127.0.0.1:${boot()}/ws"
+        c.client.ownerFor(url, OWNER)
+        c.connect(url, null)
         until("connected", c) { it.connection.state == ConnState.CONNECTED }
         until("commands listed", c) { it.runs.commands.size == 2 }
         return c

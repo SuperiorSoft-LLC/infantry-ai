@@ -46,15 +46,36 @@ class OwnerCredential(token: String) {
 
         /** The stored owner token, generating and storing one first if there is none (or it is unreadable / short). */
         fun ensure(dir: File, random: SecureRandom = SecureRandom()): String {
-            val f = file(dir)
-            runCatching { f.takeIf { it.isFile }?.readText(Charsets.UTF_8)?.trim() }.getOrNull()
-                ?.takeIf { it.length >= MIN_TOKEN_LENGTH }?.let { return it }
+            stored(dir)?.let { return it }
             val token = Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(TOKEN_BYTES).also(random::nextBytes))
             dir.mkdirs()
-            f.writeText(token, Charsets.UTF_8)
-            // Owner-only where the file system supports POSIX permissions; Windows files inherit the user profile ACL.
-            runCatching { Files.setPosixFilePermissions(f.toPath(), PosixFilePermissions.fromString("rw-------")) }
-            return token
+            val temp = File.createTempFile("owner", ".tmp", dir)
+            try {
+                temp.writeText(token, Charsets.UTF_8)
+                // Owner-only where the file system supports POSIX permissions; Windows files inherit the user profile ACL.
+                runCatching { Files.setPosixFilePermissions(temp.toPath(), PosixFilePermissions.fromString("rw-------")) }
+                // The first writer wins and every other caller (the in-process daemon and the window both ask at launch)
+                // reads its token; an unreadable or short file is replaced.
+                if (file(dir).exists() && stored(dir) == null) file(dir).delete()
+                try {
+                    // A hard link fails atomically when the name exists (a rename may replace it); a file system with no
+                    // links falls back to a move that refuses an existing target.
+                    try {
+                        Files.createLink(file(dir).toPath(), temp.toPath())
+                    } catch (e: java.nio.file.FileAlreadyExistsException) {
+                        throw e
+                    } catch (e: UnsupportedOperationException) {
+                        Files.move(temp.toPath(), file(dir).toPath())
+                    } catch (e: java.io.IOException) {
+                        Files.move(temp.toPath(), file(dir).toPath())
+                    }
+                } catch (e: java.nio.file.FileAlreadyExistsException) {
+                    return stored(dir) ?: throw e
+                }
+            } finally {
+                temp.delete()
+            }
+            return stored(dir) ?: token
         }
 
         /** The stored owner token, or null when there is none; a client on this machine reads it to connect as the owner. */
