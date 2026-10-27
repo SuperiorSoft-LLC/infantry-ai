@@ -200,18 +200,6 @@ const val ASSISTANT_STARTING_TAG = "assistant-starting"
 const val ASSISTANT_NAME = "Assistant"
 
 /**
- * ASSISTANT-1: the Assistant popup's own view state, owned by the window (not by the popup), so closing and reopening the
- * popup keeps its width, whether it is expanded, and (with its [ChatPanelState]) the draft and attachments.
- */
-class AssistantPanelState {
-    var open by mutableStateOf(false)
-    var expanded by mutableStateOf(false)
-    var width by mutableStateOf(AssistantPanelWidth.DEFAULT)
-
-    fun toggle() { open = !open }
-}
-
-/**
  * ASSISTANT-1: the global Assistant, hosted in a docked popup under the top bar (right side). It is the SAME [ChatPanel] the
  * main window renders, bound to the one global session ([AppState.assistant]): the role chip is the fixed `assistant`, the
  * model is picked with the Switch agent picker (its role row is locked), and nothing here is a second chat implementation.

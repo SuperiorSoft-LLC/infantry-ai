@@ -13,12 +13,6 @@ import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.Notice
 
 /**
- * The newest daemon refusal of a project / workspace request, owned by [AppState.projectRefusal]: it clears on a
- * successful save, on a project switch and when the user dismisses it, so it never stays pinned.
- */
-internal fun AppState.projectsRefusal(): Notice? = projectRefusal
-
-/**
  * The sidebar's project slot: the daemon's newest project / workspace refusal, shown inline with a dismiss button.
  * Picking and creating a project live in the title bar (M2-7, [ProjectPicker]); the WORKSPACES block was removed in
  * M2-13 because the Git tab already shows the same thing. Draws nothing while there is no refusal.

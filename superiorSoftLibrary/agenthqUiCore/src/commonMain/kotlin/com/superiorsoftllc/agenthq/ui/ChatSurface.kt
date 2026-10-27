@@ -758,7 +758,8 @@ fun QueuedMessages(queue: List<QueuedPrompt>) {
 
 @Composable
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
-internal fun PromptBox(
+// S4 bridge (docs/SHELL-LEAKS.md): ChatPanel (app UI) composes it; internal again once ChatSurface.kt moves too.
+fun PromptBox(
     value: String,
     onValue: (String) -> Unit,
     onSubmit: () -> Unit,
@@ -1038,7 +1039,8 @@ const val SPAWN_ROLE_DEFAULT_TAG = "spawn-role-default"
 
 /** The New agent box's role row: pick the role to spawn as and see what its binding makes the default (pick another model to override). */
 @Composable
-internal fun SpawnRoleRow(state: AppState, controller: Controller) {
+// S4 bridge (docs/SHELL-LEAKS.md): ChatPanel (app UI) composes it; internal again once ChatSurface.kt moves too.
+fun SpawnRoleRow(state: AppState, controller: Controller) {
     // PICKER-UX: room above the role tags (they sat flat against the banner) and a bold section label.
     Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {

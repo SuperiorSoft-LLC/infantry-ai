@@ -259,3 +259,144 @@ users are Infantry_Triggers and core tests, so they go (b) or (c) with Triggers 
 
 Estimated S4c addition for the board: about 14 members on `BoardContext` (the state above and 7 actions), plus
 `LayoutContext.compact`.
+
+# S4c: the shell blocks and the settings (ticket d7825a52)
+
+S4c moves the rest of the app UI that S4a left in core: the slot fills (header, center/chat, left/right panels, compact
+drawer, status bar, overlays) and the open settings group of the Config dialog (`infantry.shell.config.settings`, S3).
+One commit per group, `git mv` with the package unchanged, the same letters as S4b (a / b / c / kit / stays / bridge,
+and **hole** for a `LocalShell` use a `ShellContext` member should replace).
+
+Like Roles and the Board in S4b, the blocks are **moved, not migrated**. They read `LocalShell.current` (`Shell`,
+`AppState`, `Controller`, `UiState`), which is public, so the compiler lets them through. Each such use is a hole below.
+Migrating them all at once means growing `ShellContext` by roughly 60 members across a dozen domains (see the estimate at
+the end). `ShellContext` can only grow, so that shape is worth one design pass of its own rather than being grown block by
+block here.
+
+What stays in core, and why, is listed in "What stayed in core" at the end.
+
+## Header (Infantry_AppUi)
+
+Moved: shell/blocks/ShellHeader.kt (`ShellHeader`, `TitleBarBlock`, `HeaderLead*`, `HeaderOverflow*`, the 13 item blocks).
+
+| File | Symbol | Decision |
+|---|---|---|
+| Contract.kt | `BlockScope.row` (was internal) | kit: the block contract's own field, made public (only visibility). The title bar's lead and agent strip emit into the bar's row with it |
+| ShellHeader.kt | `TitleBarFrame`, `TitleBarToggleLeft`, `TitleBarBrand`, `TitleBarProject`, `TitleBarAgents`, `TitleBarOverflow*`, `TitleBarWindowControls`, `TitleBarConnection`, `TitleBarRightToggle`, `TitleBarAttention`, `LocalWindowChrome` | stays: TitleBar.kt is the window's chrome. The desktop window (agentHqUi AgentHqWindow.kt) and the splash draw `TitleBar` without the app UI, and the frame pieces are its parts |
+| ShellHeader.kt | `ProjectPicker` | stays: the old `TitleBar` and the projects sidebar draw it |
+| ShellHeader.kt | `ServerSwitcherChip` | stays: connect/servers is core |
+| ShellHeader.kt | `AssistantEntry` | stays with AssistantPopup.kt (see Overlays) |
+| ShellHeader.kt | `ATTENTION_TAB_ID`, `needsInput`, `PanelSide` | kit (model) |
+| ShellHeader.kt | `LocalShell.current.state` (connection, assistant, waiting, openPrompts, openQuestionSessions, the agents) | hole: `LinkContext` (has the connection), a `ChatContext` / `AgentsContext` for the strip |
+| ShellHeader.kt | `controller.togglePanel`, `s.showTab`, `s.changeConnection`, `ui.showConnect`, `ui.showServers`, `s.switcher`, `s.switchTo`, `s.assistantPanel`, `ui.flags.agentScope` | hole: a `WindowContext` (panels, tabs, the shell's dialogs) |
+
+## Status bar (Infantry_AppUi)
+
+Moved: shell/blocks/StatusBarBlocks.kt (`CoreStatusBar`, `StatusBarBlock`, the 8 `Status*` items) and ProcessesBadge.kt
+(`ProcessesBadge`, `ProcessesDialog`, the `PROCESSES_*` tags), which only the status bar draws.
+
+| File | Symbol | Decision |
+|---|---|---|
+| ProcessesBadge.kt | the whole file | (c): only `StatusProcessesBadge` uses it |
+| StatusBarBlocks.kt | `FooterBuild` | stays: the About section (trust half) draws it too |
+| StatusBarBlocks.kt | `SERVER_MISMATCH_TAG` | stays: ServerUpdateSection.kt (trust half) owns it |
+| StatusBarBlocks.kt | `ConfigTab` | stays: the Config dialog's tabs (core) |
+| StatusBarBlocks.kt | `ago`, `ConnState`, `AhqIcons`, `clickable`, `Palette`, `SpacerBlock`, `Block`, `BlockScope`, `Place`, `RenderPlaced` | kit |
+| StatusBarBlocks.kt | `state.connection` (`isLive`, its state, `lastFrameAt`, the contract) | (a) in part: `LinkContext.live`, `contract`; hole: the connection state and the last frame time |
+| StatusBarBlocks.kt | `s.serverMismatch`, `s.host.appBuild`, `state.panels.compactWindow`, `ui.showConfig`, `ui.configTab` | hole: the `WindowContext` (see Header) |
+| ProcessesBadge.kt | `state.processReport`, `processAutoReap`, `controller.refreshProcesses / reapProcesses / setProcessAutoReap` | hole: a `ProcessesContext` (5 members) |
+
+## Overlays (Infantry_AppUi)
+
+Moved: shell/blocks/ShellAssistant.kt, ShellToast.kt, ShellDiff.kt, ShellSound.kt, ShellVoice.kt, ShellQuestionPill.kt,
+and the composables only they draw: AssistantPopup.kt, ToastHost.kt, DiffModal.kt. Two pieces of those files stay in
+core in files of their own, because core still uses them.
+
+| File | Symbol | Decision |
+|---|---|---|
+| Contract.kt | `BlockScope.box` (was internal) | kit: as `row` (Header). The toast and the question pill align themselves in the dock with it |
+| ResizeHandle.kt | `ResizeHandle` (was internal) | kit: a control, made public (only visibility). The assistant's drag edge uses it, and later the side panels |
+| AssistantPopup.kt | `AssistantPopup`, `AssistantPopupFrame / Resize / Header / Chat`, `AssistantEntry`, the `ASSISTANT_*` and `TITLE_BAR_ASSISTANT_TAG` tags | (c) |
+| AssistantPopup.kt -> AssistantPanelState.kt | `AssistantPanelState` | stays: the window owns it (`Shell.assistantPanel`, App.kt), so the popup keeps its width and draft while closed |
+| ToastHost.kt | `ToastHost`, `toastColour`, the `TOAST_*` tags | (c) |
+| ToastHost.kt -> ToastService.kt | `toastEvents` | stays: `CoreShellContext` serves it as `ToastContext.events` |
+| DiffModal.kt | `DiffModal`, `DiffModalFrame / Header / Body`, `ProjectDiffModal`, `OpenDiff`, `openDiff`, the `DIFF_MODAL_*` tags | (c). `openDiff` and `ProjectDiffModal` were already only used by the moved Changes pane |
+| DiffModal.kt -> DiffLine.kt | `DiffLine` (was internal), `DIFF_LINE_*` tags | stays: the chat's change box (ChangeBox.kt) draws it; made public for the moved `DiffModalBody` |
+| AssistantPopup.kt | `ChatPanel`, `ChatPanelState`, `TITLE_BAR_HEIGHT` | stays for now: ChatPanel goes with the center (see Center), TitleBar.kt is the window chrome |
+| ShellToast.kt | `LocalShellContext`, `ToastContext.service / events / open`, `LocalToast` | (a): the toast was migrated in S2 |
+| ShellSound.kt, ShellVoice.kt | `IncomingCommsSoundEffect`, `VoiceAlerts` | stays: their files hold the Settings sections too (see Settings) |
+| ShellQuestionPill.kt | `QuestionPill` | stays: QuestionWindow.kt holds `QuestionPanel`, which the chat draws (see Center) |
+| ShellAssistant.kt, AssistantPopup.kt | `s.assistantPanel`, `s.assistantChat`, `state.assistant`, `connection.hasAssistant`, `controller.openAssistant` | hole: an `AssistantContext` (the panel, the session, open) |
+| ShellDiff.kt, DiffModal.kt | `ui.diffTarget`, `s.root.requestFocus`, `state.projectGit*`, `worktreeStatus`, `controller.loadProjectDiff / loadBranchDiff` | (a) in part: `GitContext.patch / loadDiff`, `ChangesContext.branchChanges / worktreeStatus`; hole: the diff target, `loadBranchDiff`, the window's focus |
+| ShellSound.kt, ShellVoice.kt | `controller.state`, `controller.spoken`, `ui.flags` | hole: the comms feed and the spoken lines, the UI flags (`WindowContext`) |
+| ShellQuestionPill.kt | `state.openQuestions`, `dismissedQuestions`, `selectedId`, `agents`, `controller.openQuestion / showQuestions`, `s.homeTab`, `ui.centerTab`, `s.chat.spawnMode` | hole: a `QuestionsContext` (about 4 members) and the `WindowContext` |
+
+## Center and chat (Infantry_AppUi)
+
+Moved: shell/blocks/ShellCenter.kt (`ShellCenter`, `CenterBlock`, `CenterChat*`, `NewAgentBlock`, `NewAgent*`), and
+the composables only it and the moved Assistant draw: ChatPanel.kt (`ChatPanel`, `ChatPanelHost`, `chatPanelHost`,
+`chatPanelHeader` and its sections), NewAgentDialog.kt and QuestionWindow.kt.
+
+**ChatSurface.kt stays in core in S4c.** It is the chat's whole drawing tree (60 KB: transcript, composer, status row,
+cards), and it pulls about ten helper files with it (ChatAttachments, ChangeBox, OriginRenderer, CommsCardStyle,
+SessionStartPane, SwitchAgentPicker, ChatTableView, ChatBlockRenderers, PromptCard, ProgressMeter, ReasoningPanelUi).
+Several of them are also drawn by core panes and the sidebar (App.kt uses `TicketTag`, `NEW_AGENT_LABEL`,
+`NEW_AGENT_SHORTCUT`, `SIDEBAR_NEW_AGENT_TAG`; ChatBlockRenderers and ChatTableView use `spansText`). Moving it is a
+split of its own. It is the largest piece of app UI still compiled into core. The two internals that ChatPanel composes
+are bridges until then.
+
+| File | Symbol | Decision |
+|---|---|---|
+| ChatPanel.kt | `ChatPanel`, `ChatPanelHost`, `chatPanelHost`, `chatPanelHeader`, `Header / Transcript / Notices / SpawnRows / SwitchPicker / Composer` (were internal) | (c): the center and the Assistant are their only users |
+| ChatPanel.kt -> ChatPanelState.kt | `ChatPanelState`, `rememberChatPanelState` | stays: the window owns the main chat's state (`Shell.chat`, App.kt) |
+| NewAgentDialog.kt | `NewAgentDialog`, `NewAgentDialogFrame`, `NewAgentDraft`, the steps, `NEW_AGENT_*` tags | (c) |
+| NewAgentDialog.kt -> ModalFieldColors.kt | `visibleBorderFieldColors` (was internal) | stays (kit): the executor picker and the searchable select (core) use it; public |
+| QuestionWindow.kt | the whole file (`QuestionPanel`, `QuestionPill`, `QuestionHistory`, the `QUESTION_*` tags) | (c): the chat, the pill and Attention (all app UI) are its users |
+| ChatSurface.kt | `PromptBox`, `SpawnRoleRow` (were internal) | bridge: ChatPanel composes them; they go back to internal when ChatSurface.kt moves |
+| ShellLeftPanel.kt | `dockCompact` (was internal) | bridge: closed by the next commit (side panels) |
+| ShellCenter.kt | `s.tabs`, `s.tabContext`, `ui.centerTab`, `ui.showBoard`, `ui.showNewAgent`, `controller.setCompactWindow` | hole: the `WindowContext` |
+| ShellCenter.kt, ChatPanel.kt | `s.chat` / `ChatPanelState`, `s.selected`, `state.agents`, `role`, `roles`, `tickets`, `providers`, `modelCatalog`, `pickedModel`, `harnessPickerAsk`, `shownQuestionsFor`, `userPortrait`, `connection`, `controller.resume / startSession / switchAgent / spawn / pickModel / pickSpawnRole / refreshModelCatalog / answerQuestion / cancelQuestion / dismissQuestions` | hole: a `ChatContext` (about 20 members: the session, its transcript and questions, send / start / switch / spawn) plus the shared `ExecutorContext` (Roles) |
+| NewAgentDialog.kt | `state.roles`, `roleBindings`, `providers`, `modelCatalog` | (a) in part: `RolesContext.roles / bindings`; hole: `ExecutorContext` |
+
+## Side panels and compact drawer (Infantry_AppUi)
+
+Moved: shell/blocks/ShellLeftPanel.kt, ShellRightPanel.kt, ShellCompactDrawer.kt (one commit, because the drawer draws
+the two panels' content and all three read `dockCompact`). Moved with them: the agent list out of App.kt (Sidebar.kt in
+the app UI: `Sidebar`, `AgentsList`, `AgentRow`, the row menu, `SidebarSpacing`, `CenterTabBar`), ProjectsSidebar.kt, and
+the sidebar's board entry out of BoardSidebar.kt (SidebarBoardButton.kt: `SidebarBoardButton`, `WatchFlagChip`,
+`SIDEBAR_BOARD_BUTTON_TAG`).
+
+| File | Symbol | Decision |
+|---|---|---|
+| ShellLeftPanel.kt | `dockCompact` | (c): its bridge (Center) closes, internal again in the app UI |
+| ShellLeftPanel.kt, ShellRightPanel.kt | `LeftPanelContent`, `RightPanelContent`, `rightPanelArea` (internal) | (c): internal in the app UI (the drawer is the only other user) |
+| App.kt -> Sidebar.kt | `Sidebar` (was internal), `AgentsList`, `AgentRow`, `AgentRowMenu`, `AgentGroupHeader`, `Counter`, `SidebarSpacing`, `SIDEBAR_SEARCH_TAG`, `AGENT_GROUP_DIVIDER_TAG_PREFIX`, `NO_PROJECT_LABEL`, `SESSION_NO_PROJECT_TAG_PREFIX`, `SESSION_ASSIGN_TAG_PREFIX` | (c) |
+| App.kt -> Sidebar.kt | `CenterTabBar`, `CENTER_TAB_BAR_TAG` | (c): only the moved center draws it |
+| App.kt | `RemoveAgentDialog` (was internal), `SESSION_REMOVE_*`, `PROMPT_BOX_TAG`, `COMPOSER_TAG` | stays: the chat's composer (ChatSurface.kt) opens the dialog too; public |
+| App.kt | `CompactNavRow` (was internal), `COMPACT_BACK_TAG`, `CENTER_PANE_TAG`, `CENTER_TRANSCRIPT_TAG`, `DRAWER_TAG`, `DRAWER_SCRIM_TAG` | kit: a control and test tags, public |
+| TabStrip.kt | `TabBar` (was internal) | kit: the tab strip control (core's tab strip and `CenterTabBar`), public |
+| BoardSidebar.kt -> SidebarBoardButton.kt | `SidebarBoardButton`, `WatchFlagChip`, `SIDEBAR_BOARD_BUTTON_TAG` | (c): the sidebar and Attention (app UI) are their users; the `WatchFlagChip` bridge (S4a) closes |
+| BoardSidebar.kt | `ReportFlagChip` | stays, still a bridge: the chat (ChatSurface.kt) draws it |
+| ProjectsSidebar.kt | `ProjectsSidebar` | (c) |
+| ProjectsSidebar.kt -> ProjectRefusal.kt | `projectsRefusal` (was internal) | stays: the project picker (core) reads it; public |
+| ShellLeftPanel.kt | `ResizeHandle`, `PanelSections`, `Panels`, `TabContainers`, `SidebarWidth`, `RightPanelWidth`, `PanelLayout`, `CompactScreen` | kit (`ResizeHandle` made public in Overlays) |
+| ShellLeftPanel.kt, Sidebar.kt | `s.visible`, `ui.query`, `ui.roleFilter`, `s.searchFocus`, `state.agents / groupedAgents / selectedId / waiting / openPrompts / openQuestionSessions / reviewQueue / workingCount / needsInputCount`, `controller.select / removeSession / assignSessionProject / dismissProjectRefusal` | hole: an `AgentsContext` (the list, its filter and selection, remove / assign; about 12 members) |
+| all three | `s.tabs`, `s.tabContext`, `ui.rightTab`, `ui.sidebarWidth`, `ui.rightPanelWidth`, `state.panels`, `controller.showCompactScreen`, `ui.showBoard`, `ui.showNewAgent` | hole: the `WindowContext` |
+
+## Settings (Infantry_AppUi)
+
+Moved: the open settings group of the Config dialog, `ShellConfigSettings` (`infantry.shell.config.settings`, its 15
+section blocks), from core shell/blocks/ShellConfig.kt to Infantry_AppUi/ShellConfigSettings.kt. In core the group is an
+empty slot now (`CONFIG_SETTINGS`, added to `CoreShell.slots`) inside the locked `infantry.shell.config` container, and
+Infantry_AppUi fills it (module.json `fills`). The fill goes in before overrides and injections, so the S3 overrides of
+the group and its sections (ConfigDialogOverridesUiTest, NodeRegistryTest) address the same ids as before.
+
+| File | Symbol | Decision |
+|---|---|---|
+| ShellConfig.kt | `ShellConfigSettings` | (c) |
+| ShellConfig.kt | `ConfigSectionBlock` (constructor was internal) | (d): the section block is the dialog's own contract, so it is public as it is; the app UI builds its sections with it |
+| ShellConfig.kt | `sectionEntries` (read the settings group) | stays, rewritten: derived from `ConfigEntry` (`infantry.shell.config.<entry in lowerCamelCase>`), so core no longer names the app UI's blocks. Every section id already followed that rule |
+| CoreShell.kt | `CoreShell.slots` + `infantry.shell.config.settings`, `CONFIG_SETTINGS` | (a): an addition to the slot list (tree order: before `infantry.shell.roles`) |
+| ConfigDialog.kt | `ConfigThemeSection` ... `ConfigQuestionsSection` (the 15 settings composables), `ConfigSections`, `ConfigDialogHost` | stays: the dialog's default body (`ConfigSections`, which the dialog's own UI tests draw without a shell) calls them, and they read only `ConfigDialogHost`, the dialog's contract. They hold no window state. Moving them means the dialog's default body becomes the trust half only, which changes 11 dialog tests; that is a follow-up, not a leak |
+| ShellConfig.kt | `ConfigBlock`, the frame's inputs (`state.cliLocations`, `harnessInstall*`, `toolApproval`, `limitCatalog`, `keepAliveMinutes`, `userPortrait`, `controller.set*`) | stays: the frame is locked core (the trust half's inputs come through it too) |
+| sound/IncomingCommsSoundUi.kt, voice/VoiceUi.kt | `IncomingCommsSoundSection`, `VoiceSettingsSection` (and `IncomingCommsSoundEffect`, `VoiceAlerts`, see Overlays) | stays: the settings sections above draw them |

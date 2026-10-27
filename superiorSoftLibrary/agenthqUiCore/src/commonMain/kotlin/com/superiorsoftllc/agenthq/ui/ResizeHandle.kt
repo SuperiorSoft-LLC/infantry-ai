@@ -36,7 +36,7 @@ var SemanticsPropertyReceiver.resizeCursor by ResizeCursor
  * placement, BLOCKS-LAYOUT L9a).
  */
 @Composable
-internal fun ResizeHandle(tag: String, modifier: Modifier = Modifier, onDragDp: (Float) -> Unit) {
+fun ResizeHandle(tag: String, modifier: Modifier = Modifier, onDragDp: (Float) -> Unit) {
     val density = LocalDensity.current
     val onDrag by rememberUpdatedState(onDragDp)
     val icon = HorizontalResizeIcon

@@ -69,10 +69,6 @@ fun toastColour(kind: ToastKind): Color = when (kind) {
 fun ToastHost(state: AppState, onOpen: (ToastEvent) -> Unit, modifier: Modifier = Modifier, reducedMotion: Boolean = false) =
     ToastHost(toastEvents(state), onOpen, modifier, reducedMotion)
 
-/** S2: the state's toasts plus its notices about OTHER projects, oldest first: what [ToastHost] shows. */
-fun toastEvents(state: AppState): List<ToastEvent> =
-    (state.toasts + state.crossProjectNotices().map { n -> n.toToast(state.projects.firstOrNull { it.id == n.projectId }?.name) })
-        .sortedBy { it.at }
 
 /** S2: [ToastHost] over [all], oldest first (the shell's [com.superiorsoftllc.agenthq.ui.shell.ToastContext.events]). */
 @Composable

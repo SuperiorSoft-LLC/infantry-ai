@@ -124,7 +124,7 @@ class CoreShellTreeTest {
             "infantry.shell.drawer", "infantry.shell.footer",
             "infantry.shell.assistant", "infantry.shell.toast", "infantry.shell.board", "infantry.shell.diff",
             "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions",
-            "infantry.shell.roles",
+            "infantry.shell.config.settings", "infantry.shell.roles",
         )
         assertEquals(slots, CoreShell.slots)
         assertEquals(slots, CoreShell.root.all().filterIsInstance<PlaceholderBlock>().filter { it.default == null }.map { it.id })

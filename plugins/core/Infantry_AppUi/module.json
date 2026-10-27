@@ -19,6 +19,7 @@
     "infantry.shell.sound",
     "infantry.shell.voice",
     "infantry.shell.questions",
+    "infantry.shell.config.settings",
     "infantry.shell.roles"
   ]
 }

@@ -9,6 +9,7 @@ import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellBoard
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellCenter
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellChanges
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellCompactDrawer
+import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellConfigSettings
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellDiff
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellGit
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellHeader
@@ -26,7 +27,7 @@ import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellVoice
 private val fills: List<Block> = listOf(
     ShellHeader, ShellLeftPanel, ShellCenter, ShellRightPanel, ShellCompactDrawer, CoreStatusBar,
     ShellAssistant, ShellToast, ShellBoard, ShellDiff, ShellSound, ShellVoice, ShellQuestionPill,
-    ShellRoles,
+    ShellConfigSettings, ShellRoles,
 )
 
 /**
