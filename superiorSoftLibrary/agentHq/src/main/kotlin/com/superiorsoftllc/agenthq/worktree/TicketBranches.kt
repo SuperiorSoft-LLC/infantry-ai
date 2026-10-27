@@ -56,6 +56,7 @@ sealed interface TicketBranchOutcome {
 class TicketBranches(
     private val git: GitCli = SystemGitCli(),
     private val worktreesDir: (repoRoot: File) -> File = { File(it, ".worktrees") },
+    private val androidSdk: AndroidSdkProvision = AndroidSdkProvision(),
 ) {
 
     fun ensure(request: TicketBranchRequest): TicketBranchOutcome {
@@ -83,9 +84,10 @@ class TicketBranches(
 
         val added = git.run(root, listOf("worktree", "add", "-b", branch, path.absolutePath, base))
         if (!added.ok) return TicketBranchOutcome.Refused("git worktree add failed: ${added.err()}")
+        val sdkWarning = androidSdk.provision(root, path)
         return TicketBranchOutcome.Ready(
             TicketWorktree(branch = branch, base = base, path = path.absolutePath, repoRoot = root.absolutePath),
-            note = "cut from ${request.baseBranch} ${base.take(SHORT_SHA)}",
+            note = listOfNotNull("cut from ${request.baseBranch} ${base.take(SHORT_SHA)}", sdkWarning).joinToString("; "),
         )
     }
 
@@ -104,6 +106,8 @@ class TicketBranches(
         )
         if (File(path, ".git").exists()) return ready
 
+        val reattachedReady = { ready.copy(note = androidSdk.provision(root, path)) }
+
         val branchExists = git.run(root, listOf("rev-parse", "--verify", "--quiet", "refs/heads/$branch")).ok
         val args = if (branchExists) {
             listOf("worktree", "add", path.absolutePath, branch)
@@ -113,7 +117,7 @@ class TicketBranches(
         }
         val result = git.run(root, args)
         if (!result.ok) return TicketBranchOutcome.Refused("git worktree add failed for '$branch': ${result.err()}")
-        return ready
+        return reattachedReady()
     }
 
     private fun pathFor(root: File, branch: String): File =
