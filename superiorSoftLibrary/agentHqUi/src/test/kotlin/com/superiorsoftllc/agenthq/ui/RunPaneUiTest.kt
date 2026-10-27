@@ -1,7 +1,9 @@
 package com.superiorsoftllc.agenthq.ui
 
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -37,7 +39,9 @@ class RunPaneUiTest {
         runDesktopComposeUiTest(900, 500) {
             setContent { RunPane(state(run), Controller(scope)) }
             onNodeWithTag(RUN_PANE_TAG).assertExists()
-            onNodeWithText("Echo hello", substring = true).assertExists()
+            // the name shows twice now: on the command picker and on the run pill
+            onNodeWithTag(RUN_COMMAND_PICKER_TAG).assert(hasText("Echo hello", substring = true))
+            onNodeWithTag("run-pill-r1").assert(hasText("Echo hello", substring = true))
             onNodeWithText("hello").assertExists()
             onNodeWithText("warn").assertExists()
         }
