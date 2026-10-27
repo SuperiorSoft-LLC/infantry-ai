@@ -68,6 +68,7 @@ class ProviderPickerUiTest {
         val dir = Files.createTempDirectory("agenthq-ui-prov1").toFile()
         val provider = OpenCodeSubProviders(models)
         val daemon = AgentHqDaemon.build(
+            memory = FixedMemory,
             port = 0, host = "127.0.0.1", provider = provider, runner = provider.transport(),
             sessionStore = JsonSessionStore(File(dir, "sessions.json")),
             mailStore = JsonMailStore(File(dir, "mailbox.json")),

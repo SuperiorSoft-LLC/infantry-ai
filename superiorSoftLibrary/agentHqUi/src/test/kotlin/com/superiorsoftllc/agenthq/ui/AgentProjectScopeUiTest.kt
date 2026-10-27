@@ -46,6 +46,7 @@ class AgentProjectScopeUiTest {
         val dir = Files.createTempDirectory("agenthq-ui-agent-proj").toFile()
         val provider = StubProvider(StubScript.default(), delayMs = 0)
         val daemon = AgentHqDaemon.build(
+            memory = FixedMemory,
             port = 0, host = "127.0.0.1", provider = provider, runner = provider.transport()!!,
             sessionStore = JsonSessionStore(File(dir, "sessions.json")),
             mailStore = JsonMailStore(File(dir, "mailbox.json")),

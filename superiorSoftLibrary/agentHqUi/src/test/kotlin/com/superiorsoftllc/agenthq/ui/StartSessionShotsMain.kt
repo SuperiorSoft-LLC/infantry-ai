@@ -53,6 +53,7 @@ fun main(args: Array<String>) {
         ),
     )
     val daemon = AgentHqDaemon.build(
+        memory = FixedMemory,
         port = 18798, host = "127.0.0.1", provider = provider, runner = provider.transport()!!,
         sessionStore = JsonSessionStore(File(dir, "sessions.json")), mailStore = JsonMailStore(File(dir, "mailbox.json")),
         store = store, mailBaseUrl = "http://127.0.0.1:1", token = null,

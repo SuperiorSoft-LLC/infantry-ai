@@ -111,6 +111,7 @@ class DemoFlowE2ETest {
         )
         val provider = StubProvider(script, delayMs = 1_500)
         val daemon = AgentHqDaemon.build(
+            memory = FixedMemory,
             port = 0, host = "127.0.0.1", provider = provider,
             runner = GatedReply(provider.transport()!!, replyJson, replyGate, daemonWaitMs),
             sessionStore = JsonSessionStore(File(dir, "sessions.json")),

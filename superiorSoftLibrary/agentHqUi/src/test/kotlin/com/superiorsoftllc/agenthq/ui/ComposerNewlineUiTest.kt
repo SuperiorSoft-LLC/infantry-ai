@@ -59,6 +59,7 @@ class ComposerNewlineUiTest {
         val stub = StubProvider(StubScript(name = "nl", stdoutLines = listOf("""{"type":"step_start","sessionID":"nl-1"}""", """{"type":"step_finish"}"""), exitCode = 0), delayMs = 0)
         val provider = RecordingProvider(stub)
         val daemon = AgentHqDaemon.build(
+            memory = FixedMemory,
             port = 0, host = "127.0.0.1", provider = provider, runner = stub.transport()!!,
             sessionStore = JsonSessionStore(File(dir, "sessions.json")),
             mailStore = JsonMailStore(File(dir, "mailbox.json")),

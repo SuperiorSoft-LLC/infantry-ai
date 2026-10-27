@@ -83,6 +83,7 @@ class HarnessSwitchUiTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val stub = StubProvider(script, delayMs = 0, modelIds = listOf("stub-one", "stub-two"))
         val daemon = AgentHqDaemon.build(
+            memory = FixedMemory,
             port = 0, host = "127.0.0.1", provider = stub, runner = stub.transport()!!,
             sessionStore = JsonSessionStore(File(dir, "sessions.json")),
             mailStore = JsonMailStore(File(dir, "mailbox.json")),

@@ -51,6 +51,7 @@ class RoleIconUiTest {
         val stub = StubProvider(StubScript.default(), delayMs = 0)
         val roles = RoleService(File(dir, "roles"))
         val daemon = AgentHqDaemon.build(
+            memory = FixedMemory,
             port = 0, host = "127.0.0.1", provider = stub, runner = stub.transport(),
             sessionStore = JsonSessionStore(File(dir, "sessions.json")),
             mailStore = JsonMailStore(File(dir, "mailbox.json")),

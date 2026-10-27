@@ -60,6 +60,7 @@ class TodoBoxRealDaemonUiTest {
         // Slow enough that each list is a separate push the test can observe.
         val stub = StubProvider(script, delayMs = 700)
         val daemon = AgentHqDaemon.build(
+            memory = FixedMemory,
             port = 0, host = "127.0.0.1", provider = stub, runner = stub.transport()!!,
             sessionStore = JsonSessionStore(File(dir, "sessions.json")),
             mailStore = JsonMailStore(File(dir, "mailbox.json")),

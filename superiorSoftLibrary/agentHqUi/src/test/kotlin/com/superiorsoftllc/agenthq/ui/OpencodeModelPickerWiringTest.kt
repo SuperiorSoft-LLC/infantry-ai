@@ -54,6 +54,7 @@ class OpencodeModelPickerWiringTest {
         val stub = StubProvider(StubScript(name = "w3", stdoutLines = listOf("""{"type":"step_start","sessionID":"w3-1"}""", """{"type":"step_finish"}"""), exitCode = 0), delayMs = 0)
         val provider = OpencodeLike({ ids }, stub)
         val daemon = AgentHqDaemon.build(
+            memory = FixedMemory,
             port = 0, host = "127.0.0.1", provider = provider, runner = provider.transport()!!,
             sessionStore = JsonSessionStore(File(dir, "sessions.json")),
             mailStore = JsonMailStore(File(dir, "mailbox.json")),

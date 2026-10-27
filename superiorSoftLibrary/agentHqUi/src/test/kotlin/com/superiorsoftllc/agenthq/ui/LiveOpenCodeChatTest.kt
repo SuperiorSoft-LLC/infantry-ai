@@ -48,6 +48,7 @@ class LiveOpenCodeChatTest {
         System.setProperty("user.dir", dir.absolutePath)
         val daemon = try {
             AgentHqDaemon.build(
+                memory = FixedMemory,
                 port = 0, provider = ModelPinned(model), runner = RunnerFactory.fromFlag(),
                 sessionStore = JsonSessionStore(File(dir, "sessions.json")),
                 mailStore = JsonMailStore(File(dir, "mailbox.json")),

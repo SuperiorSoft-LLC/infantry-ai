@@ -25,6 +25,7 @@ fun main() {
     val dir = Files.createTempDirectory("agenthq-ui-smoke").toFile()
     val provider = StubProvider(StubScript.default(), delayMs = 0)
     val daemon = AgentHqDaemon.build(
+        memory = FixedMemory,
         port = 18787, provider = provider, runner = provider.transport()!!,
         sessionStore = JsonSessionStore(File(dir, "sessions.json")), mailStore = JsonMailStore(File(dir, "mailbox.json")),
         store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath), mailBaseUrl = "http://127.0.0.1:1", token = null,

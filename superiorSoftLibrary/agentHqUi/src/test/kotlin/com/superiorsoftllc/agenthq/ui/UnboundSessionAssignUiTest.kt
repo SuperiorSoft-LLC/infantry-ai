@@ -48,6 +48,7 @@ class UnboundSessionAssignUiTest {
         sessions.saveAll(listOf(SessionRecord(id = legacyId, provider = "stub", workingDir = dir.absolutePath, spawnedAt = now - 60_000, lastHeartbeat = now - 60_000, state = SessionState.IDLE)))
         val provider = StubProvider(StubScript.default(), delayMs = 0)
         val daemon = AgentHqDaemon.build(
+            memory = FixedMemory,
             port = 0, host = "127.0.0.1", provider = provider, runner = provider.transport()!!,
             sessionStore = sessions,
             mailStore = JsonMailStore(File(dir, "mailbox.json")),
