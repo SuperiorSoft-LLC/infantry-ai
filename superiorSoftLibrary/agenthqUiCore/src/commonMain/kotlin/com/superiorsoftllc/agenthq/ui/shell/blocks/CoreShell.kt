@@ -31,4 +31,7 @@ object CoreShell {
 
     /** BLOCKS-SHELL-2: the status bar's children, in the order they sit in the bar (only the build stamp so far). */
     val statusBarChildren: List<Block> = listOf(StatusBuildStamp)
+
+    /** BLOCKS-SHELL-3: the status bar's children that sit right after its status text, before the flexible gap. */
+    val statusBarLeading: List<Block> = listOf(StatusProcessesBadge)
 }
