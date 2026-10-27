@@ -26,3 +26,9 @@ chrome-compact-360 270 198 80 16
 chrome-compact-360 270 328 80 16
 chrome-compact-360-overflow 270 198 80 16
 chrome-compact-360-overflow 270 328 80 16
+
+# The stub daemon runs on a free ephemeral port per render (concurrent renders must not share one), so the port digits in
+# the header's connection text "ws://127.0.0.1:<port>/ws" and in the overflow menu's server row are dynamic.
+* 1176 10 224 18
+chrome-compact-800-overflow 514 110 130 16
+chrome-compact-360-overflow 40 110 130 16
