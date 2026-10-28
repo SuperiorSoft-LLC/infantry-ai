@@ -1,5 +1,6 @@
 // Desktop window shell. Shared screens and daemon client live in :agenthqUiCore.
 import java.time.Duration
+import java.util.UUID
 
 plugins {
     kotlin("jvm")
@@ -29,6 +30,8 @@ dependencies {
     // compile classpath for EmbeddedServer.start; the engine and websocket modules arrive via :agentHq.
     implementation(project(":superiorSoftLibrary:agentHq"))
     implementation(libs.ktor.server.core)
+    // NS4: app.json (ShellApp.kt).
+    implementation(libs.kotlinx.serialization.json)
     // RUN-CONSOLE (ticket 67f117b6): the run console window is JetBrains' terminal emulator, taken under its Apache-2.0
     // option (dual LGPL-3.0 / Apache-2.0), see THIRD-PARTY-NOTICES.md. 3.72 is the last release on kotlin-stdlib 2.1.
     implementation("org.jetbrains.jediterm:jediterm-core:3.72")
@@ -545,6 +548,90 @@ gradle.taskGraph.whenReady {
         check(!providers.gradleProperty("agenthqVersion").orNull.isNullOrBlank()) {
             "RELEASE-ASSETS-1: releaseAssets needs -PagenthqVersion=MAJOR.MINOR.BUILD (e.g. -PagenthqVersion=1.0.5); it never defaults"
         }
+    }
+}
+
+// NS4 (docs/NORTH-STAR-DESIGN.md 2a-2c): the SHELL-ONLY target. The same entry (AppMainKt) on a classpath without the app
+// UI (agenthqAppUi) and the board module (Infantry_Board), exactly as the S6 drop-in shots filter it, started with
+// `--app <dir>`: <dir>/app.json names the app, <dir>/plugins is its (empty) plugins root, so the window is the empty shell
+// with the drop box. The daemon stays on the classpath (connect-or-bundle; a thin no-daemon flavour is NS-L1).
+//   ./gradlew :superiorSoftLibrary:agentHqUi:runShell                     (a generated app in build/shell-app)
+//   ./gradlew :superiorSoftLibrary:agentHqUi:runShell -PshellApp=<dir>    (an app dir of your own, relative to the repo root)
+//   ./gradlew :superiorSoftLibrary:agentHqUi:packageShellMsi [-PshellApp=<dir>]   (build/shell/msi; jpackage over the shell runtime image)
+fun isShellJar(f: File) = f.invariantSeparatorsPath.let { "agenthqAppUi" !in it && "Infantry_Board" !in it }
+val shellAppProp = project.findProperty("shellApp")?.toString()
+val defaultShellApp = layout.buildDirectory.dir("shell-app")
+val shellAppDir: Provider<File> = if (shellAppProp != null) provider { rootProject.file(shellAppProp) } else defaultShellApp.map { it.asFile }
+val prepareShellApp = tasks.register("prepareShellApp") {
+    group = "application"
+    description = "NS4: writes the default shell app (build/shell-app: app.json + an empty plugins/) unless it exists."
+    val dir = defaultShellApp
+    onlyIf { shellAppProp == null }
+    doLast {
+        val d = dir.get().asFile
+        File(d, "plugins/core").mkdirs()
+        File(d, "plugins/community").mkdirs()
+        val json = File(d, "app.json")
+        if (!json.isFile) json.writeText(
+            "{ \"appId\": \"dev.infantry.shell\", \"name\": \"Infantry Shell\", \"windowTitle\": \"Infantry Shell\",\n" +
+                "  \"daemon\": { \"mode\": \"connect-or-bundle\", \"url\": null, \"seedProject\": null } }\n",
+        )
+    }
+}
+tasks.register<JavaExec>("runShell") {
+    group = "application"
+    description = "NS4: the empty shell (no app UI on the classpath) on an app dir: -PshellApp=<dir>, default build/shell-app."
+    dependsOn(prepareShellApp)
+    mainClass.set("com.superiorsoftllc.agenthq.ui.AppMainKt")
+    classpath = sourceSets["main"].runtimeClasspath.filter(::isShellJar)
+    jvmArgs(agentHqJvmCaps) // PERF-2
+    systemProperty("agenthq.build", agentHqBuildStamp) // BUILD-STAMP-1
+    argumentProviders += CommandLineArgumentProvider { listOf("--app", shellAppDir.get().absolutePath) }
+}
+
+// The shell's jars: this module's jar plus its filtered runtime classpath (the jpackage --input).
+val shellJars = tasks.register<Sync>("shellJars") {
+    group = "distribution"
+    from(tasks.named("jar"))
+    from(sourceSets["main"].runtimeClasspath.filter { isShellJar(it) && it.isFile && it.name.endsWith(".jar") })
+    into(layout.buildDirectory.dir("shell/input"))
+}
+
+// Compose Desktop allows one application {} per project, so the shell installer is jpackage over the same runtime image
+// (createRuntimeImage, which keeps bin/java: PKG-4) with the shell jars. Name, title and icon come from app.json; the
+// upgrade code is derived from its appId only (AppManifest.upgradeUuid, same formula), so a shell app never upgrades over
+// Infantry AI (6f1d3c2a-...) nor over another app. The launcher passes -Dagenthq.app.dir=$APPDIR/shell-app.
+tasks.register<Exec>("packageShellMsi") {
+    group = "distribution"
+    description = "NS4: the shell installer (msi) for -PshellApp=<dir> (default build/shell-app) into build/shell/msi."
+    dependsOn(prepareShellApp, shellJars, "createRuntimeImage")
+    val input = layout.buildDirectory.dir("shell/input")
+    val dest = layout.buildDirectory.dir("shell/msi")
+    val jpackage = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) }
+        .map { File(it.metadata.installationPath.asFile, "bin/" + if (System.getProperty("os.name").startsWith("Windows")) "jpackage.exe" else "jpackage") }
+    val uiJar = tasks.named<Jar>("jar").flatMap { it.archiveFileName }
+    val defaultIcon = project.file("icons/agenthq.ico")
+    doFirst {
+        val app = shellAppDir.get()
+        val manifest = groovy.json.JsonSlurper().parse(File(app, "app.json")) as Map<*, *>
+        val appId = manifest["appId"] as? String ?: error("NS4: ${app}/app.json has no appId")
+        val name = (manifest["name"] as? String)?.takeIf { it.isNotBlank() } ?: appId
+        val icon = (manifest["icon"] as? String)?.let { File(app, it) }?.takeIf { it.isFile } ?: defaultIcon
+        val upgradeUuid = UUID.nameUUIDFromBytes("infantry.app:$appId".toByteArray(Charsets.UTF_8)).toString()
+        // The app.json travels inside the app dir; its plugins live in the per-app state dir (ShellApp.resolve, installed).
+        project.copy { from(File(app, "app.json")); into(input.get().dir("shell-app")) }
+        dest.get().asFile.deleteRecursively()
+        val runtime = tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask>().getByName("createRuntimeImage").destinationDir.get().asFile
+        val javaOptions = agentHqJvmCaps + listOf("-Dagenthq.version=$agentHqPackageVersion", "-Dagenthq.build=$agentHqBuildStamp", "-Dagenthq.app.dir=\$APPDIR/shell-app")
+        commandLine(
+            listOf(
+                jpackage.get().path, "--type", "msi", "--name", name, "--app-version", agentHqPackageVersion, "--vendor", "SuperiorSoft LLC",
+                "--input", input.get().asFile.path, "--main-jar", uiJar.get(), "--main-class", "com.superiorsoftllc.agenthq.ui.AppMainKt",
+                "--runtime-image", runtime.path, "--dest", dest.get().asFile.path, "--icon", icon.path,
+                "--win-upgrade-uuid", upgradeUuid, "--win-per-user-install", "--win-menu", "--win-menu-group", name, "--win-shortcut", "--win-dir-chooser",
+            ) + javaOptions.flatMap { listOf("--java-options", it) },
+        )
+        logger.lifecycle("NS4: packaging $name (appId $appId, upgrade $upgradeUuid) from $app")
     }
 }
 
