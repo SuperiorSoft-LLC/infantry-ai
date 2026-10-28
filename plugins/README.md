@@ -52,7 +52,13 @@ These rules are enforced:
 - A core update never touches `community/`.
 - An **official** module (`official/`, in the plugins root or in the install's bundled modules root, `-Dagenthq.plugins.bundled`
   / `AGENTHQ_BUNDLED_MODULES`) is on by default and its declared services are granted without `allow`, but it loads
-  through the same filtered class loader as community and gets no core right. Its jar must be signed by the Infantry
+  through a filtered class loader and gets no core right. Class visibility per tier (LOADER-1): **core** unfiltered;
+  **official** sees `plugin.api`, `ui.plugin`, `ui.model`, `ui.protocol`, `ui.block`, plus `ui.shell` and the classes directly
+  in the `ui` package (ShellContext, ChatPanelState, kit composables); **community** sees only the first five. `ui.net`
+  (Controller), `ui.pair`, `ui.sound`, `ui.voice` and DaemonLink stay hidden from both.
+  *Jar-load test pattern:* a test that only calls `register()` cannot catch a hidden class. Also resolve, through
+  `PluginClassLoader(dir, jar, parent, Tier.OFFICIAL)`, every host class the plugin's composables and context use
+  (see `PluginClassLoaderTest`), so RUNTIME-23..26 extractions fail in the test, not at composition. Its jar must be signed by the Infantry
   key (a certificate in `trusted-keys/`) and carry a signed `module.json` that claims `"tier": "official"` and equals the
   one on disk; otherwise it is refused. Dev runs may skip that with `-Dagenthq.plugins.devTrust=true` (never set by the
   packaged launcher). Safe mode skips official modules too. A modules.json without an `official` folder still scans it.
