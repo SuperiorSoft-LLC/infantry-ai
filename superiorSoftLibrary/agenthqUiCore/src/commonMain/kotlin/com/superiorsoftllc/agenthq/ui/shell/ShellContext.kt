@@ -88,6 +88,62 @@ interface ShellContext {
     val review: ReviewContext get() = NoReview
     /** RUNTIME-12 (additive): the pod requests behind the official Infantry_Pods tab. */
     val pods: PodsContext get() = NoPods
+    /** RUNTIME-13 (additive): the trigger requests behind the official Infantry_Triggers tab. */
+    val triggers: TriggersContext get() = NoTriggers
+    /** RUNTIME-13 (additive): the attention and question requests behind the official Infantry_Attention tab. */
+    val attention: AttentionContext get() = NoAttention
+}
+
+/**
+ * RUNTIME-13: the daemon requests behind the official Triggers tab. The triggers and their events come from the window's
+ * state ([com.superiorsoftllc.agenthq.ui.plugin.TabContext.state], `AppState.triggers`).
+ */
+interface TriggersContext {
+    /** Saves a trigger (`trigger_save`); [payload] is the form's checked save body (with `id` when it edits one). */
+    suspend fun save(payload: kotlinx.serialization.json.JsonObject): CommandResult
+    suspend fun fire(id: String): CommandResult
+    /** Re-arms a tripped (or re-enables a disabled) trigger. */
+    suspend fun arm(id: String): CommandResult
+    suspend fun disable(id: String): CommandResult
+    suspend fun delete(id: String): CommandResult
+    /** Asks for trigger [id]'s event rows. */
+    suspend fun loadEvents(id: String): CommandResult
+}
+
+/** No trigger requests: every one refused. */
+object NoTriggers : TriggersContext {
+    override suspend fun save(payload: kotlinx.serialization.json.JsonObject): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun fire(id: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun arm(id: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun disable(id: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun delete(id: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun loadEvents(id: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+}
+
+/**
+ * RUNTIME-13: what the official Attention tab may do: acknowledge an item, answer / cancel / show an owner question, open
+ * an agent. The items and questions come from the window's state (`AppState.attention`, `AppState.questions`).
+ */
+interface AttentionContext {
+    /** Acknowledges attention item [id] (`attention_ack`). */
+    suspend fun ack(id: String): CommandResult
+    /** Answers (or overrides the auto-pick of) an owner question. */
+    suspend fun answer(answer: com.superiorsoftllc.agenthq.ui.protocol.QuestionAnswerWire): CommandResult
+    /** Closes question [id] on the daemon. */
+    suspend fun cancelQuestion(id: String): CommandResult
+    /** Opens question [id] in its asker's chat. */
+    fun openQuestion(id: String)
+    /** Opens session [sessionId]. */
+    fun openSession(sessionId: String)
+}
+
+/** No attention requests: every one refused, opening does nothing. */
+object NoAttention : AttentionContext {
+    override suspend fun ack(id: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun answer(answer: com.superiorsoftllc.agenthq.ui.protocol.QuestionAnswerWire): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun cancelQuestion(id: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override fun openQuestion(id: String) {}
+    override fun openSession(sessionId: String) {}
 }
 
 /**

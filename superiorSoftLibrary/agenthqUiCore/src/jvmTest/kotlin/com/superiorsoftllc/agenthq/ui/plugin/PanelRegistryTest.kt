@@ -7,6 +7,7 @@ import com.superiorsoftllc.agenthq.plugin.api.Tier
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
 import com.superiorsoftllc.agenthq.plugins.official.InfantryAgents
 import com.superiorsoftllc.agenthq.plugins.official.git.InfantryGit
+import com.superiorsoftllc.agenthq.plugins.official.attention.InfantryAttention
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -75,7 +76,7 @@ class PanelRegistryTest {
     fun `a module's right panel tab joins the right strip by order like a main tab`() {
         val icon = InfantryGit.tabs.single().icon
         val side = TabProvider(id = "acme.side", container = TabContainers.RIGHT, order = 35, title = { "Hello" }, icon = icon, testTag = "right-tab-ACME") {}
-        val f = TabFactory(CoreModules.all + acme(emptyList(), tabs = listOf(side)))
+        val f = TabFactory(CoreModules.all + InfantryAttention + acme(emptyList(), tabs = listOf(side))) // RUNTIME-13: Attention is official
         val right = f.tabs(TabContainers.RIGHT).map { it.id }
         assertEquals("acme.side", right[right.indexOf("infantry.attention") + 1], "order 35 sits between Attention (30) and Usage (40)")
         assertEquals(Tier.COMMUNITY, f.moduleOf("acme.side")?.tier, "so the right panel draws the Community badge on it")

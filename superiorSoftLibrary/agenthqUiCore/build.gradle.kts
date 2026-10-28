@@ -68,6 +68,9 @@ kotlin {
             // RUNTIME-12: and the official Infantry_Pods and Infantry_Profiles (the Pods and Profiles tabs).
             implementation(project(":plugins:official:Infantry_Pods"))
             implementation(project(":plugins:official:Infantry_Profiles"))
+            // RUNTIME-13: and the official Infantry_Triggers and Infantry_Attention (the Triggers and Attention tabs).
+            implementation(project(":plugins:official:Infantry_Triggers"))
+            implementation(project(":plugins:official:Infantry_Attention"))
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)

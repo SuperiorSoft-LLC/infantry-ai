@@ -19,7 +19,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.model.WatchFlag
 import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
 
 // S4c: the sidebar's own entry to the board and the watchdog flag, out of core BoardSidebar.kt with the sidebar.
@@ -50,9 +49,4 @@ fun SidebarBoardButton(state: AppState, onOpen: () -> Unit, modifier: Modifier =
     }
 }
 
-/** PIPELINE-WATCHDOG: the watchdog flag; urgent states in the attention colour. */
-@Composable
-fun WatchFlagChip(flag: WatchFlag?, modifier: Modifier = Modifier) {
-    if (flag != null) Chip(flag.label, if (flag.urgent) Palette.Accent else Palette.Info, modifier)
-}
 

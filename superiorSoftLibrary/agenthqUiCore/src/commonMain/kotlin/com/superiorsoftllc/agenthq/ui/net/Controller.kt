@@ -1270,11 +1270,9 @@ class Controller(
     }
 
     /** TRIGGER-NUDGE (contract 1.105.0): save the trigger form as drafted -- any kind, action, interval and project. */
-    // S4 (docs/SHELL-LEAKS.md): public like every other Controller action; the app UI's Triggers tab calls it.
-    suspend fun saveTrigger(id: String?, draft: com.superiorsoftllc.agenthq.ui.TriggerDraft): CommandResult {
-        draft.problem()?.let { return report(CommandResult.Refused(it)) }
-        return report(send(Envelope(Envelope.TRIGGER_SAVE, draft.toSave(id).toString())))
-    }
+    // RUNTIME-13: the form (TriggerDraft) lives in the official Infantry_Triggers jar, which checks it and sends its payload.
+    suspend fun saveTrigger(payload: kotlinx.serialization.json.JsonObject): CommandResult =
+        report(send(Envelope(Envelope.TRIGGER_SAVE, payload.toString())))
 
     suspend fun fireTrigger(id: String): CommandResult = report(send(Envelope(Envelope.TRIGGER_FIRE, id)))
 

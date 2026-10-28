@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.attention
+
+import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -30,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.watchFlagOf
-import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.agenthq.ui.shell.AttentionContext
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
@@ -39,7 +41,7 @@ import kotlin.time.Clock
  * runs, tripped triggers, conversation ceilings -- newest first, each acknowledgeable from here.
  */
 @Composable
-internal fun AttentionPane(state: AppState, controller: Controller, showChat: () -> Unit = {}) {
+internal fun AttentionPane(state: AppState, attention: AttentionContext, showChat: () -> Unit = {}) {
     val actionScope = rememberCoroutineScope()
     var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(state.attention.size) { now = Clock.System.now().toEpochMilliseconds() }
@@ -48,9 +50,9 @@ internal fun AttentionPane(state: AppState, controller: Controller, showChat: ()
         if (state.questions.isNotEmpty()) {
             QuestionHistory(
                 state.questionsNewestFirst, live = state.connection.isLive,
-                onOverride = { answer -> actionScope.launch { controller.answerQuestion(answer) } },
-                onShow = { id -> controller.openQuestion(id); showChat() },
-                onDismiss = { id -> actionScope.launch { controller.cancelQuestion(id) } },
+                onOverride = { answer -> actionScope.launch { attention.answer(answer) } },
+                onShow = { id -> attention.openQuestion(id); showChat() },
+                onDismiss = { id -> actionScope.launch { attention.cancelQuestion(id) } },
             )
         }
         WatchSection(state, now)
@@ -71,7 +73,7 @@ internal fun AttentionPane(state: AppState, controller: Controller, showChat: ()
                     Spacer(Modifier.width(6.dp))
                     Text(ago(item.at, now) + " ago", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
                     if (open) {
-                        TextButton(onClick = { actionScope.launch { controller.ackAttention(item.id) } }, enabled = state.connection.isLive) {
+                        TextButton(onClick = { actionScope.launch { attention.ack(item.id) } }, enabled = state.connection.isLive) {
                             Text("Acknowledge", fontSize = 11.sp)
                         }
                     } else {
@@ -84,7 +86,7 @@ internal fun AttentionPane(state: AppState, controller: Controller, showChat: ()
                     item.podId?.let { Chip("pod ${it.take(8)}") }
                     item.triggerId?.let { Chip("trigger ${it.take(12)}") }
                     item.sessionId?.takeIf { it in state.agents }?.let { sid ->
-                        TextButton(onClick = { controller.openSession(sid); showChat() }) { Text("Open agent", fontSize = 11.sp) }
+                        TextButton(onClick = { attention.openSession(sid); showChat() }) { Text("Open agent", fontSize = 11.sp) }
                     }
                 }
             }

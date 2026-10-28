@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.triggers
+
+import com.superiorsoftllc.agenthq.ui.*
 
 // S4c (docs/SHELL-LEAKS.md): the trigger card's time labels, out of core with their tests; only Triggers.kt uses them.
 

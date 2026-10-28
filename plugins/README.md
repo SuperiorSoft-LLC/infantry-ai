@@ -18,7 +18,8 @@ plugins/
                           Infantry_Prompts and Infantry_Skills, the right-hand Prompts and Skills tabs;
                           Infantry_Stats, the Stats tab, and Infantry_Usage, the Usage tab;
                           Infantry_Epics, the Epics tab, and Infantry_Review, the right-hand Review tab;
-                          Infantry_Pods, the Pods tab, and Infantry_Profiles, the Profiles tab)
+                          Infantry_Pods, the Pods tab, and Infantry_Profiles, the Profiles tab;
+                          Infantry_Triggers, the Triggers tab, and Infantry_Attention, the right-hand Attention tab)
   community/<Vendor_Module>/  modules added by dropping a folder here (desktop and daemon only)
 ```
 
