@@ -3,7 +3,8 @@ package com.superiorsoftllc.agenthq.ui.shell.blocks
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
-import com.superiorsoftllc.agenthq.ui.LocalShell
+import androidx.compose.runtime.remember
+import com.superiorsoftllc.agenthq.ui.RolesDeps
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 import com.superiorsoftllc.agenthq.ui.RoleFormActions
 import com.superiorsoftllc.agenthq.ui.RoleFormDraft
@@ -76,9 +77,9 @@ object RolesList : Block("roleList", "$ROLES.list") {
 class RoleFormBlock(children: List<Block>, place: Place = Place()) : Block("roleForm", FORM, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val ctx = LocalShellContext.current ?: return
         val nav = LocalRoleManagerNav.current ?: return
-        RoleManagerForm(s.state, s.controller, nav) { draft ->
+        RoleManagerForm(remember(ctx) { RolesDeps(ctx) }, nav) { draft ->
             CompositionLocalProvider(LocalRoleFormDraft provides draft) { with(nav.column) { RenderPlaced(children) } }
         }
     }
