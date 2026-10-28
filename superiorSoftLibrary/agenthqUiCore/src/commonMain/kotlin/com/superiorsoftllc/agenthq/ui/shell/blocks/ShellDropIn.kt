@@ -29,6 +29,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.draganddrop.DragAndDropTarget
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.foundation.ScrollState
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -63,6 +68,9 @@ const val DROP_CONSENT_TAG = "shell-drop-consent"
 const val DROP_CONSENT_INSTALL_TAG = "shell-drop-consent-install"
 const val DROP_CONSENT_CANCEL_TAG = "shell-drop-consent-cancel"
 const val DROP_CONSENT_ERROR_TAG = "shell-drop-consent-error"
+const val DROP_CONSENT_SIGNER_TAG = "shell-drop-consent-signer"
+const val DROP_CONSENT_TIER_TAG = "shell-drop-consent-tier"
+const val DROP_CONSENT_LIST_TAG = "shell-drop-consent-list"
 const val DROP_CONSENT_NODE_TAG_PREFIX = "shell-drop-consent-node-"
 const val DROP_CONSENT_TICK_TAG_PREFIX = "shell-drop-consent-tick-"
 const val SAFE_MODE_BANNER_TAG = "shell-safe-mode"
@@ -184,17 +192,19 @@ private fun ConsentDialog(dropIn: PluginDropIn, preview: DropPreview, onClose: (
         modifier = Modifier.testTag(DROP_CONSENT_TAG),
         title = { Text("Install ${preview.name}?") },
         text = {
-            Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            val scroll = rememberScrollState()
+            Column(Modifier.heightIn(max = 420.dp).scrollThumb(scroll).verticalScroll(scroll).padding(end = 10.dp).testTag(DROP_CONSENT_LIST_TAG), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Version ${preview.version}" + (preview.author?.let { " · by $it" } ?: ""), fontSize = 13.sp)
-                Text("Signed by: ${preview.signer ?: "nobody (unsigned)"}", fontSize = 13.sp)
+                Text("Signed by: ${preview.signer ?: "nobody (unsigned)"}", fontSize = 13.sp, modifier = Modifier.testTag(DROP_CONSENT_SIGNER_TAG))
                 Text(
-                    if (preview.core) "Tier: core. Signed with the Infantry key: full trust, it may fill the window's empty slots."
+                    // S7: worded from the signer's name; any key in trusted-keys makes a core module, not only the Infantry key.
+                    if (preview.core) "Tier: core. Signed by ${preview.signerName ?: "a trusted signer"}, whose key you trust: full trust, it may fill the window's empty slots."
                     else "Tier: community. It runs inside the app with the app's full access, and gets only the parts of the window you tick below.",
-                    fontSize = 13.sp,
+                    fontSize = 13.sp, modifier = Modifier.testTag(DROP_CONSENT_TIER_TAG),
                 )
                 if (preview.replacesInterface) Text("This file replaces the whole interface.", color = Palette.Danger, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 if (preview.asks.isEmpty()) Text("It asks for no part of the window.", color = Palette.Muted, fontSize = 12.sp)
-                // The list scrolls without a visible bar on desktop: the count says how many there are to read.
+                // The list has a scroll thumb (scrollThumb) while there is more to read; the count says how many there are.
                 else Text("Parts of the window it asks for (${preview.asks.size})" + (if (preview.asks.size > 8) ", scroll for all:" else ":"), color = Palette.Muted, fontSize = 12.sp)
                 for (ask in preview.asks) NodeRow(ask, preview.core, ask.node in granted) { on -> granted = if (on) granted + ask.node else granted - ask.node }
                 error?.let { Text(it, color = Palette.Danger, fontSize = 12.sp, modifier = Modifier.testTag(DROP_CONSENT_ERROR_TAG)) }
@@ -277,5 +287,21 @@ private fun SafeModeBanner(dropIn: PluginDropIn, modifier: Modifier) {
             }
             note?.let { Text(it, color = Palette.Muted, fontSize = 12.sp) }
         }
+    }
+}
+
+/**
+ * S7: a thumb along the right edge of a scrolling column, drawn only while there is more to scroll to. Compose's desktop
+ * scrollbar is not in common code, and the consent list scrolled with no sign that it did.
+ */
+internal fun Modifier.scrollThumb(state: ScrollState): Modifier = drawWithContent {
+    drawContent()
+    val max = state.maxValue
+    if (max > 0 && max != Int.MAX_VALUE) {
+        val view = size.height
+        val thumb = (view * view / (view + max)).coerceAtLeast(24.dp.toPx()).coerceAtMost(view)
+        val top = (view - thumb) * state.value / max
+        val w = 4.dp.toPx()
+        drawRoundRect(Palette.Muted, Offset(size.width - w, top), Size(w, thumb), CornerRadius(w / 2))
     }
 }

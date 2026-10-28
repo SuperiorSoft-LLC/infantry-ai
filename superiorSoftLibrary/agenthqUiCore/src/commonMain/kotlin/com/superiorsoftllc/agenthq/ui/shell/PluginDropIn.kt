@@ -63,6 +63,17 @@ data class DropPreview(
 ) {
     /** It fills the shell's empty slots: it is a whole interface, not an addition to one. */
     val replacesInterface: Boolean get() = core && asks.any { it.kind == NodeAsk.Kind.FILL && !it.locked }
+
+    /** S7: who signed it, in words: the common name of the signer (`CN=Acme Ltd, O=Acme` gives `Acme Ltd`), else the whole name; null = unsigned. */
+    val signerName: String? get() = signer?.let { commonName(it) ?: it }
+
+    companion object {
+        /** The CN of an RFC 2253 distinguished name (`\,` escapes a comma), or null when it has none. */
+        fun commonName(dn: String): String? {
+            val rdn = Regex("""(?:^|,\s*)CN=((?:\\.|[^,])+)""").find(dn)?.groupValues?.get(1) ?: return null
+            return rdn.replace(Regex("""\\(.)"""), "$1").trim().takeIf { it.isNotEmpty() }
+        }
+    }
 }
 
 /**

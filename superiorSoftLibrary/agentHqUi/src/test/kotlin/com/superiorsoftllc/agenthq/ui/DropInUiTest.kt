@@ -8,6 +8,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -31,6 +34,9 @@ import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_BOX_TAG
 import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_CONSENT_CANCEL_TAG
 import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_CONSENT_INSTALL_TAG
 import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_CONSENT_NODE_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_CONSENT_LIST_TAG
+import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_CONSENT_SIGNER_TAG
+import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_CONSENT_TIER_TAG
 import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_CONSENT_TAG
 import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_CONSENT_TICK_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.shell.blocks.SAFE_MODE_BANNER_TAG
@@ -207,5 +213,27 @@ class DropInUiTest {
         drop.gate!!.countDown()
         waitUntil { onAllNodesWithTag(DROP_CONSENT_TAG).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(drop.inspectThread !== Thread.currentThread(), "inspect ran on a background thread")
+    }
+
+    @Test fun `the tier sentence names the signer, not the Infantry key`() = runDesktopComposeUiTest(1200, 800) {
+        val acme = community.copy(core = true, signer = "CN=Acme Ltd, O=Acme, C=US", asks = emptyList())
+        window(Host(FakeDropIn(check = DropCheck.Ready(acme))), TabFactory(emptyList()))
+        onNodeWithTag(DROP_BOX_CHOOSE_TAG).performClick()
+        waitUntil { onAllNodesWithTag(DROP_CONSENT_TAG).fetchSemanticsNodes().isNotEmpty() }
+        val tier = onNodeWithTag(DROP_CONSENT_TIER_TAG, useUnmergedTree = true).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text }
+        assertTrue("Signed by Acme Ltd," in tier, tier)
+        assertTrue("Infantry key" !in tier, tier)
+    }
+
+    @Test fun `a long list of asked nodes shows a scroll thumb at the right edge`() = runDesktopComposeUiTest(1200, 800) {
+        val many = community.copy(asks = (1..30).map { NodeAsk("infantry.shell.node$it", NodeAsk.Kind.OVERRIDE, locked = false) })
+        window(Host(FakeDropIn(check = DropCheck.Ready(many))), TabFactory(emptyList()))
+        onNodeWithTag(DROP_BOX_CHOOSE_TAG).performClick()
+        waitUntil { onAllNodesWithTag(DROP_CONSENT_LIST_TAG).fetchSemanticsNodes().isNotEmpty() }
+        waitForIdle()
+        val image = onNodeWithTag(DROP_CONSENT_LIST_TAG, useUnmergedTree = true).captureToImage().toPixelMap()
+        val thumb = com.superiorsoftllc.agenthq.ui.Palette.Muted.toArgb()
+        val edge = (image.width - 4 until image.width).any { x -> (0 until image.height).any { y -> image[x, y].toArgb() == thumb } }
+        assertTrue(edge, "a thumb of the muted colour is drawn along the right edge")
     }
 }
