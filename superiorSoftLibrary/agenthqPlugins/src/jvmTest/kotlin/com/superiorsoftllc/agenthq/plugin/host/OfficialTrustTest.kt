@@ -46,9 +46,18 @@ class OfficialTrustTest {
         tool("keytool", "-exportcert", "-alias", "infantry", "-keystore", ks.path, "-storepass", "changeit", "-file", File(keys, "infantry.cer").path)
         tool("jarsigner", "-keystore", ks.path, "-storepass", "changeit", module(bundled, "Infantry_Signed").path, "infantry")
         module(root, "Infantry_Unsigned")
+        // A second key whose cert is dropped into trusted-keys but is NOT pinned in the binary: refused as official.
+        val rogue = File(tmp, "rogue.p12")
+        tool("keytool", "-genkeypair", "-alias", "rogue", "-keyalg", "RSA", "-keysize", "2048", "-dname", "CN=Rogue", "-validity", "30",
+            "-keystore", rogue.path, "-storepass", "changeit", "-storetype", "PKCS12")
+        tool("keytool", "-exportcert", "-alias", "rogue", "-keystore", rogue.path, "-storepass", "changeit", "-file", File(keys, "rogue.cer").path)
+        tool("jarsigner", "-keystore", rogue.path, "-storepass", "changeit", module(bundled, "Rogue_Signed").path, "rogue")
 
         val config = PluginFolders.config(root)
-        val candidates = OfficialTrust.check(PluginFolders.scan(root, config, bundled), OfficialTrust.infantryKeys(root, bundled), devTrust = false)
+        val infantryKeys = OfficialTrust.infantryKeys(root, bundled)
+        // The test pins its per-run Infantry cert in place of the binary's pinned fingerprint.
+        val pinned = setOf(OfficialTrust.fingerprint(infantryKeys.single { "CN=Infantry" in it.subjectX500Principal.name }))
+        val candidates = OfficialTrust.check(PluginFolders.scan(root, config, bundled), infantryKeys, devTrust = false, pinned = pinned)
         val r = ModuleResolver.resolve(candidates, config, platform = "desktop")
         val byName = r.statuses.associateBy { it.name }
 
@@ -57,9 +66,15 @@ class OfficialTrustTest {
         val unsigned = byName.getValue("Infantry_Unsigned")
         assertEquals(ModuleState.REFUSED, unsigned.state)
         assertTrue("not signed" in unsigned.reason.orEmpty(), unsigned.reason)
+        val rogueStatus = byName.getValue("Rogue_Signed")
+        assertEquals(ModuleState.REFUSED, rogueStatus.state)
+        assertTrue("not the pinned Infantry key" in rogueStatus.reason.orEmpty(), rogueStatus.reason)
+        // With the binary's own pin (placeholder), a trusted-keys cert alone never makes a jar official.
+        val unpinned = ModuleResolver.resolve(OfficialTrust.check(PluginFolders.scan(root, config, bundled), infantryKeys, devTrust = false), config, platform = "desktop")
+        assertTrue(unpinned.loaded.isEmpty(), unpinned.loaded.map { it.name }.toString())
 
         // devTrust (dev runs only) lets the unsigned one through.
         val dev = ModuleResolver.resolve(OfficialTrust.check(PluginFolders.scan(root, config, bundled), emptyList(), devTrust = true), config, platform = "desktop")
-        assertEquals(setOf("Infantry_Signed", "Infantry_Unsigned"), dev.loaded.map { it.name }.toSet())
+        assertEquals(setOf("Infantry_Signed", "Infantry_Unsigned", "Rogue_Signed"), dev.loaded.map { it.name }.toSet())
     }
 }

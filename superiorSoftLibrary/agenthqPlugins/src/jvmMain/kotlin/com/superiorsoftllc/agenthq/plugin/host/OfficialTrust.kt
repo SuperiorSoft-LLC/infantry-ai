@@ -17,6 +17,24 @@ import java.util.jar.JarFile
  */
 object OfficialTrust {
     /**
+     * The Infantry signing key pinned in the binary: SHA-256 fingerprints (uppercase hex, no separators) of the Infantry
+     * signing certificate(s). A cert in a trusted-keys folder is user-writable and so is NOT enough on its own: an official
+     * jar must be signed by a cert whose fingerprint is listed here. Only public fingerprints live here, never a private key.
+     *
+     * PLACEHOLDER: the real Infantry certificate is not available yet. Replace this value with the SHA-256 fingerprint of
+     * the real Infantry signing cert (`keytool -printcert -file infantry.cer`, SHA256 line, colons removed). Until then
+     * no jar verifies as official (devTrust still works for dev runs).
+     */
+    const val INFANTRY_KEY_FINGERPRINT_PLACEHOLDER = "REPLACE_WITH_REAL_INFANTRY_SIGNING_CERT_SHA256_FINGERPRINT"
+    val PINNED_FINGERPRINTS: Set<String> = setOf(INFANTRY_KEY_FINGERPRINT_PLACEHOLDER)
+
+    /** The SHA-256 fingerprint of [cert], uppercase hex without separators (the form of [PINNED_FINGERPRINTS]). */
+    fun fingerprint(cert: X509Certificate): String =
+        java.security.MessageDigest.getInstance("SHA-256").digest(cert.encoded).joinToString("") { "%02X".format(it) }
+
+    private fun normalize(fp: String) = fp.replace(":", "").replace(" ", "").uppercase()
+
+    /**
      * The Infantry keys: the X.509 certificates of the plugins root's trusted-keys folder (`install.json` `trustedKeys`)
      * and of the bundled root's `trusted-keys/` (the ones the install ships).
      */
@@ -25,18 +43,23 @@ object OfficialTrust {
             (bundled?.let { IhqInstaller.trustedCerts(it, InstallSettings()) } ?: emptyList())
 
     /** [candidates] with each official module that fails the checks marked refused (its [ModuleCandidate.refusal]). */
-    fun check(candidates: List<ModuleCandidate>, keys: List<X509Certificate>, devTrust: Boolean, log: (String) -> Unit = {}): List<ModuleCandidate> {
+    fun check(candidates: List<ModuleCandidate>, keys: List<X509Certificate>, devTrust: Boolean, log: (String) -> Unit = {},
+              pinned: Set<String> = PINNED_FINGERPRINTS): List<ModuleCandidate> {
         val official = candidates.filter { it.tier == Tier.OFFICIAL && it.manifest != null && it.dir != null }
         if (official.isEmpty()) return candidates
         if (devTrust) {
             log("[plugins] devTrust on: ${official.size} official module(s) load without the Infantry signature check")
             return candidates
         }
-        return candidates.map { c -> if (c in official) refusal(c, keys)?.let { c.copy(refusal = "official module refused: $it") } ?: c else c }
+        return candidates.map { c -> if (c in official) refusal(c, keys, pinned)?.let { c.copy(refusal = "official module refused: $it") } ?: c else c }
     }
 
-    /** Why official module [c] may not load; null = signed by an Infantry key and its module.json is the signed one. */
-    fun refusal(c: ModuleCandidate, keys: List<X509Certificate>): String? {
+    /**
+     * Why official module [c] may not load; null = signed by an Infantry key (a cert of [keys] whose fingerprint is
+     * [pinned] in the binary) and its module.json is the signed one. [pinned] is overridable for tests only.
+     */
+    fun refusal(c: ModuleCandidate, keys: List<X509Certificate>, pinned: Set<String> = PINNED_FINGERPRINTS): String? {
+        val pins = pinned.map(::normalize).toSet()
         val m = c.manifest ?: return "no module.json"
         val dir = File(c.dir ?: return "no folder")
         val jarName = m.jar?.takeIf { it.isNotBlank() } ?: return "module.json names no jar to verify"
@@ -55,6 +78,7 @@ object OfficialTrust {
                     val signer = e.codeSigners?.firstOrNull()?.signerCertPath?.certificates?.firstOrNull() as? X509Certificate
                         ?: return "jar $jarName is not signed (${e.name})"
                     if (keys.none { it == signer }) return "jar $jarName is signed by ${signer.subjectX500Principal.name}, not by the Infantry key"
+                    if (fingerprint(signer) !in pins) return "jar $jarName is signed by ${signer.subjectX500Principal.name}, a trusted-keys cert that is not the pinned Infantry key"
                 }
                 val names = entries.map { it.name }.toSet()
                 val missing = j.manifest?.entries?.keys.orEmpty().filter { it !in names && "$it/" !in names }
