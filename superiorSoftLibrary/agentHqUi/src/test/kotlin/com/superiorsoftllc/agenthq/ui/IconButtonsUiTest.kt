@@ -119,9 +119,9 @@ class IconButtonsUiTest {
     }
 
     @Test fun `hovering Send shows the tooltip naming the action and its shortcut`() = withSpawnedAgent { _ ->
-        // Let the spawn's turn come to rest first (Kill goes disabled): while a session changes state the buttons flip
+        // Let the spawn's turn come to rest first (Stop thinking goes disabled): while a session changes state the buttons flip
         // enabled, and M3's TooltipBox closes an open tooltip on that focus re-report.
-        waitUntil(timeoutMillis = 15_000) { exists { onNodeWithContentDescription("Kill").assertIsNotEnabled() } }
+        waitUntil(timeoutMillis = 15_000) { exists { onNodeWithContentDescription(STOP_TURN_LABEL).assertIsNotEnabled() } }
         waitForIdle()
         // The button as it sits after a spawn: an empty box, so Send is disabled. A disabled icon still names itself.
         onAllNodesWithText("Send (Enter)").assertCountEquals(0)
@@ -144,7 +144,7 @@ class IconButtonsUiTest {
             }
             val tooltips = found.map { it.tooltip }
             val composer = listOf(
-                "Send (Enter)", "Switch agent (Ctrl+Shift+N)", "Resume (Ctrl+R)", "Kill (Ctrl+Shift+K)", "Force kill (Ctrl+Alt+K)", "Interrupt",
+                "Send (Enter)", "Switch agent (Ctrl+Shift+N)", "Resume (Ctrl+R)", "Stop background processes (Ctrl+Shift+K)", "End session (Ctrl+Alt+K)", "Stop thinking (current turn)",
             )
             composer.forEach { t -> assertTrue(t in tooltips, "no icon button with tooltip \"$t\" in $tooltips") }
             // The composer's buttons are icon-only: their name is the description, never a visible label.

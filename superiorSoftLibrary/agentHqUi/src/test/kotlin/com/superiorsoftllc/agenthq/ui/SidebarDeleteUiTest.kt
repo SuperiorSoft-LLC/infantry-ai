@@ -155,9 +155,9 @@ class SidebarDeleteUiTest {
     }
 
     /**
-     * SESSION-RM-1: the composer's trash button on a selected EXITED session is "Remove agent" (Force kill has
-     * nothing left to kill there): it opens the same confirm as the row menu and removes the row. On a session that
-     * has not ended it is still Force kill.
+     * SESSION-RM-1: the composer's trash button on a selected EXITED session is "Remove agent" (End session has
+     * nothing left to end there): it opens the same confirm as the row menu and removes the row. On a session that
+     * has not ended it is End session, enabled even while IDLE (ticket a7f33ba2).
      */
     @Test
     fun `the composer trash button removes a selected exited session`() {
@@ -177,7 +177,7 @@ class SidebarDeleteUiTest {
                 waitUntil(timeoutMillis = 20_000) { controller.state.value.agents[id]?.session?.state == SessionState.IDLE }
                 controller.select(id)
                 waitForIdle()
-                onNodeWithContentDescription("Force kill").assertExists()
+                onNodeWithContentDescription(END_SESSION_LABEL).assertIsEnabled()
                 onNodeWithContentDescription(REMOVE_AGENT_LABEL).assertDoesNotExist()
 
                 runBlocking { controller.kill(id) }

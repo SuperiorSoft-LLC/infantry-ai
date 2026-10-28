@@ -218,7 +218,7 @@ const val ATTENTION_TAB_ID = "infantry.attention"
  *
  * Keyboard (every control also has a button):
  *  Ctrl+K search | Alt+Up/Down previous/next agent | Ctrl+J next agent needing input
- *  Ctrl+N spawn mode | Ctrl+Shift+N switch agent (SWAP-AGENT-1) | Ctrl+R resume | Ctrl+Shift+K kill | Ctrl+Alt+K force kill
+ *  Ctrl+N spawn mode | Ctrl+Shift+N switch agent (SWAP-AGENT-1) | Ctrl+R resume | Ctrl+Shift+K stop background processes | Ctrl+Alt+K end session
  *  Ctrl+<digit> the tab whose provider claims that digit (core: 1/2/5/9/0 centre, 3/4/6/7 right)
  *  Ctrl+8 board modal (M2-8: the sidebar Board button)
  *  Ctrl+L connection | Ctrl+/ focus prompt | Ctrl+, configuration (the footer cog)
@@ -366,8 +366,8 @@ fun App(
     fun key(e: KeyEvent): Boolean {
         if (e.type != KeyEventType.KeyDown) return false
         return when {
-            e.isCtrlPressed && e.key == Key.K && e.isShiftPressed -> { selected?.let { a -> actionScope.launch { controller.kill(a.id) } }; true }
-            e.isCtrlPressed && e.isAltPressed && e.key == Key.K -> { selected?.let { a -> actionScope.launch { controller.kill(a.id, force = true) } }; true }
+            e.isCtrlPressed && e.key == Key.K && e.isShiftPressed -> { selected?.let { a -> actionScope.launch { controller.stopBackgroundProcesses(a.id) } }; true }
+            e.isCtrlPressed && e.isAltPressed && e.key == Key.K -> { selected?.let { a -> actionScope.launch { controller.endSession(a.id) } }; true }
             e.isCtrlPressed && e.key == Key.K -> {
                 if (state.panels.leftShown) searchFocus.requestFocus()
                 else { controller.revealPanel(PanelSide.LEFT); ui.focusSearchPending = true }

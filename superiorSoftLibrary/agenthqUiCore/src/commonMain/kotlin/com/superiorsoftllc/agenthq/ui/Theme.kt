@@ -61,7 +61,7 @@ object Palette {
     val Info: Color get() = tones.info
     val Warn: Color get() = tones.warn
 
-    /** The plain danger red, never the pink [Danger] turns into under a red accent: the Kill / Force kill / Interrupt buttons keep it. */
+    /** The plain danger red, never the pink [Danger] turns into under a red accent: the Stop background processes / End session / Stop thinking buttons keep it. */
     val DangerRed: Color get() = tones.danger
 
     /** Text on the accent: the original dark brown on light accents (amber), white on deep ones (the emblem red). */
