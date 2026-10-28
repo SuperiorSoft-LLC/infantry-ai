@@ -80,16 +80,18 @@ fun UsageMeterBody(report: UsageMeterReport) {
             color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
         )
         if (periods.isEmpty()) Text("No runs recorded yet.", color = Palette.Muted, fontSize = 12.sp)
+        if (periods.isNotEmpty()) TurnsTrend(periods.map { (k, r) -> k to UsageMeterView.total(r).turns }, weekly)
         periods.forEachIndexed { i, (key, rows) ->
             val t = UsageMeterView.total(rows)
             val prev = periods.getOrNull(i + 1)?.let { UsageMeterView.total(it.second).tokens }
+            val prevTurns = periods.getOrNull(i + 1)?.let { UsageMeterView.total(it.second).turns }
             Column(Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text((if (weekly) "week of " else "") + key, color = Palette.Accent, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, modifier = Modifier.weight(1f))
                     Text("${UsageMeterView.compact(t.tokens)} tokens  (${UsageMeterView.delta(t.tokens, prev)} vs previous)", fontSize = 12.sp)
                 }
                 Text(
-                    "${t.runs} runs, ${t.turns} turns | in ${UsageMeterView.compact(t.input)} out ${UsageMeterView.compact(t.output)} " +
+                    "${t.runs} runs, ${t.turns} turns (${UsageMeterView.delta(t.turns, prevTurns)} vs previous) | in ${UsageMeterView.compact(t.input)} out ${UsageMeterView.compact(t.output)} " +
                         "cache read ${UsageMeterView.compact(t.cacheRead)} write ${UsageMeterView.compact(t.cacheWrite)} | " +
                         "cache hit ${UsageMeterView.cacheHit(t)} | avg context/turn ${UsageMeterView.avgContext(t)} | cost ${UsageMeterView.cost(t)}",
                     color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
@@ -98,7 +100,7 @@ fun UsageMeterBody(report: UsageMeterReport) {
                     Row(Modifier.fillMaxWidth().padding(start = 8.dp)) {
                         Text(name, fontSize = 11.sp, modifier = Modifier.weight(1f))
                         Text(
-                            "${UsageMeterView.compact(a.tokens)}  hit ${UsageMeterView.cacheHit(a)}  ctx ${UsageMeterView.avgContext(a)}  ${UsageMeterView.cost(a)}",
+                            "${a.turns} turns  ${UsageMeterView.compact(a.tokens)}  hit ${UsageMeterView.cacheHit(a)}  ctx ${UsageMeterView.avgContext(a)}  ${UsageMeterView.cost(a)}",
                             color = Palette.Muted, fontSize = 11.sp,
                         )
                     }
@@ -106,6 +108,25 @@ fun UsageMeterBody(report: UsageMeterReport) {
             }
         }
         Spacer(Modifier.height(8.dp))
+    }
+}
+
+/** Turns per period as bars, oldest at the top; [periods] is newest first. */
+@Composable
+private fun TurnsTrend(periods: List<Pair<String, Long>>, weekly: Boolean) {
+    val shown = periods.take(14).reversed()
+    val max = (shown.maxOfOrNull { it.second } ?: 0L).coerceAtLeast(1L)
+    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp)) {
+        Text("TURNS PER ${if (weekly) "WEEK" else "DAY"}", color = Palette.Muted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
+        for ((key, turns) in shown) {
+            Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(key, color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.width(76.dp))
+                Box(Modifier.weight(1f)) {
+                    Box(Modifier.fillMaxWidth(turns.toFloat() / max).height(8.dp).clip(RoundedCornerShape(2.dp)).background(Palette.Accent))
+                }
+                Text("$turns", fontSize = 10.sp, modifier = Modifier.width(48.dp).padding(start = 6.dp))
+            }
+        }
     }
 }
 
