@@ -1,4 +1,7 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.board
+
+import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.agenthq.ui.shell.blocks.*
 
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.BoardDrop

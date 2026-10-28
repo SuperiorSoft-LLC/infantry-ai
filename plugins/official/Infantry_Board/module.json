@@ -3,10 +3,15 @@
   "version": "1.0.0",
   "apiVersion": 1,
   "author": "Infantry AI",
-  "description": "The scrum board as block types: board.pane and its sections, cards and card sections.",
+  "description": "The scrum board: the board overlay and its block types, board.pane and its sections, cards and card sections.",
+  "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.core.BoardModuleSource",
+  "entry": "com.superiorsoftllc.agenthq.plugins.official.board.BoardPlugin",
+  "jar": "build/libs/Infantry_Board.jar",
   "buildOrder": 190,
+  "fills": [
+    "infantry.shell.board"
+  ],
   "blockTypes": [
     {"type": "board.pane", "title": "Board", "takesChildren": true, "fields": [
       {"key": "columns", "type": "multiSelect", "label": "Columns", "default": ["backlog", "todo", "in_progress", "pending", "done"], "options": ["backlog", "todo", "in_progress", "pending", "done"]}

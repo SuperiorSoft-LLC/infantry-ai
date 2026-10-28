@@ -57,6 +57,8 @@ dependencies {
     testImplementation(project(":plugins:official:Infantry_Attention"))
     // RUNTIME-14: and Infantry_Roles (the role UI tests open the Roles tab and the roles window).
     testImplementation(project(":plugins:official:Infantry_Roles"))
+    // RUNTIME-15: and Infantry_Board (the board tests draw its pane and open its overlay).
+    testImplementation(project(":plugins:official:Infantry_Board"))
     implementation(compose.desktop.currentOs)
     // UPDATE-1: the update dialog (UpdatePrompt.kt); the same material3 :agenthqUiCore already ships.
     implementation(compose.material3)
@@ -224,7 +226,7 @@ val renderTabShotsForDiff = tasks.register<JavaExec>("renderTabShotsForDiff") {
     if (project.findProperty("tabShotsExtra") == "dropin") {
         val appUi = project(":superiorSoftLibrary:agenthqAppUi")
         dependsOn(":superiorSoftLibrary:agenthqAppUi:appUiIhq")
-        // NS2: nor Infantry_Board, which App_UI.ihq bundles. RUNTIME-3..14: nor Infantry_Cli, Infantry_Agents, Infantry_Settings, Infantry_Git, Infantry_Run, Infantry_Notes, Infantry_Changes, Infantry_Prompts, Infantry_Skills, Infantry_Stats, Infantry_Usage, Infantry_Epics, Infantry_Review, Infantry_Pods, Infantry_Profiles, Infantry_Triggers, Infantry_Attention, Infantry_Roles (tests carry them compiled in).
+        // RUNTIME-3..15: nor Infantry_Cli, Infantry_Agents, Infantry_Settings, Infantry_Git, Infantry_Run, Infantry_Notes, Infantry_Changes, Infantry_Prompts, Infantry_Skills, Infantry_Stats, Infantry_Usage, Infantry_Epics, Infantry_Review, Infantry_Pods, Infantry_Profiles, Infantry_Triggers, Infantry_Attention, Infantry_Roles, Infantry_Board (tests carry them compiled in).
         classpath = sourceSets["test"].runtimeClasspath.filter { p -> "agenthqAppUi" !in p.invariantSeparatorsPath && "Infantry_Board" !in p.invariantSeparatorsPath && "Infantry_Cli" !in p.invariantSeparatorsPath && "Infantry_Agents" !in p.invariantSeparatorsPath && "Infantry_Settings" !in p.invariantSeparatorsPath && "Infantry_Git" !in p.invariantSeparatorsPath && "Infantry_Run" !in p.invariantSeparatorsPath && "Infantry_Notes" !in p.invariantSeparatorsPath && "Infantry_Changes" !in p.invariantSeparatorsPath && "Infantry_Prompts" !in p.invariantSeparatorsPath && "Infantry_Skills" !in p.invariantSeparatorsPath && "Infantry_Stats" !in p.invariantSeparatorsPath && "Infantry_Usage" !in p.invariantSeparatorsPath && "Infantry_Epics" !in p.invariantSeparatorsPath && "Infantry_Review" !in p.invariantSeparatorsPath && "Infantry_Pods" !in p.invariantSeparatorsPath && "Infantry_Profiles" !in p.invariantSeparatorsPath && "Infantry_Triggers" !in p.invariantSeparatorsPath && "Infantry_Attention" !in p.invariantSeparatorsPath && "Infantry_Roles" !in p.invariantSeparatorsPath }
         systemProperty("agenthq.tabshots.appUiIhq", appUi.layout.buildDirectory.file("ihq/App_UI.ihq").get().asFile.path)
     }

@@ -56,9 +56,9 @@ class CoreModulesTest {
     }
 
     @Test
-    fun `the generated desktop module list holds the 2 core modules in the old order, without the official modules`() {
+    fun `the generated desktop module list holds the 1 core module, without the official modules`() {
         assertEquals(
-            listOf("Board", "AppUi").map { "Infantry_$it" },
+            listOf("AppUi").map { "Infantry_$it" }, // RUNTIME-15: Infantry_Board is official
             CoreModules.all.map { it.manifest.name },
         )
     }

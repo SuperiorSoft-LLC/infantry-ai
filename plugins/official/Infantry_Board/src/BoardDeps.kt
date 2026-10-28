@@ -1,21 +1,16 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.board
 
-import com.superiorsoftllc.agenthq.ui.model.AppState
+import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.agenthq.ui.shell.blocks.*
+
 import com.superiorsoftllc.agenthq.ui.model.EpicView
 import com.superiorsoftllc.agenthq.ui.model.ReportFlag
 import com.superiorsoftllc.agenthq.ui.model.AgentView
 import com.superiorsoftllc.agenthq.ui.model.reportFlagOf
-import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.protocol.Ticket
-import com.superiorsoftllc.agenthq.ui.shell.CoreExecutor
-import com.superiorsoftllc.agenthq.ui.shell.CoreLink
-import com.superiorsoftllc.agenthq.ui.shell.CoreRoles
-import com.superiorsoftllc.agenthq.ui.shell.CoreSession
-import com.superiorsoftllc.agenthq.ui.shell.CoreTickets
 import com.superiorsoftllc.agenthq.ui.shell.ExecutorContext
 import com.superiorsoftllc.agenthq.ui.shell.LayoutContext
 import com.superiorsoftllc.agenthq.ui.shell.LinkContext
-import com.superiorsoftllc.agenthq.ui.shell.NoLayout
 import com.superiorsoftllc.agenthq.ui.shell.RolesContext
 import com.superiorsoftllc.agenthq.ui.shell.SessionContext
 import com.superiorsoftllc.agenthq.ui.shell.ShellContext
@@ -35,11 +30,6 @@ class BoardDeps(
     val layout: LayoutContext,
 ) {
     constructor(ctx: ShellContext) : this(ctx.link, ctx.session, ctx.tickets, ctx.roles, ctx.executor, ctx.layout)
-
-    /** For a board drawn outside a shell (its `(state, controller)` entry point): never compact. */
-    constructor(state: AppState, controller: Controller) : this(
-        CoreLink(state), CoreSession(state), CoreTickets(state, controller), CoreRoles(state, controller), CoreExecutor(state), NoLayout,
-    )
 
     val live: Boolean get() = link.live
 

@@ -1,9 +1,10 @@
-package com.superiorsoftllc.agenthq.ui.shell.blocks
+package com.superiorsoftllc.agenthq.plugins.official.board
+
+import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.agenthq.ui.shell.blocks.*
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import com.superiorsoftllc.agenthq.ui.BoardModalFrame
-import com.superiorsoftllc.agenthq.ui.BoardModalHeader
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope

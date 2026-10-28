@@ -6,7 +6,6 @@ import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.shell.blocks.CoreStatusBar
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellAssistant
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellBoard
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellCenter
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellCompactDrawer
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellConfigSettings
@@ -22,9 +21,10 @@ import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellVoice
 /** S4: the trees Infantry_AppUi draws in the shell's empty slots (`CoreShell.slots`), in slot order. */
 private val fills: List<Block> = listOf(
     ShellHeader, ShellLeftPanel, ShellCenter, ShellRightPanel, ShellCompactDrawer, CoreStatusBar,
-    ShellAssistant, ShellToast, ShellBoard, ShellDiff, ShellSound, ShellVoice, ShellQuestionPill,
+    ShellAssistant, ShellToast, ShellDiff, ShellSound, ShellVoice, ShellQuestionPill,
     ShellConfigSettings,
     // RUNTIME-14: infantry.shell.roles (the roles window) is filled by the official Infantry_Roles itself.
+    // RUNTIME-15: infantry.shell.board (the board overlay) is filled by the official Infantry_Board itself.
 )
 
 /**

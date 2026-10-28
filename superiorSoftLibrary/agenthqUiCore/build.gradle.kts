@@ -73,6 +73,8 @@ kotlin {
             implementation(project(":plugins:official:Infantry_Attention"))
             // RUNTIME-14: and the official Infantry_Roles (the Roles tab and the roles window fill).
             implementation(project(":plugins:official:Infantry_Roles"))
+            // RUNTIME-15: and the official Infantry_Board (the board overlay fill and its block types).
+            implementation(project(":plugins:official:Infantry_Board"))
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)
