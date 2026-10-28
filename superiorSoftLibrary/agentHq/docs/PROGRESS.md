@@ -87,3 +87,18 @@ stage, reports the test totals (`##infantry count <passed> <total> tests passed 
 Under `agenthq run` (which sets `AGENTHQ_PROGRESS_PIPE=1` on the command it wraps) those lines are the report; run on
 its own with `agenthq` on PATH, the script sends the same reports through `agenthq progress`; with neither, they are
 plain lines. If you pipe a script like this through `progress --watch` instead, set `AGENTHQ_PROGRESS_PIPE=1` on it.
+
+## Daemon-computed progress for every ticket session (PROGRESS-ALL)
+
+A worker never has to report. For every ticket session at work (BUSY/STARTING) that has no progress of its own, the daemon
+derives a bar on every read (`origin` = `auto`, never stored): no model call, no prompt text, zero tokens. Signals: elapsed
+time, tool calls counted from the stream (`SessionActivityLog`), the time of the last one, commits on the ticket branch
+(`git rev-list --count base..HEAD`, refreshed on the background timer), and how long the last 20 finished tickets of the same
+project and weight took (`ticket_runs`: sum of a ticket's run durations, last run SUCCEEDED, ticket done; `AutoProgressHistory`).
+The estimate is their median once there are 3 of them; with fewer there is NO number ("no estimate yet", never invented).
+Clients read "~12m left, est." on a hatched bar. Anything the agent reported (`agenthq_progress`, markers, its to-do list,
+a sleep) wins; the daemon then only adds `stale`.
+
+`stale` (additive on `progress`): true when a working ticket session shows no tool call or event for
+`limits.progress.staleMinutes` (default 10, 0 = never; env/setting like every limit). The bar turns amber, "no activity for N min".
+The persona line stays optional: nothing forces `agenthq_progress`.

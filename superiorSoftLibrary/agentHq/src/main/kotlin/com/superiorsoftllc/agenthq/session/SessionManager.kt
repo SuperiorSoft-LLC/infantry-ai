@@ -372,6 +372,7 @@ class SessionManager(
      */
     fun scanBackgroundWork() {
         expireBgJobs()
+        runCatching { refreshAutoProgress() }
         for ((id, record) in sessions.entries.toList()) {
             val kept = record.keptProcess
             val found = if (kept == null || runs.containsKey(id)) null
@@ -382,6 +383,25 @@ class SessionManager(
             val next = if (found != null && before != null && found.pid == before.pid) found.copy(startedAt = before.startedAt) else found
             if (next == before) continue
             update(id) { it.copy(backgroundWork = next) }
+        }
+    }
+
+    private val autoSeen = java.util.concurrent.ConcurrentHashMap<String, Pair<Boolean?, Int?>>()
+
+    /**
+     * PROGRESS-ALL: for each working ticket session, refresh the commit count on its branch and notice a change of the stale
+     * flag; a change is pushed as a `session` frame (the bar itself is derived on every read, see [AutoProgress]).
+     */
+    fun refreshAutoProgress() {
+        val live = sessions.values.filter { it.ticketId != null && (it.state == SessionState.BUSY || it.state == SessionState.STARTING) }
+        autoSeen.keys.retainAll(live.map { it.id }.toSet())
+        for (r in live) {
+            val dir = r.worktreePath
+            val base = r.worktreeBaseRef
+            if (dir != null && base != null) AutoProgress.commitCount(dir, base)?.let { AutoProgress.commits[r.id] = it }
+            val seen = r.id to (SessionActivityLog.overlay(r).progress?.stale to AutoProgress.commits[r.id])
+            val before = autoSeen.put(seen.first, seen.second)
+            if (before != null && before != seen.second) eventSink?.invoke(SessionEvent.Status(r))
         }
     }
 

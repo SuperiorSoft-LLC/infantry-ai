@@ -62,6 +62,12 @@ data class SessionProgress(
      * report (or the sleep hint, which says so in [estimateSource]). An agent report always replaces a `todo` value.
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val origin: String? = null,
+    /**
+     * PROGRESS-ALL (additive): true when the session has shown no tool or event activity for the configured stale limit
+     * (`limits.progress.staleMinutes`); the daemon sets it on any running ticket session, reported or not. `origin` =
+     * `auto` marks a bar the daemon computed itself (an estimate, from past tickets of the same weight).
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val stale: Boolean? = null,
 ) {
     companion object {
         const val ORIGIN_TODO = "todo"

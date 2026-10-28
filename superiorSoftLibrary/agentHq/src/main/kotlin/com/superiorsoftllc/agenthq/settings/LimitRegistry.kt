@@ -119,6 +119,11 @@ object LimitRegistry {
         "How long a busy session may print nothing before it is flagged silent (flag only; a provably dead one is ended).",
         zeroMeans = "never flagged",
     )
+    val PROGRESS_STALE_MINUTES = LimitDef(
+        "limits.progress.staleMinutes", 10, "minutes",
+        "How long a working ticket session may show no tool or event activity before its progress bar is flagged stale (PROGRESS-ALL).",
+        zeroMeans = "never flagged",
+    )
     val IDLE_NOTICE_MINUTES = LimitDef(
         "limits.watchdog.idleNoticeMinutes", 60, "minutes",
         "How long a ticket worker may wait at rest (turn ended cleanly, ticket open, no mail to or from it) before its starter gets one note that it is waiting.",
@@ -194,7 +199,7 @@ object LimitRegistry {
     val ALL: List<LimitDef> = listOf(
         MAX_PER_POD, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
-        TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, IDLE_NOTICE_MINUTES, UNBRIEFED_GRACE_MINUTES,
+        TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NOTICE_MINUTES, UNBRIEFED_GRACE_MINUTES,
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES,
