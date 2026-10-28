@@ -15,7 +15,6 @@
     "infantry.shell.drawer",
     "infantry.shell.footer",
     "infantry.shell.assistant",
-    "infantry.shell.toast",
     "infantry.shell.diff",
     "infantry.shell.questions",
     "infantry.shell.config.settings"

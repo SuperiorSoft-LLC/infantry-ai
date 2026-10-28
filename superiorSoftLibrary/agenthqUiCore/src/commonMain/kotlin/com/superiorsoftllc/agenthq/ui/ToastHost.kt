@@ -52,11 +52,12 @@ const val TOAST_CLOSE_TAG = "toast-close"
 private const val SLIDE_MS = 220
 private const val TICK_MS = 50L
 
+/** RUNTIME-17: the notice colours (NOTICE-COLOUR-1: heads-up amber, error red), kept here since the host is shell code. */
 fun toastColour(kind: ToastKind): Color = when (kind) {
     ToastKind.INFO -> Palette.Info
     ToastKind.SUCCESS -> Palette.Ok
-    ToastKind.WARN -> noticeColour(com.superiorsoftllc.agenthq.ui.model.NoticeKind.HEADS_UP)
-    ToastKind.ERROR -> noticeColour(com.superiorsoftllc.agenthq.ui.model.NoticeKind.ERROR)
+    ToastKind.WARN -> Palette.Warn
+    ToastKind.ERROR -> Palette.Danger
 }
 
 /**

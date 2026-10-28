@@ -145,7 +145,7 @@ class CoreShellTreeTest {
         val slots = listOf(
             "infantry.shell.header", "infantry.shell.left", "infantry.shell.center", "infantry.shell.right",
             "infantry.shell.drawer", "infantry.shell.footer",
-            "infantry.shell.assistant", "infantry.shell.toast", "infantry.shell.board", "infantry.shell.diff",
+            "infantry.shell.assistant", "infantry.shell.board", "infantry.shell.diff",
             "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions",
             "infantry.shell.config.settings", "infantry.shell.roles",
         )

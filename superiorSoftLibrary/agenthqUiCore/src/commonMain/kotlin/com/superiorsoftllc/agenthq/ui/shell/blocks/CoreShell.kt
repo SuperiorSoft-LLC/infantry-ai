@@ -46,7 +46,7 @@ object CoreShell {
     val slots: List<String> = listOf(
         "infantry.shell.header", "infantry.shell.left", "infantry.shell.center", "infantry.shell.right",
         "infantry.shell.drawer", "infantry.shell.footer",
-        "infantry.shell.assistant", "infantry.shell.toast", "infantry.shell.board", "infantry.shell.diff",
+        "infantry.shell.assistant", "infantry.shell.board", "infantry.shell.diff",
         "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions",
         "infantry.shell.config.settings", "infantry.shell.roles",
     )
@@ -94,7 +94,8 @@ object CoreShell {
                             ShellConfigEntry,
                             ShellSafeMode,
                             // The overlays, over the whole dock; they align themselves.
-                            slot("infantry.shell.assistant"), slot("infantry.shell.toast"), slot("infantry.shell.board"), slot("infantry.shell.diff"),
+                            // RUNTIME-17: the toasts are the shell's own (core draws its toasts), not a slot.
+                            slot("infantry.shell.assistant"), ShellToast, slot("infantry.shell.board"), slot("infantry.shell.diff"),
                             slot("infantry.shell.sound"), slot("infantry.shell.voice"), slot("infantry.shell.questions"),
                         ),
                     ),
