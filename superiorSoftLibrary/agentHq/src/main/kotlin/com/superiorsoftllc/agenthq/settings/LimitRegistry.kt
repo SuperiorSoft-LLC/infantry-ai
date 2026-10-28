@@ -196,13 +196,30 @@ object LimitRegistry {
         max = 525_600, zeroMeans = "never expires by age",
     )
 
+    /** BG-NOTIFY (ticket 245a7d31): `agenthq bg run --notify` notices; a job's own `--notify-tail` / `--notify-timeout` win. */
+    val BG_NOTIFY_TAIL_LINES = LimitDef(
+        "limits.bg.notifyTailLines", 20, "lines",
+        "How many last output lines a background job notice (`bg run --notify`) carries to the worker.",
+        min = 1, max = 2000, zeroIsUnlimited = false,
+    )
+    val BG_NOTIFY_TIMEOUT_MINUTES = LimitDef(
+        "limits.bg.notifyTimeoutMinutes", 30, "minutes",
+        "How long a `bg run --notify` job may run before its worker is told it is still running (with its last output), and again every such period.",
+        zeroMeans = "never noticed while running",
+    )
+    val BG_NOTIFY_PATTERN_GRACE_SECONDS = LimitDef(
+        "limits.bg.notifyPatternGraceSeconds", 20, "seconds",
+        "How long a pattern match on a `bg run --notify` job's output waits for the job to exit before it is noticed on its own (an exit within it sends one notice, not two).",
+        max = 3600, zeroMeans = "noticed at the next watch pass",
+    )
+
     val ALL: List<LimitDef> = listOf(
         MAX_PER_POD, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
         TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NOTICE_MINUTES, UNBRIEFED_GRACE_MINUTES,
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
-        QUESTION_TTL_MINUTES,
+        QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
     )
 
     /** A minutes limit as milliseconds; 0 on an unlimited-capable one = [Long.MAX_VALUE] (never reached). */

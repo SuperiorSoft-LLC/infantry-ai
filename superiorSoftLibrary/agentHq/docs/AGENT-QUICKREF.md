@@ -102,6 +102,23 @@ agenthq bg logs <id>
 agenthq bg stop <id>
 ```
 
+**Never sleep or poll to wait for it: `--notify` (BG-NOTIFY).**
+
+```
+agenthq bg run --notify --name gate -- gradlew agentHq:test   # returns at once; the job runs detached
+# ... END YOUR TURN. The daemon mails you "[AUTOMATIC] bg job <id> finished, exit N" with the last lines.
+agenthq bg run --notify --notify-on "Tests? completed" --notify-timeout 20 -- gradlew test   # extra pattern, own timeout
+agenthq bg wait <id> [--timeout 9]   # fallback ONLY when your harness is not woken by mail: blocks, returns the exit code
+```
+
+Triggers (one mail each, to your session, from `system`, thread `bg:<id>`): exit (code + last `limits.bg.notifyTailLines`
+lines, or `--notify-tail N`); the job vanishing without an exit code (stopped or died); a NEW output line matching a
+pattern (defaults `BUILD SUCCESSFUL`, `BUILD FAILED`, `^e: `; replace the defaults with newline-separated regexes in
+`AGENTHQ_BG_NOTIFY_PATTERNS`, drop them with `--no-default-patterns`) while the job still runs past
+`limits.bg.notifyPatternGraceSeconds` (an exit inside that grace sends only the exit mail); still running after
+`limits.bg.notifyTimeoutMinutes` (or `--notify-timeout MIN`, 0 = never), repeated every such period with the age of the
+last output. Mail to a session at rest resumes it (claude and pi alike), so this costs no tokens while waiting.
+
 The daemon cannot see a job that detached from your shell, so a plain background run leaves the session reading idle.
 The wrapper registers the job under `AGENTHQ_SESSION_ID`, heartbeats, and deregisters on exit (a killed wrapper expires).
 QA: run every gate this way.

@@ -101,8 +101,43 @@ data class BgJob(
     val logPath: String? = null,
     /** `bg run --keep`: the job (and everything under it) survives its session closing (ticket b785f383). */
     val keep: Boolean = false,
+    /** BG-NOTIFY (ticket 245a7d31): `bg run --notify`: the daemon mails the session when the job ends (or a trigger fires); null = no notice. */
+    val notify: BgNotify? = null,
 )
 
-/** One `bg_job` request. [op] is `beat` (register or heartbeat: an upsert), `done`, or `list`. */
+/**
+ * BG-NOTIFY: what the daemon watches for on a `--notify` job and tells the owning session by COMMS mail (which wakes an
+ * idle agent). Exit is always a trigger. A null number means the daemon's setting ([com.superiorsoftllc.agenthq.settings.LimitRegistry]
+ * `limits.bg.*`) applies, read when the trigger fires.
+ */
 @Serializable
-data class BgJobRequest(val op: String, val job: BgJob? = null, val jobId: String? = null)
+data class BgNotify(
+    /** How many last output lines the notice carries; null = `limits.bg.notifyTailLines`. */
+    val tailLines: Int? = null,
+    /** Regexes matched against each new log line; a match is noticed while the job still runs (tools that never exit, end markers). */
+    val patterns: List<String> = emptyList(),
+    /** Minutes after which a still-running job is noticed (again every such period); null = `limits.bg.notifyTimeoutMinutes`, 0 = never. */
+    val timeoutMinutes: Int? = null,
+)
+
+/**
+ * One `bg_job` request. [op] is `beat` (register or heartbeat: an upsert), `done`, or `list`. On `done` the wrapper adds
+ * the command's [exitCode] and its last output lines ([tail]) for a `--notify` job's notice.
+ */
+@Serializable
+data class BgJobRequest(
+    val op: String,
+    val job: BgJob? = null,
+    val jobId: String? = null,
+    val exitCode: Int? = null,
+    val tail: List<String>? = null,
+)
+
+/** BG-NOTIFY: what [SessionManager] tells about registered jobs beyond the record change. */
+interface BgJobListener {
+    /** One background scan pass ran (every few seconds). */
+    fun scanned() {}
+
+    /** [job] of [sessionId] was dropped without a `done`: its wrapper died or went quiet. */
+    fun expired(sessionId: String, job: BgJob) {}
+}

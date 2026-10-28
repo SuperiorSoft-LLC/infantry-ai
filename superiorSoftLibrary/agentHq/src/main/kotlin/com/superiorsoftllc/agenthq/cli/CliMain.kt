@@ -294,7 +294,7 @@ internal object Cli {
                 err.appendLine("error: ${e.message}")
                 return 2
             }
-            return BgCli.main(bgArgs.drop(1), out, err, getenv) { FrameStream.open(target, err) }
+            return BgCli.main(bgArgs.drop(1), out, err, getenv, globals.toList()) { FrameStream.open(target, err) }
         }
         // BUG-CLI-1: `--desc -` / `--desc-file` become the plain description here, before any command runs, so
         // every command that takes --desc gets the text exactly as given and a bad path is a usage error (exit 2).
@@ -4175,6 +4175,9 @@ internal object Cli {
               remote on|off|status  Let the daemon accept outside (Tailscale) connections; prints the ws address
                                   and token. Takes effect on the next daemon restart.
               bg run [--name L] [--keep] -- CMD  Run CMD as a registered background job (session reads Running; --keep: survives the session closing); bg list|status|logs|stop ID
+              bg run --notify [--notify-on RE]... [--notify-tail N] [--notify-timeout MIN] [--no-default-patterns] -- CMD
+                                     Start CMD detached; the daemon MAILS this session on exit, a pattern match or the timeout: end your turn, never sleep/poll
+              bg wait ID [--timeout MIN]  Block until job ID exits (fallback when mail cannot wake the harness); prints its tail, returns its exit code
               progress <0-100> ["label"] | plan "a" "b" .. | plan N | step [name] | bytes D T | count D T | status "label" | done | fail | clear | show
                                   Report your long job's progress, shown as a live bar on your card (progress --help: all forms)
               progress --watch [--reader gradle|junit|gate]   Copy stdin to stdout unchanged, reporting ##infantry marker lines
