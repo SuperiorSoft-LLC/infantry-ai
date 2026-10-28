@@ -79,6 +79,8 @@ kotlin {
             implementation(project(":plugins:official:Infantry_Alerts"))
             // RUNTIME-18: and the official Infantry_Processes (the status bar's processes-badge fill, out of Infantry_AppUi).
             implementation(project(":plugins:official:Infantry_Processes"))
+            // RUNTIME-20: and the official Infantry_Header (the title bar and project picker, out of Infantry_AppUi and this library).
+            implementation(project(":plugins:official:Infantry_Header"))
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)

@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.header
+
+import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.Canvas
 import com.superiorsoftllc.agenthq.ui.model.PanelLayout
@@ -56,25 +58,6 @@ import com.superiorsoftllc.agenthq.ui.model.ConnState
 import com.superiorsoftllc.agenthq.ui.model.PanelSide
 import com.superiorsoftllc.agenthq.ui.model.needsInput
 import com.superiorsoftllc.agenthq.ui.model.visibleAgents
-
-/**
- * M2-6: what the title bar needs from the window it lives in. A desktop shell with an undecorated window
- * provides one (minimize / maximize-restore / close, and the drag behaviour of the empty bar); a platform
- * without a window (Android) provides none, and the bar then shows no window controls.
- */
-interface WindowChrome {
-    /** Read in composition, so an implementation backed by snapshot state swaps the maximize/restore glyph. */
-    val isMaximized: Boolean
-    fun minimize()
-    fun toggleMaximize()
-    fun close()
-
-    /** Applied to the bar's empty areas: on desktop, pressing and dragging there moves the window. */
-    val dragArea: Modifier get() = Modifier
-}
-
-/** The window chrome of the current platform window; null where there is no window to control. */
-val LocalWindowChrome = staticCompositionLocalOf<WindowChrome?> { null }
 
 /** BUG-M2-15: one top-bar avatar, suffixed with the session id. */
 const val TITLE_BAR_AVATAR_TAG_PREFIX = "title-bar-avatar-"
@@ -289,10 +272,6 @@ fun TitleBarWindowControls(chrome: WindowChrome?, modifier: Modifier = Modifier)
     }
 }
 
-val TITLE_BAR_HEIGHT = 36.dp
-
-/** True while the title bar is in its compact (narrow) layout; read by the Assistant pill to drop its label. */
-val LocalTitleBarCompact = androidx.compose.runtime.compositionLocalOf { false }
 
 /**
  * MOBILE-TITLEBAR-1 / BLOCKS-LAYOUT L8: the compact bar's overflow button and its menu. The menu's [entries] are its own

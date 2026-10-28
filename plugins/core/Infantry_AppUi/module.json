@@ -8,7 +8,6 @@
   "entry": "com.superiorsoftllc.agenthq.plugins.core.AppUiModuleSource",
   "buildOrder": 200,
   "fills": [
-    "infantry.shell.header",
     "infantry.shell.left",
     "infantry.shell.center",
     "infantry.shell.right",

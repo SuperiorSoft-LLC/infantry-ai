@@ -190,14 +190,12 @@ import kotlin.time.Clock
 import com.superiorsoftllc.agenthq.ui.model.AssistantPanelWidth
 
 /** ASSISTANT-1: tags for the top-bar entry and the popup, for UI tests. */
-const val TITLE_BAR_ASSISTANT_TAG = "title-bar-assistant"
 const val ASSISTANT_POPUP_TAG = "assistant-popup"
 const val ASSISTANT_TRANSCRIPT_TAG = "assistant-transcript"
 const val ASSISTANT_RESIZE_TAG = "assistant-resize-handle"
 const val ASSISTANT_EXPAND_TAG = "assistant-expand"
 const val ASSISTANT_CLOSE_TAG = "assistant-close"
 const val ASSISTANT_STARTING_TAG = "assistant-starting"
-const val ASSISTANT_NAME = "Assistant"
 
 /**
  * ASSISTANT-1: the global Assistant, hosted in a docked popup under the top bar (right side). It is the SAME [ChatPanel] the
@@ -297,26 +295,3 @@ private fun PopupButton(glyph: String, label: String, tag: String, onClick: () -
     }
 }
 
-/**
- * ASSISTANT-1: the Assistant's entry in the team bar. A pill (not a team portrait): the avatar, a 1dp accent border and an
- * "Assistant" label (dropped in a compact bar, the border kept). It fits the 22dp portrait row, so the bar never grows.
- */
-@Composable
-fun AssistantEntry(open: Boolean, needsInput: Boolean, onToggle: () -> Unit) {
-    val border = if (open) Palette.Text else Palette.Accent
-    val showLabel = AssistantEntryStyle.showLabel(LocalTitleBarCompact.current)
-    IconActionTooltipBox(ASSISTANT_NAME, modifier = Modifier.padding(end = 4.dp).testTag(TITLE_BAR_ASSISTANT_TAG)) { m ->
-        Row(
-            m.clip(CircleShape).border(1.dp, border, CircleShape).padding(start = 1.dp, end = if (showLabel) 8.dp else 1.dp)
-                .background(if (needsInput) Palette.Accent.copy(alpha = 0.18f) else Color.Transparent)
-                .clickable(role = Role.Button, onClickLabel = if (open) "Close the Assistant" else "Open the Assistant", onClick = onToggle),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            AgentAvatar("assistant", ASSISTANT_NAME, 22)
-            if (showLabel) {
-                Spacer(Modifier.width(5.dp))
-                Text(ASSISTANT_NAME, color = Palette.Text, fontSize = 11.sp, maxLines = 1, softWrap = false)
-            }
-        }
-    }
-}

@@ -96,6 +96,55 @@ interface ShellContext {
     val alerts: AlertsContext get() = NoAlerts
     /** RUNTIME-18 (additive): the daemon's process watch behind the official Infantry_Processes status-bar badge. */
     val processes: ProcessesContext get() = NoProcesses
+    /** RUNTIME-20 (additive): what the official Infantry_Header (title bar, project picker) reads and asks of the window. */
+    val header: HeaderContext get() = NoHeader
+}
+
+/**
+ * RUNTIME-20 (F4): the window's title bar behind the official Infantry_Header module, which fills `infantry.shell.header`.
+ * Values are the composition's snapshot; the actions are the window's own.
+ */
+interface HeaderContext {
+    /** The window's state; null where there is no window (the header draws nothing). */
+    val state: com.superiorsoftllc.agenthq.ui.model.AppState?
+    /** The controller the project picker's requests (create, edit, switch project) go through; null with [state]. */
+    val controller: com.superiorsoftllc.agenthq.ui.net.Controller?
+    /** Which agents the avatar strip lists. */
+    val agentScope: com.superiorsoftllc.agenthq.ui.model.AgentScope
+    /** The host's server dropdown; null where the host has none. */
+    val switcher: ServerSwitcher?
+    /** Shows or hides one side panel. */
+    fun togglePanel(side: com.superiorsoftllc.agenthq.ui.model.PanelSide)
+    /** Opens tab [id] (the attention chip opens Attention). */
+    fun showTab(id: String)
+    /** Opens the connection (or the host's own connect screen, MOBILE-CONNCHIP-1). */
+    fun connect()
+    /** Switches to [choice] on the server dropdown. */
+    fun switchTo(choice: ServerChoice)
+    /** Opens the Servers list. */
+    fun manageServers()
+    /** The Assistant's entry in the team strip; true while its popup is open. */
+    val assistantOpen: Boolean
+    /** Whether the Assistant exists on this daemon (or already has a session): then the strip shows its entry. */
+    val hasAssistant: Boolean
+    /** A tap on the Assistant's entry. */
+    fun toggleAssistant()
+}
+
+/** No window: nothing to draw, every action a no-op. */
+object NoHeader : HeaderContext {
+    override val state: com.superiorsoftllc.agenthq.ui.model.AppState? = null
+    override val controller: com.superiorsoftllc.agenthq.ui.net.Controller? = null
+    override val agentScope: com.superiorsoftllc.agenthq.ui.model.AgentScope = com.superiorsoftllc.agenthq.ui.model.AgentScope.GLOBAL
+    override val switcher: ServerSwitcher? = null
+    override fun togglePanel(side: com.superiorsoftllc.agenthq.ui.model.PanelSide) {}
+    override fun showTab(id: String) {}
+    override fun connect() {}
+    override fun switchTo(choice: ServerChoice) {}
+    override fun manageServers() {}
+    override val assistantOpen: Boolean = false
+    override val hasAssistant: Boolean = false
+    override fun toggleAssistant() {}
 }
 
 /**

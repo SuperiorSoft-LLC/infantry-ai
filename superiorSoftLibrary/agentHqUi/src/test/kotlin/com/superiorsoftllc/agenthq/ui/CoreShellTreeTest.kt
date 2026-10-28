@@ -28,7 +28,7 @@ class CoreShellTreeTest {
      * RUNTIME-14/15: the compiled-in modules plus the official Infantry_Roles and Infantry_Board (their jars on desktop),
      * which fill infantry.shell.roles and infantry.shell.board.
      */
-    private val withRoles by lazy { TabFactory(CoreModules.all + InfantryRoles + InfantryBoard + InfantryAttention + InfantryUsage + com.superiorsoftllc.agenthq.plugins.official.alerts.InfantryAlerts + com.superiorsoftllc.agenthq.plugins.official.processes.InfantryProcesses) }
+    private val withRoles by lazy { TabFactory(CoreModules.all + InfantryRoles + InfantryBoard + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + InfantryAttention + InfantryUsage + com.superiorsoftllc.agenthq.plugins.official.alerts.InfantryAlerts + com.superiorsoftllc.agenthq.plugins.official.processes.InfantryProcesses) }
 
     private fun Block.walk(depth: Int = 0): List<String> = listOf("  ".repeat(depth) + id) + children.flatMap { it.walk(depth + 1) }
 
