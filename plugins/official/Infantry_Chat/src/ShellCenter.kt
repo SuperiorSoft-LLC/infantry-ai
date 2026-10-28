@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -34,7 +35,9 @@ import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
 import com.superiorsoftllc.agenthq.ui.block.layout.LocalBlockSize
 import com.superiorsoftllc.agenthq.ui.model.PanelLayout
+import com.superiorsoftllc.agenthq.ui.ChatPanel
 import com.superiorsoftllc.agenthq.ui.shell.ChatContext
+import com.superiorsoftllc.agenthq.ui.shell.ChatPanels
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 import com.superiorsoftllc.agenthq.ui.shell.NoChat
 
@@ -57,6 +60,10 @@ class CenterBlock(children: List<Block>, place: Place = Place(weight = 1f)) : Bl
     override fun Render(scope: BlockScope) {
         val controller = chatCtx.controller ?: return
         val compact = dockCompact()
+        // Hands the shared chat panel to hosts that stay in the shell (the Assistant popup) through ChatPanels, once the column is drawn.
+        SideEffect {
+            ChatPanels.panel = { id, ctl, modifier, chat, allowSpawn, tag -> ChatPanel(id, ctl, modifier, chat = chat, allowSpawn = allowSpawn, transcriptTag = tag) }
+        }
         // MOBILE-LAYOUT-2: crossing 600dp (a resize, a rotation) parks this window class's panel flags and brings
         // back the other class's, so compact navigation never rewrites the wide layout. The panels render from
         // forWindow(compact) straight away; the effect then stores the same swap, so no frame shows stale flags.
