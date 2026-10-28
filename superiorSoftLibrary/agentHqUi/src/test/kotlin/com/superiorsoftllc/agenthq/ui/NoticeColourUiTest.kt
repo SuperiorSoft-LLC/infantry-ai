@@ -50,9 +50,9 @@ class NoticeColourUiTest {
     }
 
     private fun assertDrawnIn(expected: Color, actual: Color, what: String) {
-        val near = listOf("green" to Palette.Ok, "amber" to Palette.Accent, "red" to Palette.Danger)
+        val near = listOf("green" to Palette.Ok, "amber" to Palette.Warn, "red" to Palette.Danger)
             .minBy { (_, c) -> abs(c.red - actual.red) + abs(c.green - actual.green) + abs(c.blue - actual.blue) }
-        val wanted = listOf("green" to Palette.Ok, "amber" to Palette.Accent, "red" to Palette.Danger).first { it.second == expected }.first
+        val wanted = listOf("green" to Palette.Ok, "amber" to Palette.Warn, "red" to Palette.Danger).first { it.second == expected }.first
         assertEquals(wanted, near.first, "$what: drawn $actual")
     }
 
@@ -66,12 +66,12 @@ class NoticeColourUiTest {
 
     @Test
     fun aHeldTicketIsAHeadsUp() =
-        assertDrawnIn(Palette.Accent, stripColour("ticket-held", ticketFrame(TicketStart(false, "held", "t0"))), "ticket held by a prerequisite")
+        assertDrawnIn(Palette.Warn, stripColour("ticket-held", ticketFrame(TicketStart(false, "held", "t0"))), "ticket held by a prerequisite")
 
     @Test
     fun aMessageTheBusyAgentDidNotTakeIsAHeadsUp() =
         assertDrawnIn(
-            Palette.Accent,
+            Palette.Warn,
             stripColour("busy-agent", Envelope(Envelope.ERROR, "session 97968bee-a41a-4fd5-9a82-2a587e9f940a already has a run in flight")),
             "prompt to a busy agent",
         )

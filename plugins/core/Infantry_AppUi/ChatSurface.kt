@@ -703,10 +703,10 @@ fun NoticeStrip(state: AppState, sessionId: String? = null) {
     }
 }
 
-/** NOTICE-COLOUR-1: routine is the theme's success green, a heads-up its amber, and only an error is red. */
+/** NOTICE-COLOUR-1: routine is the theme's success green, a heads-up amber, and only an error is red. */
 fun noticeColour(kind: NoticeKind): Color = when (kind) {
     NoticeKind.OK -> Palette.Ok
-    NoticeKind.HEADS_UP -> Palette.Accent
+    NoticeKind.HEADS_UP -> Palette.Warn
     NoticeKind.ERROR -> Palette.Danger
 }
 

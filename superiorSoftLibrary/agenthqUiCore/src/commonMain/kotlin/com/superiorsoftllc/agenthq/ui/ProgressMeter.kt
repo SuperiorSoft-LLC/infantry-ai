@@ -49,7 +49,7 @@ const val PROGRESS_METER_TAG_PREFIX = "progress-meter-"
 /** The bar's colour for a [ProgressTone]: amber when stale, red when failed, green when done. */
 fun progressColor(tone: ProgressTone): Color = when (tone) {
     ProgressTone.Running -> Palette.Info
-    ProgressTone.Stale -> Palette.Accent
+    ProgressTone.Stale -> Palette.Warn
     ProgressTone.Done -> Palette.Ok
     ProgressTone.Failed -> Palette.Danger
 }
@@ -90,7 +90,7 @@ fun ProgressMeter(progress: ProgressView, tagKey: String, modifier: Modifier = M
         }
         Bar(view.fraction, color, hatched = view.estimated)
         if (!compact && view.detail.isNotEmpty()) {
-            Text(view.detail, color = if (view.tone == ProgressTone.Stale) Palette.Accent else Palette.Muted, fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+            Text(view.detail, color = if (view.tone == ProgressTone.Stale) Palette.Warn else Palette.Muted, fontSize = 10.sp, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
         }
     }
 }
