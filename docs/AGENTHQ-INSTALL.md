@@ -56,6 +56,7 @@ $env:IHQ_STOREPASS = '<keystore password>'
 (the key password must equal the store password, as jarsigner is given only `-storepass`). For a local test build
 only, `-Pihq.devSign=true` signs with a throwaway key made under `build/official-modules/dev-key/`. Prove the layout
 without jpackage: `./gradlew :superiorSoftLibrary:agentHqUi:verifyOfficialModulesPackaged -Pihq.devSign=true`.
+A devSign build runs with `-Dagenthq.plugins.devTrust=true` (the dev-signed modules are not the pinned key); real builds need `INFANTRY_KEY_FINGERPRINT_PLACEHOLDER` in OfficialTrust.kt replaced by the real cert SHA-256.
 
 `run` / `runUi` stay the dev window (8787). To try the installed profile before installing, use
 `./gradlew :superiorSoftLibrary:agentHqUi:runDistributable` (the packaged app image, jpackage launcher), or pass
