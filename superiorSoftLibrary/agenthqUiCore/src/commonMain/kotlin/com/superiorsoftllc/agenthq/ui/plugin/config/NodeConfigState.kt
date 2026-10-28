@@ -44,7 +44,12 @@ enum class NodeConfigLoad { IDLE, LOADING, LOADED, FAILED }
  * them through [ResolvedConfig] recomposes on a change; [load] seeds the daemon from [tree] and takes what it answers,
  * [set] writes one value. Until a load succeeds, everything resolves to the declared defaults.
  */
-class NodeConfigState(val tree: ConfigTree, private val api: NodeConfigApi = DaemonNodeConfigApi) {
+class NodeConfigState(
+    val tree: ConfigTree,
+    private val api: NodeConfigApi = DaemonNodeConfigApi,
+    /** Runs after each successful [load] (6s D: a new implementation may become a field's selection). */
+    private val afterLoad: suspend (NodeConfigState) -> Unit = {},
+) {
     /** The stored rows, node id -> key -> row. */
     var stored: Map<String, Map<String, NodeConfigEntry>> by mutableStateOf(emptyMap())
         private set
@@ -60,12 +65,13 @@ class NodeConfigState(val tree: ConfigTree, private val api: NodeConfigApi = Dae
     suspend fun load() {
         load = NodeConfigLoad.LOADING
         apply(api.seed(tree.seed()))
+        if (error == null) afterLoad(this)
         load = if (error == null) NodeConfigLoad.LOADED else NodeConfigLoad.FAILED
     }
 
-    /** Stores [value] for [node]'s [key] as the user's (null = clear it, so it resolves from the parent again). */
-    suspend fun set(node: String, key: String, value: JsonElement?): Boolean {
-        apply(api.put(NodeConfigEntry(node, key, value, ConfigSetBy.USER)))
+    /** Stores [value] for [node]'s [key] as the user's, or as [setBy] (null = clear it, so it resolves from the parent again). */
+    suspend fun set(node: String, key: String, value: JsonElement?, setBy: String = ConfigSetBy.USER): Boolean {
+        apply(api.put(NodeConfigEntry(node, key, value, setBy)))
         return error == null
     }
 

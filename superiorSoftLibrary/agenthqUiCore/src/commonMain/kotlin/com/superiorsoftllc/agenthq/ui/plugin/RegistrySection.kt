@@ -30,6 +30,7 @@ import com.superiorsoftllc.agenthq.ui.Chip
 import com.superiorsoftllc.agenthq.ui.TextButton
 import com.superiorsoftllc.agenthq.ui.plugin.config.ChildrenControl
 import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigLoad
+import com.superiorsoftllc.agenthq.ui.plugin.config.NodeFields
 import kotlinx.coroutines.launch
 import com.superiorsoftllc.agenthq.ui.FilterChip
 import com.superiorsoftllc.agenthq.ui.Palette
@@ -61,6 +62,8 @@ const val REGISTRY_TOGGLE_TAG_PREFIX = "registry-toggle-"
 const val REGISTRY_UP_TAG_PREFIX = "registry-up-"
 const val REGISTRY_DOWN_TAG_PREFIX = "registry-down-"
 const val REGISTRY_REFUSAL_TAG_PREFIX = "registry-refusal-"
+/** P1 step 2: the heading of the picked node's config fields. */
+const val REGISTRY_FIELDS_TAG = "registry-fields"
 /** P1 step 2: the line saying the settings cannot be changed now (loading, or the daemon's answer). */
 const val REGISTRY_STATUS_TAG = "registry-status"
 
@@ -78,6 +81,8 @@ fun RegistrySection(factory: TabFactory) {
     val hosts = remember(factory, stored) { NodeRegistry.of(factory) }
     var picked by remember(factory) { mutableStateOf(hosts.firstOrNull()?.id) }
     val host = hosts.firstOrNull { it.id == picked }
+    // P1 step 2 (6s A): a node with config fields that hosts no children is still pickable, for its fields.
+    val configured = factory.configTree.fields.keys.filter { id -> hosts.none { it.id == id } }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         for ((label, kind) in listOf("Tab strips" to HostKind.TABS, "Window nodes" to HostKind.TREE)) {
             val group = hosts.filter { it.kind == kind }
@@ -105,7 +110,26 @@ fun RegistrySection(factory: TabFactory) {
                 Modifier.testTag(REGISTRY_STATUS_TAG).semantics { liveRegion = LiveRegionMode.Polite }, topGap = false,
             )
         }
+        if (configured.isNotEmpty()) {
+            SectionLabel("Configured nodes", Palette.Muted, topGap = false)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                for (id in configured) {
+                    FilterChip(
+                        selected = id == picked, onClick = { picked = id },
+                        label = { SectionLabel(id.removePrefix("infantry.shell."), topGap = false) },
+                        modifier = Modifier.testTag(REGISTRY_HOST_TAG_PREFIX + id),
+                    )
+                }
+            }
+        }
         if (host != null) HostChildren(factory, host, ready)
+        val node = picked
+        val fields = node?.let { factory.configTree.fields[it] }.orEmpty()
+        if (node != null && fields.isNotEmpty()) {
+            val locked = node in com.superiorsoftllc.agenthq.ui.shell.blocks.CoreShell.locked
+            SectionLabel("Fields", topGap = false, modifier = Modifier.testTag(REGISTRY_FIELDS_TAG))
+            NodeFields(factory, node, fields, editable = ready && !locked, locked = locked)
+        }
     }
 }
 

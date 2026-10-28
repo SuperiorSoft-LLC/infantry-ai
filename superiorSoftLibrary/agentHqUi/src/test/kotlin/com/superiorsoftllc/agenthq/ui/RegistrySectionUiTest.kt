@@ -44,6 +44,10 @@ import com.superiorsoftllc.agenthq.ui.plugin.REGISTRY_TOGGLE_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.REGISTRY_UP_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigApi
 import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigLoad
+import com.superiorsoftllc.agenthq.ui.plugin.config.NODE_FIELD_OPTION_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.plugin.config.NODE_FIELD_ORIGIN_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.plugin.config.NODE_FIELD_RESET_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.plugin.config.TabSorters
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
@@ -174,6 +178,24 @@ class RegistrySectionUiTest {
         onNodeWithTag(REGISTRY_UP_TAG_PREFIX + last).performClick()
         waitUntil(timeoutMillis = 10_000) { tabs.tabs(TabContainers.CENTER).map { it.id } != before }
         assertEquals(before.toMutableList().apply { add(lastIndex - 1, removeAt(lastIndex)) }, tabs.tabs(TabContainers.CENTER).map { it.id })
+    }
+
+    @Test fun pickingTheByTitleSorterReordersTheCentreStrip() = withPlugins {
+        waitUntil(timeoutMillis = 10_000) { tabs.config.load == NodeConfigLoad.LOADED }
+        val strip = "infantry.shell.center.chat.tabs"
+        val before = tabs.tabs(TabContainers.CENTER).map { it.id }
+        val byTitle = NODE_FIELD_OPTION_TAG_PREFIX + "$strip/sorter/" + TabSorters.BY_TITLE
+        onNodeWithTag(byTitle).performScrollTo()
+        onNodeWithTag(NODE_FIELD_ORIGIN_TAG_PREFIX + "$strip/sorter", useUnmergedTree = true).assertTextEquals("Default (stored)")
+        onNodeWithTag(byTitle).performClick()
+        val expected = tabs.declaredTabs(TabContainers.CENTER).sortedWith(compareBy({ TabSorters.label(it).lowercase() }, { it.id })).map { it.id }
+        waitUntil(timeoutMillis = 10_000) { tabs.tabs(TabContainers.CENTER).map { it.id } == expected }
+        assertEquals(true, expected != before || before.size < 2)
+        onNodeWithTag(NODE_FIELD_ORIGIN_TAG_PREFIX + "$strip/sorter", useUnmergedTree = true).assertTextEquals("Set here")
+        assertEquals(kotlinx.serialization.json.JsonPrimitive(TabSorters.BY_TITLE), stored[strip to "sorter"]?.value)
+        // Reset hands it back to the default.
+        onNodeWithTag(NODE_FIELD_RESET_TAG_PREFIX + "$strip/sorter").performClick()
+        waitUntil(timeoutMillis = 10_000) { tabs.tabs(TabContainers.CENTER).map { it.id } == before }
     }
 
     @Test fun aLockedNodeShowsLockedAndOffersNothingToChange() = withPlugins {
