@@ -81,6 +81,8 @@ kotlin {
             implementation(project(":plugins:official:Infantry_Processes"))
             // RUNTIME-20: and the official Infantry_Header (the title bar and project picker, out of Infantry_AppUi and this library).
             implementation(project(":plugins:official:Infantry_Header"))
+            // RUNTIME-22: and the official Infantry_Chat (the centre column: chat and New agent).
+            implementation(project(":plugins:official:Infantry_Chat"))
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)
