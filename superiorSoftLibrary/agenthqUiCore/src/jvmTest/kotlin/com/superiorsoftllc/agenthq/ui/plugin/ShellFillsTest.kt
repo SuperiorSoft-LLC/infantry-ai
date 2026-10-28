@@ -88,7 +88,7 @@ class ShellFillsTest {
         // RUNTIME-4..18: then the official modules this test class path carries, through their jars' ServiceLoader entries.
         assertEquals(
             setOf("Infantry_Agents", "Infantry_Settings", "Infantry_Git", "Infantry_Run", "Infantry_Notes", "Infantry_Changes", "Infantry_Prompts", "Infantry_Skills",
-                "Infantry_Stats", "Infantry_Usage", "Infantry_Epics", "Infantry_Review", "Infantry_Pods", "Infantry_Profiles", "Infantry_Triggers", "Infantry_Attention", "Infantry_Roles", "Infantry_Board", "Infantry_Alerts", "Infantry_Header", "Infantry_Processes"),
+                "Infantry_Stats", "Infantry_Usage", "Infantry_Epics", "Infantry_Review", "Infantry_Pods", "Infantry_Profiles", "Infantry_Triggers", "Infantry_Attention", "Infantry_Roles", "Infantry_Board", "Infantry_Alerts", "Infantry_Header", "Infantry_Processes", "Infantry_Chat", "Infantry_Approvals"),
             found.drop(core.size).toSet(),
         )
     }
