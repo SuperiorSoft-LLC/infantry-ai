@@ -15,7 +15,7 @@ data class MeterAgg(
 
     operator fun plus(r: UsageMeterRow) = MeterAgg(
         runs + r.runs, turns + r.turns, input + r.input, output + r.output, cacheRead + r.cacheRead,
-        cacheWrite + r.cacheWrite, contextSum + r.contextSum, if (r.cost == null) cost else (cost ?: 0.0) + r.cost,
+        cacheWrite + r.cacheWrite, contextSum + r.contextSum, r.cost?.let { (cost ?: 0.0) + it } ?: cost,
     )
 }
 

@@ -45,7 +45,7 @@ class FrameGateDaemonTest {
     @Test fun `the demo lock allowlist is exactly the read-only frames decided in SEC-FIX-1`() {
         // Adding a frame to the allowlist, or a new frame type, must be a decision: change this list on purpose.
         val expected = setOf(
-            "replay_request", "sessions", "session_stats_get",
+            "replay_request", "sessions", "session_stats_get", "usage_meter_get",
             "providers", "provider_states", "models", "limits", "limit_catalog",
             "usage_get", "settings_get", "cli_locations", "tool_approval", "approval_rules",
             "role_list", "role_binding_list", "role_binding_get",

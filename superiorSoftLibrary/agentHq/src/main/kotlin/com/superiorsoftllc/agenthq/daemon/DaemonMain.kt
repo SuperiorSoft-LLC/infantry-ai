@@ -208,6 +208,12 @@ private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 /** STATS-1: one per daemon process, so the per-session resolved-path cache outlives a single connection. */
 private val sessionStats = SessionStatsService()
 
+/** USAGE-1: the usage meter (package `usagemeter`, own file). The daemon touches it at three points: this val, the event sink arm and the `usage_meter_get` frame. A failure to open it never stops the daemon. */
+private val usageMeter: com.superiorsoftllc.agenthq.usagemeter.UsageMeter? by lazy {
+    runCatching { com.superiorsoftllc.agenthq.usagemeter.UsageMeter.open(File(stateDir(), "usage-meter.db")).also { it.start() } }
+        .onFailure { System.err.println("[agentHq] usage meter disabled: ${it.message}") }.getOrNull()
+}
+
 /** PROMPT-1: numbers each WebSocket connection, so `prompt_resolved.resolvedBy` names the one that answered. */
 private val promptClientCounter = java.util.concurrent.atomic.AtomicLong()
 private val SESSION_STREAM_FRAME_TYPES = setOf(
@@ -1232,9 +1238,6 @@ class AgentHqDaemon(
                 if (c.reason in ORPHANING_CLOSE_REASONS) ownerQuestions.orphanSession(c.sessionId, c.at)
             }
             val streamSequencer = SessionFrameSequencer()
-            // USAGE-1: the usage meter, registered here and at its frame (USAGE_METER_GET) only. A failure to open it never stops the daemon.
-            val usageMeter = runCatching { com.superiorsoftllc.agenthq.usagemeter.UsageMeter.open(File(stateDir(), "usage-meter.db")).also { it.start() } }
-                .onFailure { System.err.println("[agentHq] usage meter disabled: ${it.message}") }.getOrNull()
             // Contract 1.95.0 (1c24fdc4): each session's harness-neutral run activity, carried on `status` frames.
             val runActivity = com.superiorsoftllc.agenthq.protocol.RunActivityTracker()
             // Story 9.7b: a run's usage is recorded when it ends and published on its session's stream.
