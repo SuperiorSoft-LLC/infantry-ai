@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.changes
 
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitWorktreeList
 import kotlin.test.Test

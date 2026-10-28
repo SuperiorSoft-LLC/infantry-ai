@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.changes.InfantryChanges
+import com.superiorsoftllc.agenthq.plugins.official.notes.InfantryNotes
 import androidx.compose.material3.Text
 import com.superiorsoftllc.agenthq.plugin.api.InjectDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
@@ -33,8 +35,8 @@ import kotlin.test.assertTrue
 
 /** P1 (f60f4d97, docs/BLOCKS-LAYOUT-DESIGN.md section 6s): the registry read model over what TabFactory resolved. */
 class NodeRegistryTest {
-    /** RUNTIME-6/7: the compiled-in core modules plus the official Infantry_Run and Infantry_Git (jars on desktop), as the window has them. */
-    private val coreAndGit = CoreModules.all + InfantryRun + InfantryGit
+    /** RUNTIME-6/7/8: the compiled-in core modules plus the official Notes, Changes, Run and Git (jars on desktop), as the window has them. */
+    private val coreAndGit = CoreModules.all + InfantryNotes + InfantryChanges + InfantryRun + InfantryGit
 
     private fun tab(id: String, order: Int, title: String) =
         TabProvider(id, TabContainers.CENTER, order, { title }, InfantryGit.tabs.single().icon, "center-tab-$id") { Text(title) }
@@ -52,7 +54,7 @@ class NodeRegistryTest {
             "center.chat", "center.newAgent", "right", "right.body", "footer", "assistant", "assistant.body", "board", "board.pane",
             "board.pane.columns", "board.card", "board.card.summary", "diff", "windowLayer", "config", "config.settings", "roles",
             "roles.form", "notes", "notes.hits", "notes.list", "changes", "changes.files", "changes.branchFiles",
-            "changes.history", "run", "git", // RUNTIME-6/7: Infantry_Run's and Infantry_Git's own trees, after Infantry_AppUi's (load order)
+            "changes.history", "run", "git", // RUNTIME-6/7/8: the official modules' own trees, in load order
         ).map { "$shell.$it" }
         val hosts = NodeRegistry.of(TabFactory(coreAndGit))
         assertEquals(listOf("$shell.center.chat.tabs", "$shell.right.body.strip") + tree, hosts.map { it.id })

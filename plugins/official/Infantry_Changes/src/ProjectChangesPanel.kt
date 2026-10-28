@@ -1,5 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.changes
 
+import com.superiorsoftllc.agenthq.ui.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,7 +41,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.BranchChangesView
 import com.superiorsoftllc.agenthq.ui.model.ChangesView
 import com.superiorsoftllc.agenthq.ui.model.DiffTarget
@@ -63,12 +63,7 @@ import com.superiorsoftllc.agenthq.ui.model.worktreeChangesView
 import com.superiorsoftllc.agenthq.ui.model.worktreeHeader
 import com.superiorsoftllc.agenthq.ui.model.worktreeHistoryView
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.shell.ChangesContext
-import com.superiorsoftllc.agenthq.ui.shell.CoreChanges
-import com.superiorsoftllc.agenthq.ui.shell.CoreGit
-import com.superiorsoftllc.agenthq.ui.shell.CoreLink
-import com.superiorsoftllc.agenthq.ui.shell.CoreSession
 import com.superiorsoftllc.agenthq.ui.shell.GitContext
 import com.superiorsoftllc.agenthq.ui.shell.LinkContext
 import com.superiorsoftllc.agenthq.ui.shell.SessionContext
@@ -142,7 +137,7 @@ private const val WORKTREE_LIST_POLLS = 6
 /** What the Changes tab's body shows under the header. */
 enum class ChangesMode { WORKING_TREE, HISTORY }
 
-/**
+/*
  * UX-CHANGES-1: the right-hand Changes tab, which also took over the old Worktree tab's job. On a 1.88.0 daemon its
  * header is a worktree picker (the project's worktrees; it opens on the SELECTED SESSION's checkout, its worktree or the
  * shared one, as the daemon decides), the branch with ahead/behind its base and the uncommitted count, then a Working
@@ -159,38 +154,16 @@ enum class ChangesMode { WORKING_TREE, HISTORY }
  * 1.88.0 a poll is asked again only [pollMs] after the daemon replied to the last one ([pollOnce], BUG-CHANGES-BRANCH-1).
  *
  * BRANCH-VIEW-2: the branch line is a selector. "Working tree (current)" is the default; picking a local branch shows
- * what that branch changed vs its base (`project_git_branch_changes`, contract 1.65.0). The pick lives in [AppState]
+ * what that branch changed vs its base (`project_git_branch_changes`, contract 1.65.0). The pick lives in the window state
  * (per project, so it survives a re-render) and selecting another project resets it to the working tree.
  *
  * DIFF-MODAL: clicking a file calls [onOpenDiff] (the window opens [ProjectDiffModal] over everything); [openDiff]
  * is the file shown there, highlighted in the list. With no callback the rows are not clickable.
  *
  * BLOCKS-LAYOUT L18: [ChangesPaneFrame] and its sections, top to bottom, as the Changes tab's tree draws them
- * (`infantry.shell.changes`, ShellChanges.kt).
+ * (`infantry.shell.changes`, ShellChanges.kt). RUNTIME-8: everything here reads the plugin API contexts (link, session,
+ * git, changes); the window's AppState / Controller are not used.
  */
-@Composable
-fun ProjectChangesPanel(
-    state: AppState,
-    controller: Controller,
-    pollMs: Long = PROJECT_CHANGES_POLL_MS,
-    openDiff: DiffTarget? = null,
-    onOpenDiff: ((DiffTarget) -> Unit)? = null,
-) {
-    ChangesPaneFrame(CoreLink(state), CoreSession(state), CoreGit(state, controller), CoreChanges(state, controller), pollMs, openDiff, onOpenDiff) { changes ->
-        ChangesEmptySection(changes)
-        ChangesTitleSection(changes)
-        ChangesUnsupportedSection(changes)
-        ChangesNotGitSection(changes)
-        ChangesWorktreeSection(changes)
-        ChangesHeaderSection(changes)
-        ChangesModeSection(changes)
-        ChangesBranchSection(changes)
-        ChangesHintSection(changes)
-        ChangesFilesSection(changes) { ChangesFileRow(changes, it) }
-        ChangesBranchFilesSection(changes) { ChangesBranchFileRow(changes, it) }
-        ChangesHistorySection(changes) { ChangesCommitRow(it) }
-    }
-}
 
 /** BLOCKS-LAYOUT L18: one working-tree file as the file template draws it: the file and the group it is listed in. */
 data class ChangesFileItem(val file: ChangedFile, val staged: Boolean)

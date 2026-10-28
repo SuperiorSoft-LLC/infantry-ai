@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.plugins.official.changes.InfantryChanges
+import com.superiorsoftllc.agenthq.plugins.official.notes.InfantryNotes
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.plugins.official.InfantrySettings
 import com.superiorsoftllc.agenthq.plugins.official.git.InfantryGit
@@ -43,17 +45,17 @@ class CoreModulesTest {
     }
 
     @Test
-    fun `the generated desktop module list holds the 15 core modules in the old order, without official Infantry_Cli, Infantry_Agents, Infantry_Settings, Infantry_Run and Infantry_Git`() {
+    fun `the generated desktop module list holds the 13 core modules in the old order, without official Infantry_Cli, Infantry_Agents, Infantry_Settings, Infantry_Run, Infantry_Git, Infantry_Notes and Infantry_Changes`() {
         assertEquals(
-            listOf("Pods", "Roles", "Profiles", "Triggers", "Epics", "Notes", "Stats",
-                "Changes", "Review", "Attention", "Usage", "Prompts", "Skills", "Board", "AppUi").map { "Infantry_$it" },
+            listOf("Pods", "Roles", "Profiles", "Triggers", "Epics", "Stats",
+                "Review", "Attention", "Usage", "Prompts", "Skills", "Board", "AppUi").map { "Infantry_$it" },
             CoreModules.all.map { it.manifest.name },
         )
     }
 
     @Test
     fun `the core tabs keep the strips' order, tags and shortcuts`() {
-        val f = TabFactory(CoreModules.all + InfantryRun + InfantryGit) // RUNTIME-6/7: Infantry_Run and Infantry_Git are official (their jars on desktop)
+        val f = TabFactory(CoreModules.all + InfantryNotes + InfantryChanges + InfantryRun + InfantryGit) // RUNTIME-6/7/8: Notes, Changes, Run and Git are official (their jars on desktop)
         assertEquals(emptyList(), f.problems)
         assertEquals(
             listOf("PODS", "ROLES", "PROFILES", "TRIGGERS", "EPICS", "MEMORY", "RUN", "GIT", "STATS").map { "center-tab-$it" },
@@ -74,7 +76,7 @@ class CoreModulesTest {
     @Test
     fun `a second tab with a taken id is skipped and reported`() {
         val copy = AgentHqModule(ModuleManifest(name = "Acme_Copy", version = "1.0.0", tabs = listOf(TabDeclaration("infantry.git", "center"))), InfantryGit.tabs)
-        val f = TabFactory(CoreModules.all + InfantryRun + InfantryGit + copy)
+        val f = TabFactory(CoreModules.all + InfantryNotes + InfantryChanges + InfantryRun + InfantryGit + copy)
         assertEquals(1, f.problems.size)
         assertTrue("Acme_Copy" in f.problems.single() && "infantry.git" in f.problems.single())
         assertEquals("Infantry_Git", f.find("infantry.git")?.module)
@@ -82,7 +84,7 @@ class CoreModulesTest {
 
     @Test
     fun `SETTINGS-TAB-1 the Settings group is off by default and switchable`() {
-        val f = TabFactory(CoreModules.all + InfantryRun + InfantryGit + InfantrySettings) // RUNTIME-5: Infantry_Settings is official (its jar on desktop)
+        val f = TabFactory(CoreModules.all + InfantryNotes + InfantryChanges + InfantryRun + InfantryGit + InfantrySettings) // RUNTIME-5: Infantry_Settings is official (its jar on desktop)
         // Off (unset): the strip is the one before the group, Settings hidden, nothing under it.
         assertEquals(false, f.grouped(SETTINGS_TAB_ID))
         assertEquals(null, f.tabs(TabContainers.CENTER).firstOrNull { it.id == SETTINGS_TAB_ID })
@@ -119,7 +121,7 @@ class CoreModulesTest {
 
     @Test
     fun `SETTINGS-TAB-1 without the Settings module its tabs stay in the strip even when grouped`() {
-        val f = TabFactory(CoreModules.all + InfantryRun + InfantryGit) // RUNTIME-5: no Settings jar
+        val f = TabFactory(CoreModules.all + InfantryNotes + InfantryChanges + InfantryRun + InfantryGit) // RUNTIME-5: no Settings jar
         f.config.replace(listOf(NodeConfigEntry(SETTINGS_TAB_ID, TabGroups.GROUPED, JsonPrimitive(true))))
         assertEquals(null, f.hostOf("infantry.git"))
         assertTrue(f.tabs(TabContainers.CENTER).any { it.id == "infantry.git" })

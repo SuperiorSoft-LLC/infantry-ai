@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.changes.InfantryChanges
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
@@ -42,7 +43,7 @@ class RightPanelOverridesUiTest {
             ModuleManifest("Acme_Right", "1.0.0", author = "Acme", license = "NOASSERTION", shell = listOf(decl)),
             tier = Tier.COMMUNITY, shell = mapOf("acme" to override),
         )
-        val f = TabFactory(CoreModules.all + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Right", decl.nodeId, decl.name, decl.mode)))
+        val f = TabFactory(CoreModules.all + InfantryChanges + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Right", decl.nodeId, decl.name, decl.mode)))
         assertEquals(emptyList(), f.problems)
         return f
     }

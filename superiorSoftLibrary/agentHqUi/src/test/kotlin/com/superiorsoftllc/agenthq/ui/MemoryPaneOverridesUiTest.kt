@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.notes.*
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
@@ -35,17 +37,6 @@ import com.superiorsoftllc.agenthq.ui.protocol.MemoryHit
 import com.superiorsoftllc.agenthq.ui.protocol.MemoryIndexEntry
 import com.superiorsoftllc.agenthq.ui.protocol.Project
 import com.superiorsoftllc.agenthq.ui.shell.blocks.CoreShell
-import com.superiorsoftllc.agenthq.ui.shell.blocks.NotesBanner
-import com.superiorsoftllc.agenthq.ui.shell.blocks.NotesEmpty
-import com.superiorsoftllc.agenthq.ui.shell.blocks.NotesError
-import com.superiorsoftllc.agenthq.ui.shell.blocks.NotesHeader
-import com.superiorsoftllc.agenthq.ui.shell.blocks.NotesHit
-import com.superiorsoftllc.agenthq.ui.shell.blocks.NotesModal
-import com.superiorsoftllc.agenthq.ui.shell.blocks.NotesNoOwner
-import com.superiorsoftllc.agenthq.ui.shell.blocks.NotesNote
-import com.superiorsoftllc.agenthq.ui.shell.blocks.NotesScopes
-import com.superiorsoftllc.agenthq.ui.shell.blocks.NotesSearch
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellNotes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -74,7 +65,7 @@ class MemoryPaneOverridesUiTest {
             ModuleManifest("Acme_Notes", "1.0.0", author = "Acme", license = "NOASSERTION", shell = listOf(decl)),
             tier = Tier.COMMUNITY, shell = mapOf("acme" to override),
         )
-        val f = TabFactory(CoreModules.all + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Notes", decl.nodeId, decl.name, decl.mode)))
+        val f = TabFactory(CoreModules.all + InfantryNotes + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Notes", decl.nodeId, decl.name, decl.mode)))
         assertEquals(emptyList(), f.problems)
         // The override goes into the Notes tab's tree, not the window's.
         assertSame(f.baseRoot, f.shellRoot)

@@ -1,5 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.notes
 
+import com.superiorsoftllc.agenthq.ui.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -32,16 +33,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.model.AgentView
-import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.MemoryHitView
 import com.superiorsoftllc.agenthq.ui.model.MemoryNoteView
 import com.superiorsoftllc.agenthq.ui.model.NoteScope
 import com.superiorsoftllc.agenthq.ui.model.ProjectView
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.net.Controller
-import com.superiorsoftllc.agenthq.ui.shell.CoreLink
-import com.superiorsoftllc.agenthq.ui.shell.CoreNotes
-import com.superiorsoftllc.agenthq.ui.shell.CoreSession
 import com.superiorsoftllc.agenthq.ui.shell.LinkContext
 import com.superiorsoftllc.agenthq.ui.shell.NotesContext
 import com.superiorsoftllc.agenthq.ui.shell.SessionContext
@@ -75,36 +71,19 @@ internal data class NoteDraft(
     val bodyTouched: Boolean = false,
 )
 
-/**
+/*
  * The selected project's memory (contracts 1.20.0 / 1.21.0 / 1.51.0). Selecting a project (or going live) asks the
  * daemon for its note index (`memory_list`). MEMORY-UI-1: a header row with an icon-only "Add note" button, then the
  * search box (`memory_search`, ranked hits with snippets), then the notes. Adding or editing a note happens in one
  * modal ([NoteModal], on the shared [EditorModal]) rather than in a form under the list, which a growing list pushed off screen: "+" opens it
  * empty, clicking a note opens it for that note and fetches the body with `memory_get`, because the index withholds
  * it. Save sends `memory_save` (the daemon's default replace mode, so an edit overwrites by name) and closes on
- * Sent; a refusal stays in the modal. Everything shown comes from [state].
+ * Sent; a refusal stays in the modal. Everything shown comes from the notes context.
  *
  * BLOCKS-LAYOUT L17: [NotesPaneFrame] and its sections, top to bottom, as the Notes tab's tree draws them
- * (`infantry.shell.notes`, ShellNotes.kt); the modal goes over the column.
+ * (`infantry.shell.notes`, ShellNotes.kt); the modal goes over the column. RUNTIME-8: everything here reads the plugin API
+ * contexts (link, session, notes); the window's AppState / Controller are not used.
  */
-@Composable
-fun MemoryPane(state: AppState, controller: Controller) {
-    NotesPaneFrame(
-        CoreLink(state), CoreSession(state), CoreNotes(state, controller),
-        content = { notes ->
-            NotesHeaderSection(notes)
-            NotesEmptySection(notes)
-            NotesScopesSection(notes)
-            NotesBannerSection(notes)
-            NotesNoOwnerSection(notes)
-            NotesSearchSection(notes)
-            NotesHitsSection(notes) { NotesHitRow(it) }
-            NotesErrorSection(notes)
-            NotesListSection(notes) { NotesNoteRow(notes, it) }
-        },
-        overlay = { notes -> NotesModalSection(notes) },
-    )
-}
 
 /**
  * BLOCKS-LAYOUT L17: what the Notes pane's sections read and act on. The frame ([NotesPaneFrame]) owns the search
