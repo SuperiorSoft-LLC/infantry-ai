@@ -5,6 +5,7 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -78,12 +79,14 @@ fun ScrollCueColumn(
 ) {
     val hover = remember { MutableInteractionSource() }
     val hovered by hover.collectIsHoveredAsState()
+    // PERF 0202e34a: a drag (touch) shows the thumb too; a scroll the app makes itself (scrollTo, keys) does not flash it.
+    val dragged by scroll.interactionSource.collectIsDraggedAsState()
     Box(Modifier.fillMaxWidth().hoverable(hover)) {
         // The end padding keeps the thumb clear of the content's right-hand controls.
         Column(modifier.verticalScroll(scroll).padding(end = ThumbGutter), verticalArrangement = verticalArrangement, content = content)
         if (scroll.canScrollBackward) EdgeFade(FadeEdge.TOP, fade, SCROLL_CUE_START_TAG, depth = 24.dp)
         if (scroll.canScrollForward) EdgeFade(FadeEdge.BOTTOM, fade, SCROLL_CUE_END_TAG, depth = 40.dp)
-        if (scroll.maxValue > 0) ScrollThumb(scroll, visible = hovered || scroll.isScrollInProgress)
+        if (scroll.maxValue > 0) ScrollThumb(scroll, visible = hovered || dragged)
     }
 }
 
