@@ -47,11 +47,17 @@ data class InstallSettings(
 enum class IhqRefusal { NOT_A_ZIP, TOO_BIG, TOO_MANY_ENTRIES, UNSAFE_ENTRY, UNEXPECTED_ENTRY, BAD_MANIFEST, BAD_SIGNATURE, UNSIGNED, CERT_NOT_VALID, ALREADY_INSTALLED, NO_TIER_FOLDER, IO }
 
 sealed interface IhqResult {
-    data class Installed(val name: String, val version: String, val tier: Tier, val dir: File, val signer: String?) : IhqResult
+    data class Installed(val name: String, val version: String, val tier: Tier, val dir: File, val signer: String?, val deps: List<NestedDep> = emptyList()) : IhqResult
     data class Refused(val reason: IhqRefusal, val message: String) : IhqResult
     /** S6: [IhqInstaller.inspect]'s answer: every check passed, nothing was installed. What the consent dialog shows. */
-    data class Checked(val manifest: ModuleManifest, val tier: Tier, val signer: String?) : IhqResult
+    data class Checked(val manifest: ModuleManifest, val tier: Tier, val signer: String?, val deps: List<NestedDep> = emptyList()) : IhqResult
 }
+
+/**
+ * NS3: one `deps/<name>.ihq` of a composition: its own [tier] from its own [signer]. [skipped] = the same name and version is
+ * already installed, so nothing of it was (or would be) installed.
+ */
+data class NestedDep(val name: String, val version: String, val tier: Tier?, val signer: String?, val skipped: Boolean)
 
 private class Refusal(val reason: IhqRefusal, message: String) : Exception(message)
 
@@ -69,7 +75,7 @@ object IhqInstaller {
         settings: InstallSettings = InstallSettings.load(root),
         /** Test hook: runs after the package is unpacked and checked, just before the rename. */
         beforeCommit: () -> Unit = {},
-    ): IhqResult = unpack(ihq, root, config, settings, beforeCommit, commit = true)
+    ): IhqResult = unpack(ihq, root, config, settings, beforeCommit, commit = true, nested = false)
 
     /**
      * S6: every check [install] makes (signature, limits, manifest, tier, not installed yet), then the staging folder is
@@ -81,7 +87,7 @@ object IhqInstaller {
         root: File,
         config: ModulesConfig = PluginFolders.config(root),
         settings: InstallSettings = InstallSettings.load(root),
-    ): IhqResult = unpack(ihq, root, config, settings, {}, commit = false)
+    ): IhqResult = unpack(ihq, root, config, settings, {}, commit = false, nested = false)
 
     /**
      * S6: removes installed community module [name]: its folder and its modules.json entry. Run it with the module not
@@ -96,7 +102,12 @@ object IhqInstaller {
         return null
     }
 
-    private fun unpack(ihq: File, root: File, config: ModulesConfig, settings: InstallSettings, beforeCommit: () -> Unit, commit: Boolean): IhqResult {
+    /**
+     * NS3: [nested] = this package came out of another's `deps/` folder; it may not nest again. An outer package may also
+     * carry `layout/<name>.json` (the trees its `fills[].layout` name) and `deps/<name>.ihq` (the code packages it depends on, each
+     * installed first by these same checks, with its own tier).
+     */
+    private fun unpack(ihq: File, root: File, config: ModulesConfig, settings: InstallSettings, beforeCommit: () -> Unit, commit: Boolean, nested: Boolean): IhqResult {
         var staging: File? = null
         return try {
             if (!ihq.isFile) throw Refusal(IhqRefusal.NOT_A_ZIP, "${ihq.name} is not a file")
@@ -109,8 +120,10 @@ object IhqInstaller {
                 val payload = entries.filter { !it.name.startsWith("META-INF/") }
                 for (e in payload) {
                     val n = e.name
-                    val ok = n == "module.json" || n == "lib/" || (n.startsWith("lib/") && (e.isDirectory || n.endsWith(".jar")))
-                    if (!ok) throw Refusal(IhqRefusal.UNEXPECTED_ENTRY, "unexpected entry '$n' (only module.json and lib/*.jar are allowed)")
+                    fun inFolder(folder: String, ext: String) = n == "$folder/" || (n.startsWith("$folder/") && n.count { it == '/' } == 1 && n.endsWith(ext))
+                    val ok = n == "module.json" || n == "lib/" || (n.startsWith("lib/") && (e.isDirectory || n.endsWith(".jar"))) ||
+                        inFolder("layout", ".json") || (!nested && inFolder("deps", ".ihq"))
+                    if (!ok) throw Refusal(IhqRefusal.UNEXPECTED_ENTRY, "unexpected entry '$n' (only module.json, lib/*.jar, layout/*.json${if (nested) "" else " and deps/*.ihq"} are allowed)")
                 }
                 if (payload.none { it.name == "module.json" }) throw Refusal(IhqRefusal.BAD_MANIFEST, "no module.json")
 
@@ -145,16 +158,20 @@ object IhqInstaller {
                 if (config.folders.any { f -> File(File(root, f.path), manifest.name).exists() }) throw Refusal(IhqRefusal.ALREADY_INSTALLED, "${manifest.name} is already installed")
                 val tierDir = File(root, folder.path).also { it.mkdirs() }
                 val target = File(tierDir, manifest.name)
-                if (!commit) return IhqResult.Checked(manifest, tier, signer?.subjectX500Principal?.name)
+                val depFiles = File(stage, "deps").listFiles { f -> f.isFile && f.name.endsWith(".ihq") }.orEmpty().sortedBy { it.name }
+                if (!commit) return IhqResult.Checked(manifest, tier, signer?.subjectX500Principal?.name, depFiles.map { nestedDep(it, root, config, settings, commit = false) })
 
                 beforeCommit()
+                // NS3: the nested packages go in first; the composition is only data over them.
+                val deps = depFiles.map { nestedDep(it, root, config, settings, commit = true) }
+                File(stage, "deps").deleteRecursively()
                 try {
                     Files.move(stage.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE)
                 } catch (e: IOException) {
                     throw Refusal(IhqRefusal.IO, "could not move into place: ${e.message}")
                 }
                 staging = null
-                IhqResult.Installed(manifest.name, manifest.version, tier, target, signer?.subjectX500Principal?.name)
+                IhqResult.Installed(manifest.name, manifest.version, tier, target, signer?.subjectX500Principal?.name, deps)
             }
         } catch (r: Refusal) {
             IhqResult.Refused(r.reason, r.message.orEmpty())
@@ -164,6 +181,27 @@ object IhqInstaller {
             IhqResult.Refused(IhqRefusal.IO, e.message.orEmpty())
         } finally {
             staging?.deleteRecursively()
+        }
+    }
+
+    /**
+     * NS3: one nested package. Already installed with the same name and version: skipped. Another version: refused (there is
+     * no upgrade path yet). Else every [install] check, with its own tier; a refusal refuses the outer package.
+     */
+    private fun nestedDep(file: File, root: File, config: ModulesConfig, settings: InstallSettings, commit: Boolean): NestedDep {
+        val claimed = runCatching {
+            JarFile(file, false).use { j -> j.getJarEntry("module.json")?.let { e -> j.getInputStream(e).use { PluginJson.decodeFromString(ModuleManifest.serializer(), it.readBytes().decodeToString()) } } }
+        }.getOrNull() ?: throw Refusal(IhqRefusal.BAD_MANIFEST, "deps/${file.name}: no readable module.json")
+        val existing = config.folders.map { File(File(root, it.path), claimed.name) }.firstOrNull { it.isDirectory }
+        if (existing != null) {
+            val have = runCatching { PluginJson.decodeFromString(ModuleManifest.serializer(), File(existing, "module.json").readText()).version }.getOrNull()
+            if (have == claimed.version) return NestedDep(claimed.name, claimed.version, null, null, skipped = true)
+            throw Refusal(IhqRefusal.ALREADY_INSTALLED, "deps/${file.name}: ${claimed.name} $have is installed; ${claimed.version} needs an upgrade path (none yet)")
+        }
+        return when (val r = unpack(file, root, config, settings, {}, commit, nested = true)) {
+            is IhqResult.Installed -> NestedDep(r.name, r.version, r.tier, r.signer, skipped = false)
+            is IhqResult.Checked -> NestedDep(r.manifest.name, r.manifest.version, r.tier, r.signer, skipped = false)
+            is IhqResult.Refused -> throw Refusal(r.reason, "deps/${file.name}: ${r.message}")
         }
     }
 
@@ -184,6 +222,16 @@ object IhqInstaller {
         if (!Regex("[A-Za-z0-9][A-Za-z0-9_.-]{0,63}").matches(m.name)) throw Refusal(IhqRefusal.BAD_MANIFEST, "name '${m.name.take(80)}' is not a valid folder name")
         if (m.name.endsWith(".")) throw Refusal(IhqRefusal.BAD_MANIFEST, "name '${m.name}' must not end with a dot")
         if (m.name.substringBefore('.').uppercase() in RESERVED_NAMES) throw Refusal(IhqRefusal.BAD_MANIFEST, "name '${m.name}' is a reserved device name")
+        for (f in m.fills) f.layout?.let { path ->
+            val lf = File(stage, path)
+            if (!path.startsWith("layout/") || !lf.isFile || !lf.canonicalPath.startsWith(File(stage, "layout").canonicalPath + File.separator))
+                throw Refusal(IhqRefusal.BAD_MANIFEST, "fill of ${f.node}: layout '$path' is not a layout/ file in the package")
+        }
+        // NS3: a composition is data: no entry, no jar, no lib/, and at least one fills[].layout.
+        if (m.entry.isNullOrBlank() && m.jar.isNullOrBlank() && m.fills.any { it.layout != null }) {
+            if (File(stage, "lib").listFiles().orEmpty().isNotEmpty()) throw Refusal(IhqRefusal.BAD_MANIFEST, "a composition carries no lib/ code")
+            return
+        }
         if (m.entry.isNullOrBlank()) throw Refusal(IhqRefusal.BAD_MANIFEST, "module.json has no entry class")
         val jar = m.jar?.takeIf { it.isNotBlank() } ?: throw Refusal(IhqRefusal.BAD_MANIFEST, "module.json has no jar")
         val f = File(stage, jar)

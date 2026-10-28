@@ -124,6 +124,12 @@ fun RegistrySection(factory: TabFactory) {
         }
         if (host != null) HostChildren(factory, host, ready)
         val node = picked
+        val exporter = factory.sectionExporter
+        if (node != null && exporter != null) {
+            var exported by remember(node) { mutableStateOf<String?>(null) }
+            TextButton({ exported = exporter(node) }, Modifier.testTag(REGISTRY_EXPORT_TAG)) { Text("Export section…") }
+            exported?.let { SectionLabel(it, Palette.Muted, Modifier.testTag(REGISTRY_EXPORT_RESULT_TAG), topGap = false) }
+        }
         val fields = node?.let { factory.configTree.fields[it] }.orEmpty()
         if (node != null && fields.isNotEmpty()) {
             val locked = node in com.superiorsoftllc.agenthq.ui.shell.blocks.CoreShell.locked
@@ -133,6 +139,10 @@ fun RegistrySection(factory: TabFactory) {
         BlockTypeList(factory)
     }
 }
+
+/** NS3: the picked node's "Export section…" button and the line it answers with (file written, or the refusals). */
+const val REGISTRY_EXPORT_TAG = "registry-export"
+const val REGISTRY_EXPORT_RESULT_TAG = "registry-export-result"
 
 /** NS1 / PB1: the registered block types, one chip each (title, type, module); the suffix of the tag is the type. */
 const val REGISTRY_BLOCK_TYPE_TAG_PREFIX = "registry-block-type-"

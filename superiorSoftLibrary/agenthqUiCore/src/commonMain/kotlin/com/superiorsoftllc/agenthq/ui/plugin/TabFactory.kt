@@ -44,6 +44,8 @@ import com.superiorsoftllc.agenthq.ui.block.layout.BlockResolver
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockType
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockTypes
 import com.superiorsoftllc.agenthq.ui.block.layout.PageJson
+import com.superiorsoftllc.agenthq.ui.block.layout.PageLayout
+import com.superiorsoftllc.agenthq.ui.block.layout.GroupBlock
 import kotlinx.serialization.json.JsonObject
 import com.superiorsoftllc.agenthq.ui.block.layout.InjectAt
 import com.superiorsoftllc.agenthq.ui.block.layout.InjectedBlock
@@ -261,6 +263,11 @@ class AgentHqModule(
     val implementations: Map<String, Map<String, Any>> = emptyMap(),
     /** NS1 / PB1 (6t.2): the block types the module registers, by type name (module.json `blockTypes`). */
     val blockTypes: Map<String, BlockType> = emptyMap(),
+    /**
+     * NS3: a composition's trees as data, by slot id (module.json `fills[].layout`, the page JSON read from the module
+     * folder); instantiated through the block-type registry. A community one needs the slot in its `allowOverride` grant.
+     */
+    val layoutFills: Map<String, JsonObject> = emptyMap(),
     /** S7: runs once when the host unloads the module (a soft restart replaces the module set, or the app closes it). */
     val onStop: () -> Unit = {},
 )
@@ -377,6 +384,11 @@ class TabFactory(
     val modules: List<AgentHqModule> = modules.toList()
     /** TOAST-1: where a module's `Notifications.notify` lands in the window; the window sets it to its controller's. */
     var toasts: com.superiorsoftllc.agenthq.ui.ToastService = com.superiorsoftllc.agenthq.ui.NoToastService
+    /**
+     * NS3: exports node id N's subtree as a composition `.ihq` and returns the line to show (the file, or the refusals);
+     * null = this host cannot export (only the desktop sets it). Settings > Plugins > Registered shows "Export section…".
+     */
+    var sectionExporter: ((node: String) -> String)? = null
     /** Whether a loader looked at a plugins root (the desktop); false = compiled-in modules only (web, Android, tests). */
     val loadsAtRunTime: Boolean = statuses != null
     val statuses: List<ModuleStatus> = statuses ?: modules.map { ModuleStatus(it.manifest.name, it.tier, ModuleState.LOADED, manifest = it.manifest) }
@@ -562,19 +574,34 @@ class TabFactory(
         }
         // S4: the fills and the tab trees, core tier only.
         val fills = LinkedHashMap<String, Block>()
+        var layoutTypes: BlockTypes? = null
         val fillers = LinkedHashMap<String, String>()
         val trees = LinkedHashMap<String, Pair<String, Block>>()
         for (m in modules) {
             val name = m.manifest.name
             for ((node, b) in m.fills) when {
                 m.tier == Tier.COMMUNITY -> problems += "$name: fill of $node refused: only a core module fills a shell slot"
-                node !in m.manifest.fills -> problems += "$name: fill of $node is not declared in its module.json; refused"
+                node !in m.manifest.fillNodes -> problems += "$name: fill of $node is not declared in its module.json; refused"
                 node !in CoreShell.slots -> problems += "$name: fill of $node refused: it is not an empty shell slot"
                 b.id != node -> problems += "$name: fill of $node refused: its block's id is ${b.id}"
                 node in fills -> problems += "$name: fill of $node skipped: already filled"
                 else -> { fills[node] = b; fillers[node] = name }
             }
-            for (node in m.manifest.fills - m.fills.keys) problems += "$name: fill of $node is declared but not registered; skipped"
+            for (node in m.manifest.fills.filter { it.layout == null }.map { it.node } - m.fills.keys) problems += "$name: fill of $node is declared but not registered; skipped"
+            // NS3: a composition's fills[].layout, instantiated through the registry.
+            for ((node, page) in m.layoutFills) when {
+                m.manifest.fills.none { it.node == node && it.layout != null } -> problems += "$name: layout fill of $node is not declared in its module.json; refused"
+                m.tier == Tier.COMMUNITY && node !in allowOverride(name) -> problems += "$name: layout fill of $node refused: not granted (allowOverride)"
+                node !in CoreShell.slots -> problems += "$name: layout fill of $node refused: it is not an empty shell slot"
+                node in fills -> problems += "$name: layout fill of $node skipped: already filled"
+                else -> {
+                    val types = layoutTypes ?: BlockTypes.of(modules.map { Triple(it.manifest.name, it.manifest.blockTypes, it.blockTypes) }).also { layoutTypes = it }
+                    val built = PageLayout.instantiate(page, types)
+                    built.problems.forEach { problems += "$name: layout fill of $node: $it" }
+                    val root = built.root
+                    if (root != null) { fills[node] = if (root.id == node) root else GroupBlock(node, listOf(root)); fillers[node] = name }
+                }
+            }
             for ((tab, root) in m.tabTrees) when {
                 m.tier == Tier.COMMUNITY -> problems += "$name: tab tree ${root.id} refused: only a core module adds a tab tree"
                 root.id in trees -> problems += "$name: tab tree ${root.id} skipped: already provided by ${trees.getValue(root.id).first}"

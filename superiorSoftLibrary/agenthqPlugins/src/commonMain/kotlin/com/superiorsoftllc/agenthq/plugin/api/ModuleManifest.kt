@@ -1,6 +1,10 @@
 package com.superiorsoftllc.agenthq.plugin.api
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonTransformingSerializer
 
 /** PLUGIN-PLATFORMS-1: the platform names a module.json `platforms` may list. */
 val PLATFORMS = listOf("desktop", "android", "web")
@@ -66,8 +70,11 @@ data class ModuleManifest(
     /**
      * S4 (drop-in path): the shell's empty slots (`infantry.shell.*` node ids) this module fills with a tree of its own.
      * Core tier only; a fill goes in before the overrides and injections, so their node ids are addressable as if core drew them.
+     * NS3: an entry is a node id (the module's code registers the tree) or `{"node", "layout"}` (a composition: the tree
+     * is the page JSON at `layout`, instantiated through the block-type registry; a community one needs the node in its
+     * `allowOverride` grant).
      */
-    val fills: List<String> = emptyList(),
+    val fills: List<@Serializable(FillDeclarationSerializer::class) FillDeclaration> = emptyList(),
     /**
      * P1 step 2 (docs/BLOCKS-LAYOUT-DESIGN.md 6s A): config fields per node id the module owns or is granted. Merged with
      * core's into one tree ([com.superiorsoftllc.agenthq.ui.plugin.config.ConfigTree]); a second declaration of a key is refused.
@@ -83,7 +90,26 @@ data class ModuleManifest(
      * config tree holds instances of them; an undeclared registration is refused.
      */
     val blockTypes: List<BlockTypeDeclaration> = emptyList(),
-)
+    /** NS3 (docs/NORTH-STAR-DESIGN.md 1a, 4c): the daemon capabilities the module needs and the optional ones it wants. */
+    val daemon: DaemonCapabilities? = null,
+) {
+    /** NS3: the node ids of [fills]. */
+    val fillNodes: List<String> get() = fills.map { it.node }
+}
+
+/** NS3: a fill of shell slot [node]; [layout] (a `layout/<name>.json` path in the module folder) when the tree is data. */
+@Serializable
+data class FillDeclaration(val node: String, val layout: String? = null)
+
+/** NS3: a fill entry is a plain node id string or the object form. */
+object FillDeclarationSerializer : JsonTransformingSerializer<FillDeclaration>(FillDeclaration.serializer()) {
+    override fun transformDeserialize(element: JsonElement): JsonElement =
+        if (element is JsonPrimitive && element.isString) JsonObject(mapOf("node" to element)) else element
+}
+
+/** NS3 (1a): `daemon.needs` (refused = the module does not work) and `daemon.wants` (refused = it degrades). */
+@Serializable
+data class DaemonCapabilities(val needs: List<String> = emptyList(), val wants: List<String> = emptyList())
 
 /**
  * NS1 / PB1 (6t.2): a block type, `vendor.name` (core's layout primitives are `layout.row` ...). [fields] are the

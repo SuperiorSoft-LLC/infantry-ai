@@ -140,7 +140,7 @@ class DesktopDropInTest {
 class ProbeBundle : ModuleSource {
     override fun modules(): List<AgentHqModule> = listOf(
         AgentHqModule(
-            ModuleManifest("Probe_Bundle", "1.0.0", author = "Probe", fills = listOf("infantry.shell.center")),
+            ModuleManifest("Probe_Bundle", "1.0.0", author = "Probe", fills = listOf(com.superiorsoftllc.agenthq.plugin.api.FillDeclaration("infantry.shell.center"))),
             fills = mapOf("infantry.shell.center" to GroupBlock("infantry.shell.center")),
         ),
         AgentHqModule(ModuleManifest("Probe_Other", "1.0.0", author = "Probe")),
