@@ -377,7 +377,8 @@ object EventVocabulary {
     // **1.138.0 (PLUGIN-ENDPOINTS-2, ticket-779d5845) is ADDITIVE**: `plugin_secret_get` ({module, field}) -> `plugin_secret` ({module, field, value}): one field of the secret `plugin.<module>` for that module's endpoint credential. Owner-only, refused under the demo lock, `AGENTHQ_*` fields refused. See CONTRACT.md.
     // **1.139.0 (ASK-TIMER, ticket-c62e72a9) is ADDITIVE + BEHAVIOURAL**: `prompt_request.expiresAt|onTimeout`; settings `prompts.timeoutSec` 0 = no timer, `prompts.onTimeout` (deny | approve); `new` `promptTimeoutSec|promptOnTimeout`; expiry logged in the transcript; owner questions default `defaultAfterMin` to the timer. See CONTRACT.md.
     // **1.140.0 (ASK-TIMER-2, ticket-cc73295b) is ADDITIVE + BEHAVIOURAL**: `prompt_request.recommended`; `prompt_ask.recommended`; an expired prompt auto-selects its recommended option (fallback `prompts.onTimeout` / no answer). See CONTRACT.md.
-    const val VERSION = "1.140.0"
+    // **1.141.0 (USAGE-1, ticket-98828ad8) is ADDITIVE**: `usage_meter_get` -> `usage_meter` (daily tokens/cost by role, model, source). See CONTRACT.md.
+    const val VERSION = "1.141.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA

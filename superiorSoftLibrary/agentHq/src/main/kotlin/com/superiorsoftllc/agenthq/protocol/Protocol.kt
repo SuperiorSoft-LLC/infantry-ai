@@ -419,6 +419,9 @@ data class Envelope(
         // harness does not expose null). An unknown or blank session id is an `error` "session_stats_get refused: ...".
         const val SESSION_STATS_GET = "session_stats_get"
         const val SESSION_STATS = "session_stats"
+        // USAGE-1 (contract 1.141.0): `usage_meter_get` -> `usage_meter`, the daily token/cost rows by role, model and source.
+        const val USAGE_METER_GET = "usage_meter_get"
+        const val USAGE_METER = "usage_meter"
 
         // Contract 1.5.0 -- the backlog. Requests, their answers and the pushes, all NEW.
         const val TICKET_SAVE = "ticket_save"

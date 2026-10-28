@@ -1232,6 +1232,9 @@ class AgentHqDaemon(
                 if (c.reason in ORPHANING_CLOSE_REASONS) ownerQuestions.orphanSession(c.sessionId, c.at)
             }
             val streamSequencer = SessionFrameSequencer()
+            // USAGE-1: the usage meter, registered here and at its frame (USAGE_METER_GET) only. A failure to open it never stops the daemon.
+            val usageMeter = runCatching { com.superiorsoftllc.agenthq.usagemeter.UsageMeter.open(File(stateDir(), "usage-meter.db")).also { it.start() } }
+                .onFailure { System.err.println("[agentHq] usage meter disabled: ${it.message}") }.getOrNull()
             // Contract 1.95.0 (1c24fdc4): each session's harness-neutral run activity, carried on `status` frames.
             val runActivity = com.superiorsoftllc.agenthq.protocol.RunActivityTracker()
             // Story 9.7b: a run's usage is recorded when it ends and published on its session's stream.
@@ -1327,6 +1330,8 @@ class AgentHqDaemon(
                 // Story 9.7b: usage BEFORE the backlog, so a run that spends the budget is counted before its
                 // exit drains a queue -- the drained (unattended) start is judged against the spent budget.
                 usageRecorder.onSessionEvent(event)
+                // USAGE-1: the usage meter (own package, own file); the seam is these three lines plus its frame below.
+                usageMeter?.onSessionEvent(event, manager::get)
                 // FOURTH ARM: ticket outcomes are durable, then a freed profile lane is drained.
                 board.onSessionEvent(event)
                 // Story 9.5: a trigger's run ends with its session's run.
@@ -2844,6 +2849,12 @@ private suspend fun handleConnection(
                 // STATS-1 (contract 1.92.0): one session's statistics, read on demand from its harness's own local
                 // record (read only, nothing leaves the machine). Answered to the requester only; the readers never
                 // throw, so a missing or locked harness record is a `session_stats` with null fields, not an error.
+                Envelope.USAGE_METER_GET -> try {
+                    Envelope(Envelope.USAGE_METER, usageMeter?.reportJson() ?: """{"rows":[],"keepWeeks":0,"generatedAt":0}""")
+                } catch (e: Exception) {
+                    Envelope(Envelope.ERROR, "usage_meter_get failed: ${e.message ?: e::class.simpleName}")
+                }
+
                 Envelope.SESSION_STATS_GET -> try {
                     val id = SessionStatsRequest.decode(envelope.data).sessionId?.trim().orEmpty()
                     val record = if (id.isEmpty()) null else manager.get(id)

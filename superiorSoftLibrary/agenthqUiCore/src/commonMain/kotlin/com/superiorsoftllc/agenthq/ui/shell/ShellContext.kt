@@ -80,6 +80,8 @@ interface ShellContext {
     val skills: SkillsContext get() = NoSkills
     /** RUNTIME-10 (additive): plan limits, the pacing allowance and per-session statistics, for the Usage and Stats tabs. */
     val usage: UsageContext get() = NoUsage
+    /** USAGE-1 (additive): the daemon usage meter's daily token/cost rows, for the Stats tab's by-day / by-week view. */
+    val meter: UsageMeterContext get() = NoUsageMeter
     /** RUNTIME-11 (additive): the epic requests behind the official Infantry_Epics tab. */
     val epics: EpicsContext get() = NoEpics
     /** RUNTIME-11 (additive): what the official Infantry_Review tab may do with a queued node. */
@@ -166,6 +168,16 @@ object NoUsage : UsageContext {
     override suspend fun refreshUsage(force: Boolean): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
     override suspend fun usageSet(set: com.superiorsoftllc.agenthq.ui.protocol.UsageSet): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
     override suspend fun sessionStats(sessionId: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+}
+
+/** USAGE-1: asks the daemon for the usage meter rows; the answer lands in the window's state ([AppState.usageMeter]). */
+interface UsageMeterContext {
+    suspend fun refresh(): CommandResult
+}
+
+/** No usage meter: every request refused. */
+object NoUsageMeter : UsageMeterContext {
+    override suspend fun refresh(): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
 }
 
 /** The daemon link: whether it is up and which contract the daemon announced. */

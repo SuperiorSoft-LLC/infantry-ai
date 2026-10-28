@@ -675,6 +675,8 @@ data class AppState(
     val usageReport: com.superiorsoftllc.agenthq.ui.protocol.UsageReport? = null,
     /** STATS-2 (contract 1.92.0): the last `session_stats` answer per AgentHQ session id; absent = never answered. */
     val sessionStats: Map<String, SessionStats> = emptyMap(),
+    /** USAGE-1 (contract 1.141.0): the last `usage_meter` answer; null = never answered. */
+    val usageMeter: com.superiorsoftllc.agenthq.ui.protocol.UsageMeterReport? = null,
     /**
      * BUG-M2-11e: the daemon's `session.keepAliveMinutes`, as its last `settings` frame said. Null = not read yet (or a
      * daemon older than contract 1.68.0, which has no such setting): the control says so instead of guessing a value.
@@ -1707,6 +1709,9 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
 
     // USAGE-PACE (1.119.0): the plan meters and allowances, replaced whole by each answer.
     Envelope.USAGE_REPORT -> s.copy(usageReport = json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.UsageReport.serializer(), env.data))
+
+    Envelope.USAGE_METER -> runCatching { json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.UsageMeterReport.serializer(), env.data) }
+        .getOrNull()?.let { s.copy(usageMeter = it) } ?: s
 
     // STATS-2 (1.92.0): one session's statistics, replacing that session's previous answer whole.
     Envelope.SESSION_STATS -> runCatching { json.decodeFromString(SessionStats.serializer(), env.data) }
