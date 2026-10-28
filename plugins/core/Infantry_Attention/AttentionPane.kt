@@ -50,6 +50,7 @@ internal fun AttentionPane(state: AppState, controller: Controller, showChat: ()
                 state.questionsNewestFirst, live = state.connection.isLive,
                 onOverride = { answer -> actionScope.launch { controller.answerQuestion(answer) } },
                 onShow = { id -> controller.openQuestion(id); showChat() },
+                onDismiss = { id -> actionScope.launch { controller.cancelQuestion(id) } },
             )
         }
         WatchSection(state, now)

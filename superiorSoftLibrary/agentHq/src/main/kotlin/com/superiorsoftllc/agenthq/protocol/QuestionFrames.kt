@@ -23,6 +23,8 @@ object QuestionResolvedBy {
     const val AUTO = "auto"
     /** The asking agent withdrew its own question. */
     const val ASKER = "asker"
+    /** The daemon closed it: the asking session was removed, killed, restarted or is gone, or the question outlived its TTL. */
+    const val ORPHANED = "orphaned"
 }
 
 /**

@@ -27,6 +27,9 @@ class OwnerQuestionsTest {
         repository: OwnerQuestionRepository = InMemoryOwnerQuestionRepository(),
         maxOpen: Int = 3,
         maxPerHour: Int = 6,
+        exists: (String) -> Boolean = { true },
+        busy: (String) -> Boolean = { false },
+        ttlMinutes: Long = 0,
     ) = OwnerQuestions(
         repository = repository,
         send = { sent += it; MailResult.Refused("not delivered in this test") },
@@ -34,6 +37,9 @@ class OwnerQuestionsTest {
         newId = { "q${++ids}" },
         maxOpen = { maxOpen },
         maxPerHour = { maxPerHour },
+        sessionExists = exists,
+        sessionBusy = busy,
+        ttlMinutes = { ttlMinutes },
     ).also { it.sink = { q -> pushed += q } }
 
     private val worker = Asker(sessionId = "s-1", agentId = "agent-1", role = "backend", projectId = "p-1")
@@ -245,5 +251,59 @@ class OwnerQuestionsTest {
         } finally {
             secondHandle.close()
         }
+    }
+
+    @Test
+    fun orphaningASessionClosesItsOpenQuestionsWithoutMailAndPushesThem() {
+        val questions = service()
+        val mine = questions.ask(worker, ask())
+        val other = questions.ask(Asker("s-2", "agent-2"), ask())
+        val closed = questions.orphanSession("s-1")
+        assertEquals(listOf(mine.id), closed.map { it.id })
+        assertEquals(QuestionStates.CANCELLED, questions.get(mine.id)!!.state)
+        assertEquals(QuestionResolvedBy.ORPHANED, questions.get(mine.id)!!.resolvedBy)
+        assertEquals(QuestionStates.OPEN, questions.get(other.id)!!.state)
+        assertEquals(QuestionStates.CANCELLED, pushed.last().state)
+        assertTrue(sent.isEmpty())
+    }
+
+    @Test
+    fun theSweepOrphansQuestionsWhoseSessionIsGone_AlsoAfterARestart() {
+        val repository = InMemoryOwnerQuestionRepository()
+        val q = service(repository).ask(worker, ask())
+        // "restart": a new service over the same stored rows, the session no longer exists
+        val after = service(repository, exists = { false })
+        after.sweep()
+        assertEquals(QuestionResolvedBy.ORPHANED, after.get(q.id)!!.resolvedBy)
+        assertEquals(QuestionStates.CANCELLED, after.get(q.id)!!.state)
+    }
+
+    @Test
+    fun theSweepExpiresAnOldQuestionOfAnIdleAskerButNotOfABusyOne() {
+        var busy = true
+        val questions = service(ttlMinutes = 10, busy = { busy })
+        val q = questions.ask(worker, ask())
+        now += 11 * OwnerQuestions.MINUTE_MS
+        questions.sweep()
+        assertEquals(QuestionStates.OPEN, questions.get(q.id)!!.state, "a busy asker keeps its question")
+        busy = false
+        questions.sweep()
+        assertEquals(QuestionResolvedBy.ORPHANED, questions.get(q.id)!!.resolvedBy)
+    }
+
+    @Test
+    fun aTtlOfZeroNeverExpiresAQuestionByAge() {
+        val questions = service(ttlMinutes = 0)
+        val q = questions.ask(worker, ask())
+        now += 1000 * OwnerQuestions.HOUR_MS
+        questions.sweep()
+        assertEquals(QuestionStates.OPEN, questions.get(q.id)!!.state)
+    }
+
+    @Test
+    fun theOwnerCanDismissAnOrphanedOpenQuestionByCancel() {
+        val questions = service()
+        val q = questions.ask(worker, ask())
+        assertEquals(QuestionStates.CANCELLED, questions.cancel(q.id, null).state)
     }
 }

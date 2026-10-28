@@ -150,4 +150,40 @@ class CompactQuestionTapUiTest {
         assertEquals(asker, controller.state.value.selectedId)
         onNodeWithTag(QUESTION_WINDOW_TAG).assertIsDisplayed()
     }
+
+    private val goneJson = questionJson.replace("\"id\":\"q1\"", "\"id\":\"q-gone\"").replace(asker, "s-removed")
+
+    @Test
+    fun `a question whose session no longer exists says so on tap and Dismiss cancels it`() = withPhone { controller, link ->
+        link.push(Envelope(Envelope.QUESTIONS, "[$goneJson]"))
+        waitUntil(timeoutMillis = 10_000) { controller.state.value.openQuestions.isNotEmpty() }
+        waitForIdle()
+        tap(QUESTION_PILL_TAG)
+        onNodeWithText("This question's session no longer exists").assertIsDisplayed()
+        assertEquals(here, controller.state.value.selectedId, "no session to open")
+        tap(QUESTION_GONE_DISMISS_TAG)
+        waitUntil(timeoutMillis = 10_000) { link.sentOf(Envelope.QUESTION_CANCEL).isNotEmpty() }
+        assertTrue(link.sentOf(Envelope.QUESTION_CANCEL).single().data.contains("q-gone"))
+        assertTrue(!shown(QUESTION_GONE_TAG), "the card closes")
+    }
+
+    @Test
+    fun `the pill's cross dismisses the question it would open`() = withPhone { controller, link ->
+        link.push(Envelope(Envelope.QUESTIONS, "[$goneJson]"))
+        waitUntil(timeoutMillis = 10_000) { controller.state.value.openQuestions.isNotEmpty() }
+        waitForIdle()
+        tap(QUESTION_PILL_DISMISS_TAG)
+        waitUntil(timeoutMillis = 10_000) { link.sentOf(Envelope.QUESTION_CANCEL).isNotEmpty() }
+        assertTrue(link.sentOf(Envelope.QUESTION_CANCEL).single().data.contains("q-gone"))
+    }
+
+    @Test
+    fun `an open question in the attention history has a Dismiss button`() = withPhone(1400) { controller, link ->
+        link.push(Envelope(Envelope.QUESTIONS, "[$goneJson]"))
+        waitUntil(timeoutMillis = 10_000) { controller.state.value.openQuestions.isNotEmpty() }
+        waitForIdle()
+        tap("right-tab-ATTENTION")
+        tap(QUESTION_HISTORY_DISMISS_TAG_PREFIX + "q-gone")
+        waitUntil(timeoutMillis = 10_000) { link.sentOf(Envelope.QUESTION_CANCEL).isNotEmpty() }
+    }
 }
