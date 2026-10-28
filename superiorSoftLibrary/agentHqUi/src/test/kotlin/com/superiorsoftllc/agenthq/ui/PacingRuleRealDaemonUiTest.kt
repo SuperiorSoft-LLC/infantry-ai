@@ -1,5 +1,8 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.usage.*
+import com.superiorsoftllc.agenthq.ui.shell.CoreUsage
+
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -89,7 +92,7 @@ class PacingRuleRealDaemonUiTest {
                 assertEquals("pace", rule()?.mode)
                 setContent {
                     val state by c.state.collectAsState()
-                    AgentHqTheme { UsagePane(state, null, c) }
+                    AgentHqTheme { UsagePane(state, null, CoreUsage(c)) }
                 }
 
                 // The projection sits next to the meter's percent; the rule line names the mode.

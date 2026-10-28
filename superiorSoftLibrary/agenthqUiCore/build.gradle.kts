@@ -56,6 +56,9 @@ kotlin {
             // RUNTIME-8: and the official Infantry_Notes and Infantry_Changes (their tabs and trees).
             implementation(project(":plugins:official:Infantry_Notes"))
             implementation(project(":plugins:official:Infantry_Changes"))
+            // RUNTIME-10: and the official Infantry_Stats and Infantry_Usage (their tabs).
+            implementation(project(":plugins:official:Infantry_Stats"))
+            implementation(project(":plugins:official:Infantry_Usage"))
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)

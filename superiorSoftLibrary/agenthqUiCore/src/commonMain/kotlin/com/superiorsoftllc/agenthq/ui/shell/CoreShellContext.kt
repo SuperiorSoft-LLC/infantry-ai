@@ -67,6 +67,7 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
     override val notes: NotesContext = CoreNotes(state, shell.controller)
     override val changes: ChangesContext = CoreChanges(state, shell.controller)
     override val executor: ExecutorContext = CoreExecutor(state)
+    override val usage: UsageContext = CoreUsage(shell.controller)
 
     override val board: BoardContext = object : BoardContext {
         override val open: Boolean get() = ui.showBoard
@@ -129,6 +130,14 @@ class CoreSession(private val state: AppState) : SessionContext {
     override val activeProjectId: String? get() = state.activeProjectId
     override val projects: List<ProjectView> get() = state.projects
     override fun hasSession(sessionId: String): Boolean = state.agents.containsKey(sessionId)
+}
+
+/** RUNTIME-10: [controller]'s usage and statistics requests, for the Usage and Stats tabs (or a pane drawn outside a shell). */
+class CoreUsage(private val controller: Controller) : UsageContext {
+    override suspend fun refreshLimits(): CommandResult = controller.refreshLimits()
+    override suspend fun refreshUsage(force: Boolean): CommandResult = controller.refreshUsage(force)
+    override suspend fun usageSet(set: com.superiorsoftllc.agenthq.ui.protocol.UsageSet): CommandResult = controller.usageSet(set)
+    override suspend fun sessionStats(sessionId: String): CommandResult = controller.requestSessionStats(sessionId)
 }
 
 /** S4b: [state]'s notes and [controller]'s note requests, for a pane drawn outside a shell. */

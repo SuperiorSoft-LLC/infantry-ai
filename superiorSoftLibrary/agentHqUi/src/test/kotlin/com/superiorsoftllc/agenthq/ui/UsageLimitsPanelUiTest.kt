@@ -1,5 +1,8 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.usage.*
+import com.superiorsoftllc.agenthq.ui.shell.CoreUsage
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -129,7 +132,7 @@ class UsageLimitsPanelUiTest {
             runDesktopComposeUiTest(520, 600) {
                 setContent {
                     val state by controller.state.collectAsState()
-                    UsagePane(state, null, controller)
+                    UsagePane(state, null, CoreUsage(controller))
                 }
                 link.push(Envelope(Envelope.READY, "contract=1.59.0 provider=stub instance=i1"))
                 waitUntil(timeoutMillis = 10_000) { link.sentOf("limits").isNotEmpty() }

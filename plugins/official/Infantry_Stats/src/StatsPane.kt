@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.stats
+
+import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -49,7 +51,7 @@ import com.superiorsoftllc.agenthq.ui.model.ChartScaleSetting
 import com.superiorsoftllc.agenthq.ui.model.ChartScales
 import com.superiorsoftllc.agenthq.ui.model.StatsView
 import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
-import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.agenthq.ui.shell.UsageContext
 import com.superiorsoftllc.agenthq.ui.protocol.SessionStats
 import com.superiorsoftllc.agenthq.ui.protocol.StatsPoint
 import kotlinx.coroutines.delay
@@ -81,7 +83,7 @@ const val STATS_REFRESH_MS = 3_000L
  * Every null field reads "-".
  */
 @Composable
-fun StatsPane(state: AppState, controller: Controller) {
+fun StatsPane(state: AppState, controller: UsageContext) {
     val agent = state.selected
     val supported = contractAtLeast(state.connection.contract, 1, 92)
     val live = state.connection.isLive
@@ -89,7 +91,7 @@ fun StatsPane(state: AppState, controller: Controller) {
         val id = agent?.id ?: return@LaunchedEffect
         if (!live || !supported) return@LaunchedEffect
         while (true) {
-            controller.requestSessionStats(id)
+            controller.sessionStats(id)
             delay(STATS_REFRESH_MS)
         }
     }

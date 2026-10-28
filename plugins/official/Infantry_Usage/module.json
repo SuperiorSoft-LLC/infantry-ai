@@ -4,8 +4,10 @@
   "apiVersion": 1,
   "author": "Infantry AI",
   "description": "Plan usage and limits.",
+  "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.core.UsageModuleSource",
+  "entry": "com.superiorsoftllc.agenthq.plugins.official.usage.UsagePlugin",
+  "jar": "build/libs/Infantry_Usage.jar",
   "buildOrder": 160,
   "tabs": [
     {

@@ -40,6 +40,9 @@ dependencies {
     // RUNTIME-8: and Infantry_Notes and Infantry_Changes, the Notes and Changes tabs and their trees.
     testImplementation(project(":plugins:official:Infantry_Notes"))
     testImplementation(project(":plugins:official:Infantry_Changes"))
+    // RUNTIME-10: and Infantry_Stats and Infantry_Usage (the Stats and Usage pane tests draw them).
+    testImplementation(project(":plugins:official:Infantry_Stats"))
+    testImplementation(project(":plugins:official:Infantry_Usage"))
     implementation(compose.desktop.currentOs)
     // UPDATE-1: the update dialog (UpdatePrompt.kt); the same material3 :agenthqUiCore already ships.
     implementation(compose.material3)
@@ -207,8 +210,8 @@ val renderTabShotsForDiff = tasks.register<JavaExec>("renderTabShotsForDiff") {
     if (project.findProperty("tabShotsExtra") == "dropin") {
         val appUi = project(":superiorSoftLibrary:agenthqAppUi")
         dependsOn(":superiorSoftLibrary:agenthqAppUi:appUiIhq")
-        // NS2: nor Infantry_Board, which App_UI.ihq bundles. RUNTIME-3..8: nor Infantry_Cli, Infantry_Agents, Infantry_Settings, Infantry_Git, Infantry_Run, Infantry_Notes, Infantry_Changes (tests carry them compiled in).
-        classpath = sourceSets["test"].runtimeClasspath.filter { p -> "agenthqAppUi" !in p.invariantSeparatorsPath && "Infantry_Board" !in p.invariantSeparatorsPath && "Infantry_Cli" !in p.invariantSeparatorsPath && "Infantry_Agents" !in p.invariantSeparatorsPath && "Infantry_Settings" !in p.invariantSeparatorsPath && "Infantry_Git" !in p.invariantSeparatorsPath && "Infantry_Run" !in p.invariantSeparatorsPath && "Infantry_Notes" !in p.invariantSeparatorsPath && "Infantry_Changes" !in p.invariantSeparatorsPath }
+        // NS2: nor Infantry_Board, which App_UI.ihq bundles. RUNTIME-3..10: nor Infantry_Cli, Infantry_Agents, Infantry_Settings, Infantry_Git, Infantry_Run, Infantry_Notes, Infantry_Changes, Infantry_Stats, Infantry_Usage (tests carry them compiled in).
+        classpath = sourceSets["test"].runtimeClasspath.filter { p -> "agenthqAppUi" !in p.invariantSeparatorsPath && "Infantry_Board" !in p.invariantSeparatorsPath && "Infantry_Cli" !in p.invariantSeparatorsPath && "Infantry_Agents" !in p.invariantSeparatorsPath && "Infantry_Settings" !in p.invariantSeparatorsPath && "Infantry_Git" !in p.invariantSeparatorsPath && "Infantry_Run" !in p.invariantSeparatorsPath && "Infantry_Notes" !in p.invariantSeparatorsPath && "Infantry_Changes" !in p.invariantSeparatorsPath && "Infantry_Stats" !in p.invariantSeparatorsPath && "Infantry_Usage" !in p.invariantSeparatorsPath }
         systemProperty("agenthq.tabshots.appUiIhq", appUi.layout.buildDirectory.file("ihq/App_UI.ihq").get().asFile.path)
     }
     outputs.upToDateWhen { false }

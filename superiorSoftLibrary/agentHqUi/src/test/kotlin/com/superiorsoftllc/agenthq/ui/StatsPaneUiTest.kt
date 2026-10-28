@@ -1,5 +1,8 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.stats.*
+import com.superiorsoftllc.agenthq.ui.shell.CoreUsage
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -97,7 +100,7 @@ class StatsPaneUiTest {
             runDesktopComposeUiTest(width, height) {
                 setContent {
                     val state by controller.state.collectAsState()
-                    Box(Modifier.fillMaxSize().background(Palette.Bg).testTag("shot")) { StatsPane(state, controller) }
+                    Box(Modifier.fillMaxSize().background(Palette.Bg).testTag("shot")) { StatsPane(state, CoreUsage(controller)) }
                 }
                 link.push(Envelope(Envelope.READY, "contract=1.92.0 provider=stub instance=i1"))
                 link.push(sessionsFrame())
@@ -192,7 +195,7 @@ class StatsPaneUiTest {
                     var tab by remember { mutableStateOf("infantry.cli") }
                     Column {
                         CenterTabBar(state, tab) { tab = it }
-                        if (tab == "infantry.stats") StatsPane(state, controller)
+                        if (tab == "infantry.stats") StatsPane(state, CoreUsage(controller))
                     }
                 }
                 link.push(Envelope(Envelope.READY, "contract=1.92.0 provider=stub instance=i1"))
@@ -232,7 +235,7 @@ class StatsPaneUiTest {
             runDesktopComposeUiTest(760, 600) {
                 setContent {
                     val state by controller.state.collectAsState()
-                    StatsPane(state, controller)
+                    StatsPane(state, CoreUsage(controller))
                 }
                 link.push(Envelope(Envelope.READY, "contract=1.92.0 provider=stub instance=i1"))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
@@ -256,7 +259,7 @@ class StatsPaneUiTest {
             runDesktopComposeUiTest(760, 600) {
                 setContent {
                     val state by controller.state.collectAsState()
-                    StatsPane(state, controller)
+                    StatsPane(state, CoreUsage(controller))
                 }
                 link.push(Envelope(Envelope.READY, "contract=1.91.0 provider=stub instance=i1"))
                 link.push(sessionsFrame())
