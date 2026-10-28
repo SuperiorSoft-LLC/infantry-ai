@@ -6,14 +6,12 @@ import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellCompactDrawer
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellConfigSettings
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellDiff
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellLeftPanel
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellRightPanel
 
 /** S4: the trees Infantry_AppUi draws in the shell's empty slots (`CoreShell.slots`), in slot order. */
 private val fills: List<Block> = listOf(
     ShellLeftPanel, ShellRightPanel, ShellCompactDrawer,
-    ShellDiff,
     ShellConfigSettings,
     // RUNTIME-14: infantry.shell.roles (the roles window) is filled by the official Infantry_Roles itself.
     // RUNTIME-15: infantry.shell.board (the board overlay) is filled by the official Infantry_Board itself.
@@ -24,6 +22,7 @@ private val fills: List<Block> = listOf(
     // RUNTIME-22: infantry.shell.center (the chat column and the New agent dialog) is filled by the official Infantry_Chat itself.
     // RUNTIME-23: infantry.shell.questions (the questions pill) is filled by the official Infantry_Approvals itself.
     // RUNTIME-24: infantry.shell.assistant (the Assistant popup) is filled by the official Infantry_Assistant itself.
+    // RUNTIME-25: infantry.shell.diff (the diff modal) is filled by the official Infantry_Changes itself.
     // RUNTIME-16: infantry.shell.sound and infantry.shell.voice are filled by the official Infantry_Alerts itself.
 )
 

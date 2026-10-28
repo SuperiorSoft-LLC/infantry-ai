@@ -67,6 +67,7 @@ class ChangesJarLoadTest {
             val status = f.statuses.single { s -> s.name == "Infantry_Changes" }
             assertEquals(ModuleState.LOADED, status.state, "${status.reason}\n${it.log.joinToString("\n")}")
             assertEquals(Tier.OFFICIAL, status.tier)
+            assertEquals("Infantry_Changes", f.fillModules["infantry.shell.diff"])
             assertEquals(emptyList(), f.problems)
             val tab = f.find(CHANGES_TAB_ID)
             assertEquals("Infantry_Changes", tab?.module)

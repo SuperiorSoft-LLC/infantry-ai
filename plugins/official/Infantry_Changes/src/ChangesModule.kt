@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.changes
 
+import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
@@ -12,6 +13,8 @@ import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
 
 /** The Changes tab's id. */
 const val CHANGES_TAB_ID = "infantry.changes"
+
+private const val DIFF_FILL_ID = "infantry.shell.diff"
 
 /** The Changes tab (order 10 in the right strip, shortcut 3). */
 private fun changesTab() = TabProvider(
@@ -37,8 +40,10 @@ val InfantryChanges = AgentHqModule(
     ModuleManifest(
         name = "Infantry_Changes", version = "1.0.0", author = "Infantry AI", description = "The project's worktrees and their changes.",
         tabs = listOf(TabDeclaration(CHANGES_TAB_ID, TabContainers.RIGHT)),
+        fills = listOf(FillDeclaration(DIFF_FILL_ID)),
     ),
     listOf(changesTab()),
+    fills = mapOf(DIFF_FILL_ID to ShellDiff),
     tabTrees = mapOf(CHANGES_TAB_ID to ShellChanges),
 )
 
@@ -51,6 +56,7 @@ class ChangesPlugin : UiPlugin, ModuleSource {
     override fun register(registrar: UiRegistrar) {
         registrar.tab(changesTab())
         registrar.tabTree(CHANGES_TAB_ID, ShellChanges)
+        registrar.fill(DIFF_FILL_ID, ShellDiff)
     }
 
     override fun modules(): List<AgentHqModule> = listOf(InfantryChanges)

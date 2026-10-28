@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.ui.shell.blocks
+package com.superiorsoftllc.agenthq.plugins.official.changes
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -15,6 +15,7 @@ import com.superiorsoftllc.agenthq.ui.block.layout.Size
 import com.superiorsoftllc.agenthq.ui.model.DiffBody
 import com.superiorsoftllc.agenthq.ui.model.diffBody
 import com.superiorsoftllc.agenthq.ui.openDiff
+import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 
 private const val DIFF = "infantry.shell.diff"
 
@@ -32,9 +33,11 @@ private val LocalDiffHost = compositionLocalOf<DiffHost?> { null }
 class DiffBlock(children: List<Block>, place: Place = Place()) : Block("diffModal", DIFF, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
-        val target = s.ui.diffTarget ?: return
-        val open = openDiff(s.state, s.controller, target, onTarget = { next -> s.ui.diffTarget = next; if (next == null) s.root.requestFocus() }) ?: return
+        val d = LocalShellContext.current?.diff ?: return
+        val state = d.state ?: return
+        val controller = d.controller ?: return
+        val target = d.target ?: return
+        val open = openDiff(state, controller, target, onTarget = d::show) ?: return
         val host = DiffHost(open, diffBody(open.patch))
         DiffModalFrame(open.onClose) {
             CompositionLocalProvider(LocalDiffHost provides host) { RenderPlaced(children) }
