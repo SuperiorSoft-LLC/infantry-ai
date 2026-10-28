@@ -151,6 +151,7 @@ fun ConfigDialog(
         if (theme != null && onTheme != null) add(ConfigEntry.THEME)
         add(ConfigEntry.BLUR)
         add(ConfigEntry.MARKDOWN_ENGINE)
+        add(ConfigEntry.TAB_GROUPS)
         if (userPortrait != null) add(ConfigEntry.USER_PORTRAIT)
         if (about != null) add(ConfigEntry.ABOUT)
         add(ConfigEntry.AGENT_SCOPE)
@@ -279,6 +280,7 @@ fun ConfigSections(config: ConfigDialogHost) {
     ConfigBlurSection(config)
     ConfigMarkdownEngineSection(config)
     ConfigReasoningSection(config)
+    ConfigTabGroupsSection(config)
     ConfigUserPortraitSection(config)
     ConfigAgentScopeSection(config)
     ConfigProgressStaleSection(config)
@@ -341,6 +343,16 @@ fun ConfigReasoningSection(config: ConfigDialogHost, modifier: Modifier = Modifi
     if (!config.shows(ConfigEntry.REASONING)) return
     FlagSection(ConfigEntry.REASONING, config.highlight, modifier) {
         ReasoningPlacementChoice(config.flags.reasoningPlacement) { config.onFlags(config.flags.copy(reasoningPlacement = it)) }
+    }
+}
+
+/** SETTINGS-TAB-1: one switch per host tab (Settings): its group as sub-tabs, or back in the strip. */
+@Composable
+fun ConfigTabGroupsSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
+    if (!config.shows(ConfigEntry.TAB_GROUPS)) return
+    val factory = LocalTabFactory.current
+    FlagSection(ConfigEntry.TAB_GROUPS, config.highlight, modifier) {
+        com.superiorsoftllc.agenthq.ui.plugin.TabGroupsSection(factory)
     }
 }
 

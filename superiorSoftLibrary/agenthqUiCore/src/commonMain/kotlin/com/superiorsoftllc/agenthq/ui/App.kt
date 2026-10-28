@@ -309,6 +309,8 @@ fun App(
     /** PLUGINS-1: shows a tab by id in its own container (the right one is revealed first, as above). */
     fun showTab(id: String) {
         val tab = tabs.find(id) ?: return
+        // SETTINGS-TAB-1: a sub-tab shows inside its host tab (shortcuts and links reach it there).
+        tabs.hostOf(id)?.let { host -> ui.subTabs[host] = id; return showTab(host) }
         when (tab.container) {
             TabContainers.CENTER -> ui.centerTab = tab.id
             TabContainers.RIGHT -> showRightTab(tab.id)
@@ -333,6 +335,12 @@ fun App(
     LaunchedEffect(tabs, linkLive) { if (linkLive && tabs.config.load != NodeConfigLoad.LOADED) tabs.config.load() }
     // P1 step 2 (6s E): a tab its strip's settings switch off while it is open hands the strip back to its home tab.
     LaunchedEffect(tabs.config.stored) {
+        // SETTINGS-TAB-1: grouping switched on while a sub-tab is open moves into its host on that sub-tab; switched
+        // off while the host is open shows the sub-tab that was picked in it, back in the strip.
+        tabs.hostOf(ui.centerTab)?.let { host -> ui.subTabs[host] = ui.centerTab; ui.centerTab = host }
+        if (tabs.isHost(ui.centerTab) && !tabs.grouped(ui.centerTab)) {
+            ui.centerTab = ui.subTabs[ui.centerTab]?.takeIf { tabs.find(it) != null } ?: homeTab
+        }
         if (tabs.isDisabled(ui.centerTab)) ui.centerTab = homeTab
         if (tabs.isDisabled(ui.rightTab)) tabs.home(TabContainers.RIGHT)?.let { ui.rightTab = it }
     }

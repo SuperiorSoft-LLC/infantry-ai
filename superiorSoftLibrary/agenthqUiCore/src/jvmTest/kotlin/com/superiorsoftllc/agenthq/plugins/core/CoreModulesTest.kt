@@ -5,6 +5,11 @@ import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
+import com.superiorsoftllc.agenthq.ui.plugin.TabGroups
+import com.superiorsoftllc.agenthq.ui.plugin.config.ChildrenControl
+import com.superiorsoftllc.agenthq.plugin.api.NodeConfigEntry
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.Json
 import java.io.File
 import kotlin.test.Test
@@ -59,5 +64,50 @@ class CoreModulesTest {
         assertEquals(1, f.problems.size)
         assertTrue("Acme_Copy" in f.problems.single() && "infantry.git" in f.problems.single())
         assertEquals("Infantry_Git", f.find("infantry.git")?.module)
+    }
+
+    @Test
+    fun `SETTINGS-TAB-1 the Settings group is off by default and switchable`() {
+        val f = TabFactory(CoreModules.all)
+        // Off (unset): the strip is the one before the group, Settings hidden, nothing under it.
+        assertEquals(false, f.grouped(SETTINGS_TAB_ID))
+        assertEquals(null, f.tabs(TabContainers.CENTER).firstOrNull { it.id == SETTINGS_TAB_ID })
+        assertEquals(emptyList(), f.children(SETTINGS_TAB_ID))
+        assertEquals(null, f.hostOf("infantry.git"))
+        assertEquals(listOf("PROFILES", "TRIGGERS", "MEMORY", "RUN", "GIT").map { "center-tab-$it" }, f.groupable(SETTINGS_TAB_ID).map { it.testTag })
+
+        f.config.replace(listOf(NodeConfigEntry(SETTINGS_TAB_ID, TabGroups.GROUPED, JsonPrimitive(true))))
+        assertEquals(
+            listOf("OUTPUT", "PODS", "ROLES", "EPICS", "STATS", "SETTINGS").map { "center-tab-$it" },
+            f.tabs(TabContainers.CENTER).map { it.testTag },
+        )
+        assertEquals(listOf("PROFILES", "TRIGGERS", "MEMORY", "RUN", "GIT").map { "center-tab-$it" }, f.children(SETTINGS_TAB_ID).map { it.testTag })
+        assertEquals(SETTINGS_TAB_ID, f.hostOf("infantry.git"))
+        assertEquals("infantry.cli", f.home(TabContainers.CENTER))
+        // The shortcuts still name the sub-tabs; the window opens them inside Settings.
+        assertEquals("infantry.profiles", f.byShortcut(9)?.id)
+        assertEquals("infantry.triggers", f.byShortcut(0)?.id)
+        // A sub-tab the Settings tab's own settings switch off is disabled; Settings itself is not.
+        f.config.replace(listOf(
+            NodeConfigEntry(SETTINGS_TAB_ID, TabGroups.GROUPED, JsonPrimitive(true)),
+            NodeConfigEntry(SETTINGS_TAB_ID, ChildrenControl.DISABLED, JsonArray(listOf(JsonPrimitive("infantry.run")))),
+        ))
+        assertTrue(f.isDisabled("infantry.run"))
+        assertEquals(listOf("infantry.profiles", "infantry.triggers", "infantry.notes", "infantry.git"), f.children(SETTINGS_TAB_ID).map { it.id })
+
+        // Switched back off: the old strip again.
+        f.config.replace(listOf(NodeConfigEntry(SETTINGS_TAB_ID, TabGroups.GROUPED, JsonPrimitive(false))))
+        assertEquals(
+            listOf("OUTPUT", "PODS", "ROLES", "PROFILES", "TRIGGERS", "EPICS", "MEMORY", "RUN", "GIT", "STATS").map { "center-tab-$it" },
+            f.tabs(TabContainers.CENTER).map { it.testTag },
+        )
+    }
+
+    @Test
+    fun `SETTINGS-TAB-1 without the Settings module its tabs stay in the strip even when grouped`() {
+        val f = TabFactory(CoreModules.all - InfantrySettings)
+        f.config.replace(listOf(NodeConfigEntry(SETTINGS_TAB_ID, TabGroups.GROUPED, JsonPrimitive(true))))
+        assertEquals(null, f.hostOf("infantry.git"))
+        assertTrue(f.tabs(TabContainers.CENTER).any { it.id == "infantry.git" })
     }
 }

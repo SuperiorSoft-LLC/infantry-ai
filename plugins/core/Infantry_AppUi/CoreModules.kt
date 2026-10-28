@@ -25,6 +25,7 @@ object CoreModules {
         InfantryRun,
         InfantryGit,
         InfantryStats,
+        InfantrySettings,
         InfantryChanges,
         InfantryReview,
         InfantryAttention,

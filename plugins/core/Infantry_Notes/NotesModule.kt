@@ -26,6 +26,7 @@ val InfantryNotes = AgentHqModule(
                 { moveTo(9f, 17f); lineTo(16f, 17f) },
             ),
             testTag = "center-tab-MEMORY",
+            parent = SETTINGS_TAB_ID,
             routes = listOf("loadMemory", "getMemory", "searchMemory", "saveMemory", "deleteMemory"),
         ) { NotesTab() },
     ),

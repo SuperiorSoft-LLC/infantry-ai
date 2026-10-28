@@ -438,6 +438,31 @@ fun main(args: Array<String>) {
             daemon.close()
             exitProcess(0)
         }
+        // SETTINGS-TAB-1: -PtabShotsExtra=settings is the Settings tab mockup: the strip before, the switch in Configuration >
+        // Appearance > Tab groups turned on (stored by this run's daemon), the strip after with Settings open on each of its
+        // sub-tabs, then the same at the 800 and 360 px widths. The default run is unchanged.
+        if (System.getProperty("agenthq.tabshots.extra") == "settings") {
+            snap(out, "settings-0-before-1400")
+            onNodeWithContentDescription("Configuration").performClick()
+            onNodeWithTag(CONFIG_TAB_TAG_PREFIX + ConfigTab.APPEARANCE.name).performClick()
+            onNodeWithTag(CONFIG_SECTION_TAG_PREFIX + ConfigEntry.TAB_GROUPS.name).performScrollTo()
+            waitUntil(timeoutMillis = 20_000) { tabs.config.load == com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigLoad.LOADED }
+            waitForIdle()
+            snap(out, "settings-1-switch-off")
+            onNodeWithTag(com.superiorsoftllc.agenthq.ui.plugin.TAB_GROUP_SWITCH_TAG_PREFIX + "infantry.settings").performClick()
+            waitUntil(timeoutMillis = 20_000) { tabs.grouped("infantry.settings") }
+            waitForIdle()
+            snap(out, "settings-2-switch-on")
+            onNodeWithContentDescription("Configuration").performClick()
+            waitForIdle()
+            snap(out, "settings-3-strip-1400")
+            onAllNodesWithTag("center-tab-SETTINGS")[0].performClick()
+            for (tag in listOf("PROFILES", "TRIGGERS", "MEMORY", "RUN", "GIT")) {
+                onAllNodesWithTag("center-tab-$tag")[0].performClick()
+                snap(out, "settings-4-${tag.lowercase()}-1400")
+            }
+            return@runDesktopComposeUiTest
+        }
         // BLOCKS-LAYOUT L11: -PtabShotsExtra=assistant,newAgent,diff (any of them, comma-separated) renders only those
         // overlays open, as the board's shot does (the default run is unchanged). The diff comes last: it adds a project.
         val l11 = System.getProperty("agenthq.tabshots.extra")?.split(',')?.map { it.trim() }.orEmpty()
@@ -596,6 +621,20 @@ fun main(args: Array<String>) {
         }
         // LAYOUT-1 P0: the same window with the title bar's window controls (header + footer visible), then compact widths and
         // the header's overflow menu, so a later shell change can prove the header and footer unchanged.
+    }
+    if (System.getProperty("agenthq.tabshots.extra") == "settings") {
+        for ((name, width) in listOf("800" to 800, "360" to 360)) {
+            runDesktopComposeUiTest(width, 860) {
+                setContent { ChromeApp(controller, tabs, port) }
+                waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
+                waitForIdle()
+                snap(out, "settings-5-home-$name")
+                onAllNodesWithTag("center-tab-SETTINGS")[0].performScrollTo().performClick()
+                snap(out, "settings-6-open-$name")
+            }
+        }
+        daemon.close()
+        exitProcess(0)
     }
     if ("compact" in System.getProperty("agenthq.tabshots.extra").orEmpty().split(',').map { it.trim() }) {
         // One fresh window per overlay (the compact board has no "Close" text to click back out with).
