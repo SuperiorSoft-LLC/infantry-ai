@@ -141,6 +141,14 @@ class CliTicketDescriptionTest {
     }
 
     @Test
+    fun anOlderCliBuildIsToldWhichLauncherToUse() {
+        val ready = "contract=1.78.0 build=1.0.1+20261024.1000.abcdef1"
+        val line = assertNotNull(Cli.olderCliNotice("1.0.1+20261023.1432.e85b223", ready, "C:/app/bin"))
+        assertTrue("CLI is older than the daemon" in line && "C:/app/bin" in line, line)
+        assertNull(Cli.olderCliNotice("1.0.1+20261024.1000.abcdef1", ready, null))
+    }
+
+    @Test
     fun theSameContractVersionSaysNothing() {
         assertNull(Cli.contractNotice("1.78.0", "provider=stub contract=1.78.0 instance=i since=0"))
     }

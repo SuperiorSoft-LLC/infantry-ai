@@ -3976,6 +3976,10 @@ internal object Cli {
             // A minor difference is a hint, printed once per process; a major one warns on every call.
             if (notice.major || contractHintShown.compareAndSet(false, true)) err.appendLine(notice.line)
         }
+        // Version handshake: the daemon's build= against this CLI's own; an older CLI names the launcher to use.
+        olderCliNotice(
+            com.superiorsoftllc.agenthq.update.BuildInfo.current, ready.data, System.getenv(AgentHqBin.BIN_ENV),
+        )?.let { if (contractHintShown.compareAndSet(false, true)) err.appendLine(it) }
     }
 
     private val contractHintShown = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -4002,6 +4006,26 @@ internal object Cli {
         } else {
             ContractNotice(false, "hint: CLI ${shortOf(cliVersion)}, daemon ${shortOf(daemon)}: rebuild/reinstall both for new features")
         }
+    }
+
+    /** The sortable (version, date, time) of a build string, or null when it does not follow [BuildInfo.PATTERN]. */
+    private fun buildKey(build: String): String? =
+        com.superiorsoftllc.agenthq.update.BuildInfo.PATTERN.matchEntire(build)?.let { m ->
+            m.groupValues[1].split('.').joinToString(".") { it.padStart(6, '0') } + "+" + m.groupValues[2] + m.groupValues[3]
+        }
+
+    /**
+     * "CLI is older than the daemon": the `build=` of [readyData] is newer than [cliBuild]. Null when equal, newer,
+     * unknown or not comparable. [binHint] (AGENTHQ_BIN) names the launcher that matches the daemon.
+     */
+    internal fun olderCliNotice(cliBuild: String, readyData: String, binHint: String?): String? {
+        val daemon = readyData.split(' ').firstOrNull { it.startsWith("build=") }?.removePrefix("build=") ?: return null
+        val d = buildKey(daemon) ?: return null
+        val c = buildKey(cliBuild) ?: return null
+        if (c >= d) return null
+        val use = binHint?.takeIf { it.isNotBlank() }?.let { "use the launcher in $it" }
+            ?: "use the launcher the daemon exports as AGENTHQ_BIN"
+        return "warning: CLI is older than the daemon (CLI build $cliBuild, daemon build $daemon); $use"
     }
 
     /** `pod_query` and unwrap the answer, turning the daemon's `error` frame into a failure. */
