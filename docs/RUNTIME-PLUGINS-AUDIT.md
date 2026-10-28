@@ -232,7 +232,7 @@ one, **new** = becomes a new official plugin. "Done" = moved in this ticket.
 | `ShellQuestionPill.kt`, `QuestionWindow.kt` | 324 | `infantry.shell.questions` (approvals / owner questions) | via `QuestionsContext` + appShell | **new** Infantry_Approvals; the daemon stays the enforcement point (rev 4 C5) | follow-up F7 |
 | `ShellAssistant.kt`, `AssistantPopup.kt` | 417 | `infantry.shell.assistant` | via appShell | **new** Infantry_Assistant (on Infantry_Chat's panel) | follow-up F8 |
 | `ShellDiff.kt`, `DiffModal.kt` | 326 | `infantry.shell.diff` | via appShell (`openDiff(state, controller)`) | **plugin** Infantry_Changes (it opens the diffs) | follow-up F9 |
-| `ShellAccess.kt` (`appShell`) + core `coreShell` | 13 | the last controller path | — | delete when the 31 uses are 0, then `apiVersion` 2 | follow-up F10 |
+| `ShellAccess.kt` (`appShell`) + core `coreShell` | 13 | the last controller path | — | delete when the 31 uses are 0, then `apiVersion` 2 | done, RUNTIME-26: `coreShell`/`appShell` deleted; `apiVersion` 2 (resolver + every module.json); Infantry_AppUi and App_UI.ihq retired; the panel frames and `ShellConfigSettings` moved into agenthqUiCore as the shell's own nodes |
 
 Follow-ups (weight 1-5): F1 toast → shell (1); F2 status bar: connection/cog → shell, Infantry_Processes on
 `ProcessesContext` (3); F3 config sections to their owners via `config.<entry>` contributions (3); F4 Infantry_Header
