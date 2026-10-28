@@ -3,14 +3,22 @@ package com.superiorsoftllc.agenthq.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.style.TextDecoration
+import com.superiorsoftllc.agenthq.ui.model.NewAgentField
+import com.superiorsoftllc.agenthq.ui.protocol.Role
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -55,6 +63,15 @@ const val NEW_AGENT_ADD_TAG = "new-agent-add"
 const val NEW_AGENT_ADD_HINT_TAG = "new-agent-add-hint"
 const val NEW_AGENT_ERROR_TAG = "new-agent-error"
 const val NEW_AGENT_EMPTY_ROLES_TAG = "new-agent-roles-empty"
+const val NEW_AGENT_ROLE_GRID_TAG = "new-agent-role-grid"
+const val NEW_AGENT_MORE_ROLES_TAG = "new-agent-more-roles"
+/** The "required" mark beside a step title; the suffix is the [NewAgentField] name. */
+const val NEW_AGENT_REQUIRED_TAG_PREFIX = "new-agent-required-"
+
+private val RoleCardHeight = 48.dp
+private val RoleGridGap = 6.dp
+private val RoleCardMinWidth = 150.dp
+private const val ROLE_GRID_VISIBLE_ROWS = 3
 
 /**
  * UX slice 1: the New agent modal. 1) pick a role from a searchable grid; 2) pick harness, provider and model
@@ -80,7 +97,31 @@ fun NewAgentDialog(
  * BLOCKS-LAYOUT L11: the New agent modal's draft, as its steps read it: the current model (catalogs folded in), its
  * update, and the last refusal of Add.
  */
-class NewAgentDraft(val model: NewAgentModalModel, val update: (NewAgentModalModel) -> Unit, val error: String?)
+class NewAgentDraft(
+    val model: NewAgentModalModel,
+    val update: (NewAgentModalModel) -> Unit,
+    val error: String?,
+    /** Where each step sits, so the Add hint can scroll the missing one into view (and focus it, for a text field). */
+    val targets: NewAgentTargets = NewAgentTargets(),
+)
+
+/** One scroll target per step, and a focus target per text field. Owned by the frame; the steps attach them. */
+class NewAgentTargets {
+    val role = BringIntoViewRequester()
+    val executor = BringIntoViewRequester()
+    val task = BringIntoViewRequester()
+    val roleFocus = FocusRequester()
+    val taskFocus = FocusRequester()
+
+    /** Scroll [field]'s step into view and focus its text field when it has one. */
+    suspend fun jumpTo(field: NewAgentField) {
+        when (field) {
+            NewAgentField.ROLE -> { role.bringIntoView(); runCatching { roleFocus.requestFocus() } }
+            NewAgentField.HARNESS, NewAgentField.MODEL -> executor.bringIntoView()
+            NewAgentField.TASK -> { task.bringIntoView(); runCatching { taskFocus.requestFocus() } }
+        }
+    }
+}
 
 /**
  * The New agent modal's frame: the dialog (title, Add with its hint, Cancel) and the draft it owns. [content] gets the
@@ -103,6 +144,7 @@ fun NewAgentDialogFrame(
     } else draft.executor
     val cur = draft.copy(roles = state.roles, bindings = state.roleBindings, harnesses = state.providers, catalog = state.modelCatalog, executor = executor)
     val update: (NewAgentModalModel) -> Unit = { draft = it }
+    val targets = remember { NewAgentTargets() }
 
     AhqAlertDialog(
         onDismissRequest = onDismiss,
@@ -110,17 +152,27 @@ fun NewAgentDialogFrame(
         title = { Text("New agent", fontWeight = FontWeight.Bold) },
         text = {
             // Four steps only, so a plain scrolling Column: every step stays composed (a lazy list dropped the task
-            // field once the searchable provider/model lists made step 2 taller than the viewport).
-            Column(
+            // field once the searchable provider/model lists made step 2 taller than the viewport). Ticket 90580b06:
+            // the scroll cue column fades the clipped edge, so content below the fold is visible as such.
+            ScrollCueColumn(
+                Modifier.heightIn(max = 520.dp).padding(horizontal = 2.dp, vertical = 4.dp),
+                fade = AlertDialogDefaults.containerColor,
                 verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()).padding(horizontal = 2.dp, vertical = 4.dp),
             ) {
-                content(NewAgentDraft(cur, update, error))
+                content(NewAgentDraft(cur, update, error, targets))
             }
         },
         confirmButton = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                cur.addBlockedReason?.let { Text(it, color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(NEW_AGENT_ADD_HINT_TAG)) }
+                // Ticket 90580b06: the hint names the missing field and, clicked, scrolls to it (and focuses it).
+                cur.missingField?.let { field ->
+                    Text(
+                        "\u2193 " + cur.addBlockedReason, color = MaterialTheme.colorScheme.primary, fontSize = 11.sp,
+                        textDecoration = TextDecoration.Underline,
+                        modifier = Modifier.weight(1f, fill = false).clickable(onClickLabel = "Show the missing field") { scope.launch { targets.jumpTo(field) } }
+                            .testTag(NEW_AGENT_ADD_HINT_TAG),
+                    )
+                }
                 Button(
                     onClick = {
                         cur.roleId?.let { role ->
@@ -138,11 +190,12 @@ fun NewAgentDialogFrame(
 
 /** Step 1: the role catalog (search, then the grid of roles); [modifier] goes on the step's column. */
 @Composable
-fun NewAgentRoleStep(draft: NewAgentDraft, modifier: Modifier = Modifier) = RoleStep(draft.model, draft.update, modifier)
+fun NewAgentRoleStep(draft: NewAgentDraft, modifier: Modifier = Modifier) = RoleStep(draft.model, draft.update, draft.targets, modifier)
 
 /** Step 2: harness, provider and model, closed until a role is chosen; [modifier] goes on the step's column. */
 @Composable
-fun NewAgentExecutorStep(draft: NewAgentDraft, modifier: Modifier = Modifier) = ExecutorStep(draft.model, draft.update, modifier)
+fun NewAgentExecutorStep(draft: NewAgentDraft, modifier: Modifier = Modifier) =
+    ExecutorStep(draft.model, draft.update, modifier.bringIntoViewRequester(draft.targets.executor))
 
 /** Add's last refusal, while there is one. */
 @Composable
@@ -154,22 +207,31 @@ fun NewAgentError(draft: NewAgentDraft, modifier: Modifier = Modifier) {
 @Composable
 fun NewAgentTaskStep(draft: NewAgentDraft, modifier: Modifier = Modifier) {
     val cur = draft.model
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("3. First task", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+    Column(modifier.bringIntoViewRequester(draft.targets.task), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        StepTitle("3. First task", NewAgentField.TASK)
         OutlinedTextField(
             cur.task, { draft.update(cur.withTask(it)) }, placeholder = { Text("What should this agent do first?") },
-            modifier = Modifier.fillMaxWidth().testTag(NEW_AGENT_TASK_TAG), minLines = 2, maxLines = 4, colors = visibleBorderFieldColors(),
+            modifier = Modifier.fillMaxWidth().focusRequester(draft.targets.taskFocus).testTag(NEW_AGENT_TASK_TAG), minLines = 2, maxLines = 4, colors = visibleBorderFieldColors(),
         )
     }
 }
 
+/** A step's bold title with the required mark: an asterisk plus the word, so it is not color or symbol alone. */
 @Composable
-private fun RoleStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> Unit, modifier: Modifier) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("1. Role", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+private fun StepTitle(text: String, field: NewAgentField) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(text, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        Text("* required", color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.testTag(NEW_AGENT_REQUIRED_TAG_PREFIX + field.name))
+    }
+}
+
+@Composable
+private fun RoleStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> Unit, targets: NewAgentTargets, modifier: Modifier) {
+    Column(modifier.bringIntoViewRequester(targets.role), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        StepTitle("1. Role", NewAgentField.ROLE)
         OutlinedTextField(
             m.roleQuery, { update(m.withRoleQuery(it)) }, placeholder = { Text("Search roles...") }, singleLine = true,
-            modifier = Modifier.fillMaxWidth().testTag(NEW_AGENT_ROLE_SEARCH_TAG), colors = visibleBorderFieldColors(),
+            modifier = Modifier.fillMaxWidth().focusRequester(targets.roleFocus).testTag(NEW_AGENT_ROLE_SEARCH_TAG), colors = visibleBorderFieldColors(),
         )
         val options = m.roleOptions
         when {
@@ -181,15 +243,34 @@ private fun RoleStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> Unit
                 "No role matches \"${m.roleQuery}\"", color = Palette.Muted, fontSize = 11.sp,
                 modifier = Modifier.testTag(NEW_AGENT_EMPTY_ROLES_TAG),
             )
-            else -> LazyVerticalGrid(
-                columns = GridCells.Adaptive(150.dp), modifier = Modifier.fillMaxWidth().heightIn(max = 190.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp),
+            else -> RoleGrid(m, update, options)
+        }
+    }
+}
+
+/**
+ * The role cards, at most [ROLE_GRID_VISIBLE_ROWS] whole rows tall (ticket 90580b06: the old height cap cut a row in
+ * half). Cards have a fixed height and the grid is sized to whole rows; while more rows sit below, a line says so.
+ */
+@Composable
+private fun RoleGrid(m: NewAgentModalModel, update: (NewAgentModalModel) -> Unit, options: List<Role>) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        // The Adaptive rule, done here so the row count (and so the height) is known.
+        val columns = ((maxWidth + RoleGridGap) / (RoleCardMinWidth + RoleGridGap)).toInt().coerceAtLeast(1)
+        val rows = (options.size + columns - 1) / columns
+        val shown = rows.coerceAtMost(ROLE_GRID_VISIBLE_ROWS)
+        val gridState = rememberLazyGridState()
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(columns), state = gridState,
+                modifier = Modifier.fillMaxWidth().height(RoleCardHeight * shown + RoleGridGap * (shown - 1)).testTag(NEW_AGENT_ROLE_GRID_TAG),
+                horizontalArrangement = Arrangement.spacedBy(RoleGridGap), verticalArrangement = Arrangement.spacedBy(RoleGridGap),
             ) {
                 items(options, key = { it.id }) { r ->
                     val on = m.roleId == r.id
                     val shape = RoundedCornerShape(6.dp)
                     Row(
-                        Modifier.fillMaxWidth().clip(shape)
+                        Modifier.fillMaxWidth().height(RoleCardHeight).clip(shape)
                             .border(BorderStroke(if (on) 2.dp else 1.dp, if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)), shape)
                             .clickable { update(m.withRole(r.id)) }.padding(8.dp).testTag(NEW_AGENT_ROLE_TAG_PREFIX + r.id),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -205,6 +286,12 @@ private fun RoleStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> Unit
                         }
                     }
                 }
+            }
+            if (gridState.canScrollForward) {
+                Text(
+                    "More roles below: scroll the grid or search", color = Palette.Muted, fontSize = 11.sp,
+                    modifier = Modifier.testTag(NEW_AGENT_MORE_ROLES_TAG),
+                )
             }
         }
     }
@@ -225,7 +312,7 @@ private val NEW_AGENT_EXECUTOR_TAGS = ExecutorPickerTags(
 @Composable
 private fun ExecutorStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> Unit, modifier: Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("2. Harness, provider and model", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        StepTitle("2. Harness, provider and model", NewAgentField.MODEL)
         if (!m.executorOpen) {
             Text("Pick a role first: its binding seeds these choices.", color = Palette.Muted, fontSize = 11.sp)
             return@Column

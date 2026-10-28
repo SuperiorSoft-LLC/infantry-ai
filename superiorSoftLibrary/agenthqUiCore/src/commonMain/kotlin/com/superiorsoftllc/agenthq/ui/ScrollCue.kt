@@ -69,7 +69,7 @@ internal fun BoxScope.EdgeFade(edge: FadeEdge, color: Color, tag: String, depth:
  * surface it sits on. No borders.
  */
 @Composable
-internal fun ScrollCueColumn(
+fun ScrollCueColumn(
     modifier: Modifier,
     fade: Color,
     verticalArrangement: Arrangement.Vertical = Arrangement.Top,
