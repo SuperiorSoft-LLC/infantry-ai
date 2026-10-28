@@ -43,6 +43,8 @@ data class QuestionSpec(
     val multiSelect: Boolean = false,
     val allowOther: Boolean = false,
     val timeoutMillis: Long? = null,
+    /** ASK-TIMER-2 (1.140.0): the label of the option the timer auto-selects at expiry; null = none (no answer). */
+    val recommended: String? = null,
 ) {
     companion object {
         /** The longest question a `prompt_ask` may carry. */
@@ -66,8 +68,20 @@ data class QuestionSpec(
                     "timeoutSec must be ${PromptAsk.TIMEOUT_SEC_RANGE.first}..${PromptAsk.TIMEOUT_SEC_RANGE.last}, got $it"
                 }
             }
-            return QuestionSpec(question, options, ask.multiSelect, true, timeout?.let { it * 1_000L })
+            val recommended = ask.recommended?.trim()?.takeIf { it.isNotEmpty() }?.also { rec ->
+                require(options.any { it.label == rec }) { "recommended '${rec.take(80)}' is not one of the options" }
+            }
+            return QuestionSpec(question, options, ask.multiSelect, true, timeout?.let { it * 1_000L }, recommended)
         }
+
+        /**
+         * ASK-TIMER-2: the option a harness marked as recommended in its own label (Claude's AskUserQuestion convention,
+         * "Use JWT (Recommended)"); null = none, or more than one.
+         */
+        fun recommendedIn(options: List<PromptOption>): String? =
+            options.filter { RECOMMENDED_MARK.containsMatchIn(it.label) }.singleOrNull()?.label
+
+        private val RECOMMENDED_MARK = Regex("""\(\s*recommended\s*\)""", RegexOption.IGNORE_CASE)
     }
 }
 
@@ -85,8 +99,11 @@ data class Answer(val answers: List<String>, val otherText: String?, val answere
 interface PromptAsker {
     suspend fun requestApproval(session: String, tool: String, input: String): Decision
 
-    /** ASK-TIMER: [requestApproval], plus whether the prompt's timer decided it (so the worker is told why). */
-    suspend fun requestApprovalOutcome(session: String, tool: String, input: String): ApprovalOutcome =
+    /**
+     * ASK-TIMER: [requestApproval], plus whether the prompt's timer decided it (so the worker is told why). ASK-TIMER-2:
+     * [recommended] is the decision the asker recommends, which the timer auto-selects (null = `prompts.onTimeout`).
+     */
+    suspend fun requestApprovalOutcome(session: String, tool: String, input: String, recommended: Decision? = null): ApprovalOutcome =
         ApprovalOutcome(requestApproval(session, tool, input))
     suspend fun askQuestion(session: String, spec: QuestionSpec): Answer
 
@@ -167,7 +184,7 @@ class PendingPrompts(
     override suspend fun requestApproval(session: String, tool: String, input: String): Decision =
         requestApprovalOutcome(session, tool, input).decision
 
-    override suspend fun requestApprovalOutcome(session: String, tool: String, input: String): ApprovalOutcome {
+    override suspend fun requestApprovalOutcome(session: String, tool: String, input: String, recommended: Decision?): ApprovalOutcome {
         if (isAllowedForSession(session, tool)) return ApprovalOutcome(Decision.ALLOW_SESSION)
         // PROMPT-6: a remembered rule of the session's project answers with no card (and one transcript line).
         val rule = runCatching { rules.match(projectOf(session), tool, input) }.getOrNull()
@@ -176,6 +193,8 @@ class PendingPrompts(
             return ApprovalOutcome(Decision.ALLOW_ALWAYS)
         }
         val policy = runCatching { policyFor(session) }.getOrElse { PromptTimeoutPolicy(DEFAULT_TIMEOUT_MS) }
+        // ASK-TIMER-2: the timer never stores a rule or a session grant: a recommended allow is auto-selected as allow once.
+        val autoPick = recommended?.let { if (it.allows) Decision.ALLOW_ONCE else Decision.DENY }
         val now = clock()
         val request = PromptRequest(
             promptId = newId(),
@@ -185,7 +204,8 @@ class PendingPrompts(
             tool = tool,
             input = summarize(input),
             expiresAt = expiry(now, policy.timeoutMillis),
-            onTimeout = policy.onTimeout.decision.wire,
+            onTimeout = (autoPick ?: policy.onTimeout.decision).wire,
+            recommended = autoPick?.wire,
         )
         val settled = await(request, fullInput = input, policy = policy)
         val decision = (settled.resolution as? Resolution.Approval)?.decision ?: Decision.DENY
@@ -207,6 +227,7 @@ class PendingPrompts(
             options = spec.options,
             multiSelect = spec.multiSelect,
             allowOther = spec.allowOther,
+            recommended = spec.recommended?.takeIf { rec -> spec.options.any { it.label == rec } },
         )
         return (await(request, policy = policy).resolution as? Resolution.Question)?.answer ?: Answer.NONE
     }
@@ -337,9 +358,16 @@ class PendingPrompts(
         }
     }
 
-    /** ASK-TIMER: what an expired prompt resolves as: the configured action for an approval, no answer for a question. */
-    private fun onExpiry(request: PromptRequest, policy: PromptTimeoutPolicy): Resolution =
-        if (request.kind == PromptKinds.TOOL_APPROVAL) Resolution.Approval(policy.onTimeout.decision) else Resolution.Question(Answer.NONE)
+    /**
+     * ASK-TIMER-2: what an expired prompt resolves as: its RECOMMENDED option when it has one (a question's label, an
+     * approval's decision); else `prompts.onTimeout` for an approval and no answer for a question.
+     */
+    private fun onExpiry(request: PromptRequest, policy: PromptTimeoutPolicy): Resolution = when {
+        request.kind == PromptKinds.TOOL_APPROVAL ->
+            Resolution.Approval(Decision.parse(request.recommended) ?: policy.onTimeout.decision)
+        request.recommended != null -> Resolution.Question(Answer(listOf(request.recommended), null, answered = true))
+        else -> Resolution.Question(Answer.NONE)
+    }
 
     private fun noAnswer(request: PromptRequest): Resolution =
         if (request.kind == PromptKinds.TOOL_APPROVAL) Resolution.Approval(Decision.DENY) else Resolution.Question(Answer.NONE)
@@ -367,6 +395,12 @@ class PendingPrompts(
         /** ASK-TIMER: the transcript line an expired prompt leaves, e.g. "tool approval for Bash timed out after 600s: auto-denied". */
         fun expiryNotice(request: PromptRequest, policy: PromptTimeoutPolicy): String {
             val after = "timed out after ${policy.timeoutMillis / 1_000}s with no answer"
+            // ASK-TIMER-2: a recommended option was auto-selected.
+            request.recommended?.let { rec ->
+                val what = if (request.kind == PromptKinds.TOOL_APPROVAL) "tool approval for ${request.tool ?: "a tool"}"
+                else "question \"${request.question.orEmpty().take(80)}\""
+                return "auto-selected recommended: ${optionLabel(request, rec)} ($what $after)"
+            }
             return if (request.kind == PromptKinds.TOOL_APPROVAL) {
                 val action = if (policy.onTimeout == TimeoutAction.APPROVE) "auto-approved (allow once)" else "auto-denied"
                 "tool approval for ${request.tool ?: "a tool"} $after: $action (prompts.onTimeout = ${policy.onTimeout.wire})"
@@ -374,6 +408,11 @@ class PendingPrompts(
                 "question \"${request.question.orEmpty().take(80)}\" $after: resolved as no answer"
             }
         }
+
+        /** ASK-TIMER-2: an option in words: an approval decision as Allow / Deny, a question's label as is. */
+        fun optionLabel(request: PromptRequest, option: String): String =
+            if (request.kind != PromptKinds.TOOL_APPROVAL) option
+            else if (Decision.parse(option)?.allows == true) "Allow" else "Deny"
 
         /** One line, at most [INPUT_SUMMARY_MAX] characters: a card shows what the call is, never its whole payload. */
         fun summarize(input: String): String {

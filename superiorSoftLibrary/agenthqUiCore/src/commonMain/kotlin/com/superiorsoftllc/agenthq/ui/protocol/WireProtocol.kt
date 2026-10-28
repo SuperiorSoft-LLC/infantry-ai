@@ -2344,6 +2344,8 @@ data class PromptRequestView(
     val expiresAt: Long? = null,
     /** ASK-TIMER (1.139.0): a tool approval's decision at [expiresAt] (`deny` | `allow_once`). */
     val onTimeout: String? = null,
+    /** ASK-TIMER-2 (1.140.0): the option the timer auto-selects (a question's label, an approval's decision); null = none. */
+    val recommended: String? = null,
 )
 
 /** Contract 1.77.0 (PROMPT-1): `prompt_response`, a [decision] for a tool approval, [answers]/[otherText] for a question. */

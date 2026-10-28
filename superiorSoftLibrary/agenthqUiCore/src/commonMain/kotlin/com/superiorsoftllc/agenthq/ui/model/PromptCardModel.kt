@@ -67,17 +67,19 @@ object PromptCards {
     }
 
     /**
-     * ASK-TIMER (1.139.0): the countdown line of a prompt with a timer at [now] (epoch ms), e.g. "Auto-deny in 9:42";
-     * null when the prompt has no timer.
+     * ASK-TIMER (1.139.0): the countdown line of a prompt with a timer at [now] (epoch ms), naming what the timer will
+     * pick (ASK-TIMER-2, 1.140.0): "Auto-select Allow in 9:42", "Auto-select Use JWT in 1:05"; a question with no
+     * recommended option says "No answer in 0:30". Null when the prompt has no timer.
      */
     fun countdown(prompt: PromptRequestView, now: Long): String? {
         val expiresAt = prompt.expiresAt ?: return null
         val left = ((expiresAt - now).coerceAtLeast(0) + 999) / 1_000
         val clock = "${left / 60}:${(left % 60).toString().padStart(2, '0')}"
         val action = when {
-            prompt.kind != KIND_TOOL_APPROVAL -> "No answer"
-            prompt.onTimeout == ALLOW_ONCE -> "Auto-allow"
-            else -> "Auto-deny"
+            prompt.kind == KIND_TOOL_APPROVAL ->
+                "Auto-select " + if ((prompt.recommended ?: prompt.onTimeout) == ALLOW_ONCE) "Allow" else "Deny"
+            prompt.recommended != null -> "Auto-select ${prompt.recommended}"
+            else -> "No answer"
         }
         return "$action in $clock"
     }

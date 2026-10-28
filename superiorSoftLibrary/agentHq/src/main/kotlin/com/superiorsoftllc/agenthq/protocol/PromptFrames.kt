@@ -47,8 +47,17 @@ data class PromptRequest(
      * a countdown to it); null = no timer (`prompts.timeoutSec` 0), the prompt waits for an answer.
      */
     val expiresAt: Long? = null,
-    /** ASK-TIMER (1.139.0, ADDITIVE): a tool approval's decision at [expiresAt] (`deny` | `allow_once`); null for a question (no answer). */
+    /**
+     * ASK-TIMER (1.139.0, ADDITIVE): a tool approval's decision at [expiresAt] (`deny` | `allow_once`); null for a
+     * question. 1.140.0: the RECOMMENDED decision when the asker named one, else `prompts.onTimeout`.
+     */
     val onTimeout: String? = null,
+    /**
+     * ASK-TIMER-2 (1.140.0, ADDITIVE): the option the asker recommends, which the timer auto-selects at [expiresAt]: a
+     * question's option label, a tool approval's decision (`allow_once` | `deny`). Null = none: an approval falls back to
+     * `prompts.onTimeout`, a question resolves as no answer.
+     */
+    val recommended: String? = null,
 )
 
 /**
@@ -145,6 +154,8 @@ data class PromptAsk(
     val multiSelect: Boolean = false,
     val allowOther: Boolean = false,
     val timeoutSec: Int? = null,
+    /** ASK-TIMER-2 (1.140.0, ADDITIVE): one option's label, auto-selected when the prompt timer runs out; null = none. */
+    val recommended: String? = null,
 ) {
     companion object {
         fun decode(text: String): PromptAsk = StrictJson.decode(serializer(), text, "prompt_ask payload")
