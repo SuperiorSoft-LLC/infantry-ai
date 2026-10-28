@@ -2,6 +2,8 @@ package com.superiorsoftllc.agenthq.plugins.core
 
 import com.superiorsoftllc.agenthq.plugins.official.changes.InfantryChanges
 import com.superiorsoftllc.agenthq.plugins.official.notes.InfantryNotes
+import com.superiorsoftllc.agenthq.plugins.official.prompts.InfantryPrompts
+import com.superiorsoftllc.agenthq.plugins.official.skills.InfantrySkills
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.plugins.official.InfantrySettings
 import com.superiorsoftllc.agenthq.plugins.official.git.InfantryGit
@@ -45,17 +47,17 @@ class CoreModulesTest {
     }
 
     @Test
-    fun `the generated desktop module list holds the 13 core modules in the old order, without official Infantry_Cli, Infantry_Agents, Infantry_Settings, Infantry_Run, Infantry_Git, Infantry_Notes and Infantry_Changes`() {
+    fun `the generated desktop module list holds the 11 core modules in the old order, without official Infantry_Cli, Infantry_Agents, Infantry_Settings, Infantry_Run, Infantry_Git, Infantry_Notes, Infantry_Changes, Infantry_Prompts and Infantry_Skills`() {
         assertEquals(
             listOf("Pods", "Roles", "Profiles", "Triggers", "Epics", "Stats",
-                "Review", "Attention", "Usage", "Prompts", "Skills", "Board", "AppUi").map { "Infantry_$it" },
+                "Review", "Attention", "Usage", "Board", "AppUi").map { "Infantry_$it" },
             CoreModules.all.map { it.manifest.name },
         )
     }
 
     @Test
     fun `the core tabs keep the strips' order, tags and shortcuts`() {
-        val f = TabFactory(CoreModules.all + InfantryNotes + InfantryChanges + InfantryRun + InfantryGit) // RUNTIME-6/7/8: Notes, Changes, Run and Git are official (their jars on desktop)
+        val f = TabFactory(CoreModules.all + InfantryNotes + InfantryChanges + InfantryRun + InfantryGit + InfantryPrompts + InfantrySkills) // RUNTIME-6..9: Notes, Changes, Run, Git, Prompts and Skills are official (their jars on desktop)
         assertEquals(emptyList(), f.problems)
         assertEquals(
             listOf("PODS", "ROLES", "PROFILES", "TRIGGERS", "EPICS", "MEMORY", "RUN", "GIT", "STATS").map { "center-tab-$it" },

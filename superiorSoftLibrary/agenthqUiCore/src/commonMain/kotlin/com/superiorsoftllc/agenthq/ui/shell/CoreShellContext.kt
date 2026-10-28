@@ -67,6 +67,8 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
     override val notes: NotesContext = CoreNotes(state, shell.controller)
     override val changes: ChangesContext = CoreChanges(state, shell.controller)
     override val executor: ExecutorContext = CoreExecutor(state)
+    override val prompts: PromptsContext = CorePrompts(state, shell.controller)
+    override val skills: SkillsContext = CoreSkills(state, shell.controller)
 
     override val board: BoardContext = object : BoardContext {
         override val open: Boolean get() = ui.showBoard
@@ -141,6 +143,26 @@ class CoreNotes(private val state: AppState, private val controller: Controller)
     override suspend fun save(projectId: String, name: String, description: String, body: String, at: NoteScope) =
         controller.saveMemory(projectId, name, description, body, at)
     override suspend fun delete(projectId: String, name: String, at: NoteScope) = controller.deleteMemory(projectId, name, at)
+}
+
+/** RUNTIME-9: [state]'s saved prompts and [controller]'s prompt requests, for a pane drawn outside a shell. */
+class CorePrompts(private val state: AppState, private val controller: Controller) : PromptsContext {
+    override val all get() = state.prompts
+    override val loading: Boolean get() = state.promptsLoading
+    override val error: String? get() = state.promptError
+    override suspend fun load() = controller.loadPrompts()
+    override suspend fun save(name: String, body: String, tagsCsv: String) = controller.savePrompt(name, body, tagsCsv)
+    override suspend fun delete(id: String) = controller.deletePrompt(id)
+}
+
+/** RUNTIME-9: [state]'s saved skills and [controller]'s skill requests, for a pane drawn outside a shell. */
+class CoreSkills(private val state: AppState, private val controller: Controller) : SkillsContext {
+    override val all get() = state.skills
+    override val loading: Boolean get() = state.skillsLoading
+    override val error: String? get() = state.skillError
+    override suspend fun load() = controller.loadSkills()
+    override suspend fun save(name: String, description: String, body: String, tagsCsv: String) = controller.saveSkill(name, description, body, tagsCsv)
+    override suspend fun delete(id: String) = controller.deleteSkill(id)
 }
 
 /** S4b: [state]'s worktrees and branch changes and [controller]'s Changes requests, for a pane drawn outside a shell. */

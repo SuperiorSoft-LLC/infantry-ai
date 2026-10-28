@@ -73,6 +73,13 @@ class ShellFillsTest {
     }
 
     @Test fun `the compiled modules are found through the service loader`() {
-        assertEquals(CoreModules.all.map { it.manifest.name }, CompiledModules.all.map { it.manifest.name })
+        val core = CoreModules.all.map { it.manifest.name }
+        val found = CompiledModules.all.map { it.manifest.name }
+        assertEquals(core, found.take(core.size))
+        // RUNTIME-4..9: then the official modules this test class path carries, through their jars' ServiceLoader entries.
+        assertEquals(
+            setOf("Infantry_Agents", "Infantry_Settings", "Infantry_Git", "Infantry_Run", "Infantry_Notes", "Infantry_Changes", "Infantry_Prompts", "Infantry_Skills"),
+            found.drop(core.size).toSet(),
+        )
     }
 }

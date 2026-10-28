@@ -11,6 +11,7 @@ import com.superiorsoftllc.agenthq.plugin.host.AcceptedPreference
 import com.superiorsoftllc.agenthq.plugin.host.ModuleCandidate
 import com.superiorsoftllc.agenthq.plugin.host.ModuleResolver
 import com.superiorsoftllc.agenthq.plugin.host.ModuleState
+import com.superiorsoftllc.agenthq.plugin.host.OfficialTrust
 import com.superiorsoftllc.agenthq.plugin.host.PluginFolders
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins
@@ -58,7 +59,9 @@ class SettingsJarLoadTest {
         val bundled = File(tmp, "install/modules")
         val state = File(tmp, "state")
         val env = mapOf(PluginFolders.BUNDLED_ENV to bundled.path)::get
-        fun load() = DesktopPlugins.load(state, env = env, property = { null }, compiled = listOf(probe), print = {})
+        // The test pins its throwaway Infantry cert in place of the binary's pinned fingerprint (as OfficialTrustTest does).
+        var pinned = OfficialTrust.PINNED_FINGERPRINTS
+        fun load() = DesktopPlugins.load(state, env = env, property = { null }, compiled = listOf(probe), print = {}, pinned = pinned)
 
         // No jar: the app starts without a Settings tab; its would-be sub-tab stays in the strip.
         load().use {
@@ -75,6 +78,9 @@ class SettingsJarLoadTest {
         tool("keytool", "-exportcert", "-alias", "infantry", "-keystore", ks.path, "-storepass", "changeit",
             "-file", File(bundled, "trusted-keys").apply { mkdirs() }.resolve("infantry.cer").path)
         tool("jarsigner", "-keystore", ks.path, "-storepass", "changeit", jar.path, "infantry")
+        pinned = setOf(OfficialTrust.fingerprint(File(bundled, "trusted-keys/infantry.cer").inputStream().use { c ->
+            java.security.cert.CertificateFactory.getInstance("X.509").generateCertificate(c) as java.security.cert.X509Certificate
+        }))
 
         val started = System.nanoTime()
         val loaded = load()

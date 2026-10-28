@@ -4,8 +4,10 @@
   "apiVersion": 1,
   "author": "Infantry AI",
   "description": "Saved prompts to insert into the chat.",
+  "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.core.PromptsModuleSource",
+  "entry": "com.superiorsoftllc.agenthq.plugins.official.prompts.PromptsPlugin",
+  "jar": "build/libs/Infantry_Prompts.jar",
   "buildOrder": 170,
   "tabs": [
     {
