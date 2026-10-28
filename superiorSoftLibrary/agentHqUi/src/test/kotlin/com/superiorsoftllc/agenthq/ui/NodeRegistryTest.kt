@@ -169,9 +169,9 @@ class NodeRegistryTest {
             assertEquals(module to ChildSource.FILL, row.module to row.source, slot)
         }
         assertEquals(setOf("Infantry_AppUi", "Infantry_Roles", "Infantry_Board", "Infantry_Alerts", "Infantry_Header", "Infantry_Processes", "Infantry_Usage", "Infantry_Attention"), f.fillModules.values.toSet()) // RUNTIME-19: Usage and Attention fill their config sections; RUNTIME-14/15/16/18: Roles fills the roles window, Board the board, Alerts sound + voice, Processes the status bar's badge
-        // A node under a fill: the title bar's lead row is the app UI's too.
+        // A node under a fill: the title bar's lead row is the header plugin's.
         val lead = rows.single { it.id == "infantry.shell.header.lead" }
-        assertEquals("Infantry_AppUi" to ChildSource.FILL, lead.module to lead.source)
+        assertEquals("Infantry_Header" to ChildSource.FILL, lead.module to lead.source)
         // RUNTIME-18: the status bar is the shell's own now; its cog is no module's fill.
         val cog = rows.single { it.id == "infantry.shell.footer.configCog" }
         assertTrue(cog.source != ChildSource.FILL, "the cog is the shell's: ${cog.module} ${cog.source}")

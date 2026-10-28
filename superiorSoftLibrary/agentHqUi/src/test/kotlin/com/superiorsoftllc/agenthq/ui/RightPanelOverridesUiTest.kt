@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.header.*
+
 import com.superiorsoftllc.agenthq.plugins.official.usage.InfantryUsage
 import com.superiorsoftllc.agenthq.plugins.official.review.InfantryReview
 import com.superiorsoftllc.agenthq.plugins.official.changes.InfantryChanges
