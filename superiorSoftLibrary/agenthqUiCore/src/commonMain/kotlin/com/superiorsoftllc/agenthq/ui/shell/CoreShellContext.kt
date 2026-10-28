@@ -31,6 +31,10 @@ import com.superiorsoftllc.agenthq.ui.protocol.ProviderModels
 import com.superiorsoftllc.agenthq.ui.protocol.Role
 import com.superiorsoftllc.agenthq.ui.protocol.RoleBinding
 import com.superiorsoftllc.agenthq.ui.toastEvents
+import com.superiorsoftllc.agenthq.ui.model.EpicView
+import com.superiorsoftllc.agenthq.ui.protocol.Ticket
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -55,6 +59,7 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
     override val config: ConfigContext = EmptyConfig
     override val layout: LayoutContext = object : LayoutContext {
         override fun tabTree(id: String) = shell.tabs.tabTree(id)
+        override val compact: Boolean get() = state.panels.compactWindow
     }
     override val notes: NotesContext = CoreNotes(state, shell.controller)
     override val changes: ChangesContext = CoreChanges(state, shell.controller)
@@ -75,6 +80,7 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
         override fun closeManager() { ui.showRoles = false }
     }
     override val traits: TraitsContext = CoreTraits(state, shell.controller)
+    override val tickets: TicketsContext = CoreTickets(state, shell.controller)
 
     override val toast: ToastContext = object : ToastContext {
         override val service: ToastService get() = shell.controller.toasts
@@ -100,6 +106,7 @@ class CoreSession(private val state: AppState) : SessionContext {
     override val selectedAgentId: String? get() = state.selectedId
     override val selectedAgent: AgentView? get() = state.selected
     override val activeProjectId: String? get() = state.activeProjectId
+    override val projects: List<ProjectView> get() = state.projects
 }
 
 /** S4b: [state]'s notes and [controller]'s note requests, for a pane drawn outside a shell. */
@@ -234,6 +241,29 @@ open class CoreRoles(private val state: AppState, private val controller: Contro
     override suspend fun saveProfile(profile: AgentProfile) = controller.saveProfile(profile)
     override suspend fun deleteProfile(id: String) = controller.deleteProfile(id)
     override suspend fun spawnAs(profileId: String, prompt: String) = controller.spawnAs(profileId, prompt)
+    override val profiles: List<AgentProfile> get() = state.visibleProfiles
+}
+
+/** S4d: [state]'s backlog and [controller]'s ticket requests, for a pane drawn outside a shell. */
+class CoreTickets(private val state: AppState, private val controller: Controller) : TicketsContext {
+    override val all: List<Ticket> get() = state.tickets
+    override val visible: List<Ticket> get() = state.visibleTickets
+    override val updates: Flow<List<Ticket>> get() = controller.state.map { it.visibleTickets }
+    override val epics: Map<String, List<EpicView>> get() = state.epics
+    override val error: String? get() = state.ticketError
+    override fun ticket(id: String?): Ticket? = state.ticket(id)
+    override fun column(status: String): List<Ticket> = state.column(status)
+    override suspend fun create(title: String, description: String, agentId: String?, epicId: String?, provider: String?, model: String?) =
+        controller.createTicket(title, description, null, agentId, epicId, provider, model)
+    override suspend fun edit(id: String, title: String?, description: String?, epicId: String?, agentId: String?, provider: String?, model: String?, images: List<String>?) =
+        controller.editTicket(id, title, description, epicId, agentId, provider, model, images)
+    override suspend fun delete(id: String) = controller.deleteTicket(id)
+    override suspend fun move(id: String, status: String, position: Int?) = controller.moveTicket(id, status, position = position)
+    override suspend fun reorder(id: String, position: Int) = controller.reorderTicket(id, position)
+    override suspend fun startNext() = controller.startNextTicket()
+    override suspend fun loadEpics(projectId: String) = controller.loadEpics(projectId)
+    override suspend fun uploadImage(projectId: String?, fileName: String, mimeType: String, bytes: ByteArray) =
+        controller.uploadTicketImage(projectId, fileName, mimeType, bytes)
 }
 
 /** S4c: [state]'s traits and [controller]'s trait requests, for a pane drawn outside a shell. */

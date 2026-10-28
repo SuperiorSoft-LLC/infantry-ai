@@ -76,6 +76,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.EpicView
+import com.superiorsoftllc.agenthq.ui.protocol.AgentProfile
 import com.superiorsoftllc.agenthq.ui.model.branchLine
 import com.superiorsoftllc.agenthq.ui.model.ReportFlag
 import com.superiorsoftllc.agenthq.ui.model.reportFlagFor
@@ -98,15 +99,15 @@ import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
 import kotlinx.coroutines.launch
 
 /** M2-1: the role behind a ticket's assignee: a profile's role, or the `role:<role>` lane's role, else none. */
-internal fun assigneeRole(state: AppState, agentId: String): String? =
-    state.visibleProfiles.firstOrNull { it.id == agentId }?.role
+internal fun assigneeRole(deps: BoardDeps, agentId: String): String? =
+    deps.roles.profiles.firstOrNull { it.id == agentId }?.role
         ?: agentId.removePrefix("role:").takeIf { agentId.startsWith("role:") }
-        ?: state.agents[agentId]?.role
+        ?: deps.agent(agentId)?.role
 
 /** What a ticket's assignee reads as: a profile's name when the id is one, else the raw `role:<role>` / id. */
-fun assigneeLabel(state: AppState, agentId: String?): String = when {
+fun assigneeLabel(profiles: List<AgentProfile>, agentId: String?): String = when {
     agentId == null -> "unassigned"
-    else -> state.visibleProfiles.firstOrNull { it.id == agentId }?.name ?: agentId
+    else -> profiles.firstOrNull { it.id == agentId }?.name ?: agentId
 }
 
 /** M2-14: the board's Epic filter anchor, its options (`all`, `none`, then each epic id) and a card's epic chip. */
@@ -135,10 +136,6 @@ const val TICKET_EDIT_EPIC_PICKER_TAG = "ticket-edit-epic-picker"
 const val TICKET_EDIT_EPIC_OPTION_TAG_PREFIX = "ticket-edit-epic-option-"
 const val TICKET_EDIT_SAVE_TAG = "ticket-edit-save"
 const val TICKET_EDIT_ERROR_TAG = "ticket-edit-error"
-
-/** M2-14: the epics a ticket can be filed under: the active project's, or every project's when none is selected. */
-internal fun boardEpics(state: AppState): List<EpicView> =
-    state.activeProjectId?.let { state.epics[it].orEmpty() } ?: state.epics.values.flatten()
 
 /** M2-14: the board's Epic filter. [All] shows every ticket, [NoEpic] those filed under none, [Only] one epic's. */
 internal sealed interface EpicFilter {
@@ -204,8 +201,13 @@ private fun columnTitle(status: String): Pair<String, Color> = when (status) {
  * [TicketCardFrame] and its sections, as the `infantry.shell.board.card` template draws them.
  */
 @Composable
-fun BoardPane(state: AppState, controller: Controller, onOpenAgent: (String) -> Unit) {
-    BoardPaneFrame(state, controller, onOpenAgent) { board ->
+fun BoardPane(state: AppState, controller: Controller, onOpenAgent: (String) -> Unit) =
+    BoardPane(BoardDeps(state, controller), onOpenAgent)
+
+/** S4d: the board over [deps] (the shell's context, or the Core adapters of a `(state, controller)` caller). */
+@Composable
+fun BoardPane(deps: BoardDeps, onOpenAgent: (String) -> Unit) {
+    BoardPaneFrame(deps, onOpenAgent) { board ->
         BoardFiltersSection(board)
         BoardUnassignedSection(board)
         BoardNewTicketSection(board)
@@ -231,8 +233,7 @@ fun BoardPane(state: AppState, controller: Controller, onOpenAgent: (String) -> 
  * callbacks.
  */
 class BoardPaneHost internal constructor(
-    val state: AppState,
-    val controller: Controller,
+    val deps: BoardDeps,
     val onOpenAgent: (String) -> Unit,
     private val scope: CoroutineScope,
     private val filterState: MutableState<EpicFilter>,
@@ -246,15 +247,15 @@ class BoardPaneHost internal constructor(
     internal val session: BoardDropSession,
     private val hoverState: State<DragHover?>,
 ) {
-    val live: Boolean get() = state.connection.isLive
+    val live: Boolean get() = deps.live
     val creating: Boolean get() = creatingState.value
     internal val hover: DragHover? get() = hoverState.value
 
     internal fun pickFilter(f: EpicFilter) { filterState.value = f }
     fun toggleCreating() { creatingState.value = !creatingState.value }
     fun closeCreating() { creatingState.value = false }
-    fun startNext() { scope.launch { controller.startNextTicket() } }
-    internal fun drop(t: Ticket, plan: DropPlan) { scope.launch { session.drop(plan, state.ticket(t.id) ?: t) } }
+    fun startNext() { scope.launch { deps.tickets.startNext() } }
+    internal fun drop(t: Ticket, plan: DropPlan) { scope.launch { session.drop(plan, deps.tickets.ticket(t.id) ?: t) } }
 }
 
 /**
@@ -263,30 +264,33 @@ class BoardPaneHost internal constructor(
  * column, top to bottom.
  */
 @Composable
-fun BoardPaneFrame(state: AppState, controller: Controller, onOpenAgent: (String) -> Unit, content: @Composable ColumnScope.(BoardPaneHost) -> Unit) {
+fun BoardPaneFrame(deps: BoardDeps, onOpenAgent: (String) -> Unit, content: @Composable ColumnScope.(BoardPaneHost) -> Unit) {
     val actionScope = rememberCoroutineScope()
     val creating = remember { mutableStateOf(false) }
-    val live = state.connection.isLive
+    val live = deps.live
+    val projectId = deps.session.activeProjectId
+    // The shell hands over a new context on every state change; the effects and the drop session read the current one.
+    val current by rememberUpdatedState(deps)
     // M2-14: the Epic filter lives in memory only, and resets when the shell switches project.
-    val filterState = remember(state.activeProjectId) { mutableStateOf<EpicFilter>(EpicFilter.All) }
+    val filterState = remember(projectId) { mutableStateOf<EpicFilter>(EpicFilter.All) }
     val filter by filterState
-    val epics = boardEpics(state)
+    val epics = deps.boardEpics
     // M2-14: the board loads the project's epics itself, so the filter and the form work without the Epics pane.
-    LaunchedEffect(state.activeProjectId, live) {
-        state.activeProjectId?.let { if (live) controller.loadEpics(it) }
+    LaunchedEffect(projectId, live) {
+        projectId?.let { if (live) current.tickets.loadEpics(it) }
     }
     // An epic no longer listed falls back to every ticket rather than an empty board.
     val active: EpicFilter = (filter as? EpicFilter.Only)?.takeIf { f -> epics.none { it.id == f.epicId } }?.let { EpicFilter.All } ?: filter
     // The board's view of one column, top first: what a drop's slot is counted in.
-    val columnOf: (String) -> List<Ticket> = { status -> state.column(status).filter { active.matches(it) } }
+    val columnOf: (String) -> List<Ticket> = { status -> deps.tickets.column(status).filter { active.matches(it) } }
     val drag = remember { BoardDrag() }
-    val session = remember(controller) { BoardDropSession(controller.ticketMoves()) }
+    val session = remember { BoardDropSession(ticketMoves { current.tickets }) }
     val currentColumnOf by rememberUpdatedState(columnOf)
     // Every board change is read for a start's answer, in order, so a follow-up placement is never cancelled midway.
-    LaunchedEffect(session) { controller.state.collect { s -> session.observe(s.visibleTickets, currentColumnOf) } }
-    val hover = remember(state, active) { derivedStateOf { drag.hover(columnOf) } }
+    LaunchedEffect(session) { current.tickets.updates.collect { visible -> session.observe(visible, currentColumnOf) } }
+    val hover = remember(deps.tickets.visible, active) { derivedStateOf { drag.hover(columnOf) } }
     var origin by remember { mutableStateOf(Offset.Zero) }
-    val board = BoardPaneHost(state, controller, onOpenAgent, actionScope, filterState, creating, epics, active, columnOf, drag, session, hover)
+    val board = BoardPaneHost(deps, onOpenAgent, actionScope, filterState, creating, epics, active, columnOf, drag, session, hover)
     // IMG-4: a ticket's thumbnail opens full size over the whole board.
     ImageViewerHost {
     Box(
@@ -311,10 +315,10 @@ private fun Placed(modifier: Modifier, content: @Composable () -> Unit) {
 /** BLOCKS-LAYOUT L16: the filter row (Epic, the ticket count, Start next, + New ticket); [modifier] goes on the row. */
 @Composable
 fun BoardFiltersSection(board: BoardPaneHost, modifier: Modifier = Modifier) {
-    val state = board.state
+    val tickets = board.deps.tickets
     val active = board.active
     val epics = board.epics
-    val shown = state.visibleTickets.count { active.matches(it) }
+    val shown = tickets.visible.count { active.matches(it) }
     Row(modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         LabelledDropdown(
             label = "Epic",
@@ -329,23 +333,23 @@ fun BoardFiltersSection(board: BoardPaneHost, modifier: Modifier = Modifier) {
         ) { key -> board.pickFilter(when (key) { "all" -> EpicFilter.All; "none" -> EpicFilter.NoEpic; else -> EpicFilter.Only(key) }) }
         Spacer(Modifier.width(8.dp))
         Text(
-            ticketCountLabel(shown, state.visibleTickets.size, active == EpicFilter.All),
+            ticketCountLabel(shown, tickets.visible.size, active == EpicFilter.All),
             color = Palette.Muted, fontSize = 11.sp, maxLines = 1, softWrap = false, modifier = Modifier.weight(1f),
         )
-        OutlinedButton(onClick = { board.startNext() }, enabled = state.connection.isLive && state.column(TicketColumns.TODO).isNotEmpty()) {
+        OutlinedButton(onClick = { board.startNext() }, enabled = board.live && tickets.column(TicketColumns.TODO).isNotEmpty()) {
             Text("Start next", fontSize = 12.sp)
         }
         Spacer(Modifier.width(6.dp))
-        Button(onClick = { board.toggleCreating() }, enabled = state.connection.isLive) { Text(if (board.creating) "Close" else "+ New ticket", fontSize = 12.sp) }
+        Button(onClick = { board.toggleCreating() }, enabled = board.live) { Text(if (board.creating) "Close" else "+ New ticket", fontSize = 12.sp) }
     }
 }
 
 /** BLOCKS-LAYOUT L16: the "N unassigned tickets not shown" line, with a project selected; [modifier] goes on the line. */
 @Composable
 fun BoardUnassignedSection(board: BoardPaneHost, modifier: Modifier = Modifier) {
-    val state = board.state
+    val deps = board.deps
     // Tickets with no project are not in a selected project's view; say so rather than look like an empty board.
-    val unassigned = if (state.activeProjectId == null) 0 else state.tickets.count { it.projectId == null }
+    val unassigned = if (deps.session.activeProjectId == null) 0 else deps.tickets.all.count { it.projectId == null }
     if (unassigned > 0) {
         Text(
             "$unassigned unassigned ticket${if (unassigned == 1) "" else "s"} (no project) not shown; deselect the project to see all.",
@@ -359,17 +363,16 @@ fun BoardUnassignedSection(board: BoardPaneHost, modifier: Modifier = Modifier) 
 fun BoardNewTicketSection(board: BoardPaneHost, modifier: Modifier = Modifier) {
     if (!board.creating) return
     Placed(modifier) {
-        TicketForm(board.state, board.controller, initialEpicId = (board.active as? EpicFilter.Only)?.epicId, onDone = { board.closeCreating() })
+        TicketForm(board.deps, initialEpicId = (board.active as? EpicFilter.Only)?.epicId, onDone = { board.closeCreating() })
     }
 }
 
 /** BLOCKS-LAYOUT L16: what an empty backlog says (or that there is no daemon yet); [modifier] goes on its column. */
 @Composable
 fun BoardEmptySection(board: BoardPaneHost, modifier: Modifier = Modifier) {
-    val state = board.state
-    if (state.visibleTickets.isEmpty() && !board.creating) {
+    if (board.deps.tickets.visible.isEmpty() && !board.creating) {
         Column(modifier.padding(16.dp)) {
-            Text(if (state.connection.isLive) "The backlog is empty." else "Connect to a daemon to load its backlog.", color = Palette.Text)
+            Text(if (board.live) "The backlog is empty." else "Connect to a daemon to load its backlog.", color = Palette.Text)
             Text("Create a ticket, give it an assignee (a profile or a role), then start it to hand it to that agent.", color = Palette.Muted, fontSize = 11.sp)
         }
     }
@@ -395,7 +398,7 @@ class BoardCardItem internal constructor(
  */
 @Composable
 fun BoardColumnsSection(board: BoardPaneHost, modifier: Modifier = Modifier, card: @Composable ColumnScope.(BoardCardItem) -> Unit) {
-    val state = board.state
+    val backlog = board.deps.tickets
     val live = board.live
     val drag = board.drag
     val session = board.session
@@ -403,7 +406,7 @@ fun BoardColumnsSection(board: BoardPaneHost, modifier: Modifier = Modifier, car
     val hover = board.hover
     // MOBILE-LAYOUT-2: a compact window gives each column a fixed width in a row that scrolls sideways; at 600dp and
     // above the columns share the width as before.
-    val compact = state.panels.compactWindow
+    val compact = board.deps.layout.compact
     val columnsScroll = rememberScrollState()
     Row(
         modifier.fillMaxWidth().then(if (compact) Modifier.horizontalScroll(columnsScroll) else Modifier).padding(horizontal = 6.dp),
@@ -451,7 +454,7 @@ fun BoardColumnsSection(board: BoardPaneHost, modifier: Modifier = Modifier, car
                         card(
                             BoardCardItem(
                                 t, look, handle, session.notes[t.id], { session.dismiss(t.id) },
-                                onStart = { board.drop(t, DropPlan.Start(t.id, state.column(TicketColumns.IN_PROGRESS).size)) },
+                                onStart = { board.drop(t, DropPlan.Start(t.id, backlog.column(TicketColumns.IN_PROGRESS).size)) },
                             ),
                         )
                     }
@@ -591,8 +594,7 @@ class BoardCardHost internal constructor(
     private val openState: MutableState<Boolean>,
 ) {
     val ticket: Ticket get() = item.ticket
-    val state: AppState get() = board.state
-    val controller: Controller get() = board.controller
+    val deps: BoardDeps get() = board.deps
     val live: Boolean get() = board.live
     /** The edit form is open (the summary toggles it). */
     val open: Boolean get() = openState.value
@@ -603,8 +605,8 @@ class BoardCardHost internal constructor(
     fun close() { openState.value = false }
     fun dismissNote() = item.onDismissNote()
     fun start() = item.onStart()
-    suspend fun move(status: String): CommandResult = controller.moveTicket(ticket.id, status)
-    fun delete() { scope.launch { controller.deleteTicket(ticket.id) } }
+    suspend fun move(status: String): CommandResult = deps.tickets.move(ticket.id, status)
+    fun delete() { scope.launch { deps.tickets.delete(ticket.id) } }
     fun openAgent(sessionId: String) = board.onOpenAgent(sessionId)
 }
 
@@ -655,22 +657,22 @@ fun TicketCardTitleSection(card: BoardCardHost, modifier: Modifier = Modifier) {
 @Composable
 fun TicketCardBadgesSection(card: BoardCardHost, modifier: Modifier = Modifier) {
     val t = card.ticket
-    val state = card.state
+    val deps = card.deps
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
         t.ticketType?.let { Chip(ticketTypeLabel(it)) }
         // M2-1: the assignee's avatar, the same portrait its agent shows in the list and the chat.
         t.agentId?.let { id ->
-            val role = assigneeRole(state, id)
-            AgentAvatar(role, id, 16, state.role(role)?.color, Modifier.testTag("ticket-avatar-${t.id}"))
+            val role = assigneeRole(deps, id)
+            AgentAvatar(role, id, 16, deps.roles.role(role)?.color, Modifier.testTag("ticket-avatar-${t.id}"))
         }
-        Chip(assigneeLabel(state, t.agentId), if (t.agentId == null) Palette.Muted else Palette.Info)
+        Chip(assigneeLabel(deps.roles.profiles, t.agentId), if (t.agentId == null) Palette.Muted else Palette.Info)
         // M2-14: the epic the ticket is filed under, by name (its short id until the epics have loaded).
         t.epicId?.takeIf { it.isNotBlank() }?.let { eid ->
-            Chip(state.epics.values.flatten().firstOrNull { it.id == eid }?.name ?: eid.takeLast(8), Palette.Ok, Modifier.testTag("ticket-epic-${t.id}"))
+            Chip(deps.epicName(eid) ?: eid.takeLast(8), Palette.Ok, Modifier.testTag("ticket-epic-${t.id}"))
         }
         if (t.wontFix) Chip("won't fix", Palette.Danger)
         if (t.queuedFor != null) Chip("queued", Palette.Accent)
-        ReportFlagChip(state.reportFlagFor(t), Modifier.testTag("ticket-report-${t.id}"))
+        ReportFlagChip(deps.reportFlag(t), Modifier.testTag("ticket-report-${t.id}"))
     }
 }
 
@@ -678,7 +680,6 @@ fun TicketCardBadgesSection(card: BoardCardHost, modifier: Modifier = Modifier) 
 @Composable
 fun TicketCardDetailsSection(card: BoardCardHost, modifier: Modifier = Modifier) {
     val t = card.ticket
-    val state = card.state
     Placed(modifier) {
         t.holdReason?.let { Text(it, color = Palette.Muted, fontSize = 10.sp, maxLines = if (card.open) 6 else 2) }
         // TICKET-EXEC-UI: what the ticket will run on, and where each value comes from (ticket / profile / role / default).
@@ -688,7 +689,7 @@ fun TicketCardDetailsSection(card: BoardCardHost, modifier: Modifier = Modifier)
         // BRANCH-PER-TASK 2/3: read-only; a ticket that never started has no branch line at all.
         t.branchLine()?.let { Text(it, color = Palette.Info, fontFamily = Mono, fontSize = 10.sp, maxLines = 1, modifier = Modifier.testTag("ticket-branch-${t.id}")) }
         // Contract 1.117.0: the running ticket's worker reports how far along its job is.
-        if (t.status == TicketColumns.IN_PROGRESS) t.sessionId?.let { state.agents[it] }?.session?.progress?.let { ProgressMeter(it, "ticket-${t.id}") }
+        if (t.status == TicketColumns.IN_PROGRESS) card.deps.agent(t.sessionId)?.session?.progress?.let { ProgressMeter(it, "ticket-${t.id}") }
         t.lastRun?.let { run ->
             val outcome = run.outcome ?: "running"
             Text("last run: ${outcome.lowercase().replace('_', ' ')}", color = if (run.outcome == null || run.outcome == "SUCCEEDED") Palette.Muted else Palette.Danger, fontSize = 10.sp)
@@ -711,7 +712,7 @@ fun TicketCardNoteSection(card: BoardCardHost, modifier: Modifier = Modifier) {
             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag(TICKET_DROP_NOTE_TAG_PREFIX + t.id),
         )
         // A refusal for want of a role offers the role pick inline (focused), not the whole edit form.
-        if (BoardDrop.isNoRoleNote(note) && t.agentId == null && !card.open) RoleNudge(t, card.state, card.controller)
+        if (BoardDrop.isNoRoleNote(note) && t.agentId == null && !card.open) RoleNudge(t, card.deps)
     }
 }
 
@@ -721,7 +722,7 @@ fun TicketCardEditSection(card: BoardCardHost, modifier: Modifier = Modifier) {
     val t = card.ticket
     if (!card.open) return
     Placed(modifier) {
-        TicketEditForm(t, card.state, card.controller, onDone = { card.close() })
+        TicketEditForm(t, card.deps, onDone = { card.close() })
         if (t.links.isNotEmpty()) Text(t.links.joinToString(", ") { "${it.type.replace('_', ' ')} ${it.ticketId.takeLast(8)}" }, color = Palette.Muted, fontSize = 10.sp)
     }
 }
@@ -745,7 +746,7 @@ fun TicketCardActionsSection(card: BoardCardHost, modifier: Modifier = Modifier)
             }
             TicketColumns.DONE -> CardButton("Reopen", live) { card.move(TicketColumns.TODO) }
         }
-        t.sessionId?.takeIf { it in card.state.agents }?.let { sid ->
+        t.sessionId?.takeIf { card.deps.agent(it) != null }?.let { sid ->
             TextButton(onClick = { card.openAgent(sid) }) { Text("Agent", fontSize = 11.sp) }
         }
         Spacer(Modifier.weight(1f))
@@ -755,14 +756,14 @@ fun TicketCardActionsSection(card: BoardCardHost, modifier: Modifier = Modifier)
 
 /** FIX (web, QA F11): "pick a role first" under a card whose Start was refused for want of a role; a pick saves the assignee. */
 @Composable
-private fun RoleNudge(t: Ticket, state: AppState, controller: Controller) {
+private fun RoleNudge(t: Ticket, deps: BoardDeps) {
     val actionScope = rememberCoroutineScope()
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     Column(Modifier.fillMaxWidth().testTag(TICKET_ROLE_NUDGE_TAG_PREFIX + t.id), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("Pick a role first, then Start.", color = Palette.Danger, fontSize = 11.sp)
-        TicketAssigneePicker(state, null, focus) { id ->
-            if (!id.isNullOrEmpty() && state.connection.isLive) actionScope.launch { controller.editTicket(t.id, agentId = id) }
+        TicketAssigneePicker(deps.roles, null, focus) { id ->
+            if (!id.isNullOrEmpty() && deps.live) actionScope.launch { deps.tickets.edit(t.id, agentId = id) }
         }
     }
 }
@@ -791,7 +792,7 @@ private data class TicketEdit(
  * `ticket_save refused: ...` answer in red instead of closing (the BUG-PROF-1 ProfileForm pattern).
  */
 @Composable
-private fun TicketEditForm(t: Ticket, state: AppState, controller: Controller, onDone: () -> Unit) {
+private fun TicketEditForm(t: Ticket, deps: BoardDeps, onDone: () -> Unit) {
     val actionScope = rememberCoroutineScope()
     val currentEpic = t.epicId?.takeIf { it.isNotBlank() }
     var title by remember(t.id) { mutableStateOf(t.title) }
@@ -817,7 +818,7 @@ private fun TicketEditForm(t: Ticket, state: AppState, controller: Controller, o
             imageError = null
             try {
                 for (image in picked) {
-                    when (val r = controller.uploadTicketImage(t.projectId, image.fileName, image.mimeType, image.bytes)) {
+                    when (val r = deps.tickets.uploadImage(t.projectId, image.fileName, image.mimeType, image.bytes)) {
                         is ImageUploadOutcome.Stored -> {
                             uploaded = uploaded + (r.image.relPath to image.bytes)
                             if (r.image.relPath !in images) images = images + r.image.relPath
@@ -830,9 +831,9 @@ private fun TicketEditForm(t: Ticket, state: AppState, controller: Controller, o
             }
         }
     }
-    LaunchedEffect(pending, state.ticketError, t) {
+    LaunchedEffect(pending, deps.tickets.error, t) {
         val sent = pending ?: return@LaunchedEffect
-        val error = state.ticketError
+        val error = deps.tickets.error
         if (error != null) {
             refusal = error
             pending = null
@@ -841,15 +842,15 @@ private fun TicketEditForm(t: Ticket, state: AppState, controller: Controller, o
             onDone()
         }
     }
-    val epics = boardEpics(state)
+    val epics = deps.boardEpics
     // An epic outside the active project (or not loaded yet) still reads by name, else by its short id.
-    val epicName = epicId?.let { id -> state.epics.values.flatten().firstOrNull { it.id == id }?.name ?: id.takeLast(8) } ?: "None"
+    val epicName = epicId?.let { id -> deps.epicName(id) ?: id.takeLast(8) } ?: "None"
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Panel)
             // IMG-4: Ctrl/Cmd+V anywhere in the form attaches a clipboard image; text on the clipboard pastes as usual.
             .onPreviewKeyEvent { e ->
                 val paste = e.type == KeyEventType.KeyDown && e.key == Key.V && (e.isCtrlPressed || e.isMetaPressed)
-                val image = if (paste && state.connection.isLive && pending == null && !uploading) host.clipboardImage() else null
+                val image = if (paste && deps.live && pending == null && !uploading) host.clipboardImage() else null
                 image?.let { attach(listOf(it)) } != null
             }
             .padding(8.dp),
@@ -867,13 +868,13 @@ private fun TicketEditForm(t: Ticket, state: AppState, controller: Controller, o
             anchorTag = TICKET_EDIT_EPIC_PICKER_TAG,
             optionTagPrefix = TICKET_EDIT_EPIC_OPTION_TAG_PREFIX,
         ) { key -> epicId = key.takeUnless { it == "none" } }
-        TicketAssigneePicker(state, assignee) { assignee = it.orEmpty() }
-        TicketExecutorField(state, t.id, provider, model) { p, m -> provider = p; model = m }
+        TicketAssigneePicker(deps.roles, assignee) { assignee = it.orEmpty() }
+        TicketExecutorField(deps.executor, t.id, provider, model) { p, m -> provider = p; model = m }
         TicketImagesSection(
             images = images,
-            projectDirectory = state.projects.firstOrNull { it.id == t.projectId }?.directory,
+            projectDirectory = deps.session.projects.firstOrNull { it.id == t.projectId }?.directory,
             uploaded = uploaded,
-            enabled = state.connection.isLive && pending == null,
+            enabled = deps.live && pending == null,
             busy = uploading,
             error = imageError,
             onAttach = ::attach,
@@ -881,7 +882,7 @@ private fun TicketEditForm(t: Ticket, state: AppState, controller: Controller, o
         )
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(
-                enabled = state.connection.isLive && title.isNotBlank() && pending == null && !uploading,
+                enabled = deps.live && title.isNotBlank() && pending == null && !uploading,
                 modifier = Modifier.testTag(TICKET_EDIT_SAVE_TAG),
                 onClick = {
                     actionScope.launch {
@@ -891,7 +892,7 @@ private fun TicketEditForm(t: Ticket, state: AppState, controller: Controller, o
                         refusal = null
                         // TICKET-EXEC-UI: only the pins that changed; "" clears one (unassigned / inherit).
                         val pinEdit = ticketPinEdit(currentPins, pins)
-                        val r = controller.editTicket(
+                        val r = deps.tickets.edit(
                             t.id,
                             title = edit.title.takeIf { it != t.title },
                             description = edit.description.takeIf { it != t.description },
@@ -921,27 +922,27 @@ private fun TicketEditForm(t: Ticket, state: AppState, controller: Controller, o
  * role lane it lists, visibly (unassigned while no profile exists); the create always sends that explicit choice.
  */
 @Composable
-private fun TicketForm(state: AppState, controller: Controller, initialEpicId: String?, onDone: () -> Unit) {
+private fun TicketForm(deps: BoardDeps, initialEpicId: String?, onDone: () -> Unit) {
     val actionScope = rememberCoroutineScope()
     var title by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     // null = not picked yet (the first role lane, see below), "" = unassigned, else a profile id or role:<role>
     var picked by remember { mutableStateOf<String?>(null) }
-    val assignee = picked ?: state.visibleProfiles.firstOrNull()?.let { "role:${it.role}" } ?: ""
+    val assignee = picked ?: deps.roles.profiles.firstOrNull()?.let { "role:${it.role}" } ?: ""
     // M2-14: null = no epic; starts on the board's filtered epic, if any.
     var epicId by remember { mutableStateOf(initialEpicId) }
     // TICKET-EXEC-UI: null = inherit.
     var provider by remember { mutableStateOf<String?>(null) }
     var model by remember { mutableStateOf<String?>(null) }
-    val epics = boardEpics(state)
+    val epics = deps.boardEpics
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp).clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         OutlinedTextField(title, { title = it }, label = { Text("Title") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(description, { description = it }, label = { Text("Description (the agent's task)") }, minLines = 2, maxLines = 6, modifier = Modifier.fillMaxWidth())
-        TicketAssigneePicker(state, assignee) { picked = it.orEmpty() }
-        TicketExecutorField(state, "new-ticket", provider, model) { p, m -> provider = p; model = m }
+        TicketAssigneePicker(deps.roles, assignee) { picked = it.orEmpty() }
+        TicketExecutorField(deps.executor, "new-ticket", provider, model) { p, m -> provider = p; model = m }
         LabelledDropdown(
             label = "Epic",
             selected = epics.firstOrNull { it.id == epicId }?.name ?: "None",
@@ -949,13 +950,13 @@ private fun TicketForm(state: AppState, controller: Controller, initialEpicId: S
             anchorTag = TICKET_EPIC_PICKER_TAG,
             optionTagPrefix = TICKET_EPIC_OPTION_TAG_PREFIX,
         ) { key -> epicId = key.takeUnless { it == "none" } }
-        if (state.visibleProfiles.isEmpty()) Text("No agent profile exists yet: create one in the Profiles tab so a started ticket has someone to run it.", color = Palette.Muted, fontSize = 10.sp)
+        if (deps.roles.profiles.isEmpty()) Text("No agent profile exists yet: create one in the Profiles tab so a started ticket has someone to run it.", color = Palette.Muted, fontSize = 10.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Button(
-                enabled = state.connection.isLive && title.isNotBlank(),
+                enabled = deps.live && title.isNotBlank(),
                 onClick = {
                     actionScope.launch {
-                        if (controller.createTicket(title, description, null, assignee, epicId?.takeIf { id -> epics.any { it.id == id } }, provider, model) is CommandResult.Sent) onDone()
+                        if (deps.tickets.create(title, description, assignee, epicId?.takeIf { id -> epics.any { it.id == id } }, provider, model) is CommandResult.Sent) onDone()
                     }
                 },
             ) { Text("Create ticket") }

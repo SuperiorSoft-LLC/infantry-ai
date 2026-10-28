@@ -39,9 +39,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.ProjectView
-import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
 
 const val BOARD_MODAL_TAG = "board-modal"
@@ -54,10 +52,10 @@ const val BOARD_MODAL_CLOSE_TAG = "board-modal-close"
  * than a platform Dialog, so commonMain stays free of `androidx.compose.ui.window` (PlatformBoundaryTest).
  */
 @Composable
-fun BoardModal(state: AppState, controller: Controller, onOpenAgent: (String) -> Unit, onDismiss: () -> Unit) {
+fun BoardModal(deps: BoardDeps, onOpenAgent: (String) -> Unit, onDismiss: () -> Unit) {
     BoardModalFrame(onDismiss) {
-        BoardModalHeader(state, onDismiss)
-        BoardModalPane(state, controller, onOpenAgent, Modifier.weight(1f))
+        BoardModalHeader(deps.session.activeProject, onDismiss)
+        BoardModalPane(deps, onOpenAgent, Modifier.weight(1f))
     }
 }
 
@@ -96,12 +94,10 @@ fun BoardModalFrame(onDismiss: () -> Unit, content: @Composable ColumnScope.() -
     }
 }
 
-/** BLOCKS-LAYOUT L10: the board's title row (title, active project, close) and the divider under it; [modifier] goes on the row. */
-@Composable
-fun BoardModalHeader(state: AppState, onDismiss: () -> Unit, modifier: Modifier = Modifier) =
-    BoardModalHeader(state.activeProject, onDismiss, modifier)
-
-/** S2: [BoardModalHeader] for [activeProject] (null: all projects), as the shell's context gives it. */
+/**
+ * BLOCKS-LAYOUT L10: the board's title row (title, [activeProject] or all projects, close) and the divider under it;
+ * [modifier] goes on the row.
+ */
 @Composable
 fun BoardModalHeader(activeProject: ProjectView?, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -124,8 +120,8 @@ fun BoardModalHeader(activeProject: ProjectView?, onDismiss: () -> Unit, modifie
 
 /** BLOCKS-LAYOUT L10: [BoardPane] in its padded box; the modal gives it the free height through [modifier]. */
 @Composable
-fun BoardModalPane(state: AppState, controller: Controller, onOpenAgent: (String) -> Unit, modifier: Modifier = Modifier) {
-    BoardModalPaneBox(modifier) { BoardPane(state, controller, onOpenAgent) }
+fun BoardModalPane(deps: BoardDeps, onOpenAgent: (String) -> Unit, modifier: Modifier = Modifier) {
+    BoardModalPaneBox(modifier) { BoardPane(deps, onOpenAgent) }
 }
 
 /** BLOCKS-LAYOUT L16: the board pane's padded box; [modifier] goes on it, [content] is the pane. */
