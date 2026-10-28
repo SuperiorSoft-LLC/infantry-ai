@@ -14,5 +14,8 @@
       "id": "infantry.changes",
       "container": "right"
     }
+  ],
+  "fills": [
+    "infantry.shell.diff"
   ]
 }

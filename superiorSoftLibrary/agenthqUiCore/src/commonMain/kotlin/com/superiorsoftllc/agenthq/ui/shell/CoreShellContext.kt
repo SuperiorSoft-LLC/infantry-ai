@@ -116,6 +116,12 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
         override val panel get() = shell.assistantPanel
         override val chat get() = shell.assistantChat
     }
+    override val diff: DiffContext = object : DiffContext {
+        override val state get() = shell.state
+        override val controller get() = shell.controller
+        override val target get() = ui.diffTarget
+        override fun show(next: com.superiorsoftllc.agenthq.ui.model.DiffTarget?) { ui.diffTarget = next; if (next == null) shell.root.requestFocus() }
+    }
     override val agents: AgentsContext = object : AgentsContext {
         override val state get() = shell.state
         override val visible get() = shell.visible

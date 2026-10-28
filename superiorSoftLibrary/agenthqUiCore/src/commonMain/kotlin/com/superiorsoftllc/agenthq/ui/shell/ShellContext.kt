@@ -104,6 +104,30 @@ interface ShellContext {
     val chat: ChatContext get() = NoChat
     /** RUNTIME-24 (additive): what the official Infantry_Assistant (the global Assistant popup) reads and asks of the window. */
     val assistant: AssistantContext get() = NoAssistant
+    /** RUNTIME-25 (additive): what the official Infantry_Changes (the diff modal) reads and asks of the window. */
+    val diff: DiffContext get() = NoDiff
+}
+
+/**
+ * RUNTIME-25 (F9): the diff modal behind the official Infantry_Changes module, which fills `infantry.shell.diff`.
+ * The open file is the window's (the Changes tab opens it), so it is handed in here.
+ */
+interface DiffContext {
+    /** The window's state; null where there is no window (the modal draws nothing). */
+    val state: com.superiorsoftllc.agenthq.ui.model.AppState?
+    val controller: com.superiorsoftllc.agenthq.ui.net.Controller?
+    /** The file whose diff is open; null while none is. */
+    val target: com.superiorsoftllc.agenthq.ui.model.DiffTarget?
+    /** Opens [next] (prev / next file), or closes the modal on null and hands the focus back to the window. */
+    fun show(next: com.superiorsoftllc.agenthq.ui.model.DiffTarget?)
+}
+
+/** No window: no diff open. */
+object NoDiff : DiffContext {
+    override val state: com.superiorsoftllc.agenthq.ui.model.AppState? = null
+    override val controller: com.superiorsoftllc.agenthq.ui.net.Controller? = null
+    override val target: com.superiorsoftllc.agenthq.ui.model.DiffTarget? = null
+    override fun show(next: com.superiorsoftllc.agenthq.ui.model.DiffTarget?) {}
 }
 
 /**
