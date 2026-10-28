@@ -815,7 +815,9 @@ class TicketBoard(
             when (val outcome = branches.ensure(request)) {
                 is TicketBranchOutcome.Refused -> return refusedStart(initialTicket, outcome.reason)
                 is TicketBranchOutcome.Ready -> outcome.worktree.also {
-                    cutNote = outcome.note?.let { note -> baseChoice.source?.let { "$note ($it)" } ?: note }
+                    // The setting that chose the base qualifies the cut, never the worktree's warning after it.
+                    val cut = outcome.note?.let { note -> baseChoice.source?.let { "$note ($it)" } ?: note }
+                    cutNote = listOfNotNull(cut, outcome.warning).joinToString("; ").ifEmpty { null }
                 }
             }
         } else {
