@@ -58,6 +58,11 @@ data class ModuleManifest(
      * Core tier only; a fill goes in before the overrides and injections, so their node ids are addressable as if core drew them.
      */
     val fills: List<String> = emptyList(),
+    /**
+     * P1 step 2 (docs/BLOCKS-LAYOUT-DESIGN.md 6s A): config fields per node id the module owns or is granted. Merged with
+     * core's into one tree ([com.superiorsoftllc.agenthq.ui.plugin.config.ConfigTree]); a second declaration of a key is refused.
+     */
+    val config: List<ConfigDeclaration> = emptyList(),
 )
 
 /** PLUGINS-2: module [id] (`Vendor_Module`) must be installed, enabled and at a version in [version] (e.g. `>=1.2 <2`). */

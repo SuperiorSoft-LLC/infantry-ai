@@ -237,8 +237,8 @@ interface ToastContext {
 }
 
 /**
- * Owner 2026-10-27, read-only config slot (schema, tree and storage come with ticket P1). The JSON stores values and
- * registry keys, never class names.
+ * Owner 2026-10-27, read-only config slot; P1 step 2 (44aee6e5) answers it with the merged tree over the daemon's
+ * node_config (`ResolvedConfig`). The JSON stores values and registry keys, never class names.
  */
 interface ConfigContext {
     /** Node [nodeId]'s resolved values: the node's own, else its parent's, up to the root, else the plugin default. */
@@ -256,9 +256,11 @@ interface ConfigValues {
     fun int(key: String): Int?
     fun double(key: String): Double?
     fun boolean(key: String): Boolean?
+    /** P1 step 2: a list of strings (a `multiSelect`); null where unset or not a list of strings. */
+    fun strings(key: String): List<String>? = null
 }
 
-/** No config resolved: every key unset, no implementation registered (the core's until P1). */
+/** No config resolved: every key unset, no implementation registered (a shell without a factory, and fakes). */
 object EmptyConfig : ConfigContext, ConfigValues {
     override fun values(nodeId: String): ConfigValues = this
     override fun <T : Any> implementation(type: KClass<T>, key: String): T? = null

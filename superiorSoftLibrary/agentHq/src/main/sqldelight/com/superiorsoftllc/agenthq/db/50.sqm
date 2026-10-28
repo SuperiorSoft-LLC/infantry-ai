@@ -1,0 +1,14 @@
+-- P1 step 2 (ticket 44aee6e5) -- migration v50 -> v51: per-node UI configuration (docs/BLOCKS-LAYOUT-DESIGN.md 6s B).
+-- One row per (node, key); value_json is the JSON text of the value. set_by is `seed` (inserted from the merged JSON
+-- tree, never overwriting a row) or `user` (written from the configuration view).
+--
+-- NEXT MIGRATION: 51.sqm
+
+CREATE TABLE IF NOT EXISTS node_config (
+    node_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value_json TEXT NOT NULL,
+    set_by TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (node_id, key)
+);

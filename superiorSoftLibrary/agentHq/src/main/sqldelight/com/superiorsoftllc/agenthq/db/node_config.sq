@@ -1,0 +1,23 @@
+-- P1 step 2 (ticket 44aee6e5): per-node UI configuration (docs/BLOCKS-LAYOUT-DESIGN.md 6s B). The merged JSON tree
+-- seeds it (seedNodeConfig never overwrites); after that it is the live copy the configuration view edits.
+CREATE TABLE IF NOT EXISTS node_config (
+    node_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value_json TEXT NOT NULL,
+    set_by TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (node_id, key)
+);
+
+allNodeConfig:
+SELECT * FROM node_config ORDER BY node_id ASC, key ASC;
+
+-- Insert-or-ignore then update, as settings.sq (one label per statement; see its note on why).
+seedNodeConfig:
+INSERT OR IGNORE INTO node_config(node_id, key, value_json, set_by, updated_at) VALUES (:node_id, :key, :value_json, :set_by, :updated_at);
+
+updateNodeConfig:
+UPDATE node_config SET value_json = :value_json, set_by = :set_by, updated_at = :updated_at WHERE node_id = :node_id AND key = :key;
+
+deleteNodeConfig:
+DELETE FROM node_config WHERE node_id = :node_id AND key = :key;

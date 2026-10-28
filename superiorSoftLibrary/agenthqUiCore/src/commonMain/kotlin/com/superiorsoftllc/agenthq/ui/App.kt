@@ -191,6 +191,7 @@ import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabContext
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import com.superiorsoftllc.agenthq.ui.plugin.PluginDaemon
+import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigLoad
 import com.superiorsoftllc.agenthq.plugin.api.Events
 import com.superiorsoftllc.agenthq.plugin.api.PluginEvent
 import com.superiorsoftllc.agenthq.ui.plugin.CompiledModules
@@ -325,6 +326,9 @@ fun App(
     }
     // PLUGINS-1: the plugins' gated daemon access goes to the daemon this window talks to; the bus hears what is shown.
     LaunchedEffect(url, token) { PluginDaemon.connect(url, token) }
+    // P1 step 2 (6s B): once the link is live, the merged config tree seeds the daemon's node_config and the window takes its copy.
+    val linkLive = state.connection.isLive
+    LaunchedEffect(tabs, linkLive) { if (linkLive && tabs.config.load != NodeConfigLoad.LOADED) tabs.config.load() }
     LaunchedEffect(ui.centerTab) { tabs.events.publish(PluginEvent(Events.TAB_OPENED, mapOf("id" to ui.centerTab, "container" to TabContainers.CENTER))) }
     LaunchedEffect(ui.rightTab) { tabs.events.publish(PluginEvent(Events.TAB_OPENED, mapOf("id" to ui.rightTab, "container" to TabContainers.RIGHT))) }
     LaunchedEffect(state.selectedId) { state.selectedId?.let { tabs.events.publish(PluginEvent(Events.SESSION_SELECTED, mapOf("id" to it))) } }

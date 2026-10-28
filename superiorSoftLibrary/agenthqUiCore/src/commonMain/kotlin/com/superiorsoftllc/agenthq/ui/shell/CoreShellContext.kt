@@ -47,7 +47,8 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
     override val session: SessionContext = CoreSession(state)
     override val git: GitContext = CoreGit(state, shell.controller)
     override val run: RunContext = CoreRun(state, shell.controller, console)
-    override val config: ConfigContext = EmptyConfig
+    // P1 step 2 (6s C): the merged tree resolved over the stored copy; one per factory, so its cache outlives a composition.
+    override val config: ConfigContext = shell.tabs.resolvedConfig
     override val layout: LayoutContext = object : LayoutContext {
         override fun tabTree(id: String) = shell.tabs.tabTree(id)
     }
