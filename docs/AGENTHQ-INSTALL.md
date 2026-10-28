@@ -34,6 +34,29 @@ superiorSoftLibrary/agentHqUi/build/compose/binaries/main-release/exe/AgentHQ-1.
 
 (without `Release`: `.../binaries/main/msi/` and `.../binaries/main/exe/`).
 
+### Official modules and the signing key (ticket 95c26a81)
+
+Every package task (`createDistributable`, `packageMsi`/`Exe`, the release variants) first runs `stageOfficialModules`:
+it builds every `plugins/official/*` jar, signs it, and ships it in the app's bundled modules root, which the launcher
+names with `-Dagenthq.plugins.bundled=$APPDIR/resources/modules`:
+
+```
+<install>/app/resources/modules/official/Infantry_Cli/module.json
+<install>/app/resources/modules/official/Infantry_Cli/build/libs/Infantry_Cli.jar   (the path module.json's "jar" names; signed)
+<install>/app/resources/modules/trusted-keys/infantry.cer                         (the signing certificate)
+```
+
+The packaging FAILS without a key. The real Infantry key:
+
+```powershell
+$env:IHQ_STOREPASS = '<keystore password>'
+./gradlew :superiorSoftLibrary:agentHqUi:packageReleaseMsi -Pihq.keystore=<keystore.p12, relative to the repo root> -Pihq.alias=<key alias>
+```
+
+(the key password must equal the store password, as jarsigner is given only `-storepass`). For a local test build
+only, `-Pihq.devSign=true` signs with a throwaway key made under `build/official-modules/dev-key/`. Prove the layout
+without jpackage: `./gradlew :superiorSoftLibrary:agentHqUi:verifyOfficialModulesPackaged -Pihq.devSign=true`.
+
 `run` / `runUi` stay the dev window (8787). To try the installed profile before installing, use
 `./gradlew :superiorSoftLibrary:agentHqUi:runDistributable` (the packaged app image, jpackage launcher), or pass
 `-Dagenthq.installed=true` to any launch of `AppMainKt`.
