@@ -69,6 +69,8 @@ const val MODULE_NEEDS_TAG_PREFIX = "plugin-module-needs-"
 const val MODULE_REQUIRED_BY_TAG_PREFIX = "plugin-module-required-by-"
 const val MODULE_TOGGLE_TAG_PREFIX = "plugin-module-toggle-"
 const val MODULE_MESSAGE_TAG_PREFIX = "plugin-module-message-"
+/** S7: Remove on an installed community module (outside safe mode; the soft restart follows). */
+const val MODULE_REMOVE_TAG_PREFIX = "plugin-module-remove-"
 const val MODULE_CASCADE_TAG = "plugin-modules-cascade"
 const val MODULE_EMPTY_TAG = "plugin-modules-empty"
 
@@ -90,6 +92,10 @@ fun ModulesSection(factory: TabFactory) {
     val messages = remember(factory) { mutableStateMapOf<String, ModuleChange>() }
     var cascade by remember(factory) { mutableStateOf(false) }
     val changes = factory.changes
+    // S7: a community module installed from a .ihq can be removed here, in a normal run: its jar is closed first.
+    val dropIn = com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost.current.dropIn?.takeIf { !it.demoLock }
+    val restart = com.superiorsoftllc.agenthq.ui.shell.LocalSoftRestart.current
+    val removeNotes = remember(factory) { mutableStateMapOf<String, String>() }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (factory.statuses.isEmpty()) {
@@ -111,6 +117,10 @@ fun ModulesSection(factory: TabFactory) {
                                 s, graph,
                                 enabled = enabledNow[s.name] ?: (s.state != ModuleState.DISABLED),
                                 message = messages[s.name],
+                                removeNote = removeNotes[s.name],
+                                onRemove = dropIn?.takeIf { s.tier == Tier.COMMUNITY && s.name in it.installed() }?.let { d ->
+                                    { val e = d.remove(s.name); if (e != null) removeNotes[s.name] = e; restart?.invoke() }
+                                },
                                 onToggle = changes?.let { c ->
                                     { on: Boolean ->
                                         val answer = c.request(ModuleRequest(s.name, on, cascade))
@@ -146,7 +156,7 @@ internal fun moduleByline(m: ModuleManifest): String? =
         .takeIf { it.isNotEmpty() }?.joinToString(" · ")
 
 @Composable
-private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean, message: ModuleChange?, onToggle: ((Boolean) -> Unit)?, modifier: Modifier) {
+private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean, message: ModuleChange?, removeNote: String?, onRemove: (() -> Unit)?, onToggle: ((Boolean) -> Unit)?, modifier: Modifier) {
     Column(
         modifier.clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp).testTag(MODULE_ROW_TAG_PREFIX + s.name),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -184,11 +194,17 @@ private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean
                 fontSize = 11.sp,
             )
         }
+        removeNote?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
         // The state and its control sit at the foot of the card, level across a row of cards.
         Spacer(Modifier.weight(1f))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Chip(stateLabel(s.state), if (s.state == ModuleState.LOADED) Palette.Accent else Palette.Muted, textModifier = Modifier.testTag(MODULE_STATE_TAG_PREFIX + s.name))
             Spacer(Modifier.weight(1f))
+            if (onRemove != null) TextButton(
+                onClick = onRemove,
+                modifier = Modifier.height(28.dp).testTag(MODULE_REMOVE_TAG_PREFIX + s.name),
+                contentPadding = PaddingValues(horizontal = 8.dp),
+            ) { Text("Remove", fontSize = 12.sp) }
             if (onToggle != null && s.manifest != null) {
                 TextButton(
                     onClick = { onToggle(!enabled) },

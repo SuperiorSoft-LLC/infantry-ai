@@ -25,6 +25,8 @@ class DesktopDropIn(
     override val demoLock: Boolean,
     override val safeMode: Boolean,
     private val picker: ((String) -> String?)? = null,
+    /** S7: unloads the running modules (stop, unsubscribe, close their jars) before a folder is deleted: Windows will not delete an open jar. */
+    private val release: () -> Unit = {},
 ) : PluginDropIn {
     override val canPick: Boolean get() = picker != null
 
@@ -63,7 +65,11 @@ class DesktopDropIn(
         return PluginFolders.scan(root, config).filter { it.tier == Tier.COMMUNITY }.map { it.folderName }.sorted()
     }
 
-    override fun remove(name: String): String? = if (demoLock) LOCKED else IhqInstaller.uninstall(root, name)
+    override fun remove(name: String): String? {
+        if (demoLock) return LOCKED
+        if (!safeMode) release()
+        return IhqInstaller.uninstall(root, name)
+    }
 
     override fun pickPackage(): String? = picker?.invoke("Choose a plugin (.ihq)")
 
