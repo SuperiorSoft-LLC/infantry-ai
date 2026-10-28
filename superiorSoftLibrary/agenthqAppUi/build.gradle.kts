@@ -24,8 +24,13 @@ kotlin {
         // PLUGINS-1: the core modules live in <repo>/plugins/core and are compiled into every target from there.
         // NS2: except Infantry_Board, its own project (plugins/core/Infantry_Board), which this one depends on.
         commonMain {
-            kotlin.srcDir(rootProject.file("plugins/core"))
-            kotlin.exclude("Infantry_Board/**")
+            // Each module folder (and the loose .kt files) is its own srcDir rather than plugins/core with an exclude:
+            // the Android compile (compileAndroidMain) ignores the exclude and would compile Infantry_Board's
+            // build script, tests and outputs.
+            rootProject.file("plugins/core").listFiles().orEmpty()
+                .filter { f -> f.name != "Infantry_Board" && (if (f.isDirectory) f.name.startsWith("Infantry_") else f.extension == "kt") }
+                .sortedBy { it.name }
+                .forEach { kotlin.srcDir(it) }
         }
         commonMain.dependencies {
             api(project(":superiorSoftLibrary:agenthqUiCore"))
