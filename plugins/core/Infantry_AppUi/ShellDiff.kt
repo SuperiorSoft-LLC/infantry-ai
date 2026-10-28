@@ -6,7 +6,6 @@ import androidx.compose.runtime.compositionLocalOf
 import com.superiorsoftllc.agenthq.ui.DiffModalBody
 import com.superiorsoftllc.agenthq.ui.DiffModalFrame
 import com.superiorsoftllc.agenthq.ui.DiffModalHeader
-import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.OpenDiff
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
@@ -33,7 +32,7 @@ private val LocalDiffHost = compositionLocalOf<DiffHost?> { null }
 class DiffBlock(children: List<Block>, place: Place = Place()) : Block("diffModal", DIFF, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val s = appShell
         val target = s.ui.diffTarget ?: return
         val open = openDiff(s.state, s.controller, target, onTarget = { next -> s.ui.diffTarget = next; if (next == null) s.root.requestFocus() }) ?: return
         val host = DiffHost(open, diffBody(open.patch))

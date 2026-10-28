@@ -1,7 +1,6 @@
 package com.superiorsoftllc.agenthq.ui.shell.blocks
 
 import androidx.compose.runtime.Composable
-import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundEffect
@@ -10,7 +9,7 @@ import com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundEffect
 object ShellSound : Block("infantry.shell.sound", "infantry.shell.sound") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val s = appShell
         IncomingCommsSoundEffect(s.controller.state, s.ui.flags.commsSound)
     }
 }

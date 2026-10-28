@@ -1,6 +1,9 @@
 package com.superiorsoftllc.agenthq.ui.block.layout
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import com.superiorsoftllc.agenthq.ui.LocalCoreTier
+import com.superiorsoftllc.agenthq.ui.ModuleTier
 
 /** BLOCKS-LAYOUT L5: how an override takes a node over (module.json `shell[].mode`). */
 object OverrideModes {
@@ -19,22 +22,39 @@ object OverrideModes {
 class BlockOverride(val content: @Composable (scope: BlockScope, inner: Block?) -> Unit)
 
 /** One override of node [node] by [module], already through the trust rules. */
-class NodeOverride(val module: String, val node: String, val mode: String, val override: BlockOverride)
+class NodeOverride(val module: String, val node: String, val mode: String, val override: BlockOverride, val community: Boolean = false)
 
 /**
  * The block drawn for an overridden node: it keeps the node's id and place, so its parent places it the same way. A
  * replace of a node that wears the host surface (S1: `infantry.shell.frame`) gets the surface in its scope's modifier;
  * a wrap leaves it to `inner`.
  */
-class OverrideBlock(val module: String, val mode: String, val inner: Block, private val override: BlockOverride) :
-    Block("override", inner.id, inner.place) {
+class OverrideBlock(
+    val module: String,
+    val mode: String,
+    val inner: Block,
+    private val override: BlockOverride,
+    private val community: Boolean = false,
+) : Block("override", inner.id, inner.place) {
     @Composable
     override fun Render(scope: BlockScope) = if (mode == OverrideModes.WRAP) {
-        override.content(scope, inner)
+        // S4d: a community wrap draws without the core tier; the node it wraps is drawn back at the tier around it.
+        if (community) {
+            val outer = LocalCoreTier.current
+            ModuleTier(false) { override.content(scope, TierBlock(inner, outer)) }
+        } else override.content(scope, inner)
     } else {
         val s = if (inner.wearsHostSurface) BlockScope(scope.modifier.then(LocalHostSurface.current), scope.box, scope.row) else scope
-        override.content(s, null)
+        if (community) ModuleTier(false) { override.content(s, null) } else override.content(s, null)
     }
+
+    override val wearsHostSurface: Boolean get() = inner.wearsHostSurface
+}
+
+/** S4d: [inner] drawn at module tier [core] (a community wrap's inner node is the shell's, not the module's). */
+private class TierBlock(private val inner: Block, private val core: Boolean) : Block(inner.blockType, inner.id, inner.place, inner.children) {
+    @Composable
+    override fun Render(scope: BlockScope) = CompositionLocalProvider(LocalCoreTier provides core) { inner.Render(scope) }
 
     override val wearsHostSurface: Boolean get() = inner.wearsHostSurface
 }
@@ -77,16 +97,23 @@ class NodeInjection(
     val order: Int = 0,
     val loadIndex: Int = 0,
     val injection: BlockInjection,
+    /** S4d: a community module's injection, drawn without the core tier. */
+    val community: Boolean = false,
 ) {
     /** The id of the drawn node, `<module>.<name>`. */
     val id: String get() = "$module.$name"
 }
 
 /** The node drawn for an injection: a leaf with id `<module>.<name>`, so nothing can be injected into it. */
-class InjectedBlock(val module: String, id: String, place: Place, private val content: @Composable (BlockScope) -> Unit) :
-    Block("injected", id, place) {
+class InjectedBlock(
+    val module: String,
+    id: String,
+    place: Place,
+    private val content: @Composable (BlockScope) -> Unit,
+    private val community: Boolean = false,
+) : Block("injected", id, place) {
     @Composable
-    override fun Render(scope: BlockScope) = content(scope)
+    override fun Render(scope: BlockScope) = if (community) ModuleTier(false) { content(scope) } else content(scope)
 }
 
 /**
@@ -177,7 +204,7 @@ object BlockResolver {
             bucket.zipWithNext().filter { (a, b) -> a.order == b.order }.forEach { (a, b) ->
                 problems += "${b.module}: injection ${b.name} into $target ($at) has the same order ${b.order} as ${a.id}, which goes first"
             }
-            return bucket.map { InjectedBlock(it.module, it.id, it.injection.place, it.injection.content) }
+            return bucket.map { InjectedBlock(it.module, it.id, it.injection.place, it.injection.content, it.community) }
         }
         fun inject(target: String, kids: List<Block>, js: List<NodeInjection>): List<Block> = buildList {
             addAll(drawn(js, target, InjectAt.First))
@@ -215,7 +242,7 @@ object BlockResolver {
                     injectInto.remove(j.target)
                 }
             }
-            return own.fold(rebuilt) { inner, o -> OverrideBlock(o.module, o.mode, inner, o.override) }
+            return own.fold(rebuilt) { inner, o -> OverrideBlock(o.module, o.mode, inner, o.override, o.community) }
         }
         return Resolved(resolveNode(root), problems)
     }

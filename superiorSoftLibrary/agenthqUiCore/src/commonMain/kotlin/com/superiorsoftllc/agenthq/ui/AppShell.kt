@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -92,5 +93,26 @@ class Shell(
     )
 }
 
-/** BLOCKS-SHELL-1: the [Shell] of the window being composed (not static: only the blocks that read it recompose). */
-val LocalShell = compositionLocalOf<Shell> { error("LocalShell: no App() above this block") }
+/**
+ * BLOCKS-SHELL-1: the [Shell] of the window being composed (not static: only the blocks that read it recompose).
+ * S4d (docs/SHELL-LEAKS.md): core's own; a module's block reads [coreShell] (core tier) or the ShellContext.
+ */
+internal val LocalShell = compositionLocalOf<Shell> { error("LocalShell: no App() above this block") }
+
+/**
+ * S4d: false inside a community module's composition (its tab, panel section, interceptor, slot block, shell override or
+ * injection), so [coreShell] is null there. The window itself draws core tier.
+ */
+internal val LocalCoreTier = compositionLocalOf { true }
+
+/**
+ * S4d (docs/SHELL-LEAKS.md): the window's [Shell], its state and controller, for a core module's block (the app UI's
+ * fills), the way [TabContext.coreController] is for a core module's tab. Null in a community module's composition,
+ * which reads [com.superiorsoftllc.agenthq.ui.shell.LocalShellContext] only.
+ */
+val coreShell: Shell? @Composable get() = if (LocalCoreTier.current) LocalShell.current else null
+
+/** S4d: draws [content] as a module of tier [core] would be drawn ([coreShell] is null in a community one's). */
+@Composable
+internal fun ModuleTier(core: Boolean, content: @Composable () -> Unit) =
+    CompositionLocalProvider(LocalCoreTier provides core, content = content)

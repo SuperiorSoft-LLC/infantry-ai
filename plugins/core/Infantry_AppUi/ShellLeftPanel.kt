@@ -8,7 +8,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.Palette
 import com.superiorsoftllc.agenthq.ui.ProjectsSidebar
 import com.superiorsoftllc.agenthq.ui.ResizeHandle
@@ -33,7 +32,7 @@ import kotlinx.coroutines.launch
 object ShellLeftPanel : Block("infantry.shell.left", "infantry.shell.left", Place(show = Show.Wide)) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val s = appShell
         val compact = dockCompact()
         // PANEL-TOGGLE-1: a hidden side panel and its resize handle leave the composition; the centre column's
         // weight then takes the whole width.

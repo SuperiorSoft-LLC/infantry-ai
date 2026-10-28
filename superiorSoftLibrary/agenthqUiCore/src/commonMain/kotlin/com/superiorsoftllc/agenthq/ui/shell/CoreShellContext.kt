@@ -1,6 +1,8 @@
 package com.superiorsoftllc.agenthq.ui.shell
 
+import com.superiorsoftllc.agenthq.ui.ConfigTab
 import com.superiorsoftllc.agenthq.ui.RunConsoleHost
+import com.superiorsoftllc.agenthq.ui.protocol.OwnerQuestionView
 import com.superiorsoftllc.agenthq.ui.Shell
 import com.superiorsoftllc.agenthq.ui.ToastService
 import com.superiorsoftllc.agenthq.ui.protocol.TraitView
@@ -82,6 +84,23 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
     override val traits: TraitsContext = CoreTraits(state, shell.controller)
     override val tickets: TicketsContext = CoreTickets(state, shell.controller)
 
+    override val window: WindowContext = object : WindowContext {
+        override val appBuild: String? get() = shell.host.appBuild
+        override val serverMismatch: String? get() = shell.serverMismatch
+        override fun showChat() { ui.centerTab = shell.homeTab; shell.chat.spawnMode = false }
+        override fun showTab(id: String) = shell.showTab(id)
+        override fun openConfig(tab: ConfigTab?) { if (tab != null) ui.configTab = tab; ui.showConfig = true }
+        override fun openConnection() { shell.changeConnection?.invoke() ?: run { ui.showConnect = true } }
+    }
+
+    override val questions: QuestionsContext = object : QuestionsContext {
+        override val open: List<OwnerQuestionView> get() = state.openQuestions
+        override val dismissed: Set<String> get() = state.dismissedQuestions
+        override suspend fun cancel(id: String): CommandResult = shell.controller.cancelQuestion(id)
+        override fun show(id: String) = shell.controller.openQuestion(id)
+        override fun showAll() = shell.controller.showQuestions()
+    }
+
     override val toast: ToastContext = object : ToastContext {
         override val service: ToastService get() = shell.controller.toasts
         override val events: List<ToastEvent> by lazy { toastEvents(state) }
@@ -96,6 +115,7 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
 class CoreLink(private val state: AppState) : LinkContext {
     override val live: Boolean get() = state.connection.isLive
     override val contract: String? get() = state.connection.contract
+    override val daemonBuild: String? get() = state.connection.daemonBuild
 }
 
 /** S2: [state]'s session, for a pane drawn outside a shell. */
@@ -107,6 +127,7 @@ class CoreSession(private val state: AppState) : SessionContext {
     override val selectedAgent: AgentView? get() = state.selected
     override val activeProjectId: String? get() = state.activeProjectId
     override val projects: List<ProjectView> get() = state.projects
+    override fun hasSession(sessionId: String): Boolean = state.agents.containsKey(sessionId)
 }
 
 /** S4b: [state]'s notes and [controller]'s note requests, for a pane drawn outside a shell. */
