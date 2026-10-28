@@ -446,3 +446,54 @@ default so an older shell compiles and refuses the edit (`SHELL_DOMAIN_MISSING`)
 
 Core adapters: `CoreRoles`, `CoreTraits` (CoreShellContext.kt); the window's `roles` delegates to `CoreRoles` and adds the
 roles window's `managerOpen` / `closeManager`.
+
+## Board (not migrated; S4d)
+
+Board.kt (Infantry_AppUi, 971 lines) still reads `AppState` and calls the `Controller`. A migration needs, on
+`BoardContext`: `live`, `activeProjectId` (session), `profiles`, `tickets`, `visibleTickets`, `column(status)`,
+`ticket(id)`, `epics`, `agents`, `role(id)`, `reportFlagFor`, `ticketError`, `projects`, `create`, `edit`, `delete`,
+`move`, `startNext`, `loadEpics`, `uploadImage` (about 20), plus `LayoutContext.compact` and a ticket-updates flow for
+`BoardDropSession` (today `controller.state.collect` and `controller.ticketMoves()`). `BoardPaneHost.state /
+controller` and `BoardCardHost.state / controller` are public and are read by BoardModal, ShellBoard and four UI tests
+(BoardDrag, BoardBacklogRealDaemon, BoardReorderRealDaemon, TicketBranch), so closing them is an API change.
+`TicketAssigneePicker`, `TicketExecutorField` and `assigneeLabel` (Triggers) take `AppState` too. All of these are
+**holes**, to S4d.
+
+## ShellContext additions in S4c (count)
+
+| Domain | Members | |
+|---|---|---|
+| `ShellContext` | `executor`, `traits` | 2 |
+| `ExecutorContext` (new) | `providers`, `modelCatalog` | 2 |
+| `RolesContext` | see "Roles migrated" | 12 |
+| `TraitsContext` (new) | see "Roles migrated" | 8 |
+| `SessionContext` | `activeProjectId` | 1 |
+| **Total** | | **25** |
+
+Every member has a default, so a shell written against S4b compiles unchanged. Module-contract additions (not
+`ShellContext`): `TabFactory.fills(slot)`, `ConfigDialog(drawn = ...)`, `ConfigCogLabel` (internal). Board would add
+about 22 more (above).
+
+## Holes still open after S4c
+
+- `Shell.controller` / `LocalShell.current.controller` is public (S4d). In plugins/core, 43 files still name `Controller`
+  (19 of them in Infantry_AppUi), 24 name `AppState`, and 12 read `LocalShell.current`.
+- Board (above).
+- `ReportFlagChip`, `PromptBox`, `SpawnRoleRow` are still bridges until ChatSurface moves (S4d).
+- The `(state, controller)` entry points (`RolesPane`, `RoleManagerDialog`, `BoardPane` and the S4b panes) stay public
+  as wrappers for the UI tests and hosts without a `ShellContext`.
+- The NodeRegistry label "CoreShell.tabs" (see "Holes that stay open").
+
+## What stayed in core
+
+- **The frame and its slots** (CoreShell, the `PlaceholderBlock` slots): the shape a module fills. Without it nothing draws.
+- **Connect, servers, switch error, server update** (ShellConnect, ShellServers, ShellSwitchError, ShellServerUpdate): a
+  window with no modules must still reach a daemon and recover from a bad one.
+- **The Config frame and its trust half** (ShellConfig, `ShellConfigTrust`: plugins, modules, registry, secrets, pair,
+  about, updates, server update, logs) and **ShellConfigEntry**. This is where a bad module is turned off, so no
+  module may replace it (all locked).
+- **The Config settings composables** (`ConfigThemeSection` ... in ConfigDialog.kt): drawn by the dialog's default
+  body and its tests; they read only `ConfigDialogHost`. See the Settings table.
+- **Window, images and dock** (the platform hosts) and **the placeholders**: platform glue, not UI a module owns.
+- **ChatSurface** (and with it `ReportFlagChip`, `PromptBox`, `SpawnRoleRow`, `bindingSummary`): moves in S4d.
+- **Kit**: the controls, `Palette`, icons, the model and protocol types, the pure formatters (`humanDuration`, ...).
