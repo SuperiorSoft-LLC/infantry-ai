@@ -50,7 +50,7 @@ fun ApplicationScope.AgentHqWindow(onCloseRequest: () -> Unit, content: @Composa
     val state = rememberWindowState(size = DpSize(1400.dp, 860.dp))
     // APP-ICON-1: the Infantry AI "A" mark on the title bar's taskbar entry and Alt-Tab, not the runtime default.
     val icon = remember { AppIcon.painter() }
-    Window(onCloseRequest = onCloseRequest, icon = icon, state = state, title = "Infantry AI", undecorated = true, resizable = true) {
+    Window(onCloseRequest = onCloseRequest, icon = icon, state = state, title = ShellApp.current?.manifest?.windowTitle ?: "Infantry AI", undecorated = true, resizable = true) {
         val frame = window
         LaunchedEffect(frame) { frame.minimumSize = MIN_SIZE }
         // INSTALL-REFOCUS-1: what a refused second launch's activation brings forward (only the installed app routes it).

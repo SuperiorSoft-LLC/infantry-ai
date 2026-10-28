@@ -17,6 +17,8 @@ import com.superiorsoftllc.agenthq.daemon.StateDirLock
  */
 fun main(args: Array<String>) {
     safeModeFlag(args)
+    // NS4: --app <dir> (shell builds): app.json + <dir>/plugins as the plugins root. The per-app state dir is NS5's.
+    ShellApp.apply(args)
     if (LaunchProfile.isInstalled()) {
         // PKG-3: the state dir decides where the log goes, so resolving it comes first; its override warnings are
         // held and written into the log once it is open, so a Start-menu launch (no console) keeps every line.

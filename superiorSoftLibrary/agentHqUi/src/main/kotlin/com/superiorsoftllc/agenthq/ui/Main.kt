@@ -10,6 +10,7 @@ import com.superiorsoftllc.agenthq.ui.shell.defaultPlatformHost
 /** Desktop entry: only the Window (the undecorated [AgentHqWindow]). Configuration and the shell itself live in :agenthqUiCore. */
 fun main(args: Array<String>) {
     safeModeFlag(args)
+    ShellApp.apply(args) // NS4: --app <dir>
     runDevUi()
 }
 
