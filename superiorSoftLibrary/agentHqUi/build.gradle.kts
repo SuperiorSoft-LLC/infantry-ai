@@ -1,6 +1,9 @@
 // Desktop window shell. Shared screens and daemon client live in :agenthqUiCore.
 import java.time.Duration
+import java.security.cert.CertificateFactory
+import java.security.cert.X509Certificate
 import java.util.UUID
+import java.util.jar.JarFile
 
 plugins {
     kotlin("jvm")
@@ -421,6 +424,146 @@ tasks.withType<Sync>().matching { it.name == "prepareAppResources" }.configureEa
     from(project(":superiorSoftLibrary:agentHqWeb").layout.buildDirectory.dir("assembleWeb")) { into("web") }
 }
 val javaLauncherName = if (System.getProperty("os.name").startsWith("Windows")) "java.exe" else "java"
+
+// PACKAGING (ticket 95c26a81, follow-up 1 of RUNTIME-3): the packaged app ships every official module, signed, as its
+// bundled modules root (PluginFolders.bundledRoot): <install>/app/resources/modules (jpackage's $APPDIR/resources), laid out
+//   modules/official/<Name>/module.json              (the module's own, byte for byte: OfficialTrust compares it with the signed copy)
+//   modules/official/<Name>/<module.json "jar">      (e.g. build/libs/Infantry_Cli.jar, signed with the Infantry key)
+//   modules/trusted-keys/infantry.cer                (the signing certificate: OfficialTrust.infantryKeys reads it)
+// and the launcher sets -Dagenthq.plugins.bundled=$APPDIR/resources/modules. Signing key (until 9bc0c955 pins one):
+//   -Pihq.keystore=<file> -Pihq.alias=<alias> + env IHQ_STOREPASS   the real Infantry key (keystore path relative to the repo root)
+//   -Pihq.devSign=true                                              a throwaway dev key (build/official-modules/dev-key), never for a release
+// With neither, stageOfficialModules (and so every package task) fails. `run` and the dev runs are untouched (devTrust).
+val officialProjects = rootProject.subprojects.filter { it.path.startsWith(":plugins:official:") }
+val officialStageDir = layout.buildDirectory.dir("official-modules/modules")
+val stageOfficialModules = tasks.register("stageOfficialModules") {
+    group = "distribution"
+    description = "Builds every plugins/official jar, signs it (-Pihq.keystore/-Pihq.alias + IHQ_STOREPASS, or -Pihq.devSign=true) and lays out build/official-modules/modules."
+    officialProjects.forEach { dependsOn("${it.path}:jvmJar") }
+    val modules = officialProjects.map { p -> p.name to p.projectDir }
+    val jars = officialProjects.associate { p -> p.name to p.tasks.named<Jar>("jvmJar").flatMap { it.archiveFile } }
+    val keystoreProp = providers.gradleProperty("ihq.keystore").map { rootProject.file(it) }
+    val aliasProp = providers.gradleProperty("ihq.alias")
+    val storePassEnv = providers.environmentVariable("IHQ_STOREPASS")
+    val devSign = providers.gradleProperty("ihq.devSign").map { it.trim().lowercase() == "true" }.orElse(false)
+    inputs.files(jars.values).withPropertyName("officialJars")
+    inputs.files(modules.map { File(it.second, "module.json") }).withPropertyName("moduleJsons")
+    inputs.property("keystore", keystoreProp.map { it.absolutePath }.orElse(""))
+    inputs.property("alias", aliasProp.orElse(""))
+    inputs.property("devSign", devSign)
+    val out = officialStageDir
+    val devKeyDir = layout.buildDirectory.dir("official-modules/dev-key")
+    outputs.dir(out)
+    doLast {
+        val bin = File(System.getProperty("java.home"), "bin")
+        val exe = if (System.getProperty("os.name").startsWith("Windows")) ".exe" else ""
+        fun tool(name: String, vararg args: String) {
+            val p = ProcessBuilder(listOf(File(bin, name + exe).path) + args).redirectErrorStream(true).start()
+            val text = p.inputStream.bufferedReader().readText()
+            check(p.waitFor() == 0) { "PACKAGING: $name failed: $text" }
+        }
+        // The key: the owner's keystore, else (opt-in) a throwaway dev key, else a clear failure.
+        val (keystore, alias, storePass) = when {
+            keystoreProp.isPresent -> Triple(
+                keystoreProp.get().also { check(it.isFile) { "PACKAGING: -Pihq.keystore=$it does not exist" } },
+                aliasProp.orNull ?: error("PACKAGING: -Pihq.keystore needs -Pihq.alias=<the Infantry key's alias>"),
+                storePassEnv.orNull ?: error("PACKAGING: -Pihq.keystore needs the keystore password in env IHQ_STOREPASS"),
+            )
+            devSign.get() -> {
+                val ks = File(devKeyDir.get().asFile, "infantry-dev.p12")
+                if (!ks.isFile) {
+                    ks.parentFile.mkdirs()
+                    tool("keytool", "-genkeypair", "-alias", "infantry-dev", "-keyalg", "RSA", "-keysize", "2048", "-validity", "3650",
+                        "-dname", "CN=Infantry AI dev key (throwaway - not for release)", "-storetype", "PKCS12", "-keystore", ks.path,
+                        "-storepass", "infantry-dev", "-keypass", "infantry-dev")
+                }
+                logger.warn("PACKAGING: official modules signed with a THROWAWAY dev key ($ks); never ship this build")
+                Triple(ks, "infantry-dev", "infantry-dev")
+            }
+            else -> error(
+                "PACKAGING: the official modules (${modules.joinToString { it.first }}) must be signed with the Infantry key. Pass " +
+                    "-Pihq.keystore=<keystore> -Pihq.alias=<alias> with the password in env IHQ_STOREPASS, or -Pihq.devSign=true for a " +
+                    "throwaway dev key (local test builds only).",
+            )
+        }
+        val root = out.get().asFile
+        root.deleteRecursively()
+        for ((name, dir) in modules) {
+            val json = File(dir, "module.json")
+            val manifest = groovy.json.JsonSlurper().parse(json) as Map<*, *>
+            val jarPath = (manifest["jar"] as? String)?.takeIf { it.isNotBlank() } ?: error("PACKAGING: $json names no jar")
+            val moduleDir = File(root, "official/$name")
+            json.copyTo(File(moduleDir, "module.json"))
+            val jar = jars.getValue(name).get().asFile.copyTo(File(moduleDir, jarPath))
+            tool("jarsigner", "-keystore", keystore.path, "-storepass", storePass, jar.path, alias)
+        }
+        val keys = File(root, "trusted-keys").apply { mkdirs() }
+        tool("keytool", "-exportcert", "-rfc", "-alias", alias, "-keystore", keystore.path, "-storepass", storePass, "-file", File(keys, "infantry.cer").path)
+        logger.lifecycle("PACKAGING: staged ${modules.size} official module(s) into $root")
+    }
+}
+// The package tasks' resources: Compose's prepareAppResources (shared with `run`, left as it is) plus modules/.
+val prepareDistributableResources = tasks.register<Sync>("prepareDistributableResources") {
+    group = "distribution"
+    description = "prepareAppResources plus the staged official modules (modules/): the resources of the package tasks."
+    from(tasks.named<Sync>("prepareAppResources"))
+    from(stageOfficialModules) { into("modules") }
+    into(layout.buildDirectory.dir("compose/tmp/distributableResources"))
+}
+val bundledLauncherArg = "-Dagenthq.plugins.bundled=\$APPDIR/resources/modules"
+// Compose registers its package tasks in afterEvaluate and sets appResourcesDir / launcherJvmArgs in their register
+// action; a configureEach added after that registration runs after that action (one added earlier ran before it and was
+// overwritten: verifyOfficialModulesPackaged catches that).
+afterEvaluate {
+    tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask>().configureEach {
+        dependsOn(prepareDistributableResources)
+        appResourcesDir.set(layout.dir(prepareDistributableResources.map { it.destinationDir }))
+        launcherJvmArgs.add(bundledLauncherArg)
+    }
+}
+// PACKAGING acceptance (runs no jpackage): the distributable's resources carry modules/official/<Name> with a jar signed
+// by the certificate in modules/trusted-keys and the on-disk module.json equal to the signed copy (what OfficialTrust
+// checks), and createDistributable's launcher sets agenthq.plugins.bundled. Needs a key, so it is not in `check`:
+//   ./gradlew :superiorSoftLibrary:agentHqUi:verifyOfficialModulesPackaged -Pihq.devSign=true
+tasks.register("verifyOfficialModulesPackaged") {
+    group = "verification"
+    description = "PACKAGING: the distributable input carries every official module, signed, and the launcher sets agenthq.plugins.bundled."
+    dependsOn(prepareDistributableResources)
+    val names = officialProjects.map { it.name }
+    val dist = tasks.named<org.jetbrains.compose.desktop.application.tasks.AbstractJPackageTask>("createDistributable")
+    val launcherArgs = dist.flatMap { it.launcherJvmArgs }
+    val resources = dist.flatMap { it.appResourcesDir }.map { it.asFile }
+    val prepared = prepareDistributableResources.map { it.destinationDir }
+    doLast {
+        val res = resources.get()
+        check(res == prepared.get()) { "PACKAGING: createDistributable packages $res, not the staged resources ${prepared.get()}" }
+        check(bundledLauncherArg in launcherArgs.get()) { "PACKAGING: the launcher does not set $bundledLauncherArg: ${launcherArgs.get()}" }
+        val modules = File(res, "modules")
+        val cert = CertificateFactory.getInstance("X.509")
+            .generateCertificate(File(modules, "trusted-keys/infantry.cer").inputStream().use { it.readBytes() }.inputStream())
+        check(names.isNotEmpty()) { "PACKAGING: no plugins/official module found" }
+        for (name in names) {
+            val dir = File(modules, "official/$name")
+            val json = File(dir, "module.json").readText()
+            val manifest = groovy.json.JsonSlurper().parseText(json) as Map<*, *>
+            check(manifest["tier"] == "official") { "PACKAGING: $dir/module.json is not tier official" }
+            val jar = File(dir, manifest["jar"] as String)
+            JarFile(jar, true).use { j ->
+                val files = j.entries().toList().filter { !it.isDirectory && !it.name.startsWith("META-INF/") }
+                check(files.isNotEmpty()) { "PACKAGING: $jar is empty" }
+                for (e in files) {
+                    j.getInputStream(e).use { it.readBytes() } // runs the signature check
+                    val signer = e.codeSigners?.firstOrNull()?.signerCertPath?.certificates?.firstOrNull()
+                    check(signer == cert) { "PACKAGING: ${e.name} in $jar is not signed by trusted-keys/infantry.cer" }
+                }
+                val signed = j.getInputStream(j.getJarEntry("module.json") ?: error("PACKAGING: $jar carries no module.json")).use { it.readBytes().decodeToString() }
+                check(signed == json) { "PACKAGING: $dir/module.json differs from the signed copy in $jar" }
+            }
+            logger.lifecycle("PACKAGING: modules/official/$name/${manifest["jar"]} signed by ${(cert as X509Certificate).subjectX500Principal.name}")
+        }
+        logger.lifecycle("PACKAGING: launcher sets $bundledLauncherArg; resources $res")
+    }
+}
 
 tasks.withType<org.jetbrains.compose.desktop.application.tasks.AbstractJLinkTask>().configureEach {
     doLast(keepJavaLauncherAction) {

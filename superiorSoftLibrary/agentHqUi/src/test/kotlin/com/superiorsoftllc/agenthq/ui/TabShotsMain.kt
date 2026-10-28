@@ -175,7 +175,10 @@ fun main(args: Array<String>) {
         // Every load starts the loaded modules again (a community module's event handlers too: nothing is unloaded), so the
         // 32 shots use the soft restart's own load, not one more.
         var last: TabFactory? = null
-        fun reload() = DesktopPlugins.load(dir, env = env::get, property = { null }, compiled = emptyList()).factory.also { last = it }
+        // PACKAGING (95c26a81): the official modules (Infantry_Cli) come from the copied root's official/ jars, as a packaged
+        // app loads them from its bundled root; the task's devTrust lets those unsigned dev jars through.
+        val devTrust = { name: String -> if (name == PluginFolders.DEV_TRUST_PROPERTY) System.getProperty(name) else null }
+        fun reload() = DesktopPlugins.load(dir, env = env::get, property = devTrust, compiled = emptyList()).factory.also { last = it }
         val dropIn = DesktopDropIn(root, demoLock = false, safeMode = false, picker = { ihq.path })
         check(!reload().fills("infantry.shell.center")) { "the plugins root still fills the center: not an empty shell" }
         runDesktopComposeUiTest(1400, 860) {
