@@ -370,6 +370,8 @@ class TabFactory(
     val baseRoot: Block by lazy { CoreShell.root.filled(slotFills) }
     /** S4c: whether a loaded module fills the empty slot [slot] ([CoreShell.slots]). */
     fun fills(slot: String): Boolean = slot in slotFills
+    /** S4d: the module that fills each filled slot, by slot (node) id (the Registered view names it). */
+    val fillModules: Map<String, String>
     /** S4: the tab trees the loaded modules draw, unresolved, in load order. */
     val tabTreeRoots: List<Block>
     /** S4 (P1 f60f4d97's map): the tab (its `TabProvider` id) that draws each tree of [tabTreeRoots], by tree id. */
@@ -542,6 +544,7 @@ class TabFactory(
         }
         // S4: the fills and the tab trees, core tier only.
         val fills = LinkedHashMap<String, Block>()
+        val fillers = LinkedHashMap<String, String>()
         val trees = LinkedHashMap<String, Pair<String, Block>>()
         for (m in modules) {
             val name = m.manifest.name
@@ -551,7 +554,7 @@ class TabFactory(
                 node !in CoreShell.slots -> problems += "$name: fill of $node refused: it is not an empty shell slot"
                 b.id != node -> problems += "$name: fill of $node refused: its block's id is ${b.id}"
                 node in fills -> problems += "$name: fill of $node skipped: already filled"
-                else -> fills[node] = b
+                else -> { fills[node] = b; fillers[node] = name }
             }
             for (node in m.manifest.fills - m.fills.keys) problems += "$name: fill of $node is declared but not registered; skipped"
             for ((tab, root) in m.tabTrees) when {
@@ -561,6 +564,7 @@ class TabFactory(
             }
         }
         slotFills = fills
+        fillModules = fillers
         tabTreeRoots = trees.values.map { it.second }
         tabTreeTabs = trees.mapValues { it.value.first }
         providers = seen.values.toList()
