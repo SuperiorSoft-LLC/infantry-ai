@@ -1188,10 +1188,19 @@ class AgentHqDaemon(
                 clock = clock,
                 maxOpen = settings::questionsMaxOpenPerAgent,
                 maxPerHour = settings::questionsMaxPerHour,
+                sessionExists = { manager.get(it) != null },
+                sessionBusy = { manager.get(it)?.live == true },
+                ttlMinutes = { settings.limit(com.superiorsoftllc.agenthq.settings.LimitRegistry.QUESTION_TTL_MINUTES) },
             )
             ownerQuestions.sink = { question ->
                 val frame = Envelope(Envelope.QUESTION, json.encodeToString(com.superiorsoftllc.agenthq.protocol.OwnerQuestion.serializer(), question))
                 for (c in clients.toList()) c.trySend(frame)
+            }
+            // A session that is killed, removed or restarted can no longer read the answer: its open questions are orphaned.
+            val previousOnClosed = manager.onSessionClosed
+            manager.onSessionClosed = { c ->
+                previousOnClosed(c)
+                if (c.reason in ORPHANING_CLOSE_REASONS) ownerQuestions.orphanSession(c.sessionId, c.at)
             }
             val streamSequencer = SessionFrameSequencer()
             // Contract 1.95.0 (1c24fdc4): each session's harness-neutral run activity, carried on `status` frames.
@@ -3599,3 +3608,5 @@ private fun podAnswer(orchestrator: Orchestrator, podId: String): Envelope {
 
 /** ASK-1: how often the daemon sweeps owner questions for a `defaultAfterMin` auto-pick. */
 private const val QUESTION_SWEEP_MS = 15_000L
+/** The [SessionClosed.reason]s after which the session cannot read an answer any more (a failed turn is resumable and keeps its questions). */
+private val ORPHANING_CLOSE_REASONS = setOf("session killed", "session removed", "session restarted")

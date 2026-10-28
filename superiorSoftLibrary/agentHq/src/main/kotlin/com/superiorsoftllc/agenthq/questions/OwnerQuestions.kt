@@ -143,6 +143,12 @@ class OwnerQuestions(
     private val newId: () -> String = { UUID.randomUUID().toString() },
     private val maxOpen: () -> Int = { DEFAULT_MAX_OPEN },
     private val maxPerHour: () -> Int = { DEFAULT_MAX_PER_HOUR },
+    /** Whether the asking session still has a record; an open question of a missing one is orphaned by [sweep]. */
+    private val sessionExists: (String) -> Boolean = { true },
+    /** Whether the asking session is mid-turn; a busy asker's question never expires by [ttlMinutes]. */
+    private val sessionBusy: (String) -> Boolean = { false },
+    /** `limits.questions.ttlMinutes`: an open question older than this, whose asker is not busy, is orphaned; 0 = never. */
+    private val ttlMinutes: () -> Long = { 0L },
 ) {
     @Volatile
     var sink: (OwnerQuestion) -> Unit = {}
@@ -254,8 +260,30 @@ class OwnerQuestions(
         return updated
     }
 
-    /** Auto-pick every open question whose `defaultAfterMin` has run out at [now]. Returns the questions it picked. */
+    /**
+     * A session ended (killed, removed, restarted): its open questions can no longer reach the asker, so they are
+     * cancelled with [QuestionResolvedBy.ORPHANED] (no mail: nobody is there to read it). Returns the questions closed.
+     */
+    fun orphanSession(sessionId: String, now: Long = clock()): List<OwnerQuestion> =
+        orphan(now) { it.sessionId == sessionId }
+
+    private fun orphan(now: Long, match: (OwnerQuestion) -> Boolean): List<OwnerQuestion> {
+        val closed = synchronized(lock) {
+            repository.all().filter { it.state == QuestionStates.OPEN && match(it) }.map {
+                it.copy(state = QuestionStates.CANCELLED, resolvedBy = QuestionResolvedBy.ORPHANED, resolvedAt = now).also(repository::update)
+            }
+        }
+        closed.forEach(::publish)
+        return closed
+    }
+
+    /**
+     * Orphan every open question whose session is gone, or older than the TTL with an asker that is not busy, then
+     * auto-pick every open question whose `defaultAfterMin` has run out at [now]. Returns the questions it picked.
+     */
     fun sweep(now: Long = clock()): List<OwnerQuestion> {
+        val ttlMs = ttlMinutes().let { if (it <= 0) Long.MAX_VALUE else it * MINUTE_MS }
+        orphan(now) { !sessionExists(it.sessionId) || (now - it.createdAt >= ttlMs && !sessionBusy(it.sessionId)) }
         val picked = synchronized(lock) {
             repository.all()
                 .filter { it.state == QuestionStates.OPEN && it.defaultAfterMin != null && now >= it.createdAt + it.defaultAfterMin * MINUTE_MS }
