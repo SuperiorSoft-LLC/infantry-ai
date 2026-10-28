@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.AttentionPane
@@ -29,3 +30,8 @@ val InfantryAttention = AgentHqModule(
         ) { AttentionPane(it.state, it.appController, it.showChat) },
     ),
 )
+
+/** RUNTIME-1: the entry of Infantry_Attention (module.json `entry`): hands over this module alone. */
+class AttentionModuleSource : ModuleSource {
+    override fun modules(): List<AgentHqModule> = listOf(InfantryAttention)
+}

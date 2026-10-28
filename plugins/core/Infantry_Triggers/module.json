@@ -5,6 +5,8 @@
   "author": "Infantry AI",
   "description": "Triggers that start work on an event.",
   "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.core.TriggersModuleSource",
+  "buildOrder": 60,
   "tabs": [
     {
       "id": "infantry.triggers",

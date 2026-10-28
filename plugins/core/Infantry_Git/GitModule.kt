@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
@@ -33,3 +34,8 @@ val InfantryGit = AgentHqModule(
         ) { GitTab() },
     ),
 )
+
+/** RUNTIME-1: the entry of Infantry_Git (module.json `entry`): hands over this module alone. */
+class GitModuleSource : ModuleSource {
+    override fun modules(): List<AgentHqModule> = listOf(InfantryGit)
+}

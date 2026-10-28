@@ -5,6 +5,8 @@
   "author": "Infantry AI",
   "description": "Epics and their tickets.",
   "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.core.EpicsModuleSource",
+  "buildOrder": 70,
   "tabs": [
     {
       "id": "infantry.epics",

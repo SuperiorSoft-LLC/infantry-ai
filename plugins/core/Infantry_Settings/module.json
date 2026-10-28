@@ -5,6 +5,8 @@
   "author": "Infantry AI",
   "description": "The Settings tab: groups the setup tabs (Profiles, Triggers, Notes, Run, Git) under one.",
   "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.core.SettingsModuleSource",
+  "buildOrder": 120,
   "tabs": [
     {
       "id": "infantry.settings",

@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.EpicsPane
@@ -29,3 +30,8 @@ val InfantryEpics = AgentHqModule(
         ) { EpicsPane(it.state, it.appController) },
     ),
 )
+
+/** RUNTIME-1: the entry of Infantry_Epics (module.json `entry`): hands over this module alone. */
+class EpicsModuleSource : ModuleSource {
+    override fun modules(): List<AgentHqModule> = listOf(InfantryEpics)
+}

@@ -5,6 +5,8 @@
   "author": "Infantry AI",
   "description": "What needs the owner.",
   "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.core.AttentionModuleSource",
+  "buildOrder": 150,
   "tabs": [
     {
       "id": "infantry.attention",

@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import androidx.compose.runtime.remember
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
@@ -38,3 +39,8 @@ val InfantryRoles = AgentHqModule(
         },
     ),
 )
+
+/** RUNTIME-1: the entry of Infantry_Roles (module.json `entry`): hands over this module alone. */
+class RolesModuleSource : ModuleSource {
+    override fun modules(): List<AgentHqModule> = listOf(InfantryRoles)
+}

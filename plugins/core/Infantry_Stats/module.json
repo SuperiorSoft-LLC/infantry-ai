@@ -5,6 +5,8 @@
   "author": "Infantry AI",
   "description": "The selected session's statistics.",
   "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.core.StatsModuleSource",
+  "buildOrder": 110,
   "tabs": [
     {
       "id": "infantry.stats",

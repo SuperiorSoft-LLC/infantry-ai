@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
@@ -27,3 +28,8 @@ val InfantryCli = AgentHqModule(
         ) { it.transcript() },
     ),
 )
+
+/** RUNTIME-1: the entry of Infantry_Cli (module.json `entry`): hands over this module alone. */
+class CliModuleSource : ModuleSource {
+    override fun modules(): List<AgentHqModule> = listOf(InfantryCli)
+}

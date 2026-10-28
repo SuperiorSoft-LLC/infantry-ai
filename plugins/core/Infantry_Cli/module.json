@@ -5,6 +5,8 @@
   "author": "Infantry AI",
   "description": "The selected agent's chat transcript.",
   "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.core.CliModuleSource",
+  "buildOrder": 20,
   "tabs": [
     {
       "id": "infantry.cli",

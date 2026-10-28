@@ -5,6 +5,8 @@
   "author": "Infantry AI",
   "description": "Roles: who does what, and starting a session as one.",
   "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.core.RolesModuleSource",
+  "buildOrder": 40,
   "tabs": [
     {
       "id": "infantry.roles",

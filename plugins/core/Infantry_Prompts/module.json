@@ -5,6 +5,8 @@
   "author": "Infantry AI",
   "description": "Saved prompts to insert into the chat.",
   "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.core.PromptsModuleSource",
+  "buildOrder": 170,
   "tabs": [
     {
       "id": "infantry.prompts",

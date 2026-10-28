@@ -5,6 +5,8 @@
   "author": "Infantry AI",
   "description": "Pod nodes waiting for review.",
   "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.core.ReviewModuleSource",
+  "buildOrder": 140,
   "tabs": [
     {
       "id": "infantry.review",

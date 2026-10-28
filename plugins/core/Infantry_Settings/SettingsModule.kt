@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import androidx.compose.runtime.Composable
 import com.superiorsoftllc.agenthq.plugin.api.ConfigDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldDeclaration
@@ -65,4 +66,9 @@ private fun SettingsTab(context: TabContext) {
     SubTabHost(LocalTabFactory.current, SETTINGS_TAB_ID, context, ui?.subTabs?.get(SETTINGS_TAB_ID)) { picked ->
         ui?.subTabs?.set(SETTINGS_TAB_ID, picked)
     }
+}
+
+/** RUNTIME-1: the entry of Infantry_Settings (module.json `entry`): hands over this module alone. */
+class SettingsModuleSource : ModuleSource {
+    override fun modules(): List<AgentHqModule> = listOf(InfantrySettings)
 }

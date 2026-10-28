@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.shell.blocks.NotesTab
@@ -31,3 +32,8 @@ val InfantryNotes = AgentHqModule(
         ) { NotesTab() },
     ),
 )
+
+/** RUNTIME-1: the entry of Infantry_Notes (module.json `entry`): hands over this module alone. */
+class NotesModuleSource : ModuleSource {
+    override fun modules(): List<AgentHqModule> = listOf(InfantryNotes)
+}
