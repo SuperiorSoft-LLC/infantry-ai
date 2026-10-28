@@ -28,7 +28,7 @@ val InfantryProfiles = AgentHqModule(
                 { moveTo(13f, 14f); lineTo(18f, 14f) },
             ),
             testTag = "center-tab-PROFILES",
-            parent = SETTINGS_TAB_ID,
+            parent = "infantry.settings", // the official Infantry_Settings host tab (RUNTIME-5)
             shortcut = 9,
             routes = listOf("saveProfile", "deleteProfile", "spawnAs"),
         ) { ProfilesPane(it.state, it.appController, onSessionStarted = it.showChat) },

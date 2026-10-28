@@ -14,9 +14,10 @@ const val PLUGIN_API_VERSION = 1
 
 /**
  * RUNTIME-2: additive revisions under [PLUGIN_API_VERSION] (additions only; a module never has to name it, and an older
- * module still loads). 1 = `Tier.OFFICIAL` and the `official` plugins folder.
+ * module still loads). 1 = `Tier.OFFICIAL` and the `official` plugins folder. 2 = a host tab's sub-tabs through
+ * `TabContext.SubTabs` / `subTab` / `pickSubTab` (RUNTIME-5).
  */
-const val PLUGIN_API_REVISION = 1
+const val PLUGIN_API_REVISION = 2
 
 /**
  * A module's module.json: who it is, what it needs loaded first, and everything it contributes or uses. Unknown keys

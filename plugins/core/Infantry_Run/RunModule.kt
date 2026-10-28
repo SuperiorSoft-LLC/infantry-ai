@@ -24,7 +24,7 @@ val InfantryRun = AgentHqModule(
                 { moveTo(7f, 4f); lineTo(19f, 12f); lineTo(7f, 20f); close() },
             ),
             testTag = "center-tab-RUN",
-            parent = SETTINGS_TAB_ID,
+            parent = "infantry.settings", // the official Infantry_Settings host tab (RUNTIME-5)
             routes = listOf("saveCommand", "deleteCommand", "startRun", "stopRun"),
         ) { RunTab() },
     ),

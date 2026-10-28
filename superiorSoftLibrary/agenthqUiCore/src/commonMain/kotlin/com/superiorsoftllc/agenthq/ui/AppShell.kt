@@ -94,6 +94,8 @@ class Shell(
         onOpenDiff = { ui.diffTarget = it },
         transcript = transcript,
         agentsList = agentsList,
+        subTab = { ui.subTabs[it] },
+        pickSubTab = { host, id -> ui.subTabs[host] = id },
     )
 }
 

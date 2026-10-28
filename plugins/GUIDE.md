@@ -55,6 +55,9 @@ Everything is declared in `module.json` and registered under the same id. Anythi
   by `order`. Below 100 it sits above the agents list (left) or the tab strip (right). At 100 or more it sits below
   them. `fill = true` makes the section share the panel's free height. The left panel's agents list is itself the
   official module `Infantry_Agents`.
+- **Sub-tabs**: a tab that names another its `parent` draws under it while the host's `children.grouped` switch is on
+  (the official `Infantry_Settings` hosts the setup tabs). A host tab draws them with `context.SubTabs(hostId)`; the
+  picked sub-tab is kept by the window (`context.subTab` / `context.pickSubTab`, plugin API revision 2).
 - **Shell nodes** (replace or wrap a piece of the window itself): `"shell": [{ "node": "infantry.shell.footer",
   "name": "myBar", "mode": "wrap" }]` plus `registrar.shell("myBar", BlockOverride { scope, inner -> ... })`. The
   window is a tree of blocks, each with a node id (the list is pinned in `CoreShellTreeTest`; the tree is in

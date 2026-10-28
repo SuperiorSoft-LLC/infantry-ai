@@ -47,6 +47,8 @@ kotlin {
             implementation(project(":superiorSoftLibrary:agenthqAppUi"))
             // RUNTIME-4: the official Infantry_Agents (the left panel's agents section) is no longer in the desktop list.
             implementation(project(":plugins:official:Infantry_Agents"))
+            // RUNTIME-5: and the official Infantry_Settings (the Settings host tab).
+            implementation(project(":plugins:official:Infantry_Settings"))
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)

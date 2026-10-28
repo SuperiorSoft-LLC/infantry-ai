@@ -24,7 +24,7 @@ val InfantryTriggers = AgentHqModule(
                 { moveTo(13f, 2f); lineTo(4f, 14f); lineTo(12f, 14f); lineTo(11f, 22f); lineTo(20f, 10f); lineTo(12f, 10f); close() },
             ),
             testTag = "center-tab-TRIGGERS",
-            parent = SETTINGS_TAB_ID,
+            parent = "infantry.settings", // the official Infantry_Settings host tab (RUNTIME-5)
             shortcut = 0,
             routes = listOf("saveTrigger", "deleteTrigger", "armTrigger", "disableTrigger", "fireTrigger", "loadTriggerEvents"),
         ) { TriggersPane(it.state, it.appController) },
