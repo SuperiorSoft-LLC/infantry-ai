@@ -46,6 +46,8 @@ data class ModuleManifest(
     val platforms: List<String>? = null,
     /** Daemon routes the module may call, `METHOD /path` (e.g. `GET /health`). */
     val routes: List<String> = emptyList(),
+    /** PLUGIN-ENDPOINTS-1: the backends the module may call by id (service `endpoints`). */
+    val endpoints: List<EndpointDeclaration> = emptyList(),
     /** Events the module may publish or observe. */
     val events: List<String> = emptyList(),
     /** Platform services the module may use, by [ServiceKey.id]. */
@@ -135,3 +137,14 @@ data class InjectDeclaration(val into: String, val name: String, val at: String 
     /** The bare node id, whichever form [into] uses. */
     val targetId: String get() = into.removePrefix("infantry.shell#")
 }
+
+/**
+ * PLUGIN-ENDPOINTS-1 (D1): one backend the module calls by [id], never by URL. [url] is one origin plus a path pattern (`*` = one
+ * segment, `**` = the rest); https only (http for localhost, 127.0.0.1, 10.0.2.2), exact host. The owner may override it per install.
+ */
+@Serializable
+data class EndpointDeclaration(val id: String, val url: String, val methods: List<String> = listOf("GET"), val auth: EndpointAuth = EndpointAuth())
+
+/** [kind] is `none | bearer | header | basic`; [name] is the header name for `header`; [field] the keystore field (D3, later). */
+@Serializable
+data class EndpointAuth(val kind: String = "none", val field: String? = null, val name: String? = null)

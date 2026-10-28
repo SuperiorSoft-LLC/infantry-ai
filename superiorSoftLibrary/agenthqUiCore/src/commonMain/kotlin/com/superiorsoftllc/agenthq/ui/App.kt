@@ -190,7 +190,7 @@ import com.superiorsoftllc.agenthq.ui.plugin.Panels
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabContext
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
-import com.superiorsoftllc.agenthq.ui.plugin.PluginDaemon
+import com.superiorsoftllc.agenthq.ui.plugin.DaemonLink
 import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigLoad
 import com.superiorsoftllc.agenthq.plugin.api.Events
 import com.superiorsoftllc.agenthq.plugin.api.PluginEvent
@@ -325,7 +325,7 @@ fun App(
         root.requestFocus()
     }
     // PLUGINS-1: the plugins' gated daemon access goes to the daemon this window talks to; the bus hears what is shown.
-    LaunchedEffect(url, token) { PluginDaemon.connect(url, token) }
+    LaunchedEffect(url, token) { DaemonLink.window.connect(url, token) }
     // P1 step 2 (6s B): once the link is live, the merged config tree seeds the daemon's node_config and the window takes its copy.
     val linkLive = state.connection.isLive
     LaunchedEffect(tabs, linkLive) { if (linkLive && tabs.config.load != NodeConfigLoad.LOADED) tabs.config.load() }

@@ -119,3 +119,10 @@ hour-long path.
 - Calling by endpoint id (not URL) and the `plugin.<module>` secret naming. Both become plugin API contract once third-party
   plugins ship.
 - The filtering class loader. It may break community jars that already reach into host classes. Ship it now, while there are none.
+
+## Implemented in PLUGIN-ENDPOINTS-1 (a073edfa): D1, D2, D5
+`EndpointGate` (agenthqPlugins host), `JvmEndpointAccess` (desktop), `DaemonLink` (internal; the public `PluginDaemon` is gone), `PluginClassLoader(filtered=true)` for
+community jars (allows `plugin.api`, `ui.plugin` except DaemonLink/loader internals, kotlin, kotlinx, compose, java). Core jars/bundles are unfiltered.
+Limit: `DaemonLink.window` is still a process-wide holder (internal; hidden from plugin jars by the loader filter), not per-window. The in-process JVM limit
+(reflection, owner.token on disk, AGENTHQ_TOKEN) is NOT closed. `auth` is declared and validated; the credential (D3) is not sent yet.
+Demo lock: `demoLock.allowEndpoints` + core tier required.

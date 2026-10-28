@@ -6,7 +6,7 @@ import androidx.compose.runtime.setValue
 import com.superiorsoftllc.agenthq.plugin.api.ConfigSetBy
 import com.superiorsoftllc.agenthq.plugin.api.DaemonReply
 import com.superiorsoftllc.agenthq.plugin.api.NodeConfigEntry
-import com.superiorsoftllc.agenthq.ui.plugin.PluginDaemon
+import com.superiorsoftllc.agenthq.ui.plugin.DaemonLink
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -19,13 +19,13 @@ interface NodeConfigApi {
     suspend fun put(entry: NodeConfigEntry): Result<List<NodeConfigEntry>>
 }
 
-/** [NodeConfigApi] over [PluginDaemon], the window's own daemon (the bearer it connected with). */
+/** [NodeConfigApi] over [DaemonLink], the window's own daemon (the bearer it connected with). */
 object DaemonNodeConfigApi : NodeConfigApi {
     private val json = Json { ignoreUnknownKeys = true }
     private val list = ListSerializer(NodeConfigEntry.serializer())
 
-    override suspend fun seed(entries: List<NodeConfigEntry>) = rows(PluginDaemon.send("POST /node-config/seed", json.encodeToString(list, entries)))
-    override suspend fun put(entry: NodeConfigEntry) = rows(PluginDaemon.send("PUT /node-config", json.encodeToString(NodeConfigEntry.serializer(), entry)))
+    override suspend fun seed(entries: List<NodeConfigEntry>) = rows(DaemonLink.window.send("POST /node-config/seed", json.encodeToString(list, entries)))
+    override suspend fun put(entry: NodeConfigEntry) = rows(DaemonLink.window.send("PUT /node-config", json.encodeToString(NodeConfigEntry.serializer(), entry)))
 
     private fun rows(reply: DaemonReply): Result<List<NodeConfigEntry>> = when (reply) {
         is DaemonReply.Ok -> if (reply.status in 200..299) runCatching { json.decodeFromString(list, reply.body) }

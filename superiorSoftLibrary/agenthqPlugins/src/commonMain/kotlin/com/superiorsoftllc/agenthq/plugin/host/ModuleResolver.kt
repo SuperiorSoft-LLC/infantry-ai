@@ -113,6 +113,7 @@ object ModuleResolver {
                     refuse("unknown platform '${m.platforms.first { it !in PLATFORMS }}' in platforms (known: ${PLATFORMS.joinToString()})")
                 platform != null && m.platforms != null && platform !in m.platforms ->
                     refuse("not available on this platform ($platform); it works on ${m.platforms.joinToString()}")
+                EndpointGate.invalid(m.endpoints) != null -> refuse(EndpointGate.invalid(m.endpoints)!!)
                 c.tier == Tier.COMMUNITY && m.author.isNullOrBlank() -> refuse("community module without an author")
                 c.tier == Tier.COMMUNITY && m.license.isNullOrBlank() -> refuse("community module without a license")
                 else -> {
