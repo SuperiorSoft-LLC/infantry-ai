@@ -497,3 +497,53 @@ about 22 more (above).
 - **Window, images and dock** (the platform hosts) and **the placeholders**: platform glue, not UI a module owns.
 - **ChatSurface** (and with it `ReportFlagChip`, `PromptBox`, `SpawnRoleRow`, `bindingSummary`): moves in S4d.
 - **Kit**: the controls, `Palette`, icons, the model and protocol types, the pure formatters (`humanDuration`, ...).
+
+# S4d: the board, the chat and the controller (ticket 1dadfcc4)
+
+S4d closes the holes S4c left open, one green commit each: the board, the chat tree, then `LocalShell.controller`.
+Same letters as S4b/S4c (a / b / c / kit / stays / bridge / hole).
+
+## Board migrated (S4d)
+
+The board (Board.kt, BoardModal.kt, BoardDropSession.kt, TicketExecutorField.kt, ShellBoard.kt) reads only
+`ShellContext` domains, bundled as `BoardDeps(link, session, tickets, roles, executor, layout)`
+(plugins/core/Infantry_AppUi/BoardDeps.kt), the Roles pattern. `ShellBoard` builds it from `LocalShellContext`;
+`BoardPane(state, controller)` stays as a wrapper over `BoardDeps(state, controller)` (the Core adapters) for the four UI
+tests that draw it without a shell.
+
+Design choice: the backlog is a **new sub-interface, `TicketsContext`** (`ShellContext.tickets`, default `NoTickets`),
+not twenty more members on `BoardContext`. `BoardContext` stays the board *window* (open / close / openAgent); the
+backlog is a domain other blocks need too (the chat's ticket tag, Triggers, Epics), and a block that files a ticket
+should not depend on the board modal. The assignees come from `RolesContext` (which already had `agents` and `role`),
+the pins from `ExecutorContext`, the compact flag from `LayoutContext`.
+
+| File | Symbol | Decision |
+|---|---|---|
+| Board.kt | `BoardPaneHost.state / controller`, `BoardCardHost.state / controller` | closed: replaced by `deps: BoardDeps` (API change; no caller outside the board read them, the four UI tests go through `BoardPane(state, controller)`) |
+| Board.kt | `state.tickets / visibleTickets / ticket / column / epics / ticketError` | (b) `TicketsContext.all / visible / ticket / column / epics / error` |
+| Board.kt | `state.reportFlagFor(t)`, `state.agents[id]` | (a) `RolesContext.agents` + `reportFlagOf` (kit), in `BoardDeps.agent / reportFlag`. `agents` leaves out the global Assistant, which never runs a ticket |
+| Board.kt, TicketExecutorField.kt | `state.visibleProfiles`, `state.role(id)` | (b) `RolesContext.profiles`; (a) `RolesContext.role` |
+| TicketExecutorField.kt | `state.providers / modelCatalog` | (a) `ExecutorContext` |
+| Board.kt | `state.projects` (the ticket's directory, for its images) | (b) `SessionContext.projects` |
+| Board.kt | `state.panels.compactWindow` | (b) `LayoutContext.compact` |
+| Board.kt | `state.connection.isLive`, `activeProjectId` | (a) `LinkContext.live`, `SessionContext.activeProjectId` |
+| Board.kt, BoardDropSession.kt | `controller.createTicket / editTicket / deleteTicket / moveTicket / reorderTicket / startNextTicket / loadEpics / uploadTicketImage` | (b) `TicketsContext.create / edit / delete / move / reorder / startNext / loadEpics / uploadImage` |
+| BoardDropSession.kt | `Controller.ticketMoves()`, `controller.state.collect` | (b) `ticketMoves { tickets }` over `TicketsContext`, `TicketsContext.updates` (the visible tickets after each change). The drop session reads the current context at each send: the shell hands a new one on every change |
+| Board.kt | `assigneeLabel(state, id)` | now `assigneeLabel(profiles, id)`; Triggers passes `state.visibleProfiles` until it migrates (below) |
+| BoardModal.kt | `BoardModal(state, controller)`, `BoardModalPane(state, controller)`, `BoardModalHeader(state, ...)` | now over `BoardDeps` / the active project; no caller used the `(state, controller)` forms |
+| ShellBoard.kt | `LocalShell.current.state / controller` | closed: `BoardDeps(LocalShellContext.current)` |
+
+Core adapter: `CoreTickets` (CoreShellContext.kt). Pixel proof: default 32 of 32 and `-PtabShotsExtra=board`, base
+(5424a3df) and head rendered with the same `agenthq.ui.blur=off`.
+
+| Where | Added | Count |
+|---|---|---|
+| `ShellContext` | `tickets` | 1 |
+| `TicketsContext` (new) | `all`, `visible`, `updates`, `epics`, `error`, `ticket`, `column`, `create`, `edit`, `delete`, `move`, `reorder`, `startNext`, `loadEpics`, `uploadImage` | 15 |
+| `RolesContext` | `profiles` | 1 |
+| `SessionContext` | `projects` | 1 |
+| `LayoutContext` | `compact` | 1 |
+| **Total** | | **19** |
+
+HandCursorGuardTest: the `Text` raw-call ratchet reads 1052 against a baseline of 1049 already at the base (5424a3df,
+before any S4d change; recounted from git), so its "never grow" check fails on dev as it is. S4d adds no raw call.

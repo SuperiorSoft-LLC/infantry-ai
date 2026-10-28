@@ -7,9 +7,9 @@ import com.superiorsoftllc.agenthq.ui.model.BoardDrop
 import com.superiorsoftllc.agenthq.ui.model.DropPlan
 import com.superiorsoftllc.agenthq.ui.model.TicketReorder
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.protocol.Ticket
 import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
+import com.superiorsoftllc.agenthq.ui.shell.TicketsContext
 
 /** The three requests a drop can make; each answers null once sent, else why it could not be. */
 internal interface TicketMoves {
@@ -19,10 +19,11 @@ internal interface TicketMoves {
     suspend fun start(id: String): String?
 }
 
-internal fun Controller.ticketMoves(): TicketMoves = object : TicketMoves {
-    override suspend fun reorder(id: String, position: Int) = reorderTicket(id, position).refusal()
-    override suspend fun move(id: String, status: String, position: Int) = moveTicket(id, status, position = position).refusal()
-    override suspend fun start(id: String) = moveTicket(id, TicketColumns.IN_PROGRESS).refusal()
+/** The drops' requests through [tickets], read at each send (the shell hands a new context on every change). */
+internal fun ticketMoves(tickets: () -> TicketsContext): TicketMoves = object : TicketMoves {
+    override suspend fun reorder(id: String, position: Int) = tickets().reorder(id, position).refusal()
+    override suspend fun move(id: String, status: String, position: Int) = tickets().move(id, status, position).refusal()
+    override suspend fun start(id: String) = tickets().move(id, TicketColumns.IN_PROGRESS).refusal()
 }
 
 private fun CommandResult.refusal(): String? = when (this) {

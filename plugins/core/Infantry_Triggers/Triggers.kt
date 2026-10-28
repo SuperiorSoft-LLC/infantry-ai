@@ -54,14 +54,14 @@ internal fun triggerLanes(state: AppState): List<String> =
 
 /** "any ticket" / "tickets for <assignee>" -- what a `start_next` trigger picks from. */
 internal fun triggerTarget(state: AppState, t: TriggerView): String =
-    t.action.agentId?.takeIf { it.isNotBlank() }?.let { "next ticket assigned to ${assigneeLabel(state, it)}" } ?: "next startable ticket"
+    t.action.agentId?.takeIf { it.isNotBlank() }?.let { "next ticket assigned to ${assigneeLabel(state.visibleProfiles, it)}" } ?: "next startable ticket"
 
 /** One line: when it fires and what it does -- "every 7 min: mail role:qa in AgentHQ: ..." / "manual: next startable ticket". */
 internal fun triggerSummary(state: AppState, t: TriggerView): String {
     val whenText = if (t.kind == "schedule") t.intervalMs?.let { "every ${humanDuration(it)}" } ?: "schedule (no interval)" else t.kind
     val what = if (t.action.kind == "prompt") {
         val project = t.projectId?.let { id -> state.projects.firstOrNull { it.id == id }?.name ?: id }
-        "mail ${t.action.agentId?.let { assigneeLabel(state, it) } ?: "?"}" + (project?.let { " in $it" } ?: "") + ": \"${t.action.prompt.orEmpty().take(60)}\""
+        "mail ${t.action.agentId?.let { assigneeLabel(state.visibleProfiles, it) } ?: "?"}" + (project?.let { " in $it" } ?: "") + ": \"${t.action.prompt.orEmpty().take(60)}\""
     } else {
         triggerTarget(state, t)
     }

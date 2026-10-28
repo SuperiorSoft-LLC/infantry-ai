@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import com.superiorsoftllc.agenthq.ui.BoardCardHost
+import com.superiorsoftllc.agenthq.ui.BoardDeps
 import com.superiorsoftllc.agenthq.ui.BoardCardItem
 import com.superiorsoftllc.agenthq.ui.BoardColumnsSection
 import com.superiorsoftllc.agenthq.ui.BoardEmptySection
@@ -15,7 +16,6 @@ import com.superiorsoftllc.agenthq.ui.BoardNewTicketSection
 import com.superiorsoftllc.agenthq.ui.BoardPaneFrame
 import com.superiorsoftllc.agenthq.ui.BoardPaneHost
 import com.superiorsoftllc.agenthq.ui.BoardUnassignedSection
-import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 import com.superiorsoftllc.agenthq.ui.TicketCardActionsSection
 import com.superiorsoftllc.agenthq.ui.TicketCardBadgesSection
@@ -89,9 +89,9 @@ class BoardPaneBlock(children: List<Block>, place: Place = Place(weight = 1f)) :
     @Composable
     override fun Render(scope: BlockScope) {
         val host = LocalBoardHost.current ?: return
-        val s = LocalShell.current
+        val ctx = LocalShellContext.current ?: return
         BoardModalPaneBox(scope.modifier) {
-            BoardPaneFrame(s.state, s.controller, host.onOpenAgent) { board ->
+            BoardPaneFrame(BoardDeps(ctx), host.onOpenAgent) { board ->
                 CompositionLocalProvider(LocalBoardPaneHost provides board) { RenderPlaced(children) }
             }
         }

@@ -29,6 +29,11 @@ import com.superiorsoftllc.agenthq.ui.protocol.ProviderInfo
 import com.superiorsoftllc.agenthq.ui.protocol.ProviderModels
 import com.superiorsoftllc.agenthq.ui.protocol.Role
 import com.superiorsoftllc.agenthq.ui.protocol.RoleBinding
+import com.superiorsoftllc.agenthq.ui.model.EpicView
+import com.superiorsoftllc.agenthq.ui.net.ImageUploadOutcome
+import com.superiorsoftllc.agenthq.ui.protocol.Ticket
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlin.reflect.KClass
 
 /**
@@ -59,6 +64,8 @@ interface ShellContext {
     val executor: ExecutorContext get() = NoExecutor
     /** S4c: the trait library and each role's traits, for the roles window and the Roles pane. */
     val traits: TraitsContext get() = NoTraits
+    /** S4d: the backlog (tickets, epics) and its requests, for the board and anything that files or moves a ticket. */
+    val tickets: TicketsContext get() = NoTickets
 }
 
 /** The daemon link: whether it is up and which contract the daemon announced. */
@@ -82,6 +89,8 @@ interface SessionContext {
     val selectedAgent: AgentView? get() = null
     /** S4c: the active project's id, even before its row arrives; null with none active. */
     val activeProjectId: String? get() = activeProject?.id
+    /** S4d: the daemon's projects, in its order. */
+    val projects: List<ProjectView> get() = listOfNotNull(activeProject)
 }
 
 /** The active project's git, by project id, and the requests that load or change it. */
@@ -128,6 +137,8 @@ interface RunContext {
 interface LayoutContext {
     /** The resolved tree whose root id is [id]; null when no module contributes it. */
     fun tabTree(id: String): Block?
+    /** S4d: the window is compact (below 600dp, MOBILE-LAYOUT-2), so wide content scrolls sideways or stacks. */
+    val compact: Boolean get() = false
 }
 
 /** No tab tree resolved: a tab draws its own default tree. */
@@ -252,6 +263,63 @@ interface RolesContext {
     suspend fun deleteProfile(id: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
     /** Starts a session as profile [profileId] with [prompt] as its first message. */
     suspend fun spawnAs(profileId: String, prompt: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    /** S4d: the active project's profiles (every profile with none active): who a ticket can be assigned to. */
+    val profiles: List<AgentProfile> get() = emptyList()
+}
+
+/**
+ * S4d: the backlog (contracts 1.5.0 / 1.6.0 / 1.60.0): the daemon's tickets and epics, and the requests that file, edit
+ * or move a ticket. The daemon owns the columns and the order; a reader only shows them.
+ */
+interface TicketsContext {
+    /** Every project's tickets. */
+    val all: List<Ticket>
+    /** The active project's tickets, or all of them with none active. */
+    val visible: List<Ticket>
+    /** [visible] after each change, for a reader that waits for the daemon's answer to a move (the board's drops). */
+    val updates: Flow<List<Ticket>>
+    /** The epics by project id. */
+    val epics: Map<String, List<EpicView>>
+    /** The daemon's last refusal of a ticket save; null after a success. */
+    val error: String?
+    fun ticket(id: String?): Ticket? = id?.let { wanted -> all.firstOrNull { it.id == wanted } }
+    /** One column of [visible], top first. */
+    fun column(status: String): List<Ticket> = visible.filter { it.status == status }.sortedBy { it.position }
+    suspend fun create(title: String, description: String, agentId: String?, epicId: String?, provider: String?, model: String?): CommandResult
+    /** Each null leaves its field as it is; "" clears it. */
+    suspend fun edit(
+        id: String, title: String? = null, description: String? = null, epicId: String? = null,
+        agentId: String? = null, provider: String? = null, model: String? = null, images: List<String>? = null,
+    ): CommandResult
+    suspend fun delete(id: String): CommandResult
+    /** [position] null keeps the daemon's placement in [status]. */
+    suspend fun move(id: String, status: String, position: Int? = null): CommandResult
+    suspend fun reorder(id: String, position: Int): CommandResult
+    /** Starts the top startable To do ticket. */
+    suspend fun startNext(): CommandResult
+    suspend fun loadEpics(projectId: String): CommandResult
+    /** Stores an image (purpose ticket) under [projectId]'s directory (IMG-4). */
+    suspend fun uploadImage(projectId: String?, fileName: String, mimeType: String, bytes: ByteArray): ImageUploadOutcome
+}
+
+/** S4d: the [ShellContext.tickets] of a shell without a backlog: none, every request refused. */
+object NoTickets : TicketsContext {
+    override val all: List<Ticket> get() = emptyList()
+    override val visible: List<Ticket> get() = emptyList()
+    override val updates: Flow<List<Ticket>> get() = emptyFlow()
+    override val epics: Map<String, List<EpicView>> get() = emptyMap()
+    override val error: String? get() = null
+    override suspend fun create(title: String, description: String, agentId: String?, epicId: String?, provider: String?, model: String?) =
+        CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun edit(id: String, title: String?, description: String?, epicId: String?, agentId: String?, provider: String?, model: String?, images: List<String>?) =
+        CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun delete(id: String) = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun move(id: String, status: String, position: Int?) = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun reorder(id: String, position: Int) = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun startNext() = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun loadEpics(projectId: String) = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun uploadImage(projectId: String?, fileName: String, mimeType: String, bytes: ByteArray): ImageUploadOutcome =
+        ImageUploadOutcome.Refused(SHELL_DOMAIN_MISSING)
 }
 
 /** S4c: the trait library and the traits bound to each role. */

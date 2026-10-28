@@ -10,6 +10,7 @@ import com.superiorsoftllc.agenthq.ui.protocol.Project
 import com.superiorsoftllc.agenthq.ui.protocol.Ticket
 import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
 import com.superiorsoftllc.agenthq.ui.protocol.TicketStart
+import com.superiorsoftllc.agenthq.ui.shell.CoreTickets
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -111,7 +112,8 @@ class BoardDropTest {
         try {
             val link = BoardLink(scope, tickets)
             val controller = Controller(scope, link)
-            val session = BoardDropSession(controller.ticketMoves())
+            val backlog = CoreTickets(controller.state.value, controller)
+            val session = BoardDropSession(ticketMoves { backlog })
             runBlocking {
                 link.push(Envelope(Envelope.READY, "contract=1.105.0 provider=stub instance=i1"))
                 link.push(Envelope(Envelope.PROJECTS, json.encodeToString(ListSerializer(Project.serializer()), listOf(Project("p1", "P1")))))

@@ -1,0 +1,58 @@
+package com.superiorsoftllc.agenthq.ui
+
+import com.superiorsoftllc.agenthq.ui.model.AppState
+import com.superiorsoftllc.agenthq.ui.model.EpicView
+import com.superiorsoftllc.agenthq.ui.model.ReportFlag
+import com.superiorsoftllc.agenthq.ui.model.AgentView
+import com.superiorsoftllc.agenthq.ui.model.reportFlagOf
+import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.agenthq.ui.protocol.Ticket
+import com.superiorsoftllc.agenthq.ui.shell.CoreExecutor
+import com.superiorsoftllc.agenthq.ui.shell.CoreLink
+import com.superiorsoftllc.agenthq.ui.shell.CoreRoles
+import com.superiorsoftllc.agenthq.ui.shell.CoreSession
+import com.superiorsoftllc.agenthq.ui.shell.CoreTickets
+import com.superiorsoftllc.agenthq.ui.shell.ExecutorContext
+import com.superiorsoftllc.agenthq.ui.shell.LayoutContext
+import com.superiorsoftllc.agenthq.ui.shell.LinkContext
+import com.superiorsoftllc.agenthq.ui.shell.NoLayout
+import com.superiorsoftllc.agenthq.ui.shell.RolesContext
+import com.superiorsoftllc.agenthq.ui.shell.SessionContext
+import com.superiorsoftllc.agenthq.ui.shell.ShellContext
+import com.superiorsoftllc.agenthq.ui.shell.TicketsContext
+
+/**
+ * S4d (docs/SHELL-LEAKS.md): what the board reads and sends, all of it [ShellContext] domains, so the board never reads
+ * `AppState` or calls the `Controller`. [roles] gives the assignees (profiles, role lanes, sessions), [executor] the
+ * harnesses a ticket can pin, [layout] whether the window is compact.
+ */
+class BoardDeps(
+    val link: LinkContext,
+    val session: SessionContext,
+    val tickets: TicketsContext,
+    val roles: RolesContext,
+    val executor: ExecutorContext,
+    val layout: LayoutContext,
+) {
+    constructor(ctx: ShellContext) : this(ctx.link, ctx.session, ctx.tickets, ctx.roles, ctx.executor, ctx.layout)
+
+    /** For a board drawn outside a shell (its `(state, controller)` entry point): never compact. */
+    constructor(state: AppState, controller: Controller) : this(
+        CoreLink(state), CoreSession(state), CoreTickets(state, controller), CoreRoles(state, controller), CoreExecutor(state), NoLayout,
+    )
+
+    val live: Boolean get() = link.live
+
+    /** The session [id] runs, if the sidebar knows it. */
+    fun agent(id: String?): AgentView? = id?.let { wanted -> roles.agents.firstOrNull { it.id == wanted } }
+
+    /** M2-14: the epics a ticket can be filed under: the active project's, or every project's when none is selected. */
+    val boardEpics: List<EpicView>
+        get() = session.activeProjectId?.let { tickets.epics[it].orEmpty() } ?: tickets.epics.values.flatten()
+
+    /** An epic by id from any project, so one outside the active project still reads by name. */
+    fun epicName(id: String): String? = tickets.epics.values.flatten().firstOrNull { it.id == id }?.name
+
+    /** The report flag of the session working [ticket]. */
+    fun reportFlag(ticket: Ticket): ReportFlag? = agent(ticket.sessionId)?.session?.report.let(::reportFlagOf)
+}
