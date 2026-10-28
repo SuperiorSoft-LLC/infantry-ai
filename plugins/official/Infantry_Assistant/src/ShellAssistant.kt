@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.ui.shell.blocks
+package com.superiorsoftllc.agenthq.plugins.official.assistant
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -13,11 +13,17 @@ import com.superiorsoftllc.agenthq.ui.AssistantPopupFrame
 import com.superiorsoftllc.agenthq.ui.AssistantPopupHeader
 import com.superiorsoftllc.agenthq.ui.AssistantPopupResize
 import com.superiorsoftllc.agenthq.ui.TITLE_BAR_HEIGHT
+import com.superiorsoftllc.agenthq.ui.shell.AssistantContext
+import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
+import com.superiorsoftllc.agenthq.ui.shell.NoAssistant
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.Place
 import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
 import com.superiorsoftllc.agenthq.ui.block.layout.Size
+
+/** The window's Assistant domain; [NoAssistant] (closed, nothing drawn) where the shell has no window. */
+private val assistantCtx: AssistantContext @Composable get() = LocalShellContext.current?.assistant ?: NoAssistant
 
 private const val ASSISTANT = "infantry.shell.assistant"
 
@@ -38,11 +44,13 @@ private val LocalAssistantHost = compositionLocalOf<AssistantHost?> { null }
 class AssistantBlock(children: List<Block>, place: Place = Place()) : Block("assistantPopup", ASSISTANT, place, children) {
     @Composable
     override fun Render(scope: BlockScope) = with(scope) {
-        val s = appShell
-        if (!s.assistantPanel.open) return@with
-        val compactWindow = s.state.panels.compactWindow
+        val a = assistantCtx
+        val state = a.state ?: return@with
+        val controller = a.controller ?: return@with
+        if (!a.panel.open) return@with
+        val compactWindow = state.panels.compactWindow
         AssistantPopupFrame(
-            s.state, s.controller, s.assistantPanel, compact = compactWindow,
+            state, controller, a.panel, compact = compactWindow,
             modifier = Modifier.aligned(Alignment.TopEnd).then(if (compactWindow) Modifier else Modifier.padding(top = TITLE_BAR_HEIGHT + 1.dp, bottom = 28.dp)),
         ) {
             CompositionLocalProvider(LocalAssistantHost provides AssistantHost(compactWindow)) { RenderPlaced(children) }
@@ -57,7 +65,7 @@ object AssistantResize : Block("resizeHandle", "$ASSISTANT.resize") {
     @Composable
     override fun Render(scope: BlockScope) {
         val host = LocalAssistantHost.current ?: return
-        AssistantPopupResize(appShell.assistantPanel, host.compact, scope.modifier)
+        AssistantPopupResize(assistantCtx.panel, host.compact, scope.modifier)
     }
 }
 
@@ -78,7 +86,7 @@ object AssistantHeader : Block("assistantHeader", "$BODY.header") {
     @Composable
     override fun Render(scope: BlockScope) {
         val host = LocalAssistantHost.current ?: return
-        AssistantPopupHeader(appShell.assistantPanel, host.compact, scope.modifier)
+        AssistantPopupHeader(assistantCtx.panel, host.compact, scope.modifier)
     }
 }
 
@@ -87,8 +95,10 @@ object AssistantChat : Block("assistantChat", "$BODY.chat", Place(weight = 1f, s
     @Composable
     override fun Render(scope: BlockScope) {
         if (LocalAssistantHost.current == null) return
-        val s = appShell
-        AssistantPopupChat(s.state, s.controller, s.assistantChat, scope.modifier)
+        val a = assistantCtx
+        val state = a.state ?: return
+        val controller = a.controller ?: return
+        AssistantPopupChat(state, controller, a.chat ?: return, scope.modifier)
     }
 }
 

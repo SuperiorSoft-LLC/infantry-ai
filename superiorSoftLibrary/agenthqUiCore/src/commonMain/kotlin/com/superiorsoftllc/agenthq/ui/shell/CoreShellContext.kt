@@ -110,6 +110,12 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
         @androidx.compose.runtime.Composable
         override fun TabContent(transcript: @androidx.compose.runtime.Composable () -> Unit) = shell.tabs.Content(ui.centerTab, shell.tabContext(transcript))
     }
+    override val assistant: AssistantContext = object : AssistantContext {
+        override val state get() = shell.state
+        override val controller get() = shell.controller
+        override val panel get() = shell.assistantPanel
+        override val chat get() = shell.assistantChat
+    }
     override val agents: AgentsContext = object : AgentsContext {
         override val state get() = shell.state
         override val visible get() = shell.visible

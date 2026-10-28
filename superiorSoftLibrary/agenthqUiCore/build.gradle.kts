@@ -85,6 +85,8 @@ kotlin {
             implementation(project(":plugins:official:Infantry_Chat"))
             // RUNTIME-23: and the official Infantry_Approvals (the questions pill).
             implementation(project(":plugins:official:Infantry_Approvals"))
+            // RUNTIME-24: and the official Infantry_Assistant (the Assistant popup).
+            implementation(project(":plugins:official:Infantry_Assistant"))
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)

@@ -102,6 +102,30 @@ interface ShellContext {
     val agents: AgentsContext get() = NoAgents
     /** RUNTIME-22 (additive): what the official Infantry_Chat (the centre column, New agent) reads and asks of the window. */
     val chat: ChatContext get() = NoChat
+    /** RUNTIME-24 (additive): what the official Infantry_Assistant (the global Assistant popup) reads and asks of the window. */
+    val assistant: AssistantContext get() = NoAssistant
+}
+
+/**
+ * RUNTIME-24 (F8): the Assistant popup behind the official Infantry_Assistant module, which fills `infantry.shell.assistant`.
+ * The popup's view state stays the window's (it survives closing), so it is handed in here.
+ */
+interface AssistantContext {
+    /** The window's state; null where there is no window (the popup draws nothing). */
+    val state: com.superiorsoftllc.agenthq.ui.model.AppState?
+    val controller: com.superiorsoftllc.agenthq.ui.net.Controller?
+    /** Open or closed, the dragged width, the draft's expanded flag. */
+    val panel: com.superiorsoftllc.agenthq.ui.AssistantPanelState
+    /** The Assistant's own chat panel state (draft, attachments). */
+    val chat: com.superiorsoftllc.agenthq.ui.ChatPanelState?
+}
+
+/** No window: a closed panel, nothing to draw. */
+object NoAssistant : AssistantContext {
+    override val state: com.superiorsoftllc.agenthq.ui.model.AppState? = null
+    override val controller: com.superiorsoftllc.agenthq.ui.net.Controller? = null
+    override val panel: com.superiorsoftllc.agenthq.ui.AssistantPanelState = com.superiorsoftllc.agenthq.ui.AssistantPanelState()
+    override val chat: com.superiorsoftllc.agenthq.ui.ChatPanelState? = null
 }
 
 /**
