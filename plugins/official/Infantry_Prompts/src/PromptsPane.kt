@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.prompts
+
+import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -30,10 +32,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.filterPrompts
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.agenthq.ui.shell.LinkContext
+import com.superiorsoftllc.agenthq.ui.shell.PromptsContext
 import kotlinx.coroutines.launch
 
 const val PROMPTS_ADD_BUTTON_TAG = "prompts-add"
@@ -52,17 +54,17 @@ private data class PromptDraft(val editing: String? = null, val name: String = "
  * tag), then the saved prompts with Insert (hands the body to [onInsert], the agent prompt box), Edit and Delete.
  * FORM-MODAL-1: create and edit happen in the shared [EditorModal], never in a form under the growing list: "+" opens
  * it empty, Edit (or a click on the card) opens it pre-filled with the name fixed, since `prompt_save` updates by name.
- * Save closes on Sent; a refusal stays in the modal. States: loading, empty, and a daemon refusal (`state.promptError`).
+ * Save closes on Sent; a refusal stays in the modal. States: loading, empty, and a daemon refusal (`ctx.error`).
  */
 @Composable
-fun PromptsPane(state: AppState, controller: Controller, onInsert: (String) -> Unit) {
+fun PromptsPane(link: LinkContext, ctx: PromptsContext, onInsert: (String) -> Unit) {
     val scope = rememberCoroutineScope()
-    val live = state.connection.isLive
+    val live = link.live
     var query by remember { mutableStateOf("") }
     var draft by remember { mutableStateOf<PromptDraft?>(null) }
     var localError by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(live) { if (live) controller.loadPrompts() }
+    LaunchedEffect(live) { if (live) ctx.load() }
 
     fun run(onSent: () -> Unit = {}, request: suspend () -> CommandResult) {
         localError = null
@@ -94,16 +96,16 @@ fun PromptsPane(state: AppState, controller: Controller, onInsert: (String) -> U
                 textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().testTag("prompts-search-input"),
             )
             // While the modal is open its refusals show inside it; otherwise (a delete refused) here.
-            (if (draft == null) localError ?: state.promptError else null)?.let {
+            (if (draft == null) localError ?: ctx.error else null)?.let {
                 Text(it, color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp).testTag("prompts-error"))
             }
 
-            val shown = filterPrompts(state.prompts, query)
+            val shown = filterPrompts(ctx.all, query)
             Column(Modifier.padding(top = 8.dp)) {
                 when {
-                    state.promptsLoading && state.prompts.isEmpty() ->
+                    ctx.loading && ctx.all.isEmpty() ->
                         Text("Loading prompts...", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag("prompts-loading"))
-                    state.prompts.isEmpty() ->
+                    ctx.all.isEmpty() ->
                         Text("No saved prompts yet.", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag("prompts-empty"))
                     shown.isEmpty() ->
                         Text("No prompt matches “${query.trim()}”.", color = Palette.Muted, fontSize = 12.sp)
@@ -126,7 +128,7 @@ fun PromptsPane(state: AppState, controller: Controller, onInsert: (String) -> U
                             OutlinedButton(onClick = { onInsert(p.body) }, modifier = Modifier.testTag("prompt-insert-${p.name}")) { Text("Insert", fontSize = 11.sp) }
                             OutlinedButton(onClick = edit, enabled = live, modifier = Modifier.testTag("prompt-edit-${p.name}")) { Text("Edit", fontSize = 11.sp) }
                             OutlinedButton(
-                                onClick = { run { controller.deletePrompt(p.id) } }, enabled = live,
+                                onClick = { run { ctx.delete(p.id) } }, enabled = live,
                                 modifier = Modifier.testTag("prompt-delete-${p.name}"),
                             ) { Text("Delete", fontSize = 11.sp, color = Palette.Danger) }
                         }
@@ -138,11 +140,11 @@ fun PromptsPane(state: AppState, controller: Controller, onInsert: (String) -> U
         draft?.let { d ->
             EditorModal(
                 title = if (d.editing == null) "Add prompt" else "Edit prompt",
-                onSave = { run(onSent = { draft = null }) { controller.savePrompt(d.name, d.body, d.tags) } },
+                onSave = { run(onSent = { draft = null }) { ctx.save(d.name, d.body, d.tags) } },
                 onCancel = { draft = null; localError = null },
                 modifier = Modifier.testTag(PROMPT_DIALOG_TAG),
                 saveEnabled = live && d.name.isNotBlank() && d.body.isNotBlank(),
-                error = localError ?: state.promptError,
+                error = localError ?: ctx.error,
                 saveTag = PROMPT_SAVE_TAG, cancelTag = PROMPT_CANCEL_TAG,
             ) {
                 OutlinedTextField(

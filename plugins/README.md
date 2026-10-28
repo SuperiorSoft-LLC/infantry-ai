@@ -14,7 +14,8 @@ plugins/
                           web and Android compile the same sources in (Infantry_Cli, the CLI tab, Infantry_Agents,
                           the left panel agents list, Infantry_Settings, the Settings host tab,
                           Infantry_Git, the Git tab with its own tab tree, Infantry_Run, the Run tab, Infantry_Notes,
-                          the Notes tab, and Infantry_Changes, the right-hand Changes tab, each with its own)
+                          the Notes tab, and Infantry_Changes, the right-hand Changes tab, each with its own,
+                          and Infantry_Prompts and Infantry_Skills, the right-hand Prompts and Skills tabs)
   community/<Vendor_Module>/  modules added by dropping a folder here (desktop and daemon only)
 ```
 

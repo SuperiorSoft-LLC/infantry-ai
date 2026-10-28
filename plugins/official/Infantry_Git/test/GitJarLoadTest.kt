@@ -2,6 +2,7 @@ package com.superiorsoftllc.agenthq.plugins.official.git
 
 import com.superiorsoftllc.agenthq.plugin.api.Tier
 import com.superiorsoftllc.agenthq.plugin.host.ModuleState
+import com.superiorsoftllc.agenthq.plugin.host.OfficialTrust
 import com.superiorsoftllc.agenthq.plugin.host.PluginFolders
 import com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
@@ -35,7 +36,9 @@ class GitJarLoadTest {
         val bundled = File(tmp, "install/modules")
         val state = File(tmp, "state")
         val env = mapOf(PluginFolders.BUNDLED_ENV to bundled.path)::get
-        fun load() = DesktopPlugins.load(state, env = env, property = { null }, compiled = emptyList(), print = {})
+        // The test pins its throwaway Infantry cert in place of the binary's pinned fingerprint (as OfficialTrustTest does).
+        var pinned = OfficialTrust.PINNED_FINGERPRINTS
+        fun load() = DesktopPlugins.load(state, env = env, property = { null }, compiled = emptyList(), print = {}, pinned = pinned)
 
         load().use {
             assertNull(it.factory.find(GIT_TAB_ID), "no jar, no Git tab")
@@ -51,6 +54,9 @@ class GitJarLoadTest {
         tool("keytool", "-exportcert", "-alias", "infantry", "-keystore", ks.path, "-storepass", "changeit",
             "-file", File(bundled, "trusted-keys").apply { mkdirs() }.resolve("infantry.cer").path)
         tool("jarsigner", "-keystore", ks.path, "-storepass", "changeit", jar.path, "infantry")
+        pinned = setOf(OfficialTrust.fingerprint(File(bundled, "trusted-keys/infantry.cer").inputStream().use { c ->
+            java.security.cert.CertificateFactory.getInstance("X.509").generateCertificate(c) as java.security.cert.X509Certificate
+        }))
 
         val started = System.nanoTime()
         val loaded = load()

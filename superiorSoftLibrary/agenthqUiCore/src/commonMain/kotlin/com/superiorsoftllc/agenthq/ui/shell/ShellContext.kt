@@ -14,6 +14,8 @@ import com.superiorsoftllc.agenthq.ui.model.MemorySearchView
 import com.superiorsoftllc.agenthq.ui.model.NoteScope
 import com.superiorsoftllc.agenthq.ui.model.Notice
 import com.superiorsoftllc.agenthq.ui.model.ProjectView
+import com.superiorsoftllc.agenthq.ui.protocol.PromptView
+import com.superiorsoftllc.agenthq.ui.protocol.SkillView
 import com.superiorsoftllc.agenthq.ui.model.RunsState
 import com.superiorsoftllc.agenthq.ui.model.ToastEvent
 import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
@@ -72,6 +74,10 @@ interface ShellContext {
     val window: WindowContext get() = NoWindow
     /** S4d: the owner's open questions (ASK-1) and the window's way to show or close them. */
     val questions: QuestionsContext get() = NoQuestions
+    /** RUNTIME-9: the saved prompts (contract 1.44.0) and their requests, for the official Infantry_Prompts tab. */
+    val prompts: PromptsContext get() = NoPrompts
+    /** RUNTIME-9: the saved skills (contract 1.45.0) and their requests, for the official Infantry_Skills tab. */
+    val skills: SkillsContext get() = NoSkills
 }
 
 /** The daemon link: whether it is up and which contract the daemon announced. */
@@ -285,6 +291,50 @@ object NoChanges : ChangesContext {
     override fun selectBranch(projectId: String, branch: String?) {}
     override suspend fun pollWorktrees(projectId: String, sessionId: String?, timeoutMs: Long) {}
     override suspend fun pollWorktreeStatus(projectId: String, path: String, timeoutMs: Long) {}
+}
+
+/** RUNTIME-9: the saved prompts (contract 1.44.0): the list, its load and refusal state, and the requests. */
+interface PromptsContext {
+    val all: List<PromptView>
+    val loading: Boolean
+    /** The daemon's last refusal of a prompt request; null after a success. */
+    val error: String?
+    suspend fun load(): CommandResult
+    /** Saves by [name] (an existing one is updated); [tagsCsv] comma separated. */
+    suspend fun save(name: String, body: String, tagsCsv: String): CommandResult
+    suspend fun delete(id: String): CommandResult
+}
+
+/** RUNTIME-9: no prompts: none, every request refused. */
+object NoPrompts : PromptsContext {
+    override val all: List<PromptView> get() = emptyList()
+    override val loading: Boolean get() = false
+    override val error: String? get() = null
+    override suspend fun load(): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun save(name: String, body: String, tagsCsv: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun delete(id: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+}
+
+/** RUNTIME-9: the saved skills (contract 1.45.0): the list, its load and refusal state, and the requests. */
+interface SkillsContext {
+    val all: List<SkillView>
+    val loading: Boolean
+    /** The daemon's last refusal of a skill request; null after a success. */
+    val error: String?
+    suspend fun load(): CommandResult
+    /** Saves by [name] (an existing one is updated); [tagsCsv] comma separated. */
+    suspend fun save(name: String, description: String, body: String, tagsCsv: String): CommandResult
+    suspend fun delete(id: String): CommandResult
+}
+
+/** RUNTIME-9: no skills: none, every request refused. */
+object NoSkills : SkillsContext {
+    override val all: List<SkillView> get() = emptyList()
+    override val loading: Boolean get() = false
+    override val error: String? get() = null
+    override suspend fun load(): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun save(name: String, description: String, body: String, tagsCsv: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun delete(id: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
 }
 
 /** The board modal. */

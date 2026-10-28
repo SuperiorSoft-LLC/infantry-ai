@@ -2,6 +2,7 @@ package com.superiorsoftllc.agenthq.plugins.official
 
 import com.superiorsoftllc.agenthq.plugin.api.Tier
 import com.superiorsoftllc.agenthq.plugin.host.ModuleState
+import com.superiorsoftllc.agenthq.plugin.host.OfficialTrust
 import com.superiorsoftllc.agenthq.plugin.host.PluginFolders
 import com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins
 import com.superiorsoftllc.agenthq.ui.plugin.Panels
@@ -14,7 +15,7 @@ import kotlin.test.assertTrue
 
 /**
  * RUNTIME-4: the built Infantry_Agents.jar, signed by a key in the install's trusted-keys (a throwaway one per run, as
- * RUNTIME-2's OfficialTrustTest; no key is pinned), loads at run time from the bundled official folder and
+ * RUNTIME-2's OfficialTrustTest, which the test pins in place of the binary's fingerprint), loads at run time from the bundled official folder and
  * the agents section appears in the left panel. Without the jar the app starts and the section is simply absent.
  */
 class AgentsJarLoadTest {
@@ -34,7 +35,9 @@ class AgentsJarLoadTest {
         val bundled = File(tmp, "install/modules")
         val state = File(tmp, "state")
         val env = mapOf(PluginFolders.BUNDLED_ENV to bundled.path)::get
-        fun load() = DesktopPlugins.load(state, env = env, property = { null }, compiled = emptyList(), print = {})
+        // The test pins its throwaway Infantry cert in place of the binary's pinned fingerprint (as OfficialTrustTest does).
+        var pinned = OfficialTrust.PINNED_FINGERPRINTS
+        fun load() = DesktopPlugins.load(state, env = env, property = { null }, compiled = emptyList(), print = {}, pinned = pinned)
 
         // No jar: the app starts, without the agents section.
         load().use { assertTrue(it.factory.panels(Panels.LEFT).none { p -> p.id == "infantry.agents" }, "no jar, no agents section") }
@@ -48,6 +51,9 @@ class AgentsJarLoadTest {
         tool("keytool", "-exportcert", "-alias", "infantry", "-keystore", ks.path, "-storepass", "changeit",
             "-file", File(bundled, "trusted-keys").apply { mkdirs() }.resolve("infantry.cer").path)
         tool("jarsigner", "-keystore", ks.path, "-storepass", "changeit", jar.path, "infantry")
+        pinned = setOf(OfficialTrust.fingerprint(File(bundled, "trusted-keys/infantry.cer").inputStream().use { c ->
+            java.security.cert.CertificateFactory.getInstance("X.509").generateCertificate(c) as java.security.cert.X509Certificate
+        }))
 
         val started = System.nanoTime()
         val loaded = load()

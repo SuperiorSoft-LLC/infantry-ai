@@ -56,6 +56,9 @@ kotlin {
             // RUNTIME-8: and the official Infantry_Notes and Infantry_Changes (their tabs and trees).
             implementation(project(":plugins:official:Infantry_Notes"))
             implementation(project(":plugins:official:Infantry_Changes"))
+            // RUNTIME-9: and the official Infantry_Prompts and Infantry_Skills (the right-hand Prompts and Skills tabs).
+            implementation(project(":plugins:official:Infantry_Prompts"))
+            implementation(project(":plugins:official:Infantry_Skills"))
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)

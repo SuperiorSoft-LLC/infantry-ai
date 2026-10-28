@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.skills
+
+import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -30,10 +32,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.filterSkills
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.agenthq.ui.shell.LinkContext
+import com.superiorsoftllc.agenthq.ui.shell.SkillsContext
 import kotlinx.coroutines.launch
 
 const val SKILLS_ADD_BUTTON_TAG = "skills-add"
@@ -60,17 +62,17 @@ private data class SkillDraft(
  * and Delete. FORM-MODAL-1: create and edit happen in the shared [EditorModal], never in a form under the growing
  * list: "+" opens it empty, Edit (or a click on the card) opens it pre-filled with the name fixed, since `skill_save`
  * updates by name. Save closes on Sent; a refusal stays in the modal. States: loading, empty, and a daemon refusal
- * (`state.skillError`).
+ * (`ctx.error`).
  */
 @Composable
-fun SkillsPane(state: AppState, controller: Controller, onInsert: (String) -> Unit) {
+fun SkillsPane(link: LinkContext, ctx: SkillsContext, onInsert: (String) -> Unit) {
     val scope = rememberCoroutineScope()
-    val live = state.connection.isLive
+    val live = link.live
     var query by remember { mutableStateOf("") }
     var draft by remember { mutableStateOf<SkillDraft?>(null) }
     var localError by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(live) { if (live) controller.loadSkills() }
+    LaunchedEffect(live) { if (live) ctx.load() }
 
     fun run(onSent: () -> Unit = {}, request: suspend () -> CommandResult) {
         localError = null
@@ -102,16 +104,16 @@ fun SkillsPane(state: AppState, controller: Controller, onInsert: (String) -> Un
                 textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().testTag("skills-search-input"),
             )
             // While the modal is open its refusals show inside it; otherwise (a delete refused) here.
-            (if (draft == null) localError ?: state.skillError else null)?.let {
+            (if (draft == null) localError ?: ctx.error else null)?.let {
                 Text(it, color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp).testTag("skills-error"))
             }
 
-            val shown = filterSkills(state.skills, query)
+            val shown = filterSkills(ctx.all, query)
             Column(Modifier.padding(top = 8.dp)) {
                 when {
-                    state.skillsLoading && state.skills.isEmpty() ->
+                    ctx.loading && ctx.all.isEmpty() ->
                         Text("Loading skills...", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag("skills-loading"))
-                    state.skills.isEmpty() ->
+                    ctx.all.isEmpty() ->
                         Text("No saved skills yet.", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag("skills-empty"))
                     shown.isEmpty() ->
                         Text("No skill matches “${query.trim()}”.", color = Palette.Muted, fontSize = 12.sp)
@@ -137,7 +139,7 @@ fun SkillsPane(state: AppState, controller: Controller, onInsert: (String) -> Un
                             OutlinedButton(onClick = { onInsert(p.body) }, modifier = Modifier.testTag("skill-insert-${p.name}")) { Text("Insert", fontSize = 11.sp) }
                             OutlinedButton(onClick = edit, enabled = live, modifier = Modifier.testTag("skill-edit-${p.name}")) { Text("Edit", fontSize = 11.sp) }
                             OutlinedButton(
-                                onClick = { run { controller.deleteSkill(p.id) } }, enabled = live,
+                                onClick = { run { ctx.delete(p.id) } }, enabled = live,
                                 modifier = Modifier.testTag("skill-delete-${p.name}"),
                             ) { Text("Delete", fontSize = 11.sp, color = Palette.Danger) }
                         }
@@ -149,11 +151,11 @@ fun SkillsPane(state: AppState, controller: Controller, onInsert: (String) -> Un
         draft?.let { d ->
             EditorModal(
                 title = if (d.editing == null) "Add skill" else "Edit skill",
-                onSave = { run(onSent = { draft = null }) { controller.saveSkill(d.name, d.description, d.body, d.tags) } },
+                onSave = { run(onSent = { draft = null }) { ctx.save(d.name, d.description, d.body, d.tags) } },
                 onCancel = { draft = null; localError = null },
                 modifier = Modifier.testTag(SKILL_DIALOG_TAG),
                 saveEnabled = live && d.name.isNotBlank() && d.body.isNotBlank(),
-                error = localError ?: state.skillError,
+                error = localError ?: ctx.error,
                 saveTag = SKILL_SAVE_TAG, cancelTag = SKILL_CANCEL_TAG,
             ) {
                 OutlinedTextField(
