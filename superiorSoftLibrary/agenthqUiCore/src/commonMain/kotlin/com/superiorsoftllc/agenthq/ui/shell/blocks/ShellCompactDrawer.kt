@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.superiorsoftllc.agenthq.ui.DRAWER_SCRIM_TAG
 import com.superiorsoftllc.agenthq.ui.DRAWER_TAG
+import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.Palette
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
@@ -32,7 +33,7 @@ import com.superiorsoftllc.agenthq.ui.model.CompactScreen
 object ShellCompactDrawer : Block("infantry.shell.drawer", "infantry.shell.drawer", Place(show = Show.Compact)) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
+        val s = LocalShell.current
         val windowWidthDp = LocalBlockSize.current.width.value
         val compact = dockCompact()
         val screen = s.state.panels.forWindow(compact).compactScreen()

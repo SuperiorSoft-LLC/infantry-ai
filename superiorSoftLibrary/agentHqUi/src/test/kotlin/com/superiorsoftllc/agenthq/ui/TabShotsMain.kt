@@ -177,48 +177,6 @@ fun main(args: Array<String>) {
         daemon.close()
         exitProcess(0)
     }
-    // S6 (drop-in path): -PtabShotsExtra=dropin is the drop-in acceptance (the task runs it without the app UI on the class
-    // path). From a plugins root with no app UI in it the shell is empty and draws the drop box; App_UI.ihq, signed here
-    // with a throwaway key that this root trusts (so it installs as core), goes through Choose file, the consent dialog
-    // and Install; the soft restart rebuilds the module set in this process. The 32 default shots are then rendered with
-    // that module set, as the default run renders them with the compiled-in one. Opt-in shots: dropin/.
-    if (System.getProperty("agenthq.tabshots.extra") == "dropin") {
-        File(root, "core").listFiles().orEmpty().forEach { it.deleteRecursively() }
-        val ihq = signedForShots(System.getProperty("agenthq.tabshots.appUiIhq") ?: error("agenthq.tabshots.appUiIhq is not set"), dir, root)
-        // Every load starts the loaded modules again (a community module's event handlers too: nothing is unloaded), so the
-        // 32 shots use the soft restart's own load, not one more.
-        var last: TabFactory? = null
-        // PACKAGING (95c26a81): the official modules (Infantry_Cli) come from the copied root's official/ jars, as a packaged
-        // app loads them from its bundled root; the task's devTrust lets those unsigned dev jars through.
-        val devTrust = { name: String -> if (name == PluginFolders.DEV_TRUST_PROPERTY) System.getProperty(name) else null }
-        fun reload() = DesktopPlugins.load(dir, env = env::get, property = devTrust, compiled = emptyList()).factory.also { last = it }
-        val dropIn = DesktopDropIn(root, demoLock = false, safeMode = false, picker = { ihq.path })
-        check(!reload().fills("infantry.shell.center")) { "the plugins root still fills the center: not an empty shell" }
-        runDesktopComposeUiTest(1400, 860) {
-            setContent {
-                var shown by remember { mutableStateOf(reload()) }
-                val base = LocalPlatformHost.current
-                val host = object : PlatformHost by base {
-                    override val dropIn: PluginDropIn get() = dropIn
-                    override fun reloadTabs(): TabFactory = reload()
-                }
-                CompositionLocalProvider(LocalPlatformHost provides host, LocalWindowChrome provides ShotChrome, LocalSoftRestart provides { shown = host.reloadTabs() }) {
-                    key(shown) { App(controller, "ws://127.0.0.1:$port/ws", null, tabs = shown) }
-                }
-            }
-            waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
-            val dropDir = File(out, "dropin").apply { mkdirs() }
-            snap(dropDir, "dropin-empty-shell")
-            onNodeWithTag(DROP_BOX_CHOOSE_TAG).performClick()
-            waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag(DROP_CONSENT_TAG).fetchSemanticsNodes().isNotEmpty() }
-            snap(dropDir, "dropin-consent")
-            onNodeWithTag(DROP_CONSENT_INSTALL_TAG).performClick()
-            waitUntil(timeoutMillis = 20_000) { onAllNodesWithTag(DROP_BOX_TAG).fetchSemanticsNodes().isEmpty() }
-            println("dropin: installed ${ihq.name}; the drop box is gone after the soft restart")
-        }
-        tabs = last!!
-        println("dropin: ${tabs.statuses.count { it.state == com.superiorsoftllc.agenthq.plugin.host.ModuleState.LOADED }} of ${tabs.statuses.size} modules loaded after the install")
-    }
     runDesktopComposeUiTest(1400, 860) {
         setContent { App(controller, "ws://127.0.0.1:$port/ws", null, tabs = tabs) }
         waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
@@ -692,28 +650,6 @@ fun main(args: Array<String>) {
     }
     daemon.close()
     exitProcess(0)
-}
-
-/**
- * S6: a copy of the unsigned [unsigned] App_UI.ihq signed with a throwaway key made here (fixed name, so the consent
- * dialog's signer line is the same every run), and that key's certificate pinned in [root]'s trusted-keys: it installs as core.
- */
-private fun signedForShots(unsigned: String, dir: File, root: File): File {
-    fun tool(name: String, vararg args: String) {
-        val exe = File(System.getProperty("java.home"), "bin/" + if (System.getProperty("os.name").startsWith("Windows")) "$name.exe" else name).path
-        val p = ProcessBuilder(listOf(exe) + args).redirectErrorStream(true).start()
-        val text = p.inputStream.bufferedReader().readText()
-        check(p.waitFor() == 0) { "$name failed: $text" }
-    }
-    val ks = File(dir, "shots.p12")
-    tool("keytool", "-genkeypair", "-alias", "shots", "-keyalg", "RSA", "-keysize", "2048", "-dname", "CN=Infantry AI (tab shots)",
-        "-validity", "30", "-keystore", ks.path, "-storetype", "PKCS12", "-storepass", "changeit", "-keypass", "changeit")
-    File(root, "trusted-keys").mkdirs()
-    tool("keytool", "-exportcert", "-alias", "shots", "-keystore", ks.path, "-storepass", "changeit", "-file", File(root, "trusted-keys/tab-shots.cer").path)
-    val ihq = File(dir, "drop/App_UI.ihq").apply { parentFile.mkdirs() }
-    File(unsigned).copyTo(ihq, overwrite = true)
-    tool("jarsigner", "-keystore", ks.path, "-storepass", "changeit", ihq.path, "shots")
-    return ihq
 }
 
 private object ShotChrome : WindowChrome {

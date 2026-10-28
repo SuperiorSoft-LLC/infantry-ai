@@ -125,16 +125,15 @@ class BlockInjectorTest {
         assertEquals(emptyList(), slot.children)
     }
 
-    @Test fun `on the core tree the footer takes an injection last and the board header leaf refuses one`() {
+    @Test fun `on the core tree the footer takes an injection last`() {
         val footer = "infantry.shell.footer"
         val r = BlockResolver.resolve(
             CoreModules.factory.baseRoot, emptyList(), CoreShell.locked,
-            injections = listOf(NodeInjection("m", "chip", footer, injection = nothing), NodeInjection("m", "x", "infantry.shell.board.header", injection = nothing)),
+            injections = listOf(NodeInjection("m", "chip", footer, injection = nothing)),
         )
         assertEquals(CoreModules.factory.baseRoot.find(footer)!!.children.map { it.id } + "m.chip", r.root.find(footer)!!.children.map { it.id })
-        assertNull(r.root.find("m.x"))
-        assertEquals(1, r.problems.size, r.problems.toString())
-        assertTrue(r.problems.single().startsWith("m: injection x into infantry.shell.board.header (last) refused: infantry.shell.board.header takes no children"))
+        // RUNTIME-26: the board header lives in the official Infantry_Board's tree, not in the empty shell's.
+        assertEquals(emptyList(), r.problems)
     }
 
     @Test fun `a missing target draws nothing and writes one line`() {

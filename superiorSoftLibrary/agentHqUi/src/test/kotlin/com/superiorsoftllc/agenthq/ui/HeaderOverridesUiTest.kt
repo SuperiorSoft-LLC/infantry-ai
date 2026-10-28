@@ -46,7 +46,7 @@ class HeaderOverridesUiTest {
             ModuleManifest("Acme_Header", "1.0.0", author = "Acme", license = "NOASSERTION", shell = listOf(decl)),
             tier = Tier.COMMUNITY, shell = mapOf("acme" to override),
         )
-        val f = TabFactory(CoreModules.all + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Header", decl.nodeId, decl.name, decl.mode)))
+        val f = TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Header", decl.nodeId, decl.name, decl.mode)))
         assertEquals(emptyList(), f.problems)
         return f
     }

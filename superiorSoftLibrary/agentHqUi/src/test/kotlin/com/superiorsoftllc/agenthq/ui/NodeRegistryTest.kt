@@ -144,9 +144,8 @@ class NodeRegistryTest {
         assertEquals("Acme_Shell.extra", extra.id)
         assertEquals(ChildSource.INJECTION, extra.source)
         assertEquals("Acme_Shell", extra.module)
-        // S4d: the settings are in the app UI's fill, so their own nodes are its, not the core tree's.
-        assertEquals(ChildSource.FILL, settings.children.first().source)
-        assertEquals("Infantry_AppUi", settings.children.first().module)
+        // RUNTIME-26: the settings are the shell's own, so their nodes are the core tree's.
+        assertEquals(ChildSource.SHELL, settings.children.first().source)
     }
 
     @Test fun `the locked dialog and its trust sections are marked locked, the open settings are not`() {
@@ -159,7 +158,7 @@ class NodeRegistryTest {
         assertEquals(List(6) { false } + List(9) { true }, config.children.map { it.locked })
         assertFalse(NodeRegistry.host(TabFactory(coreAndGit), "infantry.shell.config.settings")!!.locked)
     }
-    /** S4d: a filled slot and the nodes under it are the filling module's (Infantry_AppUi), not the core tree's. */
+    /** S4d: a filled slot and the nodes under it are the filling module's (an official plugin), not the core tree's. */
     @Test fun `a filled slot and its nodes name the module that fills it`() {
         val f = TabFactory(coreAndGit)
         assertTrue(f.fillModules.isNotEmpty())
@@ -168,7 +167,7 @@ class NodeRegistryTest {
             val row = rows.single { it.id == slot }
             assertEquals(module to ChildSource.FILL, row.module to row.source, slot)
         }
-        assertEquals(setOf("Infantry_AppUi", "Infantry_Roles", "Infantry_Board", "Infantry_Alerts", "Infantry_Header", "Infantry_Chat", "Infantry_Approvals", "Infantry_Assistant", "Infantry_Changes", "Infantry_Processes", "Infantry_Usage", "Infantry_Attention"), f.fillModules.values.toSet()) // RUNTIME-19: Usage and Attention fill their config sections; RUNTIME-14/15/16/18: Roles fills the roles window, Board the board, Alerts sound + voice, Processes the status bar's badge
+        assertEquals(setOf("Infantry_Roles", "Infantry_Board", "Infantry_Alerts", "Infantry_Header", "Infantry_Chat", "Infantry_Approvals", "Infantry_Assistant", "Infantry_Changes", "Infantry_Processes", "Infantry_Usage", "Infantry_Attention"), f.fillModules.values.toSet()) // RUNTIME-19: Usage and Attention fill their config sections; RUNTIME-14/15/16/18: Roles fills the roles window, Board the board, Alerts sound + voice, Processes the status bar's badge
         // A node under a fill: the title bar's lead row is the header plugin's.
         val lead = rows.single { it.id == "infantry.shell.header.lead" }
         assertEquals("Infantry_Header" to ChildSource.FILL, lead.module to lead.source)

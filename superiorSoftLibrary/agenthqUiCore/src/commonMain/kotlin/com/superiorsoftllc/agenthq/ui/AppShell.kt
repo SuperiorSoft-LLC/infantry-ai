@@ -100,24 +100,17 @@ class Shell(
 
 /**
  * BLOCKS-SHELL-1: the [Shell] of the window being composed (not static: only the blocks that read it recompose).
- * S4d (docs/SHELL-LEAKS.md): core's own; a module's block reads [coreShell] (core tier) or the ShellContext.
+ * S4d (docs/SHELL-LEAKS.md): core's own; a module's block reads the ShellContext (RUNTIME-26: coreShell is gone).
  */
 internal val LocalShell = compositionLocalOf<Shell> { error("LocalShell: no App() above this block") }
 
 /**
  * S4d: false inside a community module's composition (its tab, panel section, interceptor, slot block, shell override or
- * injection), so [coreShell] is null there. The window itself draws core tier.
+ * injection). The window itself draws core tier.
  */
 internal val LocalCoreTier = compositionLocalOf { true }
 
-/**
- * S4d (docs/SHELL-LEAKS.md): the window's [Shell], its state and controller, for a core module's block (the app UI's
- * fills; its tab twin `TabContext.coreController` was deleted in RUNTIME-16). Null in a community module's composition,
- * which reads [com.superiorsoftllc.agenthq.ui.shell.LocalShellContext] only.
- */
-val coreShell: Shell? @Composable get() = if (LocalCoreTier.current) LocalShell.current else null
-
-/** S4d: draws [content] as a module of tier [core] would be drawn ([coreShell] is null in a community one's). */
+/** S4d: draws [content] as a module of tier [core] would be drawn. */
 @Composable
 internal fun ModuleTier(core: Boolean, content: @Composable () -> Unit) =
     CompositionLocalProvider(LocalCoreTier provides core, content = content)

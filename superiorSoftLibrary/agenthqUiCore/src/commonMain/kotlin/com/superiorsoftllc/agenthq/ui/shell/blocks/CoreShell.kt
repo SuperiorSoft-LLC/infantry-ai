@@ -37,19 +37,18 @@ object CoreShell {
 
     /**
      * S4 (drop-in path): the shell's empty slots, the nodes the app UI draws. Each is an empty [PlaceholderBlock] that
-     * draws nothing until a core module fills it (module.json `fills`, [TabFactory.baseRoot]); the fill is a tree of the
+     * draws nothing until a plugin fills it (module.json `fills`, [TabFactory.baseRoot]); the fill is a tree of the
      * module's with the slot's id, and goes in before overrides and injections, so their node ids stay addressable.
      * Since S4 the tab trees (Git, Run, Notes, Changes) are module contributions too ([TabFactory.tabTreeRoots]). Since S4c
-     * the Config dialog's open settings group (`infantry.shell.config.settings`, [CONFIG_SETTINGS]) is a slot too, inside
-     * the locked dialog: without the app UI the dialog shows its trust sections only.
+     * the Config dialog's open settings group ([CONFIG_SETTINGS]) is the shell's own (RUNTIME-26), inside the locked dialog.
      */
     val slots: List<String> = listOf(
-        "infantry.shell.header", "infantry.shell.left", "infantry.shell.center", "infantry.shell.right",
+        "infantry.shell.header", "infantry.shell.center",
         // RUNTIME-18: the status bar is the shell's own; only its processes badge is a slot (Infantry_Processes).
-        "infantry.shell.drawer", PROCESSES_BADGE_SLOT,
+        PROCESSES_BADGE_SLOT,
         "infantry.shell.assistant", "infantry.shell.board", "infantry.shell.diff",
         "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions",
-        "infantry.shell.config.settings",
+        // RUNTIME-26: the side panels, the compact drawer and the open settings group are the shell's own, not slots.
     ) + CONFIG_OWNED_SECTION_SLOTS + "infantry.shell.roles"
 
     /**
@@ -79,13 +78,13 @@ object CoreShell {
                                             RowBlock(
                                                 "infantry.shell.panes", place = Place(size = Size.FillMax),
                                                 children = listOf(
-                                                    slot("infantry.shell.left", Place(show = Show.Wide)),
+                                                    ShellLeftPanel.asPlaceholder(),
                                                     // S6: the empty centre is the drop box, until the app UI fills it.
                                                     slot("infantry.shell.center", Place(weight = 1f), empty = ShellDropBox),
-                                                    slot("infantry.shell.right", Place(show = Show.Wide)),
+                                                    ShellRightPanel.asPlaceholder(),
                                                 ),
                                             ).asPlaceholder(),
-                                            slot("infantry.shell.drawer", Place(show = Show.Compact)),
+                                            ShellCompactDrawer.asPlaceholder(),
                                         ),
                                     ).asPlaceholder(),
                                     // RUNTIME-18: the status bar is the shell's (connection, build, cog), not a slot.

@@ -72,7 +72,7 @@ jar that will not load is skipped, with one log line saying why. It never stops 
 {
   "name": "Acme_Hello",
   "version": "1.0.0",
-  "apiVersion": 1,
+  "apiVersion": 2,
   "author": "Acme",
   "license": "<your license id>",
   "description": "What it does.",

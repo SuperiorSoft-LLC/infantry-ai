@@ -1,7 +1,7 @@
 {
   "name": "Acme_Echo",
   "version": "1.0.0",
-  "apiVersion": 1,
+  "apiVersion": 2,
   "author": "Acme (example)",
   "license": "NOASSERTION",
   "description": "Example community module with a backend of its own: an Echo tab that calls the endpoint 'echo' (plugins/examples/echo-backend) with a bearer key the host reads from the secret plugin.acme_echo. The plugin never sees the key.",

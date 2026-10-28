@@ -11,8 +11,8 @@ import kotlin.test.assertTrue
  */
 class ChatPanelOneSourceTest {
     private val ui = "../agenthqUiCore/src/commonMain/kotlin/com/superiorsoftllc/agenthq/ui"
-    // S4c: a host that moved to the app UI (plugins/core/Infantry_AppUi) is read from there.
-    private val app = "../../plugins/core/Infantry_AppUi"
+    // RUNTIME-26: the app UI module is retired; no host is read from it.
+    private val app = "../../plugins/core"
     // RUNTIME-24: the Assistant popup is the official Infantry_Assistant's.
     private val assistant = "../../plugins/official/Infantry_Assistant/src"
     // RUNTIME-22: the centre block and ChatPanel are the official Infantry_Chat's.

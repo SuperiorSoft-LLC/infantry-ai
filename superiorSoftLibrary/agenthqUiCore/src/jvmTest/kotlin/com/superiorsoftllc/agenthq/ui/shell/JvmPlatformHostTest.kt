@@ -40,7 +40,7 @@ class JvmPlatformHostTest {
     @Test fun thePinnedStateDirPropertyIsWherePluginsAreRead() {
         val stateDir = Files.createTempDirectory("agenthq-state").toFile().apply { deleteOnExit() }
         File(stateDir, "plugins/community/Acme_Probe").apply { mkdirs() }.resolve("module.json")
-            .writeText("""{"name":"Acme_Probe","version":"1.0.0","apiVersion":1,"author":"Acme","license":"MIT"}""")
+            .writeText("""{"name":"Acme_Probe","version":"1.0.0","apiVersion":2,"author":"Acme","license":"MIT"}""")
         File(stateDir, "daemon.port").writeText("8799")
         val host = JvmPlatformHost(
             env = { null }, home = emptyHome,

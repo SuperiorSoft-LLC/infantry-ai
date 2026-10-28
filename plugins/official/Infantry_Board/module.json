@@ -1,7 +1,7 @@
 {
   "name": "Infantry_Board",
   "version": "1.0.0",
-  "apiVersion": 1,
+  "apiVersion": 2,
   "author": "Infantry AI",
   "description": "The scrum board: the board overlay and its block types, board.pane and its sections, cards and card sections.",
   "tier": "official",

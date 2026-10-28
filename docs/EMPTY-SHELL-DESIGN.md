@@ -1,7 +1,7 @@
 # EMPTY SHELL: the app is an OS, plugins are programs
 
-**Revision 4** (ticket d78395b1, 2026-10-28). Revisions 1-3: ticket 73b920ff (rev 3 = c6f23fa5).
-This note is design only. No code was changed, nothing was built, and no test was run.
+**Revision 5** (RUNTIME-26 / F10, 2026-10-28). Rev 4: ticket d78395b1. Revisions 1-3: ticket 73b920ff (rev 3 = c6f23fa5).
+Revs 1-4 were design only; rev 5 records what the RUNTIME-6..26 extraction built (see "Rev 5: the extraction is done").
 Base: `feature-agenthq-mvp` @ 758149a5, after 4dc8b33f.
 
 **Decisions applied in rev 4:**
@@ -16,6 +16,30 @@ Base: `feature-agenthq-mvp` @ 758149a5, after 4dc8b33f.
   out.
 - Kept from rev 3: three tiers `plugins/{core,official,community}`, runtime-loaded on desktop, one module contract for
   every platform.
+
+## Rev 5: the extraction is done
+
+RUNTIME-26 (F10) is the last step of docs/RUNTIME-PLUGINS-AUDIT.md "AppUi remaining". Applied: **D4** (app = OS,
+plugins = programs), **D8** (the empty shell is a drop-in box; dropping the ORCHESTRATOR plugin in loads everything),
+**D9** (web/Android compile from the plugin list, same sources), **D11** (UI plugins first; daemon plugins later),
+**D13** (licensing parked; core+official = MPL, community/user dirs not; nothing here decides it).
+
+- **Modules: 20 classified, 25 official projects today.** Rev 4's 19 plus Infantry_Settings (the Settings tab group
+  host). Infantry_Header, Chat, Approvals, Assistant, Alerts and Processes (the AppUi split of E7) are further official
+  plugins on additive `ShellContext` services; they are not extra classes of the 20.
+- **B-classes** = the audit's [B] items: additive API (a new `ShellContext` member, a new slot, `NoXxx` default), no
+  `apiVersion` bump. The one [C] item (breaking) was this ticket.
+- **`plugins/core` is empty** (a README only). `Infantry_AppUi` and `App_UI.ihq` are retired (`appUiIhq` and the
+  `-PtabShotsExtra=dropin` acceptance are gone). The panel frames (left, right, compact drawer) and the open settings
+  group (`ShellConfigSettings`) moved into agenthqUiCore as the shell's own nodes: still replaceable by id
+  (`asPlaceholder()`), no longer slots. `CoreShell.slots` lists only what a plugin fills.
+- **`coreShell`/`appShell` are deleted** (0 uses). `ModuleTier`/`LocalCoreTier` stay as the tier plumbing (no reader).
+- **`apiVersion` 2.** `PLUGIN_API_VERSION = 2`; the resolver matches it exactly, so every module.json (official,
+  community samples, `_template`) says 2. `PLUGIN_API_REVISION` stays 2 (the additive revisions carry over).
+- **Boot with no plugin jars:** the generated desktop list (`CoreModules.jvm.kt`) is empty, so the shell boots empty
+  (drop box); `CoreModulesTest` pins the empty list. The web/Android list (`CoreModules.compiledIn.kt`) is the 25 official
+  plugins compiled in.
+- **Ratchet (3g) is at 0** on both counts: no program module in `plugins/core`, no `appController`/`appShell` use.
 
 It builds on SHELL-EMPTY-DROPIN-FEASIBILITY.md (S0-S7), SHELL-LEAKS.md (S4a-S4d), NORTH-STAR-DESIGN.md (NS1-NS10),
 BLOCKS-PERF-CHECK.md, plugins/GUIDE.md, LICENSE-0 (memory note `license-0-report-2026-10-26`) and LICENSE-1 (0fc727a6).
@@ -109,7 +133,7 @@ moves with the header.
 `Services.NOTIFICATIONS` already lands there), the status-bar connection items, `ShellConfigSettings` (the config host).
 Today they are in Infantry_AppUi.
 
-## 2. Classification of the 19 modules
+## 2. Classification of the modules (rev 4 table, 19 + Infantry_Settings = 20; all official since rev 5)
 
 Test (D4): **is it the shell, the configuration or the plugin orchestration?** If not, it is a program: OFFICIAL when
 Infantry makes it (D3), COMMUNITY otherwise. By that test every module today is official. "ctl" = it uses

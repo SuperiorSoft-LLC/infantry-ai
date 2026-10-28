@@ -191,8 +191,8 @@ class ConfigDialogOverridesUiTest {
 
     @Test fun aSectionDrawnOutsideTheDialogDrawsNothingAndDoesNotCrash() = runDesktopComposeUiTest(400, 300) {
         fun Block.all(): List<Block> = children + children.flatMap { it.all() }
-        // S4c: the open settings are the app UI's fill of the dialog's settings slot; the trust sections are core's.
-        val sections = (ShellConfigSettings.all() + ShellConfig.all()).filter { it.children.isEmpty() && it !is PlaceholderBlock }
+        // RUNTIME-26: the open settings are the shell's own (ShellConfig holds them); the trust sections are core's.
+        val sections = ShellConfig.all().filter { it.children.isEmpty() && it !is PlaceholderBlock }
         assertEquals(20, sections.size) // 11 open settings (tabGroups included) + 9 trust sections; RUNTIME-19: 5 more are slots of their owners
         setContent { Column { for (b in sections) b.Render(BlockScope(Modifier, null)) } }
         waitForIdle()
