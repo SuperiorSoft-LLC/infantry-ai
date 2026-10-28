@@ -42,6 +42,13 @@ data class PromptRequest(
     val options: List<PromptOption> = emptyList(),
     val multiSelect: Boolean = false,
     val allowOther: Boolean = false,
+    /**
+     * ASK-TIMER (1.139.0, ADDITIVE): epoch milliseconds when the daemon resolves this prompt by itself (a client shows
+     * a countdown to it); null = no timer (`prompts.timeoutSec` 0), the prompt waits for an answer.
+     */
+    val expiresAt: Long? = null,
+    /** ASK-TIMER (1.139.0, ADDITIVE): a tool approval's decision at [expiresAt] (`deny` | `allow_once`); null for a question (no answer). */
+    val onTimeout: String? = null,
 )
 
 /**

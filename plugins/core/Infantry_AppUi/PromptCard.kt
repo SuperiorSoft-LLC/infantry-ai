@@ -48,6 +48,7 @@ const val PROMPT_OPTION_TAG_PREFIX = "prompt-option-"
 const val PROMPT_OTHER_FIELD_TAG = "prompt-other-field"
 const val PROMPT_SUBMIT_TAG = "prompt-submit"
 const val PROMPT_NEEDS_YOU_TAG_PREFIX = "session-needs-you-"
+const val PROMPT_COUNTDOWN_TAG = "prompt-card-countdown"
 
 /**
  * PROMPT-2: the card docked above the chat input while [prompts] (the open session's, oldest first) is not empty. It
@@ -73,6 +74,11 @@ fun PromptCard(
         val otherFocused by otherSource.collectIsFocusedAsState()
         val focus = remember { FocusRequester() }
         LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+        // ASK-TIMER: the daemon resolves the prompt at expiresAt; the card counts down to it, once a second.
+        var now by remember { mutableStateOf(kotlin.time.Clock.System.now().toEpochMilliseconds()) }
+        if (prompt.expiresAt != null) LaunchedEffect(prompt.expiresAt) {
+            while (true) { now = kotlin.time.Clock.System.now().toEpochMilliseconds(); kotlinx.coroutines.delay(1_000) }
+        }
 
         val approval = prompt.kind == PromptCards.KIND_TOOL_APPROVAL
         val choices = if (approval) PromptCards.approvalChoices(prompt, allowAlways) else emptyList()
@@ -113,6 +119,9 @@ fun PromptCard(
                     if (approval) "Allow this tool to run?" else "The agent asks",
                     color = Palette.Accent, fontWeight = FontWeight.Bold, fontSize = 12.sp, modifier = Modifier.weight(1f),
                 )
+                PromptCards.countdown(prompt, now)?.let {
+                    Text(it, color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.padding(end = 8.dp).testTag(PROMPT_COUNTDOWN_TAG))
+                }
                 PromptCards.position(prompts.size)?.let { Text(it, color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(PROMPT_POSITION_TAG)) }
             }
             if (approval) {

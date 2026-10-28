@@ -351,6 +351,19 @@ class SessionManager(
     /** BUG-PERM-1: the Tool approval [sessionId]'s next run gets, with where it came from. */
     fun toolApprovalFor(sessionId: String): ToolApprovals.Resolution = ToolApprovals.current(toolApprovalOverrides[sessionId])
 
+    /** ASK-TIMER (1.139.0): each session's own prompt timer, chosen at spawn; held in memory like [toolApprovalOverrides]. */
+    private val promptTimeoutOverrides = ConcurrentHashMap<String, com.superiorsoftllc.agenthq.prompts.PromptTimeoutOverride>()
+
+    /** ASK-TIMER: set (or with null clear) [sessionId]'s own prompt timer over the global settings. */
+    fun setPromptTimeoutOverride(sessionId: String, override: com.superiorsoftllc.agenthq.prompts.PromptTimeoutOverride?) {
+        if (override == null || (override.timeoutSec == null && override.onTimeout == null)) promptTimeoutOverrides.remove(sessionId)
+        else promptTimeoutOverrides[sessionId] = override
+    }
+
+    /** ASK-TIMER: the prompt timer of [sessionId]: [global] with the session's override over it. */
+    fun promptTimeoutFor(sessionId: String, global: com.superiorsoftllc.agenthq.prompts.PromptTimeoutPolicy): com.superiorsoftllc.agenthq.prompts.PromptTimeoutPolicy =
+        promptTimeoutOverrides[sessionId]?.over(global) ?: global
+
     /** Throttle so a chatty stdout does not write the store once per line. */
     private val lastPersisted = ConcurrentHashMap<String, Long>()
 

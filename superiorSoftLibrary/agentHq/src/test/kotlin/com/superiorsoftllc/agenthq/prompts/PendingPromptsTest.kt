@@ -97,6 +97,22 @@ class PendingPromptsTest {
     }
 
     @Test
+    fun anExpiredApprovalResolvesWithTheConfiguredActionAndIsLogged() = runBlocking {
+        val notices = CopyOnWriteArrayList<String>()
+        val prompts = PendingPrompts(
+            clock = { 1_000L }, newId = { "p" + ids.incrementAndGet() },
+            policyFor = { PromptTimeoutPolicy(50, TimeoutAction.APPROVE) },
+        ).also { it.sink = { e -> frames += e }; it.notice = { s, text -> notices += "$s: $text" } }
+        // Nobody answers: the timer must unblock the asker with the configured action (approve = allow once).
+        val outcome = withTimeoutOrNull(5_000) { prompts.requestApprovalOutcome("s1", "Bash", "ls") }
+        assertEquals(ApprovalOutcome(Decision.ALLOW_ONCE, timedOut = true, timeoutSec = 0), outcome)
+        assertEquals(1_050L, requests().single().expiresAt, "the card carries its deadline")
+        assertEquals("allow_once", requests().single().onTimeout)
+        assertEquals(PromptResolved("p1", "timeout", "allow_once"), resolved().single())
+        assertTrue(notices.single().startsWith("s1: tool approval for Bash timed out"), notices.toString())
+    }
+
+    @Test
     fun allowSessionIsRememberedForThatSessionUntilItEnds() = runBlocking {
         val prompts = store()
         val first = async { prompts.requestApproval("s1", "Bash", "ls") }

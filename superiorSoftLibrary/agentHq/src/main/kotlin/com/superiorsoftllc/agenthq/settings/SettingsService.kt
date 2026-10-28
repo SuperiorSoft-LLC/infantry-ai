@@ -23,7 +23,8 @@ import com.superiorsoftllc.agenthq.usage.UsageSet
  * baseline skills, an array of existing skill ids, default `[]`). BUG-M2-11b-2: `session.keepAliveMinutes`, the one
  * session-lifecycle setting (docs/AGENTHQ-SESSION-HOST-PLAN.md section 8), an int 0..1440, default 30; 0 = every harness
  * runs one-shot. PROMPT-1 (contract 1.77.0): `prompts.timeoutSec`, how long a `prompt_request` waits for an answer
- * before it resolves as deny / no answer, an int 1..86400, default 600. IMG-5: `images.chatImageRetentionDays`, how
+ * before it resolves as deny / no answer, an int 0..86400 (0 = no timer, ASK-TIMER 1.139.0), default 600; ASK-TIMER:
+ * `prompts.onTimeout` (`deny` default | `approve`), what an unanswered tool approval resolves as. IMG-5: `images.chatImageRetentionDays`, how
  * many days an unused chat upload is kept before the retention sweep deletes it, an int 0..3650, default 14; 0 = keep
  * forever.
  */
@@ -46,6 +47,7 @@ class SettingsService(
             SKILL_IDS to JsonArray(skillIds().map(::JsonPrimitive)),
             KEEP_ALIVE_MINUTES to JsonPrimitive(keepAliveMinutes()),
             PROMPTS_TIMEOUT_SEC to JsonPrimitive(promptTimeoutSec()),
+            PROMPTS_ON_TIMEOUT to JsonPrimitive(promptOnTimeout().wire),
             CHAT_IMAGE_RETENTION_DAYS to JsonPrimitive(chatImageRetentionDays()),
             QUESTIONS_MAX_OPEN_PER_AGENT to JsonPrimitive(questionsMaxOpenPerAgent()),
             QUESTIONS_MAX_PER_HOUR to JsonPrimitive(questionsMaxPerHour()),
@@ -235,6 +237,7 @@ class SettingsService(
             SKILL_IDS -> JsonArray(requireSkillIds(value).map(::JsonPrimitive))
             KEEP_ALIVE_MINUTES -> JsonPrimitive(requireKeepAliveMinutes(value))
             PROMPTS_TIMEOUT_SEC -> JsonPrimitive(requirePromptTimeoutSec(value))
+            PROMPTS_ON_TIMEOUT -> JsonPrimitive(requirePromptOnTimeout(value).wire)
             CHAT_IMAGE_RETENTION_DAYS -> JsonPrimitive(requireChatImageRetentionDays(value))
             QUESTIONS_MAX_OPEN_PER_AGENT, QUESTIONS_MAX_PER_HOUR -> JsonPrimitive(requireQuestionLimit(key, value))
             TICKET_EXIT_BEHAVIOR -> JsonPrimitive(requireExitBehavior(value))
@@ -284,6 +287,23 @@ class SettingsService(
         val parsed = runCatching { (Json.parseToJsonElement(stored) as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull }.getOrNull()
         return parsed?.takeIf { it in PROMPT_TIMEOUT_RANGE } ?: DEFAULT_PROMPT_TIMEOUT_SEC
     }
+
+    /** ASK-TIMER (1.139.0): what an unanswered tool approval resolves as at its timeout; read at every prompt open. */
+    fun promptOnTimeout(): com.superiorsoftllc.agenthq.prompts.TimeoutAction {
+        val stored = store.settings.get(PROMPTS_ON_TIMEOUT)?.value ?: return com.superiorsoftllc.agenthq.prompts.TimeoutAction.DENY
+        val parsed = runCatching { (Json.parseToJsonElement(stored) as? JsonPrimitive)?.takeIf { it.isString }?.content }.getOrNull()
+        return com.superiorsoftllc.agenthq.prompts.TimeoutAction.parse(parsed) ?: com.superiorsoftllc.agenthq.prompts.TimeoutAction.DENY
+    }
+
+    /** ASK-TIMER: the global prompt timer (`prompts.timeoutSec`, 0 = none; `prompts.onTimeout`). */
+    fun promptTimeoutPolicy(): com.superiorsoftllc.agenthq.prompts.PromptTimeoutPolicy =
+        com.superiorsoftllc.agenthq.prompts.PromptTimeoutPolicy(promptTimeoutSec() * 1_000L, promptOnTimeout())
+
+    private fun requirePromptOnTimeout(value: JsonElement): com.superiorsoftllc.agenthq.prompts.TimeoutAction =
+        com.superiorsoftllc.agenthq.prompts.TimeoutAction.parse((value as? JsonPrimitive)?.takeIf { it.isString }?.content)
+            ?: throw IllegalArgumentException(
+                "setting '$PROMPTS_ON_TIMEOUT' must be one of ${com.superiorsoftllc.agenthq.prompts.TimeoutAction.WIRE.joinToString { "\"$it\"" }}",
+            )
 
     /** IMG-5: read at every sweep, never cached; an unreadable stored value falls back to the default. */
     fun chatImageRetentionDays(): Int {
@@ -395,7 +415,7 @@ class SettingsService(
     private fun requirePromptTimeoutSec(value: JsonElement): Int {
         val seconds = (value as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toIntOrNull()
         require(seconds != null && seconds in PROMPT_TIMEOUT_RANGE) {
-            "setting '$PROMPTS_TIMEOUT_SEC' must be a JSON integer in $PROMPT_TIMEOUT_RANGE (seconds)"
+            "setting '$PROMPTS_TIMEOUT_SEC' must be a JSON integer in $PROMPT_TIMEOUT_RANGE (seconds; 0 = no timer)"
         }
         return seconds
     }
@@ -437,6 +457,8 @@ class SettingsService(
         const val USER_PORTRAIT = "user.portrait"
         const val PROMPTS_TIMEOUT_SEC = "prompts.timeoutSec"
         const val DEFAULT_PROMPT_TIMEOUT_SEC = 600
+        /** ASK-TIMER (1.139.0): `deny` (default) | `approve`: what an unanswered tool approval resolves as at its timeout. */
+        const val PROMPTS_ON_TIMEOUT = "prompts.onTimeout"
         const val CHAT_IMAGE_RETENTION_DAYS = "images.chatImageRetentionDays"
         const val DEFAULT_CHAT_IMAGE_RETENTION_DAYS = 14
         private val CHAT_IMAGE_RETENTION_RANGE = 0..3650
@@ -480,7 +502,8 @@ class SettingsService(
         private val PROCESSES_IDLE_RANGE = 1..1440
         private val PROCESSES_MB_RANGE = 0..1_048_576
         private val QUESTION_LIMIT_RANGE = 1..100
-        private val PROMPT_TIMEOUT_RANGE = 1..86_400
+        /** ASK-TIMER: 0 = no timer (the prompt waits for an answer). */
+        private val PROMPT_TIMEOUT_RANGE = 0..86_400
         private val KEEP_ALIVE_RANGE = 0..LifecyclePolicy.MAX_KEEP_ALIVE_MINUTES
     }
 }

@@ -84,6 +84,10 @@ data class Answer(val answers: List<String>, val otherText: String?, val answere
  */
 interface PromptAsker {
     suspend fun requestApproval(session: String, tool: String, input: String): Decision
+
+    /** ASK-TIMER: [requestApproval], plus whether the prompt's timer decided it (so the worker is told why). */
+    suspend fun requestApprovalOutcome(session: String, tool: String, input: String): ApprovalOutcome =
+        ApprovalOutcome(requestApproval(session, tool, input))
     suspend fun askQuestion(session: String, spec: QuestionSpec): Answer
 
     companion object {
@@ -102,7 +106,9 @@ interface PromptAsker {
  *  - [respond] (a client's `prompt_response`) resolves it; an unknown, already resolved or malformed answer is an
  *    [IllegalArgumentException] and changes nothing.
  *  - Unanswered after [timeoutMillis] (read at every open; the daemon reads `prompts.timeoutSec`), a prompt resolves as
- *    deny / no answer. A session that ends ([onSessionEvent], [endSession]) resolves its open prompts the same way.
+ *    deny / no answer. ASK-TIMER (1.139.0): [policyFor] gives the timer per session (0 = none) and the approval's
+ *    action at expiry (`prompts.onTimeout`: deny | approve); `prompt_request.expiresAt` carries the deadline and the
+ *    expiry is one [notice] line in the session's transcript. A session that ends ([onSessionEvent], [endSession]) resolves its open prompts the same way.
  *  - Every resolution, whoever caused it, pushes `prompt_resolved` through [sink], so every card closes.
  *  - `allow_session` remembers the tool for that session: a later [requestApproval] for it returns at once, with no
  *    prompt, until the session ends.
@@ -120,6 +126,11 @@ class PendingPrompts(
     val rules: ApprovalRules = ApprovalRules.inMemory(),
     /** PROMPT-6: the project a session belongs to; null = none, so no rule is matched or stored for it. */
     private val projectOf: (String) -> String? = { null },
+    /**
+     * ASK-TIMER (1.139.0): the timer a prompt of a session gets (global `prompts.timeoutSec` / `prompts.onTimeout`
+     * with the session's override over it). Default: [timeoutMillis] and deny. A timeout of 0 = no timer.
+     */
+    private val policyFor: (String) -> PromptTimeoutPolicy = { PromptTimeoutPolicy(timeoutMillis()) },
 ) : PromptAsker {
     /** Where `prompt_request` / `prompt_resolved` go: the daemon points it at every connected client. */
     @Volatile
@@ -139,7 +150,11 @@ class PendingPrompts(
         val request: PromptRequest,
         val fullInput: String? = null,
         val result: CompletableDeferred<Resolution> = CompletableDeferred(),
-    )
+    ) {
+        /** Who resolved it; set before [result] completes. */
+        @Volatile
+        var resolvedBy: String? = null
+    }
 
     private val lock = Any()
     private val open = LinkedHashMap<String, Open>()
@@ -149,37 +164,51 @@ class PendingPrompts(
     }
     private val sessionAllowed = HashMap<String, MutableSet<String>>()
 
-    override suspend fun requestApproval(session: String, tool: String, input: String): Decision {
-        if (isAllowedForSession(session, tool)) return Decision.ALLOW_SESSION
+    override suspend fun requestApproval(session: String, tool: String, input: String): Decision =
+        requestApprovalOutcome(session, tool, input).decision
+
+    override suspend fun requestApprovalOutcome(session: String, tool: String, input: String): ApprovalOutcome {
+        if (isAllowedForSession(session, tool)) return ApprovalOutcome(Decision.ALLOW_SESSION)
         // PROMPT-6: a remembered rule of the session's project answers with no card (and one transcript line).
         val rule = runCatching { rules.match(projectOf(session), tool, input) }.getOrNull()
         if (rule != null) {
             runCatching { notice(session, ruleNotice(rule)) }
-            return Decision.ALLOW_ALWAYS
+            return ApprovalOutcome(Decision.ALLOW_ALWAYS)
         }
+        val policy = runCatching { policyFor(session) }.getOrElse { PromptTimeoutPolicy(DEFAULT_TIMEOUT_MS) }
+        val now = clock()
         val request = PromptRequest(
             promptId = newId(),
             sessionId = session,
             kind = PromptKinds.TOOL_APPROVAL,
-            createdAt = clock(),
+            createdAt = now,
             tool = tool,
             input = summarize(input),
+            expiresAt = expiry(now, policy.timeoutMillis),
+            onTimeout = policy.onTimeout.decision.wire,
         )
-        return (await(request, fullInput = input) as? Resolution.Approval)?.decision ?: Decision.DENY
+        val settled = await(request, fullInput = input, policy = policy)
+        val decision = (settled.resolution as? Resolution.Approval)?.decision ?: Decision.DENY
+        return ApprovalOutcome(decision, timedOut = settled.resolvedBy == PromptResolvedBy.TIMEOUT, timeoutSec = policy.timeoutMillis / 1_000)
     }
 
     override suspend fun askQuestion(session: String, spec: QuestionSpec): Answer {
+        val global = runCatching { policyFor(session) }.getOrElse { PromptTimeoutPolicy(DEFAULT_TIMEOUT_MS) }
+        // PROMPT-5: a question's own timeout replaces the session's / the global one.
+        val policy = spec.timeoutMillis?.let { global.copy(timeoutMillis = it) } ?: global
+        val now = clock()
         val request = PromptRequest(
             promptId = newId(),
             sessionId = session,
             kind = PromptKinds.QUESTION,
-            createdAt = clock(),
+            createdAt = now,
+            expiresAt = expiry(now, policy.timeoutMillis),
             question = spec.question,
             options = spec.options,
             multiSelect = spec.multiSelect,
             allowOther = spec.allowOther,
         )
-        return (await(request, timeoutOverride = spec.timeoutMillis) as? Resolution.Question)?.answer ?: Answer.NONE
+        return (await(request, policy = policy).resolution as? Resolution.Question)?.answer ?: Answer.NONE
     }
 
     /** True when the owner chose `allow_session` for [tool] earlier in [session]. */
@@ -233,17 +262,26 @@ class PendingPrompts(
         entries.forEach { resolve(it.request.promptId, resolvedBy, noAnswer(it.request)) }
     }
 
-    /** [timeoutOverride] (PROMPT-5) replaces [timeoutMillis] for this prompt; null = [timeoutMillis]. */
-    private suspend fun await(request: PromptRequest, fullInput: String? = null, timeoutOverride: Long? = null): Resolution {
+    /** How a prompt was settled: its [resolution] and who caused it (`client:<n>`, [PromptResolvedBy.TIMEOUT], ...). */
+    private data class Settled(val resolution: Resolution, val resolvedBy: String)
+
+    /**
+     * Open [request] and suspend until it resolves. ASK-TIMER: [policy] is its timer (0 = none); on expiry it resolves
+     * with [PromptTimeoutPolicy.onTimeout] (a question: no answer) and one transcript line goes to [notice].
+     */
+    private suspend fun await(request: PromptRequest, fullInput: String? = null, policy: PromptTimeoutPolicy): Settled {
         val entry = Open(request, fullInput)
         synchronized(lock) { open[request.promptId] = entry }
         sink(Envelope(Envelope.PROMPT_REQUEST, json.encodeToString(PromptRequest.serializer(), request), request.sessionId))
         try {
-            val answered = withTimeoutOrNull((timeoutOverride ?: timeoutMillis()).coerceAtLeast(1)) { entry.result.await() }
-            if (answered != null) return answered
-            resolve(request.promptId, PromptResolvedBy.TIMEOUT, noAnswer(request))
+            val answered = if (policy.timeoutMillis <= 0) entry.result.await()
+            else withTimeoutOrNull(policy.timeoutMillis) { entry.result.await() }
+            if (answered != null) return Settled(answered, entry.resolvedBy ?: "")
+            if (resolve(request.promptId, PromptResolvedBy.TIMEOUT, onExpiry(request, policy)) != null) {
+                runCatching { notice(request.sessionId, expiryNotice(request, policy)) }
+            }
             // Whoever won the race (the timeout above, or an answer that landed just before it) completed it.
-            return entry.result.await()
+            return Settled(entry.result.await(), entry.resolvedBy ?: "")
         } catch (e: CancellationException) {
             // The asker went away (its run was stopped): close the card everywhere instead of leaving it dangling.
             resolve(request.promptId, PromptResolvedBy.CANCELLED, noAnswer(request))
@@ -270,6 +308,7 @@ class PendingPrompts(
                     .onFailure { System.err.println("[agentHq] allow_always rule not stored: ${it.message}") }
             }
         }
+        entry.resolvedBy = resolvedBy
         entry.result.complete(resolution)
         val frame = PromptResolved(id, resolvedBy, outcomeOf(resolution))
         runCatching {
@@ -298,6 +337,10 @@ class PendingPrompts(
         }
     }
 
+    /** ASK-TIMER: what an expired prompt resolves as: the configured action for an approval, no answer for a question. */
+    private fun onExpiry(request: PromptRequest, policy: PromptTimeoutPolicy): Resolution =
+        if (request.kind == PromptKinds.TOOL_APPROVAL) Resolution.Approval(policy.onTimeout.decision) else Resolution.Question(Answer.NONE)
+
     private fun noAnswer(request: PromptRequest): Resolution =
         if (request.kind == PromptKinds.TOOL_APPROVAL) Resolution.Approval(Decision.DENY) else Resolution.Question(Answer.NONE)
 
@@ -317,6 +360,20 @@ class PendingPrompts(
         /** PROMPT-6: the transcript line for a call a rule answered: "auto-allowed by rule <tool> [<prefix>]". */
         fun ruleNotice(rule: com.superiorsoftllc.agenthq.protocol.ApprovalRule): String =
             "auto-allowed by rule ${rule.tool}" + (rule.prefix?.let { " $it" } ?: "")
+
+        /** ASK-TIMER: the deadline of a prompt opened at [now] with [timeoutMillis]; null = no timer. */
+        fun expiry(now: Long, timeoutMillis: Long): Long? = if (timeoutMillis <= 0) null else now + timeoutMillis
+
+        /** ASK-TIMER: the transcript line an expired prompt leaves, e.g. "tool approval for Bash timed out after 600s: auto-denied". */
+        fun expiryNotice(request: PromptRequest, policy: PromptTimeoutPolicy): String {
+            val after = "timed out after ${policy.timeoutMillis / 1_000}s with no answer"
+            return if (request.kind == PromptKinds.TOOL_APPROVAL) {
+                val action = if (policy.onTimeout == TimeoutAction.APPROVE) "auto-approved (allow once)" else "auto-denied"
+                "tool approval for ${request.tool ?: "a tool"} $after: $action (prompts.onTimeout = ${policy.onTimeout.wire})"
+            } else {
+                "question \"${request.question.orEmpty().take(80)}\" $after: resolved as no answer"
+            }
+        }
 
         /** One line, at most [INPUT_SUMMARY_MAX] characters: a card shows what the call is, never its whole payload. */
         fun summarize(input: String): String {

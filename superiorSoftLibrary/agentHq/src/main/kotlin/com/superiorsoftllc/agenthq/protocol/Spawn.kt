@@ -40,7 +40,25 @@ data class SpawnOptions(
      * over the global Settings value; null = the global value. An unknown value refuses the spawn.
      */
     val toolApproval: String? = null,
+    /**
+     * ASK-TIMER (1.139.0, ADDITIVE): this session's own prompt timer in seconds (0..86400, 0 = no timer) over the
+     * global `prompts.timeoutSec`; null = the global value. Out of range refuses the spawn.
+     */
+    val promptTimeoutSec: Int? = null,
+    /** ASK-TIMER (1.139.0, ADDITIVE): this session's `prompts.onTimeout` (`deny` | `approve`); null = global. Unknown refuses the spawn. */
+    val promptOnTimeout: String? = null,
 ) {
+    /** ASK-TIMER: the session prompt-timer override this spawn asks for; null = none. Refused ([IllegalArgumentException]) when invalid. */
+    fun promptTimeoutOverride(): com.superiorsoftllc.agenthq.prompts.PromptTimeoutOverride? {
+        promptTimeoutSec?.let { require(it in 0..86_400) { "promptTimeoutSec must be 0..86400 (0 = no timer), got $it" } }
+        val action = promptOnTimeout?.let {
+            com.superiorsoftllc.agenthq.prompts.TimeoutAction.parse(it)
+                ?: throw IllegalArgumentException("promptOnTimeout must be one of ${com.superiorsoftllc.agenthq.prompts.TimeoutAction.WIRE.joinToString()}")
+        }
+        if (promptTimeoutSec == null && action == null) return null
+        return com.superiorsoftllc.agenthq.prompts.PromptTimeoutOverride(promptTimeoutSec, action)
+    }
+
     companion object {
         /** Decode a `new` frame's JSON data, or throw [IllegalArgumentException] saying what is wrong. */
         fun decode(text: String): SpawnOptions = StrictJson.decode(serializer(), text, "new payload")

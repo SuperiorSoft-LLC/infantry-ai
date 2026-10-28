@@ -798,6 +798,8 @@ class AgentHqDaemon(
             // PROMPT-1: `prompts.timeoutSec` is read at every open; every request / resolution goes to every client.
             val pendingPrompts = com.superiorsoftllc.agenthq.prompts.PendingPrompts(
                 timeoutMillis = { settings.promptTimeoutSec() * 1000L },
+                // ASK-TIMER (1.139.0): global `prompts.timeoutSec` / `prompts.onTimeout`, the session's spawn override over it.
+                policyFor = { id -> manager.promptTimeoutFor(id, settings.promptTimeoutPolicy()) },
                 // PROMPT-6: "Always allow" rules live in the settings table (`toolApproval.rules`), scoped by project.
                 rules = com.superiorsoftllc.agenthq.prompts.ApprovalRules.forStore(store),
                 projectOf = { id -> manager.get(id)?.projectId },
@@ -1213,6 +1215,11 @@ class AgentHqDaemon(
                 sessionExists = { manager.get(it) != null },
                 sessionBusy = { manager.get(it)?.live == true },
                 ttlMinutes = { settings.limit(com.superiorsoftllc.agenthq.settings.LimitRegistry.QUESTION_TTL_MINUTES) },
+                // ASK-TIMER: a question with no `--default-after` auto-picks its recommendation when the prompt timer runs out.
+                defaultAfterMinFor = { id ->
+                    manager.promptTimeoutFor(id, settings.promptTimeoutPolicy()).timeoutMillis.takeIf { it > 0 }
+                        ?.let { ((it + 59_999) / 60_000).toInt() }
+                },
             )
             ownerQuestions.sink = { question ->
                 val frame = Envelope(Envelope.QUESTION, json.encodeToString(com.superiorsoftllc.agenthq.protocol.OwnerQuestion.serializer(), question))
@@ -2373,6 +2380,7 @@ private suspend fun handleConnection(
                                 // BUG-G2d: the session the last `new` named as its origin is charged for this one; the
                                 // check that counts is here, under the guard's lock, right before the session exists.
                                 val origin = spawnOrigin
+                                val timerOverride = spawn?.promptTimeoutOverride()
                                 val created = spawnGuard.admit(origin) { placement ->
                                     manager.startNew(
                                         // P10-K9: the session carries the project its knowledge section names.
@@ -2391,7 +2399,12 @@ private suspend fun handleConnection(
                                         effort = resolved.effort,
                                         // BUG-PERM-1: the spawn's own Tool approval; an unknown value refuses the spawn.
                                         toolApproval = com.superiorsoftllc.agenthq.harness.ToolApproval.parseStrict(spawn?.toolApproval),
-                                    ).also { if (placement != null) spawnGuard.record(it.id, origin); manager.setSpawner(it.id, origin) }
+                                    ).also {
+                                        if (placement != null) spawnGuard.record(it.id, origin)
+                                        manager.setSpawner(it.id, origin)
+                                        // ASK-TIMER (1.139.0): the spawn's own prompt timer (validated before the start below).
+                                        manager.setPromptTimeoutOverride(it.id, timerOverride)
+                                    }
                                 }
                                 active = created.id
                                 worktrees.status(created.id)?.let { outgoing.trySend(worktreeEnvelope(it)) }
