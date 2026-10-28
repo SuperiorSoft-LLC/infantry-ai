@@ -42,6 +42,7 @@ object PiToolBridge {
     /** The flat read/mail set every role sees without searching. Simple string arguments only (spike mail, point 5d). */
     val DIRECT: List<String> = listOf(
         "agenthq_inbox", "agenthq_read", "agenthq_message", "agenthq_ticket_get", "agenthq_board", "agenthq_progress",
+        "agenthq_ticket_files", "agenthq_ticket_related_files",
     )
 
     /** Big nested schemas or authority a cheap model should not hold (spike mail, point 5d). */

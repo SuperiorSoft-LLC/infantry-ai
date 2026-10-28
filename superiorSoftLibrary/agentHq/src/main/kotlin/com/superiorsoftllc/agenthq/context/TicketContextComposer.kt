@@ -87,7 +87,7 @@ class TicketContextComposer(
             return "When the work is done, run `agenthq ticket move $id done`. If you are blocked, leave the ticket " +
                 "in_progress and mail what blocks you (Team, below) " +
                 "(pending is set by the daemon from a blocked_by link; a move there by hand is refused).\n" +
-                DESC_FILE_LINE + BG_RUN_LINE
+                DESC_FILE_LINE + BG_RUN_LINE + RELATED_FILES_LINE
         }
 
         /** `agenthq bg run`: a long gate the agent starts is flagged to the daemon, so the session reads Running, not idle. */
@@ -95,6 +95,10 @@ class TicketContextComposer(
             "it returns at once, your session shows Running, and the daemon mails you when the job ends (exit code + last lines), " +
             "matches a pattern or runs too long. Never sleep or poll: end your turn and continue when that mail arrives " +
             "(`agenthq bg wait <id>` only if mail does not wake your harness). `agenthq bg list|status|logs|stop <id>` manage them."
+
+        /** TICKET-FILES (55476f3c): the related tickets' files are one indexed read, far cheaper than grepping for them. */
+        const val RELATED_FILES_LINE = "\nBefore you grep or read around, call agenthq_ticket_related_files with this ticket's id (CLI: " +
+            "`agenthq ticket files <id> --related`; a path's tickets: `agenthq ticket files --path <glob>`): the files of the tickets that changed the same code."
 
         /**
          * MCP-1: every session the daemon spawns has Infantry AI's own MCP server, so the agent prefers its tools (no Tool
