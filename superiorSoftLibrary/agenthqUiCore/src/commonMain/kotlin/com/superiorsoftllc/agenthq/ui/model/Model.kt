@@ -1771,11 +1771,19 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     // PROMPT-2 (1.77.0): open a card (a resend of an open prompt replaces it in place), or close one.
     Envelope.PROMPT_REQUEST -> {
         val p = json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.PromptRequestView.serializer(), env.data)
-        s.copy(openPrompts = if (s.openPrompts.any { it.promptId == p.promptId }) s.openPrompts.map { if (it.promptId == p.promptId) p else it } else s.openPrompts + p)
+        val known = s.openPrompts.any { it.promptId == p.promptId }
+        val next = s.copy(openPrompts = if (known) s.openPrompts.map { if (it.promptId == p.promptId) p else it } else s.openPrompts + p)
+        // BUG f422b3a1: the card docks only in that session's composer, so a prompt of a session the owner is not looking
+        // at was a tiny sidebar badge (none at all for another project's session). A new one is also a global toast that
+        // opens the session on click, and stays until the prompt resolves (removed below) or its own long timer ends.
+        if (known || p.sessionId == s.selectedId) next else next.withToast(promptToast(s, p, now))
     }
     Envelope.PROMPT_RESOLVED -> {
         val r = json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.PromptResolvedView.serializer(), env.data)
-        s.copy(openPrompts = s.openPrompts.filter { it.promptId != r.promptId }, dismissedPrompts = s.dismissedPrompts - r.promptId)
+        s.copy(
+            openPrompts = s.openPrompts.filter { it.promptId != r.promptId }, dismissedPrompts = s.dismissedPrompts - r.promptId,
+            toasts = s.toasts.filterNot { it.id == promptToastId(r.promptId) },
+        )
     }
 
     // ASK-1 (1.97.0): the whole list (on connect, or a `question_list` answer), or one question added / replaced in place.
