@@ -329,6 +329,11 @@ fun App(
     // P1 step 2 (6s B): once the link is live, the merged config tree seeds the daemon's node_config and the window takes its copy.
     val linkLive = state.connection.isLive
     LaunchedEffect(tabs, linkLive) { if (linkLive && tabs.config.load != NodeConfigLoad.LOADED) tabs.config.load() }
+    // P1 step 2 (6s E): a tab its strip's settings switch off while it is open hands the strip back to its home tab.
+    LaunchedEffect(tabs.config.stored) {
+        if (tabs.isDisabled(ui.centerTab)) ui.centerTab = homeTab
+        if (tabs.isDisabled(ui.rightTab)) tabs.home(TabContainers.RIGHT)?.let { ui.rightTab = it }
+    }
     LaunchedEffect(ui.centerTab) { tabs.events.publish(PluginEvent(Events.TAB_OPENED, mapOf("id" to ui.centerTab, "container" to TabContainers.CENTER))) }
     LaunchedEffect(ui.rightTab) { tabs.events.publish(PluginEvent(Events.TAB_OPENED, mapOf("id" to ui.rightTab, "container" to TabContainers.RIGHT))) }
     LaunchedEffect(state.selectedId) { state.selectedId?.let { tabs.events.publish(PluginEvent(Events.SESSION_SELECTED, mapOf("id" to it))) } }

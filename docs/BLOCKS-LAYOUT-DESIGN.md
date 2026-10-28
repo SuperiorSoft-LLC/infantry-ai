@@ -967,6 +967,20 @@ changes a line of the ten-line summary):
   typed, never coerced; `ConfigValues.strings` (a multiSelect) is an addition with a default. Keys under `children.`
   belong to their node and are never inherited (E).
 
+- **2. Enable/disable and reorder (E).** Stored on the container node itself as two own-only keys: `children.disabled`
+  (child ids not drawn) and `children.order` (a strip's child ids as the user put them; one not named keeps its
+  declared place after them). Applied live, not at the next start: `TabFactory.tabs`/`children` read them (so every
+  strip, including the ones `plugins/core` draws, follows), and `shellRoot`/`tabTree` drop the disabled injections
+  (memoised per stored copy, the very same tree object when nothing is off); `resolvedShellRoot`, `declaredTabs` and
+  `declaredChildren` keep everything for the registry view. Editable: a strip's tabs (on/off and Up/Down) and a tree
+  container's injected children (on/off). Never: a locked node or child, a tree container's core children as shipped
+  (hiding one is a replace, a module's job), a strip's home tab (its first declared tab; `home()` now reads the
+  declared order, so the window always opens on it), a tab whose module did not load (Modules decides), and a
+  community module's child unless modules.json `allowOverride`/`allowInject` grants it the node. The view shows why a
+  child is not editable; while the stored copy is not loaded the controls are off and a line says why, and a refused
+  write says "Not saved: <the daemon's answer>". A tab switched off while open hands its strip back to the home tab.
+  Pixels: the controls change only the opt-in `config-registry` shot (below the fold of every default shot).
+
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 
 | part | bucket |

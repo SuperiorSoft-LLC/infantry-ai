@@ -3,6 +3,9 @@ package com.superiorsoftllc.agenthq.ui
 import androidx.compose.material3.Text
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasAnyAncestor
@@ -15,6 +18,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.NodeConfigEntry
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.Tier
 import com.superiorsoftllc.agenthq.plugin.host.ModuleState
@@ -34,6 +38,12 @@ import com.superiorsoftllc.agenthq.ui.plugin.REGISTRY_MODULE_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.REGISTRY_SOURCE_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.REGISTRY_STATE_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.REGISTRY_TIER_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.plugin.REGISTRY_DOWN_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.plugin.REGISTRY_REFUSAL_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.plugin.REGISTRY_TOGGLE_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.plugin.REGISTRY_UP_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigApi
+import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigLoad
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
@@ -51,7 +61,8 @@ import kotlin.test.assertEquals
 
 /**
  * P1 (f60f4d97): Configuration > Plugins > Registered, in the real window: a fake community plugin registered in the
- * centre tab strip shows up in the strip's list with its source and tier; a locked node shows as not editable.
+ * centre tab strip shows up in the strip's list with its source and tier; a locked node shows as not editable. P1 step 2:
+ * a tab switched off leaves the strip, a move reorders it.
  */
 @OptIn(ExperimentalTestApi::class)
 class RegistrySectionUiTest {
@@ -62,8 +73,20 @@ class RegistrySectionUiTest {
     )
 
     /** Loaded at run time (statuses given), as on the desktop: only then does Configuration have a Plugins tab. */
+    /** P1 step 2: the daemon's node_config, kept in memory. */
+    private val stored = LinkedHashMap<Pair<String, String>, NodeConfigEntry>()
+    private val api = object : NodeConfigApi {
+        override suspend fun seed(entries: List<NodeConfigEntry>): Result<List<NodeConfigEntry>> {
+            for (e in entries) stored.putIfAbsent(e.nodeId to e.key, e)
+            return Result.success(stored.values.toList())
+        }
+        override suspend fun put(entry: NodeConfigEntry): Result<List<NodeConfigEntry>> {
+            if (entry.value == null) stored.remove(entry.nodeId to entry.key) else stored[entry.nodeId to entry.key] = entry
+            return Result.success(stored.values.toList())
+        }
+    }
     private val tabs = (CoreModules.all + acme).let { all ->
-        TabFactory(all, statuses = all.map { ModuleStatus(it.manifest.name, it.tier, ModuleState.LOADED, manifest = it.manifest) })
+        TabFactory(all, statuses = all.map { ModuleStatus(it.manifest.name, it.tier, ModuleState.LOADED, manifest = it.manifest) }, configApi = api)
     }
 
     /** A fake link that never dials (frontend/ui-test-flake-causes). */
@@ -120,6 +143,37 @@ class RegistrySectionUiTest {
         onNodeWithTag(REGISTRY_SOURCE_TAG_PREFIX + "infantry.git", useUnmergedTree = true).assertTextEquals("CoreShell.tabs")
         // The strip is not locked.
         onNodeWithTag(REGISTRY_LOCKED_TAG, useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test fun switchingATabOffTakesItOutOfTheStripAndBackOnRestoresIt() = withPlugins {
+        val git = InfantryGit.tabs.single()
+        waitUntil(timeoutMillis = 10_000) { tabs.config.load == NodeConfigLoad.LOADED }
+        onAllNodesWithTag(git.testTag)[0].assertExists()
+        val toggle = REGISTRY_TOGGLE_TAG_PREFIX + git.id
+        onNodeWithTag(toggle).performScrollTo()
+        onNodeWithTag(toggle).assertIsOn()
+        onNodeWithTag(toggle).performClick()
+        waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag(git.testTag).fetchSemanticsNodes().isEmpty() }
+        onNodeWithTag(REGISTRY_STATE_TAG_PREFIX + git.id, useUnmergedTree = true).assertTextEquals("Disabled")
+        assertEquals(true, stored.keys.any { it.first == "infantry.shell.center.chat.tabs" && it.second == "children.disabled" })
+        onNodeWithTag(toggle).assertIsOff()
+        onNodeWithTag(toggle).performClick()
+        waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag(git.testTag).fetchSemanticsNodes().isNotEmpty() }
+        // The home tab and a community tab with no grant say why they cannot be switched off.
+        val home = tabs.home(TabContainers.CENTER)!!
+        onNodeWithTag(REGISTRY_REFUSAL_TAG_PREFIX + home, useUnmergedTree = true).assertTextEquals("Not editable: Home tab")
+        onNodeWithTag(REGISTRY_REFUSAL_TAG_PREFIX + "acme.tabs", useUnmergedTree = true).assertTextEquals("Not editable: Not granted")
+    }
+
+    @Test fun movingATabUpReordersTheStrip() = withPlugins {
+        waitUntil(timeoutMillis = 10_000) { tabs.config.load == NodeConfigLoad.LOADED }
+        val before = tabs.tabs(TabContainers.CENTER).map { it.id }
+        val last = before.last()
+        onNodeWithTag(REGISTRY_UP_TAG_PREFIX + last).performScrollTo()
+        onNodeWithTag(REGISTRY_DOWN_TAG_PREFIX + last).assertIsNotEnabled()
+        onNodeWithTag(REGISTRY_UP_TAG_PREFIX + last).performClick()
+        waitUntil(timeoutMillis = 10_000) { tabs.tabs(TabContainers.CENTER).map { it.id } != before }
+        assertEquals(before.toMutableList().apply { add(lastIndex - 1, removeAt(lastIndex)) }, tabs.tabs(TabContainers.CENTER).map { it.id })
     }
 
     @Test fun aLockedNodeShowsLockedAndOffersNothingToChange() = withPlugins {
