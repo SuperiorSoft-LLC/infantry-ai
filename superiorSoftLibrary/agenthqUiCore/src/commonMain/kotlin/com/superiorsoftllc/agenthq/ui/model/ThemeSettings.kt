@@ -3,8 +3,8 @@ package com.superiorsoftllc.agenthq.ui.model
 /**
  * THEME-1: an accent preset. [argb] is the colour as 0xAARRGGBB, so this model stays free of Compose types.
  * [RED] is the default: a red light enough to read as text on the dark background (5:1). [AMBER] is the app's
- * original look; [INFANTRY] is the deeper red of the Infantry AI emblem (the app icon). [red] marks the red accents,
- * against which the danger colour turns orange so an error never reads as a highlight.
+ * original look; [INFANTRY] is the deeper red of the Infantry AI emblem (the app icon). [red] marks the red accents
+ * (the danger colour no longer changes with them: ticket b4735325 keeps one plain red for every accent).
  */
 enum class ThemeAccent(val label: String, val argb: Long, val red: Boolean = false) {
     RED("Red (default)", 0xFFEF4444, red = true),
