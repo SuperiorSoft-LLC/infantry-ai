@@ -32,7 +32,6 @@ import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import com.superiorsoftllc.agenthq.ui.protocol.Envelope
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ToastBlock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -157,8 +156,8 @@ class ToastServiceUiTest {
         withWindow(factory(
             // The toast node accepts children: a wrap hands it one more and draws it.
             Ov("infantry.shell.toast", "child", OverrideModes.WRAP, BlockOverride { scope, inner ->
-                val toast = inner as ToastBlock
-                toast.withChildren(toast.children + mine).Render(scope)
+                // RUNTIME-17: the toast node is the shell's own now; a community wrap gets it at the shell's tier.
+                inner!!.withChildren(inner.children + mine).Render(scope)
             }),
             Ov("infantry.shell.header.attention", "caller", OverrideModes.WRAP, BlockOverride { scope, inner ->
                 Row { inner!!.Render(scope); Text("call", Modifier.testTag("call-child").clickable { mine.post("from the title bar") }) }

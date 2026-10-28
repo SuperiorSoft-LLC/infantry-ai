@@ -193,7 +193,7 @@ class ConfigDialogOverridesUiTest {
         fun Block.all(): List<Block> = children + children.flatMap { it.all() }
         // S4c: the open settings are the app UI's fill of the dialog's settings slot; the trust sections are core's.
         val sections = (ShellConfigSettings.all() + ShellConfig.all()).filter { it.children.isEmpty() && it !is PlaceholderBlock }
-        assertEquals(24, sections.size)
+        assertEquals(25, sections.size) // 16 open settings (tabGroups included) + 9 trust sections
         setContent { Column { for (b in sections) b.Render(BlockScope(Modifier, null)) } }
         waitForIdle()
         for (e in ConfigEntry.entries) onNodeWithTag(CONFIG_SECTION_TAG_PREFIX + e.name).assertDoesNotExist()

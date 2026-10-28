@@ -34,7 +34,7 @@ class CoreShellTreeTest {
 
     /** SHELL-EMPTY-DROPIN S3: the config dialog's open settings sections (under `.settings`) and its locked trust sections. */
     private val configSettings = listOf(
-        "theme", "blur", "markdownEngine", "reasoning", "userPortrait", "agentScope", "progressStale", "lifecycle",
+        "theme", "blur", "markdownEngine", "reasoning", "tabGroups", "userPortrait", "agentScope", "progressStale", "lifecycle",
         "cliLocations", "toolApproval", "roles", "limits", "voice", "incomingSound", "questions",
     )
     private val configTrust = listOf("plugins", "modules", "registry", "secrets", "pair", "about", "updates", "serverUpdate", "logs")
@@ -81,6 +81,7 @@ class CoreShellTreeTest {
             .map { "          $footer.$it" } + listOf(
             // S4c: the core's Configuration entry, a dock sibling outside the replaceable frame.
             "      infantry.shell.configEntry",
+            "      infantry.shell.safeMode",
             "      infantry.shell.assistant",
             "        infantry.shell.assistant.resize",
             "        infantry.shell.assistant.body",
@@ -128,6 +129,7 @@ class CoreShellTreeTest {
             "    infantry.shell.servers",
             "    infantry.shell.switchError",
             "    infantry.shell.connect",
+            "    infantry.shell.dropConsent",
         )
         // S4: the window tree as drawn, the app UI's fills in the shell's empty slots.
         val tree = withRoles.baseRoot.walk()
@@ -158,6 +160,7 @@ class CoreShellTreeTest {
                 "infantry.shell.window", "infantry.shell.images", "infantry.shell.dock",
                 "infantry.shell.connect", "infantry.shell.servers", "infantry.shell.switchError",
                 "infantry.shell.serverUpdate", "infantry.shell.config", "infantry.shell.configEntry",
+                "infantry.shell.dropConsent", "infantry.shell.safeMode",
                 // S3: the trust half of Configuration (plugins, secrets, pairing, updates, about, logs).
                 "infantry.shell.config.plugins", "infantry.shell.config.modules", "infantry.shell.config.secrets",
                 // P1 (f60f4d97): where plugins are registered (step 2: where a registered child is turned off).

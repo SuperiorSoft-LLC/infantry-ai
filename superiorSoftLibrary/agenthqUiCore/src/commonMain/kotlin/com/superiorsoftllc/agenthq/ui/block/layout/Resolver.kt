@@ -56,6 +56,9 @@ private class TierBlock(private val inner: Block, private val core: Boolean) : B
     @Composable
     override fun Render(scope: BlockScope) = CompositionLocalProvider(LocalCoreTier provides core) { inner.Render(scope) }
 
+    /** RUNTIME-17: a wrap may hand the shell's node more children (a module's toast under `infantry.shell.toast`). */
+    override fun withChildren(children: List<Block>): Block = TierBlock(inner.withChildren(children), core)
+
     override val wearsHostSurface: Boolean get() = inner.wearsHostSurface
 }
 
