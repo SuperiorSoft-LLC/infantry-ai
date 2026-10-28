@@ -654,6 +654,8 @@ class AgentHqDaemon(
                 putAll(AgentHqBin.childEnv(agentHqBin))
                 // BUG-G2c: and the CLI must reach THIS daemon, not the default 8787 (AGENTHQ_URL; an inherited one wins).
                 putAll(AgentHqBin.urlEnv(host, boundPort))
+                // SEC 6d635c2f: an exported app's daemon blanks the owner credential its agents would inherit.
+                if (RemoteAccess.credentialsIsolated()) putAll(RemoteAccess.inheritedCredentialScrub())
                 if (token != null) put(AccessPolicy.TOKEN_ENV, token)
                 put(AccessPolicy.MAIL_BASE_ENV, mailBase)
             }

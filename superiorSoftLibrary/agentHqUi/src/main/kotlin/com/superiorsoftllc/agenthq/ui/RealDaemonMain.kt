@@ -241,13 +241,16 @@ internal class PinnedDaemonHost(
     override fun setting(key: String): String? = when (key) {
         ShellKeys.WS_URL -> remote?.url ?: wsUrl
         // A remote server's token is the one sealed for it, never this machine's own.
-        ShellKeys.TOKEN -> if (remote != null) remote.token else base.setting(key)?.takeIf { it.isNotBlank() } ?: storedToken()
-        ShellKeys.TOKEN_FILE -> if (remote != null) null else base.setting(key)
+        // SEC 6d635c2f: an exported app's window never sends the inherited (owner's) token to its bundled daemon.
+        ShellKeys.TOKEN -> if (remote != null) remote.token else inheritedSetting(key)?.takeIf { it.isNotBlank() } ?: storedToken()
+        ShellKeys.TOKEN_FILE -> if (remote != null) null else inheritedSetting(key)
         // SEC-FIX-1: this machine's daemon's owner credential, from its state dir only (never the environment, which agents
         // inherit); a remote server's window gets none.
         ShellKeys.OWNER_TOKEN -> if (remote != null) null else ownerToken()
         else -> base.setting(key)
     }
+
+    private fun inheritedSetting(key: String): String? = if (RemoteAccess.credentialsIsolated()) null else base.setting(key)
 
     override val logsDir: String? = logsDir?.path
 
