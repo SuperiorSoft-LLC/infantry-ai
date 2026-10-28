@@ -51,6 +51,7 @@ import com.superiorsoftllc.agenthq.ui.model.withPendingSpawn
 import com.superiorsoftllc.agenthq.ui.model.withTicketList
 import com.superiorsoftllc.agenthq.ui.model.withUserLine
 import com.superiorsoftllc.agenthq.ui.protocol.AgentProfile
+import com.superiorsoftllc.agenthq.ui.protocol.CommandCatalogAnswer
 import com.superiorsoftllc.agenthq.ui.protocol.Envelope
 import com.superiorsoftllc.agenthq.ui.restartPlan
 import com.superiorsoftllc.agenthq.ui.protocol.ImageStored
@@ -188,6 +189,7 @@ class Controller(
                 sendQueuedAtRest(before, _state.value)
                 answerImageUpload(env)
                 answerPluginSecret(env)
+                answerSpawnCatalog(env)
                 if (env.type == Envelope.SPOKEN) {
                     runCatching { json.decodeFromString(com.superiorsoftllc.agenthq.ui.voice.SpokenNotice.serializer(), env.data) }
                         .getOrNull()?.let { _spoken.tryEmit(it) }
@@ -418,11 +420,25 @@ class Controller(
      */
     private suspend fun spawnBoxCommand(text: String): CommandResult {
         val provider = _state.value.pickedModel?.provider
-        val asked = send(WireRequests.commandCatalog(null, "", provider))
-        if (asked is CommandResult.Refused) return report(asked)
-        val answer = withTimeoutOrNull(5_000) {
-            _state.map { it.slash }.first { it != null && it.sessionId == null && it.answer.prefix == "" && (provider == null || it.answer.provider == provider) }
-        }?.answer ?: return report(CommandResult.Refused("could not read the command list from the daemon: ${text.trim()} was not run and no agent was spawned"))
+        val notRun = "${text.trim()} was not run and no agent was spawned"
+        // BUG-SpawnBoxCatalog (ticket 3615b753): the answer is matched to THIS request by its id, not read back from
+        // [AppState.slash]. That slot is a conflated StateFlow the box's own typed-prefix requests overwrite, so the
+        // full list could be replaced before this wait ever saw it.
+        val env = spawnCatalogLock.withLock {
+            val requestId = "spawn-catalog-${++spawnCatalogRequests}"
+            val waiting = CompletableDeferred<Envelope>()
+            pendingSpawnCatalog = SpawnCatalogWait(requestId, provider, waiting)
+            try {
+                val asked = send(WireRequests.commandCatalog(null, "", provider, requestId))
+                if (asked is CommandResult.Refused) return report(asked)
+                withTimeoutOrNull(SPAWN_CATALOG_TIMEOUT_MS) { waiting.await() }
+            } finally {
+                pendingSpawnCatalog = null
+            }
+        } ?: return report(CommandResult.Refused("could not read the command list from the daemon: $notRun"))
+        if (env.type == Envelope.ERROR) return report(CommandResult.Refused("${env.data.take(200)}: $notRun"))
+        val answer = runCatching { json.decodeFromString(CommandCatalogAnswer.serializer(), env.data) }.getOrNull()
+            ?: return report(CommandResult.Refused("could not read the command list from the daemon: $notRun"))
         return when (val outcome = spawnSlash(text, answer)) {
             is SpawnSlash.Refuse -> report(CommandResult.Refused(outcome.reason))
             is SpawnSlash.SetModel -> {
@@ -434,6 +450,28 @@ class Controller(
                 CommandResult.Sent
             }
         }
+    }
+
+    private class SpawnCatalogWait(val requestId: String, val provider: String?, val answer: CompletableDeferred<Envelope>)
+
+    private val spawnCatalogLock = Mutex()
+    private var spawnCatalogRequests = 0
+    @kotlin.concurrent.Volatile
+    private var pendingSpawnCatalog: SpawnCatalogWait? = null
+
+    /**
+     * Settle the pending [spawnBoxCommand] catalog wait: the daemon's direct answer (or refusal) to it, matched by
+     * requestId. A daemon older than contract 1.87.0 echoes no id, so an untagged full list for the same provider counts.
+     */
+    private fun answerSpawnCatalog(env: Envelope) {
+        val wait = pendingSpawnCatalog ?: return
+        val matches = when {
+            env.requestId != null -> env.requestId == wait.requestId && (env.type == Envelope.COMMAND_CATALOG || env.type == Envelope.ERROR)
+            env.type != Envelope.COMMAND_CATALOG || env.sessionId != null -> false
+            else -> runCatching { json.decodeFromString(CommandCatalogAnswer.serializer(), env.data) }.getOrNull()
+                ?.let { it.prefix == "" && (wait.provider == null || it.provider == wait.provider) } == true
+        }
+        if (matches) wait.answer.complete(env)
     }
 
     /**
@@ -1754,6 +1792,8 @@ class Controller(
         /** IMG-4: how long an upload waits for the daemon's `image` answer. */
         const val IMAGE_UPLOAD_TIMEOUT_MS = 30_000L
         const val PLUGIN_SECRET_TIMEOUT_MS = 10_000L
+        /** CP-4(e): how long a `/` line in the New agent box waits for the daemon's full command list. */
+        const val SPAWN_CATALOG_TIMEOUT_MS = 5_000L
 
         /** The exact reason `resumable` is false, in words, for the disabled control's tooltip. */
         fun resumeBlocker(s: SessionRecord): String = when {

@@ -2114,6 +2114,33 @@ private suspend fun handleConnection(
         }
     }
 
+    // BUG-SpawnBoxCatalog (ticket 3615b753): `processes` (in every client's connect burst) enumerates every host process,
+    // ~0.5 s idle and seconds on a loaded host. Awaited inline it held the request loop, so a request sent right after
+    // connecting (the New agent box's `command_catalog`) queued behind it past the client's wait. One worker per
+    // connection answers it off the loop, on IO, in arrival order (a `reap` and the `list` after it stay ordered);
+    // other replies may overtake a `processes` reply. The direct answer echoes the request's id, as the inline path did.
+    val processesRequests = Channel<Envelope>(Channel.UNLIMITED)
+    val processesWorker = session.launch(kotlinx.coroutines.Dispatchers.IO) {
+        for (request in processesRequests) {
+            val answer = try {
+                val watch = processWatch ?: throw IllegalArgumentException("this daemon has no process watch")
+                val req = if (request.data.isBlank()) com.superiorsoftllc.agenthq.session.ProcessesRequest()
+                else json.decodeFromString(com.superiorsoftllc.agenthq.session.ProcessesRequest.serializer(), request.data)
+                Envelope(
+                    Envelope.PROCESSES,
+                    json.encodeToString(
+                        com.superiorsoftllc.agenthq.session.ProcessesAnswer.serializer(),
+                        com.superiorsoftllc.agenthq.session.ProcessFrames.answer(watch, req),
+                    ),
+                )
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                Envelope(Envelope.ERROR, "processes refused: ${e.message ?: e::class.simpleName}")
+            }
+            outgoing.trySend(if (request.requestId != null && answer.requestId == null) answer.copy(requestId = request.requestId) else answer)
+        }
+    }
+
     // BUG-CHANGES-BRANCH-2: a `project_git_*` read shells out to git, ~12 s under load. Answered inline it held every
     // later frame on this connection, chat included (the BUG-ModelsHeadOfLine class). One worker per connection
     // answers them off the loop, on IO, in arrival order: git replies stay ordered among themselves (a checkout
@@ -3097,16 +3124,10 @@ private suspend fun handleConnection(
                 }
 
                 // ROGUE-1 (contract 1.120.0): list / reap the processes this daemon's sessions started.
-                Envelope.PROCESSES -> try {
-                    val watch = processWatch ?: throw IllegalArgumentException("this daemon has no process watch")
-                    val req = if (envelope.data.isBlank()) com.superiorsoftllc.agenthq.session.ProcessesRequest()
-                    else json.decodeFromString(com.superiorsoftllc.agenthq.session.ProcessesRequest.serializer(), envelope.data)
-                    val answer = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                        com.superiorsoftllc.agenthq.session.ProcessFrames.answer(watch, req)
-                    }
-                    Envelope(Envelope.PROCESSES, json.encodeToString(com.superiorsoftllc.agenthq.session.ProcessesAnswer.serializer(), answer))
-                } catch (e: Exception) {
-                    Envelope(Envelope.ERROR, "processes refused: ${e.message ?: e::class.simpleName}")
+                // Answered by [processesWorker], off this loop (BUG-SpawnBoxCatalog, ticket 3615b753).
+                Envelope.PROCESSES -> {
+                    processesRequests.trySend(envelope)
+                    null
                 }
 
                 // `agenthq bg run`: beat (register/heartbeat), done, list. The answer is always the session's job list
@@ -3449,6 +3470,8 @@ private suspend fun handleConnection(
         askJobs.cancel()
         modelsRequests.close()
         modelsWorker.cancel()
+        processesRequests.close()
+        processesWorker.cancel()
         projectGitRequests.close()
         projectGitWorker.cancel()
         readyBurstRequests.close()
