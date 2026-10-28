@@ -996,6 +996,17 @@ changes a line of the ten-line summary):
   select and multiSelect chips, implementation chips over the registered keys only when exposed), where the value
   comes from (Default, Default (stored), Set here, From <parent>), and Reset. A locked node's fields are read-only; a
   node with fields but no children is pickable under "Configured nodes".
+- **4. Config groups as tabs (F).** The groups are tabs **inside the picked node's Fields** in Plugins > Registered
+  (`NodeFieldGroups`): one tab per group the node's fields name, in the merged tree's group order (core's first, then
+  each new name in load order), and the picked tab shows that group's fields. A node with one group still shows its one
+  tab, so the view reads the same however many a node has. Why not new top-level tabs in the Configuration dialog: its
+  strip is the fixed `ConfigTab` set of the locked `infantry.shell.config`, every group would then need a home for
+  nodes from many modules at once, and core's own "Tabs" group would add a tab to every window and move the default
+  shots. Payload's tabs are per collection, the same as per node here. A group named like a dialog tab does not move
+  into it; that can come later if a module needs it. **Shots:** 29/32 default shots are 0 px; the three
+  `settings-plugins-refused-*` differ by the Plugins tab's scrollbar thumb only (172-344 px), because the Registered
+  view below the modules is longer now (status line, Enabled/Up/Down, fields, group strip). The baseline is left as it
+  is (another worker is moving blocks; refresh it on merge).
 
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 
