@@ -130,6 +130,23 @@ fun RegistrySection(factory: TabFactory) {
             SectionLabel("Fields", topGap = false, modifier = Modifier.testTag(REGISTRY_FIELDS_TAG))
             NodeFieldGroups(factory, node, fields, editable = ready && !locked, locked = locked)
         }
+        BlockTypeList(factory)
+    }
+}
+
+/** NS1 / PB1: the registered block types, one chip each (title, type, module); the suffix of the tag is the type. */
+const val REGISTRY_BLOCK_TYPE_TAG_PREFIX = "registry-block-type-"
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun BlockTypeList(factory: TabFactory) {
+    val types = factory.blockTypes.types.values
+    if (types.isEmpty()) return
+    SectionLabel("Block types", Palette.Muted, topGap = false)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        for (t in types) {
+            Chip("${t.declaration.title} (${t.name}, ${t.module})", textModifier = Modifier.testTag(REGISTRY_BLOCK_TYPE_TAG_PREFIX + t.name))
+        }
     }
 }
 
