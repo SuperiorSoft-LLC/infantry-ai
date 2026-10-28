@@ -22,9 +22,14 @@ kotlin {
 
     sourceSets {
         // PLUGINS-1: the core modules live in <repo>/plugins/core and are compiled into every target from there.
-        commonMain { kotlin.srcDir(rootProject.file("plugins/core")) }
+        // NS2: except Infantry_Board, its own project (plugins/core/Infantry_Board), which this one depends on.
+        commonMain {
+            kotlin.srcDir(rootProject.file("plugins/core"))
+            kotlin.exclude("Infantry_Board/**")
+        }
         commonMain.dependencies {
             api(project(":superiorSoftLibrary:agenthqUiCore"))
+            api(project(":plugins:core:Infantry_Board"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
@@ -37,7 +42,8 @@ kotlin {
 
 // S6 (drop-in path): the app UI as one droppable file, build/ihq/App_UI.ihq: module.json (Infantry_AppUi's, with its entry
 // the ModuleSource that hands over every core module, so the desktop loads it as a bundle) and lib/App_UI.jar (this
-// module's jvm jar). One .ihq, one signature, 18 modules (the bundle). Without -Pihq.keystore it is unsigned and the installer refuses it.
+// module's jvm jar). One .ihq, one signature, 19 modules (the bundle). NS2: App_UI.jar also carries Infantry_Board's jar
+// contents (appUiBundleJar), so the bundle still holds the board. Without -Pihq.keystore it is unsigned and the installer refuses it.
 // The drop-in acceptance (agentHqUi renderTabShotsForDiff -PtabShotsExtra=dropin) signs a copy with a throwaway key.
 val appUiIhqDir = layout.buildDirectory.dir("ihq")
 val appUiIhqManifest = tasks.register("appUiIhqManifest") {
@@ -53,10 +59,23 @@ val appUiIhqManifest = tasks.register("appUiIhqManifest") {
         out.get().asFile.also { it.parentFile.mkdirs() }.writeText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(m)) + "\n")
     }
 }
+// NS2: this module's jvm jar plus Infantry_Board's, merged, so App_UI.jar keeps bundling the board.
+val appUiBundleJar = tasks.register<Jar>("appUiBundleJar") {
+    val own = tasks.named<Jar>("jvmJar")
+    val board = project(":plugins:core:Infantry_Board").tasks.named<Jar>("jvmJar")
+    dependsOn(own, board)
+    archiveFileName.set("App_UI.jar")
+    destinationDirectory.set(appUiIhqDir.map { it.dir("bundle") })
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
+    from(own.map { zipTree(it.archiveFile) })
+    from(board.map { zipTree(it.archiveFile) })
+}
 tasks.register<Zip>("appUiIhq") {
     group = "build"
     description = "Packages the app UI into build/ihq/App_UI.ihq (signed if -Pihq.keystore is given, else unsigned)."
-    val jar = tasks.named<Jar>("jvmJar")
+    val jar = appUiBundleJar
     dependsOn(appUiIhqManifest, jar)
     archiveFileName.set("App_UI.ihq")
     destinationDirectory.set(appUiIhqDir)

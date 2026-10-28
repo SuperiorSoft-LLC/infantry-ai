@@ -30,6 +30,9 @@ include(":superiorSoftLibrary")
 include(":superiorSoftLibrary:agentHq")
 include(":superiorSoftLibrary:agenthqUiCore")
 include(":superiorSoftLibrary:agenthqAppUi")
+// NS2 (docs/NORTH-STAR-DESIGN.md 3b): the scrum board, split out of the app UI into its own core module and jar.
+include(":plugins:core:Infantry_Board")
+project(":plugins:core:Infantry_Board").projectDir = file("plugins/core/Infantry_Board")
 // PLUGINS-1: the plugin API and the host's loading rules (no Compose, shared by the UI and the daemon).
 include(":superiorSoftLibrary:agenthqPlugins")
 include(":superiorSoftLibrary:agentHqUi")

@@ -31,6 +31,7 @@ object CoreModules {
         InfantryUsage,
         InfantryPrompts,
         InfantrySkills,
+        InfantryBoard,
         InfantryAppUi,
     )
 
