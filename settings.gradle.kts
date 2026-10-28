@@ -33,6 +33,12 @@ include(":superiorSoftLibrary:agenthqAppUi")
 // NS2 (docs/NORTH-STAR-DESIGN.md 3b): the scrum board, split out of the app UI into its own core module and jar.
 include(":plugins:core:Infantry_Board")
 project(":plugins:core:Infantry_Board").projectDir = file("plugins/core/Infantry_Board")
+// RUNTIME-3: an official module with sources (plugins/official/<Module>/build.gradle.kts) builds as its own project and
+// jar, found by scanning like community: Infantry_Cli first. Desktop loads the jar at run time; web/Android compile it in.
+file("plugins/official").listFiles { f -> f.isDirectory && !f.name.startsWith("_") && java.io.File(f, "build.gradle.kts").isFile }.orEmpty().sortedBy { it.name }.forEach { dir ->
+    include(":plugins:official:${dir.name}")
+    project(":plugins:official:${dir.name}").projectDir = dir
+}
 // PLUGINS-1: the plugin API and the host's loading rules (no Compose, shared by the UI and the daemon).
 include(":superiorSoftLibrary:agenthqPlugins")
 include(":superiorSoftLibrary:agentHqUi")

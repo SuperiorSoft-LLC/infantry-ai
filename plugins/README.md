@@ -10,7 +10,8 @@ names a tab: it asks a factory for the tabs of a container (`center`, `right`) a
 plugins/
   modules.json            the folders to scan and the owner's enable list (edit and restart, no rebuild)
   core/<Vendor_Module>/   built-in modules, compiled into every build (desktop, web, Android)
-  official/<Vendor_Module>/  programs made by Infantry: a jar signed by the Infantry key, loaded at runtime (desktop)
+  official/<Vendor_Module>/  programs made by Infantry: a jar signed by the Infantry key, loaded at runtime (desktop);
+                          web and Android compile the same sources in (Infantry_Cli, the CLI tab, is the first)
   community/<Vendor_Module>/  modules added by dropping a folder here (desktop and daemon only)
 ```
 
@@ -56,7 +57,7 @@ jar that will not load is skipped, with one log line saying why. It never stops 
   "author": "Acme",
   "license": "<your license id>",
   "description": "What it does.",
-  "dependencies": [{ "id": "Infantry_Cli", "version": ">=1.0 <2" }],
+  "dependencies": [{ "id": "Infantry_Git", "version": ">=1.0 <2" }],
   "sequence": [],
   "entry": "com.acme.hello.HelloPlugin",
   "jar": "build/libs/Acme_Hello.jar",

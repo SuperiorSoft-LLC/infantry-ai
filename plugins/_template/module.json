@@ -5,7 +5,7 @@
   "author": "Your name or company",
   "license": "NOASSERTION",
   "description": "Starter module: one tab, one interceptor and one left panel section. Copy this folder, rename it, and make it yours.",
-  "dependencies": [{ "id": "Infantry_Cli", "version": ">=1.0 <2" }],
+  "dependencies": [{ "id": "Infantry_Git", "version": ">=1.0 <2" }],
   "sequence": [],
   "entry": "com.example.starter.StarterPlugin",
   "jar": "build/libs/Example_Starter.jar",

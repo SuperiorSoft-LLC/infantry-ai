@@ -124,15 +124,15 @@ class DesktopPluginsTest {
         root.mkdirs()
         File(root, "modules.json").writeText("""{"modules":{"Acme_Base":{"enabled":false},"Acme_App":{"enabled":true}},"note":"kept"}""")
         community("Acme_Base", manifest("Acme_Base"))
-        community("Acme_App", manifest("Acme_App", ""","dependencies":[{"id":"Acme_Base","version":"^1.0"},{"id":"Infantry_Cli"}]"""))
+        community("Acme_App", manifest("Acme_App", ""","dependencies":[{"id":"Acme_Base","version":"^1.0"},{"id":"Infantry_Git"}]"""))
         val loaded = load()
         assertEquals("dependency Acme_Base is disabled", loaded.factory.statuses.single { it.name == "Acme_App" }.reason)
         val changes = loaded.factory.changes!!
         val text = { File(root, "modules.json").readText() }
 
-        // Disabling core Infantry_Cli while Acme_App (enabled) needs it: refused, nothing written.
+        // Disabling core Infantry_Git while Acme_App (enabled) needs it: refused, nothing written.
         val before = text()
-        val refused = changes.request(ModuleRequest("Infantry_Cli", enable = false))
+        val refused = changes.request(ModuleRequest("Infantry_Git", enable = false))
         assertTrue(refused is ModuleChange.Refused && refused.dependents == listOf("Acme_App"), refused.message)
         assertEquals(before, text())
 

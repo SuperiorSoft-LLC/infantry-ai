@@ -22,6 +22,10 @@ dependencies {
     // compile against it: they drive the app UI's panes.
     runtimeOnly(project(":superiorSoftLibrary:agenthqAppUi"))
     testImplementation(project(":superiorSoftLibrary:agenthqAppUi"))
+    // RUNTIME-3: the app loads the official Infantry_Cli jar at run time (plugins/official); the UI tests, which start
+    // from an empty plugins root, carry it on their class path instead (its jar's ServiceLoader entry), so they see the
+    // same CLI tab the app shows with the jar present.
+    testRuntimeOnly(project(":plugins:official:Infantry_Cli"))
     implementation(compose.desktop.currentOs)
     // UPDATE-1: the update dialog (UpdatePrompt.kt); the same material3 :agenthqUiCore already ships.
     implementation(compose.material3)
@@ -189,8 +193,8 @@ val renderTabShotsForDiff = tasks.register<JavaExec>("renderTabShotsForDiff") {
     if (project.findProperty("tabShotsExtra") == "dropin") {
         val appUi = project(":superiorSoftLibrary:agenthqAppUi")
         dependsOn(":superiorSoftLibrary:agenthqAppUi:appUiIhq")
-        // NS2: nor Infantry_Board, which App_UI.ihq bundles.
-        classpath = sourceSets["test"].runtimeClasspath.filter { p -> "agenthqAppUi" !in p.invariantSeparatorsPath && "Infantry_Board" !in p.invariantSeparatorsPath }
+        // NS2: nor Infantry_Board, which App_UI.ihq bundles. RUNTIME-3: nor Infantry_Cli (tests carry it compiled in).
+        classpath = sourceSets["test"].runtimeClasspath.filter { p -> "agenthqAppUi" !in p.invariantSeparatorsPath && "Infantry_Board" !in p.invariantSeparatorsPath && "Infantry_Cli" !in p.invariantSeparatorsPath }
         systemProperty("agenthq.tabshots.appUiIhq", appUi.layout.buildDirectory.file("ihq/App_UI.ihq").get().asFile.path)
     }
     outputs.upToDateWhen { false }
@@ -226,9 +230,14 @@ tasks.register<Sync>("updateTabShotBaseline") {
 // community module that has sources. settings.gradle.kts finds those by scanning plugins/community; none is named here.
 val repoPluginsRoot = rootProject.file("plugins")
 val communityModuleJars = rootProject.subprojects.filter { it.path.startsWith(":plugins:community:") }.map { "${it.path}:jar" }
+// RUNTIME-3: and every official module's jar (plugins/official/<Module>/build/libs), loaded at run time. A dev build is
+// not signed with the Infantry key, so the dev runs pass devTrust (never the packaged launcher: OfficialTrust).
+val officialModuleJars = rootProject.subprojects.filter { it.path.startsWith(":plugins:official:") }.map { "${it.path}:jvmJar" }
 tasks.matching { it.name in setOf("run", "runRealDaemon", "runTabShots", "renderTabShotsForDiff") }.configureEach {
     (this as? JavaExec)?.systemProperty("agenthq.plugins.root", repoPluginsRoot.absolutePath)
+    (this as? JavaExec)?.systemProperty("agenthq.plugins.devTrust", "true")
     dependsOn(communityModuleJars)
+    dependsOn(officialModuleJars)
 }
 // TAB-SHOTS-DIFF: the shots never read the real plan limits (live, per account), as the UI tests do not.
 tasks.matching { it.name in setOf("runTabShots", "renderTabShotsForDiff") }.configureEach {

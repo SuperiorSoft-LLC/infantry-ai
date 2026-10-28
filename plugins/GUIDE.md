@@ -27,7 +27,7 @@ plugins/
 
 ## 3. Declare what you need
 
-- **dependencies**: `[{ "id": "Infantry_Cli", "version": ">=1.0 <2" }]`. List the modules yours cannot run without.
+- **dependencies**: `[{ "id": "Infantry_Git", "version": ">=1.0 <2" }]`. List the modules yours cannot run without.
   Ranges take `>= > <= < =`, a bare version (`1.2` means any 1.2.x), `^1.2.3`, `~1.2.3`, `*`, and alternatives
   joined by `||`. The rules:
   - A missing, disabled or out-of-range dependency refuses your module at load. The reason is shown in Settings.

@@ -39,9 +39,9 @@ class CoreModulesTest {
     }
 
     @Test
-    fun `the generated module list holds all 20 core modules in the old order`() {
+    fun `the generated desktop module list holds the 19 core modules in the old order, without official Infantry_Cli`() {
         assertEquals(
-            listOf("Agents", "Cli", "Pods", "Roles", "Profiles", "Triggers", "Epics", "Notes", "Run", "Git", "Stats", "Settings",
+            listOf("Agents", "Pods", "Roles", "Profiles", "Triggers", "Epics", "Notes", "Run", "Git", "Stats", "Settings",
                 "Changes", "Review", "Attention", "Usage", "Prompts", "Skills", "Board", "AppUi").map { "Infantry_$it" },
             CoreModules.all.map { it.manifest.name },
         )
@@ -52,16 +52,16 @@ class CoreModulesTest {
         val f = CoreModules.factory
         assertEquals(emptyList(), f.problems)
         assertEquals(
-            listOf("OUTPUT", "PODS", "ROLES", "PROFILES", "TRIGGERS", "EPICS", "MEMORY", "RUN", "GIT", "STATS").map { "center-tab-$it" },
+            listOf("PODS", "ROLES", "PROFILES", "TRIGGERS", "EPICS", "MEMORY", "RUN", "GIT", "STATS").map { "center-tab-$it" },
             f.tabs(TabContainers.CENTER).map { it.testTag },
         )
         assertEquals(
             listOf("CHANGES", "REVIEW", "ATTENTION", "USAGE", "PROMPTS", "SKILLS").map { "right-tab-$it" },
             f.tabs(TabContainers.RIGHT).map { it.testTag },
         )
-        assertEquals("infantry.cli", f.home(TabContainers.CENTER))
+        assertEquals("infantry.pods", f.home(TabContainers.CENTER)) // RUNTIME-3: the CLI tab comes from the official jar
         assertEquals("infantry.changes", f.home(TabContainers.RIGHT))
-        val shortcuts = mapOf(1 to "infantry.cli", 2 to "infantry.pods", 3 to "infantry.changes", 4 to "infantry.review", 5 to "infantry.roles",
+        val shortcuts = mapOf(2 to "infantry.pods", 3 to "infantry.changes", 4 to "infantry.review", 5 to "infantry.roles",
             6 to "infantry.attention", 7 to "infantry.usage", 9 to "infantry.profiles", 0 to "infantry.triggers")
         for ((digit, id) in shortcuts) assertEquals(id, f.byShortcut(digit)?.id, "Ctrl+$digit")
         assertEquals(null, f.byShortcut(8), "Ctrl+8 stays the Board")
@@ -88,12 +88,12 @@ class CoreModulesTest {
 
         f.config.replace(listOf(NodeConfigEntry(SETTINGS_TAB_ID, TabGroups.GROUPED, JsonPrimitive(true))))
         assertEquals(
-            listOf("OUTPUT", "PODS", "ROLES", "EPICS", "STATS", "SETTINGS").map { "center-tab-$it" },
+            listOf("PODS", "ROLES", "EPICS", "STATS", "SETTINGS").map { "center-tab-$it" },
             f.tabs(TabContainers.CENTER).map { it.testTag },
         )
         assertEquals(listOf("PROFILES", "TRIGGERS", "MEMORY", "RUN", "GIT").map { "center-tab-$it" }, f.children(SETTINGS_TAB_ID).map { it.testTag })
         assertEquals(SETTINGS_TAB_ID, f.hostOf("infantry.git"))
-        assertEquals("infantry.cli", f.home(TabContainers.CENTER))
+        assertEquals("infantry.pods", f.home(TabContainers.CENTER)) // RUNTIME-3: the CLI tab comes from the official jar
         // The shortcuts still name the sub-tabs; the window opens them inside Settings.
         assertEquals("infantry.profiles", f.byShortcut(9)?.id)
         assertEquals("infantry.triggers", f.byShortcut(0)?.id)
@@ -108,7 +108,7 @@ class CoreModulesTest {
         // Switched back off: the old strip again.
         f.config.replace(listOf(NodeConfigEntry(SETTINGS_TAB_ID, TabGroups.GROUPED, JsonPrimitive(false))))
         assertEquals(
-            listOf("OUTPUT", "PODS", "ROLES", "PROFILES", "TRIGGERS", "EPICS", "MEMORY", "RUN", "GIT", "STATS").map { "center-tab-$it" },
+            listOf("PODS", "ROLES", "PROFILES", "TRIGGERS", "EPICS", "MEMORY", "RUN", "GIT", "STATS").map { "center-tab-$it" },
             f.tabs(TabContainers.CENTER).map { it.testTag },
         )
     }
