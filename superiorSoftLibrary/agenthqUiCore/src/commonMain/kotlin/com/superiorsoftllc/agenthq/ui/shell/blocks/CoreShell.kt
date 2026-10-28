@@ -69,7 +69,6 @@ object CoreShell {
                             ColumnBlock(
                                 "infantry.shell.frame", surface = true,
                                 children = listOf(
-                                    ShellConfigEntry,
                                     slot(HEADER_SLOT),
                                     StackBlock(
                                         "infantry.shell.body", measure = true, place = Place(weight = 1f, size = Size.FillWidth),
@@ -88,6 +87,8 @@ object CoreShell {
                                     slot("infantry.shell.footer"),
                                 ),
                             ).asPlaceholder(),
+                            // Outside the replaceable frame, so a frame replace cannot remove the locked way into Configuration.
+                            ShellConfigEntry,
                             // The overlays, over the whole dock; they align themselves.
                             slot("infantry.shell.assistant"), slot("infantry.shell.toast"), slot("infantry.shell.board"), slot("infantry.shell.diff"),
                             slot("infantry.shell.sound"), slot("infantry.shell.voice"), slot("infantry.shell.questions"),
