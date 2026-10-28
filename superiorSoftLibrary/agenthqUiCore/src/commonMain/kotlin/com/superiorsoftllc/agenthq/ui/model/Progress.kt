@@ -31,6 +31,9 @@ fun progressDisplay(p: ProgressView, now: Long, staleMin: Int = PROGRESS_STALE_D
     val tone = when {
         p.state == "failed" -> ProgressTone.Failed
         p.state == "done" -> ProgressTone.Done
+        // PROGRESS-ALL: the daemon decides staleness of a bar it computed itself (its own, configurable limit).
+        p.stale == true -> ProgressTone.Stale
+        p.origin == "auto" -> ProgressTone.Running
         quietMs > staleMin.coerceAtLeast(1) * 60_000L -> ProgressTone.Stale
         else -> ProgressTone.Running
     }
@@ -43,7 +46,7 @@ fun progressDisplay(p: ProgressView, now: Long, staleMin: Int = PROGRESS_STALE_D
     val waiting = if (running && p.estimateSource == "sleep") waitingText(eta) else null
     val head = waiting ?: buildList {
         shownPercent?.takeIf { eta?.overMs == null }?.let { add("${it.roundToInt()}%") }
-        eta?.let { progressCountdown(it) }?.let { add(it) }
+        eta?.let { progressCountdown(it) }?.let { add(if (p.origin == "auto" && eta.remainingMs != null) "$it, est." else it) }
         when (p.mode) {
             "steps" -> {
                 val total = p.stepsTotal ?: 0
@@ -63,7 +66,7 @@ fun progressDisplay(p: ProgressView, now: Long, staleMin: Int = PROGRESS_STALE_D
         if (p.mode == "bytes" && running) p.bytesPerSec?.let { add(formatBytes(it.toLong()) + "/s") }
         // No number and no estimate: alive/stuck signal only; never a bare elapsed timer.
         if (running && eta?.noEstimate == true) add("last output ${formatElapsed(now - (p.lastOutputAt ?: p.updatedAt))} ago")
-        if (tone == ProgressTone.Stale) add("no update for ${quietMs / 60_000} min")
+        if (tone == ProgressTone.Stale) add(if (p.origin == "auto" || p.stale == true) "no activity for ${(now - (p.lastOutputAt ?: p.updatedAt)).coerceAtLeast(0) / 60_000} min" else "no update for ${quietMs / 60_000} min")
     }.joinToString(" · ")
     return ProgressDisplay(fraction, head, detail, tone, estimated = eta != null && eta.percent != null && p.estimateSource != null && !(p.mode != "indeterminate" && p.percent != null))
 }

@@ -724,6 +724,8 @@ class AgentHqDaemon(
             manager.progressEstimates = com.superiorsoftllc.agenthq.session.FileProgressEstimates(
                 File(com.superiorsoftllc.agenthq.session.stateDir(), com.superiorsoftllc.agenthq.session.FileProgressEstimates.FILE_NAME),
             )
+            // PROGRESS-ALL: every working ticket session shows a daemon-computed estimate (no model call, zero tokens).
+            com.superiorsoftllc.agenthq.session.AutoProgressHistory(store).install(settings)
             val clients = CopyOnWriteArrayList<Channel<Envelope>>()
             // ROGUE-1 (contract 1.120.0): the rogue process detector. The ledger records only what a session tree started
             // (pid + start instant, owned by this state dir); a slow timer feeds it and warns under memory pressure.
@@ -1632,6 +1634,7 @@ private fun broadcast(
                         is EventNormalizer.Line.Reasoning -> "thinking"
                         else -> null
                     },
+                    tool = line is EventNormalizer.Line.Tool,
                 )
                 val own = when (line) {
                     is EventNormalizer.Line.Text -> Envelope(Envelope.TEXT_DELTA, line.delta, event.sessionId)
