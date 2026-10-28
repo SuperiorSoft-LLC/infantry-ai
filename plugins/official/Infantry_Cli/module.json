@@ -4,8 +4,10 @@
   "apiVersion": 1,
   "author": "Infantry AI",
   "description": "The selected agent's chat transcript.",
+  "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.core.CliModuleSource",
+  "entry": "com.superiorsoftllc.agenthq.plugins.official.CliPlugin",
+  "jar": "build/libs/Infantry_Cli.jar",
   "buildOrder": 20,
   "tabs": [
     {
