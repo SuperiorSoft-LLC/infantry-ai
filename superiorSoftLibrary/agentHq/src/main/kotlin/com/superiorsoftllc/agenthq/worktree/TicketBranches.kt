@@ -30,9 +30,10 @@ data class TicketBranchRequest(
 sealed interface TicketBranchOutcome {
     /**
      * [note] says what a FRESH cut came from (`cut from <ref> <short sha>`), for the start's answer; null when
-     * the start reused the branch the ticket already had.
+     * the start reused the branch the ticket already had. [warning] is anything the worktree still lacks (no Android
+     * SDK found), kept apart so a caller can qualify [note] (the setting that chose the base) without tagging the warning.
      */
-    data class Ready(val worktree: TicketWorktree, val note: String? = null) : TicketBranchOutcome
+    data class Ready(val worktree: TicketWorktree, val note: String? = null, val warning: String? = null) : TicketBranchOutcome
     data class Refused(val reason: String) : TicketBranchOutcome
 }
 
@@ -84,10 +85,10 @@ class TicketBranches(
 
         val added = git.run(root, listOf("worktree", "add", "-b", branch, path.absolutePath, base))
         if (!added.ok) return TicketBranchOutcome.Refused("git worktree add failed: ${added.err()}")
-        val sdkWarning = androidSdk.provision(root, path)
         return TicketBranchOutcome.Ready(
             TicketWorktree(branch = branch, base = base, path = path.absolutePath, repoRoot = root.absolutePath),
-            note = listOfNotNull("cut from ${request.baseBranch} ${base.take(SHORT_SHA)}", sdkWarning).joinToString("; "),
+            note = "cut from ${request.baseBranch} ${base.take(SHORT_SHA)}",
+            warning = androidSdk.provision(root, path),
         )
     }
 
@@ -106,7 +107,7 @@ class TicketBranches(
         )
         if (File(path, ".git").exists()) return ready
 
-        val reattachedReady = { ready.copy(note = androidSdk.provision(root, path)) }
+        val reattachedReady = { ready.copy(warning = androidSdk.provision(root, path)) }
 
         val branchExists = git.run(root, listOf("rev-parse", "--verify", "--quiet", "refs/heads/$branch")).ok
         val args = if (branchExists) {

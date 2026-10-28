@@ -5,7 +5,6 @@ import java.util.Properties
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -23,9 +22,12 @@ class AndroidSdkProvisionTest {
         File(worktree, "local.properties").takeIf { it.isFile }
             ?.let { f -> Properties().apply { f.inputStream().use { load(it) } }.getProperty("sdk.dir") }
 
+    /** A Gradle project: only those are provisioned. Untracked is enough, the check reads the main checkout. */
+    private fun gradleRepo(): File = newGitRepo().also { File(it, "settings.gradle.kts").writeText("rootProject.name = \"sdk\"\n") }
+
     @Test
     fun worktreeCreation_writesSdkDirFromTheMainCheckoutsLocalProperties() {
-        val repo = newGitRepo()
+        val repo = gradleRepo()
         val sdk = fakeSdk()
         File(repo, "local.properties").writeText("sdk.dir=${sdk.path.replace("\\", "\\\\")}\n")
 
@@ -35,12 +37,12 @@ class AndroidSdkProvisionTest {
         )
 
         assertEquals(sdk.path, sdkDir(cut.worktree.path))
-        assertFalse(cut.note.orEmpty().contains("no Android SDK"))
+        assertNull(cut.warning)
     }
 
     @Test
     fun theSettingIsUsedWhenTheMainCheckoutHasNoLocalProperties() {
-        val repo = newGitRepo()
+        val repo = gradleRepo()
         val sdk = fakeSdk()
         val cut = assertIs<TicketBranchOutcome.Ready>(
             TicketBranches(git, androidSdk = AndroidSdkProvision { if (it == AndroidSdkProvision.SETTING) sdk.path else null })
@@ -51,20 +53,32 @@ class AndroidSdkProvisionTest {
 
     @Test
     fun aMissingSdk_isOneClearMessageAndNoFile() {
-        val repo = newGitRepo()
+        val repo = gradleRepo()
         val cut = assertIs<TicketBranchOutcome.Ready>(
             TicketBranches(git, androidSdk = AndroidSdkProvision { null })
                 .ensure(TicketBranchRequest("ticket-cccc3333", "Sdk", repo, "HEAD")),
         )
         assertNull(sdkDir(cut.worktree.path))
-        val note = assertNotNull(cut.note)
-        assertEquals(1, Regex("no Android SDK found").findAll(note).count())
-        assertTrue(note.contains(AndroidSdkProvision.SETTING))
+        val warning = assertNotNull(cut.warning)
+        assertEquals(1, Regex("no Android SDK found").findAll(warning).count())
+        assertTrue(warning.contains(AndroidSdkProvision.SETTING))
+        assertEquals("cut from HEAD ${cut.worktree.base.take(8)}", cut.note, "the warning stays out of the cut note")
+    }
+
+    @Test
+    fun aRepositoryThatIsNoGradleProject_getsNoFileAndNoWarning() {
+        val repo = newGitRepo()
+        val cut = assertIs<TicketBranchOutcome.Ready>(
+            TicketBranches(git, androidSdk = AndroidSdkProvision { fakeSdk().path })
+                .ensure(TicketBranchRequest("ticket-dddd4444", "Sdk", repo, "HEAD")),
+        )
+        assertNull(sdkDir(cut.worktree.path))
+        assertNull(cut.warning)
     }
 
     @Test
     fun anExistingLocalProperties_isNeverOverwritten() {
-        val repo = newGitRepo()
+        val repo = gradleRepo()
         val wt = newGitRepo()
         File(wt, "local.properties").writeText("sdk.dir=/mine\n")
         assertNull(AndroidSdkProvision { fakeSdk().path }.provision(repo, wt))
