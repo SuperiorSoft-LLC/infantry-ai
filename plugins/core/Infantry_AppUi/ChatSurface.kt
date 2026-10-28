@@ -724,7 +724,7 @@ fun InterruptButton(agent: AgentView, live: Boolean, controller: Controller) {
         onClick = { actionScope.launch { controller.interrupt(agent.id) } },
         enabled = live && busy,
         modifier = Modifier.testTag(INTERRUPT_BUTTON_TAG),
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.DangerRed),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
     )
 }
 
@@ -936,7 +936,7 @@ internal fun PromptBox(
                     AhqIcons.Cancel, STOP_BACKGROUND_LABEL,
                     onClick = { actionScope.launch { controller.stopBackgroundProcesses(a.id) } }, shortcut = STOP_BACKGROUND_SHORTCUT,
                     enabled = live && backgroundProcessPids(a.session).isNotEmpty(),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.DangerRed),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
                 )
                 // SESSION-RM-1: on an ended session there is nothing left to end, so the same trash button removes it
                 // from the list (after the card menu's confirm). A session that has not ended keeps End session, enabled
@@ -946,7 +946,7 @@ internal fun PromptBox(
                     IconAction(
                         AhqIcons.DeleteForever, REMOVE_AGENT_LABEL,
                         onClick = { confirmingRemove = true }, enabled = live,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.DangerRed),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
                     )
                     if (confirmingRemove) {
                         RemoveAgentDialog(
@@ -959,7 +959,7 @@ internal fun PromptBox(
                         AhqIcons.DeleteForever, END_SESSION_LABEL,
                         onClick = { actionScope.launch { controller.endSession(a.id) } }, shortcut = END_SESSION_SHORTCUT, enabled = live,
                         style = IconActionStyle.FILLED,
-                        colors = ButtonDefaults.buttonColors(containerColor = Palette.DangerRed, contentColor = androidx.compose.ui.graphics.Color.White),
+                        colors = ButtonDefaults.buttonColors(containerColor = Palette.Danger, contentColor = androidx.compose.ui.graphics.Color.White),
                     )
                 }
                 var confirmingRestart by remember(a.id) { mutableStateOf(false) }
