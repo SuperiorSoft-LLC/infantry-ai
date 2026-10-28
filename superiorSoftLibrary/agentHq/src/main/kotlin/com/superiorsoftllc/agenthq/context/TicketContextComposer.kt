@@ -94,7 +94,9 @@ class TicketContextComposer(
         const val BG_RUN_LINE = "\nRun long commands (Gradle builds, test gates) as `agenthq bg run --notify --name <label> -- <cmd...>`: " +
             "it returns at once, your session shows Running, and the daemon mails you when the job ends (exit code + last lines), " +
             "matches a pattern or runs too long. Never sleep or poll: end your turn and continue when that mail arrives " +
-            "(`agenthq bg wait <id>` only if mail does not wake your harness). `agenthq bg list|status|logs|stop <id>` manage them."
+            "(`agenthq bg wait <id>` only if mail does not wake your harness). `agenthq bg list|status|logs|stop <id>` manage them. " +
+            "If `agenthq bg --help` does not list `run --notify` (an older CLI), run the command as a plain background job, end your turn " +
+            "and use `agenthq bg wait <id>` or read its log later; still never sleep or poll."
 
         /** TICKET-FILES (55476f3c): the related tickets' files are one indexed read, far cheaper than grepping for them. */
         const val RELATED_FILES_LINE = "\nBefore you grep or read around, call agenthq_ticket_related_files with this ticket's id (CLI: " +
