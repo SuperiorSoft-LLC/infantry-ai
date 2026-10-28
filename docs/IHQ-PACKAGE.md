@@ -27,3 +27,18 @@ A `.ihq` is a zip: `module.json` (its `jar` is `lib/<jar>`), `lib/*.jar`, and a 
 
 ## Multi-module package (S7)
 One .ihq carries many modules through a bundle: its module.json names the bundle module and an `entry` that is a `ModuleSource` (see `CoreModuleSource`); the loader asks it for every module it holds. One signature covers all of them, so a bundle signed with a trusted key installs as core tier. Build it signed: `./gradlew :superiorSoftLibrary:agenthqAppUi:appUiIhq -Pihq.keystore=<file> -Pihq.alias=<alias>` (password in IHQ_STOREPASS).
+
+## Composition package (NS3, docs/NORTH-STAR-DESIGN.md 1b)
+An exported section is a `.ihq` with no code: `module.json` (no `entry`/`jar`; `fills: [{"node": "infantry.shell.center", "layout": "layout/<name>.json"}]`,
+`dependencies`, `daemon: {needs, wants}`), `layout/*.json` (the 6t.5 page; per-item nodes carry `"template": true`) and `deps/*.ihq`
+(each dependency's published package, byte-identical, its own signature). `fills` still accepts the plain node-id string form.
+- Export: `LayoutExport.export` (pure: subtree -> page + dependencies + daemon union, or one refusal line per cause: not a type yet,
+  module not a separate package, locked node, secret reference) and `CompositionExport.export/write` (desktop). Published packages
+  are looked up as `<plugins root>/packages/<Module>.ihq`, then `-Dagenthq.packages`. Settings > Plugins > Registered > "Export section…"
+  writes `<stateDir>/exports/<Section>.ihq`.
+- Signing: `ExportKey` (per installation, `<stateDir>/export-key/export.p12` + `export.pass`, self-signed RSA cert built in-process
+  because the jlink runtime has no keytool). It never goes into trusted-keys, so a composition installs as community.
+- Install: `deps/*.ihq` go in first, one level only, each by the same checks with its own tier; same name+version already installed
+  = skipped, another version = refused. Then the composition folder (layout/ kept, deps/ dropped).
+- Load: a composition module is read by `DesktopPlugins.composition`; `TabFactory` builds each `fills[].layout` through the block-type
+  registry (`PageLayout.instantiate`) into the slot. A community composition needs the slot in its modules.json `allowOverride`.

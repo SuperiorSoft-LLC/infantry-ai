@@ -113,6 +113,18 @@ object DesktopPlugins {
         val factory = TabFactory(modules, preferences, services = { services[it] ?: NoPluginServices }, events = bus, statuses = statuses(resolution), changes = changes, shellOverrides = shellOverrides,
             allowInject = { config.setting(it).allowInject }, allowOverride = { config.setting(it).allowOverride })
         built = factory
+        // NS3: Registered > "Export section…": <stateDir>/exports/<Section>.ihq, signed with this installation's export key.
+        factory.sectionExporter = { node ->
+            val name = node.substringAfterLast('.').replaceFirstChar { it.uppercase() }.filter { it.isLetterOrDigit() }.ifEmpty { "Section" }
+            val out = File(File(stateDir, "exports"), "$name.ihq")
+            runCatching {
+                val key = ExportKey.loadOrCreate(File(stateDir, "export-key"))
+                when (val r = CompositionExport.export(factory, node, name, out, CompositionExport.packageDirs(root), key)) {
+                    is CompositionExport.Outcome.Written -> "Exported to ${r.file.absolutePath}"
+                    is CompositionExport.Outcome.Refused -> "Not exported: " + r.refusals.joinToString("; ")
+                }
+            }.getOrElse { "Not exported: ${it.message}" }
+        }
         factory.problems.forEach { say("[plugins] $it") }
         return Loaded(factory, root, config, demoLock, log, safeMode, unload = {
             modules.forEach { m -> runCatching { m.onStop() }.onFailure { say("[plugins] ${m.manifest.name} failed to stop: ${it.message}") } }
@@ -175,6 +187,20 @@ object DesktopPlugins {
         return result
     }
 
+    /**
+     * NS3: a composition (no code): its `fills[].layout` pages read from its folder. The trees are built later, through the
+     * block-type registry, by [TabFactory].
+     */
+    fun composition(m: com.superiorsoftllc.agenthq.plugin.api.ModuleManifest, tier: Tier, dir: File): AgentHqModule {
+        val layouts = m.fills.mapNotNull { f ->
+            val path = f.layout ?: return@mapNotNull null
+            val file = File(dir, path)
+            if (!file.isFile || !file.canonicalPath.startsWith(dir.canonicalPath + File.separator)) error("layout $path of ${f.node} is not in the module folder")
+            f.node to (kotlinx.serialization.json.Json.parseToJsonElement(file.readText()) as? kotlinx.serialization.json.JsonObject ?: error("layout $path is not a JSON object"))
+        }.toMap()
+        return AgentHqModule(m, tier = tier, layoutFills = layouts)
+    }
+
     /** Loaded first, in load order, then the rest by name: the order Settings > Plugins lists them. */
     private fun statuses(r: Resolution): List<ModuleStatus> =
         r.statuses.filter { it.state == ModuleState.LOADED } + r.statuses.filter { it.state != ModuleState.LOADED }.sortedBy { it.name }
@@ -185,6 +211,7 @@ object DesktopPlugins {
     private fun loadJar(s: ModuleStatus, services: com.superiorsoftllc.agenthq.plugin.api.PluginServices, loaders: MutableList<PluginClassLoader>): AgentHqModule {
         val m = s.manifest!!
         val dir = File(s.dir ?: error("no folder"))
+        if (m.entry.isNullOrBlank() && m.jar.isNullOrBlank() && m.fills.any { it.layout != null }) return composition(m, s.tier, dir)
         val entry = m.entry?.takeIf { it.isNotBlank() } ?: error("module.json has no entry class")
         val jar = File(dir, m.jar?.takeIf { it.isNotBlank() } ?: error("module.json has no jar"))
         if (!jar.isFile) error("jar ${m.jar} not found (build it first)")

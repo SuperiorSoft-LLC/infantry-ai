@@ -91,7 +91,7 @@ class DesktopDropIn(
 
         fun asks(m: ModuleManifest): List<NodeAsk> {
             fun ask(node: String, kind: NodeAsk.Kind) = NodeAsk(node, kind, node in CoreShell.locked)
-            return (m.fills.map { ask(it, NodeAsk.Kind.FILL) } + m.shell.map { ask(it.nodeId, NodeAsk.Kind.OVERRIDE) } +
+            return (m.fillNodes.map { ask(it, NodeAsk.Kind.FILL) } + m.shell.map { ask(it.nodeId, NodeAsk.Kind.OVERRIDE) } +
                 m.inject.map { ask(it.targetId, NodeAsk.Kind.INJECT) }).distinctBy { it.kind to it.node }
         }
     }

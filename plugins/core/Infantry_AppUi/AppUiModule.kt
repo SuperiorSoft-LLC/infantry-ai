@@ -38,7 +38,7 @@ val InfantryAppUi = AgentHqModule(
     ModuleManifest(
         name = "Infantry_AppUi", version = "1.0.0", author = "Infantry AI",
         description = "The app's UI in the shell's empty slots: title bar, side panels, chat, status bar, overlays and the roles window.",
-        fills = fills.map { it.id },
+        fills = fills.map { com.superiorsoftllc.agenthq.plugin.api.FillDeclaration(it.id) },
     ),
     fills = fills.associateBy { it.id },
     tabTrees = mapOf(

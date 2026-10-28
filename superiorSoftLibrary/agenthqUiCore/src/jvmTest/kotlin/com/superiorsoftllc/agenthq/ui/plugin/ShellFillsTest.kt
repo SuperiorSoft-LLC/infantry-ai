@@ -21,7 +21,7 @@ class ShellFillsTest {
     private fun Block.find(id: String): Block? = if (this.id == id) this else children.firstNotNullOfOrNull { it.find(id) }
 
     private fun module(name: String, fills: Map<String, Block>, declared: List<String> = fills.keys.toList(), tier: Tier = Tier.CORE) =
-        AgentHqModule(ModuleManifest(name, "1.0.0", author = "Acme", license = "NOASSERTION", fills = declared), tier = tier, fills = fills)
+        AgentHqModule(ModuleManifest(name, "1.0.0", author = "Acme", license = "NOASSERTION", fills = declared.map { com.superiorsoftllc.agenthq.plugin.api.FillDeclaration(it) }), tier = tier, fills = fills)
 
     @Test fun `with no module the shell draws its empty tree, every slot empty`() {
         val f = TabFactory(emptyList())
