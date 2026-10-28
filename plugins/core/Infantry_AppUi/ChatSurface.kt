@@ -720,7 +720,7 @@ fun InterruptButton(agent: AgentView, live: Boolean, controller: Controller) {
     val actionScope = rememberCoroutineScope()
     val busy = isBusy(agent)
     IconAction(
-        AhqIcons.Stop, "Interrupt",
+        AhqIcons.Stop, STOP_TURN_LABEL,
         onClick = { actionScope.launch { controller.interrupt(agent.id) } },
         enabled = live && busy,
         modifier = Modifier.testTag(INTERRUPT_BUTTON_TAG),
@@ -931,13 +931,16 @@ internal fun PromptBox(
                     }
                 }, shortcut = "Ctrl+R", enabled = canResume)
                 val running = a.session.state in setOf(SessionState.STARTING, SessionState.BUSY, SessionState.WAITING_INPUT)
+                // Ticket a7f33ba2: the old Kill slot reaps this session's background jobs and leaves the session alive.
                 IconAction(
-                    AhqIcons.Cancel, "Kill",
-                    onClick = { actionScope.launch { controller.kill(a.id) } }, shortcut = "Ctrl+Shift+K", enabled = live && running,
+                    AhqIcons.Cancel, STOP_BACKGROUND_LABEL,
+                    onClick = { actionScope.launch { controller.stopBackgroundProcesses(a.id) } }, shortcut = STOP_BACKGROUND_SHORTCUT,
+                    enabled = live && backgroundProcessPids(a.session).isNotEmpty(),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.DangerRed),
                 )
-                // SESSION-RM-1: on an ended session there is nothing left to force-kill, so the same trash button
-                // removes it from the list (after the card menu's confirm). A running or idle one keeps Force kill.
+                // SESSION-RM-1: on an ended session there is nothing left to end, so the same trash button removes it
+                // from the list (after the card menu's confirm). A session that has not ended keeps End session, enabled
+                // whatever its state (it used to need a running turn, so an IDLE session could not be ended).
                 if (a.session.state in ENDED_STATES) {
                     var confirmingRemove by remember(a.id) { mutableStateOf(false) }
                     IconAction(
@@ -953,9 +956,10 @@ internal fun PromptBox(
                     }
                 } else {
                     IconAction(
-                        AhqIcons.DeleteForever, "Force kill",
-                        onClick = { actionScope.launch { controller.kill(a.id, force = true) } }, shortcut = "Ctrl+Alt+K", enabled = live && running,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.DangerRed),
+                        AhqIcons.DeleteForever, END_SESSION_LABEL,
+                        onClick = { actionScope.launch { controller.endSession(a.id) } }, shortcut = END_SESSION_SHORTCUT, enabled = live,
+                        style = IconActionStyle.FILLED,
+                        colors = ButtonDefaults.buttonColors(containerColor = Palette.DangerRed, contentColor = androidx.compose.ui.graphics.Color.White),
                     )
                 }
                 var confirmingRestart by remember(a.id) { mutableStateOf(false) }

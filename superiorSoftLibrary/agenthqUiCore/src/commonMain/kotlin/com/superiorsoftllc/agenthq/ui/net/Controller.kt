@@ -1,6 +1,8 @@
 package com.superiorsoftllc.agenthq.ui.net
 
 import com.superiorsoftllc.agenthq.ui.model.AppState
+import com.superiorsoftllc.agenthq.ui.ENDED_STATES
+import com.superiorsoftllc.agenthq.ui.backgroundProcessPids
 import com.superiorsoftllc.agenthq.ui.model.CompactScreen
 import com.superiorsoftllc.agenthq.ui.model.PanelSide
 import com.superiorsoftllc.agenthq.ui.model.HarnessPickerAsk
@@ -1718,6 +1720,30 @@ class Controller(
 
     suspend fun kill(sessionId: String, force: Boolean = false): CommandResult =
         report(send(Envelope(Envelope.KILL, if (force) "$sessionId force" else sessionId)))
+
+    /**
+     * Ticket a7f33ba2: "End session" = the forced KILL (the session host's process tree and its leftover background
+     * processes go; history stays, Restart brings it back). Refused only for a session that has already ended.
+     */
+    suspend fun endSession(sessionId: String): CommandResult {
+        val s = _state.value.agents[sessionId]?.session ?: return report(CommandResult.Refused("no such session $sessionId"))
+        if (s.state in ENDED_STATES) return report(CommandResult.Refused("session $sessionId has already ended"))
+        return kill(sessionId, force = true)
+    }
+
+    /**
+     * Ticket a7f33ba2: "Stop background processes" = reap THIS session's background jobs ([backgroundProcessPids]) through
+     * the daemon's existing `processes reap` (ROGUE-1, process tree included); the session itself stays alive.
+     */
+    suspend fun stopBackgroundProcesses(sessionId: String): CommandResult {
+        val s = _state.value.agents[sessionId]?.session ?: return report(CommandResult.Refused("no such session $sessionId"))
+        val pids = backgroundProcessPids(s)
+        if (pids.isEmpty()) return report(CommandResult.Refused("session $sessionId has no background processes"))
+        if (!hasProcessWatch()) return report(CommandResult.Refused("this daemon has no process detector (contract 1.120.0)"))
+        var last: CommandResult = CommandResult.Refused("nothing reaped")
+        for (pid in pids) last = report(send(WireRequests.processes("reap", pid)))
+        return last
+    }
 
     /**
      * AGENT-UX-11: permanently remove [sessionId]'s durable record. The daemon refuses an unknown id
