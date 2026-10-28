@@ -19,6 +19,7 @@ import com.superiorsoftllc.agenthq.plugin.host.ServiceRegistry
 import com.superiorsoftllc.agenthq.plugin.host.SimpleEventBus
 import com.superiorsoftllc.agenthq.plugin.host.provideEvents
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
+import com.superiorsoftllc.agenthq.plugins.official.InfantryAgents
 import com.superiorsoftllc.agenthq.plugins.core.InfantryGit
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import kotlin.test.Test
@@ -171,8 +172,8 @@ class TabFactoryTest {
                 tier = Tier.COMMUNITY, panels = listOf(mine),
             )
         }
-        val core = CoreModules.factory.panels(Panels.LEFT).single { it.id == "infantry.agents" }
-        val f = TabFactory(CoreModules.all + m, preferences = listOf(AcceptedPreference("Acme_Hello", "infantry.agents", "acme.agents")))
+        val core = TabFactory(CoreModules.all + InfantryAgents).panels(Panels.LEFT).single { it.id == "infantry.agents" }
+        val f = TabFactory(CoreModules.all + InfantryAgents + m, preferences = listOf(AcceptedPreference("Acme_Hello", "infantry.agents", "acme.agents")))
         val placed = f.panels(Panels.LEFT).single { it.id == "infantry.agents" }
         assertEquals("Acme_Hello", placed.module)
         assertEquals(core.testTag, placed.testTag)
@@ -181,7 +182,7 @@ class TabFactoryTest {
         assertTrue(f.panels(Panels.LEFT).none { it.id == "acme.agents" }, "shown only as the replacement")
         assertEquals(emptyList(), f.problems)
 
-        val refused = TabFactory(CoreModules.all + m)
+        val refused = TabFactory(CoreModules.all + InfantryAgents + m)
         assertEquals("Infantry_Agents", refused.panels(Panels.LEFT).single { it.id == "infantry.agents" }.module)
         assertTrue(refused.panels(Panels.LEFT).none { it.id == "acme.agents" })
         assertTrue(refused.problems.any { "panel section acme.agents only replaces infantry.agents, which was not accepted" in it })

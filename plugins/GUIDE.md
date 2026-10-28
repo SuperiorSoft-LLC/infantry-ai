@@ -54,7 +54,7 @@ Everything is declared in `module.json` and registered under the same id. Anythi
   `registrar.panel(PanelProvider(id, panel, order, testTag) { ... })`. Use `"left"` or `"right"`. A section stacks
   by `order`. Below 100 it sits above the agents list (left) or the tab strip (right). At 100 or more it sits below
   them. `fill = true` makes the section share the panel's free height. The left panel's agents list is itself the
-  core module `Infantry_Agents`.
+  official module `Infantry_Agents`.
 - **Shell nodes** (replace or wrap a piece of the window itself): `"shell": [{ "node": "infantry.shell.footer",
   "name": "myBar", "mode": "wrap" }]` plus `registrar.shell("myBar", BlockOverride { scope, inner -> ... })`. The
   window is a tree of blocks, each with a node id (the list is pinned in `CoreShellTreeTest`; the tree is in
