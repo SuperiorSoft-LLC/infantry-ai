@@ -1884,10 +1884,11 @@ object WireRequests {
      * `command_catalog` for [sessionId]'s provider, filtered by [typed] (the text after the slash, as typed so far).
      * With no session (the New agent box) [provider] names whose catalog; null there means the daemon's default provider.
      */
-    fun commandCatalog(sessionId: String?, typed: String, provider: String? = null): Envelope = Envelope(
+    fun commandCatalog(sessionId: String?, typed: String, provider: String? = null, requestId: String? = null): Envelope = Envelope(
         Envelope.COMMAND_CATALOG,
         Json { encodeDefaults = true; explicitNulls = false }.encodeToString(CommandCatalogRequest.serializer(), CommandCatalogRequest(typed, provider)),
         sessionId,
+        requestId = requestId,
     )
 
     /** `project_list` (empty data): the daemon answers `projects` with every project in creation order. */
