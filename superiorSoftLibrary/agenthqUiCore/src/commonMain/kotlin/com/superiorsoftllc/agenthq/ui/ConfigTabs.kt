@@ -46,6 +46,7 @@ enum class ConfigEntry(val tab: ConfigTab, val title: String, val applies: Strin
     USER_PORTRAIT(ConfigTab.APPEARANCE, UserPortrait.TITLE, UserPortrait.APPLIES_TO, listOf("avatar", "picture", "photo")),
     MARKDOWN_ENGINE(ConfigTab.APPEARANCE, CHAT_MARKDOWN_TITLE, CHAT_MARKDOWN_APPLIES_TO, listOf("markdown", "table", "chat", "format", "renderer")),
     REASONING(ConfigTab.APPEARANCE, REASONING_TITLE, REASONING_APPLIES_TO, listOf("reasoning", "thinking", "thought", "panel", "inline")),
+    TAB_GROUPS(ConfigTab.APPEARANCE, com.superiorsoftllc.agenthq.ui.plugin.TabGroupsSetting.TITLE, com.superiorsoftllc.agenthq.ui.plugin.TabGroupsSetting.APPLIES_TO, listOf("settings", "tabs", "group", "sub-tabs", "strip")),
     AGENT_SCOPE(ConfigTab.GENERAL, AGENT_SCOPE_TITLE, AGENT_SCOPE_APPLIES_TO, listOf("project", "sidebar", "global")),
     PROGRESS_STALE(ConfigTab.GENERAL, PROGRESS_STALE_TITLE, PROGRESS_STALE_APPLIES_TO, listOf("progress", "stale", "minutes")),
     LIFECYCLE(ConfigTab.GENERAL, LifecycleSetting.TITLE, LifecycleSetting.APPLIES_TO, listOf("keep alive", "idle", "timeout")),

@@ -69,6 +69,15 @@ object TabContainers {
 }
 
 /**
+ * SETTINGS-TAB-1: the switch on a host tab (one that other tabs name as [TabProvider.parent]): `children.grouped`, a
+ * checkbox the host's module declares on its own node. True draws those tabs as the host's sub-tabs; false or unset
+ * leaves them in their strip and hides the host, so the old layout stays one click away.
+ */
+object TabGroups {
+    const val GROUPED = "children.grouped"
+}
+
+/**
  * PLUGINS-3: the window's two side panels. A panel is a column of [PanelProvider] sections in order; the right panel
  * also hosts the [TabContainers.RIGHT] strip, at [TABS_ORDER] (sections ordered below it draw above the strip).
  */
@@ -627,13 +636,42 @@ class TabFactory(
     /** The sub-tabs of [parentId], in order (the parent tab's stored order, without its disabled sub-tabs). */
     fun children(parentId: String): List<TabProvider> = arranged(parentId, declaredChildren(parentId))
 
-    /** P1: a container's top-level tabs in their declared order, disabled ones included. */
+    /**
+     * P1: a container's top-level tabs in their declared order, disabled ones included. SETTINGS-TAB-1: a tab whose
+     * parent does not group its sub-tabs now ([grouped]) is top level here, and that parent is not drawn.
+     */
     fun declaredTabs(container: String): List<TabProvider> =
-        providers.filter { it.container == container && it.parent == null }.sortedWith(compareBy({ it.order }, { it.id }))
+        providers.filter { it.container == container && hostOf(it.id) == null && !(isHost(it.id) && !grouped(it.id)) }
+            .sortedWith(compareBy({ it.order }, { it.id }))
 
-    /** P1: [parentId]'s sub-tabs in their declared order, disabled ones included. */
+    /** P1: [parentId]'s sub-tabs in their declared order, disabled ones included; none while it does not group them. */
     fun declaredChildren(parentId: String): List<TabProvider> =
-        providers.filter { it.parent == parentId }.sortedWith(compareBy({ it.order }, { it.id }))
+        providers.filter { hostOf(it.id) == parentId }.sortedWith(compareBy({ it.order }, { it.id }))
+
+    /**
+     * SETTINGS-TAB-1: whether host tab [hostId] draws the tabs that name it [TabProvider.parent] as its sub-tabs now: its
+     * own `children.grouped` setting ([TabGroups.GROUPED], stored on the host node); unset is false, so a host shows
+     * nothing until the owner switches it on and its sub-tabs stay in their strip.
+     */
+    fun grouped(hostId: String): Boolean = resolvedConfig.values(hostId).boolean(TabGroups.GROUPED) ?: false
+
+    /** SETTINGS-TAB-1: whether some loaded tab names [id] its parent. */
+    fun isHost(id: String): Boolean = providers.any { it.parent == id }
+
+    /** SETTINGS-TAB-1: every loaded host tab (one that some loaded tab names its parent), in declared order. */
+    fun hostTabs(): List<TabProvider> = providers.filter { isHost(it.id) }.sortedWith(compareBy({ it.order }, { it.id }))
+
+    /** SETTINGS-TAB-1: the tabs that name [hostId] their parent, grouped or not, in declared order. */
+    fun groupable(hostId: String): List<TabProvider> = providers.filter { it.parent == hostId }.sortedWith(compareBy({ it.order }, { it.id }))
+
+    /**
+     * SETTINGS-TAB-1: the tab [id] is drawn under now, or null when it is drawn in its strip: its declared parent while
+     * that parent is loaded and [grouped]. A parent whose module did not load leaves its sub-tabs in the strip.
+     */
+    fun hostOf(id: String): String? {
+        val parent = find(id)?.parent ?: return null
+        return parent.takeIf { find(it) != null && grouped(it) }
+    }
 
     /** P1: the node a container's strip settings are stored on (its [NodeRegistry.strips] node). */
     fun stripNode(container: String): String = NodeRegistry.strips.entries.firstOrNull { it.value == container }?.key ?: container
@@ -655,7 +693,8 @@ class TabFactory(
     /** Whether tab [id] is hidden by its strip's (or its parent tab's) settings. */
     fun isDisabled(id: String): Boolean {
         val t = find(id) ?: return false
-        return id in ChildrenControl.disabled(config, t.parent ?: stripNode(t.container)) || (t.parent?.let(::isDisabled) ?: false)
+        val host = hostOf(id)
+        return id in ChildrenControl.disabled(config, host ?: stripNode(t.container)) || (host?.let(::isDisabled) ?: false)
     }
 
     /** P1 step 2: whether [module] is granted node [node] by modules.json (`allowOverride` or `allowInject`). */

@@ -12,6 +12,7 @@ import com.superiorsoftllc.agenthq.ui.ConfigProgressStaleSection
 import com.superiorsoftllc.agenthq.ui.ConfigQuestionsSection
 import com.superiorsoftllc.agenthq.ui.ConfigReasoningSection
 import com.superiorsoftllc.agenthq.ui.ConfigRolesSection
+import com.superiorsoftllc.agenthq.ui.ConfigTabGroupsSection
 import com.superiorsoftllc.agenthq.ui.ConfigThemeSection
 import com.superiorsoftllc.agenthq.ui.ConfigToolApprovalSection
 import com.superiorsoftllc.agenthq.ui.ConfigUserPortraitSection
@@ -30,6 +31,7 @@ val ShellConfigSettings = GroupBlock(
         ConfigSectionBlock(ConfigEntry.BLUR, "blur") { c, m -> ConfigBlurSection(c, m) },
         ConfigSectionBlock(ConfigEntry.MARKDOWN_ENGINE, "markdownEngine") { c, m -> ConfigMarkdownEngineSection(c, m) },
         ConfigSectionBlock(ConfigEntry.REASONING, "reasoning") { c, m -> ConfigReasoningSection(c, m) },
+        ConfigSectionBlock(ConfigEntry.TAB_GROUPS, "tabGroups") { c, m -> ConfigTabGroupsSection(c, m) },
         ConfigSectionBlock(ConfigEntry.USER_PORTRAIT, "userPortrait") { c, m -> ConfigUserPortraitSection(c, m) },
         ConfigSectionBlock(ConfigEntry.AGENT_SCOPE, "agentScope") { c, m -> ConfigAgentScopeSection(c, m) },
         ConfigSectionBlock(ConfigEntry.PROGRESS_STALE, "progressStale") { c, m -> ConfigProgressStaleSection(c, m) },

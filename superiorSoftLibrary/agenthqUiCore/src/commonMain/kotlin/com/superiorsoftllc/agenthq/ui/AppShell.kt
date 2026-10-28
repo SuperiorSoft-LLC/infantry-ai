@@ -31,6 +31,8 @@ class ShellState(homeTab: String, rightHomeTab: String, flags: UiFlags, url: Str
     var roleFilter by mutableStateOf<String?>(null)
     var centerTab by mutableStateOf(homeTab)
     var rightTab by mutableStateOf(rightHomeTab)
+    // SETTINGS-TAB-1: the sub-tab picked in each host tab (host id -> sub-tab id); a host with none opens on its first.
+    val subTabs = androidx.compose.runtime.mutableStateMapOf<String, String>()
     var rightPanelWidth by mutableStateOf(RightPanelWidth.DEFAULT) // in-memory only: no UI-prefs store exists yet
     var sidebarWidth by mutableStateOf(SidebarWidth.DEFAULT) // M2-9: in-memory only, not persisted (owner's call)
     var showConnect by mutableStateOf(false)
