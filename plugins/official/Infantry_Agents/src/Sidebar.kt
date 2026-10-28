@@ -1,5 +1,10 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.agents
 
+import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
+import com.superiorsoftllc.agenthq.ui.shell.NoAgents
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -61,8 +66,6 @@ import com.superiorsoftllc.agenthq.ui.model.watchFlagOf
 import com.superiorsoftllc.agenthq.ui.model.AgentView
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.needsInput
-import com.superiorsoftllc.agenthq.ui.net.Controller
-import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import kotlin.time.Clock
 
 // S4c: the left panel's agent list and the centre's tab strip, split out of core App.kt (docs/SHELL-LEAKS.md).
@@ -355,21 +358,24 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
 }
 
 
-const val CENTER_TAB_BAR_TAG = "center-tab-bar"
 
 /**
- * The center pane's tab strip: the [LocalTabFactory]'s centre tabs in order; [current] is a tab id; [modifier] goes on the
- * strip's row (BLOCKS-LAYOUT L9b: the placement of `infantry.shell.center.chat.tabs`). Public so UI tests can read the labels.
+ * RUNTIME-21: the left panel's agents section, drawn from the window's [AgentsContext] (the shell keeps the panel frame).
+ * Draws nothing where there is no window.
  */
 @Composable
-fun CenterTabBar(state: AppState, current: String, modifier: Modifier = Modifier, onPick: (String) -> Unit) {
-    val factory = LocalTabFactory.current
-    val strip = factory.tabs(TabContainers.CENTER)
-    TabBar(
-        strip.map { factory.title(it, state) to (current == it.id) },
-        tagOf = { strip[it].testTag },
-        barTag = CENTER_TAB_BAR_TAG,
-        modifier = modifier,
-    ) { onPick(strip[it].id) }
+fun AgentsSection() {
+    val a = LocalShellContext.current?.agents ?: NoAgents
+    val state = a.state ?: return
+    val scope = rememberCoroutineScope()
+    Sidebar(
+        state, a.visible, a.query, a::setQuery, a.roleFilter, a::setRoleFilter, a.searchFocus,
+        onSelect = a::select,
+        onNew = a::newAgent,
+        onRemove = { id -> scope.launch { a.remove(id) } },
+        onAssign = { id, projectId -> scope.launch { a.assign(id, projectId) } },
+        projects = { ProjectsSidebar(state, onDismiss = a::dismissProjectRefusal) },
+        onOpenBoard = a.openBoard,
+        showReview = a.reviewLoaded,
+    )
 }
-

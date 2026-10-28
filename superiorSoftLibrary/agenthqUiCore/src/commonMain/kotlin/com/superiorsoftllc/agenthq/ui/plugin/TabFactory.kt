@@ -146,8 +146,6 @@ class TabContext(
     val transcript: @Composable () -> Unit,
     /** The platform services of the module drawing this tab, as its module.json and the owner allow. */
     val services: PluginServices = NoPluginServices,
-    /** PLUGINS-3: the window's agents list (search, filters, the list, New agent). Only the left panel has one. */
-    val agentsList: @Composable () -> Unit = {},
     /** RUNTIME-5: the sub-tab picked in a host tab (host id -> sub-tab id; null = none yet, the host opens on its first). */
     val subTab: (hostId: String) -> String? = { null },
     /** RUNTIME-5: remembers [subTabId] as the one picked in host [hostId] (the window owns it, while the app runs). */
@@ -168,7 +166,7 @@ class TabContext(
     }
 
     internal fun forModule(services: PluginServices) =
-        TabContext(state, controller, open, showChat, insertIntoChat, diffTarget, onOpenDiff, transcript, services, agentsList, subTab, pickSubTab)
+        TabContext(state, controller, open, showChat, insertIntoChat, diffTarget, onOpenDiff, transcript, services, subTab, pickSubTab)
 }
 
 /**

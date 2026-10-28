@@ -29,6 +29,7 @@ kotlin {
             api(project(":superiorSoftLibrary:agenthqUiCore"))
             implementation(compose.runtime)
             implementation(compose.foundation)
+            implementation(compose.material3)
         }
         // The ServiceLoader entry is JVM only: on Android the generated module list already names AgentsPlugin.
         jvmMain { resources.srcDir("jvmResources") }

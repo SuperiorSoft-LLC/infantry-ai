@@ -98,6 +98,55 @@ interface ShellContext {
     val processes: ProcessesContext get() = NoProcesses
     /** RUNTIME-20 (additive): what the official Infantry_Header (title bar, project picker) reads and asks of the window. */
     val header: HeaderContext get() = NoHeader
+    /** RUNTIME-21 (additive): what the official Infantry_Agents (the left panel's agents list) reads and asks of the window. */
+    val agents: AgentsContext get() = NoAgents
+}
+
+/**
+ * RUNTIME-21 (F5): the left panel's agents list behind the official Infantry_Agents module, which fills the panel
+ * section `infantry.agents`. The panel frame (width, background, resize handle, drawer) stays in the shell.
+ */
+interface AgentsContext {
+    /** The window's state; null where there is no window (the list draws nothing). */
+    val state: com.superiorsoftllc.agenthq.ui.model.AppState?
+    /** The agents the list shows (project scope applied). */
+    val visible: List<com.superiorsoftllc.agenthq.ui.model.AgentView>
+    val query: String
+    fun setQuery(q: String)
+    val roleFilter: String?
+    fun setRoleFilter(role: String?)
+    /** The search field's focus requester (Ctrl+K). */
+    val searchFocus: androidx.compose.ui.focus.FocusRequester
+    /** Selects agent [id] and shows its chat (leaving a compact window's drawer). */
+    fun select(id: String)
+    /** Opens the New agent dialog. */
+    fun newAgent()
+    suspend fun remove(id: String)
+    suspend fun assign(id: String, projectId: String)
+    /** Dismisses the daemon's newest project / workspace refusal. */
+    fun dismissProjectRefusal()
+    /** Opens the board; null when no module fills the board overlay (no Board button then). */
+    val openBoard: (() -> Unit)?
+    /** Whether the official Infantry_Review tab is loaded (the "To review" counter shows only then). */
+    val reviewLoaded: Boolean
+}
+
+/** No window: nothing to list, every action a no-op. */
+object NoAgents : AgentsContext {
+    override val state: com.superiorsoftllc.agenthq.ui.model.AppState? = null
+    override val visible: List<com.superiorsoftllc.agenthq.ui.model.AgentView> = emptyList()
+    override val query: String = ""
+    override fun setQuery(q: String) {}
+    override val roleFilter: String? = null
+    override fun setRoleFilter(role: String?) {}
+    override val searchFocus: androidx.compose.ui.focus.FocusRequester = androidx.compose.ui.focus.FocusRequester()
+    override fun select(id: String) {}
+    override fun newAgent() {}
+    override suspend fun remove(id: String) {}
+    override suspend fun assign(id: String, projectId: String) {}
+    override fun dismissProjectRefusal() {}
+    override val openBoard: (() -> Unit)? = null
+    override val reviewLoaded: Boolean = false
 }
 
 /**

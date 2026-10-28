@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.agents.*
+
 import com.superiorsoftllc.agenthq.plugins.official.header.*
 
 import androidx.compose.ui.test.ExperimentalTestApi
