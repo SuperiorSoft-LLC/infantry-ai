@@ -17,7 +17,7 @@ class RemoteAccessTest {
         val d = dir()
         assertEquals("127.0.0.1", RemoteAccess.resolveHost(d, noEnv))
         assertNull(RemoteAccess.resolveToken(d, noEnv))
-        assertNull(RemoteAccess.clientToken { if (it == "AGENTHQ_STATE_DIR") d.path else null })
+        assertNull(RemoteAccess.clientToken(getenv = { if (it == "AGENTHQ_STATE_DIR") d.path else null }))
     }
 
     @Test
@@ -62,7 +62,7 @@ class RemoteAccessTest {
         val first = RemoteAccess.resolveToken(d, noEnv)!!
         assertTrue(first.length >= 40)
         assertEquals(first, RemoteAccess.resolveToken(d, noEnv))
-        assertEquals(first, RemoteAccess.clientToken { if (it == "AGENTHQ_STATE_DIR") d.path else null })
+        assertEquals(first, RemoteAccess.clientToken(getenv = { if (it == "AGENTHQ_STATE_DIR") d.path else null }))
         // the generated token and the wildcard host satisfy the unchanged AccessPolicy
         AccessPolicy.of(RemoteAccess.resolveHost(d, noEnv), first)
     }
@@ -73,7 +73,7 @@ class RemoteAccessTest {
         RemoteAccess.save(d, RemoteAccess.Settings(remote = true, host = "100.64.1.2"))
         val env = mapOf("AGENTHQ_HOST" to "127.0.0.1", "AGENTHQ_TOKEN" to "x".repeat(40))
         assertEquals("127.0.0.1", RemoteAccess.resolveHost(d) { env[it] })
-        assertEquals("x".repeat(40), RemoteAccess.resolveToken(d) { env[it] })
+        assertEquals("x".repeat(40), RemoteAccess.resolveToken(d, getenv = { env[it] }))
         assertNull(RemoteAccess.storedToken(d), "an env token generates nothing")
     }
 
