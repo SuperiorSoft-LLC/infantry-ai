@@ -91,8 +91,10 @@ class TicketContextComposer(
         }
 
         /** `agenthq bg run`: a long gate the agent starts is flagged to the daemon, so the session reads Running, not idle. */
-        const val BG_RUN_LINE = "\nRun long commands (Gradle builds, test gates) as `agenthq bg run --name <label> -- <cmd...>` " +
-            "so your session shows Running while they work; `agenthq bg list|status|logs|stop <id>` manage them."
+        const val BG_RUN_LINE = "\nRun long commands (Gradle builds, test gates) as `agenthq bg run --notify --name <label> -- <cmd...>`: " +
+            "it returns at once, your session shows Running, and the daemon mails you when the job ends (exit code + last lines), " +
+            "matches a pattern or runs too long. Never sleep or poll: end your turn and continue when that mail arrives " +
+            "(`agenthq bg wait <id>` only if mail does not wake your harness). `agenthq bg list|status|logs|stop <id>` manage them."
 
         /**
          * MCP-1: every session the daemon spawns has Infantry AI's own MCP server, so the agent prefers its tools (no Tool

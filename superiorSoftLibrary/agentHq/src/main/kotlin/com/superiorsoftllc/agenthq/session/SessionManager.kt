@@ -198,6 +198,10 @@ class SessionManager(
     @Volatile
     var watchdogSink: ((SessionRecord, WatchdogExpiry) -> Unit)? = null
 
+    /** BG-NOTIFY (ticket 245a7d31): told of every scan pass and of every job dropped without its `done` (the daemon's job notifier). */
+    @Volatile
+    var bgJobListener: BgJobListener? = null
+
     /**
      * PROMPT-3: where a session adapter relays a Tool approval `ask` prompt; the daemon points it at its PendingPrompts.
      * Unset = nothing can prompt (approvals denied, questions unanswered).
@@ -372,6 +376,7 @@ class SessionManager(
      */
     fun scanBackgroundWork() {
         expireBgJobs()
+        bgJobListener?.let { l -> runCatching { l.scanned() } }
         runCatching { refreshAutoProgress() }
         for ((id, record) in sessions.entries.toList()) {
             val kept = record.keptProcess
@@ -481,9 +486,11 @@ class SessionManager(
     /** PROGRESS-S5: past durations for the opt-in estimated mode. The daemon sets a file-backed one in its state dir. */
     @Volatile var progressEstimates: ProgressEstimates = InMemoryProgressEstimates()
 
-    /** The wrapper's command ended: drop the job. */
-    fun bgJobDone(sessionId: String, jobId: String) {
+    /** The wrapper's command ended: drop the job. Returns the job dropped (null when it was not registered). */
+    fun bgJobDone(sessionId: String, jobId: String): BgJob? {
+        val job = sessions[sessionId]?.bgJobs?.firstOrNull { it.id == jobId }
         update(sessionId) { r -> if (r.bgJobs.none { it.id == jobId }) r else r.copy(bgJobs = r.bgJobs.filter { it.id != jobId }) }
+        return job
     }
 
     /** Jobs of [sessionId], or of every session when null. */
@@ -496,7 +503,11 @@ class SessionManager(
         for ((id, record) in sessions.entries.toList()) {
             if (record.bgJobs.isEmpty()) continue
             val live = record.bgJobs.filter { pidProbe(it.pid) && now - it.lastBeat <= BG_JOB_STALE_MS }
-            if (live.size != record.bgJobs.size) update(id) { it.copy(bgJobs = live) }
+            if (live.size != record.bgJobs.size) {
+                update(id) { it.copy(bgJobs = live) }
+                val gone = record.bgJobs - live.toSet()
+                bgJobListener?.let { l -> gone.forEach { j -> runCatching { l.expired(id, j) } } }
+            }
         }
     }
 

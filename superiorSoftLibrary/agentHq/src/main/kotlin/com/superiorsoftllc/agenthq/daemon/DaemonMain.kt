@@ -1272,6 +1272,15 @@ class AgentHqDaemon(
                 ticketOf = { id -> store.transaction { store.tickets.get(id) } },
                 idleNoticeMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.IDLE_NOTICE_MINUTES), LimitRegistry.IDLE_NOTICE_MINUTES) },
             ).also { it.start() }
+            // BG-NOTIFY (ticket 245a7d31): `bg run --notify` jobs mail their session on exit / pattern / timeout, waking it.
+            val bgNotifier = com.superiorsoftllc.agenthq.mailbox.BgJobNotifier(
+                jobs = { manager.list().flatMap { r -> r.bgJobs.map { r.id to it } } },
+                send = mail::send,
+                defaultTailLines = { settings.limit(LimitRegistry.BG_NOTIFY_TAIL_LINES).toInt() },
+                defaultTimeoutMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.BG_NOTIFY_TIMEOUT_MINUTES), LimitRegistry.BG_NOTIFY_TIMEOUT_MINUTES) },
+                patternGraceMs = { settings.limit(LimitRegistry.BG_NOTIFY_PATTERN_GRACE_SECONDS) * 1000L },
+            )
+            manager.bgJobListener = bgNotifier
             // PIPELINE-WATCHDOG: derives per-agent pending/stalled/quiet state, nudges, then tells the PM and the owner.
             val agentWatchdog = com.superiorsoftllc.agenthq.mailbox.AgentWatchdog(
                 sessions = manager, mailbox = mailbox, send = mail::send, attention = attention,
@@ -3070,7 +3079,12 @@ private suspend fun handleConnection(
                         }
                         "done" -> {
                             require(sid != null && req.jobId != null) { "done expects a sessionId and a jobId" }
-                            manager.bgJobDone(sid, req.jobId)
+                            manager.bgJobDone(sid, req.jobId)?.let { job ->
+                                (manager.bgJobListener as? com.superiorsoftllc.agenthq.mailbox.BgJobNotifier)?.let { n ->
+                                    runCatching { n.done(sid, job, req.exitCode, req.tail) }
+                                        .onFailure { System.err.println("[agentHq] bg notify failed for ${job.id}: ${it.message}") }
+                                }
+                            }
                         }
                         "list" -> Unit
                         else -> throw IllegalArgumentException("unknown op '${req.op.take(40)}'")
