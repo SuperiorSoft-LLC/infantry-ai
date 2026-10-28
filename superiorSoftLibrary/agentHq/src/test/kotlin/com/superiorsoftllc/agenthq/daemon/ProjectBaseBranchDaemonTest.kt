@@ -155,7 +155,7 @@ class ProjectBaseBranchDaemonTest {
             val tb = start("tb env", b, "p2")
             assertEquals(developSha, ta.base, "AGENTHQ_BASE_BRANCH overrides HEAD for project A")
             assertEquals(developSha, tb.base, "AGENTHQ_BASE_BRANCH overrides HEAD for project B")
-            assertEquals("cut from develop ${developSha.take(8)} (AGENTHQ_BASE_BRANCH)", ta.start?.detail)
+            assertEquals("cut from develop ${developSha.take(8)} (AGENTHQ_BASE_BRANCH)", ta.start?.detail?.replace(Regex("; no Android SDK found.*?in this worktree"), ""))
         }
     }
 
@@ -177,10 +177,10 @@ class ProjectBaseBranchDaemonTest {
             val tb = start("tb", b, "p2")
             assertEquals(developSha, ta.base, "A records develop's commit")
             assertEquals(developSha, tipOf(daemonRepo, ta), "git: A's ticket branch is at develop's commit")
-            assertEquals("cut from develop ${developSha.take(8)} (project base)", ta.start?.detail)
+            assertEquals("cut from develop ${developSha.take(8)} (project base)", ta.start?.detail?.replace(Regex("; no Android SDK found.*?in this worktree"), ""))
             assertEquals(head, tb.base, "B records HEAD's commit")
             assertEquals(head, tipOf(daemonRepo, tb), "git: B's ticket branch is at HEAD")
-            assertEquals("cut from HEAD ${head.take(8)}", tb.start?.detail)
+            assertEquals("cut from HEAD ${head.take(8)}", tb.start?.detail?.replace(Regex("; no Android SDK found.*?in this worktree"), ""))
         }
     }
 
@@ -301,7 +301,7 @@ class ProjectBaseBranchDaemonTest {
             assertEquals(TicketStatus.IN_PROGRESS, t.status)
             assertEquals(mvpSha, t.base, "cut from feature-agenthq-mvp's commit, not the main checkout's HEAD")
             assertEquals(mvpSha, tipOf(main, t))
-            assertEquals("cut from feature-agenthq-mvp ${mvpSha.take(8)} (project base)", t.start?.detail)
+            assertEquals("cut from feature-agenthq-mvp ${mvpSha.take(8)} (project base)", t.start?.detail?.replace(Regex("; no Android SDK found.*?in this worktree"), ""))
             assertEquals("half-written", File(main, "README.md").readText().trim(), "the main checkout's edit stays put")
         }
     }
@@ -331,7 +331,7 @@ class ProjectBaseBranchDaemonTest {
             assertEquals(tip, t.base, "the branch's tip at start time, not at set time")
             assertEquals(tip, tipOf(daemonRepo, t), "git: the ticket branch contains the base's current tip")
             assertTrue(tip != head, "and not the main checkout's HEAD")
-            assertEquals("cut from feature-agenthq-mvp ${tip.take(8)} (project base)", t.start?.detail)
+            assertEquals("cut from feature-agenthq-mvp ${tip.take(8)} (project base)", t.start?.detail?.replace(Regex("; no Android SDK found.*?in this worktree"), ""))
         }
     }
 

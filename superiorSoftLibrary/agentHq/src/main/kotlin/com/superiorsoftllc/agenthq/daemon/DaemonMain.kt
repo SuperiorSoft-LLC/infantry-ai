@@ -1105,9 +1105,10 @@ class AgentHqDaemon(
             val handover = SessionHandover(manager, board::brief, handoffTimeoutMs)
             // GAP-006b: a first turn of a worker whose brief never landed carries it; the sweep enforces the in-progress invariant.
             manager.briefFor = board::brief
-            java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
+            val workerSweepExec = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
                 Thread(r, "agenthq-ticket-worker-sweep").also { it.isDaemon = true }
-            }.scheduleWithFixedDelay({
+            }
+            workerSweepExec.scheduleWithFixedDelay({
                 runCatching {
                     val graceMs = LimitRegistry.minutesMs(settings.limit(LimitRegistry.UNBRIEFED_GRACE_MINUTES), LimitRegistry.UNBRIEFED_GRACE_MINUTES)
                     board.sweepWorkers(graceMs) { ticketId, sessionId, detail ->
@@ -1116,6 +1117,8 @@ class AgentHqDaemon(
                     }
                 }.onFailure { System.err.println("[agentHq] ticket worker sweep failed: ${it.message}") }
             }, 60L, 60L, java.util.concurrent.TimeUnit.SECONDS)
+            // Closed with the daemon (the sweep thread used to outlive every daemon).
+            val workerSweepCloser = AutoCloseable { workerSweepExec.shutdownNow() }
             // E1-c (contract 1.62.0): the story frames are deprecated shims over the ticket board. An old story id
             // resolves through E1-a's `story_migration`; a create that names an epic pushes that epic's frame (its
             // storyIds now list the new ticket) to every client, exactly the frame an `epic_save` answers with.
@@ -1517,7 +1520,7 @@ class AgentHqDaemon(
                 ownerQuestions = ownerQuestions,
                 handover = handover,
                 processWatch = processWatch,
-                background = listOf(AutoCloseable { usageRefresher.stop() }, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }),
+                background = listOf(AutoCloseable { usageRefresher.stop() }, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }),
                 processWatchScheduler = processWatchScheduler,
             )
         }
