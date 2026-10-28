@@ -1,12 +1,19 @@
 package com.superiorsoftllc.agenthq.ui
 
+import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertHeightIsEqualTo
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.superiorsoftllc.agenthq.ui.model.AppState
@@ -106,6 +113,65 @@ class NewAgentDialogUiTest {
         onNodeWithTag(NEW_AGENT_MODEL_TAG_PREFIX + "haiku").performClick()
         onNodeWithTag(NEW_AGENT_TASK_TAG).performTextInput("go")
         onNodeWithTag(NEW_AGENT_ADD_TAG).assertIsEnabled()
+    }
+
+    /** Ticket 90580b06: many roles and a tall executor step push the required task field below the fold. */
+    private val crowded = state.copy(roles = (1..12).map { Role("role$it", "Role number $it", "#334455") }, roleBindings = emptyMap())
+
+    private fun ComposeUiTest.pickRoleAndModel() {
+        onNodeWithTag(NEW_AGENT_ROLE_TAG_PREFIX + "role1").performClick()
+        onNodeWithTag(NEW_AGENT_HARNESS_TAG_PREFIX + "claude").performScrollTo().performClick()
+        onNodeWithTag(NEW_AGENT_MODEL_SEARCH_TAG).performScrollTo().performTextInput("son")
+        onNodeWithTag(NEW_AGENT_MODEL_TAG_PREFIX + "sonnet").performScrollTo().performClick()
+        onNodeWithTag(NEW_AGENT_ADD_HINT_TAG).assertTextContains("first task", substring = true)
+        // Back to the top, as a person who just picked lands: the task field is out of sight again.
+        onNodeWithTag(NEW_AGENT_ROLE_SEARCH_TAG).performScrollTo()
+    }
+
+    @Test
+    fun `at 1280x800 the clipped edge shows a scroll cue and the Add hint jumps to the missing task field`() = runDesktopComposeUiTest(1280, 800) {
+        setContent { NewAgentDialog(crowded, { _, _, _ -> null }, {}) }
+        // Required steps say so in words, not by a symbol alone.
+        onNodeWithTag(NEW_AGENT_REQUIRED_TAG_PREFIX + "ROLE").assertExists()
+        onNodeWithTag(NEW_AGENT_REQUIRED_TAG_PREFIX + "TASK").assertExists()
+        pickRoleAndModel()
+
+        // The content runs past the bottom edge: the fade marks it, and the task field is out of sight.
+        onNodeWithTag(SCROLL_CUE_END_TAG).assertExists()
+        onNodeWithTag(NEW_AGENT_TASK_TAG).assertIsNotDisplayed()
+        onNodeWithTag(NEW_AGENT_ADD_TAG).assertIsNotEnabled()
+        onNodeWithTag(NEW_AGENT_ADD_HINT_TAG).assertTextContains("first task", substring = true)
+
+        // The hint names the missing field and, clicked, scrolls to it and focuses it.
+        onNodeWithTag(NEW_AGENT_ADD_HINT_TAG).performClick()
+        waitForIdle()
+        onNodeWithTag(NEW_AGENT_TASK_TAG).assertIsDisplayed().assertIsFocused()
+        onNodeWithTag(NEW_AGENT_TASK_TAG).performTextInput("go")
+        onNodeWithTag(NEW_AGENT_ADD_HINT_TAG).assertDoesNotExist()
+        onNodeWithTag(NEW_AGENT_ADD_TAG).assertIsEnabled()
+    }
+
+    @Test
+    fun `on a phone-width window the hint still reaches the task field`() = runDesktopComposeUiTest(390, 740) {
+        setContent { NewAgentDialog(crowded, { _, _, _ -> null }, {}) }
+        pickRoleAndModel()
+        onNodeWithTag(SCROLL_CUE_END_TAG).assertExists()
+        onNodeWithTag(NEW_AGENT_ADD_HINT_TAG).assertIsDisplayed().performClick()
+        waitForIdle()
+        onNodeWithTag(NEW_AGENT_TASK_TAG).assertIsDisplayed()
+        onNodeWithTag(NEW_AGENT_ADD_TAG).assertIsDisplayed()
+    }
+
+    @Test
+    fun `the role grid shows whole rows only and says when more roles sit below`() = runDesktopComposeUiTest(1280, 800) {
+        setContent { NewAgentDialog(crowded, { _, _, _ -> null }, {}) }
+        // Three whole 48dp rows and two 6dp gaps: no row cut in half.
+        onNodeWithTag(NEW_AGENT_ROLE_GRID_TAG).assertHeightIsEqualTo(156.dp)
+        onNodeWithTag(NEW_AGENT_MORE_ROLES_TAG).assertExists()
+        // A search that leaves one row: the grid shrinks to it and the line goes.
+        onNodeWithTag(NEW_AGENT_ROLE_SEARCH_TAG).performTextInput("role12")
+        onNodeWithTag(NEW_AGENT_ROLE_GRID_TAG).assertHeightIsEqualTo(48.dp)
+        onNodeWithTag(NEW_AGENT_MORE_ROLES_TAG).assertDoesNotExist()
     }
 
     @Test

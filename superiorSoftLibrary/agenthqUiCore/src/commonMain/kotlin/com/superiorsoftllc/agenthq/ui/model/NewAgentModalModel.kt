@@ -30,14 +30,24 @@ data class NewAgentModalModel(
     /** The executor step stays closed until a role is chosen. */
     val executorOpen: Boolean get() = roleId != null
 
+    /** The first required field still empty, top to bottom, or null when Add can go. The modal jumps to it. */
+    val missingField: NewAgentField?
+        get() = when {
+            roleId == null -> NewAgentField.ROLE
+            executor.harness == null -> NewAgentField.HARNESS
+            executor.model == null -> NewAgentField.MODEL
+            task.isBlank() -> NewAgentField.TASK
+            else -> null
+        }
+
     /** Why Add is disabled, or null when it is enabled. Shown beside the button, never silent. */
     val addBlockedReason: String?
-        get() = when {
-            roleId == null -> "Pick a role first"
-            executor.harness == null -> "Pick a harness"
-            executor.model == null -> "Pick a model"
-            task.isBlank() -> "Type the agent's first task"
-            else -> null
+        get() = when (missingField) {
+            NewAgentField.ROLE -> "Pick a role first"
+            NewAgentField.HARNESS -> "Pick a harness"
+            NewAgentField.MODEL -> "Pick a model"
+            NewAgentField.TASK -> "Type the agent's first task"
+            null -> null
         }
 
     val canAdd: Boolean get() = addBlockedReason == null
@@ -60,3 +70,6 @@ data class NewAgentModalModel(
     /** The `new` frame's data for Add: the picked harness+model (null = daemon defaults), the role, the role binding's effort. */
     fun spawnData(): String = spawnOptionsData(executor.picked, roleId?.let { bindings[it]?.effort }, roleId)
 }
+
+/** The New agent modal's required fields, in screen order. */
+enum class NewAgentField { ROLE, HARNESS, MODEL, TASK }
