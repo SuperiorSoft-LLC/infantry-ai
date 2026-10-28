@@ -213,6 +213,20 @@ object LimitRegistry {
         max = 3600, zeroMeans = "noticed at the next watch pass",
     )
 
+    /** TICKET-FILES (ticket 55476f3c): the most lines `ticket files` / `ticket_files` / `ticket_related_files` print. */
+    val TICKET_FILES_MAX_LINES = LimitDef(
+        "limits.ticketFiles.maxLines", 60, "lines",
+        "The most file lines `agenthq ticket files` and the ticket_files / ticket_related_files tools print in one answer; the rest is counted, never printed.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
+    /** TICKET-FILES: how many related tickets `ticket_related_files` unions the files of. */
+    val TICKET_FILES_RELATED_TOP = LimitDef(
+        "limits.ticketFiles.relatedTop", 5, "tickets",
+        "How many related tickets (ranked by the Jaccard overlap of their changed files) ticket_related_files and `agenthq ticket files <id> --related` take the files of.",
+        min = 1, max = 100, zeroIsUnlimited = false,
+    )
+
     val ALL: List<LimitDef> = listOf(
         MAX_PER_POD, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
@@ -220,6 +234,7 @@ object LimitRegistry {
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
+        TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
     )
 
     /** A minutes limit as milliseconds; 0 on an unlimited-capable one = [Long.MAX_VALUE] (never reached). */

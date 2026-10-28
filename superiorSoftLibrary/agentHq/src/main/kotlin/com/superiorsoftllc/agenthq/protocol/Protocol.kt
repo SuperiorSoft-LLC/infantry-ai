@@ -354,6 +354,12 @@ data class Envelope(
         // Contract 1.121.0: `usage_set` (a `UsageSet`): a meter's manual percent / override, or the pacing rule; answered by `usage_report`.
         const val USAGE_SET = "usage_set"
 
+        // Contract 1.137.0 (TICKET-FILES): `ticket_files` (a `TicketFilesQuery`) is answered by `ticket_files_report`
+        // (a `TicketFilesReport`: capped compact text): the files a ticket changed, the tickets a path glob was
+        // changed by, the files of its related tickets, or a backfill from git history.
+        const val TICKET_FILES = "ticket_files"
+        const val TICKET_FILES_REPORT = "ticket_files_report"
+
         // Contract 1.14.0 -- story 9.5: triggers. Changes are pushed to every client.
         const val TRIGGER_SAVE = "trigger_save"
         const val TRIGGER_LIST = "trigger_list"

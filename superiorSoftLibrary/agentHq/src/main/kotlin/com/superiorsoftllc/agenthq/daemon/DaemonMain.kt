@@ -1173,9 +1173,24 @@ class AgentHqDaemon(
                     for (client in clients) client.trySend(pushed)
                 },
             )
+            // TICKET-FILES (55476f3c): a ticket that goes done records the files it changed (one git diff, off the board's
+            // lock, on its own thread) and pins its tip under refs/agenthq/tickets/<id>.
+            val ticketFiles = com.superiorsoftllc.agenthq.ticketfiles.TicketFiles(
+                db = (store as SqlAgentHqStore).database,
+                tickets = store.tickets::all,
+                repoFor = { projectId -> board.cutRepo(projectId) },
+            )
+            val ticketFilesText = com.superiorsoftllc.agenthq.ticketfiles.TicketFilesText(ticketFiles) { id -> store.tickets.get(id)?.title }
+            val ticketFilesExec = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+                Thread(r, "agenthq-ticket-files").also { it.isDaemon = true }
+            }
             board.transitionSink = { ticketId, status ->
                 triggers.onTicketTransition(ticketId, status)
                 doneWorkerReaper.onTicketTransition(ticketId, status)
+                if (status == com.superiorsoftllc.agenthq.protocol.TicketStatus.DONE) ticketFilesExec.execute {
+                    runCatching { store.tickets.get(ticketId)?.let(ticketFiles::record) }
+                        .onFailure { System.err.println("[agentHq] ticket files of $ticketId not recorded: ${it.message}") }
+                }
             }
             // E1-a: fold the story board into the ticket board, once; idempotent, resumes after a crash. A failure is
             // logged and the daemon still starts (the next start retries the stories not yet mapped).
@@ -1468,6 +1483,13 @@ class AgentHqDaemon(
                             spawnGuard,
                             limits = limits,
                             usagePacing = usagePacing,
+                            ticketFiles = { query ->
+                                ticketFilesText.answer(
+                                    query,
+                                    settings.limit(LimitRegistry.TICKET_FILES_MAX_LINES).toInt(),
+                                    settings.limit(LimitRegistry.TICKET_FILES_RELATED_TOP).toInt(),
+                                )
+                            },
                             cliLocations = cliLocations,
                             harnessInstaller = harnessInstaller,
                             toolApproval = toolApproval,
@@ -2033,6 +2055,8 @@ private suspend fun handleConnection(
     limits: LimitService = LimitService.NONE,
     /** USAGE-PACE (1.119.0): the meters and allowances a `usage_get` request reads. */
     usagePacing: UsagePacing = UsagePacing({ emptyList() }, { com.superiorsoftllc.agenthq.usage.PacingRule.DEFAULT }, { emptyMap() }, { emptyMap() }, { emptyList() }),
+    /** TICKET-FILES (contract 1.137.0): answers `ticket_files` (query -> capped text); null = this daemon serves none. */
+    ticketFiles: ((com.superiorsoftllc.agenthq.ticketfiles.TicketFilesQuery) -> String)? = null,
     /** CLIPATH-1 (contract 1.73.0): `cli_locations` / `cli_location_set`; null = this daemon serves neither. */
     cliLocations: com.superiorsoftllc.agenthq.executables.CliLocationService? = null,
     /** HARNESS-INSTALL-1 (contract 1.100.0): `harness_install_status` / `harness_install`; null = this daemon serves neither. */
@@ -2602,6 +2626,23 @@ private suspend fun handleConnection(
                 // U1 (contract 1.59.0): a live read can take 12 s per source, so it is answered off the request loop.
                 Envelope.LIMITS -> {
                     session.launch(kotlinx.coroutines.Dispatchers.IO) { outgoing.trySend(limitsEnvelope(limits.snapshot())) }
+                    null
+                }
+
+                // TICKET-FILES (1.137.0): indexed SQL reads, or a backfill that runs git: both off the request loop.
+                Envelope.TICKET_FILES -> {
+                    session.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        val answer = try {
+                            val serve = ticketFiles ?: throw IllegalArgumentException("this daemon has no ticket files")
+                            val text = serve(com.superiorsoftllc.agenthq.ticketfiles.TicketFilesQuery.decode(envelope.data))
+                            Envelope(Envelope.TICKET_FILES_REPORT, com.superiorsoftllc.agenthq.ticketfiles.TicketFilesReport(text).encode())
+                        } catch (e: IllegalArgumentException) {
+                            Envelope(Envelope.ERROR, "ticket_files refused: ${e.message ?: "invalid request"}")
+                        } catch (e: Exception) {
+                            Envelope(Envelope.ERROR, "ticket_files failed: ${e.message ?: e::class.simpleName}")
+                        }
+                        outgoing.trySend(answer)
+                    }
                     null
                 }
 
