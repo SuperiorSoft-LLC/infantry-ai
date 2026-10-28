@@ -56,20 +56,26 @@ fun runRealDaemonUi(
     logsDir: File? = null,
     stateLock: StateDirLock.Held? = null,
     updates: ((exit: () -> Unit, runningAgents: () -> Int) -> UpdateService)? = null,
+    /** NS5: a shell app passes its [DaemonLauncher]'s server (own state dir, seeded); null = this build has no daemon. */
+    local: LocalServer? = InProcessDaemon(stateLock),
 ) {
     val headless = RealDaemonLaunch.headless { agentHqSetting(it) }
     val servers = KeystoreSavedServers(stateDir())
     val activeServer = ActiveServerFile(stateDir())
-    val local = InProcessDaemon(stateLock)
     // SWITCH-1: the window opens on the remote server last picked (the installed thin client of a headless / Docker
     // server) WITHOUT starting this machine's daemon; "This computer" starts it on demand. Headless always runs it.
     val remote = if (headless) null else activeServer.read()?.let { url -> servers.list().firstOrNull { it.url == url } }
     // SPLASH-ALL-1: the window opens (on the splash) before this computer's daemon starts; headless starts it here.
-    val startLocal = { local.start()?.url ?: exitProcess(2) }
+    val startLocal = {
+        local?.start()?.url ?: run {
+            if (local == null) System.err.println("[agentHq-ui] this build has no daemon and no server is configured")
+            exitProcess(2)
+        }
+    }
     if (headless) startLocal()
     if (remote != null) println("[agentHq-ui] opening on remote server '${remote.name}' (${remote.url}); this computer's daemon is not started")
 
-    val updater = updates?.invoke({ local.stop(); exitProcess(0) }, local::runningAgents)
+    val updater = updates?.invoke({ local?.stop(); exitProcess(0) }, { (local as? InProcessDaemon)?.runningAgents() ?: 0 })
     // UPDATE-1: on start, off the UI thread; a failure is a dismissable card, never a blocked window.
     updater?.check(manual = false)
 
@@ -103,18 +109,23 @@ fun runRealDaemonUi(
             }
         }
     } finally {
-        local.stop()
+        local?.stop()
     }
 }
 
 /** SWITCH-1: the in-process daemon behind "This computer"; started once, on demand, and stopped when the app exits. */
-internal class InProcessDaemon(private val stateLock: StateDirLock.Held?) : LocalServer {
+internal class InProcessDaemon(
+    private val stateLock: StateDirLock.Held?,
+    /** NS5: app.json's `seedProject`, created on the first start of a bundled app daemon ([SeedProject]). */
+    private val seedProject: String? = null,
+) : LocalServer {
     private var daemon: AgentHqDaemon? = null
     private var wsUrl: String? = null
 
     @Synchronized
     override fun start(): LocalEndpoint? {
         wsUrl?.let { return LocalEndpoint(it, RemoteAccess.clientToken()) }
+        seedProject?.let { SeedProject.onFirstStart(File(AgentHqDaemon.defaultDbPath()), it) }
         val started = try {
             // INSTALL-REFOCUS-1: the installed app (it holds the state-dir lock) answers a refused second launch's activation.
             if (stateLock != null) AgentHqDaemon.fromEnv(WindowActivation.route) else AgentHqDaemon.fromEnv()

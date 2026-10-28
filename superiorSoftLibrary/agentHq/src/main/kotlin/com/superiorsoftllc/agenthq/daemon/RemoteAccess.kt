@@ -78,8 +78,9 @@ object RemoteAccess {
     /**
      * The bind host: `AGENTHQ_HOST` when set; else, with `remote=true`, the file's `host=` or the wildcard
      * `0.0.0.0` (loopback clients keep working, the Tailscale address is reachable); else loopback.
+     * NS5: a system property of the same name wins ([agentHqSetting]), so a shell app pins its bundled daemon to loopback.
      */
-    fun resolveHost(dir: File, getenv: (String) -> String? = InfantryEnv::get): String {
+    fun resolveHost(dir: File, getenv: (String) -> String? = { agentHqSetting(it) }): String {
         getenv("AGENTHQ_HOST")?.let { return it }
         val settings = load(dir)
         return if (settings.remote) settings.host ?: "0.0.0.0" else "127.0.0.1"

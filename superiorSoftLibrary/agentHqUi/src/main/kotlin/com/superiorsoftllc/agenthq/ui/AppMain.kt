@@ -17,9 +17,12 @@ import com.superiorsoftllc.agenthq.daemon.StateDirLock
  */
 fun main(args: Array<String>) {
     safeModeFlag(args)
-    // NS4: --app <dir> (shell builds): app.json + <dir>/plugins as the plugins root. The per-app state dir is NS5's.
-    ShellApp.apply(args)
-    if (LaunchProfile.isInstalled()) {
+    // NS4: --app <dir> (shell builds): app.json + <dir>/plugins as the plugins root.
+    // NS5/NS6a: a shell app never runs on the Infantry install's (or the dev) daemon or state: it has its own.
+    val app = ShellApp.apply(args)
+    if (app != null) {
+        runShellApp(app)
+    } else if (LaunchProfile.isInstalled()) {
         // PKG-3: the state dir decides where the log goes, so resolving it comes first; its override warnings are
         // held and written into the log once it is open, so a Start-menu launch (no console) keeps every line.
         val early = ByteArrayOutputStream()
@@ -49,10 +52,33 @@ fun main(args: Array<String>) {
         }
         // UPDATE-1: only the installed profile gets an updater (a dev build never updates itself).
         val stateDir = File(pinned.getValue("AGENTHQ_STATE_DIR"))
-        runRealDaemonUi(logsDir = logs?.dir, stateLock = stateLock) { exit, running -> InstalledUpdates.service(installed = true, stateDir = stateDir, exit = exit, runningAgents = running) }
+        runRealDaemonUi(logsDir = logs?.dir, stateLock = stateLock, updates = { exit, running -> InstalledUpdates.service(installed = true, stateDir = stateDir, exit = exit, runningAgents = running) })
     } else {
         runDevUi()
     }
+}
+
+/**
+ * NS5/NS6a: a shell app's start. Its state dir, loopback host and ephemeral port are pinned first ([AppDaemonProfile]),
+ * then [DaemonChoice] decides: a saved server the user picked (Servers), else the bundled daemon from the build's
+ * [DaemonLauncher], else the Connect dialog. Never a silent fallback, never the Infantry install's daemon.
+ */
+internal fun runShellApp(app: ShellAppLaunch) {
+    AppDaemonProfile.apply(app)
+    val stateDir = app.stateDir
+    val launcher = DaemonLaunchers.find()
+    val servers = KeystoreSavedServers(stateDir)
+    val saved = ActiveServerFile(stateDir).read()?.takeIf { url -> servers.list().any { it.url == url } }
+    val choice = DaemonChoice.resolve(app.manifest.daemon, saved, buildHasDaemon = launcher != null)
+    println("[agentHq-app] app=${app.manifest.appId} daemon=$choice state=$stateDir")
+    if (choice == DaemonChoice.ConnectDialog) {
+        // NS6b brings the Connect dialog for an app; until then say why, rather than attach anywhere.
+        System.err.println("[agentHq-app] no daemon to use: mode=${app.manifest.daemon.mode}, no saved server, bundled daemon ${if (launcher == null) "absent" else "not allowed"}")
+        exitProcess(2)
+    }
+    val logs = LaunchProfile.installLogs(LaunchProfile.isInstalled(), stateDir)
+    // The lock and the seed come with the bundled daemon; a saved server opens without starting it (SWITCH-1).
+    runRealDaemonUi(logsDir = logs?.dir, local = launcher?.create(stateDir, app.manifest.daemon.seedProject))
 }
 
 /** Which profile this JVM runs. Pure, so a test can pin it without a launcher. */
