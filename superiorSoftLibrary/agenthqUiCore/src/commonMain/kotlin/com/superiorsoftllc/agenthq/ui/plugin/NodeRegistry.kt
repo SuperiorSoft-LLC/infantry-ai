@@ -93,7 +93,7 @@ object NodeRegistry {
         val trees = factory.tabTreeTabs.entries.associate { (tree, tab) -> tab to tree }
         val off = ChildrenControl.disabled(factory.config, node)
         val rank = ChildrenControl.order(factory.config, node).withIndex().associate { (i, c) -> c to i }
-        val tabs = declared.withIndex().sortedWith(compareBy({ rank[it.value.id] ?: Int.MAX_VALUE }, { it.index })).map { it.value }
+        val tabs = factory.sorted(node, declared).withIndex().sortedWith(compareBy({ rank[it.value.id] ?: Int.MAX_VALUE }, { it.index })).map { it.value }
         val home = declared.firstOrNull()?.id
         val drawn = tabs.map { t ->
             val replaced = factory.replacedTabs[t.id]

@@ -22,6 +22,11 @@ import com.superiorsoftllc.agenthq.ui.plugin.config.ConfigSource
 import com.superiorsoftllc.agenthq.ui.plugin.config.ConfigTree
 import com.superiorsoftllc.agenthq.ui.plugin.config.CoreConfig
 import com.superiorsoftllc.agenthq.ui.plugin.config.DaemonNodeConfigApi
+import com.superiorsoftllc.agenthq.ui.plugin.config.ImplementationFields
+import com.superiorsoftllc.agenthq.ui.plugin.config.Implementations
+import com.superiorsoftllc.agenthq.ui.plugin.config.RegisteredImplementation
+import com.superiorsoftllc.agenthq.ui.plugin.config.TabSorter
+import com.superiorsoftllc.agenthq.ui.plugin.config.TabSorters
 import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigApi
 import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigState
 import com.superiorsoftllc.agenthq.ui.plugin.config.ResolvedConfig
@@ -239,6 +244,8 @@ class AgentHqModule(
     val fills: Map<String, Block> = emptyMap(),
     /** S4: the tab trees the module's tabs draw ([TabFactory.tabTree]), by the id of the tab that draws each; core tier only. */
     val tabTrees: Map<String, Block> = emptyMap(),
+    /** P1 step 2 (6s D): implementations for config `implementation` fields, registry -> key -> value (module.json `implementations`). */
+    val implementations: Map<String, Map<String, Any>> = emptyMap(),
 )
 
 /**
@@ -266,6 +273,8 @@ interface UiRegistrar {
     fun fill(node: String, block: Block) {}
     /** S4: the tab tree tab [tab] draws (`TabFactory.tabTree(root.id)`). */
     fun tabTree(tab: String, root: Block) {}
+    /** P1 step 2: [value] under [key] of registry [registry]; declare it under `implementations` in module.json. */
+    fun implementation(registry: String, key: String, value: Any) {}
 }
 
 /** Runs [plugin]'s registration into a module of [tier]. */
@@ -279,6 +288,7 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
     val inject = LinkedHashMap<String, BlockInjection>()
     val fills = LinkedHashMap<String, Block>()
     val tabTrees = LinkedHashMap<String, Block>()
+    val implementations = LinkedHashMap<String, LinkedHashMap<String, Any>>()
     plugin.register(object : UiRegistrar {
         override val services = services
         override fun tab(provider: TabProvider) { tabs += provider }
@@ -290,8 +300,9 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
         override fun inject(name: String, injection: BlockInjection) { inject[name] = injection }
         override fun fill(node: String, block: Block) { fills[node] = block }
         override fun tabTree(tab: String, root: Block) { tabTrees[tab] = root }
+        override fun implementation(registry: String, key: String, value: Any) { implementations.getOrPut(registry) { LinkedHashMap() }[key] = value }
     })
-    return AgentHqModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell, inject, fills, tabTrees)
+    return AgentHqModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell, inject, fills, tabTrees, implementations)
 }
 
 /**
@@ -569,7 +580,17 @@ class TabFactory(
 
     /** P1 step 2: [tabs] as node [node]'s settings arrange them; never empty while [tabs] is not (the home tab cannot be disabled). */
     private fun arranged(node: String, tabs: List<TabProvider>): List<TabProvider> =
-        ChildrenControl.arrange(config, node, tabs, home = tabs.firstOrNull()?.id) { it.id }
+        ChildrenControl.arrange(config, node, sorted(node, tabs), home = tabs.firstOrNull()?.id) { it.id }
+
+    /**
+     * P1 step 2 (6s D): [tabs] (declared order) through the [TabSorter] node [node]'s `sorter` field names (a sub-tab host
+     * inherits its strip's); the declared order when none resolves. The stored order (Up/Down) still goes first.
+     */
+    fun sorted(node: String, tabs: List<TabProvider>): List<TabProvider> {
+        val key = resolvedConfig.values(node).string(TabSorters.FIELD) ?: return tabs
+        val sorter = implementations.get(TabSorters.REGISTRY, key) as? TabSorter ?: return tabs
+        return sorter.sort(tabs)
+    }
 
     /** Whether tab [id] is hidden by its strip's (or its parent tab's) settings. */
     fun isDisabled(id: String): Boolean {
@@ -664,10 +685,35 @@ class TabFactory(
     }
 
     /** P1 step 2: the stored copy of the config (the daemon's `node_config`), loaded by the window once its link is live. */
-    val config: NodeConfigState by lazy { NodeConfigState(configTree, configApi) }
+    val config: NodeConfigState by lazy {
+        NodeConfigState(configTree, configApi) { ImplementationFields.reconcile(it, configTree, implementations) }
+    }
 
     /** P1 step 2 (6s C): what [com.superiorsoftllc.agenthq.ui.shell.ShellContext.config] answers: [config] resolved over [configTree]. */
-    val resolvedConfig: ResolvedConfig by lazy { ResolvedConfig(config) }
+    val resolvedConfig: ResolvedConfig by lazy { ResolvedConfig(config, implementations) }
+
+    /**
+     * P1 step 2 (6s D): every registered implementation, core's ([TabSorters]) first, then each module's in load order.
+     * A registration module.json does not declare, or a key a registry already has, is refused with a line.
+     */
+    val implementations: Implementations by lazy {
+        val out = LinkedHashMap<String, LinkedHashMap<String, RegisteredImplementation>>()
+        for ((registry, keys) in TabSorters.core) for ((key, value) in keys) out.getOrPut(registry) { LinkedHashMap() }[key] = RegisteredImplementation(registry, key, CORE_SHELL_MODULE, value)
+        val problems = mutableListOf<String>()
+        for (m in modules) {
+            val name = m.manifest.name
+            for ((registry, keys) in m.implementations) for ((key, value) in keys) {
+                val taken = out[registry]?.get(key)
+                when {
+                    m.manifest.implementations.none { it.registry == registry && it.key == key } -> problems += "$name: implementation $registry/$key is not declared in its module.json; refused"
+                    taken != null -> problems += "$name: implementation $registry/$key is already registered by ${taken.module}; refused"
+                    else -> out.getOrPut(registry) { LinkedHashMap() }[key] = RegisteredImplementation(registry, key, name, value)
+                }
+            }
+            for (d in m.manifest.implementations) if (m.implementations[d.registry]?.containsKey(d.key) != true) problems += "$name: implementation ${d.registry}/${d.key} is declared but not registered; skipped"
+        }
+        Implementations(out, problems)
+    }
 }
 
 /**

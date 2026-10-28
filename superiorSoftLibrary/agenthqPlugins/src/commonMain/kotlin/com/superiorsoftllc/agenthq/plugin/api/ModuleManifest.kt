@@ -63,7 +63,16 @@ data class ModuleManifest(
      * core's into one tree ([com.superiorsoftllc.agenthq.ui.plugin.config.ConfigTree]); a second declaration of a key is refused.
      */
     val config: List<ConfigDeclaration> = emptyList(),
+    /**
+     * P1 step 2 (6s D): the implementations the module registers (`UiRegistrar.implementation`), by registry and key.
+     * A config `implementation` field stores the key; an undeclared registration is refused.
+     */
+    val implementations: List<ImplementationDeclaration> = emptyList(),
 )
+
+/** P1 step 2: the module registers an implementation under [key] of registry [registry] (e.g. `tabs.sorter`, `byTitle`). */
+@Serializable
+data class ImplementationDeclaration(val registry: String, val key: String)
 
 /** PLUGINS-2: module [id] (`Vendor_Module`) must be installed, enabled and at a version in [version] (e.g. `>=1.2 <2`). */
 @Serializable

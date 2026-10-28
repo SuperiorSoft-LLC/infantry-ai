@@ -981,6 +981,22 @@ changes a line of the ten-line summary):
   write says "Not saved: <the daemon's answer>". A tab switched off while open hands its strip back to the home tab.
   Pixels: the controls change only the opt-in `config-registry` shot (below the fold of every default shot).
 
+- **3. Implementation fields (D).** A module registers with `UiRegistrar.implementation(registry, key, value)` and
+  declares each under module.json `implementations` (`{registry, key}`); an undeclared one or a key a registry already
+  has is refused with a line (`TabFactory.implementations`, core's first, then load order). The stored value is the key
+  only. A stored key nobody registers now resolves to the field's default and the view shows "<key> is not registered".
+  `autoSelectNew`: the keys seen at the previous load are kept beside the field as `<field>@known` (own-only, never
+  shown); a key new since then becomes the selection only if the field is `exposed`, allows it and `set_by` is not
+  `user`; the first load only records. **The real example** is each tab strip's `sorter` (core's config.json, group
+  "Tabs", registry `tabs.sorter`, keys `byOrder`, the default, and `byTitle`; exposed; autoSelectNew off, so installing
+  a sorter never reorders a user's strip by itself). `TabFactory.tabs` sorts through it before the stored Up/Down
+  order; a sub-tab host inherits its strip's sorter by resolution. Why the strips: every list container with items is in
+  `plugins/core`, which this ticket does not touch; the strips are core and drawn through `TabFactory`. The registry
+  view gains a node's **Fields**: one editor per built-in type (checkbox, text and number with Save and a min/max check,
+  select and multiSelect chips, implementation chips over the registered keys only when exposed), where the value
+  comes from (Default, Default (stored), Set here, From <parent>), and Reset. A locked node's fields are read-only; a
+  node with fields but no children is pickable under "Configured nodes".
+
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 
 | part | bucket |

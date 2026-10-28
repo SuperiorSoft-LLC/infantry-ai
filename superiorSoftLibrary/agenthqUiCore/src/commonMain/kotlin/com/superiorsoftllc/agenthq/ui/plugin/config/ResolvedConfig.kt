@@ -2,6 +2,7 @@ package com.superiorsoftllc.agenthq.ui.plugin.config
 
 import com.superiorsoftllc.agenthq.ui.shell.ConfigContext
 import com.superiorsoftllc.agenthq.ui.shell.ConfigValues
+import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldTypes
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -13,9 +14,9 @@ import kotlin.reflect.KClass
 
 /**
  * Keys that belong to the node they are stored on and are never inherited: the children control (6s E), which says
- * what a container draws, not a setting its children share.
+ * what a container draws, not a setting its children share, and bookkeeping keys (`<field>@known`, [ImplementationFields]).
  */
-fun isOwnOnlyKey(key: String): Boolean = key.startsWith("children.")
+fun isOwnOnlyKey(key: String): Boolean = key.startsWith("children.") || '@' in key
 
 /**
  * P1 step 2 (docs/BLOCKS-LAYOUT-DESIGN.md 6s C): the core's [ConfigContext]. A key resolves at the node, then its
@@ -27,10 +28,15 @@ class ResolvedConfig(private val state: NodeConfigState, private val implementat
     private var cacheOf: Any? = null
     private val cache = HashMap<String, Map<String, JsonElement>>()
 
-    override fun values(nodeId: String): ConfigValues {
+    override fun values(nodeId: String): ConfigValues = JsonValues(resolved(nodeId))
+
+    /** The JSON [key] resolves to for [nodeId], or null when unset (the configuration view's editors read it). */
+    fun json(nodeId: String, key: String): JsonElement? = resolved(nodeId)[key]
+
+    private fun resolved(nodeId: String): Map<String, JsonElement> {
         val stored = state.stored
         if (cacheOf !== stored) { cache.clear(); cacheOf = stored }
-        return JsonValues(cache.getOrPut(nodeId) { resolve(nodeId, stored) })
+        return cache.getOrPut(nodeId) { resolve(nodeId, stored) }
     }
 
     /** The key [key] resolves to for [nodeId], as JSON, and the node that answered it (null = the declared default). */
@@ -53,6 +59,17 @@ class ResolvedConfig(private val state: NodeConfigState, private val implementat
             if (i > 0 && isOwnOnlyKey(f.key)) continue
             f.field.default?.takeIf { it !is JsonNull }?.let { out.putIfAbsent(f.key, it) }
         }
+        // 6s D: a stored implementation key whose module is gone resolves to the field's default (the view says so).
+        for (k in out.keys.toList()) {
+            val f = state.tree.field(node, k)?.field ?: continue
+            val registry = f.registry ?: continue
+            if (f.type != ConfigFieldTypes.IMPLEMENTATION) continue
+            val key = (out[k] as? JsonPrimitive)?.takeIf { it.isString }?.content
+            if (key == null || !implementations.has(registry, key)) {
+                val d = (f.default as? JsonPrimitive)?.takeIf { it.isString && implementations.has(registry, it.content) }
+                if (d != null) out[k] = d else out.remove(k)
+            }
+        }
         return out
     }
 }
@@ -74,9 +91,17 @@ internal class JsonValues(private val values: Map<String, JsonElement>) : Config
  * P1 step 2 (6s D): what modules registered for implementation fields, registry -> key -> value, in load order. The
  * JSON stores a key only; this is the one place a key becomes code.
  */
-class Implementations(val registries: Map<String, Map<String, RegisteredImplementation>>) {
+class Implementations(val registries: Map<String, Map<String, RegisteredImplementation>>, val problems: List<String> = emptyList()) {
     /** The keys registered in [registry], in registration order. */
     fun keys(registry: String): List<String> = registries[registry]?.keys?.toList().orEmpty()
+
+    fun has(registry: String, key: String): Boolean = registries[registry]?.containsKey(key) == true
+
+    /** What is registered under [key] of [registry], or null. */
+    fun get(registry: String, key: String): Any? = registries[registry]?.get(key)?.value
+
+    /** Who registered [key] of [registry], or null. */
+    fun moduleOf(registry: String, key: String): String? = registries[registry]?.get(key)?.module
 
     fun <T : Any> find(type: KClass<T>, key: String): T? {
         for (r in registries.values) {
