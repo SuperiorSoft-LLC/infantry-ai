@@ -23,6 +23,13 @@ internal class DaemonLink {
         internal val window = DaemonLink()
     }
 
+    /**
+     * PLUGIN-ENDPOINTS-2 (D3): reads one field of `plugin.<module>` over the window's owner connection (`plugin_secret_get`).
+     * Only a module's EndpointAccess calls it, and it keeps the value in its own closure. Null until a window sets it.
+     */
+    @kotlin.concurrent.Volatile
+    var pluginSecret: (suspend (module: String, field: String) -> Result<String?>)? = null
+
     private var base: String? = null
     private var token: String? = null
     private val http by lazy { createPlatformHttpClient() }

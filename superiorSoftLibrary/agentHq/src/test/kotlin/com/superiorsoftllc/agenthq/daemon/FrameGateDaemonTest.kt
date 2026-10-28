@@ -74,7 +74,8 @@ class FrameGateDaemonTest {
     @Test fun `the owner-only set is the saved commands, the secret changes and run control`() {
         assertEquals(
             setOf("command_save", "command_delete", "run_start", "run_stop", "run_attach", "run_resize", "run_input",
-                "secret_set", "secret_clear", "secret_import", "secret_field_set", "secret_field_delete", "secret_delete"),
+                "secret_set", "secret_clear", "secret_import", "secret_field_set", "secret_field_delete", "secret_delete",
+                "plugin_secret_get"),
             FrameGate.OWNER_ONLY,
         )
     }

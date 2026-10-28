@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.137.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.138.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,10 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+
+### What changed in 1.138.0 (PLUGIN-ENDPOINTS-2, ticket-779d5845) - a plugin endpoint's credential
+
+Additive; `contract=1.138.0`. **`plugin_secret_get`** (client -> daemon, `{module, field}`) is answered directly (never pushed) by **`plugin_secret`** (`{module, field, value}`; `value` null when the field is not set): one field of the user secret `plugin.<module lowercased>` (set with `secret_field_set`). It is the only frame that hands a stored value back, and only for the desktop host's `EndpointAccess` of that module, which adds it to the endpoint request itself: the value is never given to the plugin, logged or stored. Owner connection only (`FrameGate.OWNER_ONLY`), refused under the demo lock (not on `DEMO_LOCK_ALLOWED`), and fields starting `AGENTHQ_` are refused. Design: docs/PLUGIN-ENDPOINTS-DESIGN.md D3.
 
 ### What changed in 1.137.0 (TICKET-FILES, ticket-55476f3c) - the files each ticket changed
 
@@ -2303,6 +2307,8 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `secret_field_set` | `{name, field, value}`: seal `value` as field `field` of the user secret `name`, creating it (since 1.135.0); `name` is lowercase `[a-z0-9._-]`, `field` an environment-variable name `[A-Za-z_][A-Za-z0-9_]*`; a built-in name, a bad name or the demo lock is an `error` that never echoes the value; answered by `secret_state`, pushed to every client | client → daemon |
 | `secret_field_delete` | `{name, field}`: remove one field; the secret goes with its last field (since 1.135.0); answered by `secret_state`, pushed to every client | client → daemon |
 | `secret_delete` | `{name}`: remove a user secret and all its fields (since 1.135.0); answered by `secret_state`, pushed to every client | client → daemon |
+| `plugin_secret_get` | `{module, field}`: one field of the secret `plugin.<module lowercased>`, for that module's endpoint credential (since 1.138.0); owner connection only, refused under the demo lock, `AGENTHQ_*` fields refused; answered by `plugin_secret` | client → daemon |
+| `plugin_secret` | `{module, field, value}` (`value` null = not set), the direct answer to `plugin_secret_get`; never pushed (since 1.138.0) | daemon → client |
 | `secret_state` | `{protection: external-key\|os\|key-file, secrets:[{name, label, set, tail, importable, overriddenByEnv}], entries:[{name, fields:[{name, tail}]}], locked}` (`entries`, `locked` since 1.135.0): the answer to every `secret_*` request, and pushed to every client after a change; never carries a stored value (`tail` is `••••` plus the last 4 characters of a 16+ character value, else `••••`) (since 1.102.0) | daemon → client |
 | `tool_approval` | — (request, no data) / one `ToolApprovalInfo` `{mode?, effective, source, choices[]}` (reply): the global Tool approval and what a run without a session override gets (since 1.76.0) | client → daemon (request), daemon → client (reply) |
 | `tool_approval_set` | `{mode?}`: stores the global Tool approval (`deny` / `allowEdits` / `allowAll`), or clears it when `mode` is null or blank (since 1.76.0); answered by `tool_approval`; an unknown mode is an `error` `"tool_approval_set refused: ..."` | client → daemon |

@@ -326,6 +326,8 @@ fun App(
     }
     // PLUGINS-1: the plugins' gated daemon access goes to the daemon this window talks to; the bus hears what is shown.
     LaunchedEffect(url, token) { DaemonLink.window.connect(url, token) }
+    // PLUGIN-ENDPOINTS-2: a module's endpoint credential comes over this window's (owner) connection, never to the plugin.
+    LaunchedEffect(controller) { DaemonLink.window.pluginSecret = controller::pluginSecret }
     // P1 step 2 (6s B): once the link is live, the merged config tree seeds the daemon's node_config and the window takes its copy.
     val linkLive = state.connection.isLive
     LaunchedEffect(tabs, linkLive) { if (linkLive && tabs.config.load != NodeConfigLoad.LOADED) tabs.config.load() }

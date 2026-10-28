@@ -38,7 +38,7 @@ plugins/
   - A core module may depend on core modules only. Cycles are refused.
 - **sequence** sets load order only. **dependencies** is for what you require.
 - **services and permissions**: list the services you use under `services` (`notifications`, `storage`, `settings`,
-  `events`, `daemon`). The owner grants each one to a community module in `modules.json`, under
+  `events`, `daemon`, `endpoints`). The owner grants each one to a community module in `modules.json`, under
   `"allow": [...]`, and can take any of them away with `"deny"`. An ungranted service is `null` in your code.
   The `daemon` service calls only the routes you list under `routes`.
 
@@ -93,6 +93,55 @@ Open Settings > Plugins > Modules and press Enable on your module, then restart.
 `needs:` and `required by:`. If your module did not load, its row says why in one line, and so does the log
 (`[plugins] Acme_Notes (community): refused - ...`).
 
+## Your own backend in an hour
+
+A plugin can call a server of yours (an API, a database front, a model) through the `endpoints` service. It calls
+an endpoint **by id**, never by URL, and it never holds the key: the host adds the credential to the request.
+The working example is `community/Acme_Echo` with its 30-line backend `examples/echo-backend/echo.py`.
+
+1. **Run a server.** Any HTTPS server, or `http://localhost:8080` while you develop (`http` is allowed only for
+   `localhost`, `127.0.0.1` and `10.0.2.2`). For the example: `ECHO_KEY=dev-key python plugins/examples/echo-backend/echo.py`.
+2. **Declare it** in `module.json`:
+   ```json
+   "services": ["endpoints"],
+   "endpoints": [{ "id": "echo", "url": "http://localhost:8080/**", "methods": ["GET", "POST"],
+                   "auth": { "kind": "bearer", "field": "apiKey" } }]
+   ```
+   - `url` is one origin plus a path pattern: `*` matches one segment, `**` the rest. The host must be exact.
+   - `methods` lists what you may send (`GET POST PUT PATCH DELETE HEAD`).
+   - `auth.kind`: `none`; `bearer` (adds `Authorization: Bearer <field>`); `header` (adds header `name` with the
+     field: `{ "kind": "header", "name": "X-Api-Key", "field": "apiKey" }`); `basic` (fields `user` and `password`).
+3. **Call it** in code:
+   ```kotlin
+   val endpoints = registrar.services.get(Services.ENDPOINTS)   // null: not declared, or not allowed
+   when (val r = endpoints?.call("echo", "POST", "/echo", "hello")) {
+       is EndpointReply.Ok -> r.status to r.body       // a 3xx comes back as is: redirects are never followed
+       is EndpointReply.Refused -> r.reason             // the gate said no, in one line
+       is EndpointReply.Failed -> r.reason              // network error, timeout (30 s)
+       null -> "endpoints not allowed"
+   }
+   ```
+   The path must sit inside the `url` pattern (no `..`, `//` or `\`). The host removes `Authorization`, `Cookie`,
+   `Host`, `Proxy-*` and `X-AgentHQ-*` from your headers. Replies are cut at 4 MiB.
+4. **Store the key** (if `auth` is not `none`): in the Secrets section of Configuration create the secret `plugin.<your module, lowercase>`
+   (for the example `plugin.acme_echo`) with the field your `auth` names (`apiKey`, value `dev-key`). Never put keys
+   in module.json, code, storage or settings. The desktop app reads the field over its owner connection
+   (`plugin_secret_get`) and keeps it inside your module's endpoint access: your code never receives it. A window
+   without the owner connection (a remote window) gets `Refused("... credential needs the owner connection")` for
+   endpoints with auth; `none` endpoints still work.
+5. **Enable it**: in `modules.json`,
+   `"Acme_Echo": { "enabled": true, "allow": ["endpoints"], "endpoints": { "echo": { "url": "http://localhost:9000/**" } } }`.
+   `allow` must name `endpoints` for a community module. The optional `endpoints.<id>.url` overrides the manifest's URL
+   for this install (a staging server, another port).
+6. **Build and try**: `gradlew.bat :plugins:community:Acme_Echo:jar`, restart, open the Echo tab, press Send. You should see
+   `200: {"method": "POST", "path": "/echo", "echo": "hello"}`. Without the key set: a refusal naming the missing field.
+7. **Debugging**: every refusal is one line in the `[plugins]` log, e.g. `[plugins] Acme_Echo: endpoint 'echo': method DELETE not declared`.
+
+Today only the desktop app runs endpoint calls. The web and Android transports, a daemon-side proxy (the key never
+leaves the daemon) and per-module daemon tokens come later (docs/PLUGIN-ENDPOINTS-DESIGN.md). Under the demo lock
+community modules never load, `plugin_secret_get` is refused, and a core module may call only the endpoint ids in
+`demoLock.allowEndpoints`.
+
 ## Dependencies, native files and platforms
 
 Your dependencies are your job; the host gives you the tools. Each module gets its own class loader (never shared with
@@ -128,7 +177,8 @@ community module works on the desktop app and the headless daemon (`GET /plugins
 ## The demo lock
 
 With `AGENTHQ_DEMO_LOCK` set, no community module loads, Settings cannot change modules.json, and the `daemon`
-service of a core module is further limited to `demoLock.allowRoutes` in `modules.json`. Core tabs work as usual.
+service of a core module is further limited to `demoLock.allowRoutes` in `modules.json`, and its `endpoints` service to
+`demoLock.allowEndpoints`. Core tabs work as usual.
 
 ## Proving the existing UI did not change
 

@@ -3422,7 +3422,8 @@ private suspend fun handleConnection(
                 // SECRETS-1 (contract 1.100.0): the keystore. Answered by `secret_state`; a value never travels back.
                 // SECRETS-2 (1.135.0): and the user's key/value secrets.
                 Envelope.SECRET_SET, Envelope.SECRET_CLEAR, Envelope.SECRET_IMPORT, Envelope.SECRET_STATUS,
-                Envelope.SECRET_FIELD_SET, Envelope.SECRET_FIELD_DELETE, Envelope.SECRET_DELETE -> keystoreFrames.answer(envelope)
+                Envelope.SECRET_FIELD_SET, Envelope.SECRET_FIELD_DELETE, Envelope.SECRET_DELETE,
+                Envelope.PLUGIN_SECRET_GET -> keystoreFrames.answer(envelope)
 
                 // P10-K6 (contract 1.54.0): the issues log. An open / attempt / fix is pushed to every client (no direct reply).
                 Envelope.ISSUE_OPEN, Envelope.ISSUE_ATTEMPT, Envelope.ISSUE_FIX,
