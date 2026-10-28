@@ -1,8 +1,11 @@
 package com.superiorsoftllc.agenthq.plugins.official.attention
 
+import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.ATTENTION_TAB_ID
+import com.superiorsoftllc.agenthq.ui.ConfigEntry
+import com.superiorsoftllc.agenthq.ui.ConfigQuestionsSection
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
@@ -12,6 +15,12 @@ import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
 import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 import com.superiorsoftllc.agenthq.ui.shell.NoAttention
+import com.superiorsoftllc.agenthq.ui.shell.blocks.ConfigSectionBlock
+
+/** RUNTIME-19: the Questions section of the Configuration dialog, which this module fills (`infantry.shell.config.questions`). */
+const val QUESTIONS_CONFIG_ID = "infantry.shell.config.questions"
+
+private val questionsSection = ConfigSectionBlock(ConfigEntry.QUESTIONS, "questions") { c, m -> ConfigQuestionsSection(c, m) }
 
 /** The Attention tab (order 30 in the right strip, shortcut 6). Its requests go through the plugin API's attention context. */
 private fun attentionTab() = TabProvider(
@@ -32,8 +41,10 @@ val InfantryAttention = AgentHqModule(
     ModuleManifest(
         name = "Infantry_Attention", version = "1.0.0", author = "Infantry AI", description = "What needs the owner.",
         tabs = listOf(TabDeclaration(ATTENTION_TAB_ID, TabContainers.RIGHT)),
+        fills = listOf(FillDeclaration(QUESTIONS_CONFIG_ID)),
     ),
     listOf(attentionTab()),
+    fills = mapOf(QUESTIONS_CONFIG_ID to questionsSection),
 )
 
 /**
@@ -44,6 +55,7 @@ val InfantryAttention = AgentHqModule(
 class AttentionPlugin : UiPlugin, ModuleSource {
     override fun register(registrar: UiRegistrar) {
         registrar.tab(attentionTab())
+        registrar.fill(QUESTIONS_CONFIG_ID, questionsSection)
     }
 
     override fun modules(): List<AgentHqModule> = listOf(InfantryAttention)

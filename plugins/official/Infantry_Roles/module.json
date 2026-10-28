@@ -16,6 +16,7 @@
     }
   ],
   "fills": [
-    "infantry.shell.roles"
+    "infantry.shell.roles",
+    "infantry.shell.config.roles"
   ]
 }

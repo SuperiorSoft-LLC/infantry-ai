@@ -50,7 +50,7 @@ object CoreShell {
         "infantry.shell.assistant", "infantry.shell.board", "infantry.shell.diff",
         "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions",
         "infantry.shell.config.settings", "infantry.shell.roles",
-    )
+    ) + CONFIG_OWNED_SECTION_SLOTS
 
     /**
      * SHELL-EMPTY-DROPIN S1 (docs/BLOCKS-LAYOUT-DESIGN.md section 13): the containers that are open slots

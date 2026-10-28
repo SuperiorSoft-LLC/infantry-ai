@@ -11,6 +11,8 @@
   "buildOrder": 200,
   "fills": [
     "infantry.shell.sound",
-    "infantry.shell.voice"
+    "infantry.shell.voice",
+    "infantry.shell.config.voice",
+    "infantry.shell.config.incomingSound"
   ]
 }

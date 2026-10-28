@@ -14,5 +14,8 @@
       "id": "infantry.usage",
       "container": "right"
     }
+  ],
+  "fills": [
+    "infantry.shell.config.limits"
   ]
 }
