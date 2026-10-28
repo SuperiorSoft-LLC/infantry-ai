@@ -109,7 +109,7 @@ agenthq issue precheck <path>
 **Long-running commands (QA gates, Gradle, test suites): `agenthq bg run`**
 
 ```
-agenthq bg run --name "gate" -- gradlew agentHq:test     # runs the command, tees output to a log, flags the session Running
+agenthq bg run --name "gate" -- gradlew.bat agentHq:test     # Windows: gradlew.bat (./gradlew fails here); runs the command, tees output to a log, flags the session Running
 agenthq bg list
 agenthq bg status <id>
 agenthq bg logs <id>
