@@ -3,6 +3,11 @@ package com.superiorsoftllc.agenthq.ui.shell
 import com.superiorsoftllc.agenthq.ui.RunConsoleHost
 import com.superiorsoftllc.agenthq.ui.Shell
 import com.superiorsoftllc.agenthq.ui.ToastService
+import com.superiorsoftllc.agenthq.ui.protocol.TraitView
+import com.superiorsoftllc.agenthq.ui.protocol.AgentProfile
+import com.superiorsoftllc.agenthq.ui.model.traitIdsFor
+import com.superiorsoftllc.agenthq.ui.model.rolesBinding
+import com.superiorsoftllc.agenthq.ui.model.TraitDraft
 import com.superiorsoftllc.agenthq.ui.model.AgentView
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.CompactScreen
@@ -65,13 +70,11 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
         }
     }
 
-    override val roles: RolesContext = object : RolesContext {
+    override val roles: RolesContext = object : RolesContext by CoreRoles(state, shell.controller) {
         override val managerOpen: Boolean get() = ui.showRoles
         override fun closeManager() { ui.showRoles = false }
-        override val roles: List<Role> get() = state.roles
-        override val bindings: Map<String, RoleBinding> get() = state.roleBindings
-        override val traits: Map<String, List<String>> get() = state.roleTraits
     }
+    override val traits: TraitsContext = CoreTraits(state, shell.controller)
 
     override val toast: ToastContext = object : ToastContext {
         override val service: ToastService get() = shell.controller.toasts
@@ -96,6 +99,7 @@ class CoreSession(private val state: AppState) : SessionContext {
     override val projectRefusal: Notice? get() = state.projectRefusal
     override val selectedAgentId: String? get() = state.selectedId
     override val selectedAgent: AgentView? get() = state.selected
+    override val activeProjectId: String? get() = state.activeProjectId
 }
 
 /** S4b: [state]'s notes and [controller]'s note requests, for a pane drawn outside a shell. */
@@ -207,4 +211,39 @@ class CoreRun(private val state: AppState, private val controller: Controller, p
 class CoreExecutor(private val state: AppState) : ExecutorContext {
     override val providers: List<ProviderInfo> get() = state.providers
     override val modelCatalog: List<ProviderModels> get() = state.modelCatalog
+}
+
+
+/** S4c: [state]'s roles, profiles and sessions and [controller]'s role requests, for a pane drawn outside a shell (no roles window). */
+open class CoreRoles(private val state: AppState, private val controller: Controller) : RolesContext {
+    override val managerOpen: Boolean get() = false
+    override fun closeManager() {}
+    override val roles: List<Role> get() = state.roles
+    override val bindings: Map<String, RoleBinding> get() = state.roleBindings
+    override val traits: Map<String, List<String>> get() = state.roleTraits
+    override val canEdit: Boolean get() = state.connection.sendsRoleEdit
+    override val iconsSupported: Boolean get() = state.connection.sendsRoleIcon
+    override fun role(id: String?): Role? = state.role(id)
+    override fun profilesFor(roleId: String): List<AgentProfile> = state.profilesFor(roleId)
+    override val agents: List<AgentView> get() = state.orderedAgents
+    override val agentError: String? get() = state.agentError
+    override suspend fun save(id: String, name: String, color: String?, persona: String, icon: String?, description: String?) =
+        controller.saveRole(id, name, color, persona, icon, description)
+    override suspend fun saveBinding(roleId: String, provider: String?, model: String?, effort: String?) = controller.saveRoleBinding(roleId, provider, model, effort)
+    override suspend fun delete(roleId: String) = controller.deleteRole(roleId)
+    override suspend fun saveProfile(profile: AgentProfile) = controller.saveProfile(profile)
+    override suspend fun deleteProfile(id: String) = controller.deleteProfile(id)
+    override suspend fun spawnAs(profileId: String, prompt: String) = controller.spawnAs(profileId, prompt)
+}
+
+/** S4c: [state]'s traits and [controller]'s trait requests, for a pane drawn outside a shell. */
+class CoreTraits(private val state: AppState, private val controller: Controller) : TraitsContext {
+    override val all: List<TraitView> get() = state.traits
+    override val loading: Boolean get() = state.traitsLoading
+    override val error: String? get() = state.traitError
+    override fun idsFor(roleId: String) = state.traitIdsFor(roleId)
+    override fun rolesBinding(traitId: String) = state.rolesBinding(traitId)
+    override suspend fun setForRole(roleId: String, traitIds: List<String>) = controller.setRoleTraits(roleId, traitIds)
+    override suspend fun save(draft: TraitDraft) = controller.saveTrait(draft)
+    override suspend fun delete(id: String) = controller.deleteTrait(id)
 }

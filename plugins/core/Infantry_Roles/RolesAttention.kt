@@ -39,7 +39,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.shell.CoreExecutor
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.ExecutorPickerModel
 import com.superiorsoftllc.agenthq.ui.model.PickedModel
@@ -51,6 +50,7 @@ import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.protocol.AgentProfile
 import com.superiorsoftllc.agenthq.ui.protocol.Role
 import com.superiorsoftllc.agenthq.ui.protocol.RoleBinding
+import com.superiorsoftllc.agenthq.ui.shell.RolesContext
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
@@ -59,12 +59,18 @@ import kotlin.time.Clock
  *
  * Choose a role from the daemon's catalog, see its persona and the agent profiles bound to it, create a
  * profile within the role (its instructions start as the role's persona), and start a session from a
- * profile. Everything shown comes from [AppState]; every action is a [Controller] command.
+ * profile. Everything shown comes from [RolesDeps] (S4c: the shell context's domains); the [AppState] / [Controller]
+ * entry point is for a pane drawn outside a shell.
  *
  * @param onSessionStarted called after a start was sent, so the window can show the conversation.
  */
 @Composable
-fun RolesPane(state: AppState, controller: Controller, onSessionStarted: () -> Unit, onOpenAgent: (String) -> Unit) {
+fun RolesPane(state: AppState, controller: Controller, onSessionStarted: () -> Unit, onOpenAgent: (String) -> Unit) =
+    RolesPane(RolesDeps(state, controller), onSessionStarted, onOpenAgent)
+
+/** S4c: [RolesPane] over the shell context's domains ([deps]). */
+@Composable
+fun RolesPane(deps: RolesDeps, onSessionStarted: () -> Unit, onOpenAgent: (String) -> Unit) {
     var selected by remember { mutableStateOf<String?>(null) }
     var creating by remember { mutableStateOf(false) }
     // ROLE-EDIT-1: the role whose editor is open; hoisted so a row's "Edit role" can open it from the list.
@@ -72,11 +78,11 @@ fun RolesPane(state: AppState, controller: Controller, onSessionStarted: () -> U
     Row(Modifier.fillMaxSize()) {
         Column(Modifier.width(230.dp).fillMaxHeight().verticalScroll(rememberScrollState()).padding(8.dp)) {
             Text("ROLES", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(4.dp))
-            if (state.roles.isEmpty()) {
-                Text(if (state.connection.isLive) "The daemon sent no roles." else "Connect to a daemon to load its roles.", color = Palette.Muted, fontSize = 11.sp)
+            if (deps.roles.roles.isEmpty()) {
+                Text(if (deps.link.live) "The daemon sent no roles." else "Connect to a daemon to load its roles.", color = Palette.Muted, fontSize = 11.sp)
             }
-            state.roles.forEach { r ->
-                val count = state.profilesFor(r.id).size
+            deps.roles.roles.forEach { r ->
+                val count = deps.roles.profilesFor(r.id).size
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp))
                         .background(if (r.id == selected && !creating) Palette.Raised else Color.Transparent)
@@ -96,18 +102,18 @@ fun RolesPane(state: AppState, controller: Controller, onSessionStarted: () -> U
                     }
                     if (r.source == "CUSTOM") Chip("custom", Palette.Info)
                     if (count > 0) { Spacer(Modifier.width(4.dp)); Chip("$count", Palette.Accent) }
-                    RoleRowMenu(r, live = state.connection.isLive, onEdit = { selected = r.id; creating = false; editingId = r.id })
+                    RoleRowMenu(r, live = deps.link.live, onEdit = { selected = r.id; creating = false; editingId = r.id })
                 }
             }
-            TextButton(onClick = { creating = true }, enabled = state.connection.isLive) { Text("+ New role", fontSize = 12.sp) }
+            TextButton(onClick = { creating = true }, enabled = deps.link.live) { Text("+ New role", fontSize = 12.sp) }
         }
         Box(Modifier.width(1.dp).fillMaxHeight().background(Palette.Border))
         Box(Modifier.weight(1f).fillMaxHeight()) {
-            val role = state.role(selected)
+            val role = deps.roles.role(selected)
             when {
-                creating -> RoleEditor(null, controller, iconsSupported = state.connection.sendsRoleIcon, onSaved = { id -> creating = false; selected = id })
+                creating -> RoleEditor(null, deps.roles, iconsSupported = deps.roles.iconsSupported, onSaved = { id -> creating = false; selected = id })
                 role != null -> RoleDetail(
-                    role, state, controller, onSessionStarted, onOpenAgent,
+                    role, deps, onSessionStarted, onOpenAgent,
                     editing = editingId == role.id,
                     onEditingChange = { open -> editingId = if (open) role.id else null },
                 )
@@ -123,8 +129,7 @@ fun RolesPane(state: AppState, controller: Controller, onSessionStarted: () -> U
 @Composable
 private fun RoleDetail(
     role: Role,
-    state: AppState,
-    controller: Controller,
+    deps: RolesDeps,
     onSessionStarted: () -> Unit,
     onOpenAgent: (String) -> Unit,
     editing: Boolean,
@@ -132,7 +137,7 @@ private fun RoleDetail(
 ) {
     // FORM-MODAL-2: the profile being created (id null) or edited in the shared modal; null = closed.
     var profileDraft by remember(role.id) { mutableStateOf<AgentProfile?>(null) }
-    val live = state.connection.isLive
+    val live = deps.link.live
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -148,20 +153,20 @@ private fun RoleDetail(
             }
             Chip(role.source.lowercase().replace('_', ' '), if (role.source == "CUSTOM") Palette.Info else Palette.Muted)
             Spacer(Modifier.width(6.dp))
-            OutlinedButton(onClick = { onEditingChange(!editing) }, enabled = state.connection.isLive) { Text(if (editing) "Close editor" else "Edit role") }
+            OutlinedButton(onClick = { onEditingChange(!editing) }, enabled = deps.link.live) { Text(if (editing) "Close editor" else "Edit role") }
         }
-        if (editing) RoleEditor(role, controller, iconsSupported = state.connection.sendsRoleIcon, onSaved = { onEditingChange(false) })
+        if (editing) RoleEditor(role, deps.roles, iconsSupported = deps.roles.iconsSupported, onSaved = { onEditingChange(false) })
         Text("Instructions (persona)", color = Palette.Muted, fontSize = 10.sp)
         Text(role.persona.ifBlank { "(no persona)" }, color = if (role.persona.isBlank()) Palette.Muted else Palette.Text, fontFamily = Mono, fontSize = 11.sp)
 
         HorizontalDivider(color = Palette.Border)
-        RoleBindingEditor(role, state, controller)
+        RoleBindingEditor(role, deps)
 
         HorizontalDivider(color = Palette.Border)
-        RoleTraitsEditor(role, state, controller)
+        RoleTraitsEditor(role, deps)
 
         HorizontalDivider(color = Palette.Border)
-        val profiles = state.profilesFor(role.id)
+        val profiles = deps.roles.profilesFor(role.id)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("Profiles in this role (${profiles.size})", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
             IconAction(
@@ -171,9 +176,9 @@ private fun RoleDetail(
             )
         }
         if (profiles.isEmpty()) Text("No profile yet: create one to start a session as this role.", color = Palette.Muted, fontSize = 11.sp)
-        profiles.forEach { p -> ProfileCard(p, state, controller, onSessionStarted, onEdit = { profileDraft = p }) }
+        profiles.forEach { p -> ProfileCard(p, deps, onSessionStarted, onEdit = { profileDraft = p }) }
 
-        val sessions = state.orderedAgents.filter { it.role == role.id }
+        val sessions = deps.roles.agents.filter { it.role == role.id }
         if (sessions.isNotEmpty()) {
             HorizontalDivider(color = Palette.Border)
             Text("Sessions of this role", color = Palette.Muted, fontSize = 10.sp)
@@ -185,7 +190,7 @@ private fun RoleDetail(
             }
         }
     }
-    profileDraft?.let { d -> ProfileEditorModal(role, d, state, controller, onClose = { profileDraft = null }) }
+    profileDraft?.let { d -> ProfileEditorModal(role, d, deps, onClose = { profileDraft = null }) }
     }
 }
 
@@ -224,17 +229,17 @@ val ROLE_EFFORT_LEVELS = listOf("low", "medium", "high", "xhigh", "max")
  * Changing it later changes future sessions only. A session already running keeps what it started with.
  */
 @Composable
-private fun RoleBindingEditor(role: Role, state: AppState, controller: Controller) {
+private fun RoleBindingEditor(role: Role, deps: RolesDeps) {
     val actionScope = rememberCoroutineScope()
-    val stored = state.roleBindings[role.id]
+    val stored = deps.roles.bindings[role.id]
     val storedPick = stored?.let { PickedModel.fromBinding(it) }
     // ROLE-FIRST S7: harness + model go through the shared ExecutorPicker. The frames can land after the editor
     // opens: fold them in, re-seeding from the stored binding until the user has touched the picker, then from
     // the user's own choice, so a late catalog never wipes an edit.
     var touched by remember(role.id, stored) { mutableStateOf(false) }
-    var draft by remember(role.id, stored) { mutableStateOf(ExecutorPickerModel.seeded(state.providers, state.modelCatalog, storedPick)) }
-    val executor = if (draft.harnesses != state.providers || draft.catalog != state.modelCatalog) {
-        ExecutorPickerModel.seeded(state.providers, state.modelCatalog, if (touched) draft.picked else storedPick)
+    var draft by remember(role.id, stored) { mutableStateOf(ExecutorPickerModel.seeded(deps.executor.providers, deps.executor.modelCatalog, storedPick)) }
+    val executor = if (draft.harnesses != deps.executor.providers || draft.catalog != deps.executor.modelCatalog) {
+        ExecutorPickerModel.seeded(deps.executor.providers, deps.executor.modelCatalog, if (touched) draft.picked else storedPick)
     } else draft
     var effort by remember(role.id, stored) { mutableStateOf(stored?.effort) }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -242,7 +247,7 @@ private fun RoleBindingEditor(role: Role, state: AppState, controller: Controlle
         Text("Currently: ${bindingSummary(stored)}", color = Palette.Text, fontSize = 12.sp, modifier = Modifier.testTag(ROLE_BINDING_CURRENT_TAG))
         ExecutorPicker(
             executor, { draft = it; touched = true }, tags = ROLE_BINDING_EXECUTOR_TAGS,
-            onDaemonDefault = { draft = ExecutorPickerModel(state.providers, state.modelCatalog); touched = true },
+            onDaemonDefault = { draft = ExecutorPickerModel(deps.executor.providers, deps.executor.modelCatalog); touched = true },
         )
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Effort", color = Palette.Muted, fontSize = 11.sp)
@@ -252,31 +257,31 @@ private fun RoleBindingEditor(role: Role, state: AppState, controller: Controlle
             }
         }
         Button(
-            enabled = state.connection.isLive,
+            enabled = deps.link.live,
             modifier = Modifier.testTag(ROLE_BINDING_SAVE_TAG),
             onClick = {
                 // Untouched = the stored harness/model exactly, even when the frames have not landed or no longer list it.
                 val saved = if (touched) executor.picked else storedPick
-                actionScope.launch { controller.saveRoleBinding(role.id, saved?.provider, saved?.model, effort) }
+                actionScope.launch { deps.roles.saveBinding(role.id, saved?.provider, saved?.model, effort) }
             },
         ) { Text("Save binding") }
     }
 }
 
 @Composable
-private fun ProfileCard(p: AgentProfile, state: AppState, controller: Controller, onSessionStarted: () -> Unit, onEdit: () -> Unit) {
+private fun ProfileCard(p: AgentProfile, deps: RolesDeps, onSessionStarted: () -> Unit, onEdit: () -> Unit) {
     val actionScope = rememberCoroutineScope()
     var first by remember(p.id) { mutableStateOf("") }
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(p.name, color = Palette.Text, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            Chip(p.provider ?: state.providers.firstOrNull { it.default }?.id?.let { "$it (default)" } ?: "default provider")
+            Chip(p.provider ?: deps.executor.providers.firstOrNull { it.default }?.id?.let { "$it (default)" } ?: "default provider")
             Spacer(Modifier.width(4.dp))
             Chip(p.model ?: "default model")
-            TextButton(onClick = onEdit, enabled = state.connection.isLive, modifier = Modifier.testTag(PROFILE_EDIT_TAG_PREFIX + (p.id ?: p.name))) {
+            TextButton(onClick = onEdit, enabled = deps.link.live, modifier = Modifier.testTag(PROFILE_EDIT_TAG_PREFIX + (p.id ?: p.name))) {
                 Text("Edit", fontSize = 11.sp)
             }
-            TextButton(onClick = { p.id?.let { id -> actionScope.launch { controller.deleteProfile(id) } } }, enabled = state.connection.isLive) {
+            TextButton(onClick = { p.id?.let { id -> actionScope.launch { deps.roles.deleteProfile(id) } } }, enabled = deps.link.live) {
                 Text("Delete", color = Palette.Danger, fontSize = 11.sp)
             }
         }
@@ -288,10 +293,10 @@ private fun ProfileCard(p: AgentProfile, state: AppState, controller: Controller
             )
             Spacer(Modifier.width(6.dp))
             Button(
-                enabled = state.connection.isLive && first.isNotBlank() && p.id != null,
+                enabled = deps.link.live && first.isNotBlank() && p.id != null,
                 onClick = {
                     actionScope.launch {
-                        if (controller.spawnAs(p.id!!, first.trim()) is CommandResult.Sent) { first = ""; onSessionStarted() }
+                        if (deps.roles.spawnAs(p.id!!, first.trim()) is CommandResult.Sent) { first = ""; onSessionStarted() }
                     }
                 },
             ) { Text("Start session") }
@@ -315,7 +320,7 @@ const val PROFILE_EDIT_TAG_PREFIX = "profile-edit-"
  * stays in the modal. Cancel discards and sends nothing.
  */
 @Composable
-private fun ProfileEditorModal(role: Role, initial: AgentProfile, state: AppState, controller: Controller, onClose: () -> Unit) {
+private fun ProfileEditorModal(role: Role, initial: AgentProfile, deps: RolesDeps, onClose: () -> Unit) {
     val actionScope = rememberCoroutineScope()
     val key = initial.id ?: role.id
     var name by remember(key) { mutableStateOf(initial.name) }
@@ -323,7 +328,7 @@ private fun ProfileEditorModal(role: Role, initial: AgentProfile, state: AppStat
     var model by remember(key) { mutableStateOf(initial.model.orEmpty()) }
     var instructions by remember(key) { mutableStateOf(initial.instructions.orEmpty()) }
     var error by remember(key) { mutableStateOf<String?>(null) }
-    val live = state.connection.isLive
+    val live = deps.link.live
     EditorModal(
         title = if (initial.id == null) "New profile in ${role.name}" else "Edit profile",
         onSave = {
@@ -333,9 +338,9 @@ private fun ProfileEditorModal(role: Role, initial: AgentProfile, state: AppStat
                     name = name.trim(), role = role.id,
                     provider = provider, model = model.trim().ifEmpty { null },
                     instructions = instructions.trim().ifEmpty { null },
-                    projectId = initial.projectId ?: state.activeProjectId,
+                    projectId = initial.projectId ?: deps.session.activeProjectId,
                 )
-                when (val r = controller.saveProfile(profile)) {
+                when (val r = deps.roles.saveProfile(profile)) {
                     is CommandResult.Sent -> onClose()
                     is CommandResult.Refused -> error = r.reason
                     is CommandResult.Queued -> Unit
@@ -345,12 +350,12 @@ private fun ProfileEditorModal(role: Role, initial: AgentProfile, state: AppStat
         onCancel = onClose,
         modifier = Modifier.testTag(PROFILE_DIALOG_TAG),
         saveEnabled = live && name.isNotBlank(),
-        error = error ?: state.agentError,
+        error = error ?: deps.roles.agentError,
         saveLabel = "Save profile",
         saveTag = PROFILE_SAVE_TAG, cancelTag = PROFILE_CANCEL_TAG,
     ) {
         OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true, modifier = Modifier.fillMaxWidth().testTag(PROFILE_NAME_TAG))
-        ProfileExecutorField(CoreExecutor(state), key, provider, model) { p, m -> provider = p; model = m }
+        ProfileExecutorField(deps.executor, key, provider, model) { p, m -> provider = p; model = m }
         OutlinedTextField(
             instructions, { instructions = it }, label = { Text("Instructions (start of every first message)") },
             minLines = 3, maxLines = 10, modifier = Modifier.fillMaxWidth().testTag(PROFILE_INSTRUCTIONS_TAG),
@@ -386,7 +391,7 @@ private fun RoleRowMenu(r: Role, live: Boolean, onEdit: () -> Unit) {
 
 /** Create a role ([existing] null) or edit one; saving answers with the role pushed back to every window. */
 @Composable
-private fun RoleEditor(existing: Role?, controller: Controller, iconsSupported: Boolean, onSaved: (String) -> Unit) {
+private fun RoleEditor(existing: Role?, roles: RolesContext, iconsSupported: Boolean, onSaved: (String) -> Unit) {
     val actionScope = rememberCoroutineScope()
     var id by remember(existing?.id) { mutableStateOf(existing?.id.orEmpty()) }
     var name by remember(existing?.id) { mutableStateOf(existing?.name.orEmpty()) }
@@ -412,7 +417,7 @@ private fun RoleEditor(existing: Role?, controller: Controller, iconsSupported: 
             enabled = id.isNotBlank() && name.isNotBlank(),
             onClick = {
                 val changed = icon.takeIf { it != existing?.icon.orEmpty() }
-                actionScope.launch { if (controller.saveRole(id, name, color, persona, changed) is CommandResult.Sent) onSaved(id.trim()) }
+                actionScope.launch { if (roles.save(id, name, color, persona, changed) is CommandResult.Sent) onSaved(id.trim()) }
             },
         ) { Text("Save role") }
         Text("The daemon validates it; a refusal appears in the notice strip with the reason.", color = Palette.Muted, fontSize = 10.sp)

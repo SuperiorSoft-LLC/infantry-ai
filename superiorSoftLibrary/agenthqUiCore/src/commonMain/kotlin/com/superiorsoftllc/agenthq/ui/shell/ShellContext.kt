@@ -2,6 +2,9 @@ package com.superiorsoftllc.agenthq.ui.shell
 
 import androidx.compose.runtime.compositionLocalOf
 import com.superiorsoftllc.agenthq.ui.ToastService
+import com.superiorsoftllc.agenthq.ui.protocol.TraitView
+import com.superiorsoftllc.agenthq.ui.protocol.AgentProfile
+import com.superiorsoftllc.agenthq.ui.model.TraitDraft
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.model.AgentView
 import com.superiorsoftllc.agenthq.ui.model.MemoryNoteView
@@ -54,6 +57,8 @@ interface ShellContext {
     val changes: ChangesContext get() = NoChanges
     /** S4c: the daemon's harnesses and model catalog, for the executor pickers. */
     val executor: ExecutorContext get() = NoExecutor
+    /** S4c: the trait library and each role's traits, for the roles window and the Roles pane. */
+    val traits: TraitsContext get() = NoTraits
 }
 
 /** The daemon link: whether it is up and which contract the daemon announced. */
@@ -75,6 +80,8 @@ interface SessionContext {
     val selectedAgentId: String? get() = null
     /** S4b: the selected session's agent; null with none selected or its row not known yet. */
     val selectedAgent: AgentView? get() = null
+    /** S4c: the active project's id, even before its row arrives; null with none active. */
+    val activeProjectId: String? get() = activeProject?.id
 }
 
 /** The active project's git, by project id, and the requests that load or change it. */
@@ -225,6 +232,51 @@ interface RolesContext {
     val bindings: Map<String, RoleBinding>
     /** Each role's trait ids, by role id. */
     val traits: Map<String, List<String>>
+    // S4c (docs/SHELL-LEAKS.md): what the roles window and the Roles pane read and send; each has a default, so an
+    // older shell compiles unchanged and its window refuses the edit.
+    /** The daemon takes role descriptions and deletes (contract 1.108) / role icons (1.93). */
+    val canEdit: Boolean get() = false
+    val iconsSupported: Boolean get() = false
+    fun role(id: String?): Role? = id?.let { wanted -> roles.firstOrNull { it.id == wanted } }
+    /** The active project's profiles of [roleId]. */
+    fun profilesFor(roleId: String): List<AgentProfile> = emptyList()
+    /** The sessions, in the sidebar's order. */
+    val agents: List<AgentView> get() = emptyList()
+    /** The daemon's last refusal of a profile save. */
+    val agentError: String? get() = null
+    suspend fun save(id: String, name: String, color: String?, persona: String, icon: String? = null, description: String? = null): CommandResult =
+        CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    suspend fun saveBinding(roleId: String, provider: String?, model: String?, effort: String?): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    suspend fun delete(roleId: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    suspend fun saveProfile(profile: AgentProfile): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    suspend fun deleteProfile(id: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    /** Starts a session as profile [profileId] with [prompt] as its first message. */
+    suspend fun spawnAs(profileId: String, prompt: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+}
+
+/** S4c: the trait library and the traits bound to each role. */
+interface TraitsContext {
+    val all: List<TraitView>
+    val loading: Boolean
+    val error: String?
+    fun idsFor(roleId: String): List<String>
+    /** The roles that bind [traitId], sorted. */
+    fun rolesBinding(traitId: String): List<String>
+    suspend fun setForRole(roleId: String, traitIds: List<String>): CommandResult
+    suspend fun save(draft: TraitDraft): CommandResult
+    suspend fun delete(id: String): CommandResult
+}
+
+/** S4c: the [ShellContext.traits] of a shell without traits: none, every edit refused. */
+object NoTraits : TraitsContext {
+    override val all: List<TraitView> get() = emptyList()
+    override val loading: Boolean get() = false
+    override val error: String? get() = null
+    override fun idsFor(roleId: String): List<String> = emptyList()
+    override fun rolesBinding(traitId: String): List<String> = emptyList()
+    override suspend fun setForRole(roleId: String, traitIds: List<String>): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun save(draft: TraitDraft): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun delete(id: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
 }
 
 /** The toasts: the service any block toasts through, what the host shows, and the tap on one. */

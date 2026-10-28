@@ -427,3 +427,22 @@ The bare shell has no header and no footer, so no cog: `ShellConfigEntry` (core,
 a locked frame child that draws a "Configuration" button while no module fills `infantry.shell.header`
 (`TabFactory.fills(slot)`), and nothing once one does, so the app window is unchanged. Ctrl+, still opens it too. The
 empty-shell shots now show the button (shell-empty-1400) and are opened through it (shell-empty-config-1400).
+
+## Roles migrated (S4c)
+
+Infantry_Roles now reads only `ShellContext` domains, bundled as `RolesDeps(link, session, roles, traits, executor,
+notes)` (plugins/core/Infantry_Roles/RolesDeps.kt). The shell block (ShellRoles) and the Roles tab build it from
+`LocalShellContext`. `RolesPane(state, controller, ...)` and `RoleManagerDialog(state, controller, ...)` remain as
+wrappers over `RolesDeps(state, controller)` (the Core* adapters), so the UI tests and any host without a
+`ShellContext` draw them unchanged. Every hole (S4c) in the Roles table above is closed. The members added, each with a
+default so an older shell compiles and refuses the edit (`SHELL_DOMAIN_MISSING`):
+
+| Where | Added | Count |
+|---|---|---|
+| `RolesContext` | `canEdit`, `iconsSupported`, `role(id)`, `profilesFor`, `agents`, `agentError`, `save`, `saveBinding`, `delete`, `saveProfile`, `deleteProfile`, `spawnAs` | 12 |
+| `TraitsContext` (new, `ShellContext.traits`, default `NoTraits`) | `all`, `loading`, `error`, `idsFor`, `rolesBinding`, `setForRole`, `save`, `delete` | 8 + 1 |
+| `SessionContext` | `activeProjectId` | 1 |
+| `ExecutorContext` (bridges commit, `ShellContext.executor`) | `providers`, `modelCatalog` | 2 + 1 |
+
+Core adapters: `CoreRoles`, `CoreTraits` (CoreShellContext.kt); the window's `roles` delegates to `CoreRoles` and adds the
+roles window's `managerOpen` / `closeManager`.

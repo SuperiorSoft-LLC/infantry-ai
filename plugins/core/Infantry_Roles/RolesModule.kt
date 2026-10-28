@@ -1,13 +1,16 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import androidx.compose.runtime.remember
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
+import com.superiorsoftllc.agenthq.ui.RolesDeps
 import com.superiorsoftllc.agenthq.ui.RolesPane
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
 import com.superiorsoftllc.agenthq.ui.plugin.circle
 import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
+import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 
 /** PLUGINS-1: core module Infantry_Roles. Roles: who does what, and starting a session as one. */
 val InfantryRoles = AgentHqModule(
@@ -27,6 +30,11 @@ val InfantryRoles = AgentHqModule(
             testTag = "center-tab-ROLES",
             shortcut = 5,
             routes = listOf("saveRole", "saveRoleBinding", "saveProfile", "deleteProfile", "spawnAs", "select"),
-        ) { RolesPane(it.state, it.appController, onSessionStarted = it.showChat, onOpenAgent = it::openAgent) },
+        ) { host ->
+            // S4c: the window's ShellContext domains where it provides them; the tab host's state and controller otherwise.
+            val ctx = LocalShellContext.current
+            if (ctx != null) RolesPane(remember(ctx) { RolesDeps(ctx) }, onSessionStarted = host.showChat, onOpenAgent = host::openAgent)
+            else RolesPane(host.state, host.appController, onSessionStarted = host.showChat, onOpenAgent = host::openAgent)
+        },
     ),
 )
