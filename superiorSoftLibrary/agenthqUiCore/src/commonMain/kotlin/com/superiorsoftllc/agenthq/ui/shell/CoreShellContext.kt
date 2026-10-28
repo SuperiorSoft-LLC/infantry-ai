@@ -72,6 +72,7 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
     override val usage: UsageContext = CoreUsage(shell.controller)
     override val epics: EpicsContext = CoreEpics(shell.controller)
     override val review: ReviewContext = CoreReview(shell.controller)
+    override val pods: PodsContext = CorePods(shell.controller)
 
     override val board: BoardContext = object : BoardContext {
         override val open: Boolean get() = ui.showBoard
@@ -154,6 +155,14 @@ class CoreEpics(private val controller: Controller) : EpicsContext {
 
 /** RUNTIME-11: [controller]'s selection, for the Review tab (or a pane drawn outside a shell). */
 class CoreReview(private val controller: Controller) : ReviewContext {
+    override fun openAgent(sessionId: String) = controller.select(sessionId)
+}
+
+/** RUNTIME-12: [controller]'s pod requests and selection, for the Pods tab (or a pane drawn outside a shell). */
+class CorePods(private val controller: Controller) : PodsContext {
+    override suspend fun submit(goal: String, nodes: List<com.superiorsoftllc.agenthq.ui.protocol.NodeSpec>): CommandResult = controller.submitPod(goal, nodes)
+    override suspend fun query(podId: String): CommandResult = controller.queryPod(podId)
+    override suspend fun cancel(podId: String): CommandResult = controller.cancelPod(podId)
     override fun openAgent(sessionId: String) = controller.select(sessionId)
 }
 

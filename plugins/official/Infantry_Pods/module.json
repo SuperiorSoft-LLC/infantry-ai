@@ -4,8 +4,10 @@
   "apiVersion": 1,
   "author": "Infantry AI",
   "description": "Pods: submit a goal, watch its nodes.",
+  "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.core.PodsModuleSource",
+  "entry": "com.superiorsoftllc.agenthq.plugins.official.pods.PodsPlugin",
+  "jar": "build/libs/Infantry_Pods.jar",
   "buildOrder": 30,
   "tabs": [
     {

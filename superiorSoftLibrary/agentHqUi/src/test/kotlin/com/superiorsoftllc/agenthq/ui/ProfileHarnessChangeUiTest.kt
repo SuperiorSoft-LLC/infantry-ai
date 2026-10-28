@@ -19,6 +19,7 @@ import com.superiorsoftllc.agenthq.role.RoleService
 import com.superiorsoftllc.agenthq.runner.StubScript
 import com.superiorsoftllc.agenthq.session.JsonSessionStore
 import com.superiorsoftllc.agenthq.stories.JsonStoryStore
+import com.superiorsoftllc.agenthq.plugins.official.profiles.PROFILE_FORM_ERROR_TAG
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
 import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.protocol.AgentProfile

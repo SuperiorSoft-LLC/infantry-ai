@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.pods
+
+import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -34,11 +36,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.parseNodes
-import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.agenthq.ui.shell.PodsContext
 import kotlinx.coroutines.launch
 
+/** The window's pods ([AppState.pods]) and the submit / load / cancel requests, through [pods] (RUNTIME-12). */
 @Composable
-internal fun PodsPane(state: AppState, controller: Controller) {
+internal fun PodsPane(state: AppState, pods: PodsContext) {
     val actionScope = rememberCoroutineScope()
     var goal by remember { mutableStateOf("") }
     var nodesText by remember { mutableStateOf("") }
@@ -52,7 +55,7 @@ internal fun PodsPane(state: AppState, controller: Controller) {
                     Text(p.pod.goal, color = Palette.Text, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 2)
                     Chip(p.pod.state, podColor(p.pod.state))
                     if (p.pod.endedAt == null) {
-                        TextButton(onClick = { actionScope.launch { controller.cancelPod(p.pod.id) } }) { Text("Cancel", color = Palette.Danger) }
+                        TextButton(onClick = { actionScope.launch { pods.cancel(p.pod.id) } }) { Text("Cancel", color = Palette.Danger) }
                     }
                 }
                 Text(p.pod.id, color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp)
@@ -68,7 +71,7 @@ internal fun PodsPane(state: AppState, controller: Controller) {
                         Spacer(Modifier.width(6.dp))
                         Text("try ${n.attempts}/${n.maxAttempts}", color = Palette.Muted, fontSize = 10.sp)
                         runs.lastOrNull()?.sessionId?.takeIf { it in state.agents }?.let { sid ->
-                            TextButton(onClick = { controller.select(sid) }) { Text("agent", fontSize = 11.sp) }
+                            TextButton(onClick = { pods.openAgent(sid) }) { Text("agent", fontSize = 11.sp) }
                         }
                     }
                     n.detail?.takeIf { it.isNotBlank() }?.let { Text(it, color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(start = 16.dp)) }
@@ -88,14 +91,14 @@ internal fun PodsPane(state: AppState, controller: Controller) {
             enabled = state.connection.isLive && goal.isNotBlank(),
             onClick = {
                 parseNodes(nodesText).fold(
-                    { nodes -> actionScope.launch { controller.submitPod(goal.trim(), nodes) }; error = null },
+                    { nodes -> actionScope.launch { pods.submit(goal.trim(), nodes) }; error = null },
                     { error = it.message },
                 )
             },
         ) { Text("Submit pod") }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(podId, { podId = it }, label = { Text("Load pod by id") }, singleLine = true, modifier = Modifier.weight(1f))
-            OutlinedButton(onClick = { actionScope.launch { controller.queryPod(podId) } }, enabled = state.connection.isLive && podId.isNotBlank()) { Text("Load") }
+            OutlinedButton(onClick = { actionScope.launch { pods.query(podId) } }, enabled = state.connection.isLive && podId.isNotBlank()) { Text("Load") }
         }
     }
 }
