@@ -15,6 +15,14 @@ agenthq tickets --status todo
 agenthq ticket show <ticket-id>
 ```
 
+**Find the code before you grep** (TICKET-FILES; MCP `agenthq_ticket_related_files` / `agenthq_ticket_files`)
+
+```
+agenthq ticket files <ticket-id> --related   # files changed by the tickets that touched the same files, ranked
+agenthq ticket files <ticket-id>             # files that ticket changed (status, +/-)
+agenthq ticket files --path TicketBoard.kt   # the tickets that changed matching paths (glob ok)
+```
+
 **See who is available**
 
 ```

@@ -75,6 +75,7 @@ import com.superiorsoftllc.agenthq.protocol.TicketMove
 import com.superiorsoftllc.agenthq.protocol.TicketSave
 import com.superiorsoftllc.agenthq.protocol.TicketListQuery
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
+import com.superiorsoftllc.agenthq.ticketfiles.TicketFilesQuery
 import com.superiorsoftllc.agenthq.protocol.Project
 import com.superiorsoftllc.agenthq.protocol.ProjectBaseRequest
 import com.superiorsoftllc.agenthq.protocol.SkillView
@@ -1166,10 +1167,37 @@ internal object Cli {
             "move" -> moveTicket(stream, parsed, out, err, getenv)
             "start" -> startTicket(stream, parsed, out, err, getenv)
             "link" -> linkTicket(stream, parsed, out, err, getenv)
+            "files" -> ticketFiles(stream, parsed, out, err, getenv)
             else -> showTicket(stream, parsed, out, err, getenv)
         }
     }
 
+    /**
+     * TICKET-FILES (contract 1.137.0): `ticket files <id|prefix> [--related]`, `ticket files --path <glob>...`,
+     * `ticket files --backfill [--all]`. Prints the daemon's capped compact text.
+     */
+    private suspend fun ticketFiles(
+        stream: FrameStream,
+        parsed: ParsedArgs,
+        out: Appendable,
+        err: Appendable,
+        getenv: (String) -> String?,
+    ): Int {
+        checkContract(stream, err)
+        val prefix = parsed.args.getOrNull(1)?.trim()?.takeIf { it.isNotEmpty() }
+        val id = prefix?.let { resolveTicket(stream, it, boardProjectOf(parsed, getenv), err)?.id ?: return 1 }
+        val query = TicketFilesQuery(
+            ticketId = id, paths = parsed.filePaths, related = parsed.related,
+            backfill = parsed.backfill, all = parsed.all, limit = parsed.limit?.toIntOrNull(),
+        )
+        return try {
+            out.appendLine(TicketFilesCli.request(stream, query))
+            0
+        } catch (e: Exception) {
+            err.appendLine("error: ${e.message}")
+            1
+        }
+    }
     /**
      * `ticket move <id|prefix> <status>`: asks the daemon to move ONE ticket and prints
      * `moved <fullId> -> <status>` with the status the daemon stored (it may derive `pending` itself).
@@ -4172,6 +4200,7 @@ internal object Cli {
                                   role, provider and model on its own ticket/<short-id>-<slug> branch; the ticket goes
                                   In Progress. A refused or held start exits 1 with the reason
               ticket link <id|prefix> <otherId|prefix> <type>   Link one ticket to another (see the link types)
+              ticket files <id|prefix> [--related] | --path <glob> | --backfill   Files a ticket changed / tickets that changed a path / related tickets' files
               remote on|off|status  Let the daemon accept outside (Tailscale) connections; prints the ws address
                                   and token. Takes effect on the next daemon restart.
               bg run [--name L] [--keep] -- CMD  Run CMD as a registered background job (session reads Running; --keep: survives the session closing); bg list|status|logs|stop ID
@@ -4375,6 +4404,11 @@ internal object Cli {
         val before: String? = null,
         /** `ticket move --top` / `--bottom`: first or last place in its column. */
         val top: Boolean = false,
+        /** TICKET-FILES: `ticket files --path <glob>` (repeatable), `--related`, `--backfill`, `--limit <n>`. */
+        val filePaths: List<String> = emptyList(),
+        val related: Boolean = false,
+        val backfill: Boolean = false,
+        val limit: String? = null,
         val bottom: Boolean = false,
         /** `ticket move --after <id|prefix>`: just below that one. `--position <n>`: index n of the column (0 = top). */
         val after: String? = null,
@@ -4494,6 +4528,10 @@ internal object Cli {
         var epic: String? = null
         var before: String? = null
         var top = false
+        val filePaths = ArrayList<String>()
+        var related = false
+        var backfill = false
+        var limit: String? = null
         var bottom = false
         var after: String? = null
         var position: String? = null
@@ -4800,6 +4838,22 @@ internal object Cli {
                         ?: return fail(err, "--before expects a ticket id or prefix (see: agenthq tickets)")
                     i++
                 }
+                "--path" -> {
+                    filePaths += flagValue(args, ++i) ?: return fail(err, "--path expects a path or glob, e.g. --path '**/TicketBoard.kt'")
+                    i++
+                }
+                "--related" -> {
+                    related = true
+                    i++
+                }
+                "--backfill" -> {
+                    backfill = true
+                    i++
+                }
+                "--limit" -> {
+                    limit = flagValue(args, ++i) ?: return fail(err, "--limit expects a whole number of lines")
+                    i++
+                }
                 "--top" -> {
                     top = true
                     i++
@@ -4905,6 +4959,10 @@ internal object Cli {
             epic = epic,
             before = before,
             top = top,
+            filePaths = filePaths,
+            related = related,
+            backfill = backfill,
+            limit = limit,
             bottom = bottom,
             after = after,
             position = position,
@@ -5167,6 +5225,7 @@ internal object Cli {
         val args = parsed.args
         fun blank(index: Int) = args.getOrNull(index)?.isBlank() != false
         return when (args.firstOrNull()) {
+            "files" -> TicketFilesCli.usageError(args.getOrNull(1)?.takeIf { it.isNotBlank() }, parsed.filePaths, parsed.backfill, parsed.limit)
             "show" -> if (blank(1)) {
                 "ticket show requires a ticket id: agenthq ticket show <id|prefix> (see: agenthq tickets)"
             } else {

@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.136.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.137.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,10 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+
+### What changed in 1.137.0 (TICKET-FILES, ticket-55476f3c) - the files each ticket changed
+
+Additive; `contract=1.137.0`. **`ticket_files`** (client -> daemon, a `TicketFilesQuery` `{ticketId?, paths?, related?, backfill?, all?, limit?, top?}`) is answered by **`ticket_files_report`** (`{text}`: compact lines, capped at `limits.ticketFiles.maxLines`). By `ticketId`: that ticket's files (status, +/-, path); with `related`: its top `limits.ticketFiles.relatedTop` tickets by Jaccard overlap of changed files, and the union of their files; by `paths` (globs; a pattern with no wildcard matches any path containing it): the tickets that changed them; `backfill`: records done tickets with no rows from git (merge commits `Merge ticket/<id> ...`, else the branch `base..tip`, else commits naming the id) and reports recovered vs not. Rows are written when a ticket goes done; its tip is pinned at `refs/agenthq/tickets/<id>`. Reads are SQL only (table `ticket_files`, schema v52). Not on the demo-lock allowlist (the backfill writes).
 
 ### What changed in 1.136.0 (SEC-FIX-1, ticket-61e8f4ac) - one frame gate, the owner credential, run input limits
 
@@ -2151,6 +2155,8 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `limits` | list of `ProviderLimits` (JSON), the answer and a push after each `usage` (1.59.0) | daemon → client |
 | `usage_get` | — (empty): request the plan meters and pacing allowance (1.119.0) | client → daemon |
 | `usage_report` | `UsageReport` (JSON) `{meters, rule, observedAt}`, answering `usage_get` (1.119.0) and `usage_set` (1.121.0) | daemon → client |
+| `ticket_files` | `TicketFilesQuery` (JSON) `{ticketId?, paths?, related?, backfill?, all?, limit?, top?}`: the files a ticket changed / the tickets a path glob was changed by / related tickets' files / backfill (1.137.0) | client → daemon |
+| `ticket_files_report` | `TicketFilesReport` (JSON) `{text}`, capped compact lines, answering `ticket_files` (1.137.0) | daemon → client |
 | `usage_set` | `UsageSet` (JSON): a meter's manual percent / override set or cleared, and/or the pacing rule; refused = `error` `usage_set refused: ...` (1.121.0) | client → daemon |
 | `providers` | — (request the list; 1.3.0) | client → daemon |
 | `providers` | list of `ProviderInfo` (JSON), the default first (1.3.0) | daemon → client |

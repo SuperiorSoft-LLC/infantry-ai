@@ -2,7 +2,7 @@
 -- One row per (node, key); value_json is the JSON text of the value. set_by is `seed` (inserted from the merged JSON
 -- tree, never overwriting a row) or `user` (written from the configuration view).
 --
--- NEXT MIGRATION: 51.sqm
+-- NEXT MIGRATION: 51.sqm (51 is TICKET-FILES ticket_files)
 
 CREATE TABLE IF NOT EXISTS node_config (
     node_id TEXT NOT NULL,

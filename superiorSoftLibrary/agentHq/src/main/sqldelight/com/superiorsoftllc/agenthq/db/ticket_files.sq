@@ -1,0 +1,42 @@
+-- TICKET-FILES (ticket 55476f3c): the files one ticket changed, one row per path, written when the ticket goes done
+-- (one `git diff` of base..tip, or of a `Merge ticket/<id>` commit once its branch is gone) and by the backfill.
+-- Read with indexed SQL only: no git call at query time. status is git's A/M/D/R/C/T letter; added/removed are
+-- null for a binary file; old_path is the source of a rename or copy.
+CREATE TABLE IF NOT EXISTS ticket_files (
+    ticket_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    status TEXT NOT NULL,
+    old_path TEXT,
+    added INTEGER,
+    removed INTEGER,
+    tip_sha TEXT,
+    merge_sha TEXT,
+    recorded_at INTEGER NOT NULL,
+    PRIMARY KEY (ticket_id, path)
+);
+
+CREATE INDEX IF NOT EXISTS index_ticket_files_on_path ON ticket_files(path);
+
+deleteForTicket:
+DELETE FROM ticket_files WHERE ticket_id = ?;
+
+insertFile:
+INSERT OR REPLACE INTO ticket_files(ticket_id, path, status, old_path, added, removed, tip_sha, merge_sha, recorded_at)
+VALUES (:ticket_id, :path, :status, :old_path, :added, :removed, :tip_sha, :merge_sha, :recorded_at);
+
+filesForTicket:
+SELECT * FROM ticket_files WHERE ticket_id = ? ORDER BY path ASC;
+
+filesForPathGlob:
+SELECT * FROM ticket_files WHERE path GLOB :glob ORDER BY recorded_at DESC, ticket_id ASC, path ASC;
+
+-- Tickets sharing at least one path with :ticket_id: the shared count and each one's own path count (for Jaccard).
+relatedTickets:
+SELECT b.ticket_id, COUNT(*) AS shared,
+    (SELECT COUNT(*) FROM ticket_files c WHERE c.ticket_id = b.ticket_id) AS total
+FROM ticket_files a JOIN ticket_files b ON b.path = a.path AND b.ticket_id <> a.ticket_id
+WHERE a.ticket_id = :ticket_id
+GROUP BY b.ticket_id;
+
+recordedTickets:
+SELECT DISTINCT ticket_id FROM ticket_files;

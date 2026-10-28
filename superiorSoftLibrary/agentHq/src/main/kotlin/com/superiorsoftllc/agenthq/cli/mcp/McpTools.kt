@@ -66,6 +66,9 @@ internal class McpTools(
     private val projectConfig = McpProjectConfigTools()
     private val usage = McpUsageTools()
 
+    /** TICKET-FILES (contract 1.137.0): `agenthq_ticket_files` / `agenthq_ticket_related_files`. */
+    private val ticketFiles = McpTicketFilesTools()
+
     /** ROGUE-1 (contract 1.120.0): `agenthq_processes` / `agenthq_processes_reap`. */
     private val processTools = McpProcessTools()
 
@@ -106,6 +109,8 @@ internal class McpTools(
                     McpRoleTools.DELETE -> roles.delete(stream, arguments)
                     McpProjectConfigTools.GET -> projectConfig.get(stream, arguments)
                     McpUsageTools.USAGE -> usage.usage(stream)
+                    McpTicketFilesTools.FILES -> ticketFiles.files(stream, arguments)
+                    McpTicketFilesTools.RELATED -> ticketFiles.related(stream, arguments)
                     McpProjectConfigTools.SET -> projectConfig.set(stream, arguments)
                     McpProcessTools.LIST -> processTools.list(stream, arguments)
                     McpProcessTools.REAP -> processTools.reap(stream, arguments)
@@ -423,7 +428,7 @@ internal class McpTools(
         /** HARNESS-INSTALL-1: detect / install the harness CLIs (claude, opencode, pi) through npm, on a local or remote daemon. */
         const val HARNESS_STATUS = "agenthq_harness_status"
         const val HARNESS_INSTALL = "agenthq_harness_install"
-        val NAMES = setOf(LIST_SESSIONS, GET_SESSION, POD_STATE, BOARD, LIST_HARNESSES, HARNESS_STATUS, HARNESS_INSTALL) + McpWriteTools.NAMES + McpMailTools.NAMES + McpTicketTools.NAMES + McpQuestionTools.NAMES + McpProgressTools.NAMES + McpPipelineTools.NAMES + McpRoleTools.NAMES + McpProjectConfigTools.NAMES + McpUsageTools.NAMES + McpProcessTools.NAMES
+        val NAMES = setOf(LIST_SESSIONS, GET_SESSION, POD_STATE, BOARD, LIST_HARNESSES, HARNESS_STATUS, HARNESS_INSTALL) + McpWriteTools.NAMES + McpMailTools.NAMES + McpTicketTools.NAMES + McpQuestionTools.NAMES + McpProgressTools.NAMES + McpPipelineTools.NAMES + McpRoleTools.NAMES + McpProjectConfigTools.NAMES + McpUsageTools.NAMES + McpTicketFilesTools.NAMES + McpProcessTools.NAMES
 
         /** The one, fixed message a tool answers with when nothing is listening at the daemon address. */
         const val DAEMON_UNREACHABLE =
@@ -563,6 +568,7 @@ internal class McpTools(
             McpRoleTools.descriptors().forEach { add(it) }
             McpProjectConfigTools.descriptors().forEach { add(it) }
             McpUsageTools.descriptors().forEach { add(it) }
+            McpTicketFilesTools.descriptors().forEach { add(it) }
             McpQuestionTools.descriptors().forEach { add(it) }
             McpProgressTools.descriptors().forEach { add(it) }
             McpProcessTools.descriptors().forEach { add(it) }

@@ -155,6 +155,7 @@ class McpServeTest {
                 "agenthq_pipeline", "agenthq_pipeline_record", // PIPE-1
                 "agenthq_role_list", "agenthq_role_get", "agenthq_role_update", "agenthq_role_create", "agenthq_role_delete", "agenthq_project_config_get", "agenthq_project_config_set", // ROLE-EDIT-1, LANE-CAPS
                 "agenthq_usage", // USAGE-PACE (1.119.0): listed after the project tools, before ask
+                "agenthq_ticket_files", "agenthq_ticket_related_files", // TICKET-FILES (1.137.0)
                 "agenthq_ask", // ASK-1
                 "agenthq_progress", // PROGRESS-1 (1.117.0)
                 "agenthq_processes", "agenthq_processes_reap", // ROGUE-1 (1.120.0)

@@ -1,0 +1,19 @@
+-- TICKET-FILES (ticket 55476f3c) -- migration v51 -> v52: the files each ticket changed (docs in ticket_files.sq).
+-- No foreign key to tickets: the rows outlive a deleted branch and are rebuilt by the backfill from merge commits.
+--
+-- NEXT MIGRATION: 52.sqm
+
+CREATE TABLE IF NOT EXISTS ticket_files (
+    ticket_id TEXT NOT NULL,
+    path TEXT NOT NULL,
+    status TEXT NOT NULL,
+    old_path TEXT,
+    added INTEGER,
+    removed INTEGER,
+    tip_sha TEXT,
+    merge_sha TEXT,
+    recorded_at INTEGER NOT NULL,
+    PRIMARY KEY (ticket_id, path)
+);
+
+CREATE INDEX IF NOT EXISTS index_ticket_files_on_path ON ticket_files(path);
