@@ -17,9 +17,12 @@ import com.superiorsoftllc.agenthq.plugin.api.PluginServices
 import com.superiorsoftllc.agenthq.plugin.api.ServiceKey
 import com.superiorsoftllc.agenthq.plugin.api.Services
 import com.superiorsoftllc.agenthq.plugin.api.Tier
+import com.superiorsoftllc.agenthq.ui.plugin.config.ChildrenControl
 import com.superiorsoftllc.agenthq.ui.plugin.config.ConfigSource
 import com.superiorsoftllc.agenthq.ui.plugin.config.ConfigTree
 import com.superiorsoftllc.agenthq.ui.plugin.config.CoreConfig
+import com.superiorsoftllc.agenthq.ui.plugin.config.DaemonNodeConfigApi
+import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigApi
 import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigState
 import com.superiorsoftllc.agenthq.ui.plugin.config.ResolvedConfig
 import com.superiorsoftllc.agenthq.plugin.host.AcceptedPreference
@@ -33,6 +36,7 @@ import com.superiorsoftllc.agenthq.ui.block.layout.BlockInjection
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockOverride
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockResolver
 import com.superiorsoftllc.agenthq.ui.block.layout.InjectAt
+import com.superiorsoftllc.agenthq.ui.block.layout.InjectedBlock
 import com.superiorsoftllc.agenthq.ui.block.layout.NodeInjection
 import com.superiorsoftllc.agenthq.ui.block.layout.NodeOverride
 import com.superiorsoftllc.agenthq.ui.block.layout.PlaceholderBlock
@@ -329,6 +333,8 @@ class TabFactory(
     private val allowInject: (module: String) -> Collection<String> = { emptyList() },
     /** P1 step 2: the core contributions (by id) modules.json `allowOverride` grants each community module; a granted node takes its config. */
     private val allowOverride: (module: String) -> Collection<String> = { emptyList() },
+    /** P1 step 2: where the node config is stored (the window's daemon; a test passes a fake). */
+    private val configApi: NodeConfigApi = DaemonNodeConfigApi,
 ) {
     val modules: List<AgentHqModule> = modules.toList()
     /** TOAST-1: where a module's `Notifications.notify` lands in the window; the window sets it to its controller's. */
@@ -363,10 +369,26 @@ class TabFactory(
             BlockResolver.resolve(t, nodeOverrides.filter { it.node in ids }, CoreShell.locked, t.id, nodeInjections.filter { it.target in ids })
         }
     }
-    /** The tree the window draws. */
-    val shellRoot: Block get() = shell.root
+    /** The tree the window draws: [resolvedShellRoot] without the injections a node's settings disable (P1 step 2). */
+    val shellRoot: Block get() = drawn(shell.root)
+    /** P1: the core tree as resolved, every injection in (the registry view lists the disabled ones too). */
+    val resolvedShellRoot: Block get() = shell.root
     /** BLOCKS-LAYOUT L14: the core tab tree with root [id] as resolved (e.g. `infantry.shell.git`), or null if there is none. */
-    fun tabTree(id: String): Block? = tabTrees.firstOrNull { it.root.id == id }?.root
+    fun tabTree(id: String): Block? = resolvedTabTree(id)?.let(::drawn)
+    /** P1: [tabTree] with every injection in. */
+    fun resolvedTabTree(id: String): Block? = tabTrees.firstOrNull { it.root.id == id }?.root
+
+    /**
+     * P1 step 2 (6s E): [root] without the injected children a node's `children.disabled` names, the very same object
+     * when none applies; memoised per stored copy, so a frame never rebuilds a tree.
+     */
+    private fun drawn(root: Block): Block {
+        val stored = config.stored
+        if (drawnFor !== stored) { drawnCache.clear(); drawnFor = stored }
+        return drawnCache.getOrPut(root.id) { root.withoutDisabled { node -> ChildrenControl.disabled(config, node) } }
+    }
+    private var drawnFor: Any? = null
+    private val drawnCache = HashMap<String, Block>()
     /** Everything refused or ignored, one line each. */
     val problems: List<String> get() = bindProblems + shell.problems + tabTrees.flatMap { it.problems }
     private val providers: List<TabProvider>
@@ -528,18 +550,40 @@ class TabFactory(
         bindProblems = problems
     }
 
-    /** A container's top-level tabs, in strip order. */
-    fun tabs(container: String): List<TabProvider> =
+    /** A container's top-level tabs, in strip order: P1 step 2, the strip node's stored order, without its disabled tabs. */
+    fun tabs(container: String): List<TabProvider> = arranged(stripNode(container), declaredTabs(container))
+
+    /** The sub-tabs of [parentId], in order (the parent tab's stored order, without its disabled sub-tabs). */
+    fun children(parentId: String): List<TabProvider> = arranged(parentId, declaredChildren(parentId))
+
+    /** P1: a container's top-level tabs in their declared order, disabled ones included. */
+    fun declaredTabs(container: String): List<TabProvider> =
         providers.filter { it.container == container && it.parent == null }.sortedWith(compareBy({ it.order }, { it.id }))
 
-    /** The sub-tabs of [parentId], in order. */
-    fun children(parentId: String): List<TabProvider> =
+    /** P1: [parentId]'s sub-tabs in their declared order, disabled ones included. */
+    fun declaredChildren(parentId: String): List<TabProvider> =
         providers.filter { it.parent == parentId }.sortedWith(compareBy({ it.order }, { it.id }))
+
+    /** P1: the node a container's strip settings are stored on (its [NodeRegistry.strips] node). */
+    fun stripNode(container: String): String = NodeRegistry.strips.entries.firstOrNull { it.value == container }?.key ?: container
+
+    /** P1 step 2: [tabs] as node [node]'s settings arrange them; never empty while [tabs] is not (the home tab cannot be disabled). */
+    private fun arranged(node: String, tabs: List<TabProvider>): List<TabProvider> =
+        ChildrenControl.arrange(config, node, tabs, home = tabs.firstOrNull()?.id) { it.id }
+
+    /** Whether tab [id] is hidden by its strip's (or its parent tab's) settings. */
+    fun isDisabled(id: String): Boolean {
+        val t = find(id) ?: return false
+        return id in ChildrenControl.disabled(config, t.parent ?: stripNode(t.container)) || (t.parent?.let(::isDisabled) ?: false)
+    }
+
+    /** P1 step 2: whether [module] is granted node [node] by modules.json (`allowOverride` or `allowInject`). */
+    internal fun granted(module: String, node: String): Boolean = node in allowOverride(module) || node in allowInject(module)
 
     fun find(id: String): TabProvider? = providers.firstOrNull { it.id == id }
 
     /** The tab a container opens on: its first. */
-    fun home(container: String): String? = tabs(container).firstOrNull()?.id
+    fun home(container: String): String? = declaredTabs(container).firstOrNull()?.id
 
     fun byShortcut(digit: Int): TabProvider? = providers.firstOrNull { it.shortcut == digit }
 
@@ -602,7 +646,7 @@ class TabFactory(
      * (its tabs, ids under its name) and on those modules.json grants it.
      */
     val configTree: ConfigTree by lazy {
-        val parents = LinkedHashMap(ConfigTree.parentsOf(listOf(shellRoot) + tabTreeRoots.map { tabTree(it.id) ?: it }))
+        val parents = LinkedHashMap(ConfigTree.parentsOf(listOf(resolvedShellRoot) + tabTreeRoots.map { resolvedTabTree(it.id) ?: it }))
         val strips = NodeRegistry.strips.entries.associate { (node, container) -> container to node }
         for (t in providers) parents.putIfAbsent(t.id, t.parent ?: strips[t.container] ?: t.container)
         for ((tree, tab) in tabTreeTabs) parents.putIfAbsent(tree, tab)
@@ -620,7 +664,7 @@ class TabFactory(
     }
 
     /** P1 step 2: the stored copy of the config (the daemon's `node_config`), loaded by the window once its link is live. */
-    val config: NodeConfigState by lazy { NodeConfigState(configTree) }
+    val config: NodeConfigState by lazy { NodeConfigState(configTree, configApi) }
 
     /** P1 step 2 (6s C): what [com.superiorsoftllc.agenthq.ui.shell.ShellContext.config] answers: [config] resolved over [configTree]. */
     val resolvedConfig: ResolvedConfig by lazy { ResolvedConfig(config) }
@@ -653,6 +697,14 @@ private fun ColumnScope.PanelSection(factory: TabFactory, section: PanelProvider
             section.content(own)
         }
     }
+}
+
+/** P1 step 2: this tree without the injected children [off] names for their parent; the very same object when none applies. */
+private fun Block.withoutDisabled(off: (node: String) -> Set<String>): Block {
+    if (children.isEmpty()) return this
+    val gone = off(id)
+    val kids = children.filterNot { it is InjectedBlock && it.id in gone }.map { it.withoutDisabled(off) }
+    return if (kids.size == children.size && kids.indices.all { kids[it] === children[it] }) this else withChildren(kids)
 }
 
 /** Every node id in the tree under (and including) this block. */

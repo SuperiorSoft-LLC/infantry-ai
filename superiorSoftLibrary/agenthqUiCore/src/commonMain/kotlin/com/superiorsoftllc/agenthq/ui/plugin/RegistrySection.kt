@@ -12,14 +12,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.material3.Text
 import androidx.compose.ui.unit.dp
 import com.superiorsoftllc.agenthq.plugin.api.Tier
+import com.superiorsoftllc.agenthq.ui.Checkbox
 import com.superiorsoftllc.agenthq.ui.Chip
+import com.superiorsoftllc.agenthq.ui.TextButton
+import com.superiorsoftllc.agenthq.ui.plugin.config.ChildrenControl
+import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigLoad
+import kotlinx.coroutines.launch
 import com.superiorsoftllc.agenthq.ui.FilterChip
 import com.superiorsoftllc.agenthq.ui.Palette
 import com.superiorsoftllc.agenthq.ui.SectionLabel
@@ -29,7 +40,8 @@ object RegistrySetting {
     const val TITLE = "Registered"
     const val APPLIES_TO = "This computer. Pick a node that hosts children (a tab strip, or a container of the window) to see " +
         "what is registered in it: each child's module and version, Core or Community, and whether it is a tab, a core " +
-        "tree, an override, a wrap or an injection. Read-only; a locked node can never be changed by a module."
+        "tree, an override, a wrap or an injection. Switch a tab or an injected block off or on, and reorder a tab strip; " +
+        "stored by the daemon and applied at once. A locked node, the core tree as shipped and a strip's home tab are not editable."
 }
 
 /** A node in the picker; the suffix is the node id. */
@@ -44,15 +56,26 @@ const val REGISTRY_CHILD_LOCKED_TAG_PREFIX = "registry-child-locked-"
 /** Shown above the list when the picked node is locked. */
 const val REGISTRY_LOCKED_TAG = "registry-locked"
 const val REGISTRY_EMPTY_TAG = "registry-empty"
+/** P1 step 2: a child's Enabled checkbox, its move buttons, and why it is not editable; the suffix is the child id. */
+const val REGISTRY_TOGGLE_TAG_PREFIX = "registry-toggle-"
+const val REGISTRY_UP_TAG_PREFIX = "registry-up-"
+const val REGISTRY_DOWN_TAG_PREFIX = "registry-down-"
+const val REGISTRY_REFUSAL_TAG_PREFIX = "registry-refusal-"
+/** P1 step 2: the line saying the settings cannot be changed now (loading, or the daemon's answer). */
+const val REGISTRY_STATUS_TAG = "registry-status"
 
 /**
  * The node picker (the tab strips, then the window's containers) and the picked node's registered children, one row
- * each. Read-only: step 2 (docs/BLOCKS-LAYOUT-DESIGN.md section 6s) adds the controls.
+ * each. P1 step 2 (docs/BLOCKS-LAYOUT-DESIGN.md 6s E): each editable child has an Enabled checkbox and, in a tab
+ * strip, Up and Down; they write the node's settings through [TabFactory.config] (the daemon's node_config), and the
+ * strip and the tree redraw from them at once. While the stored copy is not loaded the controls are off and a line says why.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun RegistrySection(factory: TabFactory) {
-    val hosts = remember(factory) { NodeRegistry.of(factory) }
+    val config = factory.config
+    val stored = config.stored
+    val hosts = remember(factory, stored) { NodeRegistry.of(factory) }
     var picked by remember(factory) { mutableStateOf(hosts.firstOrNull()?.id) }
     val host = hosts.firstOrNull { it.id == picked }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -70,13 +93,27 @@ fun RegistrySection(factory: TabFactory) {
                 }
             }
         }
-        if (host != null) HostChildren(host)
+        val ready = config.load == NodeConfigLoad.LOADED
+        val status = when {
+            config.error != null -> "Not saved: ${config.error}"
+            config.load == NodeConfigLoad.LOADING || config.load == NodeConfigLoad.IDLE -> "Loading the stored settings from the daemon..."
+            else -> null
+        }
+        if (status != null) {
+            SectionLabel(
+                status, if (config.error != null) Palette.Danger else Palette.Muted,
+                Modifier.testTag(REGISTRY_STATUS_TAG).semantics { liveRegion = LiveRegionMode.Polite }, topGap = false,
+            )
+        }
+        if (host != null) HostChildren(factory, host, ready)
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun HostChildren(host: HostNode) {
+private fun HostChildren(factory: TabFactory, host: HostNode, ready: Boolean) {
+    val scope = rememberCoroutineScope()
+    val config = factory.config
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
         SectionLabel(host.title, topGap = false)
         Chip(host.id)
@@ -88,13 +125,32 @@ private fun HostChildren(host: HostNode) {
         return
     }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        for (c in host.children) ChildRow(c)
+        val order = host.children.filter { it.loaded }.map { it.id }
+        val reorder = ChildrenControl.reorderable(host)
+        for (c in host.children) {
+            val refusal = ChildrenControl.refusal(factory, host, c)
+            val at = order.indexOf(c.id)
+            ChildRow(
+                c, refusal, ready,
+                onEnabled = if (refusal == null) { on -> scope.launch { ChildrenControl.setEnabled(config, host.id, c.id, on) } } else null,
+                onMove = if (reorder && c.loaded) { delta -> scope.launch { ChildrenControl.move(config, host.id, order, c.id, delta) } } else null,
+                first = at <= 0, last = at == order.lastIndex,
+            )
+        }
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ChildRow(c: RegisteredChild) {
+private fun ChildRow(
+    c: RegisteredChild,
+    refusal: String?,
+    ready: Boolean,
+    onEnabled: ((Boolean) -> Unit)?,
+    onMove: ((Int) -> Unit)?,
+    first: Boolean,
+    last: Boolean,
+) {
     FlowRow(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(horizontal = 10.dp, vertical = 6.dp)
             .testTag(REGISTRY_CHILD_TAG_PREFIX + c.id),
@@ -110,5 +166,17 @@ private fun ChildRow(c: RegisteredChild) {
         c.order?.let { Chip("Order $it") }
         if (c.locked) Chip("Locked", Palette.Danger, textModifier = Modifier.testTag(REGISTRY_CHILD_LOCKED_TAG_PREFIX + c.id))
         Chip(if (c.enabled) "Enabled" else "Disabled", if (c.enabled) Palette.Accent else Palette.Muted, textModifier = Modifier.testTag(REGISTRY_STATE_TAG_PREFIX + c.id))
+        if (onEnabled != null) {
+            Checkbox(
+                c.enabled, onEnabled, enabled = ready,
+                modifier = Modifier.testTag(REGISTRY_TOGGLE_TAG_PREFIX + c.id).semantics { contentDescription = "Draw ${c.name}" },
+            )
+        } else if (refusal != null && !c.locked) {
+            Chip("Not editable: $refusal", textModifier = Modifier.testTag(REGISTRY_REFUSAL_TAG_PREFIX + c.id))
+        }
+        if (onMove != null) {
+            TextButton({ onMove(-1) }, Modifier.testTag(REGISTRY_UP_TAG_PREFIX + c.id).semantics { contentDescription = "Move ${c.name} up" }, enabled = ready && !first) { Text("Up") }
+            TextButton({ onMove(1) }, Modifier.testTag(REGISTRY_DOWN_TAG_PREFIX + c.id).semantics { contentDescription = "Move ${c.name} down" }, enabled = ready && !last) { Text("Down") }
+        }
     }
 }
