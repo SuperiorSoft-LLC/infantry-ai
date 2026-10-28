@@ -61,7 +61,7 @@ None of these additions is on `ShellContext`; they all belong to the module cont
   through it, and `coreController` does not close that path. The real fix is the S2 direction: blocks read
   `ShellContext` only, and `Shell.controller` goes internal once the last moved pane stops using it (S4c). Today 44
   files use `Controller` and 22 use `LocalShell`.
-- **The Registered view attributes filled nodes to the core shell** (`NodeRegistry` keeps the label "CoreShell.tabs"
+- **The Registered view attributes filled nodes to the core shell** (S4d: fixed, see "Cleanups and the empty-shell proof") (`NodeRegistry` keeps the label "CoreShell.tabs"
   so the P1 shots stay the same). It should name `Infantry_AppUi` once a baseline refresh is acceptable.
 
 ## Decisions that are expensive to reverse
@@ -657,3 +657,47 @@ Core jvmTest 744 and agentHqUi scoped 241 (shell, header, status, questions, dif
 tabs, registry, overrides, injections, config, chat, voice, sound, CoreTierGateUiTest) pass but for three failures that
 fail the same on base 5424a3df: HandCursorGuardTest (Text ratchet), ShellOverridesTest and InjectorUiTest "a module
 replaces the frame placeholder" (both: `infantry.shell.configEntry` is locked). App UI jvm, wasm and Android compile.
+
+## Cleanups and the empty-shell proof (S4d)
+
+- **Registered view names the filler.** `NodeRegistry` lists a filled slot, and every node under it, as the module that
+  fills it (`ChildSource.FILL`, "Fill", today always `Infantry_AppUi`) instead of "Infantry core" / "Core tree"
+  (`TabFactory.fillModules`, by slot id). The tab-tree source reads "Tab tree", no longer the pre-S4 "CoreShell.tabs".
+  NodeRegistryTest gains a test for it; the config settings' own nodes now read as the app UI's (they are in its
+  fill). The opt-in `registry` shots change by exactly those labels (base vs head below); the default set does not
+  draw the Registered view.
+- **Empty shell** (app UI module absent): opt-in `empty` base vs head, below. The skeleton, connect / servers and the
+  Configuration button with the trust-only Config draw as at base.
+
+## S4d count, by sub-interface
+
+| Sub-interface | Step | Members | Count |
+|---|---|---|---|
+| `TicketsContext` (new) | board | `all`, `visible`, `updates`, `epics`, `error`, `ticket`, `column`, `create`, `edit`, `delete`, `move`, `reorder`, `startNext`, `loadEpics`, `uploadImage` | 15 |
+| `WindowContext` (new) | close | `appBuild`, `serverMismatch`, `showChat`, `showTab`, `openConfig`, `openConnection` | 6 |
+| `QuestionsContext` (new) | close | `open`, `dismissed`, `cancel`, `show`, `showAll` | 5 |
+| `ShellContext` | board, close | `tickets`, `window`, `questions` | 3 |
+| `SessionContext` | board, close | `projects`, `hasSession` | 2 |
+| `RolesContext` | board | `profiles` | 1 |
+| `LayoutContext` | board | `compact` | 1 |
+| `LinkContext` | close | `daemonBuild` | 1 |
+| **total** | | | **34** |
+
+The chat step added none (it moved code; two kit helpers and the image viewer host became public, see "Chat moved").
+
+**Plainly:** 34 additions, 26 of them in three new sub-interfaces that each describe one domain (the backlog, the
+window's chrome, the owner's questions), 3 accessor fields, and 5 single members that are natural fields of an existing
+domain (`projects`, `hasSession`, `profiles`, `compact`, `daemonBuild`). No one-off getter for a single pane. That is
+"few coherent additions", **but it is not the whole drop-in path**: `LocalShell.controller` is closed by tier (a
+community module cannot reach it), not by migration. The chat, sidebar, title bar, assistant, diff, processes badge and
+the connection items still hand `(state, controller)` to the app's panes through `appShell`, and the core tabs through
+`appController`. A community module can replace the board, roles, notes, git, run, changes, question pill and status bar
+on ShellContext alone; it cannot yet replace those. Closing them honestly is ChatContext (~30), AgentsContext (~12),
+ProcessesContext (~5) and view-typed title bar kit: roughly another 50, which should be judged by the same count when
+taken.
+
+Proof: default shots 32/32 at 0 px. Opt-in `empty` base (5424a3df) vs head 2/2 at 0 px (`shell-empty-1400`,
+`shell-empty-config-1400`). Opt-in `registry` base vs head: `config-registry` differs by 3552 px, all of them the source
+chip of the Notes, Run and Git rows ("CoreShell.tabs" now "Tab tree") and the chips after it on those rows; checked by
+eye, nothing else moves. No committed baseline holds that shot. NodeRegistryTest, RegistrySectionUiTest,
+CoreShellTreeTest, ConfigDialogOverridesUiTest pass. All renders with blur off (renderTabShotsForDiff).

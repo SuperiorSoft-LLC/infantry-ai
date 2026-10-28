@@ -21,8 +21,10 @@ enum class HostKind {
 enum class ChildSource(val label: String) {
     /** A module's tab. */
     TAB("Tab"),
-    /** A core module's tab that draws a core tab tree ([TabFactory.tabTreeRoots]; the label is the pre-S4 name). */
-    CORE_TAB_TREE("CoreShell.tabs"),
+    /** A core module's tab that draws a tab tree ([TabFactory.tabTreeRoots]). S4d: was labelled "CoreShell.tabs" (pre-S4). */
+    CORE_TAB_TREE("Tab tree"),
+    /** S4d: a node of an empty shell slot's fill (S4), the fill's root or under it; drawn by the core module that fills it. */
+    FILL("Fill"),
     /** A tab replaced through a preference, or a node a module's shell override replaces. */
     REPLACE("Replace"),
     /** A node a module's shell override wraps. */
@@ -77,7 +79,7 @@ object NodeRegistry {
         val parents = strips.flatMap { it.children }.filter { factory.children(it.id).isNotEmpty() }
             .map { tabHost(factory, it.id, it.name, factory.children(it.id), container = null) }
         val trees = listOf(factory.shellRoot) + factory.tabTreeRoots.map { factory.tabTree(it.id) ?: it }
-        return strips + parents + trees.flatMap { treeHosts(factory, it) }
+        return strips + parents + trees.flatMap { treeHosts(factory, it, owner = null) }
     }
 
     /** The host node [id], or null if it hosts nothing. */
@@ -113,18 +115,20 @@ object NodeRegistry {
     /** What [b] draws its children from: a wrap's inner block (a replace has none the core knows). */
     private fun contents(b: Block): List<Block> = if (b is OverrideBlock) { if (b.mode == OverrideModes.WRAP) contents(b.inner) else emptyList() } else b.children
 
-    private fun treeHosts(factory: TabFactory, b: Block): List<HostNode> {
+    /** [owner]: the module whose fill [b] is in (S4d), null in the core tree. */
+    private fun treeHosts(factory: TabFactory, b: Block, owner: String?): List<HostNode> {
         val kids = contents(b)
+        fun ownerOf(c: Block) = factory.fillModules[c.id] ?: owner
         val here = if (kids.isEmpty()) emptyList() else listOf(
             HostNode(
                 b.id, b.id.removePrefix("infantry.shell."), HostKind.TREE, b.id in CoreShell.locked,
-                kids.mapIndexed { i, c -> treeChild(factory, c, i) },
+                kids.mapIndexed { i, c -> treeChild(factory, c, i, ownerOf(c)) },
             ),
         )
-        return here + kids.flatMap { treeHosts(factory, it) }
+        return here + kids.flatMap { treeHosts(factory, it, ownerOf(it)) }
     }
 
-    private fun treeChild(factory: TabFactory, c: Block, index: Int): RegisteredChild {
+    private fun treeChild(factory: TabFactory, c: Block, index: Int, owner: String?): RegisteredChild {
         val locked = c.id in CoreShell.locked
         fun by(module: String, source: ChildSource, over: String? = null): RegisteredChild {
             val m = factory.modules.firstOrNull { it.manifest.name == module }
@@ -132,8 +136,8 @@ object NodeRegistry {
         }
         return when (c) {
             is InjectedBlock -> by(c.module, ChildSource.INJECTION)
-            is OverrideBlock -> by(c.module, treeSource(c), CORE_SHELL_MODULE)
-            else -> RegisteredChild(c.id, c.id, CORE_SHELL_MODULE, null, Tier.CORE, index, ChildSource.SHELL, locked = locked)
+            is OverrideBlock -> by(c.module, treeSource(c), owner ?: CORE_SHELL_MODULE)
+            else -> if (owner != null) by(owner, ChildSource.FILL) else RegisteredChild(c.id, c.id, CORE_SHELL_MODULE, null, Tier.CORE, index, ChildSource.SHELL, locked = locked)
         }
     }
 

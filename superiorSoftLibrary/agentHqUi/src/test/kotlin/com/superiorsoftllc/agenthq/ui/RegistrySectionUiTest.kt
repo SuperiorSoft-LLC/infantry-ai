@@ -117,7 +117,7 @@ class RegistrySectionUiTest {
         onNodeWithTag(REGISTRY_STATE_TAG_PREFIX + "acme.tabs", useUnmergedTree = true).assertTextEquals("Enabled")
         // A core tab next to it draws a core tab tree.
         onNodeWithTag(REGISTRY_TIER_TAG_PREFIX + "infantry.git", useUnmergedTree = true).assertTextEquals("Core")
-        onNodeWithTag(REGISTRY_SOURCE_TAG_PREFIX + "infantry.git", useUnmergedTree = true).assertTextEquals("CoreShell.tabs")
+        onNodeWithTag(REGISTRY_SOURCE_TAG_PREFIX + "infantry.git", useUnmergedTree = true).assertTextEquals("Tab tree")
         // The strip is not locked.
         onNodeWithTag(REGISTRY_LOCKED_TAG, useUnmergedTree = true).assertDoesNotExist()
     }
