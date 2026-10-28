@@ -47,7 +47,6 @@ const val PROMPT_CHOICE_TAG_PREFIX = "prompt-choice-"
 const val PROMPT_OPTION_TAG_PREFIX = "prompt-option-"
 const val PROMPT_OTHER_FIELD_TAG = "prompt-other-field"
 const val PROMPT_SUBMIT_TAG = "prompt-submit"
-const val PROMPT_NEEDS_YOU_TAG_PREFIX = "session-needs-you-"
 const val PROMPT_COUNTDOWN_TAG = "prompt-card-countdown"
 
 /**
@@ -171,15 +170,4 @@ fun PromptCard(
             }
         }
     }
-}
-
-/** PROMPT-2: the "needs you" badge on a session row whose agent waits on a prompt card. */
-@Composable
-fun NeedsYouBadge(sessionId: String) {
-    Spacer(Modifier.width(4.dp))
-    Text(
-        "needs you", color = Palette.Accent, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1,
-        modifier = Modifier.clip(RoundedCornerShape(4.dp)).border(1.dp, Palette.Accent, RoundedCornerShape(4.dp))
-            .padding(horizontal = 4.dp, vertical = 1.dp).testTag(PROMPT_NEEDS_YOU_TAG_PREFIX + sessionId),
-    )
 }

@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.plugins.official
 
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugins.official.agents.AgentsSection
 import com.superiorsoftllc.agenthq.plugin.api.PanelDeclaration
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
@@ -9,9 +10,9 @@ import com.superiorsoftllc.agenthq.ui.plugin.Panels
 import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
 import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
 
-/** The left panel's agents section: counters, Board, search, filters, the list (drawn by the app UI's `TabContext.agentsList`). */
+/** The left panel's agents section: counters, Board, search, filters, the list (drawn from the window's `ShellContext.agents`). */
 private fun agentsPanel() =
-    PanelProvider(id = "infantry.agents", panel = Panels.LEFT, order = Panels.TABS_ORDER, testTag = "left-panel-agents", fill = true) { it.agentsList() }
+    PanelProvider(id = "infantry.agents", panel = Panels.LEFT, order = Panels.TABS_ORDER, testTag = "left-panel-agents", fill = true) { AgentsSection() }
 
 /** Infantry_Agents as a compiled-in module (web and Android, D9): the manifest mirrors module.json. */
 val InfantryAgents = AgentHqModule(

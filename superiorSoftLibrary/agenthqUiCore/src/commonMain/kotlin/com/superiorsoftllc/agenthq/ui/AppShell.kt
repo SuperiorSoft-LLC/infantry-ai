@@ -85,7 +85,7 @@ class Shell(
     val switchTo: (ServerChoice) -> Unit,
 ) {
     /** PLUGINS-1: what a tab may reach; [transcript] is the chat's, for the centre strip. */
-    fun tabContext(transcript: @Composable () -> Unit, agentsList: @Composable () -> Unit = {}) = TabContext(
+    fun tabContext(transcript: @Composable () -> Unit) = TabContext(
         state, controller,
         open = showTab,
         showChat = { ui.centerTab = homeTab; chat.spawnMode = false },
@@ -93,7 +93,6 @@ class Shell(
         diffTarget = ui.diffTarget,
         onOpenDiff = { ui.diffTarget = it },
         transcript = transcript,
-        agentsList = agentsList,
         subTab = { ui.subTabs[it] },
         pickSubTab = { host, id -> ui.subTabs[host] = id },
     )

@@ -97,6 +97,28 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
         override val hasAssistant get() = shell.state.connection.hasAssistant || shell.state.assistant != null
         override fun toggleAssistant() = shell.assistantPanel.toggle()
     }
+    override val agents: AgentsContext = object : AgentsContext {
+        override val state get() = shell.state
+        override val visible get() = shell.visible
+        override val query get() = ui.query
+        override fun setQuery(q: String) { ui.query = q }
+        override val roleFilter get() = ui.roleFilter
+        override fun setRoleFilter(role: String?) { ui.roleFilter = role }
+        override val searchFocus get() = shell.searchFocus
+        override fun select(id: String) {
+            shell.controller.select(id); shell.chat.spawnMode = false
+            if (shell.state.panels.compactWindow) shell.controller.showCompactScreen(CompactScreen.OUTPUT)
+        }
+        override fun newAgent() {
+            shell.chat.spawnMode = false; ui.showNewAgent = true
+            if (shell.state.panels.compactWindow) shell.controller.showCompactScreen(CompactScreen.OUTPUT)
+        }
+        override suspend fun remove(id: String) { shell.controller.removeSession(id) }
+        override suspend fun assign(id: String, projectId: String) { shell.controller.assignSessionProject(id, projectId) }
+        override fun dismissProjectRefusal() = shell.controller.dismissProjectRefusal()
+        override val openBoard: (() -> Unit)? get() = if (BOARD_SLOT in shell.tabs.fillModules) ({ ui.showBoard = true }) else null
+        override val reviewLoaded get() = shell.tabs.find(REVIEW_TAB) != null
+    }
 
     override val board: BoardContext = object : BoardContext {
         override val open: Boolean get() = ui.showBoard
@@ -411,3 +433,9 @@ class CoreTraits(private val state: AppState, private val controller: Controller
     override suspend fun save(draft: TraitDraft) = controller.saveTrait(draft)
     override suspend fun delete(id: String) = controller.deleteTrait(id)
 }
+
+/** RUNTIME-15: the board overlay's shell slot; the official Infantry_Board fills it (no jar, no fill, no Board button). */
+private const val BOARD_SLOT = "infantry.shell.board"
+
+/** RUNTIME-16: the official Infantry_Review tab; the sidebar's "To review" counter shows only when it is loaded. */
+private const val REVIEW_TAB = "infantry.review"

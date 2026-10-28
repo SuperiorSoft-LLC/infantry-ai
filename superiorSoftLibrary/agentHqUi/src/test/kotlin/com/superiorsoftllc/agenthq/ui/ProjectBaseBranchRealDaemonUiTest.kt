@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.agents.*
+
 import com.superiorsoftllc.agenthq.plugins.official.git.*
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
