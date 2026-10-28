@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.roles.*
 import com.superiorsoftllc.agenthq.plugins.official.run.*
 
 import androidx.compose.runtime.CompositionLocalProvider
@@ -38,7 +39,6 @@ import com.superiorsoftllc.agenthq.ui.shell.ShellContext
 import com.superiorsoftllc.agenthq.ui.shell.ToastContext
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellBoard
 import com.superiorsoftllc.agenthq.plugins.official.git.ShellGit
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellRoles
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellToast
 import com.superiorsoftllc.agenthq.ui.shell.implementation
 import kotlin.reflect.KClass

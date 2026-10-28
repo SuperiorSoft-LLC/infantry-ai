@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "apiVersion": 1,
   "author": "Infantry AI",
-  "description": "The app's UI in the shell's empty slots: title bar, side panels, chat, status bar, overlays and the roles window.",
+  "description": "The app's UI in the shell's empty slots: title bar, side panels, chat, status bar, and overlays.",
   "sequence": [],
   "entry": "com.superiorsoftllc.agenthq.plugins.core.AppUiModuleSource",
   "buildOrder": 200,
@@ -21,7 +21,6 @@
     "infantry.shell.sound",
     "infantry.shell.voice",
     "infantry.shell.questions",
-    "infantry.shell.config.settings",
-    "infantry.shell.roles"
+    "infantry.shell.config.settings"
   ]
 }

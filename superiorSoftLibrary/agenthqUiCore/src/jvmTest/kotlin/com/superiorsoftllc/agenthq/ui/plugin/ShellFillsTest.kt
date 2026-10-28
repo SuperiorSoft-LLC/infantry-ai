@@ -64,9 +64,11 @@ class ShellFillsTest {
         assertEquals("Acme_First", f.modules.first { it.fills[header] === f.baseRoot.find(header) }.manifest.name)
     }
 
-    @Test fun `Infantry_AppUi fills every slot and adds no tab tree`() {
-        val f = CoreModules.factory
+    @Test fun `Infantry_AppUi and Infantry_Roles fill every slot and add no tab tree`() {
+        // RUNTIME-14: the official Infantry_Roles (its jar on desktop) fills infantry.shell.roles; Infantry_AppUi every other slot.
+        val f = TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.roles.InfantryRoles)
         CoreShell.slots.forEach { id -> assertTrue(f.baseRoot.find(id) !is PlaceholderBlock, "$id is still empty") }
+        assertEquals("Infantry_Roles", f.fillModules["infantry.shell.roles"])
         // RUNTIME-6/7/8: Infantry_Git, Infantry_Run, Infantry_Notes and Infantry_Changes (official jars) register their own trees.
         assertEquals(emptyList<String>(), f.tabTreeRoots.map { it.id })
         assertEquals(emptyList(), f.problems)
@@ -76,10 +78,10 @@ class ShellFillsTest {
         val core = CoreModules.all.map { it.manifest.name }
         val found = CompiledModules.all.map { it.manifest.name }
         assertEquals(core, found.take(core.size))
-        // RUNTIME-4..13: then the official modules this test class path carries, through their jars' ServiceLoader entries.
+        // RUNTIME-4..14: then the official modules this test class path carries, through their jars' ServiceLoader entries.
         assertEquals(
             setOf("Infantry_Agents", "Infantry_Settings", "Infantry_Git", "Infantry_Run", "Infantry_Notes", "Infantry_Changes", "Infantry_Prompts", "Infantry_Skills",
-                "Infantry_Stats", "Infantry_Usage", "Infantry_Epics", "Infantry_Review", "Infantry_Pods", "Infantry_Profiles", "Infantry_Triggers", "Infantry_Attention"),
+                "Infantry_Stats", "Infantry_Usage", "Infantry_Epics", "Infantry_Review", "Infantry_Pods", "Infantry_Profiles", "Infantry_Triggers", "Infantry_Attention", "Infantry_Roles"),
             found.drop(core.size).toSet(),
         )
     }

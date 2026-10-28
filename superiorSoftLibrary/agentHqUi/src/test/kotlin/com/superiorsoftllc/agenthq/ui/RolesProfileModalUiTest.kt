@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.roles.*
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.ExperimentalTestApi
@@ -66,7 +67,15 @@ class RolesProfileModalUiTest {
             runDesktopComposeUiTest(1100, 1400) {
                 setContent {
                     val state by controller.state.collectAsState()
-                    RolesPane(state, controller, onSessionStarted = {}, onOpenAgent = {})
+                    // RUNTIME-14: the official pane takes plugin API domains only; the test builds them over its controller.
+                    RolesPane(
+                        RolesDeps(
+                            com.superiorsoftllc.agenthq.ui.shell.CoreLink(state), com.superiorsoftllc.agenthq.ui.shell.CoreSession(state),
+                            com.superiorsoftllc.agenthq.ui.shell.CoreRoles(state, controller), com.superiorsoftllc.agenthq.ui.shell.CoreTraits(state, controller),
+                            com.superiorsoftllc.agenthq.ui.shell.CoreExecutor(state), com.superiorsoftllc.agenthq.ui.shell.CoreNotes(state, controller),
+                        ),
+                        onSessionStarted = {}, onOpenAgent = {},
+                    )
                 }
                 link.push(Envelope(Envelope.READY, "contract=1.92.0 provider=stub instance=i1"))
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }

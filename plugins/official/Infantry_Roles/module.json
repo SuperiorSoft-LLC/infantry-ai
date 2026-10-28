@@ -4,13 +4,18 @@
   "apiVersion": 1,
   "author": "Infantry AI",
   "description": "Roles: who does what, and starting a session as one.",
+  "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.core.RolesModuleSource",
+  "entry": "com.superiorsoftllc.agenthq.plugins.official.roles.RolesPlugin",
+  "jar": "build/libs/Infantry_Roles.jar",
   "buildOrder": 40,
   "tabs": [
     {
       "id": "infantry.roles",
       "container": "center"
     }
+  ],
+  "fills": [
+    "infantry.shell.roles"
   ]
 }

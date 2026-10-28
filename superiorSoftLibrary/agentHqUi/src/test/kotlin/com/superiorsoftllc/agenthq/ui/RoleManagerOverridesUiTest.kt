@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.roles.*
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
@@ -31,14 +32,6 @@ import com.superiorsoftllc.agenthq.ui.net.DaemonClient
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import com.superiorsoftllc.agenthq.ui.protocol.Envelope
-import com.superiorsoftllc.agenthq.ui.shell.blocks.RoleFormActionsBlock
-import com.superiorsoftllc.agenthq.ui.shell.blocks.RoleFormExecutorBlock
-import com.superiorsoftllc.agenthq.ui.shell.blocks.RoleFormIdentityBlock
-import com.superiorsoftllc.agenthq.ui.shell.blocks.RoleFormNotesBlock
-import com.superiorsoftllc.agenthq.ui.shell.blocks.RoleFormTitleBlock
-import com.superiorsoftllc.agenthq.ui.shell.blocks.RoleFormTraitsBlock
-import com.superiorsoftllc.agenthq.ui.shell.blocks.RolesHint
-import com.superiorsoftllc.agenthq.ui.shell.blocks.RolesList
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -59,7 +52,7 @@ class RoleManagerOverridesUiTest {
             ModuleManifest("Acme_Roles", "1.0.0", author = "Acme", license = "NOASSERTION", shell = listOf(decl)),
             tier = Tier.COMMUNITY, shell = mapOf("acme" to override),
         )
-        val f = TabFactory(CoreModules.all + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Roles", decl.nodeId, decl.name, decl.mode)))
+        val f = TabFactory(CoreModules.all + InfantryRoles + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Roles", decl.nodeId, decl.name, decl.mode)))
         assertEquals(emptyList(), f.problems)
         return f
     }

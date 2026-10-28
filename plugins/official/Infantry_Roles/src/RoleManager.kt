@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.roles
+
+import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -33,7 +35,6 @@ import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.NoteScope
 import com.superiorsoftllc.agenthq.ui.model.TraitLimits
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.protocol.Role
 import com.superiorsoftllc.agenthq.ui.protocol.RoleBinding
 import kotlinx.coroutines.launch
@@ -53,14 +54,13 @@ const val ROLE_MANAGER_DESCRIPTION_TAG = "role-manager-description"
  * The project's role notes are shown read-only. Delete removes a custom role (the daemon refuses while a live session
  * has it) or resets a customised built-in to its bundled definition; a pure built-in cannot be deleted.
  *
- * Everything is an existing [Controller] command (`role_save`, `role_binding_set`, `role_traits_set`) plus `role_delete`.
+ * Everything is a [RolesDeps] request (`role_save`, `role_binding_set`, `role_traits_set`, `role_delete`).
  *
  * BLOCKS-LAYOUT L12: drawn as [RoleManagerFrame] (dialog, title, Done, the page shown) and its pieces, which the shell's
  * `infantry.shell.roles` node draws as child blocks.
  */
 @Composable
-fun RoleManagerDialog(state: AppState, controller: Controller, onDismiss: () -> Unit) {
-    val deps = RolesDeps(state, controller)
+fun RoleManagerDialog(deps: RolesDeps, onDismiss: () -> Unit) {
     RoleManagerFrame(onDismiss) { nav ->
         RoleManagerHint()
         RoleManagerList(deps, nav)
