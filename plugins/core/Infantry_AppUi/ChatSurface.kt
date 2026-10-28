@@ -724,7 +724,7 @@ fun InterruptButton(agent: AgentView, live: Boolean, controller: Controller) {
         onClick = { actionScope.launch { controller.interrupt(agent.id) } },
         enabled = live && busy,
         modifier = Modifier.testTag(INTERRUPT_BUTTON_TAG),
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.DangerRed),
     )
 }
 
@@ -934,7 +934,7 @@ internal fun PromptBox(
                 IconAction(
                     AhqIcons.Cancel, "Kill",
                     onClick = { actionScope.launch { controller.kill(a.id) } }, shortcut = "Ctrl+Shift+K", enabled = live && running,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.DangerRed),
                 )
                 // SESSION-RM-1: on an ended session there is nothing left to force-kill, so the same trash button
                 // removes it from the list (after the card menu's confirm). A running or idle one keeps Force kill.
@@ -943,7 +943,7 @@ internal fun PromptBox(
                     IconAction(
                         AhqIcons.DeleteForever, REMOVE_AGENT_LABEL,
                         onClick = { confirmingRemove = true }, enabled = live,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.DangerRed),
                     )
                     if (confirmingRemove) {
                         RemoveAgentDialog(
@@ -955,7 +955,7 @@ internal fun PromptBox(
                     IconAction(
                         AhqIcons.DeleteForever, "Force kill",
                         onClick = { actionScope.launch { controller.kill(a.id, force = true) } }, shortcut = "Ctrl+Alt+K", enabled = live && running,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.DangerRed),
                     )
                 }
                 var confirmingRestart by remember(a.id) { mutableStateOf(false) }
