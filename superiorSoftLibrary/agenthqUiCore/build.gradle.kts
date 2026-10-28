@@ -77,6 +77,8 @@ kotlin {
             implementation(project(":plugins:official:Infantry_Board"))
             // RUNTIME-16: and the official Infantry_Alerts (the sound and voice fills, out of Infantry_AppUi).
             implementation(project(":plugins:official:Infantry_Alerts"))
+            // RUNTIME-18: and the official Infantry_Processes (the status bar's processes-badge fill, out of Infantry_AppUi).
+            implementation(project(":plugins:official:Infantry_Processes"))
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)
