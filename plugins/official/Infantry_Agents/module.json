@@ -4,8 +4,10 @@
   "apiVersion": 1,
   "author": "Infantry AI",
   "description": "The left panel's agents list.",
+  "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.core.AgentsModuleSource",
+  "entry": "com.superiorsoftllc.agenthq.plugins.official.AgentsPlugin",
+  "jar": "build/libs/Infantry_Agents.jar",
   "buildOrder": 10,
   "panels": [
     {

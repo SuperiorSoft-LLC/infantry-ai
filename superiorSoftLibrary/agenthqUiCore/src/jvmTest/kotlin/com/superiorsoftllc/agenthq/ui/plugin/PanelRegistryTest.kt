@@ -5,6 +5,7 @@ import com.superiorsoftllc.agenthq.plugin.api.PanelDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.Tier
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
+import com.superiorsoftllc.agenthq.plugins.official.InfantryAgents
 import com.superiorsoftllc.agenthq.plugins.core.InfantryGit
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
@@ -30,7 +31,7 @@ class PanelRegistryTest {
 
     @Test
     fun `the core left panel is the agents section from Infantry_Agents and the right panel has no section`() {
-        val f = CoreModules.factory
+        val f = TabFactory(CoreModules.all + InfantryAgents) // RUNTIME-4: Infantry_Agents is official (its jar on desktop)
         assertEquals(emptyList(), f.problems)
         assertEquals(listOf("infantry.agents"), f.panels(Panels.LEFT).map { it.id })
         assertEquals("Infantry_Agents", f.panels(Panels.LEFT).single().module)
@@ -40,7 +41,7 @@ class PanelRegistryTest {
 
     @Test
     fun `a module's section lands in its panel by order and names the module`() {
-        val f = TabFactory(CoreModules.all + acme(listOf(section("acme.top", order = 10), section("acme.below", order = 900))))
+        val f = TabFactory(CoreModules.all + InfantryAgents + acme(listOf(section("acme.top", order = 10), section("acme.below", order = 900))))
         assertEquals(listOf("acme.top", "infantry.agents", "acme.below"), f.panels(Panels.LEFT).map { it.id })
         assertEquals("Acme_Hello", f.panels(Panels.LEFT).first().module)
         assertEquals(Tier.COMMUNITY, f.panelModuleOf("acme.top")?.tier)
@@ -49,7 +50,7 @@ class PanelRegistryTest {
     @Test
     fun `an undeclared section, one on another panel or on an unknown panel is refused`() {
         val f = TabFactory(
-            CoreModules.all + acme(
+            CoreModules.all + InfantryAgents + acme(
                 listOf(section("acme.sneak"), section("acme.moved", Panels.RIGHT), section("acme.nowhere", "bottom")),
                 declared = listOf(PanelDeclaration("acme.moved", Panels.LEFT), PanelDeclaration("acme.nowhere", "bottom")),
             ),
@@ -65,7 +66,7 @@ class PanelRegistryTest {
 
     @Test
     fun `a second section with a taken id is skipped and reported`() {
-        val f = TabFactory(CoreModules.all + acme(listOf(section("infantry.agents"))))
+        val f = TabFactory(CoreModules.all + InfantryAgents + acme(listOf(section("infantry.agents"))))
         assertEquals("Infantry_Agents", f.panels(Panels.LEFT).single().module)
         assertTrue(f.problems.single().let { "Acme_Hello" in it && "infantry.agents" in it && "already" in it })
     }

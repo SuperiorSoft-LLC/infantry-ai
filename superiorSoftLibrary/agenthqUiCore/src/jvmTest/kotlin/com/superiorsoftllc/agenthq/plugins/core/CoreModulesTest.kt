@@ -39,9 +39,9 @@ class CoreModulesTest {
     }
 
     @Test
-    fun `the generated desktop module list holds the 19 core modules in the old order, without official Infantry_Cli`() {
+    fun `the generated desktop module list holds the 18 core modules in the old order, without official Infantry_Cli and Infantry_Agents`() {
         assertEquals(
-            listOf("Agents", "Pods", "Roles", "Profiles", "Triggers", "Epics", "Notes", "Run", "Git", "Stats", "Settings",
+            listOf("Pods", "Roles", "Profiles", "Triggers", "Epics", "Notes", "Run", "Git", "Stats", "Settings",
                 "Changes", "Review", "Attention", "Usage", "Prompts", "Skills", "Board", "AppUi").map { "Infantry_$it" },
             CoreModules.all.map { it.manifest.name },
         )

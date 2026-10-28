@@ -16,6 +16,7 @@ import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.Tier
 import com.superiorsoftllc.agenthq.plugin.host.AcceptedPreference
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
+import com.superiorsoftllc.agenthq.plugins.official.InfantryAgents
 import com.superiorsoftllc.agenthq.plugins.core.InfantryGit
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.net.Controller
@@ -68,7 +69,7 @@ class ModuleHooksUiTest {
 
     @Test fun hooksDrawWhereTheirKindAndSlotSay() = runComposeUiTest {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        val f = TabFactory(CoreModules.all + module, preferences = listOf(AcceptedPreference("Acme_Hooks", "infantry.agents", "acme.agents")))
+        val f = TabFactory(CoreModules.all + InfantryAgents + module, preferences = listOf(AcceptedPreference("Acme_Hooks", "infantry.agents", "acme.agents")))
         val context = TabContext(AppState(), Controller(scope), open = {}, showChat = {}, insertIntoChat = {}, diffTarget = null, onOpenDiff = {}, transcript = {})
         setContent {
             Column {

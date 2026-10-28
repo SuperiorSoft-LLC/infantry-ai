@@ -11,7 +11,8 @@ plugins/
   modules.json            the folders to scan and the owner's enable list (edit and restart, no rebuild)
   core/<Vendor_Module>/   built-in modules, compiled into every build (desktop, web, Android)
   official/<Vendor_Module>/  programs made by Infantry: a jar signed by the Infantry key, loaded at runtime (desktop);
-                          web and Android compile the same sources in (Infantry_Cli, the CLI tab, is the first)
+                          web and Android compile the same sources in (Infantry_Cli, the CLI tab, and Infantry_Agents,
+                          the left panel agents list)
   community/<Vendor_Module>/  modules added by dropping a folder here (desktop and daemon only)
 ```
 
@@ -82,8 +83,8 @@ jar that will not load is skipped, with one log line saying why. It never stops 
   topological sort of `dependencies` plus `sequence`.
 - `tabs` go in a container: `center` or `right` (the right panel's strip). `panels` add a section to a side panel:
   `left` or `right`.
-- `preferences` replace a contribution by id: a tab with one of your tabs, or a panel section (for example the core
-  `infantry.agents` list) with one of your panel sections. The replacement takes the replaced one's place (id, order,
+- `preferences` replace a contribution by id: a tab with one of your tabs, or a panel section (for example the official
+  `infantry.agents` list, which needs no `allowOverride`) with one of your panel sections. The replacement takes the replaced one's place (id, order,
   shortcut, test tag; for a section also its panel and fill). If two modules replace the same id, the last one loaded
   wins, and the replacement is logged. A tab cannot replace a section, or the other way round.
 - `interceptors` hook a tab. `kind` decides which parts of the registered `TabInterceptor` run:
