@@ -4,8 +4,10 @@
   "apiVersion": 1,
   "author": "Infantry AI",
   "description": "The Settings tab: groups the setup tabs (Profiles, Triggers, Notes, Run, Git) under one.",
+  "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.core.SettingsModuleSource",
+  "entry": "com.superiorsoftllc.agenthq.plugins.official.SettingsPlugin",
+  "jar": "build/libs/Infantry_Settings.jar",
   "buildOrder": 120,
   "tabs": [
     {

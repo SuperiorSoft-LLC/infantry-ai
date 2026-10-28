@@ -148,9 +148,21 @@ class TabContext(
     val services: PluginServices = NoPluginServices,
     /** PLUGINS-3: the window's agents list (search, filters, the list, New agent). Only the left panel has one. */
     val agentsList: @Composable () -> Unit = {},
+    /** RUNTIME-5: the sub-tab picked in a host tab (host id -> sub-tab id; null = none yet, the host opens on its first). */
+    val subTab: (hostId: String) -> String? = { null },
+    /** RUNTIME-5: remembers [subTabId] as the one picked in host [hostId] (the window owns it, while the app runs). */
+    val pickSubTab: (hostId: String, subTabId: String) -> Unit = { _, _ -> },
     /** S4: whether the module this context is for is core tier ([forModule] sets it from the module's tier). */
     private val core: Boolean = true,
 ) {
+    /**
+     * RUNTIME-5 (plugin API, additive): draws host tab [hostId]'s sub-tabs ([TabFactory.children]) as a strip and the
+     * picked one's content, the picked one kept by the window ([subTab] / [pickSubTab]). Any tier may call it.
+     */
+    @Composable
+    fun SubTabs(hostId: String) =
+        SubTabHost(com.superiorsoftllc.agenthq.ui.LocalTabFactory.current, hostId, this, subTab(hostId)) { pickSubTab(hostId, it) }
+
     /**
      * S4 (drop-in path, docs/SHELL-LEAKS.md): the window's controller, for a core module's content only; null in a
      * community module's. Since S4 the core modules compile outside this library, so `internal` no longer marks them.
@@ -164,7 +176,7 @@ class TabContext(
     }
 
     internal fun forModule(services: PluginServices, core: Boolean) =
-        TabContext(state, controller, open, showChat, insertIntoChat, diffTarget, onOpenDiff, transcript, services, agentsList, core)
+        TabContext(state, controller, open, showChat, insertIntoChat, diffTarget, onOpenDiff, transcript, services, agentsList, subTab, pickSubTab, core)
 }
 
 /**

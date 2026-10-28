@@ -29,7 +29,7 @@ val InfantryGit = AgentHqModule(
                 { moveTo(18f, 9f); curveTo(18f, 14f, 6f, 12f, 6f, 17f) },
             ),
             testTag = "center-tab-GIT",
-            parent = SETTINGS_TAB_ID,
+            parent = "infantry.settings", // the official Infantry_Settings host tab (RUNTIME-5)
             routes = listOf("loadProjectGit", "loadProjectBranches", "loadProjectDiff", "checkoutProjectBranch", "setProjectBaseBranch", "saveProjectDirectory"),
         ) { GitTab() },
     ),

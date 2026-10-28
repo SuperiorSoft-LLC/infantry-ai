@@ -1,6 +1,8 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
+import com.superiorsoftllc.agenthq.plugins.official.InfantrySettings
+import com.superiorsoftllc.agenthq.plugins.official.SETTINGS_TAB_ID
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
@@ -39,9 +41,9 @@ class CoreModulesTest {
     }
 
     @Test
-    fun `the generated desktop module list holds the 18 core modules in the old order, without official Infantry_Cli and Infantry_Agents`() {
+    fun `the generated desktop module list holds the 17 core modules in the old order, without official Infantry_Cli, Infantry_Agents and Infantry_Settings`() {
         assertEquals(
-            listOf("Pods", "Roles", "Profiles", "Triggers", "Epics", "Notes", "Run", "Git", "Stats", "Settings",
+            listOf("Pods", "Roles", "Profiles", "Triggers", "Epics", "Notes", "Run", "Git", "Stats",
                 "Changes", "Review", "Attention", "Usage", "Prompts", "Skills", "Board", "AppUi").map { "Infantry_$it" },
             CoreModules.all.map { it.manifest.name },
         )
@@ -78,7 +80,7 @@ class CoreModulesTest {
 
     @Test
     fun `SETTINGS-TAB-1 the Settings group is off by default and switchable`() {
-        val f = TabFactory(CoreModules.all)
+        val f = TabFactory(CoreModules.all + InfantrySettings) // RUNTIME-5: Infantry_Settings is official (its jar on desktop)
         // Off (unset): the strip is the one before the group, Settings hidden, nothing under it.
         assertEquals(false, f.grouped(SETTINGS_TAB_ID))
         assertEquals(null, f.tabs(TabContainers.CENTER).firstOrNull { it.id == SETTINGS_TAB_ID })
@@ -115,7 +117,7 @@ class CoreModulesTest {
 
     @Test
     fun `SETTINGS-TAB-1 without the Settings module its tabs stay in the strip even when grouped`() {
-        val f = TabFactory(CoreModules.all - InfantrySettings)
+        val f = TabFactory(CoreModules.all) // RUNTIME-5: no Settings jar
         f.config.replace(listOf(NodeConfigEntry(SETTINGS_TAB_ID, TabGroups.GROUPED, JsonPrimitive(true))))
         assertEquals(null, f.hostOf("infantry.git"))
         assertTrue(f.tabs(TabContainers.CENTER).any { it.id == "infantry.git" })
