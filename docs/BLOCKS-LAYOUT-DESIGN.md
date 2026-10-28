@@ -1008,6 +1008,209 @@ changes a line of the ten-line summary):
   view below the modules is longer now (status line, Enabled/Up/Down, fields, group strip). The baseline is left as it
   is (another worker is moving blocks; refresh it on merge).
 
+### 6t. PAGE BUILDER (c49ed95f): the config tree describes the blocks, the shell loads them (design only)
+
+Owner vision (2026-10-27, repeated 2026-10-28), in his words: "the configs is basically interpreting the json
+configurations. when the app loads in the blocks its passing in those configurations; the page builder is the
+configurations; the Shell loads those in"; "the structure would replicate the plugins structure". Today (6s, P1 step 2)
+the tree can only toggle and reorder a container's children (`children.disabled`, `children.order`) and edit declared
+fields. This section lets the tree **restructure** the shell: move a node to another parent, add a node from a
+registered block type, and give each instance its own config. It builds on the code read for this note: `ConfigTree`,
+`ChildrenControl`, `ResolvedConfig`, `NodeConfigState` (P1 step 2, 44aee6e5), `BlockResolver` and `admitInjections`
+(L5/J1), `UiRegistrar.fill/tabTree` and the module tier (S4/S4d, 1dadfcc4), safe mode, consent and soft restart (S6,
+c4bf3718), and the BLOCKS-1 JSON block tree note (f706b748, never built).
+
+**For the owner, in ten lines.**
+
+```
+1. Code registers block TYPES ("board.pane", "layout.row"); the config tree holds block INSTANCES (id, type, parent, place, config).
+2. The shipped tree stays the default; your edits are a layer over it, stored per node in node_config, never a frozen copy.
+3. What you see and export is the EFFECTIVE tree as one JSON (blockType, id, config, children): that JSON is "the page".
+4. Move = a node's own layout.parent + layout.at; add = a new id with layout.type; remove = off (as today) or delete what you added.
+5. A moved or added node inherits config from where it is drawn now: child -> its new parent -> root -> default.
+6. Locked nodes never move, never take children, never lose them; community code only ever draws in nodes granted to it.
+7. Every edit, from the view or from a config plugin, goes through ONE rule check and ONE atomic daemon batch with undo.
+8. Safe mode draws the shipped tree with no layer; Reset layout is on the safe-mode banner and in Registered.
+9. The Registered view stays core and locked; a plugin may ship a nicer editor, but it writes through the same check.
+10. Export a section = its subtree as layout.json plus the modules of its types; a fresh shell loads it as a fill (b9644864).
+```
+
+#### 6t.1 Options for "the page is the configuration", and the pick
+
+| option | what is stored | for | against |
+|---|---|---|---|
+| A. snapshot | the whole tree as one JSON, rendered as is | literally "the JSON is the page"; trivially exportable | a core release that adds or renames a node is invisible or broken in every stored snapshot (3-way merge needed); a snapshot can drop a locked node unless revalidated in full; one bad write breaks the whole window |
+| B. layer of edits | per-node facts over the shipped tree (this node's parent, place, type) | upgrades flow through; each fact is checked on its own and a stale one is one Problems line, skipped; same shape as injections, which already add a node at a place | the stored rows are not one readable file |
+| C. B + read model | B, plus the effective tree rendered as one JSON for the view and for export | the owner's "page" exists, as output; export and starter shell get one format | one more serialiser |
+
+**Pick C.** The page JSON is what the layer *produces*, never what is stored. Why not A: it is the expensive mistake,
+because every stored snapshot becomes a fork of the core tree that the next release cannot reach. Why not a log of ops
+(add/move/remove replayed in order): the replay order becomes data, and one failed op shifts the meaning of the ones
+after it; facts keyed by node id are order-free.
+
+#### 6t.2 What the tree may express (question 1)
+
+The facts, all own-only keys (never inherited, as `children.*` already are, `isOwnOnlyKey`), all stored on the node they
+are about, so a move touches one row set and never two parents:
+
+```
+key            on              value                                      meaning
+layout.parent  any movable id  "infantry.shell.right.body"                draw me under this parent instead of my shipped one
+layout.at      any movable id  "first" | "last" | "before:<id>" | "after:<id>"   where among its children (InjectAt grammar, J1)
+layout.type    a new id        "board.pane"                               I am an instance of this registered block type
+<field keys>   any instance    per the type's declared fields             per-instance config (6s A, declared once per type)
+children.disabled / children.order   (unchanged from P1 step 2)
+```
+
+- **Block types are code, instances are data.** A module registers a type with a new
+  `UiRegistrar.blockType(type, BlockType)` and declares it in module.json `blockTypes`: `{type, title, fields[] (6s A
+  field declarations), takesChildren, needs: "any"|"row"|"box"|"column", parents: [node ids or types it may sit in,
+  default any], max (per tree, e.g. 1 for a singleton)}`. `BlockType.create(id, children)` returns a `Block`; the block
+  reads its instance config through `ShellContext.config.values(id)` as every block does (6s C), so the factory never
+  receives config and never knows where it came from. No class names, no props outside the declared fields, no colours or
+  pixels (BLOCKS-1 rule: tokens only).
+- **Build layouts.** The section 2 primitives (`group`, `row`, `column`, `stack`, `spacer`) are registered by core as
+  types `layout.row` ... with fields for their `Place` (weight, size, align, show); adding a `layout.row` and moving two
+  nodes into it is "building a layout".
+- **Add** offers only types whose module is loaded, whose `parents` admit the target and whose `needs` matches the
+  target's kind; the new id is `user.<type tail>.<n>` from the view, `<module>.<name>` from a plugin (6t.4). Adding is
+  writing `layout.type`, `layout.parent`, `layout.at` and any fields in one batch.
+- **Move** is writing `layout.parent`/`layout.at` on the moved id. The id never changes, so every override, injection
+  anchor, config row and test that names it still finds it: ids, not paths, are the address (section 7 rule 1).
+- **Remove:** a node you added is deleted (its rows go); an injected or tab child is switched off (`children.disabled`,
+  as today); a core child as shipped is still NOT removable from the tree (P1 step 2 decision: hiding core is a
+  replace, a module's job). A moved core node can be moved back (Reset).
+- **Which shipped nodes are movable.** Not all: many core blocks assume their parent (they emit into a `RowScope`, align
+  in a `BoxScope`, or wear `LocalHostSurface`). A shipped node is movable only if it is in `CoreShell.movable`, an
+  allow-list that starts empty except the tab-tree sections that already render standalone, and grows one node at a time
+  with a test that renders it under each kind it claims (`needs`). Injected and added nodes are movable within their
+  type's `needs`/`parents`. This is the honest cost: most of the page-builder power arrives only as core sections are
+  turned into types (6t.6).
+
+#### 6t.3 How it composes with locks, grants and the resolver (question 2)
+
+**Resolution order** (once per change of the module set or of the stored copy, never per frame; memoised per stored copy
+as P1 step 2's disabled filter is):
+
+```
+shipped tree (CoreShell.root, tab trees, fills)
+  -> injections (J1)                      modules add their children at their places
+  -> LAYOUT LAYER (new, pure function)    adds instances, then detaches and re-attaches moved ids
+  -> overrides (L5)                       replace / wrap by id, wherever the node now sits
+  -> children.disabled / order (P1 s2)    the drawn filter
+  -> ConfigTree.parents from the result   so config inherits from where a node is drawn
+```
+
+- The layer runs after injections so a user can move an injected node (the most common case) and before overrides so a
+  node moved out of a later-replaced subtree is still drawn. An injection anchored on a child the user moved away loses
+  its anchor and is ignored with a line, exactly as J1 handles a missing anchor. This needs `BlockResolver.resolve` split
+  into its two passes (inject; override) with the layer between them; the passes are already separate inside it.
+- **Locked** (`CoreShell.locked`, `ShellConfigTrust`): a locked node is never moved, never receives a moved or added
+  child, never loses a child; a move whose subtree holds a locked node is refused (the L5 rule for replace, reused);
+  `windowLayer` takes injections only, so it refuses moves and adds too.
+- **Tier grants, no new grant.** Who may restructure under node P: the owner through the core view, on any unlocked P;
+  a core module, on any unlocked P; a community module, only on P its modules.json `allowOverride` lists (overriding P is
+  full control of how P draws, a superset of arranging P's children). And where community *code* may draw: an instance of
+  a community type, or a moved community node, may sit only under a node its module's `allowInject` lists, whoever made
+  the edit. Invariant kept from S4d: community code only ever draws in a granted node, at module tier.
+- **Config resolver.** `ConfigTree.parents` is already built from the drawn trees (`parentsOf(roots)`), so it follows a
+  move for free. Decision: a moved node inherits from its **new** parent (where it is drawn), because "the configuration
+  of a place" is what the owner edits; the Fields view already says where each value comes from ("From <parent>"), so a
+  value that changes with a move is visible, and a value set on the node itself moves with it. Instance fields come from
+  the type's declaration, instantiated on the instance id (`DeclaredField(node = id, module = type's module)`); two
+  instances of one type have separate values and share defaults.
+- **Stale facts** (a parent id a release removed, a type whose module is gone, an anchor that no longer exists): the fact
+  is skipped, the node is drawn where it was shipped (or, for an added one, not at all), and Problems and the Registered
+  view show one line each. Never a crash, never a silent drop.
+
+#### 6t.4 How a config plugin edits it safely (question 3)
+
+- **One rule function.** `LayoutRules.check(tree, batch, actor): List<Refusal>` is pure and is used by the view, by the
+  plugin API and by the load path (stored facts are re-checked at every resolve, because the module set may have changed
+  since they were written). Refused always: a locked node or subtree (above); the trust sections and the Registered view;
+  a cycle (moving a node under its own descendant); a type not registered or its module not loaded; a parent that takes
+  no children (`withChildren` refuses) or whose kind fails the type's `needs`/`parents`; a duplicate id; a type's `max`
+  exceeded; the home tab of a strip; anything outside the actor's grants; caps (200 added nodes, depth 24) so a plugin
+  cannot build a pathological tree; any edit while the stored copy is not loaded (P1 step 2 rule).
+- **One write.** `ShellContext.layout` (new, core-owned surface; section 7 rule 4 applies): `preview(batch): LayoutCheck`
+  returns the refusals and the effective subtree, `apply(batch)` writes all of it or none. The daemon gets one new route,
+  `POST /node-config/batch {rev, rows}`, atomic, refused when `rev` is not the current revision (two windows editing:
+  the second gets "changed elsewhere, reload", never a silent merge). Rows carry `set_by` = `user` or `module:<name>`.
+- **Undo.** The daemon journals each batch (`node_config_log(rev, node_id, key, old_json, new_json, set_by, at)`,
+  migration 51); Undo reverts the last batch by writing its old values as a new batch, so undo is itself undoable and
+  multi-client safe. Reset is per node (its and its subtree's `layout.*` rows) and global ("Reset to shipped layout").
+- **Recovery floor.** `--safe-mode` (S6) already locks community modules; it now also skips the layout layer, so the
+  shipped tree is drawn and a layout that breaks the window can always be undone; the safe-mode banner gains "Reset
+  layout". A layout edit applies live (like P1 step 2), no restart.
+- **The Registered view stays core-owned and locked: yes.** It is where a plugin is switched off and now where a
+  layout is reset; a module must not replace the thing that undoes it (6r, 6s). A config plugin may still ship a nicer
+  editor (drag and drop on a canvas) as an ordinary tab: it reads the effective tree and writes only through
+  `ShellContext.layout`, so it can never do what the rules refuse. The editor is pluggable; the rules and the recovery
+  view are not. `ShellContext.layout.apply` is offered to core modules and to community modules for their
+  `allowOverride` nodes only; a community module without such a grant gets `preview` only.
+
+#### 6t.5 Relation to b9644864 (export a section) and the starter shell (question 4)
+
+- **One JSON format for the page, the export and the starter shell**, close to BLOCKS-1's node shape:
+  `{"schema": 1, "modules": [{"name", "version"}], "root": {"blockType", "id", "config": {...}, "children": [...]}}`.
+  `config` (not BLOCKS-1's `props`) because the values are the type's declared fields; named slots wait.
+- **Export a section** = serialise node N's effective subtree in that format plus the modules that provide its types.
+  It succeeds only if every node in the subtree is an instance of a registered type; a hard-coded Kotlin node is listed
+  ("not a type yet: infantry.shell.board.card"), and the export refuses. That list is the to-do list for b9644864's first
+  example (the scrum board): turn the board's nodes into types, then export works.
+- **Drop into a fresh shell:** S4's `fill(node, block)` gains a declarative twin, module.json `fills[].layout:
+  "board.layout.json"`; the empty shell's placeholder (S1) instantiates the file through the type registry. A plugin is
+  then module.json + layout.json + the code modules of its types, the same shape as a subtree of the shell's own config:
+  "the structure replicates the plugins structure".
+- **Starter shell (wasm, Android):** the same layout.json compiles in as the default tree; the registry is filled at
+  compile time (6s G). One format, three platforms.
+- Not decided here (b9644864's job): which daemon the fresh shell talks to (connect-or-bundle), and the data contexts a
+  type needs from `ShellContext` in a shell that is not Infantry AI.
+
+#### 6t.6 Rollout (each step 0 px on the shipped tree; the layer is a pure function with unit tests)
+
+| step | change | weight |
+|---|---|---|
+| PB1 | type registry: `UiRegistrar.blockType`, module.json `blockTypes`, layout primitives as core types; Registered lists types | 3 |
+| PB2 | `LayoutLayer` + `LayoutRules` (pure), resolver split into inject/override passes, `layout.*` read from the stored copy; no UI | 4 |
+| PB3 | daemon: `POST /node-config/batch` with rev, `node_config_log` (migration 51), undo route | 3 |
+| PB4 | Registered view: Move to..., Add block..., instance Fields, Undo, Reset; safe mode skips the layer, banner Reset layout | 4 |
+| PB5 | `ShellContext.layout` (preview/apply) for config plugins, grant checks, `set_by module:` shown in Registered | 3 |
+| PB6 | export a subtree as layout.json; `fills[].layout` in the empty shell (feeds b9644864) | 4 |
+| ongoing | turn core sections into types and add them to `CoreShell.movable`, one per ticket, board first | per section |
+
+#### 6t.7 Cost and risk, honestly (question 5)
+
+1. **Most of the shell is not a type yet.** Core nodes are Kotlin `Block` objects; until a section becomes a registered
+   type it can be moved only if allow-listed and cannot be added or exported. The page builder's reach grows one section
+   at a time; PB1-PB5 alone mostly move injected tabs and panels and build rows around them.
+2. **Parent-scope assumptions.** Blocks that emit into a row, align in a box or wear the host surface break when moved;
+   `needs` plus a per-type render test is the guard, and it is real work per movable node.
+3. **Node ids become user data,** not only plugin API: renaming one strands every stored fact that names it (shown as a
+   line, not lost silently). Section 7 rule 1 gets stricter.
+4. **Pixel gates cover the shipped tree only.** A user's layout is untested by definition; the layer's unit tests and
+   the rules are the only guard, and safe mode is the floor.
+5. **A config plugin can rearrange the screen to mislead** (move a community block beside a trust control, hide
+   things). Mitigated, not removed: locked nodes take no children, community code draws only in granted nodes, every
+   batch is attributed (`set_by`) and undoable in the locked view.
+6. **One layout per daemon, not per device:** desktop and phone share it; `Place.show` (Wide/Compact) still applies.
+   Per-device layouts would be a key prefix later; decided per daemon now because node_config is per daemon.
+7. **Complexity budget:** one new layer, one rule function, one route, one table, one registry. Nothing else; no new
+   grant, no new storage engine, no snapshot merge.
+
+#### 6t.8 Decisions taken here (no owner wait), and the expensive-to-reverse ones
+
+- Taken: layer of facts over the shipped tree, not a snapshot (C); facts on the node they describe; moves inherit from
+  the new parent; core shipped nodes stay non-removable; `allowOverride` on P implies "may restructure under P", no new
+  grant; Registered view stays core and locked; safe mode skips the layer; one layout per daemon.
+- **Expensive to reverse:** (a) the `layout.parent/at/type` key format and the `user.<type>.<n>` id scheme, because they
+  are stored user data in every installation; (b) the page/export JSON schema, because exported plugins and starter
+  shells carry it; (c) "allowOverride implies restructure", because community modules will be granted on that meaning;
+  (d) block type names, once a layout.json names them (same status as node ids).
+
+Open questions for the PM (none block PB1-PB3): per-device layouts, ever? Which section becomes a type first (board
+proposed, it is b9644864's example)? Should the owner be able to hide a core shipped node without a module (today: no)?
+
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 
 | part | bucket |
