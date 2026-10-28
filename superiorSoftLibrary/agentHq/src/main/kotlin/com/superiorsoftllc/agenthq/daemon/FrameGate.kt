@@ -18,7 +18,7 @@ object FrameGate {
 
     val DEMO_LOCK_ALLOWED: Set<String> = setOf(
         REPLAY_REQUEST,
-        Envelope.SESSIONS, Envelope.SESSION_STATS_GET,
+        Envelope.SESSIONS, Envelope.SESSION_STATS_GET, Envelope.USAGE_METER_GET,
         Envelope.PROVIDERS, Envelope.PROVIDER_STATES, Envelope.MODELS, Envelope.LIMITS, Envelope.LIMIT_CATALOG,
         Envelope.USAGE_GET, Envelope.SETTINGS_GET, Envelope.CLI_LOCATIONS, Envelope.TOOL_APPROVAL, Envelope.APPROVAL_RULES,
         Envelope.ROLE_LIST, Envelope.ROLE_BINDING_LIST, Envelope.ROLE_BINDING_GET,

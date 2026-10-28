@@ -512,6 +512,11 @@ class Controller(
         if (!contractAtLeast(_state.value.connection.contract, 1, 92)) CommandResult.Refused("this daemon does not report session statistics (contract 1.92.0)")
         else send(WireRequests.sessionStatsGet(sessionId))
 
+    /** USAGE-1: ask for the daily token/cost rows (contract 1.141.0); the answer is a `usage_meter` frame the reducer keeps. */
+    suspend fun requestUsageMeter(): CommandResult =
+        if (!contractAtLeast(_state.value.connection.contract, 1, 141)) CommandResult.Refused("this daemon has no usage meter (contract 1.141.0)")
+        else send(Envelope(Envelope.USAGE_METER_GET))
+
     /**
      * BUG-M2-11e: store [minutes] as the daemon's `session.keepAliveMinutes` (0 = off). The shown value changes only when
      * the daemon answers `settings`, so a refused value (an `error` frame, shown as a notice) never looks applied.

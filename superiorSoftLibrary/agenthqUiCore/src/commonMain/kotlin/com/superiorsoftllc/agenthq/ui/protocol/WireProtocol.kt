@@ -151,6 +151,9 @@ data class Envelope(
         // daemon from its harness's own local record; answered to the requester only by `session_stats` (a SessionStats).
         const val SESSION_STATS_GET = "session_stats_get"
         const val SESSION_STATS = "session_stats"
+        // Contract 1.141.0 (USAGE-1): `usage_meter_get` -> `usage_meter` (a UsageMeterReport), daily tokens/cost by role, model, source.
+        const val USAGE_METER_GET = "usage_meter_get"
+        const val USAGE_METER = "usage_meter"
 
         // Daemon settings. BUG-M2-11e reads and writes `session.keepAliveMinutes` (contract 1.68.0) through them.
         // `settings_get` (data = a key, or empty for all) and `settings_set` are answered by `settings` (a JSON object).
@@ -2428,3 +2431,15 @@ data class HarnessInstallResult(
     val log: List<String> = emptyList(),
     val report: HarnessInstallReport = HarnessInstallReport(),
 )
+
+/** USAGE-1 (contract 1.141.0): one day of one (role, provider, model, source); [cost] is provider-reported, null = none. */
+@Serializable
+data class UsageMeterRow(
+    val day: String, val role: String, val provider: String, val model: String, val source: String,
+    val runs: Long = 0, val turns: Long = 0, val input: Long = 0, val output: Long = 0,
+    val cacheRead: Long = 0, val cacheWrite: Long = 0, val contextSum: Long = 0, val cost: Double? = null,
+)
+
+/** USAGE-1: the `usage_meter` answer. */
+@Serializable
+data class UsageMeterReport(val rows: List<UsageMeterRow> = emptyList(), val keepWeeks: Int = 0, val generatedAt: Long = 0)

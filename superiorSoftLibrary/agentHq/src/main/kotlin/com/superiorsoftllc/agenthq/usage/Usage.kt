@@ -265,15 +265,20 @@ class UsageRecorder(
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val buffers = java.util.concurrent.ConcurrentHashMap<String, MutableList<String>>()
+    // USAGE-1: Claude and Pi report no `step_finish`; their usage comes from the stream accumulator (usagemeter package).
+    private val streams = java.util.concurrent.ConcurrentHashMap<String, com.superiorsoftllc.agenthq.usagemeter.StreamUsageAccumulator>()
 
     fun onSessionEvent(event: com.superiorsoftllc.agenthq.session.SessionEvent) {
         when (event) {
-            is com.superiorsoftllc.agenthq.session.SessionEvent.Turn ->
-                buffers[event.sessionId] = java.util.Collections.synchronizedList(mutableListOf())
+            is com.superiorsoftllc.agenthq.session.SessionEvent.Turn -> {
+                    buffers[event.sessionId] = java.util.Collections.synchronizedList(mutableListOf())
+                    streams[event.sessionId] = com.superiorsoftllc.agenthq.usagemeter.StreamUsageAccumulator()
+                }
 
             is com.superiorsoftllc.agenthq.session.SessionEvent.Stdout -> {
                 val provider = sessions(event.sessionId)?.provider ?: return
                 runCatching { tracker.observeStreamLine(provider, event.line) }
+                streams[event.sessionId]?.accept(event.line)
                 if (event.line.contains("step_finish")) {
                     buffers.computeIfAbsent(event.sessionId) { java.util.Collections.synchronizedList(mutableListOf()) }.add(event.line)
                 }
@@ -284,7 +289,9 @@ class UsageRecorder(
                 val record = sessions(event.sessionId) ?: return
                 val runId = "${record.id}:${record.runCount}"
                 val model = record.model ?: defaultModel(record.provider) ?: "default"
+                val streamed = streams.remove(event.sessionId)?.totals()
                 val usage = RunUsageParser.parse(runId, record.provider, model, lines.asSequence())
+                    ?: streamed?.let { RunUsage(runId, record.provider, model, it.input, it.output, 0, it.cacheRead, it.cacheWrite, it.cost) }
                 runCatching { persist(RunUsageRecord(runId, record.id, record.provider, model, clock(), usage)) }
                     .onFailure { System.err.println("[agentHq] run usage not stored for $runId: ${it.message}") }
                 if (usage != null) {

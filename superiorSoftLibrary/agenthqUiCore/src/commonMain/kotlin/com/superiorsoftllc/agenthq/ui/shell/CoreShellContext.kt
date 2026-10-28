@@ -70,6 +70,7 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
     override val prompts: PromptsContext = CorePrompts(state, shell.controller)
     override val skills: SkillsContext = CoreSkills(state, shell.controller)
     override val usage: UsageContext = CoreUsage(shell.controller)
+    override val meter: UsageMeterContext = CoreUsageMeter(shell.controller)
     override val epics: EpicsContext = CoreEpics(shell.controller)
     override val review: ReviewContext = CoreReview(shell.controller)
     override val pods: PodsContext = CorePods(shell.controller)
@@ -143,6 +144,11 @@ class CoreUsage(private val controller: Controller) : UsageContext {
     override suspend fun refreshUsage(force: Boolean): CommandResult = controller.refreshUsage(force)
     override suspend fun usageSet(set: com.superiorsoftllc.agenthq.ui.protocol.UsageSet): CommandResult = controller.usageSet(set)
     override suspend fun sessionStats(sessionId: String): CommandResult = controller.requestSessionStats(sessionId)
+}
+
+/** USAGE-1: [controller]'s usage meter request. */
+class CoreUsageMeter(private val controller: Controller) : UsageMeterContext {
+    override suspend fun refresh(): CommandResult = controller.requestUsageMeter()
 }
 
 /** RUNTIME-11: [controller]'s epic requests, for the Epics tab (or a pane drawn outside a shell). */

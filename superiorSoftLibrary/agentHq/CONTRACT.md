@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.140.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.141.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,10 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+
+### What changed in 1.141.0 (USAGE-1, ticket-98828ad8) - tokens and cost per day, by role, model and source
+
+Additive; `contract=1.141.0`. **`usage_meter_get`** (client -> daemon, no data) is answered to the requester by **`usage_meter`** `{rows, keepWeeks, generatedAt}`; each row is one day (UTC `yyyy-MM-dd`) of one (`role`, `provider`, `model`, `source`) with `runs`, `turns`, `input`, `output`, `cacheRead`, `cacheWrite`, `contextSum` (input + cache read + cache write summed over turns) and `cost` (provider-reported, null = none). `source` is `worker`, `pm`, `trigger` or `mail`. Provider-reported only. Retention: per-run rows for the current plus previous week, older runs rolled into the daily rows, daily rows kept `keepWeeks` (default 4, env `AGENTHQ_USAGE_METER_KEEP_WEEKS`) weeks. Allowed under the demo lock.
 
 ### What changed in 1.140.0 (ASK-TIMER-2, ticket-cc73295b) - the timer picks the recommended option
 

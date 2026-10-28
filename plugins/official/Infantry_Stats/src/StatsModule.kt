@@ -9,8 +9,17 @@ import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
 import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
 import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
 import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
+import androidx.compose.foundation.clickable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 import com.superiorsoftllc.agenthq.ui.shell.NoUsage
+import com.superiorsoftllc.agenthq.ui.shell.NoUsageMeter
 
 /** The Stats tab's id. */
 const val STATS_TAB_ID = "infantry.stats"
@@ -27,8 +36,11 @@ private fun statsTab() = TabProvider(
         { moveTo(18f, 17f); lineTo(18f, 9f) },
     ),
     testTag = "center-tab-STATS",
-    routes = listOf("requestSessionStats"),
-) { StatsPane(it.state, LocalShellContext.current?.usage ?: NoUsage) }
+    routes = listOf("requestSessionStats", "requestUsageMeter"),
+) {
+    val ctx = LocalShellContext.current
+    StatsTabContent(it.state, ctx?.usage ?: NoUsage, ctx?.meter ?: NoUsageMeter)
+}
 
 /** PLUGINS-1: Infantry_Stats (official since RUNTIME-10), the selected session's statistics, compiled in on web and Android (D9). */
 val InfantryStats = AgentHqModule(
@@ -50,4 +62,21 @@ class StatsPlugin : UiPlugin, ModuleSource {
     }
 
     override fun modules(): List<AgentHqModule> = listOf(InfantryStats)
+}
+
+/** The Stats tab: the selected session's statistics, or (USAGE-1) the daemon's token meter by day / week. */
+@androidx.compose.runtime.Composable
+private fun StatsTabContent(state: com.superiorsoftllc.agenthq.ui.model.AppState, usage: com.superiorsoftllc.agenthq.ui.shell.UsageContext, meter: com.superiorsoftllc.agenthq.ui.shell.UsageMeterContext) {
+    var daily by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.fillMaxSize()) {
+        androidx.compose.foundation.layout.Row(androidx.compose.ui.Modifier.padding(start = 14.dp, top = 8.dp)) {
+            for ((label, on) in listOf("Session" to !daily, "Tokens by day/week" to daily)) {
+                androidx.compose.material3.Text(
+                    label, color = if (on) com.superiorsoftllc.agenthq.ui.Palette.Accent else com.superiorsoftllc.agenthq.ui.Palette.Muted, fontSize = 11.sp,
+                    modifier = androidx.compose.ui.Modifier.testTag("stats-mode-$label").clickable { daily = label != "Session" }.padding(end = 14.dp),
+                )
+            }
+        }
+        if (daily) UsageMeterPane(state, meter) else StatsPane(state, usage)
+    }
 }
