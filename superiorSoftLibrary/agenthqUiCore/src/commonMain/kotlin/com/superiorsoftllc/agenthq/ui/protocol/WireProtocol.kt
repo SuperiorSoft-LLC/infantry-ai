@@ -2340,6 +2340,10 @@ data class PromptRequestView(
     val options: List<PromptOptionView> = emptyList(),
     val multiSelect: Boolean = false,
     val allowOther: Boolean = false,
+    /** ASK-TIMER (1.139.0): epoch ms when the daemon resolves it by itself; null = no timer. */
+    val expiresAt: Long? = null,
+    /** ASK-TIMER (1.139.0): a tool approval's decision at [expiresAt] (`deny` | `allow_once`). */
+    val onTimeout: String? = null,
 )
 
 /** Contract 1.77.0 (PROMPT-1): `prompt_response`, a [decision] for a tool approval, [answers]/[otherText] for a question. */

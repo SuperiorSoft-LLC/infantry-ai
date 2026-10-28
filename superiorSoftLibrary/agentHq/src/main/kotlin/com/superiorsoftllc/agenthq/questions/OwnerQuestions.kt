@@ -149,6 +149,11 @@ class OwnerQuestions(
     private val sessionBusy: (String) -> Boolean = { false },
     /** `limits.questions.ttlMinutes`: an open question older than this, whose asker is not busy, is orphaned; 0 = never. */
     private val ttlMinutes: () -> Long = { 0L },
+    /**
+     * ASK-TIMER (1.139.0): the `defaultAfterMin` a question of this asking session gets when it names none (the
+     * prompt timer, `prompts.timeoutSec` with the session's override, in whole minutes); null = no timer.
+     */
+    private val defaultAfterMinFor: (sessionId: String) -> Int? = { null },
 ) {
     @Volatile
     var sink: (OwnerQuestion) -> Unit = {}
@@ -207,7 +212,8 @@ class OwnerQuestions(
                 recommended = recommended,
                 reason = reason,
                 allowOther = true, // the owner may always type an own answer
-                defaultAfterMin = request.defaultAfterMin,
+                defaultAfterMin = request.defaultAfterMin
+                    ?: runCatching { defaultAfterMinFor(asker.sessionId) }.getOrNull()?.coerceIn(QuestionAsk.DEFAULT_AFTER_MIN_RANGE),
                 createdAt = now,
             ).also(repository::insert)
         }

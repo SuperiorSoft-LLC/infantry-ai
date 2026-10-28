@@ -66,6 +66,22 @@ object PromptCards {
         return base.removeSuffix(".exe").removeSuffix(".EXE").takeIf { it.isNotEmpty() }
     }
 
+    /**
+     * ASK-TIMER (1.139.0): the countdown line of a prompt with a timer at [now] (epoch ms), e.g. "Auto-deny in 9:42";
+     * null when the prompt has no timer.
+     */
+    fun countdown(prompt: PromptRequestView, now: Long): String? {
+        val expiresAt = prompt.expiresAt ?: return null
+        val left = ((expiresAt - now).coerceAtLeast(0) + 999) / 1_000
+        val clock = "${left / 60}:${(left % 60).toString().padStart(2, '0')}"
+        val action = when {
+            prompt.kind != KIND_TOOL_APPROVAL -> "No answer"
+            prompt.onTimeout == ALLOW_ONCE -> "Auto-allow"
+            else -> "Auto-deny"
+        }
+        return "$action in $clock"
+    }
+
     /** "1 of N" when more than one prompt waits for this session, else null. */
     fun position(count: Int): String? = if (count > 1) "1 of $count" else null
 

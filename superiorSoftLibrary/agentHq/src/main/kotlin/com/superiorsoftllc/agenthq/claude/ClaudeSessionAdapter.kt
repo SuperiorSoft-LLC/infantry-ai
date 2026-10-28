@@ -265,8 +265,14 @@ class ClaudeSessionAdapter(
             val tool = request.str("tool_name").orEmpty()
             val input = request["input"] as? JsonObject ?: JsonObject(emptyMap())
             if (tool == ASK_USER_QUESTION) return answerQuestions(asker, session, input)
-            val decision = asker.requestApproval(session, tool, approvalSummary(input))
-            return if (decision.allows) allow(input) else deny("The user denied permission to use $tool (or the prompt timed out).")
+            val outcome = asker.requestApprovalOutcome(session, tool, approvalSummary(input))
+            if (outcome.decision.allows) return allow(input)
+            // ASK-TIMER: the worker is told the timer decided, so it carries on instead of waiting for the owner.
+            return deny(
+                if (outcome.timedOut) "The owner did not answer the approval prompt for $tool within ${outcome.timeoutSec}s, so " +
+                    "Infantry AI denied it automatically. Do not wait for approval: continue without this call or take another approach."
+                else "The user denied permission to use $tool (or the prompt timed out).",
+            )
         }
 
         private suspend fun answerQuestions(asker: PromptAsker, session: String, input: JsonObject): JsonObject {

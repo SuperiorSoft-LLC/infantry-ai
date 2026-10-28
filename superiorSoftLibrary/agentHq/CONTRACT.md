@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.138.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.139.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,10 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+
+### What changed in 1.139.0 (ASK-TIMER, ticket-c62e72a9) - prompt timers that never leave a worker waiting
+
+Additive + behavioural; `contract=1.139.0`. **`prompt_request`** gains `expiresAt` (epoch ms when the daemon resolves the prompt by itself; null = no timer) and `onTimeout` (a tool approval's decision at expiry, `deny` | `allow_once`; null for a question). Setting **`prompts.timeoutSec`** now takes 0..86400 (0 = no timer); new setting **`prompts.onTimeout`** (`deny` default | `approve`) is what an unanswered tool approval resolves as (`prompt_resolved` `resolvedBy` `timeout`, `outcome` the decision); a question still resolves as no answer. `new` gains `promptTimeoutSec` / `promptOnTimeout`, the session's own override (null = global). Every expiry is one `[agenthq]` line in the session's transcript, and Claude's denial tells the worker the timer decided so it carries on. An owner question (`question_ask`) with no `defaultAfterMin` gets the prompt timer, in whole minutes, as its `defaultAfterMin`.
 
 ### What changed in 1.138.0 (PLUGIN-ENDPOINTS-2, ticket-779d5845) - a plugin endpoint's credential
 
