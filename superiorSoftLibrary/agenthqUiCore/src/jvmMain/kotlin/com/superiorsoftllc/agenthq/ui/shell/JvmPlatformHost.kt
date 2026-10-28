@@ -158,7 +158,9 @@ class JvmPlatformHost(
     @Volatile private var loaded: com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins.Loaded? = null
 
     private fun load() = synchronized(this) {
-        com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins.load(stateDir() ?: File(".agenthq"), env, property).also { loaded = it }
+        // S7: the module set it replaces is unloaded once the new one is built (observers off, loaders closed).
+        val old = loaded
+        com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins.load(stateDir() ?: File(".agenthq"), env, property).also { loaded = it; old?.close() }
     }
 
     override val tabFactory: com.superiorsoftllc.agenthq.ui.plugin.TabFactory get() = (loaded ?: synchronized(this) { loaded ?: load() }).factory
@@ -172,6 +174,7 @@ class JvmPlatformHost(
             root, com.superiorsoftllc.agenthq.plugin.host.PluginFolders.demoLock(env),
             com.superiorsoftllc.agenthq.plugin.host.PluginFolders.safeMode(env, property),
             picker = if (canPickFiles) ::pickFile else null,
+            release = { synchronized(this) { loaded?.close() } },
         )
     }
 

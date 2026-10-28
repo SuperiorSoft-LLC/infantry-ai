@@ -41,9 +41,20 @@ object DesktopPlugins {
         val log: List<String>,
         /** S6: started with every community module off (`--safe-mode`). */
         val safeMode: Boolean = false,
+        /** S7: unloads this module set (see [close]). */
+        private val unload: () -> Unit = {},
         /** The gated services each loaded module gets (what its tabs see as [TabContext.services]). */
         val services: (module: String) -> com.superiorsoftllc.agenthq.plugin.api.PluginServices,
-    )
+    ) : AutoCloseable {
+        private var closed = false
+
+        /**
+         * S7: unloads every module of this set: each module's `stop()` runs, every event observer is unsubscribed, and the
+         * class loaders are closed so Windows lets go of the jars (a module can then be removed outside safe mode). Safe to
+         * call twice; one module that fails to stop does not keep the others from stopping.
+         */
+        override fun close() { if (!closed) { closed = true; unload() } }
+    }
 
     fun load(
         stateDir: File,
@@ -59,7 +70,8 @@ object DesktopPlugins {
         val demoLock = PluginFolders.demoLock(env)
         val safeMode = PluginFolders.safeMode(env, property)
         // S6: an app UI installed from a .ihq carries its modules in one jar; they take part as if compiled in.
-        val withBundles = compiled + bundles(root, config, compiled, say)
+        val loaders = mutableListOf<URLClassLoader>()
+        val withBundles = compiled + bundles(root, config, compiled, say, loaders)
         val candidates = candidates(root, config, withBundles)
         say("[plugins] root ${root.absolutePath}${if (demoLock) " (demo lock on)" else ""}${if (safeMode) " (safe mode: community modules off)" else ""}")
         var resolution = ModuleResolver.resolve(candidates, config, demoLock, safeMode = safeMode)
@@ -88,7 +100,7 @@ object DesktopPlugins {
             val needs = m.dependencies.map { it.id }.firstOrNull { it in refused }
             val result = if (needs != null) Result.failure(IllegalStateException("dependency $needs is refused")) else
                 withBundles.firstOrNull { it.manifest.name == s.name && s.tier == Tier.CORE }?.let { Result.success(it) }
-                    ?: runCatching { loadJar(s, services.getValue(s.name)) }
+                    ?: runCatching { loadJar(s, services.getValue(s.name), loaders) }
             result.onSuccess { modules += it }.onFailure {
                 refused += s.name
                 resolution = resolution.refuse(s.name, it.message ?: it::class.simpleName.orEmpty())
@@ -102,7 +114,11 @@ object DesktopPlugins {
             allowInject = { config.setting(it).allowInject }, allowOverride = { config.setting(it).allowOverride })
         built = factory
         factory.problems.forEach { say("[plugins] $it") }
-        return Loaded(factory, root, config, demoLock, log, safeMode) { services[it] ?: NoPluginServices }
+        return Loaded(factory, root, config, demoLock, log, safeMode, unload = {
+            modules.forEach { m -> runCatching { m.onStop() }.onFailure { say("[plugins] ${m.manifest.name} failed to stop: ${it.message}") } }
+            bus.clear()
+            loaders.forEach { runCatching { it.close() } }
+        }) { services[it] ?: NoPluginServices }
     }
 
     /**
@@ -111,7 +127,7 @@ object DesktopPlugins {
      * cannot fill the shell's slots anyway), loaded before the rules run so their dependencies resolve as if compiled in.
      * The bundle's own name must be one of its modules. A folder that does not load is left to [loadJar]'s refusal.
      */
-    private fun bundles(root: File, config: ModulesConfig, builtIn: List<AgentHqModule>, say: (String) -> Unit): List<AgentHqModule> {
+    private fun bundles(root: File, config: ModulesConfig, builtIn: List<AgentHqModule>, say: (String) -> Unit, loaders: MutableList<URLClassLoader>): List<AgentHqModule> {
         val core = config.folders.filter { it.tier == Tier.CORE }.map { File(root, it.path).canonicalFile }
         val out = mutableListOf<AgentHqModule>()
         for (c in PluginFolders.scan(root, config)) {
@@ -122,7 +138,8 @@ object DesktopPlugins {
             val jar = File(dir, m.jar!!)
             if (!jar.isFile || !jar.canonicalPath.startsWith(dir.canonicalPath + File.separator)) continue
             val modules = try {
-                val entry = URLClassLoader(arrayOf(jar.toURI().toURL()), DesktopPlugins::class.java.classLoader).loadClass(m.entry).getDeclaredConstructor().newInstance()
+                val loader = URLClassLoader(arrayOf(jar.toURI().toURL()), DesktopPlugins::class.java.classLoader).also { loaders += it }
+                val entry = loader.loadClass(m.entry).getDeclaredConstructor().newInstance()
                 (entry as? ModuleSource ?: continue).modules() // a UiPlugin entry is an ordinary module: loadJar's
             } catch (e: Exception) {
                 say("[plugins] ${m.name}: bundle ${m.entry} would not load (${e::class.simpleName}: ${e.message})"); continue
@@ -165,14 +182,14 @@ object DesktopPlugins {
     /** A module's private data area: `<stateDir>/plugin-data/<Vendor_Module>`. */
     fun dataDir(stateDir: File, module: String) = File(File(stateDir, "plugin-data"), module)
 
-    private fun loadJar(s: ModuleStatus, services: com.superiorsoftllc.agenthq.plugin.api.PluginServices): AgentHqModule {
+    private fun loadJar(s: ModuleStatus, services: com.superiorsoftllc.agenthq.plugin.api.PluginServices, loaders: MutableList<URLClassLoader>): AgentHqModule {
         val m = s.manifest!!
         val dir = File(s.dir ?: error("no folder"))
         val entry = m.entry?.takeIf { it.isNotBlank() } ?: error("module.json has no entry class")
         val jar = File(dir, m.jar?.takeIf { it.isNotBlank() } ?: error("module.json has no jar"))
         if (!jar.isFile) error("jar ${m.jar} not found (build it first)")
         if (!jar.canonicalPath.startsWith(dir.canonicalPath + File.separator)) error("jar ${m.jar} is outside the module folder")
-        val loader = URLClassLoader(arrayOf(jar.toURI().toURL()), DesktopPlugins::class.java.classLoader)
+        val loader = URLClassLoader(arrayOf(jar.toURI().toURL()), DesktopPlugins::class.java.classLoader).also { loaders += it }
         val plugin = try {
             loader.loadClass(entry).getDeclaredConstructor().newInstance() as? UiPlugin ?: error("$entry is not a UiPlugin")
         } catch (e: ReflectiveOperationException) {

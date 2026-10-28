@@ -46,4 +46,29 @@ class DesktopPluginsJarTest {
         assertEquals("1", File(DesktopPlugins.dataDir(state, "Acme_Hello"), "opened.txt").readText(), "the jar's observer ran and wrote its own storage")
         assertTrue(loaded.log.any { "Acme_Hello (community): loaded" in it }, loaded.log.joinToString("\n"))
     }
+
+    @Test
+    fun `closing a loaded set unsubscribes its observers and lets go of the jar, so it can be deleted`() {
+        val source = File(System.getProperty("acme.hello.dir") ?: error("acme.hello.dir not set: run through Gradle jvmTest"))
+        val module = File(root, "community/Acme_Hello").apply { mkdirs() }
+        File(source, "module.json").copyTo(File(module, "module.json"))
+        File(source, "build/libs/Acme_Hello.jar").copyTo(File(module, "build/libs/Acme_Hello.jar"))
+        File(root, "modules.json").writeText("""{"modules":{"Acme_Hello":{"enabled":true,"allow":["events","storage","daemon","notifications"]}}}""")
+        val opened = File(DesktopPlugins.dataDir(state, "Acme_Hello"), "opened.txt")
+        fun tabOpened(f: TabFactory) = f.events.publish(PluginEvent(Events.TAB_OPENED, mapOf("id" to "acme.hello")))
+
+        val first = DesktopPlugins.load(state, env = { null }, property = { null }, print = {})
+        tabOpened(first.factory)
+        assertEquals("1", opened.readText())
+        // The soft restart: a second set is loaded, then the first is closed. Only the second still hears events.
+        val second = DesktopPlugins.load(state, env = { null }, property = { null }, print = {})
+        first.close()
+        first.close() // twice is harmless
+        tabOpened(first.factory)
+        assertEquals("1", opened.readText(), "the closed set's observer no longer runs")
+        tabOpened(second.factory)
+        assertEquals("2", opened.readText(), "the new set's observer counts once, not twice")
+        second.close()
+        assertTrue(module.deleteRecursively(), "no class loader keeps the jar open")
+    }
 }

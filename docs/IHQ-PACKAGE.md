@@ -24,3 +24,6 @@ A `.ihq` is a zip: `module.json` (its `jar` is `lib/<jar>`), `lib/*.jar`, and a 
 4. **Signed `.ihq` as a whole** (not just the jar), so manifest tampering is detected. Timestamping is not used: an
    expired signing certificate is refused.
 5. The real signing key is not generated here.
+
+## Multi-module package (S7)
+One .ihq carries many modules through a bundle: its module.json names the bundle module and an `entry` that is a `ModuleSource` (see `CoreModuleSource`); the loader asks it for every module it holds. One signature covers all of them, so a bundle signed with a trusted key installs as core tier. Build it signed: `./gradlew :superiorSoftLibrary:agenthqAppUi:appUiIhq -Pihq.keystore=<file> -Pihq.alias=<alias>` (password in IHQ_STOREPASS).

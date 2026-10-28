@@ -8,6 +8,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.draganddrop.DragAndDropEvent
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -24,12 +27,16 @@ import com.superiorsoftllc.agenthq.ui.shell.NodeAsk
 import com.superiorsoftllc.agenthq.ui.shell.PlatformHost
 import com.superiorsoftllc.agenthq.ui.shell.PluginDropIn
 import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_BOX_CHOOSE_TAG
+import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_BOX_CHECKING_TAG
 import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_BOX_ERROR_TAG
 import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_BOX_LOCKED_TAG
 import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_BOX_TAG
 import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_CONSENT_CANCEL_TAG
 import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_CONSENT_INSTALL_TAG
 import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_CONSENT_NODE_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_CONSENT_LIST_TAG
+import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_CONSENT_SIGNER_TAG
+import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_CONSENT_TIER_TAG
 import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_CONSENT_TAG
 import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_CONSENT_TICK_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.shell.blocks.SAFE_MODE_BANNER_TAG
@@ -72,7 +79,9 @@ class DropInUiTest {
         val installs = mutableListOf<Pair<DropPreview, Set<String>>>()
         val removed = mutableListOf<String>()
         override val canPick = true
-        override fun inspect(path: String) = check
+        var gate: java.util.concurrent.CountDownLatch? = null
+        var inspectThread: Thread? = null
+        override fun inspect(path: String): DropCheck { inspectThread = Thread.currentThread(); gate?.await(); return check }
         override fun install(preview: DropPreview, granted: Set<String>): String? { installs += preview to granted; return null }
         override fun installed(): List<String> = onDisk.toList()
         override fun remove(name: String): String? { removed += name; onDisk -= name; return null }
@@ -116,6 +125,7 @@ class DropInUiTest {
         val drop = FakeDropIn(check = DropCheck.Refused("picked.ihq was refused: the package is not signed"))
         window(Host(drop), TabFactory(emptyList()))
         onNodeWithTag(DROP_BOX_CHOOSE_TAG).performClick()
+        waitUntil { onAllNodesWithTag(DROP_BOX_CHECKING_TAG).fetchSemanticsNodes().isEmpty() } // S7: the check runs off the UI thread
         onNodeWithTag(DROP_BOX_ERROR_TAG).assertExists()
         onNodeWithTag(DROP_CONSENT_TAG).assertDoesNotExist()
     }
@@ -125,6 +135,7 @@ class DropInUiTest {
         var restarts = 0
         window(Host(drop), TabFactory(emptyList())) { restarts++ }
         onNodeWithTag(DROP_BOX_CHOOSE_TAG).performClick()
+        waitUntil { onAllNodesWithTag(DROP_BOX_CHECKING_TAG).fetchSemanticsNodes().isEmpty() } // S7: the check runs off the UI thread
         onNodeWithTag(DROP_CONSENT_TAG).assertExists()
         onNodeWithTag(DROP_CONSENT_CANCEL_TAG).performClick()
         waitForIdle()
@@ -138,12 +149,14 @@ class DropInUiTest {
         var restarts = 0
         window(Host(drop), TabFactory(emptyList())) { restarts++ }
         onNodeWithTag(DROP_BOX_CHOOSE_TAG).performClick()
+        waitUntil { onAllNodesWithTag(DROP_BOX_CHECKING_TAG).fetchSemanticsNodes().isEmpty() } // S7: the check runs off the UI thread
         // Every node it asks for is listed; the locked one has no box to tick.
         listOf("infantry.shell.left", "infantry.shell.frame", "infantry.shell.connect").forEach { onNodeWithTag(DROP_CONSENT_NODE_TAG_PREFIX + it, useUnmergedTree = true).assertExists() }
         // Untick the injection into the frame: only the left panel's override is granted.
         onNodeWithTag(DROP_CONSENT_TICK_TAG_PREFIX + "infantry.shell.connect", useUnmergedTree = true).assertDoesNotExist()
         onNodeWithTag(DROP_CONSENT_TICK_TAG_PREFIX + "infantry.shell.frame", useUnmergedTree = true).performClick()
         onNodeWithTag(DROP_CONSENT_INSTALL_TAG).performClick()
+        waitUntil { onAllNodesWithTag(DROP_CONSENT_TAG).fetchSemanticsNodes().isEmpty() }
         waitForIdle()
         assertEquals(listOf(community to setOf("infantry.shell.left")), drop.installs)
         assertEquals(1, restarts)
@@ -158,7 +171,9 @@ class DropInUiTest {
         setContent { AgentHqShell(host, Controller(scope)) }
         onNodeWithTag(DROP_BOX_TAG).assertExists()
         onNodeWithTag(DROP_BOX_CHOOSE_TAG).performClick()
+        waitUntil { onAllNodesWithTag(DROP_BOX_CHECKING_TAG).fetchSemanticsNodes().isEmpty() } // S7: the check runs off the UI thread
         onNodeWithTag(DROP_CONSENT_INSTALL_TAG).performClick()
+        waitUntil { onAllNodesWithTag(DROP_CONSENT_TAG).fetchSemanticsNodes().isEmpty() }
         waitForIdle()
         assertEquals(1, host.reloads)
         assertEquals(1, drop.installs.size)
@@ -186,5 +201,39 @@ class DropInUiTest {
     @Test fun `outside safe mode there is no banner`() = runDesktopComposeUiTest(1200, 800) {
         window(Host(FakeDropIn()), CoreModules.factory)
         onNodeWithTag(SAFE_MODE_BANNER_TAG).assertDoesNotExist()
+    }
+
+    @Test fun `the file is checked off the UI thread, with a Checking state until it is done`() = runDesktopComposeUiTest(1200, 800) {
+        val drop = FakeDropIn(check = DropCheck.Ready(community)).also { it.gate = java.util.concurrent.CountDownLatch(1) }
+        window(Host(drop), TabFactory(emptyList()))
+        onNodeWithTag(DROP_BOX_CHOOSE_TAG).performClick()
+        waitUntil { onAllNodesWithTag(DROP_BOX_CHECKING_TAG).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithTag(DROP_BOX_CHOOSE_TAG).assertIsNotEnabled()
+        onNodeWithTag(DROP_CONSENT_TAG).assertDoesNotExist()
+        drop.gate!!.countDown()
+        waitUntil { onAllNodesWithTag(DROP_CONSENT_TAG).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(drop.inspectThread !== Thread.currentThread(), "inspect ran on a background thread")
+    }
+
+    @Test fun `the tier sentence names the signer, not the Infantry key`() = runDesktopComposeUiTest(1200, 800) {
+        val acme = community.copy(core = true, signer = "CN=Acme Ltd, O=Acme, C=US", asks = emptyList())
+        window(Host(FakeDropIn(check = DropCheck.Ready(acme))), TabFactory(emptyList()))
+        onNodeWithTag(DROP_BOX_CHOOSE_TAG).performClick()
+        waitUntil { onAllNodesWithTag(DROP_CONSENT_TAG).fetchSemanticsNodes().isNotEmpty() }
+        val tier = onNodeWithTag(DROP_CONSENT_TIER_TAG, useUnmergedTree = true).fetchSemanticsNode().config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString { it.text }
+        assertTrue("Signed by Acme Ltd," in tier, tier)
+        assertTrue("Infantry key" !in tier, tier)
+    }
+
+    @Test fun `a long list of asked nodes shows a scroll thumb at the right edge`() = runDesktopComposeUiTest(1200, 800) {
+        val many = community.copy(asks = (1..30).map { NodeAsk("infantry.shell.node$it", NodeAsk.Kind.OVERRIDE, locked = false) })
+        window(Host(FakeDropIn(check = DropCheck.Ready(many))), TabFactory(emptyList()))
+        onNodeWithTag(DROP_BOX_CHOOSE_TAG).performClick()
+        waitUntil { onAllNodesWithTag(DROP_CONSENT_LIST_TAG).fetchSemanticsNodes().isNotEmpty() }
+        waitForIdle()
+        val image = onNodeWithTag(DROP_CONSENT_LIST_TAG, useUnmergedTree = true).captureToImage().toPixelMap()
+        val thumb = com.superiorsoftllc.agenthq.ui.Palette.Muted.toArgb()
+        val edge = (image.width - 4 until image.width).any { x -> (0 until image.height).any { y -> image[x, y].toArgb() == thumb } }
+        assertTrue(edge, "a thumb of the muted colour is drawn along the right edge")
     }
 }

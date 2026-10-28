@@ -85,6 +85,9 @@ class SimpleEventBus(private val log: (String) -> Unit = {}) : EventBus {
         observers += entry
         return { observers.remove(entry) }
     }
+
+    /** S7: every observer is dropped (the module set that subscribed them is unloaded). Later publishes reach nobody. */
+    fun clear() { observers.clear() }
 }
 
 /** One module's view of the bus: it may publish and observe only the events it declared. */

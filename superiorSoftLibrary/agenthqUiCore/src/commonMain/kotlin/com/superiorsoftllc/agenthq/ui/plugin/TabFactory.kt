@@ -255,6 +255,8 @@ class AgentHqModule(
     val tabTrees: Map<String, Block> = emptyMap(),
     /** P1 step 2 (6s D): implementations for config `implementation` fields, registry -> key -> value (module.json `implementations`). */
     val implementations: Map<String, Map<String, Any>> = emptyMap(),
+    /** S7: runs once when the host unloads the module (a soft restart replaces the module set, or the app closes it). */
+    val onStop: () -> Unit = {},
 )
 
 /**
@@ -263,6 +265,12 @@ class AgentHqModule(
  */
 interface UiPlugin {
     fun register(registrar: UiRegistrar)
+
+    /**
+     * S7: the host is unloading this module (soft restart, install, remove). Release what [register] or the module's tabs
+     * started (threads, timers, sockets). Its event observers are unsubscribed by the host, not here. Default: nothing.
+     */
+    fun stop() {}
 }
 
 interface UiRegistrar {
@@ -311,7 +319,7 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
         override fun tabTree(tab: String, root: Block) { tabTrees[tab] = root }
         override fun implementation(registry: String, key: String, value: Any) { implementations.getOrPut(registry) { LinkedHashMap() }[key] = value }
     })
-    return AgentHqModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell, inject, fills, tabTrees, implementations)
+    return AgentHqModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell, inject, fills, tabTrees, implementations, onStop = plugin::stop)
 }
 
 /**
