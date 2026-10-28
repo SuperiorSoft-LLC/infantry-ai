@@ -947,6 +947,26 @@ fields.
 **G. Other platforms.** Same JSON format and resolution on web (wasm) and Android; the registry is filled at compile time
 from the compiled-in modules (`CoreModules.all`). Only Windows has the drop-in (run-time loading).
 
+**P1 step 2 (44aee6e5), as built.** Decisions taken while building (the owner approved 6s as written; none of these
+changes a line of the ten-line summary):
+
+- **1. Schema, tree, storage, resolver.** The schema types are plugin API in `agenthqPlugins` (`ConfigDeclaration`,
+  `ConfigFieldDeclaration`, `ConfigFieldTypes`, the wire row `NodeConfigEntry`), shared by the daemon and the window;
+  module.json gains `config` (A). `TabFactory.configTree` merges core's `CoreConfig.JSON` (text in commonMain, so web and
+  Android read the same file, G) and each loaded module's `config` in load order (B); the hierarchy is the drawn trees'
+  plus two links the block tree has no node for: a tab sits under its strip node (or its parent tab), a tab tree's root
+  under the tab that draws it. A core module declares on any node; a community one on its own tabs, ids under its name,
+  and the nodes modules.json `allowOverride`/`allowInject` grants it. A second key, a blank key and a stranger node are
+  refused with a line; an unknown type is kept, with a line, for a read-only editor. Storage is the daemon's
+  `node_config` (migration 50) behind three HTTP routes (`GET /node-config`, `POST /node-config/seed` inserting only
+  missing keys, `PUT /node-config` with a null value removing the row), reached through `PluginDaemon`'s bearer; not a
+  WebSocket frame, so no contract bump and no protocol type in the window. `NodeConfigState` (one per factory) is the
+  one owner of the stored copy: the window seeds and loads it once the link is live; until then, or when the daemon is
+  older (404) or down, every key resolves to its declared default and the state says why. `ResolvedConfig` is what
+  `ShellContext.config` answers now (C): the node, its parent up to the root, then the nearest declaration's default;
+  typed, never coerced; `ConfigValues.strings` (a multiSelect) is an addition with a default. Keys under `children.`
+  belong to their node and are never inherited (E).
+
 ## 7. Core vs overridable (input to LICENSE-0, 08877cc7)
 
 | part | bucket |

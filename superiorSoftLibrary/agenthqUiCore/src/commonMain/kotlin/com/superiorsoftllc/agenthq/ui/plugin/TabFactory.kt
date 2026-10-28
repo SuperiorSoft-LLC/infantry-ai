@@ -17,6 +17,11 @@ import com.superiorsoftllc.agenthq.plugin.api.PluginServices
 import com.superiorsoftllc.agenthq.plugin.api.ServiceKey
 import com.superiorsoftllc.agenthq.plugin.api.Services
 import com.superiorsoftllc.agenthq.plugin.api.Tier
+import com.superiorsoftllc.agenthq.ui.plugin.config.ConfigSource
+import com.superiorsoftllc.agenthq.ui.plugin.config.ConfigTree
+import com.superiorsoftllc.agenthq.ui.plugin.config.CoreConfig
+import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigState
+import com.superiorsoftllc.agenthq.ui.plugin.config.ResolvedConfig
 import com.superiorsoftllc.agenthq.plugin.host.AcceptedPreference
 import com.superiorsoftllc.agenthq.plugin.host.AcceptedShellOverride
 import com.superiorsoftllc.agenthq.plugin.host.ModuleState
@@ -321,7 +326,9 @@ class TabFactory(
     /** BLOCKS-LAYOUT L5: the shell overrides the loader accepted, in load order. */
     shellOverrides: List<AcceptedShellOverride> = emptyList(),
     /** BLOCKS-INJECTORS J2: the node ids modules.json `allowInject` grants each community module. */
-    allowInject: (module: String) -> Collection<String> = { emptyList() },
+    private val allowInject: (module: String) -> Collection<String> = { emptyList() },
+    /** P1 step 2: the core contributions (by id) modules.json `allowOverride` grants each community module; a granted node takes its config. */
+    private val allowOverride: (module: String) -> Collection<String> = { emptyList() },
 ) {
     val modules: List<AgentHqModule> = modules.toList()
     /** TOAST-1: where a module's `Notifications.notify` lands in the window; the window sets it to its controller's. */
@@ -587,6 +594,36 @@ class TabFactory(
     internal fun servicesOf(module: String): PluginServices = services(module)
 
     fun hasBlocks(slot: String): Boolean = !blocks[slot].isNullOrEmpty()
+
+    /**
+     * P1 step 2 (docs/BLOCKS-LAYOUT-DESIGN.md 6s B): the one merged config tree, core's [CoreConfig] then each loaded
+     * module's module.json `config`, over the hierarchy of the trees this factory draws (a tab's parent is its strip or
+     * parent tab; a tab tree's root is under the tab that draws it). A community module declares only on its own nodes
+     * (its tabs, ids under its name) and on those modules.json grants it.
+     */
+    val configTree: ConfigTree by lazy {
+        val parents = LinkedHashMap(ConfigTree.parentsOf(listOf(shellRoot) + tabTreeRoots.map { tabTree(it.id) ?: it }))
+        val strips = NodeRegistry.strips.entries.associate { (node, container) -> container to node }
+        for (t in providers) parents.putIfAbsent(t.id, t.parent ?: strips[t.container] ?: t.container)
+        for ((tree, tab) in tabTreeTabs) parents.putIfAbsent(tree, tab)
+        val problems = mutableListOf<String>()
+        val core = ConfigTree.parse(CoreConfig.JSON, problems, CORE_SHELL_MODULE)
+        val sources = modules.map { m ->
+            val name = m.manifest.name
+            val own = m.manifest.tabs.map { it.id }.toSet()
+            ConfigSource(name, m.tier, m.manifest.config) { node ->
+                m.tier != Tier.COMMUNITY || node in own || node.startsWith("$name.") || node in allowOverride(name) || node in allowInject(name)
+            }
+        }
+        val merged = ConfigTree.merge(core, sources, parents)
+        ConfigTree(merged.fields, merged.parents, problems + merged.problems)
+    }
+
+    /** P1 step 2: the stored copy of the config (the daemon's `node_config`), loaded by the window once its link is live. */
+    val config: NodeConfigState by lazy { NodeConfigState(configTree) }
+
+    /** P1 step 2 (6s C): what [com.superiorsoftllc.agenthq.ui.shell.ShellContext.config] answers: [config] resolved over [configTree]. */
+    val resolvedConfig: ResolvedConfig by lazy { ResolvedConfig(config) }
 }
 
 /**

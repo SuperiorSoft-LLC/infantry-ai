@@ -66,7 +66,7 @@ class SchemaMigrationTest {
     private val tables = listOf(
         "runs", "pods", "events", "pod_nodes", "node_dependencies", "node_attempts", "agents",
         "tickets", "ticket_links", "settings", "ticket_runs", "projects", "attention", "epics", "role_bindings", "triggers", "prompts", "skills", "traits", "role_traits", "session_instances",
-        "decisions", "issues", "issue_events", "story_migration",
+        "decisions", "issues", "issue_events", "story_migration", "node_config",
     )
 
     /**

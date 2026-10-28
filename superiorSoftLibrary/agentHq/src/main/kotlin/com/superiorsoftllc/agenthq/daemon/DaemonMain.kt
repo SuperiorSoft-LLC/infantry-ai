@@ -1380,6 +1380,8 @@ class AgentHqDaemon(
                     }
                     get("/attention") { call.respond(attention.list()) }
                     get("/plugins") { call.respond(plugins) }
+                    // P1 step 2 (6s B): the per-node UI configuration the window seeds and edits.
+                    nodeConfigRoutes(NodeConfigStore((store as SqlAgentHqStore).database))
                     // Phase 6 agent-facing mail API: how a spawned CLI agent answers a delivered message.
                     mailRoutes(mail, mailbox)
                     // SERVER-UPDATE-3 (1.110.0): status / check / apply for the headless daemon's own updates.
