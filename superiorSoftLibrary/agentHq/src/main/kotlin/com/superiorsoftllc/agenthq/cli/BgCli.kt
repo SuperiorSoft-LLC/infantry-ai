@@ -129,6 +129,58 @@ internal object BgCli {
 
     fun logDir(): File = File(System.getProperty("java.io.tmpdir"), "agenthq-bg")
 
+    private fun hostIsWindows(): Boolean = System.getProperty("os.name").lowercase().contains("win")
+
+    /**
+     * BG-RESOLVE (ticket bbb6120c): [cmd] with argv[0] turned into the absolute path of the program that will run, or
+     * null when there is none. Windows' CreateProcess appends only `.exe` and does not find `.cmd`/`.bat` shims on PATH
+     * (`agenthq` is `agenthq.cmd`), nor a program in the cwd, so `bg run -- gradlew.bat` and `bg run -- agenthq run ...`
+     * failed with CreateProcess error=2. Here:
+     *  - argv[0] with a path separator: taken against [cwd]; on Windows each PATHEXT extension is tried when it has none.
+     *  - a bare name on Windows: [cwd] first (cmd.exe semantics), then every PATH dir, each with the PATHEXT extensions.
+     *  - a bare name elsewhere: the PATH dirs, for an executable file.
+     * The JDK starts a `.cmd`/`.bat` given by its absolute path itself (through cmd.exe, with its own strict quoting), so
+     * the resolved path is passed as is; no hand-rolled `cmd.exe /c` quoting.
+     */
+    fun resolveCommand(
+        cmd: List<String>,
+        cwd: File,
+        getenv: (String) -> String?,
+        windows: Boolean = hostIsWindows(),
+    ): List<String>? {
+        val argv0 = cmd.firstOrNull()?.takeIf { it.isNotBlank() } ?: return null
+        val exts = if (!windows) emptyList()
+        else (getenv("PATHEXT")?.takeIf { it.isNotBlank() } ?: ".COM;.EXE;.BAT;.CMD")
+            .split(';').map { it.trim() }.filter { it.startsWith(".") }
+        fun hasExt(name: String) = exts.any { name.endsWith(it, ignoreCase = true) }
+        /** The file [f] names, or the first of [f] + each PATHEXT extension (lower case first: case-sensitive test FS). */
+        fun probe(f: File): File? {
+            if (!windows) return f.takeIf { it.isFile && it.canExecute() }
+            if (hasExt(f.name) && f.isFile) return f
+            for (e in exts) {
+                File(f.path + e.lowercase()).takeIf { it.isFile }?.let { return it }
+                File(f.path + e).takeIf { it.isFile }?.let { return it }
+            }
+            return null
+        }
+        val given = File(argv0)
+        val hasSep = argv0.contains('/') || (windows && argv0.contains('\\')) || given.isAbsolute
+        val found = if (hasSep) {
+            probe(if (given.isAbsolute) given else File(cwd, argv0))
+        } else {
+            val path = (getenv("PATH") ?: if (windows) getenv("Path") else null).orEmpty()
+            val dirs = path.split(File.pathSeparatorChar).map { it.trim().trim('"') }.filter { it.isNotEmpty() }.map(::File)
+            (if (windows) listOf(cwd) + dirs else dirs).firstNotNullOfOrNull { probe(File(it, argv0)) }
+        } ?: return null
+        return listOf(found.absoluteFile.normalize().path) + cmd.drop(1)
+    }
+
+    /** First line of a start failure in a job's log; [detach] reads it back to tell "never started" from "ran fast". */
+    private const val CANNOT_START = "bg run: cannot start"
+
+    /** The daemon side of a job: send a request; close when done. A seam, so tests can record what a wrapper reports. */
+    internal class Reporter(val send: (BgJobRequest) -> Unit, val close: () -> Unit)
+
     fun main(
         args: List<String>,
         out: Appendable,
@@ -144,11 +196,15 @@ internal object BgCli {
             return 2
         }
         val session = getenv(AccessPolicy.SESSION_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }
+        val cwd = File(System.getProperty("user.dir"))
         return try {
             when (parsed) {
                 is Parsed.Run ->
-                    if (parsed.notify && parsed.jobId == null) detach(parsed, session, globals, getenv, out, err)
-                    else run(parsed, session, getenv, out, err, open)
+                    if (parsed.notify && parsed.jobId == null) detach(parsed, session, globals, getenv, out, err, cwd)
+                    else runJob(parsed, session, getenv, out, err, cwd) {
+                        val s = open()
+                        Reporter({ req -> send(s, session, req) }, { s.close() })
+                    }
                 is Parsed.Wait -> waitFor(parsed, session, out, err, open)
                 is Parsed.Show -> show(parsed, session, out, err, open)
                 is Parsed.Bad -> 2
@@ -182,10 +238,23 @@ internal object BgCli {
      * this short-lived process only, so once it exits the harness's shell tree no longer holds the job. On Windows `javaw`
      * is used when present, so no console window opens for it (issue I2).
      */
-    private fun detach(p: Parsed.Run, session: String?, globals: List<String>, getenv: (String) -> String?, out: Appendable, err: Appendable): Int {
+    private fun detach(
+        p: Parsed.Run,
+        session: String?,
+        globals: List<String>,
+        getenv: (String) -> String?,
+        out: Appendable,
+        err: Appendable,
+        cwd: File,
+    ): Int {
         if (session == null) {
             err.appendLine("error: --notify needs AGENTHQ_SESSION_ID (the session the notice is mailed to); run it from an agent session")
             return 2
+        }
+        // Resolve before going detached: the caller is still in its turn and can read the error (ticket bbb6120c).
+        val command = resolveCommand(p.command, cwd, getenv) ?: run {
+            err.appendLine("error: bg run: cannot find '${p.command.first()}' on PATH or in ${cwd.absolutePath}; job NOT started")
+            return 127
         }
         val id = UUID.randomUUID().toString().take(8)
         val dir = logDir().also { it.mkdirs() }
@@ -195,13 +264,31 @@ internal object BgCli {
             if (f.name.equals("java.exe", ignoreCase = true) && w.isFile) w.path else j
         }
         val args = listOf(javaCmd, "-cp", System.getProperty("java.class.path"), MAIN_CLASS) + globals +
-            listOf("bg", "run") + p.copy(jobId = id).optionArgs() + listOf("--") + p.command
-        val nul = File(if (System.getProperty("os.name").lowercase().contains("win")) "NUL" else "/dev/null")
-        ProcessBuilder(args)
-            .redirectInput(ProcessBuilder.Redirect.from(nul))
-            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-            .redirectError(File(dir, "$id.wrapper.log"))
-            .start()
+            listOf("bg", "run") + p.copy(jobId = id).optionArgs() + listOf("--") + command
+        val nul = File(if (hostIsWindows()) "NUL" else "/dev/null")
+        val wrapperLog = File(dir, "$id.wrapper.log")
+        val log = File(dir, "$id.log")
+        val wrapper = try {
+            ProcessBuilder(args)
+                .redirectInput(ProcessBuilder.Redirect.from(nul))
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+                .redirectError(wrapperLog)
+                .start()
+        } catch (e: Exception) {
+            err.appendLine("error: bg run: cannot start the bg wrapper: ${e.message}; job NOT started")
+            return 127
+        }
+        // Safety net: a wrapper that is already gone, or whose command could not start, never becomes a job to wait on.
+        if (wrapper.waitFor(1_500, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+            val failedStart = runCatching { log.readLines().firstOrNull()?.startsWith(CANNOT_START) == true }.getOrDefault(false)
+            val exitWritten = File(dir, "$id.exit").isFile
+            if (failedStart || !exitWritten) {
+                runCatching { log.readLines().takeLast(20).forEach { err.appendLine(it) } }
+                runCatching { wrapperLog.readLines().takeLast(20).forEach { err.appendLine(it) } }
+                err.appendLine("error: bg run: the command did not start; job NOT started")
+                return wrapper.exitValue().takeIf { it != 0 } ?: 127
+            }
+        }
         out.appendLine("bg job $id started detached: ${p.name ?: p.command.joinToString(" ").take(80)}")
         out.appendLine("log: ${File(dir, "$id.log").absolutePath}")
         out.appendLine(
@@ -212,31 +299,60 @@ internal object BgCli {
         return 0
     }
 
-    private fun run(p: Parsed.Run, session: String?, getenv: (String) -> String?, out: Appendable, err: Appendable, open: () -> FrameStream): Int {
+    /**
+     * Run [p]'s command in the foreground (or as the detached `--notify` wrapper): tee its output to the log, register it
+     * through [connect] and report its end. A command that cannot start still writes the log line and the `.exit` file
+     * (127), and, when there is a session, registers the job and reports `done` 127 so the `--notify` mail goes out:
+     * a detached wrapper's caller is gone and would otherwise idle forever (ticket bbb6120c).
+     */
+    internal fun runJob(
+        p: Parsed.Run,
+        session: String?,
+        getenv: (String) -> String?,
+        out: Appendable,
+        err: Appendable,
+        cwd: File,
+        spawn: (List<String>) -> Process = { ProcessBuilder(it).directory(cwd).redirectErrorStream(true).start() },
+        connect: () -> Reporter,
+    ): Int {
         val id = p.jobId ?: UUID.randomUUID().toString().take(8)
         val log = File(logDir().also { it.mkdirs() }, "$id.log")
         val exitFile = File(logDir(), "$id.exit").also { it.delete() }
         val label = p.name ?: p.command.joinToString(" ").take(80)
         val notify = if (!p.notify) null else BgNotify(p.notifyTail, patternsFor(p, getenv), p.notifyTimeout)
-        val child = try {
-            ProcessBuilder(p.command).redirectErrorStream(true).start()
-        } catch (e: Exception) {
-            // `bg wait` must not block forever on a command that never started.
-            runCatching { log.writeText("bg run: cannot start ${p.command.joinToString(" ")}: ${e.message}" + System.lineSeparator()) }
-            runCatching { exitFile.writeText("127") }
-            throw e
-        }
         val job = BgJob(id, label, ProcessHandle.current().pid(), System.currentTimeMillis(), logPath = log.absolutePath, keep = p.keep, notify = notify)
         // No session (run outside an agent) or no daemon: the command still runs; only the flag is missing.
-        val stream = if (session == null) null else try {
-            open()
-        } catch (e: Exception) {
-            err.appendLine("warning: daemon unreachable, running unregistered (${e.message})")
-            null
-        }
+        var reporter: Reporter? = null
+        var connected = false
         fun call(req: BgJobRequest) {
-            if (stream == null) return
-            try { send(stream, session, req) } catch (e: Exception) { err.appendLine("warning: bg_job: ${e.message}") }
+            if (session == null) return
+            if (!connected) {
+                connected = true
+                reporter = try {
+                    connect()
+                } catch (e: Exception) {
+                    err.appendLine("warning: daemon unreachable, running unregistered (${e.message})")
+                    null
+                }
+            }
+            val r = reporter ?: return
+            try { r.send(req) } catch (e: Exception) { err.appendLine("warning: bg_job: ${e.message}") }
+        }
+        fun close() = runCatching { reporter?.close?.invoke() }
+        val child = try {
+            val command = resolveCommand(p.command, cwd, getenv)
+                ?: throw java.io.IOException("Cannot run program \"${p.command.first()}\": not found on PATH or in ${cwd.absolutePath}")
+            spawn(command)
+        } catch (e: Exception) {
+            // `bg wait` must not block forever on a command that never started, and a `--notify` caller must get its mail.
+            val line = "$CANNOT_START ${p.command.joinToString(" ")}: ${e.message}"
+            runCatching { log.writeText(line + System.lineSeparator()) }
+            runCatching { exitFile.writeText("127") }
+            err.appendLine("error: $line; job NOT started")
+            call(BgJobRequest("beat", job))
+            call(BgJobRequest("done", jobId = id, exitCode = 127, tail = listOf(line)))
+            close()
+            return 127
         }
         if (session == null) err.appendLine("warning: AGENTHQ_SESSION_ID is not set, running unregistered")
         out.appendLine("bg job $id: $label (log ${log.absolutePath})")
@@ -267,7 +383,7 @@ internal object BgCli {
         beat.interrupt()
         runCatching { exitFile.writeText(code.toString()) }
         call(BgJobRequest("done", jobId = id, exitCode = code, tail = tail.toList()))
-        stream?.close()
+        close()
         out.appendLine("bg job $id exited $code")
         return code
     }
