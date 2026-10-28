@@ -1,19 +1,10 @@
-package com.superiorsoftllc.agenthq.ui.shell.blocks
+package com.superiorsoftllc.agenthq.plugins.official.run
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.RunConfirmSection
-import com.superiorsoftllc.agenthq.ui.RunEditorSection
-import com.superiorsoftllc.agenthq.ui.RunEmptySection
-import com.superiorsoftllc.agenthq.ui.RunNoticesSection
-import com.superiorsoftllc.agenthq.ui.RunOutputSection
-import com.superiorsoftllc.agenthq.ui.RunPaneFrame
-import com.superiorsoftllc.agenthq.ui.RunPaneHost
-import com.superiorsoftllc.agenthq.ui.RunPillsSection
-import com.superiorsoftllc.agenthq.ui.RunToolbarSection
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.Place

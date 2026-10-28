@@ -51,6 +51,8 @@ kotlin {
             implementation(project(":plugins:official:Infantry_Settings"))
             // RUNTIME-6: and the official Infantry_Git (the Git tab and its tree).
             implementation(project(":plugins:official:Infantry_Git"))
+            // RUNTIME-7: and the official Infantry_Run (the Run tab and its tree).
+            implementation(project(":plugins:official:Infantry_Run"))
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)

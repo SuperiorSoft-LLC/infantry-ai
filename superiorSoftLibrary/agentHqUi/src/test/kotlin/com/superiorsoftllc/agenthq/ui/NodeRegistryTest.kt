@@ -13,6 +13,7 @@ import com.superiorsoftllc.agenthq.plugin.host.ModuleState
 import com.superiorsoftllc.agenthq.plugin.host.ModuleStatus
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
 import com.superiorsoftllc.agenthq.plugins.official.git.InfantryGit
+import com.superiorsoftllc.agenthq.plugins.official.run.InfantryRun
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockInjection
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockOverride
 import com.superiorsoftllc.agenthq.ui.block.layout.OverrideModes
@@ -32,8 +33,8 @@ import kotlin.test.assertTrue
 
 /** P1 (f60f4d97, docs/BLOCKS-LAYOUT-DESIGN.md section 6s): the registry read model over what TabFactory resolved. */
 class NodeRegistryTest {
-    /** RUNTIME-6: the compiled-in core modules plus the official Infantry_Git (a jar on desktop), as the window has them. */
-    private val coreAndGit = CoreModules.all + InfantryGit
+    /** RUNTIME-6/7: the compiled-in core modules plus the official Infantry_Run and Infantry_Git (jars on desktop), as the window has them. */
+    private val coreAndGit = CoreModules.all + InfantryRun + InfantryGit
 
     private fun tab(id: String, order: Int, title: String) =
         TabProvider(id, TabContainers.CENTER, order, { title }, InfantryGit.tabs.single().icon, "center-tab-$id") { Text(title) }
@@ -50,8 +51,8 @@ class NodeRegistryTest {
             "window", "images", "dock", "frame", "header", "header.lead", "header.lead.overflow", "body", "panes", "center",
             "center.chat", "center.newAgent", "right", "right.body", "footer", "assistant", "assistant.body", "board", "board.pane",
             "board.pane.columns", "board.card", "board.card.summary", "diff", "windowLayer", "config", "config.settings", "roles",
-            "roles.form", "run", "notes", "notes.hits", "notes.list", "changes", "changes.files", "changes.branchFiles",
-            "changes.history", "git", // RUNTIME-6: Infantry_Git's own tree, after Infantry_AppUi's (load order)
+            "roles.form", "notes", "notes.hits", "notes.list", "changes", "changes.files", "changes.branchFiles",
+            "changes.history", "run", "git", // RUNTIME-6/7: Infantry_Run's and Infantry_Git's own trees, after Infantry_AppUi's (load order)
         ).map { "$shell.$it" }
         val hosts = NodeRegistry.of(TabFactory(coreAndGit))
         assertEquals(listOf("$shell.center.chat.tabs", "$shell.right.body.strip") + tree, hosts.map { it.id })

@@ -21,6 +21,7 @@ import com.superiorsoftllc.agenthq.plugin.host.provideEvents
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
 import com.superiorsoftllc.agenthq.plugins.official.InfantryAgents
 import com.superiorsoftllc.agenthq.plugins.official.git.InfantryGit
+import com.superiorsoftllc.agenthq.plugins.official.run.InfantryRun
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -31,8 +32,8 @@ import kotlin.test.assertTrue
 class TabFactoryTest {
     private val icon = InfantryGit.tabs.single().icon
 
-    /** RUNTIME-6: the compiled-in core modules plus the official Infantry_Git (a jar on desktop), as the window has them. */
-    private val coreAndGit = CoreModules.all + InfantryGit
+    /** RUNTIME-6/7: the compiled-in core modules plus the official Infantry_Run and Infantry_Git (jars on desktop), as the window has them. */
+    private val coreAndGit = CoreModules.all + InfantryRun + InfantryGit
     private val heard = mutableListOf<String>()
 
     private fun tab(id: String, container: String = TabContainers.CENTER, title: String = id, order: Int = 500) =
