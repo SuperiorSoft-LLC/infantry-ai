@@ -10,10 +10,12 @@ import kotlin.test.assertTrue
  */
 class ChatIndicatorHarnessNeutralTest {
     private val core = File("../agenthqUiCore/src/commonMain/kotlin/com/superiorsoftllc/agenthq/ui")
+    // S4d: the chat tree (ChatSurface.kt) moved to the app UI (plugins/core/Infantry_AppUi); a file is read from there.
+    private val app = File("../../plugins/core/Infantry_AppUi")
 
     /** The text of [file] from the line containing [from] up to (not including) the line containing [to]. */
     private fun region(file: String, from: String, to: String): String {
-        val text = File(core, file).readText()
+        val text = (File(core, file).takeIf { it.exists() } ?: File(app, file)).readText()
         val start = text.indexOf(from)
         val end = text.indexOf(to, start + 1)
         assertTrue(start >= 0 && end > start, "markers '$from' .. '$to' must exist in $file; the indicator code moved")

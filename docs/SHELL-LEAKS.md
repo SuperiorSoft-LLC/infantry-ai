@@ -547,3 +547,33 @@ Core adapter: `CoreTickets` (CoreShellContext.kt). Pixel proof: default 32 of 32
 
 HandCursorGuardTest: the `Text` raw-call ratchet reads 1052 against a baseline of 1049 already at the base (5424a3df,
 before any S4d change; recounted from git), so its "never grow" check fails on dev as it is. S4d adds no raw call.
+
+## Chat moved (S4d)
+
+Moved into plugins/core/Infantry_AppUi (`git mv`, package unchanged): ChatSurface.kt (the chat's drawing tree:
+header, transcript, status row, composer, spawn row), and the helpers only it draws: OriginRenderer.kt,
+SessionStartPane.kt, PromptCard.kt, CommsCardStyle.kt (its test moves to agenthqAppUi commonTest), ChangeBox.kt, the
+attachment strip and sent images (ChatAttachments.kt split: ChatAttachmentViews.kt), and `ReportFlagChip`
+(BoardSidebar.kt -> ReportFlagChip.kt). Like the S4c blocks the chat is **moved, not migrated**: its `(state,
+controller)` uses are holes, listed below and taken up by the controller close (next section).
+
+| File | Symbol | Decision |
+|---|---|---|
+| ChatSurface.kt | `PromptBox`, `SpawnRoleRow` | (c): their bridges close, `internal` again (ChatPanel is their only caller, same module) |
+| ReportFlagChip.kt | `ReportFlagChip` | (c): its bridge closes, `internal` (the board, the sidebar, the chat) |
+| ChatSurface.kt -> ChatSpans.kt (core) | `ENDED_STATES`, `spansText` (was internal) | stays (kit): core's ChatPanelState reads `ENDED_STATES`; the markdown renderers and the chat table (core) draw `spansText`, now public |
+| ChatAttachments.kt -> ChatAttachmentViews.kt | `ChatAttachmentChips`, `ChatSentImages` and their thumbnails | (c): only the chat draws them |
+| ChatAttachments.kt | `ChatAttachment`, `ComposerTags`, `ChatImageLines`, the `CHAT_IMAGE_*` / `ATTACH_*` constants | stays: the window owns the draft (ChatPanelState, core) |
+| TicketImages.kt | `rememberImage`, `LocalImageViewer` (were internal) | kit (d): the shell's image viewer host (CoreShell provides it), made public as it is; S4b's table said so but the visibility had not changed |
+| UsagePane.kt | `compact(n)` (was internal) | kit: a pure token-count formatter the chat header uses, public |
+| ChatSurface.kt | `ChatBlockRenderers`, `LocalChatMarkdown`, `LocalReasoningPlacement`, `ProgressMeter`, `ChatTable`, `ChatAttachment`, `ComposerTags`, `SwitchAgentAsk`, `DiffLine` | stays: App.kt / ConfigDialog / ChatPanelState (core) use them; already public |
+| ChatSurface.kt | `TicketTag(a, state)`, `CenterHeader(.., state)`, `NoticeStrip(state)`, `SpawnRoleRow(state, controller)`: `state.ticket / ticketBranchFor / sessionExecutor / agentTitle / agentSecondaryId / noticesForSession / roles / roleBindings / spawnRole / pickedModel / waiting / openPrompts / openQuestionSessions` | hole: a `ChatContext` (see the controller close) |
+| ChatSurface.kt | `InterruptButton(.., controller)`, `PromptBox(.., controller)`: `controller.interrupt / kill / removeSession / resume / restartSession / answerPrompt / requestCommands / refreshModelCatalog / pickSpawnRole / state` | hole: the same `ChatContext` |
+| all moved | the model and wire types, `Palette`, `Mono`, the controls, `AgentAvatar`, `RoleIcon` | kit |
+
+Core no longer holds any chat drawing code; what it keeps of the chat is the window's state (`ChatPanelState`,
+`ChatAttachment`, `ComposerTags`) and the kit renderers the markdown engine owns.
+Proof: default shots 32/32 at 0 px; opt-in `assistant,newAgent` base (5424a3df) vs head 4/4 at 0 px, both rendered
+with blur off. agentHqUi chat-scoped tests and agenthqAppUi jvm tests pass; wasm, Android compile. Two core jvmTest
+failures are not this change: HandCursorGuardTest (the Text ratchet, above) and ShellOverridesTest "a module replaces a
+placeholder" (`infantry.shell.configEntry` locked), which fails the same way on base 5424a3df.

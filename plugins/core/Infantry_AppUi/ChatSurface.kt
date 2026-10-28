@@ -388,9 +388,6 @@ const val NEW_AGENT_SHORTCUT = "Ctrl+N"
 /** SESSION-RM-1: the composer trash button on an ended session (it removes the agent from the list). */
 const val REMOVE_AGENT_LABEL = "Remove agent"
 
-/** A session whose run is over for good: nothing left to kill, only to resume or remove. */
-val ENDED_STATES = setOf(SessionState.EXITED, SessionState.FAILED, SessionState.ORPHANED)
-
 /** Test tag on the list of messages waiting for a busy agent. */
 const val QUEUED_MESSAGES_TAG = "queued-messages"
 
@@ -689,19 +686,6 @@ fun CommsCard(style: CommsCardStyle, at: Long, body: @Composable () -> Unit) {
 
 const val CARD_COMMS_ICON_TAG = "card-comms-icon"
 
-internal fun spansText(spans: List<ChatSpan>): AnnotatedString = buildAnnotatedString {
-    for (s in spans) when (s) {
-        is ChatSpan.Text -> append(s.text)
-        is ChatSpan.Bold -> withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(s.text) }
-        is ChatSpan.Italic -> withStyle(SpanStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic)) { append(s.text) }
-        is ChatSpan.InlineCode -> withStyle(SpanStyle(background = Palette.Raised, color = Palette.Accent)) { append(s.text) }
-        is ChatSpan.Link -> if (isSafeChatUrl(s.url)) {
-            // Opens through the platform LocalUriHandler; the parser only ever yields http/https/mailto, re-checked here.
-            withLink(LinkAnnotation.Url(s.url, TextLinkStyles(SpanStyle(color = Palette.Info, textDecoration = TextDecoration.Underline)))) { append(s.label) }
-        } else append(s.label)
-    }
-}
-
 @Composable
 fun NoticeStrip(state: AppState, sessionId: String? = null) {
     val n = state.noticesForSession(sessionId).lastOrNull() ?: return
@@ -758,8 +742,7 @@ fun QueuedMessages(queue: List<QueuedPrompt>) {
 
 @Composable
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
-// S4 bridge (docs/SHELL-LEAKS.md): ChatPanel (app UI) composes it; internal again once ChatSurface.kt moves too.
-fun PromptBox(
+internal fun PromptBox(
     value: String,
     onValue: (String) -> Unit,
     onSubmit: () -> Unit,
@@ -1039,8 +1022,7 @@ const val SPAWN_ROLE_DEFAULT_TAG = "spawn-role-default"
 
 /** The New agent box's role row: pick the role to spawn as and see what its binding makes the default (pick another model to override). */
 @Composable
-// S4 bridge (docs/SHELL-LEAKS.md): ChatPanel (app UI) composes it; internal again once ChatSurface.kt moves too.
-fun SpawnRoleRow(state: AppState, controller: Controller) {
+internal fun SpawnRoleRow(state: AppState, controller: Controller) {
     // PICKER-UX: room above the role tags (they sat flat against the banner) and a bold section label.
     Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
