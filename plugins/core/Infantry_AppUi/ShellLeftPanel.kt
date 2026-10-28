@@ -47,6 +47,9 @@ object ShellLeftPanel : Block("infantry.shell.left", "infantry.shell.left", Plac
 /** RUNTIME-15: the board overlay's shell slot; the official Infantry_Board fills it (no jar, no fill, no Board button). */
 private const val BOARD_SLOT = "infantry.shell.board"
 
+/** RUNTIME-16: the official Infantry_Review tab; the sidebar's "To review" counter shows only when it is loaded. */
+private const val REVIEW_TAB = "infantry.review"
+
 /** MOBILE-LAYOUT-1: below PanelLayout.COMPACT_BELOW_DP (600dp) of the middle region the window shows ONE pane. */
 @Composable
 internal fun dockCompact(): Boolean = PanelLayout.isCompact(LocalBlockSize.current.width.value)
@@ -70,6 +73,7 @@ internal fun LeftPanelContent(s: Shell, compact: Boolean, sidebarWidthDp: Float)
             onAssign = { id, projectId -> s.actionScope.launch { controller.assignSessionProject(id, projectId) } },
             projects = { ProjectsSidebar(state, onDismiss = { controller.dismissProjectRefusal() }) },
             onOpenBoard = if (BOARD_SLOT in s.tabs.fillModules) ({ ui.showBoard = true }) else null,
+            showReview = s.tabs.find(REVIEW_TAB) != null,
         ) }))
     }
 }

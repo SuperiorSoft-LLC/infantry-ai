@@ -75,6 +75,8 @@ kotlin {
             implementation(project(":plugins:official:Infantry_Roles"))
             // RUNTIME-15: and the official Infantry_Board (the board overlay fill and its block types).
             implementation(project(":plugins:official:Infantry_Board"))
+            // RUNTIME-16: and the official Infantry_Alerts (the sound and voice fills, out of Infantry_AppUi).
+            implementation(project(":plugins:official:Infantry_Alerts"))
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)

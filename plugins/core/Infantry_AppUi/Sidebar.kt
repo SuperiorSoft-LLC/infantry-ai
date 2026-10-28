@@ -91,12 +91,14 @@ fun Sidebar(
     projects: @Composable () -> Unit,
     /** RUNTIME-15: null when no module fills the board overlay (no Infantry_Board jar): no Board button. */
     onOpenBoard: (() -> Unit)?,
+    /** RUNTIME-16: whether the official Infantry_Review tab is loaded; without it there is no "To review" counter. */
+    showReview: Boolean = true,
 ) {
     // PLUGINS-3: the frame (width, background, tag) is the left panel's; this is Infantry_Agents' section in it.
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(10.dp), horizontalArrangement = Arrangement.SpaceBetween) {
             Counter("Needs input", state.needsInputCount, if (state.needsInputCount > 0) Palette.Accent else Palette.Muted)
-            Counter("To review", state.reviewQueue.size, Palette.Info)
+            if (showReview) Counter("To review", state.reviewQueue.size, Palette.Info)
             Counter("Working", state.workingCount, Palette.Ok)
         }
         // M2-8: the Board button sits where the projects list was (M2-7 moved projects to the title bar).

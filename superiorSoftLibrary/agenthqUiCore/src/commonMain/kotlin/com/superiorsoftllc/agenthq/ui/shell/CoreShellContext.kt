@@ -76,6 +76,12 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
     override val pods: PodsContext = CorePods(shell.controller)
     override val triggers: TriggersContext = CoreTriggers(shell.controller)
     override val attention: AttentionContext = CoreAttention(shell.controller)
+    override val alerts: AlertsContext = object : AlertsContext {
+        override val state get() = shell.controller.state
+        override val spoken get() = shell.controller.spoken
+        override val commsSound get() = ui.flags.commsSound
+        override val voice get() = ui.flags.voice
+    }
 
     override val board: BoardContext = object : BoardContext {
         override val open: Boolean get() = ui.showBoard

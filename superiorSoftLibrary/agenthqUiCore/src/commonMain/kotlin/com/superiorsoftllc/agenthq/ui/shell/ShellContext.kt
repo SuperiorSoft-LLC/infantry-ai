@@ -92,6 +92,30 @@ interface ShellContext {
     val triggers: TriggersContext get() = NoTriggers
     /** RUNTIME-13 (additive): the attention and question requests behind the official Infantry_Attention tab. */
     val attention: AttentionContext get() = NoAttention
+    /** RUNTIME-16 (additive): what the official Infantry_Alerts (incoming-comms sound, spoken alerts) listens to. */
+    val alerts: AlertsContext get() = NoAlerts
+}
+
+/**
+ * RUNTIME-16: the window's feeds and the owner's settings behind the official Infantry_Alerts module, which fills the
+ * shell's `infantry.shell.sound` and `infantry.shell.voice` slots. The settings are the Configuration's (read in
+ * composition, so a change redraws the module).
+ */
+interface AlertsContext {
+    /** The window's state, as it changes (the sound watches it for incoming comms). */
+    val state: kotlinx.coroutines.flow.StateFlow<com.superiorsoftllc.agenthq.ui.model.AppState>?
+    /** What the daemon asks to be spoken (VOICE-1). */
+    val spoken: kotlinx.coroutines.flow.Flow<com.superiorsoftllc.agenthq.ui.voice.SpokenNotice>
+    val commsSound: com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundSettings
+    val voice: com.superiorsoftllc.agenthq.ui.voice.VoiceSettings
+}
+
+/** No alerts: no state to watch, nothing spoken (a shell without a window, and fakes). */
+object NoAlerts : AlertsContext {
+    override val state: kotlinx.coroutines.flow.StateFlow<com.superiorsoftllc.agenthq.ui.model.AppState>? = null
+    override val spoken: kotlinx.coroutines.flow.Flow<com.superiorsoftllc.agenthq.ui.voice.SpokenNotice> = kotlinx.coroutines.flow.emptyFlow()
+    override val commsSound = com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundSettings()
+    override val voice = com.superiorsoftllc.agenthq.ui.voice.VoiceSettings()
 }
 
 /**
