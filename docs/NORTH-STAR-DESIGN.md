@@ -165,6 +165,26 @@ Every other slot is empty and draws nothing.
   empty shell should start *slightly faster* than the full app. Loading one community module from disk adds its
   classloader cost (small).
 - **Measure it in NS10. Do not promise a number before that.**
+
+**NS10 measured (2026-10-28, from the build output on disk; no new distributable was built):**
+
+| What | Size | Source |
+|---|---|---|
+| Full app image `agentHqUi/build/compose/binaries/main/app/AgentHQ` | **234 MB** | `du`, build of 2026-10-23 |
+| of which the jlink runtime (`runtime/`, `includeAllModules`) | **155 MB** | `du` |
+| of which the jars (`app/`, Compose + Skiko + ktor + SQLite + ours) | **79 MB** | `du`; ours: agentHq 4.9 MB, agenthqUiCore 3.7 MB, agentHqUi 0.1 MB |
+| Installer `main-release/exe/AgentHQ-1.0.1.exe` (compressed) | **118 MB** (123,331,072 B) | `stat` |
+
+- The shell-only image is that image minus the app UI and board jars (`isShellJar`), so **~230 MB**: the estimate
+  holds. The runtime is two thirds of it; the thin flavour (trimmed jlink) is where the size can drop.
+- The 10-23 image predates the NS2 module split, so it has no separate agenthqAppUi/Infantry_Board jar to subtract.
+  An exact shell number needs `gradlew :superiorSoftLibrary:agentHqUi:packageShellMsi` (or `createRuntimeImage` +
+  `shellJars`, then `du build/shell/input` + the runtime).
+- The exported `Board.ihq` itself is small (layout JSON + the nested Infantry_Board package), not part of the image.
+- **Start-up: not measured yet.** It needs a timed window launch, which this ticket did not run (no waits). To measure:
+  Registered > `infantry.shell.board.pane` > **Try in a fresh shell**, and time from the click to the drop box; the
+  child's log is `<stateDir>/fresh-shells/<appId>/shell.log` and its `[agentHq-app] ... daemon=` line marks the daemon
+  choice. Record it here when the owner runs it.
 - Each running exported app is its own JVM. With the PERF-2 heap caps, expect a few hundred MB RSS per app, plus a second
   daemon when bundled. That matters on this host (knowledge note `host-ram-exhaustion-jvm-crashes`).
 
@@ -408,4 +428,6 @@ Taken (no owner wait):
 3. Should eb5a962f wait for NS7, or ship its own weaker token now and migrate later? Recommendation: wait. Two token
    kinds is the expensive mistake.
 4. Is "Try in a fresh shell" also wanted in the installed app (it launches a second process from the install dir), or
-   dev only for the weekend? Recommendation: both, since it is the same launcher.
+   dev only for the weekend? Recommendation: both, since it is the same launcher. **Decided yes; done in NS10**
+   (`FreshShell`: Registered > "Try in a fresh shell" exports, writes `<stateDir>/fresh-shells/<appId>` with the
+   `.ihq` beside an empty plugins root, and starts `java.home`'s javaw with the shell-only classpath and `--app`).

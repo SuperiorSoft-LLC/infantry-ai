@@ -128,6 +128,9 @@ fun RegistrySection(factory: TabFactory) {
         if (node != null && exporter != null) {
             var exported by remember(node) { mutableStateOf<String?>(null) }
             TextButton({ exported = exporter(node) }, Modifier.testTag(REGISTRY_EXPORT_TAG)) { Text("Export section…") }
+            factory.freshShellLauncher?.let { fresh ->
+                TextButton({ exported = fresh(node) }, Modifier.testTag(REGISTRY_FRESH_SHELL_TAG)) { Text("Try in a fresh shell") }
+            }
             exported?.let { SectionLabel(it, Palette.Muted, Modifier.testTag(REGISTRY_EXPORT_RESULT_TAG), topGap = false) }
         }
         val fields = node?.let { factory.configTree.fields[it] }.orEmpty()
@@ -143,6 +146,8 @@ fun RegistrySection(factory: TabFactory) {
 /** NS3: the picked node's "Export section…" button and the line it answers with (file written, or the refusals). */
 const val REGISTRY_EXPORT_TAG = "registry-export"
 const val REGISTRY_EXPORT_RESULT_TAG = "registry-export-result"
+/** NS10: "Try in a fresh shell" (export, then start the shell-only process on it). */
+const val REGISTRY_FRESH_SHELL_TAG = "registry-fresh-shell"
 
 /** NS1 / PB1: the registered block types, one chip each (title, type, module); the suffix of the tag is the type. */
 const val REGISTRY_BLOCK_TYPE_TAG_PREFIX = "registry-block-type-"
