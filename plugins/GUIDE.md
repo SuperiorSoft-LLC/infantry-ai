@@ -93,6 +93,25 @@ Open Settings > Plugins > Modules and press Enable on your module, then restart.
 `needs:` and `required by:`. If your module did not load, its row says why in one line, and so does the log
 (`[plugins] Acme_Notes (community): refused - ...`).
 
+## Dependencies, native files and platforms
+
+Your dependencies are your job; the host gives you the tools. Each module gets its own class loader (never shared with
+another module, closed on unload), parent the app's loader, so the app's API, Compose and Kotlin are already there.
+
+- **Fat jar**: shade your libraries into `build/libs/<Vendor_Module>.jar`. Simplest; one file.
+- **lib/ folder**: or leave them out of the jar and put each dependency jar in `<module>/lib/`. Every `*.jar` there is
+  on your class loader, after your own jar.
+- **Native files** (`.dll`, `.so`, `.dylib`): put them in `<module>/native/<os>-<arch>/` (e.g. `windows-amd64`,
+  `linux-amd64`, `macos-aarch64`), or `<module>/native/`, or the module folder. Call `System.loadLibrary("foo")` from
+  your own classes (not `System.load` with a guessed path): the loader finds `foo.dll` / `libfoo.so` / `libfoo.dylib`.
+- **platforms**: `"platforms": ["desktop", "android", "web"]` in `module.json` lists where the module works. Absent
+  means all. An unknown value refuses the module with a clear reason. On a platform you do not list, the module is
+  skipped and Settings > Plugins shows "not available on this platform". Only the desktop app and daemon load jars today.
+- **Per-platform builds**: write the module in Kotlin Multiplatform and build one artifact per target you list; ship
+  the desktop jar with the folder, and list only the platforms you built for.
+- **In-process**: a plugin runs inside the app with its full access (see below): the tier is a trust label, not a
+  sandbox, and that includes your libraries and native code.
+
 ## Trust tiers: a label, not a sandbox
 
 The folder decides the tier. **Core** is what ships with the app. **Community** is anything dropped into

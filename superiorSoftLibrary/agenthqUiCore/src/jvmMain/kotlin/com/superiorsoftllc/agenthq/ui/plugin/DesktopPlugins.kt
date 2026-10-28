@@ -22,7 +22,6 @@ import com.superiorsoftllc.agenthq.plugin.host.provideEvents
 
 import com.superiorsoftllc.agenthq.ui.model.ToastKind
 import java.io.File
-import java.net.URLClassLoader
 
 /**
  * PLUGINS-1: the desktop's module loader. Finds modules only by scanning the configured subfolders of the plugins root
@@ -70,11 +69,11 @@ object DesktopPlugins {
         val demoLock = PluginFolders.demoLock(env)
         val safeMode = PluginFolders.safeMode(env, property)
         // S6: an app UI installed from a .ihq carries its modules in one jar; they take part as if compiled in.
-        val loaders = mutableListOf<URLClassLoader>()
+        val loaders = mutableListOf<PluginClassLoader>()
         val withBundles = compiled + bundles(root, config, compiled, say, loaders)
         val candidates = candidates(root, config, withBundles)
         say("[plugins] root ${root.absolutePath}${if (demoLock) " (demo lock on)" else ""}${if (safeMode) " (safe mode: community modules off)" else ""}")
-        var resolution = ModuleResolver.resolve(candidates, config, demoLock, safeMode = safeMode)
+        var resolution = ModuleResolver.resolve(candidates, config, demoLock, safeMode = safeMode, platform = "desktop")
 
         var built: TabFactory? = null
         val bus = SimpleEventBus(say)
@@ -127,7 +126,7 @@ object DesktopPlugins {
      * cannot fill the shell's slots anyway), loaded before the rules run so their dependencies resolve as if compiled in.
      * The bundle's own name must be one of its modules. A folder that does not load is left to [loadJar]'s refusal.
      */
-    private fun bundles(root: File, config: ModulesConfig, builtIn: List<AgentHqModule>, say: (String) -> Unit, loaders: MutableList<URLClassLoader>): List<AgentHqModule> {
+    private fun bundles(root: File, config: ModulesConfig, builtIn: List<AgentHqModule>, say: (String) -> Unit, loaders: MutableList<PluginClassLoader>): List<AgentHqModule> {
         val core = config.folders.filter { it.tier == Tier.CORE }.map { File(root, it.path).canonicalFile }
         val out = mutableListOf<AgentHqModule>()
         for (c in PluginFolders.scan(root, config)) {
@@ -138,7 +137,7 @@ object DesktopPlugins {
             val jar = File(dir, m.jar!!)
             if (!jar.isFile || !jar.canonicalPath.startsWith(dir.canonicalPath + File.separator)) continue
             val modules = try {
-                val loader = URLClassLoader(arrayOf(jar.toURI().toURL()), DesktopPlugins::class.java.classLoader).also { loaders += it }
+                val loader = PluginClassLoader(dir, jar, DesktopPlugins::class.java.classLoader).also { loaders += it }
                 val entry = loader.loadClass(m.entry).getDeclaredConstructor().newInstance()
                 (entry as? ModuleSource ?: continue).modules() // a UiPlugin entry is an ordinary module: loadJar's
             } catch (e: Exception) {
@@ -182,14 +181,14 @@ object DesktopPlugins {
     /** A module's private data area: `<stateDir>/plugin-data/<Vendor_Module>`. */
     fun dataDir(stateDir: File, module: String) = File(File(stateDir, "plugin-data"), module)
 
-    private fun loadJar(s: ModuleStatus, services: com.superiorsoftllc.agenthq.plugin.api.PluginServices, loaders: MutableList<URLClassLoader>): AgentHqModule {
+    private fun loadJar(s: ModuleStatus, services: com.superiorsoftllc.agenthq.plugin.api.PluginServices, loaders: MutableList<PluginClassLoader>): AgentHqModule {
         val m = s.manifest!!
         val dir = File(s.dir ?: error("no folder"))
         val entry = m.entry?.takeIf { it.isNotBlank() } ?: error("module.json has no entry class")
         val jar = File(dir, m.jar?.takeIf { it.isNotBlank() } ?: error("module.json has no jar"))
         if (!jar.isFile) error("jar ${m.jar} not found (build it first)")
         if (!jar.canonicalPath.startsWith(dir.canonicalPath + File.separator)) error("jar ${m.jar} is outside the module folder")
-        val loader = URLClassLoader(arrayOf(jar.toURI().toURL()), DesktopPlugins::class.java.classLoader).also { loaders += it }
+        val loader = PluginClassLoader(dir, jar, DesktopPlugins::class.java.classLoader).also { loaders += it }
         val plugin = try {
             loader.loadClass(entry).getDeclaredConstructor().newInstance() as? UiPlugin ?: error("$entry is not a UiPlugin")
         } catch (e: ReflectiveOperationException) {

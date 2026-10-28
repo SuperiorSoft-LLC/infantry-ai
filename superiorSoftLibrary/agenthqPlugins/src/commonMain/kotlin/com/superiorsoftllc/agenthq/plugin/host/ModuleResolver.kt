@@ -2,6 +2,7 @@ package com.superiorsoftllc.agenthq.plugin.host
 
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.ModulesConfig
+import com.superiorsoftllc.agenthq.plugin.api.PLATFORMS
 import com.superiorsoftllc.agenthq.plugin.api.PLUGIN_API_VERSION
 import com.superiorsoftllc.agenthq.plugin.api.PreferenceDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.Tier
@@ -86,6 +87,8 @@ object ModuleResolver {
         apiVersion: Int = PLUGIN_API_VERSION,
         /** S6: the shell started in safe mode: every community module is off, whatever modules.json says. */
         safeMode: Boolean = false,
+        /** PLUGIN-PLATFORMS-1: the platform this host runs (`desktop`, `android`, `web`); null = do not filter by platform. */
+        platform: String? = null,
     ): Resolution {
         val log = mutableListOf<String>()
         val final = LinkedHashMap<String, ModuleStatus>()
@@ -106,6 +109,10 @@ object ModuleResolver {
                 c.dir != null && c.folderName != m.name -> refuse("folder '${c.folderName}' declares '${m.name}'; they must match")
                 m.name in seen -> refuse("'${m.name}' is already provided by ${seen.getValue(m.name).tier.name.lowercase()}/${seen.getValue(m.name).folderName}")
                 m.apiVersion != apiVersion -> refuse("needs plugin API ${m.apiVersion}, this build has $apiVersion")
+                m.platforms?.firstOrNull { it !in PLATFORMS } != null ->
+                    refuse("unknown platform '${m.platforms.first { it !in PLATFORMS }}' in platforms (known: ${PLATFORMS.joinToString()})")
+                platform != null && m.platforms != null && platform !in m.platforms ->
+                    refuse("not available on this platform ($platform); it works on ${m.platforms.joinToString()}")
                 c.tier == Tier.COMMUNITY && m.author.isNullOrBlank() -> refuse("community module without an author")
                 c.tier == Tier.COMMUNITY && m.license.isNullOrBlank() -> refuse("community module without a license")
                 else -> {

@@ -2,6 +2,9 @@ package com.superiorsoftllc.agenthq.plugin.api
 
 import kotlinx.serialization.Serializable
 
+/** PLUGIN-PLATFORMS-1: the platform names a module.json `platforms` may list. */
+val PLATFORMS = listOf("desktop", "android", "web")
+
 /** PLUGINS-1: the plugin API version this build speaks. A module that asks for another is refused. */
 const val PLUGIN_API_VERSION = 1
 
@@ -36,6 +39,11 @@ data class ModuleManifest(
     /** JVM only: the class implementing the module's plugin interface, and the jar (relative to the folder) holding it. */
     val entry: String? = null,
     val jar: String? = null,
+    /**
+     * PLUGIN-PLATFORMS-1: the platforms the module works on, from [PLATFORMS] (`desktop`, `android`, `web`). Absent = all.
+     * A host on a platform not listed skips the module ("not available on this platform"); an unknown value refuses it.
+     */
+    val platforms: List<String>? = null,
     /** Daemon routes the module may call, `METHOD /path` (e.g. `GET /health`). */
     val routes: List<String> = emptyList(),
     /** Events the module may publish or observe. */
