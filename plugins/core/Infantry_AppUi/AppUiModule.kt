@@ -15,7 +15,6 @@ import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellHeader
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellLeftPanel
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellQuestionPill
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellRightPanel
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellRoles
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellSound
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellToast
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellVoice
@@ -24,7 +23,8 @@ import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellVoice
 private val fills: List<Block> = listOf(
     ShellHeader, ShellLeftPanel, ShellCenter, ShellRightPanel, ShellCompactDrawer, CoreStatusBar,
     ShellAssistant, ShellToast, ShellBoard, ShellDiff, ShellSound, ShellVoice, ShellQuestionPill,
-    ShellConfigSettings, ShellRoles,
+    ShellConfigSettings,
+    // RUNTIME-14: infantry.shell.roles (the roles window) is filled by the official Infantry_Roles itself.
 )
 
 /**
@@ -34,7 +34,7 @@ private val fills: List<Block> = listOf(
 val InfantryAppUi = AgentHqModule(
     ModuleManifest(
         name = "Infantry_AppUi", version = "1.0.0", author = "Infantry AI",
-        description = "The app's UI in the shell's empty slots: title bar, side panels, chat, status bar, overlays and the roles window.",
+        description = "The app's UI in the shell's empty slots: title bar, side panels, chat, status bar, and overlays.",
         fills = fills.map { com.superiorsoftllc.agenthq.plugin.api.FillDeclaration(it.id) },
     ),
     fills = fills.associateBy { it.id },

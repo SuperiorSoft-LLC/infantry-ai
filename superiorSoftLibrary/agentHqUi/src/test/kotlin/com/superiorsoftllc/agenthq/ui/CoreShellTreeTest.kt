@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.roles.InfantryRoles
 import com.superiorsoftllc.agenthq.plugins.official.stats.InfantryStats
 import com.superiorsoftllc.agenthq.plugins.official.epics.InfantryEpics
 import com.superiorsoftllc.agenthq.plugins.official.pods.InfantryPods
@@ -22,6 +23,9 @@ import kotlin.test.assertEquals
 
 /** BLOCKS-LAYOUT L3: the core tree's node ids are the override address and, since L5, plugin API (plugins/GUIDE.md); this pins them. */
 class CoreShellTreeTest {
+    /** RUNTIME-14: the compiled-in modules plus the official Infantry_Roles (its jar on desktop), which fills infantry.shell.roles. */
+    private val withRoles by lazy { TabFactory(CoreModules.all + InfantryRoles) }
+
     private fun Block.walk(depth: Int = 0): List<String> = listOf("  ".repeat(depth) + id) + children.flatMap { it.walk(depth + 1) }
 
     /** SHELL-EMPTY-DROPIN S3: the config dialog's open settings sections (under `.settings`) and its locked trust sections. */
@@ -122,7 +126,7 @@ class CoreShellTreeTest {
             "    infantry.shell.connect",
         )
         // S4: the window tree as drawn, the app UI's fills in the shell's empty slots.
-        val tree = CoreModules.factory.baseRoot.walk()
+        val tree = withRoles.baseRoot.walk()
         assertEquals(expected.joinToString("\n"), tree.joinToString("\n"))
         assertEquals(tree.size, tree.map { it.trim() }.toSet().size, "node ids are unique")
     }
@@ -143,8 +147,8 @@ class CoreShellTreeTest {
         )
         assertEquals(slots, CoreShell.slots)
         assertEquals(slots, CoreShell.root.all().filterIsInstance<PlaceholderBlock>().filter { it.default == null }.map { it.id })
-        assertEquals(emptyList(), CoreModules.factory.baseRoot.all().filter { it is PlaceholderBlock && it.default == null }.map { it.id })
-        assertEquals(emptyList(), CoreModules.factory.problems)
+        assertEquals(emptyList(), withRoles.baseRoot.all().filter { it is PlaceholderBlock && it.default == null }.map { it.id })
+        assertEquals(emptyList(), withRoles.problems)
         assertEquals(
             setOf(
                 "infantry.shell.window", "infantry.shell.images", "infantry.shell.dock",
@@ -207,7 +211,7 @@ class CoreShellTreeTest {
         )
         // S4: the tab trees are the app UI's contributions now (TabFactory.tabTreeRoots), no longer CoreShell.tabs.
         // RUNTIME-6/7/8: Infantry_Notes, Infantry_Changes, Infantry_Run and Infantry_Git (official jars) register their own trees.
-        val factory = TabFactory(CoreModules.all + InfantryPods + InfantryProfiles + InfantryTriggers + InfantryAttention + InfantryNotes + InfantryChanges + InfantryStats + InfantryUsage + InfantryEpics + InfantryReview + InfantryRun + InfantryGit)
+        val factory = TabFactory(CoreModules.all + InfantryRoles + InfantryPods + InfantryProfiles + InfantryTriggers + InfantryAttention + InfantryNotes + InfantryChanges + InfantryStats + InfantryUsage + InfantryEpics + InfantryReview + InfantryRun + InfantryGit)
         val tabs = factory.tabTreeRoots
         assertEquals(listOf(notes, changes, run, git), tabs.map { it.id })
         assertEquals(expectedNotes.joinToString("\n"), tabs[0].walk().joinToString("\n"))

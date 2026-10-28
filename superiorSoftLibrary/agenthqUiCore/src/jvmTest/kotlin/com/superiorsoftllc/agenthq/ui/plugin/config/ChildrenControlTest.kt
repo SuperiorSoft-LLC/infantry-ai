@@ -34,6 +34,12 @@ class ChildrenControlTest {
         }
     })
 
+    /** RUNTIME-14: the core modules draw no center tab any more; two official ones (their jars on desktop) give the strip its tabs. */
+    private val centerTabs = arrayOf(
+        com.superiorsoftllc.agenthq.plugins.official.roles.InfantryRoles,
+        com.superiorsoftllc.agenthq.plugins.official.pods.InfantryPods,
+    )
+
     private fun factoryWith(vararg extra: AgentHqModule): Pair<TabFactory, NodeConfigState> {
         val f = TabFactory(CoreModules.all + extra)
         // The factory's own state talks to PluginDaemon; the test gives it rows through replace().
@@ -47,7 +53,7 @@ class ChildrenControlTest {
 
     @Test
     fun `a disabled tab leaves its strip and the registry lists it disabled, and the home tab cannot be disabled`() = runBlocking {
-        val (f, state) = factoryWith()
+        val (f, state) = factoryWith(*centerTabs)
         val declared = f.declaredTabs(TabContainers.CENTER).map { it.id }
         assertTrue(declared.size >= 2, declared.toString())
         val home = declared.first()
@@ -71,7 +77,7 @@ class ChildrenControlTest {
 
     @Test
     fun `a reorder is stored as the whole order and the strip draws in it`() = runBlocking {
-        val (f, state) = factoryWith()
+        val (f, state) = factoryWith(*centerTabs)
         val declared = f.declaredTabs(TabContainers.CENTER).map { it.id }
         val scratch = f.offline()
         val last = declared.last()

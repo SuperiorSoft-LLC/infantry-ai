@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.roles
+
+import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -46,7 +48,6 @@ import com.superiorsoftllc.agenthq.ui.model.RoleIcons
 import com.superiorsoftllc.agenthq.ui.model.stateLabel
 import com.superiorsoftllc.agenthq.ui.model.watchFlagOf
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.protocol.AgentProfile
 import com.superiorsoftllc.agenthq.ui.protocol.Role
 import com.superiorsoftllc.agenthq.ui.protocol.RoleBinding
@@ -59,16 +60,10 @@ import kotlin.time.Clock
  *
  * Choose a role from the daemon's catalog, see its persona and the agent profiles bound to it, create a
  * profile within the role (its instructions start as the role's persona), and start a session from a
- * profile. Everything shown comes from [RolesDeps] (S4c: the shell context's domains); the [AppState] / [Controller]
- * entry point is for a pane drawn outside a shell.
+ * profile. Everything shown comes from [RolesDeps] (S4c: the shell context's domains; RUNTIME-14: no Controller entry point).
  *
  * @param onSessionStarted called after a start was sent, so the window can show the conversation.
  */
-@Composable
-fun RolesPane(state: AppState, controller: Controller, onSessionStarted: () -> Unit, onOpenAgent: (String) -> Unit) =
-    RolesPane(RolesDeps(state, controller), onSessionStarted, onOpenAgent)
-
-/** S4c: [RolesPane] over the shell context's domains ([deps]). */
 @Composable
 fun RolesPane(deps: RolesDeps, onSessionStarted: () -> Unit, onOpenAgent: (String) -> Unit) {
     var selected by remember { mutableStateOf<String?>(null) }

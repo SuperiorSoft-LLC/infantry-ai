@@ -59,10 +59,12 @@ class NodeConfigTest {
 
     @Test
     fun `the hierarchy is the block tree's and a tab sits under its strip`() {
-        val tree = factory().configTree
+        // RUNTIME-14: the last core center tab (Roles) is official now; its module is added as the desktop loads its jar.
+        val roles = com.superiorsoftllc.agenthq.plugins.official.roles.InfantryRoles
+        val tree = factory(roles).configTree
         assertEquals("infantry.shell.board", tree.parents["infantry.shell.board.pane"])
         assertEquals(listOf("infantry.shell.board.pane", "infantry.shell.board"), tree.chain("infantry.shell.board.pane").take(2))
-        assertEquals("infantry.shell.center.chat.tabs", tree.parents[CoreModules.all.flatMap { it.tabs }.first { it.container == "center" && it.parent == null }.id])
+        assertEquals("infantry.shell.center.chat.tabs", tree.parents[(CoreModules.all + roles).flatMap { it.tabs }.first { it.container == "center" && it.parent == null }.id])
     }
 
     @Test

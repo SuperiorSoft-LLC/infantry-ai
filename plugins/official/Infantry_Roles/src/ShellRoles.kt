@@ -1,23 +1,12 @@
-package com.superiorsoftllc.agenthq.ui.shell.blocks
+package com.superiorsoftllc.agenthq.plugins.official.roles
+
+import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
-import com.superiorsoftllc.agenthq.ui.RolesDeps
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.RoleFormActions
-import com.superiorsoftllc.agenthq.ui.RoleFormDraft
-import com.superiorsoftllc.agenthq.ui.RoleFormExecutor
-import com.superiorsoftllc.agenthq.ui.RoleFormIdentity
-import com.superiorsoftllc.agenthq.ui.RoleFormNotes
-import com.superiorsoftllc.agenthq.ui.RoleFormTitle
-import com.superiorsoftllc.agenthq.ui.RoleFormTraits
-import com.superiorsoftllc.agenthq.ui.RoleManagerForm
-import com.superiorsoftllc.agenthq.ui.RoleManagerFrame
-import com.superiorsoftllc.agenthq.ui.RoleManagerHint
-import com.superiorsoftllc.agenthq.ui.RoleManagerList
-import com.superiorsoftllc.agenthq.ui.RoleManagerNav
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.Place

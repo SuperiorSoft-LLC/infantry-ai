@@ -1,13 +1,14 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.roles
+
+import com.superiorsoftllc.agenthq.ui.*
 
 import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.shell.CoreExecutor
 import com.superiorsoftllc.agenthq.ui.shell.CoreLink
-import com.superiorsoftllc.agenthq.ui.shell.CoreNotes
-import com.superiorsoftllc.agenthq.ui.shell.CoreRoles
+import com.superiorsoftllc.agenthq.ui.shell.NoNotes
+import com.superiorsoftllc.agenthq.ui.shell.NoRoles
 import com.superiorsoftllc.agenthq.ui.shell.CoreSession
-import com.superiorsoftllc.agenthq.ui.shell.CoreTraits
+import com.superiorsoftllc.agenthq.ui.shell.NoTraits
 import com.superiorsoftllc.agenthq.ui.shell.ExecutorContext
 import com.superiorsoftllc.agenthq.ui.shell.LinkContext
 import com.superiorsoftllc.agenthq.ui.shell.NotesContext
@@ -30,8 +31,9 @@ class RolesDeps(
 ) {
     constructor(ctx: ShellContext) : this(ctx.link, ctx.session, ctx.roles, ctx.traits, ctx.executor, ctx.notes)
 
-    /** For a pane drawn outside a shell (its `(state, controller)` entry point). */
-    constructor(state: AppState, controller: Controller) : this(
-        CoreLink(state), CoreSession(state), CoreRoles(state, controller), CoreTraits(state, controller), CoreExecutor(state), CoreNotes(state, controller),
-    )
+    /**
+     * RUNTIME-14: for a pane drawn outside a shell: [state]'s link, session and harnesses, and no roles, traits or notes
+     * requests (the official jar never reaches the window's Controller).
+     */
+    constructor(state: AppState) : this(CoreLink(state), CoreSession(state), NoRoles, NoTraits, CoreExecutor(state), NoNotes)
 }
