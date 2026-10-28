@@ -30,7 +30,7 @@ import com.superiorsoftllc.agenthq.ui.Chip
 import com.superiorsoftllc.agenthq.ui.TextButton
 import com.superiorsoftllc.agenthq.ui.plugin.config.ChildrenControl
 import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigLoad
-import com.superiorsoftllc.agenthq.ui.plugin.config.NodeFields
+import com.superiorsoftllc.agenthq.ui.plugin.config.NodeFieldGroups
 import kotlinx.coroutines.launch
 import com.superiorsoftllc.agenthq.ui.FilterChip
 import com.superiorsoftllc.agenthq.ui.Palette
@@ -128,7 +128,7 @@ fun RegistrySection(factory: TabFactory) {
         if (node != null && fields.isNotEmpty()) {
             val locked = node in com.superiorsoftllc.agenthq.ui.shell.blocks.CoreShell.locked
             SectionLabel("Fields", topGap = false, modifier = Modifier.testTag(REGISTRY_FIELDS_TAG))
-            NodeFields(factory, node, fields, editable = ready && !locked, locked = locked)
+            NodeFieldGroups(factory, node, fields, editable = ready && !locked, locked = locked)
         }
     }
 }

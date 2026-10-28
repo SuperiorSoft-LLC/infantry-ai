@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldTypes
@@ -33,6 +34,7 @@ import com.superiorsoftllc.agenthq.ui.FilterChip
 import com.superiorsoftllc.agenthq.ui.Palette
 import com.superiorsoftllc.agenthq.ui.SectionLabel
 import com.superiorsoftllc.agenthq.ui.TextButton
+import com.superiorsoftllc.agenthq.ui.handCursor
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
@@ -50,6 +52,8 @@ const val NODE_FIELD_INPUT_TAG_PREFIX = "node-field-input-"
 const val NODE_FIELD_SAVE_TAG_PREFIX = "node-field-save-"
 const val NODE_FIELD_RESET_TAG_PREFIX = "node-field-reset-"
 const val NODE_FIELD_CHECK_TAG_PREFIX = "node-field-check-"
+/** One config group's tab above a node's fields; the suffix is `<node>/<group>`. */
+const val NODE_GROUP_TAB_TAG_PREFIX = "node-group-tab-"
 /** Why a field cannot be changed (locked node, not exposed, unknown type); the suffix is `<node>/<key>`. */
 const val NODE_FIELD_NOTE_TAG_PREFIX = "node-field-note-"
 
@@ -125,6 +129,37 @@ fun NodeFields(factory: TabFactory, node: String, fields: List<DeclaredField>, e
             }
         }
     }
+}
+
+/**
+ * P1 step 2 (6s F): [fields] split by config group, one tab per group, in the merged tree's group order (core's first,
+ * then each name a module adds); the picked group's fields show below through [NodeFields]. A single group still shows
+ * its tab, so the view reads the same however many groups a node has.
+ */
+@Composable
+fun NodeFieldGroups(factory: TabFactory, node: String, fields: List<DeclaredField>, editable: Boolean, locked: Boolean) {
+    val order = factory.configTree.groups
+    val groups = fields.map { it.group }.distinct().sortedBy { g -> order.indexOf(g).let { if (it < 0) Int.MAX_VALUE else it } }
+    if (groups.isEmpty()) return
+    var picked by remember(node) { mutableStateOf(groups.first()) }
+    val group = picked.takeIf { it in groups } ?: groups.first()
+    androidx.compose.material3.PrimaryScrollableTabRow(
+        selectedTabIndex = groups.indexOf(group),
+        edgePadding = 0.dp,
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        contentColor = Palette.Accent,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        for (g in groups) {
+            val on = g == group
+            androidx.compose.material3.Tab(
+                selected = on, onClick = { picked = g },
+                modifier = Modifier.handCursor().testTag("$NODE_GROUP_TAB_TAG_PREFIX$node/$g"),
+                text = { Text(g, fontSize = 12.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, color = if (on) Palette.Accent else Palette.Muted) },
+            )
+        }
+    }
+    NodeFields(factory, node, fields.filter { it.group == group }, editable, locked)
 }
 
 @Composable

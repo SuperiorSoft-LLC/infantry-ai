@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.NodeConfigEntry
@@ -31,6 +32,7 @@ import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.net.DaemonClient
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.REGISTRY_CHILD_LOCKED_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.plugin.config.NODE_GROUP_TAB_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.REGISTRY_CHILD_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.REGISTRY_HOST_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.REGISTRY_LOCKED_TAG
@@ -44,6 +46,7 @@ import com.superiorsoftllc.agenthq.ui.plugin.REGISTRY_TOGGLE_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.REGISTRY_UP_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigApi
 import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigLoad
+import com.superiorsoftllc.agenthq.ui.plugin.config.NODE_FIELD_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.config.NODE_FIELD_OPTION_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.config.NODE_FIELD_ORIGIN_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.config.NODE_FIELD_RESET_TAG_PREFIX
@@ -68,10 +71,16 @@ import kotlin.test.assertEquals
  * centre tab strip shows up in the strip's list with its source and tier; a locked node shows as not editable. P1 step 2:
  * a tab switched off leaves the strip, a move reorders it.
  */
+private const val ACME_NODE = "Acme_Tabs.panel"
+
 @OptIn(ExperimentalTestApi::class)
 class RegistrySectionUiTest {
     private val acme = AgentHqModule(
-        ModuleManifest("Acme_Tabs", "2.1.0", author = "Acme", license = "NOASSERTION", tabs = listOf(TabDeclaration("acme.tabs", TabContainers.CENTER))),
+        ModuleManifest("Acme_Tabs", "2.1.0", author = "Acme", license = "NOASSERTION", tabs = listOf(TabDeclaration("acme.tabs", TabContainers.CENTER)),
+            config = listOf(
+                com.superiorsoftllc.agenthq.plugin.api.ConfigDeclaration(ACME_NODE, "Acme", listOf(com.superiorsoftllc.agenthq.plugin.api.ConfigFieldDeclaration("title", "text", default = kotlinx.serialization.json.JsonPrimitive("Hi")))),
+                com.superiorsoftllc.agenthq.plugin.api.ConfigDeclaration(ACME_NODE, "Advanced", listOf(com.superiorsoftllc.agenthq.plugin.api.ConfigFieldDeclaration("dense", "checkbox"))),
+            )),
         tabs = listOf(TabProvider("acme.tabs", TabContainers.CENTER, 500, { "Acme" }, InfantryGit.tabs.single().icon, "center-tab-ACME_TABS") { Text("acme") }),
         tier = Tier.COMMUNITY,
     )
@@ -196,6 +205,31 @@ class RegistrySectionUiTest {
         // Reset hands it back to the default.
         onNodeWithTag(NODE_FIELD_RESET_TAG_PREFIX + "$strip/sorter").performClick()
         waitUntil(timeoutMillis = 10_000) { tabs.tabs(TabContainers.CENTER).map { it.id } == before }
+    }
+
+    @Test fun aNodesConfigGroupsAreTabsAboveItsFields() = withPlugins {
+        waitUntil(timeoutMillis = 10_000) { tabs.config.load == NodeConfigLoad.LOADED }
+        onNodeWithTag(REGISTRY_HOST_TAG_PREFIX + ACME_NODE).performScrollTo()
+        onNodeWithTag(REGISTRY_HOST_TAG_PREFIX + ACME_NODE).performClick()
+        waitForIdle()
+        val acmeTab = NODE_GROUP_TAB_TAG_PREFIX + "$ACME_NODE/Acme"
+        val advanced = NODE_GROUP_TAB_TAG_PREFIX + "$ACME_NODE/Advanced"
+        onNodeWithTag(acmeTab).performScrollTo()
+        onNodeWithTag(acmeTab).assertIsSelected()
+        onNodeWithTag(NODE_FIELD_TAG_PREFIX + "$ACME_NODE/title").assertExists()
+        onNodeWithTag(NODE_FIELD_TAG_PREFIX + "$ACME_NODE/dense").assertDoesNotExist()
+        // The strip sits under the body's lower fade here; click it through its semantics, as a screen reader would.
+        onNodeWithTag(advanced).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.OnClick)
+        waitForIdle()
+        onNodeWithTag(CONFIG_DIALOG_TAG).assertExists()
+        onNodeWithTag(advanced).assertIsSelected()
+        onNodeWithTag(NODE_FIELD_TAG_PREFIX + "$ACME_NODE/dense").assertExists()
+        onNodeWithTag(NODE_FIELD_TAG_PREFIX + "$ACME_NODE/title").assertDoesNotExist()
+        // The core strip's one group still reads as a tab.
+        onNodeWithTag(REGISTRY_HOST_TAG_PREFIX + "infantry.shell.center.chat.tabs").performScrollTo()
+        onNodeWithTag(REGISTRY_HOST_TAG_PREFIX + "infantry.shell.center.chat.tabs").performClick()
+        waitForIdle()
+        onNodeWithTag(NODE_GROUP_TAB_TAG_PREFIX + "infantry.shell.center.chat.tabs/Tabs").assertExists()
     }
 
     @Test fun aLockedNodeShowsLockedAndOffersNothingToChange() = withPlugins {
