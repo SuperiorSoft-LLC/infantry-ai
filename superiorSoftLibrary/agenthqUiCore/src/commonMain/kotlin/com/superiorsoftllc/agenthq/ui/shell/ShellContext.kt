@@ -80,6 +80,44 @@ interface ShellContext {
     val skills: SkillsContext get() = NoSkills
     /** RUNTIME-10 (additive): plan limits, the pacing allowance and per-session statistics, for the Usage and Stats tabs. */
     val usage: UsageContext get() = NoUsage
+    /** RUNTIME-11 (additive): the epic requests behind the official Infantry_Epics tab. */
+    val epics: EpicsContext get() = NoEpics
+    /** RUNTIME-11 (additive): what the official Infantry_Review tab may do with a queued node. */
+    val review: ReviewContext get() = NoReview
+}
+
+/**
+ * RUNTIME-11: the daemon requests behind the official Epics tab (contract 1.19.0). The epics and tickets it shows come
+ * from the window's state ([com.superiorsoftllc.agenthq.ui.plugin.TabContext.state]).
+ */
+interface EpicsContext {
+    /** Asks for [projectId]'s epics and tickets. */
+    suspend fun load(projectId: String): CommandResult
+    /** Files a new epic under [projectId] (`epic_save`, create only). */
+    suspend fun save(projectId: String, name: String, goal: String?): CommandResult
+    /** Files a new ticket [title] under epic [epicId] of [projectId]. */
+    suspend fun addTask(projectId: String, title: String, epicId: String): CommandResult
+    /** Moves ticket [id] to column [status]. */
+    suspend fun moveTicket(id: String, status: String): CommandResult
+}
+
+/** No epic requests: every one refused. */
+object NoEpics : EpicsContext {
+    override suspend fun load(projectId: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun save(projectId: String, name: String, goal: String?): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun addTask(projectId: String, title: String, epicId: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun moveTicket(id: String, status: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+}
+
+/** RUNTIME-11: the Review tab's actions. The queue itself is the window's state (`AppState.reviewQueue`). */
+interface ReviewContext {
+    /** Selects session [sessionId] (a queued node's agent). */
+    fun openAgent(sessionId: String)
+}
+
+/** No review actions: opening an agent does nothing. */
+object NoReview : ReviewContext {
+    override fun openAgent(sessionId: String) {}
 }
 
 /**

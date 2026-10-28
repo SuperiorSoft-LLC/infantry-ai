@@ -1,5 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.epics
 
+import com.superiorsoftllc.agenthq.ui.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,9 +34,9 @@ import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.EpicView
 import com.superiorsoftllc.agenthq.ui.model.epicTicketColumns
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.protocol.Ticket
 import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
+import com.superiorsoftllc.agenthq.ui.shell.EpicsContext
 import kotlinx.coroutines.launch
 
 /** Column headers, keyed by [TicketColumns]. */
@@ -63,10 +64,10 @@ private data class EpicDraft(val name: String = "", val goal: String = "")
  * board's four columns, with a move button per other column (`ticket_move`). "Add task" files a new ticket under the
  * epic (`ticket_save{projectId, epicId}`). FORM-MODAL-1: a new epic is made in the shared [EditorModal], opened by an
  * icon-only "+" in the header, never in a field under the growing list; Save sends `epic_save` and closes on Sent.
- * Everything shown comes from [state].
+ * Everything shown comes from [state]; RUNTIME-11: the requests go through the plugin API's [EpicsContext].
  */
 @Composable
-fun EpicsPane(state: AppState, controller: Controller) {
+fun EpicsPane(state: AppState, epics: EpicsContext) {
     val scope = rememberCoroutineScope()
     val live = state.connection.isLive
     val active = state.activeProject
@@ -74,7 +75,7 @@ fun EpicsPane(state: AppState, controller: Controller) {
     var localError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(active?.id, live) {
-        if (live && active != null) controller.loadEpics(active.id)
+        if (live && active != null) epics.load(active.id)
     }
 
     fun run(onSent: () -> Unit = {}, request: suspend () -> CommandResult) {
@@ -106,12 +107,12 @@ fun EpicsPane(state: AppState, controller: Controller) {
             }
             // While the modal is open its refusals show inside it; otherwise (a task or move refused) here.
             if (draft == null) localError?.let { Text(it, color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.padding(bottom = 6.dp)) }
-            val epics = state.epics[active.id].orEmpty()
-            if (epics.isEmpty()) Text("No epics yet.", color = Palette.Muted, fontSize = 12.sp)
-            epics.forEach { epic ->
+            val list = state.epics[active.id].orEmpty()
+            if (list.isEmpty()) Text("No epics yet.", color = Palette.Muted, fontSize = 12.sp)
+            list.forEach { epic ->
                 EpicCard(epic, state.epicTicketColumns(epic.id), live,
-                    onNewTask = { title, done -> run(onSent = done) { controller.addEpicTask(active.id, title, epic.id) } },
-                    onMove = { id, status -> run { controller.moveTicket(id, status) } },
+                    onNewTask = { title, done -> run(onSent = done) { epics.addTask(active.id, title, epic.id) } },
+                    onMove = { id, status -> run { epics.moveTicket(id, status) } },
                 )
             }
         }
@@ -120,7 +121,7 @@ fun EpicsPane(state: AppState, controller: Controller) {
         if (active != null && open != null) {
             EditorModal(
                 title = "New epic",
-                onSave = { run(onSent = { draft = null }) { controller.saveEpic(active.id, open.name, open.goal) } },
+                onSave = { run(onSent = { draft = null }) { epics.save(active.id, open.name, open.goal) } },
                 onCancel = { draft = null; localError = null },
                 modifier = Modifier.testTag(EPIC_DIALOG_TAG),
                 saveEnabled = live && open.name.isNotBlank(), error = localError,

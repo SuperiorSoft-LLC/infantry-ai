@@ -1,6 +1,8 @@
 package com.superiorsoftllc.agenthq.ui.plugin
 
 import com.superiorsoftllc.agenthq.plugins.official.stats.InfantryStats
+import com.superiorsoftllc.agenthq.plugins.official.epics.InfantryEpics
+import com.superiorsoftllc.agenthq.plugins.official.review.InfantryReview
 import com.superiorsoftllc.agenthq.plugins.official.usage.InfantryUsage
 import com.superiorsoftllc.agenthq.plugins.official.changes.InfantryChanges
 import com.superiorsoftllc.agenthq.plugins.official.notes.InfantryNotes
@@ -37,7 +39,7 @@ class TabFactoryTest {
     private val icon = InfantryGit.tabs.single().icon
 
     /** RUNTIME-6/7/8: the compiled-in core modules plus the official Notes, Changes, Run and Git (jars on desktop), as the window has them. */
-    private val coreAndGit = CoreModules.all + InfantryNotes + InfantryChanges + InfantryStats + InfantryUsage + InfantryRun + InfantryGit
+    private val coreAndGit = CoreModules.all + InfantryNotes + InfantryChanges + InfantryStats + InfantryUsage + InfantryEpics + InfantryReview + InfantryRun + InfantryGit
     private val heard = mutableListOf<String>()
 
     private fun tab(id: String, container: String = TabContainers.CENTER, title: String = id, order: Int = 500) =

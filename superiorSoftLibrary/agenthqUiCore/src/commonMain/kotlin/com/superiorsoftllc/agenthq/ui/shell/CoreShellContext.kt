@@ -70,6 +70,8 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
     override val prompts: PromptsContext = CorePrompts(state, shell.controller)
     override val skills: SkillsContext = CoreSkills(state, shell.controller)
     override val usage: UsageContext = CoreUsage(shell.controller)
+    override val epics: EpicsContext = CoreEpics(shell.controller)
+    override val review: ReviewContext = CoreReview(shell.controller)
 
     override val board: BoardContext = object : BoardContext {
         override val open: Boolean get() = ui.showBoard
@@ -140,6 +142,19 @@ class CoreUsage(private val controller: Controller) : UsageContext {
     override suspend fun refreshUsage(force: Boolean): CommandResult = controller.refreshUsage(force)
     override suspend fun usageSet(set: com.superiorsoftllc.agenthq.ui.protocol.UsageSet): CommandResult = controller.usageSet(set)
     override suspend fun sessionStats(sessionId: String): CommandResult = controller.requestSessionStats(sessionId)
+}
+
+/** RUNTIME-11: [controller]'s epic requests, for the Epics tab (or a pane drawn outside a shell). */
+class CoreEpics(private val controller: Controller) : EpicsContext {
+    override suspend fun load(projectId: String): CommandResult = controller.loadEpics(projectId)
+    override suspend fun save(projectId: String, name: String, goal: String?): CommandResult = controller.saveEpic(projectId, name, goal)
+    override suspend fun addTask(projectId: String, title: String, epicId: String): CommandResult = controller.addEpicTask(projectId, title, epicId)
+    override suspend fun moveTicket(id: String, status: String): CommandResult = controller.moveTicket(id, status)
+}
+
+/** RUNTIME-11: [controller]'s selection, for the Review tab (or a pane drawn outside a shell). */
+class CoreReview(private val controller: Controller) : ReviewContext {
+    override fun openAgent(sessionId: String) = controller.select(sessionId)
 }
 
 /** S4b: [state]'s notes and [controller]'s note requests, for a pane drawn outside a shell. */
