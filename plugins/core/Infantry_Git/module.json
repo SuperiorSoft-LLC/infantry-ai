@@ -5,6 +5,8 @@
   "author": "Infantry AI",
   "description": "The project's git state.",
   "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.core.GitModuleSource",
+  "buildOrder": 100,
   "tabs": [
     {
       "id": "infantry.git",

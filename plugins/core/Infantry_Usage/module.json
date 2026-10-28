@@ -5,6 +5,8 @@
   "author": "Infantry AI",
   "description": "Plan usage and limits.",
   "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.core.UsageModuleSource",
+  "buildOrder": 160,
   "tabs": [
     {
       "id": "infantry.usage",

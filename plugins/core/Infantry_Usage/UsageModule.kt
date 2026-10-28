@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.UsagePane
@@ -28,3 +29,8 @@ val InfantryUsage = AgentHqModule(
         ) { UsagePane(it.state, it.state.selected, it.appController) },
     ),
 )
+
+/** RUNTIME-1: the entry of Infantry_Usage (module.json `entry`): hands over this module alone. */
+class UsageModuleSource : ModuleSource {
+    override fun modules(): List<AgentHqModule> = listOf(InfantryUsage)
+}

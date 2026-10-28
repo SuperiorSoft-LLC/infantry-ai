@@ -5,6 +5,8 @@
   "author": "Infantry AI",
   "description": "The left panel's agents list.",
   "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.core.AgentsModuleSource",
+  "buildOrder": 10,
   "panels": [
     {
       "id": "infantry.agents",

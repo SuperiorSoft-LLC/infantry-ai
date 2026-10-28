@@ -5,6 +5,8 @@
   "author": "Infantry AI",
   "description": "Saved commands and their runs.",
   "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.core.RunModuleSource",
+  "buildOrder": 90,
   "tabs": [
     {
       "id": "infantry.run",

@@ -5,6 +5,8 @@
   "author": "Infantry AI",
   "description": "The app's UI in the shell's empty slots: title bar, side panels, chat, status bar, overlays and the roles window.",
   "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.core.AppUiModuleSource",
+  "buildOrder": 200,
   "fills": [
     "infantry.shell.header",
     "infantry.shell.left",

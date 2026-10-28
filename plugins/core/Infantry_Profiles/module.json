@@ -5,6 +5,8 @@
   "author": "Infantry AI",
   "description": "Saved agent profiles.",
   "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.core.ProfilesModuleSource",
+  "buildOrder": 50,
   "tabs": [
     {
       "id": "infantry.profiles",

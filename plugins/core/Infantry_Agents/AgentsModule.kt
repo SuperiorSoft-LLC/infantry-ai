@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.PanelDeclaration
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
@@ -16,3 +17,8 @@ val InfantryAgents = AgentHqModule(
         PanelProvider(id = "infantry.agents", panel = Panels.LEFT, order = Panels.TABS_ORDER, testTag = "left-panel-agents", fill = true) { it.agentsList() },
     ),
 )
+
+/** RUNTIME-1: the entry of Infantry_Agents (module.json `entry`): hands over this module alone. */
+class AgentsModuleSource : ModuleSource {
+    override fun modules(): List<AgentHqModule> = listOf(InfantryAgents)
+}

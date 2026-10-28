@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.ProfilesPane
@@ -33,3 +34,8 @@ val InfantryProfiles = AgentHqModule(
         ) { ProfilesPane(it.state, it.appController, onSessionStarted = it.showChat) },
     ),
 )
+
+/** RUNTIME-1: the entry of Infantry_Profiles (module.json `entry`): hands over this module alone. */
+class ProfilesModuleSource : ModuleSource {
+    override fun modules(): List<AgentHqModule> = listOf(InfantryProfiles)
+}

@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.PromptsPane
@@ -27,3 +28,8 @@ val InfantryPrompts = AgentHqModule(
         ) { PromptsPane(it.state, it.appController, onInsert = it.insertIntoChat) },
     ),
 )
+
+/** RUNTIME-1: the entry of Infantry_Prompts (module.json `entry`): hands over this module alone. */
+class PromptsModuleSource : ModuleSource {
+    override fun modules(): List<AgentHqModule> = listOf(InfantryPrompts)
+}

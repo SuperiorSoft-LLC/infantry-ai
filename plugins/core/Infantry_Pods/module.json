@@ -5,6 +5,8 @@
   "author": "Infantry AI",
   "description": "Pods: submit a goal, watch its nodes.",
   "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.core.PodsModuleSource",
+  "buildOrder": 30,
   "tabs": [
     {
       "id": "infantry.pods",

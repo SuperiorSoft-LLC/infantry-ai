@@ -5,6 +5,8 @@
   "author": "Infantry AI",
   "description": "The project knowledge notes.",
   "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.core.NotesModuleSource",
+  "buildOrder": 80,
   "tabs": [
     {
       "id": "infantry.notes",

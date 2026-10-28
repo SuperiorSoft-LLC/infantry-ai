@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.core
 
+import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.ReviewPane
@@ -30,3 +31,8 @@ val InfantryReview = AgentHqModule(
         ) { ReviewPane(it.state, it.appController) },
     ),
 )
+
+/** RUNTIME-1: the entry of Infantry_Review (module.json `entry`): hands over this module alone. */
+class ReviewModuleSource : ModuleSource {
+    override fun modules(): List<AgentHqModule> = listOf(InfantryReview)
+}

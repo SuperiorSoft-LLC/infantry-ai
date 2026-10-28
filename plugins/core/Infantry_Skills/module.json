@@ -5,6 +5,8 @@
   "author": "Infantry AI",
   "description": "Saved skills to insert into the chat.",
   "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.core.SkillsModuleSource",
+  "buildOrder": 180,
   "tabs": [
     {
       "id": "infantry.skills",
