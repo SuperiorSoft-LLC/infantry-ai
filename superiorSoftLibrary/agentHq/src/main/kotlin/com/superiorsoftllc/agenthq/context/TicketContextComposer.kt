@@ -25,7 +25,7 @@ class TicketContextComposer(
         val switches = effective(input.includeLinkedOverride, input.includeSkillsOverride)
         val includeLinked = switches.includeLinkedTasksContext.value
         val sections = buildList {
-            add("agenthq" to "You are running inside Infantry AI. Ticket: ${input.ticketId}. Project: ${input.projectId ?: "none"}. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `agenthq` CLI, never through files. See superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md.\n" + ticketMoveLine(input.ticketId) + "\n" + MCP_LINE)
+            add("agenthq" to "You are running inside Infantry AI. Ticket: ${input.ticketId}. Project: ${input.projectId ?: "none"}. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `agenthq` CLI, never through files. See superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md.\n" + ticketMoveLine(input.ticketId) + "\n" + MCP_LINE + "\n" + RELATED_TICKETS_LINE)
             add("team" to ((input.reportTo?.let { TEAM_BLOCK + "\n" + reportToLine(it) } ?: TEAM_BLOCK) + "\n" + FINISH_LINE))
             input.instructions?.takeIf(String::isNotBlank)?.let { add("instructions" to it) }
             // The same persona -> identity -> task order [firstTurn] gives every other first turn.
@@ -112,6 +112,16 @@ class TicketContextComposer(
             "for anything they do not cover, or when they are not available. Start ticket work with agenthq_ticket_start " +
             "or `agenthq ticket start <id>`, never agenthq_spawn: a spawn runs outside the board, without the ticket's " +
             "provider, model or branch, and leaves the ticket in To Do."
+
+        /**
+         * APP-KNOWLEDGE (rule B): a worker reuses prior work before it reads from scratch. Checks the linkedTickets
+         * section, the board, then the related tickets' files (RELATED_FILES_LINE above); cites their ids in the report.
+         */
+        const val RELATED_TICKETS_LINE = "\nBefore you start, check the related tickets: (1) the linkedTickets section above, if this " +
+            "ticket has one, (2) the board (agenthq_board, or agenthq_ticket_get on an id) for tickets that touch the same work, " +
+            "(3) their changed files (agenthq ticket files <id> --related; MCP agenthq_ticket_related_files), so you go straight " +
+            "to the code. Read their findings, reuse their work, and cite their ids in your report. If none are related, say so " +
+            "in one line and carry on."
 
         /**
          * Team block every agent's first message carries (MAIL-5). The CLI reads the agent's project

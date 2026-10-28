@@ -18,10 +18,16 @@ agenthq ticket show <ticket-id>
 **Find the code before you grep** (TICKET-FILES; MCP `agenthq_ticket_related_files` / `agenthq_ticket_files`)
 
 ```
-agenthq ticket files <ticket-id> --related   # files changed by the tickets that touched the same files, ranked
-agenthq ticket files <ticket-id>             # files that ticket changed (status, +/-)
-agenthq ticket files --path TicketBoard.kt   # the tickets that changed matching paths (glob ok)
+agenthq ticket files <ticket-id> --related
+agenthq ticket files <ticket-id>
+agenthq ticket files --path TicketBoard.kt
 ```
+
+`--related` lists the files changed by the tickets that touched the same files, ranked. Without it, `ticket files` lists the files that ticket changed (status, +/-). `--path` (glob ok) lists the tickets that changed matching paths.
+
+**Check related tickets before you start** (APP-KNOWLEDGE)
+
+Before you start, check the linkedTickets section of your brief, then the board (`agenthq board`) for tickets that touch the same work, then their changed files (`agenthq ticket files <ticket-id> --related`). Reuse their work and cite their ids in your report. If none are related, say so in one line and carry on.
 
 **See who is available**
 
