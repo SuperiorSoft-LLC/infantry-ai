@@ -23,11 +23,13 @@ data class ModuleSetting(
     val allowOverride: List<String> = emptyList(),
     /** BLOCKS-INJECTORS J2: node ids this community module may inject into (a smaller grant than [allowOverride]). */
     val allowInject: List<String> = emptyList(),
+    /** PLUGIN-ENDPOINTS-1: per endpoint id, the owner's own url for this install (localhost, staging). */
+    val endpoints: Map<String, EndpointSetting> = emptyMap(),
 )
 
 /** What the demo lock lets a module's daemon access through, on top of the routes the module declared. */
 @Serializable
-data class DemoLockConfig(val allowRoutes: List<String> = emptyList())
+data class DemoLockConfig(val allowRoutes: List<String> = emptyList(), val allowEndpoints: List<String> = emptyList())
 
 /** `<plugins root>/modules.json`: the folders to scan, and the owner's enable list. Editable without a rebuild. */
 @Serializable
@@ -42,3 +44,6 @@ data class ModulesConfig(
         val DEFAULT_FOLDERS = listOf(PluginFolder("core", Tier.CORE), PluginFolder("community", Tier.COMMUNITY))
     }
 }
+
+@Serializable
+data class EndpointSetting(val url: String? = null)

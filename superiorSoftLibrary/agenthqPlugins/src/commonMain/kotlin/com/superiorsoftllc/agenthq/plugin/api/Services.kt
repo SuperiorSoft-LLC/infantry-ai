@@ -15,6 +15,7 @@ object Services {
     val EVENTS = ServiceKey<EventBus>("events")
     val SETTINGS = ServiceKey<PluginSettings>("settings")
     val DAEMON = ServiceKey<DaemonAccess>("daemon")
+    val ENDPOINTS = ServiceKey<EndpointAccess>("endpoints")
 }
 
 /** The services one module may use. [get] is null when the service is not declared, denied, or not on this platform. */
@@ -69,4 +70,16 @@ sealed interface DaemonReply {
     /** The host would not send it: not declared, or not allowed by the demo lock. */
     data class Refused(val reason: String) : DaemonReply
     data class Failed(val reason: String) : DaemonReply
+}
+
+/** PLUGIN-ENDPOINTS-1: the module's own backends, by declared endpoint id. No credential of the owner's ever rides along. */
+interface EndpointAccess {
+    suspend fun call(endpoint: String, method: String, path: String, body: String? = null, headers: Map<String, String> = emptyMap()): EndpointReply
+}
+
+sealed interface EndpointReply {
+    /** A 3xx is returned as is; redirects are never followed. */
+    data class Ok(val status: Int, val body: String, val headers: Map<String, String> = emptyMap()) : EndpointReply
+    data class Refused(val reason: String) : EndpointReply
+    data class Failed(val reason: String) : EndpointReply
 }

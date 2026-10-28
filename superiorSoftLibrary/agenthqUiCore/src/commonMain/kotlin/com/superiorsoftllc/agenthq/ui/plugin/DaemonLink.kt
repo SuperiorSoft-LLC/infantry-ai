@@ -14,10 +14,15 @@ import io.ktor.http.contentType
 import kotlinx.coroutines.CancellationException
 
 /**
- * PLUGINS-1: the plugins' raw way to the daemon the window is connected to. A module never calls it directly: its
+ * PLUGINS-1 / PLUGIN-ENDPOINTS-1 (D2a): the host's raw way to the daemon the window is connected to (was the public PluginDaemon). A module never calls it directly: its
  * `daemon` service wraps it in the route gate (declared routes, and the demo lock's). The window sets [connect].
  */
-object PluginDaemon {
+internal class DaemonLink {
+    companion object {
+        /** The window's link. Internal, and hidden from plugin jars by [PluginClassLoader]; only the DAEMON service factory and the host read it. */
+        internal val window = DaemonLink()
+    }
+
     private var base: String? = null
     private var token: String? = null
     private val http by lazy { createPlatformHttpClient() }
