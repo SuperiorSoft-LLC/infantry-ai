@@ -1,4 +1,7 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.board
+
+import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.agenthq.ui.shell.blocks.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -90,7 +93,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.net.ImageUploadOutcome
 import com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost
 import com.superiorsoftllc.agenthq.ui.shell.PickedImage
@@ -194,11 +196,7 @@ private fun columnTitle(status: String): Pair<String, Color> = when (status) {
  * BLOCKS-LAYOUT L16: [BoardPaneFrame] and its sections, as the `infantry.shell.board.pane` node draws them; every card is
  * [TicketCardFrame] and its sections, as the `infantry.shell.board.card` template draws them.
  */
-@Composable
-fun BoardPane(state: AppState, controller: Controller, onOpenAgent: (String) -> Unit) =
-    BoardPane(BoardDeps(state, controller), onOpenAgent)
-
-/** S4d: the board over [deps] (the shell's context, or the Core adapters of a `(state, controller)` caller). */
+/** S4d: the board over [deps] (the shell's context; RUNTIME-15: never the window's Controller). */
 @Composable
 fun BoardPane(deps: BoardDeps, onOpenAgent: (String) -> Unit) {
     BoardPaneFrame(deps, onOpenAgent) { board ->

@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.board.*
+
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Text
 import androidx.compose.ui.platform.testTag
@@ -38,7 +40,7 @@ class BoardOverridesUiTest {
             ModuleManifest("Acme_Board", "1.0.0", author = "Acme", license = "NOASSERTION", shell = listOf(decl)),
             tier = Tier.COMMUNITY, shell = mapOf("acme" to override),
         )
-        val f = TabFactory(CoreModules.all + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Board", decl.nodeId, decl.name, decl.mode)))
+        val f = TabFactory(CoreModules.all + InfantryBoard + com.superiorsoftllc.agenthq.plugins.official.InfantryAgents + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Board", decl.nodeId, decl.name, decl.mode)))
         assertEquals(emptyList(), f.problems)
         return f
     }

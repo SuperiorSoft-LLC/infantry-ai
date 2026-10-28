@@ -89,7 +89,8 @@ fun Sidebar(
     onRemove: (String) -> Unit,
     onAssign: (String, String) -> Unit,
     projects: @Composable () -> Unit,
-    onOpenBoard: () -> Unit,
+    /** RUNTIME-15: null when no module fills the board overlay (no Infantry_Board jar): no Board button. */
+    onOpenBoard: (() -> Unit)?,
 ) {
     // PLUGINS-3: the frame (width, background, tag) is the left panel's; this is Infantry_Agents' section in it.
     Column(Modifier.fillMaxSize()) {
@@ -99,7 +100,7 @@ fun Sidebar(
             Counter("Working", state.workingCount, Palette.Ok)
         }
         // M2-8: the Board button sits where the projects list was (M2-7 moved projects to the title bar).
-        SidebarBoardButton(state, onOpenBoard)
+        onOpenBoard?.let { SidebarBoardButton(state, it) }
         projects()
         // UX-POLISH-1: the Board row and the search are separate sections, a spacing token either side of the divider
         // (the Board row already carries 4dp of outer padding below it).

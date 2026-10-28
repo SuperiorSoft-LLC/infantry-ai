@@ -105,13 +105,11 @@ kotlin {
 
     sourceSets {
         // PLUGINS-1: the core modules live in <repo>/plugins/core and are compiled into every target from there.
-        // NS2: except Infantry_Board, its own project (plugins/core/Infantry_Board), which this one depends on.
         commonMain {
-            // Each module folder is its own srcDir rather than plugins/core with an exclude: the Android compile
-            // (compileAndroidMain) ignores the exclude and would compile Infantry_Board's build script, tests and
-            // outputs. CoreModules.kt (the module list + CoreModuleSource) is generated: generateModuleList.
+            // Each module folder is its own srcDir (RUNTIME-15: Infantry_Board, once a core project here, is official now).
+            // CoreModules.kt (the module list + CoreModuleSource) is generated: generateModuleList.
             rootProject.file("plugins/core").listFiles().orEmpty()
-                .filter { it.isDirectory && it.name.startsWith("Infantry_") && it.name != "Infantry_Board" }
+                .filter { it.isDirectory && it.name.startsWith("Infantry_") && !File(it, "build.gradle.kts").isFile }
                 .sortedBy { it.name }
                 .forEach { kotlin.srcDir(it) }
             kotlin.srcDir(generateModuleList.map { generatedModuleListDir.get() })
@@ -128,7 +126,6 @@ kotlin {
         }
         commonMain.dependencies {
             api(project(":superiorSoftLibrary:agenthqUiCore"))
-            api(project(":plugins:core:Infantry_Board"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
@@ -141,8 +138,8 @@ kotlin {
 
 // S6 (drop-in path): the app UI as one droppable file, build/ihq/App_UI.ihq: module.json (Infantry_AppUi's, with its entry
 // the ModuleSource that hands over every core module, so the desktop loads it as a bundle) and lib/App_UI.jar (this
-// module's jvm jar). One .ihq, one signature, 19 modules (the bundle). NS2: App_UI.jar also carries Infantry_Board's jar
-// contents (appUiBundleJar), so the bundle still holds the board. Without -Pihq.keystore it is unsigned and the installer refuses it.
+// module's jvm jar). One .ihq, one signature, the core modules (the bundle). RUNTIME-15: App_UI.jar no longer carries
+// Infantry_Board (an official jar now, staged by agentHqUi stageOfficialModules like the others). Without -Pihq.keystore it is unsigned and the installer refuses it.
 // The drop-in acceptance (agentHqUi renderTabShotsForDiff -PtabShotsExtra=dropin) signs a copy with a throwaway key.
 val appUiIhqDir = layout.buildDirectory.dir("ihq")
 val appUiIhqManifest = tasks.register("appUiIhqManifest") {
@@ -158,18 +155,16 @@ val appUiIhqManifest = tasks.register("appUiIhqManifest") {
         out.get().asFile.also { it.parentFile.mkdirs() }.writeText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(m)) + "\n")
     }
 }
-// NS2: this module's jvm jar plus Infantry_Board's, merged, so App_UI.jar keeps bundling the board.
+// NS2: this module's jvm jar as App_UI.jar. RUNTIME-15: the board is no longer merged in (official jar of its own).
 val appUiBundleJar = tasks.register<Jar>("appUiBundleJar") {
     val own = tasks.named<Jar>("jvmJar")
-    val board = project(":plugins:core:Infantry_Board").tasks.named<Jar>("jvmJar")
-    dependsOn(own, board)
+    dependsOn(own)
     archiveFileName.set("App_UI.jar")
     destinationDirectory.set(appUiIhqDir.map { it.dir("bundle") })
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     isPreserveFileTimestamps = false
     isReproducibleFileOrder = true
     from(own.map { zipTree(it.archiveFile) })
-    from(board.map { zipTree(it.archiveFile) })
 }
 tasks.register<Zip>("appUiIhq") {
     group = "build"

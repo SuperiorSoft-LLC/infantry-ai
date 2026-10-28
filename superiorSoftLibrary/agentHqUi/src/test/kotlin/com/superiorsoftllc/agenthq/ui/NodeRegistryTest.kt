@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
 import com.superiorsoftllc.agenthq.plugins.official.roles.InfantryRoles
+import com.superiorsoftllc.agenthq.plugins.official.board.InfantryBoard
 import com.superiorsoftllc.agenthq.plugins.official.stats.InfantryStats
 import com.superiorsoftllc.agenthq.plugins.official.epics.InfantryEpics
 import com.superiorsoftllc.agenthq.plugins.official.pods.InfantryPods
@@ -45,7 +46,7 @@ import kotlin.test.assertTrue
 /** P1 (f60f4d97, docs/BLOCKS-LAYOUT-DESIGN.md section 6s): the registry read model over what TabFactory resolved. */
 class NodeRegistryTest {
     /** RUNTIME-6/7/8: the compiled-in core modules plus the official Notes, Changes, Run and Git (jars on desktop), as the window has them. */
-    private val coreAndGit = CoreModules.all + InfantryRoles + InfantryPods + InfantryProfiles + InfantryTriggers + InfantryAttention + InfantryNotes + InfantryChanges + InfantryStats + InfantryUsage + InfantryEpics + InfantryReview + InfantryRun + InfantryGit
+    private val coreAndGit = CoreModules.all + InfantryRoles + InfantryBoard + InfantryPods + InfantryProfiles + InfantryTriggers + InfantryAttention + InfantryNotes + InfantryChanges + InfantryStats + InfantryUsage + InfantryEpics + InfantryReview + InfantryRun + InfantryGit
 
     private fun tab(id: String, order: Int, title: String) =
         TabProvider(id, TabContainers.CENTER, order, { title }, InfantryGit.tabs.single().icon, "center-tab-$id") { Text(title) }
@@ -167,7 +168,7 @@ class NodeRegistryTest {
             val row = rows.single { it.id == slot }
             assertEquals(module to ChildSource.FILL, row.module to row.source, slot)
         }
-        assertEquals(setOf("Infantry_AppUi", "Infantry_Roles"), f.fillModules.values.toSet()) // RUNTIME-14: Roles fills the roles window
+        assertEquals(setOf("Infantry_AppUi", "Infantry_Roles", "Infantry_Board"), f.fillModules.values.toSet()) // RUNTIME-14/15: Roles fills the roles window, Board the board
         // A node under a fill: the status bar's config cog is the app UI's too.
         val cog = rows.single { it.id == "infantry.shell.footer.configCog" }
         assertEquals("Infantry_AppUi" to ChildSource.FILL, cog.module to cog.source)

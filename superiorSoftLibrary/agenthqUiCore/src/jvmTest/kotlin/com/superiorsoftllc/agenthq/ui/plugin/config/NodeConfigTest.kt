@@ -55,7 +55,8 @@ class NodeConfigTest {
         }
     }
 
-    private fun factory(vararg extra: AgentHqModule) = TabFactory(CoreModules.all + extra)
+    // RUNTIME-15: the board overlay (infantry.shell.board) is the official Infantry_Board's, as the desktop loads its jar.
+    private fun factory(vararg extra: AgentHqModule) = TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.board.InfantryBoard + extra)
 
     @Test
     fun `the hierarchy is the block tree's and a tab sits under its strip`() {

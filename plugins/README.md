@@ -20,7 +20,8 @@ plugins/
                           Infantry_Epics, the Epics tab, and Infantry_Review, the right-hand Review tab;
                           Infantry_Pods, the Pods tab, and Infantry_Profiles, the Profiles tab;
                           Infantry_Triggers, the Triggers tab, and Infantry_Attention, the right-hand Attention tab;
-                          Infantry_Roles, the Roles tab and the roles window it fills)
+                          Infantry_Roles, the Roles tab and the roles window it fills;
+                          Infantry_Board, the scrum board overlay it fills and its 14 board.* block types)
   community/<Vendor_Module>/  modules added by dropping a folder here (desktop and daemon only)
 ```
 

@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.board.*
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
@@ -30,18 +32,6 @@ import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import com.superiorsoftllc.agenthq.ui.protocol.Envelope
 import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
-import com.superiorsoftllc.agenthq.ui.shell.blocks.BoardEmpty
-import com.superiorsoftllc.agenthq.ui.shell.blocks.BoardFilters
-import com.superiorsoftllc.agenthq.ui.shell.blocks.BoardNewTicket
-import com.superiorsoftllc.agenthq.ui.shell.blocks.BoardUnassigned
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellBoard
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellTicketCard
-import com.superiorsoftllc.agenthq.ui.shell.blocks.TicketCardActions
-import com.superiorsoftllc.agenthq.ui.shell.blocks.TicketCardBadges
-import com.superiorsoftllc.agenthq.ui.shell.blocks.TicketCardDetails
-import com.superiorsoftllc.agenthq.ui.shell.blocks.TicketCardEdit
-import com.superiorsoftllc.agenthq.ui.shell.blocks.TicketCardNote
-import com.superiorsoftllc.agenthq.ui.shell.blocks.TicketCardTitle
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -67,7 +57,7 @@ class BoardPaneOverridesUiTest {
             ModuleManifest("Acme_Board", "1.0.0", author = "Acme", license = "NOASSERTION", shell = listOf(decl)),
             tier = Tier.COMMUNITY, shell = mapOf("acme" to override),
         )
-        val f = TabFactory(CoreModules.all + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Board", decl.nodeId, decl.name, decl.mode)))
+        val f = TabFactory(CoreModules.all + InfantryBoard + com.superiorsoftllc.agenthq.plugins.official.InfantryAgents + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Board", decl.nodeId, decl.name, decl.mode)))
         assertEquals(emptyList(), f.problems)
         return f
     }

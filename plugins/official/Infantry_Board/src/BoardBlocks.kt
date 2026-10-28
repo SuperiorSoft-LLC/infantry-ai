@@ -1,27 +1,11 @@
-package com.superiorsoftllc.agenthq.ui.shell.blocks
+package com.superiorsoftllc.agenthq.plugins.official.board
+
+import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.agenthq.ui.shell.blocks.*
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
-import com.superiorsoftllc.agenthq.ui.BoardCardHost
-import com.superiorsoftllc.agenthq.ui.BoardCardItem
-import com.superiorsoftllc.agenthq.ui.BoardColumnsSection
-import com.superiorsoftllc.agenthq.ui.BoardDeps
-import com.superiorsoftllc.agenthq.ui.BoardEmptySection
-import com.superiorsoftllc.agenthq.ui.BoardFiltersSection
-import com.superiorsoftllc.agenthq.ui.BoardModalPaneBox
-import com.superiorsoftllc.agenthq.ui.BoardNewTicketSection
-import com.superiorsoftllc.agenthq.ui.BoardPaneFrame
-import com.superiorsoftllc.agenthq.ui.BoardPaneHost
-import com.superiorsoftllc.agenthq.ui.BoardUnassignedSection
-import com.superiorsoftllc.agenthq.ui.TicketCardActionsSection
-import com.superiorsoftllc.agenthq.ui.TicketCardBadgesSection
-import com.superiorsoftllc.agenthq.ui.TicketCardDetailsSection
-import com.superiorsoftllc.agenthq.ui.TicketCardEditSection
-import com.superiorsoftllc.agenthq.ui.TicketCardFrame
-import com.superiorsoftllc.agenthq.ui.TicketCardNoteSection
-import com.superiorsoftllc.agenthq.ui.TicketCardSummarySection
-import com.superiorsoftllc.agenthq.ui.TicketCardTitleSection
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockType

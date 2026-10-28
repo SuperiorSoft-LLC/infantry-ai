@@ -1,9 +1,9 @@
-package com.superiorsoftllc.agenthq.plugins.core
+package com.superiorsoftllc.agenthq.plugins.official.board
+
+import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.agenthq.ui.shell.blocks.*
 
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
-import com.superiorsoftllc.agenthq.ui.shell.blocks.BOARD_PANE_NODE
-import com.superiorsoftllc.agenthq.ui.shell.blocks.BoardBody
-import com.superiorsoftllc.agenthq.ui.shell.blocks.BoardTypes
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive

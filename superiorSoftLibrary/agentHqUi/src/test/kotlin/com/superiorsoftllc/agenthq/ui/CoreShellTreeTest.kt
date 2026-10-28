@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
 import com.superiorsoftllc.agenthq.plugins.official.roles.InfantryRoles
+import com.superiorsoftllc.agenthq.plugins.official.board.InfantryBoard
 import com.superiorsoftllc.agenthq.plugins.official.stats.InfantryStats
 import com.superiorsoftllc.agenthq.plugins.official.epics.InfantryEpics
 import com.superiorsoftllc.agenthq.plugins.official.pods.InfantryPods
@@ -23,8 +24,11 @@ import kotlin.test.assertEquals
 
 /** BLOCKS-LAYOUT L3: the core tree's node ids are the override address and, since L5, plugin API (plugins/GUIDE.md); this pins them. */
 class CoreShellTreeTest {
-    /** RUNTIME-14: the compiled-in modules plus the official Infantry_Roles (its jar on desktop), which fills infantry.shell.roles. */
-    private val withRoles by lazy { TabFactory(CoreModules.all + InfantryRoles) }
+    /**
+     * RUNTIME-14/15: the compiled-in modules plus the official Infantry_Roles and Infantry_Board (their jars on desktop),
+     * which fill infantry.shell.roles and infantry.shell.board.
+     */
+    private val withRoles by lazy { TabFactory(CoreModules.all + InfantryRoles + InfantryBoard) }
 
     private fun Block.walk(depth: Int = 0): List<String> = listOf("  ".repeat(depth) + id) + children.flatMap { it.walk(depth + 1) }
 
@@ -211,7 +215,7 @@ class CoreShellTreeTest {
         )
         // S4: the tab trees are the app UI's contributions now (TabFactory.tabTreeRoots), no longer CoreShell.tabs.
         // RUNTIME-6/7/8: Infantry_Notes, Infantry_Changes, Infantry_Run and Infantry_Git (official jars) register their own trees.
-        val factory = TabFactory(CoreModules.all + InfantryRoles + InfantryPods + InfantryProfiles + InfantryTriggers + InfantryAttention + InfantryNotes + InfantryChanges + InfantryStats + InfantryUsage + InfantryEpics + InfantryReview + InfantryRun + InfantryGit)
+        val factory = TabFactory(CoreModules.all + InfantryRoles + InfantryBoard + InfantryPods + InfantryProfiles + InfantryTriggers + InfantryAttention + InfantryNotes + InfantryChanges + InfantryStats + InfantryUsage + InfantryEpics + InfantryReview + InfantryRun + InfantryGit)
         val tabs = factory.tabTreeRoots
         assertEquals(listOf(notes, changes, run, git), tabs.map { it.id })
         assertEquals(expectedNotes.joinToString("\n"), tabs[0].walk().joinToString("\n"))
