@@ -1,6 +1,7 @@
 {
   "folders": [
     { "path": "core", "tier": "core" },
+    { "path": "official", "tier": "official" },
     { "path": "community", "tier": "community" }
   ],
   "modules": {

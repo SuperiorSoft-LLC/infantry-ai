@@ -10,6 +10,7 @@ names a tab: it asks a factory for the tabs of a container (`center`, `right`) a
 plugins/
   modules.json            the folders to scan and the owner's enable list (edit and restart, no rebuild)
   core/<Vendor_Module>/   built-in modules, compiled into every build (desktop, web, Android)
+  official/<Vendor_Module>/  programs made by Infantry: a jar signed by the Infantry key, loaded at runtime (desktop)
   community/<Vendor_Module>/  modules added by dropping a folder here (desktop and daemon only)
 ```
 
@@ -35,6 +36,12 @@ These rules are enforced:
 - With `AGENTHQ_DEMO_LOCK` set, no community module loads; core is unchanged. The route rule applies to the `daemon`
   service; the built-in core tabs talk to the daemon through the app's own connection, exactly as without the lock.
 - A core update never touches `community/`.
+- An **official** module (`official/`, in the plugins root or in the install's bundled modules root, `-Dagenthq.plugins.bundled`
+  / `AGENTHQ_BUNDLED_MODULES`) is on by default and its declared services are granted without `allow`, but it loads
+  through the same filtered class loader as community and gets no core right. Its jar must be signed by the Infantry
+  key (a certificate in `trusted-keys/`) and carry a signed `module.json` that claims `"tier": "official"` and equals the
+  one on disk; otherwise it is refused. Dev runs may skip that with `-Dagenthq.plugins.devTrust=true` (never set by the
+  packaged launcher). Safe mode skips official modules too. A modules.json without an `official` folder still scans it.
 
 A module that has invalid JSON, a missing dependency, a dependency cycle, a different `apiVersion`, a wrong name, or a
 jar that will not load is skipped, with one log line saying why. It never stops the app.

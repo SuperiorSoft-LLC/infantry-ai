@@ -13,6 +13,12 @@ val PLATFORMS = listOf("desktop", "android", "web")
 const val PLUGIN_API_VERSION = 1
 
 /**
+ * RUNTIME-2: additive revisions under [PLUGIN_API_VERSION] (additions only; a module never has to name it, and an older
+ * module still loads). 1 = `Tier.OFFICIAL` and the `official` plugins folder.
+ */
+const val PLUGIN_API_REVISION = 1
+
+/**
  * A module's module.json: who it is, what it needs loaded first, and everything it contributes or uses. Unknown keys
  * are ignored, so a newer module.json still parses. Declarations are the contract: the host refuses a contribution, a
  * route, an event or a service the module did not declare.

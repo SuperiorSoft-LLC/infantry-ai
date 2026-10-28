@@ -3,9 +3,14 @@ package com.superiorsoftllc.agenthq.plugin.api
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-/** PLUGINS-1: how far a module is trusted. Decided by the folder it sits in, never by its own module.json. */
+/**
+ * PLUGINS-1: how far a module is trusted. Decided by the folder it sits in, never by its own module.json.
+ * RUNTIME-2 (additive): [OFFICIAL] = a program made by Infantry (D3). It loads through the same filtered class loader as
+ * community and gets no core right (D4); it differs only in defaults: signed by the Infantry key, on by default, its
+ * declared services granted without an `allow` entry, and it does not load in safe mode.
+ */
 @Serializable
-enum class Tier { @SerialName("core") CORE, @SerialName("community") COMMUNITY }
+enum class Tier { @SerialName("core") CORE, @SerialName("official") OFFICIAL, @SerialName("community") COMMUNITY }
 
 /** One plugin subfolder of the plugins root and the tier of everything in it. */
 @Serializable
@@ -14,7 +19,7 @@ data class PluginFolder(val path: String, val tier: Tier)
 /** The owner's say over one module. */
 @Serializable
 data class ModuleSetting(
-    /** Null = the tier's default: a core module is on, a community module is off until enabled here. */
+    /** Null = the tier's default: a core or official module is on, a community module is off until enabled here. */
     val enabled: Boolean? = null,
     /** Services granted to a community module (a core module has every service it declares unless [deny] lists it). */
     val allow: List<String> = emptyList(),
@@ -41,7 +46,7 @@ data class ModulesConfig(
     fun setting(module: String): ModuleSetting = modules[module] ?: ModuleSetting()
 
     companion object {
-        val DEFAULT_FOLDERS = listOf(PluginFolder("core", Tier.CORE), PluginFolder("community", Tier.COMMUNITY))
+        val DEFAULT_FOLDERS = listOf(PluginFolder("core", Tier.CORE), PluginFolder("official", Tier.OFFICIAL), PluginFolder("community", Tier.COMMUNITY))
     }
 }
 
