@@ -52,12 +52,12 @@ class ResolvedConfig(private val state: NodeConfigState, private val implementat
             for ((k, e) in stored[n].orEmpty()) {
                 if (i > 0 && isOwnOnlyKey(k)) continue
                 val v = e.value ?: continue
-                if (v !is JsonNull) out.putIfAbsent(k, v)
+                if (v !is JsonNull) out.getOrPut(k) { v }
             }
         }
         for ((i, n) in chain.withIndex()) for (f in state.tree.fields[n].orEmpty()) {
             if (i > 0 && isOwnOnlyKey(f.key)) continue
-            f.field.default?.takeIf { it !is JsonNull }?.let { out.putIfAbsent(f.key, it) }
+            f.field.default?.takeIf { it !is JsonNull }?.let { d -> out.getOrPut(f.key) { d } }
         }
         // 6s D: a stored implementation key whose module is gone resolves to the field's default (the view says so).
         for (k in out.keys.toList()) {

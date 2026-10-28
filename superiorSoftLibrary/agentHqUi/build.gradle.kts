@@ -179,6 +179,16 @@ val renderTabShotsForDiff = tasks.register<JavaExec>("renderTabShotsForDiff") {
     // No modal blur (as in the UI tests): the blur smears the clocks behind a dialog (RAM free, ages) across the
     // window, where a mask could not hold them. The blur itself is covered by ModalBlurRenderUiTest.
     systemProperty("agenthq.ui.blur", "off")
+    // S6 (drop-in path): -PtabShotsExtra=dropin is the drop-in acceptance. The shell runs WITHOUT the app UI on its class
+    // path (the empty shell), starts from a plugins root with no app UI in it, installs App_UI.ihq through the drop box and
+    // the consent dialog, soft-restarts, and then renders the 32 default shots, which must match the baseline at 0 px. Its
+    // two opt-in shots (the drop box, the consent dialog) go to dropin/ (reference: tab-shots-baseline/dropin/).
+    if (project.findProperty("tabShotsExtra") == "dropin") {
+        val appUi = project(":superiorSoftLibrary:agenthqAppUi")
+        dependsOn(":superiorSoftLibrary:agenthqAppUi:appUiIhq")
+        classpath = sourceSets["test"].runtimeClasspath.filter { "agenthqAppUi" !in it.invariantSeparatorsPath }
+        systemProperty("agenthq.tabshots.appUiIhq", appUi.layout.buildDirectory.file("ihq/App_UI.ihq").get().asFile.path)
+    }
     outputs.upToDateWhen { false }
     doFirst { out.deleteRecursively() }
 }
@@ -205,7 +215,7 @@ tasks.register<Sync>("updateTabShotBaseline") {
     dependsOn(renderTabShotsForDiff)
     from(tabShotsRendered) { include("*.png") }
     into(tabShotsBaseline)
-    preserve { include("mask.txt", "README.md", "empty-shell/**") } // S4: the opt-in empty-shell reference
+    preserve { include("mask.txt", "README.md", "empty-shell/**", "dropin/**") } // S4, S6: the opt-in empty-shell and drop-in references
 }
 
 // PLUGINS-1: the dev runs read the repository's plugins/ folder (core + community, modules.json) and first build every

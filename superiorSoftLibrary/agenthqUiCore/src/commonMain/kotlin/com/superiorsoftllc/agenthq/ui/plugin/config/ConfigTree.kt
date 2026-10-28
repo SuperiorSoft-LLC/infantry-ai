@@ -93,7 +93,7 @@ class ConfigTree(
             val out = LinkedHashMap<String, String>()
             fun walk(b: Block) {
                 val kids = contents(b)
-                for (c in kids) { out.putIfAbsent(c.id, b.id); walk(c) }
+                for (c in kids) { out.getOrPut(c.id) { b.id }; walk(c) }
             }
             roots.forEach(::walk)
             return out

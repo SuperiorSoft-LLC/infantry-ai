@@ -682,8 +682,8 @@ class TabFactory(
     val configTree: ConfigTree by lazy {
         val parents = LinkedHashMap(ConfigTree.parentsOf(listOf(resolvedShellRoot) + tabTreeRoots.map { resolvedTabTree(it.id) ?: it }))
         val strips = NodeRegistry.strips.entries.associate { (node, container) -> container to node }
-        for (t in providers) parents.putIfAbsent(t.id, t.parent ?: strips[t.container] ?: t.container)
-        for ((tree, tab) in tabTreeTabs) parents.putIfAbsent(tree, tab)
+        for (t in providers) parents.getOrPut(t.id) { t.parent ?: strips[t.container] ?: t.container }
+        for ((tree, tab) in tabTreeTabs) parents.getOrPut(tree) { tab }
         val problems = mutableListOf<String>()
         val core = ConfigTree.parse(CoreConfig.JSON, problems, CORE_SHELL_MODULE)
         val sources = modules.map { m ->

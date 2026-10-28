@@ -31,6 +31,8 @@ object CoreShell {
         "infantry.shell.window", "infantry.shell.images", "infantry.shell.dock",
         "infantry.shell.connect", "infantry.shell.servers", "infantry.shell.switchError",
         "infantry.shell.serverUpdate", "infantry.shell.config", "infantry.shell.configEntry",
+        // S6: the drop-in consent dialog and the safe-mode banner: what a plugin asks for, and the way back from a bad one.
+        DROP_CONSENT_NODE, SAFE_MODE_NODE,
     ) + ShellConfigTrust.map { it.id }
 
     /**
@@ -77,7 +79,8 @@ object CoreShell {
                                                 "infantry.shell.panes", place = Place(size = Size.FillMax),
                                                 children = listOf(
                                                     slot("infantry.shell.left", Place(show = Show.Wide)),
-                                                    slot("infantry.shell.center", Place(weight = 1f)),
+                                                    // S6: the empty centre is the drop box, until the app UI fills it.
+                                                    slot("infantry.shell.center", Place(weight = 1f), empty = ShellDropBox),
                                                     slot("infantry.shell.right", Place(show = Show.Wide)),
                                                 ),
                                             ).asPlaceholder(),
@@ -89,6 +92,7 @@ object CoreShell {
                             ).asPlaceholder(),
                             // Outside the replaceable frame, so a frame replace cannot remove the locked way into Configuration.
                             ShellConfigEntry,
+                            ShellSafeMode,
                             // The overlays, over the whole dock; they align themselves.
                             slot("infantry.shell.assistant"), slot("infantry.shell.toast"), slot("infantry.shell.board"), slot("infantry.shell.diff"),
                             slot("infantry.shell.sound"), slot("infantry.shell.voice"), slot("infantry.shell.questions"),
@@ -101,7 +105,7 @@ object CoreShell {
                 "infantry.shell.windowLayer",
                 listOf(
                     ShellConfig, ShellServerUpdate, slot("infantry.shell.roles"), ShellServers,
-                    ShellSwitchError, ShellConnect,
+                    ShellSwitchError, ShellConnect, ShellDropConsent,
                 ),
             ).asPlaceholder(),
         ),
@@ -109,7 +113,7 @@ object CoreShell {
 }
 
 /** S4: an empty slot [id] of [CoreShell.slots] (the place is the one its usual fill has; an empty slot draws nothing). */
-private fun slot(id: String, place: Place = Place()) = PlaceholderBlock(id, null, place)
+private fun slot(id: String, place: Place = Place(), empty: Block? = null) = PlaceholderBlock(id, null, place, empty)
 
 /** `imageViewerHost` (core): IMG-VIEW-1's viewer host; its children are its content. */
 class ImageViewerHostBlock(id: String, children: List<Block> = emptyList(), place: Place = Place()) :

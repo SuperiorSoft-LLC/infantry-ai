@@ -60,6 +60,8 @@ class CoreShellTreeTest {
             "        $footer",
         ) + listOf("connStatus", "lastFrame", "contractWarning", "versionMismatch", "processesBadge", "gap", "shortcutHint", "buildStamp", "configCog")
             .map { "          $footer.$it" } + listOf(
+            // S6: safe mode's banner (locked), drawn only in safe mode.
+            "      infantry.shell.safeMode",
             "      infantry.shell.assistant",
             "        infantry.shell.assistant.resize",
             "        infantry.shell.assistant.body",
@@ -107,6 +109,8 @@ class CoreShellTreeTest {
             "    infantry.shell.servers",
             "    infantry.shell.switchError",
             "    infantry.shell.connect",
+            // S6: the drop-in consent dialog (locked).
+            "    infantry.shell.dropConsent",
         )
         // S4: the window tree as drawn, the app UI's fills in the shell's empty slots.
         val tree = CoreModules.factory.baseRoot.walk()
@@ -137,6 +141,8 @@ class CoreShellTreeTest {
                 "infantry.shell.window", "infantry.shell.images", "infantry.shell.dock",
                 "infantry.shell.connect", "infantry.shell.servers", "infantry.shell.switchError",
                 "infantry.shell.serverUpdate", "infantry.shell.config", "infantry.shell.configEntry",
+                // S6: the drop-in consent dialog and the safe-mode banner.
+                "infantry.shell.dropConsent", "infantry.shell.safeMode",
                 // S3: the trust half of Configuration (plugins, secrets, pairing, updates, about, logs).
                 "infantry.shell.config.plugins", "infantry.shell.config.modules", "infantry.shell.config.secrets",
                 // P1 (f60f4d97): where plugins are registered (step 2: where a registered child is turned off).

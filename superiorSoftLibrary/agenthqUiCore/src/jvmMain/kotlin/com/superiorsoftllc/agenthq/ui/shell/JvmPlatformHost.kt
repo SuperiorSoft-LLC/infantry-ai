@@ -151,9 +151,28 @@ class JvmPlatformHost(
         return ByteArrayOutputStream().also { ImageIO.write(buffered, "png", it) }.toByteArray()
     }
 
-    /** PLUGINS-1: the modules under the plugins root (`AGENTHQ_PLUGINS_ROOT`, else `<state dir>/plugins`), loaded once. */
-    override val tabFactory: com.superiorsoftllc.agenthq.ui.plugin.TabFactory by lazy {
-        com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins.load(stateDir() ?: File(".agenthq"), env, property).factory
+    /**
+     * PLUGINS-1: the modules under the plugins root (`AGENTHQ_PLUGINS_ROOT`, else `<state dir>/plugins`), loaded on first
+     * use. S6: loaded again by [reloadTabs] after a drop-in install (the soft restart; jars already loaded stay loaded).
+     */
+    @Volatile private var loaded: com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins.Loaded? = null
+
+    private fun load() = synchronized(this) {
+        com.superiorsoftllc.agenthq.ui.plugin.DesktopPlugins.load(stateDir() ?: File(".agenthq"), env, property).also { loaded = it }
+    }
+
+    override val tabFactory: com.superiorsoftllc.agenthq.ui.plugin.TabFactory get() = (loaded ?: synchronized(this) { loaded ?: load() }).factory
+
+    override fun reloadTabs(): com.superiorsoftllc.agenthq.ui.plugin.TabFactory = load().factory
+
+    /** S6: drop a .ihq on the empty shell; the plugins root, demo lock and safe mode as the loader reads them. */
+    override val dropIn: com.superiorsoftllc.agenthq.ui.shell.PluginDropIn by lazy {
+        val root = com.superiorsoftllc.agenthq.plugin.host.PluginFolders.root(stateDir() ?: File(".agenthq"), env, property)
+        com.superiorsoftllc.agenthq.ui.plugin.DesktopDropIn(
+            root, com.superiorsoftllc.agenthq.plugin.host.PluginFolders.demoLock(env),
+            com.superiorsoftllc.agenthq.plugin.host.PluginFolders.safeMode(env, property),
+            picker = if (canPickFiles) ::pickFile else null,
+        )
     }
 
     /**

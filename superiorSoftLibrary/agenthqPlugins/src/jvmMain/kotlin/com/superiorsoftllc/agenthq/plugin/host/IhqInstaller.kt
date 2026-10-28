@@ -49,6 +49,8 @@ enum class IhqRefusal { NOT_A_ZIP, TOO_BIG, TOO_MANY_ENTRIES, UNSAFE_ENTRY, UNEX
 sealed interface IhqResult {
     data class Installed(val name: String, val version: String, val tier: Tier, val dir: File, val signer: String?) : IhqResult
     data class Refused(val reason: IhqRefusal, val message: String) : IhqResult
+    /** S6: [IhqInstaller.inspect]'s answer: every check passed, nothing was installed. What the consent dialog shows. */
+    data class Checked(val manifest: ModuleManifest, val tier: Tier, val signer: String?) : IhqResult
 }
 
 private class Refusal(val reason: IhqRefusal, message: String) : Exception(message)
@@ -67,7 +69,34 @@ object IhqInstaller {
         settings: InstallSettings = InstallSettings.load(root),
         /** Test hook: runs after the package is unpacked and checked, just before the rename. */
         beforeCommit: () -> Unit = {},
-    ): IhqResult {
+    ): IhqResult = unpack(ihq, root, config, settings, beforeCommit, commit = true)
+
+    /**
+     * S6: every check [install] makes (signature, limits, manifest, tier, not installed yet), then the staging folder is
+     * removed: [IhqResult.Checked] with the manifest and the tier it would get, or the refusal [install] would give. The
+     * consent dialog shows this before anything is installed.
+     */
+    fun inspect(
+        ihq: File,
+        root: File,
+        config: ModulesConfig = PluginFolders.config(root),
+        settings: InstallSettings = InstallSettings.load(root),
+    ): IhqResult = unpack(ihq, root, config, settings, {}, commit = false)
+
+    /**
+     * S6: removes installed community module [name]: its folder and its modules.json entry. Run it with the module not
+     * loaded (safe mode), or Windows keeps its jar open. A core module is never removed here.
+     */
+    fun uninstall(root: File, name: String, config: ModulesConfig = PluginFolders.config(root)): String? {
+        if (!Regex("[A-Za-z0-9][A-Za-z0-9_.-]{0,63}").matches(name)) return "'${name.take(80)}' is not a module name"
+        val dir = config.folders.filter { it.tier == Tier.COMMUNITY }.map { File(File(root, it.path), name) }.firstOrNull { it.isDirectory }
+            ?: return "$name is not an installed community module"
+        if (!dir.deleteRecursively()) return "could not delete ${dir.path} (a file in it is in use)"
+        ModulesFile.forget(root, name)
+        return null
+    }
+
+    private fun unpack(ihq: File, root: File, config: ModulesConfig, settings: InstallSettings, beforeCommit: () -> Unit, commit: Boolean): IhqResult {
         var staging: File? = null
         return try {
             if (!ihq.isFile) throw Refusal(IhqRefusal.NOT_A_ZIP, "${ihq.name} is not a file")
@@ -116,6 +145,7 @@ object IhqInstaller {
                 if (config.folders.any { f -> File(File(root, f.path), manifest.name).exists() }) throw Refusal(IhqRefusal.ALREADY_INSTALLED, "${manifest.name} is already installed")
                 val tierDir = File(root, folder.path).also { it.mkdirs() }
                 val target = File(tierDir, manifest.name)
+                if (!commit) return IhqResult.Checked(manifest, tier, signer?.subjectX500Principal?.name)
 
                 beforeCommit()
                 try {
