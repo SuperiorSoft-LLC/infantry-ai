@@ -186,7 +186,8 @@ val renderTabShotsForDiff = tasks.register<JavaExec>("renderTabShotsForDiff") {
     if (project.findProperty("tabShotsExtra") == "dropin") {
         val appUi = project(":superiorSoftLibrary:agenthqAppUi")
         dependsOn(":superiorSoftLibrary:agenthqAppUi:appUiIhq")
-        classpath = sourceSets["test"].runtimeClasspath.filter { "agenthqAppUi" !in it.invariantSeparatorsPath }
+        // NS2: nor Infantry_Board, which App_UI.ihq bundles.
+        classpath = sourceSets["test"].runtimeClasspath.filter { p -> "agenthqAppUi" !in p.invariantSeparatorsPath && "Infantry_Board" !in p.invariantSeparatorsPath }
         systemProperty("agenthq.tabshots.appUiIhq", appUi.layout.buildDirectory.file("ihq/App_UI.ihq").get().asFile.path)
     }
     outputs.upToDateWhen { false }

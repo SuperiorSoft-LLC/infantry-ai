@@ -27,7 +27,7 @@ import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
 
 /** TRAITS-T9: the REPORT BACK flag; `unreported` in the attention colour, `reported` muted, nothing otherwise. */
 @Composable
-internal fun ReportFlagChip(flag: ReportFlag?, modifier: Modifier = Modifier) {
+fun ReportFlagChip(flag: ReportFlag?, modifier: Modifier = Modifier) {
     when (flag) {
         ReportFlag.UNREPORTED -> Chip(flag.label, Palette.Accent, modifier)
         ReportFlag.REPORTED -> Chip(flag.label, Palette.Muted, modifier)
