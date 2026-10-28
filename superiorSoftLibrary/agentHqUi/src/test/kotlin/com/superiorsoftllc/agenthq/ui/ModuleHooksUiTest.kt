@@ -17,7 +17,7 @@ import com.superiorsoftllc.agenthq.plugin.api.Tier
 import com.superiorsoftllc.agenthq.plugin.host.AcceptedPreference
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
 import com.superiorsoftllc.agenthq.plugins.official.InfantryAgents
-import com.superiorsoftllc.agenthq.plugins.core.InfantryGit
+import com.superiorsoftllc.agenthq.plugins.official.git.InfantryGit
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule

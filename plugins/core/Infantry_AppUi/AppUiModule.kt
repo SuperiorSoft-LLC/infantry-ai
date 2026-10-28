@@ -12,7 +12,6 @@ import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellChanges
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellCompactDrawer
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellConfigSettings
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellDiff
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellGit
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellHeader
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellLeftPanel
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellNotes
@@ -43,8 +42,8 @@ val InfantryAppUi = AgentHqModule(
     ),
     fills = fills.associateBy { it.id },
     tabTrees = mapOf(
-        "infantry.git" to ShellGit, "infantry.run" to ShellRun,
-        "infantry.notes" to ShellNotes, "infantry.changes" to ShellChanges,
+        // RUNTIME-6: Infantry_Git registers its own tree (ShellGit); it is an official jar now.
+        "infantry.run" to ShellRun, "infantry.notes" to ShellNotes, "infantry.changes" to ShellChanges,
     ),
 )
 

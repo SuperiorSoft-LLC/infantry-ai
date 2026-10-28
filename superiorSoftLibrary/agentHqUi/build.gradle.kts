@@ -33,6 +33,8 @@ dependencies {
     testImplementation(project(":plugins:official:Infantry_Agents"))
     // RUNTIME-5: and Infantry_Settings, the Settings host tab (the tab shots open it).
     testRuntimeOnly(project(":plugins:official:Infantry_Settings"))
+    // RUNTIME-6: and Infantry_Git, the Git tab and its tree (the Git pane tests draw it).
+    testImplementation(project(":plugins:official:Infantry_Git"))
     implementation(compose.desktop.currentOs)
     // UPDATE-1: the update dialog (UpdatePrompt.kt); the same material3 :agenthqUiCore already ships.
     implementation(compose.material3)
@@ -200,8 +202,8 @@ val renderTabShotsForDiff = tasks.register<JavaExec>("renderTabShotsForDiff") {
     if (project.findProperty("tabShotsExtra") == "dropin") {
         val appUi = project(":superiorSoftLibrary:agenthqAppUi")
         dependsOn(":superiorSoftLibrary:agenthqAppUi:appUiIhq")
-        // NS2: nor Infantry_Board, which App_UI.ihq bundles. RUNTIME-3/4/5: nor Infantry_Cli, Infantry_Agents, Infantry_Settings (tests carry them compiled in).
-        classpath = sourceSets["test"].runtimeClasspath.filter { p -> "agenthqAppUi" !in p.invariantSeparatorsPath && "Infantry_Board" !in p.invariantSeparatorsPath && "Infantry_Cli" !in p.invariantSeparatorsPath && "Infantry_Agents" !in p.invariantSeparatorsPath && "Infantry_Settings" !in p.invariantSeparatorsPath }
+        // NS2: nor Infantry_Board, which App_UI.ihq bundles. RUNTIME-3/4/5/6: nor Infantry_Cli, Infantry_Agents, Infantry_Settings, Infantry_Git (tests carry them compiled in).
+        classpath = sourceSets["test"].runtimeClasspath.filter { p -> "agenthqAppUi" !in p.invariantSeparatorsPath && "Infantry_Board" !in p.invariantSeparatorsPath && "Infantry_Cli" !in p.invariantSeparatorsPath && "Infantry_Agents" !in p.invariantSeparatorsPath && "Infantry_Settings" !in p.invariantSeparatorsPath && "Infantry_Git" !in p.invariantSeparatorsPath }
         systemProperty("agenthq.tabshots.appUiIhq", appUi.layout.buildDirectory.file("ihq/App_UI.ihq").get().asFile.path)
     }
     outputs.upToDateWhen { false }

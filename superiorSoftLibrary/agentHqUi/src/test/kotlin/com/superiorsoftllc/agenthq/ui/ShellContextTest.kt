@@ -35,7 +35,7 @@ import com.superiorsoftllc.agenthq.ui.shell.SessionContext
 import com.superiorsoftllc.agenthq.ui.shell.ShellContext
 import com.superiorsoftllc.agenthq.ui.shell.ToastContext
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellBoard
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellGit
+import com.superiorsoftllc.agenthq.plugins.official.git.ShellGit
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellRoles
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellRun
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellToast

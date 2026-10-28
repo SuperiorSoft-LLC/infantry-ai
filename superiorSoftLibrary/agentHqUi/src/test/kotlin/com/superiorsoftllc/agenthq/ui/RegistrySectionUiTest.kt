@@ -25,7 +25,7 @@ import com.superiorsoftllc.agenthq.plugin.api.Tier
 import com.superiorsoftllc.agenthq.plugin.host.ModuleState
 import com.superiorsoftllc.agenthq.plugin.host.ModuleStatus
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
-import com.superiorsoftllc.agenthq.plugins.core.InfantryGit
+import com.superiorsoftllc.agenthq.plugins.official.git.InfantryGit
 import com.superiorsoftllc.agenthq.ui.model.ConnState
 import com.superiorsoftllc.agenthq.ui.model.ConnectionInfo
 import com.superiorsoftllc.agenthq.ui.net.Controller
@@ -98,7 +98,7 @@ class RegistrySectionUiTest {
             return Result.success(stored.values.toList())
         }
     }
-    private val tabs = (CoreModules.all + acme).let { all ->
+    private val tabs = (CoreModules.all + InfantryGit + acme).let { all ->
         TabFactory(all, statuses = all.map { ModuleStatus(it.manifest.name, it.tier, ModuleState.LOADED, manifest = it.manifest) }, configApi = api)
     }
 

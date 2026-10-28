@@ -20,7 +20,7 @@ import com.superiorsoftllc.agenthq.plugin.host.SimpleEventBus
 import com.superiorsoftllc.agenthq.plugin.host.provideEvents
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
 import com.superiorsoftllc.agenthq.plugins.official.InfantryAgents
-import com.superiorsoftllc.agenthq.plugins.core.InfantryGit
+import com.superiorsoftllc.agenthq.plugins.official.git.InfantryGit
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -30,6 +30,9 @@ import kotlin.test.assertTrue
 /** PLUGINS-1: how the factory binds what a module registers to what its module.json declares. */
 class TabFactoryTest {
     private val icon = InfantryGit.tabs.single().icon
+
+    /** RUNTIME-6: the compiled-in core modules plus the official Infantry_Git (a jar on desktop), as the window has them. */
+    private val coreAndGit = CoreModules.all + InfantryGit
     private val heard = mutableListOf<String>()
 
     private fun tab(id: String, container: String = TabContainers.CENTER, title: String = id, order: Int = 500) =
@@ -52,7 +55,7 @@ class TabFactoryTest {
 
     @Test
     fun `a module's tab lands in its container by order and names the module`() {
-        val f = TabFactory(CoreModules.all + acme(listOf(tab("acme.hello", order = 95))))
+        val f = TabFactory(coreAndGit + acme(listOf(tab("acme.hello", order = 95))))
         val center = f.tabs(TabContainers.CENTER).map { it.id }
         assertEquals("acme.hello", center[center.indexOf("infantry.git") + 1], "order 95 sits between Git (90) and Stats (100)")
         assertEquals("Acme_Hello", f.find("acme.hello")?.module)
@@ -73,7 +76,7 @@ class TabFactoryTest {
     @Test
     fun `an accepted preference puts the replacement in the replaced tab's place and hides it under its own id`() {
         val f = TabFactory(
-            CoreModules.all + acme(listOf(tab("acme.git", title = "Acme Git"))),
+            coreAndGit + acme(listOf(tab("acme.git", title = "Acme Git"))),
             preferences = listOf(AcceptedPreference("Acme_Hello", "infantry.git", "acme.git")),
         )
         val git = f.find("infantry.git")!!
@@ -82,7 +85,7 @@ class TabFactoryTest {
         assertEquals("center-tab-GIT", git.testTag)
         assertEquals(90, git.order)
         assertNull(f.find("acme.git"), "shown only as the replacement")
-        assertEquals(CoreModules.factory.tabs(TabContainers.CENTER).map { it.id }, f.tabs(TabContainers.CENTER).map { it.id })
+        assertEquals(TabFactory(coreAndGit).tabs(TabContainers.CENTER).map { it.id }, f.tabs(TabContainers.CENTER).map { it.id })
     }
 
     @Test
@@ -90,18 +93,18 @@ class TabFactoryTest {
         val offered = acme(listOf(tab("acme.git", title = "Acme Git"))).let { m ->
             AgentHqModule(m.manifest.copy(preferences = listOf(PreferenceDeclaration("infantry.git", "acme.git"))), m.tabs, tier = Tier.COMMUNITY)
         }
-        val f = TabFactory(CoreModules.all + offered)
+        val f = TabFactory(coreAndGit + offered)
         assertEquals("Infantry_Git", f.find("infantry.git")?.module)
         assertNull(f.find("acme.git"))
         assertTrue(f.problems.any { "acme.git only replaces infantry.git, which was not accepted" in it })
-        assertEquals(CoreModules.factory.tabs(TabContainers.CENTER).map { it.id }, f.tabs(TabContainers.CENTER).map { it.id })
+        assertEquals(TabFactory(coreAndGit).tabs(TabContainers.CENTER).map { it.id }, f.tabs(TabContainers.CENTER).map { it.id })
     }
 
     @Test
     fun `a declared interceptor wraps the title, an undeclared one is refused`() {
         val hi = TabInterceptor(title = { _, proceed -> proceed() + " +hi" })
         val f = TabFactory(
-            CoreModules.all + acme(
+            coreAndGit + acme(
                 emptyList(),
                 interceptors = mapOf("hi" to hi, "sneak" to TabInterceptor(title = { _, _ -> "pwned" })),
                 declaredInterceptors = listOf(InterceptorDeclaration("infantry.epics", "hi"), InterceptorDeclaration("infantry.nope", "hi")),
@@ -134,7 +137,7 @@ class TabFactoryTest {
     fun `HOOKS-1 an interceptor runs only the parts its kind names, and says which it drops`() {
         val parts = TabInterceptor(title = { _, proceed -> proceed() + " +hi" }, before = {}, after = {})
         fun factory(kind: String) = TabFactory(
-            CoreModules.all + acme(emptyList(), interceptors = mapOf("hi" to parts), declaredInterceptors = listOf(InterceptorDeclaration("infantry.epics", "hi", kind))),
+            coreAndGit + acme(emptyList(), interceptors = mapOf("hi" to parts), declaredInterceptors = listOf(InterceptorDeclaration("infantry.epics", "hi", kind))),
         )
         val epics = { f: TabFactory -> f.title(f.find("infantry.epics")!!, AppState()) }
         assertEquals("Epics +hi", epics(factory(InterceptorKinds.AROUND)), "around wraps the title")
@@ -157,7 +160,7 @@ class TabFactoryTest {
                 blocks = (Slots.ALL + "lost").associateWith { SlotBlock {} }, tier = Tier.COMMUNITY,
             )
         }
-        val f = TabFactory(CoreModules.all + m)
+        val f = TabFactory(coreAndGit + m)
         Slots.ALL.forEach { assertTrue(f.hasBlocks(it), it) }
         assertTrue(!f.hasBlocks("center.middle"))
         assertEquals(1, f.problems.count { "block lost names unknown slot center.middle" in it }, f.problems.joinToString())
@@ -172,8 +175,8 @@ class TabFactoryTest {
                 tier = Tier.COMMUNITY, panels = listOf(mine),
             )
         }
-        val core = TabFactory(CoreModules.all + InfantryAgents).panels(Panels.LEFT).single { it.id == "infantry.agents" }
-        val f = TabFactory(CoreModules.all + InfantryAgents + m, preferences = listOf(AcceptedPreference("Acme_Hello", "infantry.agents", "acme.agents")))
+        val core = TabFactory(coreAndGit + InfantryAgents).panels(Panels.LEFT).single { it.id == "infantry.agents" }
+        val f = TabFactory(coreAndGit + InfantryAgents + m, preferences = listOf(AcceptedPreference("Acme_Hello", "infantry.agents", "acme.agents")))
         val placed = f.panels(Panels.LEFT).single { it.id == "infantry.agents" }
         assertEquals("Acme_Hello", placed.module)
         assertEquals(core.testTag, placed.testTag)
@@ -182,7 +185,7 @@ class TabFactoryTest {
         assertTrue(f.panels(Panels.LEFT).none { it.id == "acme.agents" }, "shown only as the replacement")
         assertEquals(emptyList(), f.problems)
 
-        val refused = TabFactory(CoreModules.all + InfantryAgents + m)
+        val refused = TabFactory(coreAndGit + InfantryAgents + m)
         assertEquals("Infantry_Agents", refused.panels(Panels.LEFT).single { it.id == "infantry.agents" }.module)
         assertTrue(refused.panels(Panels.LEFT).none { it.id == "acme.agents" })
         assertTrue(refused.problems.any { "panel section acme.agents only replaces infantry.agents, which was not accepted" in it })

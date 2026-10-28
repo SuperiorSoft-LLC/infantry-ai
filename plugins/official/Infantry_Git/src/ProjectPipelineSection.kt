@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.git
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -25,6 +25,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.superiorsoftllc.agenthq.ui.*
 import com.superiorsoftllc.agenthq.ui.model.PipelineSectionView
 import com.superiorsoftllc.agenthq.ui.model.pipelineSectionView
 import com.superiorsoftllc.agenthq.ui.model.shortCommit

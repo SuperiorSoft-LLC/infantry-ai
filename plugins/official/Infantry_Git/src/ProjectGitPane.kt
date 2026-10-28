@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.git
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -33,7 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
+import com.superiorsoftllc.agenthq.ui.*
 import com.superiorsoftllc.agenthq.ui.model.BASE_BRANCH_DEFAULT_LABEL
 import com.superiorsoftllc.agenthq.ui.model.Notice
 import com.superiorsoftllc.agenthq.ui.model.baseBranchChoices
@@ -52,46 +52,25 @@ import com.superiorsoftllc.agenthq.ui.model.projectPatchView
 import com.superiorsoftllc.agenthq.ui.model.summary
 import com.superiorsoftllc.agenthq.ui.model.whenText
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.net.PROJECT_BASE_UNSUPPORTED
 import com.superiorsoftllc.agenthq.ui.net.PROJECT_GIT_BRANCHES_UNSUPPORTED
 import com.superiorsoftllc.agenthq.ui.net.PROJECT_GIT_CHECKOUT_UNSUPPORTED
 import com.superiorsoftllc.agenthq.ui.net.PROJECT_GIT_UNSUPPORTED
 import com.superiorsoftllc.agenthq.ui.protocol.ChangeKind
 import com.superiorsoftllc.agenthq.ui.protocol.ChangedFile
-import com.superiorsoftllc.agenthq.ui.shell.CoreGit
-import com.superiorsoftllc.agenthq.ui.shell.CoreLink
-import com.superiorsoftllc.agenthq.ui.shell.CoreSession
 import com.superiorsoftllc.agenthq.ui.shell.GitContext
 import com.superiorsoftllc.agenthq.ui.shell.LinkContext
 import com.superiorsoftllc.agenthq.ui.shell.SessionContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
-/**
- * CP-2 (contract 1.36.0): the active project's directory and what git says about it -- the working tree,
- * one changed file's diff, and the history. Everything shown comes from [state]; every decision (unknown vs
- * clean, which diff is current) is made by the tested views in `model/ProjectGitView.kt`.
- *
- * Selecting a project, changing its directory, or going live re-reads the tree. A daemon older than 1.36.0
- * is sent nothing and the pane says so; an unreadable tree is stated as unknown with the daemon's reason and
- * is never drawn as clean.
- *
- * BLOCKS-LAYOUT L14: drawn as [GitPaneFrame] (the scrolling column, its title, the tree load) and its sections, which the
- * Git tab's `infantry.shell.git` node draws as child blocks.
+/*
+ * CP-2 (contract 1.36.0): the active project's directory and what git says about it -- the working tree, one changed
+ * file's diff, and the history. Every decision (unknown vs clean, which diff is current) is made by the tested views in
+ * `model/ProjectGitView.kt`. Drawn as [GitPaneFrame] (the scrolling column, its title, the tree load) and its sections,
+ * which the Git tab's `infantry.shell.git` node draws as child blocks ([ShellGit]). RUNTIME-6: everything here reads the
+ * plugin API contexts (link, session, git); the window's AppState / Controller are not used.
  */
-@Composable
-fun ProjectGitPane(state: AppState, controller: Controller) {
-    GitPaneFrame(CoreLink(state), CoreSession(state), CoreGit(state, controller)) { git ->
-        GitBaseSection(git)
-        GitDirectorySection(git)
-        GitTreeSection(git)
-        GitDiffSection(git)
-        GitBranchesSection(git)
-        GitPipelineSection(git)
-        GitHistorySection(git)
-    }
-}
 
 /**
  * BLOCKS-LAYOUT L14: the Git pane as its sections read it: the active [project], whether the link is [live] and the daemon

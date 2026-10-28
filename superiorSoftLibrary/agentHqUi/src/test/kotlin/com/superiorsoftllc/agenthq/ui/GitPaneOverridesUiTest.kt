@@ -39,13 +39,14 @@ import com.superiorsoftllc.agenthq.ui.protocol.Project
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitHistory
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitStatus
 import com.superiorsoftllc.agenthq.ui.shell.blocks.CoreShell
-import com.superiorsoftllc.agenthq.ui.shell.blocks.GitBase
-import com.superiorsoftllc.agenthq.ui.shell.blocks.GitBranches
-import com.superiorsoftllc.agenthq.ui.shell.blocks.GitDiff
-import com.superiorsoftllc.agenthq.ui.shell.blocks.GitDirectory
-import com.superiorsoftllc.agenthq.ui.shell.blocks.GitHistory
-import com.superiorsoftllc.agenthq.ui.shell.blocks.GitPipeline
-import com.superiorsoftllc.agenthq.ui.shell.blocks.GitTree
+import com.superiorsoftllc.agenthq.plugins.official.git.GitBase
+import com.superiorsoftllc.agenthq.plugins.official.git.InfantryGit
+import com.superiorsoftllc.agenthq.plugins.official.git.GitBranches
+import com.superiorsoftllc.agenthq.plugins.official.git.GitDiff
+import com.superiorsoftllc.agenthq.plugins.official.git.GitDirectory
+import com.superiorsoftllc.agenthq.plugins.official.git.GitHistory
+import com.superiorsoftllc.agenthq.plugins.official.git.GitPipeline
+import com.superiorsoftllc.agenthq.plugins.official.git.GitTree
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -73,7 +74,7 @@ class GitPaneOverridesUiTest {
             ModuleManifest("Acme_Git", "1.0.0", author = "Acme", license = "NOASSERTION", shell = listOf(decl)),
             tier = Tier.COMMUNITY, shell = mapOf("acme" to override),
         )
-        val f = TabFactory(CoreModules.all + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Git", decl.nodeId, decl.name, decl.mode)))
+        val f = TabFactory(CoreModules.all + InfantryGit + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Git", decl.nodeId, decl.name, decl.mode)))
         assertEquals(emptyList(), f.problems)
         // The override goes into the Git tab's tree, not the window's.
         assertSame(f.baseRoot, f.shellRoot)
