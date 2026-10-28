@@ -323,6 +323,7 @@ internal object Cli {
         // connection attempt the user never asked for and a confusing "cannot reach the daemon".
         if (command !in COMMANDS) {
             err.appendLine("error: unknown command '$command'")
+            err.appendLine("hint: if the daemon documents this command, this CLI may be older than the daemon; use the launcher the daemon exports as AGENTHQ_BIN")
             printUsage(err)
             return 2
         }
