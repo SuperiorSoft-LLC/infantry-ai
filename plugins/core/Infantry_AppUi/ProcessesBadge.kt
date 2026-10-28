@@ -60,7 +60,7 @@ fun ProcessesBadge(state: AppState, controller: Controller, modifier: Modifier =
     if (text != null) {
         val alarm = ProcessWatchView.alarming(state.processReport)
         Text(
-            if (alarm) "   ⚠ $text" else "   $text", color = if (alarm) Palette.Accent else Palette.Muted, fontSize = 11.sp, maxLines = 1,
+            if (alarm) "   ⚠ $text" else "   $text", color = if (alarm) Palette.Warn else Palette.Muted, fontSize = 11.sp, maxLines = 1,
             modifier = modifier.testTag(PROCESSES_BADGE_TAG).clickable(role = Role.Button) {
                 open = true
             },
@@ -91,7 +91,7 @@ fun ProcessesDialog(state: AppState, controller: Controller, onDismiss: () -> Un
                 val total = report.totalMb?.let { " of ${ProcessWatchView.mb(it)}" } ?: ""
                 Text(
                     "Memory: $free free$total (warning below ${ProcessWatchView.mb(report.floorMb)})",
-                    color = if (report.underPressure) Palette.Accent else Palette.Text, fontSize = 12.sp,
+                    color = if (report.underPressure) Palette.Warn else Palette.Text, fontSize = 12.sp,
                 )
                 // Contract 1.132.0: the agents' share of all cores and the sustained-CPU alert rule (limits.cpu.*).
                 report.agentCpuPercent?.let { cpu ->

@@ -7,14 +7,15 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-/** THEME-1: the stored theme round-trips, and anything unreadable falls back to the original look (amber on dark). */
+/** THEME-1: the stored theme round-trips, and anything unreadable falls back to the default (red on dark). */
 class ThemeSettingsModelTest {
-    @Test fun `the default is amber on dark`() {
+    @Test fun `the default is red on dark, and a stored amber stays amber`() {
         val d = ThemeSettings()
-        assertEquals(ThemeAccent.AMBER, d.accent)
+        assertEquals(ThemeAccent.RED, d.accent)
         assertTrue(d.dark)
         assertTrue(d.isDefault)
-        assertEquals(0xFFF59E0B, ThemeAccent.AMBER.argb) // the original Palette.Accent
+        assertEquals(0xFFEF4444, ThemeAccent.RED.argb)
+        assertEquals(ThemeSettings(ThemeAccent.AMBER, dark = true), ThemeSettings.decode("AMBER;dark"))
     }
 
     @Test fun `every choice round-trips through its stored form`() {
@@ -29,6 +30,6 @@ class ThemeSettingsModelTest {
         assertEquals(ThemeSettings(), ThemeSettings.decode(null))
         assertEquals(ThemeSettings(), ThemeSettings.decode(""))
         assertEquals(ThemeSettings(), ThemeSettings.decode("PINK;sideways"))
-        assertEquals(ThemeSettings(ThemeAccent.AMBER, dark = false), ThemeSettings.decode("PINK;light"))
+        assertEquals(ThemeSettings(ThemeAccent.RED, dark = false), ThemeSettings.decode("PINK;light"))
     }
 }

@@ -23,7 +23,7 @@ import kotlin.test.assertFalse
 class ThemeSettingsUiTest {
     @AfterTest fun restore() { Palette.theme = ThemeSettings() }
 
-    @Test fun `picking an accent and light mode re-themes live, and reset returns to amber on dark`() {
+    @Test fun `picking an accent and light mode re-themes live, and reset returns to red on dark`() {
         var primary = Color.Unspecified
         var background = Color.Unspecified
         runDesktopComposeUiTest(900, 900) {
@@ -34,7 +34,7 @@ class ThemeSettingsUiTest {
                     ConfigDialog(UiFlags(), onFlags = {}, onDismiss = {}, theme = Palette.theme, onTheme = { Palette.theme = it })
                 }
             }
-            assertEquals(Color(0xFFF59E0B), primary)
+            assertEquals(Color(ThemeAccent.RED.argb), primary)
             onNodeWithTag(THEME_RESET_TAG).performScrollTo().assertIsNotEnabled() // the default needs no reset
             onNodeWithTag(THEME_ACCENT_TAG_PREFIX + ThemeAccent.INFANTRY.name).performScrollTo().performClick()
             waitForIdle()
@@ -49,7 +49,7 @@ class ThemeSettingsUiTest {
             onNodeWithTag(THEME_RESET_TAG).performScrollTo().assertIsEnabled().performClick()
             waitForIdle()
             assertEquals(ThemeSettings(), Palette.theme)
-            assertEquals(Color(0xFFF59E0B), primary)
+            assertEquals(Color(ThemeAccent.RED.argb), primary)
             assertEquals(darkBg, background)
         }
     }

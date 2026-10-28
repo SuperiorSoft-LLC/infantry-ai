@@ -428,7 +428,7 @@ fun App(
 /** MODAL-BLUR: the host preference key for "Blur behind dialogs" ("on" / "off"; unset = on). */
 const val BLUR_PREF_KEY = "blurBehindDialogs"
 
-/** THEME-1: the host preference key for the Material theme (ThemeSettings.encode; unset = amber on dark). */
+/** THEME-1: the host preference key for the Material theme (ThemeSettings.encode; unset = red on dark). */
 const val THEME_PREF_KEY = "materialTheme"
 
 @Composable private fun VLine() = Box(Modifier.width(1.dp).fillMaxHeight().background(Palette.Border))

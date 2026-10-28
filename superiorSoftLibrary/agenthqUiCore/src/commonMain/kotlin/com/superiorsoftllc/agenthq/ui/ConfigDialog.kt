@@ -1214,7 +1214,7 @@ const val THEME_RESET_TAG = "theme-reset"
 
 /**
  * THEME-1: accent presets as swatches (a radio group: the chosen one is ringed and announced as selected), a dark / light
- * switch, and "Reset to default" (amber on dark). Each pick goes straight to [onPick], which applies it live.
+ * switch, and "Reset to default" (red on dark). Each pick goes straight to [onPick], which applies it live.
  */
 @Composable
 private fun ThemeSection(theme: ThemeSettings, onPick: (ThemeSettings) -> Unit) {
