@@ -389,6 +389,8 @@ class TabFactory(
      * null = this host cannot export (only the desktop sets it). Settings > Plugins > Registered shows "Export section…".
      */
     var sectionExporter: ((node: String) -> String)? = null
+    /** NS10: exports node id N and starts it in a fresh shell process; returns the line to show. Null = cannot (not desktop). */
+    var freshShellLauncher: ((node: String) -> String)? = null
     /** Whether a loader looked at a plugins root (the desktop); false = compiled-in modules only (web, Android, tests). */
     val loadsAtRunTime: Boolean = statuses != null
     val statuses: List<ModuleStatus> = statuses ?: modules.map { ModuleStatus(it.manifest.name, it.tier, ModuleState.LOADED, manifest = it.manifest) }

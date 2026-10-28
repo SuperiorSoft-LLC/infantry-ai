@@ -114,16 +114,29 @@ object DesktopPlugins {
             allowInject = { config.setting(it).allowInject }, allowOverride = { config.setting(it).allowOverride })
         built = factory
         // NS3: Registered > "Export section…": <stateDir>/exports/<Section>.ihq, signed with this installation's export key.
-        factory.sectionExporter = { node ->
+        fun exportNode(node: String): Pair<String, CompositionExport.Outcome> {
             val name = node.substringAfterLast('.').replaceFirstChar { it.uppercase() }.filter { it.isLetterOrDigit() }.ifEmpty { "Section" }
             val out = File(File(stateDir, "exports"), "$name.ihq")
+            val key = ExportKey.loadOrCreate(File(stateDir, "export-key"))
+            return name to CompositionExport.export(factory, node, name, out, CompositionExport.packageDirs(root), key)
+        }
+        factory.sectionExporter = { node ->
             runCatching {
-                val key = ExportKey.loadOrCreate(File(stateDir, "export-key"))
-                when (val r = CompositionExport.export(factory, node, name, out, CompositionExport.packageDirs(root), key)) {
+                when (val r = exportNode(node).second) {
                     is CompositionExport.Outcome.Written -> "Exported to ${r.file.absolutePath}"
                     is CompositionExport.Outcome.Refused -> "Not exported: " + r.refusals.joinToString("; ")
                 }
             }.getOrElse { "Not exported: ${it.message}" }
+        }
+        // NS10: "Try in a fresh shell": the same export, then a real second process on the shell-only classpath (FreshShell).
+        factory.freshShellLauncher = { node ->
+            runCatching {
+                val (name, r) = exportNode(node)
+                when (r) {
+                    is CompositionExport.Outcome.Written -> FreshShell.launch(stateDir, r.file, name)
+                    is CompositionExport.Outcome.Refused -> "Not exported: " + r.refusals.joinToString("; ")
+                }
+            }.getOrElse { "Fresh shell not started: ${it.message}" }
         }
         factory.problems.forEach { say("[plugins] $it") }
         return Loaded(factory, root, config, demoLock, log, safeMode, unload = {
