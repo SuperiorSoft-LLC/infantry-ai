@@ -9,14 +9,13 @@ import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellCenter
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellCompactDrawer
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellConfigSettings
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellDiff
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellHeader
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellLeftPanel
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellQuestionPill
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellRightPanel
 
 /** S4: the trees Infantry_AppUi draws in the shell's empty slots (`CoreShell.slots`), in slot order. */
 private val fills: List<Block> = listOf(
-    ShellHeader, ShellLeftPanel, ShellCenter, ShellRightPanel, ShellCompactDrawer,
+    ShellLeftPanel, ShellCenter, ShellRightPanel, ShellCompactDrawer,
     ShellAssistant, ShellDiff, ShellQuestionPill,
     ShellConfigSettings,
     // RUNTIME-14: infantry.shell.roles (the roles window) is filled by the official Infantry_Roles itself.
@@ -24,6 +23,7 @@ private val fills: List<Block> = listOf(
     // RUNTIME-17: infantry.shell.toast is no slot any more: the shell draws its toasts itself (ShellToast in CoreShell).
     // RUNTIME-18: infantry.shell.footer is no slot any more: the shell draws its status bar itself (CoreStatusBar in
     // CoreShell); its processes badge (infantry.shell.footer.processesBadge) is filled by the official Infantry_Processes.
+    // RUNTIME-20: infantry.shell.header (the title bar) is filled by the official Infantry_Header itself.
     // RUNTIME-16: infantry.shell.sound and infantry.shell.voice are filled by the official Infantry_Alerts itself.
 )
 

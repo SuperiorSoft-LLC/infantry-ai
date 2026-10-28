@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.ui.shell.blocks
+package com.superiorsoftllc.agenthq.plugins.official.header
 
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -7,22 +7,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.superiorsoftllc.agenthq.ui.ATTENTION_TAB_ID
 import com.superiorsoftllc.agenthq.ui.AssistantEntry
-import com.superiorsoftllc.agenthq.ui.LocalWindowChrome
-import com.superiorsoftllc.agenthq.ui.ProjectPicker
 import com.superiorsoftllc.agenthq.ui.ServerSwitcherChip
-import com.superiorsoftllc.agenthq.ui.TitleBarFrame
-import com.superiorsoftllc.agenthq.ui.TitleBarAgents
-import com.superiorsoftllc.agenthq.ui.TitleBarOverflow
-import com.superiorsoftllc.agenthq.ui.TitleBarOverflowAttention
-import com.superiorsoftllc.agenthq.ui.TitleBarOverflowConnection
-import com.superiorsoftllc.agenthq.ui.TitleBarOverflowProject
-import com.superiorsoftllc.agenthq.ui.TitleBarBrand
-import com.superiorsoftllc.agenthq.ui.TitleBarProject
-import com.superiorsoftllc.agenthq.ui.TitleBarToggleLeft
-import com.superiorsoftllc.agenthq.ui.TitleBarAttention
-import com.superiorsoftllc.agenthq.ui.TitleBarRightToggle
-import com.superiorsoftllc.agenthq.ui.TitleBarConnection
-import com.superiorsoftllc.agenthq.ui.TitleBarWindowControls
+import com.superiorsoftllc.agenthq.ui.shell.HeaderContext
+import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
+import com.superiorsoftllc.agenthq.ui.shell.NoHeader
+import com.superiorsoftllc.agenthq.ui.LocalWindowChrome
+import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
+import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
+import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
+import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
+import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.Place
@@ -44,7 +39,19 @@ class TitleBarBlock(id: String, children: List<Block> = emptyList(), place: Plac
     override fun withChildren(children: List<Block>) = TitleBarBlock(id, children, place)
 }
 
-private const val HEADER = "infantry.shell.header"
+/** The shell's title bar slot, which this module fills. */
+const val HEADER_FILL_ID = "infantry.shell.header"
+
+private const val HEADER = HEADER_FILL_ID
+
+/** The window's header domain; [NoHeader] (no state, nothing drawn) where the shell has no window. */
+private val header: HeaderContext @Composable get() = LocalShellContext.current?.header ?: NoHeader
+
+@Composable
+private fun Picker() {
+    val h = header
+    ProjectPicker(h.state ?: return, h.controller ?: return)
+}
 
 private const val LEAD = "$HEADER.lead"
 
@@ -67,8 +74,8 @@ class HeaderLeadBlock(children: List<Block>, place: Place = Place()) : Block("ti
 object HeaderToggleLeft : Block("panelToggle", "$LEAD.toggleLeft") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
-        TitleBarToggleLeft(s.state, scope.modifier) { s.controller.togglePanel(PanelSide.LEFT) }
+        val h = header
+        TitleBarToggleLeft(h.state ?: return, scope.modifier) { h.togglePanel(PanelSide.LEFT) }
     }
 }
 
@@ -82,8 +89,7 @@ object HeaderBrand : Block("brand", "$LEAD.brand") {
 object HeaderProject : Block("projectSlot", "$LEAD.project") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
-        TitleBarProject({ ProjectPicker(s.state, s.controller) }, scope.modifier)
+        TitleBarProject({ Picker() }, scope.modifier)
     }
 }
 
@@ -100,18 +106,18 @@ object HeaderAgents : Block("agentStrip", "$LEAD.agents") {
 
     @Composable
     private fun RowScope.Agents(modifier: Modifier) {
-        val s = appShell
-        val state = s.state
+        val h = header
+        val state = h.state ?: return
         TitleBarAgents(
-            state, s.ui.flags.agentScope,
+            state, h.agentScope,
             chrome = LocalWindowChrome.current,
             // ASSISTANT-1: the last member of the team strip; a tap toggles the popup (the daemon makes the session on the first open).
             assistantSlot = {
-                if (state.connection.hasAssistant || state.assistant != null) {
+                if (h.hasAssistant) {
                     AssistantEntry(
-                        s.assistantPanel.open,
+                        h.assistantOpen,
                         state.assistant?.let { needsInput(it, state.waiting, state.openPrompts, state.openQuestionSessions) } == true,
-                    ) { s.assistantPanel.toggle() }
+                    ) { h.toggleAssistant() }
                 }
             },
             modifier = modifier,
@@ -137,8 +143,7 @@ class HeaderOverflowBlock(children: List<Block>, place: Place = Place(show = Sho
 object HeaderOverflowProject : Block("projectSlot", "$OVERFLOW.project") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
-        TitleBarOverflowProject({ ProjectPicker(s.state, s.controller) }, scope.modifier)
+        TitleBarOverflowProject({ Picker() }, scope.modifier)
     }
 }
 
@@ -146,8 +151,8 @@ object HeaderOverflowProject : Block("projectSlot", "$OVERFLOW.project") {
 object HeaderOverflowAttention : Block("attentionEntry", "$OVERFLOW.attention") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
-        TitleBarOverflowAttention(s.state, { s.showTab(ATTENTION_TAB_ID) }, scope.modifier)
+        val h = header
+        TitleBarOverflowAttention(h.state ?: return, { h.showTab(ATTENTION_TAB_ID) }, scope.modifier)
     }
 }
 
@@ -155,8 +160,8 @@ object HeaderOverflowAttention : Block("attentionEntry", "$OVERFLOW.attention") 
 object HeaderOverflowConnection : Block("connectionEntry", "$OVERFLOW.connection") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
-        TitleBarOverflowConnection(s.state, { s.changeConnection?.invoke() ?: run { s.ui.showConnect = true } }, scope.modifier)
+        val h = header
+        TitleBarOverflowConnection(h.state ?: return, h::connect, scope.modifier)
     }
 }
 
@@ -174,8 +179,8 @@ object HeaderWindowControls : Block("windowControls", "$HEADER.windowControls") 
 object HeaderConnection : Block("connectionChip", "$HEADER.connection") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
-        TitleBarConnection(s.state, { s.changeConnection?.invoke() ?: run { s.ui.showConnect = true } }, scope.modifier)
+        val h = header
+        TitleBarConnection(h.state ?: return, h::connect, scope.modifier)
     }
 }
 
@@ -183,9 +188,9 @@ object HeaderConnection : Block("connectionChip", "$HEADER.connection") {
 object HeaderServer : Block("serverSwitcher", "$HEADER.server") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
-        val switcher = s.switcher
-        if (switcher != null) ServerSwitcherChip(switcher, onSelect = s.switchTo, onManage = { s.ui.showServers = true }, modifier = scope.modifier)
+        val h = header
+        val switcher = h.switcher
+        if (switcher != null) ServerSwitcherChip(switcher, onSelect = h::switchTo, onManage = h::manageServers, modifier = scope.modifier)
     }
 }
 
@@ -193,8 +198,8 @@ object HeaderServer : Block("serverSwitcher", "$HEADER.server") {
 object HeaderToggleRight : Block("panelToggle", "$HEADER.toggleRight") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
-        TitleBarRightToggle(s.state, scope.modifier) { s.controller.togglePanel(PanelSide.RIGHT) }
+        val h = header
+        TitleBarRightToggle(h.state ?: return, scope.modifier) { h.togglePanel(PanelSide.RIGHT) }
     }
 }
 
@@ -202,10 +207,34 @@ object HeaderToggleRight : Block("panelToggle", "$HEADER.toggleRight") {
 object HeaderAttention : Block("attentionChip", "$HEADER.attention") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
-        TitleBarAttention(s.state, { s.showTab(ATTENTION_TAB_ID) }, scope.modifier)
+        val h = header
+        TitleBarAttention(h.state ?: return, { h.showTab(ATTENTION_TAB_ID) }, scope.modifier)
     }
 }
 
 /** BLOCKS-SHELL-1: the window's title bar, on top. */
 val ShellHeader = TitleBarBlock(HEADER, listOf(HeaderLead, HeaderAttention, HeaderToggleRight, HeaderServer, HeaderConnection, HeaderWindowControls))
+
+/** RUNTIME-20: Infantry_Header (official), the window's title bar, compiled in on web and Android (D9). */
+val InfantryHeader = AgentHqModule(
+    ModuleManifest(
+        name = "Infantry_Header", version = "1.0.0", author = "Infantry AI",
+        description = "The window's title bar: logo, project picker, agent strip, attention and connection chips, window controls.",
+        fills = listOf(FillDeclaration(HEADER_FILL_ID)),
+    ),
+    fills = mapOf(HEADER_FILL_ID to ShellHeader),
+)
+
+/**
+ * RUNTIME-20: the entry of Infantry_Header (module.json `entry`), an official module. It fills the shell's header slot
+ * (formerly filled by Infantry_AppUi). Without it the window has no title bar.
+ *  - Desktop loads it at run time from its signed jar (`official/Infantry_Header`): the loader takes it as a [UiPlugin].
+ *  - Web and Android compile it in from the generated module list, which takes it as a [ModuleSource].
+ */
+class HeaderPlugin : UiPlugin, ModuleSource {
+    override fun register(registrar: UiRegistrar) {
+        registrar.fill(HEADER_FILL_ID, ShellHeader)
+    }
+
+    override fun modules(): List<AgentHqModule> = listOf(InfantryHeader)
+}

@@ -83,6 +83,20 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
         override val voice get() = ui.flags.voice
     }
     override val processes: ProcessesContext = CoreProcesses(state, shell.controller)
+    override val header: HeaderContext = object : HeaderContext {
+        override val state get() = shell.state
+        override val controller get() = shell.controller
+        override val agentScope get() = ui.flags.agentScope
+        override val switcher get() = shell.switcher
+        override fun togglePanel(side: com.superiorsoftllc.agenthq.ui.model.PanelSide) = shell.controller.togglePanel(side)
+        override fun showTab(id: String) = shell.showTab(id)
+        override fun connect() { shell.changeConnection?.invoke() ?: run { ui.showConnect = true } }
+        override fun switchTo(choice: ServerChoice) = shell.switchTo(choice)
+        override fun manageServers() { ui.showServers = true }
+        override val assistantOpen get() = shell.assistantPanel.open
+        override val hasAssistant get() = shell.state.connection.hasAssistant || shell.state.assistant != null
+        override fun toggleAssistant() = shell.assistantPanel.toggle()
+    }
 
     override val board: BoardContext = object : BoardContext {
         override val open: Boolean get() = ui.showBoard
