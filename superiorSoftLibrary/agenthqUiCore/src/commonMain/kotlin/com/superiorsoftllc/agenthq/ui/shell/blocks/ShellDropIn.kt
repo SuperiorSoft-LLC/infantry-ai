@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -45,6 +46,9 @@ import com.superiorsoftllc.agenthq.ui.shell.DropPreview
 import com.superiorsoftllc.agenthq.ui.shell.LocalSoftRestart
 import com.superiorsoftllc.agenthq.ui.shell.NodeAsk
 import com.superiorsoftllc.agenthq.ui.shell.PluginDropIn
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 const val DROP_CONSENT_NODE = "infantry.shell.dropConsent"
 const val SAFE_MODE_NODE = "infantry.shell.safeMode"
@@ -53,6 +57,8 @@ const val DROP_BOX_TAG = "shell-drop-box"
 const val DROP_BOX_CHOOSE_TAG = "shell-drop-box-choose"
 const val DROP_BOX_LOCKED_TAG = "shell-drop-box-locked"
 const val DROP_BOX_ERROR_TAG = "shell-drop-box-error"
+const val DROP_BOX_CHECKING_TAG = "shell-drop-box-checking"
+const val DROP_CONSENT_INSTALLING_TAG = "shell-drop-consent-installing"
 const val DROP_CONSENT_TAG = "shell-drop-consent"
 const val DROP_CONSENT_INSTALL_TAG = "shell-drop-consent-install"
 const val DROP_CONSENT_CANCEL_TAG = "shell-drop-consent-cancel"
@@ -83,10 +89,23 @@ private fun DropBox(dropIn: PluginDropIn, modifier: Modifier, onReady: (DropPrev
     val enabled = !dropIn.demoLock
     var error by remember { mutableStateOf<String?>(null) }
     var hovering by remember { mutableStateOf(false) }
+    // S7: the signature check reads the whole package; it runs off the UI thread, and the box says it is checking.
+    var checking by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
     val take: (String) -> Unit = { path ->
-        when (val check = dropIn.inspect(path)) {
-            is DropCheck.Ready -> { error = null; onReady(check.preview) }
-            is DropCheck.Refused -> error = check.message
+        if (checking == null) {
+            checking = path.substringAfterLast('/').substringAfterLast('\\')
+            error = null
+            scope.launch {
+                val check = withContext(Dispatchers.Default) {
+                    runCatching { dropIn.inspect(path) }.getOrElse { DropCheck.Refused("could not check the file: ${it.message}") }
+                }
+                checking = null
+                when (check) {
+                    is DropCheck.Ready -> onReady(check.preview)
+                    is DropCheck.Refused -> error = check.message
+                }
+            }
         }
     }
     val target = remember(dropIn, enabled) {
@@ -97,7 +116,7 @@ private fun DropBox(dropIn: PluginDropIn, modifier: Modifier, onReady: (DropPrev
             override fun onDrop(event: DragAndDropEvent): Boolean {
                 hovering = false
                 val path = dropIn.droppedPaths(event).firstOrNull()
-                if (!enabled || path == null) return false
+                if (!enabled || path == null || checking != null) return false
                 take(path)
                 return true
             }
@@ -128,9 +147,10 @@ private fun DropBox(dropIn: PluginDropIn, modifier: Modifier, onReady: (DropPrev
             }
             Button(
                 onClick = { dropIn.pickPackage()?.let(take) },
-                enabled = enabled && dropIn.canPick,
+                enabled = enabled && dropIn.canPick && checking == null,
                 modifier = Modifier.testTag(DROP_BOX_CHOOSE_TAG),
             ) { Text("Choose file") }
+            checking?.let { Text("Checking $it ...", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag(DROP_BOX_CHECKING_TAG)) }
             error?.let { Text(it, color = Palette.Danger, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.testTag(DROP_BOX_ERROR_TAG)) }
         }
     }
@@ -157,6 +177,8 @@ object ShellDropConsent : Block(DROP_CONSENT_NODE, DROP_CONSENT_NODE) {
 private fun ConsentDialog(dropIn: PluginDropIn, preview: DropPreview, onClose: () -> Unit, onInstalled: () -> Unit) {
     var granted by remember(preview) { mutableStateOf(preview.asks.filter { it.grantable(preview.core) }.map { it.node }.toSet()) }
     var error by remember(preview) { mutableStateOf<String?>(null) }
+    var installing by remember(preview) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     AlertDialog(
         onDismissRequest = onClose,
         modifier = Modifier.testTag(DROP_CONSENT_TAG),
@@ -176,11 +198,21 @@ private fun ConsentDialog(dropIn: PluginDropIn, preview: DropPreview, onClose: (
                 else Text("Parts of the window it asks for (${preview.asks.size})" + (if (preview.asks.size > 8) ", scroll for all:" else ":"), color = Palette.Muted, fontSize = 12.sp)
                 for (ask in preview.asks) NodeRow(ask, preview.core, ask.node in granted) { on -> granted = if (on) granted + ask.node else granted - ask.node }
                 error?.let { Text(it, color = Palette.Danger, fontSize = 12.sp, modifier = Modifier.testTag(DROP_CONSENT_ERROR_TAG)) }
+                if (installing) Text("Checking and installing ...", color = Palette.Muted, fontSize = 12.sp, modifier = Modifier.testTag(DROP_CONSENT_INSTALLING_TAG))
             }
         },
         confirmButton = {
             TextButton(
-                onClick = { val e = dropIn.install(preview, granted); if (e == null) onInstalled() else error = e },
+                onClick = {
+                    // S7: the install checks the package again (signature, limits); off the UI thread.
+                    installing = true; error = null
+                    scope.launch {
+                        val e = withContext(Dispatchers.Default) { runCatching { dropIn.install(preview, granted) }.getOrElse { "install failed: ${it.message}" } }
+                        installing = false
+                        if (e == null) onInstalled() else error = e
+                    }
+                },
+                enabled = !installing,
                 modifier = Modifier.testTag(DROP_CONSENT_INSTALL_TAG),
             ) { Text("Install") }
         },

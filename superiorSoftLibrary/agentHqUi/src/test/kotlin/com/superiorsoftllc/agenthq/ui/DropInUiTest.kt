@@ -24,6 +24,7 @@ import com.superiorsoftllc.agenthq.ui.shell.NodeAsk
 import com.superiorsoftllc.agenthq.ui.shell.PlatformHost
 import com.superiorsoftllc.agenthq.ui.shell.PluginDropIn
 import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_BOX_CHOOSE_TAG
+import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_BOX_CHECKING_TAG
 import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_BOX_ERROR_TAG
 import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_BOX_LOCKED_TAG
 import com.superiorsoftllc.agenthq.ui.shell.blocks.DROP_BOX_TAG
@@ -72,7 +73,9 @@ class DropInUiTest {
         val installs = mutableListOf<Pair<DropPreview, Set<String>>>()
         val removed = mutableListOf<String>()
         override val canPick = true
-        override fun inspect(path: String) = check
+        var gate: java.util.concurrent.CountDownLatch? = null
+        var inspectThread: Thread? = null
+        override fun inspect(path: String): DropCheck { inspectThread = Thread.currentThread(); gate?.await(); return check }
         override fun install(preview: DropPreview, granted: Set<String>): String? { installs += preview to granted; return null }
         override fun installed(): List<String> = onDisk.toList()
         override fun remove(name: String): String? { removed += name; onDisk -= name; return null }
@@ -116,6 +119,7 @@ class DropInUiTest {
         val drop = FakeDropIn(check = DropCheck.Refused("picked.ihq was refused: the package is not signed"))
         window(Host(drop), TabFactory(emptyList()))
         onNodeWithTag(DROP_BOX_CHOOSE_TAG).performClick()
+        waitUntil { onAllNodesWithTag(DROP_BOX_CHECKING_TAG).fetchSemanticsNodes().isEmpty() } // S7: the check runs off the UI thread
         onNodeWithTag(DROP_BOX_ERROR_TAG).assertExists()
         onNodeWithTag(DROP_CONSENT_TAG).assertDoesNotExist()
     }
@@ -125,6 +129,7 @@ class DropInUiTest {
         var restarts = 0
         window(Host(drop), TabFactory(emptyList())) { restarts++ }
         onNodeWithTag(DROP_BOX_CHOOSE_TAG).performClick()
+        waitUntil { onAllNodesWithTag(DROP_BOX_CHECKING_TAG).fetchSemanticsNodes().isEmpty() } // S7: the check runs off the UI thread
         onNodeWithTag(DROP_CONSENT_TAG).assertExists()
         onNodeWithTag(DROP_CONSENT_CANCEL_TAG).performClick()
         waitForIdle()
@@ -138,12 +143,14 @@ class DropInUiTest {
         var restarts = 0
         window(Host(drop), TabFactory(emptyList())) { restarts++ }
         onNodeWithTag(DROP_BOX_CHOOSE_TAG).performClick()
+        waitUntil { onAllNodesWithTag(DROP_BOX_CHECKING_TAG).fetchSemanticsNodes().isEmpty() } // S7: the check runs off the UI thread
         // Every node it asks for is listed; the locked one has no box to tick.
         listOf("infantry.shell.left", "infantry.shell.frame", "infantry.shell.connect").forEach { onNodeWithTag(DROP_CONSENT_NODE_TAG_PREFIX + it, useUnmergedTree = true).assertExists() }
         // Untick the injection into the frame: only the left panel's override is granted.
         onNodeWithTag(DROP_CONSENT_TICK_TAG_PREFIX + "infantry.shell.connect", useUnmergedTree = true).assertDoesNotExist()
         onNodeWithTag(DROP_CONSENT_TICK_TAG_PREFIX + "infantry.shell.frame", useUnmergedTree = true).performClick()
         onNodeWithTag(DROP_CONSENT_INSTALL_TAG).performClick()
+        waitUntil { onAllNodesWithTag(DROP_CONSENT_TAG).fetchSemanticsNodes().isEmpty() }
         waitForIdle()
         assertEquals(listOf(community to setOf("infantry.shell.left")), drop.installs)
         assertEquals(1, restarts)
@@ -158,7 +165,9 @@ class DropInUiTest {
         setContent { AgentHqShell(host, Controller(scope)) }
         onNodeWithTag(DROP_BOX_TAG).assertExists()
         onNodeWithTag(DROP_BOX_CHOOSE_TAG).performClick()
+        waitUntil { onAllNodesWithTag(DROP_BOX_CHECKING_TAG).fetchSemanticsNodes().isEmpty() } // S7: the check runs off the UI thread
         onNodeWithTag(DROP_CONSENT_INSTALL_TAG).performClick()
+        waitUntil { onAllNodesWithTag(DROP_CONSENT_TAG).fetchSemanticsNodes().isEmpty() }
         waitForIdle()
         assertEquals(1, host.reloads)
         assertEquals(1, drop.installs.size)
@@ -186,5 +195,17 @@ class DropInUiTest {
     @Test fun `outside safe mode there is no banner`() = runDesktopComposeUiTest(1200, 800) {
         window(Host(FakeDropIn()), CoreModules.factory)
         onNodeWithTag(SAFE_MODE_BANNER_TAG).assertDoesNotExist()
+    }
+
+    @Test fun `the file is checked off the UI thread, with a Checking state until it is done`() = runDesktopComposeUiTest(1200, 800) {
+        val drop = FakeDropIn(check = DropCheck.Ready(community)).also { it.gate = java.util.concurrent.CountDownLatch(1) }
+        window(Host(drop), TabFactory(emptyList()))
+        onNodeWithTag(DROP_BOX_CHOOSE_TAG).performClick()
+        waitUntil { onAllNodesWithTag(DROP_BOX_CHECKING_TAG).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithTag(DROP_BOX_CHOOSE_TAG).assertIsNotEnabled()
+        onNodeWithTag(DROP_CONSENT_TAG).assertDoesNotExist()
+        drop.gate!!.countDown()
+        waitUntil { onAllNodesWithTag(DROP_CONSENT_TAG).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(drop.inspectThread !== Thread.currentThread(), "inspect ran on a background thread")
     }
 }
