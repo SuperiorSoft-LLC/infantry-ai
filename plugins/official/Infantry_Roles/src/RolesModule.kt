@@ -4,6 +4,8 @@ import androidx.compose.runtime.remember
 import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
+import com.superiorsoftllc.agenthq.ui.ConfigEntry
+import com.superiorsoftllc.agenthq.ui.ConfigRolesSection
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
@@ -13,12 +15,18 @@ import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
 import com.superiorsoftllc.agenthq.ui.plugin.circle
 import com.superiorsoftllc.agenthq.ui.plugin.tabIcon
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
+import com.superiorsoftllc.agenthq.ui.shell.blocks.ConfigSectionBlock
 
 /** The Roles tab's id. */
 const val ROLES_TAB_ID = "infantry.roles"
 
 /** The roles window's empty shell slot (Configuration > Roles > Manage roles), which this module fills itself. */
 const val ROLES_FILL_ID = "infantry.shell.roles"
+
+/** RUNTIME-19: the Roles section of the Configuration dialog, which this module fills (`infantry.shell.config.roles`). */
+const val ROLES_CONFIG_ID = "infantry.shell.config.roles"
+
+private val rolesSection = ConfigSectionBlock(ConfigEntry.ROLES, "roles") { c, m -> ConfigRolesSection(c, m) }
 
 /**
  * The Roles tab (order 30 in the center strip, shortcut 5). Everything it reads and sends goes through the plugin API's
@@ -46,10 +54,10 @@ val InfantryRoles = AgentHqModule(
     ModuleManifest(
         name = "Infantry_Roles", version = "1.0.0", author = "Infantry AI", description = "Roles: who does what, and starting a session as one.",
         tabs = listOf(TabDeclaration(ROLES_TAB_ID, TabContainers.CENTER)),
-        fills = listOf(FillDeclaration(ROLES_FILL_ID)),
+        fills = listOf(FillDeclaration(ROLES_FILL_ID), FillDeclaration(ROLES_CONFIG_ID)),
     ),
     listOf(rolesTab()),
-    fills = mapOf(ROLES_FILL_ID to ShellRoles),
+    fills = mapOf(ROLES_FILL_ID to ShellRoles, ROLES_CONFIG_ID to rolesSection),
 )
 
 /**
@@ -62,6 +70,7 @@ class RolesPlugin : UiPlugin, ModuleSource {
     override fun register(registrar: UiRegistrar) {
         registrar.tab(rolesTab())
         registrar.fill(ROLES_FILL_ID, ShellRoles)
+        registrar.fill(ROLES_CONFIG_ID, rolesSection)
     }
 
     override fun modules(): List<AgentHqModule> = listOf(InfantryRoles)

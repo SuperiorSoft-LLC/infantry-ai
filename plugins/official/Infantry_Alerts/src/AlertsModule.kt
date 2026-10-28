@@ -5,6 +5,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.ui.ConfigEntry
+import com.superiorsoftllc.agenthq.ui.ConfigIncomingSoundSection
+import com.superiorsoftllc.agenthq.ui.ConfigVoiceSection
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
@@ -12,6 +15,7 @@ import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
 import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
+import com.superiorsoftllc.agenthq.ui.shell.blocks.ConfigSectionBlock
 import com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundEffect
 import com.superiorsoftllc.agenthq.ui.voice.VoiceAlerts
 
@@ -20,6 +24,13 @@ const val SOUND_FILL_ID = "infantry.shell.sound"
 
 /** The shell's spoken-alerts slot, which this module fills. */
 const val VOICE_FILL_ID = "infantry.shell.voice"
+
+/** RUNTIME-19: the Voice and Incoming-sound sections of the Configuration dialog, which this module fills. */
+const val VOICE_CONFIG_ID = "infantry.shell.config.voice"
+const val INCOMING_SOUND_CONFIG_ID = "infantry.shell.config.incomingSound"
+
+private val voiceSection = ConfigSectionBlock(ConfigEntry.VOICE, "voice") { c, m -> ConfigVoiceSection(c, m) }
+private val incomingSoundSection = ConfigSectionBlock(ConfigEntry.INCOMING_SOUND, "incomingSound") { c, m -> ConfigIncomingSoundSection(c, m) }
 
 /** BLOCKS-SHELL-1: the incoming-comms sound; it draws nothing. RUNTIME-16: reads the shell context's alerts domain. */
 object AlertsSound : Block(SOUND_FILL_ID, SOUND_FILL_ID) {
@@ -45,9 +56,15 @@ val InfantryAlerts = AgentHqModule(
     ModuleManifest(
         name = "Infantry_Alerts", version = "1.0.0", author = "Infantry AI",
         description = "The incoming-comms sound and spoken attention alerts.",
-        fills = listOf(FillDeclaration(SOUND_FILL_ID), FillDeclaration(VOICE_FILL_ID)),
+        fills = listOf(
+            FillDeclaration(SOUND_FILL_ID), FillDeclaration(VOICE_FILL_ID),
+            FillDeclaration(VOICE_CONFIG_ID), FillDeclaration(INCOMING_SOUND_CONFIG_ID),
+        ),
     ),
-    fills = mapOf(SOUND_FILL_ID to AlertsSound, VOICE_FILL_ID to AlertsVoice),
+    fills = mapOf(
+        SOUND_FILL_ID to AlertsSound, VOICE_FILL_ID to AlertsVoice,
+        VOICE_CONFIG_ID to voiceSection, INCOMING_SOUND_CONFIG_ID to incomingSoundSection,
+    ),
 )
 
 /**
@@ -60,6 +77,8 @@ class AlertsPlugin : UiPlugin, ModuleSource {
     override fun register(registrar: UiRegistrar) {
         registrar.fill(SOUND_FILL_ID, AlertsSound)
         registrar.fill(VOICE_FILL_ID, AlertsVoice)
+        registrar.fill(VOICE_CONFIG_ID, voiceSection)
+        registrar.fill(INCOMING_SOUND_CONFIG_ID, incomingSoundSection)
     }
 
     override fun modules(): List<AgentHqModule> = listOf(InfantryAlerts)

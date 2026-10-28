@@ -28,15 +28,17 @@ class CoreShellTreeTest {
      * RUNTIME-14/15: the compiled-in modules plus the official Infantry_Roles and Infantry_Board (their jars on desktop),
      * which fill infantry.shell.roles and infantry.shell.board.
      */
-    private val withRoles by lazy { TabFactory(CoreModules.all + InfantryRoles + InfantryBoard + com.superiorsoftllc.agenthq.plugins.official.alerts.InfantryAlerts + com.superiorsoftllc.agenthq.plugins.official.processes.InfantryProcesses) }
+    private val withRoles by lazy { TabFactory(CoreModules.all + InfantryRoles + InfantryBoard + InfantryAttention + InfantryUsage + com.superiorsoftllc.agenthq.plugins.official.alerts.InfantryAlerts + com.superiorsoftllc.agenthq.plugins.official.processes.InfantryProcesses) }
 
     private fun Block.walk(depth: Int = 0): List<String> = listOf("  ".repeat(depth) + id) + children.flatMap { it.walk(depth + 1) }
 
     /** SHELL-EMPTY-DROPIN S3: the config dialog's open settings sections (under `.settings`) and its locked trust sections. */
     private val configSettings = listOf(
         "theme", "blur", "markdownEngine", "reasoning", "tabGroups", "userPortrait", "agentScope", "progressStale", "lifecycle",
-        "cliLocations", "toolApproval", "roles", "limits", "voice", "incomingSound", "questions",
+        "cliLocations", "toolApproval",
     )
+    /** RUNTIME-19: the sections official plugins own, one slot each beside `.settings`. */
+    private val configOwned = listOf("limits", "roles", "voice", "incomingSound", "questions")
     private val configTrust = listOf("plugins", "modules", "registry", "secrets", "pair", "about", "updates", "serverUpdate", "logs")
 
     @Test fun `the core tree keeps every node id, in order, each unique`() {
@@ -114,6 +116,7 @@ class CoreShellTreeTest {
             "    infantry.shell.config",
             "      infantry.shell.config.settings",
         ) + configSettings.map { "        infantry.shell.config.$it" } +
+            configOwned.map { "      infantry.shell.config.$it" } +
             configTrust.map { "      infantry.shell.config.$it" } + listOf(
             "    infantry.shell.serverUpdate",
             "    infantry.shell.roles",
@@ -149,7 +152,9 @@ class CoreShellTreeTest {
             "infantry.shell.drawer", "infantry.shell.footer.processesBadge",
             "infantry.shell.assistant", "infantry.shell.board", "infantry.shell.diff",
             "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions",
-            "infantry.shell.config.settings", "infantry.shell.roles",
+            "infantry.shell.config.settings",
+            "infantry.shell.config.limits", "infantry.shell.config.roles", "infantry.shell.config.voice",
+            "infantry.shell.config.incomingSound", "infantry.shell.config.questions", "infantry.shell.roles",
         )
         assertEquals(slots, CoreShell.slots)
         assertEquals(slots, CoreShell.root.all().filterIsInstance<PlaceholderBlock>().filter { it.default == null }.map { it.id })
@@ -171,7 +176,7 @@ class CoreShellTreeTest {
             CoreShell.locked,
         )
         // Every config section is either open (under .settings) or locked, never both.
-        assertEquals(emptyList(), configSettings.map { "infantry.shell.config.$it" }.filter { it in CoreShell.locked })
+        assertEquals(emptyList(), (configSettings + configOwned).map { "infantry.shell.config.$it" }.filter { it in CoreShell.locked })
         assertEquals(false, "infantry.shell.config.settings" in CoreShell.locked)
     }
 

@@ -49,8 +49,8 @@ object CoreShell {
         "infantry.shell.drawer", PROCESSES_BADGE_SLOT,
         "infantry.shell.assistant", "infantry.shell.board", "infantry.shell.diff",
         "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions",
-        "infantry.shell.config.settings", "infantry.shell.roles",
-    )
+        "infantry.shell.config.settings",
+    ) + CONFIG_OWNED_SECTION_SLOTS + "infantry.shell.roles"
 
     /**
      * SHELL-EMPTY-DROPIN S1 (docs/BLOCKS-LAYOUT-DESIGN.md section 13): the containers that are open slots

@@ -119,10 +119,10 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
             onTab = { ui.configTab = it },
             modules = s.tabs.takeIf { it.loadsAtRunTime },
             // S4c: only the sections among the children are offered; an unfilled settings slot leaves the trust tabs.
-            drawn = children.flattened().mapNotNull { sectionEntries[it.id] }.toSet(),
+            drawn = children.flattened().filter { it !is PlaceholderBlock }.mapNotNull { sectionEntries[it.id] }.toSet(),
             sections = { config ->
                 CompositionLocalProvider(LocalConfigDialogHost provides config) {
-                    RenderPlaced(children.flattened().filter { c -> sectionEntries[c.id]?.let(config::shows) ?: true })
+                    RenderPlaced(children.flattened().filter { c -> c !is PlaceholderBlock }.filter { c -> sectionEntries[c.id]?.let(config::shows) ?: true })
                 }
             },
         )
@@ -172,4 +172,13 @@ private val sectionEntries: Map<String, ConfigEntry> = ConfigEntry.entries.assoc
 /** S4c: the open settings group, an empty slot ([CoreShell.slots]) that Infantry_AppUi fills; the trust sections are the shell's. */
 const val CONFIG_SETTINGS = "$CONFIG.settings"
 
-val ShellConfig = ConfigBlock(listOf(PlaceholderBlock(CONFIG_SETTINGS, null)) + ShellConfigTrust)
+/**
+ * RUNTIME-19: the sections an official plugin owns, one empty slot each (`infantry.shell.config.<name>`): Usage fills limits,
+ * Roles fills roles, Alerts fills voice and incomingSound, Attention fills questions. An unfilled slot draws nothing and
+ * offers no tab entry.
+ */
+val CONFIG_OWNED_SECTION_SLOTS: List<String> = listOf("limits", "roles", "voice", "incomingSound", "questions").map { "$CONFIG.$it" }
+
+val ShellConfig = ConfigBlock(
+    listOf(PlaceholderBlock(CONFIG_SETTINGS, null)) + CONFIG_OWNED_SECTION_SLOTS.map { PlaceholderBlock(it, null) } + ShellConfigTrust,
+)
