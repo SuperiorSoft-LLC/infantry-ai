@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.ui.plugin
 
+import com.superiorsoftllc.agenthq.plugin.api.Tier
 import java.io.File
 import java.net.URL
 import java.net.URLClassLoader
@@ -11,7 +12,7 @@ import java.net.URLClassLoader
  * finds `foo.dll` / `libfoo.so` / `libfoo.dylib` in `<module>/native/<os>-<arch>/` (e.g. `windows-amd64`), else
  * `<module>/native/`, else the module folder itself.
  *
- * PLUGIN-ENDPOINTS-1 (D2b): with [filtered] (community modules) the parent shows only the plugin API, Kotlin, Compose, `java*` and the
+ * PLUGIN-ENDPOINTS-1 (D2b): with [filtered] (community modules; OFFICIAL also sees ui.shell and the ui root package, LOADER-1) the parent shows only the plugin API, Kotlin, Compose, `java*` and the
  * plugin-facing `ui.plugin` types (not `DaemonLink`), plus the packages the plugin API's own signatures hand out (ticket-109d3f79):
  * `ui.model` (TabContext.state is an AppState, TabProvider/TabInterceptor titles take one, TabContext.diffTarget), `ui.protocol`
  * (the wire data AppState's fields hold) and `ui.block` (UiRegistrar.shell/inject/fill/tabTree/blockType take its trees). All three
@@ -21,8 +22,10 @@ import java.net.URLClassLoader
  * can still use reflection, files and the environment (owner.token, AGENTHQ_TOKEN); this closes the easy paths, not a determined
  * attacker. The trust boundary stays consent (off until enabled), safe mode and the demo lock.
  */
-class PluginClassLoader(private val dir: File, jar: File, parent: ClassLoader, filtered: Boolean = false) :
-    URLClassLoader(urls(dir, jar), if (filtered) FilteringParent(parent) else parent) {
+class PluginClassLoader(private val dir: File, jar: File, parent: ClassLoader, filtered: Boolean = false, official: Boolean = false) :
+    URLClassLoader(urls(dir, jar), if (filtered) FilteringParent(parent, official) else parent) {
+    constructor(dir: File, jar: File, parent: ClassLoader, tier: Tier) : this(dir, jar, parent, tier != Tier.CORE, tier == Tier.OFFICIAL)
+
     override fun findLibrary(libname: String): String? {
         val file = System.mapLibraryName(libname)
         val os = System.getProperty("os.name").lowercase().let { if ("win" in it) "windows" else if ("mac" in it) "macos" else "linux" }
@@ -32,16 +35,19 @@ class PluginClassLoader(private val dir: File, jar: File, parent: ClassLoader, f
     }
 
     /** Only what a plugin legitimately needs from the host. */
-    private class FilteringParent(private val real: ClassLoader) : ClassLoader(null) {
+    private class FilteringParent(private val real: ClassLoader, private val official: Boolean) : ClassLoader(null) {
         override fun loadClass(name: String, resolve: Boolean): Class<*> {
             if (!allowed(name)) throw ClassNotFoundException(name)
             return real.loadClass(name)
         }
         override fun getResource(name: String) = if (allowed(name.removeSuffix(".class").replace('/', '.'))) real.getResource(name) else null
-        private fun allowed(n: String) = (ALLOWED.any { n.startsWith(it) } && HIDDEN.none { n.startsWith(it) })
+        private fun allowed(n: String) = HIDDEN.none { n.startsWith(it) } && (ALLOWED.any { n.startsWith(it) } || (official && officialAllowed(n)))
     }
 
     private companion object {
+        const val UI = "com.superiorsoftllc.agenthq.ui."
+        /** LOADER-1: an OFFICIAL jar also sees `ui.shell` and the classes directly in the `ui` package (ShellContext, ChatPanelState, the kit composables). `ui.net`, `ui.pair`, `ui.sound`, `ui.voice` stay hidden. */
+        fun officialAllowed(n: String) = n.startsWith(UI + "shell.") || (n.startsWith(UI) && '.' !in n.removePrefix(UI))
         val ALLOWED = listOf("java.", "javax.", "kotlin.", "kotlinx.", "androidx.compose", "org.jetbrains.compose", "org.jetbrains.skiko", "com.superiorsoftllc.agenthq.plugin.api.", "com.superiorsoftllc.agenthq.ui.plugin.",
             "com.superiorsoftllc.agenthq.ui.model.", "com.superiorsoftllc.agenthq.ui.protocol.", "com.superiorsoftllc.agenthq.ui.block.")
         val HIDDEN = listOf("com.superiorsoftllc.agenthq.ui.plugin.DaemonLink", "com.superiorsoftllc.agenthq.ui.plugin.PluginClassLoader", "com.superiorsoftllc.agenthq.ui.plugin.config.DaemonNodeConfigApi", "com.superiorsoftllc.agenthq.ui.plugin.JvmEndpointAccess")

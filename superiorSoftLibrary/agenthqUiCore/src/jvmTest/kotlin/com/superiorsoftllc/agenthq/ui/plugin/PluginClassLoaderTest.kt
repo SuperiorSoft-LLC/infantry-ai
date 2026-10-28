@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.ui.plugin
 
+import com.superiorsoftllc.agenthq.plugin.api.Tier
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -26,6 +27,21 @@ class PluginClassLoaderTest {
                 "com.superiorsoftllc.agenthq.ui.plugin.DaemonLink",
                 "com.superiorsoftllc.agenthq.ui.net.Controller",
             )) assertFailsWith<ClassNotFoundException>("$name must stay hidden from a community module") { loader.loadClass(name) }
+        }
+    }
+
+    @Test
+    fun `an official loader also sees ui shell and the ui root kit, a community loader does not, and ui net stays hidden from both`() {
+        val dir = Files.createTempDirectory("plugin-loader").toFile()
+        val jar = File(dir, "empty.jar")
+        val shell = listOf("com.superiorsoftllc.agenthq.ui.shell.ShellContext", "com.superiorsoftllc.agenthq.ui.ChatPanelState")
+        PluginClassLoader(dir, jar, javaClass.classLoader, Tier.OFFICIAL).use { loader ->
+            for (name in shell) assertEquals(name, loader.loadClass(name).name, "$name must be visible to an official jar")
+            assertFailsWith<ClassNotFoundException> { loader.loadClass("com.superiorsoftllc.agenthq.ui.net.Controller") }
+            assertFailsWith<ClassNotFoundException> { loader.loadClass("com.superiorsoftllc.agenthq.ui.plugin.DaemonLink") }
+        }
+        PluginClassLoader(dir, jar, javaClass.classLoader, Tier.COMMUNITY).use { loader ->
+            for (name in shell) assertFailsWith<ClassNotFoundException>(name) { loader.loadClass(name) }
         }
     }
 }
