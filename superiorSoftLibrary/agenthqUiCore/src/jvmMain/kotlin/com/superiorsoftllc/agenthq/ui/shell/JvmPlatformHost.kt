@@ -51,9 +51,15 @@ class JvmPlatformHost(
     override val supportsBlur: Boolean get() = System.getProperty("agenthq.ui.blur")?.trim()?.lowercase() != "off"
 
     /** MODAL-BLUR: UI prefs live in the per-user Java preferences store (the registry on Windows), never in the daemon's state dir. */
-    private val prefs get() = java.util.prefs.Preferences.userRoot().node("com/superiorsoftllc/agenthq/ui")
-    override fun uiPref(key: String): String? = runCatching { prefs.get(key, null) }.getOrNull()
-    override fun saveUiPref(key: String, value: String) { runCatching { prefs.put(key, value); prefs.flush() } }
+    private val prefs get() = java.util.prefs.Preferences.userRoot().node("com/superiorsoftllc/agenthq/ui").also { preferencesReads.incrementAndGet() }
+    override fun uiPref(key: String): String? {
+        uiPrefsOverride?.let { return it[key] }
+        return runCatching { prefs.get(key, null) }.getOrNull()
+    }
+    override fun saveUiPref(key: String, value: String) {
+        uiPrefsOverride?.let { it[key] = value; return }
+        runCatching { prefs.put(key, value); prefs.flush() }
+    }
     override fun readTextFile(path: String): String? = runCatching { File(path).readText() }.getOrNull()
 
     /** CLIPATH-1: the native file dialog, when there is a display (never on a headless JVM). */
@@ -199,5 +205,16 @@ class JvmPlatformHost(
         const val PORT_FILE = "daemon.port"
     }
 }
+
+/**
+ * SHOT-PREFS (3e4eb7ed): when set, every [JvmPlatformHost] reads and writes its UI prefs in this map and never touches
+ * java.util.prefs (the registry on Windows, shared with the live app). The tab-shot renders pin it so a shot never
+ * depends on what the owner last toggled in the running app.
+ */
+@Volatile
+var uiPrefsOverride: MutableMap<String, String>? = null
+
+/** SHOT-PREFS: how many times a [JvmPlatformHost] opened the java.util.prefs store (the shot guard test reads it). */
+val preferencesReads = java.util.concurrent.atomic.AtomicInteger()
 
 actual fun defaultPlatformHost(): PlatformHost = JvmPlatformHost()

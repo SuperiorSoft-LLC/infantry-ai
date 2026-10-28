@@ -62,6 +62,18 @@ import javax.imageio.ImageIO
 import kotlin.system.exitProcess
 
 /**
+ * SHOT-PREFS (3e4eb7ed): the UI prefs every shot draws with, in memory, never the java.util.prefs store (the registry
+ * on Windows) that the live app writes. blurBehindDialogs=off matches the committed baselines (rendered with
+ * -Dagenthq.ui.blur=off), and materialTheme=INFANTRY;dark is the theme they were rendered with (the default RED;dark
+ * differs on every shot); every other pref is unset, so the shots draw its default.
+ */
+val SHOT_UI_PREFS: Map<String, String> = mapOf(BLUR_PREF_KEY to "off", THEME_PREF_KEY to "INFANTRY;dark")
+
+fun pinShotUiPrefs() {
+    com.superiorsoftllc.agenthq.ui.shell.uiPrefsOverride = SHOT_UI_PREFS.toMutableMap()
+}
+
+/**
  * PLUGINS-1 dev tool: the whole window against an in-process stub daemon (temp state), one PNG per tab of every tab
  * strip, so a change to how tabs are built can be compared shot by shot, then Settings > Plugins. Args: output folder
  * (default build/tab-shots), then `demo-lock` to load under the demo lock.
@@ -72,6 +84,7 @@ import kotlin.system.exitProcess
  */
 @OptIn(ExperimentalTestApi::class)
 fun main(args: Array<String>) {
+    pinShotUiPrefs()
     val out = File(args.firstOrNull() ?: "build/tab-shots").apply { mkdirs() }
     val dir = Files.createTempDirectory("agenthq-tab-shots").toFile()
     val root = File(dir, "plugins")
