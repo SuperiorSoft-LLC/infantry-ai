@@ -87,10 +87,36 @@ object RemoteAccess {
     }
 
     /** The token the daemon runs with: the environment's, else (remote on) the stored/generated one, else none. */
-    fun resolveToken(dir: File, getenv: (String) -> String? = InfantryEnv::get): String? {
-        AccessPolicy.tokenFromEnvironment(getenv)?.let { return it }
+    fun resolveToken(
+        dir: File,
+        getenv: (String) -> String? = InfantryEnv::get,
+        isolated: Boolean = credentialsIsolated(),
+    ): String? {
+        if (!isolated) AccessPolicy.tokenFromEnvironment(getenv)?.let { return it }
         return if (load(dir).remote) ensureToken(dir) else null
     }
+
+    /**
+     * SEC (ticket 6d635c2f): set (as a system property, by `AppDaemonProfile`) for an exported app's bundled daemon. The
+     * process environment is the OWNER's (the app was launched from the owner's shell or Infantry), so its
+     * `AGENTHQ_TOKEN` / `AGENTHQ_TOKEN_FILE` (and `INFANTRY_*` aliases) are the owner credential: under this setting the
+     * daemon and its in-process client ignore them (the token comes from the app's own state dir only), and every
+     * spawned agent gets them blanked ([inheritedCredentialScrub]).
+     */
+    const val ISOLATED_CREDENTIALS_SETTING = "AGENTHQ_ISOLATED_CREDENTIALS"
+
+    fun credentialsIsolated(setting: (String) -> String? = { agentHqSetting(it) }): Boolean =
+        setting(ISOLATED_CREDENTIALS_SETTING)?.trim().equals("true", ignoreCase = true)
+
+    /** Every environment name a credential is read from: `AGENTHQ_TOKEN`, `AGENTHQ_TOKEN_FILE` and their `INFANTRY_*` aliases. */
+    val CREDENTIAL_ENV: List<String> = listOf(AccessPolicy.TOKEN_ENV, AccessPolicy.TOKEN_FILE_ENV)
+        .flatMap { listOfNotNull(it, InfantryEnv.aliasOf(it)) }
+
+    /**
+     * The child-env overrides that blank every inherited credential name (a spawned process inherits the parent's
+     * environment; a blank value reads as unset everywhere a token is resolved). Merged UNDER the daemon's own token.
+     */
+    fun inheritedCredentialScrub(): Map<String, String> = CREDENTIAL_ENV.associateWith { "" }
 
     /** The port from the file; the environment (`AGENTHQ_PORT`) is consulted by the caller first. */
     fun filePort(dir: File): Int? = load(dir).port
@@ -99,8 +125,8 @@ object RemoteAccess {
      * The token a client on THIS machine should present when the environment names none: the stored token, and
      * only while remote access is on. Null otherwise, so a default install sends nothing, as before.
      */
-    fun clientToken(getenv: (String) -> String? = InfantryEnv::get): String? {
-        AccessPolicy.tokenFromEnvironment(getenv)?.let { return it }
+    fun clientToken(getenv: (String) -> String? = InfantryEnv::get, isolated: Boolean = credentialsIsolated()): String? {
+        if (!isolated) AccessPolicy.tokenFromEnvironment(getenv)?.let { return it }
         return runCatching {
             val dir = stateDir { getenv(it) ?: agentHqSetting(it) }
             if (load(dir).remote) storedToken(dir) else null

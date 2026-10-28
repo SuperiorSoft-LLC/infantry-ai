@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.daemon.RemoteAccess
 import com.superiorsoftllc.agenthq.daemon.StateDirLock
 import com.superiorsoftllc.agenthq.mvp.ProjectStore
 import com.superiorsoftllc.agenthq.mvp.SqlProjectPersistence
@@ -56,6 +57,32 @@ class AppDaemonTest {
             assertFalse(File(home, ".agenthq").exists())
             // The full build carries the bundled daemon's launcher.
             assertNotNull(DaemonLaunchers.find())
+        } finally {
+            home.deleteRecursively(); apps.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `an app daemon started with AGENTHQ_TOKEN in the parent env neither uses nor forwards it`() {
+        val home = Files.createTempDirectory("sec-home").toFile()
+        val apps = Files.createTempDirectory("sec-apps").toFile()
+        try {
+            val app = File(apps, "com.example.sec").apply {
+                mkdirs()
+                File(this, "app.json").writeText("""{ "appId": "com.example.sec", "daemon": { "mode": "bundle" } }""")
+            }.let { ShellApp.resolve(it, home.path) }
+            val props = AppDaemonProfile.properties(app)
+            val isolated = RemoteAccess.credentialsIsolated { props[it] }
+            assertTrue(isolated)
+            val ownerEnv = mapOf("AGENTHQ_TOKEN" to "owner-secret", "INFANTRY_TOKEN" to "owner-secret")
+            val dir = app.stateDir.apply { mkdirs() }
+            assertEquals(null, RemoteAccess.resolveToken(dir, { ownerEnv[it] }, isolated))
+            assertEquals(null, RemoteAccess.clientToken({ ownerEnv[it] ?: props[it] }, isolated))
+            // Its agents get every inherited credential name blanked.
+            val scrub = RemoteAccess.inheritedCredentialScrub()
+            for (name in listOf("AGENTHQ_TOKEN", "AGENTHQ_TOKEN_FILE", "INFANTRY_TOKEN", "INFANTRY_TOKEN_FILE")) assertEquals("", scrub[name])
+            // The Infantry install (not isolated) still honours the environment token.
+            assertEquals("owner-secret", RemoteAccess.resolveToken(dir, { ownerEnv[it] }, isolated = false))
         } finally {
             home.deleteRecursively(); apps.deleteRecursively()
         }

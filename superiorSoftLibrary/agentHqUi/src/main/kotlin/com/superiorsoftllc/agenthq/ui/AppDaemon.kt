@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
 import com.superiorsoftllc.agenthq.daemon.AgentHqBin
+import com.superiorsoftllc.agenthq.daemon.RemoteAccess
 import com.superiorsoftllc.agenthq.mvp.ProjectStore
 import com.superiorsoftllc.agenthq.mvp.SqlProjectPersistence
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
@@ -37,6 +38,8 @@ object AppDaemonProfile {
             "AGENTHQ_PORT" to PORT,
             // Sessions are told this daemon's own address, never an AGENTHQ_URL naming the owner's daemon.
             AgentHqBin.OWN_URL_ONLY_SETTING to "true",
+            // SEC 6d635c2f: the inherited AGENTHQ_TOKEN(_FILE) is the owner's credential; the app never uses or forwards it.
+            RemoteAccess.ISOLATED_CREDENTIALS_SETTING to "true",
         )
     }
 
