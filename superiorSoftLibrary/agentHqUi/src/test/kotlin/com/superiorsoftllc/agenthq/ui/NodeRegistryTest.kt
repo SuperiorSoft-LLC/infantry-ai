@@ -153,10 +153,10 @@ class NodeRegistryTest {
         val config = NodeRegistry.host(TabFactory(coreAndGit), "infantry.shell.config")!!
         assertTrue(config.locked)
         assertEquals(
-            listOf("settings", "plugins", "modules", "registry", "secrets", "pair", "about", "updates", "serverUpdate", "logs").map { "infantry.shell.config.$it" },
+            listOf("settings", "limits", "roles", "voice", "incomingSound", "questions", "plugins", "modules", "registry", "secrets", "pair", "about", "updates", "serverUpdate", "logs").map { "infantry.shell.config.$it" },
             config.children.map { it.id },
         )
-        assertEquals(listOf(false) + List(9) { true }, config.children.map { it.locked })
+        assertEquals(List(6) { false } + List(9) { true }, config.children.map { it.locked })
         assertFalse(NodeRegistry.host(TabFactory(coreAndGit), "infantry.shell.config.settings")!!.locked)
     }
     /** S4d: a filled slot and the nodes under it are the filling module's (Infantry_AppUi), not the core tree's. */
@@ -168,7 +168,7 @@ class NodeRegistryTest {
             val row = rows.single { it.id == slot }
             assertEquals(module to ChildSource.FILL, row.module to row.source, slot)
         }
-        assertEquals(setOf("Infantry_AppUi", "Infantry_Roles", "Infantry_Board", "Infantry_Alerts", "Infantry_Processes"), f.fillModules.values.toSet()) // RUNTIME-14/15/16/18: Roles fills the roles window, Board the board, Alerts sound + voice, Processes the status bar's badge
+        assertEquals(setOf("Infantry_AppUi", "Infantry_Roles", "Infantry_Board", "Infantry_Alerts", "Infantry_Processes", "Infantry_Usage", "Infantry_Attention"), f.fillModules.values.toSet()) // RUNTIME-19: Usage and Attention fill their config sections; RUNTIME-14/15/16/18: Roles fills the roles window, Board the board, Alerts sound + voice, Processes the status bar's badge
         // A node under a fill: the title bar's lead row is the app UI's too.
         val lead = rows.single { it.id == "infantry.shell.header.lead" }
         assertEquals("Infantry_AppUi" to ChildSource.FILL, lead.module to lead.source)

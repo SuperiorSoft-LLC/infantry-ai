@@ -152,9 +152,9 @@ class CoreShellTreeTest {
             "infantry.shell.drawer", "infantry.shell.footer.processesBadge",
             "infantry.shell.assistant", "infantry.shell.board", "infantry.shell.diff",
             "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions",
-            "infantry.shell.config.settings", "infantry.shell.roles",
+            "infantry.shell.config.settings",
             "infantry.shell.config.limits", "infantry.shell.config.roles", "infantry.shell.config.voice",
-            "infantry.shell.config.incomingSound", "infantry.shell.config.questions",
+            "infantry.shell.config.incomingSound", "infantry.shell.config.questions", "infantry.shell.roles",
         )
         assertEquals(slots, CoreShell.slots)
         assertEquals(slots, CoreShell.root.all().filterIsInstance<PlaceholderBlock>().filter { it.default == null }.map { it.id })
