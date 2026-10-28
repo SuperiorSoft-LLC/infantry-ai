@@ -76,9 +76,10 @@ class ShellFillsTest {
         val core = CoreModules.all.map { it.manifest.name }
         val found = CompiledModules.all.map { it.manifest.name }
         assertEquals(core, found.take(core.size))
-        // RUNTIME-4..9: then the official modules this test class path carries, through their jars' ServiceLoader entries.
+        // RUNTIME-4..11: then the official modules this test class path carries, through their jars' ServiceLoader entries.
         assertEquals(
-            setOf("Infantry_Agents", "Infantry_Settings", "Infantry_Git", "Infantry_Run", "Infantry_Notes", "Infantry_Changes", "Infantry_Prompts", "Infantry_Skills"),
+            setOf("Infantry_Agents", "Infantry_Settings", "Infantry_Git", "Infantry_Run", "Infantry_Notes", "Infantry_Changes", "Infantry_Prompts", "Infantry_Skills",
+                "Infantry_Stats", "Infantry_Usage", "Infantry_Epics", "Infantry_Review"),
             found.drop(core.size).toSet(),
         )
     }

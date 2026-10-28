@@ -1,5 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.review
 
+import com.superiorsoftllc.agenthq.ui.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -20,10 +21,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.model.AppState
-import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.agenthq.ui.shell.ReviewContext
 
+/** The nodes converged pods queue for review ([AppState.reviewQueue]); "Open agent" goes through [review] (RUNTIME-11). */
 @Composable
-internal fun ReviewPane(state: AppState, controller: Controller) {
+internal fun ReviewPane(state: AppState, review: ReviewContext) {
     val queue = state.reviewQueue
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         if (queue.isEmpty()) {
@@ -43,7 +45,7 @@ internal fun ReviewPane(state: AppState, controller: Controller) {
                 e.workingDir?.let { Text(it, color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp) }
                 Row {
                     e.sessionId?.takeIf { it in state.agents }?.let { sid ->
-                        TextButton(onClick = { controller.select(sid) }) { Text("Open agent") }
+                        TextButton(onClick = { review.openAgent(sid) }) { Text("Open agent") }
                     }
                 }
             }

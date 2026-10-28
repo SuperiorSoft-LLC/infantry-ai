@@ -62,6 +62,9 @@ kotlin {
             // RUNTIME-10: and the official Infantry_Stats and Infantry_Usage (their tabs).
             implementation(project(":plugins:official:Infantry_Stats"))
             implementation(project(":plugins:official:Infantry_Usage"))
+            // RUNTIME-11: and the official Infantry_Epics and Infantry_Review (the Epics and Review tabs).
+            implementation(project(":plugins:official:Infantry_Epics"))
+            implementation(project(":plugins:official:Infantry_Review"))
         }
         jvmMain.dependencies {
             implementation(libs.ktor.client.cio)
