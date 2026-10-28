@@ -28,6 +28,16 @@ class SecretFieldSet(val name: String, val field: String, val value: String) {
 @Serializable
 class SecretFieldName(val name: String, val field: String)
 
+/** PLUGIN-ENDPOINTS-2 (1.138.0) `plugin_secret_get`: one field of the secret `plugin.<module>`. */
+@Serializable
+class PluginSecretGet(val module: String, val field: String)
+
+/** The direct answer to [PluginSecretGet]; [value] null = not set. Never pushed, never logged. */
+@Serializable
+class PluginSecret(val module: String, val field: String, val value: String?) {
+    override fun toString(): String = "PluginSecret(module=$module, field=$field)"
+}
+
 @Serializable
 class SecretRow(val name: String, val label: String, val set: Boolean, val tail: String, val importable: Boolean, val overriddenByEnv: Boolean)
 
@@ -90,6 +100,7 @@ class KeystoreHandler(
             Envelope.SECRET_DELETE -> change(envelope.type) {
                 if (!keystore.clear(user(name(envelope)))) throw IllegalArgumentException("no such secret")
             }
+            Envelope.PLUGIN_SECRET_GET -> return pluginSecret(envelope)
             else -> return null
         }
         if (reply.type == Envelope.SECRET_STATE && envelope.type != Envelope.SECRET_STATUS) push(reply)
@@ -111,6 +122,30 @@ class KeystoreHandler(
             },
             locked = demoLock(),
         )
+    }
+
+    /**
+     * PLUGIN-ENDPOINTS-2 (D3): the value of one field of `plugin.<module>`, for the desktop host's EndpointAccess of that module.
+     * FrameGate already holds it to the owner connection and refuses it under the demo lock; refused here too under the lock.
+     */
+    private fun pluginSecret(envelope: Envelope): Envelope {
+        val frame = envelope.type
+        if (demoLock()) return Envelope(Envelope.ERROR, "$frame refused: secrets are locked under the demo lock")
+        return try {
+            val req = json.decodeFromString(PluginSecretGet.serializer(), envelope.data)
+            Keystore.checkField(req.field)
+            require(!req.field.uppercase().startsWith("AGENTHQ_")) { "AGENTHQ_* fields are never handed to a plugin" }
+            val name = pluginSecretName(req.module)
+            Keystore.checkName(name)
+            val value = keystore.field(name, req.field)
+            Envelope(Envelope.PLUGIN_SECRET, json.encodeToString(PluginSecret.serializer(), PluginSecret(req.module, req.field, value)))
+        } catch (e: SerializationException) {
+            Envelope(Envelope.ERROR, "$frame refused: malformed request")
+        } catch (e: IllegalArgumentException) {
+            Envelope(Envelope.ERROR, "$frame refused: ${e.message ?: "invalid request"}")
+        } catch (e: Exception) {
+            Envelope(Envelope.ERROR, "$frame failed: ${e::class.simpleName}")
+        }
     }
 
     private fun name(envelope: Envelope) = json.decodeFromString(SecretName.serializer(), envelope.data).name
@@ -140,6 +175,9 @@ class KeystoreHandler(
     }
 
     companion object {
+        /** PLUGIN-ENDPOINTS-2: the keystore name holding a module's endpoint credentials (names are lowercase). */
+        fun pluginSecretName(module: String): String = "plugin." + module.lowercase()
+
         val DEFAULT = listOf(KnownSecret(Keystore.UPDATE_TOKEN, "Update token", "AGENTHQ_UPDATE_TOKEN"))
 
         /**

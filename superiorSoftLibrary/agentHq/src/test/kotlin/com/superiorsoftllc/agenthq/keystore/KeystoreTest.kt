@@ -294,4 +294,16 @@ class KeystoreTest {
         assertEquals("G", token(null, null, "G"))
         assertNull(token(null, null, null))
     }
+
+    @Test
+    fun `plugin_secret_get answers the field of plugin dot module, never pushed`() {
+        val ks = Keystore(dir(), env = { null }, vault = null)
+        val pushed = mutableListOf<Envelope>()
+        val handler = KeystoreHandler(ks, push = { pushed += it })
+        ks.setField("plugin.acme_echo", "apiKey", secret)
+        val reply = handler.answer(Envelope(Envelope.PLUGIN_SECRET_GET, """{"module":"Acme_Echo","field":"apiKey"}"""))!!
+        assertEquals(Envelope.PLUGIN_SECRET, reply.type)
+        assertTrue(reply.data.contains(secret))
+        assertTrue(pushed.isEmpty(), "a plugin secret is a direct answer only")
+    }
 }

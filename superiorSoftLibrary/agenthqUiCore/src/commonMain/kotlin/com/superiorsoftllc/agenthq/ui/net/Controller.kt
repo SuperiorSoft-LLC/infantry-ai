@@ -87,6 +87,9 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlin.time.Clock
 
 /** Shown (and returned as a refusal) when the connected daemon predates the project git frames (contract 1.36.0). */
@@ -184,6 +187,7 @@ class Controller(
                 _state.update { reduce(it, env, Clock.System.now().toEpochMilliseconds()) }
                 sendQueuedAtRest(before, _state.value)
                 answerImageUpload(env)
+                answerPluginSecret(env)
                 if (env.type == Envelope.SPOKEN) {
                     runCatching { json.decodeFromString(com.superiorsoftllc.agenthq.ui.voice.SpokenNotice.serializer(), env.data) }
                         .getOrNull()?.let { _spoken.tryEmit(it) }
@@ -643,6 +647,40 @@ class Controller(
     suspend fun deleteSecretField(name: String, field: String): CommandResult = keyValueFrame(WireRequests.secretFieldDelete(name, field))
 
     suspend fun deleteSecret(name: String): CommandResult = keyValueFrame(WireRequests.secretDelete(name))
+
+    /**
+     * PLUGIN-ENDPOINTS-2 (1.138.0, D3): field [field] of the secret `plugin.<module>`, for [module]'s EndpointAccess only (it adds
+     * the value to the request; the plugin never sees it). Success with null = not set; failure = the refusal (no owner connection,
+     * demo lock, older daemon). The value is not kept here or in [state].
+     */
+    suspend fun pluginSecret(module: String, field: String): Result<String?> {
+        if (!contractAtLeast(_state.value.connection.contract, 1, 138)) return Result.failure(IllegalStateException("this daemon has no plugin secrets (needs contract 1.138.0)"))
+        return pluginSecretLock.withLock {
+            val requestId = "plugin-secret-${++pluginSecretRequests}"
+            val answer = CompletableDeferred<Envelope>()
+            pendingPluginSecret = requestId to answer
+            try {
+                if (!client.send(WireRequests.pluginSecretGet(module, field, requestId))) return@withLock Result.failure(IllegalStateException("not connected to the daemon"))
+                val env = withTimeoutOrNull(PLUGIN_SECRET_TIMEOUT_MS) { answer.await() }
+                    ?: return@withLock Result.failure(IllegalStateException("the daemon did not answer"))
+                if (env.type != Envelope.PLUGIN_SECRET) return@withLock Result.failure(IllegalStateException(env.data.take(200)))
+                Result.success(runCatching { json.parseToJsonElement(env.data).jsonObject["value"]?.jsonPrimitive?.contentOrNull }.getOrNull())
+            } finally {
+                pendingPluginSecret = null
+            }
+        }
+    }
+
+    private val pluginSecretLock = Mutex()
+    private var pluginSecretRequests = 0
+    @kotlin.concurrent.Volatile
+    private var pendingPluginSecret: Pair<String, CompletableDeferred<Envelope>>? = null
+
+    /** Settle the pending [pluginSecret] with the daemon's direct answer (or refusal) to it, matched by requestId. */
+    private fun answerPluginSecret(env: Envelope) {
+        val (id, answer) = pendingPluginSecret ?: return
+        if (env.requestId == id) answer.complete(env)
+    }
 
     private suspend fun keyValueFrame(frame: Envelope): CommandResult {
         if (!supportsKeyValueSecrets()) return report(CommandResult.Refused("this daemon has no key/value secrets (needs contract 1.135.0)"))
@@ -1715,6 +1753,7 @@ class Controller(
         const val START_FOLLOW_MS = 15_000L
         /** IMG-4: how long an upload waits for the daemon's `image` answer. */
         const val IMAGE_UPLOAD_TIMEOUT_MS = 30_000L
+        const val PLUGIN_SECRET_TIMEOUT_MS = 10_000L
 
         /** The exact reason `resumable` is false, in words, for the disabled control's tooltip. */
         fun resumeBlocker(s: SessionRecord): String = when {

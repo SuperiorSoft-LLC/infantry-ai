@@ -633,6 +633,12 @@ data class Envelope(
         const val SECRET_FIELD_SET = "secret_field_set"
         const val SECRET_FIELD_DELETE = "secret_field_delete"
         const val SECRET_DELETE = "secret_delete"
+        // PLUGIN-ENDPOINTS-2 (contract 1.138.0): `plugin_secret_get` ({module, field}) reads ONE field of the secret
+        // `plugin.<module lowercased>` for the desktop host's EndpointAccess of that module. Owner connection only, refused under
+        // the demo lock (FrameGate), fields `AGENTHQ_*` refused. Answered directly (never pushed) by `plugin_secret`
+        // ({module, field, value}; value null = not set). The value is never logged, stored or handed to the plugin.
+        const val PLUGIN_SECRET_GET = "plugin_secret_get"
+        const val PLUGIN_SECRET = "plugin_secret"
         // P10-K6 (contract 1.54.0): the project's append-only issues log. `issue_open`
         // ({projectId, sessionId?, summary, location, ticketId?}), `issue_attempt` ({projectId, sessionId?, summary,
         // outcome?, location?, issue?}) and `issue_fix` ({projectId, sessionId?, summary, issue?}) are answered by an

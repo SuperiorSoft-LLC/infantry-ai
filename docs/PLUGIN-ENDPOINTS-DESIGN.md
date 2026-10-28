@@ -126,3 +126,6 @@ community jars (allows `plugin.api`, `ui.plugin` except DaemonLink/loader intern
 Limit: `DaemonLink.window` is still a process-wide holder (internal; hidden from plugin jars by the loader filter), not per-window. The in-process JVM limit
 (reflection, owner.token on disk, AGENTHQ_TOKEN) is NOT closed. `auth` is declared and validated; the credential (D3) is not sent yet.
 Demo lock: `demoLock.allowEndpoints` + core tier required.
+
+## Implemented in PLUGIN-ENDPOINTS-2 (779d5845): D3 and (6)
+`plugin_secret_get {module, field}` -> `plugin_secret {module, field, value}` (contract 1.138.0): owner-only (`FrameGate.OWNER_ONLY`), refused under the demo lock, `AGENTHQ_*` fields refused. The secret name is `plugin.<module lowercased>` (keystore names are lowercase). `JvmEndpointAccess` fetches the field(s) its `auth` names through `Controller.pluginSecret` (set on `DaemonLink.window.pluginSecret` by the window), caches them in its own closure for the session and sets the header itself (`bearer`, `header`, `basic` = fields `user` + `password`). The daemon cannot check that the asking module is the caller's own (the client names it); the host only ever asks for the module it built the access for. A changed key is picked up on restart. plugins/GUIDE.md "Your own backend in an hour"; example `plugins/community/Acme_Echo` + `plugins/examples/echo-backend/echo.py`.

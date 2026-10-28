@@ -374,7 +374,8 @@ object EventVocabulary {
     // **1.135.0 (SECRETS-2, ticket-e5d1b57f) is ADDITIVE + BEHAVIOURAL**: key/value secrets: frames `secret_field_set`, `secret_field_delete`, `secret_delete`; `secret_state` entries/locked; `CommandSpec.secrets` and `run_start` secrets inject a secret's fields as environment variables, scrubbed from the run's output. See CONTRACT.md.
     // **1.136.0 (SEC-FIX-1, ticket-61e8f4ac) is BEHAVIOURAL**: under AGENTHQ_DEMO_LOCK every client frame not on the read-only allowlist (FrameGate.DEMO_LOCK_ALLOWED) is refused, a bare text prompt included; command_save/delete, secret_set/clear/import and run_start/stop/attach/resize/input need the owner credential (owner.token, X-AgentHQ-Owner header or agenthq.owner.<b64> subprotocol); run_input limits and pty size clamp (limits.run.*). See CONTRACT.md.
     // **1.137.0 (TICKET-FILES, ticket-55476f3c) is ADDITIVE**: `ticket_files` (TicketFilesQuery) -> `ticket_files_report` (capped text): the files a ticket changed, the tickets a path glob was changed by, the files of its related tickets, a backfill from git. See CONTRACT.md.
-    const val VERSION = "1.137.0"
+    // **1.138.0 (PLUGIN-ENDPOINTS-2, ticket-779d5845) is ADDITIVE**: `plugin_secret_get` ({module, field}) -> `plugin_secret` ({module, field, value}): one field of the secret `plugin.<module>` for that module's endpoint credential. Owner-only, refused under the demo lock, `AGENTHQ_*` fields refused. See CONTRACT.md.
+    const val VERSION = "1.138.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA

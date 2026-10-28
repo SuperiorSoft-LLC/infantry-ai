@@ -186,6 +186,10 @@ data class Envelope(
         const val SECRET_FIELD_SET = "secret_field_set"
         const val SECRET_FIELD_DELETE = "secret_field_delete"
         const val SECRET_DELETE = "secret_delete"
+        // Contract 1.138.0 (PLUGIN-ENDPOINTS-2): `plugin_secret_get` ({module, field}, owner-only, off under the demo lock) is
+        // answered by `plugin_secret` ({module, field, value}); only a module's EndpointAccess asks, and keeps the value to itself.
+        const val PLUGIN_SECRET_GET = "plugin_secret_get"
+        const val PLUGIN_SECRET = "plugin_secret"
 
         // Contract 1.77.0 (PROMPT-1): a harness asks the owner mid-run. `prompt_request` (daemon -> every client,
         // [PromptRequestView], envelope sessionId = the asking session) opens a card; `prompt_response` (client ->
@@ -2123,6 +2127,13 @@ object WireRequests {
 
     fun secretFieldDelete(name: String, field: String): Envelope =
         Envelope(Envelope.SECRET_FIELD_DELETE, JsonObject(mapOf("name" to JsonPrimitive(name), "field" to JsonPrimitive(field))).toString())
+
+    /** Contract 1.138.0 (PLUGIN-ENDPOINTS-2): one field of `plugin.<module>`, answered by `plugin_secret` with [requestId]. */
+    fun pluginSecretGet(module: String, field: String, requestId: String): Envelope = Envelope(
+        Envelope.PLUGIN_SECRET_GET,
+        JsonObject(mapOf("module" to JsonPrimitive(module), "field" to JsonPrimitive(field))).toString(),
+        requestId = requestId,
+    )
 
     fun secretDelete(name: String): Envelope = Envelope(Envelope.SECRET_DELETE, JsonObject(mapOf("name" to JsonPrimitive(name))).toString())
 
