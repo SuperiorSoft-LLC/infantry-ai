@@ -45,7 +45,8 @@ object CoreShell {
      */
     val slots: List<String> = listOf(
         "infantry.shell.header", "infantry.shell.left", "infantry.shell.center", "infantry.shell.right",
-        "infantry.shell.drawer", "infantry.shell.footer",
+        // RUNTIME-18: the status bar is the shell's own; only its processes badge is a slot (Infantry_Processes).
+        "infantry.shell.drawer", PROCESSES_BADGE_SLOT,
         "infantry.shell.assistant", "infantry.shell.board", "infantry.shell.diff",
         "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions",
         "infantry.shell.config.settings", "infantry.shell.roles",
@@ -87,7 +88,8 @@ object CoreShell {
                                             slot("infantry.shell.drawer", Place(show = Show.Compact)),
                                         ),
                                     ).asPlaceholder(),
-                                    slot("infantry.shell.footer"),
+                                    // RUNTIME-18: the status bar is the shell's (connection, build, cog), not a slot.
+                                    CoreStatusBar,
                                 ),
                             ).asPlaceholder(),
                             // Outside the replaceable frame, so a frame replace cannot remove the locked way into Configuration.

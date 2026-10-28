@@ -28,7 +28,7 @@ class CoreShellTreeTest {
      * RUNTIME-14/15: the compiled-in modules plus the official Infantry_Roles and Infantry_Board (their jars on desktop),
      * which fill infantry.shell.roles and infantry.shell.board.
      */
-    private val withRoles by lazy { TabFactory(CoreModules.all + InfantryRoles + InfantryBoard + com.superiorsoftllc.agenthq.plugins.official.alerts.InfantryAlerts) }
+    private val withRoles by lazy { TabFactory(CoreModules.all + InfantryRoles + InfantryBoard + com.superiorsoftllc.agenthq.plugins.official.alerts.InfantryAlerts + com.superiorsoftllc.agenthq.plugins.official.processes.InfantryProcesses) }
 
     private fun Block.walk(depth: Int = 0): List<String> = listOf("  ".repeat(depth) + id) + children.flatMap { it.walk(depth + 1) }
 
@@ -146,7 +146,7 @@ class CoreShellTreeTest {
         // S4: the empty slots, in tree order; each empty in the shell, filled by Infantry_AppUi, nothing left empty.
         val slots = listOf(
             "infantry.shell.header", "infantry.shell.left", "infantry.shell.center", "infantry.shell.right",
-            "infantry.shell.drawer", "infantry.shell.footer",
+            "infantry.shell.drawer", "infantry.shell.footer.processesBadge",
             "infantry.shell.assistant", "infantry.shell.board", "infantry.shell.diff",
             "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions",
             "infantry.shell.config.settings", "infantry.shell.roles",

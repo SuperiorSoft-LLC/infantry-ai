@@ -22,7 +22,8 @@ plugins/
                           Infantry_Triggers, the Triggers tab, and Infantry_Attention, the right-hand Attention tab;
                           Infantry_Roles, the Roles tab and the roles window it fills;
                           Infantry_Board, the scrum board overlay it fills and its 14 board.* block types;
-                          Infantry_Alerts, the incoming-comms sound and spoken alerts it fills)
+                          Infantry_Alerts, the incoming-comms sound and spoken alerts it fills;
+                          Infantry_Processes, the status bar's processes badge it fills)
   community/<Vendor_Module>/  modules added by dropping a folder here (desktop and daemon only)
 ```
 

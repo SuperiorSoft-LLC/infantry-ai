@@ -24,7 +24,7 @@ const val CONFIG_ENTRY_TAG = "shell-config-entry"
 
 /**
  * S4c: the core's way into Configuration (its trust half: plugins, secrets, devices, about) when no module fills the
- * title bar ([HEADER_SLOT]); the bare shell has no header and no footer, so no cog. Ctrl+, opens it too. With the app UI
+ * title bar ([HEADER_SLOT]); the bare shell has no header (since RUNTIME-18 it has the shell's own status bar and its cog). Ctrl+, opens it too. With the app UI
  * the header is filled and this draws nothing, so the window is unchanged. Locked ([CoreShell.locked]): no module hides it.
  */
 object ShellConfigEntry : Block("infantry.shell.configEntry", "infantry.shell.configEntry") {

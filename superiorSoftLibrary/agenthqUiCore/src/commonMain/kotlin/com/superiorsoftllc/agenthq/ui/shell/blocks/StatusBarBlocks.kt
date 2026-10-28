@@ -29,12 +29,13 @@ import com.superiorsoftllc.agenthq.ui.AhqIcons
 import com.superiorsoftllc.agenthq.ui.ConfigTab
 import com.superiorsoftllc.agenthq.ui.FooterBuild
 import com.superiorsoftllc.agenthq.ui.Palette
-import com.superiorsoftllc.agenthq.ui.ProcessesBadge
+import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.SERVER_MISMATCH_TAG
 import com.superiorsoftllc.agenthq.ui.ago
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.Place
+import com.superiorsoftllc.agenthq.ui.block.layout.PlaceholderBlock
 import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
 import com.superiorsoftllc.agenthq.ui.block.layout.SpacerBlock
 import com.superiorsoftllc.agenthq.ui.model.ConnState
@@ -45,6 +46,8 @@ import kotlin.time.Clock
 /**
  * BLOCKS-LAYOUT L2 (docs/BLOCKS-LAYOUT-DESIGN.md section 3): the status bar as a `statusBar` layout block. Its frame is
  * the divider plus the 24dp Panel row; the bar's items are ONE ordered array of children, placed by `place.weight`.
+ * RUNTIME-18 (F2): the bar is the shell's own (core draws its connection status and config cog), no longer a slot the app
+ * UI fills; its processes badge is an empty slot ([PROCESSES_BADGE_SLOT]) the official Infantry_Processes fills.
  */
 class StatusBarBlock(id: String, children: List<Block> = emptyList(), place: Place = Place()) :
     Block("statusBar", id, place, children) {
@@ -60,16 +63,21 @@ class StatusBarBlock(id: String, children: List<Block> = emptyList(), place: Pla
     override fun withChildren(children: List<Block>) = StatusBarBlock(id, children, place)
 }
 
-private const val FOOTER = "infantry.shell.footer"
+/** RUNTIME-18: the status bar's node id (plugin API since L5; the shell's own since RUNTIME-18). */
+const val FOOTER_NODE = "infantry.shell.footer"
+
+/** RUNTIME-18: the status bar's processes-badge slot, empty until the official Infantry_Processes fills it. */
+const val PROCESSES_BADGE_SLOT = "$FOOTER_NODE.processesBadge"
 
 /** "● daemon X contract Y" / "● state: detail". */
-object StatusConnStatus : Block("connStatus", "$FOOTER.connStatus", Place(weight = 1f, weightFill = false)) {
+object StatusConnStatus : Block("connStatus", "$FOOTER_NODE.connStatus", Place(weight = 1f, weightFill = false)) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val c = appShell.state.connection
+        val shell = LocalShell.current
+        val c = shell.state.connection
         val color = if (c.isLive) Palette.Ok else if (c.state == ConnState.RECONNECTING || c.state == ConnState.CONNECTING) Palette.Accent else Palette.Danger
         // A compact window has no width for the sentence: it would be chopped mid-word ("● dae"), so show the dot (live) or the bare state.
-        val compact = appShell.state.panels.compactWindow
+        val compact = shell.state.panels.compactWindow
         Text(
             when {
                 compact -> if (c.isLive) "●" else "● ${c.state.name.lowercase()}"
@@ -82,18 +90,18 @@ object StatusConnStatus : Block("connStatus", "$FOOTER.connStatus", Place(weight
 }
 
 /** Owns the 1 s ticker, so only this text recomposes each second. */
-object StatusLastFrame : Block("lastFrame", "$FOOTER.lastFrame") {
+object StatusLastFrame : Block("lastFrame", "$FOOTER_NODE.lastFrame") {
     @Composable
     override fun Render(scope: BlockScope) {
         var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
         LaunchedEffect(Unit) { while (true) { delay(1000); now = Clock.System.now().toEpochMilliseconds() } }
-        appShell.state.connection.lastFrameAt?.let {
+        LocalShell.current.state.connection.lastFrameAt?.let {
             Text("   last frame ${ago(it, now)} ago", color = Palette.Muted, fontSize = 11.sp, modifier = scope.modifier)
         }
     }
 }
 
-object StatusContractWarning : Block("contractWarning", "$FOOTER.contractWarning") {
+object StatusContractWarning : Block("contractWarning", "$FOOTER_NODE.contractWarning") {
     @Composable
     override fun Render(scope: BlockScope) {
         val link = (LocalShellContext.current ?: return).link
@@ -102,7 +110,7 @@ object StatusContractWarning : Block("contractWarning", "$FOOTER.contractWarning
 }
 
 /** SERVER-UPDATE-4: client and server differ by more than a patch; the full text is in Configuration > Server. */
-object StatusVersionMismatch : Block("versionMismatch", "$FOOTER.versionMismatch") {
+object StatusVersionMismatch : Block("versionMismatch", "$FOOTER_NODE.versionMismatch") {
     @Composable
     override fun Render(scope: BlockScope) {
         val ctx = LocalShellContext.current ?: return
@@ -112,17 +120,14 @@ object StatusVersionMismatch : Block("versionMismatch", "$FOOTER.versionMismatch
     }
 }
 
-/** ROGUE-1's processes badge (rogue background processes / low memory; hidden while nothing is wrong). */
-object StatusProcessesBadge : Block("processesBadge", "$FOOTER.processesBadge") {
-    @Composable
-    override fun Render(scope: BlockScope) {
-        val s = appShell
-        ProcessesBadge(s.state, s.controller)
-    }
-}
+/**
+ * ROGUE-1's processes badge (rogue background processes / low memory): RUNTIME-18, an empty slot the official
+ * Infantry_Processes fills (on `ShellContext.processes`). No jar, no badge.
+ */
+val StatusProcessesBadge: Block = PlaceholderBlock(PROCESSES_BADGE_SLOT, null)
 
 /** The shortcut hint only where there is room for it (a phone has no keyboard shortcuts and no width to spare). */
-object StatusShortcutHint : Block("shortcutHint", "$FOOTER.shortcutHint", Place(weight = 1f, weightFill = false)) {
+object StatusShortcutHint : Block("shortcutHint", "$FOOTER_NODE.shortcutHint", Place(weight = 1f, weightFill = false)) {
     @Composable
     override fun Render(scope: BlockScope) {
         if (LocalShellContext.current?.layout?.compact == false) {
@@ -132,7 +137,7 @@ object StatusShortcutHint : Block("shortcutHint", "$FOOTER.shortcutHint", Place(
 }
 
 /** BUILD-STAMP-1: which build this is; a click opens Configuration > About. */
-object StatusBuildStamp : Block("buildStamp", "$FOOTER.buildStamp") {
+object StatusBuildStamp : Block("buildStamp", "$FOOTER_NODE.buildStamp") {
     @Composable
     override fun Render(scope: BlockScope) {
         val ctx = LocalShellContext.current ?: return
@@ -147,7 +152,7 @@ object StatusBuildStamp : Block("buildStamp", "$FOOTER.buildStamp") {
 }
 
 /** The footer cog, bottom-right. It opens the configuration modal (flags). */
-object StatusConfigCog : Block("configCog", "$FOOTER.configCog") {
+object StatusConfigCog : Block("configCog", "$FOOTER_NODE.configCog") {
     @Composable
     override fun Render(scope: BlockScope) {
         val window = (LocalShellContext.current ?: return).window
@@ -162,10 +167,10 @@ object StatusConfigCog : Block("configCog", "$FOOTER.configCog") {
 
 /** The status bar's items, left to right. */
 val CoreStatusBar = StatusBarBlock(
-    FOOTER,
+    FOOTER_NODE,
     listOf(
         StatusConnStatus, StatusLastFrame, StatusContractWarning, StatusVersionMismatch, StatusProcessesBadge,
-        SpacerBlock("$FOOTER.gap", place = Place(weight = 1f)),
+        SpacerBlock("$FOOTER_NODE.gap", place = Place(weight = 1f)),
         StatusShortcutHint, StatusBuildStamp, StatusConfigCog,
     ),
 )

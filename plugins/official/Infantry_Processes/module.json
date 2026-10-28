@@ -1,0 +1,15 @@
+{
+  "name": "Infantry_Processes",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "author": "Infantry AI",
+  "description": "The status bar's processes badge (free RAM, rogue processes) and its panel.",
+  "tier": "official",
+  "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.official.processes.ProcessesPlugin",
+  "jar": "build/libs/Infantry_Processes.jar",
+  "buildOrder": 200,
+  "fills": [
+    "infantry.shell.footer.processesBadge"
+  ]
+}

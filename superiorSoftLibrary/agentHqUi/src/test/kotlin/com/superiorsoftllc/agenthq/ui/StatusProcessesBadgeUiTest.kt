@@ -8,6 +8,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.agenthq.plugins.official.processes.PROCESSES_BADGE_TAG
+import com.superiorsoftllc.agenthq.plugins.official.processes.PROCESSES_PANEL_TAG
 import com.superiorsoftllc.agenthq.ui.protocol.Envelope
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

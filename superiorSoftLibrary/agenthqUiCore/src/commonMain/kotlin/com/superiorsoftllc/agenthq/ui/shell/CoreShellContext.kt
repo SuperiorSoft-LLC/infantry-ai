@@ -82,6 +82,7 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
         override val commsSound get() = ui.flags.commsSound
         override val voice get() = ui.flags.voice
     }
+    override val processes: ProcessesContext = CoreProcesses(state, shell.controller)
 
     override val board: BoardContext = object : BoardContext {
         override val open: Boolean get() = ui.showBoard
@@ -132,6 +133,15 @@ class CoreLink(private val state: AppState) : LinkContext {
     override val live: Boolean get() = state.connection.isLive
     override val contract: String? get() = state.connection.contract
     override val daemonBuild: String? get() = state.connection.daemonBuild
+}
+
+/** RUNTIME-18: [state]'s process report and [controller]'s process-watch requests, for the official Infantry_Processes. */
+class CoreProcesses(private val state: AppState, private val controller: com.superiorsoftllc.agenthq.ui.net.Controller) : ProcessesContext {
+    override val report: com.superiorsoftllc.agenthq.ui.protocol.ProcessReport? get() = state.processReport
+    override val autoReap: Boolean? get() = state.processAutoReap
+    override suspend fun refresh(): CommandResult = controller.refreshProcesses()
+    override suspend fun reap(pid: Long?): CommandResult = controller.reapProcesses(pid)
+    override suspend fun setAutoReap(on: Boolean): CommandResult = controller.setProcessAutoReap(on)
 }
 
 /** S2: [state]'s session, for a pane drawn outside a shell. */

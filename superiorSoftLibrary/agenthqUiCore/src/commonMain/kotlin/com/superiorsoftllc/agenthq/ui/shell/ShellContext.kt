@@ -94,6 +94,35 @@ interface ShellContext {
     val attention: AttentionContext get() = NoAttention
     /** RUNTIME-16 (additive): what the official Infantry_Alerts (incoming-comms sound, spoken alerts) listens to. */
     val alerts: AlertsContext get() = NoAlerts
+    /** RUNTIME-18 (additive): the daemon's process watch behind the official Infantry_Processes status-bar badge. */
+    val processes: ProcessesContext get() = NoProcesses
+}
+
+/**
+ * RUNTIME-18 (F2): the daemon's process watch (ROGUE-1, contract 1.120.0) behind the official Infantry_Processes module,
+ * which fills the status bar's `infantry.shell.footer.processesBadge` slot. The values are the composition's snapshot;
+ * whether the daemon has the watch at all is [LinkContext.contractAtLeast].
+ */
+interface ProcessesContext {
+    /** The daemon's last process report (memory, tracked / rogue / not-ours processes); null until it sends one. */
+    val report: com.superiorsoftllc.agenthq.ui.protocol.ProcessReport?
+    /** The daemon's `processes.autoReap` setting as last answered; null until it answers (the report's value applies). */
+    val autoReap: Boolean?
+    /** Asks for a fresh report (silent; refused by a daemon without the watch). */
+    suspend fun refresh(): CommandResult
+    /** Reaps rogue process [pid], or with null every rogue one; the daemon refuses anything its sessions did not start. */
+    suspend fun reap(pid: Long?): CommandResult
+    /** Sets the daemon's `processes.autoReap`. */
+    suspend fun setAutoReap(on: Boolean): CommandResult
+}
+
+/** No process watch: no report, every request refused (a shell without a window, and fakes). */
+object NoProcesses : ProcessesContext {
+    override val report: com.superiorsoftllc.agenthq.ui.protocol.ProcessReport? = null
+    override val autoReap: Boolean? = null
+    override suspend fun refresh(): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun reap(pid: Long?): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun setAutoReap(on: Boolean): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
 }
 
 /**

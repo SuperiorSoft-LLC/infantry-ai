@@ -4,7 +4,6 @@ import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
-import com.superiorsoftllc.agenthq.ui.shell.blocks.CoreStatusBar
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellAssistant
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellCenter
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellCompactDrawer
@@ -17,12 +16,14 @@ import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellRightPanel
 
 /** S4: the trees Infantry_AppUi draws in the shell's empty slots (`CoreShell.slots`), in slot order. */
 private val fills: List<Block> = listOf(
-    ShellHeader, ShellLeftPanel, ShellCenter, ShellRightPanel, ShellCompactDrawer, CoreStatusBar,
+    ShellHeader, ShellLeftPanel, ShellCenter, ShellRightPanel, ShellCompactDrawer,
     ShellAssistant, ShellDiff, ShellQuestionPill,
     ShellConfigSettings,
     // RUNTIME-14: infantry.shell.roles (the roles window) is filled by the official Infantry_Roles itself.
     // RUNTIME-15: infantry.shell.board (the board overlay) is filled by the official Infantry_Board itself.
     // RUNTIME-17: infantry.shell.toast is no slot any more: the shell draws its toasts itself (ShellToast in CoreShell).
+    // RUNTIME-18: infantry.shell.footer is no slot any more: the shell draws its status bar itself (CoreStatusBar in
+    // CoreShell); its processes badge (infantry.shell.footer.processesBadge) is filled by the official Infantry_Processes.
     // RUNTIME-16: infantry.shell.sound and infantry.shell.voice are filled by the official Infantry_Alerts itself.
 )
 
@@ -33,7 +34,7 @@ private val fills: List<Block> = listOf(
 val InfantryAppUi = AgentHqModule(
     ModuleManifest(
         name = "Infantry_AppUi", version = "1.0.0", author = "Infantry AI",
-        description = "The app's UI in the shell's empty slots: title bar, side panels, chat, status bar, and overlays.",
+        description = "The app's UI in the shell's empty slots: title bar, side panels, chat, and overlays.",
         fills = fills.map { com.superiorsoftllc.agenthq.plugin.api.FillDeclaration(it.id) },
     ),
     fills = fills.associateBy { it.id },
