@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.usage
+
+import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -33,7 +35,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.LimitsView
-import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.agenthq.ui.shell.UsageContext
 import com.superiorsoftllc.agenthq.ui.protocol.LimitWindow
 import com.superiorsoftllc.agenthq.ui.protocol.ProviderLimits
 import com.superiorsoftllc.agenthq.ui.protocol.ProviderState
@@ -49,7 +51,7 @@ import kotlin.time.Clock
  * reported nothing is not shown as zero tokens. The operator budget is the daemon's, and never called quota.
  */
 @Composable
-fun UsagePane(state: AppState, selected: AgentView?, controller: Controller? = null) {
+fun UsagePane(state: AppState, selected: AgentView?, controller: UsageContext? = null) {
     val now = Clock.System.now().toEpochMilliseconds()
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -214,13 +216,6 @@ private fun ProviderLimit(p: ProviderState, now: Long) {
             p.observedAt?.let { Spacer(Modifier.width(8.dp)); Text("observed ${ago(it, now)} ago", color = Palette.Muted, fontSize = 10.sp) }
         }
     }
-}
-
-/** 1234 -> "1.2k"; tokens read at a glance. */
-fun compact(n: Long): String = when {
-    n >= 1_000_000 -> "${(n / 100_000) / 10.0}M"
-    n >= 1_000 -> "${(n / 100) / 10.0}k"
-    else -> n.toString()
 }
 
 private fun money(v: Double): String {

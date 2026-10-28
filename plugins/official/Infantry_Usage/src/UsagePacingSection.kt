@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.usage
+
+import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -29,7 +31,8 @@ import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.LimitsView
 import com.superiorsoftllc.agenthq.ui.model.PacingView
-import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.agenthq.ui.shell.UsageContext
+import androidx.compose.runtime.rememberUpdatedState
 import com.superiorsoftllc.agenthq.ui.protocol.MeterUsage
 import com.superiorsoftllc.agenthq.ui.protocol.PacingRule
 import com.superiorsoftllc.agenthq.ui.protocol.UsageSet
@@ -49,17 +52,18 @@ private sealed interface PacingEdit {
  * edit the rule, type a percent for a meter with no readable usage, and override a meter's allowance for a while.
  */
 @Composable
-internal fun PacingSection(state: AppState, now: Long, controller: Controller?) {
+internal fun PacingSection(state: AppState, now: Long, controller: UsageContext?) {
     val report = state.usageReport
     var edit by remember { mutableStateOf<PacingEdit?>(null) }
     val canEdit = controller != null && state.connection.isLive && report != null
     // Running workers change with every start and exit: re-read while the pane is open (the daemon re-reads a plan's
     // live usage at most once per 5 minutes, so this costs no extra provider call).
+    val live by rememberUpdatedState(state.connection.isLive)
     if (controller != null && report != null) {
         LaunchedEffect(controller) {
             while (true) {
                 delay(REFRESH_MS)
-                if (controller.state.value.connection.isLive) controller.refreshUsage()
+                if (live) controller.refreshUsage()
             }
         }
     }
@@ -139,7 +143,7 @@ private fun MeterCard(m: MeterUsage, rule: PacingRule, now: Long, onManual: (() 
 
 /** One dialog for the three edits, on the shared modal wrapper ([AhqAlertDialog]). */
 @Composable
-private fun PacingDialog(edit: PacingEdit, rule: PacingRule, ceiling: Int?, now: Long, controller: Controller, onDone: () -> Unit) {
+private fun PacingDialog(edit: PacingEdit, rule: PacingRule, ceiling: Int?, now: Long, controller: UsageContext, onDone: () -> Unit) {
     val scope = rememberCoroutineScope()
     var first by remember(edit) {
         mutableStateOf(

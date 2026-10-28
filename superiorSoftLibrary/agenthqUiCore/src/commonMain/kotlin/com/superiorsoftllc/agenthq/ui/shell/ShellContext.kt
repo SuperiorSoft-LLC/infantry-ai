@@ -78,6 +78,31 @@ interface ShellContext {
     val prompts: PromptsContext get() = NoPrompts
     /** RUNTIME-9: the saved skills (contract 1.45.0) and their requests, for the official Infantry_Skills tab. */
     val skills: SkillsContext get() = NoSkills
+    /** RUNTIME-10 (additive): plan limits, the pacing allowance and per-session statistics, for the Usage and Stats tabs. */
+    val usage: UsageContext get() = NoUsage
+}
+
+/**
+ * RUNTIME-10: the daemon requests behind the official Usage and Stats tabs (contracts 1.59.0 / 1.92.0 / 1.119.0 /
+ * 1.121.0). What they show comes from the window's state ([com.superiorsoftllc.agenthq.ui.plugin.TabContext.state]).
+ */
+interface UsageContext {
+    /** Asks for the plan-limit meters again (and the pacing allowance where the daemon has it). */
+    suspend fun refreshLimits(): CommandResult
+    /** Asks for the plan meters and pacing allowance again; [force] skips the daemon's re-read throttle. */
+    suspend fun refreshUsage(force: Boolean = false): CommandResult
+    /** A manual percent, an override or the rule; the answer is the fresh `usage_report`. */
+    suspend fun usageSet(set: com.superiorsoftllc.agenthq.ui.protocol.UsageSet): CommandResult
+    /** Asks for [sessionId]'s statistics; the answer is a `session_stats` frame the window keeps. */
+    suspend fun sessionStats(sessionId: String): CommandResult
+}
+
+/** No usage requests: every one refused. */
+object NoUsage : UsageContext {
+    override suspend fun refreshLimits(): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun refreshUsage(force: Boolean): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun usageSet(set: com.superiorsoftllc.agenthq.ui.protocol.UsageSet): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun sessionStats(sessionId: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
 }
 
 /** The daemon link: whether it is up and which contract the daemon announced. */
