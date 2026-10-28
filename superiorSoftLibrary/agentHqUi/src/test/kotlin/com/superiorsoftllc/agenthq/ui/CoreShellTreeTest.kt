@@ -26,6 +26,8 @@ class CoreShellTreeTest {
             "  infantry.shell.images",
             "    infantry.shell.dock",
             "      infantry.shell.frame",
+            // S4c: the core's Configuration entry, drawn only while no module fills the header.
+            "        infantry.shell.configEntry",
             "        $header",
             "          $header.lead",
         ) + listOf("toggleLeft", "brand", "project", "agents", "overflow")
@@ -134,7 +136,7 @@ class CoreShellTreeTest {
             setOf(
                 "infantry.shell.window", "infantry.shell.images", "infantry.shell.dock",
                 "infantry.shell.connect", "infantry.shell.servers", "infantry.shell.switchError",
-                "infantry.shell.serverUpdate", "infantry.shell.config",
+                "infantry.shell.serverUpdate", "infantry.shell.config", "infantry.shell.configEntry",
                 // S3: the trust half of Configuration (plugins, secrets, pairing, updates, about, logs).
                 "infantry.shell.config.plugins", "infantry.shell.config.modules", "infantry.shell.config.secrets",
                 // P1 (f60f4d97): where plugins are registered (step 2: where a registered child is turned off).

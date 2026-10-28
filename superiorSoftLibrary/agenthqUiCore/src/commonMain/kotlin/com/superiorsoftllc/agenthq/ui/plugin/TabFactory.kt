@@ -335,6 +335,8 @@ class TabFactory(
     private val slotFills: Map<String, Block>
     /** S4: the core tree with the modules' fills in, before any override or injection (the core's empty tree when none fills). */
     val baseRoot: Block by lazy { CoreShell.root.filled(slotFills) }
+    /** S4c: whether a loaded module fills the empty slot [slot] ([CoreShell.slots]). */
+    fun fills(slot: String): Boolean = slot in slotFills
     /** S4: the tab trees the loaded modules draw, unresolved, in load order. */
     val tabTreeRoots: List<Block>
     /** S4 (P1 f60f4d97's map): the tab (its `TabProvider` id) that draws each tree of [tabTreeRoots], by tree id. */

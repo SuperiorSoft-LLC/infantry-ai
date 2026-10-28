@@ -420,3 +420,10 @@ Secrets / Devices / About (Plugins too where modules load at run time), never an
 | `bindingSummary` | core Profiles.kt | kit: the chat (ChatSurface.kt, core) uses it |
 | `ReportFlagChip` | core BoardSidebar.kt | **still a bridge**: ChatSurface.kt draws it; closes with the ChatSurface move (S4d) |
 | `PromptBox`, `SpawnRoleRow` | core ChatSurface.kt | **still bridges**: ChatPanel (app) composes them; close with the ChatSurface move (S4d) |
+
+## Core Config entry point (S4c)
+
+The bare shell has no header and no footer, so no cog: `ShellConfigEntry` (core, shell/blocks/ShellConfigEntry.kt) is
+a locked frame child that draws a "Configuration" button while no module fills `infantry.shell.header`
+(`TabFactory.fills(slot)`), and nothing once one does, so the app window is unchanged. Ctrl+, still opens it too. The
+empty-shell shots now show the button (shell-empty-1400) and are opened through it (shell-empty-config-1400).

@@ -533,13 +533,23 @@ fun ConfigLogsSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
 
 /** Ticket cb1ceb93: the title, after the same drawn cog as the footer button that opens this dialog. */
 @Composable
-private fun ConfigHeader() {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        androidx.compose.material3.Icon(
-            AhqIcons.Cog, contentDescription = null, tint = Palette.Accent,
-            modifier = Modifier.size(22.dp).testTag(CONFIG_HEADER_ICON_TAG),
-        )
-        Text("Configuration", fontWeight = FontWeight.Bold)
+private fun ConfigHeader() =
+    ConfigCogLabel(Palette.Accent, 22.dp, 10.dp, Modifier.testTag(CONFIG_HEADER_ICON_TAG), fontWeight = FontWeight.Bold)
+
+/** The cog and "Configuration": the dialog's title ([ConfigHeader]) and, S4c, the bare shell's way in (ShellConfigEntry). */
+@Composable
+internal fun ConfigCogLabel(
+    tint: androidx.compose.ui.graphics.Color,
+    iconSize: androidx.compose.ui.unit.Dp,
+    gap: androidx.compose.ui.unit.Dp,
+    iconModifier: Modifier = Modifier,
+    color: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Unspecified,
+    fontSize: androidx.compose.ui.unit.TextUnit = androidx.compose.ui.unit.TextUnit.Unspecified,
+    fontWeight: FontWeight? = null,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(gap)) {
+        androidx.compose.material3.Icon(AhqIcons.Cog, contentDescription = null, tint = tint, modifier = iconModifier.size(iconSize))
+        Text("Configuration", color = color, fontSize = fontSize, fontWeight = fontWeight)
     }
 }
 

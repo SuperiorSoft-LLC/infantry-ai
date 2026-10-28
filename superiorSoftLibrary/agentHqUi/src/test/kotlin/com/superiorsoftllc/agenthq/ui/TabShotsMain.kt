@@ -13,10 +13,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.pressKey
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.performScrollTo
 import com.superiorsoftllc.agenthq.plugin.api.ModuleSetting
 import com.superiorsoftllc.agenthq.plugin.api.ModulesConfig
@@ -30,6 +26,7 @@ import com.superiorsoftllc.agenthq.ui.plugin.MODULE_TOGGLE_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.REGISTRY_CHILD_TAG_PREFIX
 import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.runDesktopComposeUiTest
+import com.superiorsoftllc.agenthq.ui.shell.blocks.CONFIG_ENTRY_TAG
 import com.superiorsoftllc.agenthq.daemon.AgentHqDaemon
 import com.superiorsoftllc.agenthq.mailbox.JsonMailStore
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
@@ -130,9 +127,9 @@ fun main(args: Array<String>) {
             setContent { ChromeApp(controller, TabFactory(emptyList()), port) }
             waitUntil(timeoutMillis = 20_000) { controller.state.value.connection.isLive }
             snap(out, "shell-empty-1400")
-            // S4c: Configuration (Ctrl+, the surface's own shortcut; the footer cog is app UI) as it opens, on Appearance: the frame
-            // and the tab strip are the core's, the settings body is empty (`infantry.shell.config.settings` is an empty slot).
-            onRoot().performKeyInput { keyDown(Key.CtrlLeft); pressKey(Key.Comma); keyUp(Key.CtrlLeft) }
+            // S4c: Configuration through the core's own entry (ShellConfigEntry, drawn while no module fills the header): the
+            // frame and the trust tabs (Secrets / Devices / About) are the core's; the open settings are an empty slot.
+            onNodeWithTag(CONFIG_ENTRY_TAG).performClick()
             waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag(CONFIG_DIALOG_TAG).fetchSemanticsNodes().isNotEmpty() }
             snap(out, "shell-empty-config-1400")
         }

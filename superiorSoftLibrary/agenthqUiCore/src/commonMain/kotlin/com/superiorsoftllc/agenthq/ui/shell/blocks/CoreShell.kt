@@ -30,7 +30,7 @@ object CoreShell {
     val locked: Set<String> = setOf(
         "infantry.shell.window", "infantry.shell.images", "infantry.shell.dock",
         "infantry.shell.connect", "infantry.shell.servers", "infantry.shell.switchError",
-        "infantry.shell.serverUpdate", "infantry.shell.config",
+        "infantry.shell.serverUpdate", "infantry.shell.config", "infantry.shell.configEntry",
     ) + ShellConfigTrust.map { it.id }
 
     /**
@@ -69,7 +69,8 @@ object CoreShell {
                             ColumnBlock(
                                 "infantry.shell.frame", surface = true,
                                 children = listOf(
-                                    slot("infantry.shell.header"),
+                                    ShellConfigEntry,
+                                    slot(HEADER_SLOT),
                                     StackBlock(
                                         "infantry.shell.body", measure = true, place = Place(weight = 1f, size = Size.FillWidth),
                                         children = listOf(
