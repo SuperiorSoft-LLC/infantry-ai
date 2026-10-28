@@ -284,7 +284,11 @@ class ClaudeSessionAdapter(
                 val options = (q["options"] as? JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
                     .map { PromptOption(it.str("label").orEmpty(), it.str("description").orEmpty()) }
                 // Claude's own question UI always offers "Other", so the card does too.
-                val spec = QuestionSpec(text, options, multiSelect = q.str("multiSelect") == "true", allowOther = true)
+                // ASK-TIMER-2: the option Claude labelled "(Recommended)" is what the prompt timer auto-selects.
+                val spec = QuestionSpec(
+                    text, options, multiSelect = q.str("multiSelect") == "true", allowOther = true,
+                    recommended = QuestionSpec.recommendedIn(options),
+                )
                 val answer = asker.askQuestion(session, spec)
                 if (!answer.answered) return deny("The user did not answer the question (or the prompt timed out).")
                 answers[text] = JsonPrimitive((answer.answers + listOfNotNull(answer.otherText)).joinToString(", "))

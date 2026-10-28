@@ -80,6 +80,11 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
             onHarnessInstall = { ids, update -> actionScope.launch { controller.installHarnesses(ids, update) } },
             toolApproval = state.toolApproval,
             onToolApproval = { mode -> actionScope.launch { controller.setToolApproval(mode) } },
+            // ASK-TIMER-2: the prompt timer, under Tool approval (a daemon older than 1.139.0 has none).
+            promptTimer = state.promptTimer,
+            onPromptTimer = if (contractAtLeast(state.connection.contract, com.superiorsoftllc.agenthq.ui.model.PromptTimerSetting.SINCE_MAJOR, com.superiorsoftllc.agenthq.ui.model.PromptTimerSetting.SINCE_MINOR)) {
+                { seconds, onTimeout -> actionScope.launch { controller.setPromptTimer(seconds, onTimeout) } }
+            } else null,
             onBrowse = s.pickFile,
             logs = s.logs,
             updates = s.updates,

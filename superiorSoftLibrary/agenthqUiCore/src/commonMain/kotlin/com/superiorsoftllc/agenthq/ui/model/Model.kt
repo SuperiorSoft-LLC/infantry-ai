@@ -696,6 +696,8 @@ data class AppState(
     val harnessInstallLog: List<String> = emptyList(),
     /** BUG-PERM-1 (1.76.0): the global Tool approval, as the daemon's last `tool_approval` said. Null = not read yet. */
     val toolApproval: com.superiorsoftllc.agenthq.ui.protocol.ToolApprovalInfo? = null,
+    /** ASK-TIMER-2: the daemon's `prompts.timeoutSec` / `prompts.onTimeout`, as its last `settings` frame said. Null = not read yet. */
+    val promptTimer: PromptTimerSetting.Value? = null,
     /** SECRETS-1 (1.100.0): the daemon keystore's last `secret_state` (set / not set and masked tails only). Null = not read yet. */
     val secrets: com.superiorsoftllc.agenthq.ui.protocol.SecretState? = null,
     /**
@@ -1738,7 +1740,8 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
         val withAutoReap = ProcessWatchView.autoReapFromSettingsFrame(env.data)?.let { s.copy(processAutoReap = it) } ?: s
         val withKeepAlive = LifecycleSetting.fromSettingsFrame(env.data)?.let { withAutoReap.copy(keepAliveMinutes = it) } ?: withAutoReap
         val withPortrait = UserPortrait.fromSettingsFrame(env.data)?.let { withKeepAlive.copy(userPortrait = it.base64) } ?: withKeepAlive
-        withPortrait.copy(limitCatalog = LimitsSetting.withSettingsFrame(withPortrait.limitCatalog, env.data))
+        val withTimer = PromptTimerSetting.fromSettingsFrame(env.data, withPortrait.promptTimer)?.let { withPortrait.copy(promptTimer = it) } ?: withPortrait
+        withTimer.copy(limitCatalog = LimitsSetting.withSettingsFrame(withTimer.limitCatalog, env.data))
     }
 
     // No-hard-coded-limits (1.133.0): the whole catalog, replaced by each answer.

@@ -50,7 +50,7 @@ enum class ConfigEntry(val tab: ConfigTab, val title: String, val applies: Strin
     PROGRESS_STALE(ConfigTab.GENERAL, PROGRESS_STALE_TITLE, PROGRESS_STALE_APPLIES_TO, listOf("progress", "stale", "minutes")),
     LIFECYCLE(ConfigTab.GENERAL, LifecycleSetting.TITLE, LifecycleSetting.APPLIES_TO, listOf("keep alive", "idle", "timeout")),
     CLI_LOCATIONS(ConfigTab.AGENTS, CliLocationsSetting.TITLE, CliLocationsSetting.APPLIES_TO, listOf("harness", "install", "path", "cli")),
-    TOOL_APPROVAL(ConfigTab.AGENTS, ToolApprovalSetting.TITLE, ToolApprovalSetting.APPLIES_TO, listOf("permission", "approve", "tools")),
+    TOOL_APPROVAL(ConfigTab.AGENTS, ToolApprovalSetting.TITLE, ToolApprovalSetting.APPLIES_TO, listOf("permission", "approve", "tools", "timer", "timeout", "prompt", "expiry", "indefinite")),
     ROLES(ConfigTab.AGENTS, ROLES_TITLE, ROLES_APPLIES_TO, listOf("role", "provider", "model", "traits")),
     LIMITS(ConfigTab.LIMITS, com.superiorsoftllc.agenthq.ui.model.LimitsSetting.TITLE, com.superiorsoftllc.agenthq.ui.model.LimitsSetting.APPLIES_TO, listOf("limit", "cap", "concurrency", "workers", "spawn", "depth", "timeout", "deadline", "watchdog", "threshold", "cpu", "build")),
     VOICE(ConfigTab.NOTIFICATIONS, VOICE_TITLE, com.superiorsoftllc.agenthq.ui.voice.VOICE_APPLIES_TO, listOf("voice", "speech", "alert", "sound")),

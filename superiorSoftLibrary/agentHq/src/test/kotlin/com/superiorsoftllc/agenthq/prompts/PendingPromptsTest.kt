@@ -113,6 +113,29 @@ class PendingPromptsTest {
     }
 
     @Test
+    fun anExpiredQuestionAutoSelectsItsRecommendedOptionAndIsLogged() = runBlocking {
+        val notices = CopyOnWriteArrayList<String>()
+        val prompts = PendingPrompts(
+            clock = { 1_000L }, newId = { "p" + ids.incrementAndGet() },
+            policyFor = { PromptTimeoutPolicy(50, TimeoutAction.DENY) },
+        ).also { it.sink = { e -> frames += e }; it.notice = { s, text -> notices += "$s: $text" } }
+        val options = listOf(PromptOption("sqlite"), PromptOption("postgres (Recommended)"))
+        // ASK-TIMER-2: Claude marks its recommendation in the label; nobody answers, so the timer picks it.
+        val recommended = QuestionSpec.recommendedIn(options)
+        val answer = withTimeoutOrNull(5_000) { prompts.askQuestion("s1", QuestionSpec("Which db?", options, recommended = recommended)) }
+        assertEquals(Answer(listOf("postgres (Recommended)"), null, answered = true), answer)
+        assertEquals("postgres (Recommended)", requests().single().recommended, "the card names what the timer will pick")
+        assertEquals(PromptResolved("p1", "timeout", "answered"), resolved().single())
+        assertTrue(notices.single().startsWith("s1: auto-selected recommended: postgres (Recommended)"), notices.toString())
+
+        // A recommended approval wins over prompts.onTimeout (deny here).
+        val outcome = withTimeoutOrNull(5_000) { prompts.requestApprovalOutcome("s1", "Bash", "ls", recommended = Decision.ALLOW_SESSION) }
+        assertEquals(ApprovalOutcome(Decision.ALLOW_ONCE, timedOut = true, timeoutSec = 0), outcome, "the timer only ever allows once")
+        assertEquals("allow_once", requests().last().onTimeout)
+        assertTrue(notices.last().startsWith("s1: auto-selected recommended: Allow"), notices.toString())
+    }
+
+    @Test
     fun allowSessionIsRememberedForThatSessionUntilItEnds() = runBlocking {
         val prompts = store()
         val first = async { prompts.requestApproval("s1", "Bash", "ls") }

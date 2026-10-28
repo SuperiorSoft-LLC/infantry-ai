@@ -10,6 +10,7 @@ import com.superiorsoftllc.agenthq.ui.model.CliLocationsSetting
 import com.superiorsoftllc.agenthq.ui.model.ToolApprovalSetting
 import com.superiorsoftllc.agenthq.ui.model.LifecycleSetting
 import com.superiorsoftllc.agenthq.ui.model.LimitsSetting
+import com.superiorsoftllc.agenthq.ui.model.PromptTimerSetting
 import com.superiorsoftllc.agenthq.ui.model.ProcessWatchView
 import com.superiorsoftllc.agenthq.ui.model.UserPortrait
 import kotlinx.serialization.json.JsonPrimitive
@@ -523,6 +524,26 @@ class Controller(
             return report(CommandResult.Refused("this daemon has no session lifecycle setting (needs contract 1.68.0)"))
         }
         return report(send(WireRequests.settingsSet(LifecycleSetting.KEY, JsonPrimitive(minutes))))
+    }
+
+    /**
+     * ASK-TIMER-2: store the prompt timer: [seconds] as `prompts.timeoutSec` (0 = Indefinite) and/or [onTimeout] as
+     * `prompts.onTimeout`. The shown values change only when the daemon answers `settings`.
+     */
+    suspend fun setPromptTimer(seconds: Int? = null, onTimeout: String? = null): CommandResult {
+        if (!contractAtLeast(_state.value.connection.contract, PromptTimerSetting.SINCE_MAJOR, PromptTimerSetting.SINCE_MINOR)) {
+            return report(CommandResult.Refused("this daemon has no prompt timer setting (needs contract 1.139.0)"))
+        }
+        if (seconds != null && seconds !in 0..PromptTimerSetting.MAX_SEC) {
+            return report(CommandResult.Refused("the prompt timer must be 0..${PromptTimerSetting.MAX_SEC} seconds (0 = Indefinite)"))
+        }
+        if (onTimeout != null && onTimeout !in PromptTimerSetting.ON_TIMEOUT_CHOICES) {
+            return report(CommandResult.Refused("on expiry must be one of ${PromptTimerSetting.ON_TIMEOUT_CHOICES.joinToString()}"))
+        }
+        var result: CommandResult = CommandResult.Sent
+        if (seconds != null) result = report(send(WireRequests.settingsSet(PromptTimerSetting.KEY_TIMEOUT, JsonPrimitive(seconds))))
+        if (onTimeout != null) result = report(send(WireRequests.settingsSet(PromptTimerSetting.KEY_ON_TIMEOUT, JsonPrimitive(onTimeout))))
+        return result
     }
 
     /**

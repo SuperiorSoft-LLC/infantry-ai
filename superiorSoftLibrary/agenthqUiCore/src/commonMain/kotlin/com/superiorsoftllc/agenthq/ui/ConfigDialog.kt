@@ -98,6 +98,10 @@ fun ConfigDialog(
     toolApproval: ToolApprovalInfo? = null,
     /** BUG-PERM-1: pick a mode; null hides the section. */
     onToolApproval: ((String) -> Unit)? = null,
+    /** ASK-TIMER-2: the daemon's prompt timer (null = not read yet / an older daemon). */
+    promptTimer: com.superiorsoftllc.agenthq.ui.model.PromptTimerSetting.Value? = null,
+    /** ASK-TIMER-2: store the timer (seconds, 0 = Indefinite) and/or the on-expiry fallback; null = no timer control. */
+    onPromptTimer: ((seconds: Int?, onTimeout: String?) -> Unit)? = null,
     /** PKG-3: the installed app's log folder; null (dev, Android) hides the Logs section. */
     logs: LogsFolder? = null,
     /** UPDATE-1: the installed app's version and "Check for updates"; null (dev, Android) hides the Updates section. */
@@ -184,7 +188,7 @@ fun ConfigDialog(
         harnessInstall, harnessInstallBusy, harnessInstallLog, onHarnessCheck, onHarnessInstall, onBrowse,
         toolApproval, onToolApproval, logs, updates, secrets, secretActions, pair, limits, onLimit, onOpenRoles,
         onSendTestQuestion, testQuestionReady, serverUpdate, serverMismatch, theme, onTheme, about, modules,
-        voicePlugins, present, tab, highlight,
+        voicePlugins, present, tab, highlight, promptTimer = promptTimer, onPromptTimer = onPromptTimer,
     )
     // Ticket cb1ceb93: the scroll cue fades into the dialog's own surface.
     val surface = androidx.compose.material3.AlertDialogDefaults.containerColor
@@ -260,6 +264,9 @@ class ConfigDialogHost internal constructor(
     val present: Set<ConfigEntry>,
     val tab: ConfigTab?,
     val highlight: ConfigEntry?,
+    /** ASK-TIMER-2: the daemon's prompt timer and its save callback (null = no timer control). */
+    val promptTimer: com.superiorsoftllc.agenthq.ui.model.PromptTimerSetting.Value? = null,
+    val onPromptTimer: ((seconds: Int?, onTimeout: String?) -> Unit)? = null,
 ) {
     /** A section shows when its tab is the selected one and this host has it. */
     fun shows(entry: ConfigEntry): Boolean = entry.tab == tab && entry in present
@@ -398,7 +405,12 @@ fun ConfigCliLocationsSection(config: ConfigDialogHost, modifier: Modifier = Mod
 fun ConfigToolApprovalSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
     val onToolApproval = config.onToolApproval ?: return
     if (!config.shows(ConfigEntry.TOOL_APPROVAL)) return
-    FlagSection(ConfigEntry.TOOL_APPROVAL, config.highlight, modifier) { ToolApprovalDropdown(config.toolApproval, onToolApproval) }
+    FlagSection(ConfigEntry.TOOL_APPROVAL, config.highlight, modifier) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            ToolApprovalDropdown(config.toolApproval, onToolApproval)
+            config.onPromptTimer?.let { PromptTimerControl(config.promptTimer, it) }
+        }
+    }
 }
 
 /** ROLE-EDIT-1: the role manager is its own dialog (shared modal). */
@@ -1117,6 +1129,89 @@ private fun ToolApprovalDropdown(value: ToolApprovalInfo?, onPick: (String) -> U
         if (value != null) Text(ToolApprovalSetting.status(value), color = Palette.Muted, fontSize = 11.sp)
     }
 }
+
+/**
+ * ASK-TIMER-2: the prompt timer under Tool approval: a seconds field (0 = Indefinite) with Save, an Indefinite / 120 s
+ * shortcut row, and the on-expiry fallback for an approval with no recommended option. [value] null = not read yet.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PromptTimerControl(
+    value: com.superiorsoftllc.agenthq.ui.model.PromptTimerSetting.Value?,
+    onSave: (seconds: Int?, onTimeout: String?) -> Unit,
+) {
+    val setting = com.superiorsoftllc.agenthq.ui.model.PromptTimerSetting
+    // Re-seeded whenever the daemon reports another value, so a change elsewhere shows here.
+    var text by remember(value?.timeoutSec) { mutableStateOf((value?.timeoutSec ?: setting.SUGGESTED_SEC).toString()) }
+    val typed = setting.parseSeconds(text)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.testTag(PROMPT_TIMER_TAG)) {
+        Text(setting.TITLE, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+        Text(setting.APPLIES_TO, color = Palette.Muted, fontSize = 11.sp)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it.filter(Char::isDigit).take(5) },
+                singleLine = true,
+                enabled = value != null,
+                label = { Text("Seconds (0 = Indefinite)") },
+                isError = typed == null,
+                modifier = Modifier.weight(1f).testTag(PROMPT_TIMER_FIELD_TAG),
+            )
+            TextButton(
+                onClick = { typed?.let { onSave(it, null) } },
+                enabled = value != null && typed != null && typed != value.timeoutSec,
+                modifier = Modifier.testTag(PROMPT_TIMER_SAVE_TAG),
+            ) { Text("Save") }
+            TextButton(
+                onClick = { text = "0"; onSave(0, null) },
+                enabled = value != null && value.timeoutSec != 0,
+                modifier = Modifier.testTag(PROMPT_TIMER_INDEFINITE_TAG),
+            ) { Text("Indefinite") }
+            TextButton(
+                onClick = { text = setting.SUGGESTED_SEC.toString(); onSave(setting.SUGGESTED_SEC, null) },
+                enabled = value != null && value.timeoutSec != setting.SUGGESTED_SEC,
+            ) { Text("${setting.SUGGESTED_SEC} s (suggested)") }
+        }
+        Text(
+            when {
+                value == null -> "Not read from the daemon"
+                value.timeoutSec == null -> "Timer not reported by the daemon"
+                else -> "Now: " + setting.label(value.timeoutSec)
+            },
+            color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(PROMPT_TIMER_STATUS_TAG),
+        )
+        var expanded by remember { mutableStateOf(false) }
+        ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it && value != null }) {
+            OutlinedTextField(
+                value = value?.onTimeout?.let(setting::onTimeoutLabel) ?: "Not read from the daemon",
+                onValueChange = {},
+                readOnly = true,
+                singleLine = true,
+                enabled = value != null,
+                label = { Text("On expiry, when the agent recommended nothing") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).handCursor(overrideDescendants = true).fillMaxWidth().testTag(PROMPT_ON_TIMEOUT_FIELD_TAG),
+            )
+            ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                setting.ON_TIMEOUT_CHOICES.forEach { choice ->
+                    DropdownMenuItem(
+                        text = { Text(setting.onTimeoutLabel(choice)) },
+                        onClick = { expanded = false; if (choice != value?.onTimeout) onSave(null, choice) },
+                        modifier = Modifier.testTag(PROMPT_ON_TIMEOUT_OPTION_TAG_PREFIX + choice),
+                    )
+                }
+            }
+        }
+    }
+}
+
+const val PROMPT_TIMER_TAG = "prompt-timer"
+const val PROMPT_TIMER_FIELD_TAG = "prompt-timer-field"
+const val PROMPT_TIMER_SAVE_TAG = "prompt-timer-save"
+const val PROMPT_TIMER_INDEFINITE_TAG = "prompt-timer-indefinite"
+const val PROMPT_TIMER_STATUS_TAG = "prompt-timer-status"
+const val PROMPT_ON_TIMEOUT_FIELD_TAG = "prompt-on-timeout-field"
+const val PROMPT_ON_TIMEOUT_OPTION_TAG_PREFIX = "prompt-on-timeout-option-"
 
 const val TOOL_APPROVAL_FIELD_TAG = "tool-approval-field"
 const val TOOL_APPROVAL_OPTION_TAG_PREFIX = "tool-approval-option-"

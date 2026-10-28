@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.139.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.140.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -104,6 +104,10 @@ The `ready` frame reports `contract=1.87.0`. No schema change.
   could take another ticket's push (a started ticket's run, another client's edit) as its own answer.
 - The `agenthq` CLI and `mcp serve` send a `requestId` on those requests only to a daemon whose `ready` names
   `contract` >= 1.87.0; against an older daemon (or one naming no contract) they keep matching by type.
+
+### What changed in 1.140.0 (ASK-TIMER-2, ticket-cc73295b) - the timer picks the recommended option
+
+Additive + behavioural; `contract=1.140.0`. **`prompt_request`** gains `recommended`: the option the asker recommends, which the timer auto-selects at `expiresAt` (a question's option label; a tool approval's decision, `allow_once` | `deny`). A tool approval's `onTimeout` is now the recommended decision when there is one, else `prompts.onTimeout`. A question with a `recommended` resolves at expiry as answered with that option (`prompt_resolved` `resolvedBy` `timeout`, `outcome` `answered`); with none it still resolves as no answer. **`prompt_ask`** gains `recommended` (one option's label; any other value is refused). Claude's `AskUserQuestion` option whose label carries `(Recommended)` is that question's `recommended`. An auto-selected expiry leaves the transcript line `[agenthq] auto-selected recommended: <option> (...)`. Every session, ticket starts included, gets the global `prompts.timeoutSec` / `prompts.onTimeout` unless its `new` named an override; the desktop Settings > Tool approval now edits both.
 
 ### What changed in 1.139.0 (ASK-TIMER, ticket-c62e72a9) - prompt timers that never leave a worker waiting
 
