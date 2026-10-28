@@ -18,7 +18,6 @@ import com.superiorsoftllc.agenthq.ui.block.layout.BlockOverride
 import com.superiorsoftllc.agenthq.ui.block.layout.OverrideModes
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.ChildSource
-import com.superiorsoftllc.agenthq.ui.plugin.CORE_SHELL_MODULE
 import com.superiorsoftllc.agenthq.ui.plugin.HostKind
 import com.superiorsoftllc.agenthq.ui.plugin.NodeRegistry
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
@@ -129,8 +128,9 @@ class NodeRegistryTest {
         assertEquals("Acme_Shell.extra", extra.id)
         assertEquals(ChildSource.INJECTION, extra.source)
         assertEquals("Acme_Shell", extra.module)
-        assertEquals(ChildSource.SHELL, settings.children.first().source)
-        assertEquals(CORE_SHELL_MODULE, settings.children.first().module)
+        // S4d: the settings are in the app UI's fill, so their own nodes are its, not the core tree's.
+        assertEquals(ChildSource.FILL, settings.children.first().source)
+        assertEquals("Infantry_AppUi", settings.children.first().module)
     }
 
     @Test fun `the locked dialog and its trust sections are marked locked, the open settings are not`() {
@@ -142,5 +142,19 @@ class NodeRegistryTest {
         )
         assertEquals(listOf(false) + List(9) { true }, config.children.map { it.locked })
         assertFalse(NodeRegistry.host(CoreModules.factory, "infantry.shell.config.settings")!!.locked)
+    }
+    /** S4d: a filled slot and the nodes under it are the filling module's (Infantry_AppUi), not the core tree's. */
+    @Test fun `a filled slot and its nodes name the module that fills it`() {
+        val f = CoreModules.factory
+        assertTrue(f.fillModules.isNotEmpty())
+        val rows = NodeRegistry.of(f).flatMap { it.children }
+        f.fillModules.forEach { (slot, module) ->
+            val row = rows.single { it.id == slot }
+            assertEquals(module to ChildSource.FILL, row.module to row.source, slot)
+        }
+        assertEquals(setOf("Infantry_AppUi"), f.fillModules.values.toSet())
+        // A node under a fill: the status bar's config cog is the app UI's too.
+        val cog = rows.single { it.id == "infantry.shell.footer.configCog" }
+        assertEquals("Infantry_AppUi" to ChildSource.FILL, cog.module to cog.source)
     }
 }
