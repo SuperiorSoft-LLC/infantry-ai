@@ -6,7 +6,7 @@ import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.Tier
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
 import com.superiorsoftllc.agenthq.plugins.official.InfantryAgents
-import com.superiorsoftllc.agenthq.plugins.core.InfantryGit
+import com.superiorsoftllc.agenthq.plugins.official.git.InfantryGit
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals

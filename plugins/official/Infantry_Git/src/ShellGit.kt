@@ -1,18 +1,9 @@
-package com.superiorsoftllc.agenthq.ui.shell.blocks
+package com.superiorsoftllc.agenthq.plugins.official.git
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
-import com.superiorsoftllc.agenthq.ui.GitBaseSection
-import com.superiorsoftllc.agenthq.ui.GitBranchesSection
-import com.superiorsoftllc.agenthq.ui.GitDiffSection
-import com.superiorsoftllc.agenthq.ui.GitDirectorySection
-import com.superiorsoftllc.agenthq.ui.GitHistorySection
-import com.superiorsoftllc.agenthq.ui.GitPaneFrame
-import com.superiorsoftllc.agenthq.ui.GitPaneHost
-import com.superiorsoftllc.agenthq.ui.GitPipelineSection
-import com.superiorsoftllc.agenthq.ui.GitTreeSection
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope

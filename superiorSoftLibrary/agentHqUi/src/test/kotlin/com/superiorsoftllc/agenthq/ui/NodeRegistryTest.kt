@@ -12,7 +12,7 @@ import com.superiorsoftllc.agenthq.plugin.host.AcceptedShellOverride
 import com.superiorsoftllc.agenthq.plugin.host.ModuleState
 import com.superiorsoftllc.agenthq.plugin.host.ModuleStatus
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
-import com.superiorsoftllc.agenthq.plugins.core.InfantryGit
+import com.superiorsoftllc.agenthq.plugins.official.git.InfantryGit
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockInjection
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockOverride
 import com.superiorsoftllc.agenthq.ui.block.layout.OverrideModes
@@ -32,6 +32,9 @@ import kotlin.test.assertTrue
 
 /** P1 (f60f4d97, docs/BLOCKS-LAYOUT-DESIGN.md section 6s): the registry read model over what TabFactory resolved. */
 class NodeRegistryTest {
+    /** RUNTIME-6: the compiled-in core modules plus the official Infantry_Git (a jar on desktop), as the window has them. */
+    private val coreAndGit = CoreModules.all + InfantryGit
+
     private fun tab(id: String, order: Int, title: String) =
         TabProvider(id, TabContainers.CENTER, order, { title }, InfantryGit.tabs.single().icon, "center-tab-$id") { Text(title) }
 
@@ -47,17 +50,17 @@ class NodeRegistryTest {
             "window", "images", "dock", "frame", "header", "header.lead", "header.lead.overflow", "body", "panes", "center",
             "center.chat", "center.newAgent", "right", "right.body", "footer", "assistant", "assistant.body", "board", "board.pane",
             "board.pane.columns", "board.card", "board.card.summary", "diff", "windowLayer", "config", "config.settings", "roles",
-            "roles.form", "git", "run", "notes", "notes.hits", "notes.list", "changes", "changes.files", "changes.branchFiles",
-            "changes.history",
+            "roles.form", "run", "notes", "notes.hits", "notes.list", "changes", "changes.files", "changes.branchFiles",
+            "changes.history", "git", // RUNTIME-6: Infantry_Git's own tree, after Infantry_AppUi's (load order)
         ).map { "$shell.$it" }
-        val hosts = NodeRegistry.of(CoreModules.factory)
+        val hosts = NodeRegistry.of(TabFactory(coreAndGit))
         assertEquals(listOf("$shell.center.chat.tabs", "$shell.right.body.strip") + tree, hosts.map { it.id })
         assertEquals(listOf(HostKind.TABS, HostKind.TABS), hosts.take(2).map { it.kind })
         assertEquals(setOf("$shell.window", "$shell.images", "$shell.dock", "$shell.config"), hosts.filter { it.locked }.map { it.id }.toSet())
     }
 
     @Test fun `a community tab in the centre strip shows its module, version, tier and order, after the core tabs`() {
-        val center = NodeRegistry.host(TabFactory(CoreModules.all + acme), "infantry.shell.center.chat.tabs")
+        val center = NodeRegistry.host(TabFactory(coreAndGit + acme), "infantry.shell.center.chat.tabs")
         assertNotNull(center)
         val row = center.children.single { it.id == "acme.tabs" }
         assertEquals("Acme", row.name)
@@ -78,9 +81,9 @@ class NodeRegistryTest {
     }
 
     @Test fun `a tab declared by a module that did not load is listed as disabled, without an order`() {
-        val statuses = CoreModules.all.map { ModuleStatus(it.manifest.name, it.tier, ModuleState.LOADED, manifest = it.manifest) } +
+        val statuses = coreAndGit.map { ModuleStatus(it.manifest.name, it.tier, ModuleState.LOADED, manifest = it.manifest) } +
             ModuleStatus("Acme_Tabs", Tier.COMMUNITY, ModuleState.DISABLED, "off in modules.json", acme.manifest)
-        val center = NodeRegistry.host(TabFactory(CoreModules.all, statuses = statuses), "infantry.shell.center.chat.tabs")!!
+        val center = NodeRegistry.host(TabFactory(coreAndGit, statuses = statuses), "infantry.shell.center.chat.tabs")!!
         val row = center.children.last()
         assertEquals("acme.tabs", row.id)
         assertFalse(row.enabled)
@@ -97,7 +100,7 @@ class NodeRegistryTest {
             tabs = listOf(tab("acme.git", 900, "Acme Git")),
             tier = Tier.COMMUNITY,
         )
-        val f = TabFactory(CoreModules.all + pref, preferences = listOf(AcceptedPreference("Acme_Git", "infantry.git", "acme.git")))
+        val f = TabFactory(coreAndGit + pref, preferences = listOf(AcceptedPreference("Acme_Git", "infantry.git", "acme.git")))
         val row = NodeRegistry.host(f, "infantry.shell.center.chat.tabs")!!.children.single { it.id == "infantry.git" }
         assertEquals(ChildSource.REPLACE, row.source)
         assertEquals("Acme_Git", row.module)
@@ -114,7 +117,7 @@ class NodeRegistryTest {
             shell = mapOf("frame" to BlockOverride { scope, inner -> inner?.Render(scope) }),
             inject = mapOf("extra" to BlockInjection { Text("extra") }),
         )
-        val f = TabFactory(CoreModules.all + m, shellOverrides = listOf(AcceptedShellOverride("Acme_Shell", decl.nodeId, decl.name, decl.mode)))
+        val f = TabFactory(coreAndGit + m, shellOverrides = listOf(AcceptedShellOverride("Acme_Shell", decl.nodeId, decl.name, decl.mode)))
         assertEquals(emptyList(), f.problems)
         val git = NodeRegistry.host(f, "infantry.shell.center.chat.tabs")!!.children.single { it.id == "infantry.git" }
         assertEquals(ChildSource.WRAP, git.source)
@@ -134,18 +137,18 @@ class NodeRegistryTest {
     }
 
     @Test fun `the locked dialog and its trust sections are marked locked, the open settings are not`() {
-        val config = NodeRegistry.host(CoreModules.factory, "infantry.shell.config")!!
+        val config = NodeRegistry.host(TabFactory(coreAndGit), "infantry.shell.config")!!
         assertTrue(config.locked)
         assertEquals(
             listOf("settings", "plugins", "modules", "registry", "secrets", "pair", "about", "updates", "serverUpdate", "logs").map { "infantry.shell.config.$it" },
             config.children.map { it.id },
         )
         assertEquals(listOf(false) + List(9) { true }, config.children.map { it.locked })
-        assertFalse(NodeRegistry.host(CoreModules.factory, "infantry.shell.config.settings")!!.locked)
+        assertFalse(NodeRegistry.host(TabFactory(coreAndGit), "infantry.shell.config.settings")!!.locked)
     }
     /** S4d: a filled slot and the nodes under it are the filling module's (Infantry_AppUi), not the core tree's. */
     @Test fun `a filled slot and its nodes name the module that fills it`() {
-        val f = CoreModules.factory
+        val f = TabFactory(coreAndGit)
         assertTrue(f.fillModules.isNotEmpty())
         val rows = NodeRegistry.of(f).flatMap { it.children }
         f.fillModules.forEach { (slot, module) ->
