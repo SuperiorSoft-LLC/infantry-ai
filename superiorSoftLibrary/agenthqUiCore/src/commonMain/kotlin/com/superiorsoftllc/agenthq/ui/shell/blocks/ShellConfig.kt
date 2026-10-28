@@ -26,6 +26,7 @@ import com.superiorsoftllc.agenthq.ui.THEME_PREF_KEY
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.PlaceholderBlock
+import com.superiorsoftllc.agenthq.ui.block.layout.asPlaceholder
 import com.superiorsoftllc.agenthq.ui.block.layout.Place
 import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
 import com.superiorsoftllc.agenthq.ui.block.layout.flattened
@@ -163,13 +164,13 @@ val ShellConfigTrust: List<ConfigSectionBlock> = listOf(
 
 /**
  * Section node id -> its entry, for the container's tab filter: `infantry.shell.config.<entry in lowerCamelCase>`. S4c:
- * derived from [ConfigEntry], since the open sections' blocks are the app UI's (Infantry_AppUi's ShellConfigSettings).
+ * derived from [ConfigEntry], since the open sections' blocks are ShellConfigSettings'.
  */
 private val sectionEntries: Map<String, ConfigEntry> = ConfigEntry.entries.associateBy { e ->
     "$CONFIG." + e.name.lowercase().split('_').mapIndexed { i, w -> if (i == 0) w else w.replaceFirstChar { it.uppercase() } }.joinToString("")
 }
 
-/** S4c: the open settings group, an empty slot ([CoreShell.slots]) that Infantry_AppUi fills; the trust sections are the shell's. */
+/** S4c: the open settings group, the shell's own since RUNTIME-26 (replaceable by id); the trust sections are locked. */
 const val CONFIG_SETTINGS = "$CONFIG.settings"
 
 /**
@@ -180,5 +181,5 @@ const val CONFIG_SETTINGS = "$CONFIG.settings"
 val CONFIG_OWNED_SECTION_SLOTS: List<String> = listOf("limits", "roles", "voice", "incomingSound", "questions").map { "$CONFIG.$it" }
 
 val ShellConfig = ConfigBlock(
-    listOf(PlaceholderBlock(CONFIG_SETTINGS, null)) + CONFIG_OWNED_SECTION_SLOTS.map { PlaceholderBlock(it, null) } + ShellConfigTrust,
+    listOf(ShellConfigSettings.asPlaceholder()) + CONFIG_OWNED_SECTION_SLOTS.map { PlaceholderBlock(it, null) } + ShellConfigTrust,
 )

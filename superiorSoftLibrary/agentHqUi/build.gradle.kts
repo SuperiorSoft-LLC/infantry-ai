@@ -231,17 +231,6 @@ val renderTabShotsForDiff = tasks.register<JavaExec>("renderTabShotsForDiff") {
     // No modal blur (as in the UI tests): the blur smears the clocks behind a dialog (RAM free, ages) across the
     // window, where a mask could not hold them. The blur itself is covered by ModalBlurRenderUiTest.
     systemProperty("agenthq.ui.blur", "off")
-    // S6 (drop-in path): -PtabShotsExtra=dropin is the drop-in acceptance. The shell runs WITHOUT the app UI on its class
-    // path (the empty shell), starts from a plugins root with no app UI in it, installs App_UI.ihq through the drop box and
-    // the consent dialog, soft-restarts, and then renders the 32 default shots, which must match the baseline at 0 px. Its
-    // two opt-in shots (the drop box, the consent dialog) go to dropin/ (reference: tab-shots-baseline/dropin/).
-    if (project.findProperty("tabShotsExtra") == "dropin") {
-        val appUi = project(":superiorSoftLibrary:agenthqAppUi")
-        dependsOn(":superiorSoftLibrary:agenthqAppUi:appUiIhq")
-        // RUNTIME-3..20: nor Infantry_Cli, Infantry_Agents, Infantry_Settings, Infantry_Git, Infantry_Run, Infantry_Notes, Infantry_Changes, Infantry_Prompts, Infantry_Skills, Infantry_Stats, Infantry_Usage, Infantry_Epics, Infantry_Review, Infantry_Pods, Infantry_Profiles, Infantry_Triggers, Infantry_Attention, Infantry_Roles, Infantry_Board, Infantry_Alerts, Infantry_Processes, Infantry_Header, Infantry_Chat, Infantry_Approvals, Infantry_Assistant (tests carry them compiled in).
-        classpath = sourceSets["test"].runtimeClasspath.filter { p -> "agenthqAppUi" !in p.invariantSeparatorsPath && "Infantry_Board" !in p.invariantSeparatorsPath && "Infantry_Cli" !in p.invariantSeparatorsPath && "Infantry_Agents" !in p.invariantSeparatorsPath && "Infantry_Settings" !in p.invariantSeparatorsPath && "Infantry_Git" !in p.invariantSeparatorsPath && "Infantry_Run" !in p.invariantSeparatorsPath && "Infantry_Notes" !in p.invariantSeparatorsPath && "Infantry_Changes" !in p.invariantSeparatorsPath && "Infantry_Prompts" !in p.invariantSeparatorsPath && "Infantry_Skills" !in p.invariantSeparatorsPath && "Infantry_Stats" !in p.invariantSeparatorsPath && "Infantry_Usage" !in p.invariantSeparatorsPath && "Infantry_Epics" !in p.invariantSeparatorsPath && "Infantry_Review" !in p.invariantSeparatorsPath && "Infantry_Pods" !in p.invariantSeparatorsPath && "Infantry_Profiles" !in p.invariantSeparatorsPath && "Infantry_Triggers" !in p.invariantSeparatorsPath && "Infantry_Attention" !in p.invariantSeparatorsPath && "Infantry_Roles" !in p.invariantSeparatorsPath && "Infantry_Alerts" !in p.invariantSeparatorsPath && "Infantry_Processes" !in p.invariantSeparatorsPath && "Infantry_Header" !in p.invariantSeparatorsPath && "Infantry_Chat" !in p.invariantSeparatorsPath && "Infantry_Approvals" !in p.invariantSeparatorsPath && "Infantry_Assistant" !in p.invariantSeparatorsPath }
-        systemProperty("agenthq.tabshots.appUiIhq", appUi.layout.buildDirectory.file("ihq/App_UI.ihq").get().asFile.path)
-    }
     outputs.upToDateWhen { false }
     doFirst { out.deleteRecursively() }
 }

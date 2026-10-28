@@ -145,14 +145,16 @@ class CoreShellTreeTest {
         fun Block.all(): List<Block> = listOf(this) + children.flatMap { it.all() }
         val placeholders = listOf("infantry.shell.frame", "infantry.shell.body", "infantry.shell.panes", "infantry.shell.windowLayer")
         assertEquals(placeholders, CoreShell.placeholders)
-        assertEquals(placeholders, CoreShell.root.all().filterIsInstance<PlaceholderBlock>().filter { it.default != null }.map { it.id })
-        // S4: the empty slots, in tree order; each empty in the shell, filled by Infantry_AppUi, nothing left empty.
+        // RUNTIME-26: the side panels, the compact drawer and the open settings group are the shell's own, replaceable by id.
+        assertEquals(
+            (placeholders + listOf("infantry.shell.left", "infantry.shell.right", "infantry.shell.drawer", "infantry.shell.config.settings")).sorted(),
+            CoreShell.root.all().filterIsInstance<PlaceholderBlock>().filter { it.default != null }.map { it.id }.sorted(),
+        )
+        // S4: the empty slots, in tree order; each empty in the shell, filled by an official plugin, nothing left empty.
         val slots = listOf(
-            "infantry.shell.header", "infantry.shell.left", "infantry.shell.center", "infantry.shell.right",
-            "infantry.shell.drawer", "infantry.shell.footer.processesBadge",
+            "infantry.shell.header", "infantry.shell.center", "infantry.shell.footer.processesBadge",
             "infantry.shell.assistant", "infantry.shell.board", "infantry.shell.diff",
             "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions",
-            "infantry.shell.config.settings",
             "infantry.shell.config.limits", "infantry.shell.config.roles", "infantry.shell.config.voice",
             "infantry.shell.config.incomingSound", "infantry.shell.config.questions", "infantry.shell.roles",
         )

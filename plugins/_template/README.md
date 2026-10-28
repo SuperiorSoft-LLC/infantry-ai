@@ -23,7 +23,7 @@ JSON has no comments, so the fields are explained here. Unknown keys are ignored
 |---|---|---|
 | `name` | yes | `Vendor_Module`. Each part starts with a capital letter, and there is no other underscore. It must equal the folder name. |
 | `version` | yes | The module's semantic version, `MAJOR.MINOR.PATCH`. Other modules' `dependencies` ranges are checked against it. |
-| `apiVersion` | no (1) | The plugin API the module is written for. A build with a different API version refuses the module. |
+| `apiVersion` | no (2) | The plugin API the module is written for. A build with a different API version refuses the module. |
 | `author` | community: yes | Who wrote it. It is shown on the module's tabs and in Settings. Without it, a community module is refused. |
 | `license` | community: yes | The module's license id (SPDX, or `NOASSERTION`). Without it, a community module is refused. |
 | `description` | no | One line on what the module does. |

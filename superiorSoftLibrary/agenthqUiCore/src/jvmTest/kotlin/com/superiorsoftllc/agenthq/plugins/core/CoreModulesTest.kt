@@ -56,11 +56,9 @@ class CoreModulesTest {
     }
 
     @Test
-    fun `the generated desktop module list holds the 1 core module, without the official modules`() {
-        assertEquals(
-            listOf("AppUi").map { "Infantry_$it" }, // RUNTIME-15: Infantry_Board is official
-            CoreModules.all.map { it.manifest.name },
-        )
+    fun `the generated desktop module list is empty, with no core and no official module`() {
+        // RUNTIME-26: Infantry_AppUi is retired; the shell boots empty and every module is an official jar.
+        assertEquals(emptyList(), CoreModules.all.map { it.manifest.name })
     }
 
     @Test

@@ -1,7 +1,7 @@
 {
   "name": "Acme_Hello",
   "version": "1.0.0",
-  "apiVersion": 1,
+  "apiVersion": 2,
   "author": "Acme (example)",
   "license": "NOASSERTION",
   "description": "Example community module: a Hello tab, an interceptor on the core Epics tab, a tab in the right panel, an observer of tab.opened, and an override of the core Git tab that the trust rules refuse.",

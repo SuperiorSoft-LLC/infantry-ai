@@ -1,7 +1,7 @@
 {
   "name": "Infantry_Changes",
   "version": "1.0.0",
-  "apiVersion": 1,
+  "apiVersion": 2,
   "author": "Infantry AI",
   "description": "The project's worktrees and their changes.",
   "tier": "official",

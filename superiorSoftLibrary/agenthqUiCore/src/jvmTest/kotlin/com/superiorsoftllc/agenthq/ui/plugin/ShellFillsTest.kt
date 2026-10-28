@@ -64,10 +64,10 @@ class ShellFillsTest {
         assertEquals("Acme_First", f.modules.first { it.fills[header] === f.baseRoot.find(header) }.manifest.name)
     }
 
-    @Test fun `Infantry_AppUi, Infantry_Roles, Infantry_Board, Infantry_Alerts and Infantry_Processes fill every slot and add no tab tree`() {
+    @Test fun `Infantry_Roles, Infantry_Board, Infantry_Alerts and Infantry_Processes fill every slot and add no tab tree`() {
         // RUNTIME-14/15: the official Infantry_Roles and Infantry_Board (their jars on desktop) fill infantry.shell.roles and
         // infantry.shell.board; RUNTIME-16: Infantry_Alerts the sound and voice slots;
-        // RUNTIME-18: Infantry_Processes the status bar's processes badge; Infantry_AppUi every other slot.
+        // RUNTIME-18: Infantry_Processes the status bar's processes badge; RUNTIME-26: no core module is left.
         val f = TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.roles.InfantryRoles + com.superiorsoftllc.agenthq.plugins.official.board.InfantryBoard + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.approvals.InfantryApprovals + com.superiorsoftllc.agenthq.plugins.official.assistant.InfantryAssistant + com.superiorsoftllc.agenthq.plugins.official.changes.InfantryChanges + com.superiorsoftllc.agenthq.plugins.official.usage.InfantryUsage + com.superiorsoftllc.agenthq.plugins.official.attention.InfantryAttention + com.superiorsoftllc.agenthq.plugins.official.alerts.InfantryAlerts + com.superiorsoftllc.agenthq.plugins.official.processes.InfantryProcesses)
         CoreShell.slots.forEach { id -> assertTrue(f.baseRoot.find(id) !is PlaceholderBlock, "$id is still empty") }
         assertEquals("Infantry_Roles", f.fillModules["infantry.shell.roles"])

@@ -22,14 +22,15 @@ class DesktopPluginsTest {
 
     private fun community(name: String, json: String) = File(root, "community/$name").apply { mkdirs() }.resolve("module.json").writeText(json)
 
-    private fun load(vararg env: Pair<String, String>) = DesktopPlugins.load(state, env = env.toMap()::get, property = { null }, print = {})
+    private fun load(vararg env: Pair<String, String>, compiled: List<com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule> = CompiledModules.all) =
+        DesktopPlugins.load(state, env = env.toMap()::get, property = { null }, compiled = compiled, print = {})
 
     private fun manifest(name: String, extra: String = "") =
         """{"name":"$name","version":"1.0.0","author":"Acme","license":"NOASSERTION","entry":"com.acme.Nope","jar":"build/libs/$name.jar"$extra}"""
 
     @Test
     fun `with no plugins root the compiled core modules load, unchanged`() {
-        val loaded = load()
+        val loaded = load(compiled = CoreModules.all)
         assertEquals(CoreModules.all.map { it.manifest.name }.sorted(), loaded.factory.statuses.map { it.name }, "load order: sequence, then name")
         assertTrue(loaded.factory.statuses.all { it.state == ModuleState.LOADED && it.tier == Tier.CORE })
         assertEquals(CoreModules.factory.tabs(TabContainers.CENTER).map { it.testTag }, loaded.factory.tabs(TabContainers.CENTER).map { it.testTag })
@@ -67,7 +68,7 @@ class DesktopPluginsTest {
         root.mkdirs()
         File(root, "modules.json").writeText("""{"modules":{"Acme_NoJar":{"enabled":true}}}""")
         community("Acme_NoJar", manifest("Acme_NoJar"))
-        val loaded = load(PluginFolders.DEMO_LOCK_ENV to "1")
+        val loaded = load(PluginFolders.DEMO_LOCK_ENV to "1", compiled = CoreModules.all)
         assertTrue(loaded.demoLock)
         assertEquals(ModuleState.LOCKED, loaded.factory.statuses.single { it.name == "Acme_NoJar" }.state)
         assertEquals(CoreModules.factory.tabs(TabContainers.CENTER).map { it.id }, loaded.factory.tabs(TabContainers.CENTER).map { it.id })

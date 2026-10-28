@@ -1,7 +1,7 @@
 {
   "name": "Infantry_Settings",
   "version": "1.0.0",
-  "apiVersion": 1,
+  "apiVersion": 2,
   "author": "Infantry AI",
   "description": "The Settings tab: groups the setup tabs (Profiles, Triggers, Notes, Run, Git) under one.",
   "tier": "official",

@@ -10,8 +10,8 @@ import kotlin.test.assertTrue
  */
 class ChatIndicatorHarnessNeutralTest {
     private val core = File("../agenthqUiCore/src/commonMain/kotlin/com/superiorsoftllc/agenthq/ui")
-    // S4d: the chat tree (ChatSurface.kt) moved to the app UI (plugins/core/Infantry_AppUi); a file is read from there.
-    private val app = File("../../plugins/core/Infantry_AppUi")
+    // S4d: the chat tree (ChatSurface.kt) is the official Infantry_Chat's (RUNTIME-22); a file is read from there.
+    private val app = File("../../plugins/official/Infantry_Chat/src")
 
     /** The text of [file] from the line containing [from] up to (not including) the line containing [to]. */
     private fun region(file: String, from: String, to: String): String {

@@ -238,7 +238,7 @@ class TabInterceptor(
     internal val parts: List<String>
         get() = listOfNotNull(title?.let { "title" }, before?.let { "before" }, after?.let { "after" }, content?.let { "content" })
 
-    /** S4d: this one with its parts drawn as module tier [core] (a community one's see no [com.superiorsoftllc.agenthq.ui.coreShell]). */
+    /** S4d: this one with its parts drawn as module tier [core]. */
     internal fun atTier(core: Boolean): TabInterceptor = if (core) this else TabInterceptor(
         title,
         before?.let { b -> { c -> ModuleTier(false) { b(c) } } },

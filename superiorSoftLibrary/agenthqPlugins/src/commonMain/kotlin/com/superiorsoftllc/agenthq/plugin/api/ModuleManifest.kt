@@ -9,11 +9,11 @@ import kotlinx.serialization.json.JsonTransformingSerializer
 /** PLUGIN-PLATFORMS-1: the platform names a module.json `platforms` may list. */
 val PLATFORMS = listOf("desktop", "android", "web")
 
-/** PLUGINS-1: the plugin API version this build speaks. A module that asks for another is refused. */
-const val PLUGIN_API_VERSION = 1
+/** PLUGINS-1: the plugin API version this build speaks. A module that asks for another is refused. RUNTIME-26: 2 (coreShell/appShell and the core tier are gone; every module.json says 2). */
+const val PLUGIN_API_VERSION = 2
 
 /**
- * RUNTIME-2: additive revisions under [PLUGIN_API_VERSION] (additions only; a module never has to name it, and an older
+ * RUNTIME-2: additive revisions (carried into API 2 by RUNTIME-26, so the revision stays 2) under [PLUGIN_API_VERSION] (additions only; a module never has to name it, and an older
  * module still loads). 1 = `Tier.OFFICIAL` and the `official` plugins folder. 2 = a host tab's sub-tabs through
  * `TabContext.SubTabs` / `subTab` / `pickSubTab` (RUNTIME-5).
  */

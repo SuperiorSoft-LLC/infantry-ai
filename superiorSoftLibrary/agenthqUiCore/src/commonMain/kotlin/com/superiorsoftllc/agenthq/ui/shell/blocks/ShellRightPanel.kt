@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.CompactNavRow
 import com.superiorsoftllc.agenthq.ui.ResizeHandle
+import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.Shell
 import com.superiorsoftllc.agenthq.ui.TabBar
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
@@ -41,7 +42,7 @@ private const val BODY = "$RIGHT.body"
 class RightPanelBlock(children: List<Block>, place: Place = Place(show = Show.Wide)) : Block("rightPanel", RIGHT, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
+        val s = LocalShell.current
         // PANEL-TOGGLE-1: a hidden side panel and its resize handle leave the composition.
         if (!s.state.panels.forWindow(dockCompact()).rightShown) return
         val row = scope.row
@@ -55,7 +56,7 @@ class RightPanelBlock(children: List<Block>, place: Place = Place(show = Show.Wi
 object RightPanelResize : Block("resizeHandle", "$RIGHT.resize") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
+        val s = LocalShell.current
         ResizeHandle("right-panel-resize-handle", scope.modifier) { s.ui.rightPanelWidth = RightPanelWidth.dragged(s.ui.rightPanelWidth, it) }
     }
 }
@@ -67,7 +68,7 @@ object RightPanelResize : Block("resizeHandle", "$RIGHT.resize") {
 class RightPanelBodyBlock(children: List<Block>, place: Place = Place()) : Block("rightPanelBody", BODY, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
+        val s = LocalShell.current
         RightPanelContent(s, scope.modifier.width(s.ui.rightPanelWidth.dp), null, children)
     }
 
@@ -78,7 +79,7 @@ class RightPanelBodyBlock(children: List<Block>, place: Place = Place()) : Block
 object RightPanelStrip : Block("tabStrip", "$BODY.strip") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
+        val s = LocalShell.current
         val tabs = s.tabs
         val strip = tabs.tabs(TabContainers.RIGHT)
         TabBar(
@@ -98,7 +99,7 @@ object RightPanelStrip : Block("tabStrip", "$BODY.strip") {
 object RightPanelTab : Block("tabContent", "$BODY.tab") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
+        val s = LocalShell.current
         if (scope.modifier == Modifier) s.tabs.Content(s.ui.rightTab, s.tabContext({}))
         else Box(scope.modifier) { s.tabs.Content(s.ui.rightTab, s.tabContext({})) }
     }

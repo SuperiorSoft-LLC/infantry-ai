@@ -1,7 +1,7 @@
 {
   "name": "Infantry_Alerts",
   "version": "1.0.0",
-  "apiVersion": 1,
+  "apiVersion": 2,
   "author": "Infantry AI",
   "description": "The incoming-comms sound and spoken attention alerts.",
   "tier": "official",
