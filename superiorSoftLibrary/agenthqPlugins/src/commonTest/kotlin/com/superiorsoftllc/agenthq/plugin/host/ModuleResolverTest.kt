@@ -34,6 +34,15 @@ class ModuleResolverTest {
     private fun Resolution.reason(name: String) = status(name)?.reason.orEmpty()
 
     @Test
+    fun `a module that does not list the current platform is skipped as not available`() {
+        val web = ModuleCandidate("Acme_Web", Tier.COMMUNITY, "/p/community/Acme_Web", ModuleManifest("Acme_Web", "1.0.0", author = "Acme", license = "MIT", platforms = listOf("web")))
+        val any = community("Acme_Any")
+        val r = ModuleResolver.resolve(listOf(web, any), enabled("Acme_Web", "Acme_Any"), platform = "desktop")
+        assertEquals(ModuleState.LOADED, r.state("Acme_Any"))
+        assertTrue("not available on this platform" in r.reason("Acme_Web"))
+    }
+
+    @Test
     fun `load order follows dependencies, core before community, then name`() {
         val r = ModuleResolver.resolve(
             listOf(community("Acme_B", "Infantry_Z"), core("Infantry_Z", "Infantry_A"), core("Infantry_A"), community("Acme_A")),
