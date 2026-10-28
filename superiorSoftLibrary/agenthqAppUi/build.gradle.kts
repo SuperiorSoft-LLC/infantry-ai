@@ -34,3 +34,34 @@ kotlin {
         }
     }
 }
+
+// S6 (drop-in path): the app UI as one droppable file, build/ihq/App_UI.ihq: module.json (Infantry_AppUi's, with its entry
+// the ModuleSource that hands over every core module, so the desktop loads it as a bundle) and lib/App_UI.jar (this
+// module's jvm jar). Unsigned: the installer refuses it until it is signed (jarsigner, the Infantry key; never in the repo).
+// The drop-in acceptance (agentHqUi renderTabShotsForDiff -PtabShotsExtra=dropin) signs a copy with a throwaway key.
+val appUiIhqDir = layout.buildDirectory.dir("ihq")
+val appUiIhqManifest = tasks.register("appUiIhqManifest") {
+    val source = rootProject.file("plugins/core/Infantry_AppUi/module.json")
+    inputs.file(source)
+    val out = appUiIhqDir.map { it.file("stage/module.json") }
+    outputs.file(out)
+    doLast {
+        @Suppress("UNCHECKED_CAST")
+        val m = groovy.json.JsonSlurper().parse(source) as MutableMap<String, Any?>
+        m["entry"] = "com.superiorsoftllc.agenthq.plugins.core.CoreModuleSource"
+        m["jar"] = "lib/App_UI.jar"
+        out.get().asFile.also { it.parentFile.mkdirs() }.writeText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(m)) + "\n")
+    }
+}
+tasks.register<Zip>("appUiIhq") {
+    group = "build"
+    description = "Packages the app UI into build/ihq/App_UI.ihq (unsigned)."
+    val jar = tasks.named<Jar>("jvmJar")
+    dependsOn(appUiIhqManifest, jar)
+    archiveFileName.set("App_UI.ihq")
+    destinationDirectory.set(appUiIhqDir)
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
+    from(appUiIhqManifest.map { appUiIhqDir.get().file("stage/module.json") })
+    from(jar.map { it.archiveFile }) { into("lib"); rename { "App_UI.jar" } }
+}

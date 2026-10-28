@@ -15,7 +15,8 @@ import com.superiorsoftllc.agenthq.daemon.StateDirLock
  *    production state dir and port ([InstallProfile]) and start the app's own daemon in this JVM;
  *  - otherwise dev, exactly as [runDevUi] (MainKt): the window only, connecting to the dev daemon on 8787.
  */
-fun main() {
+fun main(args: Array<String>) {
+    safeModeFlag(args)
     if (LaunchProfile.isInstalled()) {
         // PKG-3: the state dir decides where the log goes, so resolving it comes first; its override warnings are
         // held and written into the log once it is open, so a Start-menu launch (no console) keeps every line.

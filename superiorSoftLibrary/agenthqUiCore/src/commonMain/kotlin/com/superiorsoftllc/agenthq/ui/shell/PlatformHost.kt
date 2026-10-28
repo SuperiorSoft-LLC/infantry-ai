@@ -55,6 +55,12 @@ interface PlatformHost {
      */
     val tabFactory: com.superiorsoftllc.agenthq.ui.plugin.TabFactory get() = com.superiorsoftllc.agenthq.ui.plugin.CompiledModules.factory
 
+    /** S6: the module set loaded again (after a drop-in install), for the soft restart; a host that cannot load modules returns [tabFactory]. */
+    fun reloadTabs(): com.superiorsoftllc.agenthq.ui.plugin.TabFactory = tabFactory
+
+    /** S6: installing a plugin by dropping a .ihq on the empty shell; null where modules cannot be loaded at run time (web, Android). */
+    val dropIn: PluginDropIn? get() = null
+
     /** VOICE-1: whether the app window has focus right now; true when the host cannot tell. */
     fun windowFocused(): Boolean = true
 

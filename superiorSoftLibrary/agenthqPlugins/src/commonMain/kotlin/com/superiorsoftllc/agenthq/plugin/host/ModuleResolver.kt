@@ -66,7 +66,7 @@ data class Resolution(
  * - a module that does not parse, is misnamed, sits in a folder of another name, or repeats a name is refused;
  * - the folder decides the tier; a tier claimed in module.json is logged and ignored;
  * - a community module needs an author and a license, and stays off until modules.json enables it;
- * - under the demo lock no community module loads;
+ * - under the demo lock no community module loads; S6: nor in safe mode;
  * - load order puts each module after its `dependencies` and its `sequence` (order only: an absent name is ignored);
  * - PLUGINS-2: a dependency that is missing, off, refused or outside its version range refuses the module, and so on
  *   down the chain; a cycle refuses the modules on it; a core module may not depend on a community one (core never
@@ -84,6 +84,8 @@ object ModuleResolver {
         config: ModulesConfig = ModulesConfig(),
         demoLock: Boolean = false,
         apiVersion: Int = PLUGIN_API_VERSION,
+        /** S6: the shell started in safe mode: every community module is off, whatever modules.json says. */
+        safeMode: Boolean = false,
     ): Resolution {
         val log = mutableListOf<String>()
         val final = LinkedHashMap<String, ModuleStatus>()
@@ -123,6 +125,8 @@ object ModuleResolver {
                         )
                         demoLock && c.tier == Tier.COMMUNITY ->
                             final[m.name] = ModuleStatus(m.name, c.tier, ModuleState.LOCKED, "community modules do not load under the demo lock", m, c.dir)
+                        safeMode && c.tier == Tier.COMMUNITY ->
+                            final[m.name] = ModuleStatus(m.name, c.tier, ModuleState.LOCKED, "safe mode: community modules do not load", m, c.dir)
                         else -> eligible += c
                     }
                 }

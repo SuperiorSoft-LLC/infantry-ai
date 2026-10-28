@@ -6,6 +6,8 @@ import com.superiorsoftllc.agenthq.plugin.api.PluginSettings
 import com.superiorsoftllc.agenthq.plugin.api.PluginStorage
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -29,6 +31,13 @@ object PluginFolders {
     /** AGENTHQ_DEMO_LOCK set to anything but empty, 0, false or off. */
     fun demoLock(env: (String) -> String? = System::getenv): Boolean =
         env(DEMO_LOCK_ENV)?.trim()?.lowercase()?.let { it.isNotEmpty() && it != "0" && it != "false" && it != "off" } ?: false
+
+    /** S6: safe mode, no community module loads: AGENTHQ_SAFE_MODE, or the `agenthq.safeMode` property (`--safe-mode`). */
+    const val SAFE_MODE_ENV = "AGENTHQ_SAFE_MODE"
+    const val SAFE_MODE_PROPERTY = "agenthq.safeMode"
+
+    fun safeMode(env: (String) -> String? = System::getenv, property: (String) -> String? = System::getProperty): Boolean =
+        (env(SAFE_MODE_ENV) ?: property(SAFE_MODE_PROPERTY))?.trim()?.lowercase()?.let { it.isNotEmpty() && it != "0" && it != "false" && it != "off" } ?: false
 
     /** `<root>/modules.json`; a missing file is the defaults, an unreadable one too (and [log] says so). */
     fun config(root: File, log: (String) -> Unit = {}): ModulesConfig {
@@ -69,8 +78,39 @@ object ModulesFile {
             setting.enabled?.let { entry["enabled"] = JsonPrimitive(it) } ?: entry.remove("enabled")
             modules[name] = JsonObject(entry)
         }
+        save(root, tree, modules)
+    }
+
+    /**
+     * S6: the consent dialog's answer for module [name]: on, with exactly the node grants the owner left ticked
+     * (`allowOverride`, `allowInject`). Every other key of its entry, and of the file, stays as it was.
+     */
+    fun grant(root: File, name: String, allowOverride: List<String>, allowInject: List<String>) {
+        val (tree, modules) = read(root)
+        val entry = (modules[name] as? JsonObject)?.toMutableMap() ?: mutableMapOf()
+        entry["enabled"] = JsonPrimitive(true)
+        fun put(key: String, ids: List<String>) { if (ids.isEmpty()) entry.remove(key) else entry[key] = JsonArray(ids.distinct().map(::JsonPrimitive)) }
+        put("allowOverride", allowOverride)
+        put("allowInject", allowInject)
+        modules[name] = JsonObject(entry)
+        save(root, tree, modules)
+    }
+
+    /** S6: drops module [name]'s entry (it was uninstalled); nothing else changes. */
+    fun forget(root: File, name: String) {
+        val (tree, modules) = read(root)
+        if (modules.remove(name) != null) save(root, tree, modules)
+    }
+
+    private fun read(root: File): Pair<JsonObject, MutableMap<String, JsonElement>> {
+        val f = File(root, "modules.json")
+        val tree = f.takeIf { it.isFile }?.let { runCatching { PluginJson.parseToJsonElement(it.readText()).jsonObject }.getOrNull() } ?: JsonObject(emptyMap())
+        return tree to ((tree["modules"] as? JsonObject)?.toMutableMap() ?: mutableMapOf())
+    }
+
+    private fun save(root: File, tree: JsonObject, modules: Map<String, JsonElement>) {
         root.mkdirs()
-        f.writeText(PluginJson.encodeToString(JsonObject.serializer(), JsonObject(tree + ("modules" to JsonObject(modules)))) + "\n")
+        File(root, "modules.json").writeText(PluginJson.encodeToString(JsonObject.serializer(), JsonObject(tree + ("modules" to JsonObject(modules)))) + "\n")
     }
 }
 

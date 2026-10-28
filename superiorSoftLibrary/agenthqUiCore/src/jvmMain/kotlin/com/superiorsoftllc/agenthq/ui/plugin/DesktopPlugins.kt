@@ -39,6 +39,8 @@ object DesktopPlugins {
         val config: ModulesConfig,
         val demoLock: Boolean,
         val log: List<String>,
+        /** S6: started with every community module off (`--safe-mode`). */
+        val safeMode: Boolean = false,
         /** The gated services each loaded module gets (what its tabs see as [TabContext.services]). */
         val services: (module: String) -> com.superiorsoftllc.agenthq.plugin.api.PluginServices,
     )
@@ -55,9 +57,12 @@ object DesktopPlugins {
         val root = PluginFolders.root(stateDir, env, property)
         val config = PluginFolders.config(root, say)
         val demoLock = PluginFolders.demoLock(env)
-        val candidates = candidates(root, config, compiled)
-        say("[plugins] root ${root.absolutePath}${if (demoLock) " (demo lock on)" else ""}")
-        var resolution = ModuleResolver.resolve(candidates, config, demoLock)
+        val safeMode = PluginFolders.safeMode(env, property)
+        // S6: an app UI installed from a .ihq carries its modules in one jar; they take part as if compiled in.
+        val withBundles = compiled + bundles(root, config, compiled, say)
+        val candidates = candidates(root, config, withBundles)
+        say("[plugins] root ${root.absolutePath}${if (demoLock) " (demo lock on)" else ""}${if (safeMode) " (safe mode: community modules off)" else ""}")
+        var resolution = ModuleResolver.resolve(candidates, config, demoLock, safeMode = safeMode)
 
         var built: TabFactory? = null
         val bus = SimpleEventBus(say)
@@ -82,7 +87,7 @@ object DesktopPlugins {
             val m = s.manifest!!
             val needs = m.dependencies.map { it.id }.firstOrNull { it in refused }
             val result = if (needs != null) Result.failure(IllegalStateException("dependency $needs is refused")) else
-                compiled.firstOrNull { it.manifest.name == s.name && s.tier == Tier.CORE }?.let { Result.success(it) }
+                withBundles.firstOrNull { it.manifest.name == s.name && s.tier == Tier.CORE }?.let { Result.success(it) }
                     ?: runCatching { loadJar(s, services.getValue(s.name)) }
             result.onSuccess { modules += it }.onFailure {
                 refused += s.name
@@ -92,12 +97,44 @@ object DesktopPlugins {
         resolution.log.forEach(say)
         val preferences = resolution.preferences.filter { it.module !in refused }
         val shellOverrides = resolution.shellOverrides.filter { it.module !in refused }
-        val changes = ModuleChanges { request -> change(root, compiled, demoLock, request).also { c -> (c as? ModuleChange.Applied)?.log?.forEach(say); say("[plugins] ${c.message}") } }
+        val changes = ModuleChanges { request -> change(root, withBundles, demoLock, request).also { c -> (c as? ModuleChange.Applied)?.log?.forEach(say); say("[plugins] ${c.message}") } }
         val factory = TabFactory(modules, preferences, services = { services[it] ?: NoPluginServices }, events = bus, statuses = statuses(resolution), changes = changes, shellOverrides = shellOverrides,
             allowInject = { config.setting(it).allowInject }, allowOverride = { config.setting(it).allowOverride })
         built = factory
         factory.problems.forEach { say("[plugins] $it") }
-        return Loaded(factory, root, config, demoLock, log) { services[it] ?: NoPluginServices }
+        return Loaded(factory, root, config, demoLock, log, safeMode) { services[it] ?: NoPluginServices }
+    }
+
+    /**
+     * S6 (drop-in path): the modules of each core-tier folder whose `entry` is a [ModuleSource] rather than a [UiPlugin]: a
+     * bundle, such as the app UI (17 modules plus Infantry_AppUi in one signed .ihq). Core tier only (a community module
+     * cannot fill the shell's slots anyway), loaded before the rules run so their dependencies resolve as if compiled in.
+     * The bundle's own name must be one of its modules. A folder that does not load is left to [loadJar]'s refusal.
+     */
+    private fun bundles(root: File, config: ModulesConfig, builtIn: List<AgentHqModule>, say: (String) -> Unit): List<AgentHqModule> {
+        val core = config.folders.filter { it.tier == Tier.CORE }.map { File(root, it.path).canonicalFile }
+        val out = mutableListOf<AgentHqModule>()
+        for (c in PluginFolders.scan(root, config)) {
+            val m = c.manifest ?: continue
+            val dir = c.dir?.let(::File) ?: continue
+            if (c.tier != Tier.CORE || dir.canonicalFile.parentFile !in core || m.entry.isNullOrBlank() || m.jar.isNullOrBlank()) continue
+            if (builtIn.any { it.manifest.name == m.name } || out.any { it.manifest.name == m.name }) continue
+            val jar = File(dir, m.jar!!)
+            if (!jar.isFile || !jar.canonicalPath.startsWith(dir.canonicalPath + File.separator)) continue
+            val modules = try {
+                val entry = URLClassLoader(arrayOf(jar.toURI().toURL()), DesktopPlugins::class.java.classLoader).loadClass(m.entry).getDeclaredConstructor().newInstance()
+                (entry as? ModuleSource ?: continue).modules() // a UiPlugin entry is an ordinary module: loadJar's
+            } catch (e: Exception) {
+                say("[plugins] ${m.name}: bundle ${m.entry} would not load (${e::class.simpleName}: ${e.message})"); continue
+            } catch (e: LinkageError) {
+                say("[plugins] ${m.name}: bundle ${m.entry} would not link (${e::class.simpleName}: ${e.message})"); continue
+            }
+            if (modules.none { it.manifest.name == m.name }) { say("[plugins] ${m.name}: bundle refused: none of its modules is named ${m.name}"); continue }
+            val fresh = modules.filter { b -> builtIn.none { it.manifest.name == b.manifest.name } && out.none { it.manifest.name == b.manifest.name } }
+            say("[plugins] ${m.name}: bundle of ${fresh.size} modules from ${m.jar}")
+            out += fresh
+        }
+        return out
     }
 
     /** What is installed: every module folder under the root, plus each compiled-in core module that has none. */

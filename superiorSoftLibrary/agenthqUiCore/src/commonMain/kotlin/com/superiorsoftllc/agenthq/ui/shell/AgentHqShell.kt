@@ -5,6 +5,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import com.superiorsoftllc.agenthq.ui.App
 import com.superiorsoftllc.agenthq.ui.LogsFolder
@@ -32,14 +35,19 @@ fun AgentHqShell(host: PlatformHost, controller: Controller? = null) {
     // SEC-FIX-1: the owner credential goes with the launch URL only, so a switch to another server never carries it.
     remember(active, config) { config.ownerToken?.let { active.client.ownerFor(config.url, it) } }
     DisposableEffect(owned) { onDispose { owned?.cancel() } }
-    CompositionLocalProvider(LocalPlatformHost provides host) {
-        App(
-            active, config.url, config.token,
-            pickFile = if (host.canPickFiles) host::pickFile else null,
-            logs = host.logsDir?.let { dir -> LogsFolder(dir) { host.openFolder(dir) } },
-            updates = host.updates,
-            tabs = host.tabFactory,
-        )
+    // S6: the module set, owned here: a drop-in install reloads it (the soft restart), and the window is composed again
+    // with it (key), in the same process and with the same controller and connection.
+    var tabs by remember(host) { mutableStateOf(host.tabFactory) }
+    CompositionLocalProvider(LocalPlatformHost provides host, LocalSoftRestart provides { tabs = host.reloadTabs() }) {
+        key(tabs) {
+            App(
+                active, config.url, config.token,
+                pickFile = if (host.canPickFiles) host::pickFile else null,
+                logs = host.logsDir?.let { dir -> LogsFolder(dir) { host.openFolder(dir) } },
+                updates = host.updates,
+                tabs = tabs,
+            )
+        }
     }
     ShellSplashReady(active)
 }
