@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.keystore
 
+import com.superiorsoftllc.agenthq.settings.LimitRegistry
 import com.superiorsoftllc.agenthq.session.InfantryEnv
 
 import java.io.File
@@ -116,9 +117,11 @@ class Keystore(
         require(clean.length <= MAX_LENGTH) { "the secret is longer than $MAX_LENGTH characters" }
         val current = read()
         val fields = current.secrets[name].orEmpty()
-        require(field in fields || fields.size < MAX_FIELDS) { "a secret holds at most $MAX_FIELDS fields" }
-        require(name in current.secrets || name in current.entries || current.secrets.size < MAX_SECRETS) {
-            "the keystore holds at most $MAX_SECRETS secrets"
+        val maxFields = Keystore.maxFields
+        val maxSecrets = Keystore.maxSecrets
+        require(field in fields || fields.size < maxFields) { "a secret holds at most $maxFields fields" }
+        require(name in current.secrets || name in current.entries || current.secrets.size < maxSecrets) {
+            "the keystore holds at most $maxSecrets secrets"
         }
         write(current, current.secrets + (name to fields + (field to seal(name, field, clean))))
     }
@@ -255,8 +258,13 @@ class Keystore(
         const val KEY_ENV = "AGENTHQ_KEYSTORE_KEY"
         const val KEY_FILE_ENV = "AGENTHQ_KEYSTORE_KEY_FILE"
         const val MAX_LENGTH = 4096
-        const val MAX_FIELDS = 64
-        const val MAX_SECRETS = 256
+        /** SEC-FIX-2a: setting `limits.secrets.maxFields` (registry default). */
+        val maxFields: Int
+            get() = LimitRegistry.cap(LimitRegistry.KEYSTORE_MAX_FIELDS.default, LimitRegistry.KEYSTORE_MAX_FIELDS)
+
+        /** SEC-FIX-2a: setting `limits.secrets.maxSecrets` (registry default). */
+        val maxSecrets: Int
+            get() = LimitRegistry.cap(LimitRegistry.KEYSTORE_MAX_SECRETS.default, LimitRegistry.KEYSTORE_MAX_SECRETS)
 
         /** The one field of a single-value secret, and what a SECRETS-1 entry migrates to. */
         const val VALUE_FIELD = "value"

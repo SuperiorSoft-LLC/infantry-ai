@@ -227,6 +227,27 @@ object LimitRegistry {
         min = 1, max = 100, zeroIsUnlimited = false,
     )
 
+    /** SEC-FIX-2a (SECRETS-2): how many secrets a saved command or one run_start may name. */
+    val RUN_MAX_SECRETS = LimitDef(
+        "limits.secrets.maxPerRun", 16, "secrets",
+        "The most keystore secrets one saved command (commands.json) or one run_start may name; more is refused.",
+        min = 1, max = 10_000, zeroIsUnlimited = false,
+    )
+
+    /** SEC-FIX-2a (SECRETS-2): the most fields one keystore secret holds. */
+    val KEYSTORE_MAX_FIELDS = LimitDef(
+        "limits.secrets.maxFields", 64, "fields",
+        "The most fields one keystore secret may hold; setting a new field beyond it is refused.",
+        min = 1, max = 10_000, zeroIsUnlimited = false,
+    )
+
+    /** SEC-FIX-2a (SECRETS-2): the most secrets the keystore holds. */
+    val KEYSTORE_MAX_SECRETS = LimitDef(
+        "limits.secrets.maxSecrets", 256, "secrets",
+        "The most secrets the daemon keystore may hold; adding a new secret beyond it is refused.",
+        min = 1, max = 100_000, zeroIsUnlimited = false,
+    )
+
     val ALL: List<LimitDef> = listOf(
         MAX_PER_POD, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
@@ -235,6 +256,7 @@ object LimitRegistry {
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
+        RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
     )
 
     /** A minutes limit as milliseconds; 0 on an unlimited-capable one = [Long.MAX_VALUE] (never reached). */
