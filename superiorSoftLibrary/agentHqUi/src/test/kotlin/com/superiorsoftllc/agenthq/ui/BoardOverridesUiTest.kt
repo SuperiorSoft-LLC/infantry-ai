@@ -54,7 +54,8 @@ class BoardOverridesUiTest {
                 waitUntil(timeoutMillis = 10_000) { controller.state.value.connection.isLive }
                 waitForIdle()
                 onNodeWithTag(SIDEBAR_BOARD_BUTTON_TAG).performClick()
-                waitForIdle()
+                // The modal (and its content) lands a beat after the click: wait on the node, not on idle.
+                waitUntil(timeoutMillis = 10_000) { onAllNodes(hasTestTag(BOARD_MODAL_TAG)).fetchSemanticsNodes().isNotEmpty() }
                 body()
             }
         } finally {
@@ -68,11 +69,12 @@ class BoardOverridesUiTest {
         withOpenBoard(factory("infantry.shell.board.pane", OverrideModes.REPLACE, BlockOverride { scope, inner ->
             Text(if (inner == null) "acme board" else "bad", scope.modifier.testTag("acme-board"))
         })) {
+            waitUntil(timeoutMillis = 10_000) { onAllNodes(hasTestTag("acme-board") and inBoard).fetchSemanticsNodes().isNotEmpty() }
             onNode(hasTestTag("acme-board") and inBoard).assertExists()
             // The core board is gone; the header (and its close button) stays, and still closes the modal.
             onNode(hasText("The backlog is empty.") and inBoard).assertDoesNotExist()
             onNodeWithTag(BOARD_MODAL_CLOSE_TAG).performClick()
-            waitForIdle()
+            waitUntil(timeoutMillis = 10_000) { onAllNodes(hasTestTag(BOARD_MODAL_TAG)).fetchSemanticsNodes().isEmpty() }
             onNodeWithTag(BOARD_MODAL_TAG).assertDoesNotExist()
         }
     }
@@ -81,7 +83,10 @@ class BoardOverridesUiTest {
         withOpenBoard(factory("infantry.shell#infantry.shell.board.pane", OverrideModes.WRAP, BlockOverride { scope, inner ->
             Box(scope.modifier.testTag("acme-frame")) { inner!!.Render(scope) }
         })) {
-            onNode(hasText("The backlog is empty.") and hasAnyAncestor(hasTestTag("acme-frame"))).assertExists()
+            val coreInFrame = hasText("The backlog is empty.") and hasAnyAncestor(hasTestTag("acme-frame"))
+            // Controller state reaches the composition a beat after waitForIdle on a cold run: wait on the node itself.
+            waitUntil(timeoutMillis = 10_000) { onAllNodes(coreInFrame).fetchSemanticsNodes().isNotEmpty() }
+            onNode(coreInFrame).assertExists()
             onNode(hasTestTag("acme-frame") and inBoard).assertExists()
         }
     }
