@@ -59,8 +59,9 @@ const val DEFAULT_GRACE_MILLIS = 5_000L
 /** The longest grace window a command may ask for (RUN-CMD-1): a stop never waits more than ten minutes to escalate. */
 const val MAX_GRACE_MILLIS = 600_000L
 
-/** SECRETS-2: the most secrets one command (or one run_start) may name. */
-const val MAX_RUN_SECRETS = 16
+/** SECRETS-2: the most secrets one command (or one run_start) may name; setting `limits.secrets.maxPerRun` (SEC-FIX-2a). */
+val maxRunSecrets: Int
+    get() = com.superiorsoftllc.agenthq.settings.LimitRegistry.let { it.cap(it.RUN_MAX_SECRETS.default, it.RUN_MAX_SECRETS) }
 
 /**
  * The daemon's saved commands, loaded once from `<AGENTHQ_HOME>/commands.json` (design sections 2-3).
@@ -131,7 +132,7 @@ class CommandRegistry private constructor(
             if (e.argv.isEmpty() || e.argv.any { it.isBlank() }) return no("$where ('${e.id}') has an empty argv")
             if (e.graceMillis <= 0) return no("$where ('${e.id}') has a non-positive graceMillis")
             if (e.graceMillis > MAX_GRACE_MILLIS) return no("$where ('${e.id}') has a graceMillis over $MAX_GRACE_MILLIS")
-            if (e.secrets.size > MAX_RUN_SECRETS) return no("$where ('${e.id}') names more than $MAX_RUN_SECRETS secrets")
+            if (e.secrets.size > maxRunSecrets) return no("$where ('${e.id}') names more than $maxRunSecrets secrets")
             if (e.secrets.any { !com.superiorsoftllc.agenthq.keystore.Keystore.isName(it) }) return no("$where ('${e.id}') names an invalid secret")
             val cwd = e.cwd?.takeIf { it.isNotBlank() }
             val dir = resolveCwd(root, cwd) ?: return no("$where ('${e.id}') has a cwd outside the repo")

@@ -262,7 +262,7 @@ class RunManager(
     private fun secretEnv(names: List<String>): Result<Map<String, String>> {
         fun no(why: String) = Result.failure<Map<String, String>>(IllegalArgumentException(why))
         if (names.isEmpty()) return Result.success(emptyMap())
-        if (names.size > MAX_RUN_SECRETS) return no("a run takes at most $MAX_RUN_SECRETS secrets")
+        if (names.size > maxRunSecrets) return no("a run takes at most $maxRunSecrets secrets")
         if (demoLock()) return no("secrets are locked under the demo lock")
         val env = LinkedHashMap<String, String>()
         for (name in names) {
