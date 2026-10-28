@@ -122,8 +122,9 @@ agenthq bg stop <id>
 agenthq bg run --notify --name gate -- gradlew agentHq:test   # returns at once; the job runs detached
 # ... END YOUR TURN. The daemon mails you "[AUTOMATIC] bg job <id> finished, exit N" with the last lines.
 agenthq bg run --notify --notify-on "Tests? completed" --notify-timeout 20 -- gradlew test   # extra pattern, own timeout
-agenthq bg wait <id> [--timeout 9]   # fallback ONLY when your harness is not woken by mail: blocks, returns the exit code
 ```
+
+`agenthq bg wait <id>` is a fallback, ONLY for when your harness is not woken by mail: it blocks and returns the exit code. Add `--timeout <MIN>` to bound the wait.
 
 Triggers (one mail each, to your session, from `system`, thread `bg:<id>`): exit (code + last `limits.bg.notifyTailLines`
 lines, or `--notify-tail N`); the job vanishing without an exit code (stopped or died); a NEW output line matching a
