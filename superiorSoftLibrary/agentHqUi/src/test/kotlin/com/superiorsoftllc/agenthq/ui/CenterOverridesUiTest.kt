@@ -40,7 +40,7 @@ class CenterOverridesUiTest {
             ModuleManifest("Acme_Center", "1.0.0", author = "Acme", license = "NOASSERTION", shell = listOf(decl)),
             tier = Tier.COMMUNITY, shell = mapOf("acme" to override),
         )
-        val f = TabFactory(CoreModules.all + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Center", decl.nodeId, decl.name, decl.mode)))
+        val f = TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Center", decl.nodeId, decl.name, decl.mode)))
         assertEquals(emptyList(), f.problems)
         return f
     }

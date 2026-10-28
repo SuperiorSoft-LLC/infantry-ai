@@ -100,6 +100,56 @@ interface ShellContext {
     val header: HeaderContext get() = NoHeader
     /** RUNTIME-21 (additive): what the official Infantry_Agents (the left panel's agents list) reads and asks of the window. */
     val agents: AgentsContext get() = NoAgents
+    /** RUNTIME-22 (additive): what the official Infantry_Chat (the centre column, New agent) reads and asks of the window. */
+    val chat: ChatContext get() = NoChat
+}
+
+/**
+ * RUNTIME-22 (F6): the centre column behind the official Infantry_Chat module, which fills `infantry.shell.center`.
+ * Values are the composition's snapshot; the actions are the window's own.
+ */
+interface ChatContext {
+    /** The window's state; null where there is no window (the column draws nothing). */
+    val state: com.superiorsoftllc.agenthq.ui.model.AppState?
+    val controller: com.superiorsoftllc.agenthq.ui.net.Controller?
+    /** The main window's chat panel state (draft, attachments, spawn mode). */
+    val chat: com.superiorsoftllc.agenthq.ui.ChatPanelState?
+    /** The selected agent's session id. */
+    val selectedId: String?
+    /** The picked centre tab id. */
+    val centerTab: String
+    fun setCenterTab(id: String)
+    /** Whether the New agent dialog is open. */
+    val showNewAgent: Boolean
+    fun setShowNewAgent(open: Boolean)
+    /** Opens the board (the chat header's ticket tag). */
+    fun showBoard()
+    /** Draws the picked centre tab; [transcript] is the chat's, which the Chat tab shows. */
+    @androidx.compose.runtime.Composable
+    fun TabContent(transcript: @androidx.compose.runtime.Composable () -> Unit)
+}
+
+/** No window: nothing to draw, every action a no-op. */
+object NoChat : ChatContext {
+    override val state: com.superiorsoftllc.agenthq.ui.model.AppState? = null
+    override val controller: com.superiorsoftllc.agenthq.ui.net.Controller? = null
+    override val chat: com.superiorsoftllc.agenthq.ui.ChatPanelState? = null
+    override val selectedId: String? = null
+    override val centerTab: String = ""
+    override fun setCenterTab(id: String) {}
+    override val showNewAgent: Boolean = false
+    override fun setShowNewAgent(open: Boolean) {}
+    override fun showBoard() {}
+    @androidx.compose.runtime.Composable
+    override fun TabContent(transcript: @androidx.compose.runtime.Composable () -> Unit) {}
+}
+
+/**
+ * RUNTIME-22: the shared chat panel, drawn by the official Infantry_Chat, for a host that stays in the shell until its own
+ * split (the Assistant popup, F8). Null while Infantry_Chat is not loaded (the host then draws nothing).
+ */
+object ChatPanels {
+    var panel: (@androidx.compose.runtime.Composable (sessionId: String, controller: com.superiorsoftllc.agenthq.ui.net.Controller, modifier: androidx.compose.ui.Modifier, chat: com.superiorsoftllc.agenthq.ui.ChatPanelState, allowSpawn: Boolean, transcriptTag: String) -> Unit)? = null
 }
 
 /**

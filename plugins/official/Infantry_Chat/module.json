@@ -1,0 +1,15 @@
+{
+  "name": "Infantry_Chat",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "author": "Infantry AI",
+  "description": "The centre column: the agent chat, the centre tab strip and the New agent dialog.",
+  "tier": "official",
+  "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.official.chat.ChatPlugin",
+  "jar": "build/libs/Infantry_Chat.jar",
+  "buildOrder": 200,
+  "fills": [
+    "infantry.shell.center"
+  ]
+}

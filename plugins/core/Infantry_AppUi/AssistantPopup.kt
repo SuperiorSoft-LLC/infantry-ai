@@ -281,7 +281,8 @@ fun AssistantPopupChat(state: AppState, controller: Controller, chat: ChatPanelS
             )
         }
     } else {
-        ChatPanel(assistant.id, controller, modifier, chat = chat, allowSpawn = false, transcriptTag = ASSISTANT_TRANSCRIPT_TAG)
+        // RUNTIME-22: the shared ChatPanel is Infantry_Chat's; nothing is drawn while that module is not loaded.
+        com.superiorsoftllc.agenthq.ui.shell.ChatPanels.panel?.invoke(assistant.id, controller, modifier, chat, false, ASSISTANT_TRANSCRIPT_TAG)
     }
 }
 

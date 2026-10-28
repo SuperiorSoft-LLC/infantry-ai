@@ -97,6 +97,19 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
         override val hasAssistant get() = shell.state.connection.hasAssistant || shell.state.assistant != null
         override fun toggleAssistant() = shell.assistantPanel.toggle()
     }
+    override val chat: ChatContext = object : ChatContext {
+        override val state get() = shell.state
+        override val controller get() = shell.controller
+        override val chat get() = shell.chat
+        override val selectedId get() = shell.selected?.id
+        override val centerTab get() = ui.centerTab
+        override fun setCenterTab(id: String) { ui.centerTab = id }
+        override val showNewAgent get() = ui.showNewAgent
+        override fun setShowNewAgent(open: Boolean) { ui.showNewAgent = open }
+        override fun showBoard() { ui.showBoard = true }
+        @androidx.compose.runtime.Composable
+        override fun TabContent(transcript: @androidx.compose.runtime.Composable () -> Unit) = shell.tabs.Content(ui.centerTab, shell.tabContext(transcript))
+    }
     override val agents: AgentsContext = object : AgentsContext {
         override val state get() = shell.state
         override val visible get() = shell.visible

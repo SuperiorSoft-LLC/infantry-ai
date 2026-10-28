@@ -13,12 +13,14 @@ class ChatPanelOneSourceTest {
     private val ui = "../agenthqUiCore/src/commonMain/kotlin/com/superiorsoftllc/agenthq/ui"
     // S4c: a host that moved to the app UI (plugins/core/Infantry_AppUi) is read from there.
     private val app = "../../plugins/core/Infantry_AppUi"
-    private fun src(name: String) = (File("$ui/$name").takeIf { it.exists() } ?: File("$app/${name.substringAfterLast('/')}")).readText()
+    // RUNTIME-22: the centre block and ChatPanel are the official Infantry_Chat's.
+    private val chat = "../../plugins/official/Infantry_Chat/src"
+    private fun src(name: String) = (File("$ui/$name").takeIf { it.exists() } ?: File("$app/${name.substringAfterLast('/')}").takeIf { it.exists() } ?: File("$chat/${name.substringAfterLast('/')}")).readText()
 
     @Test fun `the main window centre block and the assistant popup both host ChatPanel`() {
         // BLOCKS-LAYOUT L9b: the centre block hosts ChatPanel's own sections, one node each, through chatPanelHost.
         assertTrue(Regex("""\bchatPanelHost\(""").containsMatchIn(src("shell/blocks/ShellCenter.kt")), "ShellCenter.kt (the main window centre block) hosts ChatPanel's sections")
-        assertTrue(Regex("""\bChatPanel\(""").containsMatchIn(src("AssistantPopup.kt")), "AssistantPopup.kt hosts ChatPanel")
+        assertTrue(src("AssistantPopup.kt").contains("ChatPanels.panel"), "AssistantPopup.kt hosts ChatPanel (through the panel Infantry_Chat publishes)")
     }
 
     @Test fun `neither host builds its own chat parts`() {

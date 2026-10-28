@@ -32,8 +32,20 @@ import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.Place
 import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
+import com.superiorsoftllc.agenthq.ui.block.layout.LocalBlockSize
+import com.superiorsoftllc.agenthq.ui.model.PanelLayout
+import com.superiorsoftllc.agenthq.ui.shell.ChatContext
+import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
+import com.superiorsoftllc.agenthq.ui.shell.NoChat
 
 private const val CENTER = "infantry.shell.center"
+
+/** The window's chat domain; [NoChat] (no state, nothing drawn) where the shell has no window. */
+private val chatCtx: ChatContext @Composable get() = LocalShellContext.current?.chat ?: NoChat
+
+/** MOBILE-LAYOUT-1: below PanelLayout.COMPACT_BELOW_DP (600dp) of the middle region the window shows ONE pane. */
+@Composable
+private fun dockCompact(): Boolean = PanelLayout.isCompact(LocalBlockSize.current.width.value)
 
 /**
  * BLOCKS-SHELL-1: the centre column (chat, centre tabs, the New agent dialog); it fills what the side panels leave.
@@ -43,8 +55,7 @@ private const val CENTER = "infantry.shell.center"
 class CenterBlock(children: List<Block>, place: Place = Place(weight = 1f)) : Block("center", CENTER, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
-        val controller = s.controller
+        val controller = chatCtx.controller ?: return
         val compact = dockCompact()
         // MOBILE-LAYOUT-2: crossing 600dp (a resize, a rotation) parks this window class's panel flags and brings
         // back the other class's, so compact navigation never rewrites the wide layout. The panels render from
@@ -71,12 +82,13 @@ private val LocalChatPanelHost = compositionLocalOf<ChatPanelHost?> { null }
 class CenterChatBlock(children: List<Block>, place: Place = Place(weight = 1f)) : Block("chatPanel", CHAT, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
-        val ui = s.ui
+        val c = chatCtx
+        val controller = c.controller ?: return
+        val chat = c.chat ?: return
         val host = chatPanelHost(
-            s.selected?.id, s.controller, s.chat, allowSpawn = true,
-            header = chatPanelHeader(s.chat, s.controller) { ui.showBoard = true },
-            content = { transcript -> s.tabs.Content(ui.centerTab, s.tabContext(transcript)) },
+            c.selectedId, controller, chat, allowSpawn = true,
+            header = chatPanelHeader(chat, controller) { c.showBoard() },
+            content = { transcript -> c.TabContent(transcript) },
             transcriptTag = CENTER_TRANSCRIPT_TAG,
         )
         CompositionLocalProvider(LocalChatPanelHost provides host) {
@@ -108,9 +120,8 @@ object CenterChatHeader : Block("chatHeader", "$CHAT.header") {
 object CenterChatTabs : Block("tabStrip", "$CHAT.tabs") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
-        val ui = s.ui
-        CenterTabBar(s.state, ui.centerTab, scope.modifier) { ui.centerTab = it }
+        val c = chatCtx
+        CenterTabBar(c.state ?: return, c.centerTab, scope.modifier) { c.setCenterTab(it) }
     }
 }
 
@@ -177,23 +188,22 @@ private val LocalNewAgentDraft = compositionLocalOf<NewAgentDraft?> { null }
 class NewAgentBlock(children: List<Block>, place: Place = Place()) : Block("newAgentDialog", NEW_AGENT, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = appShell
-        val state = s.state
-        val controller = s.controller
-        val ui = s.ui
-        LaunchedEffect(ui.showNewAgent, state.connection.isLive) {
-            if (ui.showNewAgent && state.connection.isLive) controller.refreshModelCatalog()
+        val c = chatCtx
+        val state = c.state ?: return
+        val controller = c.controller ?: return
+        LaunchedEffect(c.showNewAgent, state.connection.isLive) {
+            if (c.showNewAgent && state.connection.isLive) controller.refreshModelCatalog()
         }
-        if (ui.showNewAgent) {
+        if (c.showNewAgent) {
             NewAgentDialogFrame(
                 state,
                 onAdd = { role, picked, task ->
                     controller.pickSpawnRole(role)
                     controller.pickModel(picked)
                     val r = controller.spawn(task)
-                    if (r is CommandResult.Refused) r.reason else { ui.showNewAgent = false; null }
+                    if (r is CommandResult.Refused) r.reason else { c.setShowNewAgent(false); null }
                 },
-                onDismiss = { ui.showNewAgent = false },
+                onDismiss = { c.setShowNewAgent(false) },
             ) { draft ->
                 CompositionLocalProvider(LocalNewAgentDraft provides draft) { RenderPlaced(children) }
             }
@@ -238,3 +248,6 @@ object NewAgentTask : Block("newAgentTask", "$NEW_AGENT.task") {
 private val CenterNewAgent = NewAgentBlock(listOf(NewAgentRole, NewAgentExecutor, NewAgentErrorLine, NewAgentTask))
 
 val ShellCenter = CenterBlock(listOf(CenterChat, CenterNewAgent))
+
+/** The Infantry_Chat module's centre fill id (module.json `fills`). */
+const val CHAT_FILL_ID = "infantry.shell.center"

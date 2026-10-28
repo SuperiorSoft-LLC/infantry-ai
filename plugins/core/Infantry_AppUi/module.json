@@ -9,7 +9,6 @@
   "buildOrder": 200,
   "fills": [
     "infantry.shell.left",
-    "infantry.shell.center",
     "infantry.shell.right",
     "infantry.shell.drawer",
     "infantry.shell.assistant",
