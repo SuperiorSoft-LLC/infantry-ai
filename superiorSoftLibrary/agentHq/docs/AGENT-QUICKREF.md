@@ -124,6 +124,11 @@ agenthq bg run --notify --name gate -- gradlew agentHq:test   # returns at once;
 agenthq bg run --notify --notify-on "Tests? completed" --notify-timeout 20 -- gradlew test   # extra pattern, own timeout
 ```
 
+The command's program is resolved before it starts: a bare name is looked up in the current directory (Windows) and on
+PATH with PATHEXT, so `gradlew.bat`, `gradlew` and `agenthq` (a `.cmd` shim) all work from a worktree root. A command
+that cannot be found or started is NOT a job: `bg run` prints `error: ... job NOT started` and exits 127, with no job
+id to wait on. If a detached wrapper still fails to start it, the daemon mails you `exited 127` at once.
+
 `agenthq bg wait <id>` is a fallback, ONLY for when your harness is not woken by mail: it blocks and returns the exit code. Add `--timeout <MIN>` to bound the wait.
 
 Triggers (one mail each, to your session, from `system`, thread `bg:<id>`): exit (code + last `limits.bg.notifyTailLines`
