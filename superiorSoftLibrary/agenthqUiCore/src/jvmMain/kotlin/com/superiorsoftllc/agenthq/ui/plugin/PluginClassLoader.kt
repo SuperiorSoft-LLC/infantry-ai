@@ -12,7 +12,12 @@ import java.net.URLClassLoader
  * `<module>/native/`, else the module folder itself.
  *
  * PLUGIN-ENDPOINTS-1 (D2b): with [filtered] (community modules) the parent shows only the plugin API, Kotlin, Compose, `java*` and the
- * plugin-facing `ui.plugin` types (not `DaemonLink`); any other host class is a ClassNotFoundException. HONEST LIMIT: code in this JVM
+ * plugin-facing `ui.plugin` types (not `DaemonLink`), plus the packages the plugin API's own signatures hand out (ticket-109d3f79):
+ * `ui.model` (TabContext.state is an AppState, TabProvider/TabInterceptor titles take one, TabContext.diffTarget), `ui.protocol`
+ * (the wire data AppState's fields hold) and `ui.block` (UiRegistrar.shell/inject/fill/tabTree/blockType take its trees). All three
+ * are data and pure functions with no daemon link or credential: nothing in them holds a Controller, DaemonLink or token (model's
+ * ProjectSettings only names the Controller type in a lambda signature, and Controller stays hidden). `ui.net` (Controller,
+ * DaemonLink's HTTP client) and `ui.shell` stay hidden. Any other host class is a ClassNotFoundException. HONEST LIMIT: code in this JVM
  * can still use reflection, files and the environment (owner.token, AGENTHQ_TOKEN); this closes the easy paths, not a determined
  * attacker. The trust boundary stays consent (off until enabled), safe mode and the demo lock.
  */
@@ -37,7 +42,8 @@ class PluginClassLoader(private val dir: File, jar: File, parent: ClassLoader, f
     }
 
     private companion object {
-        val ALLOWED = listOf("java.", "javax.", "kotlin.", "kotlinx.", "androidx.compose", "org.jetbrains.compose", "org.jetbrains.skiko", "com.superiorsoftllc.agenthq.plugin.api.", "com.superiorsoftllc.agenthq.ui.plugin.")
+        val ALLOWED = listOf("java.", "javax.", "kotlin.", "kotlinx.", "androidx.compose", "org.jetbrains.compose", "org.jetbrains.skiko", "com.superiorsoftllc.agenthq.plugin.api.", "com.superiorsoftllc.agenthq.ui.plugin.",
+            "com.superiorsoftllc.agenthq.ui.model.", "com.superiorsoftllc.agenthq.ui.protocol.", "com.superiorsoftllc.agenthq.ui.block.")
         val HIDDEN = listOf("com.superiorsoftllc.agenthq.ui.plugin.DaemonLink", "com.superiorsoftllc.agenthq.ui.plugin.PluginClassLoader", "com.superiorsoftllc.agenthq.ui.plugin.config.DaemonNodeConfigApi", "com.superiorsoftllc.agenthq.ui.plugin.JvmEndpointAccess")
         fun urls(dir: File, jar: File): Array<URL> =
             (listOf(jar) + File(dir, "lib").listFiles { f -> f.isFile && f.name.endsWith(".jar") }.orEmpty().sortedBy { it.name }).map { it.toURI().toURL() }.toTypedArray()
