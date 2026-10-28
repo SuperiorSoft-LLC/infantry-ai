@@ -160,12 +160,12 @@ class EpicBaseBranchDaemonTest {
             val inE = startIn("in E", p, e, "p1")
             assertEquals(releaseSha, inE.base, "a ticket in E records release's commit")
             assertEquals(releaseSha, tipOf(daemonRepo, inE), "git: its branch sits on release's commit")
-            assertEquals("cut from release ${releaseSha.take(8)} (epic $e)", inE.start?.detail, "the note names the epic")
+            assertEquals("cut from release ${releaseSha.take(8)} (epic $e)", inE.start?.detail?.replace(Regex("; no Android SDK found.*?in this worktree"), ""), "the note names the epic")
 
             val outside = startIn("outside E", p, null, "p2")
             assertEquals(developSha, outside.base, "a ticket outside E cuts from the project's develop")
             assertEquals(developSha, tipOf(daemonRepo, outside))
-            assertEquals("cut from develop ${developSha.take(8)} (project base)", outside.start?.detail)
+            assertEquals("cut from develop ${developSha.take(8)} (project base)", outside.start?.detail?.replace(Regex("; no Android SDK found.*?in this worktree"), ""))
 
             val cleared = epicBase(e, clear = true)
             assertEquals(Envelope.EPIC, cleared.type, cleared.data)
@@ -173,7 +173,7 @@ class EpicBaseBranchDaemonTest {
             val after = startIn("in E after clear", p, e, "p3")
             assertEquals(developSha, after.base, "after the clear the next ticket in E cuts from develop")
             assertEquals(developSha, tipOf(daemonRepo, after))
-            assertEquals("cut from develop ${developSha.take(8)} (project base)", after.start?.detail)
+            assertEquals("cut from develop ${developSha.take(8)} (project base)", after.start?.detail?.replace(Regex("; no Android SDK found.*?in this worktree"), ""))
             assertEquals(releaseSha, tipOf(daemonRepo, inE), "the ticket started earlier keeps its branch on release")
         }
     }
