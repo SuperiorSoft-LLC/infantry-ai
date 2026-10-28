@@ -13,7 +13,6 @@
     "infantry.shell.drawer",
     "infantry.shell.assistant",
     "infantry.shell.diff",
-    "infantry.shell.questions",
     "infantry.shell.config.settings"
   ]
 }

@@ -68,7 +68,7 @@ class ShellFillsTest {
         // RUNTIME-14/15: the official Infantry_Roles and Infantry_Board (their jars on desktop) fill infantry.shell.roles and
         // infantry.shell.board; RUNTIME-16: Infantry_Alerts the sound and voice slots;
         // RUNTIME-18: Infantry_Processes the status bar's processes badge; Infantry_AppUi every other slot.
-        val f = TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.roles.InfantryRoles + com.superiorsoftllc.agenthq.plugins.official.board.InfantryBoard + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.usage.InfantryUsage + com.superiorsoftllc.agenthq.plugins.official.attention.InfantryAttention + com.superiorsoftllc.agenthq.plugins.official.alerts.InfantryAlerts + com.superiorsoftllc.agenthq.plugins.official.processes.InfantryProcesses)
+        val f = TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.roles.InfantryRoles + com.superiorsoftllc.agenthq.plugins.official.board.InfantryBoard + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.approvals.InfantryApprovals + com.superiorsoftllc.agenthq.plugins.official.usage.InfantryUsage + com.superiorsoftllc.agenthq.plugins.official.attention.InfantryAttention + com.superiorsoftllc.agenthq.plugins.official.alerts.InfantryAlerts + com.superiorsoftllc.agenthq.plugins.official.processes.InfantryProcesses)
         CoreShell.slots.forEach { id -> assertTrue(f.baseRoot.find(id) !is PlaceholderBlock, "$id is still empty") }
         assertEquals("Infantry_Roles", f.fillModules["infantry.shell.roles"])
         assertEquals("Infantry_Board", f.fillModules["infantry.shell.board"])
@@ -88,7 +88,7 @@ class ShellFillsTest {
         // RUNTIME-4..18: then the official modules this test class path carries, through their jars' ServiceLoader entries.
         assertEquals(
             setOf("Infantry_Agents", "Infantry_Settings", "Infantry_Git", "Infantry_Run", "Infantry_Notes", "Infantry_Changes", "Infantry_Prompts", "Infantry_Skills",
-                "Infantry_Stats", "Infantry_Usage", "Infantry_Epics", "Infantry_Review", "Infantry_Pods", "Infantry_Profiles", "Infantry_Triggers", "Infantry_Attention", "Infantry_Roles", "Infantry_Board", "Infantry_Alerts", "Infantry_Header", "Infantry_Processes"),
+                "Infantry_Stats", "Infantry_Usage", "Infantry_Epics", "Infantry_Review", "Infantry_Pods", "Infantry_Profiles", "Infantry_Triggers", "Infantry_Attention", "Infantry_Roles", "Infantry_Board", "Infantry_Alerts", "Infantry_Header", "Infantry_Processes", "Infantry_Chat", "Infantry_Approvals"),
             found.drop(core.size).toSet(),
         )
     }

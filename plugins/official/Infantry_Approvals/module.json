@@ -1,0 +1,15 @@
+{
+  "name": "Infantry_Approvals",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "author": "Infantry AI",
+  "description": "The questions pill: open owner questions the owner cannot see inline, one click from the asking chat.",
+  "tier": "official",
+  "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.official.approvals.ApprovalsPlugin",
+  "jar": "build/libs/Infantry_Approvals.jar",
+  "buildOrder": 200,
+  "fills": [
+    "infantry.shell.questions"
+  ]
+}
