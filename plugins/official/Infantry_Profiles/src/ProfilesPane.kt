@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.profiles
+
+import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
@@ -30,10 +32,10 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.shell.CoreExecutor
+import com.superiorsoftllc.agenthq.ui.shell.ExecutorContext
+import com.superiorsoftllc.agenthq.ui.shell.RolesContext
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
-import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.protocol.AgentProfile
 import kotlinx.coroutines.launch
 
@@ -43,27 +45,28 @@ import kotlinx.coroutines.launch
  * Roles stay the place to browse a role's persona; this is where you manage the agents a ticket can be given to.
  *
  * The harness + model control is [ProfileExecutorField] (shared with the Roles pane's profile editor).
+ * RUNTIME-12: saves, deletes and starts go through [roles] (plugin API), the harness list through [executor].
  */
 
 @Composable
-internal fun ProfilesPane(state: AppState, controller: Controller, onSessionStarted: () -> Unit) {
+internal fun ProfilesPane(state: AppState, roles: RolesContext, executor: ExecutorContext, onSessionStarted: () -> Unit) {
     var creating by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("${state.visibleProfiles.size} agent profiles", color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
             Button(onClick = { creating = !creating }, enabled = state.connection.isLive) { Text(if (creating) "Close" else "+ New profile", fontSize = 12.sp) }
         }
-        if (creating) ProfileForm(null, state, controller, onDone = { creating = false })
+        if (creating) ProfileForm(null, state, roles, executor, onDone = { creating = false })
         if (state.visibleProfiles.isEmpty() && !creating) {
             Text(if (state.connection.isLive) "No agent profile yet." else "Connect to a daemon to load its profiles.", color = Palette.Text)
             Text("A profile binds a role to a provider and model plus standing instructions. Tickets are assigned to a profile or to a role.", color = Palette.Muted, fontSize = 11.sp)
         }
-        state.visibleProfiles.forEach { p -> ProfileRow(p, state, controller, onSessionStarted) }
+        state.visibleProfiles.forEach { p -> ProfileRow(p, state, roles, executor, onSessionStarted) }
     }
 }
 
 @Composable
-private fun ProfileRow(p: AgentProfile, state: AppState, controller: Controller, onSessionStarted: () -> Unit) {
+private fun ProfileRow(p: AgentProfile, state: AppState, roles: RolesContext, executor: ExecutorContext, onSessionStarted: () -> Unit) {
     val actionScope = rememberCoroutineScope()
     var editing by remember(p.id) { mutableStateOf(false) }
     var first by remember(p.id) { mutableStateOf("") }
@@ -81,12 +84,12 @@ private fun ProfileRow(p: AgentProfile, state: AppState, controller: Controller,
             Spacer(Modifier.width(4.dp))
             Chip(p.model ?: "default model")
             OutlinedButton(onClick = { editing = !editing }, enabled = live, modifier = Modifier.padding(start = 6.dp)) { Text(if (editing) "Close" else "Edit", fontSize = 11.sp) }
-            TextButton(onClick = { p.id?.let { id -> actionScope.launch { controller.deleteProfile(id) } } }, enabled = live && p.id != null) {
+            TextButton(onClick = { p.id?.let { id -> actionScope.launch { roles.deleteProfile(id) } } }, enabled = live && p.id != null) {
                 Text("Delete", color = Palette.Danger, fontSize = 11.sp)
             }
         }
         p.instructions?.takeIf { it.isNotBlank() }?.let { Text(it, color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp, maxLines = 3) }
-        if (editing) ProfileForm(p, state, controller, onDone = { editing = false })
+        if (editing) ProfileForm(p, state, roles, executor, onDone = { editing = false })
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 first, { first = it }, label = { Text("First message") }, singleLine = true,
@@ -95,7 +98,7 @@ private fun ProfileRow(p: AgentProfile, state: AppState, controller: Controller,
             Spacer(Modifier.width(6.dp))
             Button(
                 enabled = live && first.isNotBlank() && p.id != null,
-                onClick = { actionScope.launch { if (controller.spawnAs(p.id!!, first.trim()) is CommandResult.Sent) { first = ""; onSessionStarted() } } },
+                onClick = { actionScope.launch { if (roles.spawnAs(p.id!!, first.trim()) is CommandResult.Sent) { first = ""; onSessionStarted() } } },
             ) { Text("Start session") }
         }
     }
@@ -103,7 +106,7 @@ private fun ProfileRow(p: AgentProfile, state: AppState, controller: Controller,
 
 /** Create ([existing] null) or edit a profile. An edit keeps the id, so the daemon overwrites the stored profile. */
 @Composable
-private fun ProfileForm(existing: AgentProfile?, state: AppState, controller: Controller, onDone: () -> Unit) {
+private fun ProfileForm(existing: AgentProfile?, state: AppState, roles: RolesContext, executor: ExecutorContext, onDone: () -> Unit) {
     val actionScope = rememberCoroutineScope()
     var name by remember(existing?.id) { mutableStateOf(existing?.name.orEmpty()) }
     var role by remember(existing?.id) { mutableStateOf(existing?.role ?: state.roles.firstOrNull()?.id.orEmpty()) }
@@ -132,7 +135,7 @@ private fun ProfileForm(existing: AgentProfile?, state: AppState, controller: Co
             Text("Role", color = Palette.Muted, fontSize = 11.sp)
             state.roles.forEach { r -> Chip(r.id, if (role == r.id) Palette.Accent else Palette.Muted, Modifier.clickable { role = r.id }) }
         }
-        ProfileExecutorField(CoreExecutor(state), existing?.id, provider, model) { p, m -> provider = p; model = m }
+        ProfileExecutorField(executor, existing?.id, provider, model) { p, m -> provider = p; model = m }
         val chosenProvider = state.providers.firstOrNull { it.id == provider } ?: state.providers.firstOrNull { it.default }
         if (chosenProvider?.modelsStale == true) {
             Text(
@@ -159,7 +162,7 @@ private fun ProfileForm(existing: AgentProfile?, state: AppState, controller: Co
                         )
                         refusal = null
                         val before = PendingSave(existing?.id, profile.name, state.profiles)
-                        when (val r = controller.saveProfile(profile)) {
+                        when (val r = roles.saveProfile(profile)) {
                             is CommandResult.Sent -> pending = before
                             else -> refusal = (r as? CommandResult.Refused)?.reason ?: "the save could not be sent"
                         }

@@ -2,6 +2,8 @@ package com.superiorsoftllc.agenthq.ui
 
 import com.superiorsoftllc.agenthq.plugins.official.stats.InfantryStats
 import com.superiorsoftllc.agenthq.plugins.official.epics.InfantryEpics
+import com.superiorsoftllc.agenthq.plugins.official.pods.InfantryPods
+import com.superiorsoftllc.agenthq.plugins.official.profiles.InfantryProfiles
 import com.superiorsoftllc.agenthq.plugins.official.review.InfantryReview
 import com.superiorsoftllc.agenthq.plugins.official.usage.InfantryUsage
 import com.superiorsoftllc.agenthq.plugins.official.changes.InfantryChanges
@@ -203,7 +205,7 @@ class CoreShellTreeTest {
         )
         // S4: the tab trees are the app UI's contributions now (TabFactory.tabTreeRoots), no longer CoreShell.tabs.
         // RUNTIME-6/7/8: Infantry_Notes, Infantry_Changes, Infantry_Run and Infantry_Git (official jars) register their own trees.
-        val factory = TabFactory(CoreModules.all + InfantryNotes + InfantryChanges + InfantryStats + InfantryUsage + InfantryEpics + InfantryReview + InfantryRun + InfantryGit)
+        val factory = TabFactory(CoreModules.all + InfantryPods + InfantryProfiles + InfantryNotes + InfantryChanges + InfantryStats + InfantryUsage + InfantryEpics + InfantryReview + InfantryRun + InfantryGit)
         val tabs = factory.tabTreeRoots
         assertEquals(listOf(notes, changes, run, git), tabs.map { it.id })
         assertEquals(expectedNotes.joinToString("\n"), tabs[0].walk().joinToString("\n"))

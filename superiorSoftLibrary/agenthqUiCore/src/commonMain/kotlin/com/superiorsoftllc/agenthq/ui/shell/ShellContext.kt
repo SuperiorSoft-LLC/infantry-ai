@@ -84,6 +84,31 @@ interface ShellContext {
     val epics: EpicsContext get() = NoEpics
     /** RUNTIME-11 (additive): what the official Infantry_Review tab may do with a queued node. */
     val review: ReviewContext get() = NoReview
+    /** RUNTIME-12 (additive): the pod requests behind the official Infantry_Pods tab. */
+    val pods: PodsContext get() = NoPods
+}
+
+/**
+ * RUNTIME-12: the daemon requests behind the official Pods tab. The pods it shows come from the window's state
+ * ([com.superiorsoftllc.agenthq.ui.plugin.TabContext.state], `AppState.pods`).
+ */
+interface PodsContext {
+    /** Submits a pod for [goal] with [nodes] (`pod_submit`). */
+    suspend fun submit(goal: String, nodes: List<com.superiorsoftllc.agenthq.ui.protocol.NodeSpec>): CommandResult
+    /** Asks for pod [podId] (`pod_query`). */
+    suspend fun query(podId: String): CommandResult
+    /** Cancels pod [podId] (`pod_cancel`). */
+    suspend fun cancel(podId: String): CommandResult
+    /** Selects session [sessionId] (a node's agent). */
+    fun openAgent(sessionId: String)
+}
+
+/** No pod requests: every one refused, opening an agent does nothing. */
+object NoPods : PodsContext {
+    override suspend fun submit(goal: String, nodes: List<com.superiorsoftllc.agenthq.ui.protocol.NodeSpec>): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun query(podId: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override suspend fun cancel(podId: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override fun openAgent(sessionId: String) {}
 }
 
 /**
@@ -440,6 +465,15 @@ interface RolesContext {
     suspend fun spawnAs(profileId: String, prompt: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
     /** S4d: the active project's profiles (every profile with none active): who a ticket can be assigned to. */
     val profiles: List<AgentProfile> get() = emptyList()
+}
+
+/** RUNTIME-12: no roles domain: no roles, no manager, every request refused (a pane drawn without a shell). */
+object NoRoles : RolesContext {
+    override val managerOpen: Boolean get() = false
+    override fun closeManager() {}
+    override val roles: List<Role> get() = emptyList()
+    override val bindings: Map<String, RoleBinding> get() = emptyMap()
+    override val traits: Map<String, List<String>> get() = emptyMap()
 }
 
 /**
