@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.run
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -34,15 +34,12 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.superiorsoftllc.agenthq.ui.model.AppState
+import com.superiorsoftllc.agenthq.ui.*
 import com.superiorsoftllc.agenthq.ui.model.CommandSpecView
 import com.superiorsoftllc.agenthq.ui.model.RunState
 import com.superiorsoftllc.agenthq.ui.model.RunsState
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
 import com.superiorsoftllc.agenthq.ui.model.runPills
-import com.superiorsoftllc.agenthq.ui.net.Controller
-import com.superiorsoftllc.agenthq.ui.shell.CoreLink
-import com.superiorsoftllc.agenthq.ui.shell.CoreRun
 import com.superiorsoftllc.agenthq.ui.shell.LinkContext
 import com.superiorsoftllc.agenthq.ui.shell.RunContext
 import kotlinx.coroutines.CoroutineScope
@@ -111,10 +108,10 @@ internal data class CommandDraft(
     }
 }
 
-/**
- * In-app build run panel (design section 4): a command dropdown, Start, Stop and a scrolling monospace output
- * pane. Everything shown comes from [AppState.runs]; the local state is the picked command, the dropdown, and
- * the command editor.
+/*
+ * In-app build run panel (design section 4): a command dropdown, Start, Stop and a scrolling monospace output pane.
+ * Everything shown comes from the run context's runs; the local state is the picked command, the dropdown, and the
+ * command editor.
  *
  * RUN-CMD-2: Add / Edit / Delete next to the picker. The editor sends `command_save`; the daemon's refusal shows
  * inline under the form, and the form closes once the new `commands` list arrives. Delete asks for an inline confirm
@@ -122,20 +119,9 @@ internal data class CommandDraft(
  * The button rows wrap and the form scrolls, so the compact (phone) layout fits.
  *
  * BLOCKS-LAYOUT L15: drawn as [RunPaneFrame] (the column, its title, the save watch) and its sections, which the Run tab's
- * `infantry.shell.run` node draws as child blocks.
+ * `infantry.shell.run` node draws as child blocks ([ShellRun]). RUNTIME-7: everything here reads the plugin API contexts
+ * (link, run); the window's AppState / Controller are not used.
  */
-@Composable
-fun RunPane(state: AppState, controller: Controller) {
-    RunPaneFrame(CoreLink(state), CoreRun(state, controller, LocalRunConsole.current)) { run ->
-        RunEmptySection(run)
-        RunToolbarSection(run)
-        RunPillsSection(run)
-        RunConfirmSection(run)
-        RunEditorSection(run, Modifier.weight(1f))
-        RunNoticesSection(run)
-        RunOutputSection(run, Modifier.weight(1f))
-    }
-}
 
 /**
  * BLOCKS-LAYOUT L15: the Run pane as its sections read it: the runs, whether the link is [live], the [picked] command, the

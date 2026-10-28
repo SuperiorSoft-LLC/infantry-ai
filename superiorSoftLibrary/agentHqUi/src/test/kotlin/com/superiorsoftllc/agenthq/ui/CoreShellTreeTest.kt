@@ -1,6 +1,9 @@
 package com.superiorsoftllc.agenthq.ui
 
 import com.superiorsoftllc.agenthq.plugins.core.CoreModules
+import com.superiorsoftllc.agenthq.plugins.official.git.InfantryGit
+import com.superiorsoftllc.agenthq.plugins.official.run.InfantryRun
+import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.PlaceholderBlock
 import com.superiorsoftllc.agenthq.ui.shell.blocks.CoreShell
@@ -193,18 +196,20 @@ class CoreShellTreeTest {
             "    $changes.commit",
         )
         // S4: the tab trees are the app UI's contributions now (TabFactory.tabTreeRoots), no longer CoreShell.tabs.
-        val tabs = CoreModules.factory.tabTreeRoots
-        assertEquals(listOf(git, run, notes, changes), tabs.map { it.id })
-        assertEquals(expectedGit.joinToString("\n"), tabs[0].walk().joinToString("\n"))
-        assertEquals(expectedRun.joinToString("\n"), tabs[1].walk().joinToString("\n"))
-        assertEquals(expectedNotes.joinToString("\n"), tabs[2].walk().joinToString("\n"))
-        assertEquals(expectedChanges.joinToString("\n"), tabs[3].walk().joinToString("\n"))
-        val all = (listOf(CoreModules.factory.baseRoot) + tabs).flatMap { it.walk() }.map { it.trim() }
+        // RUNTIME-6/7: Infantry_Run and Infantry_Git (official jars) register their own trees, after Infantry_AppUi's.
+        val factory = TabFactory(CoreModules.all + InfantryRun + InfantryGit)
+        val tabs = factory.tabTreeRoots
+        assertEquals(listOf(notes, changes, run, git), tabs.map { it.id })
+        assertEquals(expectedNotes.joinToString("\n"), tabs[0].walk().joinToString("\n"))
+        assertEquals(expectedChanges.joinToString("\n"), tabs[1].walk().joinToString("\n"))
+        assertEquals(expectedRun.joinToString("\n"), tabs[2].walk().joinToString("\n"))
+        assertEquals(expectedGit.joinToString("\n"), tabs[3].walk().joinToString("\n"))
+        val all = (listOf(factory.baseRoot) + tabs).flatMap { it.walk() }.map { it.trim() }
         assertEquals(all.size, all.toSet().size, "node ids are unique across the trees")
         // P1 (f60f4d97): the tab that draws each tree, as Configuration > Plugins > Registered names it.
         assertEquals(
             mapOf(git to "infantry.git", run to "infantry.run", notes to "infantry.notes", changes to "infantry.changes"),
-            CoreModules.factory.tabTreeTabs,
+            factory.tabTreeTabs,
         )
     }
 }

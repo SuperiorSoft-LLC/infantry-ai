@@ -60,7 +60,8 @@ Everything is declared in `module.json` and registered under the same id. Anythi
   picked sub-tab is kept by the window (`context.subTab` / `context.pickSubTab`, plugin API revision 2).
 - **Tab trees**: a tab drawn as a tree of blocks (so other modules can override its sections by node id) registers the
   tree with `registrar.tabTree(tabId, root)` and draws `LocalShellContext.current?.layout?.tabTree(root.id)`. Core and
-  official tiers only; the official `Infantry_Git` registers `ShellGit` (`infantry.shell.git`) this way.
+  official tiers only; the official `Infantry_Git` registers `ShellGit` (`infantry.shell.git`) this way, and `Infantry_Run`
+  registers `ShellRun` (`infantry.shell.run`).
 - **Shell nodes** (replace or wrap a piece of the window itself): `"shell": [{ "node": "infantry.shell.footer",
   "name": "myBar", "mode": "wrap" }]` plus `registrar.shell("myBar", BlockOverride { scope, inner -> ... })`. The
   window is a tree of blocks, each with a node id (the list is pinned in `CoreShellTreeTest`; the tree is in

@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.run.*
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
@@ -32,13 +34,6 @@ import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import com.superiorsoftllc.agenthq.ui.protocol.Envelope
 import com.superiorsoftllc.agenthq.ui.shell.blocks.CoreShell
-import com.superiorsoftllc.agenthq.ui.shell.blocks.RunConfirm
-import com.superiorsoftllc.agenthq.ui.shell.blocks.RunEditor
-import com.superiorsoftllc.agenthq.ui.shell.blocks.RunEmpty
-import com.superiorsoftllc.agenthq.ui.shell.blocks.RunNotices
-import com.superiorsoftllc.agenthq.ui.shell.blocks.RunOutput
-import com.superiorsoftllc.agenthq.ui.shell.blocks.RunPills
-import com.superiorsoftllc.agenthq.ui.shell.blocks.RunToolbar
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -62,7 +57,7 @@ class RunPaneOverridesUiTest {
             ModuleManifest("Acme_Run", "1.0.0", author = "Acme", license = "NOASSERTION", shell = listOf(decl)),
             tier = Tier.COMMUNITY, shell = mapOf("acme" to override),
         )
-        val f = TabFactory(CoreModules.all + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Run", decl.nodeId, decl.name, decl.mode)))
+        val f = TabFactory(CoreModules.all + InfantryRun + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Run", decl.nodeId, decl.name, decl.mode)))
         assertEquals(emptyList(), f.problems)
         // The override goes into the Run tab's tree, not the window's.
         assertSame(f.baseRoot, f.shellRoot)

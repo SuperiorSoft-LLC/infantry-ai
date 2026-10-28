@@ -66,6 +66,8 @@ object DesktopPlugins {
         property: (String) -> String? = System::getProperty,
         compiled: List<AgentHqModule> = CompiledModules.all,
         print: (String) -> Unit = { System.err.println(it) },
+        /** The pinned Infantry key fingerprints ([OfficialTrust.PINNED_FINGERPRINTS]); overridable for tests only. */
+        pinned: Set<String> = OfficialTrust.PINNED_FINGERPRINTS,
     ): Loaded {
         val log = mutableListOf<String>()
         val say: (String) -> Unit = { log += it; print(it) }
@@ -78,7 +80,7 @@ object DesktopPlugins {
         val withBundles = compiled + bundles(root, config, compiled, say, loaders)
         val bundled = PluginFolders.bundledRoot(env, property)
         val devTrust = PluginFolders.devTrust(property)
-        val candidates = OfficialTrust.check(candidates(root, config, withBundles, bundled), OfficialTrust.infantryKeys(root, bundled), devTrust, say)
+        val candidates = OfficialTrust.check(candidates(root, config, withBundles, bundled), OfficialTrust.infantryKeys(root, bundled), devTrust, say, pinned)
         say("[plugins] root ${root.absolutePath}${bundled?.let { " (bundled ${it.absolutePath})" } ?: ""}${if (demoLock) " (demo lock on)" else ""}${if (safeMode) " (safe mode: community modules off)" else ""}")
         var resolution = ModuleResolver.resolve(candidates, config, demoLock, safeMode = safeMode, platform = "desktop")
 

@@ -4,8 +4,10 @@
   "apiVersion": 1,
   "author": "Infantry AI",
   "description": "Saved commands and their runs.",
+  "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.core.RunModuleSource",
+  "entry": "com.superiorsoftllc.agenthq.plugins.official.run.RunPlugin",
+  "jar": "build/libs/Infantry_Run.jar",
   "buildOrder": 90,
   "tabs": [
     {
