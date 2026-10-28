@@ -41,6 +41,10 @@ import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockInjection
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockOverride
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockResolver
+import com.superiorsoftllc.agenthq.ui.block.layout.BlockType
+import com.superiorsoftllc.agenthq.ui.block.layout.BlockTypes
+import com.superiorsoftllc.agenthq.ui.block.layout.PageJson
+import kotlinx.serialization.json.JsonObject
 import com.superiorsoftllc.agenthq.ui.block.layout.InjectAt
 import com.superiorsoftllc.agenthq.ui.block.layout.InjectedBlock
 import com.superiorsoftllc.agenthq.ui.block.layout.NodeInjection
@@ -255,6 +259,8 @@ class AgentHqModule(
     val tabTrees: Map<String, Block> = emptyMap(),
     /** P1 step 2 (6s D): implementations for config `implementation` fields, registry -> key -> value (module.json `implementations`). */
     val implementations: Map<String, Map<String, Any>> = emptyMap(),
+    /** NS1 / PB1 (6t.2): the block types the module registers, by type name (module.json `blockTypes`). */
+    val blockTypes: Map<String, BlockType> = emptyMap(),
     /** S7: runs once when the host unloads the module (a soft restart replaces the module set, or the app closes it). */
     val onStop: () -> Unit = {},
 )
@@ -292,6 +298,8 @@ interface UiRegistrar {
     fun tabTree(tab: String, root: Block) {}
     /** P1 step 2: [value] under [key] of registry [registry]; declare it under `implementations` in module.json. */
     fun implementation(registry: String, key: String, value: Any) {}
+    /** NS1 / PB1: block type [type] (`vendor.name`); declare it under `blockTypes` in module.json. */
+    fun blockType(type: String, blockType: BlockType) {}
 }
 
 /** Runs [plugin]'s registration into a module of [tier]. */
@@ -306,6 +314,7 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
     val fills = LinkedHashMap<String, Block>()
     val tabTrees = LinkedHashMap<String, Block>()
     val implementations = LinkedHashMap<String, LinkedHashMap<String, Any>>()
+    val blockTypes = LinkedHashMap<String, BlockType>()
     plugin.register(object : UiRegistrar {
         override val services = services
         override fun tab(provider: TabProvider) { tabs += provider }
@@ -318,8 +327,9 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
         override fun fill(node: String, block: Block) { fills[node] = block }
         override fun tabTree(tab: String, root: Block) { tabTrees[tab] = root }
         override fun implementation(registry: String, key: String, value: Any) { implementations.getOrPut(registry) { LinkedHashMap() }[key] = value }
+        override fun blockType(type: String, blockType: BlockType) { blockTypes[type] = blockType }
     })
-    return AgentHqModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell, inject, fills, tabTrees, implementations, onStop = plugin::stop)
+    return AgentHqModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell, inject, fills, tabTrees, implementations, blockTypes, onStop = plugin::stop)
 }
 
 /**
@@ -420,7 +430,7 @@ class TabFactory(
     private var drawnFor: Any? = null
     private val drawnCache = HashMap<String, Block>()
     /** Everything refused or ignored, one line each. */
-    val problems: List<String> get() = bindProblems + shell.problems + tabTrees.flatMap { it.problems }
+    val problems: List<String> get() = bindProblems + shell.problems + tabTrees.flatMap { it.problems } + blockTypes.problems
     private val providers: List<TabProvider>
     /** P1 (f60f4d97): each tab id a preference replaced, and the module whose tab it replaced. */
     internal val replacedTabs: Map<String, String>
@@ -735,6 +745,29 @@ class TabFactory(
         }
         Implementations(out, problems)
     }
+
+    /** NS1 / PB1 (6t.2): every registered block type, core's layout primitives first, then each module's in load order. */
+    val blockTypes: BlockTypes by lazy {
+        BlockTypes.of(modules.map { Triple(it.manifest.name, it.manifest.blockTypes, it.blockTypes) })
+    }
+
+    /**
+     * NS1 (6t.5): [root] (default the drawn shell) as the page JSON: each node's registered type (or its own
+     * [Block.blockType] when it is not a type yet), id, the resolved values of its declared fields (its type's and its
+     * node's), children. The modules list is every loaded module with its version.
+     */
+    fun pageJson(root: Block = shellRoot): JsonObject = PageJson.render(
+        root,
+        modules.map { it.manifest.name to it.manifest.version },
+        typeOf = { blockTypes.typeOf(it) ?: it.blockType },
+        config = { b ->
+            // A type field not in the config tree yet (instances join it in PB2) falls back to the type's default.
+            val keys = LinkedHashMap<String, kotlinx.serialization.json.JsonElement?>()
+            blockTypes.typeOf(b)?.let { t -> blockTypes[t]?.declaration?.fields?.forEach { keys[it.key] = it.default } }
+            configTree.fields[b.id]?.forEach { keys.getOrPut(it.key) { null } }
+            keys.mapNotNull { (k, d) -> (resolvedConfig.json(b.id, k) ?: d)?.let { k to it } }.toMap()
+        },
+    )
 }
 
 /**

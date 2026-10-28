@@ -78,7 +78,40 @@ data class ModuleManifest(
      * A config `implementation` field stores the key; an undeclared registration is refused.
      */
     val implementations: List<ImplementationDeclaration> = emptyList(),
+    /**
+     * NS1 / PB1 (docs/BLOCKS-LAYOUT-DESIGN.md 6t.2): the block TYPES the module registers (`UiRegistrar.blockType`). The
+     * config tree holds instances of them; an undeclared registration is refused.
+     */
+    val blockTypes: List<BlockTypeDeclaration> = emptyList(),
 )
+
+/**
+ * NS1 / PB1 (6t.2): a block type, `vendor.name` (core's layout primitives are `layout.row` ...). [fields] are the
+ * per-instance config fields (6s A declarations, instantiated on each instance id); [takesChildren] whether an instance
+ * hosts children; [needs] the kind of parent it must sit in (`any | row | box | column`); [parents] the node ids or
+ * types it may sit in (empty = any); [max] instances per tree (null = no cap); [template] (NS2) the instance is drawn
+ * once per item of its parent, never as a fixed instance.
+ */
+@Serializable
+data class BlockTypeDeclaration(
+    val type: String,
+    val title: String = type,
+    val fields: List<ConfigFieldDeclaration> = emptyList(),
+    val takesChildren: Boolean = false,
+    val needs: String = BlockNeeds.ANY,
+    val parents: List<String> = emptyList(),
+    val max: Int? = null,
+    val template: Boolean = false,
+)
+
+/** NS1: the parent kinds a [BlockTypeDeclaration.needs] may name. */
+object BlockNeeds {
+    const val ANY = "any"
+    const val ROW = "row"
+    const val BOX = "box"
+    const val COLUMN = "column"
+    val ALL = setOf(ANY, ROW, BOX, COLUMN)
+}
 
 /** P1 step 2: the module registers an implementation under [key] of registry [registry] (e.g. `tabs.sorter`, `byTitle`). */
 @Serializable
