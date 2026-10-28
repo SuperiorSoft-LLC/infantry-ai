@@ -48,6 +48,15 @@ class PromptCardModelTest {
         assertTrue(feed(Envelope(Envelope.READY, "contract=1.78.0 instance=x"), from = open).openPrompts.isEmpty())
     }
 
+    @Test fun `a prompt of an unselected session is a toast that opens it, gone when the prompt resolves`() {
+        val s = feed(approvalFrame("p1"))
+        val toast = s.toasts.single()
+        assertEquals("s1", toast.sessionId)
+        assertTrue(toast.body.orEmpty().let { "Bash" in it && "git status" in it })
+        assertTrue(feed(resolved("p1"), from = s).toasts.isEmpty())
+        assertTrue(feed(approvalFrame("p2"), from = AppState(selectedId = "s1")).toasts.isEmpty(), "the selected session shows its card")
+    }
+
     @Test fun `a session with an open prompt needs you`() {
         val agent = AgentView(session = SessionRecord(id = "s1", provider = "stub", workingDir = "/w", spawnedAt = 1, lastHeartbeat = 1, state = SessionState.BUSY, providerSessionId = "p"))
         val s = feed(approvalFrame("p1"))

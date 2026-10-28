@@ -35,6 +35,25 @@ fun NoticeKind.toToastKind(): ToastKind = when (this) {
 fun Notice.toToast(projectName: String?): ToastEvent =
     ToastEvent("notice-$at-${text.hashCode()}", at, kind.toToastKind(), projectName ?: projectId.orEmpty(), text, projectId = projectId)
 
+/** BUG f422b3a1: how long a prompt toast stays if nobody answers (it is removed at once when the prompt resolves). */
+const val PROMPT_TOAST_MS = 10 * 60_000L
+
+fun promptToastId(promptId: String): String = "prompt-$promptId"
+
+/**
+ * BUG f422b3a1: the global toast for a prompt opened by a session that is not the selected one: who asks and what for.
+ * A click opens that session (its project first), where the card is docked above the input.
+ */
+fun promptToast(s: AppState, p: com.superiorsoftllc.agenthq.ui.protocol.PromptRequestView, now: Long): ToastEvent {
+    val agent = s.agents[p.sessionId]
+    val who = agent?.let { s.agentTitle(it) } ?: p.sessionId.take(8)
+    val what = if (p.tool != null) "wants to run ${p.tool}" + (p.input?.takeIf { it.isNotBlank() }?.let { ": ${it.take(120)}" } ?: "")
+    else p.question?.takeIf { it.isNotBlank() }?.let { "asks: ${it.take(160)}" } ?: "has a question"
+    val title = if (p.tool != null) "Approval needed" else "Question for you"
+    return ToastEvent(promptToastId(p.promptId), now, ToastKind.WARN, title, "$who $what", sessionId = p.sessionId,
+        projectId = agent?.session?.projectId, durationMs = PROMPT_TOAST_MS)
+}
+
 /** Post [toast]; an id already queued is ignored. Keeps the newest few. */
 fun AppState.withToast(toast: ToastEvent): AppState =
     if (toasts.any { it.id == toast.id }) this else copy(toasts = (toasts + toast).takeLast(MAX_QUEUED_TOASTS))
