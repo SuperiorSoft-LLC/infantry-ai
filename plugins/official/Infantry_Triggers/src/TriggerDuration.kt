@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.triggers
+
+import com.superiorsoftllc.agenthq.ui.*
 
 import kotlin.math.floor
 import kotlin.math.roundToLong

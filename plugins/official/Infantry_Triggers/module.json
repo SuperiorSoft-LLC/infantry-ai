@@ -4,8 +4,10 @@
   "apiVersion": 1,
   "author": "Infantry AI",
   "description": "Triggers that start work on an event.",
+  "tier": "official",
   "sequence": [],
-  "entry": "com.superiorsoftllc.agenthq.plugins.core.TriggersModuleSource",
+  "entry": "com.superiorsoftllc.agenthq.plugins.official.triggers.TriggersPlugin",
+  "jar": "build/libs/Infantry_Triggers.jar",
   "buildOrder": 60,
   "tabs": [
     {

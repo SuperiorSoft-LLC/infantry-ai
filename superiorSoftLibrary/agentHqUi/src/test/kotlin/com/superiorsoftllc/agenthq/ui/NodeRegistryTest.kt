@@ -4,6 +4,8 @@ import com.superiorsoftllc.agenthq.plugins.official.stats.InfantryStats
 import com.superiorsoftllc.agenthq.plugins.official.epics.InfantryEpics
 import com.superiorsoftllc.agenthq.plugins.official.pods.InfantryPods
 import com.superiorsoftllc.agenthq.plugins.official.profiles.InfantryProfiles
+import com.superiorsoftllc.agenthq.plugins.official.triggers.InfantryTriggers
+import com.superiorsoftllc.agenthq.plugins.official.attention.InfantryAttention
 import com.superiorsoftllc.agenthq.plugins.official.review.InfantryReview
 import com.superiorsoftllc.agenthq.plugins.official.usage.InfantryUsage
 import com.superiorsoftllc.agenthq.plugins.official.changes.InfantryChanges
@@ -42,7 +44,7 @@ import kotlin.test.assertTrue
 /** P1 (f60f4d97, docs/BLOCKS-LAYOUT-DESIGN.md section 6s): the registry read model over what TabFactory resolved. */
 class NodeRegistryTest {
     /** RUNTIME-6/7/8: the compiled-in core modules plus the official Notes, Changes, Run and Git (jars on desktop), as the window has them. */
-    private val coreAndGit = CoreModules.all + InfantryPods + InfantryProfiles + InfantryNotes + InfantryChanges + InfantryStats + InfantryUsage + InfantryEpics + InfantryReview + InfantryRun + InfantryGit
+    private val coreAndGit = CoreModules.all + InfantryPods + InfantryProfiles + InfantryTriggers + InfantryAttention + InfantryNotes + InfantryChanges + InfantryStats + InfantryUsage + InfantryEpics + InfantryReview + InfantryRun + InfantryGit
 
     private fun tab(id: String, order: Int, title: String) =
         TabProvider(id, TabContainers.CENTER, order, { title }, InfantryGit.tabs.single().icon, "center-tab-$id") { Text(title) }

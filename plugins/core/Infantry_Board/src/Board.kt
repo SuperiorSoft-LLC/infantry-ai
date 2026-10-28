@@ -104,12 +104,6 @@ internal fun assigneeRole(deps: BoardDeps, agentId: String): String? =
         ?: agentId.removePrefix("role:").takeIf { agentId.startsWith("role:") }
         ?: deps.agent(agentId)?.role
 
-/** What a ticket's assignee reads as: a profile's name when the id is one, else the raw `role:<role>` / id. */
-fun assigneeLabel(profiles: List<AgentProfile>, agentId: String?): String = when {
-    agentId == null -> "unassigned"
-    else -> profiles.firstOrNull { it.id == agentId }?.name ?: agentId
-}
-
 /** M2-14: the board's Epic filter anchor, its options (`all`, `none`, then each epic id) and a card's epic chip. */
 const val BOARD_EPIC_FILTER_TAG = "board-epic-filter"
 const val BOARD_EPIC_FILTER_OPTION_TAG_PREFIX = "board-epic-filter-option-"

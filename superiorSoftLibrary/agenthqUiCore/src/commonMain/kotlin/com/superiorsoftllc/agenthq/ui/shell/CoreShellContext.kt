@@ -74,6 +74,8 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
     override val epics: EpicsContext = CoreEpics(shell.controller)
     override val review: ReviewContext = CoreReview(shell.controller)
     override val pods: PodsContext = CorePods(shell.controller)
+    override val triggers: TriggersContext = CoreTriggers(shell.controller)
+    override val attention: AttentionContext = CoreAttention(shell.controller)
 
     override val board: BoardContext = object : BoardContext {
         override val open: Boolean get() = ui.showBoard
@@ -170,6 +172,25 @@ class CorePods(private val controller: Controller) : PodsContext {
     override suspend fun query(podId: String): CommandResult = controller.queryPod(podId)
     override suspend fun cancel(podId: String): CommandResult = controller.cancelPod(podId)
     override fun openAgent(sessionId: String) = controller.select(sessionId)
+}
+
+/** RUNTIME-13: [controller]'s trigger requests, for the Triggers tab. */
+class CoreTriggers(private val controller: Controller) : TriggersContext {
+    override suspend fun save(payload: kotlinx.serialization.json.JsonObject): CommandResult = controller.saveTrigger(payload)
+    override suspend fun fire(id: String): CommandResult = controller.fireTrigger(id)
+    override suspend fun arm(id: String): CommandResult = controller.armTrigger(id)
+    override suspend fun disable(id: String): CommandResult = controller.disableTrigger(id)
+    override suspend fun delete(id: String): CommandResult = controller.deleteTrigger(id)
+    override suspend fun loadEvents(id: String): CommandResult = controller.loadTriggerEvents(id)
+}
+
+/** RUNTIME-13: [controller]'s attention and question requests, for the Attention tab. */
+class CoreAttention(private val controller: Controller) : AttentionContext {
+    override suspend fun ack(id: String): CommandResult = controller.ackAttention(id)
+    override suspend fun answer(answer: com.superiorsoftllc.agenthq.ui.protocol.QuestionAnswerWire): CommandResult = controller.answerQuestion(answer)
+    override suspend fun cancelQuestion(id: String): CommandResult = controller.cancelQuestion(id)
+    override fun openQuestion(id: String) = controller.openQuestion(id)
+    override fun openSession(sessionId: String) = controller.openSession(sessionId)
 }
 
 /** S4b: [state]'s notes and [controller]'s note requests, for a pane drawn outside a shell. */
