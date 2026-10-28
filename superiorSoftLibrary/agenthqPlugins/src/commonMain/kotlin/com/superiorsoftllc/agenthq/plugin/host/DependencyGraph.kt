@@ -112,7 +112,7 @@ class DependencyGraph(nodes: List<ModuleNode>) {
         /** The graph of what is installed, enabled as modules.json (and each tier's default) says. */
         fun of(candidates: List<ModuleCandidate>, config: ModulesConfig): DependencyGraph = DependencyGraph(
             candidates.mapNotNull { c ->
-                c.manifest?.let { m -> ModuleNode(m.name, c.tier, m, config.setting(m.name).enabled ?: (c.tier == Tier.CORE)) }
+                c.manifest?.let { m -> ModuleNode(m.name, c.tier, m, config.setting(m.name).enabled ?: (c.tier != Tier.COMMUNITY)) }
             },
         )
 
@@ -128,7 +128,7 @@ class DependencyGraph(nodes: List<ModuleNode>) {
         fun edgeProblem(from: String, fromTier: Tier, dep: DependencyDeclaration, targetTier: Tier?, targetManifest: ModuleManifest?): String? {
             val range = VersionRange.parseOrNull(dep.version) ?: return "$from declares an invalid version range '${dep.version}' for ${dep.id}"
             if (targetManifest == null || targetTier == null) return "$from needs ${label(dep)}, which is not installed"
-            if (fromTier == Tier.CORE && targetTier == Tier.COMMUNITY) return "core module $from cannot depend on community module ${dep.id}"
+            if (targetTier.ordinal > fromTier.ordinal) return "${fromTier.name.lowercase()} module $from cannot depend on ${targetTier.name.lowercase()} module ${dep.id}"
             val v = SemVer.parseOrNull(targetManifest.version) ?: return "$from needs ${label(dep)}, but ${dep.id} has version '${targetManifest.version}', which is not a version"
             if (!range.contains(v)) return "$from needs ${label(dep)}, but ${dep.id} is $v"
             return null

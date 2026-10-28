@@ -723,20 +723,22 @@ class TabFactory(
     fun Content(id: String, context: TabContext) {
         val tab = find(id) ?: return
         val module = byModule[tab.module]
-        val own = context.forModule(services(tab.module), module?.tier != Tier.COMMUNITY)
+        // RUNTIME-2: only a core module gets the window controller; official is a program like community (D4).
+        val own = context.forModule(services(tab.module), module?.tier.isCoreTier())
         val hooks = interceptors[id].orEmpty().filter { it.before != null || it.after != null || it.content != null }
         val top = blocks[Slots.top(tab.container)].orEmpty()
         val bottom = blocks[Slots.bottom(tab.container)].orEmpty()
         val community = module?.tier == Tier.COMMUNITY
+        val core = module?.tier.isCoreTier()
         if (!community && hooks.isEmpty() && top.isEmpty() && bottom.isEmpty()) {
-            ModuleTier(!community) { tab.content(own) }
+            ModuleTier(core) { tab.content(own) }
             return
         }
-        val inner = hooks.foldRight<TabInterceptor, @Composable () -> Unit>({ ModuleTier(!community) { tab.content(own) } }) { i, proceed ->
+        val inner = hooks.foldRight<TabInterceptor, @Composable () -> Unit>({ ModuleTier(core) { tab.content(own) } }) { i, proceed ->
             i.content?.let { wrap -> { wrap(own, proceed) } } ?: proceed
         }
         Column {
-            top.forEach { (owner, b) -> ModuleTier(byModule[owner]?.tier != Tier.COMMUNITY) { b.content(context.forModule(services(owner), byModule[owner]?.tier != Tier.COMMUNITY)) } }
+            top.forEach { (owner, b) -> ModuleTier(byModule[owner]?.tier.isCoreTier()) { b.content(context.forModule(services(owner), byModule[owner]?.tier.isCoreTier())) } }
             if (community) CommunityBadge(module!!.manifest)
             hooks.forEach { it.before?.invoke(own) }
             Box(Modifier.weight(1f)) {
@@ -744,7 +746,7 @@ class TabFactory(
                 CompositionLocalProvider(LocalContentColor provides Palette.Text) { inner() }
             }
             hooks.forEach { it.after?.invoke(own) }
-            bottom.forEach { (owner, b) -> ModuleTier(byModule[owner]?.tier != Tier.COMMUNITY) { b.content(context.forModule(services(owner), byModule[owner]?.tier != Tier.COMMUNITY)) } }
+            bottom.forEach { (owner, b) -> ModuleTier(byModule[owner]?.tier.isCoreTier()) { b.content(context.forModule(services(owner), byModule[owner]?.tier.isCoreTier())) } }
         }
     }
 
@@ -854,7 +856,7 @@ fun ColumnScope.PanelSections(factory: TabFactory, panel: String, context: TabCo
 @Composable
 private fun ColumnScope.PanelSection(factory: TabFactory, section: PanelProvider, context: TabContext) {
     val module = factory.panelModuleOf(section.id)
-    val own = context.forModule(factory.servicesOf(section.module), module?.tier != Tier.COMMUNITY)
+    val own = context.forModule(factory.servicesOf(section.module), module?.tier.isCoreTier())
     Box(Modifier.fillMaxWidth().testTag(section.testTag).let { if (section.fill) it.weight(1f) else it }) {
         if (module?.tier == Tier.COMMUNITY) {
             Column {
@@ -862,7 +864,7 @@ private fun ColumnScope.PanelSection(factory: TabFactory, section: PanelProvider
                 CompositionLocalProvider(LocalContentColor provides Palette.Text) { ModuleTier(false) { section.content(own) } }
             }
         } else {
-            section.content(own)
+            ModuleTier(module?.tier.isCoreTier()) { section.content(own) }
         }
     }
 }
@@ -885,3 +887,6 @@ private fun Block.filled(fills: Map<String, Block>): Block {
     val kids = children.map { it.filled(fills) }
     return if (kids.indices.all { kids[it] === children[it] }) this else withChildren(kids)
 }
+
+/** RUNTIME-2: core rights (window controller, core tier) go to a core module, or to the shell's own (no module), never to official. */
+internal fun Tier?.isCoreTier(): Boolean = (this ?: Tier.CORE) == Tier.CORE

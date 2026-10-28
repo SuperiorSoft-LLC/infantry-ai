@@ -253,7 +253,7 @@ object IhqInstaller {
         return first
     }
 
-    private fun trustedCerts(root: File, settings: InstallSettings): List<X509Certificate> {
+    internal fun trustedCerts(root: File, settings: InstallSettings): List<X509Certificate> {
         val dir = File(settings.trustedKeys).let { if (it.isAbsolute) it else File(root, settings.trustedKeys) }
         val cf = CertificateFactory.getInstance("X.509")
         return dir.listFiles { f -> f.isFile && f.extension.lowercase() in setOf("cer", "crt", "pem") }.orEmpty().sortedBy { it.name }

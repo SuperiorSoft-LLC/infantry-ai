@@ -3,7 +3,9 @@ package com.superiorsoftllc.agenthq.plugin.host
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.ModulesConfig
 import com.superiorsoftllc.agenthq.plugin.api.PluginSettings
+import com.superiorsoftllc.agenthq.plugin.api.PluginFolder
 import com.superiorsoftllc.agenthq.plugin.api.PluginStorage
+import com.superiorsoftllc.agenthq.plugin.api.Tier
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.JsonArray
@@ -39,6 +41,24 @@ object PluginFolders {
     fun safeMode(env: (String) -> String? = System::getenv, property: (String) -> String? = System::getProperty): Boolean =
         (env(SAFE_MODE_ENV) ?: property(SAFE_MODE_PROPERTY))?.trim()?.lowercase()?.let { it.isNotEmpty() && it != "0" && it != "false" && it != "off" } ?: false
 
+    /**
+     * RUNTIME-2: the bundled modules root of the install (`<install>/modules`, holding `official/`): AGENTHQ_BUNDLED_MODULES,
+     * else the `agenthq.plugins.bundled` property (the packaged launcher sets it). Null = none (a dev run from the repo).
+     */
+    const val BUNDLED_ENV = "AGENTHQ_BUNDLED_MODULES"
+    const val BUNDLED_PROPERTY = "agenthq.plugins.bundled"
+
+    fun bundledRoot(env: (String) -> String? = System::getenv, property: (String) -> String? = System::getProperty): File? =
+        (env(BUNDLED_ENV)?.takeIf { it.isNotBlank() } ?: property(BUNDLED_PROPERTY)?.takeIf { it.isNotBlank() })?.let(::File)
+
+    /**
+     * RUNTIME-2: `agenthq.plugins.devTrust=true` lets an unsigned official jar load (dev runs from the repo root only).
+     * A system property only, never an environment variable; the packaged launcher never sets it.
+     */
+    const val DEV_TRUST_PROPERTY = "agenthq.plugins.devTrust"
+
+    fun devTrust(property: (String) -> String? = System::getProperty): Boolean = property(DEV_TRUST_PROPERTY)?.trim()?.lowercase() == "true"
+
     /** `<root>/modules.json`; a missing file is the defaults, an unreadable one too (and [log] says so). */
     fun config(root: File, log: (String) -> Unit = {}): ModulesConfig {
         val f = File(root, "modules.json")
@@ -51,8 +71,32 @@ object PluginFolders {
      * Every module folder under the configured subfolders, in folder order then name. A folder without module.json is
      * not a module; nor is one whose name starts with `_` (PLUGINS-2: `_template`, a copy being worked on).
      */
-    fun scan(root: File, config: ModulesConfig): List<ModuleCandidate> =
-        config.folders.flatMap { folder ->
+    fun scan(root: File, config: ModulesConfig): List<ModuleCandidate> = scanFolders(root, folders(config))
+
+    /**
+     * RUNTIME-2: the folders scanned: modules.json's, plus `official` when it names no official folder (a modules.json
+     * written before the official tier must not hide every official plugin).
+     */
+    fun folders(config: ModulesConfig): List<PluginFolder> =
+        if (config.folders.any { it.tier == Tier.OFFICIAL }) config.folders
+        else config.folders.flatMap { if (it.tier == Tier.CORE) listOf(it, OFFICIAL_FOLDER) else listOf(it) }
+            .let { if (OFFICIAL_FOLDER in it) it else it + OFFICIAL_FOLDER }
+
+    /**
+     * RUNTIME-2: every module of the user [root] and, after them, of the bundled root's `official/` folder. A bundled module
+     * whose name the user root already holds is left out (the user copy is the one that loads; it passes the same checks).
+     */
+    fun scan(root: File, config: ModulesConfig, bundled: File?): List<ModuleCandidate> {
+        val user = scan(root, config)
+        if (bundled == null || bundled.canonicalFile == root.canonicalFile) return user
+        val names = user.map { it.manifest?.name ?: it.folderName }.toSet()
+        return user + scanFolders(bundled, listOf(OFFICIAL_FOLDER)).filter { (it.manifest?.name ?: it.folderName) !in names }
+    }
+
+    private val OFFICIAL_FOLDER = PluginFolder("official", Tier.OFFICIAL)
+
+    private fun scanFolders(root: File, folders: List<PluginFolder>): List<ModuleCandidate> =
+        folders.flatMap { folder ->
             File(root, folder.path).listFiles { f -> f.isDirectory && !f.name.startsWith("_") && File(f, "module.json").isFile }.orEmpty()
                 .sortedBy { it.name }
                 .map { dir ->

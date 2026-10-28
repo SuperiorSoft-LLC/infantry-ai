@@ -13,6 +13,7 @@ import com.superiorsoftllc.agenthq.plugin.host.ModuleResolver
 import com.superiorsoftllc.agenthq.plugin.host.ModuleState
 import com.superiorsoftllc.agenthq.plugin.host.ModuleStatus
 import com.superiorsoftllc.agenthq.plugin.host.ModulesFile
+import com.superiorsoftllc.agenthq.plugin.host.OfficialTrust
 import com.superiorsoftllc.agenthq.plugin.host.PluginFolders
 import com.superiorsoftllc.agenthq.plugin.host.Resolution
 import com.superiorsoftllc.agenthq.plugin.host.RouteGate
@@ -28,6 +29,10 @@ import java.io.File
  * (no list anywhere names a plugin), applies the trust rules ([ModuleResolver]), then loads each community module's
  * jar and entry class into this JVM. A jar that will not load refuses that module (and the ones that need it) with a
  * log line; nothing here stops the app. The compiled-in core modules always take part, from disk or not.
+ *
+ * RUNTIME-2: official modules come from `official/` of the plugins root and of the install's bundled modules root
+ * ([PluginFolders.bundledRoot]). Each must be signed by the Infantry key ([OfficialTrust]; `devTrust` skips that in dev)
+ * and loads through the same filtered class loader as a community module: no core right.
  *
  * This is a trust label, not a sandbox: a loaded jar runs in-process with the app's full access.
  */
@@ -71,8 +76,10 @@ object DesktopPlugins {
         // S6: an app UI installed from a .ihq carries its modules in one jar; they take part as if compiled in.
         val loaders = mutableListOf<PluginClassLoader>()
         val withBundles = compiled + bundles(root, config, compiled, say, loaders)
-        val candidates = candidates(root, config, withBundles)
-        say("[plugins] root ${root.absolutePath}${if (demoLock) " (demo lock on)" else ""}${if (safeMode) " (safe mode: community modules off)" else ""}")
+        val bundled = PluginFolders.bundledRoot(env, property)
+        val devTrust = PluginFolders.devTrust(property)
+        val candidates = OfficialTrust.check(candidates(root, config, withBundles, bundled), OfficialTrust.infantryKeys(root, bundled), devTrust, say)
+        say("[plugins] root ${root.absolutePath}${bundled?.let { " (bundled ${it.absolutePath})" } ?: ""}${if (demoLock) " (demo lock on)" else ""}${if (safeMode) " (safe mode: community modules off)" else ""}")
         var resolution = ModuleResolver.resolve(candidates, config, demoLock, safeMode = safeMode, platform = "desktop")
 
         var built: TabFactory? = null
@@ -109,7 +116,7 @@ object DesktopPlugins {
         resolution.log.forEach(say)
         val preferences = resolution.preferences.filter { it.module !in refused }
         val shellOverrides = resolution.shellOverrides.filter { it.module !in refused }
-        val changes = ModuleChanges { request -> change(root, withBundles, demoLock, request).also { c -> (c as? ModuleChange.Applied)?.log?.forEach(say); say("[plugins] ${c.message}") } }
+        val changes = ModuleChanges { request -> change(root, withBundles, demoLock, request, bundled).also { c -> (c as? ModuleChange.Applied)?.log?.forEach(say); say("[plugins] ${c.message}") } }
         val factory = TabFactory(modules, preferences, services = { services[it] ?: NoPluginServices }, events = bus, statuses = statuses(resolution), changes = changes, shellOverrides = shellOverrides,
             allowInject = { config.setting(it).allowInject }, allowOverride = { config.setting(it).allowOverride })
         built = factory
@@ -180,8 +187,8 @@ object DesktopPlugins {
     }
 
     /** What is installed: every module folder under the root, plus each compiled-in core module that has none. */
-    private fun candidates(root: File, config: ModulesConfig, compiled: List<AgentHqModule>): List<ModuleCandidate> {
-        val onDisk = PluginFolders.scan(root, config)
+    private fun candidates(root: File, config: ModulesConfig, compiled: List<AgentHqModule>, bundled: File? = null): List<ModuleCandidate> {
+        val onDisk = PluginFolders.scan(root, config, bundled)
         // A compiled-in core module with no folder on disk (the installed app) still loads, as core.
         return onDisk + compiled.filter { c -> onDisk.none { it.folderName == c.manifest.name } }
             .map { ModuleCandidate(it.manifest.name, Tier.CORE, null, it.manifest) }
@@ -191,10 +198,10 @@ object DesktopPlugins {
      * PLUGINS-2: Settings asks to enable or disable a module. modules.json is read afresh, the dependency rules decide,
      * and only an allowed change is written (it applies at the next start). Under the demo lock nothing is written.
      */
-    fun change(root: File, compiled: List<AgentHqModule>, demoLock: Boolean, request: ModuleRequest): ModuleChange {
+    fun change(root: File, compiled: List<AgentHqModule>, demoLock: Boolean, request: ModuleRequest, bundled: File? = null): ModuleChange {
         if (demoLock) return ModuleChange.Refused("The demo lock is on: modules.json is not changed.")
         val config = PluginFolders.config(root)
-        val graph = DependencyGraph.of(candidates(root, config, compiled), config)
+        val graph = DependencyGraph.of(candidates(root, config, compiled, bundled), config)
         val result = if (request.enable) graph.enable(request.module, config) else graph.disable(request.module, config, request.cascade)
         if (result is ModuleChange.Applied && result.changed.isNotEmpty()) ModulesFile.write(root, config, result.config)
         return result

@@ -18,6 +18,8 @@ data class ModuleCandidate(
     val dir: String?,
     val manifest: ModuleManifest?,
     val parseError: String? = null,
+    /** RUNTIME-2: set by the host when a check outside module.json failed (an official jar not signed by the Infantry key). */
+    val refusal: String? = null,
 )
 
 enum class ModuleState { LOADED, DISABLED, LOCKED, REFUSED }
@@ -105,6 +107,7 @@ object ModuleResolver {
             }
             when {
                 m == null -> refuse("invalid module.json: ${c.parseError ?: "unreadable"}")
+                c.refusal != null -> refuse(c.refusal)
                 !NAME.matches(m.name) -> refuse("name '${m.name}' is not Vendor_Module")
                 c.dir != null && c.folderName != m.name -> refuse("folder '${c.folderName}' declares '${m.name}'; they must match")
                 m.name in seen -> refuse("'${m.name}' is already provided by ${seen.getValue(m.name).tier.name.lowercase()}/${seen.getValue(m.name).folderName}")
@@ -124,7 +127,7 @@ object ModuleResolver {
                         }
                     }
                     val setting = config.setting(m.name)
-                    val on = setting.enabled ?: (c.tier == Tier.CORE)
+                    val on = setting.enabled ?: (c.tier != Tier.COMMUNITY)
                     when {
                         !on -> final[m.name] = ModuleStatus(
                             m.name, c.tier, ModuleState.DISABLED,
@@ -133,8 +136,8 @@ object ModuleResolver {
                         )
                         demoLock && c.tier == Tier.COMMUNITY ->
                             final[m.name] = ModuleStatus(m.name, c.tier, ModuleState.LOCKED, "community modules do not load under the demo lock", m, c.dir)
-                        safeMode && c.tier == Tier.COMMUNITY ->
-                            final[m.name] = ModuleStatus(m.name, c.tier, ModuleState.LOCKED, "safe mode: community modules do not load", m, c.dir)
+                        safeMode && c.tier != Tier.CORE ->
+                            final[m.name] = ModuleStatus(m.name, c.tier, ModuleState.LOCKED, "safe mode: ${c.tier.name.lowercase()} modules do not load", m, c.dir)
                         else -> eligible += c
                     }
                 }
@@ -172,7 +175,7 @@ object ModuleResolver {
         }
 
         // Topological order (Kahn), stable: folder order (core first) then name among the ready ones.
-        val tierRank = { c: ModuleCandidate -> if (c.tier == Tier.CORE) 0 else 1 }
+        val tierRank = { c: ModuleCandidate -> c.tier.ordinal }
         val order = mutableListOf<ModuleCandidate>()
         val remaining = byName.values.sortedWith(compareBy<ModuleCandidate>({ tierRank(it) }, { it.manifest!!.name })).toMutableList()
         val placed = HashSet<String>()
@@ -225,8 +228,8 @@ object ModuleResolver {
                 !myTab && !mySection -> log += "[plugins] ${s.name}: preference ${p.replace} -> ${p.with} refused: ${p.with} is not a tab or panel section it declares"
                 target == null -> log += "[plugins] ${s.name}: preference ${p.replace} -> ${p.with} refused: no loaded module provides " +
                     "${if (myTab) "tab" else "panel section"} ${p.replace}"
-                s.tier == Tier.COMMUNITY && target.tier == Tier.CORE && p.replace !in config.setting(s.name).allowOverride ->
-                    log += "[plugins] ${s.name}: preference ${p.replace} -> ${p.with} refused: a community module cannot replace core ${p.replace} (${target.name}) unless modules.json allows it"
+                s.tier != Tier.CORE && target.tier == Tier.CORE && p.replace !in config.setting(s.name).allowOverride ->
+                    log += "[plugins] ${s.name}: preference ${p.replace} -> ${p.with} refused: a ${s.tier.name.lowercase()} module cannot replace core ${p.replace} (${target.name}) unless modules.json allows it"
                 else -> {
                     out.lastOrNull { it.replace == p.replace }?.let { log += "[plugins] ${s.name}: replaces ${p.replace}, overriding ${it.module}" }
                     out += AcceptedPreference(s.name, p.replace, p.with)
