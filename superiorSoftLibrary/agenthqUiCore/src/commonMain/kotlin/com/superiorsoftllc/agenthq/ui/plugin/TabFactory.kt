@@ -35,6 +35,7 @@ import com.superiorsoftllc.agenthq.plugin.host.AcceptedShellOverride
 import com.superiorsoftllc.agenthq.plugin.host.ModuleState
 import com.superiorsoftllc.agenthq.plugin.host.ModuleStatus
 import com.superiorsoftllc.agenthq.plugin.host.SimpleEventBus
+import com.superiorsoftllc.agenthq.ui.ModuleTier
 import com.superiorsoftllc.agenthq.ui.Palette
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockInjection
@@ -219,6 +220,14 @@ class TabInterceptor(
     /** The names of the parts this one registers. */
     internal val parts: List<String>
         get() = listOfNotNull(title?.let { "title" }, before?.let { "before" }, after?.let { "after" }, content?.let { "content" })
+
+    /** S4d: this one with its parts drawn as module tier [core] (a community one's see no [com.superiorsoftllc.agenthq.ui.coreShell]). */
+    internal fun atTier(core: Boolean): TabInterceptor = if (core) this else TabInterceptor(
+        title,
+        before?.let { b -> { c -> ModuleTier(false) { b(c) } } },
+        after?.let { a -> { c -> ModuleTier(false) { a(c) } } },
+        content?.let { w -> { c, proceed -> ModuleTier(false) { w(c, proceed) } } },
+    )
 }
 
 /** A block a module adds to a named slot (see [Slots]); bound by the module.json `blocks` entry. */
@@ -485,7 +494,7 @@ class TabFactory(
                     else -> {
                         val unused = i.parts - bound.parts.toSet()
                         if (unused.isNotEmpty()) problems += "$name: interceptor ${d.name} is kind ${d.kind}; its ${unused.joinToString()} not run"
-                        ints.getOrPut(d.target) { mutableListOf() } += bound
+                        ints.getOrPut(d.target) { mutableListOf() } += bound.atTier(m.tier != Tier.COMMUNITY)
                     }
                 }
             }
@@ -521,7 +530,7 @@ class TabFactory(
                 when {
                     j == null -> { problems += "$name: injection ${d.name} is declared but not registered; skipped"; null }
                     at == null -> { problems += "$name: injection ${d.name} into ${d.targetId} has unknown at '${d.at}' (first, last, before:<id>, after:<id>); skipped"; null }
-                    else -> NodeInjection(name, d.name, d.targetId, at, d.order, loadIndex, j)
+                    else -> NodeInjection(name, d.name, d.targetId, at, d.order, loadIndex, j, community = m.tier == Tier.COMMUNITY)
                 }
             }
         }
@@ -529,7 +538,7 @@ class TabFactory(
         nodeOverrides = shellOverrides.mapNotNull { a ->
             val o = byModule[a.module]?.shell?.get(a.name)
             if (o == null) problems += "${a.module}: shell override ${a.name} is declared but not registered; skipped"
-            o?.let { NodeOverride(a.module, a.node, a.mode, it) }
+            o?.let { NodeOverride(a.module, a.node, a.mode, it, community = byModule[a.module]?.tier == Tier.COMMUNITY) }
         }
         // S4: the fills and the tab trees, core tier only.
         val fills = LinkedHashMap<String, Block>()
@@ -630,14 +639,14 @@ class TabFactory(
         val bottom = blocks[Slots.bottom(tab.container)].orEmpty()
         val community = module?.tier == Tier.COMMUNITY
         if (!community && hooks.isEmpty() && top.isEmpty() && bottom.isEmpty()) {
-            tab.content(own)
+            ModuleTier(!community) { tab.content(own) }
             return
         }
-        val inner = hooks.foldRight<TabInterceptor, @Composable () -> Unit>({ tab.content(own) }) { i, proceed ->
+        val inner = hooks.foldRight<TabInterceptor, @Composable () -> Unit>({ ModuleTier(!community) { tab.content(own) } }) { i, proceed ->
             i.content?.let { wrap -> { wrap(own, proceed) } } ?: proceed
         }
         Column {
-            top.forEach { (owner, b) -> b.content(context.forModule(services(owner), byModule[owner]?.tier != Tier.COMMUNITY)) }
+            top.forEach { (owner, b) -> ModuleTier(byModule[owner]?.tier != Tier.COMMUNITY) { b.content(context.forModule(services(owner), byModule[owner]?.tier != Tier.COMMUNITY)) } }
             if (community) CommunityBadge(module!!.manifest)
             hooks.forEach { it.before?.invoke(own) }
             Box(Modifier.weight(1f)) {
@@ -645,7 +654,7 @@ class TabFactory(
                 CompositionLocalProvider(LocalContentColor provides Palette.Text) { inner() }
             }
             hooks.forEach { it.after?.invoke(own) }
-            bottom.forEach { (owner, b) -> b.content(context.forModule(services(owner), byModule[owner]?.tier != Tier.COMMUNITY)) }
+            bottom.forEach { (owner, b) -> ModuleTier(byModule[owner]?.tier != Tier.COMMUNITY) { b.content(context.forModule(services(owner), byModule[owner]?.tier != Tier.COMMUNITY)) } }
         }
     }
 
@@ -737,7 +746,7 @@ private fun ColumnScope.PanelSection(factory: TabFactory, section: PanelProvider
         if (module?.tier == Tier.COMMUNITY) {
             Column {
                 CommunityBadge(module.manifest)
-                CompositionLocalProvider(LocalContentColor provides Palette.Text) { section.content(own) }
+                CompositionLocalProvider(LocalContentColor provides Palette.Text) { ModuleTier(false) { section.content(own) } }
             }
         } else {
             section.content(own)

@@ -12,7 +12,6 @@ import com.superiorsoftllc.agenthq.ui.AssistantPopupChat
 import com.superiorsoftllc.agenthq.ui.AssistantPopupFrame
 import com.superiorsoftllc.agenthq.ui.AssistantPopupHeader
 import com.superiorsoftllc.agenthq.ui.AssistantPopupResize
-import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.TITLE_BAR_HEIGHT
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
@@ -39,7 +38,7 @@ private val LocalAssistantHost = compositionLocalOf<AssistantHost?> { null }
 class AssistantBlock(children: List<Block>, place: Place = Place()) : Block("assistantPopup", ASSISTANT, place, children) {
     @Composable
     override fun Render(scope: BlockScope) = with(scope) {
-        val s = LocalShell.current
+        val s = appShell
         if (!s.assistantPanel.open) return@with
         val compactWindow = s.state.panels.compactWindow
         AssistantPopupFrame(
@@ -58,7 +57,7 @@ object AssistantResize : Block("resizeHandle", "$ASSISTANT.resize") {
     @Composable
     override fun Render(scope: BlockScope) {
         val host = LocalAssistantHost.current ?: return
-        AssistantPopupResize(LocalShell.current.assistantPanel, host.compact, scope.modifier)
+        AssistantPopupResize(appShell.assistantPanel, host.compact, scope.modifier)
     }
 }
 
@@ -79,7 +78,7 @@ object AssistantHeader : Block("assistantHeader", "$BODY.header") {
     @Composable
     override fun Render(scope: BlockScope) {
         val host = LocalAssistantHost.current ?: return
-        AssistantPopupHeader(LocalShell.current.assistantPanel, host.compact, scope.modifier)
+        AssistantPopupHeader(appShell.assistantPanel, host.compact, scope.modifier)
     }
 }
 
@@ -88,7 +87,7 @@ object AssistantChat : Block("assistantChat", "$BODY.chat", Place(weight = 1f, s
     @Composable
     override fun Render(scope: BlockScope) {
         if (LocalAssistantHost.current == null) return
-        val s = LocalShell.current
+        val s = appShell
         AssistantPopupChat(s.state, s.controller, s.assistantChat, scope.modifier)
     }
 }

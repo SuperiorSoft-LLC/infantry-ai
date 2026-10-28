@@ -7,7 +7,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.superiorsoftllc.agenthq.ui.ATTENTION_TAB_ID
 import com.superiorsoftllc.agenthq.ui.AssistantEntry
-import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.LocalWindowChrome
 import com.superiorsoftllc.agenthq.ui.ProjectPicker
 import com.superiorsoftllc.agenthq.ui.ServerSwitcherChip
@@ -68,7 +67,7 @@ class HeaderLeadBlock(children: List<Block>, place: Place = Place()) : Block("ti
 object HeaderToggleLeft : Block("panelToggle", "$LEAD.toggleLeft") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val s = appShell
         TitleBarToggleLeft(s.state, scope.modifier) { s.controller.togglePanel(PanelSide.LEFT) }
     }
 }
@@ -83,7 +82,7 @@ object HeaderBrand : Block("brand", "$LEAD.brand") {
 object HeaderProject : Block("projectSlot", "$LEAD.project") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val s = appShell
         TitleBarProject({ ProjectPicker(s.state, s.controller) }, scope.modifier)
     }
 }
@@ -101,7 +100,7 @@ object HeaderAgents : Block("agentStrip", "$LEAD.agents") {
 
     @Composable
     private fun RowScope.Agents(modifier: Modifier) {
-        val s = LocalShell.current
+        val s = appShell
         val state = s.state
         TitleBarAgents(
             state, s.ui.flags.agentScope,
@@ -138,7 +137,7 @@ class HeaderOverflowBlock(children: List<Block>, place: Place = Place(show = Sho
 object HeaderOverflowProject : Block("projectSlot", "$OVERFLOW.project") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val s = appShell
         TitleBarOverflowProject({ ProjectPicker(s.state, s.controller) }, scope.modifier)
     }
 }
@@ -147,7 +146,7 @@ object HeaderOverflowProject : Block("projectSlot", "$OVERFLOW.project") {
 object HeaderOverflowAttention : Block("attentionEntry", "$OVERFLOW.attention") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val s = appShell
         TitleBarOverflowAttention(s.state, { s.showTab(ATTENTION_TAB_ID) }, scope.modifier)
     }
 }
@@ -156,7 +155,7 @@ object HeaderOverflowAttention : Block("attentionEntry", "$OVERFLOW.attention") 
 object HeaderOverflowConnection : Block("connectionEntry", "$OVERFLOW.connection") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val s = appShell
         TitleBarOverflowConnection(s.state, { s.changeConnection?.invoke() ?: run { s.ui.showConnect = true } }, scope.modifier)
     }
 }
@@ -175,7 +174,7 @@ object HeaderWindowControls : Block("windowControls", "$HEADER.windowControls") 
 object HeaderConnection : Block("connectionChip", "$HEADER.connection") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val s = appShell
         TitleBarConnection(s.state, { s.changeConnection?.invoke() ?: run { s.ui.showConnect = true } }, scope.modifier)
     }
 }
@@ -184,7 +183,7 @@ object HeaderConnection : Block("connectionChip", "$HEADER.connection") {
 object HeaderServer : Block("serverSwitcher", "$HEADER.server") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val s = appShell
         val switcher = s.switcher
         if (switcher != null) ServerSwitcherChip(switcher, onSelect = s.switchTo, onManage = { s.ui.showServers = true }, modifier = scope.modifier)
     }
@@ -194,7 +193,7 @@ object HeaderServer : Block("serverSwitcher", "$HEADER.server") {
 object HeaderToggleRight : Block("panelToggle", "$HEADER.toggleRight") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val s = appShell
         TitleBarRightToggle(s.state, scope.modifier) { s.controller.togglePanel(PanelSide.RIGHT) }
     }
 }
@@ -203,7 +202,7 @@ object HeaderToggleRight : Block("panelToggle", "$HEADER.toggleRight") {
 object HeaderAttention : Block("attentionChip", "$HEADER.attention") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val s = appShell
         TitleBarAttention(s.state, { s.showTab(ATTENTION_TAB_ID) }, scope.modifier)
     }
 }

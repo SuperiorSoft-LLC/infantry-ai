@@ -15,7 +15,6 @@ import com.superiorsoftllc.agenthq.ui.CenterTabBar
 import com.superiorsoftllc.agenthq.ui.ChatPanelHost
 import com.superiorsoftllc.agenthq.ui.Composer
 import com.superiorsoftllc.agenthq.ui.Header
-import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.NewAgentDialogFrame
 import com.superiorsoftllc.agenthq.ui.NewAgentDraft
 import com.superiorsoftllc.agenthq.ui.NewAgentError
@@ -44,7 +43,7 @@ private const val CENTER = "infantry.shell.center"
 class CenterBlock(children: List<Block>, place: Place = Place(weight = 1f)) : Block("center", CENTER, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val s = appShell
         val controller = s.controller
         val compact = dockCompact()
         // MOBILE-LAYOUT-2: crossing 600dp (a resize, a rotation) parks this window class's panel flags and brings
@@ -72,7 +71,7 @@ private val LocalChatPanelHost = compositionLocalOf<ChatPanelHost?> { null }
 class CenterChatBlock(children: List<Block>, place: Place = Place(weight = 1f)) : Block("chatPanel", CHAT, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val s = appShell
         val ui = s.ui
         val host = chatPanelHost(
             s.selected?.id, s.controller, s.chat, allowSpawn = true,
@@ -109,7 +108,7 @@ object CenterChatHeader : Block("chatHeader", "$CHAT.header") {
 object CenterChatTabs : Block("tabStrip", "$CHAT.tabs") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val s = appShell
         val ui = s.ui
         CenterTabBar(s.state, ui.centerTab, scope.modifier) { ui.centerTab = it }
     }
@@ -178,7 +177,7 @@ private val LocalNewAgentDraft = compositionLocalOf<NewAgentDraft?> { null }
 class NewAgentBlock(children: List<Block>, place: Place = Place()) : Block("newAgentDialog", NEW_AGENT, place, children) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val s = LocalShell.current
+        val s = appShell
         val state = s.state
         val controller = s.controller
         val ui = s.ui

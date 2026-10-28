@@ -3,7 +3,6 @@ package com.superiorsoftllc.agenthq.ui.shell.blocks
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.voice.VoiceAlerts
@@ -12,7 +11,7 @@ import com.superiorsoftllc.agenthq.ui.voice.VoiceAlerts
 object ShellVoice : Block("infantry.shell.voice", "infantry.shell.voice") {
     @Composable
     override fun Render(scope: BlockScope) = with(scope) {
-        val s = LocalShell.current
+        val s = appShell
         VoiceAlerts(s.controller.spoken, s.ui.flags.voice, Modifier.aligned(Alignment.BottomStart))
     }
 }

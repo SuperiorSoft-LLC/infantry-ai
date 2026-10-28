@@ -1,7 +1,9 @@
 package com.superiorsoftllc.agenthq.ui.shell
 
 import androidx.compose.runtime.compositionLocalOf
+import com.superiorsoftllc.agenthq.ui.ConfigTab
 import com.superiorsoftllc.agenthq.ui.ToastService
+import com.superiorsoftllc.agenthq.ui.protocol.OwnerQuestionView
 import com.superiorsoftllc.agenthq.ui.protocol.TraitView
 import com.superiorsoftllc.agenthq.ui.protocol.AgentProfile
 import com.superiorsoftllc.agenthq.ui.model.TraitDraft
@@ -66,6 +68,10 @@ interface ShellContext {
     val traits: TraitsContext get() = NoTraits
     /** S4d: the backlog (tickets, epics) and its requests, for the board and anything that files or moves a ticket. */
     val tickets: TicketsContext get() = NoTickets
+    /** S4d: the window's own chrome: which build, which pane or dialog to open. */
+    val window: WindowContext get() = NoWindow
+    /** S4d: the owner's open questions (ASK-1) and the window's way to show or close them. */
+    val questions: QuestionsContext get() = NoQuestions
 }
 
 /** The daemon link: whether it is up and which contract the daemon announced. */
@@ -74,6 +80,8 @@ interface LinkContext {
     /** The contract version from `ready` ("1.2.0"); null before it or from a daemon too old to say. */
     val contract: String?
     fun contractAtLeast(major: Int, minor: Int): Boolean = contractAtLeast(contract, major, minor)
+    /** S4d: the daemon's build stamp from `ready`; null before it or from a daemon too old to say. */
+    val daemonBuild: String? get() = null
 }
 
 /** The window's working context: the active project and the daemon's refusals. */
@@ -91,6 +99,60 @@ interface SessionContext {
     val activeProjectId: String? get() = activeProject?.id
     /** S4d: the daemon's projects, in its order. */
     val projects: List<ProjectView> get() = listOfNotNull(activeProject)
+    /** S4d: whether the session list has [sessionId] (a question's asker may be gone). */
+    fun hasSession(sessionId: String): Boolean = false
+}
+
+/**
+ * S4d (docs/SHELL-LEAKS.md): the window's chrome: its build, its server's mismatch, and what a block may open (the chat,
+ * a tab, the configuration modal, the connection). The window's panes and dialogs stay its own.
+ */
+interface WindowContext {
+    /** This app's build stamp; null where the host does not know it. */
+    val appBuild: String?
+    /** SERVER-UPDATE-4: client and server differ by more than a patch (the text Configuration > Server shows); else null. */
+    val serverMismatch: String?
+    /** Shows the selected session's chat in the centre (leaves a spawn form). */
+    fun showChat()
+    /** Shows tab [id] where it lives (centre or right). */
+    fun showTab(id: String)
+    /** Opens the configuration modal, on [tab] or where the owner left it. */
+    fun openConfig(tab: ConfigTab? = null)
+    /** Opens the connection: the host's own connect screen where it has one, else the connect dialog. */
+    fun openConnection()
+}
+
+/** S4d: no window (a pane drawn outside one): nothing to open. */
+object NoWindow : WindowContext {
+    override val appBuild: String? get() = null
+    override val serverMismatch: String? get() = null
+    override fun showChat() {}
+    override fun showTab(id: String) {}
+    override fun openConfig(tab: ConfigTab?) {}
+    override fun openConnection() {}
+}
+
+/** S4d (docs/SHELL-LEAKS.md): ASK-1's open questions, which the window puts off (Later) and brings back. */
+interface QuestionsContext {
+    /** The questions still open on the daemon, oldest first. */
+    val open: List<OwnerQuestionView>
+    /** The ids put off with Later in this window. */
+    val dismissed: Set<String>
+    /** Closes question [id] on the daemon (its asker is gone, or the owner dismissed it). */
+    suspend fun cancel(id: String): CommandResult
+    /** Brings the questions back and opens question [id]'s asker, where it is in the list. */
+    fun show(id: String)
+    /** Brings every put-off question back. */
+    fun showAll()
+}
+
+/** S4d: no questions. */
+object NoQuestions : QuestionsContext {
+    override val open: List<OwnerQuestionView> get() = emptyList()
+    override val dismissed: Set<String> get() = emptySet()
+    override suspend fun cancel(id: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+    override fun show(id: String) {}
+    override fun showAll() {}
 }
 
 /** The active project's git, by project id, and the requests that load or change it. */

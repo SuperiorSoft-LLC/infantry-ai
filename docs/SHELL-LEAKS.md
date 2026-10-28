@@ -57,7 +57,7 @@ None of these additions is on `ShellContext`; they all belong to the module cont
 
 ## Holes that stay open
 
-- **`LocalShell.current.controller` is public.** Any module, community ones included, can reach the whole `Controller`
+- **`LocalShell.current.controller` is public.** (S4d: closed by tier, see "Controller close (S4d)".) Any module, community ones included, can reach the whole `Controller`
   through it, and `coreController` does not close that path. The real fix is the S2 direction: blocks read
   `ShellContext` only, and `Shell.controller` goes internal once the last moved pane stops using it (S4c). Today 44
   files use `Controller` and 22 use `LocalShell`.
@@ -577,3 +577,83 @@ Proof: default shots 32/32 at 0 px; opt-in `assistant,newAgent` base (5424a3df) 
 with blur off. agentHqUi chat-scoped tests and agenthqAppUi jvm tests pass; wasm, Android compile. Two core jvmTest
 failures are not this change: HandCursorGuardTest (the Text ratchet, above) and ShellOverridesTest "a module replaces a
 placeholder" (`infantry.shell.configEntry` locked), which fails the same way on base 5424a3df.
+
+## Controller close (S4d)
+
+**Decision: gate, not migrate wholesale.** Moving every remaining `(state, controller)` pane onto ShellContext is
+migrating the whole app shell (chat composer and its `ChatPanelState`, sidebar, project picker, title bar, assistant,
+processes, diff, the right panel's tabs): the inventory reads about 260 distinct members across 21 files that name
+`Controller` and 25 that name `AppState`. Done as ShellContext getters that would be ~150 additions, most of them read
+by exactly one pane: the pile of one-off getters this count is meant to catch. Instead the door closes at the tier:
+
+- `LocalShell` is `internal` to core. Core's own blocks (connect, servers, config, config entry, server update, switch
+  error) keep it; no module can name it.
+- `coreShell` (public, `@Composable`) is the window's `Shell` in a **core** module's composition and **null in a
+  community module's** (its tab, panel section, interceptor, slot block, shell override, injection). It is the block
+  twin of `TabContext.coreController`, which already gates the tabs the same way. `LocalCoreTier` (internal) carries
+  the tier; `ModuleTier` sets it at each of the six community render sites (`TabFactory.Content` tab and slot blocks,
+  `TabInterceptor.atTier`, `PanelSection`, `OverrideBlock`, `InjectedBlock`). A community wrap's inner node (`TierBlock`)
+  is drawn back at the tier around it, so the app UI node it wraps still draws.
+- The app UI reads it as `appShell` (Infantry_AppUi/ShellAccess.kt, `checkNotNull`: its blocks are fills, which only a
+  core module may register, so a null is a wiring bug like `appController`'s).
+- Proof: CoreTierGateUiTest, in the real window: a community injection and a community wrap of
+  `infantry.shell.center` see `coreShell == null` and a ShellContext; a core injection sees the Shell; the wrapped
+  centre (app UI, `appShell`) still draws.
+
+So `LocalShell.controller` is no longer reachable by modules: a community module cannot name `LocalShell`, and
+`coreShell` is null for it. Compile time cannot enforce more: Kotlin `internal` is per Gradle module and the app UI is
+its own module (`-Xfriend-paths` would hand it all of core's internals and blind the per-module leak check S4a-c rely
+on). `Shell`, `Controller` and `AppState` stay public types; reaching an instance needs the core tier.
+
+**Migrated to ShellContext** (what a community module's equivalent block would need, so a drop-in can be written):
+
+| Block | Reads now |
+|---|---|
+| ShellQuestionPill | `questions.open / dismissed / cancel / show / showAll`, `session.selectedAgentId / hasSession`, `window.showChat` |
+| StatusContractWarning | `link.live / contract` (a) |
+| StatusVersionMismatch | `link.live`, `window.serverMismatch` |
+| StatusShortcutHint | `layout.compact` (a) |
+| StatusBuildStamp | `layout.compact`, `window.appBuild / openConfig(ABOUT)`, `link.daemonBuild` |
+| StatusConfigCog | `window.openConfig()` |
+
+**Additions (b)**, all with defaults, two new sub-interfaces and two members on existing ones:
+
+| Sub-interface | Members | Count |
+|---|---|---|
+| `WindowContext` (new) | `appBuild`, `serverMismatch`, `showChat`, `showTab`, `openConfig(tab)`, `openConnection` | 6 |
+| `QuestionsContext` (new) | `open`, `dismissed`, `cancel`, `show`, `showAll` | 5 |
+| `LinkContext` | `daemonBuild` | 1 |
+| `SessionContext` | `hasSession(id)` | 1 |
+| `ShellContext` | `window`, `questions` | 2 |
+| **total** | | **15** |
+
+**Stays on `appShell` (core tier), each a hole for a later step**, because the pane it feeds takes `(state,
+controller)` and is the app's own:
+
+| Block | What it hands on |
+|---|---|
+| ShellCenter | `ChatPanel(state, controller, chat)`, `chatPanelHeader`, `CenterTabBar(state)`, `tabs.Content(tabContext)` |
+| ShellLeftPanel, ShellCompactDrawer | `Sidebar(state, ...)`, `controller.select / removeSession / assignSessionProject / showCompactScreen`, `PanelSections` |
+| ShellRightPanel | `tabs.title(it, state)`, `state.panels`, `tabContext` |
+| ShellHeader | `TitleBar*(state)`, `ProjectPicker(state, controller)`, `controller.togglePanel`, `switcher`, `assistantPanel` |
+| ShellAssistant | `AssistantPanel(state, controller, assistantPanel)`, `AssistantPopupChat(.., assistantChat)` |
+| ShellDiff | `openDiff(state, controller, ui.diffTarget)` |
+| StatusConnStatus, StatusLastFrame | `state.connection` (state, detail, provider, lastFrameAt) |
+| StatusProcessesBadge | `ProcessesBadge(state, controller)` |
+| ShellSound, ShellVoice | `IncomingCommsSoundEffect(controller.state)`, `controller.spoken`, `ui.flags` |
+
+The core tabs (Attention, Epics, Pods, Profiles, Prompts, Review, Roles, Skills, Stats, Triggers, Usage) keep passing
+`TabContext.appController` to their `(state, controller)` panes: the same tier gate, unchanged since S4.
+
+**Verdict.** 15 additions in two coherent sub-interfaces (the window's chrome actions, the owner's questions) plus two
+natural fields (`daemonBuild`, `hasSession`): good, not duct tape. What is **not** done is the drop-in for the
+heavy panes: a community module can replace the status bar or the question pill on ShellContext alone, but not the
+chat, sidebar, title bar or assistant. That needs a ChatContext (the composer's submit/attach/resume off `ChatPanelState`,
+~30 members), an AgentsContext (~12), a ProcessesContext (~5) and the title bar's kit taking views instead of
+`AppState`; each is its own ticket and is listed above so it can be counted when it is taken.
+
+Proof: default shots 32/32 at 0 px; opt-in `config,compact` base (5424a3df) vs head 18/18 at 0 px (blur off both).
+Core jvmTest 744 and agentHqUi scoped 241 (shell, header, status, questions, diff, drawer, assistant, panels, plugins,
+tabs, registry, overrides, injections, config, chat, voice, sound, CoreTierGateUiTest) pass but for three failures that
+fail the same on base 5424a3df: HandCursorGuardTest (Text ratchet), ShellOverridesTest and InjectorUiTest "a module
+replaces the frame placeholder" (both: `infantry.shell.configEntry` is locked). App UI jvm, wasm and Android compile.
