@@ -1,24 +1,11 @@
-package com.superiorsoftllc.agenthq.ui.shell.blocks
+package com.superiorsoftllc.agenthq.plugins.official.notes
 
+import com.superiorsoftllc.agenthq.ui.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
-import com.superiorsoftllc.agenthq.ui.NotesBannerSection
-import com.superiorsoftllc.agenthq.ui.NotesEmptySection
-import com.superiorsoftllc.agenthq.ui.NotesErrorSection
-import com.superiorsoftllc.agenthq.ui.NotesHeaderSection
-import com.superiorsoftllc.agenthq.ui.NotesHitRow
-import com.superiorsoftllc.agenthq.ui.NotesHitsSection
-import com.superiorsoftllc.agenthq.ui.NotesListSection
-import com.superiorsoftllc.agenthq.ui.NotesModalSection
-import com.superiorsoftllc.agenthq.ui.NotesNoOwnerSection
-import com.superiorsoftllc.agenthq.ui.NotesNoteRow
-import com.superiorsoftllc.agenthq.ui.NotesPaneFrame
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
-import com.superiorsoftllc.agenthq.ui.NotesPaneHost
-import com.superiorsoftllc.agenthq.ui.NotesScopesSection
-import com.superiorsoftllc.agenthq.ui.NotesSearchSection
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.Place

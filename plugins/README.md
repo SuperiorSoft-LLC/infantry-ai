@@ -13,7 +13,8 @@ plugins/
   official/<Vendor_Module>/  programs made by Infantry: a jar signed by the Infantry key, loaded at runtime (desktop);
                           web and Android compile the same sources in (Infantry_Cli, the CLI tab, Infantry_Agents,
                           the left panel agents list, Infantry_Settings, the Settings host tab,
-                          Infantry_Git, the Git tab with its own tab tree, and Infantry_Run, the Run tab with its own)
+                          Infantry_Git, the Git tab with its own tab tree, Infantry_Run, the Run tab, Infantry_Notes,
+                          the Notes tab, and Infantry_Changes, the right-hand Changes tab, each with its own)
   community/<Vendor_Module>/  modules added by dropping a folder here (desktop and daemon only)
 ```
 

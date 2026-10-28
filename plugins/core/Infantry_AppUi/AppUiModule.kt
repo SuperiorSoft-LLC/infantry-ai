@@ -8,13 +8,11 @@ import com.superiorsoftllc.agenthq.ui.shell.blocks.CoreStatusBar
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellAssistant
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellBoard
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellCenter
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellChanges
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellCompactDrawer
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellConfigSettings
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellDiff
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellHeader
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellLeftPanel
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellNotes
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellQuestionPill
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellRightPanel
 import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellRoles
@@ -31,7 +29,7 @@ private val fills: List<Block> = listOf(
 
 /**
  * S4 (drop-in path): core module Infantry_AppUi, the app's UI as a plugin of the shell. It fills every empty slot of
- * the shell and adds the tab trees its tabs draw; without it the shell draws its skeleton and locked dialogs only.
+ * the shell; without it the shell draws its skeleton and locked dialogs only.
  */
 val InfantryAppUi = AgentHqModule(
     ModuleManifest(
@@ -40,10 +38,8 @@ val InfantryAppUi = AgentHqModule(
         fills = fills.map { com.superiorsoftllc.agenthq.plugin.api.FillDeclaration(it.id) },
     ),
     fills = fills.associateBy { it.id },
-    tabTrees = mapOf(
-        // RUNTIME-6/7: Infantry_Git and Infantry_Run register their own trees (ShellGit, ShellRun); they are official jars now.
-        "infantry.notes" to ShellNotes, "infantry.changes" to ShellChanges,
-    ),
+    // RUNTIME-6/7/8: no tab trees of its own any more: Infantry_Git, Infantry_Run, Infantry_Notes and Infantry_Changes
+    // (official jars) register theirs (ShellGit, ShellRun, ShellNotes, ShellChanges).
 )
 
 /** RUNTIME-1: the entry of Infantry_AppUi (module.json `entry`): hands over this module alone. */

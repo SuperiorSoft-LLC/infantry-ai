@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.changes.*
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
@@ -38,20 +40,7 @@ import com.superiorsoftllc.agenthq.ui.protocol.GitWorktree
 import com.superiorsoftllc.agenthq.ui.protocol.Project
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitWorktreeList
 import com.superiorsoftllc.agenthq.ui.protocol.ProjectGitWorktreeStatus
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ChangesBranch
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ChangesBranchFile
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ChangesCommit
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ChangesEmpty
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ChangesFile
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ChangesHeader
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ChangesHint
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ChangesModeToggle
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ChangesNotGit
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ChangesTitle
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ChangesUnsupported
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ChangesWorktree
 import com.superiorsoftllc.agenthq.ui.shell.blocks.CoreShell
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellChanges
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -80,7 +69,7 @@ class ProjectChangesPanelOverridesUiTest {
             ModuleManifest("Acme_Changes", "1.0.0", author = "Acme", license = "NOASSERTION", shell = listOf(decl)),
             tier = Tier.COMMUNITY, shell = mapOf("acme" to override),
         )
-        val f = TabFactory(CoreModules.all + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Changes", decl.nodeId, decl.name, decl.mode)))
+        val f = TabFactory(CoreModules.all + InfantryChanges + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Changes", decl.nodeId, decl.name, decl.mode)))
         assertEquals(emptyList(), f.problems)
         // The override goes into the Changes tab's tree, not the window's.
         assertSame(f.baseRoot, f.shellRoot)

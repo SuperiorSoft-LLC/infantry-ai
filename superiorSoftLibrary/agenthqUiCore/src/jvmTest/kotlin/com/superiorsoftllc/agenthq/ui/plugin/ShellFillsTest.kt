@@ -64,11 +64,11 @@ class ShellFillsTest {
         assertEquals("Acme_First", f.modules.first { it.fills[header] === f.baseRoot.find(header) }.manifest.name)
     }
 
-    @Test fun `Infantry_AppUi fills every slot and adds its two tab trees`() {
+    @Test fun `Infantry_AppUi fills every slot and adds no tab tree`() {
         val f = CoreModules.factory
         CoreShell.slots.forEach { id -> assertTrue(f.baseRoot.find(id) !is PlaceholderBlock, "$id is still empty") }
-        // RUNTIME-6/7: Infantry_Git and Infantry_Run (official jars) register their own trees.
-        assertEquals(listOf("infantry.shell.notes", "infantry.shell.changes"), f.tabTreeRoots.map { it.id })
+        // RUNTIME-6/7/8: Infantry_Git, Infantry_Run, Infantry_Notes and Infantry_Changes (official jars) register their own trees.
+        assertEquals(emptyList<String>(), f.tabTreeRoots.map { it.id })
         assertEquals(emptyList(), f.problems)
     }
 
