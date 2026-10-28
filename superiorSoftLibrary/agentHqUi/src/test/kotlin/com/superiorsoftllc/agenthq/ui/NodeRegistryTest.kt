@@ -46,7 +46,7 @@ import kotlin.test.assertTrue
 /** P1 (f60f4d97, docs/BLOCKS-LAYOUT-DESIGN.md section 6s): the registry read model over what TabFactory resolved. */
 class NodeRegistryTest {
     /** RUNTIME-6/7/8: the compiled-in core modules plus the official Notes, Changes, Run and Git (jars on desktop), as the window has them. */
-    private val coreAndGit = CoreModules.all + InfantryRoles + InfantryBoard + InfantryPods + InfantryProfiles + InfantryTriggers + InfantryAttention + InfantryNotes + InfantryChanges + InfantryStats + InfantryUsage + InfantryEpics + InfantryReview + InfantryRun + InfantryGit
+    private val coreAndGit = CoreModules.all + InfantryRoles + InfantryBoard + com.superiorsoftllc.agenthq.plugins.official.alerts.InfantryAlerts + InfantryPods + InfantryProfiles + InfantryTriggers + InfantryAttention + InfantryNotes + InfantryChanges + InfantryStats + InfantryUsage + InfantryEpics + InfantryReview + InfantryRun + InfantryGit
 
     private fun tab(id: String, order: Int, title: String) =
         TabProvider(id, TabContainers.CENTER, order, { title }, InfantryGit.tabs.single().icon, "center-tab-$id") { Text(title) }
@@ -168,7 +168,7 @@ class NodeRegistryTest {
             val row = rows.single { it.id == slot }
             assertEquals(module to ChildSource.FILL, row.module to row.source, slot)
         }
-        assertEquals(setOf("Infantry_AppUi", "Infantry_Roles", "Infantry_Board"), f.fillModules.values.toSet()) // RUNTIME-14/15: Roles fills the roles window, Board the board
+        assertEquals(setOf("Infantry_AppUi", "Infantry_Roles", "Infantry_Board", "Infantry_Alerts"), f.fillModules.values.toSet()) // RUNTIME-14/15/16: Roles fills the roles window, Board the board, Alerts sound + voice
         // A node under a fill: the status bar's config cog is the app UI's too.
         val cog = rows.single { it.id == "infantry.shell.footer.configCog" }
         assertEquals("Infantry_AppUi" to ChildSource.FILL, cog.module to cog.source)

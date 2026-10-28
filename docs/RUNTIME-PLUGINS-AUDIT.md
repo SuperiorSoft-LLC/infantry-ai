@@ -206,3 +206,37 @@ rev 4 was based (758149a5).
   `LocalTabFactory`, the `*Pane` composables). So rev 4's E5 must come before E6, as rev 4 orders it.
 - The daemon has compile-time plugins (`HarnessPlugin` via ServiceLoader, the `ProviderFactory` map) that rev 4 does
   not cover.
+
+---
+
+## AppUi remaining (RUNTIME-16, ticket 76227a76)
+
+State after RUNTIME-6..15 and this ticket: Infantry_AppUi is the only module left in plugins/core. No official plugin
+reaches the window's `Controller` any more (0 main-code uses in plugins/official; `TabContext.coreController` had 0
+users and is deleted here). What still reaches it is Infantry_AppUi alone, through `appShell` (= `coreShell`): 31 uses
+in 12 files. Decision per piece: **shell** = stays in core (config/orchestration), **plugin** = moves to an existing
+one, **new** = becomes a new official plugin. "Done" = moved in this ticket.
+
+| Piece (files in plugins/core/Infantry_AppUi) | LOC | Fills / role | Reaches Controller? | Decision | Status |
+|---|---|---|---|---|---|
+| `AppController.kt` (`TabContext.appController`) + `TabContext.coreController` | 11 | tab access to the window controller | was the path | delete (0 users) | **done** |
+| `ShellSound.kt`, `ShellVoice.kt` | 32 | `infantry.shell.sound`, `infantry.shell.voice` | via appShell | **new** Infantry_Alerts (on `ShellContext.alerts`, additive) | **done** |
+| Sidebar "To review" counter (`Sidebar.kt`) | 1 | reads `AppState.reviewQueue` | no | stays in the agents list, shown only when Infantry_Review's tab is loaded | **done** |
+| `ShellToast.kt`, `ToastHost.kt` | 166 | `infantry.shell.toast` (already on `ShellContext.toast` only) | no | **shell** (rev 4 E7: core draws its own toasts) | follow-up F1 |
+| `StatusBarBlocks.kt` (connection dot, last frame, config cog), `ProcessesBadge.kt` | 321 | `infantry.shell.footer` | via appShell | connection items + cog: **shell**; RAM/rogue badge: **new** Infantry_Processes (`ProcessesContext`) | follow-up F2 |
+| `ShellConfigSettings.kt` (16 config sections) | 47 | `infantry.shell.config.settings` | no (sections are in core) | host: **shell**; each section to the plugin that owns it (Limits→Usage, Roles→Roles, Voice/Sound→Alerts, Questions→Attention) | follow-up F3 |
+| `ShellHeader.kt` (+ core `TitleBar`, `ProjectPicker`) | 211 (+908 in core) | `infantry.shell.header` | via appShell (10) | **new** Infantry_Header | follow-up F4 |
+| `ShellLeftPanel.kt`, `Sidebar.kt`, `SidebarBoardButton.kt`, `ProjectsSidebar.kt`, `ShellCompactDrawer.kt` | 589 | `infantry.shell.left`, `infantry.shell.drawer`; the agents list behind `TabContext.agentsList` | via appShell | panel frames: **shell**; the agents list → **plugin** Infantry_Agents (needs `AgentsContext`) | follow-up F5 |
+| `ShellRightPanel.kt` | 140 | `infantry.shell.right` | via appShell (5) | **shell** (a panel frame + strips, like the left) | follow-up F5 |
+| `ShellCenter.kt`, `ChatPanel.kt`, `ChatSurface.kt`, `ChatAttachmentViews.kt`, `ChangeBox.kt`, `CommsCardStyle.kt`, `OriginRenderer.kt`, `PromptCard.kt`, `SessionStartPane.kt`, `NewAgentDialog.kt` | 2,641 | `infantry.shell.center` (chat + center strip + New agent) | via appShell | centre frame + strip: **shell**; chat: **new** Infantry_Chat (`ChatContext`); New agent dialog → Infantry_Chat | follow-up F6 |
+| `ShellQuestionPill.kt`, `QuestionWindow.kt` | 324 | `infantry.shell.questions` (approvals / owner questions) | via `QuestionsContext` + appShell | **new** Infantry_Approvals; the daemon stays the enforcement point (rev 4 C5) | follow-up F7 |
+| `ShellAssistant.kt`, `AssistantPopup.kt` | 417 | `infantry.shell.assistant` | via appShell | **new** Infantry_Assistant (on Infantry_Chat's panel) | follow-up F8 |
+| `ShellDiff.kt`, `DiffModal.kt` | 326 | `infantry.shell.diff` | via appShell (`openDiff(state, controller)`) | **plugin** Infantry_Changes (it opens the diffs) | follow-up F9 |
+| `ShellAccess.kt` (`appShell`) + core `coreShell` | 13 | the last controller path | — | delete when the 31 uses are 0, then `apiVersion` 2 | follow-up F10 |
+
+Follow-ups (weight 1-5): F1 toast → shell (1); F2 status bar: connection/cog → shell, Infantry_Processes on
+`ProcessesContext` (3); F3 config sections to their owners via `config.<entry>` contributions (3); F4 Infantry_Header
+(TitleBar + ProjectPicker out of agenthqUiCore) (3); F5 panel frames → shell, agents list → Infantry_Agents on
+`AgentsContext` (3); F6 Infantry_Chat on `ChatContext` (5); F7 Infantry_Approvals (4); F8 Infantry_Assistant (2,
+after F6); F9 diff modal → Infantry_Changes (2); F10 delete `coreShell`/`appShell`, `apiVersion` 2, retire
+Infantry_AppUi and App_UI.ihq (2, after F1-F9).

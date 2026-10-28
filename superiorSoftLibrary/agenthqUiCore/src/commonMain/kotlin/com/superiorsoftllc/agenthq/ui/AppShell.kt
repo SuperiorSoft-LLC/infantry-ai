@@ -113,7 +113,7 @@ internal val LocalCoreTier = compositionLocalOf { true }
 
 /**
  * S4d (docs/SHELL-LEAKS.md): the window's [Shell], its state and controller, for a core module's block (the app UI's
- * fills), the way [TabContext.coreController] is for a core module's tab. Null in a community module's composition,
+ * fills; its tab twin `TabContext.coreController` was deleted in RUNTIME-16). Null in a community module's composition,
  * which reads [com.superiorsoftllc.agenthq.ui.shell.LocalShellContext] only.
  */
 val coreShell: Shell? @Composable get() = if (LocalCoreTier.current) LocalShell.current else null

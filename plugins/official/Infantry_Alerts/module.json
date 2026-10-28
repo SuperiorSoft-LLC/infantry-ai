@@ -1,0 +1,16 @@
+{
+  "name": "Infantry_Alerts",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "author": "Infantry AI",
+  "description": "The incoming-comms sound and spoken attention alerts.",
+  "tier": "official",
+  "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.official.alerts.AlertsPlugin",
+  "jar": "build/libs/Infantry_Alerts.jar",
+  "buildOrder": 200,
+  "fills": [
+    "infantry.shell.sound",
+    "infantry.shell.voice"
+  ]
+}

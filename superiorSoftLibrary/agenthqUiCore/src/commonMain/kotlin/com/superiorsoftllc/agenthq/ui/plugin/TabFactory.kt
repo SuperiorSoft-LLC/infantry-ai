@@ -128,8 +128,8 @@ object NoPluginServices : PluginServices {
 
 /**
  * What a tab's content may reach. The window builds one per strip; a tab never sees the window's own variables, it
- * asks through these. A core module reaches the window's controller ([coreController]); a community module reaches
- * the daemon only through the gated [services].
+ * asks through these. RUNTIME-16: no module reaches the window's controller any more (`coreController` is gone); a module
+ * reaches the daemon through the ShellContext domains or the gated [services].
  */
 class TabContext(
     val state: AppState,
@@ -152,8 +152,6 @@ class TabContext(
     val subTab: (hostId: String) -> String? = { null },
     /** RUNTIME-5: remembers [subTabId] as the one picked in host [hostId] (the window owns it, while the app runs). */
     val pickSubTab: (hostId: String, subTabId: String) -> Unit = { _, _ -> },
-    /** S4: whether the module this context is for is core tier ([forModule] sets it from the module's tier). */
-    private val core: Boolean = true,
 ) {
     /**
      * RUNTIME-5 (plugin API, additive): draws host tab [hostId]'s sub-tabs ([TabFactory.children]) as a strip and the
@@ -163,20 +161,14 @@ class TabContext(
     fun SubTabs(hostId: String) =
         SubTabHost(com.superiorsoftllc.agenthq.ui.LocalTabFactory.current, hostId, this, subTab(hostId)) { pickSubTab(hostId, it) }
 
-    /**
-     * S4 (drop-in path, docs/SHELL-LEAKS.md): the window's controller, for a core module's content only; null in a
-     * community module's. Since S4 the core modules compile outside this library, so `internal` no longer marks them.
-     */
-    val coreController: Controller? get() = controller.takeIf { core }
-
     /** Selects an agent and shows its chat. */
     fun openAgent(sessionId: String) {
         controller.select(sessionId)
         showChat()
     }
 
-    internal fun forModule(services: PluginServices, core: Boolean) =
-        TabContext(state, controller, open, showChat, insertIntoChat, diffTarget, onOpenDiff, transcript, services, agentsList, subTab, pickSubTab, core)
+    internal fun forModule(services: PluginServices) =
+        TabContext(state, controller, open, showChat, insertIntoChat, diffTarget, onOpenDiff, transcript, services, agentsList, subTab, pickSubTab)
 }
 
 /**
@@ -736,7 +728,7 @@ class TabFactory(
         val tab = find(id) ?: return
         val module = byModule[tab.module]
         // RUNTIME-2: only a core module gets the window controller; official is a program like community (D4).
-        val own = context.forModule(services(tab.module), module?.tier.isCoreTier())
+        val own = context.forModule(services(tab.module))
         val hooks = interceptors[id].orEmpty().filter { it.before != null || it.after != null || it.content != null }
         val top = blocks[Slots.top(tab.container)].orEmpty()
         val bottom = blocks[Slots.bottom(tab.container)].orEmpty()
@@ -750,7 +742,7 @@ class TabFactory(
             i.content?.let { wrap -> { wrap(own, proceed) } } ?: proceed
         }
         Column {
-            top.forEach { (owner, b) -> ModuleTier(byModule[owner]?.tier.isCoreTier()) { b.content(context.forModule(services(owner), byModule[owner]?.tier.isCoreTier())) } }
+            top.forEach { (owner, b) -> ModuleTier(byModule[owner]?.tier.isCoreTier()) { b.content(context.forModule(services(owner))) } }
             if (community) CommunityBadge(module!!.manifest)
             hooks.forEach { it.before?.invoke(own) }
             Box(Modifier.weight(1f)) {
@@ -758,7 +750,7 @@ class TabFactory(
                 CompositionLocalProvider(LocalContentColor provides Palette.Text) { inner() }
             }
             hooks.forEach { it.after?.invoke(own) }
-            bottom.forEach { (owner, b) -> ModuleTier(byModule[owner]?.tier.isCoreTier()) { b.content(context.forModule(services(owner), byModule[owner]?.tier.isCoreTier())) } }
+            bottom.forEach { (owner, b) -> ModuleTier(byModule[owner]?.tier.isCoreTier()) { b.content(context.forModule(services(owner))) } }
         }
     }
 
@@ -868,7 +860,7 @@ fun ColumnScope.PanelSections(factory: TabFactory, panel: String, context: TabCo
 @Composable
 private fun ColumnScope.PanelSection(factory: TabFactory, section: PanelProvider, context: TabContext) {
     val module = factory.panelModuleOf(section.id)
-    val own = context.forModule(factory.servicesOf(section.module), module?.tier.isCoreTier())
+    val own = context.forModule(factory.servicesOf(section.module))
     Box(Modifier.fillMaxWidth().testTag(section.testTag).let { if (section.fill) it.weight(1f) else it }) {
         if (module?.tier == Tier.COMMUNITY) {
             Column {
