@@ -105,6 +105,8 @@ class AgentQuickRefCommandsTest {
         var any = false
         for (c in line) {
             when {
+                // A shell comment: an unquoted `#` that starts a word ends the command, so the doc may annotate it.
+                c == '#' && !quoted && !any -> break
                 c == '"' -> { quoted = !quoted; any = true }
                 c.isWhitespace() && !quoted -> { if (any) words += current.toString(); current.clear(); any = false }
                 else -> { current.append(c); any = true }

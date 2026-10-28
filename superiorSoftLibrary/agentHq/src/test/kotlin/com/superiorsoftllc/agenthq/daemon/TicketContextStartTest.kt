@@ -56,7 +56,7 @@ class TicketContextStartTest {
 
             val sources = fixture.daemon.manager.list().single().contextSources.associateBy { it.source }
             // BUG-E2E-2: the section ends with the line telling the agent to move its own ticket.
-            val agenthqSection = agenthqPrefix + "\n" + com.superiorsoftllc.agenthq.context.TicketContextComposer.ticketMoveLine(ticket.id) + "\n" + com.superiorsoftllc.agenthq.context.TicketContextComposer.MCP_LINE
+            val agenthqSection = agenthqPrefix + "\n" + com.superiorsoftllc.agenthq.context.TicketContextComposer.ticketMoveLine(ticket.id) + "\n" + com.superiorsoftllc.agenthq.context.TicketContextComposer.MCP_LINE + "\n" + com.superiorsoftllc.agenthq.context.TicketContextComposer.RELATED_TICKETS_LINE
             assertTrue(prompt.startsWith(agenthqSection), "the move instruction closes the agenthq section: ${prompt.take(600)}")
             assertEquals(agenthqSection.length, sources.getValue("agenthq").chars)
             // b7a55d4: the instance's instructions are the persona plus the shipped KNOWLEDGE.md.

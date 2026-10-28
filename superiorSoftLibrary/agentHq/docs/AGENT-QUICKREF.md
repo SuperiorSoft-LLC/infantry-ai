@@ -18,10 +18,16 @@ agenthq ticket show <ticket-id>
 **Find the code before you grep** (TICKET-FILES; MCP `agenthq_ticket_related_files` / `agenthq_ticket_files`)
 
 ```
-agenthq ticket files <ticket-id> --related   # files changed by the tickets that touched the same files, ranked
-agenthq ticket files <ticket-id>             # files that ticket changed (status, +/-)
-agenthq ticket files --path TicketBoard.kt   # the tickets that changed matching paths (glob ok)
+agenthq ticket files <ticket-id> --related
+agenthq ticket files <ticket-id>
+agenthq ticket files --path TicketBoard.kt
 ```
+
+`--related` lists the files changed by the tickets that touched the same files, ranked. Without it, `ticket files` lists the files that ticket changed (status, +/-). `--path` (glob ok) lists the tickets that changed matching paths.
+
+**Check related tickets before you start** (APP-KNOWLEDGE)
+
+Before you start, check the linkedTickets section of your brief, then the board (`agenthq board`) for tickets that touch the same work, then their changed files (`agenthq ticket files <ticket-id> --related`). Reuse their work and cite their ids in your report. If none are related, say so in one line and carry on.
 
 **See who is available**
 
@@ -116,8 +122,9 @@ agenthq bg stop <id>
 agenthq bg run --notify --name gate -- gradlew agentHq:test   # returns at once; the job runs detached
 # ... END YOUR TURN. The daemon mails you "[AUTOMATIC] bg job <id> finished, exit N" with the last lines.
 agenthq bg run --notify --notify-on "Tests? completed" --notify-timeout 20 -- gradlew test   # extra pattern, own timeout
-agenthq bg wait <id> [--timeout 9]   # fallback ONLY when your harness is not woken by mail: blocks, returns the exit code
 ```
+
+`agenthq bg wait <id>` is a fallback, ONLY for when your harness is not woken by mail: it blocks and returns the exit code. Add `--timeout <MIN>` to bound the wait.
 
 Triggers (one mail each, to your session, from `system`, thread `bg:<id>`): exit (code + last `limits.bg.notifyTailLines`
 lines, or `--notify-tail N`); the job vanishing without an exit code (stopped or died); a NEW output line matching a
