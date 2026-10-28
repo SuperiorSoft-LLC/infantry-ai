@@ -515,6 +515,11 @@ val prepareDistributableResources = tasks.register<Sync>("prepareDistributableRe
     into(layout.buildDirectory.dir("compose/tmp/distributableResources"))
 }
 val bundledLauncherArg = "-Dagenthq.plugins.bundled=\$APPDIR/resources/modules"
+// DEV-TRUST (ticket 98ef2f8f): a -Pihq.devSign=true build signs with the throwaway dev key, which the pinned Infantry key
+// (OfficialTrust) does not match, so its launcher trusts the dev-signed modules (devTrust). A real-key build (-Pihq.keystore)
+// never gets it. Same precedence as stageOfficialModules: a keystore wins over devSign.
+val devTrustLauncherArg = "-Dagenthq.plugins.devTrust=true"
+val usesDevKey = !hasProperty("ihq.keystore") && findProperty("ihq.devSign")?.toString()?.trim()?.lowercase() == "true"
 // Compose registers its package tasks in afterEvaluate and sets appResourcesDir / launcherJvmArgs in their register
 // action; a configureEach added after that registration runs after that action (one added earlier ran before it and was
 // overwritten: verifyOfficialModulesPackaged catches that).
@@ -523,6 +528,7 @@ afterEvaluate {
         dependsOn(prepareDistributableResources)
         appResourcesDir.set(layout.dir(prepareDistributableResources.map { it.destinationDir }))
         launcherJvmArgs.add(bundledLauncherArg)
+        if (usesDevKey) launcherJvmArgs.add(devTrustLauncherArg)
     }
 }
 // PACKAGING acceptance (runs no jpackage): the distributable's resources carry modules/official/<Name> with a jar signed
@@ -542,6 +548,9 @@ tasks.register("verifyOfficialModulesPackaged") {
         val res = resources.get()
         check(res == prepared.get()) { "PACKAGING: createDistributable packages $res, not the staged resources ${prepared.get()}" }
         check(bundledLauncherArg in launcherArgs.get()) { "PACKAGING: the launcher does not set $bundledLauncherArg: ${launcherArgs.get()}" }
+        check((devTrustLauncherArg in launcherArgs.get()) == usesDevKey) {
+            "PACKAGING: the launcher ${if (usesDevKey) "lacks" else "must not set"} $devTrustLauncherArg (devSign=$usesDevKey): ${launcherArgs.get()}"
+        }
         val modules = File(res, "modules")
         val cert = CertificateFactory.getInstance("X.509")
             .generateCertificate(File(modules, "trusted-keys/infantry.cer").inputStream().use { it.readBytes() }.inputStream())
