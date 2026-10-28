@@ -26,8 +26,6 @@ class CoreShellTreeTest {
             "  infantry.shell.images",
             "    infantry.shell.dock",
             "      infantry.shell.frame",
-            // S4c: the core's Configuration entry, drawn only while no module fills the header.
-            "        infantry.shell.configEntry",
             "        $header",
             "          $header.lead",
         ) + listOf("toggleLeft", "brand", "project", "agents", "overflow")
@@ -60,6 +58,8 @@ class CoreShellTreeTest {
             "        $footer",
         ) + listOf("connStatus", "lastFrame", "contractWarning", "versionMismatch", "processesBadge", "gap", "shortcutHint", "buildStamp", "configCog")
             .map { "          $footer.$it" } + listOf(
+            // S4c: the core's Configuration entry, a dock sibling outside the replaceable frame.
+            "      infantry.shell.configEntry",
             "      infantry.shell.assistant",
             "        infantry.shell.assistant.resize",
             "        infantry.shell.assistant.body",
