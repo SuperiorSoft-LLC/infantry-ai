@@ -46,7 +46,7 @@ import kotlin.test.assertTrue
 /** P1 (f60f4d97, docs/BLOCKS-LAYOUT-DESIGN.md section 6s): the registry read model over what TabFactory resolved. */
 class NodeRegistryTest {
     /** RUNTIME-6/7/8: the compiled-in core modules plus the official Notes, Changes, Run and Git (jars on desktop), as the window has them. */
-    private val coreAndGit = CoreModules.all + InfantryRoles + InfantryBoard + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.approvals.InfantryApprovals + com.superiorsoftllc.agenthq.plugins.official.alerts.InfantryAlerts + com.superiorsoftllc.agenthq.plugins.official.processes.InfantryProcesses + InfantryPods + InfantryProfiles + InfantryTriggers + InfantryAttention + InfantryNotes + InfantryChanges + InfantryStats + InfantryUsage + InfantryEpics + InfantryReview + InfantryRun + InfantryGit
+    private val coreAndGit = CoreModules.all + InfantryRoles + InfantryBoard + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.approvals.InfantryApprovals + com.superiorsoftllc.agenthq.plugins.official.assistant.InfantryAssistant + com.superiorsoftllc.agenthq.plugins.official.alerts.InfantryAlerts + com.superiorsoftllc.agenthq.plugins.official.processes.InfantryProcesses + InfantryPods + InfantryProfiles + InfantryTriggers + InfantryAttention + InfantryNotes + InfantryChanges + InfantryStats + InfantryUsage + InfantryEpics + InfantryReview + InfantryRun + InfantryGit
 
     private fun tab(id: String, order: Int, title: String) =
         TabProvider(id, TabContainers.CENTER, order, { title }, InfantryGit.tabs.single().icon, "center-tab-$id") { Text(title) }
@@ -168,7 +168,7 @@ class NodeRegistryTest {
             val row = rows.single { it.id == slot }
             assertEquals(module to ChildSource.FILL, row.module to row.source, slot)
         }
-        assertEquals(setOf("Infantry_AppUi", "Infantry_Roles", "Infantry_Board", "Infantry_Alerts", "Infantry_Header", "Infantry_Chat", "Infantry_Approvals", "Infantry_Processes", "Infantry_Usage", "Infantry_Attention"), f.fillModules.values.toSet()) // RUNTIME-19: Usage and Attention fill their config sections; RUNTIME-14/15/16/18: Roles fills the roles window, Board the board, Alerts sound + voice, Processes the status bar's badge
+        assertEquals(setOf("Infantry_AppUi", "Infantry_Roles", "Infantry_Board", "Infantry_Alerts", "Infantry_Header", "Infantry_Chat", "Infantry_Approvals", "Infantry_Assistant", "Infantry_Processes", "Infantry_Usage", "Infantry_Attention"), f.fillModules.values.toSet()) // RUNTIME-19: Usage and Attention fill their config sections; RUNTIME-14/15/16/18: Roles fills the roles window, Board the board, Alerts sound + voice, Processes the status bar's badge
         // A node under a fill: the title bar's lead row is the header plugin's.
         val lead = rows.single { it.id == "infantry.shell.header.lead" }
         assertEquals("Infantry_Header" to ChildSource.FILL, lead.module to lead.source)

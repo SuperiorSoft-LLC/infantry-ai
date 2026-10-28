@@ -13,9 +13,11 @@ class ChatPanelOneSourceTest {
     private val ui = "../agenthqUiCore/src/commonMain/kotlin/com/superiorsoftllc/agenthq/ui"
     // S4c: a host that moved to the app UI (plugins/core/Infantry_AppUi) is read from there.
     private val app = "../../plugins/core/Infantry_AppUi"
+    // RUNTIME-24: the Assistant popup is the official Infantry_Assistant's.
+    private val assistant = "../../plugins/official/Infantry_Assistant/src"
     // RUNTIME-22: the centre block and ChatPanel are the official Infantry_Chat's.
     private val chat = "../../plugins/official/Infantry_Chat/src"
-    private fun src(name: String) = (File("$ui/$name").takeIf { it.exists() } ?: File("$app/${name.substringAfterLast('/')}").takeIf { it.exists() } ?: File("$chat/${name.substringAfterLast('/')}")).readText()
+    private fun src(name: String) = (File("$ui/$name").takeIf { it.exists() } ?: File("$app/${name.substringAfterLast('/')}").takeIf { it.exists() } ?: File("$assistant/${name.substringAfterLast('/')}").takeIf { it.exists() } ?: File("$chat/${name.substringAfterLast('/')}")).readText()
 
     @Test fun `the main window centre block and the assistant popup both host ChatPanel`() {
         // BLOCKS-LAYOUT L9b: the centre block hosts ChatPanel's own sections, one node each, through chatPanelHost.
