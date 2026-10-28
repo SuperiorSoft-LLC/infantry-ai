@@ -77,7 +77,7 @@ internal fun ticketImagePath(projectDirectory: String?, relPath: String): String
     projectDirectory?.takeIf { it.isNotBlank() }?.let { it.trimEnd('/', '\\') + "/" + relPath }
 
 /** IMG-4: what opens an image full size: the board's viewer, or nothing outside a board. */
-internal val LocalImageViewer = staticCompositionLocalOf<(ImageBitmap, String) -> Unit> { { _, _ -> } }
+val LocalImageViewer = staticCompositionLocalOf<(ImageBitmap, String) -> Unit> { { _, _ -> } }
 
 /**
  * IMG-4: [content] with a full-size image viewer over it. A thumbnail anywhere inside opens it through
@@ -246,7 +246,7 @@ private fun TicketImageThumb(relPath: String, path: String?, fallback: ByteArray
 /** The image at [path] (read through the platform host), else [fallback]'s bytes; null while loading or unreadable. */
 @OptIn(ExperimentalResourceApi::class)
 @Composable
-internal fun rememberImage(path: String?, fallback: ByteArray?): ImageBitmap? {
+fun rememberImage(path: String?, fallback: ByteArray?): ImageBitmap? {
     val host = LocalPlatformHost.current
     val bitmap by produceState<ImageBitmap?>(null, path, fallback) {
         value = withContext(Dispatchers.Default) {

@@ -23,13 +23,11 @@ import com.superiorsoftllc.agenthq.ui.model.ReportFlag
 import com.superiorsoftllc.agenthq.ui.model.WatchFlag
 import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
 
-// S4b (docs/SHELL-LEAKS.md): what the chat (core) draws of the board, which moved to the app UI. Since S4c (the
-// sidebar moved) only the REPORT BACK flag is left.
+// S4d (docs/SHELL-LEAKS.md): moved from core BoardSidebar.kt with the chat; the board, the sidebar and the chat draw it.
 
 /** TRAITS-T9: the REPORT BACK flag; `unreported` in the attention colour, `reported` muted, nothing otherwise. */
-// S4 bridge (docs/SHELL-LEAKS.md): public only until the chat (ChatSurface.kt) moves; the board and the sidebar use it.
 @Composable
-fun ReportFlagChip(flag: ReportFlag?, modifier: Modifier = Modifier) {
+internal fun ReportFlagChip(flag: ReportFlag?, modifier: Modifier = Modifier) {
     when (flag) {
         ReportFlag.UNREPORTED -> Chip(flag.label, Palette.Accent, modifier)
         ReportFlag.REPORTED -> Chip(flag.label, Palette.Muted, modifier)
