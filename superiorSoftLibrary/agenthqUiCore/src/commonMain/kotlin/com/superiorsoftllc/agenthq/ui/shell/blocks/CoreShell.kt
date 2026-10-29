@@ -48,6 +48,8 @@ object CoreShell {
         PROCESSES_BADGE_SLOT,
         "infantry.shell.assistant", "infantry.shell.board", "infantry.shell.diff",
         "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions",
+        // CONFIG-3: the theme block (Infantry_Appearance); draws nothing, applies the theme config.
+        "infantry.shell.theme",
         // RUNTIME-26: the side panels, the compact drawer and the open settings group are the shell's own, not slots.
     ) + CONFIG_OWNED_SECTION_SLOTS + "infantry.shell.roles"
 
@@ -97,7 +99,7 @@ object CoreShell {
                             // The overlays, over the whole dock; they align themselves.
                             // RUNTIME-17: the toasts are the shell's own (core draws its toasts), not a slot.
                             slot("infantry.shell.assistant"), ShellToast, slot("infantry.shell.board"), slot("infantry.shell.diff"),
-                            slot("infantry.shell.sound"), slot("infantry.shell.voice"), slot("infantry.shell.questions"),
+                            slot("infantry.shell.sound"), slot("infantry.shell.voice"), slot("infantry.shell.questions"), slot("infantry.shell.theme"),
                         ),
                     ),
                 ),

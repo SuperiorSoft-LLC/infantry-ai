@@ -495,3 +495,7 @@ CoreConfig}.kt}`, `agenthqPlugins/.../plugin/api/{NodeConfig.kt,ModuleManifest.k
 (`set`), `agentHq/.../daemon/NodeConfigHttp.kt` (signatures), `docs/{BLOCKS-LAYOUT-DESIGN.md (6s),RUNTIME-PLUGINS-AUDIT.md,
 EMPTY-SHELL-DESIGN.md (headings),PLUGIN-ENDPOINTS-DESIGN.md (D1)}`. Not read in full: `ConfigDialog.kt`, `NodeFields.kt`,
 `NodeConfigState.kt` bodies (signatures only).
+
+## CONFIG-3 as built: storage
+
+PM decision 2026-10-29: the compiled manifest is NOT a new table. It is a reserved `node_config` row per host: `nodeId="@manifest"`, `key=<host>`, `set_by="manifest"`, `value_json` = the `ConfigManifest` JSON (`hash`, `json`, `sources`, `compiledAt`). `GET /node-config` never lists it and `PUT /node-config` refuses that node id. `GET/PUT /config-manifest?host=` read and swap it; a swap runs the seed migration. No schema change, so `SchemaMigrationTest` is untouched in shape. Guard test: `LegacyConfigStructureTest`.

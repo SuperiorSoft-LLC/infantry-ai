@@ -52,21 +52,21 @@ internal fun placement(
 @Composable
 fun RowScope.RenderPlaced(children: List<Block>) {
     for (c in children.flattened()) key(c.id) {
-        if (c.place.visible()) c.Render(BlockScope(placement(c.place, { w, f -> Modifier.weight(w, f) }, null), null, this))
+        if (c.place.visible()) c.Render(BlockScope(placement(c.place, { w, f -> Modifier.weight(w, f) }, null), null, this, c.id))
     }
 }
 
 @Composable
 fun ColumnScope.RenderPlaced(children: List<Block>) {
     for (c in children.flattened()) key(c.id) {
-        if (c.place.visible()) c.Render(BlockScope(placement(c.place, { w, f -> Modifier.weight(w, f) }, null), null))
+        if (c.place.visible()) c.Render(BlockScope(placement(c.place, { w, f -> Modifier.weight(w, f) }, null), null, blockId = c.id))
     }
 }
 
 @Composable
 fun BoxScope.RenderPlaced(children: List<Block>) {
     for (c in children.flattened()) key(c.id) {
-        if (c.place.visible()) c.Render(BlockScope(placement(c.place, null, { a -> Modifier.align(a) }), this))
+        if (c.place.visible()) c.Render(BlockScope(placement(c.place, null, { a -> Modifier.align(a) }), this, blockId = c.id))
     }
 }
 
@@ -74,6 +74,6 @@ fun BoxScope.RenderPlaced(children: List<Block>) {
 @Composable
 fun RenderPlain(children: List<Block>) {
     for (c in children.flattened()) key(c.id) {
-        if (c.place.visible()) c.Render(BlockScope(placement(c.place, null, null), null))
+        if (c.place.visible()) c.Render(BlockScope(placement(c.place, null, null), null, blockId = c.id))
     }
 }

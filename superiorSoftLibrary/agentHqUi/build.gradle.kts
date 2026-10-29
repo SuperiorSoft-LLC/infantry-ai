@@ -61,6 +61,8 @@ dependencies {
     testImplementation(project(":plugins:official:Infantry_Board"))
     // RUNTIME-16: and Infantry_Alerts (the sound and voice fills; the voice and sound UI tests run the whole window).
     testImplementation(project(":plugins:official:Infantry_Alerts"))
+    // CONFIG-3: and Infantry_Appearance (the theme slot; the Appearance tab is generated from its config).
+    testImplementation(project(":plugins:official:Infantry_Appearance"))
     // RUNTIME-18: and Infantry_Processes (the status bar's processes badge; its UI tests run the whole window).
     testImplementation(project(":plugins:official:Infantry_Processes"))
     // RUNTIME-20: and Infantry_Header (the title bar; every window test draws it).

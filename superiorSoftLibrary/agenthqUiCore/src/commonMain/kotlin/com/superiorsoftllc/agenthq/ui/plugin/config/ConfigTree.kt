@@ -10,6 +10,7 @@ import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.OverrideBlock
 import com.superiorsoftllc.agenthq.ui.block.layout.OverrideModes
 import com.superiorsoftllc.agenthq.ui.plugin.CORE_SHELL_MODULE
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
@@ -17,6 +18,10 @@ import kotlinx.serialization.json.Json
 data class DeclaredField(val node: String, val module: String, val group: String, val field: ConfigFieldDeclaration) {
     val key: String get() = this.field.key
 }
+
+/** CONFIG-3: one accepted [ConfigDeclaration] and the [module] that declared it (core's is [CORE_SHELL_MODULE]). */
+@Serializable
+data class ModuleDeclaration(val module: String, val declaration: ConfigDeclaration)
 
 /** A module's declarations, as the merge sees them: who, how trusted, and which node ids it may declare fields on. */
 class ConfigSource(val module: String, val tier: Tier, val declarations: List<ConfigDeclaration>, val owns: (node: String) -> Boolean)
@@ -32,6 +37,8 @@ class ConfigTree(
     /** Each node's parent; a root has none. */
     val parents: Map<String, String>,
     val problems: List<String> = emptyList(),
+    /** CONFIG-3: the accepted declarations in merge order, each with its module: what the compiled manifest is made of. */
+    val declarations: List<ModuleDeclaration> = emptyList(),
 ) {
     /** [node], then its parent, up to the root. */
     fun chain(node: String): List<String> {
@@ -69,10 +76,12 @@ class ConfigTree(
         fun merge(core: List<ConfigDeclaration>, modules: List<ConfigSource>, parents: Map<String, String>, knownTypes: Set<String> = ConfigFieldTypes.BUILT_IN): ConfigTree {
             val problems = mutableListOf<String>()
             val out = LinkedHashMap<String, MutableList<DeclaredField>>()
+            val accepted = mutableListOf<ModuleDeclaration>()
             val sources = listOf(ConfigSource(CORE_SHELL_MODULE, Tier.CORE, core) { true }) + modules
             for (s in sources) for (d in s.declarations) {
                 if (!s.owns(d.node)) { problems += "${s.module}: config for ${d.node} refused: the module neither owns that node nor is granted it"; continue }
                 val list = out.getOrPut(d.node) { mutableListOf() }
+                val kept = mutableListOf<ConfigFieldDeclaration>()
                 for (f in d.fields) {
                     val taken = list.firstOrNull { it.key == f.key }
                     when {
@@ -81,11 +90,13 @@ class ConfigTree(
                         else -> {
                             if (f.type !in knownTypes) problems += "${s.module}: config key ${f.key} on ${d.node} has unknown type ${f.type}; shown read-only"
                             list += DeclaredField(d.node, s.module, d.group, f)
+                            kept += f
                         }
                     }
                 }
+                if (kept.isNotEmpty()) accepted += ModuleDeclaration(s.module, d.copy(fields = kept))
             }
-            return ConfigTree(out.filterValues { it.isNotEmpty() }, parents, problems)
+            return ConfigTree(out.filterValues { it.isNotEmpty() }, parents, problems, accepted)
         }
 
         /** Each node's parent in [roots] (a wrap's inner children count as the wrap's; a replace has none the core knows). */

@@ -21,3 +21,11 @@ UPDATE node_config SET value_json = :value_json, set_by = :set_by, updated_at = 
 
 deleteNodeConfig:
 DELETE FROM node_config WHERE node_id = :node_id AND key = :key;
+
+-- CONFIG-3: the seed migration deletes a default copy; user rows are never touched by it.
+deleteSeedNodeConfig:
+DELETE FROM node_config WHERE node_id = :node_id AND key = :key AND set_by = 'seed';
+
+-- CONFIG-3: a seed row that differs from the default is somebody's value, so it becomes a user row.
+adoptSeedNodeConfig:
+UPDATE node_config SET set_by = 'user' WHERE set_by = 'seed';

@@ -1108,4 +1108,31 @@ class SchemaMigrationTest {
             "the project row survives and its directory is the empty default, never NULL",
         )
     }
+
+    /**
+     * CONFIG-3: the first manifest a daemon receives (stored in the reserved node_config row `@manifest`, no new table)
+     * deletes each seed row equal to the declared default and turns the other seed rows (somebody's value) into user
+     * rows. User rows are not touched, and the manifest row never shows in the node_config list.
+     */
+    @Test
+    fun `the first manifest migrates the seed rows of an existing node_config`() {
+        val path = newDatabasePath()
+        AgentHQDatabaseFactory.open(path).close()
+        exec(path, "INSERT INTO node_config VALUES ('infantry.shell.theme', 'accent', '\"RED\"', 'seed', 1);")
+        exec(path, "INSERT INTO node_config VALUES ('infantry.shell.theme', 'dark', 'false', 'seed', 1);")
+        exec(path, "INSERT INTO node_config VALUES ('infantry.shell.board', 'title', '\"Mine\"', 'user', 1);")
+
+        AgentHQDatabaseFactory.open(path).use { h ->
+            val manifest = """[{"declaration":{"fields":[{"default":"RED","key":"accent"},{"default":true,"key":"dark"}],"node":"infantry.shell.theme"},"module":"Infantry_Appearance"}]"""
+            val nodeConfig = com.superiorsoftllc.agenthq.daemon.NodeConfigStore(h.database)
+            com.superiorsoftllc.agenthq.daemon.ConfigManifestStore(h.database, nodeConfig)
+                .put(com.superiorsoftllc.agenthq.plugin.api.ConfigManifest("desktop", "h1", manifest))
+            assertEquals(2, nodeConfig.all().size, "the @manifest row is not listed")
+        }
+        assertEquals(
+            listOf(listOf("@manifest", "desktop", "manifest"), listOf("infantry.shell.board", "title", "user"), listOf("infantry.shell.theme", "dark", "user")),
+            rows(path, "SELECT node_id, key, set_by FROM node_config ORDER BY node_id, key;"),
+            "the seed row equal to the default is gone, the other one is the user's now, the user row is untouched",
+        )
+    }
 }

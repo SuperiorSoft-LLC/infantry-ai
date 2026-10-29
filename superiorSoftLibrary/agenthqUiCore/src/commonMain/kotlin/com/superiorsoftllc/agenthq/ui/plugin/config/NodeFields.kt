@@ -36,6 +36,7 @@ import com.superiorsoftllc.agenthq.ui.SectionLabel
 import com.superiorsoftllc.agenthq.ui.TextButton
 import com.superiorsoftllc.agenthq.ui.handCursor
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
+import com.superiorsoftllc.agenthq.ui.shell.parseConfigColor
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -90,12 +91,12 @@ fun NodeFields(factory: TabFactory, node: String, fields: List<DeclaredField>, e
                 }
                 val can = editable && note == null
                 when (f.field.type) {
-                    ConfigFieldTypes.CHECKBOX -> Checkbox(
+                    ConfigFieldTypes.CHECKBOX, ConfigFieldTypes.TOGGLE -> Checkbox(
                         (value as? JsonPrimitive)?.booleanOrNull ?: false, if (can) { on -> write(JsonPrimitive(on)) } else null, enabled = can,
                         modifier = Modifier.testTag(NODE_FIELD_CHECK_TAG_PREFIX + tag).semantics { contentDescription = f.field.label },
                     )
-                    ConfigFieldTypes.TEXT, ConfigFieldTypes.NUMBER -> TextEditor(f, tag, value, can, ::write)
-                    ConfigFieldTypes.SELECT -> for (o in f.field.options) Option(tag, o, o, (value as? JsonPrimitive)?.content == o, can) { write(JsonPrimitive(o)) }
+                    ConfigFieldTypes.TEXT, ConfigFieldTypes.NUMBER, ConfigFieldTypes.COLOR -> TextEditor(f, tag, value, can, ::write)
+                    ConfigFieldTypes.SELECT, ConfigFieldTypes.RADIO -> for (o in f.field.options) Option(tag, o, f.field.optionLabels[o] ?: o, (value as? JsonPrimitive)?.content == o, can) { write(JsonPrimitive(o)) }
                     ConfigFieldTypes.MULTI_SELECT -> {
                         val picked = (value as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty()
                         for (o in f.field.options) Option(tag, o, o, o in picked, can) {
@@ -163,7 +164,7 @@ fun NodeFieldGroups(factory: TabFactory, node: String, fields: List<DeclaredFiel
 }
 
 @Composable
-private fun Option(tag: String, option: String, label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+internal fun Option(tag: String, option: String, label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     FilterChip(
         selected = selected, onClick = onClick, enabled = enabled,
         label = { Text(label, fontSize = 11.sp) },
@@ -173,7 +174,7 @@ private fun Option(tag: String, option: String, label: String, selected: Boolean
 
 /** A text or number field: typed into a draft, stored on Save; a number outside min..max (or not a number) is refused. */
 @Composable
-private fun TextEditor(f: DeclaredField, tag: String, value: JsonElement?, enabled: Boolean, write: (JsonElement?) -> Unit) {
+internal fun TextEditor(f: DeclaredField, tag: String, value: JsonElement?, enabled: Boolean, write: (JsonElement?) -> Unit) {
     val shown = (value as? JsonPrimitive)?.content.orEmpty()
     var draft by remember(tag, shown) { mutableStateOf(shown) }
     val number = f.field.type == ConfigFieldTypes.NUMBER
@@ -181,6 +182,7 @@ private fun TextEditor(f: DeclaredField, tag: String, value: JsonElement?, enabl
     val min = f.field.min
     val max = f.field.max
     val problem = when {
+        f.field.type == ConfigFieldTypes.COLOR -> if (parseConfigColor(draft.trim()) == null) "Use #RRGGBB or #AARRGGBB" else null
         !number -> null
         parsed == null -> "Not a number"
         min != null && parsed < min -> "At least $min"

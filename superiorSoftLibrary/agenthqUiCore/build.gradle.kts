@@ -77,6 +77,8 @@ kotlin {
             implementation(project(":plugins:official:Infantry_Board"))
             // RUNTIME-16: and the official Infantry_Alerts (the sound and voice fills, out of Infantry_AppUi).
             implementation(project(":plugins:official:Infantry_Alerts"))
+            // CONFIG-3: and the official Infantry_Appearance (the theme slot and the generated Appearance tab).
+            implementation(project(":plugins:official:Infantry_Appearance"))
             // RUNTIME-18: and the official Infantry_Processes (the status bar's processes-badge fill, out of Infantry_AppUi).
             implementation(project(":plugins:official:Infantry_Processes"))
             // RUNTIME-20: and the official Infantry_Header (the title bar and project picker, out of Infantry_AppUi and this library).

@@ -1,0 +1,179 @@
+package com.superiorsoftllc.agenthq.ui.plugin.config
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.superiorsoftllc.agenthq.plugin.api.ConfigDeclaration
+import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldDeclaration
+import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldTypes
+import com.superiorsoftllc.agenthq.plugin.api.ConfigSetBy
+import com.superiorsoftllc.agenthq.ui.CONFIG_HIGHLIGHT_STATE
+import com.superiorsoftllc.agenthq.ui.CONFIG_SECTION_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.Chip
+import com.superiorsoftllc.agenthq.ui.ConfigEntry
+import com.superiorsoftllc.agenthq.ui.ConfigTab
+import com.superiorsoftllc.agenthq.ui.Palette
+import com.superiorsoftllc.agenthq.ui.RadioButton
+import com.superiorsoftllc.agenthq.ui.Switch
+import com.superiorsoftllc.agenthq.ui.TextButton
+import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
+import com.superiorsoftllc.agenthq.ui.shell.parseConfigColor
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+
+/** A generated card that no [ConfigEntry] stands for; the suffix is `<node>/<group>`. */
+const val GENERATED_CARD_TAG_PREFIX = "config-card-"
+/** One generated field; the suffix is `<node>/<key>`. A toggle is [NODE_FIELD_CHECK_TAG_PREFIX] + `<node>/<key>`, an option [NODE_FIELD_OPTION_TAG_PREFIX]. */
+const val GENERATED_FIELD_TAG_PREFIX = "config-field-"
+
+/**
+ * CONFIG-3 (docs/CONFIG-MANIFEST-DESIGN.md section 4): the Settings dialog's tabs that are generated from the compiled
+ * manifest's declarations. Phase 1 pilots Appearance only; every other tab stays hand-written until CONFIG-5.
+ */
+val GENERATED_TABS: Set<ConfigTab> = setOf(ConfigTab.APPEARANCE)
+
+/** One card of a generated tab: a declaration that has a `tab`, with the module that declared it. */
+class ConfigCard(val module: String, val declaration: ConfigDeclaration) {
+    val node: String get() = declaration.node
+    val title: String get() = declaration.title ?: declaration.group
+    val applies: String? get() = declaration.applies
+    val fields: List<ConfigFieldDeclaration> get() = declaration.fields.sortedBy { it.order }
+
+    /** The hand-written section this card replaces (same tab, same title), so its test tag, search entry and highlight carry over. */
+    fun replaces(): ConfigEntry? = ConfigEntry.entries.firstOrNull { it.tab.label == declaration.tab && it.title == title }
+}
+
+/**
+ * The generated cards of [tab], from the snapshot (the daemon's compiled manifest), else the local tree: no jar, no card.
+ * Sorted by `order`, ties in load order. Empty for a tab outside [GENERATED_TABS].
+ */
+fun generatedCards(factory: TabFactory?, tab: ConfigTab?): List<ConfigCard> {
+    if (factory == null || tab == null || tab !in GENERATED_TABS) return emptyList()
+    return factory.config.declarations
+        .filter { it.declaration.tab == tab.label && it.declaration.fields.isNotEmpty() }
+        .sortedBy { it.declaration.order }
+        .map { ConfigCard(it.module, it.declaration) }
+}
+
+/** The hand-written sections that a generated card replaces on [tab]; the dialog draws the card instead. */
+fun generatedEntries(factory: TabFactory?, tab: ConfigTab?): Set<ConfigEntry> = generatedCards(factory, tab).mapNotNull { it.replaces() }.toSet()
+
+/** CONFIG-3: the cards of [tab] drawn at the top of its body; [highlight] outlines the card standing in for a searched section. */
+@Composable
+fun GeneratedCards(factory: TabFactory?, tab: ConfigTab?, highlight: ConfigEntry?) {
+    if (factory == null) return
+    for (card in generatedCards(factory, tab)) GeneratedCard(factory, card, highlight)
+}
+
+@Composable
+private fun GeneratedCard(factory: TabFactory, card: ConfigCard, highlight: ConfigEntry?) {
+    val entry = card.replaces()
+    val lit = entry != null && entry == highlight
+    val requester = remember { BringIntoViewRequester() }
+    LaunchedEffect(lit) { if (lit) requester.bringIntoView() }
+    val tag = entry?.let { CONFIG_SECTION_TAG_PREFIX + it.name } ?: "$GENERATED_CARD_TAG_PREFIX${card.node}/${card.declaration.group}"
+    Column(
+        Modifier.testTag(tag).bringIntoViewRequester(requester)
+            .then(if (lit) Modifier.border(2.dp, Palette.Accent, RoundedCornerShape(6.dp)).padding(8.dp) else Modifier)
+            .semantics { if (lit) stateDescription = CONFIG_HIGHLIGHT_STATE },
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(card.title, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        card.applies?.let { Text(it, color = Palette.Muted, fontSize = 11.sp) }
+        val editable = factory.config.load == NodeConfigLoad.LOADED
+        for (f in card.fields) GeneratedField(factory, card, f, editable)
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun GeneratedField(factory: TabFactory, card: ConfigCard, f: ConfigFieldDeclaration, editable: Boolean) {
+    val node = card.node
+    val tag = "$node/${f.key}"
+    val scope = rememberCoroutineScope()
+    val value: JsonElement? = factory.resolvedConfig.json(node, f.key)
+    val own = factory.config.own(node, f.key)
+    fun write(v: JsonElement?) { scope.launch { factory.config.set(node, f.key, v) } }
+    val declared = DeclaredField(node, card.module, card.declaration.group, f)
+    Column(Modifier.fillMaxWidth().testTag(GENERATED_FIELD_TAG_PREFIX + tag), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(f.label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        f.description?.let { Text(it, color = Palette.Muted, fontSize = 11.sp) }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp), itemVerticalAlignment = Alignment.CenterVertically) {
+            when (f.type) {
+                ConfigFieldTypes.CHECKBOX, ConfigFieldTypes.TOGGLE -> {
+                    val on = (value as? JsonPrimitive)?.booleanOrNull ?: false
+                    Switch(
+                        checked = on, onCheckedChange = if (editable) { v -> write(JsonPrimitive(v)) } else null, enabled = editable,
+                        modifier = Modifier.testTag(NODE_FIELD_CHECK_TAG_PREFIX + tag).semantics { contentDescription = f.label },
+                    )
+                    Text(if (on) "On" else "Off", fontSize = 12.sp)
+                }
+                ConfigFieldTypes.SELECT -> for (o in f.options) Option(tag, o, f.optionLabels[o] ?: o, (value as? JsonPrimitive)?.content == o, editable) { write(JsonPrimitive(o)) }
+                ConfigFieldTypes.RADIO -> Column(Modifier.selectableGroup()) {
+                    for (o in f.options) {
+                        val picked = (value as? JsonPrimitive)?.content == o
+                        Row(
+                            Modifier.selectable(picked, enabled = editable, role = Role.RadioButton) { write(JsonPrimitive(o)) }.testTag("$NODE_FIELD_OPTION_TAG_PREFIX$tag/$o"),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(picked, null, enabled = editable)
+                            Text(f.optionLabels[o] ?: o, fontSize = 12.sp, modifier = Modifier.padding(start = 6.dp))
+                        }
+                    }
+                }
+                ConfigFieldTypes.COLOR -> {
+                    val argb = parseConfigColor((value as? JsonPrimitive)?.content)
+                    Box(
+                        Modifier.size(20.dp).clip(RoundedCornerShape(4.dp)).background(argb?.let { Color(it.toInt()) } ?: Color.Transparent)
+                            .border(1.dp, Palette.Muted, RoundedCornerShape(4.dp)).testTag("config-swatch-$tag"),
+                    )
+                    TextEditor(declared, tag, value, editable, ::write)
+                }
+                ConfigFieldTypes.TEXT, ConfigFieldTypes.NUMBER -> TextEditor(declared, tag, value, editable, ::write)
+                ConfigFieldTypes.MULTI_SELECT -> {
+                    val picked = (value as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty()
+                    for (o in f.options) Option(tag, o, f.optionLabels[o] ?: o, o in picked, editable) {
+                        write(JsonArray((if (o in picked) picked - o else f.options.filter { it in picked || it == o }).map(::JsonPrimitive)))
+                    }
+                }
+                else -> Chip(value?.toString() ?: "unset")
+            }
+            if (editable && own?.setBy == ConfigSetBy.USER) {
+                TextButton({ write(null) }, Modifier.testTag(NODE_FIELD_RESET_TAG_PREFIX + tag).semantics { contentDescription = "Reset ${f.label}" }) { Text("Reset") }
+            }
+        }
+    }
+}

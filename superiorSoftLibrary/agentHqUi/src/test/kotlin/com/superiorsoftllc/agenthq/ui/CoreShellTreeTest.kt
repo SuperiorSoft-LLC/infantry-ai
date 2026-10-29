@@ -28,7 +28,7 @@ class CoreShellTreeTest {
      * RUNTIME-14/15: the compiled-in modules plus the official Infantry_Roles and Infantry_Board (their jars on desktop),
      * which fill infantry.shell.roles and infantry.shell.board.
      */
-    private val withRoles by lazy { TabFactory(CoreModules.all + InfantryRoles + InfantryBoard + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.approvals.InfantryApprovals + com.superiorsoftllc.agenthq.plugins.official.assistant.InfantryAssistant + com.superiorsoftllc.agenthq.plugins.official.changes.InfantryChanges + InfantryAttention + InfantryUsage + com.superiorsoftllc.agenthq.plugins.official.alerts.InfantryAlerts + com.superiorsoftllc.agenthq.plugins.official.processes.InfantryProcesses) }
+    private val withRoles by lazy { TabFactory(CoreModules.all + InfantryRoles + InfantryBoard + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.approvals.InfantryApprovals + com.superiorsoftllc.agenthq.plugins.official.assistant.InfantryAssistant + com.superiorsoftllc.agenthq.plugins.official.changes.InfantryChanges + InfantryAttention + InfantryUsage + com.superiorsoftllc.agenthq.plugins.official.alerts.InfantryAlerts + com.superiorsoftllc.agenthq.plugins.official.appearance.InfantryAppearance + com.superiorsoftllc.agenthq.plugins.official.processes.InfantryProcesses) }
 
     private fun Block.walk(depth: Int = 0): List<String> = listOf("  ".repeat(depth) + id) + children.flatMap { it.walk(depth + 1) }
 
@@ -112,6 +112,7 @@ class CoreShellTreeTest {
             "      infantry.shell.sound",
             "      infantry.shell.voice",
             "      infantry.shell.questions",
+            "      infantry.shell.theme",
             "  infantry.shell.windowLayer",
             "    infantry.shell.config",
             "      infantry.shell.config.settings",
@@ -154,7 +155,7 @@ class CoreShellTreeTest {
         val slots = listOf(
             "infantry.shell.header", "infantry.shell.center", "infantry.shell.footer.processesBadge",
             "infantry.shell.assistant", "infantry.shell.board", "infantry.shell.diff",
-            "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions",
+            "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions", "infantry.shell.theme",
             "infantry.shell.config.limits", "infantry.shell.config.roles", "infantry.shell.config.voice",
             "infantry.shell.config.incomingSound", "infantry.shell.config.questions", "infantry.shell.roles",
         )
