@@ -76,11 +76,29 @@ data class ExecutorPickerModel(
     val picked: PickedModel? get() = harness?.let { PickedModel(it, model?.takeIf { m -> m.isNotBlank() }) }
 
     /**
-     * Choose a harness. A vendor or model the new harness does not list is cleared (a model id belongs to one
-     * harness); one it also lists is kept. The open search boxes close. An unknown id changes nothing.
+     * DEMO-RESTRICT (ticket f9e181af): why harness [id] cannot be chosen, or null when it can: its CLI is missing
+     * (`providers` says unavailable), or the `models` frame marks it unavailable (it lists no models, or the daemon's
+     * model allowlist names none of them). A harness the frames say nothing about stays choosable.
      */
-    fun withHarness(id: String): ExecutorPickerModel {
+    fun unavailableReason(id: String): String? {
+        val info = harnesses.firstOrNull { it.id == id } ?: return null
+        if (!info.available) return info.unavailableReason?.takeIf { it.isNotBlank() } ?: "the daemon cannot find its CLI"
+        val rows = catalog.filter { it.provider == id }
+        if (rows.isEmpty() || rows.any { it.models.isNotEmpty() } || rows.none { it.unavailable }) return null
+        return rows.filter { it.unavailable }.mapNotNull { it.note }.joinToString("; ").ifBlank { "it lists no models" }
+    }
+
+    /** DEMO-RESTRICT: [id] can be picked (see [unavailableReason]). */
+    fun selectable(id: String): Boolean = unavailableReason(id) == null
+
+    /**
+     * Choose a harness. A vendor or model the new harness does not list is cleared (a model id belongs to one
+     * harness); one it also lists is kept. The open search boxes close. An unknown id changes nothing, and so does
+     * (DEMO-RESTRICT) an unavailable one unless [force] (a stored choice being shown, see [seeded]).
+     */
+    fun withHarness(id: String, force: Boolean = false): ExecutorPickerModel {
         if (id == harness || harnesses.none { it.id == id }) return this
+        if (!force && !selectable(id)) return this
         val next = copy(harness = id, providerQuery = "", modelQuery = "")
         val keptGroup = group?.takeIf { it in next.groups }
         val keptModel = model?.takeIf { m -> next.listedRows.any { m in it.models && (keptGroup == null || it.group == keptGroup) } }
@@ -148,7 +166,8 @@ data class ExecutorPickerModel(
         fun seeded(harnesses: List<ProviderInfo>, catalog: List<ProviderModels>, picked: PickedModel?): ExecutorPickerModel {
             val base = ExecutorPickerModel(harnesses, catalog)
             if (picked == null) return base
-            val chosen = base.withHarness(picked.provider)
+            // DEMO-RESTRICT: a stored choice is shown as it is, even on a harness that cannot be picked now.
+            val chosen = base.withHarness(picked.provider, force = true)
             if (chosen.harness == null || picked.model.isNullOrBlank()) return chosen
             val withModel = chosen.withModel(picked.model)
             return if (withModel.model == picked.model) withModel else chosen.copy(model = picked.model)

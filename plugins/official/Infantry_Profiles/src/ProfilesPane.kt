@@ -71,6 +71,8 @@ private fun ProfileRow(p: AgentProfile, state: AppState, roles: RolesContext, ex
     var editing by remember(p.id) { mutableStateOf(false) }
     var first by remember(p.id) { mutableStateOf("") }
     val live = state.connection.isLive
+    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
+    val canWrite = state.connection.canWrite
     val role = state.role(p.role)
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -83,8 +85,8 @@ private fun ProfileRow(p: AgentProfile, state: AppState, roles: RolesContext, ex
             Chip(p.provider ?: state.providers.firstOrNull { it.default }?.id?.let { "$it (default)" } ?: "default provider")
             Spacer(Modifier.width(4.dp))
             Chip(p.model ?: "default model")
-            OutlinedButton(onClick = { editing = !editing }, enabled = live, modifier = Modifier.padding(start = 6.dp)) { Text(if (editing) "Close" else "Edit", fontSize = 11.sp) }
-            TextButton(onClick = { p.id?.let { id -> actionScope.launch { roles.deleteProfile(id) } } }, enabled = live && p.id != null) {
+            OutlinedButton(onClick = { editing = !editing }, enabled = canWrite, modifier = Modifier.padding(start = 6.dp)) { Text(if (editing) "Close" else "Edit", fontSize = 11.sp) }
+            TextButton(onClick = { p.id?.let { id -> actionScope.launch { roles.deleteProfile(id) } } }, enabled = canWrite && p.id != null) {
                 Text("Delete", color = Palette.Danger, fontSize = 11.sp)
             }
         }
@@ -97,7 +99,7 @@ private fun ProfileRow(p: AgentProfile, state: AppState, roles: RolesContext, ex
             )
             Spacer(Modifier.width(6.dp))
             Button(
-                enabled = live && first.isNotBlank() && p.id != null,
+                enabled = canWrite && first.isNotBlank() && p.id != null,
                 onClick = { actionScope.launch { if (roles.spawnAs(p.id!!, first.trim()) is CommandResult.Sent) { first = ""; onSessionStarted() } } },
             ) { Text("Start session") }
         }

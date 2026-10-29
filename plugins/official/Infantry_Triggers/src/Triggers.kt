@@ -82,7 +82,7 @@ internal fun TriggersPane(state: AppState, triggers: TriggersContext) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("${state.triggers.size} triggers" + state.trippedTriggerCount.takeIf { it > 0 }?.let { ", $it tripped" }.orEmpty(), color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
-            Button(onClick = { creating = !creating }, enabled = state.connection.isLive) { Text(if (creating) "Close" else "+ New trigger", fontSize = 12.sp) }
+            Button(onClick = { creating = !creating }, enabled = state.connection.canWrite) { Text(if (creating) "Close" else "+ New trigger", fontSize = 12.sp) }
         }
         if (creating) TriggerForm(state, triggers, onDone = { creating = false })
         if (state.triggers.isEmpty() && !creating) {
@@ -99,6 +99,8 @@ private fun TriggerCard(t: TriggerView, state: AppState, triggers: TriggersConte
     var showEvents by remember(t.id) { mutableStateOf(false) }
     var editing by remember(t.id) { mutableStateOf(false) }
     val live = state.connection.isLive
+    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
+    val canWrite = state.connection.canWrite
     val now = Clock.System.now().toEpochMilliseconds()
     // The rows are history the daemon keeps; refresh them whenever the trigger changes while they are open.
     LaunchedEffect(t.id, t.state, t.trippedAt, t.lastFiredAt, showEvents, live) { if (showEvents && live) triggers.loadEvents(t.id) }
@@ -127,23 +129,23 @@ private fun TriggerCard(t: TriggerView, state: AppState, triggers: TriggersConte
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(
-                enabled = live && t.state != "disabled",
+                enabled = canWrite && t.state != "disabled",
                 onClick = { actionScope.launch { triggers.fire(t.id); if (showEvents) triggers.loadEvents(t.id) } },
             ) { Text("Fire now", fontSize = 12.sp) }
             if (t.state == "tripped") {
-                OutlinedButton(onClick = { actionScope.launch { triggers.arm(t.id) } }, enabled = live) { Text("Re-arm", fontSize = 12.sp) }
+                OutlinedButton(onClick = { actionScope.launch { triggers.arm(t.id) } }, enabled = canWrite) { Text("Re-arm", fontSize = 12.sp) }
             }
             // The enable toggle: off disables (nothing fires), on arms it again (trigger_arm enables since 1.105.0).
             Checkbox(
                 checked = t.state != "disabled",
                 onCheckedChange = { on -> actionScope.launch { if (on) triggers.arm(t.id) else triggers.disable(t.id) } },
-                enabled = live,
+                enabled = canWrite,
             )
             Text("Enabled", color = Palette.Muted, fontSize = 11.sp)
             TextButton(onClick = { showEvents = !showEvents }) { Text(if (showEvents) "Hide events" else "Events", fontSize = 11.sp) }
-            TextButton(onClick = { editing = !editing }, enabled = live) { Text(if (editing) "Close" else "Edit", fontSize = 11.sp) }
+            TextButton(onClick = { editing = !editing }, enabled = state.connection.canWrite) { Text(if (editing) "Close" else "Edit", fontSize = 11.sp) }
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = { actionScope.launch { triggers.delete(t.id) } }, enabled = live) { Text("Delete", color = Palette.Danger, fontSize = 11.sp) }
+            TextButton(onClick = { actionScope.launch { triggers.delete(t.id) } }, enabled = canWrite) { Text("Delete", color = Palette.Danger, fontSize = 11.sp) }
         }
         if (editing) TriggerForm(state, triggers, onDone = { editing = false }, existing = t)
         if (showEvents) TriggerEvents(t, state, triggers)

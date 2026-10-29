@@ -203,7 +203,7 @@ class NewAgentBlock(children: List<Block>, place: Place = Place()) : Block("newA
         LaunchedEffect(c.showNewAgent, state.connection.isLive) {
             if (c.showNewAgent && state.connection.isLive) controller.refreshModelCatalog()
         }
-        if (c.showNewAgent) {
+        if (c.showNewAgent && !state.connection.demoLock) { // DEMO-LOCK: the New agent modal never opens under the lock
             NewAgentDialogFrame(
                 state,
                 onAdd = { role, picked, task ->

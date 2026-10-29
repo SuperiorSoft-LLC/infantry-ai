@@ -70,6 +70,8 @@ private data class EpicDraft(val name: String = "", val goal: String = "")
 fun EpicsPane(state: AppState, epics: EpicsContext) {
     val scope = rememberCoroutineScope()
     val live = state.connection.isLive
+    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
+    val canWrite = state.connection.canWrite
     val active = state.activeProject
     var draft by remember(active?.id) { mutableStateOf<EpicDraft?>(null) }
     var localError by remember { mutableStateOf<String?>(null) }
@@ -96,7 +98,7 @@ fun EpicsPane(state: AppState, epics: EpicsContext) {
                 Text(if (active != null) "EPICS · ${active.name}" else "EPICS", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
                 if (active != null) {
                     IconAction(
-                        AhqIcons.Add, "New epic", onClick = { localError = null; draft = EpicDraft() }, enabled = live,
+                        AhqIcons.Add, "New epic", onClick = { localError = null; draft = EpicDraft() }, enabled = state.connection.canWrite,
                         style = IconActionStyle.TEXT, modifier = Modifier.testTag(EPICS_ADD_BUTTON_TAG),
                     )
                 }
@@ -110,7 +112,7 @@ fun EpicsPane(state: AppState, epics: EpicsContext) {
             val list = state.epics[active.id].orEmpty()
             if (list.isEmpty()) Text("No epics yet.", color = Palette.Muted, fontSize = 12.sp)
             list.forEach { epic ->
-                EpicCard(epic, state.epicTicketColumns(epic.id), live,
+                EpicCard(epic, state.epicTicketColumns(epic.id), canWrite,
                     onNewTask = { title, done -> run(onSent = done) { epics.addTask(active.id, title, epic.id) } },
                     onMove = { id, status -> run { epics.moveTicket(id, status) } },
                 )
@@ -124,15 +126,15 @@ fun EpicsPane(state: AppState, epics: EpicsContext) {
                 onSave = { run(onSent = { draft = null }) { epics.save(active.id, open.name, open.goal) } },
                 onCancel = { draft = null; localError = null },
                 modifier = Modifier.testTag(EPIC_DIALOG_TAG),
-                saveEnabled = live && open.name.isNotBlank(), error = localError,
+                saveEnabled = canWrite && open.name.isNotBlank(), error = localError,
                 saveLabel = "Create epic", saveTag = EPIC_SAVE_TAG, cancelTag = EPIC_CANCEL_TAG,
             ) {
                 OutlinedTextField(
-                    open.name, { draft = open.copy(name = it) }, label = { Text("Name") }, singleLine = true, enabled = live,
+                    open.name, { draft = open.copy(name = it) }, label = { Text("Name") }, singleLine = true, enabled = canWrite,
                     textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().testTag(EPIC_NAME_TAG),
                 )
                 OutlinedTextField(
-                    open.goal, { draft = open.copy(goal = it) }, label = { Text("Goal (optional)") }, minLines = 2, maxLines = 6, enabled = live,
+                    open.goal, { draft = open.copy(goal = it) }, label = { Text("Goal (optional)") }, minLines = 2, maxLines = 6, enabled = canWrite,
                     textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().testTag(EPIC_GOAL_TAG),
                 )
             }

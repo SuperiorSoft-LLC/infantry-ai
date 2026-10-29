@@ -496,6 +496,12 @@ interface LinkContext {
     fun contractAtLeast(major: Int, minor: Int): Boolean = contractAtLeast(contract, major, minor)
     /** S4d: the daemon's build stamp from `ready`; null before it or from a daemon too old to say. */
     val daemonBuild: String? get() = null
+    /** DEMO-MERGE-1: the daemon announced `demo=lock` (it refuses writes); false for every normal daemon and for a plugin written before it. */
+    val demoLock: Boolean get() = false
+    /** DEMO-MERGE-1: the deployment's demo notice the daemon announced in `ready` (`demoNotice=`); null for a normal daemon. Data only: a demo plugin draws it. */
+    val demoNotice: String? get() = null
+    /** A write control may be enabled: live, and not a locked daemon. Read-only views keep using [live]. */
+    val canWrite: Boolean get() = live && !demoLock
 }
 
 /** The window's working context: the active project and the daemon's refusals. */

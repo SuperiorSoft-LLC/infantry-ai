@@ -55,7 +55,7 @@ object RolesList : Block("roleList", "$ROLES.list") {
     override fun Render(scope: BlockScope) {
         val ctx = LocalShellContext.current ?: return
         val nav = LocalRoleManagerNav.current ?: return
-        RoleManagerList(ctx.roles.roles, ctx.roles.bindings, ctx.roles.traits, ctx.link.live, nav, scope.modifier)
+        RoleManagerList(ctx.roles.roles, ctx.roles.bindings, ctx.roles.traits, ctx.link.canWrite, nav, scope.modifier)
     }
 }
 

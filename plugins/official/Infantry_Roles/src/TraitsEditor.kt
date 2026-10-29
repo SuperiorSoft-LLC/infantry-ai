@@ -44,6 +44,8 @@ internal fun RoleTraitsEditor(role: Role, deps: RolesDeps) {
     val traits = deps.traits
     val scope = rememberCoroutineScope()
     val live = deps.link.live
+    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
+    val canWrite = deps.link.canWrite
     val bound = traits.idsFor(role.id)
     fun set(ids: List<String>) { scope.launch { traits.setForRole(role.id, ids) } }
 
@@ -57,9 +59,9 @@ internal fun RoleTraitsEditor(role: Role, deps: RolesDeps) {
                 Spacer(Modifier.width(6.dp))
                 Text(t?.name ?: id, color = Palette.Text, fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 1)
                 if (t?.check != null) { Chip("report", Palette.Info); Spacer(Modifier.width(4.dp)) }
-                TextButton(onClick = { set(moveTrait(bound, id, -1)) }, enabled = live && i > 0) { Text("Up", fontSize = 11.sp) }
-                TextButton(onClick = { set(moveTrait(bound, id, +1)) }, enabled = live && i < bound.lastIndex) { Text("Down", fontSize = 11.sp) }
-                TextButton(onClick = { set(unbindTrait(bound, id)) }, enabled = live) { Text("Unbind", fontSize = 11.sp) }
+                TextButton(onClick = { set(moveTrait(bound, id, -1)) }, enabled = canWrite && i > 0) { Text("Up", fontSize = 11.sp) }
+                TextButton(onClick = { set(moveTrait(bound, id, +1)) }, enabled = canWrite && i < bound.lastIndex) { Text("Down", fontSize = 11.sp) }
+                TextButton(onClick = { set(unbindTrait(bound, id)) }, enabled = canWrite) { Text("Unbind", fontSize = 11.sp) }
             }
         }
         val unbound = traits.all.filterNot { it.id in bound }
@@ -67,7 +69,7 @@ internal fun RoleTraitsEditor(role: Role, deps: RolesDeps) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Bind:", color = Palette.Muted, fontSize = 11.sp)
                 unbound.forEach { t ->
-                    TextButton(onClick = { set(bindTrait(bound, t.id)) }, enabled = live, modifier = Modifier.testTag(ROLE_TRAIT_BIND_TAG_PREFIX + t.id)) {
+                    TextButton(onClick = { set(bindTrait(bound, t.id)) }, enabled = canWrite, modifier = Modifier.testTag(ROLE_TRAIT_BIND_TAG_PREFIX + t.id)) {
                         Text("+ ${t.name}", fontSize = 11.sp)
                     }
                 }

@@ -97,6 +97,16 @@ fun IconAction(
 }
 
 /**
+ * DEMO-LOCK (ticket db5b3b70): under the lock [content]'s (disabled) control says "Disabled in the demo" on hover; with
+ * the lock off it is [content] alone, unchanged.
+ */
+@Composable
+fun DemoLockTooltip(locked: Boolean, content: @Composable (Modifier) -> Unit) {
+    if (locked) IconActionTooltipBox(com.superiorsoftllc.agenthq.ui.model.DEMO_DISABLED_TOOLTIP, describe = false, content = content)
+    else content(Modifier)
+}
+
+/**
  * UX-POLISH-1: [IconAction]'s tooltip, for an icon control that is not a Material button (e.g. the title bar's square
  * New project box). Names the action on hover or keyboard focus, puts [label] in the contentDescription when
  * [describe] is set, and exposes the tooltip text as [IconActionTooltip]. [content] gets the modifier to put on the

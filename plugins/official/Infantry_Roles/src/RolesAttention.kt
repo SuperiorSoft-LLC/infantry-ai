@@ -97,10 +97,10 @@ fun RolesPane(deps: RolesDeps, onSessionStarted: () -> Unit, onOpenAgent: (Strin
                     }
                     if (r.source == "CUSTOM") Chip("custom", Palette.Info)
                     if (count > 0) { Spacer(Modifier.width(4.dp)); Chip("$count", Palette.Accent) }
-                    RoleRowMenu(r, live = deps.link.live, onEdit = { selected = r.id; creating = false; editingId = r.id })
+                    RoleRowMenu(r, live = deps.link.live, locked = deps.link.demoLock, onEdit = { selected = r.id; creating = false; editingId = r.id })
                 }
             }
-            TextButton(onClick = { creating = true }, enabled = deps.link.live) { Text("+ New role", fontSize = 12.sp) }
+            TextButton(onClick = { creating = true }, enabled = deps.link.canWrite) { Text("+ New role", fontSize = 12.sp) }
         }
         Box(Modifier.width(1.dp).fillMaxHeight().background(Palette.Border))
         Box(Modifier.weight(1f).fillMaxHeight()) {
@@ -133,6 +133,8 @@ private fun RoleDetail(
     // FORM-MODAL-2: the profile being created (id null) or edited in the shared modal; null = closed.
     var profileDraft by remember(role.id) { mutableStateOf<AgentProfile?>(null) }
     val live = deps.link.live
+    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
+    val canWrite = deps.link.canWrite
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -148,7 +150,7 @@ private fun RoleDetail(
             }
             Chip(role.source.lowercase().replace('_', ' '), if (role.source == "CUSTOM") Palette.Info else Palette.Muted)
             Spacer(Modifier.width(6.dp))
-            OutlinedButton(onClick = { onEditingChange(!editing) }, enabled = deps.link.live) { Text(if (editing) "Close editor" else "Edit role") }
+            OutlinedButton(onClick = { onEditingChange(!editing) }, enabled = deps.link.canWrite) { Text(if (editing) "Close editor" else "Edit role") }
         }
         if (editing) RoleEditor(role, deps.roles, iconsSupported = deps.roles.iconsSupported, onSaved = { onEditingChange(false) })
         Text("Instructions (persona)", color = Palette.Muted, fontSize = 10.sp)
@@ -167,7 +169,7 @@ private fun RoleDetail(
             IconAction(
                 AhqIcons.Add, "New profile in ${role.name}",
                 onClick = { profileDraft = AgentProfile(name = "", role = role.id, instructions = role.persona) },
-                enabled = live, style = IconActionStyle.TEXT, modifier = Modifier.testTag(PROFILE_ADD_BUTTON_TAG),
+                enabled = deps.link.canWrite, style = IconActionStyle.TEXT, modifier = Modifier.testTag(PROFILE_ADD_BUTTON_TAG),
             )
         }
         if (profiles.isEmpty()) Text("No profile yet: create one to start a session as this role.", color = Palette.Muted, fontSize = 11.sp)
@@ -246,13 +248,13 @@ private fun RoleBindingEditor(role: Role, deps: RolesDeps) {
         )
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Effort", color = Palette.Muted, fontSize = 11.sp)
-            Chip("default", if (effort == null) Palette.Accent else Palette.Muted, Modifier.clickable { effort = null })
+            Chip("default", if (effort == null) Palette.Accent else Palette.Muted, Modifier.clickable(enabled = deps.link.canWrite) { effort = null })
             ROLE_EFFORT_LEVELS.forEach { level ->
-                Chip(level, if (effort == level) Palette.Accent else Palette.Muted, Modifier.testTag(ROLE_BINDING_EFFORT_TAG_PREFIX + level).clickable { effort = level })
+                Chip(level, if (effort == level) Palette.Accent else Palette.Muted, Modifier.testTag(ROLE_BINDING_EFFORT_TAG_PREFIX + level).clickable(enabled = deps.link.canWrite) { effort = level })
             }
         }
         Button(
-            enabled = deps.link.live,
+            enabled = deps.link.canWrite,
             modifier = Modifier.testTag(ROLE_BINDING_SAVE_TAG),
             onClick = {
                 // Untouched = the stored harness/model exactly, even when the frames have not landed or no longer list it.
@@ -273,10 +275,10 @@ private fun ProfileCard(p: AgentProfile, deps: RolesDeps, onSessionStarted: () -
             Chip(p.provider ?: deps.executor.providers.firstOrNull { it.default }?.id?.let { "$it (default)" } ?: "default provider")
             Spacer(Modifier.width(4.dp))
             Chip(p.model ?: "default model")
-            TextButton(onClick = onEdit, enabled = deps.link.live, modifier = Modifier.testTag(PROFILE_EDIT_TAG_PREFIX + (p.id ?: p.name))) {
+            TextButton(onClick = onEdit, enabled = deps.link.canWrite, modifier = Modifier.testTag(PROFILE_EDIT_TAG_PREFIX + (p.id ?: p.name))) {
                 Text("Edit", fontSize = 11.sp)
             }
-            TextButton(onClick = { p.id?.let { id -> actionScope.launch { deps.roles.deleteProfile(id) } } }, enabled = deps.link.live) {
+            TextButton(onClick = { p.id?.let { id -> actionScope.launch { deps.roles.deleteProfile(id) } } }, enabled = deps.link.canWrite) {
                 Text("Delete", color = Palette.Danger, fontSize = 11.sp)
             }
         }
@@ -288,7 +290,7 @@ private fun ProfileCard(p: AgentProfile, deps: RolesDeps, onSessionStarted: () -
             )
             Spacer(Modifier.width(6.dp))
             Button(
-                enabled = deps.link.live && first.isNotBlank() && p.id != null,
+                enabled = deps.link.canWrite && first.isNotBlank() && p.id != null,
                 onClick = {
                     actionScope.launch {
                         if (deps.roles.spawnAs(p.id!!, first.trim()) is CommandResult.Sent) { first = ""; onSessionStarted() }
@@ -324,6 +326,8 @@ private fun ProfileEditorModal(role: Role, initial: AgentProfile, deps: RolesDep
     var instructions by remember(key) { mutableStateOf(initial.instructions.orEmpty()) }
     var error by remember(key) { mutableStateOf<String?>(null) }
     val live = deps.link.live
+    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
+    val canWrite = deps.link.canWrite
     EditorModal(
         title = if (initial.id == null) "New profile in ${role.name}" else "Edit profile",
         onSave = {
@@ -344,7 +348,7 @@ private fun ProfileEditorModal(role: Role, initial: AgentProfile, deps: RolesDep
         },
         onCancel = onClose,
         modifier = Modifier.testTag(PROFILE_DIALOG_TAG),
-        saveEnabled = live && name.isNotBlank(),
+        saveEnabled = canWrite && name.isNotBlank(),
         error = error ?: deps.roles.agentError,
         saveLabel = "Save profile",
         saveTag = PROFILE_SAVE_TAG, cancelTag = PROFILE_CANCEL_TAG,
@@ -364,22 +368,26 @@ private fun ProfileEditorModal(role: Role, initial: AgentProfile, deps: RolesDep
  * is the existing `role_save`, keyed by the unchanged id. Disabled while disconnected, like every command.
  */
 @Composable
-private fun RoleRowMenu(r: Role, live: Boolean, onEdit: () -> Unit) {
+private fun RoleRowMenu(r: Role, live: Boolean, locked: Boolean, onEdit: () -> Unit) {
     var menuOpen by remember { mutableStateOf(false) }
     Box {
         Box(
             Modifier.padding(start = 4.dp).size(width = 22.dp, height = 18.dp).clip(RoundedCornerShape(4.dp))
-                .clickable(enabled = live, onClickLabel = "Role actions") { menuOpen = true }
+                .clickable(enabled = live && !locked, onClickLabel = "Role actions") { menuOpen = true }
                 .semantics { contentDescription = "Role actions" }
                 .testTag(ROLE_ROW_MENU_TAG_PREFIX + r.id),
             contentAlignment = Alignment.Center,
         ) { androidx.compose.material3.Icon(AhqIcons.MoreHoriz, contentDescription = null, tint = if (live) Palette.Muted else Palette.Border, modifier = Modifier.size(14.dp)) }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, modifier = Modifier.background(Palette.Raised)) {
-            DropdownMenuItem(
-                text = { Text("Edit role", color = Palette.Text, fontSize = 12.sp) },
-                onClick = { menuOpen = false; onEdit() },
-                modifier = Modifier.testTag(ROLE_ROW_EDIT_TAG_PREFIX + r.id),
-            )
+            // DEMO-LOCK (ticket 9bf81983): the locked daemon refuses role_save, so Edit role is dimmed and says why.
+            DemoLockTooltip(locked) { m ->
+                DropdownMenuItem(
+                    text = { Text("Edit role", color = if (locked) Palette.Border else Palette.Text, fontSize = 12.sp) },
+                    onClick = { menuOpen = false; onEdit() },
+                    enabled = !locked,
+                    modifier = m.testTag(ROLE_ROW_EDIT_TAG_PREFIX + r.id),
+                )
+            }
         }
     }
 }

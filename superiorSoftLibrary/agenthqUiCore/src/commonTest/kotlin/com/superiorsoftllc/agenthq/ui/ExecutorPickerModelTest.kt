@@ -300,4 +300,28 @@ class ExecutorPickerModelTest {
         assertFalse(m.freeText, "providers-frame models make it a searchable list, not a text box")
         assertEquals(2, m.providerOptions.size)
     }
+    // --- DEMO-RESTRICT (ticket f9e181af) --------------------------------------------------------------
+
+    @Test
+    fun `an unavailable harness says why and cannot be picked, a stored one is still shown`() {
+        val hs = listOf(ProviderInfo("opencode"), ProviderInfo("claude", available = false, unavailableReason = "claude not found"), ProviderInfo("pi"))
+        val rows = listOf(
+            ProviderModels("opencode", "opencode-go", "opencode-go", listOf("opencode-go/beam-free")),
+            ProviderModels("pi", "", "pi", emptyList(), note = "pi --list-models listed no models", unavailable = true),
+        )
+        val m = ExecutorPickerModel(hs, rows)
+        assertNull(m.unavailableReason("opencode"))
+        assertEquals("claude not found", m.unavailableReason("claude"))
+        assertEquals("pi --list-models listed no models", m.unavailableReason("pi"))
+        assertNull(m.withHarness("claude").harness)
+        assertNull(m.withHarness("pi").harness)
+        assertEquals("opencode", m.withHarness("opencode").harness)
+        assertEquals("claude", ExecutorPickerModel.seeded(hs, rows, PickedModel("claude", "sonnet")).harness)
+    }
+
+    @Test
+    fun `a harness with only a failed listing stays a free-text choice`() {
+        assertNull(fresh().unavailableReason("quiet"))
+        assertEquals("quiet", fresh().withHarness("quiet").harness)
+    }
 }

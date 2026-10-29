@@ -156,12 +156,14 @@ object StatusConfigCog : Block("configCog", "$FOOTER_NODE.configCog") {
     @Composable
     override fun Render(scope: BlockScope) {
         val window = (LocalShellContext.current ?: return).window
+        // DEMO-LOCK: every setting is refused by the daemon, so the cog is dimmed and says why.
+        val demo = LocalShell.current.state.connection.demoLock
         Box(
             scope.modifier.padding(start = 10.dp).size(24.dp)
-                .clickable(role = Role.Button) { window.openConfig() }
-                .semantics { contentDescription = "Configuration" },
+                .clickable(enabled = !demo, role = Role.Button) { window.openConfig() }
+                .semantics { contentDescription = if (demo) com.superiorsoftllc.agenthq.ui.model.DEMO_DISABLED_TOOLTIP else "Configuration" },
             contentAlignment = Alignment.Center,
-        ) { Icon(AhqIcons.Cog, contentDescription = null, tint = Palette.Muted, modifier = Modifier.size(14.dp)) }
+        ) { Icon(AhqIcons.Cog, contentDescription = null, tint = if (demo) Palette.Border else Palette.Muted, modifier = Modifier.size(14.dp)) }
     }
 }
 

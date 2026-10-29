@@ -94,7 +94,7 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
         override fun switchTo(choice: ServerChoice) = shell.switchTo(choice)
         override fun manageServers() { ui.showServers = true }
         override val assistantOpen get() = shell.assistantPanel.open
-        override val hasAssistant get() = shell.state.connection.hasAssistant || shell.state.assistant != null
+        override val hasAssistant get() = (shell.state.connection.hasAssistant || shell.state.assistant != null) && !shell.state.connection.demoLock
         override fun toggleAssistant() = shell.assistantPanel.toggle()
     }
     override val chat: ChatContext = object : ChatContext {
@@ -194,6 +194,8 @@ class CoreLink(private val state: AppState) : LinkContext {
     override val live: Boolean get() = state.connection.isLive
     override val contract: String? get() = state.connection.contract
     override val daemonBuild: String? get() = state.connection.daemonBuild
+    override val demoLock: Boolean get() = state.connection.demoLock
+    override val demoNotice: String? get() = state.connection.demoNotice?.takeIf { state.connection.demoLock }
 }
 
 /** RUNTIME-18: [state]'s process report and [controller]'s process-watch requests, for the official Infantry_Processes. */

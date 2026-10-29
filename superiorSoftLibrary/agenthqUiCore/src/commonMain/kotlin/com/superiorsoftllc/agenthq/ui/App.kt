@@ -377,8 +377,8 @@ fun App(
     fun key(e: KeyEvent): Boolean {
         if (e.type != KeyEventType.KeyDown) return false
         return when {
-            e.isCtrlPressed && e.key == Key.K && e.isShiftPressed -> { selected?.let { a -> actionScope.launch { controller.stopBackgroundProcesses(a.id) } }; true }
-            e.isCtrlPressed && e.isAltPressed && e.key == Key.K -> { selected?.let { a -> actionScope.launch { controller.endSession(a.id) } }; true }
+            e.isCtrlPressed && e.key == Key.K && e.isShiftPressed && !state.connection.demoLock -> { selected?.let { a -> actionScope.launch { controller.stopBackgroundProcesses(a.id) } }; true }
+            e.isCtrlPressed && e.isAltPressed && e.key == Key.K && !state.connection.demoLock -> { selected?.let { a -> actionScope.launch { controller.endSession(a.id) } }; true }
             e.isCtrlPressed && e.key == Key.K -> {
                 if (state.panels.leftShown) searchFocus.requestFocus()
                 else { controller.revealPanel(PanelSide.LEFT); ui.focusSearchPending = true }
@@ -391,7 +391,7 @@ fun App(
                 true
             }
             e.isCtrlPressed && e.isShiftPressed && e.key == Key.N -> { selected?.let { chat.openSwitch(it.id) }; true }
-            e.isCtrlPressed && e.key == Key.N -> { chat.spawnMode = !chat.spawnMode; chat.focus.requestFocus(); true }
+            e.isCtrlPressed && e.key == Key.N && !state.connection.demoLock -> { chat.spawnMode = !chat.spawnMode; chat.focus.requestFocus(); true }
             e.isCtrlPressed && e.key == Key.R -> {
                 selected?.let { a -> chat.resume(controller, actionScope, a) }
                 true
@@ -399,7 +399,7 @@ fun App(
             e.isCtrlPressed && e.key == Key.Eight -> { ui.showBoard = true; true }
             e.isCtrlPressed && digitOf(e.key)?.let(tabs::byShortcut) != null -> { showTab(tabs.byShortcut(digitOf(e.key)!!)!!.id); true }
             e.isCtrlPressed && e.key == Key.L -> { ui.showConnect = true; true }
-            e.isCtrlPressed && e.key == Key.Comma -> { ui.showConfig = true; true }
+            e.isCtrlPressed && e.key == Key.Comma && !state.connection.demoLock -> { ui.showConfig = true; true }
             e.isCtrlPressed && e.key == Key.Slash -> { chat.focus.requestFocus(); true }
             else -> false
         }

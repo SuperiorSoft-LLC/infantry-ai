@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -269,7 +270,12 @@ fun chatPanelHost(
     val state by controller.state.collectAsState()
     val scope = rememberCoroutineScope()
     val agent = sessionId?.let { state.agents[it] }
-    LaunchedEffect(state.harnessPickerAsk) { state.harnessPickerAsk?.let { chat.openSwitch(it.sessionId, it.harness) } }
+    LaunchedEffect(state.harnessPickerAsk) { state.harnessPickerAsk?.takeIf { !state.connection.demoLock }?.let { chat.openSwitch(it.sessionId, it.harness) } }
+    // DEMO-LOCK (ticket 293380f7): New agent opened before the `ready` frame said "locked" (or by any later path) is closed
+    // the moment the lock is known; the daemon refuses every new session, so the spawn rows must never show.
+    // DEMO-LOCK (ticket 9bf81983): the Switch agent picker changes the agent's harness/model, so it never opens either.
+    LaunchedEffect(state.connection.demoLock) { if (state.connection.demoLock) { chat.spawnMode = false; chat.switchAsk = null } }
+    val spawnOpen = chat.spawnMode && !state.connection.demoLock
     // CP-1b: every time New agent opens (and on reconnect while open), re-read the model catalog.
     LaunchedEffect(chat.spawnMode || chat.switchAsk != null, state.connection.isLive) {
         if ((chat.spawnMode || chat.switchAsk != null) && state.connection.isLive) controller.refreshModelCatalog()

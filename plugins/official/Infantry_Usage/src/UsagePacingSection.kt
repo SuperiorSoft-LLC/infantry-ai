@@ -55,7 +55,7 @@ private sealed interface PacingEdit {
 internal fun PacingSection(state: AppState, now: Long, controller: UsageContext?) {
     val report = state.usageReport
     var edit by remember { mutableStateOf<PacingEdit?>(null) }
-    val canEdit = controller != null && state.connection.isLive && report != null
+    val canEdit = controller != null && state.connection.canWrite && report != null
     // Running workers change with every start and exit: re-read while the pane is open (the daemon re-reads a plan's
     // live usage at most once per 5 minutes, so this costs no extra provider call).
     val live by rememberUpdatedState(state.connection.isLive)

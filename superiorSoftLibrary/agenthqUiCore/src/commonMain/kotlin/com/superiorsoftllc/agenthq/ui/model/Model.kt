@@ -91,8 +91,15 @@ data class ConnectionInfo(
     val historySince: Long? = null,
     /** BUILD-STAMP-1: the daemon's build string (`ready` build=), e.g. 1.0.1+20261023.1432.e85b223; null from an older daemon. */
     val daemonBuild: String? = null,
+    /** DEMO-LOCK (ticket 2f154f5f): the daemon announced `demo=lock` in `ready`: it refuses everything but the demo agents. */
+    val demoLock: Boolean = false,
+    /** DEMO-LOCK: the pinned demo notice (`ready` demoNotice=, base64url), null when none. */
+    val demoNotice: String? = null,
 ) {
     val isLive: Boolean get() = state == ConnState.CONNECTED
+
+    /** DEMO-LOCK (ticket db5b3b70): a write control may be enabled: live, and not a locked demo daemon (which refuses every write). */
+    val canWrite: Boolean get() = isLive && !demoLock
 
     /**
      * Contract 1.11.0: the daemon puts every prompt on its session's stream as a `turn`, so the transcript
@@ -692,6 +699,10 @@ data class AppState(
     val keepAliveMinutes: Int? = null,
     /** No-hard-coded-limits (1.133.0): every daemon limit, as its last `limit_catalog` said (values follow `settings`). Null = not read yet. */
     val limitCatalog: List<LimitInfo>? = null,
+    /** DEMO-RESTRICT: the daemon's role allowlist (`limits.roles.allowed`); empty = every role may be chosen. */
+    val allowedRoles: List<String> = emptyList(),
+    /** DEMO-RESTRICT: `limits.concurrency.maxSessions` from the `settings` frame; 0 = no cap (the normal app). */
+    val maxSessions: Long = 0,
     /** ROGUE-1 (1.120.0): the daemon's last `processes` answer or `process_pressure` push; null = never answered. */
     val processReport: com.superiorsoftllc.agenthq.ui.protocol.ProcessReport? = null,
     /** ROGUE-1 (1.120.0): the daemon's `processes.autoReap` as its last `settings` frame said; null = not read yet. */
@@ -1298,7 +1309,9 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
         if (inOrder) withTodos.copy(statusDetail = p.detail) else withTodos
     }
 
-    Envelope.ERROR -> requeueRefused(s, env) ?: if (env.sessionId == null) {
+    // Ticket 9bf81983: the demo's per-visitor turn limit replaces the pinned demo notice; it is not an error banner.
+    Envelope.ERROR -> demoLimitReached(env.data)?.let { s.copy(connection = s.connection.copy(demoNotice = it)) }
+        ?: requeueRefused(s, env) ?: if (env.sessionId == null) {
         // A refused command. If it was this window's spawn, no session is coming: stop waiting for one.
         // P10-C: a `prompt_*` refusal also lands inline in the Prompts tab and ends its loading state.
         val promptRefusal = env.data.startsWith("prompt_")
@@ -1768,7 +1781,11 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
         val withKeepAlive = LifecycleSetting.fromSettingsFrame(env.data)?.let { withAutoReap.copy(keepAliveMinutes = it) } ?: withAutoReap
         val withPortrait = UserPortrait.fromSettingsFrame(env.data)?.let { withKeepAlive.copy(userPortrait = it.base64) } ?: withKeepAlive
         val withTimer = PromptTimerSetting.fromSettingsFrame(env.data, withPortrait.promptTimer)?.let { withPortrait.copy(promptTimer = it) } ?: withPortrait
-        withTimer.copy(limitCatalog = LimitsSetting.withSettingsFrame(withTimer.limitCatalog, env.data))
+        withTimer.copy(
+            limitCatalog = LimitsSetting.withSettingsFrame(withTimer.limitCatalog, env.data),
+            allowedRoles = AllowedRoles.fromSettingsFrame(env.data) ?: withTimer.allowedRoles,
+            maxSessions = AllowedRoles.maxSessionsFromSettingsFrame(env.data) ?: withTimer.maxSessions,
+        )
     }
 
     // No-hard-coded-limits (1.133.0): the whole catalog, replaced by each answer.
@@ -1857,6 +1874,8 @@ private fun ready(s: AppState, env: Envelope): AppState {
             instance = instance,
             historySince = fields["since"]?.toLongOrNull(),
             daemonBuild = fields["build"]?.takeIf { it.isNotBlank() },
+            demoLock = fields["demo"] == "lock",
+            demoNotice = fields["demoNotice"]?.let(::decodeDemoNotice),
         ),
         // PROMPT-2: the daemon resends every prompt still open right after `ready`; one resolved while the link was
         // down must not keep its card.
@@ -2098,3 +2117,16 @@ fun ticketTagLabel(ticketId: String, title: String?): String {
 /** The untruncated tag text, shown on hover and read by screen readers. */
 fun ticketTagFull(ticketId: String, title: String?): String =
     title?.trim()?.takeIf { it.isNotEmpty() }?.let { "$ticketId $it" } ?: ticketId
+
+/** DEMO-LOCK (ticket 2f154f5f): the `ready` demoNotice= value is base64url (no padding) UTF-8; null when it does not decode. */
+@OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+internal fun decodeDemoNotice(encoded: String): String? = runCatching {
+    kotlin.io.encoding.Base64.UrlSafe.withPadding(kotlin.io.encoding.Base64.PaddingOption.ABSENT_OPTIONAL).decode(encoded).decodeToString()
+}.getOrNull()?.takeIf { it.isNotBlank() }
+
+/** Ticket 9bf81983: the daemon's `demo_limit <message>` refusal (a visitor's turns are used up): the message, else null. */
+internal fun demoLimitReached(data: String): String? =
+    data.takeIf { it.startsWith("demo_limit ") }?.removePrefix("demo_limit ")?.trim()?.takeIf { it.isNotEmpty() }
+
+/** DEMO-LOCK: the tooltip on every control the demo dims. */
+const val DEMO_DISABLED_TOOLTIP = "Disabled in the demo"

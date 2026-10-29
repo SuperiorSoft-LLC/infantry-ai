@@ -73,3 +73,45 @@ data class NewAgentModalModel(
 
 /** The New agent modal's required fields, in screen order. */
 enum class NewAgentField { ROLE, HARNESS, MODEL, TASK }
+
+/**
+ * DEMO-RESTRICT (ticket f9e181af): the daemon's role allowlist (`limits.roles.allowed` in the `settings` frame). Empty =
+ * every role. Same matching as the daemon: case-insensitive, `*` = any run of characters.
+ */
+object AllowedRoles {
+    const val SETTING = "limits.roles.allowed"
+
+    /** The list a `settings` frame carries, or null when the frame does not carry it (it then changes nothing). */
+    fun fromSettingsFrame(data: String): List<String>? {
+        val obj = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(data) as? kotlinx.serialization.json.JsonObject }.getOrNull() ?: return null
+        val arr = obj[SETTING] as? kotlinx.serialization.json.JsonArray ?: return null
+        return arr.mapNotNull { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.trim()?.takeIf(String::isNotEmpty) }
+    }
+
+    /** DEMO-RESTRICT: `limits.concurrency.maxSessions` in a `settings` frame, or null when the frame does not carry it. */
+    fun maxSessionsFromSettingsFrame(data: String): Long? {
+        val obj = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(data) as? kotlinx.serialization.json.JsonObject }.getOrNull() ?: return null
+        val v = obj["limits.concurrency.maxSessions"] as? kotlinx.serialization.json.JsonPrimitive ?: return null
+        return v.content.toLongOrNull()
+    }
+
+    fun allows(patterns: List<String>, roleId: String): Boolean = patterns.isEmpty() || patterns.any { matches(it, roleId) }
+
+    fun filter(patterns: List<String>, roles: List<Role>): List<Role> = if (patterns.isEmpty()) roles else roles.filter { allows(patterns, it.id) }
+
+    fun matches(pattern: String, id: String): Boolean {
+        val p = pattern.trim().lowercase()
+        val s = id.trim().lowercase()
+        if ('*' !in p) return p == s
+        val parts = p.split('*')
+        if (!s.startsWith(parts.first())) return false
+        var at = parts.first().length
+        for (i in 1 until parts.size - 1) {
+            val found = s.indexOf(parts[i], at)
+            if (found < 0) return false
+            at = found + parts[i].length
+        }
+        val last = parts.last()
+        return s.length - at >= last.length && s.endsWith(last)
+    }
+}
