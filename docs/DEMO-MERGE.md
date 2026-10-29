@@ -132,3 +132,30 @@ git worktree prune
 NOT covered, decide first (commits in neither demo-build nor dev on 2026-10-29): the `.worktrees/demo-loader` worktree (detached 874f3c6e), `parked/d4c1dbd9-demo-extras` (2),
 `ticket/2e6b444e-design-offline-demo-canned-data-web-demo` (1), `ticket/b4202754-fix-web-demo-missing-icon-glyphs-tofu-bo` (2),
 `ticket/d5eb35a0-fix-web-demo-remaining-tofu-glyphs-mobil` (1). Check with `git log --oneline feature-agenthq-mvp..<branch>`.
+
+## Phase 4: verification (run 2026-10-29 on d94f899b, exact commands)
+
+PowerShell from the worktree root. Gradle always `--no-parallel "-Dorg.gradle.jvmargs=-XX:MaxMetaspaceSize=2g -Xmx3g"` (below: `$G`).
+
+```powershell
+# tests (all green: agentHqUi 653, agenthqUiCore jvm 837 incl. NoDemoInCoreGuardTest, Demo_Lock 4, daemon demo/FrameGate 31)
+./gradlew.bat $G :superiorSoftLibrary:agenthqUiCore:jvmTest :plugins:demo:Demo_Lock:jvmTest :plugins:demo:Demo_Banner:compileKotlinJvm
+./gradlew.bat $G :superiorSoftLibrary:agentHqUi:test :superiorSoftLibrary:agentHq:test --tests "*DemoLockTest" --tests "*DemoModeOffTest" --tests "*DemoRestrictionsTest" --tests "*FrameGate*"
+# wasm both ways; copy superiorSoftLibrary/agenthqAppUi/build/generated after each and diff -r them
+./gradlew.bat $G :superiorSoftLibrary:agentHqWeb:assembleWeb
+./gradlew.bat $G -Pdemo=true :superiorSoftLibrary:agentHqWeb:assembleWeb
+#   diff = exactly two added lines in CoreModules.compiledIn.kt: DemoBannerPlugin() and DemoLockPlugin()
+# Android both ways
+./gradlew.bat $G :superiorSoftLibrary:agentHqAndroid:compileDebugKotlin
+./gradlew.bat $G -Pdemo=true :superiorSoftLibrary:agentHqAndroid:compileDebugKotlin
+# daemon
+./gradlew.bat $G :superiorSoftLibrary:agentHq:installDist
+#   temp state dir, free port (never 8797), AGENTHQ_TOKEN = a 32+ char test token; start hidden, kill by the printed PID only:
+#   java -Xmx512m -cp "superiorSoftLibrary\agentHq\build\install\agenthq\lib\*" com.superiorsoftllc.agenthq.daemon.DaemonMainKt
+#   then GET /health, GET /demo/visitor-token, and over /ws: settings_set, project_save, kill, sessions;  taskkill /T /F /PID <pid>
+```
+
+| run | env | result |
+|---|---|---|
+| no env, port 18931 | AGENTHQ_STATE_DIR, AGENTHQ_PORT, AGENTHQ_TOKEN only | `ready` has no demo/access/notices keys; settings_set / project_save / kill reach their handlers (refused only for the test payloads' own validity); `/demo/visitor-token` 404 (401 unauthenticated); sessions `[]` |
+| demo, port 18932 | + AGENTHQ_DEMO_LOCK=1, AGENTHQ_DEMO_PUBLIC_TOKEN, AGENTHQ_DEMO_DIR, AGENTHQ_DEMO_NOTICE="Live demo: two agents", AGENTHQ_DEMO_TURNS_PER_IP=2 | `ready ... demo=lock access=restricted notices=demo_limit demoNotice=TGl2ZSBkZW1vOiB0d28gYWdlbnRz`; `/demo/visitor-token` 200 (the visitor token); settings_set / project_save / kill -> `demo: '<x>' is disabled in this demo`; sessions = the 2 seeded sessions |
