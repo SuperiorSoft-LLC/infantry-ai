@@ -32,12 +32,14 @@ object DaemonPlugins {
         env: (String) -> String? = System::getenv,
         property: (String) -> String? = System::getProperty,
         log: (String) -> Unit = { System.err.println(it) },
+        /** POLICY-1: the daemon's lock now (its active preset's); null = the env alone, as before. */
+        locked: Boolean? = null,
         /** CONFIG-8: told the whole resolution (the daemon compiles its config manifest from it). */
         onResolved: (com.superiorsoftllc.agenthq.plugin.host.Resolution) -> Unit = {},
     ): PluginsWire {
         val root = PluginFolders.root(stateDir, env, property)
         val config = PluginFolders.config(root, log)
-        val demoLock = PluginFolders.demoLock(env)
+        val demoLock = locked ?: PluginFolders.demoLock(env)
         val resolution = ModuleResolver.resolve(PluginFolders.scan(root, config), config, demoLock)
         log("[plugins] daemon root ${root.absolutePath}${if (demoLock) " (demo lock on)" else ""}: ${resolution.loaded.size} loaded")
         resolution.log.forEach(log)

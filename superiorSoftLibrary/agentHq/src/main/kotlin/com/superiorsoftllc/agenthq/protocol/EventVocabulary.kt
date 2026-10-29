@@ -379,7 +379,8 @@ object EventVocabulary {
     // **1.140.0 (ASK-TIMER-2, ticket-cc73295b) is ADDITIVE + BEHAVIOURAL**: `prompt_request.recommended`; `prompt_ask.recommended`; an expired prompt auto-selects its recommended option (fallback `prompts.onTimeout` / no answer). See CONTRACT.md.
     // **1.141.0 (USAGE-1, ticket-98828ad8) is ADDITIVE**: `usage_meter_get` -> `usage_meter` (daily tokens/cost by role, model, source). See CONTRACT.md.
     // **1.142.0 (CONFIG-8) is ADDITIVE**: `config_get`, `config_schema`, `config_values`, `config_set` (expectRev), `config_changed`; `GET /config/schema`. See CONTRACT.md.
-    const val VERSION = "1.142.0"
+    // **1.143.0 (POLICY-1, ticket-b6446a82) is ADDITIVE + BEHAVIOURAL**: `policy` (PolicyWire, after `ready` and on every switch), `policy_get`, `policy_set` (owner, refused while pinned); `processes_reap` (the killing half of `processes`; a legacy `processes` reap is gated as it); under a non-production policy every client frame is gated by its named action (ActionCatalog). See CONTRACT.md.
+    const val VERSION = "1.143.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA

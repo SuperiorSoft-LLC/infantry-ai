@@ -383,7 +383,7 @@ fun App(
     fun key(e: KeyEvent): Boolean {
         if (e.type != KeyEventType.KeyDown) return false
         return when {
-            e.isCtrlPressed && e.key == Key.K && e.isShiftPressed && may("host.processes") -> { selected?.let { a -> actionScope.launch { controller.stopBackgroundProcesses(a.id) } }; true }
+            e.isCtrlPressed && e.key == Key.K && e.isShiftPressed && may("host.processes.reap") -> { selected?.let { a -> actionScope.launch { controller.stopBackgroundProcesses(a.id) } }; true }
             e.isCtrlPressed && e.isAltPressed && e.key == Key.K && may("agents.kill") -> { selected?.let { a -> actionScope.launch { controller.endSession(a.id) } }; true }
             e.isCtrlPressed && e.key == Key.K -> {
                 if (state.panels.leftShown) searchFocus.requestFocus()

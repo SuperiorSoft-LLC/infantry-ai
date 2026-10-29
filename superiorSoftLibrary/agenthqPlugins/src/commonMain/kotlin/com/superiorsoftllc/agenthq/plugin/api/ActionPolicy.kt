@@ -41,6 +41,8 @@ data class SeatsSpec(
     val turnWindowHours: Int = 0,
     /** The refusal code of the turn limit, declared a notice. */
     val turnLimitCode: String? = null,
+    /** The turn limit's refusal text; `{turns}` and `{window}` (`day`, or `N hours`) are filled in. Null = core's neutral text. */
+    val turnLimitText: String? = null,
     /** Refusal text for a mail that is not between two seats. */
     val mailRefusal: String = "mail is only allowed between the seated agents",
     /** Refusal text for a refused HTTP route; `{method}` and `{path}` are filled in. */

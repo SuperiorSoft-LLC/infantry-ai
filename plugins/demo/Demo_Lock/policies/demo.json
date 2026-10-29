@@ -26,6 +26,7 @@
     "turnsPerIp": 0,
     "turnWindowHours": 0,
     "turnLimitCode": "demo_limit",
+    "turnLimitText": "Demo limit reached: {turns} turns per visitor per {window}",
     "mailRefusal": "demo: mail is only allowed between the two demo agents",
     "httpRefusal": "demo: {method} {path} is disabled in this demo"
   }

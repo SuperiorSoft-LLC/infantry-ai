@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.142.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.143.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -9,6 +9,16 @@ a stub, or one that does not exist yet) is behind the daemon.
 > before you write your first test. It is short, it needs no tools beyond `read`, and a merge will be held
 > without it. It covers the RED-before-implementation rule, the mutation check, how to write a test that
 > cannot pass vacuously, and the durability rules (commit by explicit path, early).
+
+### POLICY-1 (contract 1.143.0, additive + behavioural): named actions and the policy switch
+
+Design: [`docs/POLICY.md`](../../docs/POLICY.md). Every client frame the daemon dispatches is one named action (`ActionCatalog`, id + kind `read|write|destructive|spawn`). The active policy preset (selection: `AGENTHQ_POLICY`, a preset's `selectWhenEnv`, `<state dir>/policy.preset`, else `production`) refuses frames by their action; `production` refuses nothing.
+
+- `policy` (daemon -> client, JSON `PolicyWire`): sent after `ready` and to every client on each switch: the active preset id/label, `pinned`, `canSwitch`, the selectable presets, the resolved rules, reason, notice, `restricted`, `notices`, `ready` extras.
+- `policy_get` (no data): answered by `policy`. `policy_set` (data: a preset id): the owner's switch, refused (`error`) for a non-owner connection, an unknown id, or while pinned.
+- `processes_reap` ({op: `reap`|`reap_rogue`, pid?}, answered by `processes`): the killing half of `processes`, its own action (`host.processes.reap`, destructive), so a read-only policy can still list with `processes` (`host.processes.read`). `processes_reap` with op `list` is refused. A `processes` frame whose op is not `list` (a client below 1.143.0) is still served, and is gated as `host.processes.reap`.
+
+A client below 1.143.0 ignores `policy`; a client on a daemon below 1.143.0 reaps with `processes` (`Controller.splitsReap`).
 
 ### CONFIG-8 (contract 1.142.0, additive): the daemon's declared config
 

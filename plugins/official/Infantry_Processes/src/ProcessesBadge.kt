@@ -87,6 +87,8 @@ fun ProcessesDialog(processes: ProcessesContext, onDismiss: () -> Unit) {
     LaunchedEffect(Unit) { runCatching { processes.refresh() } }
     val report = processes.report
     val now = Clock.System.now().toEpochMilliseconds()
+    // POLICY-1: reaping is the destructive `host.processes.reap` action; a read-only policy still lists.
+    val reap = com.superiorsoftllc.agenthq.ui.shell.rememberGate("host.processes.reap", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE)
     AhqAlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag(PROCESSES_PANEL_TAG),
@@ -120,7 +122,7 @@ fun ProcessesDialog(processes: ProcessesContext, onDismiss: () -> Unit) {
                         modifier = Modifier.testTag(PROCESSES_AUTO_REAP_TAG),
                     )
                 }
-                Section("Rogue (${report.rogue.size})", report.rogue, now, reapable = true) { pid ->
+                Section("Rogue (${report.rogue.size})", report.rogue, now, reapable = reap.enabled) { pid ->
                     scope.launch { processes.reap(pid) }
                 }
                 Section("Tracked, healthy", report.tracked.filter { !it.rogue }, now, reapable = false) {}
@@ -130,7 +132,7 @@ fun ProcessesDialog(processes: ProcessesContext, onDismiss: () -> Unit) {
         confirmButton = {
             Button(
                 onClick = { scope.launch { processes.reap(null) } },
-                enabled = report?.rogue?.isNotEmpty() == true,
+                enabled = reap.enabled && report?.rogue?.isNotEmpty() == true,
                 colors = ButtonDefaults.buttonColors(containerColor = Palette.Danger, contentColor = Palette.Bg),
                 modifier = Modifier.testTag(PROCESSES_REAP_ALL_TAG),
             ) { Text("Reap all rogue") }

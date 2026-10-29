@@ -66,7 +66,8 @@ A preset is a JSON file (`PolicyPreset`):
   and no `allow` rule does (allow = the exceptions). Undeclared generic write = id `""`, kind `write`.
 * `extends` layers presets: lists are unioned parent-first, scalars are the child's when set.
 * `seats` (optional): the seated lockdown mechanism (DEMO-LOCK's): a project directory + name, role seats
-  (`role/provider/model`), warm-up, a per-IP turn limit, a public visitor token env name. Present = the daemon seeds the
+  (`role/provider/model`), warm-up, a per-IP turn limit (`turnsPerIp`, `turnWindowHours`, `turnLimitCode`, and
+  `turnLimitText` with `{turns}` / `{window}`; core's neutral text when unset), a public visitor token env name. Present = the daemon seeds the
   project and seats, scopes prompts/resume/replay to the seats, mail to between seats, project reads to the seat project.
 * `allowedModels` / `allowedRoles`: used when the `limits.models.allowed` / `limits.roles.allowed` settings (and their env)
   are empty.
@@ -87,6 +88,13 @@ Selection, first that applies:
    **Configuration > General > Policy** (the `policy_set` frame, owner credential only, refused while pinned).
 4. Otherwise `production` (nothing disabled, nothing added to `ready`).
 
+**Everything follows the switch at runtime, no restart** (`PolicySwitchDaemonTest`): the frame gate, the seated lock (seeded
+on the switch), the keystore's `locked` and its refused changes, RunManager's interactive-run / `run_input` / run-secrets
+refusals, the daemon's plugin resolution (`GET /plugins`), the public visitor token's admission (the `/ws` handshake and
+`GET /demo/visitor-token`, read per request), the `policy` frame and the `ready` extras. A visitor token present at start is
+still validated then (a bad one stops the daemon starting); one that becomes active on a switch and breaks the token rules
+is logged and not admitted.
+
 A pinned id that no provider has resolves to **deny-everything** (fail closed); `AGENTHQ_DEMO_LOCK=1` without the demo preset
 installed also keeps SEC-FIX-1's `FrameGate` read-only list.
 
@@ -103,6 +111,11 @@ frame -> `ActionCatalog` action -> `ActionPolicyMatcher` with the active preset.
 action id, so the dimming and the refusal cannot disagree. An unknown frame under a non-production preset is refused
 (default deny). With `seats` the seated scoping (`DemoLock`'s, now values-free) runs next. `policy_set` / `policy_get` are
 always reachable by the owner (the escape hatch: the switch itself is never policy-gated; pinning is how a deployment locks it).
+
+`processes` is split (contract 1.143.0): `processes` lists (`host.processes.read`, a read) and `processes_reap` kills
+(`host.processes.reap`, destructive), so a read-only preset can list host processes. A legacy `processes` frame whose op
+is not `list` (a client below 1.143.0) is still served and gated as the reap (`ActionCatalog.forEnvelope`), so the split
+opens no way around a policy (`ProcessesSplitPolicyTest`).
 
 `ActionCatalogCoverageTest` reads the daemon's dispatch `when` and fails when a dispatched frame is not in the catalog, and
 when a write frame is in neither the catalog nor `FrameGate.OWNER_ONLY`.
@@ -130,6 +143,10 @@ daemon refuses `ticket_save` / `kill` with the preset's refusal text. Flips back
 control is enabled and a ticket is saved again. No rebuild, no plugin edited, no env var.
 
 Run: `gradlew.bat --no-parallel :superiorSoftLibrary:agentHqUi:test --tests "*PolicyOneSwitchRealDaemonUiTest"`.
+
+Tests never read the owner's state dir: `TestStateIsolationTest` (agentHq and agentHqUi) fails when a test JVM's `stateDir()`,
+which `AgentHqDaemon.build`'s owner-token / policy defaults read, is not the build's throwaway one. `DaemonFixture` and
+`ConfigDaemonScopeRealDaemonUiTest` pass their own temp owner token and policies explicitly.
 
 ## 6. Settings and plugins
 

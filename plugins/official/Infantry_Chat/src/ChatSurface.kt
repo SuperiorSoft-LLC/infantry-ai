@@ -744,7 +744,7 @@ internal fun PromptBox(
     val policy = com.superiorsoftllc.agenthq.ui.shell.rememberGate("")
     val swap = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.swap")
     val spawn = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.spawn", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN)
-    val reap = com.superiorsoftllc.agenthq.ui.shell.rememberGate("host.processes")
+    val reap = com.superiorsoftllc.agenthq.ui.shell.rememberGate("host.processes.reap", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE)
     val remove = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.delete")
     val kill = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.kill")
     val restart = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.restart")

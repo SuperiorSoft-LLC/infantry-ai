@@ -101,7 +101,7 @@ class PolicyRuntime(
         val preset = current
         if (preset.isEmpty) return null
         if (lock.enabled) return lock.frameRefusal(envelope, active)
-        return actionRefusal(preset, type)
+        return actionRefusal(preset, envelope)
     }
 
     companion object {
@@ -111,8 +111,12 @@ class PolicyRuntime(
         fun truthy(v: String?): Boolean = v?.trim()?.lowercase()?.let { it.isNotEmpty() && it != "0" && it != "false" && it != "off" && it != "no" } ?: false
 
         /** The refusal of frame [type] by [preset]'s rules, or null; the text is the preset's `refusal` template. */
-        fun actionRefusal(preset: PolicyPreset, type: String): String? {
-            val action = ActionCatalog.forFrame(type)
+        fun actionRefusal(preset: PolicyPreset, type: String): String? = actionRefusal(preset, Envelope(type, ""))
+
+        /** As above for a whole frame: its action is read from the payload when the frame alone does not say ([ActionCatalog.forEnvelope]). */
+        fun actionRefusal(preset: PolicyPreset, envelope: Envelope): String? {
+            val type = envelope.type
+            val action = ActionCatalog.forEnvelope(envelope)
             if (action != null && com.superiorsoftllc.agenthq.plugin.api.ActionPolicyMatcher.allows(preset.disable, preset.allow, action.id, action.kind)) return null
             return refusalText(preset, type, action?.id)
         }

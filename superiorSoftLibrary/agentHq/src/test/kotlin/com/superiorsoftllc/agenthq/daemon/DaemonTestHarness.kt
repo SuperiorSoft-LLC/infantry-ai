@@ -320,6 +320,11 @@ class DaemonFixture private constructor(
             owner: Boolean = true,
             /** SEC-FIX-1: the demo lock, off unless a test sets it, so the operator's AGENTHQ_DEMO_LOCK never leaks in. */
             demoLock: Boolean = false,
+            /**
+             * POLICY-1: the policy presets and the switch. Default: production only, over the fixture's OWN state dir (never
+             * the process's, gap 9), so the operator's AGENTHQ_POLICY / policy.preset never leaks in.
+             */
+            policies: ((File) -> com.superiorsoftllc.agenthq.policy.PolicyRuntime)? = null,
         ): DaemonFixture {
             val opened: AgentHqStore = store ?: SqlAgentHqStore.open(storePath, holderLabel, busyTimeoutMs)
             val provider = StubProvider(script = script, delayMs = 0)
@@ -363,6 +368,7 @@ class DaemonFixture private constructor(
                 webBundle = webBundle,
                 ownerToken = OwnerCredential.ensure(stateDir),
                 demoLock = { demoLock },
+                policies = policies?.invoke(stateDir) ?: com.superiorsoftllc.agenthq.policy.PolicyRuntime(emptyList(), { null }, null, stateDir),
             )
             beforeStart(daemon)
             // PORT-1: the production start path: bind, then record the bound port (resolves the ephemeral 0).

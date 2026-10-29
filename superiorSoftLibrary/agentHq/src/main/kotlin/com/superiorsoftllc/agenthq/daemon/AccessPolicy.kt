@@ -53,8 +53,11 @@ class AccessPolicy private constructor(
     private val browserHostNames: Set<String> = emptySet(),
     /** SANDBOX-1: the digest of the daemon's scoped agent token; null = no agent tier. See [AgentFrames]. */
     private val agentDigest: ByteArray? = null,
-    /** Ticket 9bf81983 (demo-build): the digest of the demo lock's PUBLIC visitor token; null = none. See [withDemoToken]. */
-    private val demoDigest: ByteArray? = null,
+    /**
+     * Ticket 9bf81983 (demo-build): the digest of the seated lock's PUBLIC visitor token NOW; null = none. POLICY-1: read per
+     * request, so it follows the active policy preset ([withDemoTokens]). See [withDemoToken].
+     */
+    private val demoDigest: () -> ByteArray? = { null },
 ) {
     /**
      * Ticket 9bf81983: also admit the demo lock's public visitor token. Only a locked daemon calls this (DemoLock refuses
@@ -62,6 +65,27 @@ class AccessPolicy private constructor(
      * Refused: no owner token (a tokenless daemon), a short token, or one equal to the owner or agent token.
      */
     fun withDemoToken(token: String): AccessPolicy {
+        val d = demoDigestOf(token)
+        return AccessPolicy(bindHost, tokenDigest, browserHostNames, agentDigest) { d }
+    }
+
+    /**
+     * POLICY-1: admit the visitor token [current] names NOW (null = none), so a Settings switch to or from a seated preset
+     * opens or closes visitor admission without a restart. The same rules as [withDemoToken]; a token that breaks them is
+     * logged and not admitted (a running daemon cannot refuse to start).
+     */
+    fun withDemoTokens(current: () -> String?): AccessPolicy {
+        val cache = java.util.concurrent.atomic.AtomicReference<Pair<String, ByteArray?>?>(null)
+        return AccessPolicy(bindHost, tokenDigest, browserHostNames, agentDigest) {
+            current()?.let { token ->
+                cache.get()?.takeIf { it.first == token }?.second ?: runCatching { demoDigestOf(token) }
+                    .onFailure { System.err.println("[agentHq] visitor token not admitted: ${it.message}") }
+                    .getOrNull().also { cache.set(token to it) }
+            }
+        }
+    }
+
+    private fun demoDigestOf(token: String): ByteArray {
         val owner = tokenDigest ?: throw AccessConfigurationException("a demo public token needs an owner token: set $TOKEN_FILE_ENV or $TOKEN_ENV")
         if (token.length < MIN_TOKEN_LENGTH || token.any { it.isWhitespace() || it.isISOControl() }) {
             throw AccessConfigurationException("the demo public token must be at least $MIN_TOKEN_LENGTH characters, no whitespace")
@@ -70,11 +94,11 @@ class AccessPolicy private constructor(
         if (MessageDigest.isEqual(d, owner) || (agentDigest?.let { MessageDigest.isEqual(d, it) } ?: false)) {
             throw AccessConfigurationException("the demo public token must not be the owner token")
         }
-        return AccessPolicy(bindHost, tokenDigest, browserHostNames, agentDigest, d)
+        return d
     }
 
-    /** Ticket 9bf81983: true when a demo public token is admitted (the visitor-token route answers only then). */
-    val hasDemoToken: Boolean get() = demoDigest != null
+    /** Ticket 9bf81983: true when a demo public token is admitted now (the visitor-token route answers only then). */
+    val hasDemoToken: Boolean get() = demoDigest() != null
 
     /**
      * SANDBOX-1: the tier of a request [check] admitted: [AccessTier.AGENT] when it presented the scoped agent token, else
@@ -114,7 +138,7 @@ class AccessPolicy private constructor(
     ): Refusal? {
         if (webAsset) return checkWebAsset(host, origin)
         // Ticket 9bf81983: the public visitor token, read by the page like a bundle file (it is public by design).
-        if (demoDigest != null && path == DemoLock.VISITOR_TOKEN_PATH) return checkWebAsset(host, origin)
+        if (path == DemoLock.VISITOR_TOKEN_PATH && demoDigest() != null) return checkWebAsset(host, origin)
         if (origin != null && path == BROWSER_PATH) return checkBrowser(host, origin, authorization, webSocketProtocols)
         if (origin != null) {
             return Refusal(
@@ -199,7 +223,7 @@ class AccessPolicy private constructor(
         val expected = tokenDigest ?: return false
         if (presented.isEmpty()) return false
         return MessageDigest.isEqual(digest(presented), expected) || (agentDigest?.let { MessageDigest.isEqual(digest(presented), it) } ?: false) ||
-            (demoDigest?.let { MessageDigest.isEqual(digest(presented), it) } ?: false)
+            (demoDigest()?.let { MessageDigest.isEqual(digest(presented), it) } ?: false)
     }
 
     private fun bearerMatches(authorization: String?): Boolean {
@@ -213,7 +237,7 @@ class AccessPolicy private constructor(
         // too; what it may do is decided by its tier ([tierOf], [AgentFrames]).
         val d = digest(presented)
         return MessageDigest.isEqual(d, expected) || (agentDigest?.let { MessageDigest.isEqual(d, it) } ?: false) ||
-            (demoDigest?.let { MessageDigest.isEqual(d, it) } ?: false)
+            (demoDigest()?.let { MessageDigest.isEqual(d, it) } ?: false)
     }
 
     companion object {

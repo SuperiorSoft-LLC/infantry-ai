@@ -705,9 +705,11 @@ class AgentHqDaemon(
             val agentToken = if (token != null) AgentFrames.newToken() else null
             val policy = AccessPolicy.of(host, token, agentToken = agentToken).let { base ->
                 // Ticket 9bf81983: the public visitor token is admitted ONLY under a seated lock (never in the normal app).
-                // POLICY-1: decided at start; a Settings switch to a seated preset admits no visitor token until a restart.
-                val visitor = policies.lock.publicToken
-                if (policies.lock.enabled && visitor != null) base.withDemoToken(visitor) else base
+                // POLICY-1: read per request from the ACTIVE preset's lock, so a Settings switch opens or closes it with no
+                // restart. One present at start is checked now, so a bad one still stops the daemon starting.
+                val visitor = { policies.lock.takeIf { it.enabled }?.publicToken }
+                visitor()?.let(base::withDemoToken)
+                base.withDemoTokens(visitor)
             }
             // SEC-FIX-1: built once; refused when it equals the access token every agent is handed.
             val ownerCredential = OwnerCredential.forDaemon(ownerToken, token)
@@ -924,6 +926,9 @@ class AgentHqDaemon(
             // history follow `limits.run.*`; the demo lock refuses interactive runs and run_input (no raw shell).
             // SECRETS-1: the daemon-owned keystore, in the state dir. SECRETS-2: a run reads its secrets' fields from it.
             val keystore = Keystore(stateDir())
+            // POLICY-1: "locked" follows the ACTIVE preset (a Settings switch included), read per call; the env shorthand
+            // with no seated preset installed still locks (SEC-FIX-1's fallback).
+            val locked: () -> Boolean = { policies.lock.enabled || demoLock() }
             val runManager = com.superiorsoftllc.agenthq.commands.RunManager(
                 { commandStore.registry }, com.superiorsoftllc.agenthq.runner.PipedProcessRunner(),
                 emit = { env -> for (c in clients.toList()) c.trySend(env) },
@@ -937,7 +942,7 @@ class AgentHqDaemon(
                     maxCols = { settings.limitCap(LimitRegistry.RUN_MAX_COLS) },
                     maxRows = { settings.limitCap(LimitRegistry.RUN_MAX_ROWS) },
                 ),
-                demoLock = demoLock,
+                demoLock = locked,
                 // SEC-FIX-1 H1(b): user secrets only; a built-in (the update token) never reaches a run.
                 secrets = com.superiorsoftllc.agenthq.keystore.KeystoreHandler.runSecrets(keystore::fields),
             )
@@ -1106,6 +1111,7 @@ class AgentHqDaemon(
             // SECRETS-1 / SECRETS-2: the keystore's frames; the demo lock refuses every change.
             val keystoreFrames = KeystoreHandler(
                 keystore = keystore,
+                demoLock = locked,
                 push = { envelope -> for (client in clients) client.trySend(envelope) },
             )
             // P10-K6: the issues log, over the same file. The declared session is the author AND the scope of the active
@@ -1537,7 +1543,10 @@ class AgentHqDaemon(
                 val frame = Envelope(Envelope.CONFIG_CHANGED, json.encodeToString(com.superiorsoftllc.agenthq.plugin.api.ConfigChangedFrame.serializer(), changed))
                 for (client in clients) client.trySend(frame)
             }
-            val plugins = DaemonPlugins.resolve(stateDir(), onResolved = { daemonConfig.load(it).forEach { line -> System.err.println(line) } })
+            // POLICY-1: resolved under the ACTIVE preset's lock, and again on every switch (GET /plugins reads the latest).
+            fun resolvePlugins() = DaemonPlugins.resolve(stateDir(), locked = locked(), onResolved = { daemonConfig.load(it).forEach { line -> System.err.println(line) } })
+            val pluginsNow = java.util.concurrent.atomic.AtomicReference(resolvePlugins())
+            policies.onChange { pluginsNow.set(resolvePlugins()) }
 
             val server = embeddedServer(CIO, port = boundPort, host = host) {
                 install(WebSockets)
@@ -1592,7 +1601,7 @@ class AgentHqDaemon(
                         )
                     }
                     get("/attention") { call.respond(attention.list()) }
-                    get("/plugins") { call.respond(plugins) }
+                    get("/plugins") { call.respond(pluginsNow.get()) }
                     // P1 step 2 (6s B): the per-node UI configuration the window seeds and edits.
                     val nodeConfigStore = NodeConfigStore((store as SqlAgentHqStore).database)
                     nodeConfigRoutes(nodeConfigStore)
@@ -2335,6 +2344,8 @@ private suspend fun handleConnection(
                 val watch = processWatch ?: throw IllegalArgumentException("this daemon has no process watch")
                 val req = if (request.data.isBlank()) com.superiorsoftllc.agenthq.session.ProcessesRequest()
                 else json.decodeFromString(com.superiorsoftllc.agenthq.session.ProcessesRequest.serializer(), request.data)
+                // POLICY-1 (1.143.0): `processes_reap` only kills (its policy action is destructive); listing is `processes`.
+                require(request.type != Envelope.PROCESSES_REAP || req.op != "list") { "processes_reap only reaps: list with `processes`" }
                 Envelope(
                     Envelope.PROCESSES,
                     json.encodeToString(
@@ -3401,7 +3412,7 @@ private suspend fun handleConnection(
 
                 // ROGUE-1 (contract 1.120.0): list / reap the processes this daemon's sessions started.
                 // Answered by [processesWorker], off this loop (BUG-SpawnBoxCatalog, ticket 3615b753).
-                Envelope.PROCESSES -> {
+                Envelope.PROCESSES, Envelope.PROCESSES_REAP -> {
                     processesRequests.trySend(envelope)
                     null
                 }

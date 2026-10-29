@@ -51,6 +51,6 @@
     { "id": "agents.kill", "label": "End session", "kind": "destructive", "frames": ["kill"] },
     { "id": "agents.delete", "label": "Remove agent", "kind": "destructive", "frames": ["session_delete"] },
     { "id": "agents.restart", "label": "Restart session", "kind": "destructive", "frames": ["session_restart"] },
-    { "id": "host.processes", "label": "Stop background processes", "kind": "destructive", "frames": ["processes"] }
+    { "id": "host.processes.reap", "label": "Stop background processes", "kind": "destructive", "frames": ["processes_reap"] }
   ]
 }

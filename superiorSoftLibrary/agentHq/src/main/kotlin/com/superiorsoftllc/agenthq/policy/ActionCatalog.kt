@@ -49,8 +49,9 @@ object ActionCatalog {
         a("worktrees.read", READ, E.WORKTREES),
         a("runs.read", READ, E.RUN_LIST),
         a("config.read", READ, E.CONFIG_GET),
-        // `processes` both lists and (data "reap <pid>") kills host processes: one frame, so it is catalogued by its worst use.
-        a("host.processes", DESTRUCTIVE, E.PROCESSES),
+        // POLICY-1 (1.143.0): listing is a read; the killing half is its own frame (see [forEnvelope] for a legacy reap).
+        a("host.processes.read", READ, E.PROCESSES),
+        a("host.processes.reap", DESTRUCTIVE, E.PROCESSES_REAP),
         a("secrets.read", READ, E.SECRET_STATUS),
         a("secrets.plugin.read", READ, E.PLUGIN_SECRET_GET),
         a("stories.read", READ, E.STORY_GET, E.STORY_LIST),
@@ -149,6 +150,24 @@ object ActionCatalog {
     private val byId: Map<String, Action> = ACTIONS.associateBy { it.id }.also { check(it.size == ACTIONS.size) { "an action id is declared twice" } }
 
     fun forFrame(type: String): Action? = byFrame[type]
+
+    /**
+     * The action [envelope] performs: its frame's, except a legacy `processes` whose op is not `list` (a client below
+     * 1.143.0 reaps with it), which is the reap action. Gate with this, never with the frame alone.
+     */
+    fun forEnvelope(envelope: E): Action? {
+        if (envelope.type == E.PROCESSES && processesOp(envelope.data) != "list") return byFrame[E.PROCESSES_REAP]
+        return byFrame[envelope.type]
+    }
+
+    /** The op of a `processes` payload (blank = `list`); an unreadable payload is not `list`, so it is gated as a reap. */
+    private fun processesOp(data: String): String? {
+        if (data.isBlank()) return "list"
+        return runCatching {
+            (kotlinx.serialization.json.Json.parseToJsonElement(data) as kotlinx.serialization.json.JsonObject)["op"]
+                ?.let { (it as kotlinx.serialization.json.JsonPrimitive).content } ?: "list"
+        }.getOrNull()
+    }
 
     fun forId(id: String): Action? = byId[id]
 

@@ -166,7 +166,7 @@ class DemoLock(
     fun frameRefusal(envelope: Envelope, active: String?): String? {
         if (!enabled) return null
         val type = envelope.type
-        if (PolicyRuntime.actionRefusal(preset, type) != null) return refusal(type)
+        if (PolicyRuntime.actionRefusal(preset, envelope) != null) return refusal(type)
         val ok = when {
             type == ActionCatalog.REPLAY_REQUEST -> seeded(envelope.sessionId)
             type == Envelope.PROMPT -> seeded(envelope.sessionId) && envelope.data.isNotBlank() && !envelope.data.trimStart().startsWith("/")
@@ -262,7 +262,7 @@ class DemoLock(
                 seats = seats,
                 publicToken = getenv(PUBLIC_TOKEN_ENV)?.trim()?.takeIf { it.isNotEmpty() }
                     ?: getenv(PUBLIC_TOKEN_FILE_ENV)?.takeIf { it.isNotBlank() }?.let { AccessPolicy.readTokenFile(File(it)) },
-                turnLimit = if (perIp > 0 && hours > 0) DemoTurnLimit(perIp, hours * 3_600_000L, File(stateDir, DemoTurnLimit.FILE_NAME), code = spec.turnLimitCode ?: DemoTurnLimit.PREFIX) else null,
+                turnLimit = if (perIp > 0 && hours > 0) DemoTurnLimit(perIp, hours * 3_600_000L, File(stateDir, DemoTurnLimit.FILE_NAME), code = spec.turnLimitCode ?: DemoTurnLimit.PREFIX, text = spec.turnLimitText ?: DemoTurnLimit.TEXT) else null,
                 trustedProxies = DemoTurnLimit.trustedProxies(getenv),
                 preset = preset,
             )
