@@ -243,6 +243,8 @@ class Controller(
                         if (contractAtLeast(contract, ToolApprovalSetting.SINCE_MAJOR, ToolApprovalSetting.SINCE_MINOR)) {
                             client.send(WireRequests.toolApproval())
                         }
+                        // CONFIG-11: the daemon's declared config (schema + values), merged into the Settings dialog (1.142.0).
+                        if (_state.value.connection.servesConfigSchema) client.send(Envelope(Envelope.CONFIG_GET, ""))
                         // SECRETS-1: the keystore's set / not set state, shown in the Configuration modal (1.100.0).
                         if (contractAtLeast(contract, 1, 102)) client.send(WireRequests.secretStatus())
                         // ROGUE-1: the rogue process detector's first report, for the status-bar badge (1.120.0).
@@ -555,6 +557,19 @@ class Controller(
      * No-hard-coded-limits (1.133.0): store [value] as the daemon limit [key]. The shown value changes only when the
      * daemon answers `settings`; a refusal (an `error` frame naming the range) is shown as a notice.
      */
+    /**
+     * CONFIG-11: write a daemon-scoped field through `config_set`, guarded by the rev this window last saw ([value] null resets
+     * it). The daemon's answer is `config_values` (and a `config_changed` push); a refusal lands in `daemonConfigError`.
+     */
+    suspend fun setDaemonConfig(node: String, key: String, value: kotlinx.serialization.json.JsonElement?): CommandResult {
+        val s = _state.value
+        if (!s.connection.servesConfigSchema) return report(CommandResult.Refused("this daemon does not serve configuration (needs contract 1.142.0)"))
+        val rev = s.daemonConfigValues?.rev ?: s.daemonConfigSchema?.rev
+        val frame = com.superiorsoftllc.agenthq.plugin.api.ConfigSetFrame(node, key, value, rev)
+        _state.update { it.copy(daemonConfigError = null) }
+        return send(Envelope(Envelope.CONFIG_SET, json.encodeToString(com.superiorsoftllc.agenthq.plugin.api.ConfigSetFrame.serializer(), frame)))
+    }
+
     suspend fun setLimit(key: String, value: Long): CommandResult {
         if (!contractAtLeast(_state.value.connection.contract, LimitsSetting.SINCE_MAJOR, LimitsSetting.SINCE_MINOR)) {
             return report(CommandResult.Refused("this daemon has no limit settings (needs contract 1.133.0)"))

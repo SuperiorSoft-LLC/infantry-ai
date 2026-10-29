@@ -59,6 +59,9 @@ import kotlinx.serialization.json.booleanOrNull
 
 /** A generated card that no [ConfigEntry] stands for; the suffix is `<node>/<group>`. */
 const val GENERATED_CARD_TAG_PREFIX = "config-card-"
+/** CONFIG-11: the daemon's refusal line on a daemon card, and the read-only note on an unsigned plugin's card. */
+const val GENERATED_DAEMON_ERROR_TAG = "config-daemon-error"
+const val GENERATED_READONLY_TAG_PREFIX = "config-readonly-"
 /** One generated field; the suffix is `<node>/<key>`. A toggle is [NODE_FIELD_CHECK_TAG_PREFIX] + `<node>/<key>`, an option [NODE_FIELD_OPTION_TAG_PREFIX]. */
 const val GENERATED_FIELD_TAG_PREFIX = "config-field-"
 
@@ -125,8 +128,12 @@ private fun GeneratedCard(factory: TabFactory, card: ConfigCard, highlight: Conf
     ) {
         Text(card.title, fontWeight = FontWeight.Bold, fontSize = 13.sp)
         card.applies?.let { Text(it, color = Palette.Muted, fontSize = 11.sp) }
-        val editable = factory.config.load == NodeConfigLoad.LOADED && !card.declaration.locked
+        // CONFIG-11: a daemon card is editable while the daemon answers, unless it is read-only (an unsigned plugin's).
+        val daemonCard = factory.config.isDaemonNode(card.node)
+        val editable = (daemonCard || factory.config.load == NodeConfigLoad.LOADED) && !card.declaration.locked && !card.declaration.readOnly
+        if (card.declaration.readOnly) Text("Read-only: this plugin is not signed.", color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(GENERATED_READONLY_TAG_PREFIX + card.node))
         for (f in card.fields) GeneratedField(factory, card, f, editable)
+        if (daemonCard) factory.config.daemonError?.let { Text(it, color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.testTag(GENERATED_DAEMON_ERROR_TAG)) }
     }
 }
 

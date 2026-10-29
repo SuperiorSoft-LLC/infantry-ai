@@ -2,6 +2,7 @@ package com.superiorsoftllc.agenthq.ui
 
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -30,6 +31,9 @@ class ConfigModalUiTest {
             runDesktopComposeUiTest(1700, 1000) {
                 setContent { App(Controller(scope), "ws://127.0.0.1:1/ws", null) }
 
+                // The footer (and its cog) is composed by the shell after its first frames; the click waits for it instead of
+                // racing it (CONFIG-11: this was the intermittent "cannot find Configuration" at the first click).
+                waitUntil(timeoutMillis = 10_000) { onAllNodesWithContentDescription("Configuration").fetchSemanticsNodes().isNotEmpty() }
                 // Default (BUG-M2-15): Project Scoped Agents, with its effect stated.
                 onNodeWithContentDescription("Configuration").performClick()
                 // CONFIG-TABS-1: the modal opens on Appearance; agent scope lives under General.

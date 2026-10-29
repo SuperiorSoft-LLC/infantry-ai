@@ -42,7 +42,7 @@ class ResolvedConfig(private val state: NodeConfigState, private val implementat
     }
 
     /** The JSON [key] resolves to for [nodeId], or null when unset (the configuration view's editors read it). */
-    fun json(nodeId: String, key: String): JsonElement? = resolved(nodeId)[key]
+    fun json(nodeId: String, key: String): JsonElement? = state.daemonJson(nodeId, key) ?: resolved(nodeId)[key]
 
     private fun resolved(nodeId: String): Map<String, JsonElement> {
         val stored = state.stored

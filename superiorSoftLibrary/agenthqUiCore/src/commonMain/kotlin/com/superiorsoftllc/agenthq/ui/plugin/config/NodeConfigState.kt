@@ -3,7 +3,10 @@ package com.superiorsoftllc.agenthq.ui.plugin.config
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ConfigManifest
+import com.superiorsoftllc.agenthq.plugin.api.ConfigSchemaFrame
+import com.superiorsoftllc.agenthq.plugin.api.ConfigValuesFrame
 import com.superiorsoftllc.agenthq.plugin.api.ConfigManifestSource
 import com.superiorsoftllc.agenthq.plugin.api.ConfigScopes
 import com.superiorsoftllc.agenthq.plugin.api.ConfigSetBy
@@ -86,8 +89,54 @@ class NodeConfigState(
      */
     var snapshot: List<ModuleDeclaration>? by mutableStateOf(null)
         private set
-    /** The declarations to build the dialog from: the daemon's snapshot, else the local [tree]'s. */
-    val declarations: List<ModuleDeclaration> get() = snapshot ?: tree.declarations
+    /** The declarations to build the dialog from: the daemon's snapshot, else the local [tree]'s, then the daemon's own ([daemonDecls]). */
+    val declarations: List<ModuleDeclaration> get() = (snapshot ?: tree.declarations) + daemonDecls
+    /** CONFIG-11: the snapshot with the daemon's own sections after it; null while there is no snapshot (the dialog then uses [declarations]). */
+    val planDeclarations: List<ModuleDeclaration>? get() = snapshot?.let { it + daemonDecls }
+
+    /** CONFIG-11: the daemon's `config_schema` sections (scope `daemon`), empty below contract 1.142.0 or before the daemon answered. */
+    var daemonDecls: List<ModuleDeclaration> by mutableStateOf(emptyList())
+        private set
+    /** CONFIG-11: the daemon's `config_values`, node id -> key -> value. */
+    private var daemonStored: Map<String, Map<String, JsonElement>> by mutableStateOf(emptyMap())
+    /** CONFIG-11: the daemon's last refusal of a write (stale rev, validator text), shown inline on the daemon cards. */
+    var daemonError: String? by mutableStateOf(null)
+        private set
+    private var daemonWriter: (suspend (node: String, key: String, value: JsonElement?) -> Boolean)? = null
+    private val daemonFields: Map<Pair<String, String>, ConfigFieldDeclaration>
+        get() = daemonDecls.flatMap { m -> m.declaration.fields.map { (m.declaration.node to it.key) to it } }.toMap()
+
+    /**
+     * CONFIG-11: takes the daemon's sections and values from the connection ([schema] null = the daemon does not serve
+     * config: the hand-written sections stay). A secret is never a field; a section the daemon marks read-only (unsigned
+     * plugin) stays read-only.
+     */
+    fun applyDaemon(
+        schema: ConfigSchemaFrame?,
+        values: ConfigValuesFrame?,
+        error: String?,
+        writer: (suspend (node: String, key: String, value: JsonElement?) -> Boolean)?,
+    ) {
+        daemonWriter = writer
+        daemonError = error
+        daemonDecls = schema?.declarations.orEmpty().map { d ->
+            ModuleDeclaration(d.node.removePrefix("daemon."), d.copy(
+                tab = d.tab ?: "General",
+                fields = d.fields.filterNot { it.type == "secret" || it.type == "password" },
+            ))
+        }.filter { it.declaration.fields.isNotEmpty() || it.declaration.block != null }
+        daemonStored = values?.rows.orEmpty().filter { it.value != null && it.value !is kotlinx.serialization.json.JsonNull }
+            .groupBy({ it.nodeId }) { it.key to it.value!! }.mapValues { (_, l) -> l.toMap() }
+    }
+
+    /** True when [node]'s fields come from the daemon's schema. */
+    fun isDaemonNode(node: String): Boolean = daemonDecls.any { it.declaration.node == node }
+
+    /** The daemon field's value (stored, else its declared default), or null when [node]/[key] is not a daemon field. */
+    fun daemonJson(node: String, key: String): JsonElement? {
+        val f = daemonFields[node to key] ?: return null
+        return daemonStored[node]?.get(key) ?: f.default?.takeIf { it !is kotlinx.serialization.json.JsonNull }
+    }
     /** The last failure, one line; null after a success. */
     var error: String? by mutableStateOf(null)
         private set
@@ -113,7 +162,8 @@ class NodeConfigState(
     fun isDevice(node: String, key: String): Boolean = tree.field(node, key)?.field?.scope == ConfigScopes.DEVICE
 
     /** The row stored for [node] itself (no inheritance), or null. */
-    fun own(node: String, key: String): NodeConfigEntry? = stored[node]?.get(key)
+    fun own(node: String, key: String): NodeConfigEntry? =
+        daemonStored[node]?.get(key)?.takeIf { daemonFields.containsKey(node to key) }?.let { NodeConfigEntry(node, key, it, ConfigSetBy.USER) } ?: stored[node]?.get(key)
 
     suspend fun load() {
         load = NodeConfigLoad.LOADING
@@ -136,6 +186,8 @@ class NodeConfigState(
 
     /** Stores [value] for [node]'s [key] as the user's, or as [setBy] (null = clear it, so it resolves from the parent again). */
     suspend fun set(node: String, key: String, value: JsonElement?, setBy: String = ConfigSetBy.USER): Boolean {
+        // CONFIG-11: a daemon-scoped field is written through config_set; the daemon's answer comes back as config_values / config_changed.
+        if (daemonFields.containsKey(node to key)) return daemonWriter?.invoke(node, key, value) ?: false
         val prefs = devicePrefs
         if (prefs != null && isDevice(node, key)) {
             // The store cannot delete: null is written as "" and reads back as unset.
