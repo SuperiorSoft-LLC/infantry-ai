@@ -17,7 +17,7 @@ class AppearanceManifestTest {
         assertEquals("Infantry_Appearance", manifest.name)
         assertEquals(APPEARANCE_CONFIG, manifest.config)
         assertEquals(listOf(THEME_FILL_ID), manifest.fills.map { it.node })
-        assertEquals(listOf("Appearance", "Appearance"), manifest.config.map { it.tab })
+        assertEquals(listOf("Appearance", "Appearance", "Appearance"), manifest.config.map { it.tab })
         assertTrue(manifest.config.flatMap { it.fields }.map { it.key }.containsAll(listOf(ACCENT_KEY, DARK_KEY, BLUR_KEY)))
     }
 }

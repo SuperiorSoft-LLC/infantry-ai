@@ -53,6 +53,7 @@ val APPEARANCE_CONFIG: List<ConfigDeclaration> = listOf(
         keywords = listOf("dialog", "scrim", "modal"),
         fields = listOf(ConfigFieldDeclaration(BLUR_KEY, ConfigFieldTypes.TOGGLE, "Blur behind dialogs", JsonPrimitive(true), scope = ConfigScopes.DEVICE)),
     ),
+    ConfigDeclaration(node = "infantry.shell.config.userPortrait", group = "Your portrait", tab = "Appearance", order = 30, title = "Your portrait", keywords = listOf("avatar", "picture", "photo"), block = "infantry.shell.config.userPortrait"),
 )
 
 /** What a [ThemeBlock] last applied, so a Reset (the user override gone) puts the declared default back. */

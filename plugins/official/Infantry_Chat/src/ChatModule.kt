@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.chat
 
+import com.superiorsoftllc.agenthq.plugin.api.ConfigDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
@@ -15,6 +16,10 @@ val InfantryChat = AgentHqModule(
         name = "Infantry_Chat", version = "1.0.0", author = "Infantry AI",
         description = "The centre column: the agent chat, the centre tab strip and the New agent dialog.",
         fills = listOf(FillDeclaration(CHAT_FILL_ID)),
+        config = listOf(
+            ConfigDeclaration(node = "infantry.shell.config.markdownEngine", group = "Markdown engine", tab = "Appearance", order = 40, title = "Markdown engine", keywords = listOf("markdown", "table", "chat", "format", "renderer"), block = "infantry.shell.config.markdownEngine"),
+            ConfigDeclaration(node = "infantry.shell.config.reasoning", group = "Agent reasoning", tab = "Appearance", order = 50, title = "Agent reasoning", keywords = listOf("reasoning", "thinking", "thought", "panel", "inline"), block = "infantry.shell.config.reasoning"),
+        ),
     ),
     fills = mapOf(CHAT_FILL_ID to ShellCenter),
 )

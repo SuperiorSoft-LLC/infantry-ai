@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official
 
+import com.superiorsoftllc.agenthq.plugin.api.ConfigDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugins.official.agents.AgentsSection
 import com.superiorsoftllc.agenthq.plugin.api.PanelDeclaration
@@ -19,6 +20,10 @@ val InfantryAgents = AgentHqModule(
     ModuleManifest(
         name = "Infantry_Agents", version = "1.0.0", author = "Infantry AI", description = "The left panel's agents list.",
         panels = listOf(PanelDeclaration("infantry.agents", Panels.LEFT)),
+        config = listOf(
+            ConfigDeclaration(node = "infantry.shell.config.progressStale", group = "Progress bars: stale after", tab = "General", order = 80, title = "Progress bars: stale after", keywords = listOf("progress", "stale", "minutes"), block = "infantry.shell.config.progressStale"),
+            ConfigDeclaration(node = "infantry.shell.config.cliLocations", group = "CLI locations", tab = "Agents", order = 100, title = "CLI locations", keywords = listOf("harness", "install", "path", "cli"), block = "infantry.shell.config.cliLocations"),
+        ),
     ),
     panels = listOf(agentsPanel()),
 )
