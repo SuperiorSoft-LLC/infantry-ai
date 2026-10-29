@@ -194,10 +194,13 @@ data class BlockDeclaration(val slot: String, val name: String, val order: Int =
 /**
  * BLOCKS-LAYOUT L5: the module's code [name] (registered with `UiRegistrar.shell`) takes over core shell node [node]
  * (a node id such as `infantry.shell.footer`, or its address `infantry.shell#infantry.shell.footer`). [mode] is
- * `replace` (the core block is not drawn) or `wrap` (the module draws around the core block, which it gets as `inner`).
+ * `replace` (the core block is not drawn) or `wrap` (the module draws around the core block, which it gets as `inner`);
+ * OVERRIDE-1 adds `before` / `after` (the module's block is drawn next to the node, in its parent; the node is untouched).
+ * [node] may also be a path selector (docs/PLUGIN-OVERRIDES.md); [priority]: higher wins a replace and goes first among
+ * `before` / `after` (ties: load order).
  */
 @Serializable
-data class ShellOverrideDeclaration(val node: String, val name: String, val mode: String = "replace") {
+data class ShellOverrideDeclaration(val node: String, val name: String, val mode: String = "replace", val priority: Int = 0) {
     /** The bare node id, whichever form [node] uses. */
     val nodeId: String get() = node.removePrefix("infantry.shell#")
 }

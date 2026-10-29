@@ -40,7 +40,7 @@ data class ModuleStatus(
 data class AcceptedPreference(val module: String, val replace: String, val with: String)
 
 /** BLOCKS-LAYOUT L5: an override of core shell node [node] the trust rules let through ([mode] `replace` or `wrap`). */
-data class AcceptedShellOverride(val module: String, val node: String, val name: String, val mode: String)
+data class AcceptedShellOverride(val module: String, val node: String, val name: String, val mode: String, val priority: Int = 0)
 
 /**
  * The outcome of one load: every module's status (in load order for the loaded ones, then the rest), the preferences
@@ -207,7 +207,7 @@ object ModuleResolver {
                     log += "[plugins] ${s.name}: shell override ${d.name} of ${d.nodeId} refused: a community module cannot override core shell node ${d.nodeId} unless modules.json allows it"
                     null
                 } else {
-                    AcceptedShellOverride(s.name, d.nodeId, d.name, d.mode)
+                    AcceptedShellOverride(s.name, d.nodeId, d.name, d.mode, d.priority)
                 }
             }
         }
