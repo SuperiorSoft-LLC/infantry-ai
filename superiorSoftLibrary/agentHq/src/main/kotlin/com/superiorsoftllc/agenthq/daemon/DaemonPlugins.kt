@@ -32,6 +32,8 @@ object DaemonPlugins {
         env: (String) -> String? = System::getenv,
         property: (String) -> String? = System::getProperty,
         log: (String) -> Unit = { System.err.println(it) },
+        /** CONFIG-8: told the whole resolution (the daemon compiles its config manifest from it). */
+        onResolved: (com.superiorsoftllc.agenthq.plugin.host.Resolution) -> Unit = {},
     ): PluginsWire {
         val root = PluginFolders.root(stateDir, env, property)
         val config = PluginFolders.config(root, log)
@@ -39,6 +41,7 @@ object DaemonPlugins {
         val resolution = ModuleResolver.resolve(PluginFolders.scan(root, config), config, demoLock)
         log("[plugins] daemon root ${root.absolutePath}${if (demoLock) " (demo lock on)" else ""}: ${resolution.loaded.size} loaded")
         resolution.log.forEach(log)
+        onResolved(resolution)
         return PluginsWire(
             root.absolutePath, demoLock,
             resolution.statuses.map { s ->

@@ -40,6 +40,20 @@ class SettingsService(
     @Volatile
     var onKeepAliveChanged: (() -> Unit)? = null
 
+    /**
+     * CONFIG-8: the field a plugin declared for a flat settings [key] (`daemon.config`, `scope:"daemon"`); null = none. [set] falls
+     * back to its validator for a key it has no `when` for. The daemon points it at its [com.superiorsoftllc.agenthq.daemon.DaemonConfig].
+     */
+    @Volatile
+    var declaredField: (String) -> com.superiorsoftllc.agenthq.plugin.api.ConfigFieldDeclaration? = { null }
+
+    /** CONFIG-8: the stored JSON of a plugin-declared key, null when never set or reset. */
+    fun storedDeclared(key: String): JsonElement? = store.settings.get(key)?.value
+        ?.let { runCatching { Json.parseToJsonElement(it) }.getOrNull() }?.takeIf { it !is kotlinx.serialization.json.JsonNull }
+
+    /** CONFIG-8: whether [key] is one this service validates itself (so a plugin cannot redeclare it). */
+    fun isBuiltIn(key: String): Boolean = key in all() || LimitRegistry.get(key) != null
+
     override fun all(): JsonObject = JsonObject(
         mapOf(
             INCLUDE_LINKED_TASKS_CONTEXT to (storedBoolean(INCLUDE_LINKED_TASKS_CONTEXT) ?: JsonPrimitive(true)),
@@ -256,6 +270,7 @@ class SettingsService(
             PROCESSES_HEAVY_MB, PROCESSES_FLOOR_MB -> JsonPrimitive(requireIntIn(key, value, PROCESSES_MB_RANGE))
             LIMITS_BUILD_PRIORITY -> JsonPrimitive(requireBuildPriority(value).key)
             else -> LimitRegistry.get(key)?.let { JsonPrimitive(requireLimit(it, value)) }
+                ?: declaredField(key)?.let { com.superiorsoftllc.agenthq.plugin.api.ConfigFieldValidator.validate(it, value) }
                 ?: throw IllegalArgumentException("unknown setting '$key'")
         }
         store.settings.put(

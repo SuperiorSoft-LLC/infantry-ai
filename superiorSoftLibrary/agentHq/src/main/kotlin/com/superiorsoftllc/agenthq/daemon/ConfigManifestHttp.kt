@@ -87,3 +87,9 @@ fun Route.configManifestRoutes(store: ConfigManifestStore) {
         call.respond(withContext(Dispatchers.IO) { store.put(manifest) })
     }
 }
+
+/** CONFIG-8: the daemon's declared config over HTTP for a client without the socket: `GET /config/schema`, `GET /config/values`. */
+fun Route.daemonConfigRoutes(config: DaemonConfig) {
+    get("/config/schema") { call.respond(config.schema()) }
+    get("/config/values") { call.respond(config.values()) }
+}

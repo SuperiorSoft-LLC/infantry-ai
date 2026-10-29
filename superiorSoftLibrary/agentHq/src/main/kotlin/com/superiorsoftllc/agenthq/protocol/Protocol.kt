@@ -442,6 +442,14 @@ data class Envelope(
         const val SETTINGS_SET = "settings_set"
         const val SETTINGS = "settings"
 
+        // Contract 1.142.0 -- CONFIG-8 (additive): the daemon's declared config. `config_get` (no data) is answered by `config_schema`
+        // then `config_values`; `config_set` by `config_values` (or an `error` when stale/invalid); `config_changed` is pushed to every other client.
+        const val CONFIG_GET = "config_get"
+        const val CONFIG_SCHEMA = "config_schema"
+        const val CONFIG_VALUES = "config_values"
+        const val CONFIG_SET = "config_set"
+        const val CONFIG_CHANGED = "config_changed"
+
         // Contract 1.133.0 -- no hard-coded limits: `limit_catalog` (no data) is answered by a `limit_catalog` frame
         // `{"limits":[{key, value, default, unit, description, min, max?, zeroMeans?, env}]}`; values change via [SETTINGS_SET].
         const val LIMIT_CATALOG = "limit_catalog"

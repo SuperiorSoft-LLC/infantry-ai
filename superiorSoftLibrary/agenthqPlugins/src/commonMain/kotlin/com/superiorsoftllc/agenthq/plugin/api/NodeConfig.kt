@@ -29,6 +29,8 @@ data class ConfigDeclaration(
     val block: String? = null,
     /** CONFIG-5: a trust section: only core may declare it, and no module hides or edits it. */
     val locked: Boolean = false,
+    /** CONFIG-8: set by the host, never trusted from a module.json: a daemon field from an unsigned (community) plugin is shown but cannot be edited. */
+    val readOnly: Boolean = false,
 )
 
 /**
@@ -121,3 +123,63 @@ data class ConfigManifest(
 /** One contributor to a [ConfigManifest]: a module, its version and the hash of its own `config`. */
 @Serializable
 data class ConfigManifestSource(val module: String, val version: String = "", val manifestHash: String = "")
+
+/** CONFIG-8 (docs/CONFIG-MANIFEST-DESIGN.md section 6): `config_schema`, the daemon's own `scope:"daemon"` declarations; [rev] moves on every schema or value change. */
+@Serializable
+data class ConfigSchemaFrame(val rev: Long, val declarations: List<ConfigDeclaration> = emptyList())
+
+/** CONFIG-8: `config_values`, the stored value of every declared daemon key (a key never set is absent: the client resolves the default). */
+@Serializable
+data class ConfigValuesFrame(val rev: Long, val rows: List<NodeConfigEntry> = emptyList())
+
+/** CONFIG-8: `config_set` (client to daemon). A null [value] resets the key to its default; [expectRev] non-null must equal the daemon's rev or the write is refused as stale. */
+@Serializable
+data class ConfigSetFrame(val node: String, val key: String, val value: JsonElement? = null, val expectRev: Long? = null)
+
+/** CONFIG-8: `config_changed`, pushed to every connected client after a write; [by] is who wrote it. */
+@Serializable
+data class ConfigChangedFrame(val node: String, val key: String, val value: JsonElement? = null, val by: String = ConfigSetBy.USER, val rev: Long = 0)
+
+/** CONFIG-8: the check a declared field applies to a written value; the daemon and a client share it. Throws [IllegalArgumentException]. */
+object ConfigFieldValidator {
+    private val COLOR = Regex("^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$")
+
+    fun validate(field: ConfigFieldDeclaration, value: JsonElement): JsonElement {
+        val name = field.key
+        val prim = value as? kotlinx.serialization.json.JsonPrimitive
+        fun text(): String {
+            require(prim != null && prim.isString) { "setting '$name' must be a string" }
+            return prim.content
+        }
+        return when (field.type) {
+            ConfigFieldTypes.CHECKBOX, ConfigFieldTypes.TOGGLE -> {
+                require(prim != null && !prim.isString && prim.content in setOf("true", "false")) { "setting '$name' must be true or false" }
+                prim
+            }
+            ConfigFieldTypes.NUMBER -> {
+                val n = prim?.takeIf { !it.isString }?.content?.toDoubleOrNull()
+                require(n != null && n.isFinite()) { "setting '$name' must be a number" }
+                require(field.min == null || n >= field.min) { "setting '$name' must be at least ${field.min}" }
+                require(field.max == null || n <= field.max) { "setting '$name' must be at most ${field.max}" }
+                prim
+            }
+            ConfigFieldTypes.SELECT, ConfigFieldTypes.RADIO -> {
+                val t = text()
+                require(field.options.isEmpty() || t in field.options) { "setting '$name' must be one of ${field.options.joinToString { "\"$it\"" }}" }
+                prim!!
+            }
+            ConfigFieldTypes.MULTI_SELECT -> {
+                val arr = value as? kotlinx.serialization.json.JsonArray
+                require(arr != null && arr.all { it is kotlinx.serialization.json.JsonPrimitive && it.isString }) { "setting '$name' must be an array of strings" }
+                require(field.options.isEmpty() || arr.all { (it as kotlinx.serialization.json.JsonPrimitive).content in field.options }) { "setting '$name' has a value outside its options" }
+                arr
+            }
+            ConfigFieldTypes.COLOR -> {
+                require(COLOR.matches(text())) { "setting '$name' must be #RRGGBB or #AARRGGBB" }
+                prim!!
+            }
+            ConfigFieldTypes.TEXT, ConfigFieldTypes.IMPLEMENTATION -> { text(); prim!! }
+            else -> value
+        }
+    }
+}

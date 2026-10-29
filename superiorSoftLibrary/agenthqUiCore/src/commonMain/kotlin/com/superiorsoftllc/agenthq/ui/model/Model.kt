@@ -123,6 +123,8 @@ data class ConnectionInfo(
     val swapsRoles: Boolean get() = contractAtLeast(contract, 1, 86)
     /** Contract 1.60.0 (M2-17): an edit's empty `epicId` clears the ticket's epic (an older daemon keeps it). */
     val clearsTicketEpic: Boolean get() = contractAtLeast(contract, 1, 60)
+    /** CONFIG-8 (contract 1.142.0): the daemon serves `config_schema`; below it the dialog uses the hand-written daemon sections. */
+    val servesConfigSchema: Boolean get() = contractAtLeast(contract, 1, 142)
 }
 
 /** Insert [p], or replace the stored profile with its id. */
@@ -675,6 +677,10 @@ data class AppState(
     val usageReport: com.superiorsoftllc.agenthq.ui.protocol.UsageReport? = null,
     /** STATS-2 (contract 1.92.0): the last `session_stats` answer per AgentHQ session id; absent = never answered. */
     val sessionStats: Map<String, SessionStats> = emptyMap(),
+    /** CONFIG-8 (contract 1.142.0): the daemon's last `config_schema`; null = never sent (an older daemon, or none declared): the dialog keeps the hand-written daemon sections. */
+    val daemonConfigSchema: com.superiorsoftllc.agenthq.plugin.api.ConfigSchemaFrame? = null,
+    /** CONFIG-8: the daemon's last `config_values`, kept current by `config_changed`. */
+    val daemonConfigValues: com.superiorsoftllc.agenthq.plugin.api.ConfigValuesFrame? = null,
     /** USAGE-1 (contract 1.141.0): the last `usage_meter` answer; null = never answered. */
     val usageMeter: com.superiorsoftllc.agenthq.ui.protocol.UsageMeterReport? = null,
     /**
@@ -1709,6 +1715,19 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
 
     // USAGE-PACE (1.119.0): the plan meters and allowances, replaced whole by each answer.
     Envelope.USAGE_REPORT -> s.copy(usageReport = json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.UsageReport.serializer(), env.data))
+
+    // CONFIG-8 (1.142.0): the daemon's declared config, replaced whole by each schema / values frame.
+    Envelope.CONFIG_SCHEMA -> runCatching { json.decodeFromString(com.superiorsoftllc.agenthq.plugin.api.ConfigSchemaFrame.serializer(), env.data) }
+        .getOrNull()?.let { s.copy(daemonConfigSchema = it) } ?: s
+    Envelope.CONFIG_VALUES -> runCatching { json.decodeFromString(com.superiorsoftllc.agenthq.plugin.api.ConfigValuesFrame.serializer(), env.data) }
+        .getOrNull()?.let { s.copy(daemonConfigValues = it) } ?: s
+    Envelope.CONFIG_CHANGED -> runCatching { json.decodeFromString(com.superiorsoftllc.agenthq.plugin.api.ConfigChangedFrame.serializer(), env.data) }
+        .getOrNull()?.let { c ->
+            val old = s.daemonConfigValues ?: com.superiorsoftllc.agenthq.plugin.api.ConfigValuesFrame(c.rev)
+            val rows = old.rows.filterNot { it.nodeId == c.node && it.key == c.key } +
+                (c.value?.let { listOf(com.superiorsoftllc.agenthq.plugin.api.NodeConfigEntry(c.node, c.key, it, c.by)) } ?: emptyList())
+            s.copy(daemonConfigValues = old.copy(rev = c.rev, rows = rows))
+        } ?: s
 
     Envelope.USAGE_METER -> runCatching { json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.UsageMeterReport.serializer(), env.data) }
         .getOrNull()?.let { s.copy(usageMeter = it) } ?: s

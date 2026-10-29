@@ -378,7 +378,8 @@ object EventVocabulary {
     // **1.139.0 (ASK-TIMER, ticket-c62e72a9) is ADDITIVE + BEHAVIOURAL**: `prompt_request.expiresAt|onTimeout`; settings `prompts.timeoutSec` 0 = no timer, `prompts.onTimeout` (deny | approve); `new` `promptTimeoutSec|promptOnTimeout`; expiry logged in the transcript; owner questions default `defaultAfterMin` to the timer. See CONTRACT.md.
     // **1.140.0 (ASK-TIMER-2, ticket-cc73295b) is ADDITIVE + BEHAVIOURAL**: `prompt_request.recommended`; `prompt_ask.recommended`; an expired prompt auto-selects its recommended option (fallback `prompts.onTimeout` / no answer). See CONTRACT.md.
     // **1.141.0 (USAGE-1, ticket-98828ad8) is ADDITIVE**: `usage_meter_get` -> `usage_meter` (daily tokens/cost by role, model, source). See CONTRACT.md.
-    const val VERSION = "1.141.0"
+    // **1.142.0 (CONFIG-8) is ADDITIVE**: `config_get`, `config_schema`, `config_values`, `config_set` (expectRev), `config_changed`; `GET /config/schema`. See CONTRACT.md.
+    const val VERSION = "1.142.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA
