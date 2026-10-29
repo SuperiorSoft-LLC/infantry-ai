@@ -10,6 +10,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import com.superiorsoftllc.agenthq.plugin.api.ConfigManifestSource
 import com.superiorsoftllc.agenthq.plugin.api.EventBus
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.PluginEvent
@@ -784,12 +785,12 @@ class TabFactory(
             }
         }
         val merged = ConfigTree.merge(core, sources, parents)
-        ConfigTree(merged.fields, merged.parents, problems + merged.problems)
+        ConfigTree(merged.fields, merged.parents, problems + merged.problems, merged.declarations)
     }
 
     /** P1 step 2: the stored copy of the config (the daemon's `node_config`), loaded by the window once its link is live. */
     val config: NodeConfigState by lazy {
-        NodeConfigState(configTree, configApi) { ImplementationFields.reconcile(it, configTree, implementations) }
+        NodeConfigState(configTree, configApi, host = if (loadsAtRunTime) "desktop" else "compiled", sources = modules.map { ConfigManifestSource(it.manifest.name, it.manifest.version) }) { ImplementationFields.reconcile(it, configTree, implementations) }
     }
 
     /** P1 step 2 (6s C): what [com.superiorsoftllc.agenthq.ui.shell.ShellContext.config] answers: [config] resolved over [configTree]. */

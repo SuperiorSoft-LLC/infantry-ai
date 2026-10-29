@@ -8,6 +8,9 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.DpSize
+import com.superiorsoftllc.agenthq.ui.shell.ConfigValues
+import com.superiorsoftllc.agenthq.ui.shell.EmptyConfig
+import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 
 /**
  * BLOCKS-LAYOUT L1 (docs/BLOCKS-LAYOUT-DESIGN.md section 1): the block contract. Since L3 the whole shell is a tree of
@@ -60,8 +63,10 @@ enum class Show { Always, Wide, Compact }
  * What a parent hands a child: its placement [modifier], in a stack the [box] it can align itself in, and in a row the
  * [row] (L6): a block not yet decomposed that emits several items with their own weights into its parent row (both
  * public since S4c: the overlays that align in the dock and the title bar and right panel that emit into a row are app UI).
+ * CONFIG-3: [blockId] is the id of the block being drawn (the node its config is injected from, see [config]); blank where
+ * a scope is made by hand (a test, a tab calling a tree directly), which reads as no config.
  */
-class BlockScope(val modifier: Modifier, val box: BoxScope?, val row: RowScope? = null) {
+class BlockScope(val modifier: Modifier, val box: BoxScope?, val row: RowScope? = null, val blockId: String = "") {
     /** Aligns in the parent stack's Box; outside a stack it is the modifier unchanged. */
     fun Modifier.aligned(alignment: Alignment): Modifier = box?.run { this@aligned.align(alignment) } ?: this
 }
@@ -75,3 +80,12 @@ val LocalBlockSize = staticCompositionLocalOf { DpSize.Unspecified }
  * over it do not blur with it.
  */
 internal val LocalHostSurface = compositionLocalOf<Modifier> { Modifier }
+
+/**
+ * CONFIG-3 (docs/CONFIG-MANIFEST-DESIGN.md section 3): this block's own resolved config values (its node id, then its
+ * parents), live: the caller recomposes when a value changes. Missing config is a value, not an error: outside a shell
+ * every key reads null and the block uses its constants.
+ */
+@Composable
+fun BlockScope.config(): ConfigValues =
+    LocalShellContext.current?.config?.takeIf { blockId.isNotEmpty() }?.values(blockId) ?: EmptyConfig

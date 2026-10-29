@@ -25,14 +25,36 @@ private val nodeConfigJson = Json { ignoreUnknownKeys = true }
 class NodeConfigStore(private val db: AgentHQDatabase, private val clock: () -> Long = System::currentTimeMillis) {
     private val q = db.node_configQueries
 
-    fun all(): List<NodeConfigEntry> = q.allNodeConfig().executeAsList().map {
+    fun all(): List<NodeConfigEntry> = every().filter { it.nodeId != MANIFEST_NODE }
+
+    /** Every row, the reserved [MANIFEST_NODE] ones too. */
+    internal fun every(): List<NodeConfigEntry> = q.allNodeConfig().executeAsList().map {
         NodeConfigEntry(it.node_id, it.key, runCatching { nodeConfigJson.parseToJsonElement(it.value_json) }.getOrNull(), it.set_by, it.updated_at)
+    }
+
+    companion object {
+        /** CONFIG-3: the reserved node id whose rows hold the compiled manifests (key = host); never listed, never a setting. */
+        const val MANIFEST_NODE = "@manifest"
+        /** The `set_by` of a manifest row, so the seed migration cannot touch it. */
+        const val MANIFEST_SET_BY = "manifest"
     }
 
     /** Inserts each entry with a value whose key is not stored yet, as [ConfigSetBy.SEED]. */
     fun seed(entries: List<NodeConfigEntry>) {
         val now = clock()
         db.transaction { for (e in entries) e.value?.let { q.seedNodeConfig(e.nodeId, e.key, it.toString(), ConfigSetBy.SEED, now) } }
+    }
+
+    /**
+     * CONFIG-3 seed migration (docs/CONFIG-MANIFEST-DESIGN.md section 2): deletes each `seed` row whose value equals the
+     * default [defaults] (node id -> key -> JSON) declares, because a default is the manifest's, never a stored row; a seed
+     * row left over differs from the default, so somebody's value: it becomes a user row. User rows are never touched.
+     */
+    fun migrateSeedRows(defaults: Map<String, Map<String, JsonElement>>) {
+        db.transaction {
+            for (e in all()) if (e.nodeId != MANIFEST_NODE && e.setBy == ConfigSetBy.SEED && e.value != null && defaults[e.nodeId]?.get(e.key) == e.value) q.deleteSeedNodeConfig(e.nodeId, e.key)
+            q.adoptSeedNodeConfig()
+        }
     }
 
     /** Writes [entry]'s value (insert or overwrite); a null value removes the row, so the key resolves from the parent again. */
@@ -53,7 +75,7 @@ class NodeConfigStore(private val db: AgentHQDatabase, private val clock: () -> 
  * P1 step 2: the node config surface, behind [installAccessPolicy] like every route but `/health`.
  *
  *  - `GET  /node-config`       every stored row.
- *  - `POST /node-config/seed`  a list of [NodeConfigEntry]; inserts only the keys not stored yet; answers every row.
+ *  - `POST /node-config/seed`  CONFIG-3: a no-op kept for old clients (defaults live in `config_manifest`, not as rows); answers every row.
  *  - `PUT  /node-config`       one [NodeConfigEntry]; writes it (null value = remove); answers every row.
  */
 fun Route.nodeConfigRoutes(store: NodeConfigStore) {
@@ -63,12 +85,12 @@ fun Route.nodeConfigRoutes(store: NodeConfigStore) {
     post("/node-config/seed") {
         val entries = runCatching { nodeConfigJson.decodeFromString(list, call.receiveText()) }.getOrNull()
         if (entries == null) { call.respond(HttpStatusCode.BadRequest, "malformed node config seed"); return@post }
-        call.respond(withContext(Dispatchers.IO) { store.seed(entries); store.all() })
+        call.respond(withContext(Dispatchers.IO) { store.all() })
     }
 
     put("/node-config") {
         val entry = runCatching { nodeConfigJson.decodeFromString(NodeConfigEntry.serializer(), call.receiveText()) }.getOrNull()
-        if (entry == null || entry.nodeId.isBlank() || entry.key.isBlank()) { call.respond(HttpStatusCode.BadRequest, "malformed node config entry"); return@put }
+        if (entry == null || entry.nodeId.isBlank() || entry.key.isBlank() || entry.nodeId == NodeConfigStore.MANIFEST_NODE) { call.respond(HttpStatusCode.BadRequest, "malformed node config entry"); return@put }
         call.respond(withContext(Dispatchers.IO) { store.put(entry); store.all() })
     }
 }

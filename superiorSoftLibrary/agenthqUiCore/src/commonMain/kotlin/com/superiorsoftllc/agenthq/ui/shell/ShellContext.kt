@@ -904,6 +904,21 @@ interface ConfigValues {
     fun boolean(key: String): Boolean?
     /** P1 step 2: a list of strings (a `multiSelect`); null where unset or not a list of strings. */
     fun strings(key: String): List<String>? = null
+    /** CONFIG-3: a `color` field as 0xAARRGGBB (`"#RRGGBB"` is opaque); null where unset or not a colour. */
+    fun color(key: String): Long? = parseConfigColor(string(key))
+    /**
+     * CONFIG-3: whether the user set [key] (a stored `user` row at this node or a parent), as opposed to it resolving
+     * from a declared default. A block that already has its own persisted state applies a value only when this is true.
+     */
+    fun overridden(key: String): Boolean = false
+}
+
+/** CONFIG-3: `"#RRGGBB"` or `"#AARRGGBB"` as 0xAARRGGBB, else null. */
+fun parseConfigColor(text: String?): Long? {
+    val hex = text?.trim()?.removePrefix("#") ?: return null
+    if (hex.length != 6 && hex.length != 8 || !hex.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null
+    val v = hex.toLong(16)
+    return if (hex.length == 6) 0xFF000000L or v else v
 }
 
 /** No config resolved: every key unset, no implementation registered (a shell without a factory, and fakes). */

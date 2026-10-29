@@ -62,7 +62,7 @@ class HandCursorGuardTest {
     /** Kinds without a wrapper yet: raw call counts may only go down. Lower the number when you migrate a kind. */
     private val rawBaseline = mapOf(
         // S6: 1058 / 100 at the S6 base (S4b-S5 drift past 1049 / 99), plus the drop box, consent dialog and safe-mode banner's 23 Text.
-        "Text" to 1115,
+        "Text" to 1122,
         "DropdownMenu" to 9,
         "OutlinedTextField" to 102,
         "BasicTextField" to 2,

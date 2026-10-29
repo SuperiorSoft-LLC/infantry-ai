@@ -270,7 +270,8 @@ fun App(
     val chatBlockRenderers = remember { ChatBlockRenderers().also { it.override("callout", CalloutBlockRenderer) } }
     // THEME-1: the stored theme, applied once before the first themed frame; Palette.theme is its only owner from here on.
     remember(host) { Palette.theme = com.superiorsoftllc.agenthq.ui.model.ThemeSettings.decode(host.uiPref(THEME_PREF_KEY)) }
-    modalBlur.enabled = flags.blurBehindDialogs
+    // CONFIG-3: set when the flag changes, not on every recomposition, so a plugin's blur config (Infantry_Appearance) can set it too.
+    remember(flags.blurBehindDialogs) { modalBlur.enabled = flags.blurBehindDialogs }
     val url = ui.url
     val token = ui.token
     // SWITCH-1: "This computer" + saved servers; a host with neither a local daemon nor a store has no switcher.

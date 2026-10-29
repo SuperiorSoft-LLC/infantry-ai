@@ -44,7 +44,7 @@ class OverrideBlock(
             ModuleTier(false) { override.content(scope, TierBlock(inner, outer)) }
         } else override.content(scope, inner)
     } else {
-        val s = if (inner.wearsHostSurface) BlockScope(scope.modifier.then(LocalHostSurface.current), scope.box, scope.row) else scope
+        val s = if (inner.wearsHostSurface) BlockScope(scope.modifier.then(LocalHostSurface.current), scope.box, scope.row, scope.blockId) else scope
         if (community) ModuleTier(false) { override.content(s, null) } else override.content(s, null)
     }
 

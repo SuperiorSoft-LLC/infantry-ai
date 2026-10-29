@@ -3,6 +3,8 @@ package com.superiorsoftllc.agenthq.ui.plugin.config
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import com.superiorsoftllc.agenthq.plugin.api.ConfigManifest
+import com.superiorsoftllc.agenthq.plugin.api.ConfigManifestSource
 import com.superiorsoftllc.agenthq.plugin.api.ConfigSetBy
 import com.superiorsoftllc.agenthq.plugin.api.DaemonReply
 import com.superiorsoftllc.agenthq.plugin.api.NodeConfigEntry
@@ -17,6 +19,10 @@ interface NodeConfigApi {
     suspend fun seed(entries: List<NodeConfigEntry>): Result<List<NodeConfigEntry>>
     /** Writes [entry] (null value = remove) and answers every stored row. */
     suspend fun put(entry: NodeConfigEntry): Result<List<NodeConfigEntry>>
+    /** CONFIG-3: the manifest the daemon holds for [host], or null when it has none (or is older than the table). */
+    suspend fun manifest(host: String): Result<ConfigManifest?> = Result.success(null)
+    /** CONFIG-3: replaces the daemon's manifest row for [ConfigManifest.host]. */
+    suspend fun putManifest(manifest: ConfigManifest): Result<ConfigManifest?> = Result.success(null)
 }
 
 /** [NodeConfigApi] over [DaemonLink], the window's own daemon (the bearer it connected with). */
@@ -26,6 +32,20 @@ object DaemonNodeConfigApi : NodeConfigApi {
 
     override suspend fun seed(entries: List<NodeConfigEntry>) = rows(DaemonLink.window.send("POST /node-config/seed", json.encodeToString(list, entries)))
     override suspend fun put(entry: NodeConfigEntry) = rows(DaemonLink.window.send("PUT /node-config", json.encodeToString(NodeConfigEntry.serializer(), entry)))
+
+    override suspend fun manifest(host: String): Result<ConfigManifest?> = one(DaemonLink.window.send("GET /config-manifest?host=$host", ""))
+    override suspend fun putManifest(manifest: ConfigManifest): Result<ConfigManifest?> =
+        one(DaemonLink.window.send("PUT /config-manifest", json.encodeToString(ConfigManifest.serializer(), manifest)))
+
+    private fun one(reply: DaemonReply): Result<ConfigManifest?> = when (reply) {
+        is DaemonReply.Ok -> when {
+            reply.status == 404 -> Result.success(null)
+            reply.status in 200..299 -> runCatching { json.decodeFromString(ConfigManifest.serializer(), reply.body) }
+            else -> Result.failure(IllegalStateException("the daemon answered ${reply.status}"))
+        }
+        is DaemonReply.Refused -> Result.failure(IllegalStateException(reply.reason))
+        is DaemonReply.Failed -> Result.failure(IllegalStateException(reply.reason))
+    }
 
     private fun rows(reply: DaemonReply): Result<List<NodeConfigEntry>> = when (reply) {
         is DaemonReply.Ok -> if (reply.status in 200..299) runCatching { json.decodeFromString(list, reply.body) }
@@ -47,6 +67,9 @@ enum class NodeConfigLoad { IDLE, LOADING, LOADED, FAILED }
 class NodeConfigState(
     val tree: ConfigTree,
     private val api: NodeConfigApi = DaemonNodeConfigApi,
+    /** CONFIG-3: which host's manifest row this window compiles (`desktop`, or `compiled` for a wasm / Android module list). */
+    private val host: String = "desktop",
+    private val sources: List<ConfigManifestSource> = emptyList(),
     /** Runs after each successful [load] (6s D: a new implementation may become a field's selection). */
     private val afterLoad: suspend (NodeConfigState) -> Unit = {},
 ) {
@@ -55,6 +78,15 @@ class NodeConfigState(
         private set
     var load: NodeConfigLoad by mutableStateOf(NodeConfigLoad.IDLE)
         private set
+    /**
+     * CONFIG-3: the declarations of the compiled unified manifest the daemon holds for [host] (what the Settings dialog
+     * generates tabs from). Null until a load has published and read it back, and whenever the daemon has none: the
+     * dialog then uses [tree] (the same declarations, built locally), so a bare shell and an older daemon behave as before.
+     */
+    var snapshot: List<ModuleDeclaration>? by mutableStateOf(null)
+        private set
+    /** The declarations to build the dialog from: the daemon's snapshot, else the local [tree]'s. */
+    val declarations: List<ModuleDeclaration> get() = snapshot ?: tree.declarations
     /** The last failure, one line; null after a success. */
     var error: String? by mutableStateOf(null)
         private set
@@ -65,8 +97,20 @@ class NodeConfigState(
     suspend fun load() {
         load = NodeConfigLoad.LOADING
         apply(api.seed(tree.seed()))
-        if (error == null) afterLoad(this)
+        if (error == null) { publishManifest(); afterLoad(this) }
         load = if (error == null) NodeConfigLoad.LOADED else NodeConfigLoad.FAILED
+    }
+
+    /**
+     * CONFIG-3: compiles the tree, and when the daemon's row for [host] has another hash replaces it (the daemon swaps the
+     * row in one transaction and drops seed rows equal to a default). The snapshot is what the daemon answers; any failure
+     * leaves it null and the local tree authoritative for the session. Never an error of the load.
+     */
+    private suspend fun publishManifest() {
+        val local = ConfigManifests.compile(tree, host, sources)
+        val held = api.manifest(host).getOrNull()
+        val stored = if (held?.hash == local.hash) held else api.putManifest(local).getOrNull()
+        snapshot = stored?.let(ConfigManifests::parse)
     }
 
     /** Stores [value] for [node]'s [key] as the user's, or as [setBy] (null = clear it, so it resolves from the parent again). */

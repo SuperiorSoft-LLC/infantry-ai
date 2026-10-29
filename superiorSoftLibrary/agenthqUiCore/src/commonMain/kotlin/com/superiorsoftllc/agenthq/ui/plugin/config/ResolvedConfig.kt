@@ -3,6 +3,7 @@ package com.superiorsoftllc.agenthq.ui.plugin.config
 import com.superiorsoftllc.agenthq.ui.shell.ConfigContext
 import com.superiorsoftllc.agenthq.ui.shell.ConfigValues
 import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldTypes
+import com.superiorsoftllc.agenthq.plugin.api.ConfigSetBy
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -28,7 +29,16 @@ class ResolvedConfig(private val state: NodeConfigState, private val implementat
     private var cacheOf: Any? = null
     private val cache = HashMap<String, Map<String, JsonElement>>()
 
-    override fun values(nodeId: String): ConfigValues = JsonValues(resolved(nodeId))
+    override fun values(nodeId: String): ConfigValues {
+        val values = resolved(nodeId)
+        val chain = state.tree.chain(nodeId)
+        val set = values.keys.filterTo(HashSet()) { k ->
+            chain.withIndex().any { (i, n) ->
+                (i == 0 || !isOwnOnlyKey(k)) && state.stored[n]?.get(k)?.let { it.setBy == ConfigSetBy.USER && it.value.let { v -> v != null && v !is JsonNull } } == true
+            }
+        }
+        return JsonValues(values, set)
+    }
 
     /** The JSON [key] resolves to for [nodeId], or null when unset (the configuration view's editors read it). */
     fun json(nodeId: String, key: String): JsonElement? = resolved(nodeId)[key]
@@ -75,7 +85,8 @@ class ResolvedConfig(private val state: NodeConfigState, private val implementat
 }
 
 /** Typed reads of one node's resolved JSON; a value of another type is null, never coerced. */
-internal class JsonValues(private val values: Map<String, JsonElement>) : ConfigValues {
+internal class JsonValues(private val values: Map<String, JsonElement>, private val userSet: Set<String> = emptySet()) : ConfigValues {
+    override fun overridden(key: String): Boolean = key in userSet
     override val keys: Set<String> get() = values.keys
     private fun prim(key: String) = values[key] as? JsonPrimitive
     override fun string(key: String): String? = prim(key)?.takeIf { it.isString }?.content

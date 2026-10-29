@@ -33,6 +33,8 @@ import com.superiorsoftllc.agenthq.ui.block.layout.flattened
 import com.superiorsoftllc.agenthq.ui.model.UserPortrait
 import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
 import com.superiorsoftllc.agenthq.ui.pair.applyPairing
+import com.superiorsoftllc.agenthq.ui.plugin.config.GeneratedCards
+import com.superiorsoftllc.agenthq.ui.plugin.config.generatedEntries
 import kotlinx.coroutines.launch
 
 private const val CONFIG = "infantry.shell.config"
@@ -122,8 +124,12 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
             // S4c: only the sections among the children are offered; an unfilled settings slot leaves the trust tabs.
             drawn = children.flattened().filter { it !is PlaceholderBlock }.mapNotNull { sectionEntries[it.id] }.toSet(),
             sections = { config ->
+                // CONFIG-3: a generated tab (Appearance) draws its cards from the compiled manifest first, instead of the
+                // hand-written sections they replace; with no card (no jar, or no snapshot and no local declaration) nothing changes.
+                val generated = generatedEntries(s.tabs, config.tab)
                 CompositionLocalProvider(LocalConfigDialogHost provides config) {
-                    RenderPlaced(children.flattened().filter { c -> c !is PlaceholderBlock }.filter { c -> sectionEntries[c.id]?.let(config::shows) ?: true })
+                    GeneratedCards(s.tabs, config.tab, config.highlight)
+                    RenderPlaced(children.flattened().filter { c -> c !is PlaceholderBlock }.filter { c -> sectionEntries[c.id]?.let { it !in generated && config.shows(it) } ?: true })
                 }
             },
         )
