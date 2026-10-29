@@ -145,9 +145,12 @@ fun ProjectPicker(state: AppState, controller: Controller) {
             }
         }
         Spacer(Modifier.width(6.dp))
-        NewProjectBox(enabled = live) { creating = true }
+        // DEMO-MERGE-1: a project change is a write; both boxes are dimmed and say why while writes are refused.
+        val policy = com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current
+        val writeLocked = !policy.canWrite
+        NewProjectBox(enabled = live && !writeLocked, label = policy.label(NEW_PROJECT_LABEL)) { creating = true }
         Spacer(Modifier.width(6.dp))
-        EditProjectBox(enabled = live && current != null) { editing = true }
+        EditProjectBox(enabled = live && current != null && !writeLocked, label = policy.label(EDIT_PROJECT_LABEL)) { editing = true }
     }
 
     if (editing && current != null) ProjectConfigDialog(state, controller, current, live, onDismiss = { editing = false })
@@ -166,9 +169,9 @@ fun ProjectPicker(state: AppState, controller: Controller) {
  * with the shared icon-action tooltip naming what it does.
  */
 @Composable
-private fun NewProjectBox(enabled: Boolean, onClick: () -> Unit) {
+private fun NewProjectBox(enabled: Boolean, label: String = NEW_PROJECT_LABEL, onClick: () -> Unit) {
     val tint = if (enabled) Palette.Accent else Palette.Border
-    IconActionTooltipBox(NEW_PROJECT_LABEL, modifier = Modifier.size(PROJECT_CONTROL_HEIGHT).testTag(NEW_PROJECT_BUTTON_TAG)) { m ->
+    IconActionTooltipBox(label, modifier = Modifier.size(PROJECT_CONTROL_HEIGHT).testTag(NEW_PROJECT_BUTTON_TAG)) { m ->
         Box(
             m.clip(RoundedCornerShape(5.dp)).border(1.5.dp, tint, RoundedCornerShape(5.dp))
                 .clickable(enabled = enabled, role = Role.Button, onClickLabel = NEW_PROJECT_LABEL, onClick = onClick),
@@ -178,9 +181,9 @@ private fun NewProjectBox(enabled: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun EditProjectBox(enabled: Boolean, onClick: () -> Unit) {
+private fun EditProjectBox(enabled: Boolean, label: String = EDIT_PROJECT_LABEL, onClick: () -> Unit) {
     val tint = if (enabled) Palette.Accent else Palette.Border
-    IconActionTooltipBox(EDIT_PROJECT_LABEL, modifier = Modifier.size(PROJECT_CONTROL_HEIGHT).testTag(EDIT_PROJECT_BUTTON_TAG)) { m ->
+    IconActionTooltipBox(label, modifier = Modifier.size(PROJECT_CONTROL_HEIGHT).testTag(EDIT_PROJECT_BUTTON_TAG)) { m ->
         Box(
             m.clip(RoundedCornerShape(5.dp)).border(1.5.dp, tint, RoundedCornerShape(5.dp))
                 .clickable(enabled = enabled, role = Role.Button, onClickLabel = EDIT_PROJECT_LABEL, onClick = onClick),

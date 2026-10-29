@@ -356,7 +356,7 @@ private fun BranchSwitcher(link: LinkContext, ctx: GitContext, projectId: String
                     if (!isCurrent && switchSupported) {
                         OutlinedButton(
                             onClick = { checkout(b.name, create = false) },
-                            enabled = live,
+                            enabled = link.canWrite,
                             modifier = Modifier.testTag(GIT_SWITCH_TAG + b.name),
                         ) { Text("Switch", fontSize = 11.sp) }
                     }
@@ -369,12 +369,12 @@ private fun BranchSwitcher(link: LinkContext, ctx: GitContext, projectId: String
     if (switchSupported) {
         Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
-                newName, { newName = it }, label = { Text("New branch name") }, singleLine = true, enabled = live,
+                newName, { newName = it }, label = { Text("New branch name") }, singleLine = true, enabled = link.canWrite,
                 textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.weight(1f).testTag(GIT_NEW_BRANCH_FIELD_TAG),
             )
             OutlinedButton(
                 onClick = { checkout(newName, create = true) },
-                enabled = live && newName.isNotBlank(),
+                enabled = link.canWrite && newName.isNotBlank(),
                 modifier = Modifier.testTag(GIT_NEW_BRANCH_TAG),
             ) { Text("New branch from current", fontSize = 11.sp) }
         }

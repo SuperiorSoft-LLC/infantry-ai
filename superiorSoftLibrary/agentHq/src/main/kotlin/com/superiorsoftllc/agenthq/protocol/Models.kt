@@ -17,4 +17,9 @@ data class ProviderModels(
     val label: String,
     val models: List<String>,
     val note: String? = null,
+    /**
+     * DEMO-RESTRICT (ticket f9e181af): true = the harness cannot run anything right now (it lists no models, or the
+     * model allowlist names none of them); [note] says why. Pickers show the harness dimmed and not selectable.
+     */
+    val unavailable: Boolean = false,
 )

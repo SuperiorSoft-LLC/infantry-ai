@@ -68,6 +68,8 @@ private data class SkillDraft(
 fun SkillsPane(link: LinkContext, ctx: SkillsContext, onInsert: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val live = link.live
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
+    val canWrite = link.canWrite
     var query by remember { mutableStateOf("") }
     var draft by remember { mutableStateOf<SkillDraft?>(null) }
     var localError by remember { mutableStateOf<String?>(null) }
@@ -95,7 +97,7 @@ fun SkillsPane(link: LinkContext, ctx: SkillsContext, onInsert: (String) -> Unit
             Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("SKILLS", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
                 IconAction(
-                    AhqIcons.Add, "Add skill", onClick = { openDraft(SkillDraft()) }, enabled = live,
+                    AhqIcons.Add, "Add skill", onClick = { openDraft(SkillDraft()) }, enabled = link.canWrite,
                     style = IconActionStyle.TEXT, modifier = Modifier.testTag(SKILLS_ADD_BUTTON_TAG),
                 )
             }
@@ -124,7 +126,7 @@ fun SkillsPane(link: LinkContext, ctx: SkillsContext, onInsert: (String) -> Unit
                     }
                     Column(
                         Modifier.fillMaxWidth().padding(bottom = 6.dp).clip(RoundedCornerShape(6.dp)).background(Palette.Panel)
-                            .clickable(enabled = live, onClickLabel = "Edit skill", role = Role.Button) { edit() }
+                            .clickable(enabled = link.canWrite, onClickLabel = "Edit skill", role = Role.Button) { edit() }
                             .padding(10.dp),
                     ) {
                         Text(p.name, color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
@@ -137,9 +139,9 @@ fun SkillsPane(link: LinkContext, ctx: SkillsContext, onInsert: (String) -> Unit
                         }
                         Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             OutlinedButton(onClick = { onInsert(p.body) }, modifier = Modifier.testTag("skill-insert-${p.name}")) { Text("Insert", fontSize = 11.sp) }
-                            OutlinedButton(onClick = edit, enabled = live, modifier = Modifier.testTag("skill-edit-${p.name}")) { Text("Edit", fontSize = 11.sp) }
+                            OutlinedButton(onClick = edit, enabled = link.canWrite, modifier = Modifier.testTag("skill-edit-${p.name}")) { Text("Edit", fontSize = 11.sp) }
                             OutlinedButton(
-                                onClick = { run { ctx.delete(p.id) } }, enabled = live,
+                                onClick = { run { ctx.delete(p.id) } }, enabled = canWrite,
                                 modifier = Modifier.testTag("skill-delete-${p.name}"),
                             ) { Text("Delete", fontSize = 11.sp, color = Palette.Danger) }
                         }
@@ -154,24 +156,24 @@ fun SkillsPane(link: LinkContext, ctx: SkillsContext, onInsert: (String) -> Unit
                 onSave = { run(onSent = { draft = null }) { ctx.save(d.name, d.description, d.body, d.tags) } },
                 onCancel = { draft = null; localError = null },
                 modifier = Modifier.testTag(SKILL_DIALOG_TAG),
-                saveEnabled = live && d.name.isNotBlank() && d.body.isNotBlank(),
+                saveEnabled = canWrite && d.name.isNotBlank() && d.body.isNotBlank(),
                 error = localError ?: ctx.error,
                 saveTag = SKILL_SAVE_TAG, cancelTag = SKILL_CANCEL_TAG,
             ) {
                 OutlinedTextField(
-                    d.name, { draft = d.copy(name = it) }, label = { Text("Name") }, singleLine = true, enabled = live && d.editing == null,
+                    d.name, { draft = d.copy(name = it) }, label = { Text("Name") }, singleLine = true, enabled = canWrite && d.editing == null,
                     textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().testTag(SKILL_NAME_TAG),
                 )
                 OutlinedTextField(
                     d.description, { draft = d.copy(description = it) }, label = { Text("Description (optional, max 500)") }, singleLine = true,
-                    enabled = live, textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().testTag(SKILL_DESCRIPTION_TAG),
+                    enabled = canWrite, textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().testTag(SKILL_DESCRIPTION_TAG),
                 )
                 OutlinedTextField(
-                    d.body, { draft = d.copy(body = it) }, label = { Text("Skill body") }, minLines = 3, maxLines = 12, enabled = live,
+                    d.body, { draft = d.copy(body = it) }, label = { Text("Skill body") }, minLines = 3, maxLines = 12, enabled = canWrite,
                     textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().testTag(SKILL_BODY_TAG),
                 )
                 OutlinedTextField(
-                    d.tags, { draft = d.copy(tags = it) }, label = { Text("Tags (comma separated)") }, singleLine = true, enabled = live,
+                    d.tags, { draft = d.copy(tags = it) }, label = { Text("Tags (comma separated)") }, singleLine = true, enabled = canWrite,
                     textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().testTag(SKILL_TAGS_TAG),
                 )
             }

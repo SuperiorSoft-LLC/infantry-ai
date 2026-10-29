@@ -141,6 +141,8 @@ class RunPaneHost internal constructor(
 ) {
     val runs: RunsState = context.runs
     val live: Boolean = link.live
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
+    val canWrite: Boolean @Composable get() = link.canWrite
     val picked: CommandSpecView? = runs.commands.firstOrNull { it.id == pickedId.value } ?: runs.commands.firstOrNull()
     val current: RunState? = runs.current
     /** The run going now (one at a time), whichever pill is selected. */
@@ -276,6 +278,8 @@ fun RunEmptySection(run: RunPaneHost, modifier: Modifier = Modifier) {
 fun RunToolbarSection(run: RunPaneHost, modifier: Modifier = Modifier) {
     val runs = run.runs
     val live = run.live
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
+    val canWrite = run.canWrite
     val inFlight = run.inFlight
     val picked = run.picked
     var menuOpen by remember { mutableStateOf(false) }
@@ -289,7 +293,7 @@ fun RunToolbarSection(run: RunPaneHost, modifier: Modifier = Modifier) {
         Box {
             OutlinedButton(
                 onClick = { menuOpen = true },
-                enabled = live && !inFlight && runs.commands.isNotEmpty(),
+                enabled = canWrite && !inFlight && runs.commands.isNotEmpty(),
                 modifier = Modifier.testTag(RUN_COMMAND_PICKER_TAG),
             ) { Text(picked?.name ?: "Pick a command", fontSize = 12.sp) }
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
@@ -304,14 +308,14 @@ fun RunToolbarSection(run: RunPaneHost, modifier: Modifier = Modifier) {
         }
         OutlinedButton(
             onClick = { run.start(interactive) },
-            enabled = live && !inFlight && picked != null,
+            enabled = canWrite && !inFlight && picked != null,
             modifier = Modifier.testTag(RUN_START_TAG),
         ) { Text("Start", fontSize = 12.sp) }
         // Typing into a run needs a console to type in: the desktop only, on a 1.134.0 daemon.
         if (run.context.hasConsoleWindow && run.context.interactiveSupported) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(
-                    checked = interactive, onCheckedChange = { interactive = it }, enabled = live && !inFlight,
+                    checked = interactive, onCheckedChange = { interactive = it }, enabled = canWrite && !inFlight,
                     modifier = Modifier.testTag(RUN_INTERACTIVE_TAG),
                 )
                 Text("Interactive", color = Palette.Muted, fontSize = 12.sp)
@@ -319,7 +323,7 @@ fun RunToolbarSection(run: RunPaneHost, modifier: Modifier = Modifier) {
         }
         OutlinedButton(
             onClick = run::stop,
-            enabled = live && inFlight,
+            enabled = canWrite && inFlight,
             modifier = Modifier.testTag(RUN_STOP_TAG),
         ) { Text("Stop", fontSize = 12.sp) }
         if (runs.commands.isNotEmpty()) {

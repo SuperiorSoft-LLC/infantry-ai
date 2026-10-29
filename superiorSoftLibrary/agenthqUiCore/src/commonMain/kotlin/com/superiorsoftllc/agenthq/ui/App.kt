@@ -320,6 +320,8 @@ fun App(
         }
     }
     val root = remember { FocusRequester() }
+    // DEMO-MERGE-1: the write policy a module provides under the frame, mirrored here for the shortcuts below (default allow-all).
+    val writePolicy = remember { androidx.compose.runtime.mutableStateOf(com.superiorsoftllc.agenthq.ui.shell.WritePolicy.AllowAll) }
 
     DisposableEffect(controller) {
         onDispose { controller.disconnect() }
@@ -377,8 +379,8 @@ fun App(
     fun key(e: KeyEvent): Boolean {
         if (e.type != KeyEventType.KeyDown) return false
         return when {
-            e.isCtrlPressed && e.key == Key.K && e.isShiftPressed -> { selected?.let { a -> actionScope.launch { controller.stopBackgroundProcesses(a.id) } }; true }
-            e.isCtrlPressed && e.isAltPressed && e.key == Key.K -> { selected?.let { a -> actionScope.launch { controller.endSession(a.id) } }; true }
+            e.isCtrlPressed && e.key == Key.K && e.isShiftPressed && writePolicy.value.canWrite -> { selected?.let { a -> actionScope.launch { controller.stopBackgroundProcesses(a.id) } }; true }
+            e.isCtrlPressed && e.isAltPressed && e.key == Key.K && writePolicy.value.canWrite -> { selected?.let { a -> actionScope.launch { controller.endSession(a.id) } }; true }
             e.isCtrlPressed && e.key == Key.K -> {
                 if (state.panels.leftShown) searchFocus.requestFocus()
                 else { controller.revealPanel(PanelSide.LEFT); ui.focusSearchPending = true }
@@ -391,7 +393,7 @@ fun App(
                 true
             }
             e.isCtrlPressed && e.isShiftPressed && e.key == Key.N -> { selected?.let { chat.openSwitch(it.id) }; true }
-            e.isCtrlPressed && e.key == Key.N -> { chat.spawnMode = !chat.spawnMode; chat.focus.requestFocus(); true }
+            e.isCtrlPressed && e.key == Key.N && writePolicy.value.canWrite -> { chat.spawnMode = !chat.spawnMode; chat.focus.requestFocus(); true }
             e.isCtrlPressed && e.key == Key.R -> {
                 selected?.let { a -> chat.resume(controller, actionScope, a) }
                 true
@@ -399,7 +401,7 @@ fun App(
             e.isCtrlPressed && e.key == Key.Eight -> { ui.showBoard = true; true }
             e.isCtrlPressed && digitOf(e.key)?.let(tabs::byShortcut) != null -> { showTab(tabs.byShortcut(digitOf(e.key)!!)!!.id); true }
             e.isCtrlPressed && e.key == Key.L -> { ui.showConnect = true; true }
-            e.isCtrlPressed && e.key == Key.Comma -> { ui.showConfig = true; true }
+            e.isCtrlPressed && e.key == Key.Comma && writePolicy.value.canWrite -> { ui.showConfig = true; true }
             e.isCtrlPressed && e.key == Key.Slash -> { chat.focus.requestFocus(); true }
             else -> false
         }
@@ -426,6 +428,7 @@ fun App(
           com.superiorsoftllc.agenthq.ui.shell.LocalShellContext provides com.superiorsoftllc.agenthq.ui.shell.CoreShellContext(shell, LocalRunConsole.current),
           // TOAST-1: every block can toast; a subtree may provide its own (nearest wins).
           LocalToast provides controller.toasts,
+          com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicySink provides writePolicy,
       ) {
       // BLOCKS-LAYOUT L3: the window is one block tree (L5: with the modules' overrides in); the docked column (`infantry.shell.frame`) wears the surface.
       // BUG-PANEL-TOGGLE-1: the docked column is itself the focus target. A requester on a non-focusable node hands

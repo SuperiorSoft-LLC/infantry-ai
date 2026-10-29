@@ -690,11 +690,12 @@ fun noticeColour(kind: NoticeKind): Color = when (kind) {
 @Composable
 fun InterruptButton(agent: AgentView, live: Boolean, controller: Controller) {
     val actionScope = rememberCoroutineScope()
+    val policy = com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current
     val busy = isBusy(agent)
     IconAction(
-        AhqIcons.Stop, STOP_TURN_LABEL,
+        AhqIcons.Stop, policy.label(STOP_TURN_LABEL),
         onClick = { actionScope.launch { controller.interrupt(agent.id) } },
-        enabled = live && busy,
+        enabled = policy.canWrite && live && busy,
         modifier = Modifier.testTag(INTERRUPT_BUTTON_TAG),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
     )
@@ -738,6 +739,9 @@ internal fun PromptBox(
     val host = LocalPlatformHost.current
     val snapshot = controller.state.collectAsState().value
     val live = snapshot.connection.isLive
+    // DEMO-MERGE-1: the nearest write policy (default allow-all) dims the composer's write controls and says why.
+    val policy = com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current
+    val writeLocked = !policy.canWrite
     // COMPOSER-NEWLINE-1: the box keeps its own caret so Shift+Enter can break the line exactly there. A value set
     // from outside (cleared after a send, a slash row picked) wins and puts the caret at its end.
     var field by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
@@ -828,6 +832,8 @@ internal fun PromptBox(
             placeholder = {
                 Text(
                     when {
+                        // DEMO-MERGE-1: no new agents while writes are refused; with none selected the box says what to do.
+                        writeLocked && (spawnMode || a == null) -> "Pick an agent to message it"
                         spawnMode || a == null -> "Task for a NEW agent. Enter to spawn, Shift+Enter for a new line"
                         isBusy(a) -> "Agent is busy. Enter to queue: sent as its next turn when this one ends"
                         blocker != null -> "Waiting: $blocker"
@@ -879,20 +885,26 @@ internal fun PromptBox(
             IconAction(
                 AhqIcons.Send,
                 when {
+                    // DEMO-MERGE-1: while writes are refused a `/` command is not a chat message; Send is dimmed and says why.
+                    writeLocked && value.trimStart().startsWith("/") -> "Slash commands: ${policy.reason.orEmpty()}"
                     spawnMode || a == null -> "Spawn"
                     isBusy(a) -> "Queue"
                     else -> "Send"
                 },
-                onSubmit, shortcut = "Enter", enabled = live && (value.isNotBlank() || attachments.isNotEmpty()) && !attachBusy && blocker == null,
+                onSubmit, shortcut = "Enter", enabled = live && (value.isNotBlank() || attachments.isNotEmpty()) && !attachBusy && blocker == null &&
+                    !(writeLocked && (spawnMode || a == null || value.trimStart().startsWith("/"))),
                 style = IconActionStyle.FILLED,
             )
             if (a != null && !spawnMode) {
-                IconAction(AhqIcons.SwapHoriz, SWITCH_AGENT_LABEL, onSwitchAgent, shortcut = SWITCH_AGENT_SHORTCUT)
+                // DEMO-MERGE-1: switching changes the agent's harness/model (a write), so it stays visible but dimmed.
+                IconAction(AhqIcons.SwapHoriz, policy.label(SWITCH_AGENT_LABEL), onSwitchAgent, shortcut = SWITCH_AGENT_SHORTCUT, enabled = !writeLocked)
             } else {
                 IconAction(
                     if (spawnMode) AhqIcons.Close else AhqIcons.PersonAdd,
-                    if (spawnMode) "Cancel new agent" else NEW_AGENT_LABEL,
+                    if (spawnMode) "Cancel new agent" else policy.label(NEW_AGENT_LABEL),
                     onSpawnToggle, shortcut = NEW_AGENT_SHORTCUT,
+                    // DEMO-MERGE-1: a new session is a write; the button is dimmed with the reason as its tooltip.
+                    enabled = spawnMode || !writeLocked,
                 )
             }
             if (a != null && !spawnMode) {
@@ -905,9 +917,9 @@ internal fun PromptBox(
                 val running = a.session.state in setOf(SessionState.STARTING, SessionState.BUSY, SessionState.WAITING_INPUT)
                 // Ticket a7f33ba2: the old Kill slot reaps this session's background jobs and leaves the session alive.
                 IconAction(
-                    AhqIcons.Cancel, STOP_BACKGROUND_LABEL,
+                    AhqIcons.Cancel, policy.label(STOP_BACKGROUND_LABEL),
                     onClick = { actionScope.launch { controller.stopBackgroundProcesses(a.id) } }, shortcut = STOP_BACKGROUND_SHORTCUT,
-                    enabled = live && backgroundProcessPids(a.session).isNotEmpty(),
+                    enabled = live && !writeLocked && backgroundProcessPids(a.session).isNotEmpty(),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
                 )
                 // SESSION-RM-1: on an ended session there is nothing left to end, so the same trash button removes it
@@ -916,8 +928,9 @@ internal fun PromptBox(
                 if (a.session.state in ENDED_STATES) {
                     var confirmingRemove by remember(a.id) { mutableStateOf(false) }
                     IconAction(
-                        AhqIcons.DeleteForever, REMOVE_AGENT_LABEL,
-                        onClick = { confirmingRemove = true }, enabled = live,
+                        // DEMO-MERGE-1: the delete is a write.
+                        AhqIcons.DeleteForever, policy.label(REMOVE_AGENT_LABEL),
+                        onClick = { confirmingRemove = true }, enabled = live && !writeLocked,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
                     )
                     if (confirmingRemove) {
@@ -928,14 +941,14 @@ internal fun PromptBox(
                     }
                 } else {
                     IconAction(
-                        AhqIcons.DeleteForever, END_SESSION_LABEL,
-                        onClick = { actionScope.launch { controller.endSession(a.id) } }, shortcut = END_SESSION_SHORTCUT, enabled = live,
+                        AhqIcons.DeleteForever, policy.label(END_SESSION_LABEL),
+                        onClick = { actionScope.launch { controller.endSession(a.id) } }, shortcut = END_SESSION_SHORTCUT, enabled = live && !writeLocked,
                         style = IconActionStyle.FILLED,
                         colors = ButtonDefaults.buttonColors(containerColor = Palette.Danger, contentColor = androidx.compose.ui.graphics.Color.White),
                     )
                 }
                 var confirmingRestart by remember(a.id) { mutableStateOf(false) }
-                IconAction(AhqIcons.Refresh, RESTART_SESSION_LABEL, onClick = { confirmingRestart = true }, enabled = live)
+                IconAction(AhqIcons.Refresh, policy.label(RESTART_SESSION_LABEL), onClick = { confirmingRestart = true }, enabled = live && !writeLocked)
                 if (confirmingRestart) {
                     RestartSessionDialog(
                         a, snapshot, onDismiss = { confirmingRestart = false },
@@ -1004,7 +1017,7 @@ internal fun SpawnRoleRow(state: AppState, controller: Controller) {
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             SectionLabel("Role", Palette.Text, Modifier.padding(end = 4.dp), topGap = false)
             Chip("none", if (state.spawnRole == null) Palette.Accent else Palette.Muted, Modifier.clickable { controller.pickSpawnRole(null) })
-            state.roles.forEach { r ->
+            com.superiorsoftllc.agenthq.ui.model.AllowedRoles.filter(state.allowedRoles, state.roles).forEach { r ->
                 Chip(r.id, if (state.spawnRole == r.id) Palette.Accent else Palette.Muted, Modifier.testTag(SPAWN_ROLE_TAG_PREFIX + r.id).clickable { controller.pickSpawnRole(r.id) })
             }
         }

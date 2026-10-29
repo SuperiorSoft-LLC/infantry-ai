@@ -1,9 +1,19 @@
-# Headless Infantry AI daemon (no Compose UI). Build the context with Gradle, then build the image from it:
+# Headless Infantry AI daemon (no Compose UI) with the harness CLIs inside. Build the context with Gradle, then the image:
 #   ./gradlew :superiorSoftLibrary:agentHq:dockerContext
 #   docker build -t infantryai/infantry-ai:dev superiorSoftLibrary/agentHq/build/docker
-# `dockerContext` copies this file next to the installDist output (agenthq/), so the image holds exactly what a droplet runs.
-# Harness CLIs (claude, opencode, ...) are not baked in: Node/npm is, so the built-in installer puts them in the volume
-# (`agenthq harness-install claude` -> /data/harness-tools). See README "Docker".
+# `dockerContext` copies this file and entrypoint.sh next to the installDist output (agenthq/) and the browser bundle
+# (agenthq/web), so the image holds exactly what a droplet runs. installDist is the daemon's own runtime classpath:
+# no Compose/skiko jar is in it (those are only in the desktop app), so nothing Windows-only reaches the image.
+#
+# Harness CLIs baked in (DOCKER-2, ticket c00d1d1c): opencode and pi always, claude only with --build-arg INSTALL_CLAUDE=true.
+# Pin versions with --build-arg OPENCODE_VERSION=... / PI_VERSION=... / CLAUDE_VERSION=... (default: latest at build time).
+# They land in /usr/local/bin, which the daemon finds on PATH (executables/ExecutableResolver.kt). The built-in installer
+# (`agenthq harness-install <id>` -> /data/harness-tools) still works and wins over the baked-in copy when used.
+
+# SANDBOX-1: the Landlock launcher (limits.sandbox.mode = 1 wraps every agent CLI with it). Static: no runtime deps.
+FROM gcc:13-bookworm AS landlock
+COPY landlock-exec.c /src/landlock-exec.c
+RUN gcc -O2 -static -Wall -Werror -o /landlock-exec /src/landlock-exec.c
 
 FROM eclipse-temurin:21-jre AS stage
 COPY agenthq /opt/agenthq
@@ -11,17 +21,31 @@ RUN chmod +x /opt/agenthq/bin/agenthq
 
 FROM eclipse-temurin:21-jre
 LABEL org.opencontainers.image.title="Infantry AI" org.opencontainers.image.description="Infantry AI headless daemon (formerly AgentHQ)"
-# git: ticket starts cut worktrees. curl: health check.
-RUN apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates \
+# git: ticket starts cut worktrees. curl: health check. ripgrep: opencode/pi search tools use it when present.
+RUN apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates ripgrep \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --create-home --uid 10001 --home-dir /home/agenthq agenthq \
     && mkdir -p /data /work && chown agenthq:agenthq /data /work
-# Node 22 + npm for the harness installer (HARNESS-INSTALL-1), from the official image: Ubuntu's nodejs is too old (< 20).
+# Node 22 + npm, from the official image: Ubuntu's nodejs is too old (pi needs node >= 22.19).
 COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
 COPY --from=node:22-bookworm-slim /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -s ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+
+ARG OPENCODE_VERSION=latest
+ARG PI_VERSION=latest
+ARG INSTALL_CLAUDE=false
+ARG CLAUDE_VERSION=latest
+RUN npm install -g --no-audit --no-fund "opencode-ai@${OPENCODE_VERSION}" "@earendil-works/pi-coding-agent@${PI_VERSION}" \
+    && if [ "$INSTALL_CLAUDE" = "true" ]; then npm install -g --no-audit --no-fund "@anthropic-ai/claude-code@${CLAUDE_VERSION}"; fi \
+    && npm cache clean --force \
+    && opencode --version && pi --version
+
 COPY --from=stage /opt/agenthq /opt/agenthq
+COPY --from=landlock /landlock-exec /usr/local/bin/landlock-exec
+COPY entrypoint.sh /usr/local/bin/infantry-entrypoint
+# LF line ends are kept by .gitattributes (*.sh eol=lf); a CRLF script would fail with "not found".
+RUN chmod 755 /usr/local/bin/infantry-entrypoint
 
 ARG AGENTHQ_VERSION=dev
 ENV AGENTHQ_VERSION=$AGENTHQ_VERSION \
@@ -30,13 +54,19 @@ ENV AGENTHQ_VERSION=$AGENTHQ_VERSION \
     AGENTHQ_PORT=8787 \
     AGENTHQ_STATE_DIR=/data \
     AGENTHQ_HOME=/data \
+    AGENTHQ_TOKEN_FILE=/data/access-token \
     AGENTHQ_BIN=/opt/agenthq/bin \
     AGENTHQ_WEB_DIR=/opt/agenthq/web \
+    JAVA_OPTS="-Xms32m -Xmx512m" \
+    AGENTHQ_LIMIT_HEALTH_WATCHDOG_FAILURES=3 \
     PATH=/opt/agenthq/bin:$PATH
-# AGENTHQ_TOKEN (or AGENTHQ_TOKEN_FILE) is required: the daemon refuses a non-loopback bind without one.
+# Ticket 55d60a5e: Docker restarts a container that EXITS, never one that is only unhealthy. The daemon's health watchdog
+# (limits.health.*) asks its own /health every 10 s and halts the JVM (exit 3) after 3 failures in a row, so
+# `restart: unless-stopped` brings it back. AGENTHQ_LIMIT_HEALTH_WATCHDOG_FAILURES=0 turns it off.
+# Token: AGENTHQ_TOKEN, or the file AGENTHQ_TOKEN_FILE; when neither exists the entrypoint generates the file in /data on
+# first start (AGENTHQ_TOKEN_AUTO=false = refuse to start instead). The daemon refuses a non-loopback bind without one.
 # WEB-1: the browser client is at http://<host>:8787/. Set AGENTHQ_WEB_HOSTS to the host name(s) the browser uses
 # (e.g. agents.example.com): inside a container the daemon cannot see the host's own addresses.
-# Mount the keystore master key and set AGENTHQ_KEYSTORE_KEY_FILE (CONTRACT.md 1.102.0); never bake it in.
 
 USER agenthq
 WORKDIR /work
@@ -44,4 +74,4 @@ VOLUME ["/data"]
 EXPOSE 8787
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
     CMD curl -fsS "http://127.0.0.1:${AGENTHQ_PORT}/health" || exit 1
-ENTRYPOINT ["java", "-cp", "/opt/agenthq/lib/*", "-Djava.awt.headless=true", "-Xms32m", "-Xmx512m", "com.superiorsoftllc.agenthq.daemon.DaemonMainKt"]
+ENTRYPOINT ["/usr/local/bin/infantry-entrypoint"]

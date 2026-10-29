@@ -88,6 +88,8 @@ fun <T> SearchableSelect(
     onBackOut: (() -> Unit)? = null,
     /** Unselected row text; the host passes its surface's content color (a light dialog needs a dark one). */
     textColor: Color = Palette.Text,
+    /** Drawn between the search box and the options, e.g. the "Model: ..." label right above the choice. */
+    aboveList: (@Composable () -> Unit)? = null,
 ) {
     val shown = if (text == null) items else remember(items, query) { filterRanked(items, query, text) }
     var highlight by remember(query, shown.size) { mutableIntStateOf(0) }
@@ -100,6 +102,7 @@ fun <T> SearchableSelect(
 
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         if (totalCount == 0 && query.isEmpty()) {
+            aboveList?.invoke()
             Text(emptyText, color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(searchTag + SELECT_EMPTY_SUFFIX))
             return@Column
         }
@@ -125,6 +128,7 @@ fun <T> SearchableSelect(
             "${shown.size} of $totalCount", color = Palette.Muted, fontSize = 10.sp,
             modifier = Modifier.align(Alignment.End).testTag(searchTag + SELECT_COUNT_SUFFIX),
         )
+        aboveList?.invoke()
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = maxListHeight).bringIntoViewRequester(rowsInView), state = listState, verticalArrangement = Arrangement.spacedBy(3.dp)) {
             itemsIndexed(shown, key = { _, it -> key(it) }) { index, item ->
                 val on = isSelected(item)

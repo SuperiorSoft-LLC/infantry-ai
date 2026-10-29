@@ -178,6 +178,8 @@ class Controller(
                             historySince = cur.historySince,
                             // BUILD-STAMP-1: set by `ready`, like the contract; a link-state change keeps it.
                             daemonBuild = cur.daemonBuild,
+                            readyFields = cur.readyFields,
+                            notices = cur.notices,
                         ),
                     )
                 }
@@ -209,6 +211,8 @@ class Controller(
                         // The board and the triggers load once the daemon says which contract it speaks, so an
                         // older daemon is never sent a frame it does not know (it would answer with an error).
                         val contract = _state.value.connection.contract
+                        // DEMO-MERGE-1: a restricted link (`ready` access=restricted) refuses the owner-only reads below; do not provoke them.
+                        val restricted = _state.value.connection.restricted
                         if (contractAtLeast(contract, 1, 5)) client.send(WireRequests.ticketList())
                         if (contractAtLeast(contract, 1, 14)) client.send(Envelope(Envelope.TRIGGER_LIST))
                         if (contractAtLeast(contract, 1, 8)) client.send(WireRequests.projectList())
@@ -233,23 +237,23 @@ class Controller(
                         }
                         // CLIPATH-1: where each CLI is launched from, shown in the Configuration modal (1.73.0).
                         if (contractAtLeast(contract, CliLocationsSetting.SINCE_MAJOR, CliLocationsSetting.SINCE_MINOR)) {
-                            client.send(WireRequests.cliLocations())
+                            if (!restricted) client.send(WireRequests.cliLocations())
                         }
                         // HARNESS-INSTALL-1: the daemon's own check of each harness CLI (1.100.0).
                         if (contractAtLeast(contract, 1, 102)) {
-                            client.send(WireRequests.harnessInstallStatus())
+                            if (!restricted) client.send(WireRequests.harnessInstallStatus())
                         }
                         // BUG-PERM-1: the global Tool approval, shown in the Configuration modal (1.76.0).
                         if (contractAtLeast(contract, ToolApprovalSetting.SINCE_MAJOR, ToolApprovalSetting.SINCE_MINOR)) {
-                            client.send(WireRequests.toolApproval())
+                            if (!restricted) client.send(WireRequests.toolApproval())
                         }
                         // CONFIG-11: the daemon's declared config (schema + values), merged into the Settings dialog (1.142.0).
                         if (_state.value.connection.servesConfigSchema) client.send(Envelope(Envelope.CONFIG_GET, ""))
                         // SECRETS-1: the keystore's set / not set state, shown in the Configuration modal (1.100.0).
-                        if (contractAtLeast(contract, 1, 102)) client.send(WireRequests.secretStatus())
+                        if (!restricted && contractAtLeast(contract, 1, 102)) client.send(WireRequests.secretStatus())
                         // ROGUE-1: the rogue process detector's first report, for the status-bar badge (1.120.0).
                         if (contractAtLeast(contract, ProcessWatchView.SINCE_MAJOR, ProcessWatchView.SINCE_MINOR)) {
-                            client.send(WireRequests.processes())
+                            if (!restricted) client.send(WireRequests.processes())
                         }
                     }
                     // The sidebar shows the active project's workspaces, including the one chosen by default.
@@ -364,7 +368,9 @@ class Controller(
      * mode) [provider] is the one picked for the new agent; null asks for the daemon's default.
      */
     suspend fun requestCommands(sessionId: String?, typed: String, provider: String? = null): CommandResult =
-        send(WireRequests.commandCatalog(sessionId, typed, provider))
+        // DEMO-MERGE-1: a restricted link refuses `command_catalog`; never ask, so typing `/` shows no error.
+        if (_state.value.connection.restricted) CommandResult.Refused("slash commands are not available on this link")
+        else send(WireRequests.commandCatalog(sessionId, typed, provider))
 
     /**
      * ASSISTANT-1 (contract 1.115.0): ask the daemon for the installation-wide Assistant. The daemon creates it on the first

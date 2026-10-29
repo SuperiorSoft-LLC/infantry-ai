@@ -137,7 +137,7 @@ fun Sidebar(
                     if (state.agents.isEmpty()) "No agents yet." else "No agent matches the filter.",
                     color = Palette.Muted, fontSize = 12.sp,
                 )
-                if (state.agents.isEmpty() && state.connection.isLive) {
+                if (state.agents.isEmpty() && state.connection.canWrite) {
                     TextButton(onClick = onNew) { Text("Spawn one (Ctrl+N)") }
                 }
             }
@@ -145,10 +145,13 @@ fun Sidebar(
         AgentsList(state, visible, onSelect, onRemove, Modifier.weight(1f), onAssign)
         HorizontalDivider(color = Palette.Border)
         // UX-ICON-1: the same New agent icon as the composer, with its label (the sidebar has the room).
+        // DEMO-MERGE-1: dimmed, with the reason as its tooltip, while the write policy refuses writes.
+        val policy = com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current
+        val writeLocked = !policy.canWrite
         IconAction(
-            AhqIcons.PersonAdd, NEW_AGENT_LABEL, onNew, Modifier.fillMaxWidth().testTag(SIDEBAR_NEW_AGENT_TAG),
-            shortcut = NEW_AGENT_SHORTCUT, style = IconActionStyle.TEXT,
-            colors = ButtonDefaults.textButtonColors(contentColor = Palette.Accent), text = NEW_AGENT_LABEL, textColor = Palette.Accent,
+            AhqIcons.PersonAdd, policy.label(NEW_AGENT_LABEL), onNew, Modifier.fillMaxWidth().testTag(SIDEBAR_NEW_AGENT_TAG),
+            shortcut = NEW_AGENT_SHORTCUT, style = IconActionStyle.TEXT, enabled = !writeLocked,
+            colors = ButtonDefaults.textButtonColors(contentColor = Palette.Accent), text = NEW_AGENT_LABEL, textColor = if (writeLocked) Palette.Muted else Palette.Accent,
         )
     }
 }
@@ -317,13 +320,15 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
     var menuOpen by remember { mutableStateOf(false) }
     var confirming by remember { mutableStateOf(false) }
     val live = state.connection.isLive
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
+    val canWrite = state.connection.canWrite
     val focusSource = remember { MutableInteractionSource() }
     val focused by focusSource.collectIsFocusedAsState()
     Box {
         Box(
             Modifier.padding(top = 4.dp).size(width = 22.dp, height = 18.dp).clip(RoundedCornerShape(4.dp))
                 .alpha(if (revealed || menuOpen || focused) 1f else 0f)
-                .clickable(interactionSource = focusSource, indication = null, enabled = live, role = Role.Button, onClickLabel = "Agent actions") { menuOpen = true }
+                .clickable(interactionSource = focusSource, indication = null, enabled = canWrite, role = Role.Button, onClickLabel = "Agent actions") { menuOpen = true }
                 .semantics { contentDescription = "Agent actions" }
                 .testTag("session-menu-${a.id}"),
             contentAlignment = Alignment.Center,
@@ -347,11 +352,17 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
                 )
             }
             HorizontalDivider(color = Palette.Border)
-            DropdownMenuItem(
-                text = { Text("Remove", color = Palette.Danger, fontSize = 12.sp) },
-                onClick = { menuOpen = false; confirming = true },
-                modifier = Modifier.testTag("session-remove-${a.id}"),
-            )
+            // DEMO-MERGE-1: the delete is a write; Remove is dimmed and says why while writes are refused.
+            val policy = com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current
+            val writeLocked = !policy.canWrite
+            WritePolicyTooltip { m ->
+                DropdownMenuItem(
+                    text = { Text("Remove", color = if (writeLocked) Palette.Border else Palette.Danger, fontSize = 12.sp) },
+                    onClick = { menuOpen = false; confirming = true },
+                    enabled = !writeLocked,
+                    modifier = m.testTag("session-remove-${a.id}"),
+                )
+            }
         }
     }
     if (confirming) RemoveAgentDialog(a, state, onDismiss = { confirming = false }, onRemove = { confirming = false; onRemove(a.id) })

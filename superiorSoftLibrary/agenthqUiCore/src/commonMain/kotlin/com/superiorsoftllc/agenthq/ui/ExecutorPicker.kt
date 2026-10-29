@@ -5,7 +5,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,6 +30,8 @@ const val EXECUTOR_MODEL_LABEL_TAG = "executor-model-label"
 const val EXECUTOR_NOTE_TAG = "executor-note"
 const val EXECUTOR_PROVIDER_LABEL_TAG = "executor-provider-label"
 const val EXECUTOR_MODEL_MISSING_TAG = "executor-model-missing"
+/** DEMO-RESTRICT: the reason line of an unavailable harness, `executor-unavailable-<harness>`. */
+const val EXECUTOR_UNAVAILABLE_TAG_PREFIX = "executor-unavailable-"
 
 /**
  * The test tags of one [ExecutorPicker]. The defaults are the doc's `executor-*` names (section 7, rule 5); a host
@@ -50,7 +60,7 @@ data class ExecutorPickerTags(
  *  - A harness that lists no models keeps a free-text field with its default, plus the daemon's note saying why.
  *  - No harnesses yet: one loading line, never an empty control.
  */
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun ExecutorPicker(
     model: ExecutorPickerModel,
@@ -83,11 +93,37 @@ fun ExecutorPicker(
                 )
             }
             ex.harnesses.forEach { h ->
-                HarnessChip(
-                    h.id, if (ex.harness == h.id) Palette.Accent else Palette.Muted,
-                    Modifier.testTag(tags.harness(h.id)).clickable { onChange(ex.withHarness(h.id)) },
-                )
+                val why = ex.unavailableReason(h.id)
+                if (why == null) {
+                    HarnessChip(
+                        h.id, if (ex.harness == h.id) Palette.Accent else Palette.Muted,
+                        Modifier.testTag(tags.harness(h.id)).clickable { onChange(ex.withHarness(h.id)) },
+                    )
+                } else {
+                    // DEMO-RESTRICT: dimmed, not clickable, the reason on hover and below the chips.
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        tooltip = { PlainTooltip { Text("${h.id} unavailable: $why", fontSize = 11.sp) } },
+                        state = rememberTooltipState(isPersistent = true),
+                    ) {
+                        HarnessChip(
+                            h.id, (if (ex.harness == h.id) Palette.Accent else Palette.Muted).copy(alpha = 0.35f),
+                            Modifier.testTag(tags.harness(h.id)).semantics {
+                                disabled()
+                                contentDescription = "${h.id} unavailable: $why"
+                            },
+                        )
+                    }
+                }
             }
+        }
+        ex.harnesses.mapNotNull { h -> ex.unavailableReason(h.id)?.let { h.id to it } }.forEach { (id, why) ->
+            // One line each (a CLI-not-found reason lists every path tried; the tooltip keeps the whole text).
+            Text(
+                "$id unavailable: ${why.lineSequence().first().trim()}", color = Palette.Muted.copy(alpha = 0.7f), fontSize = 10.sp,
+                maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.testTag(EXECUTOR_UNAVAILABLE_TAG_PREFIX + id),
+            )
         }
         val harness = ex.harness
         if (harness == null) {
@@ -126,22 +162,6 @@ fun ExecutorPicker(
             )
         }
 
-        // PICKER-UX: a lone model is named as the only one on offer, so nobody hunts for another choice.
-        val sole = ex.soleModel?.id
-        SectionLabel(
-            when {
-                sole != null && ex.model == sole -> "Model: $sole (only one allowed in this deployment)"
-                ex.model != null -> "Model: ${ex.model}"
-                else -> "Model (none picked: harness default)"
-            },
-            textColor, Modifier.testTag(EXECUTOR_MODEL_LABEL_TAG),
-        )
-        if (ex.modelMissing) {
-            Text(
-                "\"${ex.model}\" is no longer in this harness's catalog; it is kept as stored until you pick another.",
-                color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.testTag(EXECUTOR_MODEL_MISSING_TAG),
-            )
-        }
         SearchableSelect(
             items = ex.modelOptions, query = ex.modelQuery, onQueryChange = { onChange(ex.withModelQuery(it)) },
             onPick = { onChange(ex.withModel(it.id, it.group)) },
@@ -153,6 +173,24 @@ fun ExecutorPicker(
             totalCount = ex.withModelQuery("").modelOptions.size,
             onBackOut = if (!ex.providerCollapsed && ex.selectedGroup != null) ({ onChange(ex.withGroup(null)) }) else null,
             textColor = textColor,
+            aboveList = {
+                // PICKER-UX: a lone model is named as the only one on offer, so nobody hunts for another choice.
+                val sole = ex.soleModel?.id
+                SectionLabel(
+                    when {
+                        sole != null && ex.model == sole -> "Model: $sole (only one allowed in this deployment)"
+                        ex.model != null -> "Model: ${ex.model}"
+                        else -> "Model (none picked: harness default)"
+                    },
+                    textColor, Modifier.testTag(EXECUTOR_MODEL_LABEL_TAG),
+                )
+                if (ex.modelMissing) {
+                    Text(
+                        "\"${ex.model}\" is no longer in this harness's catalog; it is kept as stored until you pick another.",
+                        color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.testTag(EXECUTOR_MODEL_MISSING_TAG),
+                    )
+                }
+            },
         )
     }
 }

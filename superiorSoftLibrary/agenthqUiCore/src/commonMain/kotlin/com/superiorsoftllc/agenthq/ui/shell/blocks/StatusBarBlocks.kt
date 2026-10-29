@@ -156,12 +156,15 @@ object StatusConfigCog : Block("configCog", "$FOOTER_NODE.configCog") {
     @Composable
     override fun Render(scope: BlockScope) {
         val window = (LocalShellContext.current ?: return).window
+        // DEMO-MERGE-1: a module's write policy that refuses writes dims the cog and says why (default: allowed).
+        val policy = com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current
+        val locked = !policy.canWrite
         Box(
             scope.modifier.padding(start = 10.dp).size(24.dp)
-                .clickable(role = Role.Button) { window.openConfig() }
-                .semantics { contentDescription = "Configuration" },
+                .clickable(enabled = !locked, role = Role.Button) { window.openConfig() }
+                .semantics { contentDescription = if (locked) policy.reason ?: "Configuration" else "Configuration" },
             contentAlignment = Alignment.Center,
-        ) { Icon(AhqIcons.Cog, contentDescription = null, tint = Palette.Muted, modifier = Modifier.size(14.dp)) }
+        ) { Icon(AhqIcons.Cog, contentDescription = null, tint = if (locked) Palette.Border else Palette.Muted, modifier = Modifier.size(14.dp)) }
     }
 }
 

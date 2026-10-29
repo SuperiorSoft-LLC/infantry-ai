@@ -55,7 +55,9 @@ const val PROCESSES_AUTO_REAP_TAG = "processes-auto-reap"
 @Composable
 fun ProcessesBadge(link: LinkContext, processes: ProcessesContext, modifier: Modifier = Modifier) {
     val live = link.live && link.contractAtLeast(ProcessWatchView.SINCE_MAJOR, ProcessWatchView.SINCE_MINOR)
-    if (!live) return
+    // DEMO-MERGE-1: a restricted link refuses `processes` (host process lines); no badge, no poll
+    if (!live || link.restricted) return
+
     // The context is provided anew as the state changes: the poll keeps its clock and asks the newest one.
     val current by rememberUpdatedState(processes)
     LaunchedEffect(Unit) {

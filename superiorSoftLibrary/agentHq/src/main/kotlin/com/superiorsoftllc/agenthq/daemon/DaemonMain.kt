@@ -129,6 +129,7 @@ import com.superiorsoftllc.agenthq.worktree.TicketBaseRef
 import com.superiorsoftllc.agenthq.worktree.TicketBranches
 import com.superiorsoftllc.agenthq.worktree.WorktreeStatus
 import kotlinx.serialization.json.JsonArray
+import io.ktor.http.HttpStatusCode
 import io.ktor.serialization.kotlinx.json.json
 import io.ktor.server.application.ApplicationStarted
 import io.ktor.server.application.install
@@ -137,6 +138,8 @@ import io.ktor.server.engine.EmbeddedServer
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.server.response.respond
+import io.ktor.server.response.respondText
+import io.ktor.server.response.header
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.DefaultWebSocketServerSession
@@ -202,6 +205,8 @@ private const val DEFAULT_DB_NAME = "agenthq.db"
 private const val SESSION_CLOSE_GRACE_MS = 3_000L
 private const val SESSION_REPLAY_REQUEST_TYPE = "replay_request"
 private const val SESSION_REPLAY_GAP_TYPE = "replay_gap"
+/** Ticket 9bf81983: the frames a demo visitor's turn limit counts (each makes an agent run). */
+private val DEMO_COUNTED_TURNS = setOf(Envelope.PROMPT, Envelope.RESUME, Envelope.MAIL_SEND)
 private const val SESSION_REPLAY_BUFFER_CAPACITY = 256
 private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
@@ -283,6 +288,31 @@ private data class Health(
     val providerStatus: Map<String, String> = emptyMap(),
     /** Contract 1.14.0: triggers currently tripped (waiting for `trigger_arm`). */
     val triggersTripped: Int = 0,
+    /**
+     * Ticket 55d60a5e: `ok`, `stuck` (no answer within `limits.health.dbTimeoutSeconds`) or `error`. Anything but `ok`
+     * comes with HTTP 503 and [status] `unhealthy`; the counts above are then the last ones the database gave.
+     */
+    val database: String = "ok",
+    /** Ticket 55d60a5e: how long the database has not answered (`stuck`), or its error message (`error`). */
+    val databaseDetail: String? = null,
+)
+
+/** Ticket 55d60a5e: the database-backed part of `/health`, read through the [HealthGate]. */
+private data class HealthCounts(
+    val sessions: Int,
+    val worktrees: Int,
+    val pods: Int,
+    val runsInFlight: Int,
+    val attentionOpen: Int,
+    val triggersTripped: Int,
+)
+
+/** Ticket 55d60a5e: the health limits, resolved once at start-up (see [LimitRegistry.HEALTH_DB_TIMEOUT_SECONDS]). */
+data class HealthSettings(
+    val dbTimeoutMs: Long,
+    val watchdogFailures: Int,
+    val watchdogIntervalMs: Long,
+    val watchdogTimeoutMs: Long,
 )
 
 /** States from which a session can no longer take a plain prompt: a new/last-known session is used. */
@@ -355,6 +385,18 @@ fun main() {
     stateLock.recordPort(bound)
     Runtime.getRuntime().addShutdownHook(Thread { daemon.releasePortFile(); stateLock.release() })
     println("[agentHq] listening on ws://${daemon.host}:$bound/ws")
+    // Ticket 55d60a5e: the headless daemon only (the desktop app embeds the daemon and never runs main).
+    val health = daemon.healthSettings
+    if (health.watchdogFailures > 0) {
+        val url = HealthWatchdog.selfUrl(daemon.host, bound)
+        HealthWatchdog(url, health.watchdogIntervalMs, health.watchdogTimeoutMs, health.watchdogFailures).start()
+        println(
+            "[agentHq] health watchdog: $url every ${health.watchdogIntervalMs / 1000} s, halts after " +
+                "${health.watchdogFailures} failed checks (limits.health.watchdog*)",
+        )
+    } else {
+        println("[agentHq] health watchdog: off (limits.health.watchdogFailures = 0)")
+    }
     // The server runs on its own threads; this thread only keeps the process alive until it is stopped.
     Thread.currentThread().join()
 }
@@ -429,6 +471,13 @@ class AgentHqDaemon(
      */
     private val background: List<AutoCloseable> = emptyList(),
     private val processWatchScheduler: AutoCloseable? = null,
+    /** Ticket 55d60a5e: the health limits [build] resolved at start-up; [main] starts the watchdog from them. */
+    val healthSettings: HealthSettings = HealthSettings(
+        dbTimeoutMs = LimitRegistry.HEALTH_DB_TIMEOUT_SECONDS.default * 1000L,
+        watchdogFailures = LimitRegistry.HEALTH_WATCHDOG_FAILURES.default.toInt(),
+        watchdogIntervalMs = LimitRegistry.HEALTH_WATCHDOG_INTERVAL_SECONDS.default * 1000L,
+        watchdogTimeoutMs = LimitRegistry.HEALTH_WATCHDOG_TIMEOUT_SECONDS.default * 1000L,
+    ),
 ) {
     @Volatile private var recordedPort: Int? = null
     /** ASK-1: the `defaultAfterMin` sweep, started by [start], stopped by [close]. */
@@ -643,8 +692,16 @@ class AgentHqDaemon(
             sessionIds: () -> String = { UUID.randomUUID().toString() },
             /** ROGUE-1: free RAM for the process watch; the tab-shots renderer pins it so the host's RAM never adds a low-memory notice. */
             memory: com.superiorsoftllc.agenthq.session.MemorySource = com.superiorsoftllc.agenthq.session.OsMemorySource,
+            /** DEMO-LOCK (ticket 2f154f5f): `AGENTHQ_DEMO_LOCK=1`, read once here; off = nothing below consults it. */
+            demo: DemoLock = DemoLock.fromEnvironment(),
         ): AgentHqDaemon {
-            val policy = AccessPolicy.of(host, token)
+            // SANDBOX-1: the scoped token sandboxed agents get instead of the owner token (in memory only, new every start).
+            val agentToken = if (token != null) AgentFrames.newToken() else null
+            val policy = AccessPolicy.of(host, token, agentToken = agentToken).let { base ->
+                // Ticket 9bf81983: the public visitor token is admitted ONLY under the demo lock (never in the normal app).
+                val visitor = demo.publicToken
+                if (demo.enabled && visitor != null) base.withDemoToken(visitor) else base
+            }
             // SEC-FIX-1: built once; refused when it equals the access token every agent is handed.
             val ownerCredential = OwnerCredential.forDaemon(ownerToken, token)
             // PORT-1: FIRST, because the mail base and every session's AGENTHQ_URL below carry the port.
@@ -684,6 +741,16 @@ class AgentHqDaemon(
             }
             // BUG-M2-11b-2: `session.keepAliveMinutes` decides, per launch, whether a session's process is kept (plan section 8).
             val settings = SettingsService(store)
+            // Ticket 55d60a5e: resolved now, while the database answers; /health and its watchdog never read it later.
+            val healthSettings = HealthSettings(
+                dbTimeoutMs = settings.limit(LimitRegistry.HEALTH_DB_TIMEOUT_SECONDS) * 1000L,
+                watchdogFailures = settings.limit(LimitRegistry.HEALTH_WATCHDOG_FAILURES).toInt(),
+                watchdogIntervalMs = settings.limit(LimitRegistry.HEALTH_WATCHDOG_INTERVAL_SECONDS) * 1000L,
+                watchdogTimeoutMs = settings.limit(LimitRegistry.HEALTH_WATCHDOG_TIMEOUT_SECONDS) * 1000L,
+            )
+            val healthGate = HealthGate(healthSettings.dbTimeoutMs)
+            // The last counts the database gave, shown beside a 503 while it is stuck.
+            var lastHealthCounts: HealthCounts? = null
             // CLIPATH-1: every launch (harness, session adapter, model listing, git) resolves its executable through
             // this one resolver, which reads the user's Settings overrides from the store.
             val executableOverrides = com.superiorsoftllc.agenthq.executables.StoredExecutableOverrides(store)
@@ -702,14 +769,25 @@ class AgentHqDaemon(
             val restoreToolApproval = com.superiorsoftllc.agenthq.session.ToolApprovals.install(toolApproval::stored)
             // BUG-REAP-OWNER: no id (unwritable dir) => nothing is ever reaped, which is the safe side.
             val instanceId = runCatching { InstanceId.loadOrCreate(com.superiorsoftllc.agenthq.session.stateDir()) }.getOrNull()
+            // SANDBOX-1: every CLI launch goes through the sandbox seam; with limits.sandbox.mode = 0 it is a pass-through.
+            val sandboxPlan = com.superiorsoftllc.agenthq.runner.SandboxPlan(com.superiorsoftllc.agenthq.session.stateDir())
+            val sandboxConfig = {
+                com.superiorsoftllc.agenthq.runner.SandboxConfig(settings.limit(LimitRegistry.SANDBOX_MODE) == 1L, settings.sandboxAllowedDirs(), agentToken)
+            }
+            fun sandboxed(r: ProcessRunner): ProcessRunner = com.superiorsoftllc.agenthq.runner.SandboxRunner(r, sandboxPlan, sandboxConfig)
+            settings.sandboxStatus = {
+                com.superiorsoftllc.agenthq.runner.SandboxSupport.status(sandboxConfig().enabled) +
+                    (if (sandboxConfig().enabled && token == null) "; WARNING: this daemon has no token, so agents reach it unauthenticated over loopback (set AGENTHQ_TOKEN_FILE)" else "")
+            }
             val manager = SessionManager(
                 provider,
-                runner,
+                sandboxed(runner),
                 sessionStore,
                 worktrees = worktrees,
                 childEnv = childEnv,
                 additionalProviders = additionalProviders,
-                cliRunner = cliRunner,
+                cliRunner = sandboxed(cliRunner),
+                lineRunner = sandboxed(com.superiorsoftllc.agenthq.runner.PipedProcessRunner()),
                 harnesses = harnesses,
                 instances = store.sessionInstances,
                 lifecyclePolicy = { com.superiorsoftllc.agenthq.session.host.LifecyclePolicy(settings.keepAliveMinutes()) },
@@ -723,6 +801,12 @@ class AgentHqDaemon(
             )
             // BUG-M2-11f: a new keep-alive value applies to the processes already kept, not only to the next launch.
             settings.onKeepAliveChanged = manager::lifecyclePolicyChanged
+            // DEMO-RESTRICT (ticket f9e181af): the model allowlist and the daemon-wide working-session cap, read live.
+            manager.allowedModels = settings::allowedModels
+            manager.allowedRoles = settings::allowedRoles
+            if (settings.allowedRoles().restricts) println("[agentHq] role allowlist in force: ${settings.allowedRoles().patterns.joinToString()}")
+            manager.maxSessions = { settings.limitCap(LimitRegistry.MAX_SESSIONS) }
+            if (settings.allowedModels().restricts) println("[agentHq] model allowlist in force: ${settings.allowedModels().patterns.joinToString()}")
             // Contract 1.4.0: profiles are validated against the providers [manager] was configured with.
             val agents = AgentProfiles(
                 store.agents, manager, roleBindings = store.roleBindings, roleExists = { roles.role(it) != null },
@@ -915,7 +999,7 @@ class AgentHqDaemon(
             val projectStore = ProjectStore(persistence = SqlProjectPersistence((store as SqlAgentHqStore).database))
             projectStore.laneDefault = { settings.limitCap(LimitRegistry.LANE_DEFAULT) }
             // EXPERIMENTS-1: the pi tool bridge (off unless the project setting or the env override says on). Removing it = this line.
-            com.superiorsoftllc.agenthq.experiments.pitoolbridge.PiToolBridgeRegistration.register({ projectStore.experimentOn(it, "piToolBridge") }, sessionStats)
+            com.superiorsoftllc.agenthq.experiments.pitoolbridge.PiToolBridgeRegistration.register({ sandboxConfig().enabled || projectStore.experimentOn(it, "piToolBridge") }, sessionStats)
             // TODO-PROGRESS-1: every pi session loads the daemon's `todowrite` extension (pi has no to-do tool of its own).
             com.superiorsoftllc.agenthq.harness.pi.PiLaunchExtras.builtIn =
                 com.superiorsoftllc.agenthq.harness.pi.PiTodoExtension.launchArgs(File(stateDir(), "pi"))
@@ -1371,6 +1455,7 @@ class AgentHqDaemon(
             }
 
             println("[agentHq] provider=${provider.id} runner=${runner.id} stateDir=${stateDir()}")
+            println("[agentHq] sandbox: ${runCatching { settings.sandboxStatus?.invoke() }.getOrNull() ?: "off"} (setting limits.sandbox.mode)")
             println(
                 if (additionalProviders.isEmpty()) {
                     "[agentHq] providers: ${provider.id} only (set ${ProviderFactory.PROVIDERS_ENV} to let a spawn choose another)"
@@ -1405,6 +1490,13 @@ class AgentHqDaemon(
                     "(runs closed ORPHANED, open pods INTERRUPTED)",
             )
 
+            // DEMO-LOCK: the demo project and its two sessions exist before anything is delivered or served.
+            demo.seed(projectStore, manager, agents)
+            // Ticket 9bf81983: each seeded session's first run starts now, composed like a visitor's first message.
+            demo.warmUp(manager, compose = { s, prompt ->
+                val instance = manager.instance(s.id)
+                firstTurn(instance, s.role, s.agentId, prompt, knowledge.section(s.projectId, s.role), skillsSource.section(instance))
+            })
             // Deliver anything that was queued before the last shutdown to a session already at rest.
             mail.onStartup()
             // TRIGGER-NUDGE: only now may a schedule fire (a slot missed while down fires on this first pump).
@@ -1434,22 +1526,51 @@ class AgentHqDaemon(
                 install(WebSockets)
                 install(ContentNegotiation) { json() }
                 // Before routing, so a refused request never reaches a handler (the mailbox included).
-                installAccessPolicy(policy, webBundle::isAsset)
+                installAccessPolicy(policy, webBundle::isAsset, demo)
                 routing {
+                    // Ticket 9bf81983: the demo's public visitor token, so a visitor lands connected (404 when none).
+                    get(DemoLock.VISITOR_TOKEN_PATH) {
+                        val visitor = demo.publicToken
+                        if (demo.enabled && visitor != null && policy.hasDemoToken) {
+                            call.response.header(io.ktor.http.HttpHeaders.CacheControl, "no-store")
+                            call.respondText(visitor)
+                        } else call.respond(io.ktor.http.HttpStatusCode.NotFound, "no demo visitor token")
+                    }
                     get("/health") {
-                        call.respond(
-                            Health(
-                                status = "ok",
-                                provider = provider.id,
-                                runner = runner.id,
+                        // Ticket 55d60a5e: the database part runs on the gate's own thread, bounded; a stuck database
+                        // is answered 503 at once instead of holding this request thread (and every later one).
+                        val outcome = healthGate.read {
+                            HealthCounts(
                                 sessions = manager.list().size,
                                 worktrees = worktrees.list().count { !it.removed },
                                 pods = store.pods.open().size,
                                 runsInFlight = store.runs.unfinished().size,
-                                providers = manager.providers.map { it.id },
                                 attentionOpen = attention.openCount().toInt(),
-                                providerStatus = manager.providers.associate { it.id to providerStates.state(it.id).status.wireName },
                                 triggersTripped = triggers.trippedCount(),
+                            )
+                        }
+                        val counts = (outcome as? HealthGate.Outcome.Ok)?.value?.also { lastHealthCounts = it } ?: lastHealthCounts
+                        val (database, detail) = when (outcome) {
+                            is HealthGate.Outcome.Ok -> "ok" to null
+                            is HealthGate.Outcome.Stuck -> "stuck" to "no answer for ${outcome.forMs} ms"
+                            is HealthGate.Outcome.Failed -> "error" to outcome.message
+                        }
+                        call.respond(
+                            if (database == "ok") HttpStatusCode.OK else HttpStatusCode.ServiceUnavailable,
+                            Health(
+                                status = if (database == "ok") "ok" else "unhealthy",
+                                provider = provider.id,
+                                runner = runner.id,
+                                sessions = counts?.sessions ?: 0,
+                                worktrees = counts?.worktrees ?: 0,
+                                pods = counts?.pods ?: 0,
+                                runsInFlight = counts?.runsInFlight ?: 0,
+                                providers = manager.providers.map { it.id },
+                                attentionOpen = counts?.attentionOpen ?: 0,
+                                providerStatus = manager.providers.associate { it.id to providerStates.state(it.id).status.wireName },
+                                triggersTripped = counts?.triggersTripped ?: 0,
+                                database = database,
+                                databaseDetail = detail,
                             ),
                         )
                     }
@@ -1463,7 +1584,7 @@ class AgentHqDaemon(
                     // CONFIG-8: `GET /config/schema` (+ `/config/values`), the HTTP twin of the config_schema / config_values frames.
                     daemonConfigRoutes(daemonConfig)
                     // Phase 6 agent-facing mail API: how a spawned CLI agent answers a delivered message.
-                    mailRoutes(mail, mailbox)
+                    mailRoutes(mail, mailbox, demo::mailRefusal)
                     // SERVER-UPDATE-3 (1.110.0): status / check / apply for the headless daemon's own updates.
                     updateRoutes(
                         updates ?: com.superiorsoftllc.agenthq.update.ServerUpdateService.fromEnvironment(
@@ -1523,7 +1644,7 @@ class AgentHqDaemon(
                             commandStore,
                             runManager,
                             harnesses,
-                            RoleBindingHandler(store.roleBindings, roles, { providerInfos(manager, harnesses).map { it.id }.toSet() }, com.superiorsoftllc.agenthq.harness.claude.ClaudeCommands.EFFORT_LEVELS.toSet()),
+                            RoleBindingHandler(store.roleBindings, roles, { providerInfos(manager, harnesses).map { it.id }.toSet() }, com.superiorsoftllc.agenthq.harness.claude.ClaudeCommands.EFFORT_LEVELS.toSet(), modelCheck = { manager.requireAllowedModel(it, null) }),
                             com.superiorsoftllc.agenthq.persistence.PromptStore(store.prompts),
                             com.superiorsoftllc.agenthq.persistence.SkillStore(store.skills),
                             com.superiorsoftllc.agenthq.persistence.TraitStore(store.traits, { roles.role(it) != null }, boundBy = { id -> store.traitReferences(id) }),
@@ -1553,6 +1674,8 @@ class AgentHqDaemon(
                             ownerCredential = ownerCredential,
                             demoLock = demoLock,
                             daemonConfig = daemonConfig,
+                            tier = call.attributes.getOrNull(ACCESS_TIER) ?: AccessTier.OWNER,
+                            demo = demo,
                         )
                     }
                 }
@@ -1603,8 +1726,9 @@ class AgentHqDaemon(
                 ownerQuestions = ownerQuestions,
                 handover = handover,
                 processWatch = processWatch,
-                background = listOf(AutoCloseable { usageRefresher.stop() }, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }),
+                background = listOf(AutoCloseable { usageRefresher.stop() }, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, healthGate),
                 processWatchScheduler = processWatchScheduler,
+                healthSettings = healthSettings,
             )
         }
 
@@ -2137,6 +2261,10 @@ private suspend fun handleConnection(
     demoLock: () -> Boolean = { false },
     /** CONFIG-8 (1.142.0): the daemon's declared config (`config_*` frames); the default declares nothing. */
     daemonConfig: DaemonConfig,
+    /** SANDBOX-1: what this connection was admitted as; an AGENT (the scoped token) may send only [AgentFrames.ALLOWED]. */
+    tier: AccessTier = AccessTier.OWNER,
+    /** DEMO-LOCK (ticket 2f154f5f): when on, every frame not on its allow-list is refused, for every tier. */
+    demo: DemoLock = DemoLock(false),
 ) {
     println("[agentHq] ws connected (provider=${manager.providerId})")
     // SEC-FIX-1: decided once, at the handshake, from what this connection presented.
@@ -2162,7 +2290,10 @@ private suspend fun handleConnection(
             val answer = try {
                 Envelope(
                     Envelope.MODELS,
-                    json.encodeToString(ListSerializer(ProviderModels.serializer()), modelCatalog(manager, harnesses, modelCatalogs)),
+                    json.encodeToString(
+                        ListSerializer(ProviderModels.serializer()),
+                        allowedCatalog(modelCatalog(manager, harnesses, modelCatalogs), manager.allowedModels()),
+                    ),
                 )
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
@@ -2219,7 +2350,7 @@ private suspend fun handleConnection(
     fun readyBurstAnswer(envelope: Envelope): Envelope = when (envelope.type) {
         Envelope.PROVIDERS -> Envelope(
             Envelope.PROVIDERS,
-            json.encodeToString(ListSerializer(ProviderInfo.serializer()), providerInfos(manager, harnesses)),
+            json.encodeToString(ListSerializer(ProviderInfo.serializer()), allowedProviders(providerInfos(manager, harnesses), manager.allowedModels())),
         )
         Envelope.SETTINGS_GET -> try {
             val all = settings.all()
@@ -2280,7 +2411,9 @@ private suspend fun handleConnection(
             "provider=${manager.providerId} contract=${EventVocabulary.VERSION} " +
                 "instance=${identity.instance} since=${identity.historySince} " +
                 // BUILD-STAMP-1: additive key (no contract bump): the daemon's build string, e.g. 1.0.1+20261023.1432.e85b223.
-                "build=${com.superiorsoftllc.agenthq.update.BuildInfo.current}",
+                "build=${com.superiorsoftllc.agenthq.update.BuildInfo.current}" +
+                // DEMO-LOCK: additive keys, only while the lock is on (the UI dims what the daemon refuses).
+                demo.readyFields(),
         ),
     )
     // Manually serialize sessions with SessionRecordSerializer to include computed `live` field
@@ -2334,15 +2467,32 @@ private suspend fun handleConnection(
     var spawnRefused: String? = null
     // BUG-G2d: the session the last `new` named as its origin; the session the next prompt creates is charged to it.
     var spawnOrigin: String? = null
+    // Ticket 9bf81983: under the demo lock, the client IP this connection's visitor turns are charged to.
+    val turnLimit = demo.turnLimit?.takeIf { demo.enabled }
+    val turnClient = turnLimit?.let {
+        DemoTurnLimit.clientIp(session.call.request.local.remoteAddress, session.call.request.headers["X-Forwarded-For"], demo.trustedProxies)
+    }.orEmpty()
     try {
         for (frame in session.incoming) {
             val text = (frame as? Frame.Text)?.readText() ?: continue
             val envelope = runCatching { json.decodeFromString(Envelope.serializer(), text) }.getOrNull()
                 ?: Envelope(Envelope.PROMPT, text)
             // SEC-FIX-1: the one gate, before every branch below (the bare-text prompt and the replay included).
-            FrameGate.refusal(envelope.type, demoLock(), owner)?.let { why ->
+            // The full DemoLock (seeded sessions, per-project reads, visitor turns) is stricter and replaces the plain frame list when it is on.
+            FrameGate.refusal(envelope.type, demoLock() && !demo.enabled, owner)?.let { why ->
                 outgoing.trySend(Envelope(Envelope.ERROR, why, requestId = envelope.requestId))
                 continue
+            }
+            demo.frameRefusal(envelope, active)?.let { reason ->
+                outgoing.trySend(Envelope(Envelope.ERROR, reason).copy(requestId = envelope.requestId))
+                continue
+            }
+            // Ticket 9bf81983: a visitor turn over this client's limit is refused before it reaches an agent.
+            if (turnLimit != null && envelope.type in DEMO_COUNTED_TURNS) {
+                turnLimit.refusal(turnClient)?.let { reason ->
+                    outgoing.trySend(Envelope(Envelope.ERROR, reason).copy(requestId = envelope.requestId))
+                    continue
+                }
             }
             if (envelope.type == SESSION_REPLAY_REQUEST_TYPE) {
                 val sessionId = envelope.sessionId
@@ -2378,6 +2528,11 @@ private suspend fun handleConnection(
                 }
                 continue
             }
+            // SANDBOX-1: a sandboxed agent's connection sends only what its scoped token allows.
+            if (tier == AccessTier.AGENT && !AgentFrames.allows(envelope.type)) {
+                outgoing.trySend(Envelope(Envelope.ERROR, AgentFrames.refusal(envelope.type)).copy(requestId = envelope.requestId))
+                continue
+            }
             // BUG-MCP-RACE-1 (1.87.0): a correlated backlog request is answered directly even when the push carried it.
             val direct = envelope.requestId != null
             val reply: Envelope? = when (envelope.type) {
@@ -2404,6 +2559,7 @@ private suspend fun handleConnection(
                                 envelope.data
                             }
                             active = manager.resume(envelope.sessionId, turn).id
+                            turnLimit?.record(turnClient)
                             null
                         } catch (e: RunInFlightException) {
                             // 1.96.0: typed, so the client that sent it (its requestId is echoed below) can queue it again.
@@ -2506,7 +2662,8 @@ private suspend fun handleConnection(
                         // that counts.
                         try {
                             val options = SpawnOptions.decode(data)
-                            agents.resolveSpawn(options)
+                            // DEMO-RESTRICT: a role the allowlist leaves out is refused now, with nothing bound.
+                            manager.requireAllowedRole(agents.resolveSpawn(options).role)
                             // BUG-G2d (1.58.0): a `new` that names the session it comes from (`agenthq_spawn`) is
                             // charged to that session's pod: checked NOW, so a refusal binds nothing and leaves no
                             // spawn options behind, and again when the session is actually created.
@@ -3156,6 +3313,7 @@ private suspend fun handleConnection(
                     } else {
                         try {
                             active = manager.resume(id, prompt).id
+                            turnLimit?.record(turnClient)
                             null
                         } catch (e: Exception) {
                             Envelope(Envelope.ERROR, e.message ?: "resume failed")
@@ -3364,6 +3522,7 @@ private suspend fun handleConnection(
                     } else {
                         when (val result = mail.send(request)) {
                             is MailResult.Sent -> {
+                                turnLimit?.record(turnClient)
                                 // Report the CURRENT state, not the QUEUED snapshot: the pump already
                                 // ran, so a sender learns whether it landed or failed in this reply.
                                 val current = mailbox.message(result.message.id) ?: result.message
@@ -3767,6 +3926,43 @@ private fun modelCatalog(
     return rows.map { row ->
         val reason = missing[row.provider] ?: return@map row
         if (row.note?.contains(reason) == true) row else row.copy(note = listOfNotNull(row.note, reason).joinToString("; "))
+    }
+}
+
+/**
+ * DEMO-RESTRICT (ticket f9e181af): the `models` answer narrowed to [allowlist]: every row keeps only its allowed models,
+ * a row left empty is dropped, and a harness left with none at all becomes one `unavailable` row saying why, so pickers
+ * show it dimmed. No restriction = [rows] unchanged.
+ */
+internal fun allowedCatalog(rows: List<ProviderModels>, allowlist: com.superiorsoftllc.agenthq.settings.ModelAllowlist): List<ProviderModels> {
+    if (!allowlist.restricts) return rows
+    return rows.map { it.provider }.distinct().flatMap { harness ->
+        val own = rows.filter { it.provider == harness }
+        val kept = own.filter { it.models.isNotEmpty() }.map { it.copy(models = allowlist.filter(it.models)) }.filter { it.models.isNotEmpty() }
+        kept.ifEmpty {
+            // A harness that listed nothing keeps its own reason; one that listed models says none is allowed.
+            val own0 = own.none { it.models.isNotEmpty() }
+            val why = if (own0) own.mapNotNull { it.note?.trim()?.trimEnd('.') }.joinToString("; ").ifEmpty { "$harness lists no models" }
+            else "no model of $harness is allowed on this server"
+            listOf(ProviderModels(harness, "", harness, emptyList(), "$why. ${allowlist.describe()}", unavailable = true))
+        }
+    }
+}
+
+/**
+ * DEMO-RESTRICT: the `providers` answer under [allowlist]: each harness's listed models narrowed to the allowed ones, and
+ * one whose list names no allowed model marked unavailable with the reason. No restriction = [infos] unchanged.
+ */
+internal fun allowedProviders(infos: List<ProviderInfo>, allowlist: com.superiorsoftllc.agenthq.settings.ModelAllowlist): List<ProviderInfo> {
+    if (!allowlist.restricts) return infos
+    return infos.map { info ->
+        val listed = info.models ?: return@map info
+        val allowed = allowlist.filter(listed)
+        if (allowed.isNotEmpty() || !info.available) {
+            info.copy(models = allowed.ifEmpty { null }, defaultModel = info.defaultModel?.takeIf { allowlist.allows(it) })
+        } else {
+            info.copy(models = null, available = false, unavailableReason = "no model of ${info.id} is allowed on this server. ${allowlist.describe()}")
+        }
     }
 }
 

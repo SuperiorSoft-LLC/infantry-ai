@@ -12,16 +12,21 @@ import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.ShellOverrideDeclaration
 import com.superiorsoftllc.agenthq.ui.Palette
+import com.superiorsoftllc.agenthq.plugins.demo.lock.LocalDemoLock
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockOverride
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
 import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
 
+const val DEFAULT_TEXT = "DEMO BUILD - sample data, nothing here is live"
+
 /** The strip the demo build draws between the header and the app body. */
 val demoBanner = BlockOverride { scope, _ ->
+    // Demo_Lock's notice (AGENTHQ_DEMO_NOTICE from `ready`, or the turn-limit notice) wins; offline/wasm demo has none and says the default.
+    val text = LocalDemoLock.current.notice ?: DEFAULT_TEXT
     Box(scope.modifier.fillMaxWidth().background(Palette.Accent).padding(vertical = 3.dp).testTag("demo-banner"), contentAlignment = Alignment.Center) {
-        Text("DEMO BUILD - sample data, nothing here is live", color = Palette.Bg, fontSize = 11.sp)
+        Text(text, color = Palette.Bg, fontSize = 11.sp)
     }
 }
 

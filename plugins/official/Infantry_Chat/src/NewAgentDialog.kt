@@ -44,6 +44,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.superiorsoftllc.agenthq.ui.model.AllowedRoles
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.ExecutorPickerModel
 import com.superiorsoftllc.agenthq.ui.model.NewAgentModalModel
@@ -139,12 +140,12 @@ fun NewAgentDialogFrame(
     val scope = rememberCoroutineScope()
     var error by remember { mutableStateOf<String?>(null) }
     var adding by remember { mutableStateOf(false) }
-    var draft by remember { mutableStateOf(NewAgentModalModel(state.roles, state.roleBindings, state.providers, state.modelCatalog)) }
+    var draft by remember { mutableStateOf(NewAgentModalModel(AllowedRoles.filter(state.allowedRoles, state.roles), state.roleBindings, state.providers, state.modelCatalog)) }
     // The catalogs arrive after the window opens (opening triggers the refresh): fold them in without losing the user's draft.
     val executor = if (state.providers != draft.harnesses || state.modelCatalog != draft.catalog) {
         ExecutorPickerModel.seeded(state.providers, state.modelCatalog, draft.executor.picked).let { if (draft.roleId != null) it.withSoleModel() else it }
     } else draft.executor
-    val cur = draft.copy(roles = state.roles, bindings = state.roleBindings, harnesses = state.providers, catalog = state.modelCatalog, executor = executor)
+    val cur = draft.copy(roles = AllowedRoles.filter(state.allowedRoles, state.roles), bindings = state.roleBindings, harnesses = state.providers, catalog = state.modelCatalog, executor = executor)
     val update: (NewAgentModalModel) -> Unit = { draft = it }
     val targets = remember { NewAgentTargets() }
 

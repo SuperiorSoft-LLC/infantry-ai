@@ -22,6 +22,8 @@ kotlin {
         commonMain { kotlin.srcDir("src") }
         commonMain.dependencies {
             api(project(":superiorSoftLibrary:agenthqUiCore"))
+            // DEMO-MERGE-1: the notice comes from Demo_Lock, which wraps the frame this banner sits in.
+            implementation(project(":plugins:demo:Demo_Lock"))
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)

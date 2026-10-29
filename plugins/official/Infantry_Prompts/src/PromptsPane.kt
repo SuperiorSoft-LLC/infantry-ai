@@ -60,6 +60,8 @@ private data class PromptDraft(val editing: String? = null, val name: String = "
 fun PromptsPane(link: LinkContext, ctx: PromptsContext, onInsert: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val live = link.live
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
+    val canWrite = link.canWrite
     var query by remember { mutableStateOf("") }
     var draft by remember { mutableStateOf<PromptDraft?>(null) }
     var localError by remember { mutableStateOf<String?>(null) }
@@ -87,7 +89,7 @@ fun PromptsPane(link: LinkContext, ctx: PromptsContext, onInsert: (String) -> Un
             Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("PROMPTS", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
                 IconAction(
-                    AhqIcons.Add, "Add prompt", onClick = { openDraft(PromptDraft()) }, enabled = live,
+                    AhqIcons.Add, "Add prompt", onClick = { openDraft(PromptDraft()) }, enabled = link.canWrite,
                     style = IconActionStyle.TEXT, modifier = Modifier.testTag(PROMPTS_ADD_BUTTON_TAG),
                 )
             }
@@ -114,7 +116,7 @@ fun PromptsPane(link: LinkContext, ctx: PromptsContext, onInsert: (String) -> Un
                     val edit = { openDraft(PromptDraft(editing = p.name, name = p.name, body = p.body, tags = p.tags.joinToString(", "))) }
                     Column(
                         Modifier.fillMaxWidth().padding(bottom = 6.dp).clip(RoundedCornerShape(6.dp)).background(Palette.Panel)
-                            .clickable(enabled = live, onClickLabel = "Edit prompt", role = Role.Button) { edit() }
+                            .clickable(enabled = link.canWrite, onClickLabel = "Edit prompt", role = Role.Button) { edit() }
                             .padding(10.dp),
                     ) {
                         Text(p.name, color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
@@ -126,9 +128,9 @@ fun PromptsPane(link: LinkContext, ctx: PromptsContext, onInsert: (String) -> Un
                         }
                         Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             OutlinedButton(onClick = { onInsert(p.body) }, modifier = Modifier.testTag("prompt-insert-${p.name}")) { Text("Insert", fontSize = 11.sp) }
-                            OutlinedButton(onClick = edit, enabled = live, modifier = Modifier.testTag("prompt-edit-${p.name}")) { Text("Edit", fontSize = 11.sp) }
+                            OutlinedButton(onClick = edit, enabled = link.canWrite, modifier = Modifier.testTag("prompt-edit-${p.name}")) { Text("Edit", fontSize = 11.sp) }
                             OutlinedButton(
-                                onClick = { run { ctx.delete(p.id) } }, enabled = live,
+                                onClick = { run { ctx.delete(p.id) } }, enabled = canWrite,
                                 modifier = Modifier.testTag("prompt-delete-${p.name}"),
                             ) { Text("Delete", fontSize = 11.sp, color = Palette.Danger) }
                         }
@@ -143,20 +145,20 @@ fun PromptsPane(link: LinkContext, ctx: PromptsContext, onInsert: (String) -> Un
                 onSave = { run(onSent = { draft = null }) { ctx.save(d.name, d.body, d.tags) } },
                 onCancel = { draft = null; localError = null },
                 modifier = Modifier.testTag(PROMPT_DIALOG_TAG),
-                saveEnabled = live && d.name.isNotBlank() && d.body.isNotBlank(),
+                saveEnabled = canWrite && d.name.isNotBlank() && d.body.isNotBlank(),
                 error = localError ?: ctx.error,
                 saveTag = PROMPT_SAVE_TAG, cancelTag = PROMPT_CANCEL_TAG,
             ) {
                 OutlinedTextField(
-                    d.name, { draft = d.copy(name = it) }, label = { Text("Name") }, singleLine = true, enabled = live && d.editing == null,
+                    d.name, { draft = d.copy(name = it) }, label = { Text("Name") }, singleLine = true, enabled = canWrite && d.editing == null,
                     textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().testTag(PROMPT_NAME_TAG),
                 )
                 OutlinedTextField(
-                    d.body, { draft = d.copy(body = it) }, label = { Text("Prompt body") }, minLines = 3, maxLines = 12, enabled = live,
+                    d.body, { draft = d.copy(body = it) }, label = { Text("Prompt body") }, minLines = 3, maxLines = 12, enabled = canWrite,
                     textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().testTag(PROMPT_BODY_TAG),
                 )
                 OutlinedTextField(
-                    d.tags, { draft = d.copy(tags = it) }, label = { Text("Tags (comma separated)") }, singleLine = true, enabled = live,
+                    d.tags, { draft = d.copy(tags = it) }, label = { Text("Tags (comma separated)") }, singleLine = true, enabled = canWrite,
                     textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().testTag(PROMPT_TAGS_TAG),
                 )
             }

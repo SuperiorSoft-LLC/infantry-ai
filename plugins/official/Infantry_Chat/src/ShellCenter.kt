@@ -203,7 +203,8 @@ class NewAgentBlock(children: List<Block>, place: Place = Place()) : Block("newA
         LaunchedEffect(c.showNewAgent, state.connection.isLive) {
             if (c.showNewAgent && state.connection.isLive) controller.refreshModelCatalog()
         }
-        if (c.showNewAgent) {
+        // DEMO-MERGE-1: the New agent modal never opens while writes are refused
+        if (c.showNewAgent && com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current.canWrite) {
             NewAgentDialogFrame(
                 state,
                 onAdd = { role, picked, task ->

@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.ui.shell
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
 import com.superiorsoftllc.agenthq.ui.ConfigTab
 import com.superiorsoftllc.agenthq.ui.ToastService
@@ -496,6 +497,14 @@ interface LinkContext {
     fun contractAtLeast(major: Int, minor: Int): Boolean = contractAtLeast(contract, major, minor)
     /** S4d: the daemon's build stamp from `ready`; null before it or from a daemon too old to say. */
     val daemonBuild: String? get() = null
+    /** DEMO-MERGE-1: every `key=value` field of the last `ready`, verbatim; a module adapting the UI to its deployment reads its own. */
+    val readyFields: Map<String, String> get() = emptyMap()
+    /** DEMO-MERGE-1: the latest message per refusal code the daemon declared a notice (`ready` notices=); a module shows them. */
+    val notices: Map<String, String> get() = emptyMap()
+    /** DEMO-MERGE-1: the daemon serves this link a restricted surface (`ready` access=restricted): owner-only reads are refused. */
+    val restricted: Boolean get() = readyFields["access"] == "restricted"
+    /** A write control may be enabled: live, and the nearest [WritePolicy] allows writes. Read-only views keep using [live]. */
+    val canWrite: Boolean @Composable get() = live && LocalWritePolicy.current.canWrite
 }
 
 /** The window's working context: the active project and the daemon's refusals. */

@@ -13,6 +13,8 @@ class RoleBindingHandler(
     private val roles: RoleService,
     private val providerIds: () -> Set<String>,
     private val effortLevels: Set<String>,
+    /** DEMO-RESTRICT: refuses a model the allowlist does not name (throws [IllegalArgumentException]); default = any. */
+    private val modelCheck: (String) -> Unit = {},
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     fun all(): List<RoleBinding> = repository.all()
@@ -28,7 +30,9 @@ class RoleBindingHandler(
         require(provider == null || provider in providerIds()) { "unknown provider '$provider': the daemon lists ${providerIds().sorted()}" }
         val effort = save.effort?.trim()?.ifEmpty { null }
         require(effort == null || effort in effortLevels) { "unknown effort '$effort': one of ${effortLevels.toList()}" }
-        val binding = RoleBinding(roleId, provider, save.model?.trim()?.ifEmpty { null }, effort)
+        val model = save.model?.trim()?.ifEmpty { null }
+        model?.let(modelCheck)
+        val binding = RoleBinding(roleId, provider, model, effort)
         val at = clock()
         repository.set(binding, at)
         return binding.copy(updatedAt = at)

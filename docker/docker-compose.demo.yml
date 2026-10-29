@@ -1,0 +1,7 @@
+# DEMO-LOCK overlay (ticket 2f154f5f): the locked public demo = docker-compose.yml + this file.
+#   docker compose -f docker/docker-compose.yml -f docker/docker-compose.demo.yml up -d
+# Without this overlay the image runs the normal app (AGENTHQ_DEMO_LOCK unset = off).
+services:
+  infantry-ai:
+    env_file:
+      - demo-seed.env

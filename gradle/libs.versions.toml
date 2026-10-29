@@ -42,6 +42,9 @@ androidx-activity-compose = { module = "androidx.activity:activity-compose", ver
 kotlinx-datetime = { group = "org.jetbrains.kotlinx", name = "kotlinx-datetime", version.ref = "kotlinx-datetime" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 sqlite-driver = { module = "app.cash.sqldelight:sqlite-driver", version.ref = "sqldelight" }
+# Ticket 55d60a5e: sqlite-driver 2.2.1 brings sqlite-jdbc 3.51.0.0, whose SQLite 3.51.0 deadlocks in the unix VFS
+# (unixIsSharingShmNode takes the VFS mutex under the inode lock; fixed in 3.51.2). 3.51.3 also fixes WAL-reset corruption.
+sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version = "3.51.3.0" }
 kotlin-stdlib = { group = "org.jetbrains.kotlin", name = "kotlin-stdlib", version.ref = "kotlinStdlib" }
 jlayer = { module = "com.googlecode.soundlibs:jlayer", version.ref = "jlayer" }
 zxing-core = { module = "com.google.zxing:core", version.ref = "zxing" }

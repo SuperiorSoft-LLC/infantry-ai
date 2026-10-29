@@ -51,7 +51,44 @@ class AccessPolicy private constructor(
     private val tokenDigest: ByteArray?,
     /** WEB-1: lowercased host names a browser may reach this daemon by (see [browserHosts]). */
     private val browserHostNames: Set<String> = emptySet(),
+    /** SANDBOX-1: the digest of the daemon's scoped agent token; null = no agent tier. See [AgentFrames]. */
+    private val agentDigest: ByteArray? = null,
+    /** Ticket 9bf81983 (demo-build): the digest of the demo lock's PUBLIC visitor token; null = none. See [withDemoToken]. */
+    private val demoDigest: ByteArray? = null,
 ) {
+    /**
+     * Ticket 9bf81983: also admit the demo lock's public visitor token. Only a locked daemon calls this (DemoLock refuses
+     * every frame and route outside its allow-list for every token), so this token can do nothing the lock does not allow.
+     * Refused: no owner token (a tokenless daemon), a short token, or one equal to the owner or agent token.
+     */
+    fun withDemoToken(token: String): AccessPolicy {
+        val owner = tokenDigest ?: throw AccessConfigurationException("a demo public token needs an owner token: set $TOKEN_FILE_ENV or $TOKEN_ENV")
+        if (token.length < MIN_TOKEN_LENGTH || token.any { it.isWhitespace() || it.isISOControl() }) {
+            throw AccessConfigurationException("the demo public token must be at least $MIN_TOKEN_LENGTH characters, no whitespace")
+        }
+        val d = digest(token)
+        if (MessageDigest.isEqual(d, owner) || (agentDigest?.let { MessageDigest.isEqual(d, it) } ?: false)) {
+            throw AccessConfigurationException("the demo public token must not be the owner token")
+        }
+        return AccessPolicy(bindHost, tokenDigest, browserHostNames, agentDigest, d)
+    }
+
+    /** Ticket 9bf81983: true when a demo public token is admitted (the visitor-token route answers only then). */
+    val hasDemoToken: Boolean get() = demoDigest != null
+
+    /**
+     * SANDBOX-1: the tier of a request [check] admitted: [AccessTier.AGENT] when it presented the scoped agent token, else
+     * [AccessTier.OWNER] (the owner token, or a tokenless loopback daemon).
+     */
+    fun tierOf(authorization: String?, webSocketProtocols: String? = null): AccessTier {
+        val agent = agentDigest ?: return AccessTier.OWNER
+        val header = authorization?.trim().orEmpty()
+        val presented = if (header.startsWith(BEARER_PREFIX, ignoreCase = true)) header.substring(BEARER_PREFIX.length).trim()
+        else bearerFromProtocols(webSocketProtocols).orEmpty()
+        if (presented.isEmpty()) return AccessTier.OWNER
+        return if (MessageDigest.isEqual(digest(presented), agent)) AccessTier.AGENT else AccessTier.OWNER
+    }
+
     /** WEB-1: the host names (no port) a browser page may name in its Host and Origin, lowercased and sorted. */
     val browserHosts: List<String> get() = browserHostNames.sorted()
 
@@ -76,6 +113,8 @@ class AccessPolicy private constructor(
         webAsset: Boolean = false,
     ): Refusal? {
         if (webAsset) return checkWebAsset(host, origin)
+        // Ticket 9bf81983: the public visitor token, read by the page like a bundle file (it is public by design).
+        if (demoDigest != null && path == DemoLock.VISITOR_TOKEN_PATH) return checkWebAsset(host, origin)
         if (origin != null && path == BROWSER_PATH) return checkBrowser(host, origin, authorization, webSocketProtocols)
         if (origin != null) {
             return Refusal(
@@ -159,7 +198,8 @@ class AccessPolicy private constructor(
     private fun matchesToken(presented: String): Boolean {
         val expected = tokenDigest ?: return false
         if (presented.isEmpty()) return false
-        return MessageDigest.isEqual(digest(presented), expected)
+        return MessageDigest.isEqual(digest(presented), expected) || (agentDigest?.let { MessageDigest.isEqual(digest(presented), it) } ?: false) ||
+            (demoDigest?.let { MessageDigest.isEqual(digest(presented), it) } ?: false)
     }
 
     private fun bearerMatches(authorization: String?): Boolean {
@@ -169,8 +209,11 @@ class AccessPolicy private constructor(
         val presented = header.substring(BEARER_PREFIX.length).trim()
         if (presented.isEmpty()) return false
         // Fixed-length digests compared in constant time: neither the token's length nor how many of its
-        // leading bytes match can be learned from how long the comparison takes.
-        return MessageDigest.isEqual(digest(presented), expected)
+        // leading bytes match can be learned from how long the comparison takes. SANDBOX-1: the agent token is admitted
+        // too; what it may do is decided by its tier ([tierOf], [AgentFrames]).
+        val d = digest(presented)
+        return MessageDigest.isEqual(d, expected) || (agentDigest?.let { MessageDigest.isEqual(d, it) } ?: false) ||
+            (demoDigest?.let { MessageDigest.isEqual(d, it) } ?: false)
     }
 
     companion object {
@@ -297,8 +340,13 @@ class AccessPolicy private constructor(
             bindHost: String,
             token: String?,
             webHosts: Collection<String> = webHostsFromEnvironment(),
+            /** SANDBOX-1: the scoped agent token (needs an owner token; a tokenless loopback daemon has no tiers). */
+            agentToken: String? = null,
             localAddresses: () -> Set<String> = ::localInterfaceAddresses,
         ): AccessPolicy {
+            if (agentToken != null && (agentToken == token || agentToken.length < MIN_TOKEN_LENGTH)) {
+                throw AccessConfigurationException("the agent token must differ from the owner token and be at least $MIN_TOKEN_LENGTH characters")
+            }
             if (token == null) {
                 if (!isLoopbackHost(bindHost)) {
                     throw AccessConfigurationException(
@@ -318,7 +366,7 @@ class AccessPolicy private constructor(
                     "the bearer token must not contain whitespace or control characters",
                 )
             }
-            return AccessPolicy(bindHost, digest(token), browserHostNames(bindHost, webHosts, localAddresses))
+            return AccessPolicy(bindHost, digest(token), browserHostNames(bindHost, webHosts, localAddresses), agentToken?.let(::digest))
         }
 
         /** WEB-1: [WEB_HOSTS_ENV], split on commas; empty when unset. */
@@ -390,19 +438,37 @@ class AccessPolicy private constructor(
  * Install [policy] in front of every route. A refused request is answered here and the pipeline is
  * finished, so no handler runs: a refused `POST /mail/send` must never reach the mailbox.
  */
-fun Application.installAccessPolicy(policy: AccessPolicy, isWebAsset: (String) -> Boolean = { false }) {
+/** SANDBOX-1: the [AccessTier] the access policy admitted a call with. */
+val ACCESS_TIER = io.ktor.util.AttributeKey<AccessTier>("agenthq.accessTier")
+
+fun Application.installAccessPolicy(policy: AccessPolicy, isWebAsset: (String) -> Boolean = { false }, demoLock: DemoLock = DemoLock(false)) {
     intercept(ApplicationCallPipeline.Plugins) {
         val path = call.request.path()
         val protocols = call.request.headers.getAll(HttpHeaders.SecWebSocketProtocol)?.joinToString(",")
+        val webAsset = call.request.httpMethod == io.ktor.http.HttpMethod.Get && isWebAsset(path)
         val refusal = policy.check(
             path = path,
             host = call.request.headers[HttpHeaders.Host],
             origin = call.request.headers[HttpHeaders.Origin],
             authorization = call.request.headers[HttpHeaders.Authorization],
             webSocketProtocols = protocols,
-            webAsset = call.request.httpMethod == io.ktor.http.HttpMethod.Get && isWebAsset(path),
+            webAsset = webAsset,
         )
         if (refusal == null) {
+            // DEMO-LOCK (ticket 2f154f5f): default-deny on every route for every token, the owner's included.
+            demoLock.httpRefusal(call.request.httpMethod.value, path, webAsset)?.let { reason ->
+                call.respond(HttpStatusCode.Forbidden, reason)
+                finish()
+                return@intercept
+            }
+            // SANDBOX-1: the agent token reaches only the routes an agent needs; the WebSocket reads the tier attribute.
+            val tier = policy.tierOf(call.request.headers[HttpHeaders.Authorization], protocols)
+            if (tier == AccessTier.AGENT && !AgentFrames.allowsHttp(call.request.httpMethod.value, path)) {
+                call.respond(HttpStatusCode.Forbidden, "sandbox: this route is not available to a sandboxed agent")
+                finish()
+                return@intercept
+            }
+            call.attributes.put(ACCESS_TIER, tier)
             // WEB-1: a browser that offered subprotocols fails the handshake unless one is selected. Answer with the
             // plain one only: the bearer subprotocol is never echoed.
             if (path == AccessPolicy.BROWSER_PATH && AccessPolicy.offersWebProtocol(protocols)) {

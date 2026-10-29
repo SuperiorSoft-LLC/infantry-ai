@@ -883,6 +883,8 @@ data class ProviderModels(
     val label: String,
     val models: List<String>,
     val note: String? = null,
+    /** DEMO-RESTRICT: the harness cannot run anything now (no models, or none allowed); [note] says why. */
+    val unavailable: Boolean = false,
 )
 
 /**

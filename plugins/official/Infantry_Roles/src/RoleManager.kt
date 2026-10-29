@@ -111,7 +111,7 @@ fun RoleManagerHint(modifier: Modifier = Modifier) {
 /** The list page (New role, then a row per role); nothing while a role is open. [modifier] goes on New role. */
 @Composable
 fun RoleManagerList(deps: RolesDeps, nav: RoleManagerNav, modifier: Modifier = Modifier) =
-    RoleManagerList(deps.roles.roles, deps.roles.bindings, deps.roles.traits, deps.link.live, nav, modifier)
+    RoleManagerList(deps.roles.roles, deps.roles.bindings, deps.roles.traits, deps.link.canWrite, nav, modifier)
 
 /** S2: [RoleManagerList] over the shell context's [roles], their [bindings] and [traits]; [live] enables New role. */
 @Composable
@@ -178,6 +178,8 @@ class RoleFormDraft(
     val onDone: () -> Unit,
 ) {
     val live: Boolean get() = deps.link.live
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
+    val canWrite: Boolean @Composable get() = deps.link.canWrite
     val canEdit: Boolean get() = deps.roles.canEdit
 }
 
@@ -312,13 +314,13 @@ fun RoleFormActions(draft: RoleFormDraft, modifier: Modifier = Modifier) {
     f.error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
         if (existing != null && existing.source == "CUSTOM") {
-            TextButton(onClick = { f.confirmDelete = true }, enabled = draft.live && draft.canEdit, modifier = Modifier.testTag(ROLE_MANAGER_DELETE_TAG)) {
+            TextButton(onClick = { f.confirmDelete = true }, enabled = draft.canWrite && draft.canEdit, modifier = Modifier.testTag(ROLE_MANAGER_DELETE_TAG)) {
                 Text("Delete", color = Palette.Danger, fontSize = 12.sp)
             }
         }
         TextButton(onClick = draft.onDone) { Text("Back", fontSize = 12.sp) }
         Button(
-            enabled = draft.live && f.id.isNotBlank() && f.name.isNotBlank(),
+            enabled = draft.canWrite && f.id.isNotBlank() && f.name.isNotBlank(),
             modifier = Modifier.testTag(ROLE_MANAGER_SAVE_TAG),
             onClick = draft.onSave,
         ) { Text("Save role", fontSize = 12.sp) }

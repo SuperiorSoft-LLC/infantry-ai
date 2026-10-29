@@ -1,0 +1,14 @@
+{
+  "name": "Demo_Lock",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "description": "Demo build only: wraps the app so that, against a demo-locked daemon (ready demo=lock), every write control is dimmed with \"Disabled in the demo\" and the demo notice is available to the blocks below.",
+  "tier": "official",
+  "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.demo.lock.DemoLockPlugin",
+  "buildOrder": 890,
+  "shell": [
+    { "node": "infantry.shell.frame", "name": "lock", "mode": "wrap" }
+  ]
+}

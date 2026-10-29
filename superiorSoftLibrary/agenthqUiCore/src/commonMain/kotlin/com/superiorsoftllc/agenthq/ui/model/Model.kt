@@ -91,8 +91,27 @@ data class ConnectionInfo(
     val historySince: Long? = null,
     /** BUILD-STAMP-1: the daemon's build string (`ready` build=), e.g. 1.0.1+20261023.1432.e85b223; null from an older daemon. */
     val daemonBuild: String? = null,
+    /**
+     * DEMO-MERGE-1: every `key=value` field of the last `ready`, verbatim. Core reads only the generic ones (`access`);
+     * a module that adapts the UI to a particular deployment reads its own.
+     */
+    val readyFields: Map<String, String> = emptyMap(),
+    /**
+     * DEMO-MERGE-1: refusals the daemon declared as notices (`ready` notices=code,code): the latest message per code. Such a
+     * refusal is not an error banner; a module shows it.
+     */
+    val notices: Map<String, String> = emptyMap(),
 ) {
     val isLive: Boolean get() = state == ConnState.CONNECTED
+
+    /**
+     * DEMO-MERGE-1: the daemon serves this link a restricted surface (`ready` access=restricted): it refuses the owner-only
+     * reads (configuration, host processes, the command catalog), so the UI does not ask for them.
+     */
+    val restricted: Boolean get() = readyFields["access"] == "restricted"
+
+    /** A write control may be enabled: live, and the nearest [com.superiorsoftllc.agenthq.ui.shell.WritePolicy] allows writes. */
+    val canWrite: Boolean @androidx.compose.runtime.Composable get() = isLive && com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current.canWrite
 
     /**
      * Contract 1.11.0: the daemon puts every prompt on its session's stream as a `turn`, so the transcript
@@ -692,6 +711,10 @@ data class AppState(
     val keepAliveMinutes: Int? = null,
     /** No-hard-coded-limits (1.133.0): every daemon limit, as its last `limit_catalog` said (values follow `settings`). Null = not read yet. */
     val limitCatalog: List<LimitInfo>? = null,
+    /** DEMO-RESTRICT: the daemon's role allowlist (`limits.roles.allowed`); empty = every role may be chosen. */
+    val allowedRoles: List<String> = emptyList(),
+    /** DEMO-RESTRICT: `limits.concurrency.maxSessions` from the `settings` frame; 0 = no cap (the normal app). */
+    val maxSessions: Long = 0,
     /** ROGUE-1 (1.120.0): the daemon's last `processes` answer or `process_pressure` push; null = never answered. */
     val processReport: com.superiorsoftllc.agenthq.ui.protocol.ProcessReport? = null,
     /** ROGUE-1 (1.120.0): the daemon's `processes.autoReap` as its last `settings` frame said; null = not read yet. */
@@ -1298,7 +1321,9 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
         if (inOrder) withTodos.copy(statusDetail = p.detail) else withTodos
     }
 
-    Envelope.ERROR -> requeueRefused(s, env) ?: if (env.sessionId == null) {
+    // DEMO-MERGE-1: a refusal whose code the daemon declared a notice (`ready` notices=) is kept for a module to show, not an error banner.
+    Envelope.ERROR -> declaredNotice(s.connection, env.data)?.let { (code, msg) -> s.copy(connection = s.connection.copy(notices = s.connection.notices + (code to msg))) }
+        ?: requeueRefused(s, env) ?: if (env.sessionId == null) {
         // A refused command. If it was this window's spawn, no session is coming: stop waiting for one.
         // P10-C: a `prompt_*` refusal also lands inline in the Prompts tab and ends its loading state.
         val promptRefusal = env.data.startsWith("prompt_")
@@ -1768,7 +1793,11 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
         val withKeepAlive = LifecycleSetting.fromSettingsFrame(env.data)?.let { withAutoReap.copy(keepAliveMinutes = it) } ?: withAutoReap
         val withPortrait = UserPortrait.fromSettingsFrame(env.data)?.let { withKeepAlive.copy(userPortrait = it.base64) } ?: withKeepAlive
         val withTimer = PromptTimerSetting.fromSettingsFrame(env.data, withPortrait.promptTimer)?.let { withPortrait.copy(promptTimer = it) } ?: withPortrait
-        withTimer.copy(limitCatalog = LimitsSetting.withSettingsFrame(withTimer.limitCatalog, env.data))
+        withTimer.copy(
+            limitCatalog = LimitsSetting.withSettingsFrame(withTimer.limitCatalog, env.data),
+            allowedRoles = AllowedRoles.fromSettingsFrame(env.data) ?: withTimer.allowedRoles,
+            maxSessions = AllowedRoles.maxSessionsFromSettingsFrame(env.data) ?: withTimer.maxSessions,
+        )
     }
 
     // No-hard-coded-limits (1.133.0): the whole catalog, replaced by each answer.
@@ -1857,6 +1886,8 @@ private fun ready(s: AppState, env: Envelope): AppState {
             instance = instance,
             historySince = fields["since"]?.toLongOrNull(),
             daemonBuild = fields["build"]?.takeIf { it.isNotBlank() },
+            readyFields = fields,
+            notices = emptyMap(),
         ),
         // PROMPT-2: the daemon resends every prompt still open right after `ready`; one resolved while the link was
         // down must not keep its card.
@@ -2098,3 +2129,14 @@ fun ticketTagLabel(ticketId: String, title: String?): String {
 /** The untruncated tag text, shown on hover and read by screen readers. */
 fun ticketTagFull(ticketId: String, title: String?): String =
     title?.trim()?.takeIf { it.isNotEmpty() }?.let { "$ticketId $it" } ?: ticketId
+
+/**
+ * DEMO-MERGE-1: [data] is `<code> <message>` with a code the daemon declared in `ready` notices= (comma separated): the
+ * code and the message, else null.
+ */
+internal fun declaredNotice(c: ConnectionInfo, data: String): Pair<String, String>? {
+    val declared = c.readyFields["notices"]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+    val code = data.substringBefore(' ')
+    val message = data.substringAfter(' ', "").trim()
+    return if (code in declared && message.isNotEmpty()) code to message else null
+}

@@ -87,6 +87,12 @@ private fun jsByte(a: JsAny, i: Int): Int = js("a[i]")
 private sealed interface WebMode {
     /** The token screen; [error] says why the last token was not used. */
     data class Gate(val error: String? = null) : WebMode
+    /**
+     * Ticket 9bf81983 (demo-build): asking a locked demo daemon for its PUBLIC visitor token, so a visitor lands connected.
+     * A daemon without one answers 404 and the token screen shows ([error] kept). [rejected] is a token just refused,
+     * never tried again, so a refused visitor token ends on the token screen instead of looping.
+     */
+    data class Discover(val error: String? = null, val rejected: String? = null) : WebMode
     /** Asking the daemon whether [token] is accepted, before the app opens its WebSocket. */
     data class Checking(val token: String) : WebMode
     data class Live(val token: String) : WebMode
@@ -109,8 +115,15 @@ private fun notifySplashReady(): Unit = js("{ if (typeof window.infantryReady ==
 private fun WebRoot() {
     SymbolFontFallback()
     SplashDone()
-    var mode by remember { mutableStateOf<WebMode>(BrowserStorage.get(BrowserStorage.TOKEN_KEY)?.let { WebMode.Checking(it) } ?: WebMode.Gate()) }
+    var mode by remember { mutableStateOf<WebMode>(BrowserStorage.get(BrowserStorage.TOKEN_KEY)?.let { WebMode.Checking(it) } ?: WebMode.Discover()) }
     when (val m = mode) {
+        is WebMode.Discover -> {
+            LaunchedEffect(m) {
+                val visitor = VisitorToken.fetch()
+                mode = if (visitor != null && visitor != m.rejected) WebMode.Checking(visitor) else WebMode.Gate(m.error)
+            }
+            CenteredNote("Connecting...")
+        }
         is WebMode.Gate -> TokenGate(
             savedToken = BrowserStorage.get(BrowserStorage.TOKEN_KEY),
             error = m.error,
@@ -124,7 +137,8 @@ private fun WebRoot() {
             LaunchedEffect(m.token) {
                 mode = when (val status = TokenCheck.status(m.token)) {
                     200 -> { BrowserStorage.set(BrowserStorage.TOKEN_KEY, m.token); WebMode.Live(m.token) }
-                    401 -> WebMode.Gate("The daemon refused that token. Check it and try again.")
+                    // A refused saved token (e.g. from before a demo reset) falls back to the demo's visitor token once.
+                    401 -> WebMode.Discover("The daemon refused that token. Check it and try again.", rejected = m.token)
                     0 -> WebMode.Gate("Could not reach the daemon at ${pageWebSocketUrl()}. Is it running?")
                     else -> WebMode.Gate("The daemon answered HTTP $status while checking the token.")
                 }
@@ -159,6 +173,14 @@ private object TokenCheck {
 
 private fun fetchStatus(token: String): Promise<JsNumber> =
     js("fetch('/attention', { headers: { 'Authorization': 'Bearer ' + token }, cache: 'no-store' }).then(r => r.status).catch(() => 0)")
+
+/** Ticket 9bf81983: a locked demo daemon's public visitor token, or null (no such daemon, none set, unreachable). */
+private object VisitorToken {
+    suspend fun fetch(): String? = fetchVisitorToken().await<JsString>().toString().trim().takeIf { it.isNotEmpty() }
+}
+
+private fun fetchVisitorToken(): Promise<JsString> =
+    js("fetch('/demo/visitor-token', { cache: 'no-store' }).then(r => r.ok ? r.text() : '').catch(() => '')")
 
 const val TOKEN_FIELD_TAG = "web-token-field"
 const val CONNECT_TAG = "web-connect"

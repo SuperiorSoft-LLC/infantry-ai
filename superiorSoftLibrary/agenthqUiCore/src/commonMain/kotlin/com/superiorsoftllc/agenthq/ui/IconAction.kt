@@ -97,6 +97,18 @@ fun IconAction(
 }
 
 /**
+ * DEMO-MERGE-1: when the nearest [com.superiorsoftllc.agenthq.ui.shell.WritePolicy] refuses writes and gives a reason,
+ * [content]'s (disabled) control says that reason on hover; otherwise it is [content] alone, unchanged.
+ */
+@Composable
+fun WritePolicyTooltip(content: @Composable (Modifier) -> Unit) {
+    val policy = com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current
+    val reason = policy.reason?.takeIf { !policy.canWrite }
+    if (reason != null) IconActionTooltipBox(reason, describe = false, content = content)
+    else content(Modifier)
+}
+
+/**
  * UX-POLISH-1: [IconAction]'s tooltip, for an icon control that is not a Material button (e.g. the title bar's square
  * New project box). Names the action on hover or keyboard focus, puts [label] in the contentDescription when
  * [describe] is set, and exposes the tooltip text as [IconActionTooltip]. [content] gets the modifier to put on the

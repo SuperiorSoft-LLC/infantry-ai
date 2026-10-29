@@ -240,6 +240,8 @@ class BoardPaneHost internal constructor(
     private val hoverState: State<DragHover?>,
 ) {
     val live: Boolean get() = deps.live
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
+    val canWrite: Boolean @Composable get() = deps.canWrite
     val creating: Boolean get() = creatingState.value
     internal val hover: DragHover? get() = hoverState.value
 
@@ -260,6 +262,8 @@ fun BoardPaneFrame(deps: BoardDeps, onOpenAgent: (String) -> Unit, content: @Com
     val actionScope = rememberCoroutineScope()
     val creating = remember { mutableStateOf(false) }
     val live = deps.live
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
+    val canWrite = deps.canWrite
     val projectId = deps.session.activeProjectId
     // The shell hands over a new context on every state change; the effects and the drop session read the current one.
     val current by rememberUpdatedState(deps)
@@ -328,11 +332,11 @@ fun BoardFiltersSection(board: BoardPaneHost, modifier: Modifier = Modifier) {
             ticketCountLabel(shown, tickets.visible.size, active == EpicFilter.All),
             color = Palette.Muted, fontSize = 11.sp, maxLines = 1, softWrap = false, modifier = Modifier.weight(1f),
         )
-        OutlinedButton(onClick = { board.startNext() }, enabled = board.live && tickets.column(TicketColumns.TODO).isNotEmpty()) {
+        OutlinedButton(onClick = { board.startNext() }, enabled = board.canWrite && tickets.column(TicketColumns.TODO).isNotEmpty()) {
             Text("Start next", fontSize = 12.sp)
         }
         Spacer(Modifier.width(6.dp))
-        Button(onClick = { board.toggleCreating() }, enabled = board.live) { Text(if (board.creating) "Close" else "+ New ticket", fontSize = 12.sp) }
+        Button(onClick = { board.toggleCreating() }, enabled = board.canWrite) { Text(if (board.creating) "Close" else "+ New ticket", fontSize = 12.sp) }
     }
 }
 
@@ -392,6 +396,8 @@ class BoardCardItem internal constructor(
 fun BoardColumnsSection(board: BoardPaneHost, modifier: Modifier = Modifier, card: @Composable ColumnScope.(BoardCardItem) -> Unit) {
     val backlog = board.deps.tickets
     val live = board.live
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
+    val canWrite = board.canWrite
     val drag = board.drag
     val session = board.session
     val columnOf = board.columnOf
@@ -588,6 +594,8 @@ class BoardCardHost internal constructor(
     val ticket: Ticket get() = item.ticket
     val deps: BoardDeps get() = board.deps
     val live: Boolean get() = board.live
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
+    val canWrite: Boolean @Composable get() = board.canWrite
     /** The edit form is open (the summary toggles it). */
     val open: Boolean get() = openState.value
     val dropNote: String? get() = item.dropNote
@@ -724,25 +732,27 @@ fun TicketCardEditSection(card: BoardCardHost, modifier: Modifier = Modifier) {
 fun TicketCardActionsSection(card: BoardCardHost, modifier: Modifier = Modifier) {
     val t = card.ticket
     val live = card.live
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
+    val canWrite = card.canWrite
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
         when (t.status) {
             // 1.131.0: a backlog card is never started; it is promoted to the sprint first.
-            TicketColumns.BACKLOG -> CardButton("To do", live, "Move to To do (the sprint)") { card.move(TicketColumns.TODO) }
+            TicketColumns.BACKLOG -> CardButton("To do", canWrite, "Move to To do (the sprint)") { card.move(TicketColumns.TODO) }
             TicketColumns.TODO -> {
-                CardButton("Start", live) { card.start(); CommandResult.Sent }
-                CardButton("Backlog", live, "Park in Backlog") { card.move(TicketColumns.BACKLOG) }
+                CardButton("Start", canWrite) { card.start(); CommandResult.Sent }
+                CardButton("Backlog", canWrite, "Park in Backlog") { card.move(TicketColumns.BACKLOG) }
             }
             TicketColumns.IN_PROGRESS -> {
-                CardButton("Done", live) { card.move(TicketColumns.DONE) }
-                CardButton("Back", live) { card.move(TicketColumns.TODO) }
+                CardButton("Done", canWrite) { card.move(TicketColumns.DONE) }
+                CardButton("Back", canWrite) { card.move(TicketColumns.TODO) }
             }
-            TicketColumns.DONE -> CardButton("Reopen", live) { card.move(TicketColumns.TODO) }
+            TicketColumns.DONE -> CardButton("Reopen", canWrite) { card.move(TicketColumns.TODO) }
         }
         t.sessionId?.takeIf { card.deps.agent(it) != null }?.let { sid ->
             TextButton(onClick = { card.openAgent(sid) }) { Text("Agent", fontSize = 11.sp) }
         }
         Spacer(Modifier.weight(1f))
-        if (card.open) TextButton(onClick = { card.delete() }, enabled = live) { Text("Delete", color = Palette.Danger, fontSize = 11.sp) }
+        if (card.open) TextButton(onClick = { card.delete() }, enabled = canWrite) { Text("Delete", color = Palette.Danger, fontSize = 11.sp) }
     }
 }
 
@@ -866,7 +876,7 @@ private fun TicketEditForm(t: Ticket, deps: BoardDeps, onDone: () -> Unit) {
             images = images,
             projectDirectory = deps.session.projects.firstOrNull { it.id == t.projectId }?.directory,
             uploaded = uploaded,
-            enabled = deps.live && pending == null,
+            enabled = deps.canWrite && pending == null,
             busy = uploading,
             error = imageError,
             onAttach = ::attach,
@@ -874,7 +884,7 @@ private fun TicketEditForm(t: Ticket, deps: BoardDeps, onDone: () -> Unit) {
         )
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             Button(
-                enabled = deps.live && title.isNotBlank() && pending == null && !uploading,
+                enabled = deps.canWrite && title.isNotBlank() && pending == null && !uploading,
                 modifier = Modifier.testTag(TICKET_EDIT_SAVE_TAG),
                 onClick = {
                     actionScope.launch {
@@ -945,7 +955,7 @@ private fun TicketForm(deps: BoardDeps, initialEpicId: String?, onDone: () -> Un
         if (deps.roles.profiles.isEmpty()) Text("No agent profile exists yet: create one in the Profiles tab so a started ticket has someone to run it.", color = Palette.Muted, fontSize = 10.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Button(
-                enabled = deps.live && title.isNotBlank(),
+                enabled = deps.canWrite && title.isNotBlank(),
                 onClick = {
                     actionScope.launch {
                         if (deps.tickets.create(title, description, assignee, epicId?.takeIf { id -> epics.any { it.id == id } }, provider, model) is CommandResult.Sent) onDone()
