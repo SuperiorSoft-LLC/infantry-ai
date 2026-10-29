@@ -72,9 +72,15 @@ dependencies {
 
     // Persistence story 1/3: the `runs` table. The catalog's `sqlite-driver`
     // (app.cash.sqldelight:sqlite-driver, 2.2.1) -- NOT `sqldelight-jdbc-driver`, which would need
-    // org.xerial:sqlite-jdbc supplied separately and that coordinate is not in libs.versions.toml.
+    // org.xerial:sqlite-jdbc supplied separately (the catalog now carries it as `sqlite-jdbc`, pinned below).
     // sqlite-driver resolves the JVM variant here and adds no compilation targets.
     implementation(libs.sqlite.driver)
+    // Ticket 55d60a5e: the sqlite-jdbc sqlite-driver brings (3.51.0.0) deadlocks: a connection closing in WAL mode holds
+    // the inode lock and waits for the unix-VFS mutex (3.51.0's unixIsSharingShmNode) while a connection opening holds
+    // that mutex and waits for the inode lock (findReusableFd). Every later open queues on the mutex, so the daemon's
+    // per-query connections all hang in NativeDB._open_utf8 (measured with gdb in the Docker image). SQLite 3.51.2 fixed
+    // it; this pins the newer driver, which wins the version conflict over sqlite-driver's transitive 3.51.0.0.
+    implementation(libs.sqlite.jdbc)
     // Phase 4.5: the rest of the SQLDelight JVM stack, all from the catalog. `runtime` and
     // `jdbc-driver` already arrive transitively through sqlite-driver; they are declared so the
     // module states what it compiles against instead of leaning on a transitive edge.
@@ -381,6 +387,10 @@ tasks.register<Sync>("dockerContext") {
     dependsOn(webBundleTask)
     from(webBundleDir) { into("agenthq/web") }
     from(rootProject.layout.projectDirectory.file("docker/Dockerfile"))
+    // DOCKER-2: the entrypoint (first-start token in the state volume, JAVA_OPTS).
+    from(rootProject.layout.projectDirectory.file("docker/entrypoint.sh"))
+    // SANDBOX-1: the Landlock launcher the Dockerfile compiles (limits.sandbox.mode).
+    from(rootProject.layout.projectDirectory.file("docker/landlock-exec.c"))
     into(layout.buildDirectory.dir("docker"))
 }
 

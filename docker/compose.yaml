@@ -23,6 +23,9 @@ services:
       AGENTHQ_BASE_BRANCH: ${AGENTHQ_BASE_BRANCH:-main}
       # Host name(s) the browser uses (comma separated), e.g. agents.example.com. Empty: the daemon's own addresses only.
       AGENTHQ_WEB_HOSTS: ${AGENTHQ_WEB_HOSTS:-}
+      # Health watchdog (ticket 55d60a5e): halts the daemon after FAILURES failed /health self-checks in a row so the restart
+      # policy restarts it (Docker never restarts an unhealthy container). 0 = off. See docker-compose.yml.
+      AGENTHQ_LIMIT_HEALTH_WATCHDOG_FAILURES: ${AGENTHQ_LIMIT_HEALTH_WATCHDOG_FAILURES:-3}
       # Harness credentials: pass through from the host environment / .env, never write them into this file.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -53,7 +56,8 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      AGENTHQ_DOMAIN: ${AGENTHQ_DOMAIN:?set AGENTHQ_DOMAIN to use the tls profile}
+      # Required with --profile tls. Not `:?`: compose interpolates every service, so `:?` broke plain `up` (no tls).
+      AGENTHQ_DOMAIN: ${AGENTHQ_DOMAIN:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

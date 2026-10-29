@@ -76,6 +76,9 @@ class SettingsService(
             PROCESSES_HEAVY_MB to JsonPrimitive(processWatchConfig().heavyMb),
             PROCESSES_FLOOR_MB to JsonPrimitive(processWatchConfig().floorMb),
             LIMITS_BUILD_PRIORITY to JsonPrimitive(buildLimits().priority.key),
+            SANDBOX_ALLOWED_DIRS to JsonArray(sandboxAllowedDirs().map(::JsonPrimitive)),
+            ALLOWED_MODELS to JsonArray(allowedModels().patterns.map(::JsonPrimitive)),
+            ALLOWED_ROLES to JsonArray(allowedRoles().patterns.map(::JsonPrimitive)),
         ) + LimitRegistry.ALL.associate { it.key to JsonPrimitive(limit(it)) } + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
     )
 
@@ -118,6 +121,67 @@ class SettingsService(
         return stored ?: runCatching { LimitRegistry.fromEnv(def, env) }.getOrDefault(def.default)
     }
 
+    /** SANDBOX-1: what the sandbox really does on this machine (set by the daemon); shown under limits.sandbox.mode. */
+    @Volatile
+    var sandboxStatus: (() -> String)? = null
+
+    private fun sandboxStatusLine(): String {
+        val status = runCatching { sandboxStatus?.invoke() }.getOrNull() ?: return ""
+        val dirs = sandboxAllowedDirs()
+        return " Status: $status. Allowed dirs ($SANDBOX_ALLOWED_DIRS): " + (if (dirs.isEmpty()) "none besides each session's working dir" else dirs.joinToString())
+    }
+
+    /**
+     * SANDBOX-1: the extra directories confined agents may write besides their working dir: the stored setting (a JSON
+     * array of absolute paths), else env AGENTHQ_LIMIT_SANDBOX_ALLOWED_DIRS (comma separated), else none.
+     */
+    fun sandboxAllowedDirs(): List<String> {
+        store.settings.get(SANDBOX_ALLOWED_DIRS)?.value
+            ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonArray)?.mapNotNull { e -> (e as? JsonPrimitive)?.content } }.getOrNull() }
+            ?.let { return it }
+        return env(SANDBOX_ALLOWED_DIRS_ENV)?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+    }
+
+    /**
+     * DEMO-RESTRICT (ticket f9e181af): the model allowlist in force, read at every check: the stored setting (a JSON array
+     * of patterns; `[]` = no restriction, overriding the env), else env AGENTHQ_ALLOWED_MODELS (comma separated), else none.
+     */
+    fun allowedModels(): ModelAllowlist {
+        store.settings.get(ALLOWED_MODELS)?.value
+            ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonArray)?.mapNotNull { e -> (e as? JsonPrimitive)?.content } }.getOrNull() }
+            ?.let { return ModelAllowlist.parse(it.joinToString(",")) }
+        return ModelAllowlist.parse(env(ModelAllowlist.ENV))
+    }
+
+    /** DEMO-RESTRICT: the role allowlist: stored `limits.roles.allowed` (`[]` = all, beats the env) > env AGENTHQ_ALLOWED_ROLES > all. */
+    fun allowedRoles(): ModelAllowlist {
+        store.settings.get(ALLOWED_ROLES)?.value
+            ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonArray)?.mapNotNull { e -> (e as? JsonPrimitive)?.content } }.getOrNull() }
+            ?.let { return ModelAllowlist.roles(it.joinToString(",")) }
+        return ModelAllowlist.roles(env(ModelAllowlist.ROLES_ENV))
+    }
+
+    /** A JSON array of non-blank strings, or one comma separated string (`""` = no restriction). */
+    private fun requireAllowedModels(value: JsonElement, key: String = ALLOWED_MODELS): List<String> {
+        val items = when (value) {
+            is JsonArray -> value.map { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+            is JsonPrimitive -> if (value.isString) value.content.split(',') else listOf(null)
+            else -> listOf(null)
+        }
+        require(items.all { it != null }) {
+            "setting '$key' must be a JSON array of ids or patterns (`*` = any characters), e.g. [\"opencode-go/beam-free\"] or [\"pm\", \"backend\"]; [] = no restriction"
+        }
+        return ModelAllowlist.parse(items.filterNotNull().joinToString(",")).patterns
+    }
+
+    private fun requireAllowedDirs(value: JsonElement): List<String> {
+        val items = (value as? JsonArray)?.map { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+        require(items != null && items.all { it != null && java.io.File(it).isAbsolute }) {
+            "setting '$SANDBOX_ALLOWED_DIRS' must be a JSON array of absolute paths, e.g. [\"/work\"]"
+        }
+        return items.filterNotNull().map { it.trimEnd('/', '\\').ifEmpty { "/" } }
+    }
+
     /** [limit] as a count: 0 on an unlimited-capable limit becomes [Int.MAX_VALUE] (no limit). */
     fun limitCap(def: LimitDef): Int = LimitRegistry.cap(limit(def), def)
 
@@ -135,7 +199,7 @@ class SettingsService(
                             put("value", JsonPrimitive(limit(def)))
                             put("default", JsonPrimitive(def.default))
                             put("unit", JsonPrimitive(def.unit))
-                            put("description", JsonPrimitive(def.description))
+                            put("description", JsonPrimitive(def.description + (if (def == LimitRegistry.SANDBOX_MODE) sandboxStatusLine() else "")))
                             put("min", JsonPrimitive(def.min))
                             def.max?.let { put("max", JsonPrimitive(it)) }
                             if (def.zeroIsUnlimited) put("zeroMeans", JsonPrimitive(def.zeroMeans))
@@ -143,6 +207,17 @@ class SettingsService(
                         },
                     )
                 },
+            ),
+            // DEMO-RESTRICT: the model allowlist (not a number, so beside the list): [] = every model is allowed.
+            "allowedModels" to JsonObject(
+                mapOf(
+                    "key" to JsonPrimitive(ALLOWED_MODELS),
+                    "value" to JsonArray(allowedModels().patterns.map(::JsonPrimitive)),
+                    "env" to JsonPrimitive(ModelAllowlist.ENV),
+                    "description" to JsonPrimitive(
+                        "The models sessions, tickets and roles may run on; empty = every model. `*` matches any characters.",
+                    ),
+                ),
             ),
         ),
     )
@@ -269,6 +344,9 @@ class SettingsService(
             PROCESSES_IDLE_MINUTES -> JsonPrimitive(requireIntIn(key, value, PROCESSES_IDLE_RANGE))
             PROCESSES_HEAVY_MB, PROCESSES_FLOOR_MB -> JsonPrimitive(requireIntIn(key, value, PROCESSES_MB_RANGE))
             LIMITS_BUILD_PRIORITY -> JsonPrimitive(requireBuildPriority(value).key)
+            SANDBOX_ALLOWED_DIRS -> JsonArray(requireAllowedDirs(value).map(::JsonPrimitive))
+            ALLOWED_MODELS -> JsonArray(requireAllowedModels(value).map(::JsonPrimitive))
+            ALLOWED_ROLES -> JsonArray(requireAllowedModels(value, ALLOWED_ROLES).map { JsonPrimitive(it.lowercase()) })
             else -> LimitRegistry.get(key)?.let { JsonPrimitive(requireLimit(it, value)) }
                 ?: declaredField(key)?.let { com.superiorsoftllc.agenthq.plugin.api.ConfigFieldValidator.validate(it, value) }
                 ?: throw IllegalArgumentException("unknown setting '$key'")
@@ -290,7 +368,10 @@ class SettingsService(
 
     /** Read on every launch decision, never cached (plan section 8). */
     fun keepAliveMinutes(): Int {
-        val stored = store.settings.get(KEEP_ALIVE_MINUTES)?.value ?: return LifecyclePolicy.DEFAULT_KEEP_ALIVE_MINUTES
+        // DEMO-RESTRICT: no stored value -> env AGENTHQ_SESSION_KEEP_ALIVE_MINUTES (a bad one is ignored) -> the default.
+        val stored = store.settings.get(KEEP_ALIVE_MINUTES)?.value
+            ?: return env(KEEP_ALIVE_ENV)?.trim()?.toIntOrNull()?.takeIf { it in KEEP_ALIVE_RANGE }
+                ?: LifecyclePolicy.DEFAULT_KEEP_ALIVE_MINUTES
         val parsed = (Json.parseToJsonElement(stored) as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull
         check(parsed != null && parsed in KEEP_ALIVE_RANGE) { "stored setting '$KEEP_ALIVE_MINUTES' is not an int in $KEEP_ALIVE_RANGE" }
         return parsed
@@ -468,6 +549,8 @@ class SettingsService(
         const val INCLUDE_SKILLS_CONTEXT = "context.includeSkillsContext"
         const val SKILL_IDS = "context.skillIds"
         const val KEEP_ALIVE_MINUTES = "session.keepAliveMinutes"
+        /** DEMO-RESTRICT: the environment layer of [KEEP_ALIVE_MINUTES] (the stored setting wins). */
+        const val KEEP_ALIVE_ENV = "AGENTHQ_SESSION_KEEP_ALIVE_MINUTES"
         /** USER-PORTRAIT: base64 PNG/WebP (<= 256 KB) of the human's portrait; "" clears it. */
         const val USER_PORTRAIT = "user.portrait"
         const val PROMPTS_TIMEOUT_SEC = "prompts.timeoutSec"
@@ -510,6 +593,11 @@ class SettingsService(
          * than that share of all cores for that long (default 90 % for 10 min; 0 min = off).
          */
         const val LIMITS_BUILD_PRIORITY = "limits.build.priority"
+        const val SANDBOX_ALLOWED_DIRS = "limits.sandbox.allowedDirs"
+        const val SANDBOX_ALLOWED_DIRS_ENV = "AGENTHQ_LIMIT_SANDBOX_ALLOWED_DIRS"
+        /** DEMO-RESTRICT: the model allowlist, see [ModelAllowlist]. */
+        const val ALLOWED_MODELS = ModelAllowlist.SETTING
+        const val ALLOWED_ROLES = ModelAllowlist.ROLES_SETTING
         val LIMITS_BUILD_MAX_WORKERS = LimitRegistry.BUILD_MAX_WORKERS.key
         val LIMITS_BUILD_MAX_PARALLEL_FORKS = LimitRegistry.BUILD_MAX_PARALLEL_FORKS.key
         val LIMITS_CPU_ALERT_PERCENT = LimitRegistry.CPU_ALERT_PERCENT.key

@@ -121,7 +121,7 @@ class SessionManager(
     /** TRAITS-T4: where each agent/role session's frozen [RoleInstance] is kept. The daemon passes its database. */
     private val instances: SessionInstanceRepository = InMemorySessionInstances(),
     /** BUG-M2-11b-1: the one lifecycle setting, read on every launch decision (plan section 8). */
-    lifecyclePolicy: () -> LifecyclePolicy = { LifecyclePolicy.DEFAULT },
+    private val lifecyclePolicy: () -> LifecyclePolicy = { LifecyclePolicy.DEFAULT },
     /** BUG-M2-11b-1: the piped runner every line-protocol adapter spawns through (plan D10). */
     lineRunner: ProcessRunner = PipedProcessRunner(),
     /** BUG-M2-11f: start instants and tree kills for kept processes (recorded at launch, reaped at start). */
@@ -176,7 +176,87 @@ class SessionManager(
      */
     fun checkSpawn(providerId: String?, model: String?) {
         resolveProvider(providerId)
-        spawnModel(model)
+        spawnModel(model)?.let { requireAllowedModel(it, null) }
+    }
+
+    /**
+     * DEMO-RESTRICT (ticket f9e181af): the model allowlist in force, read at every check; the daemon points it at the
+     * setting `limits.models.allowed`. [com.superiorsoftllc.agenthq.settings.ModelAllowlist.NONE] = every model.
+     */
+    @Volatile
+    var allowedModels: () -> com.superiorsoftllc.agenthq.settings.ModelAllowlist = { com.superiorsoftllc.agenthq.settings.ModelAllowlist.NONE }
+
+    /** DEMO-RESTRICT: the role allowlist in force (`limits.roles.allowed`), read at every check; NONE = every role. */
+    @Volatile
+    var allowedRoles: () -> com.superiorsoftllc.agenthq.settings.ModelAllowlist = { com.superiorsoftllc.agenthq.settings.ModelAllowlist.NONE }
+
+    /**
+     * DEMO-RESTRICT: refuse [role] when a role allowlist is in force and does not name it. A session with no role (an
+     * anonymous console) is not a role choice and passes. Throws [IllegalArgumentException]; no restriction = no-op.
+     */
+    fun requireAllowedRole(role: String?) {
+        val wanted = role?.trim()?.takeIf { it.isNotEmpty() } ?: return
+        val allowlist = allowedRoles()
+        require(allowlist.allows(wanted)) { "role '${wanted.take(80)}' is not allowed on this server. ${allowlist.describe()}" }
+    }
+
+    /** DEMO-RESTRICT: `limits.concurrency.maxSessions` in force, read at every start; [Int.MAX_VALUE] = no cap. */
+    @Volatile
+    var maxSessions: () -> Int = { Int.MAX_VALUE }
+
+    /**
+     * DEMO-RESTRICT: refuse [model] when an allowlist is in force and does not name it. A null [model] is the harness
+     * default: [provider] (when given) resolves it, and a default that is unknown or not allowed is refused too, since
+     * the run would spend it. Throws [IllegalArgumentException] naming the allowed models; no restriction = no-op.
+     */
+    fun requireAllowedModel(model: String?, provider: AgentProvider?) {
+        val allowlist = allowedModels()
+        if (!allowlist.restricts) return
+        val explicit = model?.trim()?.takeIf { it.isNotEmpty() }
+        if (explicit != null) {
+            require(allowlist.allows(explicit)) { "model '${explicit.take(80)}' is not allowed on this server. ${allowlist.describe()}" }
+            return
+        }
+        if (provider == null) return
+        val default = runCatching { provider.defaultModel() }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
+        require(default != null && allowlist.allows(default)) {
+            "no model picked, and the default model of '${provider.id}' (${default ?: "its CLI's own"}) is not allowed on this server: " +
+                "pick one. ${allowlist.describe()}"
+        }
+    }
+
+    /**
+     * DEMO-RESTRICT: whether [sessionId]'s CLI process is still alive between turns (kept by `session.keepAliveMinutes`).
+     * A seam so a test can say which sessions hold one; the daemon reads the session host.
+     */
+    @Volatile
+    var hasLiveProcess: (String) -> Boolean = { host.hasProcess(it) }
+
+    /** DEMO-RESTRICT: [record] is OPEN: working on a turn, or resting with its CLI process kept alive. */
+    private fun isOpen(record: SessionRecord): Boolean =
+        runs.containsKey(record.id) || record.state in WORKING || runCatching { hasLiveProcess(record.id) }.getOrDefault(false)
+
+    /** " (an idle agent is closed after N minutes)", from `session.keepAliveMinutes`; empty when it cannot be read. */
+    private fun keepAliveText(): String = runCatching { lifecyclePolicy().keepAliveMinutes }.getOrNull()
+        ?.let { " (an idle agent is closed after $it minute${if (it == 1) "" else "s"}, setting session.keepAliveMinutes)" }.orEmpty()
+
+    /** DEMO-RESTRICT: how many sessions are OPEN now (working, or idle with a live kept process); `maxSessions` bounds it. */
+    fun openCount(): Int = sessions.values.count(::isOpen)
+
+    /**
+     * DEMO-RESTRICT: the refusal for one more open session, or null while `limits.concurrency.maxSessions` has room.
+     * [sessionId] (a session about to take a turn) passes when it is already open: it holds its slot already.
+     */
+    fun sessionCapRefusal(sessionId: String? = null): String? {
+        val cap = maxSessions()
+        if (cap == Int.MAX_VALUE) return null
+        val self = sessionId?.let { sessions[it] }
+        if (self != null && isOpen(self)) return null
+        val open = openCount()
+        if (open < cap) return null
+        return "$SESSION_CAP_REFUSED: $open agent${if (open == 1) " is" else "s are"} open, the most this server runs at once. " +
+            "Stop one (the Stop button in its chat), or wait for it to time out${keepAliveText()}, then try again. " +
+            com.superiorsoftllc.agenthq.settings.LimitRegistry.MAX_SESSIONS.hint()
     }
 
     /**
@@ -643,6 +723,9 @@ class SessionManager(
 
     // --- reads ----------------------------------------------------------------------------------
 
+    /** DEMO-LOCK (ticket 2f154f5f): set by the demo seed once its two sessions exist; [startNew] then refuses. */
+    @Volatile var demoLocked: Boolean = false
+
     fun list(): List<SessionRecord> = sessions.values.sortedBy { it.spawnedAt }
 
     fun get(id: String): SessionRecord? = sessions[id]
@@ -710,9 +793,15 @@ class SessionManager(
         /** Contract 1.115.0: create the installation-wide Assistant; set on the FIRST `session` frame, so no client ever sees it as an ordinary agent. */
         global: Boolean = false,
     ): SessionRecord {
+        // DEMO-LOCK (ticket 2f154f5f): once the demo seed exists no path (frame, mail, trigger, ticket) may create a session.
+        if (demoLocked) throw IllegalArgumentException("demo: new sessions are disabled in this demo")
         busyTwin(null, agentId, ticketId)?.let { throw IllegalArgumentException(twinRefusal("start", agentId, ticketId, it)) }
         val chosen = resolveProvider(providerId).provider
         val sessionModel = spawnModel(model)
+        // DEMO-RESTRICT: both refused BEFORE anything exists (no-ops while neither setting is set).
+        requireAllowedModel(sessionModel, chosen)
+        if (!global) requireAllowedRole(role)
+        sessionCapRefusal()?.let { throw SessionCapException(it) }
         val sessionEffort = effort?.trim()?.takeIf { it.isNotEmpty() }?.also {
             require(modelProblem(it) == null) { "effort '${it.take(40)}' is not a usable level" }
         }
@@ -846,6 +935,12 @@ class SessionManager(
             "session $sessionId runs on provider '${session.provider}', which this daemon is not " +
                 "configured with (configured: ${configured.keys.joinToString()})"
         }
+        if (prompt.isNotBlank()) {
+            // DEMO-RESTRICT: a turn spends the session's model and takes a working slot; refused before anything changes.
+            requireAllowedModel(session.model, lookup(session.provider)?.provider)
+            if (!session.global) requireAllowedRole(session.role)
+            sessionCapRefusal(sessionId)?.let { throw SessionCapException(it) }
+        }
         val revived = session.copy(
             state = SessionState.IDLE,
             killOutcome = null,
@@ -884,6 +979,7 @@ class SessionManager(
     @Synchronized
     fun setModel(sessionId: String, model: String): SessionRecord {
         val wanted = spawnModel(model) ?: throw IllegalArgumentException("a model name is required")
+        requireAllowedModel(wanted, null)
         return changeSetting(sessionId) { it.copy(model = wanted) }
     }
 
@@ -906,6 +1002,7 @@ class SessionManager(
     @Synchronized
     fun retarget(sessionId: String, model: String?, effort: String?): SessionRecord {
         val wantedModel = spawnModel(model)
+        requireAllowedModel(wantedModel, null)
         val wantedEffort = effort?.trim()?.takeIf { it.isNotEmpty() }?.also {
             require(modelProblem(it) == null) { "effort '${it.take(40)}' is not a usable level" }
         }
@@ -918,7 +1015,7 @@ class SessionManager(
      */
     fun checkSwitch(providerId: String, model: String?, effort: String?) {
         resolveProvider(providerId)
-        spawnModel(model)
+        spawnModel(model)?.let { requireAllowedModel(it, null) }
         effort?.trim()?.takeIf { it.isNotEmpty() }?.let {
             require(modelProblem(it) == null) { "effort '${it.take(40)}' is not a usable level" }
         }
@@ -941,6 +1038,7 @@ class SessionManager(
         val target = resolveProvider(providerId).provider.id
         if (target == session.provider) return retarget(sessionId, model, effort)
         val wantedModel = spawnModel(model)
+        requireAllowedModel(wantedModel, null)
         val wantedEffort = effort?.trim()?.takeIf { it.isNotEmpty() }?.also {
             require(modelProblem(it) == null) { "effort '${it.take(40)}' is not a usable level" }
         }
@@ -972,6 +1070,7 @@ class SessionManager(
         require(!runs.containsKey(sessionId) && !session.live) { "a reply is still running; wait for it to finish or stop it, then switch" }
         val wanted = role?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
         if (wanted == session.role?.takeIf { it.isNotBlank() }) return session
+        requireAllowedRole(wanted)
         val next = resolveInstance(session.agentId, wanted)?.let { withSkills(it.copy(agentId = session.agentId, role = wanted), session.ticketId) }
         host.stop(sessionId)
         instances.delete(sessionId)
@@ -1802,3 +1901,12 @@ internal fun modelProblem(model: String): String? = when {
  * caller can offer the same turn again once that run ends. Still an [IllegalStateException], as `check` threw before.
  */
 class RunInFlightException(val sessionId: String, message: String) : IllegalStateException(message)
+
+/** DEMO-RESTRICT (ticket f9e181af): how a `limits.concurrency.maxSessions` refusal starts (the UI shows it as it is). */
+const val SESSION_CAP_REFUSED = "Demo busy"
+
+/** DEMO-RESTRICT: the states of a session working on a turn, counted against `limits.concurrency.maxSessions`. */
+private val WORKING = setOf(SessionState.STARTING, SessionState.BUSY, SessionState.WAITING_INPUT)
+
+/** DEMO-RESTRICT: a start refused by `limits.concurrency.maxSessions`; nothing was created or started. */
+class SessionCapException(message: String) : IllegalArgumentException(message)

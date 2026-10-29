@@ -51,6 +51,11 @@ object LimitRegistry {
         "How many live sessions a session (or MCP connection) may grow its pod by; the worker concurrency cap.",
         legacyEnv = listOf("AGENTHQ_POD_SPAWN_CAP"),
     )
+    /** DEMO-RESTRICT (ticket f9e181af): the daemon-wide cap on sessions working at once (SessionManager). */
+    val MAX_SESSIONS = LimitDef(
+        "limits.concurrency.maxSessions", 0, "sessions",
+        "How many sessions of this whole daemon may be OPEN at once: working on a turn, or idle with their CLI process kept alive (session.keepAliveMinutes). At the cap a new session, or a turn for a session with no live process, is refused until one is stopped or times out.",
+    )
     val MAX_DEPTH = LimitDef(
         "limits.concurrency.maxDepth", 1, "levels",
         "How deep spawns from inside sessions may nest (daemon pod guard and MCP write tools share this one value); 1 = a session may spawn, its spawns may not; 0 = sessions may not spawn at all; set a high number for no practical limit.",
@@ -248,8 +253,41 @@ object LimitRegistry {
         min = 1, max = 100_000, zeroIsUnlimited = false,
     )
 
+    /** SANDBOX-1 (ticket d4c1dbd9): confine agent CLIs (runner/Sandbox.kt); the dirs are `limits.sandbox.allowedDirs`. */
+    val SANDBOX_MODE = LimitDef(
+        "limits.sandbox.mode", 0, "mode",
+        "1 = every agent CLI runs confined: shell and web tools off, files only in its working dir + limits.sandbox.allowedDirs (env AGENTHQ_LIMIT_SANDBOX_ALLOWED_DIRS), its own config read-only, a scoped token instead of the owner token. OS confinement is Linux-only (Landlock); elsewhere it is NOT enforced yet.",
+        max = 1, zeroMeans = "off",
+    )
+
+    /**
+     * Ticket 55d60a5e: `/health` and its watchdog (daemon/HealthGate.kt). Read ONCE at start-up, while the database still
+     * answers: the watchdog exists for the moment it does not, so it must never read a setting from it. A change applies
+     * on the next start.
+     */
+    val HEALTH_DB_TIMEOUT_SECONDS = LimitDef(
+        "limits.health.dbTimeoutSeconds", 3, "seconds",
+        "How long /health waits for the database before it answers 503 with database=stuck (the request thread is never held longer). Read at start-up.",
+        min = 1, max = 3600, zeroIsUnlimited = false,
+    )
+    val HEALTH_WATCHDOG_FAILURES = LimitDef(
+        "limits.health.watchdogFailures", 0, "checks",
+        "Failed /health self-checks in a row after which the headless daemon halts its JVM so its supervisor (Docker restart policy) restarts it; Docker never restarts an unhealthy container by itself. The Docker image sets 3. Read at start-up.",
+        max = 1000, zeroMeans = "watchdog off",
+    )
+    val HEALTH_WATCHDOG_INTERVAL_SECONDS = LimitDef(
+        "limits.health.watchdogIntervalSeconds", 10, "seconds",
+        "How often the health watchdog asks the daemon's own /health (also the delay before its first check). Read at start-up.",
+        min = 1, max = 3600, zeroIsUnlimited = false,
+    )
+    val HEALTH_WATCHDOG_TIMEOUT_SECONDS = LimitDef(
+        "limits.health.watchdogTimeoutSeconds", 5, "seconds",
+        "How long one health watchdog check waits for /health before counting it as failed. Read at start-up.",
+        min = 1, max = 3600, zeroIsUnlimited = false,
+    )
+
     val ALL: List<LimitDef> = listOf(
-        MAX_PER_POD, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
+        MAX_PER_POD, MAX_SESSIONS, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
         TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NOTICE_MINUTES, UNBRIEFED_GRACE_MINUTES,
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
@@ -257,6 +295,8 @@ object LimitRegistry {
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
+        SANDBOX_MODE,
+        HEALTH_DB_TIMEOUT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
     )
 
     /** A minutes limit as milliseconds; 0 on an unlimited-capable one = [Long.MAX_VALUE] (never reached). */

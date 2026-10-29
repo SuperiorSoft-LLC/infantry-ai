@@ -36,7 +36,12 @@ private val mailJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
  * Host check applies. The curl in a delivered prompt sends `$AGENTHQ_TOKEN`, which the daemon puts in the
  * agent's environment; the literal token is never written into a prompt.
  */
-fun Route.mailRoutes(mail: MailRouter, mailbox: Mailbox) {
+fun Route.mailRoutes(
+    mail: MailRouter,
+    mailbox: Mailbox,
+    /** DEMO-LOCK (ticket 2f154f5f): a non-null answer refuses the send (403) before the mailbox sees it. */
+    sendGuard: (MailSendRequest) -> String? = { null },
+) {
 
     /** Send (or reply to) a message. 200 + the stored `Message`, or 400 + a `MailRefused`. */
     post("/mail/send") {
@@ -45,6 +50,10 @@ fun Route.mailRoutes(mail: MailRouter, mailbox: Mailbox) {
         }.getOrNull()
         if (request == null) {
             call.respond(HttpStatusCode.BadRequest, MailRefused("", "", null, "malformed mail_send payload"))
+            return@post
+        }
+        sendGuard(request)?.let { reason ->
+            call.respond(HttpStatusCode.Forbidden, MailRefused(request.from, request.to, request.threadId, reason))
             return@post
         }
         when (val result = mail.send(request)) {

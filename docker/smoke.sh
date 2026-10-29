@@ -5,12 +5,12 @@
 # Uses a throwaway compose project, a random token and port 18787; removes its containers and volumes on exit.
 set -euo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")" && (pwd -W 2>/dev/null || pwd))"   # pwd -W: a Windows path under Git Bash (MSYS_NO_PATHCONV below)
 export AGENTHQ_IMAGE="${1:-${AGENTHQ_IMAGE:-infantryai/infantry-ai:dev}}"
 export COMPOSE_PROJECT_NAME="infantry-smoke-$$"
 export AGENTHQ_HOST_PORT="${SMOKE_PORT:-18787}"
 SECRETS="$(mktemp -d)"
-export AGENTHQ_SECRETS_DIR="$SECRETS"
+export AGENTHQ_SECRETS_DIR="$(cd "$SECRETS" && (pwd -W 2>/dev/null || pwd))"
 export MSYS_NO_PATHCONV=1   # Git Bash on Windows must not rewrite /data, /work
 DC=(docker compose -f "$HERE/compose.yaml")
 URL="http://127.0.0.1:${AGENTHQ_HOST_PORT}"
@@ -40,8 +40,8 @@ wait_health() {
   fail "/health did not answer within 120 s"
 }
 
-echo "== 1. start without a token must refuse (strict token rule)"
-if docker run --rm -e AGENTHQ_HOST=0.0.0.0 "$AGENTHQ_IMAGE" >/tmp/smoke-notoken.$$ 2>&1 & pid=$!; then
+echo "== 1. start without a token must refuse when generation is off (strict token rule)"
+if docker run --rm -e AGENTHQ_HOST=0.0.0.0 -e AGENTHQ_TOKEN_AUTO=false "$AGENTHQ_IMAGE" >/tmp/smoke-notoken.$$ 2>&1 & pid=$!; then
   for _ in $(seq 1 30); do kill -0 $pid 2>/dev/null || break; sleep 1; done
   if kill -0 $pid 2>/dev/null; then kill $pid 2>/dev/null || true; fail "daemon kept running with no token"; fi
   rm -f /tmp/smoke-notoken.$$

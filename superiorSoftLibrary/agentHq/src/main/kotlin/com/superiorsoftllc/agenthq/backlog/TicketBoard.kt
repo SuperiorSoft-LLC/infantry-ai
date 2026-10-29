@@ -1742,6 +1742,8 @@ class TicketBoard(
 
     private fun validateAgentId(agentId: String?, checkCatalog: Boolean) {
         if (agentId == null) return
+        // DEMO-RESTRICT: a ticket newly assigned to a role the role allowlist leaves out is refused (a stored one stays editable).
+        if (checkCatalog) sessions?.requireAllowedRole(if (agentId.startsWith("role:")) agentId.removePrefix("role:") else ticketProfile(agentId)?.role)
         if (agentId.startsWith("role:")) {
             val role = agentId.removePrefix("role:")
             require(RoleIds.PATTERN.matches(role) && (!checkCatalog || role in roleIds())) {
