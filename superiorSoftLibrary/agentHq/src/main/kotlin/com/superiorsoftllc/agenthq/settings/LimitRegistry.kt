@@ -235,8 +235,13 @@ object LimitRegistry {
     )
     val WATCH_FORCED = LimitDef(
         "limits.watch.forced", 1, "switch",
-        "1 = every worker session runs gradle/mvn/npm/yarn/pnpm through the watched runner (PATH shims); 0 = off for every session (owner only).",
+        "1 = every worker session runs gradle/mvn/npm/yarn/pnpm (PATH shims) and, through its harness hook, ./gradlew, java -jar and backgrounded shell commands through the watched runner; 0 = off for every session (owner only).",
         max = 1, zeroIsUnlimited = false,
+    )
+    val WATCH_TREE_WAIT_MINUTES = LimitDef(
+        "limits.watch.treeWaitMinutes", 30, "minutes",
+        "After a watched command exits, how long the runner waits for the rest of its process tree (Job Object / subreaper; build daemons excluded) before it reports done anyway, naming the survivors.",
+        max = 1440, zeroMeans = "no tree wait (done at the command's own exit)",
     )
     val BG_NOTIFY_PATTERN_GRACE_SECONDS = LimitDef(
         "limits.bg.notifyPatternGraceSeconds", 20, "seconds",
@@ -319,7 +324,7 @@ object LimitRegistry {
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
-        WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_FORCED,
+        WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_FORCED, WATCH_TREE_WAIT_MINUTES,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE,

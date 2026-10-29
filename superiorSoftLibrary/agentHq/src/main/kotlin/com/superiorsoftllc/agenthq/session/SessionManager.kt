@@ -1843,7 +1843,10 @@ class SessionManager(
         val pidChanged = next.childPid != current.childPid
         // BUG-M2-11f: the kept process must be on disk before the daemon can die, or the next start cannot reap it.
         val keptChanged = next.keptProcess != current.keptProcess
-        persist(sessionId, force = stateChanged || identityChanged || pidChanged || liveChanged || keptChanged)
+        // STALL-2: a watched job registered or ended is on disk at once, so a daemon restart keeps the watch (a beat that only
+        // moves lastBeat is not: the reload stamps a fresh beat anyway).
+        val jobsChanged = next.bgJobs.map { it.id } != current.bgJobs.map { it.id }
+        persist(sessionId, force = stateChanged || identityChanged || pidChanged || liveChanged || keptChanged || jobsChanged)
         // M2-12: a turn is BUSY from its start, so the first output no longer changes the state; the provider session
         // id it carries (what resume and the interrupt snapshot need) must still reach clients as its own status.
         val backgroundChanged = next.backgroundWork != current.backgroundWork || next.bgJobs.map { it.id } != current.bgJobs.map { it.id }

@@ -233,6 +233,8 @@ class UsageMeter private constructor(
     data class Report(
         val rows: List<Row>, val keepWeeks: Int, val generatedAt: Long,
         val requests: List<RequestRow> = emptyList(), val events: List<EventRow> = emptyList(), val prices: List<Price> = emptyList(),
+        /** STALL-2: the stall watcher's own counters (no model call behind any of them); null = not attached. */
+        val watch: com.superiorsoftllc.agenthq.mailbox.WatchMeter.Counts? = null,
     )
 
     /** One row per day per (role, provider, model, source): live runs grouped by day, plus the daily rollups. */
@@ -288,7 +290,7 @@ class UsageMeter private constructor(
         out.reverse(); out
     }
 
-    fun reportJson(): String = Json.encodeToString(Report.serializer(), report())
+    fun reportJson(): String = Json.encodeToString(Report.serializer(), report().copy(watch = com.superiorsoftllc.agenthq.mailbox.WatchMeter.counts()))
 
     companion object {
         const val DEFAULT_KEEP_WEEKS = 4

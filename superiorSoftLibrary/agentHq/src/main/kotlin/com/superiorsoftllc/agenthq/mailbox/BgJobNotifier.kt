@@ -393,15 +393,30 @@ object WatchMeter {
     private val heartbeats = java.util.concurrent.atomic.AtomicLong()
     private val optOuts = java.util.concurrent.atomic.AtomicLong()
     private val stalls = java.util.concurrent.atomic.AtomicLong()
+    private val hookRewrites = java.util.concurrent.atomic.AtomicLong()
+    private val hookOverrides = java.util.concurrent.atomic.AtomicLong()
 
     fun event() { events.incrementAndGet() }
     fun heartbeat() { heartbeats.incrementAndGet() }
     fun optOut() { optOuts.incrementAndGet() }
     fun stall() { stalls.incrementAndGet() }
+    /** STALL-2: a harness hook routed a shell command through the runner. */
+    fun hookRewrite() { hookRewrites.incrementAndGet() }
+    /** STALL-2: another harness hook's rewrite replaced ours; the command ran unwatched. */
+    fun hookOverride() { hookOverrides.incrementAndGet() }
 
-    data class Counts(val events: Long, val heartbeats: Long, val optOuts: Long, val stallNudges: Long) {
-        val note: String get() = "watcher, heartbeat and stall detector use no model tokens"
-    }
+    @kotlinx.serialization.Serializable
+    data class Counts(
+        val events: Long,
+        val heartbeats: Long,
+        val optOuts: Long,
+        val stallNudges: Long,
+        val hookRewrites: Long = 0,
+        val hookOverrides: Long = 0,
+        val note: String = NOTE,
+    )
 
-    fun counts() = Counts(events.get(), heartbeats.get(), optOuts.get(), stalls.get())
+    const val NOTE = "watcher, heartbeat and stall detector use no model tokens"
+
+    fun counts() = Counts(events.get(), heartbeats.get(), optOuts.get(), stalls.get(), hookRewrites.get(), hookOverrides.get())
 }

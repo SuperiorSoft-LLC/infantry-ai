@@ -103,6 +103,8 @@ class ClaudeSessionAdapter(
         streamInput = true,
         // PROMPT-3: in the fingerprint too, so switching into / out of `ask` restarts + resumes.
         permissionPromptTool = ClaudeCommand.PERMISSION_PROMPT_STDIO.takeIf { request.toolApproval == ToolApproval.ASK },
+        // STALL-2: the watch PreToolUse hook (allowAll = bypassPermissions only; the daemon checks the mode again).
+        settings = com.superiorsoftllc.agenthq.daemon.WatchHooks.claudeSettingsArg(env).takeIf { request.toolApproval == ToolApproval.ALLOW_ALL },
     )
 
     private class Turn(private val sink: AdapterSink) {

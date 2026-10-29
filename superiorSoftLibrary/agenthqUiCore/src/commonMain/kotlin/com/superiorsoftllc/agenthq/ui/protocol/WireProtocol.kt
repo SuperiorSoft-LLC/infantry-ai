@@ -1094,6 +1094,11 @@ data class SessionRecord(
     val global: Boolean = false,
     /** Contract 1.117.0: the agent's own report on its long job; null = none, or an older daemon. */
     val progress: ProgressView? = null,
+    /**
+     * STALL-2: the daemon's one-line watch state for this session (`watching X (quiet 2m)`, `watch OFF: reason`,
+     * `busy, silent Nm`, `stalled`, `idle`); null = nothing to say, or an older daemon.
+     */
+    val watchLabel: String? = null,
 ) {
     val resumable: Boolean
         get() = providerSessionId != null &&
@@ -2462,6 +2467,15 @@ data class UsageMeterRow(
 data class UsageMeterReport(
     val rows: List<UsageMeterRow> = emptyList(), val keepWeeks: Int = 0, val generatedAt: Long = 0,
     val requests: List<UsageMeterRequest> = emptyList(), val events: List<UsageMeterEvent> = emptyList(), val prices: List<UsageMeterPrice> = emptyList(),
+    /** STALL-2: the stall watcher's counters; null from an older daemon. */
+    val watch: WatchMeterCounts? = null,
+)
+
+/** STALL-2: the daemon's `WatchMeter.Counts`: what the job watcher did, none of it a model call ([note] says so). */
+@Serializable
+data class WatchMeterCounts(
+    val events: Long = 0, val heartbeats: Long = 0, val optOuts: Long = 0, val stallNudges: Long = 0, val hookRewrites: Long = 0, val hookOverrides: Long = 0,
+    val note: String = "",
 )
 
 /** STATS-ACC-1: one model request (a "turn"). A null field was not reported by the harness: show n/a, never 0. */

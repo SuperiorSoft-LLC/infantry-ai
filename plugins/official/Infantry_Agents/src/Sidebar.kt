@@ -283,6 +283,14 @@ fun AgentRow(a: AgentView, state: AppState, selected: Boolean, onClick: () -> Un
             TicketTag(a, state, null, Modifier.testTag("agent-row-ticket-${a.id}"))
             // Contract 1.117.0: the agent's own progress report on its long job, as a slim live bar.
             a.session.progress?.let { ProgressMeter(it, "row-${a.id}", Modifier.padding(top = 3.dp), compact = true) }
+            // STALL-2: the daemon's watch state for this session (watching X, watch OFF: reason, busy silent, stalled).
+            a.session.watchLabel?.takeIf { it.isNotBlank() }?.let { label ->
+                val alarm = label.startsWith("stalled") || label.startsWith("watch OFF") || label.startsWith("busy, silent")
+                Text(
+                    label, color = if (alarm) Palette.Accent else Palette.Muted, fontSize = 10.sp, maxLines = 1,
+                    softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 2.dp).testTag("agent-row-watch-${a.id}"),
+                )
+            }
             Spacer(Modifier.height(2.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 a.role?.let { Text(it, color = roleColor, fontSize = 11.sp, fontWeight = FontWeight.Medium, maxLines = 1, modifier = Modifier.testTag("agent-row-role-${a.id}")); Spacer(Modifier.width(5.dp)) }
