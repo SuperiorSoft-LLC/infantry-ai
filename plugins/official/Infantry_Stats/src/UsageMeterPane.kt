@@ -85,6 +85,14 @@ fun UsageMeterBody(report: UsageMeterReport) {
             color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(bottom = 8.dp).testTag("stats-turn-definition"),
         )
         UsageMeterExtras(report)
+        // STALL-2: the job watcher's counters, all daemon-side work with no model call behind it.
+        report.watch?.let { w ->
+            Text(
+                "Job watcher: ${w.events} events, ${w.heartbeats} heartbeats, ${w.hookRewrites} commands routed by hooks (${w.hookOverrides} overridden by another hook), ${w.optOuts} opt-outs, ${w.stallNudges} stall nudges" +
+                    (if (w.note.isNotBlank()) " (${w.note})" else ""),
+                color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(bottom = 8.dp).testTag("stats-watch-meter"),
+            )
+        }
         if (periods.isEmpty()) Text("No runs recorded yet.", color = Palette.Muted, fontSize = 12.sp)
         if (periods.isNotEmpty()) TurnsTrend(periods.map { (k, r) -> k to UsageMeterView.total(r).turns }, weekly)
         periods.forEachIndexed { i, (key, rows) ->

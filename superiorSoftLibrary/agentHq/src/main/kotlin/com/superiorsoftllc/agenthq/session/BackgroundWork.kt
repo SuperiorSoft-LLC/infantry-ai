@@ -37,20 +37,21 @@ interface ProcessSource {
 object OsProcessSource : ProcessSource {
     override fun descendants(rootPid: Long): List<ProcInfo> {
         val root = ProcessHandle.of(rootPid).orElse(null) ?: return emptyList()
-        return root.descendants().filter { it.isAlive }.map { h -> describe(h, parentKnown = true) }.toList()
+        return root.descendants().filter { it.isAlive }.map { h -> describe(h, parentKnown = true, full = true) }.toList()
     }
 
     override fun all(): List<ProcInfo> =
         ProcessHandle.allProcesses().filter { it.isAlive }.map { describe(it, parentKnown = true) }.toList()
 
     override fun info(pid: Long): ProcInfo? =
-        ProcessHandle.of(pid).filter { it.isAlive }.map { describe(it, parentKnown = false) }.orElse(null)
+        ProcessHandle.of(pid).filter { it.isAlive }.map { describe(it, parentKnown = false, full = true) }.orElse(null)
 
-    private fun describe(h: ProcessHandle, parentKnown: Boolean): ProcInfo {
+    /** STALL-2: [full] = the real command line on Windows too (the JDK gives none there, so the daemon/helper filters missed). */
+    private fun describe(h: ProcessHandle, parentKnown: Boolean, full: Boolean = false): ProcInfo {
         val info = h.info()
         return ProcInfo(
             h.pid(), if (parentKnown) h.parent().map { it.pid() }.orElse(null) else null,
-            info.commandLine().orElse(null) ?: info.command().orElse(""),
+            if (full) com.superiorsoftllc.agenthq.runner.ProcessTree.commandLine(h) else info.commandLine().orElse(null) ?: info.command().orElse(""),
             info.startInstant().map { it.toEpochMilli() }.orElse(null),
         )
     }

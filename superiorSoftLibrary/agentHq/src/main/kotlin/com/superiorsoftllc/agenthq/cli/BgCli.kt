@@ -53,7 +53,21 @@ internal object BgCli {
             val attached: Boolean = false,
             /** STALL-1: `--shim <name>`: started by the PATH shim for [command]'s argv0; the shim dir is skipped when resolving. */
             val shim: String? = null,
+            /**
+             * STALL-2: `--hook <harness>`: a harness hook rewrote the worker's shell command into this run
+             * ([com.superiorsoftllc.agenthq.runner.WatchRewrite]); the runner's own lines go to stderr, like a shim's.
+             */
+            val hook: String? = null,
+            /** STALL-2: `--shell <exe> --script-b64 <b64>`: the command is this script, run by that shell (no `--` part). */
+            val shell: String? = null,
+            val scriptB64: String? = null,
         ) : Parsed {
+            /** The script a hook passed, decoded; null for a plain `-- <cmd...>` run. */
+            val script: String? get() = scriptB64?.let { com.superiorsoftllc.agenthq.runner.WatchRewrite.decode(it) }
+
+            /** What the START line and the label show: the script itself, not `bash <file>`. */
+            val shown: String get() = script?.replace(Regex("\\s+"), " ") ?: command.joinToString(" ")
+
             /** The options again, as the detached wrapper's arguments (before `--`). */
             fun optionArgs(): List<String> = buildList {
                 name?.let { add("--name"); add(it) }
@@ -66,6 +80,9 @@ internal object BgCli {
                 jobId?.let { add("--job-id"); add(it) }
                 if (attached) add("--attached")
                 shim?.let { add("--shim"); add(it) }
+                hook?.let { add("--hook"); add(it) }
+                shell?.let { add("--shell"); add(it) }
+                scriptB64?.let { add("--script-b64"); add(it) }
             }
         }
         /** STALL-1: `agenthq unwatched --reason <text> -- <cmd...>`: the explicit opt-out; [reason] is required. */
@@ -94,6 +111,9 @@ internal object BgCli {
                 var jobId: String? = null
                 var attached = false
                 var shim: String? = null
+                var hook: String? = null
+                var shell: String? = null
+                var scriptB64: String? = null
                 var i = 0
                 while (i < opts.size) {
                     when (opts[i]) {
@@ -116,12 +136,20 @@ internal object BgCli {
                             ?: return Parsed.Bad("--job-id expects an id")
                         "--attached" -> { attached = true; notify = true }
                         "--shim" -> shim = opts.getOrNull(++i)?.takeIf { it.isNotBlank() } ?: return Parsed.Bad("--shim expects a program name")
+                        "--hook" -> hook = opts.getOrNull(++i)?.takeIf { it.matches(Regex("[a-z0-9-]{1,20}")) } ?: return Parsed.Bad("--hook expects a harness id")
+                        "--shell" -> shell = opts.getOrNull(++i) ?: return Parsed.Bad("--shell expects a shell executable")
+                        "--script-b64" -> scriptB64 = opts.getOrNull(++i)?.takeIf { s ->
+                            runCatching { com.superiorsoftllc.agenthq.runner.WatchRewrite.decode(s) }.isSuccess
+                        } ?: return Parsed.Bad("--script-b64 expects a base64url script")
                         else -> return Parsed.Bad("bg run: unknown option '${opts[i]}' (put the command after --)")
                     }
                     i++
                 }
-                if (command.isEmpty()) Parsed.Bad("bg run expects a command after --, e.g. agenthq bg run --name gate -- gradlew test")
-                else Parsed.Run(name, command, keep, notify, notifyOn, defaults, tail, timeout, jobId, attached, shim)
+                when {
+                    scriptB64 != null && command.isNotEmpty() -> Parsed.Bad("bg run: --script-b64 and a command after -- are exclusive")
+                    scriptB64 == null && command.isEmpty() -> Parsed.Bad("bg run expects a command after --, e.g. agenthq bg run --name gate -- gradlew test")
+                    else -> Parsed.Run(name, command, keep, notify, notifyOn, defaults, tail, timeout, jobId, attached, shim, hook, shell, scriptB64)
+                }
             }
             "unwatched" -> {
                 val split = rest.indexOf("--")
@@ -196,6 +224,42 @@ internal object BgCli {
             (if (windows) listOf(cwd) + dirs else dirs).firstNotNullOfOrNull { probe(File(it, argv0)) }
         } ?: return null
         return listOf(found.absoluteFile.normalize().path) + cmd.drop(1)
+    }
+
+    /**
+     * STALL-2: the shell a hooked script runs with: [given] (the harness shell's own path, `$BASH` / PowerShell's `$PID`
+     * process) when it resolves, else the same family from PATH (`pwsh`, `powershell` / `bash`, `sh`).
+     */
+    fun resolveShell(given: String?, cwd: File, getenv: (String) -> String?): String? {
+        val g = given?.trim()?.trim('"')?.takeIf { it.isNotEmpty() && !it.contains('$') }
+        val family = g?.let { File(it).name.lowercase().substringBefore('.') }
+        val fallbacks = if (family == "pwsh" || family == "powershell") listOf("pwsh", "powershell") else if (family == "cmd") listOf("cmd") else listOf("bash", "sh")
+        return (listOfNotNull(g) + fallbacks).firstNotNullOfOrNull { resolveCommand(listOf(it), cwd, getenv)?.first() }
+    }
+
+    /**
+     * STALL-2: the argv that runs [p]'s hooked script, or null when no shell resolves. PowerShell gets it as
+     * `-EncodedCommand` (UTF-16LE base64: no quoting layer between); bash/sh/zsh and cmd.exe get a script file next to the
+     * job's log, so neither the JDK's Windows argument quoting nor cmd.exe's ever touches the text.
+     */
+    internal fun scriptCommand(p: Parsed.Run, id: String, cwd: File, getenv: (String) -> String?): List<String>? {
+        val script = p.script ?: return null
+        val shell = resolveShell(p.shell, cwd, getenv) ?: return null
+        val dir = logDir().also { it.mkdirs() }
+        return when (File(shell).name.lowercase().substringBefore('.')) {
+            "pwsh", "powershell" -> {
+                val body = script + "\nif (\$null -ne \$LASTEXITCODE) { exit \$LASTEXITCODE }\n"
+                listOf(shell, "-NoProfile", "-NonInteractive", "-EncodedCommand", java.util.Base64.getEncoder().encodeToString(body.toByteArray(Charsets.UTF_16LE)))
+            }
+            "cmd" -> {
+                val f = File(dir, "$id.cmd").apply { writeText("@echo off\r\n" + script.replace("\r\n", "\n").replace("\n", "\r\n") + "\r\n") }
+                listOf(shell, "/d", "/c", f.absolutePath)
+            }
+            else -> {
+                val f = File(dir, "$id.sh").apply { writeText(script + "\n") }
+                listOf(shell, f.absolutePath.replace('\\', '/'))
+            }
+        }
     }
 
     /** First line of a start failure in a job's log; [detach] reads it back to tell "never started" from "ran fast". */
@@ -294,7 +358,14 @@ internal object BgCli {
             return 2
         }
         // Resolve before going detached: the caller is still in its turn and can read the error (ticket bbb6120c).
-        val command = resolveCommand(p.command, cwd, getenv) ?: run {
+        // STALL-2: a hooked script is rebuilt by the wrapper from its options; only its shell is checked here.
+        val command = if (p.scriptB64 != null) {
+            if (resolveShell(p.shell, cwd, getenv) == null) {
+                err.appendLine("error: bg run: no shell found for the hooked command (${p.shell ?: "none given"}); job NOT started")
+                return 127
+            }
+            emptyList()
+        } else resolveCommand(p.command, cwd, getenv) ?: run {
             err.appendLine("error: bg run: cannot find '${p.command.first()}' on PATH or in ${cwd.absolutePath}; job NOT started")
             return 127
         }
@@ -306,7 +377,7 @@ internal object BgCli {
             if (f.name.equals("java.exe", ignoreCase = true) && w.isFile) w.path else j
         }
         val args = listOf(javaCmd, "-cp", System.getProperty("java.class.path"), MAIN_CLASS) +
-            listOf("bg", "run") + globals + p.copy(jobId = id).optionArgs() + listOf("--") + command
+            listOf("bg", "run") + globals + p.copy(jobId = id).optionArgs() + (if (command.isEmpty()) emptyList() else listOf("--") + command)
         val nul = File(if (hostIsWindows()) "NUL" else "/dev/null")
         val wrapperLog = File(dir, "$id.wrapper.log")
         val log = File(dir, "$id.log")
@@ -331,7 +402,7 @@ internal object BgCli {
                 return wrapper.exitValue().takeIf { it != 0 } ?: 127
             }
         }
-        out.appendLine("bg job $id started detached: ${p.name ?: p.command.joinToString(" ").take(80)}")
+        out.appendLine("bg job $id started detached: ${p.name ?: p.shown.take(80)}")
         out.appendLine("log: ${File(dir, "$id.log").absolutePath}")
         out.appendLine(
             "You will get a COMMS mail when it exits (or prints ${patternsFor(p, getenv).joinToString(", ") { "/$it/" }}, " +
@@ -349,6 +420,12 @@ internal object BgCli {
     const val WATCH_ENV = "AGENTHQ_WATCH"
     /** STALL-1: seconds between the runner's `still running` lines (default 60; tests set it short). */
     const val BEAT_LINE_ENV = "AGENTHQ_WATCH_BEAT_SECONDS"
+    /** STALL-2: seconds the runner waits for a command's tree after its exit (`limits.watch.treeWaitMinutes`; 0 = none). */
+    const val TREE_WAIT_ENV = "AGENTHQ_WATCH_TREE_WAIT_SECONDS"
+    const val DEFAULT_TREE_WAIT_SECONDS = 1800L
+
+    private fun describe(h: ProcessHandle) = "${h.pid()} ${com.superiorsoftllc.agenthq.runner.ProcessTree.commandLine(h).ifEmpty { "?" }.take(80)}"
+
     /** How long the runner waits for the output pipe's EOF after the command exited before it reports anyway. */
     const val EOF_GRACE_MS = 2_000L
 
@@ -419,7 +496,7 @@ internal object BgCli {
         val id = p.jobId ?: UUID.randomUUID().toString().take(8)
         val log = File(logDir().also { it.mkdirs() }, "$id.log")
         val exitFile = File(logDir(), "$id.exit").also { it.delete() }
-        val label = p.name ?: p.command.joinToString(" ").take(80)
+        val label = p.name ?: p.shown.take(80)
         val notify = if (!p.notify) null else BgNotify(p.notifyTail, patternsFor(p, getenv), p.notifyTimeout)
         val beatLineMs = (getenv(BEAT_LINE_ENV)?.toLongOrNull()?.takeIf { it > 0 } ?: 60L) * 1000L
         val started = System.currentTimeMillis()
@@ -450,13 +527,18 @@ internal object BgCli {
                 if (p.attached) b.redirectInput(ProcessBuilder.Redirect.INHERIT)
             }.start()
         }
+        com.superiorsoftllc.agenthq.runner.ProcessTree.prepare() // STALL-2: Linux subreaper, before the command starts
         val child = try {
-            val command = resolveCommand(p.command, cwd, resolveEnv)
-                ?: throw java.io.IOException("Cannot run program \"${p.command.first()}\": not found on PATH or in ${cwd.absolutePath}")
+            val command = if (p.scriptB64 != null) {
+                scriptCommand(p, id, cwd, resolveEnv) ?: throw java.io.IOException("no shell found for the hooked command (${p.shell ?: "none given"})")
+            } else {
+                resolveCommand(p.command, cwd, resolveEnv)
+                    ?: throw java.io.IOException("Cannot run program \"${p.command.first()}\": not found on PATH or in ${cwd.absolutePath}")
+            }
             doSpawn(withPlainConsole(command))
         } catch (e: Exception) {
             // `bg wait` must not block forever on a command that never started, and a `--notify` caller must get its mail.
-            val line = "$CANNOT_START ${p.command.joinToString(" ")}: ${e.message}"
+            val line = "$CANNOT_START ${p.shown}: ${e.message}"
             runCatching { log.writeText(line + System.lineSeparator()) }
             runCatching { exitFile.writeText("127") }
             err.appendLine("error: $line; job NOT started")
@@ -466,9 +548,11 @@ internal object BgCli {
             return 127
         }
         job = job.copy(cmdPid = child.pid())
+        // STALL-2 item 2: the command's whole tree (Windows Job Object / Linux subreaper), so done = every member ended.
+        val tree = runCatching { com.superiorsoftllc.agenthq.runner.ProcessTree.attach(child, DETACHED_DAEMON) }.getOrNull()
         if (session == null) err.appendLine("warning: AGENTHQ_SESSION_ID is not set, running unregistered")
         // A shim call's harness should see only the command's own output on stdout; the runner's own lines go to stderr.
-        val own: Appendable = if (p.shim != null) err else out
+        val own: Appendable = if (p.shim != null || p.hook != null) err else out
         own.appendLine("bg job $id: $label (log ${log.absolutePath})")
         val writer = log.bufferedWriter()
         val keepLines = p.notifyTail ?: 200
@@ -483,7 +567,7 @@ internal object BgCli {
                 if (tail.size > keepLines) tail.removeFirst()
             }
         }
-        emit("[agenthq:start pid=${child.pid()} at=${java.time.Instant.ofEpochMilli(started)} cmd=${p.command.joinToString(" ").take(80)}]", runner = true)
+        emit("[agenthq:start pid=${child.pid()} at=${java.time.Instant.ofEpochMilli(started)} cmd=${p.shown.take(80)}${p.hook?.let { " via=$it-hook" } ?: ""}]", runner = true)
         call(BgJobRequest("beat", job))
         // Runner stopped gracefully (Ctrl-C, SIGTERM): still leave an END, with the exit unknown.
         val hook = Thread {
@@ -513,6 +597,7 @@ internal object BgCli {
                     // Often at first: a short-lived command may start its child and exit within a second.
                     Thread.sleep(if (System.currentTimeMillis() - started < 5_000) 200 else 1_000)
                     runCatching { child.descendants().toList().takeIf { it.isNotEmpty() || !child.isAlive }?.let(lastKids::set) }
+                    runCatching { tree?.alive() } // the snapshot form learns members only while it can still see them
                     val now = System.currentTimeMillis()
                     if (now >= nextLine) {
                         emit("[agenthq:running elapsed=${fmtElapsed(now - started)}]", runner = true)
@@ -528,6 +613,24 @@ internal object BgCli {
         }.apply { isDaemon = true; start() }
         runCatching { lastKids.set(child.descendants().toList()) }
         val code = child.waitFor()
+        // STALL-2 item 2: the command exited; done waits for the rest of its tree (build daemons excluded), up to the cap.
+        // The beat keeps running meanwhile, so the log still says `running` and the daemon still sees the job alive.
+        val treeWaitMs = (getenv(TREE_WAIT_ENV)?.trim()?.toLongOrNull()?.takeIf { it >= 0 } ?: DEFAULT_TREE_WAIT_SECONDS) * 1000L
+        var waiting = if (treeWaitMs > 0) runCatching { tree?.alive().orEmpty() }.getOrDefault(emptyList()) else emptyList()
+        if (waiting.isNotEmpty()) {
+            emit("[agenthq:note command exited $code; waiting for ${waiting.size} process(es) of its tree (${tree?.kind}): ${describe(waiting.first())}]", runner = true)
+            val until = System.currentTimeMillis() + treeWaitMs
+            while (waiting.isNotEmpty() && System.currentTimeMillis() < until) {
+                Thread.sleep(500)
+                waiting = runCatching { tree?.alive().orEmpty() }.getOrDefault(emptyList())
+            }
+            emit(
+                if (waiting.isEmpty()) "[agenthq:note tree ended ${fmtElapsed(System.currentTimeMillis() - started)} after start]"
+                else "[agenthq:note tree wait capped at ${fmtElapsed(treeWaitMs)}: ${waiting.size} still running: ${describe(waiting.first())}]",
+                runner = true,
+            )
+        }
+        runCatching { tree?.close() }
         beat.interrupt()
         reader.join(EOF_GRACE_MS)
         val eof = !reader.isAlive
@@ -535,9 +638,10 @@ internal object BgCli {
         val orphans = runCatching {
             ProcessHandle.allProcesses().filter { h -> h.isAlive && h.parent().map { it.pid() == child.pid() }.orElse(false) }.toList()
         }.getOrDefault(emptyList())
-        val survivors = (lastKids.get() + orphans).distinctBy { it.pid() }.filter { it.isAlive }
-            .filterNot { DETACHED_DAEMON.containsMatchIn(it.info().commandLine().orElse("")) }
-            .map { "${it.pid()} ${it.info().commandLine().orElse(it.info().command().orElse("?")).take(80)}" }
+        // `waiting`: what the tree wait was capped on (on Linux an orphan is the runner's child by then, not the command's).
+        val survivors = (lastKids.get() + orphans + waiting).distinctBy { it.pid() }.filter { it.isAlive }
+            .filterNot { DETACHED_DAEMON.containsMatchIn(com.superiorsoftllc.agenthq.runner.ProcessTree.commandLine(it)) }
+            .map(::describe)
         val bytes = counting.count
         runCatching { exitFile.writeText(code.toString()) }
         if (!eof) {

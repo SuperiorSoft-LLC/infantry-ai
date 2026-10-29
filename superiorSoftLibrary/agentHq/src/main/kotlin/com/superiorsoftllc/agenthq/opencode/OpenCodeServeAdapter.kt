@@ -147,7 +147,10 @@ class OpenCodeServeAdapter(
             // BUG-PERM-5: the agenthq allow rides the inline config, merged into whatever the child would inherit.
             val inherited = env[OpenCodePermissions.CONFIG_CONTENT_ENV] ?: InfantryEnv.get(OpenCodePermissions.CONFIG_CONTENT_ENV)
             // PROMPT-4: in `ask` mode the gated permissions are `ask` too, so opencode emits permission.asked.
-            val config = OpenCodePermissions.CONFIG_CONTENT_ENV to OpenCodePermissions.serveConfig(request.toolApproval, inherited, env) // MCP-1: + mcp.agenthq
+            val served = OpenCodePermissions.serveConfig(request.toolApproval, inherited, env) // MCP-1: + mcp.agenthq
+            // STALL-2: + the watch plugin (allowAll only: a rewrite must never widen what the session may run).
+            val config = OpenCodePermissions.CONFIG_CONTENT_ENV to
+                (if (request.toolApproval == ToolApproval.ALLOW_ALL) com.superiorsoftllc.agenthq.daemon.WatchHooks.mergeOpenCodePlugin(served, env) else served)
             process = runner.start(ProcessSpec(command, request.workingDir, env + config + (PASSWORD_ENV to password)), object : ProcessListener {
                 override fun onStdout(line: String) {
                     LISTENING.find(line)?.let { urlFuture.complete(it.groupValues[1].trimEnd('/')) }

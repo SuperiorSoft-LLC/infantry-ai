@@ -816,6 +816,7 @@ class AgentHqDaemon(
                         com.superiorsoftllc.agenthq.runner.WatchShims.sessionEnv(
                             watchShimDir, childEnv["PATH"] ?: System.getenv("PATH"),
                             forced = settings.limit(LimitRegistry.WATCH_FORCED) != 0L,
+                            treeWaitMinutes = settings.limit(LimitRegistry.WATCH_TREE_WAIT_MINUTES),
                         )
                 },
                 // No-hard-coded-limits S2: the watchdog and silent sweeper read limits.watchdog.* live.
@@ -1028,8 +1029,17 @@ class AgentHqDaemon(
             // EXPERIMENTS-1: the pi tool bridge (off unless the project setting or the env override says on). Removing it = this line.
             com.superiorsoftllc.agenthq.experiments.pitoolbridge.PiToolBridgeRegistration.register({ sandboxConfig().enabled || projectStore.experimentOn(it, "piToolBridge") }, sessionStats)
             // TODO-PROGRESS-1: every pi session loads the daemon's `todowrite` extension (pi has no to-do tool of its own).
-            com.superiorsoftllc.agenthq.harness.pi.PiLaunchExtras.builtIn =
-                com.superiorsoftllc.agenthq.harness.pi.PiTodoExtension.launchArgs(File(stateDir(), "pi"))
+            // STALL-2: and the watch hook extension (`tool_call` -> the watched runner) when the session's watch is on.
+            run {
+                val todo = com.superiorsoftllc.agenthq.harness.pi.PiTodoExtension.launchArgs(File(stateDir(), "pi"))
+                val watch = WatchHooks.piLaunchArgs(File(stateDir(), "pi"))
+                com.superiorsoftllc.agenthq.harness.pi.PiLaunchExtras.builtIn = { dir, env -> todo(dir, env) + watch(dir, env) }
+            }
+            // STALL-2: the opencode watch plugin, named in every serve's inline config while its session's watch is on.
+            WatchHooks.openCodePlugin = runCatching { WatchHooks.install(File(stateDir(), "opencode"), WatchHooks.OPENCODE_RESOURCE, "agenthq-watch.js") }
+                .onFailure { System.err.println("[agentHq] opencode watch plugin not written: ${it.message}") }.getOrNull()
+            // STALL-2: claude's watch hook settings go to a file here (inline JSON loses its quotes through the Windows .cmd shim).
+            WatchHooks.settingsDir = File(stateDir(), "watch")
             // BASE-1a: `project_base` checks a branch in the repo ticket starts cut in -- the board's, read at answer
             // time through [boardRef] (built further down) -- with the same resolver a cut uses.
             var boardRef: TicketBoard? = null
@@ -1659,6 +1669,11 @@ class AgentHqDaemon(
                     )
                     // P9.6: signature-admitted webhook ingress (exempt from the bearer in AccessPolicy, signed per hook).
                     hookRoutes(WebhookIngress(triggers))
+                    // STALL-2: the harness watch hooks (claude PreToolUse http, opencode plugin, pi extension) ask here.
+                    watchHookRoutes(
+                        approvalOf = { id -> manager.get(id)?.let { manager.toolApprovalFor(id).mode } },
+                        launcher = { WatchHooks.launcher(agentHqBin) },
+                    )
                     extraRoutes()
                     // WEB-1: the browser client, one exact route per bundle file (no path resolution, nothing to traverse).
                     webBundleRoutes(webBundle)
@@ -3136,7 +3151,8 @@ private suspend fun handleConnection(
                 // record (read only, nothing leaves the machine). Answered to the requester only; the readers never
                 // throw, so a missing or locked harness record is a `session_stats` with null fields, not an error.
                 Envelope.USAGE_METER_GET -> try {
-                    Envelope(Envelope.USAGE_METER, usageMeter?.reportJson() ?: """{"rows":[],"keepWeeks":0,"generatedAt":0}""")
+                    Envelope(Envelope.USAGE_METER, usageMeter?.reportJson() ?: com.superiorsoftllc.agenthq.usagemeter.UsageMeter.Report(emptyList(), 0, 0, watch = com.superiorsoftllc.agenthq.mailbox.WatchMeter.counts())
+                        .let { Json.encodeToString(com.superiorsoftllc.agenthq.usagemeter.UsageMeter.Report.serializer(), it) })
                 } catch (e: Exception) {
                     Envelope(Envelope.ERROR, "usage_meter_get failed: ${e.message ?: e::class.simpleName}")
                 }

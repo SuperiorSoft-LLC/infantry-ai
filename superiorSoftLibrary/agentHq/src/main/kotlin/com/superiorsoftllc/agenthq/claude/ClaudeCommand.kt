@@ -163,6 +163,8 @@ object ClaudeCommand {
          * a call outside the allowlist arrives on stdout as a `can_use_tool` control_request instead of being denied.
          */
         permissionPromptTool: String? = null,
+        /** STALL-2: `--settings <json>` (the watch PreToolUse hook, [com.superiorsoftllc.agenthq.daemon.WatchHooks.claudeSettings]). */
+        settings: String? = null,
     ): List<String> = buildList {
         add(executable)
         add("-p")
@@ -175,6 +177,7 @@ object ClaudeCommand {
         permissionMode?.takeIf { it.isNotBlank() }?.let { add("--permission-mode"); add(it) }
         allowedTools.takeIf { it.isNotEmpty() }?.let { add("--allowedTools"); add(it.joinToString(",")) }
         permissionPromptTool?.takeIf { it.isNotBlank() }?.let { add("--permission-prompt-tool"); add(it) }
+        settings?.takeIf { it.isNotBlank() }?.let { add("--settings"); add(it) }
         mcpConfigs.takeIf { it.isNotEmpty() }?.let {
             add("--mcp-config"); addAll(it)
             if (strictMcp) add("--strict-mcp-config")
