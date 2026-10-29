@@ -48,6 +48,9 @@ class FakeDaemonClient(private val scope: CoroutineScope) : DaemonClient(scope) 
                 emit(id, Envelope.STATUS, "{\"state\":\"IDLE\"}")
             }
         }
+        // The libraries are empty offline; an unanswered list request would leave the pane on "Loading...".
+        if (envelope.type == Envelope.PROMPT_LIST) scope.launch { _frames.emit(Envelope(Envelope.PROMPTS, "[]")) }
+        if (envelope.type == Envelope.SKILL_LIST) scope.launch { _frames.emit(Envelope(Envelope.SKILLS, "[]")) }
         return true
     }
 
