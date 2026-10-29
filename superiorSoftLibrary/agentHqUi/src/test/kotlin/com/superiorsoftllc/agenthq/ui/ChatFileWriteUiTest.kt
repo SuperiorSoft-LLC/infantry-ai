@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.chat.*
+
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText

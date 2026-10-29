@@ -6,8 +6,8 @@ import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
 import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.shell.blocks.CHAT_FILL_ID
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellCenter
+import com.superiorsoftllc.agenthq.plugins.official.chat.CHAT_FILL_ID
+import com.superiorsoftllc.agenthq.plugins.official.chat.ShellCenter
 
 /** Infantry_Chat as a compiled-in module (web and Android, D9): the manifest mirrors module.json. */
 val InfantryChat = AgentHqModule(

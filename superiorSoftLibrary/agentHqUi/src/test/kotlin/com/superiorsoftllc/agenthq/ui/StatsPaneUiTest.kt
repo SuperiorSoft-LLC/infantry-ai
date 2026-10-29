@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.chat.*
+
 import com.superiorsoftllc.agenthq.plugins.official.stats.*
 import com.superiorsoftllc.agenthq.ui.shell.CoreUsage
 

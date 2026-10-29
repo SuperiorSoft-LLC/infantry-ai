@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.chat.*
+
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals

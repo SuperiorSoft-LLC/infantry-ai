@@ -31,13 +31,16 @@ class PluginClassLoaderTest {
     }
 
     @Test
-    fun `an official loader also sees ui shell and the ui root kit, a community loader does not, and ui net stays hidden from both`() {
+    fun `an official loader also sees ui shell, the ui root kit and the host types official jars link, a community loader does not, and the daemon client stays hidden from both`() {
         val dir = Files.createTempDirectory("plugin-loader").toFile()
         val jar = File(dir, "empty.jar")
-        val shell = listOf("com.superiorsoftllc.agenthq.ui.shell.ShellContext", "com.superiorsoftllc.agenthq.ui.ChatPanelState")
+        // e063ce77: the Controller, ImageUploadOutcome, ui.sound and ui.voice are what the official jars link (owner's boot crash).
+        val shell = listOf("com.superiorsoftllc.agenthq.ui.shell.ShellContext", "com.superiorsoftllc.agenthq.ui.ChatPanelState",
+            "com.superiorsoftllc.agenthq.ui.net.Controller", "com.superiorsoftllc.agenthq.ui.net.ImageUploadOutcome",
+            "com.superiorsoftllc.agenthq.ui.sound.IncomingCommsSoundSettings", "com.superiorsoftllc.agenthq.ui.voice.VoiceSettings")
         PluginClassLoader(dir, jar, javaClass.classLoader, Tier.OFFICIAL).use { loader ->
             for (name in shell) assertEquals(name, loader.loadClass(name).name, "$name must be visible to an official jar")
-            assertFailsWith<ClassNotFoundException> { loader.loadClass("com.superiorsoftllc.agenthq.ui.net.Controller") }
+            assertFailsWith<ClassNotFoundException> { loader.loadClass("com.superiorsoftllc.agenthq.ui.net.DaemonClient") }
             assertFailsWith<ClassNotFoundException> { loader.loadClass("com.superiorsoftllc.agenthq.ui.plugin.DaemonLink") }
         }
         PluginClassLoader(dir, jar, javaClass.classLoader, Tier.COMMUNITY).use { loader ->

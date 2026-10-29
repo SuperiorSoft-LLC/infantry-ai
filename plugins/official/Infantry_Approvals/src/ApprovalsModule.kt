@@ -6,7 +6,7 @@ import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
 import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
-import com.superiorsoftllc.agenthq.ui.shell.blocks.ShellQuestionPill
+import com.superiorsoftllc.agenthq.plugins.official.approvals.ShellQuestionPill
 
 private const val QUESTIONS_FILL_ID = "infantry.shell.questions"
 

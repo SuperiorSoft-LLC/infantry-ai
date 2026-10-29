@@ -3,10 +3,10 @@ package com.superiorsoftllc.agenthq.plugins.official.changes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
-import com.superiorsoftllc.agenthq.ui.DiffModalBody
-import com.superiorsoftllc.agenthq.ui.DiffModalFrame
-import com.superiorsoftllc.agenthq.ui.DiffModalHeader
-import com.superiorsoftllc.agenthq.ui.OpenDiff
+import com.superiorsoftllc.agenthq.plugins.official.changes.DiffModalBody
+import com.superiorsoftllc.agenthq.plugins.official.changes.DiffModalFrame
+import com.superiorsoftllc.agenthq.plugins.official.changes.DiffModalHeader
+import com.superiorsoftllc.agenthq.plugins.official.changes.OpenDiff
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.Place
@@ -14,7 +14,7 @@ import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
 import com.superiorsoftllc.agenthq.ui.block.layout.Size
 import com.superiorsoftllc.agenthq.ui.model.DiffBody
 import com.superiorsoftllc.agenthq.ui.model.diffBody
-import com.superiorsoftllc.agenthq.ui.openDiff
+import com.superiorsoftllc.agenthq.plugins.official.changes.openDiff
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 
 private const val DIFF = "infantry.shell.diff"

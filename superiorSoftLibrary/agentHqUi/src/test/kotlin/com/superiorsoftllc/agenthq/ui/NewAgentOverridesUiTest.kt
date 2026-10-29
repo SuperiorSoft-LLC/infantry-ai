@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.chat.*
+
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
@@ -24,10 +26,10 @@ import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import com.superiorsoftllc.agenthq.ui.protocol.Envelope
-import com.superiorsoftllc.agenthq.ui.shell.blocks.NewAgentErrorLine
-import com.superiorsoftllc.agenthq.ui.shell.blocks.NewAgentExecutor
-import com.superiorsoftllc.agenthq.ui.shell.blocks.NewAgentRole
-import com.superiorsoftllc.agenthq.ui.shell.blocks.NewAgentTask
+import com.superiorsoftllc.agenthq.plugins.official.chat.NewAgentErrorLine
+import com.superiorsoftllc.agenthq.plugins.official.chat.NewAgentExecutor
+import com.superiorsoftllc.agenthq.plugins.official.chat.NewAgentRole
+import com.superiorsoftllc.agenthq.plugins.official.chat.NewAgentTask
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

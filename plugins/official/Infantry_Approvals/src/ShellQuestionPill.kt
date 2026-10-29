@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui.shell.blocks
+package com.superiorsoftllc.agenthq.plugins.official.approvals
+
+import com.superiorsoftllc.agenthq.ui.shell.blocks.*
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -7,8 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.launch
-import com.superiorsoftllc.agenthq.ui.QuestionGoneCard
-import com.superiorsoftllc.agenthq.ui.QuestionPill
+import com.superiorsoftllc.agenthq.plugins.official.approvals.QuestionGoneCard
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext

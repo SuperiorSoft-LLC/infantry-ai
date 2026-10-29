@@ -1,5 +1,10 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.approvals.*
+import com.superiorsoftllc.agenthq.plugins.official.assistant.*
+import com.superiorsoftllc.agenthq.plugins.official.changes.*
+import com.superiorsoftllc.agenthq.plugins.official.chat.*
+
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Text
 import androidx.compose.ui.platform.testTag

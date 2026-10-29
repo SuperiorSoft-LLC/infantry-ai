@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui.shell.blocks
+package com.superiorsoftllc.agenthq.plugins.official.chat
+
+import com.superiorsoftllc.agenthq.ui.shell.blocks.*
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -12,22 +14,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.superiorsoftllc.agenthq.ui.CENTER_PANE_TAG
 import com.superiorsoftllc.agenthq.ui.CENTER_TRANSCRIPT_TAG
-import com.superiorsoftllc.agenthq.ui.CenterTabBar
-import com.superiorsoftllc.agenthq.ui.ChatPanelHost
-import com.superiorsoftllc.agenthq.ui.Composer
-import com.superiorsoftllc.agenthq.ui.Header
-import com.superiorsoftllc.agenthq.ui.NewAgentDialogFrame
-import com.superiorsoftllc.agenthq.ui.NewAgentDraft
-import com.superiorsoftllc.agenthq.ui.NewAgentError
-import com.superiorsoftllc.agenthq.ui.NewAgentExecutorStep
-import com.superiorsoftllc.agenthq.ui.NewAgentRoleStep
-import com.superiorsoftllc.agenthq.ui.NewAgentTaskStep
-import com.superiorsoftllc.agenthq.ui.Notices
-import com.superiorsoftllc.agenthq.ui.SpawnRows
-import com.superiorsoftllc.agenthq.ui.SwitchPicker
-import com.superiorsoftllc.agenthq.ui.Transcript
-import com.superiorsoftllc.agenthq.ui.chatPanelHeader
-import com.superiorsoftllc.agenthq.ui.chatPanelHost
+import com.superiorsoftllc.agenthq.plugins.official.chat.CenterTabBar
+import com.superiorsoftllc.agenthq.plugins.official.chat.ChatPanelHost
+import com.superiorsoftllc.agenthq.plugins.official.chat.Composer
+import com.superiorsoftllc.agenthq.plugins.official.chat.Header
+import com.superiorsoftllc.agenthq.plugins.official.chat.NewAgentDialogFrame
+import com.superiorsoftllc.agenthq.plugins.official.chat.NewAgentDraft
+import com.superiorsoftllc.agenthq.plugins.official.chat.NewAgentError
+import com.superiorsoftllc.agenthq.plugins.official.chat.NewAgentExecutorStep
+import com.superiorsoftllc.agenthq.plugins.official.chat.NewAgentRoleStep
+import com.superiorsoftllc.agenthq.plugins.official.chat.NewAgentTaskStep
+import com.superiorsoftllc.agenthq.plugins.official.chat.Notices
+import com.superiorsoftllc.agenthq.plugins.official.chat.SpawnRows
+import com.superiorsoftllc.agenthq.plugins.official.chat.SwitchPicker
+import com.superiorsoftllc.agenthq.plugins.official.chat.Transcript
+import com.superiorsoftllc.agenthq.plugins.official.chat.chatPanelHeader
+import com.superiorsoftllc.agenthq.plugins.official.chat.chatPanelHost
 import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
 import com.superiorsoftllc.agenthq.ui.block.layout.Place
@@ -35,7 +37,7 @@ import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
 import com.superiorsoftllc.agenthq.ui.block.layout.LocalBlockSize
 import com.superiorsoftllc.agenthq.ui.model.PanelLayout
-import com.superiorsoftllc.agenthq.ui.ChatPanel
+import com.superiorsoftllc.agenthq.plugins.official.chat.ChatPanel
 import com.superiorsoftllc.agenthq.ui.shell.ChatContext
 import com.superiorsoftllc.agenthq.ui.shell.ChatPanels
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
