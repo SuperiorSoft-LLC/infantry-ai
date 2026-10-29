@@ -59,7 +59,8 @@ A preset is a JSON file (`PolicyPreset`):
   "selectWhenEnv": null,
   "restricted": false, "notices": [], "ready": {}, "notice": null,
   "allowedModels": [], "allowedRoles": [],
-  "seats": null
+  "seats": null,
+  "sessionCapText": null
 }
 ```
 
@@ -70,6 +71,8 @@ A preset is a JSON file (`PolicyPreset`):
   (`role/provider/model`), warm-up, a per-IP turn limit (`turnsPerIp`, `turnWindowHours`, `turnLimitCode`, and
   `turnLimitText` with `{turns}` / `{window}`; core's neutral text when unset), a public visitor token env name. Present = the daemon seeds the
   project and seats, scopes prompts/resume/replay to the seats, mail to between seats, project reads to the seat project.
+* `sessionCapText` (COPY-1): how a `limits.concurrency.maxSessions` refusal starts; core's neutral `Session limit reached`
+  when unset (the demo preset says `Demo busy`). Read per refusal, so a switch applies at once.
 * `allowedModels` / `allowedRoles`: used when the `limits.models.allowed` / `limits.roles.allowed` settings (and their env)
   are empty.
 * Presets come from **providers** (`PolicyProvider`, a one-method interface, so DAEMON-PLUGINS-1 can register more):

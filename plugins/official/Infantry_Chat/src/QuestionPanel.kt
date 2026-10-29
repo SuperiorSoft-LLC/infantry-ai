@@ -85,7 +85,10 @@ fun QuestionPanel(
     onAnswer: (QuestionAnswerWire) -> Unit,
     onCancel: (String) -> Unit,
     onLater: () -> Unit,
+    /** GATE-PANES-1: `questions.answer` (answer and cancel) is allowed here; off, the panel stays readable but sends nothing. */
+    enabled: Boolean = true,
 ) {
+    val answer: (QuestionAnswerWire) -> Unit = { if (enabled) onAnswer(it) }
     val current = shown.firstOrNull()
     // The last question stays drawn while the panel animates out.
     var last by remember { mutableStateOf(current) }
@@ -101,8 +104,8 @@ fun QuestionPanel(
             LaunchedEffect(otherOpen) { runCatching { if (otherOpen) otherFocus.requestFocus() else focus.requestFocus() } }
             LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
             fun send() {
-                if (otherOpen) { if (other.isNotBlank()) onAnswer(QuestionAnswerWire(q.id, otherText = other.trim())) }
-                else q.options.firstOrNull { it.label == q.recommended }?.let { onAnswer(QuestionAnswerWire(q.id, answer = it.label)) }
+                if (otherOpen) { if (other.isNotBlank()) answer(QuestionAnswerWire(q.id, otherText = other.trim())) }
+                else q.options.firstOrNull { it.label == q.recommended }?.let { answer(QuestionAnswerWire(q.id, answer = it.label)) }
             }
             val shape = RoundedCornerShape(10.dp)
             Box(Modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = 14.dp, vertical = 8.dp).testTag(QUESTION_WINDOW_TAG)) {
@@ -116,7 +119,7 @@ fun QuestionPanel(
                             e.key == Key.Escape -> { if (otherOpen) otherOpen = false else onLater(); true }
                             e.key == Key.Enter && otherOpen && e.isShiftPressed -> false
                             e.key == Key.Enter -> { send(); true }
-                            digit in q.options.indices -> { onAnswer(QuestionAnswerWire(q.id, answer = q.options[digit].label)); true }
+                            digit in q.options.indices -> { answer(QuestionAnswerWire(q.id, answer = q.options[digit].label)); true }
                             else -> false
                         }
                     }
@@ -136,7 +139,7 @@ fun QuestionPanel(
                         Modifier.fillMaxWidth().clip(optionShape)
                             .background(if (recommended) Palette.Panel else Palette.Raised)
                             .border(if (recommended) 2.dp else 1.dp, if (recommended) Palette.Accent else Palette.Border, optionShape)
-                            .clickable(role = Role.Button, onClickLabel = "Choose ${o.label}") { onAnswer(QuestionAnswerWire(q.id, answer = o.label)) }
+                            .clickable(enabled = enabled, role = Role.Button, onClickLabel = "Choose ${o.label}") { answer(QuestionAnswerWire(q.id, answer = o.label)) }
                             .testTag(QUESTION_OPTION_TAG_PREFIX + i).padding(10.dp),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
@@ -161,12 +164,12 @@ fun QuestionPanel(
                     OtherAnswer(
                         open = otherOpen, text = other, onText = { other = it },
                         onOpen = { otherOpen = true }, onClose = { otherOpen = false },
-                        onSend = { if (other.isNotBlank()) onAnswer(QuestionAnswerWire(q.id, otherText = other.trim())) },
+                        onSend = { if (other.isNotBlank()) answer(QuestionAnswerWire(q.id, otherText = other.trim())) }, enabled = enabled,
                         fieldModifier = Modifier.focusRequester(otherFocus).onFocusChanged { otherFocused = it.isFocused },
                     )
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = { onCancel(q.id) }, modifier = Modifier.testTag(QUESTION_CANCEL_TAG)) {
+                    TextButton(onClick = { onCancel(q.id) }, enabled = enabled, modifier = Modifier.testTag(QUESTION_CANCEL_TAG)) {
                         Text("Cancel question", color = Palette.Danger, fontSize = 12.sp)
                     }
                     Spacer(Modifier.weight(1f))
@@ -193,13 +196,14 @@ private fun OtherAnswer(
     onClose: () -> Unit,
     onSend: () -> Unit,
     fieldModifier: Modifier,
+    enabled: Boolean = true,
 ) {
     val shape = RoundedCornerShape(6.dp)
     if (!open) {
         Text(
             "Other…", color = Palette.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
             modifier = Modifier.fillMaxWidth().clip(shape).background(Palette.Raised).border(1.dp, Palette.Border, shape)
-                .clickable(role = Role.Button, onClickLabel = "Type your own answer", onClick = onOpen)
+                .clickable(enabled = enabled, role = Role.Button, onClickLabel = "Type your own answer", onClick = onOpen)
                 .testTag(QUESTION_OTHER_ROW_TAG).padding(10.dp),
         )
         return
@@ -211,7 +215,7 @@ private fun OtherAnswer(
             modifier = Modifier.fillMaxWidth().then(fieldModifier).testTag(QUESTION_OTHER_FIELD_TAG),
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = onSend, enabled = text.isNotBlank(), modifier = Modifier.testTag(QUESTION_SEND_OTHER_TAG)) {
+            Button(onClick = onSend, enabled = enabled && text.isNotBlank(), modifier = Modifier.testTag(QUESTION_SEND_OTHER_TAG)) {
                 Text("Send", fontSize = 12.sp)
             }
             OutlinedButton(onClick = onClose, modifier = Modifier.testTag(QUESTION_OTHER_CANCEL_TAG)) {

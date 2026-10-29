@@ -37,12 +37,16 @@ import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.parseNodes
 import com.superiorsoftllc.agenthq.ui.shell.PodsContext
+import com.superiorsoftllc.agenthq.ui.shell.gate
 import kotlinx.coroutines.launch
 
 /** The window's pods ([AppState.pods]) and the submit / load / cancel requests, through [pods] (RUNTIME-12). */
 @Composable
 internal fun PodsPane(state: AppState, pods: PodsContext) {
     val actionScope = rememberCoroutineScope()
+    // GATE-PANES-1: submitting a pod spawns agents, cancelling one stops them; each its own named action.
+    val canSubmit = state.connection.gate("pods.submit", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN).enabled
+    val canCancel = state.connection.gate("pods.cancel", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE).enabled
     var goal by remember { mutableStateOf("") }
     var nodesText by remember { mutableStateOf("") }
     var podId by remember { mutableStateOf("") }
@@ -55,7 +59,7 @@ internal fun PodsPane(state: AppState, pods: PodsContext) {
                     Text(p.pod.goal, color = Palette.Text, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f), maxLines = 2)
                     Chip(p.pod.state, podColor(p.pod.state))
                     if (p.pod.endedAt == null) {
-                        TextButton(onClick = { actionScope.launch { pods.cancel(p.pod.id) } }) { Text("Cancel", color = Palette.Danger) }
+                        TextButton(onClick = { actionScope.launch { pods.cancel(p.pod.id) } }, enabled = canCancel) { Text("Cancel", color = Palette.Danger) }
                     }
                 }
                 Text(p.pod.id, color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp)
@@ -88,7 +92,7 @@ internal fun PodsPane(state: AppState, pods: PodsContext) {
         )
         error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
         Button(
-            enabled = state.connection.isLive && goal.isNotBlank(),
+            enabled = canSubmit && goal.isNotBlank(),
             onClick = {
                 parseNodes(nodesText).fold(
                     { nodes -> actionScope.launch { pods.submit(goal.trim(), nodes) }; error = null },

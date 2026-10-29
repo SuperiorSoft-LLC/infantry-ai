@@ -16,6 +16,8 @@
     }
   ],
   "actions": [
-    { "id": "epics.save", "label": "New or edit an epic", "kind": "write", "frames": ["epic_save", "epic_base"] }
+    { "id": "epics.save", "label": "New or edit an epic", "kind": "write", "frames": ["epic_save", "epic_base"] },
+    { "id": "board.ticket.save", "label": "Add a task to an epic", "kind": "write", "frames": ["ticket_save"] },
+    { "id": "board.ticket.move", "label": "Move an epic's task", "kind": "write", "frames": ["ticket_move"] }
   ]
 }

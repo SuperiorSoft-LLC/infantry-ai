@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.plugins.official.notes
 
 import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.agenthq.ui.shell.gate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -101,6 +102,10 @@ class NotesPaneHost internal constructor(
     private val scopeState: MutableState<String>,
 ) {
     val live: Boolean get() = link.live
+
+    /** GATE-PANES-1: save (add / edit) and delete, each its named action: dimmed with the policy's reason while off. */
+    val canSave: Boolean @Composable get() = link.gate("memory.save").enabled
+    val canDelete: Boolean @Composable get() = link.gate("memory.delete", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE).enabled
     val active: ProjectView? get() = session.activeProject
     val picked: AgentView? get() = session.selectedAgent
 
@@ -243,7 +248,7 @@ fun NotesHeaderSection(notes: NotesPaneHost, modifier: Modifier = Modifier) {
         )
         if (active != null) {
             IconAction(
-                AhqIcons.Add, "Add note", onClick = { notes.openNew() }, enabled = notes.live,
+                AhqIcons.Add, "Add note", onClick = { notes.openNew() }, enabled = notes.canSave,
                 style = IconActionStyle.TEXT, modifier = Modifier.testTag(MEMORY_ADD_NOTE_BUTTON_TAG),
             )
         }
@@ -385,7 +390,7 @@ fun NotesModalSection(notes: NotesPaneHost, modifier: Modifier = Modifier) {
     if (notes.active == null) return
     val open = notes.draft ?: return
     NoteModal(
-        draft = open, live = notes.live, error = notes.error,
+        draft = open, canSave = notes.canSave, canDelete = notes.canDelete, error = notes.error,
         onChange = { notes.change(it) },
         onSave = { notes.saveDraft() },
         onDelete = open.editing?.let { { notes.deleteEditing() } },
@@ -405,7 +410,8 @@ private fun NotesPlaced(modifier: Modifier, content: @Composable () -> Unit) {
 @Composable
 private fun NoteModal(
     draft: NoteDraft,
-    live: Boolean,
+    canSave: Boolean,
+    canDelete: Boolean,
     error: String?,
     onChange: (NoteDraft) -> Unit,
     onSave: (NoteDraft) -> Unit,
@@ -418,25 +424,25 @@ private fun NoteModal(
         title = (if (draft.editing == null) "Add " else "Edit ") + scopeLabel,
         onSave = { onSave(draft) }, onCancel = onCancel,
         modifier = modifier.testTag(MEMORY_NOTE_DIALOG_TAG),
-        saveEnabled = live && draft.name.isNotBlank(), error = error,
+        saveEnabled = canSave && draft.name.isNotBlank(), error = error,
         saveTag = MEMORY_NOTE_SAVE_TAG, cancelTag = MEMORY_NOTE_CANCEL_TAG,
     ) {
         if (onDelete != null) {
-            OutlinedButton(onClick = onDelete, enabled = live, modifier = Modifier.testTag(MEMORY_NOTE_DELETE_TAG)) {
+            OutlinedButton(onClick = onDelete, enabled = canDelete, modifier = Modifier.testTag(MEMORY_NOTE_DELETE_TAG)) {
                 Text("Delete this $scopeLabel", fontSize = 12.sp, color = Palette.Danger)
             }
         }
         OutlinedTextField(
             draft.name, { onChange(draft.copy(name = it)) }, label = { Text("Name") }, singleLine = true,
-            enabled = live && draft.editing == null,
+            enabled = canSave && draft.editing == null,
             textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().testTag(MEMORY_NOTE_NAME_TAG),
         )
         OutlinedTextField(
-            draft.description, { onChange(draft.copy(description = it)) }, label = { Text("Description") }, singleLine = true, enabled = live,
+            draft.description, { onChange(draft.copy(description = it)) }, label = { Text("Description") }, singleLine = true, enabled = canSave,
             textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().testTag(MEMORY_NOTE_DESCRIPTION_TAG),
         )
         OutlinedTextField(
-            draft.body, { onChange(draft.copy(body = it, bodyTouched = true)) }, label = { Text("Body") }, minLines = 5, maxLines = 14, enabled = live,
+            draft.body, { onChange(draft.copy(body = it, bodyTouched = true)) }, label = { Text("Body") }, minLines = 5, maxLines = 14, enabled = canSave,
             textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.fillMaxWidth().testTag(MEMORY_NOTE_BODY_TAG),
         )
     }

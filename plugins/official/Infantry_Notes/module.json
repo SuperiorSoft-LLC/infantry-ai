@@ -14,5 +14,9 @@
       "id": "infantry.notes",
       "container": "center"
     }
+  ],
+  "actions": [
+    {"id": "memory.save", "label": "Add or edit a note", "kind": "write", "frames": ["memory_save"]},
+    {"id": "memory.delete", "label": "Delete a note", "kind": "destructive", "frames": ["memory_delete", "memory_purge_role"]}
   ]
 }

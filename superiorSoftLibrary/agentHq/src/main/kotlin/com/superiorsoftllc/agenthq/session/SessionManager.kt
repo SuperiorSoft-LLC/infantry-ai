@@ -240,6 +240,9 @@ class SessionManager(
     private fun keepAliveText(): String = runCatching { lifecyclePolicy().keepAliveMinutes }.getOrNull()
         ?.let { " (an idle agent is closed after $it minute${if (it == 1) "" else "s"}, setting session.keepAliveMinutes)" }.orEmpty()
 
+    /** COPY-1: the active policy preset's `sessionCapText` (the daemon installs it); null = [SESSION_CAP_REFUSED]. */
+    @Volatile var sessionCapText: () -> String? = { null }
+
     /** DEMO-RESTRICT: how many sessions are OPEN now (working, or idle with a live kept process); `maxSessions` bounds it. */
     fun openCount(): Int = sessions.values.count(::isOpen)
 
@@ -254,7 +257,8 @@ class SessionManager(
         if (self != null && isOpen(self)) return null
         val open = openCount()
         if (open < cap) return null
-        return "$SESSION_CAP_REFUSED: $open agent${if (open == 1) " is" else "s are"} open, the most this server runs at once. " +
+        val lead = runCatching { sessionCapText() }.getOrNull()?.takeIf { it.isNotBlank() } ?: SESSION_CAP_REFUSED
+        return "$lead: $open agent${if (open == 1) " is" else "s are"} open, the most this server runs at once. " +
             "Stop one (the Stop button in its chat), or wait for it to time out${keepAliveText()}, then try again. " +
             com.superiorsoftllc.agenthq.settings.LimitRegistry.MAX_SESSIONS.hint()
     }
@@ -1943,8 +1947,11 @@ internal fun modelProblem(model: String): String? = when {
  */
 class RunInFlightException(val sessionId: String, message: String) : IllegalStateException(message)
 
-/** DEMO-RESTRICT (ticket f9e181af): how a `limits.concurrency.maxSessions` refusal starts (the UI shows it as it is). */
-const val SESSION_CAP_REFUSED = "Demo busy"
+/**
+ * DEMO-RESTRICT (ticket f9e181af): how a `limits.concurrency.maxSessions` refusal starts (the UI shows it as it is).
+ * COPY-1: neutral, as every deployment shows it; a policy preset's `sessionCapText` replaces it.
+ */
+const val SESSION_CAP_REFUSED = "Session limit reached"
 
 /** DEMO-RESTRICT: the states of a session working on a turn, counted against `limits.concurrency.maxSessions`. */
 private val WORKING = setOf(SessionState.STARTING, SessionState.BUSY, SessionState.WAITING_INPUT)

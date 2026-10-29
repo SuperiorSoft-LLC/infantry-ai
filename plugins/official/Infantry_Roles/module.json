@@ -20,6 +20,7 @@
     "infantry.shell.config.roles"
   ],
   "actions": [
+    { "id": "agents.spawn", "label": "Start a session as a profile", "kind": "spawn", "frames": ["new"] },
     { "id": "roles.save", "label": "Edit a role", "kind": "write", "frames": ["role_save", "role_binding_set", "role_traits_set"] },
     { "id": "agents.profile.save", "label": "Save a profile", "kind": "write", "frames": ["agent_save"] },
     { "id": "agents.profile.delete", "label": "Delete a profile", "kind": "destructive", "frames": ["agent_delete"] },

@@ -78,6 +78,8 @@ data class PolicyPreset(
     val allowedModels: List<String> = emptyList(),
     val allowedRoles: List<String> = emptyList(),
     val seats: SeatsSpec? = null,
+    /** POLICY-1 (COPY-1): how a `limits.concurrency.maxSessions` refusal starts. Null = core's neutral text. */
+    val sessionCapText: String? = null,
 ) {
     /** Production: nothing refused, nothing added. */
     val isEmpty: Boolean get() = disable.isEmpty() && seats == null && restricted != true
@@ -112,7 +114,7 @@ data class PolicyPreset(
             restricted = top.restricted ?: base.restricted, notices = (base.notices + top.notices).distinct(),
             ready = base.ready + top.ready, notice = top.notice ?: base.notice,
             allowedModels = top.allowedModels.ifEmpty { base.allowedModels }, allowedRoles = top.allowedRoles.ifEmpty { base.allowedRoles },
-            seats = top.seats ?: base.seats,
+            seats = top.seats ?: base.seats, sessionCapText = top.sessionCapText ?: base.sessionCapText,
         )
     }
 }

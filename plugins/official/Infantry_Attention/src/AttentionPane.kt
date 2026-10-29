@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.watchFlagOf
 import com.superiorsoftllc.agenthq.ui.shell.AttentionContext
+import com.superiorsoftllc.agenthq.ui.shell.gate
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 
@@ -43,13 +44,16 @@ import kotlin.time.Clock
 @Composable
 internal fun AttentionPane(state: AppState, attention: AttentionContext, showChat: () -> Unit = {}) {
     val actionScope = rememberCoroutineScope()
+    // GATE-PANES-1: answering / dismissing a question and acknowledging an item are named actions, dimmed while off.
+    val canAnswer = state.connection.gate("questions.answer").enabled
+    val canAck = state.connection.gate("attention.ack").enabled
     var now by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
     LaunchedEffect(state.attention.size) { now = Clock.System.now().toEpochMilliseconds() }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // ASK-1: the owner questions (open, answered, auto-picked, cancelled) come first; an auto-pick can be overridden.
         if (state.questions.isNotEmpty()) {
             QuestionHistory(
-                state.questionsNewestFirst, live = state.connection.isLive,
+                state.questionsNewestFirst, live = canAnswer,
                 onOverride = { answer -> actionScope.launch { attention.answer(answer) } },
                 onShow = { id -> attention.openQuestion(id); showChat() },
                 onDismiss = { id -> actionScope.launch { attention.cancelQuestion(id) } },
@@ -73,7 +77,7 @@ internal fun AttentionPane(state: AppState, attention: AttentionContext, showCha
                     Spacer(Modifier.width(6.dp))
                     Text(ago(item.at, now) + " ago", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
                     if (open) {
-                        TextButton(onClick = { actionScope.launch { attention.ack(item.id) } }, enabled = state.connection.isLive) {
+                        TextButton(onClick = { actionScope.launch { attention.ack(item.id) } }, enabled = canAck) {
                             Text("Acknowledge", fontSize = 11.sp)
                         }
                     } else {

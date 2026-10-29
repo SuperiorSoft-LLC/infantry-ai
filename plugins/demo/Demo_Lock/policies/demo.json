@@ -17,6 +17,7 @@
   "notices": ["demo_limit"],
   "ready": { "demo": "lock" },
   "notice": "",
+  "sessionCapText": "Demo busy",
   "seats": {
     "projectName": "Demo project",
     "projectDir": "/work/demo",

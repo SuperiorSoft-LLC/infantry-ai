@@ -44,22 +44,26 @@ const val START_CANCEL_TAG = "session-start-cancel"
  */
 @Composable
 fun SessionStartPane(action: SessionPaneAction, onApply: (StartPlan) -> Unit, onResume: (String) -> Unit) {
+    // GATE-PANES-1: Resume is `chat.resume`; Start runs the session's first prompt (`chat.prompt`) or moves its ticket.
+    val resume = com.superiorsoftllc.agenthq.ui.shell.rememberGate("chat.resume")
+    val start = if ((action as? SessionPaneAction.Start)?.plan?.ticketId != null) com.superiorsoftllc.agenthq.ui.shell.rememberGate("board.ticket.move")
+        else com.superiorsoftllc.agenthq.ui.shell.rememberGate("chat.prompt")
     when (action) {
         is SessionPaneAction.Resume ->
-            Button(onClick = { onResume(action.sessionId) }, modifier = Modifier.testTag(RESUME_SESSION_TAG)) { Text("Resume") }
+            Button(onClick = { onResume(action.sessionId) }, enabled = resume.allowed, modifier = Modifier.testTag(RESUME_SESSION_TAG)) { Text("Resume") }
         is SessionPaneAction.Start -> {
             var confirming by remember(action.plan.sessionId) { mutableStateOf(false) }
             if (!confirming) {
-                Button(onClick = { confirming = true }, modifier = Modifier.testTag(START_SESSION_TAG)) { Text("Start session") }
+                Button(onClick = { confirming = true }, enabled = start.allowed, modifier = Modifier.testTag(START_SESSION_TAG)) { Text(start.label("Start session")) }
             } else {
-                StartCard(action.plan, onApply = { confirming = false; onApply(action.plan) }, onCancel = { confirming = false })
+                StartCard(action.plan, applyEnabled = start.allowed, onApply = { confirming = false; onApply(action.plan) }, onCancel = { confirming = false })
             }
         }
     }
 }
 
 @Composable
-private fun StartCard(plan: StartPlan, onApply: () -> Unit, onCancel: () -> Unit) {
+private fun StartCard(plan: StartPlan, applyEnabled: Boolean, onApply: () -> Unit, onCancel: () -> Unit) {
     Column(
         Modifier.widthIn(max = 460.dp)
             .background(Palette.Raised, RoundedCornerShape(8.dp))
@@ -80,7 +84,7 @@ private fun StartCard(plan: StartPlan, onApply: () -> Unit, onCancel: () -> Unit
         Spacer(Modifier.padding(top = 8.dp))
         Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = onCancel, modifier = Modifier.testTag(START_CANCEL_TAG)) { Text("Cancel") }
-            Button(onClick = onApply, modifier = Modifier.testTag(START_APPLY_TAG)) { Text("Apply") }
+            Button(onClick = onApply, enabled = applyEnabled, modifier = Modifier.testTag(START_APPLY_TAG)) { Text("Apply") }
         }
     }
 }

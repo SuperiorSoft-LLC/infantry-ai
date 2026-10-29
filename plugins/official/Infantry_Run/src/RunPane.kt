@@ -149,7 +149,8 @@ class RunPaneHost internal constructor(
     /** The run going now (one at a time), whichever pill is selected. */
     val active: RunState? = runs.runs.values.firstOrNull { it.state != "FINISHED" }
     val inFlight: Boolean = active != null
-    val canEdit: Boolean = live && !inFlight
+    /** GATE-PANES-1: add / edit / delete a saved command is `commands.save`; off while a run is in flight too. */
+    val canEdit: Boolean @Composable get() = can("commands.save") && !inFlight
     internal val draft: CommandDraft? get() = draftState.value
     /** The add / edit form is open. */
     val editing: Boolean get() = draftState.value != null
