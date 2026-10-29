@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.141.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.142.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -9,6 +9,20 @@ a stub, or one that does not exist yet) is behind the daemon.
 > before you write your first test. It is short, it needs no tools beyond `read`, and a merge will be held
 > without it. It covers the RED-before-implementation rule, the mutation check, how to write a test that
 > cannot pass vacuously, and the durability rules (commit by explicit path, early).
+
+### CONFIG-8 (contract 1.142.0, additive): the daemon's declared config
+
+A module's `module.json` may carry `daemon.config` (a `ConfigDeclaration` list, the same schema as `config`); the daemon compiles the loaded modules' lists into its own manifest (host = daemon). Only `scope:"daemon"` fields are served; a key is a flat settings key, and one the daemon already owns (or an earlier module declared) is dropped. A field from a community (unsigned) plugin arrives with its declaration `readOnly:true` and `config_set` refuses it. Secrets never travel as fields.
+
+| Frame | Direction | Data |
+|---|---|---|
+| `config_get` | client to daemon | none; answered by `config_schema` then `config_values` |
+| `config_schema` | daemon to client | `{rev, declarations:[ConfigDeclaration]}`; also pushed on connect when any are declared |
+| `config_values` | daemon to client | `{rev, rows:[{nodeId,key,value,setBy,updatedAt}]}`, a key never set is absent (resolve the default) |
+| `config_set` | client to daemon | `{node, key, value|null, expectRev?}`; null resets; a stale `expectRev`, an unknown or read-only key, or a value the declared validator rejects answers `error` ("config_set refused: ..."); success answers `config_values` |
+| `config_changed` | daemon to all clients | `{node, key, value|null, by, rev}` after every write |
+
+HTTP twin: `GET /config/schema`, `GET /config/values`. `SettingsService.set` (and so `settings_set`) validates a plugin-declared key with the declared field's type, options, min and max. The existing `settings` / `settings_set` frames, per-key validators, `/node-config` and `node_config` rows are unchanged. A client below 1.142.0 never receives these frames (a daemon with nothing declared sends none), and a client on a daemon below 1.142.0 keeps the hand-written daemon sections (`ConnectionInfo.servesConfigSchema`).
 
 ### HARNESS contract 1.3.0 (harness plugin interface, separate from the wire version)
 

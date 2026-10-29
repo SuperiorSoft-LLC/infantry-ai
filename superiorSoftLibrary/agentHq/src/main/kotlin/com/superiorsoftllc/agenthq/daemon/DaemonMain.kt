@@ -1411,7 +1411,13 @@ class AgentHqDaemon(
             )
 
             // PLUGINS-1: the daemon reads the same plugins root and rules as the desktop (no UI here); GET /plugins lists them.
-            val plugins = DaemonPlugins.resolve(stateDir())
+            // CONFIG-8: the daemon's own config manifest, compiled from the loaded modules' `daemon.config`.
+            val daemonConfig = DaemonConfig(settings, store)
+            daemonConfig.onChanged = { changed ->
+                val frame = Envelope(Envelope.CONFIG_CHANGED, json.encodeToString(com.superiorsoftllc.agenthq.plugin.api.ConfigChangedFrame.serializer(), changed))
+                for (client in clients) client.trySend(frame)
+            }
+            val plugins = DaemonPlugins.resolve(stateDir(), onResolved = { daemonConfig.load(it).forEach { line -> System.err.println(line) } })
 
             val server = embeddedServer(CIO, port = boundPort, host = host) {
                 install(WebSockets)
@@ -1443,6 +1449,8 @@ class AgentHqDaemon(
                     nodeConfigRoutes(nodeConfigStore)
                     // CONFIG-3: the compiled unified manifest, one row per host; a swap migrates node_config's seed rows.
                     configManifestRoutes(ConfigManifestStore(store.database, nodeConfigStore))
+                    // CONFIG-8: `GET /config/schema` (+ `/config/values`), the HTTP twin of the config_schema / config_values frames.
+                    daemonConfigRoutes(daemonConfig)
                     // Phase 6 agent-facing mail API: how a spawned CLI agent answers a delivered message.
                     mailRoutes(mail, mailbox)
                     // SERVER-UPDATE-3 (1.110.0): status / check / apply for the headless daemon's own updates.
@@ -1533,6 +1541,7 @@ class AgentHqDaemon(
                             processWatch = processWatch,
                             ownerCredential = ownerCredential,
                             demoLock = demoLock,
+                            daemonConfig = daemonConfig,
                         )
                     }
                 }
@@ -2005,6 +2014,12 @@ internal fun worktreeBootLine(
 }
 
 /** Contract 1.12.0: push a saved role to every connected client; for the one that saved it, this IS the answer. */
+private fun configSchemaEnvelope(config: DaemonConfig) =
+    Envelope(Envelope.CONFIG_SCHEMA, json.encodeToString(com.superiorsoftllc.agenthq.plugin.api.ConfigSchemaFrame.serializer(), config.schema()))
+
+private fun configValuesEnvelope(values: com.superiorsoftllc.agenthq.plugin.api.ConfigValuesFrame) =
+    Envelope(Envelope.CONFIG_VALUES, json.encodeToString(com.superiorsoftllc.agenthq.plugin.api.ConfigValuesFrame.serializer(), values))
+
 private fun broadcastRole(clients: List<Channel<Envelope>>, role: Role) {
     val envelope = Envelope(Envelope.ROLE, json.encodeToString(Role.serializer(), role))
     for (client in clients) client.trySend(envelope)
@@ -2109,6 +2124,8 @@ private suspend fun handleConnection(
     ownerCredential: OwnerCredential? = null,
     /** SEC-FIX-1 (1.136.0): the demo lock, read per frame ([FrameGate.DEMO_LOCK_ALLOWED]). */
     demoLock: () -> Boolean = { false },
+    /** CONFIG-8 (1.142.0): the daemon's declared config (`config_*` frames); the default declares nothing. */
+    daemonConfig: DaemonConfig,
 ) {
     println("[agentHq] ws connected (provider=${manager.providerId})")
     // SEC-FIX-1: decided once, at the handshake, from what this connection presented.
@@ -2266,6 +2283,11 @@ private suspend fun handleConnection(
         ),
     )
 
+    // CONFIG-8: a daemon with declared config tells a connecting client its schema and values (none declared = no frames, as before).
+    if (daemonConfig.schema().declarations.isNotEmpty()) {
+        outgoing.trySend(configSchemaEnvelope(daemonConfig))
+        outgoing.trySend(configValuesEnvelope(daemonConfig.values()))
+    }
     // PROMPT-1: every prompt still open, so a client that (re)connects shows its card.
     pendingPrompts?.snapshot()?.forEach { request ->
         outgoing.trySend(
@@ -3097,6 +3119,23 @@ private suspend fun handleConnection(
                     Envelope(Envelope.ERROR, "settings_set refused: ${e.message ?: "invalid request"}")
                 } catch (e: Exception) {
                     Envelope(Envelope.ERROR, "settings_set failed: ${e.message ?: e::class.simpleName}")
+                }
+
+                // CONFIG-8 (contract 1.142.0): the daemon's declared config. Answered by `config_schema` + `config_values`.
+                Envelope.CONFIG_GET -> {
+                    outgoing.trySend(configSchemaEnvelope(daemonConfig))
+                    configValuesEnvelope(daemonConfig.values())
+                }
+
+                Envelope.CONFIG_SET -> try {
+                    val request = json.decodeFromString(com.superiorsoftllc.agenthq.plugin.api.ConfigSetFrame.serializer(), envelope.data)
+                    configValuesEnvelope(daemonConfig.set(request, by = "client"))
+                } catch (e: IllegalArgumentException) {
+                    Envelope(Envelope.ERROR, "config_set refused: ${e.message ?: "invalid request"}")
+                } catch (e: kotlinx.serialization.SerializationException) {
+                    Envelope(Envelope.ERROR, "config_set refused: malformed request")
+                } catch (e: Exception) {
+                    Envelope(Envelope.ERROR, "config_set failed: ${e.message ?: e::class.simpleName}")
                 }
 
                 Envelope.RESUME -> {

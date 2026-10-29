@@ -118,7 +118,12 @@ object FillDeclarationSerializer : JsonTransformingSerializer<FillDeclaration>(F
 
 /** NS3 (1a): `daemon.needs` (refused = the module does not work) and `daemon.wants` (refused = it degrades). */
 @Serializable
-data class DaemonCapabilities(val needs: List<String> = emptyList(), val wants: List<String> = emptyList())
+data class DaemonCapabilities(
+    val needs: List<String> = emptyList(),
+    val wants: List<String> = emptyList(),
+    /** CONFIG-8: the module's daemon-side config, the same schema as [ModuleManifest.config]; only `scope:"daemon"` fields are served. */
+    val config: List<ConfigDeclaration> = emptyList(),
+)
 
 /**
  * NS1 / PB1 (6t.2): a block type, `vendor.name` (core's layout primitives are `layout.row` ...). [fields] are the
