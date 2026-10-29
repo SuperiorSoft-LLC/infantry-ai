@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.dp
 import com.superiorsoftllc.agenthq.plugin.api.DaemonReply
 import com.superiorsoftllc.agenthq.plugin.api.PluginEvent
 import com.superiorsoftllc.agenthq.plugin.api.Services
+import com.superiorsoftllc.agenthq.ui.plugin.PanelProvider
+import com.superiorsoftllc.agenthq.ui.plugin.Panels
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabContext
 import com.superiorsoftllc.agenthq.ui.plugin.TabInterceptor
@@ -60,6 +62,8 @@ class HelloPlugin : UiPlugin {
                 testTag = "right-tab-ACME_HELLO",
             ) { Text("Hello from the right panel. Tabs opened since start: $opened.", Modifier.padding(12.dp).testTag("acme-hello-side")) },
         )
+        // EXAMPLE-1: the greeting block, in the left panel's left.board slot (under the Board button); module.json "panels".
+        registrar.panel(PanelProvider(id = AcmeHelloConfig.GREETING_NODE, panel = Panels.LEFT_BOARD, order = 10, testTag = "acme-hello-greeting-block") { GreetingBlock(it) })
         // Offered as a replacement for the core Git tab; the trust rules refuse it unless modules.json allows the override.
         registrar.tab(
             TabProvider(

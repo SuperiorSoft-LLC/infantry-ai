@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -91,7 +92,12 @@ object TabGroups {
 object Panels {
     const val LEFT = "left"
     const val RIGHT = "right"
-    val ALL = setOf(LEFT, RIGHT)
+    /**
+     * EXAMPLE-1: an empty slot in the left panel, right under the sidebar's Board button. The section that draws the
+     * Board button draws this slot's sections there ([PanelSlot]); nothing else draws, so an empty slot takes no room.
+     */
+    const val LEFT_BOARD = "left.board"
+    val ALL = setOf(LEFT, RIGHT, LEFT_BOARD)
     /** Where a panel's tab strip sits among its sections. */
     const val TABS_ORDER = 100
 }
@@ -850,7 +856,8 @@ class TabFactory(
         val generated = if (loadsAtRunTime) emptyMap() else CompiledConfig.declarations(problems)
         val sources = modules.map { m ->
             val name = m.manifest.name
-            val own = m.manifest.tabs.map { it.id }.toSet()
+            // EXAMPLE-1: a module owns the nodes of its own tabs and of its own panel sections.
+            val own = (m.manifest.tabs.map { it.id } + m.manifest.panels.map { it.id }).toSet()
             val declared = m.manifest.config.flatMap { d -> d.fields.map { d.node to it.key } }.toSet()
             val extra = generated[name].orEmpty().map { d -> d.copy(fields = d.fields.filter { (d.node to it.key) !in declared }) }.filter { it.fields.isNotEmpty() || it.block != null }
             ConfigSource(name, m.tier, m.manifest.config + extra) { node ->
@@ -929,9 +936,26 @@ class TabFactory(
 @Composable
 fun ColumnScope.PanelSections(factory: TabFactory, panel: String, context: TabContext, tabs: (@Composable ColumnScope.() -> Unit)? = null) {
     val (above, below) = factory.panels(panel).partition { it.order < Panels.TABS_ORDER }
-    above.forEach { PanelSection(factory, it, context) }
-    if (tabs != null) Column(Modifier.weight(1f).fillMaxWidth()) { tabs() }
-    below.forEach { PanelSection(factory, it, context) }
+    CompositionLocalProvider(LocalPanelHost provides PanelHost(factory, context)) {
+        above.forEach { PanelSection(factory, it, context) }
+        if (tabs != null) Column(Modifier.weight(1f).fillMaxWidth()) { tabs() }
+        below.forEach { PanelSection(factory, it, context) }
+    }
+}
+
+/** EXAMPLE-1: the factory and window context of the [PanelSections] being drawn, for a section that hosts a [PanelSlot]. */
+private class PanelHost(val factory: TabFactory, val context: TabContext)
+
+private val LocalPanelHost = staticCompositionLocalOf<PanelHost?> { null }
+
+/**
+ * EXAMPLE-1: draws panel slot [panel]'s sections (e.g. [Panels.LEFT_BOARD]) where the calling section puts this call,
+ * in order, each as its own module (badge, tier, services). Nothing outside [PanelSections], or when no section fills it.
+ */
+@Composable
+fun ColumnScope.PanelSlot(panel: String) {
+    val host = LocalPanelHost.current ?: return
+    host.factory.panels(panel).forEach { PanelSection(host.factory, it, host.context) }
 }
 
 @Composable

@@ -67,6 +67,8 @@ import com.superiorsoftllc.agenthq.ui.model.watchFlagOf
 import com.superiorsoftllc.agenthq.ui.model.AgentView
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.needsInput
+import com.superiorsoftllc.agenthq.ui.plugin.PanelSlot
+import com.superiorsoftllc.agenthq.ui.plugin.Panels
 import kotlin.time.Clock
 
 // S4c: the left panel's agent list and the centre's tab strip, split out of core App.kt (docs/SHELL-LEAKS.md).
@@ -135,6 +137,8 @@ fun Sidebar(
         }
         // M2-8: the Board button sits where the projects list was (M2-7 moved projects to the title bar).
         onOpenBoard?.let { SidebarBoardButton(state, it) }
+        // EXAMPLE-1: the left.board slot; a module's panel section declared on it draws here, under the Board button.
+        PanelSlot(Panels.LEFT_BOARD)
         projects()
         // UX-POLISH-1: the Board row and the search are separate sections, a spacing token either side of the divider
         // (the Board row already carries 4dp of outer padding below it).

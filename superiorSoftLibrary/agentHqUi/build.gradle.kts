@@ -31,6 +31,8 @@ dependencies {
     testImplementation(project(":plugins:official:Infantry_Cli"))
     // RUNTIME-4: likewise Infantry_Agents, the left panel's agents section (tests that build a factory name InfantryAgents).
     testImplementation(project(":plugins:official:Infantry_Agents"))
+    // EXAMPLE-1: the example community module, so AcmeHelloGreetingUiTest registers it from its module.json (no ServiceLoader entry).
+    testImplementation(project(":plugins:community:Acme_Hello"))
     // RUNTIME-5: and Infantry_Settings, the Settings host tab (the tab shots open it).
     testRuntimeOnly(project(":plugins:official:Infantry_Settings"))
     // RUNTIME-6: and Infantry_Git, the Git tab and its tree (the Git pane tests draw it).
