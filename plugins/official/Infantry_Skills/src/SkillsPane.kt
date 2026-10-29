@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.skills
 
+import com.superiorsoftllc.agenthq.ui.shell.gate
 import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.background
@@ -68,8 +69,9 @@ private data class SkillDraft(
 fun SkillsPane(link: LinkContext, ctx: SkillsContext, onInsert: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val live = link.live
-    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
-    val canWrite = link.canWrite
+    // POLICY-1: write controls are named actions gated by the daemon's policy (and any write policy); reads keep live.
+    val canWrite = link.gate("skills.save").enabled
+    val canDelete = link.gate("skills.delete", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE).enabled
     var query by remember { mutableStateOf("") }
     var draft by remember { mutableStateOf<SkillDraft?>(null) }
     var localError by remember { mutableStateOf<String?>(null) }
@@ -97,7 +99,7 @@ fun SkillsPane(link: LinkContext, ctx: SkillsContext, onInsert: (String) -> Unit
             Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("SKILLS", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
                 IconAction(
-                    AhqIcons.Add, "Add skill", onClick = { openDraft(SkillDraft()) }, enabled = link.canWrite,
+                    AhqIcons.Add, "Add skill", onClick = { openDraft(SkillDraft()) }, enabled = canWrite,
                     style = IconActionStyle.TEXT, modifier = Modifier.testTag(SKILLS_ADD_BUTTON_TAG),
                 )
             }
@@ -126,7 +128,7 @@ fun SkillsPane(link: LinkContext, ctx: SkillsContext, onInsert: (String) -> Unit
                     }
                     Column(
                         Modifier.fillMaxWidth().padding(bottom = 6.dp).clip(RoundedCornerShape(6.dp)).background(Palette.Panel)
-                            .clickable(enabled = link.canWrite, onClickLabel = "Edit skill", role = Role.Button) { edit() }
+                            .clickable(enabled = canWrite, onClickLabel = "Edit skill", role = Role.Button) { edit() }
                             .padding(10.dp),
                     ) {
                         Text(p.name, color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
@@ -139,9 +141,9 @@ fun SkillsPane(link: LinkContext, ctx: SkillsContext, onInsert: (String) -> Unit
                         }
                         Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             OutlinedButton(onClick = { onInsert(p.body) }, modifier = Modifier.testTag("skill-insert-${p.name}")) { Text("Insert", fontSize = 11.sp) }
-                            OutlinedButton(onClick = edit, enabled = link.canWrite, modifier = Modifier.testTag("skill-edit-${p.name}")) { Text("Edit", fontSize = 11.sp) }
+                            OutlinedButton(onClick = edit, enabled = canWrite, modifier = Modifier.testTag("skill-edit-${p.name}")) { Text("Edit", fontSize = 11.sp) }
                             OutlinedButton(
-                                onClick = { run { ctx.delete(p.id) } }, enabled = canWrite,
+                                onClick = { run { ctx.delete(p.id) } }, enabled = canDelete,
                                 modifier = Modifier.testTag("skill-delete-${p.name}"),
                             ) { Text("Delete", fontSize = 11.sp, color = Palette.Danger) }
                         }

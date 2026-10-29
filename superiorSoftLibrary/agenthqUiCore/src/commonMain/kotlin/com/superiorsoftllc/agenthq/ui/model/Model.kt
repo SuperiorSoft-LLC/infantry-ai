@@ -101,6 +101,11 @@ data class ConnectionInfo(
      * refusal is not an error banner; a module shows it.
      */
     val notices: Map<String, String> = emptyMap(),
+    /**
+     * POLICY-1 (docs/POLICY.md): the daemon's active policy (the `policy` frame): which named actions are off and why.
+     * [PolicyWire.Production] (nothing off) until the frame arrives, and from a daemon too old to send it.
+     */
+    val policy: com.superiorsoftllc.agenthq.plugin.api.PolicyWire = com.superiorsoftllc.agenthq.plugin.api.PolicyWire.Production,
 ) {
     val isLive: Boolean get() = state == ConnState.CONNECTED
 
@@ -110,8 +115,13 @@ data class ConnectionInfo(
      */
     val restricted: Boolean get() = readyFields["access"] == "restricted"
 
-    /** A write control may be enabled: live, and the nearest [com.superiorsoftllc.agenthq.ui.shell.WritePolicy] allows writes. */
-    val canWrite: Boolean @androidx.compose.runtime.Composable get() = isLive && com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current.canWrite
+    /**
+     * The GENERIC write action (an undeclared write, POLICY-1) may be enabled: live, the daemon's [policy] does not turn
+     * undeclared writes off, and the nearest [com.superiorsoftllc.agenthq.ui.shell.WritePolicy] allows writes. A control
+     * with a named action asks [com.superiorsoftllc.agenthq.ui.shell.rememberGate] instead.
+     */
+    val canWrite: Boolean @androidx.compose.runtime.Composable get() =
+        isLive && policy.allows("") && com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current.canWrite
 
     /**
      * Contract 1.11.0: the daemon puts every prompt on its session's stream as a `turn`, so the transcript
@@ -1250,6 +1260,7 @@ fun reduce(state: AppState, env: Envelope, now: Long): AppState {
 
 private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.type) {
     Envelope.READY -> ready(s, env)
+    Envelope.POLICY -> policy(s, env)
 
     Envelope.SESSIONS -> {
         val raw = json.parseToJsonElement(env.data) as JsonArray
@@ -1864,6 +1875,29 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     // this build does not know is still marked applied, so a newer daemon's frame never leaves a replay hole.
     else -> if (env.sessionId != null && env.sequence != null) s.stream(env) { a, _ -> a } else s
 }
+
+/**
+ * POLICY-1 (docs/POLICY.md): the daemon's active policy. Its `ready` contributions (restricted, notices, the preset's own
+ * keys, the notice) are folded into [ConnectionInfo.readyFields] in place of the previous policy's, so the modules that
+ * read ready fields follow a runtime switch exactly as they follow a fresh `ready`.
+ */
+@OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+private fun policy(s: AppState, env: Envelope): AppState {
+    val wire = json.decodeFromString(com.superiorsoftllc.agenthq.plugin.api.PolicyWire.serializer(), env.data)
+    fun contributed(w: com.superiorsoftllc.agenthq.plugin.api.PolicyWire): Map<String, String> = w.readyFields() +
+        listOfNotNull(w.notice?.takeIf { it.isNotBlank() }?.let {
+            POLICY_NOTICE_FIELD to kotlin.io.encoding.Base64.UrlSafe.withPadding(kotlin.io.encoding.Base64.PaddingOption.ABSENT).encode(it.encodeToByteArray())
+        })
+    val c = s.connection
+    val stale = contributed(c.policy).keys + POLICY_NOTICE_FIELD
+    val fields = c.readyFields.filterKeys { it !in stale || it in POLICY_KEPT_FIELDS } + contributed(wire)
+    return s.copy(connection = c.copy(policy = wire, readyFields = fields))
+}
+
+/** The `ready` key the daemon puts the policy's notice in (base64url UTF-8). */
+private const val POLICY_NOTICE_FIELD = "notice"
+/** `ready` keys a policy never owns, whatever it declares. */
+private val POLICY_KEPT_FIELDS = setOf("contract", "provider", "instance", "since", "build")
 
 /**
  * `ready`: the link is live. When it comes from a different daemon PROCESS than the cursors were built

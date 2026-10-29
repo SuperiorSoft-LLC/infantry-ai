@@ -192,6 +192,8 @@ class ConfigSectionBlock(
  * replaces or wraps one, and a bad drop can always be undone from Configuration > Plugins.
  */
 val ShellConfigTrust: List<ConfigSectionBlock> = listOf(
+    // POLICY-1: the ONE switch (which policy preset is active) and what it turns off; locked like the rest of the kernel.
+    ConfigSectionBlock(ConfigEntry.POLICY, "policy") { c, m -> com.superiorsoftllc.agenthq.ui.ConfigPolicySection(c, m) },
     ConfigSectionBlock(ConfigEntry.PLUGINS, "plugins") { c, m -> ConfigPluginsSection(c, m) },
     ConfigSectionBlock(ConfigEntry.MODULES, "modules") { c, m -> ConfigModulesSection(c, m) },
     ConfigSectionBlock(ConfigEntry.REGISTRY, "registry") { c, m -> ConfigRegistrySection(c, m) },

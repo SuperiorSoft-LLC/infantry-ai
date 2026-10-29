@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.roles
 
+import com.superiorsoftllc.agenthq.ui.shell.gate
 import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.runtime.Composable
@@ -55,7 +56,7 @@ object RolesList : Block("roleList", "$ROLES.list") {
     override fun Render(scope: BlockScope) {
         val ctx = LocalShellContext.current ?: return
         val nav = LocalRoleManagerNav.current ?: return
-        RoleManagerList(ctx.roles.roles, ctx.roles.bindings, ctx.roles.traits, ctx.link.canWrite, nav, scope.modifier)
+        RoleManagerList(ctx.roles.roles, ctx.roles.bindings, ctx.roles.traits, ctx.link.gate("roles.save").enabled, nav, scope.modifier)
     }
 }
 

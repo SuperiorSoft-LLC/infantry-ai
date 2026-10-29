@@ -154,6 +154,7 @@ fun ConfigDialog(
 ) {
     // VOICE-PLUGIN-1: the host's installable voice plugins (desktop); null = no Plugins tab.
     val voicePlugins = com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost.current.voicePlugins
+    val policyLink = com.superiorsoftllc.agenthq.ui.shell.LocalShellContext.current?.link
     // CONFIG-TABS-1: which sections this host has; a tab with none of them is not offered.
     val present = buildSet {
         if (theme != null && onTheme != null) add(ConfigEntry.THEME)
@@ -165,6 +166,8 @@ fun ConfigDialog(
         add(ConfigEntry.AGENT_SCOPE)
         add(ConfigEntry.PROGRESS_STALE)
         if (onKeepAliveMinutes != null) add(ConfigEntry.LIFECYCLE)
+        // POLICY-1: offered once the daemon has sent its policy (a daemon too old to have one has no switch).
+        if (policyLink?.policy?.presets?.isNotEmpty() == true) add(ConfigEntry.POLICY)
         if (onCliLocation != null) add(ConfigEntry.CLI_LOCATIONS)
         if (onToolApproval != null) add(ConfigEntry.TOOL_APPROVAL)
         if (onOpenRoles != null) add(ConfigEntry.ROLES)
@@ -637,7 +640,7 @@ private fun ConfigTabRow(tabs: List<String>, selected: String?, onPick: (String)
  * scrolled into view.
  */
 @Composable
-private fun FlagSection(entry: ConfigEntry, highlight: ConfigEntry?, modifier: Modifier, control: @Composable () -> Unit) {
+internal fun FlagSection(entry: ConfigEntry, highlight: ConfigEntry?, modifier: Modifier, control: @Composable () -> Unit) {
     val lit = entry == highlight
     val requester = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
     androidx.compose.runtime.LaunchedEffect(lit) { if (lit) requester.bringIntoView() }

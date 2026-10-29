@@ -17,5 +17,8 @@
   ],
   "fills": [
     "infantry.shell.config.limits"
+  ],
+  "actions": [
+    { "id": "usage.set", "label": "Edit pacing", "kind": "write", "frames": ["usage_set"] }
   ]
 }

@@ -50,6 +50,7 @@ enum class ConfigEntry(val tab: ConfigTab, val title: String, val applies: Strin
     AGENT_SCOPE(ConfigTab.GENERAL, AGENT_SCOPE_TITLE, AGENT_SCOPE_APPLIES_TO, listOf("project", "sidebar", "global")),
     PROGRESS_STALE(ConfigTab.GENERAL, PROGRESS_STALE_TITLE, PROGRESS_STALE_APPLIES_TO, listOf("progress", "stale", "minutes")),
     LIFECYCLE(ConfigTab.GENERAL, LifecycleSetting.TITLE, LifecycleSetting.APPLIES_TO, listOf("keep alive", "idle", "timeout")),
+    POLICY(ConfigTab.GENERAL, POLICY_TITLE, POLICY_APPLIES_TO, listOf("policy", "preset", "read-only", "disabled", "actions", "production", "switch")),
     CLI_LOCATIONS(ConfigTab.AGENTS, CliLocationsSetting.TITLE, CliLocationsSetting.APPLIES_TO, listOf("harness", "install", "path", "cli")),
     TOOL_APPROVAL(ConfigTab.AGENTS, ToolApprovalSetting.TITLE, ToolApprovalSetting.APPLIES_TO, listOf("permission", "approve", "tools", "timer", "timeout", "prompt", "expiry", "indefinite")),
     ROLES(ConfigTab.AGENTS, ROLES_TITLE, ROLES_APPLIES_TO, listOf("role", "provider", "model", "traits")),

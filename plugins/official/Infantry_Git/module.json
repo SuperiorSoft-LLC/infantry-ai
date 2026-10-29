@@ -14,5 +14,8 @@
       "id": "infantry.git",
       "container": "center"
     }
+  ],
+  "actions": [
+    { "id": "project.git.checkout", "label": "Switch or create a branch", "kind": "write", "frames": ["project_git_checkout"] }
   ]
 }

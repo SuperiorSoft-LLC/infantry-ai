@@ -32,9 +32,11 @@ An action is `area.thing.verb` (e.g. `board.ticket.move`), with a kind: `read | 
   `frames` names the daemon frames the control sends. `PolicyActionParityTest` checks every declared frame maps (in the daemon
   catalog) to the same action id, so a declaration cannot drift from what the daemon refuses.
 * Code gates through ONE helper: `Gated("board.ticket.move") { gate -> Button(enabled = gate.enabled, ...) }`, or
-  `ActionButton("board.ticket.move", "Move", onClick)`, or `rememberGate(id).enabled` for a modifier. A gate is enabled when
-  the link is live, the daemon's policy allows the action, and the nearest `WritePolicy` (kept, additive) allows writes. While
-  the policy refuses it the gate carries the policy's reason (hover tooltip via `WritePolicyTooltip`, `gate.label(normal)`).
+  `ActionButton("board.ticket.move", "Move", onClick)`, or `link.gate(id)` / `state.connection.gate(id)` / `rememberGate(id)`
+  for a flag. A gate is `enabled` when the link is live, the daemon's policy allows the action, and the nearest `WritePolicy`
+  (kept) allows writes; `allowed` is the same without the link (a control that also works offline). While the policy refuses
+  it the gate carries the policy's reason (hover tooltip via `WritePolicyTooltip`, `gate.label(normal)`). The app's write
+  shortcuts (Ctrl+N, Ctrl+Alt+K, Ctrl+Shift+K, Ctrl+,) ask the same gate with their action ids.
 * **Undeclared actions follow their kind.** `link.canWrite` / `connection.canWrite` (DEMO-MERGE-1) is now "the generic write
   action": it is refused by any rule that matches an undeclared write (`*`, `kind:write`). So an old or community plugin that
   only checks `canWrite` is still gated by a policy that turns writes off.
@@ -121,10 +123,13 @@ when a write frame is in neither the catalog nor `FrameGate.OWNER_ONLY`.
 ## 5. One-switch proof
 
 `PolicyOneSwitchRealDaemonUiTest` (agentHqUi): real in-process daemon (temp state dir, port 0, owner token), the real App over
-the real WebSocket, plugins root = a temp copy of the demo preset. Boots `production`: New ticket / New agent enabled, a
-`ticket_save` is answered. Flips ONLY the setting to `demo` from the Settings Policy card (owner): the same controls dim with
-"Disabled in the demo" and the daemon refuses `ticket_save` / `kill`. Flips back to `production`: enabled and answered again.
-No rebuild, no plugin edited.
+the real WebSocket, plugins root = a temp copy of the demo preset. Boots `production`: New agent is enabled and a
+`ticket_save` is answered. Flips ONLY the setting to `demo` from the Settings Policy card (owner; the choice is stored in
+`<state dir>/policy.preset`): the same control dims, the generic write is refused, `ready` gains `access=restricted`, and the
+daemon refuses `ticket_save` / `kill` with the preset's refusal text. Flips back to `production`: the file is removed, the
+control is enabled and a ticket is saved again. No rebuild, no plugin edited, no env var.
+
+Run: `gradlew.bat --no-parallel :superiorSoftLibrary:agentHqUi:test --tests "*PolicyOneSwitchRealDaemonUiTest"`.
 
 ## 6. Settings and plugins
 

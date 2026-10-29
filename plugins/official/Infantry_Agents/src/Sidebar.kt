@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.agents
 
+import com.superiorsoftllc.agenthq.ui.shell.gate
 import com.superiorsoftllc.agenthq.ui.*
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
 import com.superiorsoftllc.agenthq.ui.shell.NoAgents
@@ -137,7 +138,7 @@ fun Sidebar(
                     if (state.agents.isEmpty()) "No agents yet." else "No agent matches the filter.",
                     color = Palette.Muted, fontSize = 12.sp,
                 )
-                if (state.agents.isEmpty() && state.connection.canWrite) {
+                if (state.agents.isEmpty() && state.connection.gate("agents.spawn", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN).enabled) {
                     TextButton(onClick = onNew) { Text("Spawn one (Ctrl+N)") }
                 }
             }
@@ -146,8 +147,8 @@ fun Sidebar(
         HorizontalDivider(color = Palette.Border)
         // UX-ICON-1: the same New agent icon as the composer, with its label (the sidebar has the room).
         // DEMO-MERGE-1: dimmed, with the reason as its tooltip, while the write policy refuses writes.
-        val policy = com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current
-        val writeLocked = !policy.canWrite
+        val policy = state.connection.gate("agents.spawn", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN)
+        val writeLocked = !policy.allowed
         IconAction(
             AhqIcons.PersonAdd, policy.label(NEW_AGENT_LABEL), onNew, Modifier.fillMaxWidth().testTag(SIDEBAR_NEW_AGENT_TAG),
             shortcut = NEW_AGENT_SHORTCUT, style = IconActionStyle.TEXT, enabled = !writeLocked,
@@ -320,7 +321,7 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
     var menuOpen by remember { mutableStateOf(false) }
     var confirming by remember { mutableStateOf(false) }
     val live = state.connection.isLive
-    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
+    // DEMO-MERGE-1 / POLICY-1: the menu holds several actions (assign, remove), so it opens on the generic write; each item has its own gate.
     val canWrite = state.connection.canWrite
     val focusSource = remember { MutableInteractionSource() }
     val focused by focusSource.collectIsFocusedAsState()
@@ -353,8 +354,8 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
             }
             HorizontalDivider(color = Palette.Border)
             // DEMO-MERGE-1: the delete is a write; Remove is dimmed and says why while writes are refused.
-            val policy = com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current
-            val writeLocked = !policy.canWrite
+            val policy = state.connection.gate("agents.delete", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE)
+            val writeLocked = !policy.allowed
             WritePolicyTooltip { m ->
                 DropdownMenuItem(
                     text = { Text("Remove", color = if (writeLocked) Palette.Border else Palette.Danger, fontSize = 12.sp) },

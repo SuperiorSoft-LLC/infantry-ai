@@ -124,6 +124,16 @@ jar that will not load is skipped, with one log line saying why. It never stops 
 - `entry` is a class implementing `com.superiorsoftllc.agenthq.ui.plugin.UiPlugin`. It registers its tabs, panel
   sections, interceptors, blocks and observers by the names declared above. Anything it registers without declaring
   is refused.
+- `actions` (optional, POLICY-1, docs/POLICY.md): the named actions this module's controls perform, so a policy preset can
+  turn them off by data. Each is `{ "id": "area.thing.verb", "label": "...", "kind": "read|write|destructive|spawn",
+  "frames": ["<daemon frame>", ...] }`. Draw the control through the shared gate (`Gated(id) { gate -> }`,
+  `ActionButton(id, label, onClick)`, `link.gate(id).enabled`, `state.connection.gate(id).enabled`): it is dimmed with
+  the policy's reason on hover and its click is blocked while the active preset refuses the action, and the daemon
+  refuses the same frames with the same matcher. `PolicyActionParityTest` (daemon) fails when a declared frame is mapped
+  to another action. An undeclared control that only checks `canWrite` is the generic write (id `""`, kind `write`): any
+  preset that turns writes off dims it too. A control that checks neither cannot be dimmed (its frame is still refused).
+  A module may also ship presets as data: `policies/*.json` next to its module.json (the demo preset is
+  `plugins/demo/Demo_Lock/policies/demo.json`); the daemon finds them under the plugins root and `AGENTHQ_POLICY_DIRS`.
 - The API (manifest, services, events, the loading rules) lives in `superiorSoftLibrary/agenthqPlugins`. It depends
   on nothing in the app. Whole screens, a module's own state, and background work are reserved contribution types and
   will come the same way.

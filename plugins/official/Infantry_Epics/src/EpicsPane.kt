@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.epics
 
+import com.superiorsoftllc.agenthq.ui.shell.gate
 import com.superiorsoftllc.agenthq.ui.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -70,8 +71,8 @@ private data class EpicDraft(val name: String = "", val goal: String = "")
 fun EpicsPane(state: AppState, epics: EpicsContext) {
     val scope = rememberCoroutineScope()
     val live = state.connection.isLive
-    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
-    val canWrite = state.connection.canWrite
+    // POLICY-1: write controls are named actions gated by the daemon's policy (and any write policy); reads keep live.
+    val canWrite = state.connection.gate("epics.save").enabled
     val active = state.activeProject
     var draft by remember(active?.id) { mutableStateOf<EpicDraft?>(null) }
     var localError by remember { mutableStateOf<String?>(null) }
@@ -98,7 +99,7 @@ fun EpicsPane(state: AppState, epics: EpicsContext) {
                 Text(if (active != null) "EPICS · ${active.name}" else "EPICS", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
                 if (active != null) {
                     IconAction(
-                        AhqIcons.Add, "New epic", onClick = { localError = null; draft = EpicDraft() }, enabled = state.connection.canWrite,
+                        AhqIcons.Add, "New epic", onClick = { localError = null; draft = EpicDraft() }, enabled = state.connection.gate("epics.save").enabled,
                         style = IconActionStyle.TEXT, modifier = Modifier.testTag(EPICS_ADD_BUTTON_TAG),
                     )
                 }

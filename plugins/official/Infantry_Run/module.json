@@ -14,5 +14,9 @@
       "id": "infantry.run",
       "container": "center"
     }
+  ],
+  "actions": [
+    { "id": "runs.start", "label": "Run a command", "kind": "spawn", "frames": ["run_start", "run_attach", "run_resize", "run_input"] },
+    { "id": "runs.stop", "label": "Stop a run", "kind": "destructive", "frames": ["run_stop"] }
   ]
 }

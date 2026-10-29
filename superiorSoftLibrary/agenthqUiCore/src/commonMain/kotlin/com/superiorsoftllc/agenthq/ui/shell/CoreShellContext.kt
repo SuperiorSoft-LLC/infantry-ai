@@ -54,7 +54,7 @@ import kotlinx.serialization.json.jsonPrimitive
 class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : ShellContext {
     private val state = shell.state
     private val ui = shell.ui
-    override val link: LinkContext = CoreLink(state)
+    override val link: LinkContext = CoreLink(state) { id -> shell.actionScope.launch { shell.controller.selectPolicy(id) } }
     override val session: SessionContext = CoreSession(state)
     override val git: GitContext = CoreGit(state, shell.controller)
     override val run: RunContext = CoreRun(state, shell.controller, console)
@@ -190,12 +190,14 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
 }
 
 /** S2: [state]'s link, for a pane drawn outside a shell (its `(state, controller)` entry point). */
-class CoreLink(private val state: AppState) : LinkContext {
+class CoreLink(private val state: AppState, private val onSelectPolicy: ((String) -> Unit)? = null) : LinkContext {
     override val live: Boolean get() = state.connection.isLive
     override val contract: String? get() = state.connection.contract
     override val daemonBuild: String? get() = state.connection.daemonBuild
     override val readyFields: Map<String, String> get() = state.connection.readyFields
     override val notices: Map<String, String> get() = state.connection.notices
+    override val policy: com.superiorsoftllc.agenthq.plugin.api.PolicyWire get() = state.connection.policy
+    override fun selectPolicy(presetId: String) { onSelectPolicy?.invoke(presetId) }
 }
 
 /** RUNTIME-18: [state]'s process report and [controller]'s process-watch requests, for the official Infantry_Processes. */

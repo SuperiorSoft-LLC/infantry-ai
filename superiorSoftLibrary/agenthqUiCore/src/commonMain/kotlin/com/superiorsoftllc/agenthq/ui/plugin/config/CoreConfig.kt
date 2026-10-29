@@ -21,7 +21,7 @@ object CoreConfig {
      * `block` cards (the hand-written section is the card) placed by tab / order; copy and keywords come from [ConfigEntry].
      */
     val TRUST: List<ConfigEntry> = listOf(
-        ConfigEntry.PLUGINS, ConfigEntry.MODULES, ConfigEntry.REGISTRY, ConfigEntry.SECRETS, ConfigEntry.PAIR,
+        ConfigEntry.POLICY, ConfigEntry.PLUGINS, ConfigEntry.MODULES, ConfigEntry.REGISTRY, ConfigEntry.SECRETS, ConfigEntry.PAIR,
         ConfigEntry.ABOUT, ConfigEntry.UPDATES, ConfigEntry.SERVER_UPDATE, ConfigEntry.LOGS,
     )
 

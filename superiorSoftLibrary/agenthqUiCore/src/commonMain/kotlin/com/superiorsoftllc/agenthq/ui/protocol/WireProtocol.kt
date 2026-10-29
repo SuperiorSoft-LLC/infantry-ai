@@ -31,6 +31,11 @@ data class Envelope(
 ) {
     companion object {
         const val READY = "ready"
+        /** POLICY-1 (docs/POLICY.md): the daemon's active policy (JSON PolicyWire), after `ready` and on every switch. */
+        const val POLICY = "policy"
+        /** POLICY-1: ask for the `policy` frame again; `policy_set` is the owner's switch (data: the preset id). */
+        const val POLICY_GET = "policy_get"
+        const val POLICY_SET = "policy_set"
         const val PROMPT = "prompt"
         const val STDOUT = "stdout"
         const val STDERR = "stderr"

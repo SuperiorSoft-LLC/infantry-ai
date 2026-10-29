@@ -146,8 +146,8 @@ fun ProjectPicker(state: AppState, controller: Controller) {
         }
         Spacer(Modifier.width(6.dp))
         // DEMO-MERGE-1: a project change is a write; both boxes are dimmed and say why while writes are refused.
-        val policy = com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current
-        val writeLocked = !policy.canWrite
+        val policy = com.superiorsoftllc.agenthq.ui.shell.rememberGate("projects.save")
+        val writeLocked = !policy.allowed
         NewProjectBox(enabled = live && !writeLocked, label = policy.label(NEW_PROJECT_LABEL)) { creating = true }
         Spacer(Modifier.width(6.dp))
         EditProjectBox(enabled = live && current != null && !writeLocked, label = policy.label(EDIT_PROJECT_LABEL)) { editing = true }

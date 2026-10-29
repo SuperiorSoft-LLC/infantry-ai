@@ -385,6 +385,9 @@ class Controller(
             CommandResult.Refused("not connected to a daemon (${_state.value.connection.state.name.lowercase()}) - nothing was sent")
         } else if (client.send(env)) CommandResult.Sent else CommandResult.Refused("the connection dropped while sending - nothing was sent")
 
+    /** POLICY-1 (docs/POLICY.md): the owner's ONE switch; the daemon answers every client with the new `policy` frame. */
+    suspend fun selectPolicy(presetId: String): CommandResult = report(send(Envelope(Envelope.POLICY_SET, presetId.trim())))
+
     private fun report(r: CommandResult): CommandResult {
         if (r is CommandResult.Refused) _state.update { it.withNotice(Clock.System.now().toEpochMilliseconds(), r.reason, null, NoticeKind.ERROR) }
         return r

@@ -79,14 +79,15 @@ class PolicyRuntime(
     fun wire(owner: Boolean): PolicyWire = PolicyWire.of(
         current, pinnedBy, canSwitch = owner && pinnedBy == null,
         presets = presets().map { PolicyChoice(it.id, it.label.ifBlank { it.id }, it.description) },
-    )
+    ).copy(notice = notice())
+
+    /** The pinned notice: the seated lock's (the deployment's env may override it), else the preset's; null = none. */
+    private fun notice(): String? = lock.notice.ifBlank { current.notice.orEmpty() }.takeIf { it.isNotBlank() }
 
     /** The extra `ready` keys of [current] (empty for production), each ` key=value`. */
     fun readyFields(): String = buildString {
-        val wire = wire(false)
-        for ((k, v) in wire.readyFields()) append(' ').append(k).append('=').append(v)
-        val notice = lock.notice.ifBlank { current.notice.orEmpty() }
-        if (notice.isNotBlank()) append(" notice=").append(Base64.getUrlEncoder().withoutPadding().encodeToString(notice.toByteArray(Charsets.UTF_8)))
+        for ((k, v) in wire(false).readyFields()) append(' ').append(k).append('=').append(v)
+        notice()?.let { append(" notice=").append(Base64.getUrlEncoder().withoutPadding().encodeToString(it.toByteArray(Charsets.UTF_8))) }
     }
 
     /**

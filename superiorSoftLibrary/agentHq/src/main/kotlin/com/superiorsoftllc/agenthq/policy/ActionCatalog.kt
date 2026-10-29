@@ -49,7 +49,8 @@ object ActionCatalog {
         a("worktrees.read", READ, E.WORKTREES),
         a("runs.read", READ, E.RUN_LIST),
         a("config.read", READ, E.CONFIG_GET),
-        a("host.processes.read", READ, E.PROCESSES),
+        // `processes` both lists and (data "reap <pid>") kills host processes: one frame, so it is catalogued by its worst use.
+        a("host.processes", DESTRUCTIVE, E.PROCESSES),
         a("secrets.read", READ, E.SECRET_STATUS),
         a("secrets.plugin.read", READ, E.PLUGIN_SECRET_GET),
         a("stories.read", READ, E.STORY_GET, E.STORY_LIST),

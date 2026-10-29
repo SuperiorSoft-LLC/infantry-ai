@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.git
 
+import com.superiorsoftllc.agenthq.ui.shell.gate
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -356,7 +357,7 @@ private fun BranchSwitcher(link: LinkContext, ctx: GitContext, projectId: String
                     if (!isCurrent && switchSupported) {
                         OutlinedButton(
                             onClick = { checkout(b.name, create = false) },
-                            enabled = link.canWrite,
+                            enabled = link.gate("project.git.checkout").enabled,
                             modifier = Modifier.testTag(GIT_SWITCH_TAG + b.name),
                         ) { Text("Switch", fontSize = 11.sp) }
                     }
@@ -369,12 +370,12 @@ private fun BranchSwitcher(link: LinkContext, ctx: GitContext, projectId: String
     if (switchSupported) {
         Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
-                newName, { newName = it }, label = { Text("New branch name") }, singleLine = true, enabled = link.canWrite,
+                newName, { newName = it }, label = { Text("New branch name") }, singleLine = true, enabled = link.gate("project.git.checkout").enabled,
                 textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.weight(1f).testTag(GIT_NEW_BRANCH_FIELD_TAG),
             )
             OutlinedButton(
                 onClick = { checkout(newName, create = true) },
-                enabled = link.canWrite && newName.isNotBlank(),
+                enabled = link.gate("project.git.checkout").enabled && newName.isNotBlank(),
                 modifier = Modifier.testTag(GIT_NEW_BRANCH_TAG),
             ) { Text("New branch from current", fontSize = 11.sp) }
         }

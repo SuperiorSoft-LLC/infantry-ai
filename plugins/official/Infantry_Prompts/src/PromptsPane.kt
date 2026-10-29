@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.prompts
 
+import com.superiorsoftllc.agenthq.ui.shell.gate
 import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.background
@@ -60,8 +61,9 @@ private data class PromptDraft(val editing: String? = null, val name: String = "
 fun PromptsPane(link: LinkContext, ctx: PromptsContext, onInsert: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val live = link.live
-    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
-    val canWrite = link.canWrite
+    // POLICY-1: write controls are named actions gated by the daemon's policy (and any write policy); reads keep live.
+    val canWrite = link.gate("prompts.save").enabled
+    val canDelete = link.gate("prompts.delete", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE).enabled
     var query by remember { mutableStateOf("") }
     var draft by remember { mutableStateOf<PromptDraft?>(null) }
     var localError by remember { mutableStateOf<String?>(null) }
@@ -89,7 +91,7 @@ fun PromptsPane(link: LinkContext, ctx: PromptsContext, onInsert: (String) -> Un
             Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("PROMPTS", color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.weight(1f))
                 IconAction(
-                    AhqIcons.Add, "Add prompt", onClick = { openDraft(PromptDraft()) }, enabled = link.canWrite,
+                    AhqIcons.Add, "Add prompt", onClick = { openDraft(PromptDraft()) }, enabled = canWrite,
                     style = IconActionStyle.TEXT, modifier = Modifier.testTag(PROMPTS_ADD_BUTTON_TAG),
                 )
             }
@@ -116,7 +118,7 @@ fun PromptsPane(link: LinkContext, ctx: PromptsContext, onInsert: (String) -> Un
                     val edit = { openDraft(PromptDraft(editing = p.name, name = p.name, body = p.body, tags = p.tags.joinToString(", "))) }
                     Column(
                         Modifier.fillMaxWidth().padding(bottom = 6.dp).clip(RoundedCornerShape(6.dp)).background(Palette.Panel)
-                            .clickable(enabled = link.canWrite, onClickLabel = "Edit prompt", role = Role.Button) { edit() }
+                            .clickable(enabled = canWrite, onClickLabel = "Edit prompt", role = Role.Button) { edit() }
                             .padding(10.dp),
                     ) {
                         Text(p.name, color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
@@ -128,9 +130,9 @@ fun PromptsPane(link: LinkContext, ctx: PromptsContext, onInsert: (String) -> Un
                         }
                         Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             OutlinedButton(onClick = { onInsert(p.body) }, modifier = Modifier.testTag("prompt-insert-${p.name}")) { Text("Insert", fontSize = 11.sp) }
-                            OutlinedButton(onClick = edit, enabled = link.canWrite, modifier = Modifier.testTag("prompt-edit-${p.name}")) { Text("Edit", fontSize = 11.sp) }
+                            OutlinedButton(onClick = edit, enabled = canWrite, modifier = Modifier.testTag("prompt-edit-${p.name}")) { Text("Edit", fontSize = 11.sp) }
                             OutlinedButton(
-                                onClick = { run { ctx.delete(p.id) } }, enabled = canWrite,
+                                onClick = { run { ctx.delete(p.id) } }, enabled = canDelete,
                                 modifier = Modifier.testTag("prompt-delete-${p.name}"),
                             ) { Text("Delete", fontSize = 11.sp, color = Palette.Danger) }
                         }

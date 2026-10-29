@@ -14,5 +14,9 @@
       "id": "infantry.skills",
       "container": "right"
     }
+  ],
+  "actions": [
+    { "id": "skills.save", "label": "Add or edit a skill", "kind": "write", "frames": ["skill_save"] },
+    { "id": "skills.delete", "label": "Delete a skill", "kind": "destructive", "frames": ["skill_delete"] }
   ]
 }

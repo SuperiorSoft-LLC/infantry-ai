@@ -62,7 +62,7 @@ Two independent switches, both default off. Same source tree, no branch.
 
 | switch | where | what it does |
 |---|---|---|
-| `-Pdemo=true` (Gradle) | wasm / Android build | compiles `plugins/demo/*` after the live modules (PLUGIN-OVERRIDES.md section 6). Today: `Demo_Lock` (wraps `infantry.shell.frame`; under `ready demo=lock` it provides a `WritePolicy` that refuses writes with "Disabled in the demo", and the notice) and `Demo_Banner` (the strip above the body; shows Demo_Lock's notice, i.e. the daemon's `AGENTHQ_DEMO_NOTICE` or the turn-limit message, else "DEMO BUILD - sample data"). Without the flag the generated module list is the live set, byte for byte. |
+| `-Pdemo=true` (Gradle) | wasm / Android build | compiles `plugins/demo/*` after the live modules (PLUGIN-OVERRIDES.md section 6). Today: `Demo_Lock` (POLICY-1: ships the demo policy preset `policies/demo.json`, which the daemon enforces and core's gate dims in every build; in the demo build it wraps `infantry.shell.frame` and provides the notice) and `Demo_Banner` (the strip above the body; shows Demo_Lock's notice, i.e. the daemon's `AGENTHQ_DEMO_NOTICE` or the turn-limit message, else "DEMO BUILD - sample data"). Without the flag the generated module list is the live set, byte for byte. |
 | `AGENTHQ_DEMO_LOCK=1` (env) | daemon, runtime | demo lock: default-deny frames and routes for every token, the demo project + two seeded sessions, warm-up, refuses interrupt/kill/writes. Unset = the normal daemon (DemoModeOffTest). |
 
 Daemon demo env (read once at start; only meaningful with `AGENTHQ_DEMO_LOCK=1`; see `DemoLock.fromEnvironment` and docs/docker-deploy.md):
@@ -76,12 +76,12 @@ SEC-FIX-1 drop-in lock files that predate this ticket):
 
 | core mechanism | what it is | who uses it |
 |---|---|---|
-| `WritePolicy` / `LocalWritePolicy` / `ProvideWritePolicy` (shell/WritePolicy.kt) | may write controls be enabled, and the hover reason; default allow-all; mirrored to the app shortcuts | `LinkContext.canWrite` / `ConnectionInfo.canWrite` (= live and the nearest policy allows), `WritePolicyTooltip`, `policy.label(...)`; provided by `Demo_Lock` |
-| `ConnectionInfo.readyFields` / `LinkContext.readyFields` | every `ready` key=value verbatim | `Demo_Lock` reads `demo=lock`, `demoNotice=` |
+| `WritePolicy` / `LocalWritePolicy` / `ProvideWritePolicy` (shell/WritePolicy.kt) | may write controls be enabled, and the hover reason; default allow-all; mirrored to the app shortcuts | `LinkContext.canWrite` / `ConnectionInfo.canWrite` (= live and the nearest policy allows), `WritePolicyTooltip`, `policy.label(...)`; no longer provided by `Demo_Lock` (POLICY-1: the demo dimming is core's policy gate, docs/POLICY.md) |
+| `ConnectionInfo.readyFields` / `LinkContext.readyFields` | every `ready` key=value verbatim | `Demo_Lock` reads `demo=lock`, `notice=` (`demoNotice=` before POLICY-1) |
 | `ready access=restricted` -> `restricted` | the daemon refuses owner-only reads | Controller skips cli locations, harness status, tool approval, secrets, processes and the command catalog; ProcessesBadge does not poll; no Assistant |
 | `ready notices=code,...` -> `notices` | a refusal `<code> <message>` with a declared code is kept, not an error banner | `Demo_Lock` shows `demo_limit` (the turn limit) as its notice |
 
-The daemon's `DemoLock` (core stopgap, default off) announces `demo=lock access=restricted notices=demo_limit demoNotice=...`.
+The daemon's `DemoLock` (core stopgap, default off) announces `demo=lock access=restricted notices=demo_limit notice=...` (POLICY-1: the demo preset's `ready` keys; the notice key was `demoNotice=` before).
 Plugins gate write controls on `canWrite` and keep reads on `live`. Anything only the demo shows or does is a `plugins/demo/*` module.
 
 The deployed demo = the wasm bundle built with `-Pdemo=true` served by a daemon started with `AGENTHQ_DEMO_LOCK=1`

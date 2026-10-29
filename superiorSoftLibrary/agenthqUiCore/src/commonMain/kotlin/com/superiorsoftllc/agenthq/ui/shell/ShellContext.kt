@@ -503,8 +503,16 @@ interface LinkContext {
     val notices: Map<String, String> get() = emptyMap()
     /** DEMO-MERGE-1: the daemon serves this link a restricted surface (`ready` access=restricted): owner-only reads are refused. */
     val restricted: Boolean get() = readyFields["access"] == "restricted"
-    /** A write control may be enabled: live, and the nearest [WritePolicy] allows writes. Read-only views keep using [live]. */
-    val canWrite: Boolean @Composable get() = live && LocalWritePolicy.current.canWrite
+    /** POLICY-1 (docs/POLICY.md): the daemon's active policy; [PolicyWire.Production] (nothing off) when none was sent. */
+    val policy: com.superiorsoftllc.agenthq.plugin.api.PolicyWire get() = com.superiorsoftllc.agenthq.plugin.api.PolicyWire.Production
+    /** POLICY-1: the owner's switch (`policy_set`); the daemon refuses it unless [policy] says `canSwitch`. */
+    fun selectPolicy(presetId: String) {}
+    /**
+     * The GENERIC write (an undeclared write action) may be enabled: live, the [policy] does not turn undeclared writes
+     * off, and the nearest [WritePolicy] allows writes. A control with a named action uses [gate] / [Gated] instead.
+     * Read-only views keep using [live].
+     */
+    val canWrite: Boolean @Composable get() = gate("").enabled
 }
 
 /** The window's working context: the active project and the daemon's refusals. */
