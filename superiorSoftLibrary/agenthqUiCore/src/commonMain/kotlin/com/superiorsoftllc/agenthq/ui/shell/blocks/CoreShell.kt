@@ -51,7 +51,7 @@ object CoreShell {
         // CONFIG-3: the theme block (Infantry_Appearance); draws nothing, applies the theme config.
         "infantry.shell.theme",
         // RUNTIME-26: the side panels, the compact drawer and the open settings group are the shell's own, not slots.
-    ) + CONFIG_OWNED_SECTION_SLOTS + "infantry.shell.roles"
+    ) + CONFIG_OWNED_SECTION_SLOTS + "infantry.shell.roles" + SETTINGS_SLOT
 
     /**
      * SHELL-EMPTY-DROPIN S1 (docs/BLOCKS-LAYOUT-DESIGN.md section 13): the containers that are open slots

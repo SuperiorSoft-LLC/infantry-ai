@@ -106,9 +106,12 @@ data class ModuleManifest(
     val fillNodes: List<String> get() = fills.map { it.node }
 }
 
-/** NS3: a fill of shell slot [node]; [layout] (a `layout/<name>.json` path in the module folder) when the tree is data. */
+/**
+ * NS3: a fill of shell slot [node]; [layout] (a `layout/<name>.json` path in the module folder) when the tree is data.
+ * CONFIG-10b: [replaces] names the module whose fill of [node] this one takes over (that module stays loaded, unused); absent = first fill wins.
+ */
 @Serializable
-data class FillDeclaration(val node: String, val layout: String? = null)
+data class FillDeclaration(val node: String, val layout: String? = null, val replaces: String? = null)
 
 /** NS3: a fill entry is a plain node id string or the object form. */
 object FillDeclarationSerializer : JsonTransformingSerializer<FillDeclaration>(FillDeclaration.serializer()) {
