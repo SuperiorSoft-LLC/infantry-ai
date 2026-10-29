@@ -21,20 +21,6 @@ object InstallProfile {
     /** The installed daemon's port. Not 8787 (dev daemon), not 8788 (dev UI preview), and its 10-port fallback scan stays clear of both. */
     const val DEFAULT_PORT = 8797
 
-    /** DEVDEFAULTS-1: a dev/devSign build's own default port, so it never contends for the owner's 8797. */
-    const val DEV_DEFAULT_PORT = 8798
-
-    /** DEVDEFAULTS-1: a dev/devSign build's own state folder name, beside the real one. */
-    const val DEV_APP_DIR_NAME = "InfantryAI-dev"
-    const val DEV_LINUX_DIR_NAME = "infantryai-dev"
-
-    /** Set on the launcher of a `-Pihq.devSign=true` build (build.gradle.kts, DEV-TRUST); also usable by hand. */
-    const val DEV_BUILD_PROPERTY = "agenthq.plugins.devTrust"
-
-    /** True when this is a dev/devSign build: the launcher carries [DEV_BUILD_PROPERTY]. A release build never does. */
-    fun isDevBuild(getProperty: (String) -> String? = System::getProperty): Boolean =
-        getProperty(DEV_BUILD_PROPERTY)?.trim()?.equals("true", ignoreCase = true) == true
-
     /**
      * The state dir's path under `%LOCALAPPDATA%` (or `%APPDATA%`): `SuperiorSoft\AgentHQ`.
      *
@@ -72,13 +58,12 @@ object InstallProfile {
     val DEV_PORTS: Set<Int> = setOf(8787, 8788)
 
     /** `AGENTHQ_INSTALL_PORT` when it is a valid port that is not a dev port, else [DEFAULT_PORT]. */
-    fun port(env: (String) -> String?, dev: Boolean = false): Int {
-        val fallback = if (dev) DEV_DEFAULT_PORT else DEFAULT_PORT
-        val raw = env(PORT_ENV)?.trim()?.takeIf { it.isNotEmpty() } ?: return fallback
+    fun port(env: (String) -> String?): Int {
+        val raw = env(PORT_ENV)?.trim()?.takeIf { it.isNotEmpty() } ?: return DEFAULT_PORT
         val asked = raw.toIntOrNull()
         return when {
-            asked == null || asked !in 1..65535 -> fallback.also { warn("$PORT_ENV=$raw is not a port; using $fallback") }
-            asked in DEV_PORTS -> fallback.also { warn("$PORT_ENV=$asked is a dev port; using $fallback") }
+            asked == null || asked !in 1..65535 -> DEFAULT_PORT.also { warn("$PORT_ENV=$raw is not a port; using $DEFAULT_PORT") }
+            asked in DEV_PORTS -> DEFAULT_PORT.also { warn("$PORT_ENV=$asked is a dev port; using $DEFAULT_PORT") }
             else -> asked
         }
     }
@@ -107,16 +92,13 @@ object InstallProfile {
         home: String = System.getProperty("user.home"),
         installDir: File? = null,
         os: String = System.getProperty("os.name").orEmpty(),
-        dev: Boolean = false,
     ): File {
-        val appDir = if (dev) DEV_APP_DIR_NAME else APP_DIR_NAME
-        val linuxDir = if (dev) DEV_LINUX_DIR_NAME else LINUX_DIR_NAME
         fun under(base: String?, fallback: String) =
-            File(File(base?.takeIf { it.isNotBlank() } ?: File(home, fallback).path, VENDOR_DIR_NAME), appDir).absoluteFile
+            File(File(base?.takeIf { it.isNotBlank() } ?: File(home, fallback).path, VENDOR_DIR_NAME), APP_DIR_NAME).absoluteFile
         val local = under(env("LOCALAPPDATA"), "AppData/Local")
         val default = when (platform(os)) {
-            Platform.MAC -> File(home, "Library/Application Support/$appDir").absoluteFile
-            Platform.LINUX -> File(env("XDG_DATA_HOME")?.takeIf { it.isNotBlank() } ?: File(home, ".local/share").path, linuxDir).absoluteFile
+            Platform.MAC -> File(home, "Library/Application Support/$APP_DIR_NAME").absoluteFile
+            Platform.LINUX -> File(env("XDG_DATA_HOME")?.takeIf { it.isNotBlank() } ?: File(home, ".local/share").path, LINUX_DIR_NAME).absoluteFile
             Platform.WINDOWS -> if (installDir != null && local.isInside(installDir)) {
                 val roaming = under(env("APPDATA"), "AppData/Roaming")
                 if (roaming.isInside(installDir)) {
@@ -168,12 +150,11 @@ object InstallProfile {
         cliBin: File? = InstalledCli.binDir(),
         installDir: File? = installDir(),
         os: String = System.getProperty("os.name").orEmpty(),
-        dev: Boolean = isDevBuild(),
     ): Map<String, String> {
-        val dir = stateDir(env, home, installDir, os, dev)
+        val dir = stateDir(env, home, installDir, os)
         return linkedMapOf(
             "AGENTHQ_STATE_DIR" to dir.path,
-            "AGENTHQ_PORT" to port(env, dev).toString(),
+            "AGENTHQ_PORT" to port(env).toString(),
             "AGENTHQ_HOME" to dir.path,
             "AGENTHQ_DB" to File(dir, "agenthq.db").path,
             "AGENTHQ_UI_DATA_DIR" to File(dir, "ui").path,
