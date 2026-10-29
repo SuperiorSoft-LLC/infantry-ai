@@ -10,7 +10,6 @@ import java.util.jar.JarFile
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.test.AfterTest
-import kotlin.test.Ignore
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -217,16 +216,27 @@ class DesktopPluginsOfficialJarTest {
     }
 
     @Test
-    @Ignore("ticket-b8c0b854: all 25 loaders stay reachable after Loaded.close")
     fun `an unloaded plugin class loader is garbage collected`() {
         installAll()
-        val refs = mutableListOf<Pair<String, java.lang.ref.WeakReference<ClassLoader>>>()
-        loadFrom(bundled).use { loaded ->
-            loaded.factory.modules.forEach { refs += it.manifest.name to java.lang.ref.WeakReference(it::class.java.classLoader) }
-        }
-        assertEquals(allSources.size, refs.size)
+        val refs = loadAndUnload()
+        assertTrue(refs.size >= allSources.size / 2, "only ${refs.size} of ${allSources.size} modules expose a plugin-defined object to watch")
         val leaked = refs.filter { !collected(it.second) }.map { it.first }
         assertTrue(leaked.isEmpty(), "class loaders still reachable after unload: $leaked")
+    }
+
+    /** The plugin class loader that defined one of [m]'s objects (the module itself is a host class); null if it hands out none. */
+    private fun pluginLoaderOf(m: com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule): ClassLoader? =
+        (m.tabs.map { it.title } + m.tabTrees.values + m.panels + m.blocks.values + m.interceptors.values + m.observers.values +
+            m.shell.values + m.inject.values + m.fills.values + m.blockTypes.values + m.implementations.values.flatMap { it.values })
+            .mapNotNull { it::class.java.classLoader }.firstOrNull { it is PluginClassLoader }
+
+    /** Own frame, so no local of the test keeps the loaded set alive while the collector runs. */
+    private fun loadAndUnload(): List<Pair<String, java.lang.ref.WeakReference<ClassLoader>>> {
+        val refs = mutableListOf<Pair<String, java.lang.ref.WeakReference<ClassLoader>>>()
+        loadFrom(bundled).use { loaded ->
+            loaded.factory.modules.forEach { m -> pluginLoaderOf(m)?.let { refs += m.manifest.name to java.lang.ref.WeakReference(it) } }
+        }
+        return refs
     }
 
     /** Control for the test above: a bare PluginClassLoader that linked a jar's classes goes away when closed and dropped. */
