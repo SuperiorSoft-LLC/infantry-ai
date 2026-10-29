@@ -4,7 +4,7 @@
   "apiVersion": 2,
   "author": "Acme (example)",
   "license": "NOASSERTION",
-  "description": "Example community module: a Hello tab, an interceptor on the core Epics tab, a tab in the right panel, an observer of tab.opened, and an override of the core Git tab that the trust rules refuse.",
+  "description": "Example community module: a greeting block under the Board button (set in Settings > Plugins), a Hello tab, an interceptor on the core Epics tab, a tab in the right panel, an observer of tab.opened, and an override of the core Git tab that the trust rules refuse.",
   "tier": "core",
   "dependencies": [{ "id": "Infantry_Git", "version": ">=1.0 <2" }],
   "entry": "com.acme.hello.HelloPlugin",
@@ -17,6 +17,9 @@
     { "id": "acme.git", "container": "center" },
     { "id": "acme.hello.side", "container": "right" }
   ],
+  "panels": [
+    { "id": "acme.hello.greeting", "panel": "left.board" }
+  ],
   "preferences": [
     { "replace": "infantry.git", "with": "acme.git" }
   ],
@@ -25,7 +28,16 @@
   ],
   "config": [
     { "node": "acme.hello", "group": "Hello", "fields": [
-      { "key": "greeting", "type": "text", "label": "Greeting", "default": "Hello from Acme_Hello, a community module." } ] }
+      { "key": "greeting", "type": "text", "label": "Greeting", "default": "Hello from Acme_Hello, a community module." } ] },
+    { "node": "acme.hello.greeting", "group": "Hello greeting", "tab": "Plugins", "order": 900,
+      "title": "Hello greeting (Acme_Hello)", "applies": "Applies to: the Acme_Hello block under the Board button, live.",
+      "keywords": ["acme", "hello", "greeting", "example"],
+      "fields": [
+        { "key": "greeting", "type": "radio", "label": "Greeting", "default": "Hello World", "options": ["Hello World", "Hello Nation"], "order": 1 },
+        { "key": "message", "type": "text", "label": "Custom message", "default": "", "order": 2 },
+        { "key": "shout", "type": "checkbox", "label": "Shout", "default": false, "order": 3 },
+        { "key": "classes", "type": "classes", "label": "Classes", "order": 4, "slots": { "text": { "tokens": ["big", "bold", "muted"] } } }
+      ] }
   ],
   "observers": [
     { "event": "tab.opened", "name": "count" }
