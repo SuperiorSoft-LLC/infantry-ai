@@ -55,3 +55,25 @@ intent is re-applied by hand on the current owners.
 1. **Two demo locks** (FrameGate on dev, DemoLock on demo-build). Universal answer: one switch (`AGENTHQ_DEMO_LOCK`), FrameGate first, then `DemoLock` decisions; both default off.
 2. **Limits that change meaning** (maxSessions counts open sessions). Kept behind the existing limit; reported, not hidden.
 3. **Demo-only UI text/seed** must not live in the shell. Universal answer: the daemon sends `ready demo=lock demoNotice=...` (data), the shell reads a generic `demoLocked` flag + notice; anything visual is a `plugins/demo/*` override.
+
+## How the demo is produced from dev (after this ticket)
+
+Two independent switches, both default off. Same source tree, no branch.
+
+| switch | where | what it does |
+|---|---|---|
+| `-Pdemo=true` (Gradle) | wasm / Android build | compiles `plugins/demo/*` after the live modules (PLUGIN-OVERRIDES.md section 6). Today: `Demo_Banner` (the strip above the body; shows the daemon's `AGENTHQ_DEMO_NOTICE` when the daemon sends one, else "DEMO BUILD - sample data"). Without the flag the generated module list is the live set, byte for byte. |
+| `AGENTHQ_DEMO_LOCK=1` (env) | daemon, runtime | demo lock: default-deny frames and routes for every token, the demo project + two seeded sessions, warm-up, refuses interrupt/kill/writes. Unset = the normal daemon (DemoModeOffTest). |
+
+Daemon demo env (read once at start; only meaningful with `AGENTHQ_DEMO_LOCK=1`; see `DemoLock.fromEnvironment` and docs/docker-deploy.md):
+`AGENTHQ_DEMO_NOTICE`, `AGENTHQ_DEMO_DIR`, `AGENTHQ_DEMO_SEATS`, `AGENTHQ_DEMO_PUBLIC_TOKEN` / `_FILE`
+(served at `GET /demo/visitor-token`), `AGENTHQ_DEMO_TURNS_PER_IP`, `AGENTHQ_DEMO_TURN_WINDOW_HOURS`, `AGENTHQ_DEMO_TRUSTED_PROXIES`.
+Restrictions that are not demo-only but a deployment uses for it: `AGENTHQ_ALLOWED_MODELS` / `limits.models.allowed`,
+`AGENTHQ_ALLOWED_ROLES` / `limits.roles.allowed`, `limits.concurrency.maxSessions`, `limits.sandbox.mode`, `limits.health.*` (all default off).
+
+The shell itself knows only generic data: `LinkContext.demoLock`, `LinkContext.canWrite` (= `live && !demoLock`) and
+`LinkContext.demoNotice`. Plugins gate write controls on `canWrite` and keep reads on `live`. Anything visual that only the
+demo shows is a `plugins/demo/*` module.
+
+The deployed demo = the wasm bundle built with `-Pdemo=true` served by a daemon started with `AGENTHQ_DEMO_LOCK=1`
+(docker: `docker/docker-compose.yml` + `docker/docker-compose.demo.yml` + `docker/demo-seed.env`).

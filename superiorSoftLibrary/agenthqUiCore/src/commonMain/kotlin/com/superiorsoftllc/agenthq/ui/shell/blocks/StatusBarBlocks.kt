@@ -155,9 +155,10 @@ object StatusBuildStamp : Block("buildStamp", "$FOOTER_NODE.buildStamp") {
 object StatusConfigCog : Block("configCog", "$FOOTER_NODE.configCog") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val window = (LocalShellContext.current ?: return).window
+        val ctx = LocalShellContext.current ?: return
+        val window = ctx.window
         // DEMO-LOCK: every setting is refused by the daemon, so the cog is dimmed and says why.
-        val demo = LocalShell.current.state.connection.demoLock
+        val demo = ctx.link.demoLock
         Box(
             scope.modifier.padding(start = 10.dp).size(24.dp)
                 .clickable(enabled = !demo, role = Role.Button) { window.openConfig() }

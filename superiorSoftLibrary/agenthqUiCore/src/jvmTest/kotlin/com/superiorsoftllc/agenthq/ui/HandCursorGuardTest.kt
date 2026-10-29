@@ -64,7 +64,8 @@ class HandCursorGuardTest {
         // S6: 1058 / 100 at the S6 base (S4b-S5 drift past 1049 / 99), plus the drop box, consent dialog and safe-mode banner's 23 Text.
         // FIX-CONFIG-1: 1140 / 104 after STATS-ACC-1 (usage meter) and CONFIG-3/9 (generated cards, compile-time config) added +18 Text, +2 OutlinedTextField.
         // CONFIG-11: +2 Text in the daemon-config section of the Settings dialog.
-        "Text" to 1142,
+        // DEMO-MERGE-1: +2 Text from the ported demo-build UI (demo-lock and picker labels).
+        "Text" to 1144,
         "DropdownMenu" to 9,
         "OutlinedTextField" to 104,
         "BasicTextField" to 2,
