@@ -138,7 +138,7 @@ tasks.named<Test>("jvmTest") {
         systemProperty("acme.hello.dir", acme.projectDir.absolutePath)
     }
     // LOADER-2: DesktopPluginsOfficialJarTest signs and loads the real official jars (module dirs, each with module.json and build/libs).
-    systemProperty("official.module.dirs", listOf("Infantry_Git", "Infantry_Chat").joinToString(File.pathSeparator) { n ->
+    systemProperty("official.module.dirs", rootProject.file("plugins/official").listFiles { f -> f.isDirectory && !f.name.startsWith("_") && File(f, "build.gradle.kts").isFile }!!.map { it.name }.sorted().joinToString(File.pathSeparator) { n ->
         val p = rootProject.findProject(":plugins:official:$n") ?: error("no $n")
         dependsOn("${p.path}:jvmJar")
         p.projectDir.absolutePath

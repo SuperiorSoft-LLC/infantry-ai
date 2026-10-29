@@ -47,7 +47,7 @@ class PluginClassLoader(private val dir: File, jar: File, parent: ClassLoader, f
     private companion object {
         const val UI = "com.superiorsoftllc.agenthq.ui."
         /** LOADER-1: an OFFICIAL jar also sees `ui.shell` and the classes directly in the `ui` package (ShellContext, ChatPanelState, the kit composables). `ui.net`, `ui.pair`, `ui.sound`, `ui.voice` stay hidden. */
-        fun officialAllowed(n: String) = n.startsWith(UI + "shell.") || (n.startsWith(UI) && '.' !in n.removePrefix(UI))
+        fun officialAllowed(n: String) = n.startsWith(UI + "shell.") || n.startsWith(UI + "net.CommandResult") || (n.startsWith(UI) && '.' !in n.removePrefix(UI))
         val ALLOWED = listOf("java.", "javax.", "kotlin.", "kotlinx.", "androidx.compose", "org.jetbrains.compose", "org.jetbrains.skiko", "com.superiorsoftllc.agenthq.plugin.api.", "com.superiorsoftllc.agenthq.ui.plugin.",
             "com.superiorsoftllc.agenthq.ui.model.", "com.superiorsoftllc.agenthq.ui.protocol.", "com.superiorsoftllc.agenthq.ui.block.")
         val HIDDEN = listOf("com.superiorsoftllc.agenthq.ui.plugin.DaemonLink", "com.superiorsoftllc.agenthq.ui.plugin.PluginClassLoader", "com.superiorsoftllc.agenthq.ui.plugin.config.DaemonNodeConfigApi", "com.superiorsoftllc.agenthq.ui.plugin.JvmEndpointAccess")
