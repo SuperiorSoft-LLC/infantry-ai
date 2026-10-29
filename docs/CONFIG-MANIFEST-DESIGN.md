@@ -37,6 +37,20 @@ What is **missing** (and is the whole of this design):
    validator per key.
 6. The 11 ownerless sections have no manifest at all, and the shell still owns them through the `ConfigEntry` enum (section 9).
 
+## 0a. Structure guard (owner constraint, 2026-10-29)
+
+The owner prefers the CURRENT STRUCTURE and wants it MAINTAINED. Everything here is additive. Left untouched by every phase:
+the `plugins/<tier>/<Name>` layout; the module.json shape and its `entry` / `fills` / `blockTypes` keys (new keys are optional,
+old manifests parse and behave as before); the `Block` / `BlockType` / fills / `UiRegistrar` model; `ConfigTree`,
+`ResolvedConfig` and `node_config` storage (rows, endpoints, `ShellContext.config.values`); the page JSON shape. Every phase
+ticket names what it leaves untouched and carries a guard test that the old structure still works (an old-shape module.json with
+no new keys loads, resolves, renders and saves exactly as before).
+
+Items that would change structure are NOT decided here; they are open questions (section 11): the new `config_manifest` table
+(the decision asks for a compiled JSON in the database; a new table is the only place for it, alternative: a reserved
+`node_config` row), and deleting the `ConfigEntry` enum / `ShellConfigSettings.kt` (the decision asks for the shell coupling to
+go; until the owner agrees they stay as the fallback).
+
 ## 1. Manifest schema
 
 A module.json `config` entry is today `{node, group, fields[]}`. The new schema is the same shape plus optional keys. Every
@@ -481,6 +495,8 @@ Recorded answers to the CONFIG-1 questions:
 5. **Classes:** author-owned style tokens (section 1c); no free CSS-like strings.
 6. **Community reach:** a community module cannot add fields to official nodes yet; only its own nodes.
 7. **Remote daemon schema:** config from an unsigned plugin is read-only on the client.
+
+Open for the owner (structure, see 0a): (a) new table `config_manifest` vs a reserved `node_config` row (`nodeId='@manifest'`) so no table is added; (b) delete `ConfigEntry`/`ShellConfigSettings.kt` after the 11 sections move, or keep them as a permanent fallback.
 
 Still open (none blocks phase 1): whether `config_manifest` is one row per host (this doc's pick, because wasm/Android lists
 differ) or one global row; whether the portrait image stays a `block` field or becomes a `file` type.
