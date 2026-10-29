@@ -28,7 +28,7 @@ dependencies {
     // RUNTIME-3: the app loads the official Infantry_Cli jar at run time (plugins/official); the UI tests, which start
     // from an empty plugins root, carry it on their class path instead (its jar's ServiceLoader entry), so they see the
     // same CLI tab the app shows with the jar present.
-    testRuntimeOnly(project(":plugins:official:Infantry_Cli"))
+    testImplementation(project(":plugins:official:Infantry_Cli"))
     // RUNTIME-4: likewise Infantry_Agents, the left panel's agents section (tests that build a factory name InfantryAgents).
     testImplementation(project(":plugins:official:Infantry_Agents"))
     // RUNTIME-5: and Infantry_Settings, the Settings host tab (the tab shots open it).
