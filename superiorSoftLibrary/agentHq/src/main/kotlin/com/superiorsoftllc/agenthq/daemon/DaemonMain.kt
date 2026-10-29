@@ -1552,7 +1552,9 @@ class AgentHqDaemon(
             policies.onChange { runtime ->
                 manager.demoLocked = false
                 runCatching { runtime.lock.seed(projectStore, manager, agents); runtime.lock.warmUp(manager, compose = seatFirstTurn) }
+                    // GAP-AUDIT-1 (f): not only logged: the policy frame the connections are sent next carries it to the owner.
                     .onFailure { System.err.println("[agentHq] policy '${runtime.current.id}': seating failed: ${it.message}") }
+                    .let { r -> runtime.seatingFailed(r.exceptionOrNull()?.let { "seating failed: ${it.message ?: it::class.simpleName}" }) }
                 manager.demoLocked = runtime.lock.enabled
                 println("[agentHq] policy switched to '${runtime.current.id}'")
             }

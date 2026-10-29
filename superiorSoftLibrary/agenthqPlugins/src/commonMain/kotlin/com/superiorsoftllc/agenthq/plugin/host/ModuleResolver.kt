@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugin.host
 
+import com.superiorsoftllc.agenthq.plugin.api.GrantPattern
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.ModulesConfig
 import com.superiorsoftllc.agenthq.plugin.api.PLATFORMS
@@ -203,7 +204,7 @@ object ModuleResolver {
     private fun shellOverrides(loaded: List<ModuleStatus>, config: ModulesConfig, log: MutableList<String>): List<AcceptedShellOverride> =
         loaded.flatMap { s ->
             s.manifest!!.shell.mapNotNull { d ->
-                if (s.tier == Tier.COMMUNITY && d.nodeId !in config.setting(s.name).allowOverride) {
+                if (s.tier == Tier.COMMUNITY && !GrantPattern.matches(config.setting(s.name).allowOverride, d.nodeId)) {
                     log += "[plugins] ${s.name}: shell override ${d.name} of ${d.nodeId} refused: a community module cannot override core shell node ${d.nodeId} unless modules.json allows it"
                     null
                 } else {
@@ -228,7 +229,7 @@ object ModuleResolver {
                 !myTab && !mySection -> log += "[plugins] ${s.name}: preference ${p.replace} -> ${p.with} refused: ${p.with} is not a tab or panel section it declares"
                 target == null -> log += "[plugins] ${s.name}: preference ${p.replace} -> ${p.with} refused: no loaded module provides " +
                     "${if (myTab) "tab" else "panel section"} ${p.replace}"
-                s.tier != Tier.CORE && target.tier == Tier.CORE && p.replace !in config.setting(s.name).allowOverride ->
+                s.tier != Tier.CORE && target.tier == Tier.CORE && !GrantPattern.matches(config.setting(s.name).allowOverride, p.replace) ->
                     log += "[plugins] ${s.name}: preference ${p.replace} -> ${p.with} refused: a ${s.tier.name.lowercase()} module cannot replace core ${p.replace} (${target.name}) unless modules.json allows it"
                 else -> {
                     out.lastOrNull { it.replace == p.replace }?.let { log += "[plugins] ${s.name}: replaces ${p.replace}, overriding ${it.module}" }

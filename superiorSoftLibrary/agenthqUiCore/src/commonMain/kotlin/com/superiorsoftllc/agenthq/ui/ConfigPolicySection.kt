@@ -10,8 +10,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -27,6 +29,8 @@ const val POLICY_APPLIES_TO =
 const val POLICY_CHOICE_TAG_PREFIX = "policy-choice:"
 const val POLICY_DISABLED_TAG = "policy-disabled"
 const val POLICY_PINNED_TAG = "policy-pinned"
+/** GAP-AUDIT-1 (f): the line saying the active preset could not be seated. */
+const val POLICY_SEATING_ERROR_TAG = "policy-seating-error"
 
 /**
  * POLICY-1 (docs/POLICY.md section 6): Configuration > General > Policy, a locked trust section. The active preset, the
@@ -45,6 +49,13 @@ fun ConfigPolicySection(config: ConfigDialogHost, modifier: Modifier = Modifier)
 internal fun PolicyBody(policy: PolicyWire, live: Boolean, onSelect: (String) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("Active: ${policy.label.ifBlank { policy.preset }}", fontSize = 12.sp)
+        // GAP-AUDIT-1 (f): a seated preset the daemon could not seat (its project or sessions) says so here, not only in the log.
+        policy.seatingError?.let {
+            Text(
+                "Not fully applied: $it", color = Palette.Danger, fontSize = 11.sp,
+                modifier = Modifier.testTag(POLICY_SEATING_ERROR_TAG).semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
         if (policy.pinned) {
             Text(
                 "Pinned by ${policy.pinnedBy ?: "the deployment"}: change it there and restart the daemon.",

@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.testTag
 import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldTypes
 import com.superiorsoftllc.agenthq.plugin.api.ConfigManifestSource
 import com.superiorsoftllc.agenthq.plugin.api.EventBus
+import com.superiorsoftllc.agenthq.plugin.api.GrantPattern
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.plugin.api.PluginEvent
 import com.superiorsoftllc.agenthq.plugin.api.PluginServices
@@ -437,7 +438,7 @@ class TabFactory(
     private val shell: Resolved by lazy {
         val inTabs = tabTreeRoots.flatMap { it.ids() }.toSet()
         BlockResolver.resolve(
-            baseRoot, nodeOverrides.filter { o -> tabTreeRoots.none { NodeSelector.find(it, o.node) != null } }, CoreShell.locked,
+            baseRoot, nodeOverrides.filter { o -> tabTreeRoots.none { NodeSelector.find(it, o.node) != null } }, locked,
             injections = nodeInjections.filter { it.target !in inTabs },
         )
     }
@@ -445,7 +446,7 @@ class TabFactory(
     private val tabTrees: List<Resolved> by lazy {
         tabTreeRoots.map { t ->
             val ids = t.ids()
-            BlockResolver.resolve(t, nodeOverrides.filter { o -> NodeSelector.find(t, o.node) != null }, CoreShell.locked, t.id, nodeInjections.filter { it.target in ids })
+            BlockResolver.resolve(t, nodeOverrides.filter { o -> NodeSelector.find(t, o.node) != null }, locked, t.id, nodeInjections.filter { it.target in ids })
         }
     }
     /** The tree the window draws: [resolvedShellRoot] without the injections a node's settings disable (P1 step 2). */
@@ -469,7 +470,50 @@ class TabFactory(
     private var drawnFor: Any? = null
     private val drawnCache = HashMap<String, Block>()
     /** Everything refused or ignored, one line each. */
-    val problems: List<String> get() = bindProblems + shell.problems + tabTrees.flatMap { it.problems } + blockTypes.problems + fieldTypes.problems
+    val problems: List<String> get() = bindProblems + lockedNodes.second + shell.problems + tabTrees.flatMap { it.problems } + blockTypes.problems + fieldTypes.problems
+
+    /** GAP-AUDIT-1 (b): the declared node locks, and a line per refused one (a community module locks only `<name>.` ids). */
+    private val lockedNodes: Pair<Set<String>, List<String>> by lazy {
+        val refused = mutableListOf<String>()
+        val ids = modules.flatMap { m ->
+            val name = m.manifest.name
+            m.manifest.nodes.filter { !it.overridable }.mapNotNull { n ->
+                when {
+                    n.id.isBlank() -> { refused += "$name: nodes[] entry with an empty id ignored"; null }
+                    m.tier == Tier.COMMUNITY && !n.id.startsWith("$name.") ->
+                        { refused += "$name: overridable:false on ${n.id} refused: a community module locks only its own nodes ($name.*)"; null }
+                    else -> n.id
+                }
+            }
+        }
+        (CoreShell.locked + ids) to refused
+    }
+
+    /**
+     * GAP-AUDIT-1 (b): the nodes no module may replace, wrap, place a block beside or inject into: [CoreShell.locked] plus
+     * every node a loaded module's module.json marks `overridable: false`.
+     */
+    val locked: Set<String> get() = lockedNodes.first
+
+    /**
+     * GAP-AUDIT-1 (c): who overrides what, for Settings > Plugins > Registered: every accepted shell override (the loader's
+     * trust rule already passed) with its selector resolved to the node's full path, and whether it is drawn now; a
+     * refused or ignored one carries its problem line. Read-only; built from the resolved trees, never a second resolve.
+     */
+    val overrideMap: List<OverrideEntry> by lazy {
+        val trees = listOf(shell) + tabTrees
+        nodeOverrides.map { o ->
+            val tree = trees.firstOrNull { NodeSelector.find(it.root, o.node) != null } ?: shell
+            val id = NodeSelector.find(baseRoot, o.node) ?: tabTreeRoots.firstNotNullOfOrNull { NodeSelector.find(it, o.node) }
+            val path = id?.let { pathTo(tree.root, it) ?: tabTreeRoots.firstNotNullOfOrNull { t -> pathTo(t, it) } }
+            val prefix = "${o.module}: shell override (${o.mode}) of ${o.node}"
+            val problem = tree.problems.firstOrNull { it.startsWith(prefix) }
+                ?: (listOf(shell) + tabTrees).flatMap { it.problems }.firstOrNull { it.startsWith(prefix) }
+            val drawn = id != null && problem == null && isDrawn(tree.root, o.module, o.mode, id)
+            OverrideEntry(o.module, byModule[o.module]?.tier ?: Tier.CORE, o.mode, o.node, id, path, o.priority, drawn,
+                problem?.removePrefix(prefix)?.trim())
+        }
+    }
     private val providers: List<TabProvider>
     /** P1 (f60f4d97): each tab id a preference replaced, and the module whose tab it replaced. */
     internal val replacedTabs: Map<String, String>
@@ -597,7 +641,7 @@ class TabFactory(
         // OVERRIDE-1: no loader list (web, Android, tests: compiled-in modules) = read the overrides off the manifests, same trust rule.
         val accepted = shellOverrides ?: modules.flatMap { m ->
             m.manifest.shell.mapNotNull { d ->
-                if (m.tier == Tier.COMMUNITY && d.nodeId !in allowOverride(m.manifest.name)) {
+                if (m.tier == Tier.COMMUNITY && !GrantPattern.matches(allowOverride(m.manifest.name), d.nodeId)) {
                     problems += "${m.manifest.name}: shell override ${d.name} of ${d.nodeId} refused: a community module cannot override core shell node ${d.nodeId} unless modules.json allows it"
                     null
                 } else AcceptedShellOverride(m.manifest.name, d.nodeId, d.name, d.mode, d.priority)
@@ -630,7 +674,7 @@ class TabFactory(
             // NS3: a composition's fills[].layout, instantiated through the registry.
             for ((node, page) in m.layoutFills) when {
                 m.manifest.fills.none { it.node == node && it.layout != null } -> problems += "$name: layout fill of $node is not declared in its module.json; refused"
-                m.tier == Tier.COMMUNITY && node !in allowOverride(name) -> problems += "$name: layout fill of $node refused: not granted (allowOverride)"
+                m.tier == Tier.COMMUNITY && !GrantPattern.matches(allowOverride(name), node) -> problems += "$name: layout fill of $node refused: not granted (allowOverride)"
                 node !in CoreShell.slots -> problems += "$name: layout fill of $node refused: it is not an empty shell slot"
                 node in fills -> problems += "$name: layout fill of $node skipped: already filled"
                 else -> {
@@ -726,7 +770,7 @@ class TabFactory(
     }
 
     /** P1 step 2: whether [module] is granted node [node] by modules.json (`allowOverride` or `allowInject`). */
-    internal fun granted(module: String, node: String): Boolean = node in allowOverride(module) || node in allowInject(module)
+    internal fun granted(module: String, node: String): Boolean = GrantPattern.matches(allowOverride(module), node) || GrantPattern.matches(allowInject(module), node)
 
     fun find(id: String): TabProvider? = providers.firstOrNull { it.id == id }
 
@@ -810,7 +854,7 @@ class TabFactory(
             val declared = m.manifest.config.flatMap { d -> d.fields.map { d.node to it.key } }.toSet()
             val extra = generated[name].orEmpty().map { d -> d.copy(fields = d.fields.filter { (d.node to it.key) !in declared }) }.filter { it.fields.isNotEmpty() || it.block != null }
             ConfigSource(name, m.tier, m.manifest.config + extra) { node ->
-                m.tier != Tier.COMMUNITY || node in own || node.startsWith("$name.") || node in allowOverride(name) || node in allowInject(name)
+                m.tier != Tier.COMMUNITY || node in own || node.startsWith("$name.") || GrantPattern.matches(allowOverride(name), node) || GrantPattern.matches(allowInject(name), node)
             }
         }
         val merged = ConfigTree.merge(core, sources, parents, ConfigFieldTypes.BUILT_IN + fieldTypes.ids)
@@ -916,6 +960,37 @@ private fun Block.withoutDisabled(off: (node: String) -> Set<String>): Block {
 
 /** Every node id in the tree under (and including) this block. */
 private fun Block.ids(): Set<String> = setOf(id) + children.flatMap { it.ids() }
+
+/** GAP-AUDIT-1 (c): the `/`-joined ids from [root] down to the node [id], or null when it is not in the tree. */
+internal fun pathTo(root: Block, id: String): String? {
+    if (root.id == id) return root.id
+    if (root is com.superiorsoftllc.agenthq.ui.block.layout.OverrideBlock) return pathTo(root.inner, id)
+    return root.children.firstNotNullOfOrNull { pathTo(it, id) }?.let { "${root.id}/$it" }
+}
+
+/** GAP-AUDIT-1 (c): whether [module]'s [mode] override of node [id] is in the resolved tree [root]. */
+private fun isDrawn(root: Block, module: String, mode: String, id: String): Boolean = when {
+    root is com.superiorsoftllc.agenthq.ui.block.layout.OverrideBlock && root.id == id && root.module == module && root.mode == mode -> true
+    root is com.superiorsoftllc.agenthq.ui.block.layout.InjectedBlock && root.module == module && root.id == "$module.$mode-$id" -> true
+    root is com.superiorsoftllc.agenthq.ui.block.layout.OverrideBlock -> isDrawn(root.inner, module, mode, id)
+    else -> root.children.any { isDrawn(it, module, mode, id) }
+}
+
+/**
+ * GAP-AUDIT-1 (c): one row of [TabFactory.overrideMap]. [selector] as declared, [node] the id it resolves to (null: no
+ * such node), [path] that node's ids from the tree root, [drawn] whether it is applied now, [problem] why not.
+ */
+data class OverrideEntry(
+    val module: String,
+    val tier: Tier,
+    val mode: String,
+    val selector: String,
+    val node: String?,
+    val path: String?,
+    val priority: Int,
+    val drawn: Boolean,
+    val problem: String?,
+)
 
 /** S4: this tree with each empty slot that [fills] names replaced by its fill; the very same object when none applies. */
 private fun Block.filled(fills: Map<String, Block>): Block {

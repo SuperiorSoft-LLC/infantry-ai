@@ -33,6 +33,12 @@ class PolicyRuntime(
     /** The seated lockdown of [current] (off when it has no `seats`). */
     @Volatile var lock: DemoLock = DemoLock(false)
         private set
+    /** GAP-AUDIT-1 (f): why seating [current] failed after the last switch (sent in the `policy` frame), or null. */
+    @Volatile var seatingError: String? = null
+        private set
+
+    /** GAP-AUDIT-1 (f): the daemon's seat listener reports its outcome; null = seated. Listeners after it send the frame. */
+    fun seatingFailed(error: String?) { seatingError = error }
 
     init { recompute() }
 
@@ -53,6 +59,7 @@ class PolicyRuntime(
         // A pinned id nobody provides is fail-closed; a stored one that vanished falls back to production.
         current = find(id) ?: if (pin != null) PolicyPreset.missing(id) else PolicyPreset.Production
         pinnedBy = pin
+        seatingError = null
         lock = DemoLock.of(current, getenv, stateDir)
     }
 
@@ -79,7 +86,7 @@ class PolicyRuntime(
     fun wire(owner: Boolean): PolicyWire = PolicyWire.of(
         current, pinnedBy, canSwitch = owner && pinnedBy == null,
         presets = presets().map { PolicyChoice(it.id, it.label.ifBlank { it.id }, it.description) },
-    ).copy(notice = notice())
+    ).copy(notice = notice(), seatingError = seatingError, frames = if (current.isEmpty) emptyMap() else ActionCatalog.wireFrames())
 
     /** The pinned notice: the seated lock's (the deployment's env may override it), else the preset's; null = none. */
     private fun notice(): String? = lock.notice.ifBlank { current.notice.orEmpty() }.takeIf { it.isNotBlank() }
@@ -121,12 +128,8 @@ class PolicyRuntime(
             return refusalText(preset, type, action?.id)
         }
 
-        fun refusalText(preset: PolicyPreset, type: String, actionId: String?): String {
-            val shown = type.filter { it in ' '..'~' }.take(64)
-            val reason = preset.reason ?: "disabled by policy '${preset.id}'"
-            return (preset.refusal ?: "policy: '{frame}' ({action}) is disabled: {reason}")
-                .replace("{frame}", shown).replace("{action}", actionId ?: "unmapped").replace("{reason}", reason)
-        }
+        fun refusalText(preset: PolicyPreset, type: String, actionId: String?): String =
+            com.superiorsoftllc.agenthq.plugin.api.PolicyRefusal.text(preset.refusal, preset.reason, preset.id, type, actionId)
 
         /** The real daemon's: env, the plugins roots' `policies/` folders, `<state dir>/policy.preset`. */
         fun fromEnvironment(

@@ -141,8 +141,32 @@ data class PolicyWire(
     val restricted: Boolean = false,
     val notices: List<String> = emptyList(),
     val ready: Map<String, String> = emptyMap(),
+    /**
+     * GAP-AUDIT-1 (f): why the daemon could not seat the active preset (its project or seats) after the last switch;
+     * null = seated or nothing to seat. The Settings Policy card shows it to the owner.
+     */
+    val seatingError: String? = null,
+    /** GAP-AUDIT-1 (h): the preset's refusal template (`{frame}`, `{action}`, `{reason}`), the same text the daemon refuses with. */
+    val refusal: String? = null,
+    /**
+     * GAP-AUDIT-1 (h): the daemon's frame -> action catalog (empty under production and from an older daemon), so a
+     * client refuses before sending exactly what the daemon would refuse ([refusesFrame]).
+     */
+    val frames: Map<String, FrameAction> = emptyMap(),
 ) {
     fun allows(actionId: String, kind: String = ActionKind.WRITE): Boolean = ActionPolicyMatcher.allows(disable, allow, actionId, kind)
+
+    /**
+     * GAP-AUDIT-1 (h), the send-side gate: the refusal of a frame of [type] under this policy, or null = send it. Every
+     * client command goes through it, so a control that never asked a gate (a raw clickable) still cannot send a write
+     * the policy turns off: it gets the policy's reason at once, as the daemon would answer. A frame the catalog does
+     * not map is left to the daemon (it refuses it under any non-production preset).
+     */
+    fun refusesFrame(type: String): String? {
+        if (frames.isEmpty() || disable.isEmpty()) return null
+        val a = frames[type] ?: return null
+        return if (allows(a.action, a.kind)) null else PolicyRefusal.text(refusal, reason, preset, type, a.action)
+    }
 
     /** The `ready` keys this policy contributes (folded into the client's ready fields). */
     fun readyFields(): Map<String, String> = buildMap {
@@ -157,8 +181,22 @@ data class PolicyWire(
         fun of(p: PolicyPreset, pinnedBy: String?, canSwitch: Boolean, presets: List<PolicyChoice>) = PolicyWire(
             preset = p.id, label = p.label.ifBlank { p.id }, pinned = pinnedBy != null, pinnedBy = pinnedBy, canSwitch = canSwitch,
             presets = presets, disable = p.disable, allow = p.allow, reason = p.reason, notice = p.notice,
-            restricted = p.restricted == true, notices = p.notices, ready = p.ready,
+            restricted = p.restricted == true, notices = p.notices, ready = p.ready, refusal = p.refusal,
         )
+    }
+}
+
+/** GAP-AUDIT-1 (h): one catalog entry of [PolicyWire.frames]: the action a frame performs and its kind. */
+@Serializable
+data class FrameAction(val action: String, val kind: String)
+
+/** GAP-AUDIT-1 (h): the ONE refusal text, the daemon's and the client's send gate's (a preset's `refusal` template). */
+object PolicyRefusal {
+    fun text(template: String?, reason: String?, presetId: String, type: String, actionId: String?): String {
+        val shown = type.filter { it in ' '..'~' }.take(64)
+        val why = reason ?: "disabled by policy '$presetId'"
+        return (template ?: "policy: '{frame}' ({action}) is disabled: {reason}")
+            .replace("{frame}", shown).replace("{action}", actionId ?: "unmapped").replace("{reason}", why)
     }
 }
 

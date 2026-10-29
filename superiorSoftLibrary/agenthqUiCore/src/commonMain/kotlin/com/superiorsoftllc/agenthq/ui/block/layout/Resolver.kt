@@ -2,6 +2,9 @@ package com.superiorsoftllc.agenthq.ui.block.layout
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.movableContentOf
+import androidx.compose.runtime.remember
+import com.superiorsoftllc.agenthq.plugin.api.GrantPattern
 import com.superiorsoftllc.agenthq.ui.LocalCoreTier
 import com.superiorsoftllc.agenthq.ui.ModuleTier
 
@@ -88,7 +91,20 @@ class OverrideBlock(
     private val community: Boolean = false,
 ) : Block("override", inner.id, inner.place) {
     @Composable
-    override fun Render(scope: BlockScope) = if (mode == OverrideModes.WRAP) {
+    override fun Render(scope: BlockScope) =
+        // GAP-AUDIT-1 (a): probed before it is drawn; one that throws is never drawn, the node as core drew it is.
+        // A wrap's inner node is movable content, so the switch from the fallback to the wrap keeps its state; the probe
+        // gets an empty stand-in for it, so only the module's code is probed and core's subtree is never composed twice.
+        if (mode == OverrideModes.WRAP) {
+            val kept = remember(inner) { movableContentOf { s: BlockScope -> inner.Render(s) } }
+            val movable = remember(inner, kept) { MovableBlock(inner, kept) }
+            GuardedBlock(OverrideHealth.key(module, mode, inner.id), override, fallback = { kept(scope) }, probe = { Draw(scope, ProbeStandIn(inner)) }) { Draw(scope, movable) }
+        } else {
+            GuardedBlock(OverrideHealth.key(module, mode, inner.id), override, fallback = { inner.Render(scope) }) { Draw(scope, inner) }
+        }
+
+    @Composable
+    private fun Draw(scope: BlockScope, inner: Block) = if (mode == OverrideModes.WRAP) {
         // S4d: a community wrap draws without the core tier; the node it wraps is drawn back at the tier around it.
         if (community) {
             val outer = LocalCoreTier.current
@@ -98,6 +114,24 @@ class OverrideBlock(
         val s = if (inner.wearsHostSurface) BlockScope(scope.modifier.then(LocalHostSurface.current), scope.box, scope.row, scope.blockId) else scope
         if (community) ModuleTier(false) { override.content(s, null) } else override.content(s, null)
     }
+
+    override val wearsHostSurface: Boolean get() = inner.wearsHostSurface
+}
+
+/** GAP-AUDIT-1 (a): what a wrap's probe gets as `inner`: the node's id, place and children, drawing nothing. */
+private class ProbeStandIn(private val inner: Block) : Block(inner.blockType, inner.id, inner.place, inner.children) {
+    @Composable
+    override fun Render(scope: BlockScope) {}
+
+    override fun withChildren(children: List<Block>): Block = ProbeStandIn(inner.withChildren(children))
+}
+
+/** GAP-AUDIT-1 (a): a wrap's [inner] node drawn through [kept], the movable content its fallback drew. */
+private class MovableBlock(private val inner: Block, private val kept: @Composable (BlockScope) -> Unit) : Block(inner.blockType, inner.id, inner.place, inner.children) {
+    @Composable
+    override fun Render(scope: BlockScope) = kept(scope)
+
+    override fun withChildren(children: List<Block>): Block = inner.withChildren(children)
 
     override val wearsHostSurface: Boolean get() = inner.wearsHostSurface
 }
@@ -167,7 +201,11 @@ class InjectedBlock(
     private val community: Boolean = false,
 ) : Block("injected", id, place) {
     @Composable
-    override fun Render(scope: BlockScope) = if (community) ModuleTier(false) { content(scope) } else content(scope)
+    override fun Render(scope: BlockScope) =
+        // GAP-AUDIT-1 (a): an injection (and an override's before / after) that throws in the probe draws nothing.
+        GuardedBlock(OverrideHealth.key(module, "inject", id), content, fallback = {}) {
+            if (community) ModuleTier(false) { content(scope) } else content(scope)
+        }
 }
 
 /**
@@ -180,7 +218,7 @@ fun admitInjections(
     allowInject: (module: String) -> Collection<String>,
     problems: MutableList<String>,
 ): List<NodeInjection> = injections.filter { j ->
-    (isCore(j.module) || j.target in allowInject(j.module)).also { ok ->
+    (isCore(j.module) || GrantPattern.matches(allowInject(j.module), j.target)).also { ok ->
         if (!ok) problems += "${j.module}: injection ${j.name} into ${j.target} refused: a community module cannot inject into ${j.target} unless modules.json allowInject lists it"
     }
 }
