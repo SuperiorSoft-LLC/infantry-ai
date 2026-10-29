@@ -10,6 +10,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldTypes
 import com.superiorsoftllc.agenthq.plugin.api.ConfigManifestSource
 import com.superiorsoftllc.agenthq.plugin.api.EventBus
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
@@ -22,6 +23,8 @@ import com.superiorsoftllc.agenthq.ui.plugin.config.ChildrenControl
 import com.superiorsoftllc.agenthq.ui.plugin.config.ConfigSource
 import com.superiorsoftllc.agenthq.ui.plugin.config.ConfigTree
 import com.superiorsoftllc.agenthq.ui.plugin.config.CoreConfig
+import com.superiorsoftllc.agenthq.ui.plugin.config.FieldType
+import com.superiorsoftllc.agenthq.ui.plugin.config.FieldTypes
 import com.superiorsoftllc.agenthq.ui.plugin.config.DaemonNodeConfigApi
 import com.superiorsoftllc.agenthq.ui.plugin.config.ImplementationFields
 import com.superiorsoftllc.agenthq.ui.plugin.config.Implementations
@@ -280,6 +283,8 @@ class AgentHqModule(
      * folder); instantiated through the block-type registry. A community one needs the slot in its `allowOverride` grant.
      */
     val layoutFills: Map<String, JsonObject> = emptyMap(),
+    /** CONFIG-5: the config field types the module registers, by id (module.json `fieldTypes`). */
+    val fieldTypes: Map<String, FieldType> = emptyMap(),
     /** S7: runs once when the host unloads the module (a soft restart replaces the module set, or the app closes it). */
     val onStop: () -> Unit = {},
 )
@@ -319,6 +324,8 @@ interface UiRegistrar {
     fun implementation(registry: String, key: String, value: Any) {}
     /** NS1 / PB1: block type [type] (`vendor.name`); declare it under `blockTypes` in module.json. */
     fun blockType(type: String, blockType: BlockType) {}
+    /** CONFIG-5: config field type [id] (editor + validate); declare it under `fieldTypes` in module.json. */
+    fun fieldType(id: String, type: FieldType) {}
 }
 
 /** Runs [plugin]'s registration into a module of [tier]. */
@@ -334,6 +341,7 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
     val tabTrees = LinkedHashMap<String, Block>()
     val implementations = LinkedHashMap<String, LinkedHashMap<String, Any>>()
     val blockTypes = LinkedHashMap<String, BlockType>()
+    val fieldTypes = LinkedHashMap<String, FieldType>()
     plugin.register(object : UiRegistrar {
         override val services = services
         override fun tab(provider: TabProvider) { tabs += provider }
@@ -347,8 +355,9 @@ fun registerModule(manifest: ModuleManifest, tier: Tier, services: PluginService
         override fun tabTree(tab: String, root: Block) { tabTrees[tab] = root }
         override fun implementation(registry: String, key: String, value: Any) { implementations.getOrPut(registry) { LinkedHashMap() }[key] = value }
         override fun blockType(type: String, blockType: BlockType) { blockTypes[type] = blockType }
+        override fun fieldType(id: String, type: FieldType) { fieldTypes[id] = type }
     })
-    return AgentHqModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell, inject, fills, tabTrees, implementations, blockTypes, onStop = plugin::stop)
+    return AgentHqModule(manifest, tabs, interceptors, blocks, observers, tier, panels, shell, inject, fills, tabTrees, implementations, blockTypes, fieldTypes = fieldTypes, onStop = plugin::stop)
 }
 
 /**
@@ -456,7 +465,7 @@ class TabFactory(
     private var drawnFor: Any? = null
     private val drawnCache = HashMap<String, Block>()
     /** Everything refused or ignored, one line each. */
-    val problems: List<String> get() = bindProblems + shell.problems + tabTrees.flatMap { it.problems } + blockTypes.problems
+    val problems: List<String> get() = bindProblems + shell.problems + tabTrees.flatMap { it.problems } + blockTypes.problems + fieldTypes.problems
     private val providers: List<TabProvider>
     /** P1 (f60f4d97): each tab id a preference replaced, and the module whose tab it replaced. */
     internal val replacedTabs: Map<String, String>
@@ -784,7 +793,7 @@ class TabFactory(
                 m.tier != Tier.COMMUNITY || node in own || node.startsWith("$name.") || node in allowOverride(name) || node in allowInject(name)
             }
         }
-        val merged = ConfigTree.merge(core, sources, parents)
+        val merged = ConfigTree.merge(core, sources, parents, ConfigFieldTypes.BUILT_IN + fieldTypes.ids)
         ConfigTree(merged.fields, merged.parents, problems + merged.problems, merged.declarations)
     }
 
@@ -817,6 +826,11 @@ class TabFactory(
             for (d in m.manifest.implementations) if (m.implementations[d.registry]?.containsKey(d.key) != true) problems += "$name: implementation ${d.registry}/${d.key} is declared but not registered; skipped"
         }
         Implementations(out, problems)
+    }
+
+    /** CONFIG-5: every registered config field type (module.json `fieldTypes` + `UiRegistrar.fieldType`), in load order. */
+    val fieldTypes: FieldTypes by lazy {
+        FieldTypes.of(modules.map { Triple(it.manifest.name, it.manifest.fieldTypes, it.fieldTypes) })
     }
 
     /** NS1 / PB1 (6t.2): every registered block type, core's layout primitives first, then each module's in load order. */

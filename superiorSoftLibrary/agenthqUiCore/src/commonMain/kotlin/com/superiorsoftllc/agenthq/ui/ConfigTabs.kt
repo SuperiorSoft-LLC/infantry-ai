@@ -74,6 +74,10 @@ enum class ConfigEntry(val tab: ConfigTab, val title: String, val applies: Strin
     }
 }
 
+/** CONFIG-5: the id of [entry]'s section block, `infantry.shell.config.<entry in lowerCamelCase>`; a `block` card names it. */
+fun configSectionNode(entry: ConfigEntry): String =
+    "infantry.shell.config." + entry.name.lowercase().split('_').mapIndexed { i, w -> if (i == 0) w else w.replaceFirstChar { it.uppercase() } }.joinToString("")
+
 /** The tabs that have at least one of the [present] sections, in display order. */
 fun visibleConfigTabs(present: Set<ConfigEntry>): List<ConfigTab> =
     ConfigTab.entries.filter { tab -> present.any { it.tab == tab } }

@@ -1,5 +1,8 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.ui.plugin.config.ConfigHit
+import com.superiorsoftllc.agenthq.ui.plugin.config.ConfigPlan
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.relocation.bringIntoViewRequester
@@ -143,6 +146,11 @@ fun ConfigDialog(
      * shell without the app UI (whose fill holds the open settings) offers only the trust tabs.
      */
     drawn: Set<ConfigEntry>? = null,
+    /**
+     * CONFIG-5: the cards and tabs generated from the daemon's compiled manifest; null (no snapshot) = the hand-written
+     * [ConfigEntry] tabs and search, as before.  Called with the sections this host has ([ConfigDialogHost.present]).
+     */
+    plan: ((present: Set<ConfigEntry>) -> ConfigPlan?)? = null,
 ) {
     // VOICE-PLUGIN-1: the host's installable voice plugins (desktop); null = no Plugins tab.
     val voicePlugins = com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost.current.voicePlugins
@@ -173,23 +181,29 @@ fun ConfigDialog(
         if (serverUpdate != null) add(ConfigEntry.SERVER_UPDATE)
         if (logs != null) add(ConfigEntry.LOGS)
     }.let { all -> drawn?.let(all::intersect) ?: all }
+    val generated = plan?.invoke(present)
     val tabs = visibleConfigTabs(present)
-    var wanted by remember { mutableStateOf(initialTab) }
-    val tab = pickConfigTab(wanted, present)
+    var wanted by remember { mutableStateOf(initialTab?.label) }
+    val tabLabel = if (generated != null) generated.pick(wanted) else pickConfigTab(ConfigTab.entries.firstOrNull { it.label == wanted }, present)?.label
+    val tab = ConfigTab.entries.firstOrNull { it.label == tabLabel }
+    val tabLabels = generated?.tabs ?: tabs.map { it.label }
     // CONFIG-SEARCH-1: a non-empty query shows matching sections instead of the tab body; picking one jumps to its
     // tab and briefly outlines it (highlight), scrolled into view.
     var query by remember { mutableStateOf("") }
     var highlight by remember { mutableStateOf<ConfigEntry?>(null) }
-    androidx.compose.runtime.LaunchedEffect(highlight) {
-        if (highlight != null) { kotlinx.coroutines.delay(CONFIG_HIGHLIGHT_MS); highlight = null }
+    var highlightKey by remember { mutableStateOf<String?>(null) }
+    androidx.compose.runtime.LaunchedEffect(highlight, highlightKey) {
+        if (highlight != null || highlightKey != null) { kotlinx.coroutines.delay(CONFIG_HIGHLIGHT_MS); highlight = null; highlightKey = null }
     }
-    val results = searchConfig(query, present)
+    val results = generated?.search(query)
+        ?: searchConfig(query, present).map { ConfigHit(it.name, it.tab.label, it.title, it.applies, it) }
     val config = ConfigDialogHost(
         flags, onFlags, keepAliveMinutes, userPortrait, onKeepAliveMinutes, cliLocations, onCliLocation,
         harnessInstall, harnessInstallBusy, harnessInstallLog, onHarnessCheck, onHarnessInstall, onBrowse,
         toolApproval, onToolApproval, logs, updates, secrets, secretActions, pair, limits, onLimit, onOpenRoles,
         onSendTestQuestion, testQuestionReady, serverUpdate, serverMismatch, theme, onTheme, about, modules,
         voicePlugins, present, tab, highlight, promptTimer = promptTimer, onPromptTimer = onPromptTimer,
+        plan = generated, tabLabel = tabLabel, highlightKey = highlightKey,
     )
     // Ticket cb1ceb93: the scroll cue fades into the dialog's own surface.
     val surface = androidx.compose.material3.AlertDialogDefaults.containerColor
@@ -205,12 +219,15 @@ fun ConfigDialog(
             Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(FLAGS_LIFETIME_NOTE, color = Palette.Muted, fontSize = 11.sp)
                 ConfigSearchField(query) { query = it }
-                ConfigTabRow(tabs, tab) { picked -> query = ""; wanted = picked; onTab?.invoke(picked) }
+                ConfigTabRow(tabLabels, tabLabel) { picked -> query = ""; wanted = picked; ConfigTab.entries.firstOrNull { it.label == picked }?.let { onTab?.invoke(it) } }
                 if (query.isNotBlank()) {
-                    ConfigSearchResults(results, surface) { e -> query = ""; wanted = e.tab; onTab?.invoke(e.tab); highlight = e }
+                    ConfigSearchResults(results, surface) { h ->
+                        query = ""; wanted = h.tab; ConfigTab.entries.firstOrNull { it.label == h.tab }?.let { onTab?.invoke(it) }
+                        highlight = h.entry; highlightKey = h.key
+                    }
                 } else
                 // Each tab scrolls on its own, from the top: the key gives each tab a fresh scroll state.
-                androidx.compose.runtime.key(tab) {
+                androidx.compose.runtime.key(tabLabel) {
                     ScrollCueColumn(
                         Modifier.fillMaxWidth().heightIn(min = 360.dp, max = 480.dp).testTag(CONFIG_TAB_BODY_TAG),
                         fade = surface,
@@ -268,9 +285,13 @@ class ConfigDialogHost internal constructor(
     /** ASK-TIMER-2: the daemon's prompt timer and its save callback (null = no timer control). */
     val promptTimer: com.superiorsoftllc.agenthq.ui.model.PromptTimerSetting.Value? = null,
     val onPromptTimer: ((seconds: Int?, onTimeout: String?) -> Unit)? = null,
+    /** CONFIG-5: the generated plan (null = hand-written tabs), the selected tab's label (a plugin's tab has no [tab]) and the card a search just picked. */
+    val plan: ConfigPlan? = null,
+    val tabLabel: String? = tab?.label,
+    val highlightKey: String? = null,
 ) {
-    /** A section shows when its tab is the selected one and this host has it. */
-    fun shows(entry: ConfigEntry): Boolean = entry.tab == tab && entry in present
+    /** A section shows when its tab is the selected one (the plan's, when a card moved it) and this host has it. */
+    fun shows(entry: ConfigEntry): Boolean = entry in present && if (plan != null) plan.tabOf(entry) == tabLabel else entry.tab == tab
 }
 
 /** SHELL-EMPTY-DROPIN S3: every section, in display order (each draws nothing off its tab or when this host lacks it). */
@@ -582,7 +603,7 @@ internal fun ConfigCogLabel(
  * each tab carries CONFIG_TAB_TAG_PREFIX + its name.
  */
 @Composable
-private fun ConfigTabRow(tabs: List<ConfigTab>, selected: ConfigTab?, onPick: (ConfigTab) -> Unit) {
+private fun ConfigTabRow(tabs: List<String>, selected: String?, onPick: (String) -> Unit) {
     if (tabs.isEmpty()) return
     val index = tabs.indexOf(selected).coerceAtLeast(0)
     androidx.compose.material3.PrimaryScrollableTabRow(
@@ -597,10 +618,10 @@ private fun ConfigTabRow(tabs: List<ConfigTab>, selected: ConfigTab?, onPick: (C
             androidx.compose.material3.Tab(
                 selected = on,
                 onClick = { onPick(t) },
-                modifier = Modifier.handCursor().testTag(CONFIG_TAB_TAG_PREFIX + t.name),
+                modifier = Modifier.handCursor().testTag(CONFIG_TAB_TAG_PREFIX + (ConfigTab.entries.firstOrNull { it.label == t }?.name ?: t)),
                 text = {
                     Text(
-                        t.label, fontSize = 12.sp,
+                        t, fontSize = 12.sp,
                         fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
                         color = if (on) Palette.Accent else Palette.Muted,
                     )
@@ -642,7 +663,7 @@ private fun ConfigSearchField(query: String, onQuery: (String) -> Unit) {
 
 /** CONFIG-SEARCH-1: the sections matching the query, each with its tab; picking one opens it. */
 @Composable
-private fun ConfigSearchResults(results: List<ConfigEntry>, fade: androidx.compose.ui.graphics.Color, onPick: (ConfigEntry) -> Unit) {
+private fun ConfigSearchResults(results: List<ConfigHit>, fade: androidx.compose.ui.graphics.Color, onPick: (ConfigHit) -> Unit) {
     ScrollCueColumn(
         Modifier.fillMaxWidth().heightIn(min = 360.dp, max = 480.dp).testTag(CONFIG_SEARCH_RESULTS_TAG),
         fade = fade,
@@ -654,7 +675,7 @@ private fun ConfigSearchResults(results: List<ConfigEntry>, fade: androidx.compo
         results.forEach { e ->
             Row(
                 Modifier.fillMaxWidth().clickable(role = Role.Button) { onPick(e) }.padding(horizontal = 8.dp, vertical = 6.dp)
-                    .testTag(CONFIG_RESULT_TAG_PREFIX + e.name),
+                    .testTag(CONFIG_RESULT_TAG_PREFIX + (e.entry?.name ?: e.key)),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -663,7 +684,7 @@ private fun ConfigSearchResults(results: List<ConfigEntry>, fade: androidx.compo
                     Text(e.applies, color = Palette.Muted, fontSize = 11.sp, maxLines = 2)
                 }
                 Text(
-                    e.tab.label, fontSize = 10.sp, color = Palette.Accent,
+                    e.tab, fontSize = 10.sp, color = Palette.Accent,
                     modifier = Modifier.border(1.dp, Palette.Accent, androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).padding(horizontal = 8.dp, vertical = 2.dp),
                 )
             }

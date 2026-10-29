@@ -85,7 +85,7 @@ fun NodeFields(factory: TabFactory, node: String, fields: List<DeclaredField>, e
                 SectionLabel(f.field.label, topGap = false)
                 val note = when {
                     locked -> "Locked node"
-                    f.field.type !in ConfigFieldTypes.BUILT_IN -> "Unknown type ${f.field.type}: read-only"
+                    f.field.type !in ConfigFieldTypes.BUILT_IN && factory.fieldTypes[f.field.type] == null -> "Unknown type ${f.field.type}: read-only"
                     f.field.type == ConfigFieldTypes.IMPLEMENTATION && !f.field.exposed -> "Not exposed"
                     else -> null
                 }
@@ -116,7 +116,7 @@ fun NodeFields(factory: TabFactory, node: String, fields: List<DeclaredField>, e
                         val stored = (own?.value as? JsonPrimitive)?.content
                         if (stored != null && stored !in keys) Chip("$stored is not registered: using ${current ?: "nothing"}", Palette.Danger)
                     }
-                    else -> Chip(value?.toString() ?: "unset")
+                    else -> factory.fieldTypes[f.field.type]?.let { RegisteredEditor(factory, f.field, value, can, ::write) } ?: Chip(value?.toString() ?: "unset")
                 }
                 if (note != null) Chip(note, textModifier = Modifier.testTag(NODE_FIELD_NOTE_TAG_PREFIX + tag))
                 val origin = resolved.origin(node, f.key)
@@ -203,4 +203,20 @@ internal fun TextEditor(f: DeclaredField, tag: String, value: JsonElement?, enab
         },
         Modifier.testTag(NODE_FIELD_SAVE_TAG_PREFIX + tag), enabled = enabled && draft != shown && problem == null,
     ) { Text("Save") }
+}
+
+/**
+ * CONFIG-5: the editor a module registered for a custom field type. A value its type's `validate` refuses is not
+ * written; the reason shows under the editor.
+ */
+@Composable
+internal fun RegisteredEditor(factory: TabFactory, field: com.superiorsoftllc.agenthq.plugin.api.ConfigFieldDeclaration, value: JsonElement?, enabled: Boolean, write: (JsonElement?) -> Unit) {
+    val type = factory.fieldTypes[field.type] ?: return
+    var problem by remember(field.key, value) { mutableStateOf<String?>(null) }
+    type.Editor(field, value, enabled) { next ->
+        val why = factory.fieldTypes.validate(field, next)
+        problem = why
+        if (why == null) write(next)
+    }
+    problem?.let { Chip(it, Palette.Danger) }
 }
