@@ -50,7 +50,15 @@ data class ConfigFieldDeclaration(
     val description: String? = null,
     /** CONFIG-3: sorts the fields of a group (ties: declaration order). */
     val order: Int = 0,
+    /** CONFIG-4: where the user's override lives: `device` (this host's ui prefs) or `daemon`; null = today's `node_config`. */
+    val scope: String? = null,
 )
+
+/** CONFIG-4: the override scopes a field may declare. */
+object ConfigScopes {
+    const val DEVICE = "device"
+    const val DAEMON = "daemon"
+}
 
 /** The built-in field types (6s A). */
 object ConfigFieldTypes {
