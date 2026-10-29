@@ -40,7 +40,7 @@ class SkillsFirstTurnTest {
         val input = runner.processes.single().deliveredInput
         assertTrue(input.contains("$RENDERED\n\n$IDENTITY\n\n$KNOWLEDGE\n\n$skills\n\nShip it\n\nthe body"), input.take(3000))
         val sources = fixture.daemon.manager.get(sessionId)!!.contextSources
-        assertEquals(listOf("agenthq", "team", "instructions", "identity", "knowledge", "skills", "ticket"), sources.map { it.source })
+        assertEquals(listOf("agenthq", "team", "instructions", "identity", "knowledge", "skills", "ticket", "related"), sources.map { it.source })
         assertEquals(skills.length, sources.single { it.source == "skills" }.chars)
         assertEquals(listOf(tdd.id), fixture.daemon.manager.skillIds(sessionId), "what rendered is what froze")
     }
