@@ -40,10 +40,11 @@ An action is `area.thing.verb` (e.g. `board.ticket.move`), with a kind: `read | 
 * **Undeclared actions follow their kind.** `link.canWrite` / `connection.canWrite` (DEMO-MERGE-1) is now "the generic write
   action": it is refused by any rule that matches an undeclared write (`*`, `kind:write`). So an old or community plugin that
   only checks `canWrite` is still gated by a policy that turns writes off.
-* **What cannot be auto-gated** (documented, not hacked): a control that checks neither `canWrite` nor a gate (a raw
-  `Modifier.clickable` / `Button` that sends a frame). The daemon still refuses its frame (the daemon gate is total: an
-  unmapped frame is refused under any non-production policy), so the worst case is an enabled control whose click gets an
-  error; the UI cannot dim what never asks.
+* **A control that asks no gate** (a raw `Modifier.clickable` / `Button` that sends a frame) cannot be dimmed, but since
+  GAP-AUDIT-1 (h) it cannot send either: the `policy` frame carries the daemon's frame -> action catalog
+  (`PolicyWire.frames`) and `Controller.send` refuses, before sending, every frame the active preset refuses
+  (`PolicyWire.refusesFrame`, the same matcher and `PolicyRefusal.text`). `PolicyGateGuardTest` fails when a plugin
+  declares a non-read action no control of its own asks through a gate helper. The daemon gate stays total.
 
 ## 2. Policy data
 

@@ -173,6 +173,13 @@ object ActionCatalog {
 
     val frames: Set<String> get() = byFrame.keys
 
+    /**
+     * GAP-AUDIT-1 (h): the catalog as the `policy` frame sends it (frame -> action id + kind), without the switch frames,
+     * which the policy never gates for the owner; the client's send gate runs the same matcher on it.
+     */
+    fun wireFrames(): Map<String, com.superiorsoftllc.agenthq.plugin.api.FrameAction> =
+        byFrame.filterKeys { it !in SWITCH_FRAMES }.mapValues { (_, a) -> com.superiorsoftllc.agenthq.plugin.api.FrameAction(a.id, a.kind) }
+
     /** The switch itself: never policy-gated for the owner (pinning is how a deployment locks it). */
     val SWITCH_FRAMES: Set<String> = setOf(POLICY_GET, POLICY_SET)
 }

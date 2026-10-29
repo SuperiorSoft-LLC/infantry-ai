@@ -103,6 +103,12 @@ data class ModuleManifest(
     val daemon: DaemonCapabilities? = null,
     /** POLICY-1 (docs/POLICY.md section 1): the named actions the module's controls perform; a policy may turn each off. */
     val actions: List<ActionDeclaration> = emptyList(),
+    /**
+     * GAP-AUDIT-1 (b): per-node flags the module declares on node ids it draws. `{"id": "<node id>", "overridable": false}`
+     * locks the node like the shell's own locked set: no module may replace, wrap,
+     * place a block beside or inject into it. A community module may lock only ids under its own name (`<name>.`).
+     */
+    val nodes: List<NodeDeclaration> = emptyList(),
 ) {
     /** NS3: the node ids of [fills]. */
     val fillNodes: List<String> get() = fills.map { it.node }
@@ -114,6 +120,10 @@ data class ModuleManifest(
  */
 @Serializable
 data class FillDeclaration(val node: String, val layout: String? = null, val replaces: String? = null)
+
+/** GAP-AUDIT-1 (b): a node the module draws; [overridable] false = locked against every other module. */
+@Serializable
+data class NodeDeclaration(val id: String, val overridable: Boolean = true)
 
 /** NS3: a fill entry is a plain node id string or the object form. */
 object FillDeclarationSerializer : JsonTransformingSerializer<FillDeclaration>(FillDeclaration.serializer()) {

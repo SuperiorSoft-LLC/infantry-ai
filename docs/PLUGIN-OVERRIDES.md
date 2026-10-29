@@ -55,18 +55,25 @@ scope; a wrap also gets the original with its children and config.
 - **replace**: higher `priority` wins; equal priority: the later loaded module. Each loser is logged by name.
 - **wrap**: applied in (priority, load order), so the highest is outermost.
 - **before/after**: all render, ordered by priority (higher first) then load order.
-- **A throwing override.** Compose cannot catch an exception thrown while a block draws (try/catch around composable calls is not
-  allowed), so a render-time fallback to the original is *not* built. Problems that can be caught are: an unknown selector or mode,
-  a missing registration, a locked target, a parent that takes no children: each skips the override and logs. See open question in the report.
+- **A throwing override** (GAP-AUDIT-1 (a), `OverrideGuard.kt`). Compose forbids try/catch around a composable call, so each
+  module block (replace, wrap, before, after, injection) is first composed once in a throwaway composition of its own (no UI, no
+  effect runs, the window's locals); that one is plain code, so its throw is caught. Until it answers (one frame) the original is
+  drawn; a block that threw is never drawn (replace / wrap: the core node; before / after / injection: nothing) and its fault is
+  listed in Settings > Plugins > Registered. Not covered: a throw only on a later recomposition, and lazy-list content.
+  Problems caught at resolve time: an unknown selector or mode, a missing registration, a locked target, a parent that takes no
+  children: each skips the override and logs.
 
 ## 4. Trust
 
 - Core and official modules may override or insert anywhere except a **locked** block.
 - A community module needs an explicit grant in modules.json: `allowOverride` lists the selector or node id it may use. Without it the
   override is refused (logged); the loader applies this on desktop, the factory applies the same rule on the compile-time path.
+  GAP-AUDIT-1 (e): an entry may be a glob (`GrantPattern`): `*` = any characters but `/` (`infantry.board.*`), `**` = anything
+  (`infantry.shell.frame/**`); the same for `allowInject`. A grant never reaches a locked node.
 - **Non-overridable = `CoreShell.locked`** (the trust sections, the Config dialog, About, the drop-in consent, safe mode, the window/dock).
-  A locked block refuses replace, wrap, a `before`/`after` next to it, and injection into it. We did not add a separate
-  `overridable: false` key: `locked` already is that set; to make a block non-overridable, add its id there.
+  A locked block refuses replace, wrap, a `before`/`after` next to it, and injection into it. GAP-AUDIT-1 (b): a module locks its
+  own nodes with module.json `"nodes": [{"id": "<node id>", "overridable": false}]` (a community module only `<name>.*` ids);
+  the effective set is `TabFactory.locked`. About is `infantry.shell.config.about`, in the locked trust kernel.
 
 ## 5. Removing the plugin
 
@@ -97,7 +104,8 @@ demo value, and its override keeps only the notice for `Demo_Banner`.
 
 The factory's `problems` list already shows what an override did or refused. `NodeRegistry` (Settings > Plugins > Registered) lists a node's
 replace/wrap overrides and injections per container. The sibling `before`/`after` placements appear there as injections (`Injection`
-source). A dedicated read-only "who overrides what" list, with the path selectors resolved, is not built in this ticket.
+source). GAP-AUDIT-1 (c): the same page lists **who overrides what** (`TabFactory.overrideMap`): each module's mode, the selector
+resolved to the node's full path, priority, drawn or why not (refused, ignored, threw in the probe).
 The settings dialog replacement of CONFIG-10b (`fills[].replaces`) is kept as is: it replaces a whole *fill by module*, which a node-level
 override cannot express; both coexist, and the node-level one can wrap/replace what the fill draws.
 

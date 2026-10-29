@@ -46,6 +46,7 @@
   ],
   "actions": [
     { "id": "agents.spawn", "label": "New agent", "kind": "spawn", "frames": ["new"] },
-    { "id": "agents.delete", "label": "Remove an ended agent", "kind": "destructive", "frames": ["session_delete"] }
+    { "id": "agents.delete", "label": "Remove an ended agent", "kind": "destructive", "frames": ["session_delete"] },
+    {"id": "agents.project.set", "label": "Assign an agent to a project", "kind": "write", "frames": ["session_project"]}
   ]
 }

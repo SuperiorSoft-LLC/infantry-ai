@@ -380,10 +380,13 @@ class Controller(
         if (!_state.value.connection.hasAssistant) report(CommandResult.Refused("this daemon is too old for the Assistant: update Infantry AI on the server (needs contract 1.115.0)"))
         else send(Envelope(Envelope.ASSISTANT, ""))
 
-    private suspend fun send(env: Envelope): CommandResult =
-        if (!_state.value.connection.isLive) {
-            CommandResult.Refused("not connected to a daemon (${_state.value.connection.state.name.lowercase()}) - nothing was sent")
-        } else if (client.send(env)) CommandResult.Sent else CommandResult.Refused("the connection dropped while sending - nothing was sent")
+    private suspend fun send(env: Envelope): CommandResult {
+        val c = _state.value.connection
+        if (!c.isLive) return CommandResult.Refused("not connected to a daemon (${c.state.name.lowercase()}) - nothing was sent")
+        // GAP-AUDIT-1 (h): the send-side gate: a write the daemon's policy turns off never leaves, even from a control that asked no gate.
+        c.policy.refusesFrame(env.type)?.let { return CommandResult.Refused(it) }
+        return if (client.send(env)) CommandResult.Sent else CommandResult.Refused("the connection dropped while sending - nothing was sent")
+    }
 
     /** POLICY-1 (docs/POLICY.md): the owner's ONE switch; the daemon answers every client with the new `policy` frame. */
     suspend fun selectPolicy(presetId: String): CommandResult = report(send(Envelope(Envelope.POLICY_SET, presetId.trim())))

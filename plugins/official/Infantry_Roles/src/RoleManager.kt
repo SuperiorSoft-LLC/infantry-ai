@@ -181,6 +181,8 @@ class RoleFormDraft(
     val live: Boolean get() = deps.link.live
     // POLICY-1: write controls are named actions gated by the daemon's policy (and any write policy); reads keep live.
     val canWrite: Boolean @Composable get() = deps.link.gate("roles.save").enabled
+    /** GAP-AUDIT-1 (g): deleting a role is its own declared action, not the save's. */
+    val canDelete: Boolean @Composable get() = deps.link.gate("roles.delete", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE).enabled
     val canEdit: Boolean get() = deps.roles.canEdit
 }
 
@@ -315,7 +317,7 @@ fun RoleFormActions(draft: RoleFormDraft, modifier: Modifier = Modifier) {
     f.error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), verticalAlignment = Alignment.CenterVertically) {
         if (existing != null && existing.source == "CUSTOM") {
-            TextButton(onClick = { f.confirmDelete = true }, enabled = draft.canWrite && draft.canEdit, modifier = Modifier.testTag(ROLE_MANAGER_DELETE_TAG)) {
+            TextButton(onClick = { f.confirmDelete = true }, enabled = draft.canDelete && draft.canEdit, modifier = Modifier.testTag(ROLE_MANAGER_DELETE_TAG)) {
                 Text("Delete", color = Palette.Danger, fontSize = 12.sp)
             }
         }

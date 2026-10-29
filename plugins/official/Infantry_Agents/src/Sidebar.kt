@@ -321,15 +321,15 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
     var menuOpen by remember { mutableStateOf(false) }
     var confirming by remember { mutableStateOf(false) }
     val live = state.connection.isLive
-    // DEMO-MERGE-1 / POLICY-1: the menu holds several actions (assign, remove), so it opens on the generic write; each item has its own gate.
-    val canWrite = state.connection.canWrite
+    // GAP-AUDIT-1 (g): the menu opens while live (Open is a read); each write in it has its own declared action and gate.
+    val canOpen = live
     val focusSource = remember { MutableInteractionSource() }
     val focused by focusSource.collectIsFocusedAsState()
     Box {
         Box(
             Modifier.padding(top = 4.dp).size(width = 22.dp, height = 18.dp).clip(RoundedCornerShape(4.dp))
                 .alpha(if (revealed || menuOpen || focused) 1f else 0f)
-                .clickable(interactionSource = focusSource, indication = null, enabled = canWrite, role = Role.Button, onClickLabel = "Agent actions") { menuOpen = true }
+                .clickable(interactionSource = focusSource, indication = null, enabled = canOpen, role = Role.Button, onClickLabel = "Agent actions") { menuOpen = true }
                 .semantics { contentDescription = "Agent actions" }
                 .testTag("session-menu-${a.id}"),
             contentAlignment = Alignment.Center,
@@ -346,11 +346,15 @@ private fun AgentRowMenu(a: AgentView, state: AppState, revealed: Boolean, onOpe
             // BUG-M2-15b: only an unbound session, and only while a project is selected: bind it to that project.
             val target = state.activeProject
             if (a.session.projectId.isNullOrBlank() && target != null) {
-                DropdownMenuItem(
-                    text = { Text("Assign to ${target.name}", color = Palette.Text, fontSize = 12.sp) },
-                    onClick = { menuOpen = false; onAssign(a.id, target.id) },
-                    modifier = Modifier.testTag(SESSION_ASSIGN_TAG_PREFIX + a.id),
-                )
+                val assign = state.connection.gate("agents.project.set")
+                WritePolicyTooltip { m ->
+                    DropdownMenuItem(
+                        text = { Text("Assign to ${target.name}", color = if (assign.enabled) Palette.Text else Palette.Border, fontSize = 12.sp) },
+                        onClick = { menuOpen = false; onAssign(a.id, target.id) },
+                        enabled = assign.enabled,
+                        modifier = m.testTag(SESSION_ASSIGN_TAG_PREFIX + a.id),
+                    )
+                }
             }
             HorizontalDivider(color = Palette.Border)
             // DEMO-MERGE-1: the delete is a write; Remove is dimmed and says why while writes are refused.
