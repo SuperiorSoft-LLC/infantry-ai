@@ -23,6 +23,10 @@
   "interceptors": [
     { "target": "infantry.epics", "name": "hi", "kind": "around" }
   ],
+  "config": [
+    { "node": "acme.hello", "group": "Hello", "fields": [
+      { "key": "greeting", "type": "text", "label": "Greeting", "default": "Hello from Acme_Hello, a community module." } ] }
+  ],
   "observers": [
     { "event": "tab.opened", "name": "count" }
   ]
