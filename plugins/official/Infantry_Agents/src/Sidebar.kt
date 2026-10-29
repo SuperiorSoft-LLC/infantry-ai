@@ -79,6 +79,34 @@ val SidebarSpacing = 10.dp
 /** UX-POLISH-1: the sidebar's agent search field. */
 const val SIDEBAR_SEARCH_TAG = "sidebar-search"
 
+/** UI-ARROWS-1: the role filter chip row, its scroll arrows and each chip ("all", then one per role). */
+const val ROLE_FILTER_ROW_TAG = "role-filter-row"
+const val ROLE_FILTER_ARROW_LEFT_TAG = "role-filter-arrow-left"
+const val ROLE_FILTER_ARROW_RIGHT_TAG = "role-filter-arrow-right"
+const val ROLE_FILTER_CHIP_TAG_PREFIX = "role-filter-chip-"
+
+/**
+ * The sidebar's role filter: "all", then a chip per role of the listed agents (none without agents). Overflowing
+ * chips scroll sideways behind the tab strips' arrows (UI-ARROWS-1), one press about one chip.
+ */
+@Composable
+fun RoleFilterChips(state: AppState, roleFilter: String?, onRoleFilter: (String?) -> Unit) {
+    val roles = state.agents.values.mapNotNull { it.role }.distinct().sorted()
+    if (roles.isEmpty()) return
+    ArrowScrollRow(
+        ROLE_FILTER_ARROW_LEFT_TAG, ROLE_FILTER_ARROW_RIGHT_TAG,
+        Modifier.padding(start = 10.dp, end = 10.dp, top = SidebarSpacing, bottom = 6.dp),
+        leftLabel = "Scroll roles left", rightLabel = "Scroll roles right", step = ArrowStep.fixed(72.dp),
+        contentTag = ROLE_FILTER_ROW_TAG, horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Chip("all", if (roleFilter == null) Palette.Accent else Palette.Muted, Modifier.testTag(ROLE_FILTER_CHIP_TAG_PREFIX + "all").clickable { onRoleFilter(null) })
+        // ROLE-ICON-1: each role filter carries the role's icon ("all" names no role, so it has none).
+        roles.forEach { r ->
+            RoleChip(r, r, state.role(r)?.icon, RoleIconSite.FILTER, if (roleFilter == r) Palette.Accent else Palette.Muted, Modifier.testTag(ROLE_FILTER_CHIP_TAG_PREFIX + r).clickable { onRoleFilter(if (roleFilter == r) null else r) })
+        }
+    }
+}
+
 @Composable
 fun Sidebar(
     state: AppState,
@@ -121,16 +149,7 @@ fun Sidebar(
                 decorationBox = { inner -> if (query.isEmpty()) Text("Search agents...  ^K", color = Palette.Muted, fontSize = 12.sp); inner() },
             )
         }
-        val roles = state.agents.values.mapNotNull { it.role }.distinct().sorted()
-        if (roles.isNotEmpty()) {
-            Row(Modifier.padding(start = 10.dp, end = 10.dp, top = SidebarSpacing, bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Chip("all", if (roleFilter == null) Palette.Accent else Palette.Muted, Modifier.clickable { onRoleFilter(null) })
-                // ROLE-ICON-1: each role filter carries the role's icon ("all" names no role, so it has none).
-                roles.forEach { r ->
-                    RoleChip(r, r, state.role(r)?.icon, RoleIconSite.FILTER, if (roleFilter == r) Palette.Accent else Palette.Muted, Modifier.clickable { onRoleFilter(if (roleFilter == r) null else r) })
-                }
-            }
-        }
+        RoleFilterChips(state, roleFilter, onRoleFilter)
         HorizontalDivider(color = Palette.Border, modifier = Modifier.padding(top = 6.dp))
         if (visible.isEmpty()) {
             Column(Modifier.padding(14.dp)) {
