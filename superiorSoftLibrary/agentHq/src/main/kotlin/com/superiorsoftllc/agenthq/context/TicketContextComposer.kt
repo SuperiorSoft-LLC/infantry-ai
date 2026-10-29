@@ -90,7 +90,7 @@ class TicketContextComposer(
             return "When the work is done, run `agenthq ticket move $id done`. If you are blocked, leave the ticket " +
                 "in_progress and mail what blocks you (Team, below) " +
                 "(pending is set by the daemon from a blocked_by link; a move there by hand is refused).\n" +
-                DESC_FILE_LINE + BG_RUN_LINE + RELATED_FILES_LINE
+                DESC_FILE_LINE + BG_RUN_LINE + WATCH_LINE + RELATED_FILES_LINE
         }
 
         /** `agenthq bg run`: a long gate the agent starts is flagged to the daemon, so the session reads Running, not idle. */
@@ -101,6 +101,13 @@ class TicketContextComposer(
             "If `agenthq bg --help` does not list `run --notify` (an older CLI), run the command as a plain background job, end your turn " +
             "and use `agenthq bg wait <id>` or read its log later; still never sleep or poll. " +
             "On Windows run Gradle as `gradlew.bat` (`./gradlew` fails under `agenthq bg run`)."
+
+        /** STALL-1 (ticket 802c64d5): the daemon-side watch, told once at ticket start (no per-ticket text). */
+        const val WATCH_LINE = "\nYour commands are WATCHED by the daemon, at no token cost: `gradle`, `mvn`, `npm`, `yarn` and `pnpm` run through " +
+            "its runner automatically (START, `still running` every minute, END with exit code), and any long process under your " +
+            "session is seen when it ends. The result arrives as an `[AUTOMATIC]` mail that wakes you; a quiet job, a job still " +
+            "running after 15 min and an idle or stuck ticket get one too. Opt out only for a real need: " +
+            "`agenthq unwatched --reason \"<why>\" -- <cmd...>` (logged and reported to the PM). Never sleep, poll or block a turn only to wait: end it, the mail wakes you."
 
         /** TICKET-FILES (55476f3c): the related tickets' files are one indexed read, far cheaper than grepping for them. */
         const val RELATED_FILES_LINE = "\nBefore you grep or read around, call agenthq_ticket_related_files with this ticket's id (CLI: " +

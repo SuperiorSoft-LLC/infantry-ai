@@ -469,6 +469,7 @@ class SessionManager(
      */
     fun scanBackgroundWork() {
         expireBgJobs()
+        runCatching { trackTreeJobs() }
         bgJobListener?.let { l -> runCatching { l.scanned() } }
         runCatching { refreshAutoProgress() }
         for ((id, record) in sessions.entries.toList()) {
@@ -590,6 +591,41 @@ class SessionManager(
     fun bgJobs(sessionId: String?): List<BgJob> =
         (if (sessionId != null) listOfNotNull(sessions[sessionId]) else sessions.values.toList()).flatMap { it.bgJobs }
 
+    /** STALL-1: the top-level work processes last seen under each session's kept harness process. */
+    private val treeSeen = ConcurrentHashMap<String, Map<Long, ProcInfo>>()
+
+    /**
+     * STALL-1 layer 5, for processes the daemon did NOT launch (a harness's own background shell, a `gradlew` the worker
+     * ran in its tool): every scan reads the top-level work processes under each kept harness process, in a turn or not,
+     * and tells [bgJobListener] when one that lived at least `limits.watch.treeJobSeconds` (30) is gone. Its exit code is unknown.
+     */
+    fun trackTreeJobs() {
+        val now = clock()
+        val def = com.superiorsoftllc.agenthq.settings.LimitRegistry.WATCH_TREE_JOB_SECONDS
+        val minLived = (limitSource?.let { src -> runCatching { src(def) }.getOrNull() } ?: def.default) * 1000L
+        for ((id, record) in sessions.entries.toList()) {
+            val kept = record.keptProcess
+            if (kept == null) { treeSeen.remove(id); continue }
+            val tops = BackgroundWorkScanner.tops(processSource, kept.pid, kept.startedAt).associateBy { it.pid }
+            val before = treeSeen.put(id, tops) ?: continue
+            // The harness itself gone = the session ended; that is the finish notice's, not a job end.
+            if (tops.isEmpty() && !pidProbe(kept.pid)) continue
+            for ((pid, p) in before) {
+                if (pid in tops) continue
+                if (now - (p.startedAt ?: now) < minLived) continue
+                bgJobListener?.let { l -> runCatching { l.treeJobEnded(id, p, now) } }
+            }
+        }
+        treeSeen.keys.retainAll(sessions.keys)
+    }
+
+    /** STALL-1: the session list's watch label ("watching gate (quiet 2m)", "stalled", ...); written only on a change. */
+    fun setWatchLabel(sessionId: String, label: String?) {
+        val current = sessions[sessionId] ?: return
+        if (current.watchLabel == label) return
+        update(sessionId) { it.copy(watchLabel = label) }
+    }
+
     /** Drop jobs whose wrapper pid is gone or whose heartbeat went quiet for [BG_JOB_STALE_MS]. Called on the scan timer. */
     fun expireBgJobs() {
         val now = clock()
@@ -652,7 +688,12 @@ class SessionManager(
             val kept = loadedRecord.keptProcess
             val reaped = kept != null && reap(loadedRecord.id, kept)
             // Background work is derived, never trusted from disk: its wire state read BUSY, so the real one is IDLE.
-            val persisted = loadedRecord.copy(keptProcess = null, backgroundWork = null, bgJobs = emptyList(), watch = null, progress = null).let {
+            // STALL-1: a watched (`--notify`) job is KEPT across the restart: its runner re-registers by its next beat, or the pid
+            // probe drops it and the watcher reports it ("exit N" from its exit file, else "runner lost, exit unknown").
+            val persisted = loadedRecord.copy(
+                keptProcess = null, backgroundWork = null, watch = null, progress = null, watchLabel = null,
+                bgJobs = loadedRecord.bgJobs.filter { it.notify != null }.map { it.copy(lastBeat = clock()) },
+            ).let {
                 if ((loadedRecord.backgroundWork != null || loadedRecord.bgJobs.isNotEmpty()) && it.state == SessionState.BUSY && it.childPid == null) it.copy(state = SessionState.IDLE) else it
             }
             val midRun = persisted.state == SessionState.STARTING ||

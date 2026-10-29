@@ -219,3 +219,5 @@ com/superiorsoftllc/agenthq/runner/BuildPriority.kt:JOB_OBJECT_EXTENDED_LIMIT_IN
 com/superiorsoftllc/agenthq/runner/BuildPriority.kt:JOB_OBJECT_LIMIT_BREAKAWAY_OK|Win32 API constant (job object flag / info class), not a limit
 com/superiorsoftllc/agenthq/runner/BuildPriority.kt:JOB_OBJECT_LIMIT_PRIORITY_CLASS|Win32 API constant (job object flag / info class), not a limit
 com/superiorsoftllc/agenthq/usagemeter/UsageMeter.kt:DEFAULT_KEEP_WEEKS|pending S2-S4 (not yet routed through LimitRegistry; already overridable via AGENTHQ_USAGE_METER_KEEP_WEEKS)
+com/superiorsoftllc/agenthq/cli/BgCli.kt:EOF_GRACE_MS|STALL-1 pipe drain after the process wait returned (the end is already known); a protocol constant, not a limit
+com/superiorsoftllc/agenthq/daemon/DemoTurnLimit.kt:HOUR_MILLIS|unit conversion (ms per hour), not a limit

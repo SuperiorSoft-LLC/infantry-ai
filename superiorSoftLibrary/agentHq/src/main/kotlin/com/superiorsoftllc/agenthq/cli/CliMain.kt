@@ -266,6 +266,10 @@ internal object Cli {
         /** Contract 1.117.0: the raw stdin `progress --watch` copies through byte for byte. */
         rawInput: () -> java.io.InputStream = { System.`in` },
     ): Int {
+        // STALL-1 (ticket 802c64d5): `run-watched [opts] -- <cmd...>` is `bg run --notify [opts] -- <cmd...>` (detached, the
+        // daemon tells the session when it ends); `unwatched --reason <why> -- <cmd...>` is the explicit, logged opt-out.
+        if (args.firstOrNull() == "run-watched") return run(arrayOf("bg", "run", "--notify") + args.drop(1), out, err, getenv, input, cwd, rawInput)
+        if (args.firstOrNull() == "unwatched") return run(arrayOf("bg") + args, out, err, getenv, input, cwd, rawInput)
         // Contract 1.117.0: `progress ...` and `run -- <cmd...>` never meet the global flag parser either, and never fail
         // outside Infantry AI: no session, no daemon or a bad connection option all mean "report nothing".
         if (args.firstOrNull() == "progress" || args.firstOrNull() == "run") {
@@ -4232,6 +4236,8 @@ internal object Cli {
               bg run --notify [--notify-on RE]... [--notify-tail N] [--notify-timeout MIN] [--no-default-patterns] -- CMD
                                      Start CMD detached; the daemon MAILS this session on exit, a pattern match or the timeout: end your turn, never sleep/poll
               bg wait ID [--timeout MIN]  Block until job ID exits (fallback when mail cannot wake the harness); prints its tail, returns its exit code
+              run-watched [bg run options] -- CMD  Same as bg run --notify: watched (START/still running/END lines), you are mailed when it ends or goes quiet
+              unwatched --reason "WHY" -- CMD  Opt out of the watch for one command (reason required; logged, counted, shown, reported to the PM)
               progress <0-100> ["label"] | plan "a" "b" .. | plan N | step [name] | bytes D T | count D T | status "label" | done | fail | clear | show
                                   Report your long job's progress, shown as a live bar on your card (progress --help: all forms)
               progress --watch [--reader gradle|junit|gate]   Copy stdin to stdout unchanged, reporting ##infantry marker lines

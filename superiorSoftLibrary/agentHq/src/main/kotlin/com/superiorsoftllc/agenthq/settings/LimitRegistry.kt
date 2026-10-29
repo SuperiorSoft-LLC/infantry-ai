@@ -208,9 +208,35 @@ object LimitRegistry {
         min = 1, max = 2000, zeroIsUnlimited = false,
     )
     val BG_NOTIFY_TIMEOUT_MINUTES = LimitDef(
-        "limits.bg.notifyTimeoutMinutes", 30, "minutes",
-        "How long a `bg run --notify` job may run before its worker is told it is still running (with its last output), and again every such period.",
+        "limits.bg.notifyTimeoutMinutes", 15, "minutes",
+        "The watch heartbeat: how long a watched job may run before its worker gets a status (elapsed, last output, process alive); the interval then doubles up to limits.watch.heartbeatCapMinutes.",
         zeroMeans = "never noticed while running",
+    )
+    /** STALL-1 (ticket 802c64d5): the daemon's job watch, heartbeat and stall detector (no model tokens). */
+    val WATCH_QUIET_MINUTES = LimitDef(
+        "limits.watch.quietMinutes", 5, "minutes",
+        "How long a watched job may print no new line before its worker is told once that it went quiet.",
+        max = 1440, zeroMeans = "never told",
+    )
+    val WATCH_HEARTBEAT_CAP_MINUTES = LimitDef(
+        "limits.watch.heartbeatCapMinutes", 60, "minutes",
+        "The largest interval between watch heartbeats (they start at limits.bg.notifyTimeoutMinutes and double); the first beat at it also tells the PM.",
+        min = 1, max = 1440, zeroIsUnlimited = false,
+    )
+    val WATCH_STALL_MINUTES = LimitDef(
+        "limits.watch.stallMinutes", 5, "minutes",
+        "Stall detector: how long a ticket worker may sit idle with no job, or BUSY and silent after its job ended, before it is nudged and its PM is told.",
+        max = 1440, zeroMeans = "never nudged",
+    )
+    val WATCH_TREE_JOB_SECONDS = LimitDef(
+        "limits.watch.treeJobSeconds", 30, "seconds",
+        "How long a process under a worker's harness (one the daemon did not launch) must have run for its end to be told to the worker.",
+        min = 1, max = 86_400, zeroIsUnlimited = false,
+    )
+    val WATCH_FORCED = LimitDef(
+        "limits.watch.forced", 1, "switch",
+        "1 = every worker session runs gradle/mvn/npm/yarn/pnpm through the watched runner (PATH shims); 0 = off for every session (owner only).",
+        max = 1, zeroIsUnlimited = false,
     )
     val BG_NOTIFY_PATTERN_GRACE_SECONDS = LimitDef(
         "limits.bg.notifyPatternGraceSeconds", 20, "seconds",
@@ -293,6 +319,7 @@ object LimitRegistry {
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
+        WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_FORCED,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE,

@@ -65,6 +65,27 @@ object BackgroundWorkScanner {
 
     const val LABEL_MAX = 80
 
+    /** STALL-1: processes a command leaves running on purpose (build daemons); never a job whose end is awaited. */
+    private val DAEMON = Regex("""(?i)GradleDaemon|org\.gradle\.launcher\.daemon|KotlinCompileDaemon|kotlin-daemon""")
+
+    /**
+     * STALL-1: the top-level WORK processes under [rootPid] (the same helper and launch-grace rules as [scan]), build
+     * daemons excluded: the processes whose end the daemon tells the session about.
+     */
+    fun tops(source: ProcessSource, rootPid: Long, rootStartedAt: Long?): List<ProcInfo> {
+        val (work, ignored) = classify(source.descendants(rootPid), rootStartedAt)
+        return work.filter { (it.parentPid == rootPid || it.parentPid in ignored) && !DAEMON.containsMatchIn(it.command) }
+    }
+
+    private fun classify(all: List<ProcInfo>, rootStartedAt: Long?): Pair<List<ProcInfo>, Set<Long>> {
+        val ignored = HashSet<Long>()
+        for (p in all.sortedBy { it.startedAt ?: 0L }) {
+            val launchHelper = rootStartedAt != null && p.startedAt != null && p.startedAt - rootStartedAt <= LAUNCH_GRACE_MS
+            if (launchHelper || HELPER.containsMatchIn(p.command) || p.parentPid in ignored) ignored += p.pid
+        }
+        return all.filter { it.pid !in ignored } to ignored
+    }
+
     fun scan(source: ProcessSource, rootPid: Long, rootStartedAt: Long?): BackgroundWork? {
         val all = source.descendants(rootPid)
         val ignored = HashSet<Long>()
@@ -103,6 +124,15 @@ data class BgJob(
     val keep: Boolean = false,
     /** BG-NOTIFY (ticket 245a7d31): `bg run --notify`: the daemon mails the session when the job ends (or a trigger fires); null = no notice. */
     val notify: BgNotify? = null,
+    /**
+     * STALL-1 (ticket 802c64d5): the command runs in the caller's foreground (a PATH shim, plain `bg run`): its end is
+     * noticed by mail only when the session is at rest by then; a turn still in flight saw the end on its own console.
+     */
+    val attached: Boolean = false,
+    /** STALL-1: `agenthq unwatched --reason <text>`: the output is not watched (no log); heartbeat and stall checks still apply. */
+    val optOut: String? = null,
+    /** STALL-1: the pid of the command itself (the wrapper's child), null when not known. */
+    val cmdPid: Long? = null,
 )
 
 /**
@@ -121,7 +151,7 @@ data class BgNotify(
 )
 
 /**
- * One `bg_job` request. [op] is `beat` (register or heartbeat: an upsert), `done`, or `list`. On `done` the wrapper adds
+ * One `bg_job` request. [op] is `beat` (register or heartbeat: an upsert), `done`, `eof` (STALL-1: the output closed while the command still runs), or `list`. On `done` the wrapper adds
  * the command's [exitCode] and its last output lines ([tail]) for a `--notify` job's notice.
  */
 @Serializable
@@ -131,6 +161,12 @@ data class BgJobRequest(
     val jobId: String? = null,
     val exitCode: Int? = null,
     val tail: List<String>? = null,
+    /** STALL-1: on `done` and `eof`, the bytes the command wrote to its output pipe (0 = it printed nothing). */
+    val bytes: Long? = null,
+    /** STALL-1: on `done`, whether the output pipe reached EOF; false = a child the command left behind still holds it. */
+    val eof: Boolean? = null,
+    /** STALL-1: on `done`, child processes still alive after the command ended (`pid command`), detached daemons excluded. */
+    val survivors: List<String>? = null,
 )
 
 /** BG-NOTIFY: what [SessionManager] tells about registered jobs beyond the record change. */
@@ -140,4 +176,10 @@ interface BgJobListener {
 
     /** [job] of [sessionId] was dropped without a `done`: its wrapper died or went quiet. */
     fun expired(sessionId: String, job: BgJob) {}
+
+    /**
+     * STALL-1 layer 5: a long-lived process under [sessionId]'s harness (one the daemon did not launch, e.g. the
+     * harness's own background shell) is gone. Its exit code is unknown: it is not the daemon's child.
+     */
+    fun treeJobEnded(sessionId: String, job: ProcInfo, endedAt: Long) {}
 }

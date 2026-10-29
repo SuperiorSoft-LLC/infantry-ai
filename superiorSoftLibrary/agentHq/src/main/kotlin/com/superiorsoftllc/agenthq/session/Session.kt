@@ -207,6 +207,8 @@ data class SessionRecord(
     @EncodeDefault(EncodeDefault.Mode.NEVER) val lastEventAt: Long? = null,
     /** PIPELINE-WATCHDOG: what the daemon derived about this agent's pending work ([AgentWatch]); derived, cleared on a daemon start. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val watch: AgentWatch? = null,
+    /** STALL-1 (ticket 802c64d5): the job-watch state for the session list (`watching gate (quiet 2m)`, `idle`, `stalled`, `busy, silent 7m`, `watch OFF: <reason>`); derived, cleared on a daemon start. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val watchLabel: String? = null,
     /** The run phase worth naming beside [state]; only `compacting` today. Filled on the wire from the run tracker, never persisted. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val runPhase: String? = null,
     /** Contract 1.114.0: the session that spawned this one (the `new` frame's origin); persisted, so a kill rule survives an app restart. Omitted when none. */
