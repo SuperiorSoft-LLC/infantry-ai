@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.chat
+
+import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically

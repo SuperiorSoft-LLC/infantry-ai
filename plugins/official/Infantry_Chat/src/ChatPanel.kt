@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.chat
+
+import com.superiorsoftllc.agenthq.ui.*
 
 import com.superiorsoftllc.agenthq.ui.model.SessionPaneAction
 import com.superiorsoftllc.agenthq.ui.model.sessionPaneAction

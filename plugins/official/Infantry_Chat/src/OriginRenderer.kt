@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.chat
+
+import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
