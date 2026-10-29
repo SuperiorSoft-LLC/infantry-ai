@@ -6,6 +6,7 @@ import androidx.compose.runtime.remember
 import com.superiorsoftllc.agenthq.plugin.api.ConfigDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldTypes
+import com.superiorsoftllc.agenthq.plugin.api.ConfigScopes
 import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.ui.LocalModalBlur
@@ -41,16 +42,16 @@ val APPEARANCE_CONFIG: List<ConfigDeclaration> = listOf(
         fields = listOf(
             ConfigFieldDeclaration(
                 ACCENT_KEY, ConfigFieldTypes.SELECT, "Accent", JsonPrimitive(ThemeAccent.RED.name), ThemeAccent.entries.map { it.name }, order = 1,
-                optionLabels = ThemeAccent.entries.associate { it.name to it.label },
+                optionLabels = ThemeAccent.entries.associate { it.name to it.label }, scope = ConfigScopes.DEVICE,
             ),
-            ConfigFieldDeclaration(DARK_KEY, ConfigFieldTypes.TOGGLE, "Dark mode", JsonPrimitive(true), order = 2),
+            ConfigFieldDeclaration(DARK_KEY, ConfigFieldTypes.TOGGLE, "Dark mode", JsonPrimitive(true), order = 2, scope = ConfigScopes.DEVICE),
         ),
     ),
     ConfigDeclaration(
         node = THEME_FILL_ID, group = "Blur", tab = "Appearance", order = 20, title = "Blur behind dialogs",
         applies = "Applies to: every dialog. Blurs the window behind it while it is open.",
         keywords = listOf("dialog", "scrim", "modal"),
-        fields = listOf(ConfigFieldDeclaration(BLUR_KEY, ConfigFieldTypes.TOGGLE, "Blur behind dialogs", JsonPrimitive(true))),
+        fields = listOf(ConfigFieldDeclaration(BLUR_KEY, ConfigFieldTypes.TOGGLE, "Blur behind dialogs", JsonPrimitive(true), scope = ConfigScopes.DEVICE)),
     ),
 )
 

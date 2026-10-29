@@ -303,9 +303,12 @@ tasks.withType<Test>().configureEach {
 // (never ~/.agenthq, 8787 or 8788). Kept out of `test`; QA runs it as its own gate step, alone in a few minutes:
 //   ./gradlew :superiorSoftLibrary:agentHqUi:ownerSmoke
 // Each scenario's logs and stub recordings are kept under build/ownerSmoke/runs/<scenario>/.
+// QA-CONFIG-3: tests that load the official plugin JARS (devTrust, as the tab shots do) need them built, so they run in their
+// own task (./gradlew :superiorSoftLibrary:agentHqUi:testOfficialJars) and stay out of test / testFast / testSlow.
 val ownerSmokeTests = "com.superiorsoftllc.agenthq.ui.owner.*"
+val officialJarsTests = "*OfficialJarsUiTest"
 tasks.named<Test>("test") {
-    filter { excludeTestsMatching(ownerSmokeTests) }
+    filter { excludeTestsMatching(ownerSmokeTests); excludeTestsMatching(officialJarsTests) }
     // TEST-SPEED-1: parallel test-class forks (was 1 fork, fully serial). Fewer than :agentHq because each UI fork boots a
     // daemon AND a Compose window. ownerSmoke stays a single fork. Override: -Pagenthq.uiTestForks=1.
     maxParallelForks = providers.gradleProperty("agenthq.uiTestForks").map { it.toInt() }.getOrElse(2)
@@ -324,8 +327,19 @@ fun Test.uiTier(desc: String, slow: Boolean) {
     maxHeapSize = "2g"
     filter {
         excludeTestsMatching(ownerSmokeTests)
+        excludeTestsMatching(officialJarsTests)
         slowUiTestPatterns.forEach { if (slow) includeTestsMatching(it) else excludeTestsMatching(it) }
     }
+}
+tasks.register<Test>("testOfficialJars") {
+    group = "verification"
+    description = "QA-CONFIG-3: the UI tests that load the official plugin jars from the repository plugins/ root (devTrust)."
+    testClassesDirs = uiUnitTest.get().testClassesDirs
+    classpath = uiUnitTest.get().classpath
+    maxHeapSize = "2g"
+    filter { includeTestsMatching(officialJarsTests) }
+    systemProperty("agenthq.qa.pluginsRoot", repoPluginsRoot.absolutePath)
+    dependsOn(officialModuleJars)
 }
 // TEST-SPEED-1: per-fork tmpdir and state dir for the parallel UI test tasks, as :agentHq does: the same TestForkAgent
 // (built by :agentHq) moves each fork into <testTmp>/fork-<pid> and <test-state-dir>/fork-<pid>. ownerSmoke (one fork,
@@ -333,7 +347,7 @@ fun Test.uiTier(desc: String, slow: Boolean) {
 val uiTestTmp = File(System.getProperty("java.io.tmpdir"), "agenthq-test-tmp/" + Integer.toHexString(projectDir.absolutePath.hashCode()))
 val uiTestState = layout.buildDirectory.dir("test-state-dir").get().asFile
 val forkAgentJar = project(":superiorSoftLibrary:agentHq").layout.buildDirectory.file("testForkAgent/agenthq-test-fork-agent.jar")
-tasks.withType<Test>().matching { it.name in setOf("test", "testFast", "testSlow") }.configureEach {
+tasks.withType<Test>().matching { it.name in setOf("test", "testFast", "testSlow", "testOfficialJars") }.configureEach {
     dependsOn(":superiorSoftLibrary:agentHq:testForkAgentJar")
     inputs.file(forkAgentJar).withPropertyName("testForkAgent").withNormalizer(ClasspathNormalizer::class.java)
     systemProperty("AGENTHQ_STATE_DIR", uiTestState.absolutePath)
