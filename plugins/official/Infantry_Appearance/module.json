@@ -23,11 +23,11 @@
       "keywords": ["color", "colour", "accent", "dark", "light"],
       "fields": [
         {
-          "key": "accent", "type": "select", "label": "Accent", "default": "RED", "order": 1,
+          "key": "accent", "type": "select", "label": "Accent", "default": "RED", "order": 1, "scope": "device",
           "options": ["RED", "AMBER", "INFANTRY", "BLUE", "GREEN", "VIOLET", "TEAL"],
           "optionLabels": { "RED": "Red (default)", "AMBER": "Amber", "INFANTRY": "Infantry red", "BLUE": "Blue", "GREEN": "Green", "VIOLET": "Violet", "TEAL": "Teal" }
         },
-        { "key": "dark", "type": "toggle", "label": "Dark mode", "default": true, "order": 2 }
+        { "key": "dark", "type": "toggle", "label": "Dark mode", "default": true, "order": 2, "scope": "device" }
       ]
     },
     {
@@ -39,7 +39,7 @@
       "applies": "Applies to: every dialog. Blurs the window behind it while it is open.",
       "keywords": ["dialog", "scrim", "modal"],
       "fields": [
-        { "key": "blur", "type": "toggle", "label": "Blur behind dialogs", "default": true }
+        { "key": "blur", "type": "toggle", "label": "Blur behind dialogs", "default": true, "scope": "device" }
       ]
     }
   ]

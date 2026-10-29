@@ -27,6 +27,7 @@ fun isOwnOnlyKey(key: String): Boolean = key.startsWith("children.") || '@' in k
  */
 class ResolvedConfig(private val state: NodeConfigState, private val implementations: Implementations = Implementations.NONE) : ConfigContext {
     private var cacheOf: Any? = null
+    private var deviceOf: Any? = null
     private val cache = HashMap<String, Map<String, JsonElement>>()
 
     override fun values(nodeId: String): ConfigValues {
@@ -34,7 +35,7 @@ class ResolvedConfig(private val state: NodeConfigState, private val implementat
         val chain = state.tree.chain(nodeId)
         val set = values.keys.filterTo(HashSet()) { k ->
             chain.withIndex().any { (i, n) ->
-                (i == 0 || !isOwnOnlyKey(k)) && state.stored[n]?.get(k)?.let { it.setBy == ConfigSetBy.USER && it.value.let { v -> v != null && v !is JsonNull } } == true
+                (i == 0 || !isOwnOnlyKey(k)) && (state.device[n]?.containsKey(k) == true || state.stored[n]?.get(k)?.let { it.setBy == ConfigSetBy.USER && it.value.let { v -> v != null && v !is JsonNull } } == true)
             }
         }
         return JsonValues(values, set)
@@ -45,7 +46,8 @@ class ResolvedConfig(private val state: NodeConfigState, private val implementat
 
     private fun resolved(nodeId: String): Map<String, JsonElement> {
         val stored = state.stored
-        if (cacheOf !== stored) { cache.clear(); cacheOf = stored }
+        val device = state.device
+        if (cacheOf !== stored || deviceOf !== device) { cache.clear(); cacheOf = stored; deviceOf = device }
         return cache.getOrPut(nodeId) { resolve(nodeId, stored) }
     }
 
@@ -58,9 +60,15 @@ class ResolvedConfig(private val state: NodeConfigState, private val implementat
     private fun resolve(node: String, stored: Map<String, Map<String, com.superiorsoftllc.agenthq.plugin.api.NodeConfigEntry>>): Map<String, JsonElement> {
         val chain = state.tree.chain(node)
         val out = LinkedHashMap<String, JsonElement>()
+        // CONFIG-4: a device field takes its value from this device's layer (nearest node first), never from node_config.
+        for ((i, n) in chain.withIndex()) for ((k, v) in state.device[n].orEmpty()) {
+            if (i > 0 && isOwnOnlyKey(k)) continue
+            if (k !in out) out[k] = v
+        }
         for ((i, n) in chain.withIndex()) {
             for ((k, e) in stored[n].orEmpty()) {
                 if (i > 0 && isOwnOnlyKey(k)) continue
+                if (state.isDevice(n, k)) continue
                 val v = e.value ?: continue
                 if (v !is JsonNull) if (k !in out) out[k] = v
             }

@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.superiorsoftllc.agenthq.plugin.api.ConfigManifest
 import com.superiorsoftllc.agenthq.plugin.api.ConfigManifestSource
+import com.superiorsoftllc.agenthq.plugin.api.ConfigScopes
 import com.superiorsoftllc.agenthq.plugin.api.ConfigSetBy
 import com.superiorsoftllc.agenthq.plugin.api.DaemonReply
 import com.superiorsoftllc.agenthq.plugin.api.NodeConfigEntry
@@ -91,6 +92,26 @@ class NodeConfigState(
     var error: String? by mutableStateOf(null)
         private set
 
+    /**
+     * CONFIG-4: the `scope:"device"` overrides read from the host's prefs, node id -> key -> value. A device field's
+     * daemon row is ignored; [ResolvedConfig] layers this over the parent chain and under nothing else for that key.
+     */
+    var device: Map<String, Map<String, JsonElement>> by mutableStateOf(emptyMap())
+        private set
+    private var devicePrefs: DevicePrefs? = null
+
+    /** CONFIG-4: binds the host's prefs, runs the one-time migration of the old pref keys, and reads every device field. */
+    fun attachDevice(prefs: DevicePrefs) {
+        devicePrefs = prefs
+        DeviceScope.migrate(prefs)
+        device = tree.fields.values.flatten().filter { it.field.scope == ConfigScopes.DEVICE }.mapNotNull { f ->
+            DeviceScope.decode(prefs.get(DeviceScope.prefKey(f.node, f.key)))?.let { Triple(f.node, f.key, it) }
+        }.groupBy({ it.first }) { it.second to it.third }.mapValues { (_, l) -> l.toMap() }
+    }
+
+    /** True when [key] resolved for [node] is a device-scope field. */
+    fun isDevice(node: String, key: String): Boolean = tree.field(node, key)?.field?.scope == ConfigScopes.DEVICE
+
     /** The row stored for [node] itself (no inheritance), or null. */
     fun own(node: String, key: String): NodeConfigEntry? = stored[node]?.get(key)
 
@@ -115,6 +136,15 @@ class NodeConfigState(
 
     /** Stores [value] for [node]'s [key] as the user's, or as [setBy] (null = clear it, so it resolves from the parent again). */
     suspend fun set(node: String, key: String, value: JsonElement?, setBy: String = ConfigSetBy.USER): Boolean {
+        val prefs = devicePrefs
+        if (prefs != null && isDevice(node, key)) {
+            // The store cannot delete: null is written as "" and reads back as unset.
+            prefs.put(DeviceScope.prefKey(node, key), value?.takeIf { it !is kotlinx.serialization.json.JsonNull }?.let(DeviceScope::encode) ?: "")
+            val own = device[node].orEmpty().toMutableMap()
+            if (value == null || value is kotlinx.serialization.json.JsonNull) own.remove(key) else own[key] = value
+            device = device + (node to own)
+            return true
+        }
         apply(api.put(NodeConfigEntry(node, key, value, setBy)))
         return error == null
     }
