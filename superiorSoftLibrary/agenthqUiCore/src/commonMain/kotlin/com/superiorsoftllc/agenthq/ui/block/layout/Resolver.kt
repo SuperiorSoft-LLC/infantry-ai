@@ -11,7 +11,11 @@ object OverrideModes {
     const val REPLACE = "replace"
     /** The override draws around the core block, which it gets as `inner`. */
     const val WRAP = "wrap"
-    val ALL = setOf(REPLACE, WRAP)
+    /** OVERRIDE-1: the override draws as the node's previous sibling in its parent; the node itself is untouched. */
+    const val BEFORE = "before"
+    /** OVERRIDE-1: the override draws as the node's next sibling in its parent; the node itself is untouched. */
+    const val AFTER = "after"
+    val ALL = setOf(REPLACE, WRAP, BEFORE, AFTER)
 }
 
 /**
@@ -22,7 +26,54 @@ object OverrideModes {
 class BlockOverride(val content: @Composable (scope: BlockScope, inner: Block?) -> Unit)
 
 /** One override of node [node] by [module], already through the trust rules. */
-class NodeOverride(val module: String, val node: String, val mode: String, val override: BlockOverride, val community: Boolean = false)
+class NodeOverride(
+    val module: String,
+    /** A node id or an OVERRIDE-1 selector ([NodeSelector]). */
+    val node: String,
+    val mode: String,
+    val override: BlockOverride,
+    val community: Boolean = false,
+    /** OVERRIDE-1: higher wins a replace, is outermost for a wrap and goes first among before / after; ties: list (load) order. */
+    val priority: Int = 0,
+)
+
+/**
+ * OVERRIDE-1 (docs/PLUGIN-OVERRIDES.md section 1): the DOM-like address of a block. A selector is either a plain node id
+ * (`infantry.shell.footer`, the node with that id anywhere in the tree) or a path of ids joined by `/`, each the direct
+ * parent of the next (`infantry.shell.left/infantry.board.button`); the path ends at the block it addresses and need not
+ * start at the root. A segment `[n]` is the n-th child (from 0) of the segment before it. The old `infantry.shell#<id>`
+ * address is still a plain id.
+ */
+object NodeSelector {
+    /** The id of the node [selector] addresses in [root], or null. The first match in tree order wins. */
+    fun find(root: Block, selector: String): String? {
+        val segs = selector.removePrefix("infantry.shell#").split('/').map { it.trim() }.filter { it.isNotEmpty() }
+        if (segs.isEmpty()) return null
+        if (segs.size == 1) return segs[0].takeIf { !isIndex(it) && contains(root, it) }
+        fun matches(chain: List<Block>): Boolean {
+            // chain = root..candidate; the path must equal the tail of the chain, an [n] segment checks the child index.
+            var i = chain.size - 1
+            for (k in segs.indices.reversed()) {
+                val seg = segs[k]
+                if (i < 0) return false
+                if (isIndex(seg)) {
+                    val n = seg.drop(1).dropLast(1).toIntOrNull() ?: return false
+                    if (i == 0 || chain[i - 1].children.getOrNull(n) !== chain[i]) return false
+                } else if (chain[i].id != seg) return false
+                i--
+            }
+            return true
+        }
+        fun walk(chain: List<Block>): String? {
+            if (matches(chain)) return chain.last().id
+            return chain.last().children.firstNotNullOfOrNull { walk(chain + it) }
+        }
+        return walk(listOf(root))
+    }
+
+    private fun isIndex(seg: String) = seg.length > 2 && seg.startsWith("[") && seg.endsWith("]")
+    private fun contains(b: Block, id: String): Boolean = b.id == id || b.children.any { contains(it, id) }
+}
 
 /**
  * The block drawn for an overridden node: it keeps the node's id and place, so its parent places it the same way. A
@@ -162,24 +213,38 @@ object BlockResolver {
     ): Resolved {
         if (overrides.isEmpty() && injections.isEmpty()) return Resolved(root, emptyList())
         val nodes = HashMap<String, Block>()
-        fun index(b: Block) { nodes.getOrPut(b.id) { b }; b.children.forEach(::index) }
+        val parents = HashMap<String, String>()
+        fun index(b: Block) { nodes.getOrPut(b.id) { b }; b.children.forEach { parents.getOrPut(it.id) { b.id }; index(it) } }
         index(root)
         fun lockedBelow(b: Block): String? = b.children.firstNotNullOfOrNull { c -> c.id.takeIf { it in locked } ?: lockedBelow(c) }
 
         val problems = mutableListOf<String>()
         val byNode = LinkedHashMap<String, MutableList<NodeOverride>>()
-        for (o in overrides) {
-            val node = nodes[o.node]
+        // OVERRIDE-1: a higher priority is applied later (so wins a replace, is outermost for a wrap); equal priority keeps list (load) order.
+        val ordered = overrides.sortedBy { it.priority }
+        val siblings = mutableListOf<NodeInjection>()
+        for ((n, o) in ordered.withIndex()) {
+            val id = NodeSelector.find(root, o.node)
+            val node = id?.let(nodes::get)
             val what = "${o.module}: shell override (${o.mode}) of ${o.node}"
             val below = node?.takeIf { o.mode == OverrideModes.REPLACE }?.let(::lockedBelow)
+            val sibling = o.mode == OverrideModes.BEFORE || o.mode == OverrideModes.AFTER
             when {
                 node == null -> problems += "$what ignored: $tree has no node ${o.node}"
                 o.mode !in OverrideModes.ALL -> problems += "$what ignored: unknown mode '${o.mode}' (${OverrideModes.ALL.joinToString()})"
-                o.node in locked -> problems += "$what refused: ${o.node} is locked"
+                node.id in locked -> problems += "$what refused: ${node.id} is locked"
+                sibling && parents[node.id] == null -> problems += "$what refused: ${node.id} is the root and has no parent to place a sibling in"
+                sibling && parents[node.id] in locked -> problems += "$what refused: ${parents[node.id]} is locked, nothing may be placed beside ${node.id}"
                 below != null -> problems += "$what refused: it would remove locked node $below"
+                sibling -> {
+                    val at = if (o.mode == OverrideModes.BEFORE) InjectAt.Before(node.id) else InjectAt.After(node.id)
+                    // injections sort by order then load index: a higher priority goes first, so its order is the lower one.
+                    siblings += NodeInjection(o.module, "${o.mode}-${node.id}", parents.getValue(node.id), at, -o.priority, n,
+                        BlockInjection { scope -> o.override.content(scope, null) }, o.community)
+                }
                 else -> {
-                    val list = byNode.getOrPut(o.node) { mutableListOf() }
-                    if (o.mode == OverrideModes.REPLACE) list.lastOrNull()?.let { problems += "${o.module}: replaces ${o.node}, overriding ${it.module}" }
+                    val list = byNode.getOrPut(node.id) { mutableListOf() }
+                    if (o.mode == OverrideModes.REPLACE) list.lastOrNull { it.mode == OverrideModes.REPLACE }?.let { problems += "${o.module}: replaces ${node.id}, overriding ${it.module}" }
                     list += o
                 }
             }
@@ -187,7 +252,7 @@ object BlockResolver {
 
         val injectInto = LinkedHashMap<String, MutableList<NodeInjection>>()
         val taken = HashSet(nodes.keys)
-        for (j in injections) {
+        for (j in injections + siblings) {
             val node = nodes[j.target]
             val what = "${j.module}: injection ${j.name} into ${j.target} (${j.at})"
             val anchor = when (val at = j.at) { is InjectAt.Before -> at.childId; is InjectAt.After -> at.childId; else -> null }

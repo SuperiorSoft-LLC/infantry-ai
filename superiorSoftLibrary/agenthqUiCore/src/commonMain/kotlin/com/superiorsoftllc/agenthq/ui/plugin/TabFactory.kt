@@ -56,6 +56,7 @@ import com.superiorsoftllc.agenthq.ui.block.layout.InjectAt
 import com.superiorsoftllc.agenthq.ui.block.layout.InjectedBlock
 import com.superiorsoftllc.agenthq.ui.block.layout.NodeInjection
 import com.superiorsoftllc.agenthq.ui.block.layout.NodeOverride
+import com.superiorsoftllc.agenthq.ui.block.layout.NodeSelector
 import com.superiorsoftllc.agenthq.ui.block.layout.PlaceholderBlock
 import com.superiorsoftllc.agenthq.ui.block.layout.admitInjections
 import com.superiorsoftllc.agenthq.ui.block.layout.Resolved
@@ -397,7 +398,7 @@ class TabFactory(
     /** PLUGINS-2: how Settings > Plugins enables and disables a module; null = this host cannot change modules.json. */
     val changes: ModuleChanges? = null,
     /** BLOCKS-LAYOUT L5: the shell overrides the loader accepted, in load order. */
-    shellOverrides: List<AcceptedShellOverride> = emptyList(),
+    shellOverrides: List<AcceptedShellOverride>? = null,
     /** BLOCKS-INJECTORS J2: the node ids modules.json `allowInject` grants each community module. */
     private val allowInject: (module: String) -> Collection<String> = { emptyList() },
     /** P1 step 2: the core contributions (by id) modules.json `allowOverride` grants each community module; a granted node takes its config. */
@@ -436,7 +437,7 @@ class TabFactory(
     private val shell: Resolved by lazy {
         val inTabs = tabTreeRoots.flatMap { it.ids() }.toSet()
         BlockResolver.resolve(
-            baseRoot, nodeOverrides.filter { it.node !in inTabs }, CoreShell.locked,
+            baseRoot, nodeOverrides.filter { o -> tabTreeRoots.none { NodeSelector.find(it, o.node) != null } }, CoreShell.locked,
             injections = nodeInjections.filter { it.target !in inTabs },
         )
     }
@@ -444,7 +445,7 @@ class TabFactory(
     private val tabTrees: List<Resolved> by lazy {
         tabTreeRoots.map { t ->
             val ids = t.ids()
-            BlockResolver.resolve(t, nodeOverrides.filter { it.node in ids }, CoreShell.locked, t.id, nodeInjections.filter { it.target in ids })
+            BlockResolver.resolve(t, nodeOverrides.filter { o -> NodeSelector.find(t, o.node) != null }, CoreShell.locked, t.id, nodeInjections.filter { it.target in ids })
         }
     }
     /** The tree the window draws: [resolvedShellRoot] without the injections a node's settings disable (P1 step 2). */
@@ -593,10 +594,19 @@ class TabFactory(
             }
         }
         nodeInjections = admitInjections(declared, isCore = { byModule[it]?.tier != Tier.COMMUNITY }, allowInject = allowInject, problems = problems)
-        nodeOverrides = shellOverrides.mapNotNull { a ->
+        // OVERRIDE-1: no loader list (web, Android, tests: compiled-in modules) = read the overrides off the manifests, same trust rule.
+        val accepted = shellOverrides ?: modules.flatMap { m ->
+            m.manifest.shell.mapNotNull { d ->
+                if (m.tier == Tier.COMMUNITY && d.nodeId !in allowOverride(m.manifest.name)) {
+                    problems += "${m.manifest.name}: shell override ${d.name} of ${d.nodeId} refused: a community module cannot override core shell node ${d.nodeId} unless modules.json allows it"
+                    null
+                } else AcceptedShellOverride(m.manifest.name, d.nodeId, d.name, d.mode, d.priority)
+            }
+        }
+        nodeOverrides = accepted.mapNotNull { a ->
             val o = byModule[a.module]?.shell?.get(a.name)
             if (o == null) problems += "${a.module}: shell override ${a.name} is declared but not registered; skipped"
-            o?.let { NodeOverride(a.module, a.node, a.mode, it, community = byModule[a.module]?.tier == Tier.COMMUNITY) }
+            o?.let { NodeOverride(a.module, a.node, a.mode, it, community = byModule[a.module]?.tier == Tier.COMMUNITY, priority = a.priority) }
         }
         // S4: the fills and the tab trees, core tier only.
         val fills = LinkedHashMap<String, Block>()
