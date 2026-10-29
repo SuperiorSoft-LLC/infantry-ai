@@ -17,6 +17,7 @@
   ],
   "actions": [
     { "id": "runs.start", "label": "Run a command", "kind": "spawn", "frames": ["run_start", "run_attach", "run_resize", "run_input"] },
-    { "id": "runs.stop", "label": "Stop a run", "kind": "destructive", "frames": ["run_stop"] }
+    { "id": "runs.stop", "label": "Stop a run", "kind": "destructive", "frames": ["run_stop"] },
+    { "id": "commands.save", "label": "Add, edit or delete a saved command", "kind": "write", "frames": ["command_save", "command_delete"] }
   ]
 }

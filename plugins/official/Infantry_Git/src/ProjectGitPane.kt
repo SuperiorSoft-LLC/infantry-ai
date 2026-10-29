@@ -153,7 +153,8 @@ fun GitDirectorySection(git: GitPaneHost, modifier: Modifier = Modifier) {
     val active = git.project
     HorizontalDivider(color = Palette.Border, modifier = Modifier.padding(vertical = 10.dp))
     var draft by remember(active.id, active.directory) { mutableStateOf(active.directory) }
-    val canEdit = git.live && git.supported
+    // GATE-PANES-1: the directory is part of the project (`projects.save`), dimmed while the policy refuses it.
+    val canEdit = git.link.gate("projects.save").enabled && git.supported
     Text("Directory: ${active.directory.ifBlank { "not set" }}", modifier = modifier, color = Palette.Text, fontSize = 12.sp, fontFamily = Mono)
     OutlinedTextField(
         draft, { draft = it }, label = { Text("Project directory") }, singleLine = true, enabled = canEdit,
@@ -455,7 +456,8 @@ private fun BaseBranchPicker(link: LinkContext, session: SessionContext, ctx: Gi
         }
         OutlinedButton(
             onClick = { open = !open; if (!open) query = "" },
-            enabled = live,
+            // GATE-PANES-1: the base branch is `project_base` (`projects.save`).
+            enabled = link.gate("projects.save").enabled,
             modifier = Modifier.testTag(GIT_BASE_TOGGLE_TAG),
         ) { Text("Change ${if (open) "▴" else "▾"}", fontSize = 12.sp) }
     }

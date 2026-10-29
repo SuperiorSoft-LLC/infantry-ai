@@ -291,7 +291,8 @@ private fun ProfileCard(p: AgentProfile, deps: RolesDeps, onSessionStarted: () -
             )
             Spacer(Modifier.width(6.dp))
             Button(
-                enabled = deps.link.gate("agents.profile.save").enabled && first.isNotBlank() && p.id != null,
+                // GATE-PANES-1: a start as this profile spawns a session (`new`, `agents.spawn`), not a profile save.
+                enabled = deps.link.gate("agents.spawn", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN).enabled && first.isNotBlank() && p.id != null,
                 onClick = {
                     actionScope.launch {
                         if (deps.roles.spawnAs(p.id!!, first.trim()) is CommandResult.Sent) { first = ""; onSessionStarted() }

@@ -309,6 +309,7 @@ internal fun ChatPanelHost.Transcript(modifier: Modifier) {
                     // ASK-1: this session's pending question, inline above the Activity box.
                     QuestionPanel(
                         shown = agent?.let { state.shownQuestionsFor(it.id) }.orEmpty(),
+                        enabled = com.superiorsoftllc.agenthq.ui.shell.rememberGate("questions.answer").allowed,
                         onAnswer = { answer -> scope.launch { controller.answerQuestion(answer) } },
                         onCancel = { id -> scope.launch { controller.cancelQuestion(id) } },
                         onLater = { controller.dismissQuestions(); chat.focus.requestFocus() },

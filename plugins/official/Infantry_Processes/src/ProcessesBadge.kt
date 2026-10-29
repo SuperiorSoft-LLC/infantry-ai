@@ -89,6 +89,8 @@ fun ProcessesDialog(processes: ProcessesContext, onDismiss: () -> Unit) {
     val now = Clock.System.now().toEpochMilliseconds()
     // POLICY-1: reaping is the destructive `host.processes.reap` action; a read-only policy still lists.
     val reap = com.superiorsoftllc.agenthq.ui.shell.rememberGate("host.processes.reap", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE)
+    // GATE-PANES-1: the auto-reap switch is a setting (`settings_set`, `settings.save`).
+    val autoReap = com.superiorsoftllc.agenthq.ui.shell.rememberGate("settings.save")
     AhqAlertDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.testTag(PROCESSES_PANEL_TAG),
@@ -119,6 +121,7 @@ fun ProcessesDialog(processes: ProcessesContext, onDismiss: () -> Unit) {
                     Switch(
                         checked = processes.autoReap ?: report.autoReap,
                         onCheckedChange = { on -> scope.launch { processes.setAutoReap(on) } },
+                        enabled = autoReap.enabled,
                         modifier = Modifier.testTag(PROCESSES_AUTO_REAP_TAG),
                     )
                 }

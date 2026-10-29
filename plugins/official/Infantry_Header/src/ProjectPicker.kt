@@ -212,7 +212,7 @@ private fun NewProjectDialog(
     var busy by remember { mutableStateOf(false) }
     var directory by remember { mutableStateOf("") }
     val nameFocus = remember { FocusRequester() }
-    val canCreate = live && name.isNotBlank() && !busy
+    val canCreate = live && com.superiorsoftllc.agenthq.ui.shell.rememberGate("projects.save").allowed && name.isNotBlank() && !busy
     fun create() {
         if (!canCreate) return
         busy = true
@@ -272,7 +272,9 @@ private fun ProjectConfigDialog(state: AppState, controller: Controller, project
     var name by remember { mutableStateOf(project.name) }
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
-    val canSave = live && name.isNotBlank() && !busy
+    // GATE-PANES-1: every change here (name, directory, lane caps, switches) is `projects.save`, dimmed while it is off.
+    val canWrite = live && com.superiorsoftllc.agenthq.ui.shell.rememberGate("projects.save").allowed
+    val canSave = canWrite && name.isNotBlank() && !busy
     fun save() {
         if (!canSave) return
         busy = true
@@ -310,15 +312,15 @@ private fun ProjectConfigDialog(state: AppState, controller: Controller, project
                         val focus = remember { FocusRequester() }
                         LaunchedEffect(Unit) { focus.requestFocus() }
                         OutlinedTextField(
-                            name, { name = it; error = null }, label = { Text("Project name") }, singleLine = true, enabled = live,
+                            name, { name = it; error = null }, label = { Text("Project name") }, singleLine = true, enabled = canWrite,
                             modifier = Modifier.fillMaxWidth().focusRequester(focus).testTag(NEW_PROJECT_NAME_TAG),
                         )
                         if (!live) Text("Connect to a daemon to change the project.", color = Palette.Muted, fontSize = 11.sp)
-                                        DirectorySetting(state, controller, project, live)
+                                        DirectorySetting(state, controller, project, canWrite)
                         error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
                     }
-                    ProjectSettingsRegistry.LANES -> LanesTab(state, controller, project, live)
-                    else -> ToggleSection(state, controller, project, live, tab)
+                    ProjectSettingsRegistry.LANES -> LanesTab(state, controller, project, canWrite)
+                    else -> ToggleSection(state, controller, project, canWrite, tab)
                 }
             }
         },

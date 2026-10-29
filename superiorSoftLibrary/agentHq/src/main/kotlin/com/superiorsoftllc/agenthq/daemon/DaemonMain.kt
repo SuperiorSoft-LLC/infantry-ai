@@ -1546,6 +1546,8 @@ class AgentHqDaemon(
                 firstTurn(instance, s.role, s.agentId, prompt, knowledge.section(s.projectId, s.role), skillsSource.section(instance))
             }
             policies.lock.seed(projectStore, manager, agents)
+            // COPY-1: the session cap's refusal text is the active preset's (read per refusal, so a switch applies at once).
+            manager.sessionCapText = { policies.current.sessionCapText }
             // Ticket 9bf81983: each seeded session's first run starts now, composed like a visitor's first message.
             policies.lock.warmUp(manager, compose = seatFirstTurn)
             // POLICY-1: a Settings switch re-seeds (idempotent) and opens or closes the session door; each connection is told itself.

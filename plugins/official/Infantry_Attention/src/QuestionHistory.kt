@@ -45,6 +45,8 @@ fun QuestionHistory(
     onOverride: (QuestionAnswerWire) -> Unit,
     onShow: (questionId: String) -> Unit,
     onDismiss: ((questionId: String) -> Unit)? = null,
+    /** GATE-PANES-1: Dismiss is a `questions.answer` write too; off with [live] (the pane passes the gate there). */
+    canDismiss: Boolean = live,
 ) {
     Column(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("Questions", color = Palette.Text, fontWeight = FontWeight.Bold, fontSize = 13.sp)
@@ -65,7 +67,7 @@ fun QuestionHistory(
                     if (q.state == "open") {
                         TextButton(onClick = { onShow(q.id) }) { Text("Show", fontSize = 11.sp) }
                         if (onDismiss != null) {
-                            TextButton(onClick = { onDismiss(q.id) }, modifier = Modifier.testTag(QUESTION_HISTORY_DISMISS_TAG_PREFIX + q.id)) {
+                            TextButton(onClick = { onDismiss(q.id) }, enabled = canDismiss, modifier = Modifier.testTag(QUESTION_HISTORY_DISMISS_TAG_PREFIX + q.id)) {
                                 Text("Dismiss", color = Palette.Danger, fontSize = 11.sp)
                             }
                         }

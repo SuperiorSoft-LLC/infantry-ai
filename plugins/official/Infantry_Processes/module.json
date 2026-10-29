@@ -14,6 +14,7 @@
   ],
   "actions": [
     { "id": "host.processes.read", "label": "List background processes", "kind": "read", "frames": ["processes"] },
-    { "id": "host.processes.reap", "label": "Reap background processes", "kind": "destructive", "frames": ["processes_reap"] }
+    { "id": "host.processes.reap", "label": "Reap background processes", "kind": "destructive", "frames": ["processes_reap"] },
+    { "id": "settings.save", "label": "Reap rogue processes automatically", "kind": "write", "frames": ["settings_set"] }
   ]
 }

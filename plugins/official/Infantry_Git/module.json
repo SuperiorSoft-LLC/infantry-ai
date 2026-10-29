@@ -16,6 +16,8 @@
     }
   ],
   "actions": [
-    { "id": "project.git.checkout", "label": "Switch or create a branch", "kind": "write", "frames": ["project_git_checkout"] }
+    { "id": "project.git.checkout", "label": "Switch or create a branch", "kind": "write", "frames": ["project_git_checkout"] },
+    { "id": "projects.save", "label": "Set the project directory or base branch", "kind": "write", "frames": ["project_save", "project_base"] },
+    { "id": "pipeline.save", "label": "Configure the pipeline stages", "kind": "write", "frames": ["pipeline_config"] }
   ]
 }

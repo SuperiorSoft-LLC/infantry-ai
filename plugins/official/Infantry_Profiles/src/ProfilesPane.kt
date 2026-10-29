@@ -101,7 +101,8 @@ private fun ProfileRow(p: AgentProfile, state: AppState, roles: RolesContext, ex
             )
             Spacer(Modifier.width(6.dp))
             Button(
-                enabled = canWrite && first.isNotBlank() && p.id != null,
+                // GATE-PANES-1: a start as this profile spawns a session (`new`, `agents.spawn`), not a profile save.
+                enabled = state.connection.gate("agents.spawn", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN).enabled && first.isNotBlank() && p.id != null,
                 onClick = { actionScope.launch { if (roles.spawnAs(p.id!!, first.trim()) is CommandResult.Sent) { first = ""; onSessionStarted() } } },
             ) { Text("Start session") }
         }

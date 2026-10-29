@@ -14,5 +14,9 @@
       "id": "infantry.pods",
       "container": "center"
     }
+  ],
+  "actions": [
+    { "id": "pods.submit", "label": "Submit a pod", "kind": "spawn", "frames": ["pod_submit"] },
+    { "id": "pods.cancel", "label": "Cancel a pod", "kind": "destructive", "frames": ["pod_cancel"] }
   ]
 }

@@ -17,5 +17,9 @@
   ],
   "fills": [
     "infantry.shell.config.questions"
+  ],
+  "actions": [
+    {"id": "questions.answer", "label": "Answer or dismiss a question", "kind": "write", "frames": ["question_answer", "question_cancel"]},
+    {"id": "attention.ack", "label": "Acknowledge an item", "kind": "write", "frames": ["attention_ack"]}
   ]
 }

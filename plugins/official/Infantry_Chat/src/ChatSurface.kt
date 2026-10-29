@@ -748,6 +748,9 @@ internal fun PromptBox(
     val remove = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.delete")
     val kill = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.kill")
     val restart = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.restart")
+    // GATE-PANES-1: a message to an existing agent is `chat.prompt`; off, Send is dimmed and says why.
+    val prompt = com.superiorsoftllc.agenthq.ui.shell.rememberGate("chat.prompt")
+    val promptLocked = !spawnMode && a != null && !prompt.allowed
     val writeLocked = !policy.allowed
     // COMPOSER-NEWLINE-1: the box keeps its own caret so Shift+Enter can break the line exactly there. A value set
     // from outside (cleared after a send, a slash row picked) wins and puts the caret at its end.
@@ -817,6 +820,7 @@ internal fun PromptBox(
                 snapshot.promptsFor(a.id), com.superiorsoftllc.agenthq.ui.model.PromptCards.offersAllowAlways(snapshot.connection.contract),
                 onAnswer = { r -> actionScope.launch { controller.answerPrompt(r) } },
                 onDismiss = controller::dismissPrompt,
+                enabled = com.superiorsoftllc.agenthq.ui.shell.rememberGate("approvals.answer").allowed,
             )
         }
         QueuedMessages(queue)
@@ -870,7 +874,7 @@ internal fun PromptBox(
                         onValue(text)
                         true
                     }
-                    e.key == Key.Enter && !e.isShiftPressed && !e.isCtrlPressed -> { onSubmit(); true }
+                    e.key == Key.Enter && !e.isShiftPressed && !e.isCtrlPressed -> { if (!promptLocked) onSubmit(); true }
                     // ATTACH-INLINE-1: Ctrl+Shift+A is the paperclip.
                     e.isCtrlPressed && e.isShiftPressed && e.key == Key.A -> { pick(); true }
                     // IMG-2: Ctrl+V with a file or an image on the clipboard attaches it (a tag at the caret);
@@ -894,12 +898,13 @@ internal fun PromptBox(
                 when {
                     // DEMO-MERGE-1: while writes are refused a `/` command is not a chat message; Send is dimmed and says why.
                     writeLocked && value.trimStart().startsWith("/") -> "Slash commands: ${policy.reason.orEmpty()}"
+                    promptLocked -> prompt.label("Send")
                     spawnMode || a == null -> "Spawn"
                     isBusy(a) -> "Queue"
                     else -> "Send"
                 },
                 onSubmit, shortcut = "Enter", enabled = live && (value.isNotBlank() || attachments.isNotEmpty()) && !attachBusy && blocker == null &&
-                    !(!spawn.allowed && (spawnMode || a == null)) && !(writeLocked && value.trimStart().startsWith("/")),
+                    !(!spawn.allowed && (spawnMode || a == null)) && !(writeLocked && value.trimStart().startsWith("/")) && !promptLocked,
                 style = IconActionStyle.FILLED,
             )
             if (a != null && !spawnMode) {
@@ -915,8 +920,9 @@ internal fun PromptBox(
                 )
             }
             if (a != null && !spawnMode) {
-                val canResume = live && a.session.resumable
-                IconAction(AhqIcons.PlayArrow, "Resume", onClick = {
+                val resume = com.superiorsoftllc.agenthq.ui.shell.rememberGate("chat.resume")
+                val canResume = live && resume.allowed && a.session.resumable
+                IconAction(AhqIcons.PlayArrow, resume.label("Resume"), onClick = {
                     actionScope.launch {
                         if (controller.resume(a.id, wire(value).trim()) is CommandResult.Sent) onValue("")
                     }

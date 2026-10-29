@@ -163,6 +163,20 @@ class DemoRestrictionsTest {
     }
 
     @Test
+    fun cap_refusalIsNeutralInProduction_andThePresetsTextUnderAPreset() {
+        manager.maxSessions = { 1 }
+        manager.hasLiveProcess = { false }
+        manager.startNew("one")
+        val neutral = assertFailsWith<SessionCapException> { manager.startNew("two") }.message!!
+        assertTrue(neutral.startsWith("Session limit reached: "), neutral)
+        assertFalse("demo" in neutral.lowercase(), neutral)
+        // COPY-1: the demo plugin's preset (its real file) supplies its own wording; the daemon reads it per refusal.
+        manager.sessionCapText = { com.superiorsoftllc.agenthq.daemon.DemoPresetFixture.preset.sessionCapText }
+        val demo = assertFailsWith<SessionCapException> { manager.startNew("two") }.message!!
+        assertTrue(demo.startsWith("Demo busy: "), demo)
+    }
+
+    @Test
     fun cap_countsIdleSessionsWhoseProcessIsKeptAlive_untilStoppedOrTimedOut() {
         manager.maxSessions = { 2 }
         val kept = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()

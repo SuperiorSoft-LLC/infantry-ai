@@ -23,7 +23,7 @@ Legend for "exists": **yes** = the tool is built and the demo uses it; **part** 
 | 4 | `/demo/visitor-token` route in core, `withDemoToken` in AccessPolicy | public visitor token for anonymous visitors | **daemon plugin route** (`endpoints`/`routes` served by a plugin) plus a generic "public guest token" access tier | no (a daemon plugin cannot declare a route) | M |
 | 5 | wasm `Main.kt` fetches `/demo/visitor-token`; offline `WebMode.Demo` with `DemoFixtures` / `FakeDaemonClient` | land a visitor connected; the offline web demo | a **web bootstrap hook** (`BootstrapProvider`: "how do I get a token / a client") that a compiled-in plugin provides | no | M |
 | 6 | `SessionManager.demoLocked` and "demo: new sessions are disabled in this demo" | refuse `new` under the lock | the policy gate (`agents.spawn` off) already refuses it; the flag is now redundant | part | S |
-| 7 | `SESSION_CAP_REFUSED = "Demo busy"` | the message at the session cap, shown in **every** deployment | a config field / the preset's text (`limits.concurrency.refusal`) | no | S |
+| 7 | `SESSION_CAP_REFUSED = "Demo busy"` | the message at the session cap, shown in **every** deployment | the preset's text (`sessionCapText`) | **closed by POLISH-1**: core says "Session limit reached", the demo preset "Demo busy" | - |
 | 8 | RunManager / KeystoreHandler "under the demo lock" refusals | refuse interactive runs and secret changes | the policy gate on `runs.start` / `secrets.save` with the preset's refusal text | part (the gate is total; the extra text is a leftover) | S |
 | 9 | `ModulesConfig.demoLock` (`allowRoutes`, `allowEndpoints`) in the SDK | which plugin routes pass under the lock | a policy rule on route ids (`route:<id>` actions in the same matcher) | no | M |
 | 10 | Model/role allowlist (rows 4, 5) | ExecutorPicker hides models and roles | `limits.models.allowed` / `limits.roles.allowed` plus preset `allowedModels` / `allowedRoles` | yes | - |
@@ -120,6 +120,11 @@ nudge), `Infantry_Header/ProjectPicker` (lane cap, pipeline toggles, directory s
 They still are not *dimmed*, because a control that never asks cannot be dimmed. Fix per pane: declare the action in
 module.json and ask `gate(id)`. The coverage guard then keeps each declaration honest. S per pane; one ticket for all
 of them.
+**Closed by POLISH-1 (GATE-PANES-1):** every write control in these panes (and in Epics, Git, Pods, Processes, Profiles,
+Roles' spawn-as) declares its action in module.json and asks its gate. `PolicyGateGuardTest` now also fails when an
+official plugin calls a write method (a name of its own, such as `ack`, `addTask`, `saveDirectory`) whose action its
+module.json does not declare; generic names (`save`, `delete`, ...) stay with the declaration check. `GatePanesUiTest`
+proves one control per pane group dims under a read-only policy.
 
 ## 3. Ranked gaps (launch impact × how often a plugin author hits it)
 

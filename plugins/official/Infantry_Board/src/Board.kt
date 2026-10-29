@@ -393,7 +393,8 @@ class BoardCardItem internal constructor(
 @Composable
 fun BoardColumnsSection(board: BoardPaneHost, modifier: Modifier = Modifier, card: @Composable ColumnScope.(BoardCardItem) -> Unit) {
     val backlog = board.deps.tickets
-    val live = board.live
+    // GATE-PANES-1: dragging (or its keyboard actions) moves a ticket: `board.ticket.move`, off while the policy refuses it.
+    val canMove = board.can("board.ticket.move")
     val drag = board.drag
     val session = board.session
     val columnOf = board.columnOf
@@ -434,7 +435,7 @@ fun BoardColumnsSection(board: BoardPaneHost, modifier: Modifier = Modifier, car
                     if (slot != null && tickets.isEmpty()) DropLine(Modifier)
                     tickets.forEachIndexed { index, t ->
                         val handle = @Composable {
-                            DragHandle(t, live, drag, cardMoves(t, index, columnOf, board::drop)) {
+                            DragHandle(t, canMove, drag, cardMoves(t, index, columnOf, board::drop)) {
                                 val plan = drag.hover(columnOf)?.plan ?: DropPlan.Stay(t.id)
                                 drag.end()
                                 board.drop(t, plan)
@@ -727,7 +728,6 @@ fun TicketCardEditSection(card: BoardCardHost, modifier: Modifier = Modifier) {
 @Composable
 fun TicketCardActionsSection(card: BoardCardHost, modifier: Modifier = Modifier) {
     val t = card.ticket
-    val live = card.live
     // POLICY-1: each card button is a named action (move, start, delete), gated by the daemon's policy.
     val canMove = card.can("board.ticket.move")
     // Start moves the ticket to In progress (ticket_move); the daemon then starts its agent.
@@ -760,11 +760,13 @@ fun TicketCardActionsSection(card: BoardCardHost, modifier: Modifier = Modifier)
 private fun RoleNudge(t: Ticket, deps: BoardDeps) {
     val actionScope = rememberCoroutineScope()
     val focus = remember { FocusRequester() }
+    // GATE-PANES-1: picking the role edits the ticket (`board.ticket.save`).
+    val canSave = deps.can("board.ticket.save")
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     Column(Modifier.fillMaxWidth().testTag(TICKET_ROLE_NUDGE_TAG_PREFIX + t.id), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text("Pick a role first, then Start.", color = Palette.Danger, fontSize = 11.sp)
         TicketAssigneePicker(deps.roles, null, focus) { id ->
-            if (!id.isNullOrEmpty() && deps.live) actionScope.launch { deps.tickets.edit(t.id, agentId = id) }
+            if (!id.isNullOrEmpty() && canSave) actionScope.launch { deps.tickets.edit(t.id, agentId = id) }
         }
     }
 }
@@ -844,6 +846,7 @@ private fun TicketEditForm(t: Ticket, deps: BoardDeps, onDone: () -> Unit) {
         }
     }
     val epics = deps.boardEpics
+    val canUpload = deps.can("images.upload")
     // An epic outside the active project (or not loaded yet) still reads by name, else by its short id.
     val epicName = epicId?.let { id -> deps.epicName(id) ?: id.takeLast(8) } ?: "None"
     Column(
@@ -851,7 +854,7 @@ private fun TicketEditForm(t: Ticket, deps: BoardDeps, onDone: () -> Unit) {
             // IMG-4: Ctrl/Cmd+V anywhere in the form attaches a clipboard image; text on the clipboard pastes as usual.
             .onPreviewKeyEvent { e ->
                 val paste = e.type == KeyEventType.KeyDown && e.key == Key.V && (e.isCtrlPressed || e.isMetaPressed)
-                val image = if (paste && deps.live && pending == null && !uploading) host.clipboardImage() else null
+                val image = if (paste && canUpload && pending == null && !uploading) host.clipboardImage() else null
                 image?.let { attach(listOf(it)) } != null
             }
             .padding(8.dp),

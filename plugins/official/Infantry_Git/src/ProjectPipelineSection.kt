@@ -33,6 +33,7 @@ import com.superiorsoftllc.agenthq.ui.model.silentMs
 import com.superiorsoftllc.agenthq.ui.net.CommandResult
 import com.superiorsoftllc.agenthq.ui.shell.GitContext
 import com.superiorsoftllc.agenthq.ui.shell.LinkContext
+import com.superiorsoftllc.agenthq.ui.shell.gate
 import com.superiorsoftllc.agenthq.ui.net.PIPELINE_UNSUPPORTED
 import com.superiorsoftllc.agenthq.ui.protocol.PipelineCheckView
 import com.superiorsoftllc.agenthq.ui.protocol.PipelineEntryView
@@ -67,10 +68,12 @@ fun ProjectPipelineSection(link: LinkContext, ctx: GitContext, projectId: String
     LaunchedEffect(projectId, live, supported) { if (live && supported) ctx.loadPipeline(projectId) }
 
     val view = pipelineSectionView(ctx.pipeline(projectId))
+    // GATE-PANES-1: configuring or removing the stages is `pipeline.save`, dimmed while the policy refuses it.
+    val canConfigure = link.gate("pipeline.save").enabled
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Text("PIPELINE", color = Palette.Muted, fontSize = 10.sp)
         if (supported) OutlinedButton(
-            onClick = { error = null; editing = true }, enabled = live, modifier = Modifier.testTag(PIPELINE_CONFIGURE_TAG),
+            onClick = { error = null; editing = true }, enabled = canConfigure, modifier = Modifier.testTag(PIPELINE_CONFIGURE_TAG),
         ) { Text(if (view is PipelineSectionView.Configured) "Stages…" else "Configure…", fontSize = 11.sp) }
     }
     when {
@@ -92,7 +95,7 @@ fun ProjectPipelineSection(link: LinkContext, ctx: GitContext, projectId: String
     if (editing) {
         val current = (view as? PipelineSectionView.Configured)?.stages.orEmpty()
         StagesDialog(
-            initial = current.joinToString(", "), configured = view is PipelineSectionView.Configured, live = live,
+            initial = current.joinToString(", "), configured = view is PipelineSectionView.Configured, live = canConfigure,
             onDismiss = { editing = false },
             onSave = { stages ->
                 scope.launch {

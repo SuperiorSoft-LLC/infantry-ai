@@ -113,7 +113,9 @@ fun EpicsPane(state: AppState, epics: EpicsContext) {
             val list = state.epics[active.id].orEmpty()
             if (list.isEmpty()) Text("No epics yet.", color = Palette.Muted, fontSize = 12.sp)
             list.forEach { epic ->
-                EpicCard(epic, state.epicTicketColumns(epic.id), canWrite,
+                // GATE-PANES-1: a task is a ticket (`board.ticket.save`), a move is `board.ticket.move`; each dims on its own.
+                EpicCard(epic, state.epicTicketColumns(epic.id), canAddTask = state.connection.gate("board.ticket.save").enabled,
+                    canMove = state.connection.gate("board.ticket.move").enabled,
                     onNewTask = { title, done -> run(onSent = done) { epics.addTask(active.id, title, epic.id) } },
                     onMove = { id, status -> run { epics.moveTicket(id, status) } },
                 )
@@ -147,7 +149,8 @@ fun EpicsPane(state: AppState, epics: EpicsContext) {
 private fun EpicCard(
     epic: EpicView,
     columns: Map<String, List<Ticket>>,
-    live: Boolean,
+    canAddTask: Boolean,
+    canMove: Boolean,
     onNewTask: (title: String, onSent: () -> Unit) -> Unit,
     onMove: (id: String, status: String) -> Unit,
 ) {
@@ -163,16 +166,16 @@ private fun EpicCard(
                 val tickets = columns[column].orEmpty()
                 Column(Modifier.weight(1f).testTag("epic-column-${epic.id}-$column")) {
                     Text("${COLUMN_LABELS[column] ?: column} · ${tickets.size}", color = Palette.Muted, fontSize = 10.sp)
-                    tickets.forEach { t -> EpicTicketRow(t, live, onMove) }
+                    tickets.forEach { t -> EpicTicketRow(t, canMove, onMove) }
                 }
             }
         }
         Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlinedTextField(
-                title, { title = it }, label = { Text("New task") }, singleLine = true, enabled = live,
+                title, { title = it }, label = { Text("New task") }, singleLine = true, enabled = canAddTask,
                 textStyle = TextStyle(fontSize = 12.sp), modifier = Modifier.weight(1f).testTag("new-task-${epic.id}"),
             )
-            OutlinedButton(onClick = { onNewTask(title) { title = "" } }, enabled = live && title.isNotBlank(), modifier = Modifier.testTag("create-task-${epic.id}")) {
+            OutlinedButton(onClick = { onNewTask(title) { title = "" } }, enabled = canAddTask && title.isNotBlank(), modifier = Modifier.testTag("create-task-${epic.id}")) {
                 Text("Add task", fontSize = 12.sp)
             }
         }

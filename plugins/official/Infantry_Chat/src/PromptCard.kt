@@ -64,7 +64,10 @@ fun PromptCard(
     onAnswer: (PromptResponseWire) -> Unit,
     onDismiss: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** GATE-PANES-1: `approvals.answer` is allowed here; off, the card stays readable (Esc still hides it) but sends nothing. */
+    enabled: Boolean = true,
 ) {
+    val send: (PromptResponseWire) -> Unit = { if (enabled) onAnswer(it) }
     val prompt = prompts.firstOrNull() ?: return
     // Fresh selection state per prompt: the next one in the queue never inherits the last one's choice.
     key(prompt.promptId) {
@@ -87,8 +90,8 @@ fun PromptCard(
         val answer = if (approval) null else PromptCards.answer(prompt, chosen, other)
 
         fun submit() {
-            if (approval) choices.getOrNull(index)?.let { onAnswer(PromptCards.decide(prompt, it.decision)) }
-            else answer?.let(onAnswer)
+            if (approval) choices.getOrNull(index)?.let { send(PromptCards.decide(prompt, it.decision)) }
+            else answer?.let(send)
         }
         fun moveTo(next: Int) {
             index = next
@@ -105,7 +108,7 @@ fun PromptCard(
                         Key.DirectionDown, Key.DirectionRight -> { moveTo(PromptCards.move(index, 1, rows)); true }
                         Key.DirectionUp, Key.DirectionLeft -> { moveTo(PromptCards.move(index, -1, rows)); true }
                         Key.Enter, Key.NumPadEnter -> { submit(); true }
-                        Key.Escape -> { PromptCards.escape(prompt)?.let(onAnswer) ?: onDismiss(prompt.promptId); true }
+                        Key.Escape -> { PromptCards.escape(prompt)?.takeIf { enabled }?.let(send) ?: onDismiss(prompt.promptId); true }
                         Key.Spacebar -> if (!approval && !otherFocused) {
                             prompt.options.getOrNull(index)?.let { chosen = PromptCards.toggle(prompt, chosen, it.label) }; true
                         } else false
@@ -131,11 +134,11 @@ fun PromptCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     choices.forEachIndexed { i, c ->
                         val tag = Modifier.testTag(PROMPT_CHOICE_TAG_PREFIX + c.decision)
-                        val onClick = { onAnswer(PromptCards.decide(prompt, c.decision)) }
+                        val onClick = { send(PromptCards.decide(prompt, c.decision)) }
                         if (i == index) {
-                            Button(onClick = onClick, modifier = tag, colors = ButtonDefaults.buttonColors(containerColor = Palette.Accent)) { Text(c.label, fontSize = 12.sp) }
+                            Button(onClick = onClick, enabled = enabled, modifier = tag, colors = ButtonDefaults.buttonColors(containerColor = Palette.Accent)) { Text(c.label, fontSize = 12.sp) }
                         } else {
-                            OutlinedButton(onClick = onClick, modifier = tag) { Text(c.label, fontSize = 12.sp, color = Palette.Text) }
+                            OutlinedButton(onClick = onClick, enabled = enabled, modifier = tag) { Text(c.label, fontSize = 12.sp, color = Palette.Text) }
                         }
                     }
                 }
@@ -167,7 +170,7 @@ fun PromptCard(
                 }
                 Row {
                     Spacer(Modifier.weight(1f))
-                    Button(onClick = { submit() }, enabled = answer != null, modifier = Modifier.testTag(PROMPT_SUBMIT_TAG)) { Text("Submit", fontSize = 12.sp) }
+                    Button(onClick = { submit() }, enabled = enabled && answer != null, modifier = Modifier.testTag(PROMPT_SUBMIT_TAG)) { Text("Submit", fontSize = 12.sp) }
                 }
             }
         }
