@@ -76,12 +76,18 @@ class DesktopPluginsOfficialJarTest {
             assertTrue(loaded.factory.find("infantry.git") != null, "the Git tab is registered from the jar")
         }
 
-        // ticket-e063ce77 (Header needs ui.net.Controller) has its own @Ignore test below; everything else must link.
-        val other = linkAll(sources).filter { !it.startsWith("Infantry_Header") }
-        assertTrue(other.isEmpty(), "classes that do not link under the OFFICIAL loader (${other.size}):\n" + other.joinToString("\n"))
+        val failures = linkAll(sources)
+        assertTrue(failures.isEmpty(), "classes that do not link under the OFFICIAL loader (${failures.size}):\n" + failures.joinToString("\n"))
     }
 
-    /** Links every class of each jar through its own OFFICIAL loader; returns "module: class -> cause" per failure. */
+    /** A host class named in a class file (constant pool UTF-8 / descriptors); ui.* only, the packages the OFFICIAL filter decides on. */
+    private val HOST_REF = Regex("com/superiorsoftllc/agenthq/ui/[A-Za-z0-9_/$]*[A-Za-z0-9_]")
+
+    /**
+     * Links every class of each jar through its own OFFICIAL loader; returns "module: class -> cause" per failure.
+     * Linking only resolves signature types, so it also loads every host class a class file names anywhere (method bodies
+     * included: AlertsSound.Render reached ui.sound only at first frame, the owner's boot crash) through the same loader.
+     */
     private fun linkAll(sources: List<File>): List<String> {
         val linkFailures = mutableListOf<String>()
         for (src in sources) {
@@ -96,13 +102,20 @@ class DesktopPluginsOfficialJarTest {
                         c.declaredMethods; c.declaredFields; c.declaredConstructors
                     }.onFailure { linkFailures += "${src.name}: $n -> ${it.cause?.message ?: it.message}" }
                 }
+                val own = names.map { it.removeSuffix(".class") }.toSet()
+                val referenced = JarFile(jar).use { j ->
+                    names.flatMap { n -> HOST_REF.findAll(String(j.getInputStream(j.getJarEntry(n)).readBytes(), Charsets.ISO_8859_1)).map { it.value to n } }
+                }.filter { it.first !in own }.distinctBy { it.first }
+                for ((ref, from) in referenced) {
+                    runCatching { loader.loadClass(ref.replace('/', '.')) }
+                        .onFailure { linkFailures += "${src.name}: $from references ${ref.replace('/', '.')} -> ${it.javaClass.simpleName}" }
+                }
             }
         }
         return linkFailures
     }
 
     @Test
-    @Ignore("ticket-e063ce77: Infantry_Header needs ui.net.Controller, hidden from the OFFICIAL loader")
     fun `official jars - Infantry_Header classes link under the OFFICIAL loader`() {
         installAll()
         val failures = linkAll(allSources.filter { it.name == "Infantry_Header" })

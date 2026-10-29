@@ -46,8 +46,17 @@ class PluginClassLoader(private val dir: File, jar: File, parent: ClassLoader, f
 
     private companion object {
         const val UI = "com.superiorsoftllc.agenthq.ui."
-        /** LOADER-1: an OFFICIAL jar also sees `ui.shell` and the classes directly in the `ui` package (ShellContext, ChatPanelState, the kit composables). `ui.net`, `ui.pair`, `ui.sound`, `ui.voice` stay hidden. */
-        fun officialAllowed(n: String) = n.startsWith(UI + "shell.") || n.startsWith(UI + "net.CommandResult") || (n.startsWith(UI) && '.' !in n.removePrefix(UI))
+        /** LOADER-1: an OFFICIAL jar also sees `ui.shell` and the classes directly in the `ui` package (ShellContext, ChatPanelState, the kit composables).
+         *  e063ce77: and exactly the host types the official jars link against (checked with jdeps over all 25 jars): the shell's
+         *  `ui.net.Controller` (Header, Chat, Changes, Assistant) and `ImageUploadOutcome` (Board), and `ui.sound` / `ui.voice` (Alerts;
+         *  settings and UI only). The rest of `ui.net` (DaemonClient, the HTTP client) and `ui.pair` stay hidden. */
+        val OFFICIAL_NET = listOf("net.CommandResult", "net.Controller", "net.ImageUploadOutcome")
+        fun officialAllowed(n: String): Boolean {
+            if (!n.startsWith(UI)) return false
+            val r = n.removePrefix(UI)
+            return r.startsWith("shell.") || r.startsWith("sound.") || r.startsWith("voice.") || '.' !in r ||
+                OFFICIAL_NET.any { r == it || r.startsWith("$it$") }
+        }
         val ALLOWED = listOf("java.", "javax.", "kotlin.", "kotlinx.", "androidx.compose", "org.jetbrains.compose", "org.jetbrains.skiko", "com.superiorsoftllc.agenthq.plugin.api.", "com.superiorsoftllc.agenthq.ui.plugin.",
             "com.superiorsoftllc.agenthq.ui.model.", "com.superiorsoftllc.agenthq.ui.protocol.", "com.superiorsoftllc.agenthq.ui.block.")
         val HIDDEN = listOf("com.superiorsoftllc.agenthq.ui.plugin.DaemonLink", "com.superiorsoftllc.agenthq.ui.plugin.PluginClassLoader", "com.superiorsoftllc.agenthq.ui.plugin.config.DaemonNodeConfigApi", "com.superiorsoftllc.agenthq.ui.plugin.JvmEndpointAccess")
