@@ -22,6 +22,13 @@ data class ConfigDeclaration(
     val applies: String? = null,
     /** CONFIG-3: extra words the dialog search matches. */
     val keywords: List<String> = emptyList(),
+    /**
+     * CONFIG-5: escape hatch for a section that is not a form: the id of the fill that draws the card (placed by
+     * [tab]/[group]/[order]). A block card has no [fields].
+     */
+    val block: String? = null,
+    /** CONFIG-5: a trust section: only core may declare it, and no module hides or edits it. */
+    val locked: Boolean = false,
 )
 
 /**

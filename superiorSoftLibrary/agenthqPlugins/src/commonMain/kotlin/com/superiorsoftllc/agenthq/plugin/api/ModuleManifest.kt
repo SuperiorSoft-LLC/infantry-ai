@@ -97,6 +97,8 @@ data class ModuleManifest(
      * config tree holds instances of them; an undeclared registration is refused.
      */
     val blockTypes: List<BlockTypeDeclaration> = emptyList(),
+    /** CONFIG-5: the config field type ids the module registers (`UiRegistrar.fieldType`); an undeclared registration is refused. */
+    val fieldTypes: List<String> = emptyList(),
     /** NS3 (docs/NORTH-STAR-DESIGN.md 1a, 4c): the daemon capabilities the module needs and the optional ones it wants. */
     val daemon: DaemonCapabilities? = null,
 ) {

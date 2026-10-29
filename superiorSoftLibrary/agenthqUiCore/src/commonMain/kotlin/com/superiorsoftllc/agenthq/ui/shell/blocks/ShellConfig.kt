@@ -18,6 +18,7 @@ import com.superiorsoftllc.agenthq.ui.ConfigRegistrySection
 import com.superiorsoftllc.agenthq.ui.ConfigSecretsSection
 import com.superiorsoftllc.agenthq.ui.ConfigServerUpdateSection
 import com.superiorsoftllc.agenthq.ui.ConfigUpdatesSection
+import com.superiorsoftllc.agenthq.ui.configSectionNode
 import com.superiorsoftllc.agenthq.ui.LocalShell
 import com.superiorsoftllc.agenthq.ui.PairEntry
 import com.superiorsoftllc.agenthq.ui.Palette
@@ -33,7 +34,9 @@ import com.superiorsoftllc.agenthq.ui.block.layout.flattened
 import com.superiorsoftllc.agenthq.ui.model.UserPortrait
 import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
 import com.superiorsoftllc.agenthq.ui.pair.applyPairing
+import com.superiorsoftllc.agenthq.ui.plugin.config.ConfigPlan
 import com.superiorsoftllc.agenthq.ui.plugin.config.GeneratedCards
+import com.superiorsoftllc.agenthq.ui.plugin.config.PlanFormCard
 import com.superiorsoftllc.agenthq.ui.plugin.config.generatedEntries
 import kotlinx.coroutines.launch
 
@@ -123,13 +126,30 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
             modules = s.tabs.takeIf { it.loadsAtRunTime },
             // S4c: only the sections among the children are offered; an unfilled settings slot leaves the trust tabs.
             drawn = children.flattened().filter { it !is PlaceholderBlock }.mapNotNull { sectionEntries[it.id] }.toSet(),
+            // CONFIG-5: with a compiled manifest (snapshot) every tab and card is generated from it; without one the
+            // hand-written sections and tabs are drawn as before.
+            plan = { present -> s.tabs.config.snapshot?.let { snap -> ConfigPlan.of(snap, present, children.flattened().filter { it !is PlaceholderBlock }.map { it.id }.toSet()) } },
             sections = { config ->
                 // CONFIG-3: a generated tab (Appearance) draws its cards from the compiled manifest first, instead of the
                 // hand-written sections they replace; with no card (no jar, or no snapshot and no local declaration) nothing changes.
-                val generated = generatedEntries(s.tabs, config.tab)
-                CompositionLocalProvider(LocalConfigDialogHost provides config) {
-                    GeneratedCards(s.tabs, config.tab, config.highlight)
-                    RenderPlaced(children.flattened().filter { c -> c !is PlaceholderBlock }.filter { c -> sectionEntries[c.id]?.let { it !in generated && config.shows(it) } ?: true })
+                val plan = config.plan
+                val kids = children.flattened().filter { c -> c !is PlaceholderBlock }
+                if (plan != null) {
+                    val placed = plan.cards.mapNotNull { it.block }.toSet()
+                    CompositionLocalProvider(LocalConfigDialogHost provides config) {
+                        for (card in plan.cardsOf(config.tabLabel.orEmpty())) {
+                            // The escape hatch: the card is the named fill; any other card is a form.
+                            if (card.block != null) RenderPlaced(kids.filter { it.id == card.block })
+                            else PlanFormCard(s.tabs, card, config.highlight, config.highlightKey)
+                        }
+                        RenderPlaced(kids.filter { c -> c.id !in placed }.filter { c -> sectionEntries[c.id]?.let { it in plan.uncovered && config.shows(it) } ?: true })
+                    }
+                } else {
+                    val generated = generatedEntries(s.tabs, config.tab)
+                    CompositionLocalProvider(LocalConfigDialogHost provides config) {
+                        GeneratedCards(s.tabs, config.tab, config.highlight)
+                        RenderPlaced(kids.filter { c -> sectionEntries[c.id]?.let { it !in generated && config.shows(it) } ?: true })
+                    }
                 }
             },
         )
@@ -172,9 +192,7 @@ val ShellConfigTrust: List<ConfigSectionBlock> = listOf(
  * Section node id -> its entry, for the container's tab filter: `infantry.shell.config.<entry in lowerCamelCase>`. S4c:
  * derived from [ConfigEntry], since the open sections' blocks are ShellConfigSettings'.
  */
-private val sectionEntries: Map<String, ConfigEntry> = ConfigEntry.entries.associateBy { e ->
-    "$CONFIG." + e.name.lowercase().split('_').mapIndexed { i, w -> if (i == 0) w else w.replaceFirstChar { it.uppercase() } }.joinToString("")
-}
+private val sectionEntries: Map<String, ConfigEntry> = ConfigEntry.entries.associateBy { e -> configSectionNode(e) }
 
 /** S4c: the open settings group, the shell's own since RUNTIME-26 (replaceable by id); the trust sections are locked. */
 const val CONFIG_SETTINGS = "$CONFIG.settings"

@@ -79,6 +79,8 @@ class ConfigTree(
             val accepted = mutableListOf<ModuleDeclaration>()
             val sources = listOf(ConfigSource(CORE_SHELL_MODULE, Tier.CORE, core) { true }) + modules
             for (s in sources) for (d in s.declarations) {
+                if (d.locked && s.tier != Tier.CORE) { problems += "${s.module}: config for ${d.node} is locked; only core declares a locked section; refused"; continue }
+                if (d.block != null && accepted.any { it.declaration.block == d.block }) { problems += "${s.module}: block ${d.block} is already placed; refused"; continue }
                 if (!s.owns(d.node)) { problems += "${s.module}: config for ${d.node} refused: the module neither owns that node nor is granted it"; continue }
                 val list = out.getOrPut(d.node) { mutableListOf() }
                 val kept = mutableListOf<ConfigFieldDeclaration>()
@@ -94,7 +96,7 @@ class ConfigTree(
                         }
                     }
                 }
-                if (kept.isNotEmpty()) accepted += ModuleDeclaration(s.module, d.copy(fields = kept))
+                if (kept.isNotEmpty() || d.block != null) accepted += ModuleDeclaration(s.module, d.copy(fields = kept))
             }
             return ConfigTree(out.filterValues { it.isNotEmpty() }, parents, problems, accepted)
         }

@@ -19,6 +19,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -98,10 +101,19 @@ fun GeneratedCards(factory: TabFactory?, tab: ConfigTab?, highlight: ConfigEntry
     for (card in generatedCards(factory, tab)) GeneratedCard(factory, card, highlight)
 }
 
+/**
+ * CONFIG-5: one form card of the plan (a snapshot-driven dialog), lit when it is [highlight] or the card [highlightKey]
+ * (a search hit that has no hand-written section). A card that replaces a section keeps its `config-section-*` tag.
+ */
 @Composable
-private fun GeneratedCard(factory: TabFactory, card: ConfigCard, highlight: ConfigEntry?) {
+fun PlanFormCard(factory: TabFactory, card: PlanCard, highlight: ConfigEntry?, highlightKey: String?) {
+    GeneratedCard(factory, ConfigCard(card.module, card.declaration), highlight, highlightKey)
+}
+
+@Composable
+private fun GeneratedCard(factory: TabFactory, card: ConfigCard, highlight: ConfigEntry?, highlightKey: String? = null) {
     val entry = card.replaces()
-    val lit = entry != null && entry == highlight
+    val lit = (entry != null && entry == highlight) || highlightKey == "${card.node}/${card.declaration.group}"
     val requester = remember { BringIntoViewRequester() }
     LaunchedEffect(lit) { if (lit) requester.bringIntoView() }
     val tag = entry?.let { CONFIG_SECTION_TAG_PREFIX + it.name } ?: "$GENERATED_CARD_TAG_PREFIX${card.node}/${card.declaration.group}"
@@ -113,7 +125,7 @@ private fun GeneratedCard(factory: TabFactory, card: ConfigCard, highlight: Conf
     ) {
         Text(card.title, fontWeight = FontWeight.Bold, fontSize = 13.sp)
         card.applies?.let { Text(it, color = Palette.Muted, fontSize = 11.sp) }
-        val editable = factory.config.load == NodeConfigLoad.LOADED
+        val editable = factory.config.load == NodeConfigLoad.LOADED && !card.declaration.locked
         for (f in card.fields) GeneratedField(factory, card, f, editable)
     }
 }
@@ -126,7 +138,13 @@ private fun GeneratedField(factory: TabFactory, card: ConfigCard, f: ConfigField
     val scope = rememberCoroutineScope()
     val value: JsonElement? = factory.resolvedConfig.json(node, f.key)
     val own = factory.config.own(node, f.key)
-    fun write(v: JsonElement?) { scope.launch { factory.config.set(node, f.key, v) } }
+    // CONFIG-5: a value its type's rule refuses is not written; the reason shows under the editor.
+    var problem by remember(tag, value) { mutableStateOf<String?>(null) }
+    fun write(v: JsonElement?) {
+        val why = if (v == null) null else factory.fieldTypes.validate(f, v)
+        problem = why
+        if (why == null) scope.launch { factory.config.set(node, f.key, v) }
+    }
     val declared = DeclaredField(node, card.module, card.declaration.group, f)
     Column(Modifier.fillMaxWidth().testTag(GENERATED_FIELD_TAG_PREFIX + tag), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(f.label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
@@ -169,8 +187,9 @@ private fun GeneratedField(factory: TabFactory, card: ConfigCard, f: ConfigField
                         write(JsonArray((if (o in picked) picked - o else f.options.filter { it in picked || it == o }).map(::JsonPrimitive)))
                     }
                 }
-                else -> Chip(value?.toString() ?: "unset")
+                else -> factory.fieldTypes[f.type]?.let { RegisteredEditor(factory, f, value, editable, ::write) } ?: Chip(value?.toString() ?: "unset")
             }
+            problem?.let { Chip(it, Palette.Danger) }
             if (editable && own?.setBy == ConfigSetBy.USER) {
                 TextButton({ write(null) }, Modifier.testTag(NODE_FIELD_RESET_TAG_PREFIX + tag).semantics { contentDescription = "Reset ${f.label}" }) { Text("Reset") }
             }
