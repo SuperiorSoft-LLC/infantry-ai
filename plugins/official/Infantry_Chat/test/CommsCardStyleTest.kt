@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.chat
 
 import com.superiorsoftllc.agenthq.ui.model.MessageOrigin
 import kotlin.test.Test

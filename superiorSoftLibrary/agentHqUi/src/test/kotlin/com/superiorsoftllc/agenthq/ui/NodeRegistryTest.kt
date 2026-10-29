@@ -36,6 +36,7 @@ import com.superiorsoftllc.agenthq.ui.plugin.NodeRegistry
 import com.superiorsoftllc.agenthq.ui.plugin.TabContainers
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import com.superiorsoftllc.agenthq.ui.plugin.TabProvider
+import com.superiorsoftllc.agenthq.ui.shell.blocks.SETTINGS_SLOT
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -152,10 +153,10 @@ class NodeRegistryTest {
         val config = NodeRegistry.host(TabFactory(coreAndGit), "infantry.shell.config")!!
         assertTrue(config.locked)
         assertEquals(
-            listOf("settings", "limits", "roles", "voice", "incomingSound", "questions", "plugins", "modules", "registry", "secrets", "pair", "about", "updates", "serverUpdate", "logs").map { "infantry.shell.config.$it" },
+            listOf("settings", "limits", "roles", "voice", "incomingSound", "questions", "plugins", "modules", "registry", "secrets", "pair", "about", "updates", "serverUpdate", "logs").map { "infantry.shell.config.$it" }.let { it.take(1) + SETTINGS_SLOT + it.drop(1) },
             config.children.map { it.id },
         )
-        assertEquals(List(6) { false } + List(9) { true }, config.children.map { it.locked })
+        assertEquals(List(7) { false } + List(9) { true }, config.children.map { it.locked })
         assertFalse(NodeRegistry.host(TabFactory(coreAndGit), "infantry.shell.config.settings")!!.locked)
     }
     /** S4d: a filled slot and the nodes under it are the filling module's (an official plugin), not the core tree's. */
