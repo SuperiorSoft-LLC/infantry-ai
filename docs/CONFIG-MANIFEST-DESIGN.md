@@ -404,6 +404,7 @@ Filed by CONFIG-2 as tickets in To Do (frontend/claude/sonnet), in this order; i
 | 5 | CONFIG-7 decoupling proof | the throwaway community plugin test of section 9 (settings + custom block, no shell change; remove jar = gone); Acme_Hello `greeting` |
 | 6 | CONFIG-8 daemon sections + frames | `daemon.config`, `config_schema/values/set/changed`, `SettingsService` falls back to declared validator, contract bump; unsigned remote = read-only |
 | 7 | CONFIG-9 wasm/Android generation + classes | `GeneratedConfig.JSON` from the module list; `classes` type; per-platform pass |
+| 8 | CONFIG-10 settings surface is replaceable | section 12: slot `infantry.shell.settings`, `replaces` key, guard test; after CONFIG-5 |
 
 Each phase ships with the default 32 shots unchanged (the generated card must match the old section pixel for pixel or the
 baseline is updated deliberately in that ticket).
@@ -500,6 +501,76 @@ Open for the owner (structure, see 0a): (a) new table `config_manifest` vs a res
 
 Still open (none blocks phase 1): whether `config_manifest` is one row per host (this doc's pick, because wasm/Android lists
 differ) or one global row; whether the portrait image stays a `block` field or becomes a `file` type.
+
+## 12. Replacing the settings plugin (CONFIG-10, owner requirement 2026-10-28)
+
+**Requirement.** The configuration UI is itself a plugin, so a user must be able to redesign or replace it with another plugin
+that renders the same unified config JSON (the `ConfigSnapshot` of section 2 + `ResolvedConfig`). The data contract is the only
+coupling: the surface reads the snapshot and writes `node_config` rows through `NodeConfigState.set`; it owns no data.
+
+**What is already possible (read from `TabFactory.kt`, `NodeRegistry.kt`, `CoreShell.kt`, 2026-10-29).**
+- *Settings tab host* (`Infantry_Settings`, tab `infantry.settings`, centre strip): it is an ordinary tab. A tab can be replaced
+  through a preference, and a module's shell override (`shell` in module.json, `UiRegistrar.shell`, modes replace/wrap) can
+  replace or wrap its tree. A replacement plugin can therefore take over the Settings tab today.
+- *Fills* (`UiRegistrar.fill`, module.json `fills`): fill an **empty shell slot** of `CoreShell.slots` with a block tree. Refused
+  for a community module (`only a core module fills a shell slot`), refused for a node outside `CoreShell.slots`, one fill per
+  slot (the second is skipped). A composition fill (`fills[].layout`) is open to a community module with an `allowOverride`
+  grant for the slot.
+- *`implementations`* (`UiRegistrar.implementation(registry, key, value)`, config field type `implementation`): lets a user pick
+  among registered implementations of a registry per config value; the right mechanism for "which surface" once a registry exists.
+- *Not possible today:* the Config **dialog** (`ConfigDialog`, frame, search, Done, the locked trust sections) is core, not a
+  slot, and `ConfigEntry`/`ConfigTab` are hard-wired to it. Only the sections that are already slots (`CONFIG_OWNED_SECTION_SLOTS`,
+  `infantry.shell.config.*`) are replaceable. So the whole surface cannot be swapped until CONFIG-5.
+
+**Design (additive; old manifests keep working).**
+1. A new optional shell slot id `infantry.shell.settings` ("settings surface") is added to `CoreShell.slots`. The dialog frame
+   (title, lifetime note, Done, the locked trust sections) stays core; the *body* (tab strip + cards) is the slot.
+2. CONFIG-5's generated dialog body becomes the **default fill**, registered by `Infantry_Settings` as
+   `fills: [{ "node": "infantry.shell.settings" }]` (a `GeneratedSettingsBlock` that reads the snapshot). No other manifest changes.
+3. A replacement is a plugin whose own fill of the same node wins. Fill precedence today is first-wins; to allow replacement
+   without removing the official plugin, add an optional `"replaces": "Infantry_Settings"` (or `"priority"`) key on a `fills`
+   entry: the replacing fill takes the slot, the default stays loaded but unused. Absent key = today's behaviour. Uninstalling the
+   replacement restores the default because the default fill is still registered.
+4. The replacement renders the same config: `scope.config()`/`ConfigTree.fields` for declarations and the same `FieldType`
+   editors (`NodeFields`), writes through `NodeConfigState.set`. Because values live in `node_config`, switching surface loses nothing.
+5. The locked trust sections (secrets, plugins, pair, updates, logs) are rendered by the core frame, never by the slot, so a
+   replacement cannot hide or weaken them.
+6. A community plugin may fill the slot only with a composition (`fills[].layout`) and an `allowOverride` grant, like any
+   other core slot; a coded fill stays core tier.
+
+**Worked example: `Acme_Settings` (throwaway, core-tier in the test, community with a grant in real use).**
+```jsonc
+// plugins/community/Acme_Settings/module.json
+{ "id": "Acme_Settings", "version": "1.0.0", "apiVersion": 2, "main": "com.acme.settings.AcmeSettingsPlugin",
+  "fills": [ { "node": "infantry.shell.settings", "replaces": "Infantry_Settings" } ] }
+```
+```kotlin
+class AcmeSettingsPlugin : Plugin {
+    override fun register(r: UiRegistrar) = r.fill("infantry.shell.settings", AcmeSettingsBlock)
+}
+object AcmeSettingsBlock : Block("infantry.shell.settings") {
+    @Composable override fun Render(scope: BlockScope) {
+        val tree = scope.configTree()                          // the same snapshot the default dialog reads
+        LazyColumn { // its own layout: one flat list, no tabs
+            tree.fields.filter { it.tab != null }.forEach { f ->
+                item { FieldType.editor(f).Edit(f, scope.config(f.node).raw(f.key)) { v -> scope.setConfig(f.node, f.key, v) } }
+            }
+        }
+    }
+}
+```
+Result: opening Settings shows the flat list; changing "Theme" writes the same `node_config` row the default dialog would, and the
+Appearance block still reacts. Removing the jar restores the generated default.
+
+**Phase.** CONFIG-10 follows CONFIG-5 (the generated body does not exist yet; the slot and guard test have nothing to attach to
+before it). Nothing in CONFIG-3/4 is blocked by it.
+1. Add the slot `infantry.shell.settings` and the optional `replaces` key (fill resolver in `TabFactory`, a `problems` line when the
+   named plugin is not loaded).
+2. `Infantry_Settings` fills it with the generated body (CONFIG-5 code moved behind the slot).
+3. Guard test `SettingsSurfaceReplaceableTest` (agentHqUi): (a) with only the default, the surface shows the Appearance tab;
+   (b) load a throwaway plugin that fills the slot: its test tag is present, the default's is not, and a write through it is read
+   back by `ResolvedConfig` and by the default editor path; (c) remove it: the default is back and the value persists.
+   No shell source names `Acme`.
 
 ## Files read
 
