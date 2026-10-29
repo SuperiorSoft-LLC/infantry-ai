@@ -39,7 +39,7 @@ class KnowledgeFirstTurnTest {
         val input = runner.processes.single().deliveredInput
         assertTrue(input.contains("$RENDERED\n\n$IDENTITY\n\n$TRAITS_BLOCK\n\n$FULL\n\nShip it\n\nthe body"), "traits, knowledge, ticket: ${input.take(3000)}")
         val sources = fixture.daemon.manager.get(sessionId)!!.contextSources
-        assertEquals(listOf("agenthq", "team", "instructions", "identity", "traits", "knowledge", "ticket"), sources.map { it.source })
+        assertEquals(listOf("agenthq", "team", "instructions", "identity", "traits", "knowledge", "ticket", "related"), sources.map { it.source })
         assertEquals(FULL.length, sources.single { it.source == "knowledge" }.chars)
     }
 

@@ -117,6 +117,7 @@ class CoreShellTreeTest {
             "    infantry.shell.config",
             "      infantry.shell.config.settings",
         ) + configSettings.map { "        infantry.shell.config.$it" } +
+            listOf("      infantry.shell.settings") + // CONFIG-10b: the empty settings slot
             configOwned.map { "      infantry.shell.config.$it" } +
             configTrust.map { "      infantry.shell.config.$it" } + listOf(
             "    infantry.shell.serverUpdate",
@@ -157,11 +158,14 @@ class CoreShellTreeTest {
             "infantry.shell.assistant", "infantry.shell.board", "infantry.shell.diff",
             "infantry.shell.sound", "infantry.shell.voice", "infantry.shell.questions", "infantry.shell.theme",
             "infantry.shell.config.limits", "infantry.shell.config.roles", "infantry.shell.config.voice",
-            "infantry.shell.config.incomingSound", "infantry.shell.config.questions", "infantry.shell.roles",
+            "infantry.shell.config.incomingSound", "infantry.shell.config.questions", "infantry.shell.roles", "infantry.shell.settings",
         )
         assertEquals(slots, CoreShell.slots)
-        assertEquals(slots, CoreShell.root.all().filterIsInstance<PlaceholderBlock>().filter { it.default == null }.map { it.id })
-        assertEquals(emptyList(), withRoles.baseRoot.all().filter { it is PlaceholderBlock && it.default == null }.map { it.id })
+        // CONFIG-10b: in tree order the settings slot sits right after the theme block (slots lists it last).
+        val treeOrder = slots.filter { it != "infantry.shell.settings" }.let { it.take(it.indexOf("infantry.shell.theme") + 1) + "infantry.shell.settings" + it.drop(it.indexOf("infantry.shell.theme") + 1) }
+        assertEquals(treeOrder, CoreShell.root.all().filterIsInstance<PlaceholderBlock>().filter { it.default == null }.map { it.id })
+        // CONFIG-10b: the settings slot is the one deliberately open slot; no official plugin in this fixture fills it.
+        assertEquals(listOf("infantry.shell.settings"), withRoles.baseRoot.all().filter { it is PlaceholderBlock && it.default == null }.map { it.id })
         assertEquals(emptyList(), withRoles.problems)
         assertEquals(
             setOf(
