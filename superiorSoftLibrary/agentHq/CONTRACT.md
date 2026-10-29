@@ -3168,3 +3168,7 @@ ADDITIVE + BEHAVIOURAL; `contract=1.133.0`. Owner rule 2026-10-25: no hard-coded
 - **CLI.** `agenthq settings [get [<key>]]`, `agenthq settings set <key> <value>`, `agenthq settings limits`.
 - **Pacing okProjected / hardStopPercent** stay fields of the `usage.pacing` rule (already a setting; `usage_set` / `agenthq settings set usage.pacing <json>`), not separate keys.
 - **Old clients.** They ignore the new keys and never send `limit_catalog`; nothing they send changes meaning.
+
+### Note (STATS-ACC-1) - `usage_meter` is also pushed, with per-request rows
+
+No version bump (additive). The daemon now pushes `usage_meter` to all clients whenever a turn is recorded (debounced to 4/s); `usage_meter_get` still answers on demand. New fields, all defaulting empty: `requests` (last 600 model requests: ts, sessionId, ticketId, role, harness, model, source, input, output, cacheRead, cacheWrite, context, cost; null = harness did not report), `events` (compactions), `prices` (per-million-token table from `usage-prices.json`). See docs/USAGE-STATS.md.

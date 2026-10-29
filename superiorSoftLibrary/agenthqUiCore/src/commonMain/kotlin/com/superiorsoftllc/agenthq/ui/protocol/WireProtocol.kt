@@ -2449,4 +2449,23 @@ data class UsageMeterRow(
 
 /** USAGE-1: the `usage_meter` answer. */
 @Serializable
-data class UsageMeterReport(val rows: List<UsageMeterRow> = emptyList(), val keepWeeks: Int = 0, val generatedAt: Long = 0)
+data class UsageMeterReport(
+    val rows: List<UsageMeterRow> = emptyList(), val keepWeeks: Int = 0, val generatedAt: Long = 0,
+    val requests: List<UsageMeterRequest> = emptyList(), val events: List<UsageMeterEvent> = emptyList(), val prices: List<UsageMeterPrice> = emptyList(),
+)
+
+/** STATS-ACC-1: one model request (a "turn"). A null field was not reported by the harness: show n/a, never 0. */
+@Serializable
+data class UsageMeterRequest(
+    val ts: Long, val sessionId: String, val ticketId: String? = null, val role: String, val harness: String, val model: String? = null,
+    val source: String = "", val input: Long? = null, val output: Long? = null, val cacheRead: Long? = null, val cacheWrite: Long? = null,
+    val context: Long? = null, val cost: Double? = null,
+)
+
+/** STATS-ACC-1: a compaction / context rotation the harness announced. */
+@Serializable
+data class UsageMeterEvent(val ts: Long, val sessionId: String, val ticketId: String? = null, val harness: String, val kind: String, val trigger: String? = null, val tokensBefore: Long? = null)
+
+/** STATS-ACC-1: USD per million tokens for model ids containing [match], from the daemon's config (usage-prices.json). */
+@Serializable
+data class UsageMeterPrice(val match: String, val input: Double, val output: Double, val cacheRead: Double, val cacheWrite: Double)
