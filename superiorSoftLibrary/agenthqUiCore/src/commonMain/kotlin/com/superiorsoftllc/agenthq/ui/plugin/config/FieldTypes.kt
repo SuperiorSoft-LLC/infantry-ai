@@ -3,6 +3,7 @@ package com.superiorsoftllc.agenthq.ui.plugin.config
 import androidx.compose.runtime.Composable
 import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldTypes
+import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldValidator
 import com.superiorsoftllc.agenthq.ui.shell.parseConfigColor
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -80,6 +81,8 @@ class FieldTypes(private val types: Map<String, RegisteredFieldType> = emptyMap(
                     if (field.options.isNotEmpty() && items.any { it == null || it !in field.options }) "Not all among: ${field.options.joinToString()}" else null
                 }
                 ConfigFieldTypes.TEXT -> if (value is JsonPrimitive) null else "Not text"
+                ConfigFieldTypes.CLASSES, ConfigFieldTypes.LIST ->
+                    runCatching { ConfigFieldValidator.validate(field, value) }.exceptionOrNull()?.message?.let { it.substringAfter("' ", it).replaceFirstChar(Char::uppercase) }
                 else -> null
             }
         }

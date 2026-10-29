@@ -31,6 +31,8 @@ data class ConfigDeclaration(
     val locked: Boolean = false,
     /** CONFIG-8: set by the host, never trusted from a module.json: a daemon field from an unsigned (community) plugin is shown but cannot be edited. */
     val readOnly: Boolean = false,
+    /** CONFIG-9: the platforms (`desktop`, `android`, `web`) this group exists on; null = all. The compile-time list drops it elsewhere. */
+    val platforms: List<String>? = null,
 )
 
 /**
@@ -61,7 +63,17 @@ data class ConfigFieldDeclaration(
     val order: Int = 0,
     /** CONFIG-4: where the user's override lives: `device` (this host's ui prefs) or `daemon`; null = today's `node_config`. */
     val scope: String? = null,
+    /** CONFIG-9: the platforms this field exists on; null = all. */
+    val platforms: List<String>? = null,
+    /** CONFIG-9: a `classes` field's slots, each with the allow-list of style tokens the block's author owns. */
+    val slots: Map<String, ConfigClassSlot> = emptyMap(),
+    /** CONFIG-9: a `list` field's item: a field (`{type:"text"}`); its [key] is ignored. Null = text. */
+    val item: ConfigFieldDeclaration? = null,
 )
+
+/** CONFIG-9: one slot of a `classes` field. An empty [tokens] means free text (stored, ignored unless the block knows it). */
+@Serializable
+data class ConfigClassSlot(val tokens: List<String> = emptyList(), val default: String? = null)
 
 /** CONFIG-4: the override scopes a field may declare. */
 object ConfigScopes {
@@ -83,7 +95,11 @@ object ConfigFieldTypes {
     const val RADIO = "radio"
     /** CONFIG-3: `"#RRGGBB"` or `"#AARRGGBB"`. */
     const val COLOR = "color"
-    val BUILT_IN = setOf(TEXT, NUMBER, CHECKBOX, SELECT, MULTI_SELECT, IMPLEMENTATION, TOGGLE, RADIO, COLOR)
+    /** CONFIG-9: `{ "<slot>": "<style token string>" }`, tokens space-separated, each in the slot's allow-list. */
+    const val CLASSES = "classes"
+    /** CONFIG-9: a JSON array whose items are checked against the field's `item`. */
+    const val LIST = "list"
+    val BUILT_IN = setOf(TEXT, NUMBER, CHECKBOX, SELECT, MULTI_SELECT, IMPLEMENTATION, TOGGLE, RADIO, COLOR, CLASSES, LIST)
 }
 
 /** Who wrote a stored value: the merged JSON tree on first load, or the user from the configuration view. */
@@ -179,6 +195,25 @@ object ConfigFieldValidator {
                 prim!!
             }
             ConfigFieldTypes.TEXT, ConfigFieldTypes.IMPLEMENTATION -> { text(); prim!! }
+            ConfigFieldTypes.CLASSES -> {
+                val obj = value as? kotlinx.serialization.json.JsonObject
+                require(obj != null && obj.values.all { it is kotlinx.serialization.json.JsonPrimitive && it.isString }) { "setting '$name' must be an object of strings" }
+                for ((slot, v) in obj) {
+                    val declared = field.slots[slot]
+                    require(field.slots.isEmpty() || declared != null) { "setting '$name' has no slot '$slot'" }
+                    val bad = (v as kotlinx.serialization.json.JsonPrimitive).content.split(' ').filter { it.isNotEmpty() }
+                        .firstOrNull { declared != null && declared.tokens.isNotEmpty() && it !in declared.tokens }
+                    require(bad == null) { "setting '$name' slot '$slot' has no token '$bad'" }
+                }
+                obj
+            }
+            ConfigFieldTypes.LIST -> {
+                val arr = value as? kotlinx.serialization.json.JsonArray
+                require(arr != null) { "setting '$name' must be an array" }
+                val item = field.item ?: ConfigFieldDeclaration(name, ConfigFieldTypes.TEXT)
+                arr.forEach { validate(item.copy(key = name), it) }
+                arr
+            }
             else -> value
         }
     }

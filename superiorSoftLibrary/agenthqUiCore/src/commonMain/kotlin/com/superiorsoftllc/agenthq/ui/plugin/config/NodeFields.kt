@@ -39,6 +39,9 @@ import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
 import com.superiorsoftllc.agenthq.ui.shell.parseConfigColor
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import androidx.compose.foundation.layout.Row
+import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldDeclaration
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -103,6 +106,8 @@ fun NodeFields(factory: TabFactory, node: String, fields: List<DeclaredField>, e
                             write(JsonArray((if (o in picked) picked - o else f.field.options.filter { it in picked || it == o }).map(::JsonPrimitive)))
                         }
                     }
+                    ConfigFieldTypes.CLASSES -> ClassesEditor(f, tag, value, can, ::write)
+                    ConfigFieldTypes.LIST -> ListEditor(f, tag, value, can, ::write)
                     ConfigFieldTypes.IMPLEMENTATION -> {
                         val registry = f.field.registry.orEmpty()
                         val current = (value as? JsonPrimitive)?.content
@@ -203,6 +208,54 @@ internal fun TextEditor(f: DeclaredField, tag: String, value: JsonElement?, enab
         },
         Modifier.testTag(NODE_FIELD_SAVE_TAG_PREFIX + tag), enabled = enabled && draft != shown && problem == null,
     ) { Text("Save") }
+}
+
+/**
+ * CONFIG-9: a `classes` field: one row per slot. A slot with a token allow-list offers exactly those tokens (multi-pick);
+ * a slot with none is free text. A token outside the list is refused by [ConfigFieldValidator], so it never reaches a block.
+ */
+@Composable
+internal fun ClassesEditor(f: DeclaredField, tag: String, value: JsonElement?, enabled: Boolean, write: (JsonElement?) -> Unit) {
+    val current = (value as? JsonObject).orEmpty()
+    fun tokens(slot: String) = (current[slot] as? JsonPrimitive)?.content.orEmpty().split(' ').filter { it.isNotEmpty() }
+    fun put(slot: String, text: String) = write(JsonObject(current + (slot to JsonPrimitive(text))))
+    for ((slot, decl) in f.field.slots) {
+        val picked = tokens(slot)
+        Text(slot, fontSize = 11.sp)
+        if (decl.tokens.isNotEmpty()) {
+            for (t in decl.tokens) Option("$tag/$slot", t, t, t in picked, enabled) {
+                put(slot, decl.tokens.filter { (it in picked) != (it == t) }.joinToString(" "))
+            }
+        } else {
+            var draft by remember(tag, slot, picked) { mutableStateOf(picked.joinToString(" ")) }
+            OutlinedTextField(
+                value = draft, onValueChange = { draft = it }, singleLine = true, enabled = enabled,
+                modifier = Modifier.widthIn(min = 160.dp, max = 320.dp).testTag("$NODE_FIELD_INPUT_TAG_PREFIX$tag/$slot").semantics { contentDescription = "${f.field.label} $slot" },
+            )
+            TextButton({ put(slot, draft.trim()) }, Modifier.testTag("$NODE_FIELD_SAVE_TAG_PREFIX$tag/$slot"), enabled = enabled && draft.trim() != picked.joinToString(" ")) { Text("Save") }
+        }
+    }
+}
+
+/** CONFIG-9: a `list` field of text items: each row removable, one box adds. Items are checked against the field's `item` before they are written. */
+@Composable
+internal fun ListEditor(f: DeclaredField, tag: String, value: JsonElement?, enabled: Boolean, write: (JsonElement?) -> Unit) {
+    val items = (value as? JsonArray).orEmpty()
+    var draft by remember(tag, items) { mutableStateOf("") }
+    val item = (f.field.item ?: ConfigFieldDeclaration(f.key, ConfigFieldTypes.TEXT)).copy(key = f.key)
+    val problem = if (draft.isBlank()) null else FieldTypes.validateBuiltIn(item, JsonPrimitive(draft))
+    items.forEachIndexed { i, it ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text((it as? JsonPrimitive)?.content ?: it.toString(), fontSize = 11.sp)
+            TextButton({ write(JsonArray(items.filterIndexed { j, _ -> j != i })) }, Modifier.testTag("$NODE_FIELD_SAVE_TAG_PREFIX$tag/remove-$i"), enabled = enabled) { Text("Remove") }
+        }
+    }
+    OutlinedTextField(
+        value = draft, onValueChange = { draft = it }, singleLine = true, enabled = enabled, isError = problem != null,
+        modifier = Modifier.widthIn(min = 160.dp, max = 320.dp).testTag(NODE_FIELD_INPUT_TAG_PREFIX + tag).semantics { contentDescription = f.field.label },
+    )
+    if (problem != null) Chip(problem, Palette.Danger)
+    TextButton({ write(JsonArray(items + JsonPrimitive(draft))) }, Modifier.testTag(NODE_FIELD_SAVE_TAG_PREFIX + tag), enabled = enabled && draft.isNotBlank() && problem == null) { Text("Add") }
 }
 
 /**

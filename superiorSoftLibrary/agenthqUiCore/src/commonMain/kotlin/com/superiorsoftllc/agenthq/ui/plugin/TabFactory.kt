@@ -22,6 +22,7 @@ import com.superiorsoftllc.agenthq.plugin.api.Tier
 import com.superiorsoftllc.agenthq.ui.plugin.config.ChildrenControl
 import com.superiorsoftllc.agenthq.ui.plugin.config.ConfigSource
 import com.superiorsoftllc.agenthq.ui.plugin.config.ConfigTree
+import com.superiorsoftllc.agenthq.ui.plugin.config.CompiledConfig
 import com.superiorsoftllc.agenthq.ui.plugin.config.CoreConfig
 import com.superiorsoftllc.agenthq.ui.plugin.config.FieldType
 import com.superiorsoftllc.agenthq.ui.plugin.config.FieldTypes
@@ -788,10 +789,14 @@ class TabFactory(
         for ((tree, tab) in tabTreeTabs) parents.getOrPut(tree) { tab }
         val problems = mutableListOf<String>()
         val core = ConfigTree.parse(CoreConfig.JSON, problems, CORE_SHELL_MODULE)
+        // CONFIG-9: a compiled-in build (web, Android) also reads the build step's GeneratedConfig; the desktop reads module.json.
+        val generated = if (loadsAtRunTime) emptyMap() else CompiledConfig.declarations(problems)
         val sources = modules.map { m ->
             val name = m.manifest.name
             val own = m.manifest.tabs.map { it.id }.toSet()
-            ConfigSource(name, m.tier, m.manifest.config) { node ->
+            val declared = m.manifest.config.flatMap { d -> d.fields.map { d.node to it.key } }.toSet()
+            val extra = generated[name].orEmpty().map { d -> d.copy(fields = d.fields.filter { (d.node to it.key) !in declared }) }.filter { it.fields.isNotEmpty() || it.block != null }
+            ConfigSource(name, m.tier, m.manifest.config + extra) { node ->
                 m.tier != Tier.COMMUNITY || node in own || node.startsWith("$name.") || node in allowOverride(name) || node in allowInject(name)
             }
         }

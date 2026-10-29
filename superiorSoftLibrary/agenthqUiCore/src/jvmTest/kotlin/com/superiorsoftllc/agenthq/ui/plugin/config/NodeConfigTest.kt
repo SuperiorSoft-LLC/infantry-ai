@@ -119,15 +119,15 @@ class NodeConfigTest {
     fun `a second declaration of a key and a community module's stranger node are refused with a line`() {
         val again = ConfigDeclaration("infantry.shell.board", "Board", listOf(field("showEmpty", "checkbox", false)))
         val stranger = ConfigDeclaration("infantry.shell.footer", "Footer", listOf(field("x", "text", "y")))
-        val own = ConfigDeclaration("Acme_Comm.thing", "Acme", listOf(field("x", "list", "red")))
+        val own = ConfigDeclaration("Acme_Comm.thing", "Acme", listOf(field("x", "gauge", "red")))
         val tree = factory(module("Acme_Board", Tier.CORE, board), module("Acme_Two", Tier.CORE, again), module("Acme_Comm", Tier.COMMUNITY, stranger, own)).configTree
         assertEquals("Acme_Board", tree.field("infantry.shell.board", "showEmpty")?.module)
         assertTrue(tree.problems.any { "Acme_Two: config key showEmpty on infantry.shell.board is already declared by Acme_Board" in it }, tree.problems.toString())
         assertTrue(tree.problems.any { "Acme_Comm: config for infantry.shell.footer refused" in it }, tree.problems.toString())
         assertNull(tree.fields["infantry.shell.footer"])
         // An unknown type is kept (shown read-only) with a line.
-        assertEquals("list", tree.field("Acme_Comm.thing", "x")?.field?.type)
-        assertTrue(tree.problems.any { "unknown type list" in it })
+        assertEquals("gauge", tree.field("Acme_Comm.thing", "x")?.field?.type)
+        assertTrue(tree.problems.any { "unknown type gauge" in it })
     }
 
     @Test

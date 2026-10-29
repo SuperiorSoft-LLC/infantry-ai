@@ -904,6 +904,8 @@ interface ConfigValues {
     fun boolean(key: String): Boolean?
     /** P1 step 2: a list of strings (a `multiSelect`); null where unset or not a list of strings. */
     fun strings(key: String): List<String>? = null
+    /** CONFIG-9: a `classes` field's tokens for [slot] (space-separated in the value); null where [key] is unset or has no such slot. */
+    fun classes(slot: String, key: String = "classes"): List<String>? = null
     /** CONFIG-3: a `color` field as 0xAARRGGBB (`"#RRGGBB"` is opaque); null where unset or not a colour. */
     fun color(key: String): Long? = parseConfigColor(string(key))
     /**
