@@ -427,13 +427,13 @@ shell, `ConfigEntry`, `CoreConfig` or any official plugin changes.
   "blockTypes": [ { "id": "acme.weather.badge", "slot": "infantry.header.right" } ],
   "fieldTypes": [ "stationPicker" ],          // a custom settings editor: optional, the author's own
   "config": [
-    { "node": "acme.weather.badge", "tab": "Weather", "group": "Display", "order": 1,
+    { "node": "Acme_Weather.badge", "tab": "Weather", "group": "Display", "order": 1,
       "title": "Weather badge", "applies": "The header badge.", "keywords": ["temperature","city"],
       "fields": [
         { "key": "city",  "type": "text",   "label": "City", "default": "Oslo", "scope": "device", "description": "Shown in the badge." },
         { "key": "unit",  "type": "radio",  "label": "Unit", "default": "C", "scope": "device", "options": ["C","F"] },
         { "key": "every", "type": "number", "label": "Refresh (min)", "default": 15, "min": 1, "max": 120, "scope": "device" } ] },
-    { "node": "acme.weather.badge", "tab": "Weather", "group": "Advanced", "order": 2,
+    { "node": "Acme_Weather.badge", "tab": "Weather", "group": "Advanced", "order": 2,
       "fields": [ { "key": "station", "type": "stationPicker", "label": "Station", "scope": "device" } ] } ] }
 ```
 ```kotlin
