@@ -192,7 +192,7 @@ class ConfigGeneratedDialogUiTest {
             waitForIdle()
             // The hand-written section is the card: same tag as before, drawn once.
             onAllNodesWithTag(CONFIG_SECTION_TAG_PREFIX + ConfigEntry.ABOUT.name).assertCountEquals(1)
-            assertEquals(true, tabs.configTree.declarations.filter { it.declaration.block != null }.all { it.declaration.locked })
+            assertEquals(true, tabs.configTree.declarations.filter { d -> d.declaration.block != null && ConfigEntry.entries.firstOrNull { configSectionNode(it) == d.declaration.block } !in com.superiorsoftllc.agenthq.ui.plugin.config.ConfigPlan.MOVED }.all { it.declaration.locked })
         }
     }
 

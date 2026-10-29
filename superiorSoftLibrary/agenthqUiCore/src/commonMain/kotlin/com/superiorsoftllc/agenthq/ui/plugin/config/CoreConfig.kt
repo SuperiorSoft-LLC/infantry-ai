@@ -25,6 +25,19 @@ object CoreConfig {
         ConfigEntry.ABOUT, ConfigEntry.UPDATES, ConfigEntry.SERVER_UPDATE, ConfigEntry.LOGS,
     )
 
+    /**
+     * CONFIG-6: the two sections the shell itself owns (which agents the sidebar lists; the daemon's keep-alive), declared
+     * here as `block` cards. Lifecycle's value is the daemon's (`keepAlive.minutes`); `scope:"daemon"` waits for CONFIG-8.
+     */
+    val SHELL_OWNED: List<ConfigEntry> = listOf(ConfigEntry.AGENT_SCOPE, ConfigEntry.LIFECYCLE)
+
+    private fun shellOwnedJson(): String = SHELL_OWNED.joinToString(",\n") { e ->
+        val node = configSectionNode(e)
+        fun q(t: String) = JsonPrimitive(t).toString()
+        """  { "node": ${q(node)}, "group": ${q(e.title)}, "title": ${q(e.title)}, "tab": ${q(e.tab.label)}, "order": ${(ConfigPlan.MOVED.indexOf(e) + 1) * 10},""" +
+            """ "keywords": [${e.keywords.joinToString(", ") { q(it) }}], "block": ${q(node)} }"""
+    }
+
     private fun trustJson(): String = TRUST.joinToString(",\n") { e ->
         val node = configSectionNode(e)
         fun q(t: String) = JsonPrimitive(t).toString()
@@ -32,5 +45,5 @@ object CoreConfig {
             """ "applies": ${q(e.applies)}, "keywords": [${e.keywords.joinToString(", ") { q(it) }}], "block": ${q(node)}, "locked": true }"""
     }
 
-    val JSON: String = BASE + ",\n" + trustJson() + "\n]"
+    val JSON: String = BASE + ",\n" + shellOwnedJson() + ",\n" + trustJson() + "\n]"
 }

@@ -25,7 +25,18 @@
           "type": "checkbox",
           "label": "Group the setup tabs under Settings"
         }
-      ]
+      ],
+      "title": "Tab groups",
+      "tab": "Appearance",
+      "order": 60,
+      "keywords": [
+        "settings",
+        "tabs",
+        "group",
+        "sub-tabs",
+        "strip"
+      ],
+      "block": "infantry.shell.config.tabGroups"
     }
   ]
 }
