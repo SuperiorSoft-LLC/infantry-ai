@@ -37,7 +37,7 @@ class AssistantOverridesUiTest {
             ModuleManifest("Acme_Assistant", "1.0.0", author = "Acme", license = "NOASSERTION", shell = listOf(decl)),
             tier = Tier.COMMUNITY, shell = mapOf("acme" to override),
         )
-        val f = TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Assistant", decl.nodeId, decl.name, decl.mode)))
+        val f = TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.InfantryAgents + com.superiorsoftllc.agenthq.plugins.official.assistant.InfantryAssistant + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Assistant", decl.nodeId, decl.name, decl.mode)))
         assertEquals(emptyList(), f.problems)
         return f
     }
