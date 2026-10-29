@@ -195,6 +195,9 @@ object NoChat : ChatContext {
 /**
  * RUNTIME-22: the shared chat panel, drawn by the official Infantry_Chat, for a host that stays in the shell until its own
  * split (the Assistant popup, F8). Null while Infantry_Chat is not loaded (the host then draws nothing).
+ * HOUSEKEEP-1: kept on purpose. A composable with parameters cannot travel through a fill (fills are parameterless
+ * blocks/sections), and Infantry_Assistant must not depend on Infantry_Chat's classes, so this shell-owned holder is the
+ * one hand-off between the two plugins. Revisit when the Assistant gets its own chat block.
  */
 object ChatPanels {
     var panel: (@androidx.compose.runtime.Composable (sessionId: String, controller: com.superiorsoftllc.agenthq.ui.net.Controller, modifier: androidx.compose.ui.Modifier, chat: com.superiorsoftllc.agenthq.ui.ChatPanelState, allowSpawn: Boolean, transcriptTag: String) -> Unit)? = null
