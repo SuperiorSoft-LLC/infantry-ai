@@ -81,14 +81,20 @@ class TriggerDaemonTest {
         assertEquals("backend", session.agentId)
         assertTrue(session.unattended, "a trigger's run is unattended")
 
-        // The re-arm is pushed the same way -- the trigger's own `trigger` frame once its run ends.
-        // Scan from the SAME mark: the save's own "armed" push sits behind it, so the first "armed"
-        // after the mark is the re-arm and cannot be missed by the stub finishing before a later mark.
-        fixture.client.awaitAfter(mark, "the trigger re-armed after the run succeeded") { frame ->
+        // The re-arm is pushed the same way -- the trigger's own `trigger` frame once its run ends. The frames after
+        // the fire are armed (the fire's own push), armed, running, running, armed: so an "armed" frame alone is NOT the
+        // re-arm. Wait for "running" first, then for the "armed" that follows it (TRIGGER-RACE-1: matching the early one
+        // asserted on a run still in flight, which read as a BUSY session after a "successful" run).
+        val running = fixture.client.awaitAfter(mark, "the trigger running its ticket") { frame ->
+            frame.type == Envelope.TRIGGER && trigger(frame).let { it.id == trigger.id && it.state == "running" }
+        }
+        val afterRunning = fixture.client.frames.indexOf(running) + 1
+        fixture.client.awaitAfter(afterRunning, "the trigger re-armed after the run succeeded") { frame ->
             frame.type == Envelope.TRIGGER && trigger(frame).let { it.id == trigger.id && it.state == "armed" }
         }
-        // Reaching "armed" is only possible from a run that ended SUCCEEDED (IDLE, exit 0 at that moment). The session
-        // may be re-prompted right after, so its live state is not asserted here; the exit code is final.
+        // The re-arm follows the run's Exit, which follows the session's IDLE + exit 0 (settle), so this is a fact to
+        // assert, not a wait.
+        assertEquals("IDLE", fixture.daemon.manager.get(session.id)?.state?.name, "a successful run leaves its session IDLE")
         assertEquals(0, fixture.daemon.manager.get(session.id)?.lastExitCode, "a successful run exits 0")
 
         assertEquals(listOf("started"), events(fixture, trigger.id).map { it.disposition })
