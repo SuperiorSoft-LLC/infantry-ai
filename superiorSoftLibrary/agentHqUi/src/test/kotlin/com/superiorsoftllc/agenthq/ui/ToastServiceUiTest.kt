@@ -55,7 +55,7 @@ class ToastServiceUiTest {
             ModuleManifest("Acme_Toast", "1.0.0", author = "Acme", license = "NOASSERTION", shell = decls),
             tier = Tier.COMMUNITY, shell = ovs.associate { it.name to it.override },
         )
-        val f = TabFactory(CoreModules.all + module, shellOverrides = decls.map { AcceptedShellOverride("Acme_Toast", it.nodeId, it.name, it.mode) })
+        val f = TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.InfantryAgents + com.superiorsoftllc.agenthq.plugins.official.attention.InfantryAttention + module, shellOverrides = decls.map { AcceptedShellOverride("Acme_Toast", it.nodeId, it.name, it.mode) })
         assertEquals(emptyList(), f.problems)
         return f
     }

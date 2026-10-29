@@ -16,7 +16,7 @@ fun main(args: Array<String>) {
 
 /**
  * S6: `--safe-mode` starts the shell with every community module off (and a banner that can remove one), so a plugin
- * that breaks the window never locks the owner out. Same as AGENTHQ_SAFE_MODE=1.
+ * that breaks the window never locks the owner out. Same as the safe-mode environment switch.
  */
 fun safeModeFlag(args: Array<String>) {
     if ("--safe-mode" in args) System.setProperty(com.superiorsoftllc.agenthq.plugin.host.PluginFolders.SAFE_MODE_PROPERTY, "true")
