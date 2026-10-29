@@ -91,12 +91,12 @@ class ConfigPlanTest {
         assertEquals(listOf(ConfigEntry.LOGS), plan.search("diagnostics").map { it.entry })
     }
 
-    @Test fun `the nine trust sections are declared in core's config, locked, as block cards`() {
+    @Test fun `the ten trust sections (POLICY-1 added policy) are declared in core's config, locked, as block cards`() {
         val problems = mutableListOf<String>()
         val decls = ConfigTree.parse(CoreConfig.JSON, problems, "core")
         assertEquals(emptyList(), problems)
         val trust = decls.filter { it.block != null && it.locked }
-        assertEquals(9, trust.size)
+        assertEquals(10, trust.size)
         assertTrue(trust.all { it.locked && it.tab != null && it.fields.isEmpty() })
         for (e in CoreConfig.TRUST) {
             val d = trust.single { it.block == configSectionNode(e) }

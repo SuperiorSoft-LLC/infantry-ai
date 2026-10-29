@@ -47,6 +47,7 @@ import com.superiorsoftllc.agenthq.ui.ConfigEntry
 import com.superiorsoftllc.agenthq.ui.ConfigTab
 import com.superiorsoftllc.agenthq.ui.Palette
 import com.superiorsoftllc.agenthq.ui.RadioButton
+import com.superiorsoftllc.agenthq.ui.handCursor
 import com.superiorsoftllc.agenthq.ui.Switch
 import com.superiorsoftllc.agenthq.ui.TextButton
 import com.superiorsoftllc.agenthq.ui.plugin.TabFactory
@@ -171,7 +172,7 @@ private fun GeneratedField(factory: TabFactory, card: ConfigCard, f: ConfigField
                     for (o in f.options) {
                         val picked = (value as? JsonPrimitive)?.content == o
                         Row(
-                            Modifier.selectable(picked, enabled = editable, role = Role.RadioButton) { write(JsonPrimitive(o)) }.testTag("$NODE_FIELD_OPTION_TAG_PREFIX$tag/$o"),
+                            Modifier.selectable(picked, enabled = editable, role = Role.RadioButton) { write(JsonPrimitive(o)) }.handCursor(editable).testTag("$NODE_FIELD_OPTION_TAG_PREFIX$tag/$o"),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             RadioButton(picked, null, enabled = editable)

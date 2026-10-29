@@ -39,7 +39,7 @@ class CoreShellTreeTest {
     )
     /** RUNTIME-19: the sections official plugins own, one slot each beside `.settings`. */
     private val configOwned = listOf("limits", "roles", "voice", "incomingSound", "questions")
-    private val configTrust = listOf("plugins", "modules", "registry", "secrets", "pair", "about", "updates", "serverUpdate", "logs")
+    private val configTrust = listOf("policy", "plugins", "modules", "registry", "secrets", "pair", "about", "updates", "serverUpdate", "logs")
 
     @Test fun `the core tree keeps every node id, in order, each unique`() {
         val header = "infantry.shell.header"
@@ -174,6 +174,8 @@ class CoreShellTreeTest {
                 "infantry.shell.serverUpdate", "infantry.shell.config", "infantry.shell.configEntry",
                 "infantry.shell.dropConsent", "infantry.shell.safeMode",
                 // S3: the trust half of Configuration (plugins, secrets, pairing, updates, about, logs).
+                // POLICY-1: the Settings Policy card, first of the trust sections.
+                "infantry.shell.config.policy",
                 "infantry.shell.config.plugins", "infantry.shell.config.modules", "infantry.shell.config.secrets",
                 // P1 (f60f4d97): where plugins are registered (step 2: where a registered child is turned off).
                 "infantry.shell.config.registry",
