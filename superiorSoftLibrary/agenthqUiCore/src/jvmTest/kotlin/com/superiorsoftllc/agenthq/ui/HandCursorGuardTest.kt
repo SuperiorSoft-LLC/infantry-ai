@@ -65,7 +65,10 @@ class HandCursorGuardTest {
         // FIX-CONFIG-1: 1140 / 104 after STATS-ACC-1 (usage meter) and CONFIG-3/9 (generated cards, compile-time config) added +18 Text, +2 OutlinedTextField.
         // CONFIG-11: +2 Text in the daemon-config section of the Settings dialog.
         // DEMO-MERGE-1: +2 Text from the ported demo-build UI (demo-lock and picker labels).
-        "Text" to 1144,
+        // QA-FIX-2: +14 display-only Text (none clickable): POLICY-1 ConfigPolicySection.kt +11 (status, choice label and
+        // description, rule lines; its selectable row now carries the hand) and ActionGate.kt +1 (label inside the wrapped
+        // TextButton), STALL-2 Sidebar.kt +1 (watch-state label), UsageMeterPane.kt +1 (job-watcher counters).
+        "Text" to 1158,
         "DropdownMenu" to 9,
         "OutlinedTextField" to 104,
         "BasicTextField" to 2,

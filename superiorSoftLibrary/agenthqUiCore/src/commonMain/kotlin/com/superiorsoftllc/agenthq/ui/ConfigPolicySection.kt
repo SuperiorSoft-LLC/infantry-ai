@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -70,6 +69,7 @@ internal fun PolicyBody(policy: PolicyWire, live: Boolean, onSelect: (String) ->
                 val selected = choice.id == policy.preset
                 Row(
                     Modifier.selectable(selected = selected, enabled = enabled, role = Role.RadioButton) { if (!selected) onSelect(choice.id) }
+                        .handCursor(enabled)
                         .testTag(POLICY_CHOICE_TAG_PREFIX + choice.id)
                         .semantics { contentDescription = "Policy ${choice.label.ifBlank { choice.id }}" }
                         .padding(vertical = 2.dp),
