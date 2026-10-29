@@ -44,6 +44,13 @@ fun registerDist(name: String, mode: String) = tasks.register<Sync>(name) {
     from(layout.buildDirectory.dir("compileSync/wasmJs/main/${mode.replaceFirstChar { it.lowercase() }}Executable/kotlin"))
     from(layout.buildDirectory.dir("compose/skiko-for-web-runtime"))
     from(layout.buildDirectory.dir("processedResources/wasmJs/main"))
+    // index.html imports agentHqWeb.mjs; a bundled agentHqWeb.js (webpack UMD) would 404 on any static server.
+    val outDir = layout.buildDirectory.dir(name)
+    doLast {
+        check(outDir.get().file("agentHqWeb.mjs").asFile.exists()) {
+            "$name: agentHqWeb.mjs missing (index.html needs it); the wasmJs output was not the raw ES module"
+        }
+    }
 }
 
 // Fast, unminified: for working on the client.
