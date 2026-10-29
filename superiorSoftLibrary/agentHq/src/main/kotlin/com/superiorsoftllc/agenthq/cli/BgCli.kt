@@ -49,6 +49,10 @@ internal object BgCli {
             val notifyTimeout: Int? = null,
             /** Internal: set on the detached wrapper a `--notify` run starts, so both agree on the id. */
             val jobId: String? = null,
+            /** STALL-1: `--attached`: watched (`--notify`) but run in the caller's foreground, not detached. */
+            val attached: Boolean = false,
+            /** STALL-1: `--shim <name>`: started by the PATH shim for [command]'s argv0; the shim dir is skipped when resolving. */
+            val shim: String? = null,
         ) : Parsed {
             /** The options again, as the detached wrapper's arguments (before `--`). */
             fun optionArgs(): List<String> = buildList {
@@ -60,8 +64,12 @@ internal object BgCli {
                 notifyTail?.let { add("--notify-tail"); add(it.toString()) }
                 notifyTimeout?.let { add("--notify-timeout"); add(it.toString()) }
                 jobId?.let { add("--job-id"); add(it) }
+                if (attached) add("--attached")
+                shim?.let { add("--shim"); add(it) }
             }
         }
+        /** STALL-1: `agenthq unwatched --reason <text> -- <cmd...>`: the explicit opt-out; [reason] is required. */
+        data class Unwatched(val reason: String, val command: List<String>) : Parsed
         data class Wait(val id: String, val timeoutMin: Long?) : Parsed
         data class Show(val verb: String, val id: String?) : Parsed
         data class Bad(val message: String) : Parsed
@@ -84,6 +92,8 @@ internal object BgCli {
                 var tail: Int? = null
                 var timeout: Int? = null
                 var jobId: String? = null
+                var attached = false
+                var shim: String? = null
                 var i = 0
                 while (i < opts.size) {
                     when (opts[i]) {
@@ -104,12 +114,25 @@ internal object BgCli {
                             ?: return Parsed.Bad("--notify-timeout expects minutes (0 = never)")
                         "--job-id" -> jobId = opts.getOrNull(++i)?.takeIf { it.matches(Regex("[A-Za-z0-9-]{1,40}")) }
                             ?: return Parsed.Bad("--job-id expects an id")
+                        "--attached" -> { attached = true; notify = true }
+                        "--shim" -> shim = opts.getOrNull(++i)?.takeIf { it.isNotBlank() } ?: return Parsed.Bad("--shim expects a program name")
                         else -> return Parsed.Bad("bg run: unknown option '${opts[i]}' (put the command after --)")
                     }
                     i++
                 }
                 if (command.isEmpty()) Parsed.Bad("bg run expects a command after --, e.g. agenthq bg run --name gate -- gradlew test")
-                else Parsed.Run(name, command, keep, notify, notifyOn, defaults, tail, timeout, jobId)
+                else Parsed.Run(name, command, keep, notify, notifyOn, defaults, tail, timeout, jobId, attached, shim)
+            }
+            "unwatched" -> {
+                val split = rest.indexOf("--")
+                val opts = if (split >= 0) rest.take(split) else rest
+                val command = if (split >= 0) rest.drop(split + 1) else emptyList()
+                val reason = if (opts.size == 2 && opts[0] == "--reason") opts[1].trim() else ""
+                when {
+                    reason.isEmpty() -> Parsed.Bad("unwatched needs a reason: agenthq unwatched --reason \"<why>\" -- <cmd...>")
+                    command.isEmpty() -> Parsed.Bad("unwatched expects a command after --")
+                    else -> Parsed.Unwatched(reason, command)
+                }
             }
             "wait" -> {
                 val id = rest.firstOrNull()?.takeIf { !it.startsWith("--") } ?: return Parsed.Bad("bg wait expects a job id")
@@ -197,14 +220,33 @@ internal object BgCli {
         }
         val session = getenv(AccessPolicy.SESSION_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }
         val cwd = File(System.getProperty("user.dir"))
+        // STALL-1: a shim call inside a watched command (npm running npm), or with the watch off, runs the real program.
+        if (parsed is Parsed.Run && parsed.shim != null &&
+            (!getenv(WATCHED_ENV).isNullOrBlank() || getenv(WATCH_ENV)?.trim()?.lowercase() == "off" || session == null)
+        ) {
+            val command = resolveCommand(parsed.command, cwd, withoutShimDir(getenv)) ?: run {
+                err.appendLine("error: cannot find '${parsed.command.first()}' on PATH (outside the watch shims)")
+                return 127
+            }
+            return try {
+                ProcessBuilder(command).directory(cwd).inheritIO().start().waitFor()
+            } catch (e: Exception) {
+                err.appendLine("error: ${e.message}")
+                127
+            }
+        }
         return try {
             when (parsed) {
                 is Parsed.Run ->
-                    if (parsed.notify && parsed.jobId == null) detach(parsed, session, globals, getenv, out, err, cwd)
+                    if (parsed.notify && parsed.jobId == null && !parsed.attached) detach(parsed, session, globals, getenv, out, err, cwd)
                     else runJob(parsed, session, getenv, out, err, cwd) {
                         val s = open()
                         Reporter({ req -> send(s, session, req) }, { s.close() })
                     }
+                is Parsed.Unwatched -> unwatched(parsed, session, getenv, err, cwd) {
+                    val s = open()
+                    Reporter({ req -> send(s, session, req) }, { s.close() })
+                }
                 is Parsed.Wait -> waitFor(parsed, session, out, err, open)
                 is Parsed.Show -> show(parsed, session, out, err, open)
                 is Parsed.Bad -> 2
@@ -299,11 +341,70 @@ internal object BgCli {
         return 0
     }
 
+    /** STALL-1: the env a watched command's children get, so a nested shim call runs the real program directly. */
+    const val WATCHED_ENV = "AGENTHQ_WATCHED"
+    /** STALL-1: the PATH dir of the shims; skipped when a shim resolves the real program. */
+    const val SHIM_DIR_ENV = "AGENTHQ_SHIM_DIR"
+    /** STALL-1: `off` = the session's shims run the real program unwatched (the owner's `limits.watch.forced` = 0). */
+    const val WATCH_ENV = "AGENTHQ_WATCH"
+    /** STALL-1: seconds between the runner's `still running` lines (default 60; tests set it short). */
+    const val BEAT_LINE_ENV = "AGENTHQ_WATCH_BEAT_SECONDS"
+    /** How long the runner waits for the output pipe's EOF after the command exited before it reports anyway. */
+    const val EOF_GRACE_MS = 2_000L
+
+    /** Children a command may leave behind on purpose; named, never waited on (a Gradle or Kotlin daemon). */
+    val DETACHED_DAEMON = Regex("(?i)GradleDaemon|org\\.gradle\\.launcher\\.daemon|KotlinCompileDaemon|kotlin-daemon")
+
+    /** The END sentinel the runner writes after the process wait returns: `[agenthq:done exit=0 elapsed=1m2s bytes=0]`. */
+    fun endLine(exit: Int?, elapsedMs: Long, bytes: Long): String =
+        "[agenthq:done exit=${exit ?: "unknown"} elapsed=${fmtElapsed(elapsedMs)} bytes=$bytes]"
+
+    fun fmtElapsed(ms: Long): String {
+        val s = (ms / 1000).coerceAtLeast(0)
+        return if (s < 60) "${s}s" else "${s / 60}m${s % 60}s"
+    }
+
+    /** Gradle (wrapper or not) gets `--console=plain` unless the caller chose a console: rich output hides progress from a log. */
+    fun withPlainConsole(cmd: List<String>): List<String> {
+        val base = File(cmd.firstOrNull() ?: return cmd).name.lowercase().substringBefore('.')
+        if (base != "gradlew" && base != "gradle") return cmd
+        if (cmd.drop(1).any { it.startsWith("--console") }) return cmd
+        return listOf(cmd[0], "--console=plain") + cmd.drop(1)
+    }
+
+    /** [getenv] without the shim dir on PATH, so a shim never resolves to itself. */
+    fun withoutShimDir(getenv: (String) -> String?): (String) -> String? {
+        val dir = getenv(SHIM_DIR_ENV)?.takeIf { it.isNotBlank() } ?: return getenv
+        val norm = { d: String -> File(d.trim().trim('"')).absoluteFile.normalize().path.lowercase() }
+        val skip = norm(dir)
+        return { k ->
+            val v = getenv(k)
+            if ((k == "PATH" || k == "Path") && v != null) {
+                v.split(File.pathSeparatorChar).filter { it.isNotBlank() && norm(it) != skip }.joinToString(File.pathSeparator)
+            } else v
+        }
+    }
+
+    /** Counts the bytes read through it: the runner's `bytes=` (0 = the command printed nothing). */
+    private class CountingStream(input: java.io.InputStream) : java.io.FilterInputStream(input) {
+        @Volatile var count = 0L
+        override fun read(): Int = super.read().also { if (it >= 0) count++ }
+        override fun read(b: ByteArray, off: Int, len: Int): Int = super.read(b, off, len).also { if (it > 0) count += it }
+    }
+
     /**
      * Run [p]'s command in the foreground (or as the detached `--notify` wrapper): tee its output to the log, register it
      * through [connect] and report its end. A command that cannot start still writes the log line and the `.exit` file
      * (127), and, when there is a session, registers the job and reports `done` 127 so the `--notify` mail goes out:
      * a detached wrapper's caller is gone and would otherwise idle forever (ticket bbb6120c).
+     *
+     * STALL-1 (ticket 802c64d5), the definitive end: the command's END is the return of the PROCESS WAIT ([Process.waitFor];
+     * the runner is its parent and gets the real exit code), never the EOF of its output pipe. The pipe is read on its own
+     * thread: EOF there means only that every writer closed it. So (i) a silent command that exits gives EOF with 0 bytes
+     * at once and is reported `bytes=0`; (ii) a command whose child inherited the pipe and outlives it never gives EOF, and
+     * is still reported done [EOF_GRACE_MS] after its exit, naming the child; (iii) a command that closes its output and keeps
+     * running gives EOF while alive: an `eof` event, not a done. The log ALWAYS has a START line, a `still running` line
+     * every [BEAT_LINE_ENV] seconds (60) and the END sentinel [endLine], so even a silent command has output.
      */
     internal fun runJob(
         p: Parsed.Run,
@@ -312,7 +413,7 @@ internal object BgCli {
         out: Appendable,
         err: Appendable,
         cwd: File,
-        spawn: (List<String>) -> Process = { ProcessBuilder(it).directory(cwd).redirectErrorStream(true).start() },
+        spawn: ((List<String>) -> Process)? = null,
         connect: () -> Reporter,
     ): Int {
         val id = p.jobId ?: UUID.randomUUID().toString().take(8)
@@ -320,11 +421,14 @@ internal object BgCli {
         val exitFile = File(logDir(), "$id.exit").also { it.delete() }
         val label = p.name ?: p.command.joinToString(" ").take(80)
         val notify = if (!p.notify) null else BgNotify(p.notifyTail, patternsFor(p, getenv), p.notifyTimeout)
-        val job = BgJob(id, label, ProcessHandle.current().pid(), System.currentTimeMillis(), logPath = log.absolutePath, keep = p.keep, notify = notify)
+        val beatLineMs = (getenv(BEAT_LINE_ENV)?.toLongOrNull()?.takeIf { it > 0 } ?: 60L) * 1000L
+        val started = System.currentTimeMillis()
+        var job = BgJob(id, label, ProcessHandle.current().pid(), started, logPath = log.absolutePath, keep = p.keep, notify = notify, attached = p.attached)
         // No session (run outside an agent) or no daemon: the command still runs; only the flag is missing.
         var reporter: Reporter? = null
         var connected = false
-        fun call(req: BgJobRequest) {
+        val callLock = Any()
+        fun call(req: BgJobRequest): Unit = synchronized(callLock) {
             if (session == null) return
             if (!connected) {
                 connected = true
@@ -339,10 +443,17 @@ internal object BgCli {
             try { r.send(req) } catch (e: Exception) { err.appendLine("warning: bg_job: ${e.message}") }
         }
         fun close() = runCatching { reporter?.close?.invoke() }
+        val resolveEnv = if (p.shim != null) withoutShimDir(getenv) else getenv
+        val doSpawn = spawn ?: { cmd: List<String> ->
+            ProcessBuilder(cmd).directory(cwd).redirectErrorStream(true).also { b ->
+                b.environment()[WATCHED_ENV] = id
+                if (p.attached) b.redirectInput(ProcessBuilder.Redirect.INHERIT)
+            }.start()
+        }
         val child = try {
-            val command = resolveCommand(p.command, cwd, getenv)
+            val command = resolveCommand(p.command, cwd, resolveEnv)
                 ?: throw java.io.IOException("Cannot run program \"${p.command.first()}\": not found on PATH or in ${cwd.absolutePath}")
-            spawn(command)
+            doSpawn(withPlainConsole(command))
         } catch (e: Exception) {
             // `bg wait` must not block forever on a command that never started, and a `--notify` caller must get its mail.
             val line = "$CANNOT_START ${p.command.joinToString(" ")}: ${e.message}"
@@ -350,41 +461,135 @@ internal object BgCli {
             runCatching { exitFile.writeText("127") }
             err.appendLine("error: $line; job NOT started")
             call(BgJobRequest("beat", job))
-            call(BgJobRequest("done", jobId = id, exitCode = 127, tail = listOf(line)))
+            call(BgJobRequest("done", jobId = id, exitCode = 127, tail = listOf(line), bytes = 0L, eof = true))
             close()
             return 127
         }
+        job = job.copy(cmdPid = child.pid())
         if (session == null) err.appendLine("warning: AGENTHQ_SESSION_ID is not set, running unregistered")
-        out.appendLine("bg job $id: $label (log ${log.absolutePath})")
+        // A shim call's harness should see only the command's own output on stdout; the runner's own lines go to stderr.
+        val own: Appendable = if (p.shim != null) err else out
+        own.appendLine("bg job $id: $label (log ${log.absolutePath})")
+        val writer = log.bufferedWriter()
+        val keepLines = p.notifyTail ?: 200
+        val tail = ArrayDeque<String>()
+        val ioLock = Any()
+        var ended = false
+        fun emit(line: String, runner: Boolean) = synchronized(ioLock) {
+            runCatching { writer.appendLine(line); writer.flush() }
+            (if (runner) own else out).appendLine(line)
+            if (!runner) {
+                tail.addLast(line)
+                if (tail.size > keepLines) tail.removeFirst()
+            }
+        }
+        emit("[agenthq:start pid=${child.pid()} at=${java.time.Instant.ofEpochMilli(started)} cmd=${p.command.joinToString(" ").take(80)}]", runner = true)
         call(BgJobRequest("beat", job))
+        // Runner stopped gracefully (Ctrl-C, SIGTERM): still leave an END, with the exit unknown.
+        val hook = Thread {
+            synchronized(ioLock) {
+                if (!ended) runCatching {
+                    writer.appendLine("[agenthq:done exit=unknown elapsed=${fmtElapsed(System.currentTimeMillis() - started)} reason=runner stopped]")
+                    writer.flush()
+                }
+            }
+        }
+        runCatching { Runtime.getRuntime().addShutdownHook(hook) }
+        val counting = CountingStream(child.inputStream)
+        val reader = Thread {
+            runCatching { counting.bufferedReader().forEachLine { emit(it, runner = false) } }
+            if (child.isAlive) {
+                emit("[agenthq:eof bytes=${counting.count} process=running]", runner = true)
+                call(BgJobRequest("eof", jobId = id, bytes = counting.count))
+            }
+        }.apply { isDaemon = true; name = "agenthq-bg-reader"; start() }
+        // Children are snapshotted while the command lives: once it has exited, its tree can no longer be asked for.
+        val lastKids = java.util.concurrent.atomic.AtomicReference<List<ProcessHandle>>(emptyList())
         val beat = Thread {
             try {
+                var nextBeat = System.currentTimeMillis() + BEAT_MS
+                var nextLine = started + beatLineMs
                 while (true) {
-                    Thread.sleep(BEAT_MS)
-                    call(BgJobRequest("beat", job))
+                    // Often at first: a short-lived command may start its child and exit within a second.
+                    Thread.sleep(if (System.currentTimeMillis() - started < 5_000) 200 else 1_000)
+                    runCatching { child.descendants().toList().takeIf { it.isNotEmpty() || !child.isAlive }?.let(lastKids::set) }
+                    val now = System.currentTimeMillis()
+                    if (now >= nextLine) {
+                        emit("[agenthq:running elapsed=${fmtElapsed(now - started)}]", runner = true)
+                        nextLine += beatLineMs
+                    }
+                    if (now >= nextBeat) {
+                        call(BgJobRequest("beat", job))
+                        nextBeat = now + BEAT_MS
+                    }
                 }
             } catch (_: InterruptedException) {
             }
         }.apply { isDaemon = true; start() }
-        val keepLines = p.notifyTail ?: 200
-        val tail = ArrayDeque<String>()
-        child.inputStream.bufferedReader().use { r ->
-            log.bufferedWriter().use { w ->
-                r.forEachLine { line ->
-                    w.appendLine(line)
-                    w.flush()
-                    out.appendLine(line)
-                    tail.addLast(line)
-                    if (tail.size > keepLines) tail.removeFirst()
-                }
-            }
-        }
+        runCatching { lastKids.set(child.descendants().toList()) }
         val code = child.waitFor()
         beat.interrupt()
+        reader.join(EOF_GRACE_MS)
+        val eof = !reader.isAlive
+        // Plus any live process still naming the command as its parent (started after the last snapshot).
+        val orphans = runCatching {
+            ProcessHandle.allProcesses().filter { h -> h.isAlive && h.parent().map { it.pid() == child.pid() }.orElse(false) }.toList()
+        }.getOrDefault(emptyList())
+        val survivors = (lastKids.get() + orphans).distinctBy { it.pid() }.filter { it.isAlive }
+            .filterNot { DETACHED_DAEMON.containsMatchIn(it.info().commandLine().orElse("")) }
+            .map { "${it.pid()} ${it.info().commandLine().orElse(it.info().command().orElse("?")).take(80)}" }
+        val bytes = counting.count
         runCatching { exitFile.writeText(code.toString()) }
-        call(BgJobRequest("done", jobId = id, exitCode = code, tail = tail.toList()))
+        if (!eof) {
+            emit("[agenthq:note output still open after exit: ${survivors.size} child process(es) hold it${survivors.firstOrNull()?.let { ": $it" } ?: ""}]", runner = true)
+        }
+        emit(endLine(code, System.currentTimeMillis() - started, bytes), runner = true)
+        synchronized(ioLock) { ended = true; runCatching { writer.close() } }
+        runCatching { Runtime.getRuntime().removeShutdownHook(hook) }
+        val lines = synchronized(ioLock) { tail.toList() }
+        call(BgJobRequest("done", jobId = id, exitCode = code, tail = lines, bytes = bytes, eof = eof, survivors = survivors))
         close()
-        out.appendLine("bg job $id exited $code")
+        own.appendLine("bg job $id exited $code")
+        return code
+    }
+
+    /**
+     * STALL-1 `agenthq unwatched --reason <text> -- <cmd...>`: the explicit opt-out. The command runs with the caller's own
+     * stdio (no log, no tee), but it is still REGISTERED with its reason, so the daemon logs and counts the opt-out, shows
+     * `watch OFF: <reason>`, tells the PM once, and the heartbeat and stall detector still cover it.
+     */
+    internal fun unwatched(
+        p: Parsed.Unwatched,
+        session: String?,
+        getenv: (String) -> String?,
+        err: Appendable,
+        cwd: File,
+        spawn: (List<String>) -> Process = { ProcessBuilder(it).directory(cwd).inheritIO().start() },
+        connect: () -> Reporter,
+    ): Int {
+        val command = resolveCommand(p.command, cwd, withoutShimDir(getenv)) ?: run {
+            err.appendLine("error: unwatched: cannot find '${p.command.first()}' on PATH or in ${cwd.absolutePath}")
+            return 127
+        }
+        val id = UUID.randomUUID().toString().take(8)
+        val job = BgJob(
+            id, p.command.joinToString(" ").take(80), ProcessHandle.current().pid(), System.currentTimeMillis(),
+            notify = BgNotify(), attached = true, optOut = p.reason.take(200),
+        )
+        val reporter = if (session == null) null else runCatching(connect).getOrNull()
+        fun call(req: BgJobRequest) { runCatching { reporter?.send?.invoke(req) } }
+        call(BgJobRequest("beat", job))
+        val child = spawn(command)
+        val beat = Thread {
+            try {
+                while (true) { Thread.sleep(BEAT_MS); call(BgJobRequest("beat", job.copy(cmdPid = child.pid()))) }
+            } catch (_: InterruptedException) {
+            }
+        }.apply { isDaemon = true; start() }
+        val code = child.waitFor()
+        beat.interrupt()
+        call(BgJobRequest("done", jobId = id, exitCode = code))
+        runCatching { reporter?.close?.invoke() }
         return code
     }
 

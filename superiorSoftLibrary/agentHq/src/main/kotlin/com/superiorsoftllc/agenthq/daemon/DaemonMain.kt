@@ -652,6 +652,8 @@ class AgentHqDaemon(
              * Only [fromEnv] (the real daemon) passes the state dir's file, so a test never migrates the operator's state.
              */
             storyMigrationFile: File? = null,
+            /** STALL-1: where the watch shims are written; null (tests) = no shims. Only [fromEnv] passes the state dir's. */
+            shimDir: File? = null,
             /**
              * PORT-1: `AGENTHQ_PORT_STRICT=true` refuses to start on a taken [port] ([PortInUseException]) instead of
              * falling back to a free one. See [DaemonPort].
@@ -726,6 +728,10 @@ class AgentHqDaemon(
             // prompt carries can authenticate, AND the daemon's agent-facing mail base as AGENTHQ_MAIL_BASE,
             // so a running agent can INITIATE a handoff to a colleague (its own session id is added per run
             // by SessionManager). Absent a token, only the mail base is added.
+            // STALL-1: the watch shims, rewritten at every start (the CLI launcher may have moved). Null = could not write.
+            val watchShimDir: File? = shimDir?.let { dir ->
+                runCatching { com.superiorsoftllc.agenthq.runner.WatchShims.install(dir, com.superiorsoftllc.agenthq.runner.WatchShims.launcher(agentHqBin)) }
+            }?.onFailure { System.err.println("[agentHq] watch shims not written: ${it.message}") }?.getOrNull()
             val childEnv = buildMap {
                 // BUG-G2: `agenthq knowledge` (P10-K9) must resolve inside every session, so the CLI's bin
                 // dir goes first on the child's PATH (and is exported as AGENTHQ_BIN).
@@ -803,7 +809,15 @@ class AgentHqDaemon(
                 defaultWorkingDir = workingDir,
                 instanceId = instanceId,
                 // Ticket 66153313: every worker run gets the build limits (priority, Gradle workers, forks) of the settings.
-                buildEnv = { settings.buildLimits().sessionEnv(System.getenv("GRADLE_OPTS")) },
+                // STALL-1 (ticket 802c64d5): and the watch shims first on PATH (gradle/mvn/npm/yarn/pnpm run watched), unless
+                // the owner turned the forced watch off (`limits.watch.forced` = 0).
+                buildEnv = {
+                    settings.buildLimits().sessionEnv(System.getenv("GRADLE_OPTS")) +
+                        com.superiorsoftllc.agenthq.runner.WatchShims.sessionEnv(
+                            watchShimDir, childEnv["PATH"] ?: System.getenv("PATH"),
+                            forced = settings.limit(LimitRegistry.WATCH_FORCED) != 0L,
+                        )
+                },
                 // No-hard-coded-limits S2: the watchdog and silent sweeper read limits.watchdog.* live.
                 limitSource = settings::limit,
                 idFactory = sessionIds,
@@ -1418,6 +1432,11 @@ class AgentHqDaemon(
                 ticketOf = { id -> store.transaction { store.tickets.get(id) } },
                 idleNoticeMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.IDLE_NOTICE_MINUTES), LimitRegistry.IDLE_NOTICE_MINUTES) },
             ).also { it.start() }
+            // STALL-1: who hears about a worker's long wait or stall: its ticket's starter, else the `pm` role.
+            fun stallPmOf(s: com.superiorsoftllc.agenthq.session.SessionRecord?): String? {
+                val ticket = s?.ticketId?.let { id -> runCatching { store.transaction { store.tickets.get(id) } }.getOrNull() }
+                return ticket?.startedBy?.takeIf { it.isNotBlank() && it != s?.id } ?: s?.let { "pm" }
+            }
             // BG-NOTIFY (ticket 245a7d31): `bg run --notify` jobs mail their session on exit / pattern / timeout, waking it.
             val bgNotifier = com.superiorsoftllc.agenthq.mailbox.BgJobNotifier(
                 jobs = { manager.list().flatMap { r -> r.bgJobs.map { r.id to it } } },
@@ -1425,8 +1444,25 @@ class AgentHqDaemon(
                 defaultTailLines = { settings.limit(LimitRegistry.BG_NOTIFY_TAIL_LINES).toInt() },
                 defaultTimeoutMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.BG_NOTIFY_TIMEOUT_MINUTES), LimitRegistry.BG_NOTIFY_TIMEOUT_MINUTES) },
                 patternGraceMs = { settings.limit(LimitRegistry.BG_NOTIFY_PATTERN_GRACE_SECONDS) * 1000L },
+                quietMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.WATCH_QUIET_MINUTES), LimitRegistry.WATCH_QUIET_MINUTES) },
+                heartbeatCapMs = { settings.limit(LimitRegistry.WATCH_HEARTBEAT_CAP_MINUTES) * 60_000L },
+                inTurn = { sid -> manager.get(sid)?.isBusy() == true },
+                pmOf = { sid -> stallPmOf(manager.get(sid)) },
             )
             manager.bgJobListener = bgNotifier
+            // STALL-1 item 5: idle or BUSY-but-silent ticket workers are nudged and their PM told; no model call, no kill.
+            val stallDetector = com.superiorsoftllc.agenthq.mailbox.StallDetector(
+                sessions = manager, send = mail::send,
+                ticketInProgress = { id -> store.transaction { store.tickets.get(id) }?.status == com.superiorsoftllc.agenthq.protocol.TicketStatus.IN_PROGRESS },
+                deliberateWait = { s ->
+                    mailbox.waiting().any { it.session == s.id } ||
+                        ownerQuestions.list().any { it.sessionId == s.id && it.state == com.superiorsoftllc.agenthq.protocol.QuestionStates.OPEN }
+                },
+                lastJobEndedAt = bgNotifier::lastEndedAt,
+                quietSeconds = bgNotifier::quietSeconds,
+                stallMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.WATCH_STALL_MINUTES), LimitRegistry.WATCH_STALL_MINUTES) },
+                pmOf = ::stallPmOf,
+            ).also { it.start() }
             // PIPELINE-WATCHDOG: derives per-agent pending/stalled/quiet state, nudges, then tells the PM and the owner.
             val agentWatchdog = com.superiorsoftllc.agenthq.mailbox.AgentWatchdog(
                 sessions = manager, mailbox = mailbox, send = mail::send, attention = attention,
@@ -1781,6 +1817,7 @@ class AgentHqDaemon(
             if (DaemonPort.strictFromEnv()) DaemonPort.choose(configuredPort(), host, strict = true)
             return build(
                 storyMigrationFile = File(stateDir(), "stories.json"),
+                shimDir = File(stateDir(), "shims"),
                 portFile = File(stateDir(), DaemonPort.FILE_NAME),
                 extraRoutes = extraRoutes,
             )
@@ -3432,8 +3469,17 @@ private suspend fun handleConnection(
                             require(sid != null && req.jobId != null) { "done expects a sessionId and a jobId" }
                             manager.bgJobDone(sid, req.jobId)?.let { job ->
                                 (manager.bgJobListener as? com.superiorsoftllc.agenthq.mailbox.BgJobNotifier)?.let { n ->
-                                    runCatching { n.done(sid, job, req.exitCode, req.tail) }
+                                    runCatching { n.done(sid, job, req.exitCode, req.tail, req.bytes, req.eof, req.survivors) }
                                         .onFailure { System.err.println("[agentHq] bg notify failed for ${job.id}: ${it.message}") }
+                                }
+                            }
+                        }
+                        "eof" -> {
+                            require(sid != null && req.jobId != null) { "eof expects a sessionId and a jobId" }
+                            manager.bgJobs(sid).firstOrNull { it.id == req.jobId }?.let { job ->
+                                (manager.bgJobListener as? com.superiorsoftllc.agenthq.mailbox.BgJobNotifier)?.let { n ->
+                                    runCatching { n.eof(sid, job, req.bytes) }
+                                        .onFailure { System.err.println("[agentHq] bg eof notice failed for ${job.id}: ${it.message}") }
                                 }
                             }
                         }
