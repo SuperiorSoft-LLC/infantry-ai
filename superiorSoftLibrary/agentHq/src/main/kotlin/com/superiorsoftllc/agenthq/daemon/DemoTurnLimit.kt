@@ -15,6 +15,8 @@ class DemoTurnLimit(
     val windowMillis: Long,
     private val file: File?,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** POLICY-1: the refusal code (the preset's `turnLimitCode`), declared a notice in `ready`. */
+    val code: String = PREFIX,
 ) {
     private val turns = HashMap<String, ArrayDeque<Long>>()
 
@@ -27,7 +29,7 @@ class DemoTurnLimit(
     fun refusal(client: String): String? {
         val now = clock()
         val used = turns[client]?.apply { removeAll { now - it >= windowMillis } }?.size ?: 0
-        return if (used >= perClient) "$PREFIX ${message()}" else null
+        return if (used >= perClient) "$code ${message()}" else null
     }
 
     /** One turn of [client] reached an agent. */

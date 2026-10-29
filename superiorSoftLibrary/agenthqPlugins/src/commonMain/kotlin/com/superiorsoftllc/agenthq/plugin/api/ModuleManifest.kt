@@ -101,6 +101,8 @@ data class ModuleManifest(
     val fieldTypes: List<String> = emptyList(),
     /** NS3 (docs/NORTH-STAR-DESIGN.md 1a, 4c): the daemon capabilities the module needs and the optional ones it wants. */
     val daemon: DaemonCapabilities? = null,
+    /** POLICY-1 (docs/POLICY.md section 1): the named actions the module's controls perform; a policy may turn each off. */
+    val actions: List<ActionDeclaration> = emptyList(),
 ) {
     /** NS3: the node ids of [fills]. */
     val fillNodes: List<String> get() = fills.map { it.node }

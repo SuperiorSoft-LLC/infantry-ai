@@ -207,6 +207,9 @@ private const val SESSION_REPLAY_REQUEST_TYPE = "replay_request"
 private const val SESSION_REPLAY_GAP_TYPE = "replay_gap"
 /** Ticket 9bf81983: the frames a demo visitor's turn limit counts (each makes an agent run). */
 private val DEMO_COUNTED_TURNS = setOf(Envelope.PROMPT, Envelope.RESUME, Envelope.MAIL_SEND)
+
+/** POLICY-1 (docs/POLICY.md): daemon -> client, the active policy (JSON PolicyWire); answers `policy_get` / `policy_set` too. */
+internal const val POLICY_FRAME = "policy"
 private const val SESSION_REPLAY_BUFFER_CAPACITY = 256
 private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
@@ -692,15 +695,19 @@ class AgentHqDaemon(
             sessionIds: () -> String = { UUID.randomUUID().toString() },
             /** ROGUE-1: free RAM for the process watch; the tab-shots renderer pins it so the host's RAM never adds a low-memory notice. */
             memory: com.superiorsoftllc.agenthq.session.MemorySource = com.superiorsoftllc.agenthq.session.OsMemorySource,
-            /** DEMO-LOCK (ticket 2f154f5f): `AGENTHQ_DEMO_LOCK=1`, read once here; off = nothing below consults it. */
-            demo: DemoLock = DemoLock.fromEnvironment(),
+            /**
+             * POLICY-1 (docs/POLICY.md): the ONE switch: which policy preset is active (env-pinned, the `AGENTHQ_DEMO_LOCK`
+             * shorthand, or the owner's Settings pick). Its seated lockdown is DEMO-LOCK's. A test passes its own.
+             */
+            policies: com.superiorsoftllc.agenthq.policy.PolicyRuntime = com.superiorsoftllc.agenthq.policy.PolicyRuntime.fromEnvironment(stateDir()),
         ): AgentHqDaemon {
             // SANDBOX-1: the scoped token sandboxed agents get instead of the owner token (in memory only, new every start).
             val agentToken = if (token != null) AgentFrames.newToken() else null
             val policy = AccessPolicy.of(host, token, agentToken = agentToken).let { base ->
-                // Ticket 9bf81983: the public visitor token is admitted ONLY under the demo lock (never in the normal app).
-                val visitor = demo.publicToken
-                if (demo.enabled && visitor != null) base.withDemoToken(visitor) else base
+                // Ticket 9bf81983: the public visitor token is admitted ONLY under a seated lock (never in the normal app).
+                // POLICY-1: decided at start; a Settings switch to a seated preset admits no visitor token until a restart.
+                val visitor = policies.lock.publicToken
+                if (policies.lock.enabled && visitor != null) base.withDemoToken(visitor) else base
             }
             // SEC-FIX-1: built once; refused when it equals the access token every agent is handed.
             val ownerCredential = OwnerCredential.forDaemon(ownerToken, token)
@@ -802,8 +809,9 @@ class AgentHqDaemon(
             // BUG-M2-11f: a new keep-alive value applies to the processes already kept, not only to the next launch.
             settings.onKeepAliveChanged = manager::lifecyclePolicyChanged
             // DEMO-RESTRICT (ticket f9e181af): the model allowlist and the daemon-wide working-session cap, read live.
-            manager.allowedModels = settings::allowedModels
-            manager.allowedRoles = settings::allowedRoles
+            // POLICY-1: the active preset's lists apply while the settings (and their env) are empty.
+            manager.allowedModels = { settings.allowedModels().takeIf { it.restricts } ?: com.superiorsoftllc.agenthq.settings.ModelAllowlist.parse(policies.current.allowedModels.joinToString(",")) }
+            manager.allowedRoles = { settings.allowedRoles().takeIf { it.restricts } ?: com.superiorsoftllc.agenthq.settings.ModelAllowlist.roles(policies.current.allowedRoles.joinToString(",")) }
             if (settings.allowedRoles().restricts) println("[agentHq] role allowlist in force: ${settings.allowedRoles().patterns.joinToString()}")
             manager.maxSessions = { settings.limitCap(LimitRegistry.MAX_SESSIONS) }
             if (settings.allowedModels().restricts) println("[agentHq] model allowlist in force: ${settings.allowedModels().patterns.joinToString()}")
@@ -1490,13 +1498,22 @@ class AgentHqDaemon(
                     "(runs closed ORPHANED, open pods INTERRUPTED)",
             )
 
-            // DEMO-LOCK: the demo project and its two sessions exist before anything is delivered or served.
-            demo.seed(projectStore, manager, agents)
-            // Ticket 9bf81983: each seeded session's first run starts now, composed like a visitor's first message.
-            demo.warmUp(manager, compose = { s, prompt ->
+            // DEMO-LOCK / POLICY-1: a seated preset's project and sessions exist before anything is delivered or served.
+            val seatFirstTurn = { s: com.superiorsoftllc.agenthq.session.SessionRecord, prompt: String ->
                 val instance = manager.instance(s.id)
                 firstTurn(instance, s.role, s.agentId, prompt, knowledge.section(s.projectId, s.role), skillsSource.section(instance))
-            })
+            }
+            policies.lock.seed(projectStore, manager, agents)
+            // Ticket 9bf81983: each seeded session's first run starts now, composed like a visitor's first message.
+            policies.lock.warmUp(manager, compose = seatFirstTurn)
+            // POLICY-1: a Settings switch re-seeds (idempotent) and opens or closes the session door; each connection is told itself.
+            policies.onChange { runtime ->
+                manager.demoLocked = false
+                runCatching { runtime.lock.seed(projectStore, manager, agents); runtime.lock.warmUp(manager, compose = seatFirstTurn) }
+                    .onFailure { System.err.println("[agentHq] policy '${runtime.current.id}': seating failed: ${it.message}") }
+                manager.demoLocked = runtime.lock.enabled
+                println("[agentHq] policy switched to '${runtime.current.id}'")
+            }
             // Deliver anything that was queued before the last shutdown to a session already at rest.
             mail.onStartup()
             // TRIGGER-NUDGE: only now may a schedule fire (a slot missed while down fires on this first pump).
@@ -1526,12 +1543,12 @@ class AgentHqDaemon(
                 install(WebSockets)
                 install(ContentNegotiation) { json() }
                 // Before routing, so a refused request never reaches a handler (the mailbox included).
-                installAccessPolicy(policy, webBundle::isAsset, demo)
+                installAccessPolicy(policy, webBundle::isAsset, currentLock = { policies.lock })
                 routing {
                     // Ticket 9bf81983: the demo's public visitor token, so a visitor lands connected (404 when none).
                     get(DemoLock.VISITOR_TOKEN_PATH) {
-                        val visitor = demo.publicToken
-                        if (demo.enabled && visitor != null && policy.hasDemoToken) {
+                        val visitor = policies.lock.publicToken
+                        if (policies.lock.enabled && visitor != null && policy.hasDemoToken) {
                             call.response.header(io.ktor.http.HttpHeaders.CacheControl, "no-store")
                             call.respondText(visitor)
                         } else call.respond(io.ktor.http.HttpStatusCode.NotFound, "no demo visitor token")
@@ -1584,7 +1601,7 @@ class AgentHqDaemon(
                     // CONFIG-8: `GET /config/schema` (+ `/config/values`), the HTTP twin of the config_schema / config_values frames.
                     daemonConfigRoutes(daemonConfig)
                     // Phase 6 agent-facing mail API: how a spawned CLI agent answers a delivered message.
-                    mailRoutes(mail, mailbox, demo::mailRefusal)
+                    mailRoutes(mail, mailbox) { request -> policies.lock.mailRefusal(request) }
                     // SERVER-UPDATE-3 (1.110.0): status / check / apply for the headless daemon's own updates.
                     updateRoutes(
                         updates ?: com.superiorsoftllc.agenthq.update.ServerUpdateService.fromEnvironment(
@@ -1675,7 +1692,7 @@ class AgentHqDaemon(
                             demoLock = demoLock,
                             daemonConfig = daemonConfig,
                             tier = call.attributes.getOrNull(ACCESS_TIER) ?: AccessTier.OWNER,
-                            demo = demo,
+                            policies = policies,
                         )
                     }
                 }
@@ -2263,8 +2280,11 @@ private suspend fun handleConnection(
     daemonConfig: DaemonConfig,
     /** SANDBOX-1: what this connection was admitted as; an AGENT (the scoped token) may send only [AgentFrames.ALLOWED]. */
     tier: AccessTier = AccessTier.OWNER,
-    /** DEMO-LOCK (ticket 2f154f5f): when on, every frame not on its allow-list is refused, for every tier. */
-    demo: DemoLock = DemoLock(false),
+    /**
+     * POLICY-1: the active policy preset gates every frame by its named action (its seated lockdown = DEMO-LOCK's, for every
+     * tier); this connection is sent the `policy` frame after `ready` and again on every switch.
+     */
+    policies: com.superiorsoftllc.agenthq.policy.PolicyRuntime = com.superiorsoftllc.agenthq.policy.PolicyRuntime(emptyList(), { null }, null, java.io.File(".")),
 ) {
     println("[agentHq] ws connected (provider=${manager.providerId})")
     // SEC-FIX-1: decided once, at the handshake, from what this connection presented.
@@ -2412,10 +2432,14 @@ private suspend fun handleConnection(
                 "instance=${identity.instance} since=${identity.historySince} " +
                 // BUILD-STAMP-1: additive key (no contract bump): the daemon's build string, e.g. 1.0.1+20261023.1432.e85b223.
                 "build=${com.superiorsoftllc.agenthq.update.BuildInfo.current}" +
-                // DEMO-LOCK: additive keys, only while the lock is on (the UI dims what the daemon refuses).
-                demo.readyFields(),
+                // DEMO-LOCK / POLICY-1: additive keys of the active preset, none in production (the UI dims what the daemon refuses).
+                policies.readyFields(),
         ),
     )
+    // POLICY-1: the active policy right after `ready`, and again on every switch (each connection its own canSwitch).
+    fun policyEnvelope() = Envelope(POLICY_FRAME, json.encodeToString(com.superiorsoftllc.agenthq.plugin.api.PolicyWire.serializer(), policies.wire(owner)))
+    outgoing.trySend(policyEnvelope())
+    val policySubscription = policies.onChange { outgoing.trySend(policyEnvelope()) }
     // Manually serialize sessions with SessionRecordSerializer to include computed `live` field
     val sessionsElements = manager.list().map { json.encodeToJsonElement(SessionRecordSerializer, it) }
     val sessionsJson = JsonArray(sessionsElements)
@@ -2467,26 +2491,28 @@ private suspend fun handleConnection(
     var spawnRefused: String? = null
     // BUG-G2d: the session the last `new` named as its origin; the session the next prompt creates is charged to it.
     var spawnOrigin: String? = null
-    // Ticket 9bf81983: under the demo lock, the client IP this connection's visitor turns are charged to.
-    val turnLimit = demo.turnLimit?.takeIf { demo.enabled }
-    val turnClient = turnLimit?.let {
-        DemoTurnLimit.clientIp(session.call.request.local.remoteAddress, session.call.request.headers["X-Forwarded-For"], demo.trustedProxies)
-    }.orEmpty()
     try {
         for (frame in session.incoming) {
             val text = (frame as? Frame.Text)?.readText() ?: continue
             val envelope = runCatching { json.decodeFromString(Envelope.serializer(), text) }.getOrNull()
                 ?: Envelope(Envelope.PROMPT, text)
-            // SEC-FIX-1: the one gate, before every branch below (the bare-text prompt and the replay included).
-            // The full DemoLock (seeded sessions, per-project reads, visitor turns) is stricter and replaces the plain frame list when it is on.
-            FrameGate.refusal(envelope.type, demoLock() && !demo.enabled, owner)?.let { why ->
+            // SEC-FIX-1: the one gate, before every branch below (the bare-text prompt and the replay included). Its plain
+            // demo-lock frame list applies only when `AGENTHQ_DEMO_LOCK` is set but no installed preset took it (fail closed).
+            FrameGate.refusal(envelope.type, demoLock() && policies.current.isEmpty, owner)?.let { why ->
                 outgoing.trySend(Envelope(Envelope.ERROR, why, requestId = envelope.requestId))
                 continue
             }
-            demo.frameRefusal(envelope, active)?.let { reason ->
+            // POLICY-1: the active preset, by the frame's named action (then the seated lockdown, when it has seats).
+            policies.frameRefusal(envelope, active, owner)?.let { reason ->
                 outgoing.trySend(Envelope(Envelope.ERROR, reason).copy(requestId = envelope.requestId))
                 continue
             }
+            // Ticket 9bf81983: under a seated lock, the client IP this connection's visitor turns are charged to.
+            val lockNow = policies.lock
+            val turnLimit = lockNow.turnLimit?.takeIf { lockNow.enabled }
+            val turnClient = turnLimit?.let {
+                DemoTurnLimit.clientIp(session.call.request.local.remoteAddress, session.call.request.headers["X-Forwarded-For"], lockNow.trustedProxies)
+            }.orEmpty()
             // Ticket 9bf81983: a visitor turn over this client's limit is refused before it reaches an agent.
             if (turnLimit != null && envelope.type in DEMO_COUNTED_TURNS) {
                 turnLimit.refusal(turnClient)?.let { reason ->
@@ -3708,6 +3734,11 @@ private suspend fun handleConnection(
 
                 Envelope.STORY_LIST -> storyBoard.answer(envelope)
 
+                // POLICY-1 (docs/POLICY.md): read the active policy; the owner switches it (refused while an env pins it).
+                // A switch tells every connection (each its own `policy` frame), this one included, so no direct answer.
+                com.superiorsoftllc.agenthq.policy.ActionCatalog.POLICY_GET -> policyEnvelope()
+                com.superiorsoftllc.agenthq.policy.ActionCatalog.POLICY_SET -> policies.select(envelope.data)?.let { Envelope(Envelope.ERROR, "policy_set refused: $it") }
+
                 else -> Envelope(Envelope.ERROR, "unknown frame type '${envelope.type}'")
             }
             // BUG-MCP-RACE-1: the direct answer echoes the request's id; a push (sent elsewhere) never carries one.
@@ -3718,6 +3749,7 @@ private suspend fun handleConnection(
     } finally {
         println("[agentHq] ws closed")
         clients.remove(outgoing)
+        policySubscription.close()
         askJobs.cancel()
         modelsRequests.close()
         modelsWorker.cancel()

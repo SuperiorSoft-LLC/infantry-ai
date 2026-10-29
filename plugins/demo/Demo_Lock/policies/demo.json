@@ -1,0 +1,32 @@
+{
+  "id": "demo",
+  "label": "Demo",
+  "description": "The public demo: two seated agents a visitor can talk to; everything else is read-only.",
+  "selectWhenEnv": "AGENTHQ_DEMO_LOCK",
+  "disable": ["*"],
+  "allow": [
+    "sessions.read", "sessions.replay", "projects.read", "settings.read", "usage.read", "board.read", "triggers.read",
+    "commands.read", "roles.read", "harness.read", "questions.read", "mail.read", "agents.read", "attention.read",
+    "prompts.read", "skills.read", "pods.read",
+    "project.git.read", "epics.read", "memory.read", "pipeline.read",
+    "chat.prompt", "chat.resume", "mail.send"
+  ],
+  "reason": "Disabled in the demo",
+  "refusal": "demo: '{frame}' is disabled in this demo",
+  "restricted": true,
+  "notices": ["demo_limit"],
+  "ready": { "demo": "lock" },
+  "notice": "",
+  "seats": {
+    "projectName": "Demo project",
+    "projectDir": "/work/demo",
+    "projectGoal": "Infantry AI demo",
+    "seats": ["backend:opencode:opencode-go/beam-free", "pm:opencode:opencode-go/beam-free"],
+    "warmUpPrompt": "Reply with: ready",
+    "turnsPerIp": 0,
+    "turnWindowHours": 0,
+    "turnLimitCode": "demo_limit",
+    "mailRefusal": "demo: mail is only allowed between the two demo agents",
+    "httpRefusal": "demo: {method} {path} is disabled in this demo"
+  }
+}

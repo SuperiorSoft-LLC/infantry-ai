@@ -14,7 +14,7 @@ import kotlin.test.assertTrue
 class DemoLockTest {
     private val a = "session-a"
     private val b = "session-b"
-    private fun locked() = DemoLock(enabled = true, notice = "This is a demo.").also { it.adopt("project-demo", mapOf("backend" to a, "pm" to b)) }
+    private fun locked() = DemoPresetFixture.lock(notice = "This is a demo.").also { it.adopt("project-demo", mapOf("backend" to a, "pm" to b)) }
     private fun mail(from: String, to: String, cross: Boolean = false) =
         Json.encodeToString(MailSendRequest.serializer(), MailSendRequest(from = from, to = to, body = "hi", allowCrossProject = cross))
 
@@ -41,18 +41,18 @@ class DemoLockTest {
     @Test
     fun `ready carries demo=lock and the notice base64url`() {
         val fields = locked().readyFields()
-        assertTrue(fields.startsWith(" demo=lock access=restricted notices=demo_limit demoNotice="), fields)
-        val encoded = fields.substringAfter("demoNotice=")
+        assertTrue(fields.startsWith(" demo=lock access=restricted notices=demo_limit notice="), fields)
+        val encoded = fields.substringAfter("notice=")
         assertEquals("This is a demo.", String(java.util.Base64.getUrlDecoder().decode(encoded)))
     }
 
     @Test
     fun `reads pass, writes and spawns are refused`() {
         val lock = locked()
-        for (t in DemoLock.READ_FRAMES) assertNull(lock.frameRefusal(Envelope(t, ""), null), t)
+        for (t in DemoPresetFixture.READ_FRAMES) assertNull(lock.frameRefusal(Envelope(t, ""), null), t)
         for (t in listOf("new", Envelope.PROJECT_SAVE, "settings_set", "ticket_save", "role_save", "agent_save", "secret_set",
             "harness_install", "cli_location_set", "session_delete", "image_upload", "pod_submit", "assistant_open", "anything_new")) {
-            assertEquals(DemoLock.refusal(t), lock.frameRefusal(Envelope(t, "{}"), a), t)
+            assertEquals(lock.refusal(t), lock.frameRefusal(Envelope(t, "{}"), a), t)
         }
     }
 
@@ -60,12 +60,12 @@ class DemoLockTest {
     fun `per-project reads pass only naming the demo project, the git checkout never`() {
         val lock = locked()
         val demo = """{"projectId":"project-demo"}"""
-        for (t in DemoLock.PROJECT_READ_FRAMES) {
+        for (t in DemoPresetFixture.PROJECT_READ_FRAMES) {
             assertNull(lock.frameRefusal(Envelope(t, demo), null), t)
-            assertEquals(DemoLock.refusal(t), lock.frameRefusal(Envelope(t, """{"projectId":"project-other"}"""), null), t)
-            assertEquals(DemoLock.refusal(t), lock.frameRefusal(Envelope(t, "{}"), null), t)
-            assertEquals(DemoLock.refusal(t), lock.frameRefusal(Envelope(t, ""), null), t)
-            assertEquals(DemoLock.refusal(t), lock.frameRefusal(Envelope(t, """{"projectId":["project-demo"]}"""), null), t)
+            assertEquals(lock.refusal(t), lock.frameRefusal(Envelope(t, """{"projectId":"project-other"}"""), null), t)
+            assertEquals(lock.refusal(t), lock.frameRefusal(Envelope(t, "{}"), null), t)
+            assertEquals(lock.refusal(t), lock.frameRefusal(Envelope(t, ""), null), t)
+            assertEquals(lock.refusal(t), lock.frameRefusal(Envelope(t, """{"projectId":["project-demo"]}"""), null), t)
         }
         // A payload that could name two projects (repeated key, or a \u escape spelling the key) is refused.
         val log = Envelope.PROJECT_GIT_LOG
@@ -80,7 +80,7 @@ class DemoLockTest {
         assertNotNull(lock.frameRefusal(Envelope(Envelope.EPIC_SAVE, demo), null))
         assertNotNull(lock.frameRefusal(Envelope(Envelope.MEMORY_SAVE, demo), null))
         // Before the seed there is no demo project: nothing names it.
-        assertNotNull(DemoLock(enabled = true).frameRefusal(Envelope(Envelope.EPIC_LIST, ""), null))
+        assertNotNull(DemoPresetFixture.lock().frameRefusal(Envelope(Envelope.EPIC_LIST, ""), null))
     }
 
     @Test

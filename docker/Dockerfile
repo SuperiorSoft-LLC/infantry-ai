@@ -57,6 +57,7 @@ ENV AGENTHQ_VERSION=$AGENTHQ_VERSION \
     AGENTHQ_TOKEN_FILE=/data/access-token \
     AGENTHQ_BIN=/opt/agenthq/bin \
     AGENTHQ_WEB_DIR=/opt/agenthq/web \
+    AGENTHQ_POLICY_DIRS=/opt/agenthq/policies \
     JAVA_OPTS="-Xms32m -Xmx512m" \
     AGENTHQ_LIMIT_HEALTH_WATCHDOG_FAILURES=3 \
     PATH=/opt/agenthq/bin:$PATH

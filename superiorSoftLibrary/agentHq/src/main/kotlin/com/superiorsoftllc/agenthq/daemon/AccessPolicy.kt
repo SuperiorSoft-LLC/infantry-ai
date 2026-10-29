@@ -441,7 +441,7 @@ class AccessPolicy private constructor(
 /** SANDBOX-1: the [AccessTier] the access policy admitted a call with. */
 val ACCESS_TIER = io.ktor.util.AttributeKey<AccessTier>("agenthq.accessTier")
 
-fun Application.installAccessPolicy(policy: AccessPolicy, isWebAsset: (String) -> Boolean = { false }, demoLock: DemoLock = DemoLock(false)) {
+fun Application.installAccessPolicy(policy: AccessPolicy, isWebAsset: (String) -> Boolean = { false }, demoLock: DemoLock = DemoLock(false), currentLock: () -> DemoLock = { demoLock }) {
     intercept(ApplicationCallPipeline.Plugins) {
         val path = call.request.path()
         val protocols = call.request.headers.getAll(HttpHeaders.SecWebSocketProtocol)?.joinToString(",")
@@ -456,7 +456,8 @@ fun Application.installAccessPolicy(policy: AccessPolicy, isWebAsset: (String) -
         )
         if (refusal == null) {
             // DEMO-LOCK (ticket 2f154f5f): default-deny on every route for every token, the owner's included.
-            demoLock.httpRefusal(call.request.httpMethod.value, path, webAsset)?.let { reason ->
+            // POLICY-1: the lock of the policy active NOW (a Settings switch takes effect on the next request).
+            currentLock().httpRefusal(call.request.httpMethod.value, path, webAsset)?.let { reason ->
                 call.respond(HttpStatusCode.Forbidden, reason)
                 finish()
                 return@intercept
