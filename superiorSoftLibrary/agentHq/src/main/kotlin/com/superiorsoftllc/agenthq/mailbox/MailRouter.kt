@@ -81,6 +81,10 @@ class MailRouter(
     private val starterOf: (workerSessionId: String) -> String? = { null },
 ) : MailDelivery {
 
+    /** DAEMON-CONTEXT-1: for mail a worker sends its `starter`: a refusal reason (a done report without Files read) or null. */
+    @Volatile
+    var reportCheck: ((from: String, body: String) -> String?)? = null
+
     /** Sessions currently being pumped; the re-entrancy guard. */
     private val pumping = ConcurrentHashMap.newKeySet<String>()
 
@@ -106,6 +110,7 @@ class MailRouter(
      * mailbox before this returns, so the pump can only ever be a bonus, never a precondition.
      */
     fun send(request: MailSendRequest): MailResult {
+        if (request.to == TicketContextComposer.STARTER) reportCheck?.invoke(request.from, request.body)?.let { return MailResult.Refused(it) }
         crossProjectRefusal(request)?.let { return MailResult.Refused(it) }
         val result = mailbox.send(addressStarter(request))
         if (result is MailResult.Sent) {

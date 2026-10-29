@@ -1042,11 +1042,13 @@ class AgentHqDaemon(
                 library = { com.superiorsoftllc.agenthq.persistence.SkillStore(store.skills).list(null) },
                 includeSkillsContext = { settings.includeSkillsContext() },
             )
+            val relatedRef = java.util.concurrent.atomic.AtomicReference(com.superiorsoftllc.agenthq.context.RelatedWorkSource.NONE)
             val ticketContext = context ?: TicketContextComposer(
                 settings, knowledge, skillsSource,
                 roleNotes = com.superiorsoftllc.agenthq.context.RoleNotesSource { project, role ->
                     memoryNotes.index(project, com.superiorsoftllc.agenthq.memory.SCOPE_ROLE, role).map { it.name to it.description }
                 },
+                related = com.superiorsoftllc.agenthq.context.RelatedWorkSource { id, desc -> relatedRef.get().block(id, desc) },
             )
             // P10-K13: the effective skill ids each bound spawn freezes on its instance (K-D9 / K-D11), read once, at spawn.
             manager.skillsFor = { agentId, ticketId ->
@@ -1190,6 +1192,16 @@ class AgentHqDaemon(
                 tickets = store.tickets::all,
                 repoFor = { projectId -> board.cutRepo(projectId) },
             )
+            relatedRef.set(com.superiorsoftllc.agenthq.ticketfiles.LiveRelatedWork(ticketFiles, ticket = { id -> store.tickets.get(id) }))
+            mail.reportCheck = { from, body ->
+                manager.get(from)?.ticketId?.takeIf { it.isNotBlank() }?.let { tid ->
+                    val row = store.tickets.get(tid)
+                    val line = com.superiorsoftllc.agenthq.ticketfiles.FilesReadCheck.extract(body)
+                    val refusal = com.superiorsoftllc.agenthq.ticketfiles.FilesReadCheck.refusal(body, row?.status == com.superiorsoftllc.agenthq.protocol.TicketStatus.DONE)
+                    if (refusal == null && line != null) runCatching { ticketFiles.saveFilesRead(tid, line) }
+                    refusal
+                }
+            }
             val ticketFilesText = com.superiorsoftllc.agenthq.ticketfiles.TicketFilesText(ticketFiles) { id -> store.tickets.get(id)?.title }
             val ticketFilesExec = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
                 Thread(r, "agenthq-ticket-files").also { it.isDaemon = true }
