@@ -210,7 +210,13 @@ private val sessionStats = SessionStatsService()
 
 /** USAGE-1: the usage meter (package `usagemeter`, own file). The daemon touches it at three points: this val, the event sink arm and the `usage_meter_get` frame. A failure to open it never stops the daemon. */
 private val usageMeter: com.superiorsoftllc.agenthq.usagemeter.UsageMeter? by lazy {
-    runCatching { com.superiorsoftllc.agenthq.usagemeter.UsageMeter.open(File(stateDir(), "usage-meter.db")).also { it.start() } }
+    runCatching {
+        com.superiorsoftllc.agenthq.usagemeter.UsageMeter.open(File(stateDir(), "usage-meter.db")).also { m ->
+            m.start()
+            val prices = com.superiorsoftllc.agenthq.usagemeter.UsagePrices(File(stateDir(), "usage-prices.json"))
+            m.prices = prices::current
+        }
+    }
         .onFailure { System.err.println("[agentHq] usage meter disabled: ${it.message}") }.getOrNull()
 }
 
@@ -1329,6 +1335,11 @@ class AgentHqDaemon(
                 config = com.superiorsoftllc.agenthq.session.WatchdogConfig.fromEnv(),
                 isEnabledFor = { projectStore.experimentOn(it, "agentWatchdog") },
             ).also { it.start() }
+            // STATS-ACC-1: every recorded turn pushes a fresh `usage_meter` frame to all clients (debounced to 4/s), so the pane never polls.
+            usageMeter?.let { m ->
+                val push = com.superiorsoftllc.agenthq.usagemeter.PushDebounce { val f = Envelope(Envelope.USAGE_METER, m.reportJson()); for (c in clients) c.trySend(f) }
+                m.onRecorded = push::poke
+            }
             manager.eventSink = { event ->
                 broadcast(clients, event, streamSequencer, runActivity, { id, seconds ->
                     // A `sleep N` in a tool call becomes a "waiting" countdown; the call returning (or the agent moving on) ends it.

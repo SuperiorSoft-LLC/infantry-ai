@@ -86,4 +86,67 @@ class UsageMeterTest {
         assertEquals("worker", row.source); assertEquals(1L, row.runs); assertEquals(2200L, row.cacheRead)
         m.close()
     }
+
+    private fun ticketRec(id: String, provider: String, ticket: String?) = rec(id, "backend").copy(provider = provider, ticketId = ticket)
+
+    @Test fun `each turn is stored per request as it arrives and pushed, before the run exits`() {
+        val m = UsageMeter.open(File.createTempFile("meter", ".db").also { it.deleteOnExit() })
+        val pushes = java.util.concurrent.atomic.AtomicInteger()
+        m.onRecorded = { pushes.incrementAndGet() }
+        val r = ticketRec("s1", "claude", "t-1")
+        val sessions: (String) -> SessionRecord? = { r }
+        m.onSessionEvent(SessionEvent.Turn("s1", "go"), sessions)
+        m.onSessionEvent(SessionEvent.Stdout("s1", claudeLines[0]), sessions)
+        // no Exit yet: the request and the in-flight run are already in the report, and one push fired.
+        assertEquals(1, pushes.get())
+        val rep = m.report()
+        val q = rep.requests.single()
+        assertEquals("claude", q.harness); assertEquals("t-1", q.ticketId); assertEquals("s1", q.sessionId); assertEquals("backend", q.role)
+        assertEquals(10L, q.input); assertEquals(1000L, q.cacheRead); assertEquals(200L, q.cacheWrite); assertEquals(1210L, q.context)
+        assertNull(q.output, "claude assistant lines carry streaming placeholders: output is n/a per request")
+        assertNull(q.cost)
+        assertEquals(1L, rep.rows.sumOf { it.turns })
+        m.onSessionEvent(SessionEvent.Stdout("s1", claudeLines[2]), sessions)
+        assertEquals(2, pushes.get()); assertEquals(2, m.report().requests.size)
+        m.onSessionEvent(SessionEvent.Exit("s1", 0), sessions)
+        assertEquals(2L, m.report().rows.sumOf { it.turns }, "the exit replaces the in-flight row, no double count")
+        m.close()
+    }
+
+    @Test fun `a field the harness does not report is stored as null`() {
+        val m = UsageMeter.open(File.createTempFile("meter", ".db").also { it.deleteOnExit() })
+        val r = ticketRec("o1", "opencode", null)
+        val sessions: (String) -> SessionRecord? = { r }
+        m.onSessionEvent(SessionEvent.Turn("o1", "go"), sessions)
+        m.onSessionEvent(SessionEvent.Stdout("o1", """{"type":"step_finish","part":{"tokens":{"input":50,"output":7}}}"""), sessions)
+        val q = m.report().requests.single()
+        assertEquals(50L, q.input); assertEquals(7L, q.output)
+        assertNull(q.cacheRead); assertNull(q.cacheWrite); assertEquals(50L, q.context); assertNull(q.cost); assertNull(q.ticketId)
+        m.close()
+    }
+
+    @Test fun `a compaction the harness reports is recorded as an event`() {
+        val m = UsageMeter.open(File.createTempFile("meter", ".db").also { it.deleteOnExit() })
+        val r = ticketRec("c1", "claude", "t-9")
+        val sessions: (String) -> SessionRecord? = { r }
+        m.onSessionEvent(SessionEvent.Turn("c1", "go"), sessions)
+        m.onSessionEvent(SessionEvent.Stdout("c1", """{"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"auto","pre_tokens":150000}}"""), sessions)
+        val e = m.report().events.single()
+        assertEquals("compaction", e.kind); assertEquals("auto", e.trigger); assertEquals(150000L, e.tokensBefore); assertEquals("t-9", e.ticketId)
+        m.close()
+    }
+
+    @Test fun `the price table rides the report and the debounce coalesces a burst`() {
+        val dir = java.nio.file.Files.createTempDirectory("prices").toFile()
+        val prices = UsagePrices(File(dir, "usage-prices.json"))
+        val m = UsageMeter.open(File(dir, "m.db")); m.prices = prices::current
+        assertEquals(UsagePrices.DEFAULTS, m.report().prices)
+        assertEquals(true, File(dir, "usage-prices.json").exists())
+        m.close()
+        val fired = java.util.concurrent.atomic.AtomicInteger()
+        val d = PushDebounce(200) { fired.incrementAndGet() }
+        repeat(20) { d.poke() }
+        Thread.sleep(600)
+        assertEquals(2, fired.get(), "one leading push, one trailing push")
+    }
 }

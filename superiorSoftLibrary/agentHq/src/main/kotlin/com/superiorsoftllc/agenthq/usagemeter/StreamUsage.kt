@@ -19,6 +19,22 @@ data class RunTotals(
     val model: String?,
 )
 
+/** One model request/response (a "turn"), as the harness reported it. A field the harness did not report is null, never 0. */
+data class TurnUsage(
+    val model: String?,
+    val input: Long?,
+    val output: Long?,
+    val cacheRead: Long?,
+    val cacheWrite: Long?,
+    val cost: Double?,
+) {
+    /** Tokens the model re-read this request (input + cache read + cache write); null when none of the three was reported. */
+    val context: Long? get() = if (input == null && cacheRead == null && cacheWrite == null) null else (input ?: 0) + (cacheRead ?: 0) + (cacheWrite ?: 0)
+}
+
+/** A compaction / context rotation the harness announced. [tokensBefore] null = not reported. */
+data class CompactionUsage(val trigger: String?, val tokensBefore: Long?)
+
 /**
  * Folds one run's stdout lines into [RunTotals]. Provider-reported usage only, no model calls, nothing estimated.
  *
@@ -29,6 +45,10 @@ data class RunTotals(
  * - OpenCode `step_finish`: `part.tokens{input,output,cache{read,write}}`, `part.cost`.
  */
 class StreamUsageAccumulator {
+    /** STATS-ACC-1: called once per recorded turn, as the line arrives (the push path). */
+    var onTurn: ((TurnUsage) -> Unit)? = null
+    var onCompaction: ((CompactionUsage) -> Unit)? = null
+
     private val seen = HashSet<String>()
     private var turns = 0L
     private var input = 0L
@@ -46,13 +66,21 @@ class StreamUsageAccumulator {
     private var resultTurns: Long? = null
 
     fun accept(line: String) {
-        if ('{' !in line || ("usage" !in line && "tokens" !in line)) return
+        if ('{' !in line || ("usage" !in line && "tokens" !in line && "compact" !in line)) return
         val o = runCatching { Json.parseToJsonElement(line).jsonObject }.getOrNull() ?: return
         when (o.str("type")) {
             "assistant" -> claudeAssistant(o)
             "result" -> claudeResult(o)
             "message_end" -> piMessage(o["message"] as? JsonObject)
             "step_finish" -> openCodeStep(o["part"] as? JsonObject)
+            "system" -> if (o.str("subtype") == "compact_boundary") {
+                val md = o["compact_metadata"] as? JsonObject
+                onCompaction?.invoke(CompactionUsage(md?.str("trigger"), md?.ln("pre_tokens")))
+            }
+            "auto_compaction_end", "compaction_end" -> {
+                val r = o["result"] as? JsonObject
+                onCompaction?.invoke(CompactionUsage(o.str("reason") ?: "auto", r?.ln("tokensBefore") ?: o.ln("tokensBefore")))
+            }
         }
     }
 
@@ -62,7 +90,9 @@ class StreamUsageAccumulator {
         val id = m.str("id")
         if (id != null && !seen.add(id)) return
         m.str("model")?.takeIf { it != "<synthetic>" }?.let { model = it }
-        turn(u.l("input_tokens"), u.l("output_tokens"), u.l("cache_read_input_tokens"), u.l("cache_creation_input_tokens"), null)
+        // Assistant lines carry streaming placeholders for output_tokens, so a per-request output is n/a (null) for Claude.
+        turn(u.l("input_tokens"), u.l("output_tokens"), u.l("cache_read_input_tokens"), u.l("cache_creation_input_tokens"), null,
+            TurnUsage(m.str("model")?.takeIf { it != "<synthetic>" }, u.ln("input_tokens"), null, u.ln("cache_read_input_tokens"), u.ln("cache_creation_input_tokens"), null))
     }
 
     private fun claudeResult(o: JsonObject) {
@@ -81,17 +111,22 @@ class StreamUsageAccumulator {
         val u = m["usage"] as? JsonObject ?: return
         val provider = m.str("provider")
         m.str("model")?.let { model = if (provider != null) "$provider/$it" else it }
-        turn(u.l("input"), u.l("output"), u.l("cacheRead"), u.l("cacheWrite"), ((u["cost"] as? JsonObject)?.get("total") as? JsonPrimitive)?.doubleOrNull)
+        val cost = ((u["cost"] as? JsonObject)?.get("total") as? JsonPrimitive)?.doubleOrNull
+        turn(u.l("input"), u.l("output"), u.l("cacheRead"), u.l("cacheWrite"), cost,
+            TurnUsage(model, u.ln("input"), u.ln("output"), u.ln("cacheRead"), u.ln("cacheWrite"), cost))
     }
 
     private fun openCodeStep(p: JsonObject?) {
         val t = p?.get("tokens") as? JsonObject ?: return
         val c = t["cache"] as? JsonObject
-        turn(t.l("input"), t.l("output"), c?.l("read") ?: 0, c?.l("write") ?: 0, (p["cost"] as? JsonPrimitive)?.doubleOrNull)
+        val cost = (p["cost"] as? JsonPrimitive)?.doubleOrNull
+        turn(t.l("input"), t.l("output"), c?.l("read") ?: 0, c?.l("write") ?: 0, cost,
+            TurnUsage(model, t.ln("input"), t.ln("output"), c?.ln("read"), c?.ln("write"), cost))
     }
 
-    private fun turn(i: Long, out: Long, r: Long, w: Long, c: Double?) {
+    private fun turn(i: Long, out: Long, r: Long, w: Long, c: Double?, reported: TurnUsage) {
         if (i + out + r + w == 0L) return
+        onTurn?.invoke(reported)
         any = true
         turns++
         input += i; output += out; read += r; write += w
@@ -111,5 +146,6 @@ class StreamUsageAccumulator {
     }
 
     private fun JsonObject.str(k: String): String? = (this[k] as? JsonPrimitive)?.takeIf { it.isString }?.content
+    private fun JsonObject.ln(k: String): Long? = (this[k] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull
     private fun JsonObject.l(k: String): Long = (this[k] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull ?: 0L
 }
