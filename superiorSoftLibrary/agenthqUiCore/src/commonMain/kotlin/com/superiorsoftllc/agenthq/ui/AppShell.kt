@@ -95,6 +95,7 @@ class Shell(
         transcript = transcript,
         subTab = { ui.subTabs[it] },
         pickSubTab = { host, id -> ui.subTabs[host] = id },
+        config = { tabs.resolvedConfig.values(it) },
     )
 }
 

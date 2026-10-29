@@ -154,6 +154,8 @@ class TabContext(
     val subTab: (hostId: String) -> String? = { null },
     /** RUNTIME-5: remembers [subTabId] as the one picked in host [hostId] (the window owns it, while the app runs). */
     val pickSubTab: (hostId: String, subTabId: String) -> Unit = { _, _ -> },
+    /** CONFIG-7 (additive): node [nodeId]'s resolved config values, live; every key reads null where there is no shell. */
+    val config: (nodeId: String) -> com.superiorsoftllc.agenthq.ui.shell.ConfigValues = { com.superiorsoftllc.agenthq.ui.shell.EmptyConfig },
 ) {
     /**
      * RUNTIME-5 (plugin API, additive): draws host tab [hostId]'s sub-tabs ([TabFactory.children]) as a strip and the
@@ -170,7 +172,7 @@ class TabContext(
     }
 
     internal fun forModule(services: PluginServices) =
-        TabContext(state, controller, open, showChat, insertIntoChat, diffTarget, onOpenDiff, transcript, services, subTab, pickSubTab)
+        TabContext(state, controller, open, showChat, insertIntoChat, diffTarget, onOpenDiff, transcript, services, subTab, pickSubTab, config)
 }
 
 /**

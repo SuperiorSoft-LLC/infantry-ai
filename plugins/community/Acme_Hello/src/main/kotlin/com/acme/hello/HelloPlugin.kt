@@ -91,7 +91,7 @@ class HelloPlugin : UiPlugin {
             }
         }
         Column(Modifier.fillMaxSize().padding(16.dp).testTag("acme-hello"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Hello from Acme_Hello, a community module.")
+            Text(context.config("acme.hello").string("greeting") ?: "Hello from Acme_Hello, a community module.", Modifier.testTag("acme-hello-greeting"))
             Text("Agents: ${context.state.agents.size}. Tabs opened since start: $opened.")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { call("GET /health") }, modifier = Modifier.testTag("acme-hello-health")) { Text("GET /health (declared)") }
