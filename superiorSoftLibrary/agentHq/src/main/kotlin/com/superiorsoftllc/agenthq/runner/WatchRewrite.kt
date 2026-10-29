@@ -38,8 +38,8 @@ object WatchRewrite {
 
     data class Result(val command: String, val detached: Boolean, val matched: String)
 
-    /** Long by nature: builds, test runs, package installs. Matched by base name, so `./gradlew` and `gradlew.bat` count. */
-    val LONG = setOf("gradlew", "gradle", "mvnw", "mvn", "npm", "yarn", "pnpm")
+    /** Long by nature (builds, test runs, package installs): the tool profiles' unconditional `long` commands ([ToolProfiles]). */
+    val LONG: Set<String> get() = ToolProfiles.active.filter { it.long && it.longIf.isEmpty() }.flatMap { it.commands }.toSet()
 
     /** The `agenthq` subcommands that already chose how they are watched. */
     private val CHOSEN = setOf("bg", "run-watched", "unwatched")
@@ -65,7 +65,7 @@ object WatchRewrite {
             if (seg.background) bg = true
             if (r.shell == Shell.POWERSHELL && words.any { it.equals("Start-Process", true) || it.equals("Start-Job", true) || it.equals("saps", true) }) bg = true
             if (words.take(prog.second).any { it == "nohup" || it == "setsid" }) bg = true
-            if (matched == null && (base in LONG || (base == "java" && words.drop(prog.second + 1).contains("-jar")))) matched = base
+            if (matched == null && ToolProfiles.isLong(prog.first, words.drop(prog.second + 1))) matched = base
         }
         if (matched == null && !bg) return null
         val script = if (bg) stripBackground(body, r.shell) else body
@@ -142,9 +142,7 @@ object WatchRewrite {
         return null
     }
 
-    private fun baseName(p: String): String =
-        p.substringAfterLast('/').substringAfterLast('\\').lowercase()
-            .removeSuffix(".bat").removeSuffix(".cmd").removeSuffix(".exe").removeSuffix(".sh").removeSuffix(".ps1")
+    private fun baseName(p: String): String = ToolProfiles.baseName(p)
 
     /** The command with its trailing `&` / `disown` removed: the runner itself is what goes to the background. */
     private fun stripBackground(cmd: String, shell: Shell): String {

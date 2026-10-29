@@ -183,9 +183,9 @@ class StallRunnerTest {
 
     @Test
     fun gradleGetsAPlainConsole_andTheShimDirIsSkipped() {
-        assertEquals(listOf("gradlew.bat", "--console=plain", "test"), BgCli.withPlainConsole(listOf("gradlew.bat", "test")))
-        assertEquals(listOf("/x/gradle", "--console=rich"), BgCli.withPlainConsole(listOf("/x/gradle", "--console=rich")))
-        assertEquals(listOf("npm", "test"), BgCli.withPlainConsole(listOf("npm", "test")))
+        assertEquals(listOf("gradlew.bat", "--console=plain", "test"), BgCli.withProfileArgs(listOf("gradlew.bat", "test")))
+        assertEquals(listOf("/x/gradle", "--console=rich"), BgCli.withProfileArgs(listOf("/x/gradle", "--console=rich")))
+        assertEquals(listOf("npm", "test"), BgCli.withProfileArgs(listOf("npm", "test")))
         val sep = File.pathSeparator
         val shim = File("shimdir").absolutePath
         val env = mapOf("PATH" to "$shim${sep}/usr/bin", BgCli.SHIM_DIR_ENV to shim)

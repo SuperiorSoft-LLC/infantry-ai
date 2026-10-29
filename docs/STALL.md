@@ -52,21 +52,75 @@ see the end and start a turn, so the fix is daemon-side.
 So the definitive end is the **process wait** of a process the runner launched itself (`Process.waitFor`: the runner is
 its parent and gets the real exit code), never the pipe's EOF; EOF is reported as what it is.
 
-## 2. What is forced, per harness, and what is not coverable
+## 2. What is forced, per harness (STALL-1, STALL-2, STALL-3)
 
 | mechanism | claude | opencode | pi |
 |---|---|---|---|
-| **PATH shims** (`<state>/shims` first on every worker session's PATH): bare `gradle`, `mvn`, `npm`, `yarn`, `pnpm` run through `agenthq bg run --attached --shim` | forced | forced | forced |
-| **process-tree watch** (layer 5): any top-level process under the harness that lived 30 s+ and ends is told, exit code unknown | forced | forced | forced |
-| **stall detector**: idle with ticket In Progress, or BUSY-silent after a job ended | forced | forced | forced |
-| explicit `agenthq run-watched -- <cmd>` (= `bg run --notify`): detached, exit code + tail | worker's choice | worker's choice | worker's choice |
-| harness hook that rewrites path-named programs (`./gradlew`, `gradlew.bat`) into the runner | **not done** (Claude PreToolUse `updatedInput` would do it; costs a CLI JVM per shell call) | **not done** (plugin `tool.execute.before`) | **not done** (extension) |
+| **PATH shims** (`<state>/shims` first on every worker session's PATH): the tool profiles' `shim` programs (shipped: `gradle`, `mvn`, `npm`, `yarn`, `pnpm`) run through `agenthq bg run --attached --shim` | forced | forced | forced |
+| **hook rewrite of a long command**: a profile's `long` command by base name, path-named too (`./gradlew`, `.\gradlew.bat`, `java -jar`), into `bg run --attached --hook` (same console and exit code, plus log, END sentinel, registration) | forced in `bypassPermissions` (PreToolUse `http` hook in a `--settings` file) | forced in `allowAll` (plugin `tool.execute.before`) | forced (extension `tool_call`; pi has no permission system) |
+| **hook rewrite of ANY backgrounded command**, whatever its name (`&`, `nohup`, `setsid`, `Start-Process`, `Start-Job`, claude `run_in_background`), into `bg run --notify --hook` (detached, end mailed with exit code) | forced in `bypassPermissions` | forced in `allowAll` | forced |
+| **tree wait**: done = every member of the command's tree ended (Windows Job Object, Linux subreaper; profile `daemons` excluded) | forced | forced | forced |
+| **process-tree watch**: any top-level process under the harness that lived 30 s+ and ends is told, exit code unknown | forced | forced | forced |
+| **stall detector**: idle with ticket In Progress; BUSY-silent after a job ended; BUSY-silent inside a long foreground call (section 3) | forced | forced | forced |
+| explicit `agenthq run-watched -- <cmd>` (= `bg run --notify`) | worker's choice | worker's choice | worker's choice |
 
-Not coverable by a PATH shim, by construction: a program named by a path (`./gradlew`, `.\gradlew.bat`, and on Windows
-`gradlew.bat` from the cwd, which cmd.exe resolves before PATH). Those are still covered by the process-tree watch and the
-stall detector (end told, exit code unknown), and by the start prompt that tells workers to use `run-watched`.
-`SHELL` / `BASH_ENV` / `ComSpec` wrappers were rejected: `BASH_ENV` cannot rewrite a command line, and replacing
-`ComSpec` changes every `cmd /c` the harness and its tools run.
+**Detected, not forced.** Another PreToolUse rewriter (RTK's `rtk hook claude`, or any other hook) can win over ours.
+Claude Code runs every PreToolUse hook of every settings source and applies ONE `updatedInput`, in an order we do not
+set (STALL-2 live run: rtk won for `./gradlew`, ours won for `npm`). We do not fight it. The claude PostToolUse hook
+compares the command that ran with our rewrite of that `tool_use_id`; a mismatch is counted (`WatchMeter`), logged and
+told to the agent ("this command ran UNWATCHED ... rerun it as `agenthq run-watched -- <cmd>`"). That job is then covered
+only by the process-tree watch and the stall detector (end told, exit code unknown). For opencode and pi, a later plugin
+that rewrites the command again is **not detected** (we use no post-call hook there).
+
+**Not covered** (by construction):
+
+- claude outside `bypassPermissions`, opencode outside `allowAll`: no rewrite. The rewritten command starts with
+  `agenthq` (always allowed), and a hook must never widen what a session may run. Shims, tree watch and stall detector still apply.
+- a long tool with no profile entry, run in the foreground: neither shimmed nor rewritten (add a profile entry).
+- a tool other than the harness's shell tool (claude `Bash` / `PowerShell`, opencode `bash` / `powershell`, pi `bash`).
+- `SHELL` / `BASH_ENV` / `ComSpec` wrappers were rejected: `BASH_ENV` cannot rewrite a command line, and replacing
+  `ComSpec` changes every `cmd /c` the harness and its tools run.
+
+**Opting out.**
+
+- one command: `agenthq unwatched --reason "<why>" -- <cmd...>` (reason required; registered, counted, shown as
+  `watch OFF: <reason>`, told to the PM once, still covered by the heartbeat and the stall detector). An `agenthq bg ...`,
+  `run-watched` or `unwatched` call is never rewritten.
+- every session (owner only): `limits.watch.forced` = 0: no shims, no hook rewrite (`AGENTHQ_WATCH=off`).
+- one tool: a profile override with `"disabled": true` (below).
+
+## Tool profiles (STALL-3)
+
+No runner, shim, hook or process-watch code names a build tool. What they know about a tool is one data list, shipped as
+`superiorSoftLibrary/agentHq/src/main/resources/watch/tool-profiles.json` and overridable with the setting
+`watch.toolProfiles` (a JSON array of entries in the same format, set like any other setting). The override is merged
+over the defaults by `name`: a known name replaces that entry, `"disabled": true` drops it, a new name adds a tool. The
+list is read at every session launch (a changed list rewrites the shims) and handed to the session as env
+`AGENTHQ_TOOL_PROFILES`, so the runner a worker starts reads the same list. A bad override (bad regex, bad command name,
+a `shim` that is not one of its `commands`) is refused when set.
+
+| field | type | meaning |
+|---|---|---|
+| `name` | string, required | the entry's key |
+| `commands` | string[] | program base names; `gradlew` matches `./gradlew`, `gradlew.bat`, `C:\x\gradlew.cmd` |
+| `shim` | string[] or absent | which `commands` get a PATH shim; absent = all, `[]` = none (a path-named wrapper never meets PATH) |
+| `long` | bool, default true | a call of one of `commands` is long: the hooks rewrite it even in the foreground |
+| `longIf` | string[] | long only when one of these args is present (`java` + `-jar`) |
+| `args` | string[] | inserted by the runner right after the program (`--console=plain`) |
+| `argsUnless` | string[] | arg prefixes meaning the caller already chose (`--console`): `args` are then left out |
+| `daemons` | regex[] | processes the tool leaves running on purpose (build daemons): never waited on, never a survivor, never a job |
+| `notifyOn` | regex[] | log lines a `bg run --notify` job is watched for by default (verdicts, compiler errors) |
+| `disabled` | bool | in an override: drop the default entry of this `name` |
+
+Example override adding cargo and make and turning npm off:
+
+```json
+[
+  { "name": "cargo", "commands": ["cargo"], "args": ["--color=never"], "argsUnless": ["--color"], "notifyOn": ["^error"] },
+  { "name": "make", "commands": ["make"] },
+  { "name": "npm", "disabled": true }
+]
+```
 
 ## 3. Design
 
@@ -74,13 +128,13 @@ Layers, strongest first; each event is named by what is known:
 
 1. **process exit + exit code**: the runner (`BgCli.runJob`) is the command's parent and waits on it; it writes
    `<id>.exit` and reports `done` with exit code, byte count, EOF state and surviving children (build daemons named and
-   excluded: `GradleDaemon`, `KotlinCompileDaemon`).
-2. **tree**: children are snapshotted every second while the command lives; after its exit the survivors are listed.
-   A Windows Job Object / Linux process group wait is not used (not done; the snapshot names the survivors instead).
+   excluded: the tool profiles' `daemons`).
+2. **tree**: the command's whole tree is waited on (STALL-2: Windows Job Object, Linux subreaper, capped by
+   `limits.watch.treeWaitMinutes`); profile daemons are excluded; after the cap the survivors are named.
 3. **END sentinel** in the log, after the wait returns: `[agenthq:done exit=<code> elapsed=<t> bytes=<n>]`
    (`bytes=0` = nothing was output). A graceful runner stop writes `exit=unknown reason=runner stopped`. Every log also has
    `[agenthq:start pid=.. at=.. cmd=<80 chars>]` and `[agenthq:running elapsed=Xm]` every 60 s, so a silent command
-   always has output. Gradle gets `--console=plain`.
+   always has output. The tool profile's `args` are added (shipped: Gradle gets `--console=plain`).
 4. **pipe EOF**: `[agenthq:eof bytes=N process=running]` + an `eof` event when the output closes while the process lives;
    `[agenthq:note output still open after exit ...]` when a child keeps it open.
 5. **pid gone** for processes the daemon did not launch: the process-tree watch (`SessionManager.trackTreeJobs`).
@@ -102,7 +156,9 @@ mailed (the turn saw the end on its console); its end is recorded for the stall 
 
 Stall detector (`StallDetector`, every 30 s, `limits.watch.stallMinutes` = 5): IDLE (ticket In Progress, at rest, no job,
 no open owner question, not waiting on a mail reply) and BUSY-BUT-SILENT (turn in flight, a job ended after the last sign
-of life, silent since). One nudge to the worker and one line to the PM (the ticket's starter, else `pm`) per stretch.
+of life, silent since), and (STALL-3) BUSY-IN-THE-FOREGROUND (turn in flight, no tool progress and no watched job for
+`limits.watch.foregroundStallMinutes`, 10, even though no job ended: a hung `find` over everything, a long build the hooks
+could not rewrite; 0 = never). One nudge to the worker and one line to the PM (the ticket's starter, else `pm`) per stretch.
 Never kills or restarts. A BUSY turn cannot be written into: the nudge queues; the PM line goes out at once.
 
 Opt-out: `agenthq unwatched --reason "<why>" -- <cmd...>` (reason required). The command runs with the caller's stdio and
@@ -114,11 +170,7 @@ Visibility: `SessionRecord.watchLabel` (`watching <job> (quiet 2m)`, `watch OFF:
 `idle`; none for a session with no ticket and no job). `WatchMeter` counts events, heartbeats, opt-outs and stall nudges
 (counts only; it says the watch uses no model tokens).
 
-## 4. Remaining (not done in 802c64d5)
+## 4. Remaining
 
-- Harness hooks that force path-named programs (`./gradlew`) through the runner: claude PreToolUse, opencode plugin, pi extension.
-- Job Object / process-group tree wait (survivors are named, not waited on).
-- UI: render `watchLabel` on the session card; add `WatchMeter` counts to the `usage_meter` frame.
-- End-to-end stub-harness tests per harness (job ends while idle / busy-waiting / compacting resumes the worker), a daemon
-  restart test; the pieces are unit-tested (runner, watcher, delivery rule, detector) and the mail queue has its own tests.
-- Linux was not run (the code paths are the same JDK calls).
+- opencode / pi: a later plugin that rewrites the command again is not detected (claude only).
+- Linux: the runner tests ran on WSL1 (STALL-2); the hooks were not run live on Linux.

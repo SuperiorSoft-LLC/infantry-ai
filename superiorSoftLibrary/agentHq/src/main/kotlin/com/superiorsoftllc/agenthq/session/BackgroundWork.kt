@@ -67,7 +67,7 @@ object BackgroundWorkScanner {
     const val LABEL_MAX = 80
 
     /** STALL-1: processes a command leaves running on purpose (build daemons); never a job whose end is awaited. */
-    private val DAEMON = Regex("""(?i)GradleDaemon|org\.gradle\.launcher\.daemon|KotlinCompileDaemon|kotlin-daemon""")
+    private val DAEMON: Regex get() = com.superiorsoftllc.agenthq.runner.ToolProfiles.daemonRegex()
 
     /**
      * STALL-1: the top-level WORK processes under [rootPid] (the same helper and launch-grace rules as [scan]), build

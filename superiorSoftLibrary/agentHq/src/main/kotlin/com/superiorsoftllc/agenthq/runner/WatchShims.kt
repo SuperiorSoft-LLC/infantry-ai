@@ -17,7 +17,10 @@ import java.io.File
  * run the real program directly: the CLI checks `AGENTHQ_WATCHED` / `AGENTHQ_WATCH` before it wraps anything.
  */
 object WatchShims {
-    val PROGRAMS = listOf("gradle", "mvn", "npm", "yarn", "pnpm")
+    /** STALL-3: the tool profiles' shim list ([ToolProfiles]); no tool is named here. */
+    val PROGRAMS: List<String> get() = ToolProfiles.shimPrograms()
+
+    private const val MARKER = "Infantry AI STALL-1 watch shim"
 
     /**
      * Writes the shims into [dir] (a `.cmd` and an extensionless `sh` script per program on Windows, where Git Bash runs
@@ -25,7 +28,11 @@ object WatchShims {
      */
     fun install(dir: File, launcher: List<String>, windows: Boolean = isWindows()): File {
         dir.mkdirs()
-        for (p in PROGRAMS) {
+        val programs = PROGRAMS
+        // A tool dropped from the profiles loses its shim (only files this code wrote carry the marker).
+        dir.listFiles()?.filter { it.isFile && it.name.substringBefore('.') !in programs }
+            ?.filter { f -> runCatching { f.readText().contains(MARKER) }.getOrDefault(false) }?.forEach { it.delete() }
+        for (p in programs) {
             val args = listOf("bg", "run", "--attached", "--shim", p, "--", p)
             val sh = File(dir, p)
             sh.writeText(
@@ -60,9 +67,17 @@ object WatchShims {
      * The session env: [dir] first on PATH (before [inheritedPath], the PATH the session would get otherwise) and the
      * shim dir named, or, with [forced] false, `AGENTHQ_WATCH=off` and PATH untouched.
      */
-    fun sessionEnv(dir: File?, inheritedPath: String?, forced: Boolean, treeWaitMinutes: Long? = null): Map<String, String> {
+    fun sessionEnv(
+        dir: File?,
+        inheritedPath: String?,
+        forced: Boolean,
+        treeWaitMinutes: Long? = null,
+        profiles: List<ToolProfile>? = null,
+    ): Map<String, String> {
         // STALL-2: the runner's tree-wait cap (`limits.watch.treeWaitMinutes`) reaches every run a session starts.
-        val tree = treeWaitMinutes?.let { mapOf("AGENTHQ_WATCH_TREE_WAIT_SECONDS" to (it * 60).toString()) }.orEmpty()
+        // STALL-3: and the tool profiles in force, so the runner a worker starts reads the daemon's list.
+        val tree = treeWaitMinutes?.let { mapOf("AGENTHQ_WATCH_TREE_WAIT_SECONDS" to (it * 60).toString()) }.orEmpty() +
+            profiles?.let { mapOf(ToolProfiles.ENV to ToolProfiles.encode(it)) }.orEmpty()
         if (!forced || dir == null) return mapOf("AGENTHQ_WATCH" to "off") + tree
         val path = dir.absolutePath + (inheritedPath?.takeIf { it.isNotBlank() }?.let { File.pathSeparator + it } ?: "")
         return mapOf("PATH" to path, "AGENTHQ_SHIM_DIR" to dir.absolutePath, "AGENTHQ_WATCH" to "on") + tree

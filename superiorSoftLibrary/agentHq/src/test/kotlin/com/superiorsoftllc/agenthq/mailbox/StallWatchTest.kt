@@ -183,7 +183,7 @@ class StallWatchTest {
 
     // ---- stall detector -------------------------------------------------------------------------------------------
 
-    private class StallRig(autoExit: Boolean) {
+    private class StallRig(autoExit: Boolean, foregroundMin: Long? = null) {
         val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = autoExit), tempSessionStore(), killGraceMs = 50)
         val sent = mutableListOf<MailSendRequest>()
         var offsetMin = 0L
@@ -199,6 +199,7 @@ class StallWatchTest {
             stallMs = { 5 * 60_000L },
             pmOf = { "pm" },
             clock = { System.currentTimeMillis() + offsetMin * 60_000 },
+            foregroundStallMs = { foregroundMin?.let { it * 60_000L } ?: Long.MAX_VALUE },
         )
         fun at(m: Long) { offsetMin = m; detector.tick() }
         fun record(id: String): SessionRecord = manager.get(id)!!
@@ -252,5 +253,27 @@ class StallWatchTest {
         r.at(12); r.at(13)
         assertEquals(1, r.sent.count { it.to == s.id && it.subject.contains("your job ended") })
         assertEquals(1, r.sent.count { it.to == "pm" })
+    }
+
+    @Test
+    fun busyInALongForegroundCall_withNoJobEnded_isNudgedOnce_byTheDaemonTimerAlone() {
+        // STALL-3 item 4: a hung or very long foreground call (no tool progress, no watched job, no job ended).
+        val r = StallRig(autoExit = false, foregroundMin = 10)
+        val s = r.manager.startNew("find / -name x", ticketId = "t1")
+        r.at(9)
+        assertTrue(r.sent.isEmpty(), "under the foreground limit")
+        r.at(11); r.at(12); r.at(20)
+        assertEquals(1, r.sent.count { it.to == s.id && it.subject.contains("no tool progress") }, r.sent.map { it.subject }.toString())
+        assertEquals(1, r.sent.count { it.to == "pm" })
+        assertEquals("stalled", r.record(s.id).watchLabel)
+        assertTrue(r.manager.get(s.id) != null, "never killed")
+    }
+
+    @Test
+    fun foregroundLimitZeroOrNever_isNotNudged() {
+        val r = StallRig(autoExit = false, foregroundMin = 0)
+        r.manager.startNew("long", ticketId = "t1")
+        r.at(60)
+        assertTrue(r.sent.isEmpty(), r.sent.map { it.subject }.toString())
     }
 }

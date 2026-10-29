@@ -17,6 +17,9 @@ import java.util.concurrent.TimeUnit
  *  - BUSY BUT SILENT: a turn is in flight, a job of the session ended ([lastJobEndedAt]: a bg job's end, or a process
  *    under its harness gone) after the session's last sign of life, and nothing happened for [stallMs] since. The nudge
  *    mail queues until that turn ends (a turn in flight cannot be written into); the PM line goes out at once.
+ *  - BUSY IN THE FOREGROUND (STALL-3): a turn is in flight with no tool progress for [foregroundStallMs] and no watched job
+ *    of the session running, even though no job ended: a long or hung foreground call (`find /` over everything, a build
+ *    the hooks could not rewrite). Same nudge and PM line, keyed by the last sign of life.
  * Each stretch is told once (keyed by the last sign of life). It also writes every session's watch label
  * ([SessionManager.setWatchLabel]): `watching <job> (quiet 2m)`, `watch OFF: <reason>`, `busy, silent 7m`, `stalled`,
  * `idle`; a session with no ticket and no job gets none.
@@ -33,6 +36,8 @@ class StallDetector(
     /** Who gets the one line: the ticket's starter, else the `pm` role. */
     private val pmOf: (SessionRecord) -> String?,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** STALL-3: `limits.watch.foregroundStallMinutes` (10); [Long.MAX_VALUE] = never. */
+    private val foregroundStallMs: () -> Long = { Long.MAX_VALUE },
 ) {
     private val told = ConcurrentHashMap<String, String>()
     private val executor = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "agenthq-stall-detector").also { it.isDaemon = true } }
@@ -79,8 +84,8 @@ class StallDetector(
             }
             return key
         }
-        val ended = lastJobEndedAt(s.id) ?: return null
-        if (ended <= s.lastHeartbeat || now - ended < stall || silentFor < stall) return null
+        val ended = lastJobEndedAt(s.id)?.takeIf { it > s.lastHeartbeat } ?: return foreground(s, ticket, now, silentFor)
+        if (now - ended < stall || silentFor < stall) return null
         val key = "busy:$ended"
         if (told.put(s.id, key) != key) {
             nudge(
@@ -90,6 +95,25 @@ class StallDetector(
                     "no tool call or output since. Do not wait on it any longer: read its result and continue, or report to the PM.",
                 pmLine = "worker ${s.id.take(8)} (${s.role ?: "?"}) is BUSY but silent ${fmt(silentFor)}; its job ended ${fmt(now - ended)} ago. " +
                     "Nudge queued until its turn ends; interrupt it if it stays stuck.",
+            )
+        }
+        return key
+    }
+
+    /** STALL-3: BUSY with no tool progress and no watched job for [foregroundStallMs]: a long or hung foreground call. */
+    private fun foreground(s: SessionRecord, ticket: String, now: Long, silentFor: Long): String? {
+        val limit = foregroundStallMs()
+        if (limit == Long.MAX_VALUE || limit <= 0 || silentFor < limit || s.bgJobs.isNotEmpty()) return null
+        val key = "busy-fg:${s.lastHeartbeat}"
+        if (told.put(s.id, key) != key) {
+            nudge(
+                s, key,
+                subject = "[AUTOMATIC] stall check: busy ${fmt(silentFor)} with no tool progress",
+                body = "Your turn has shown no tool call or output for ${fmt(silentFor)} and no watched job of yours is running: a " +
+                    "foreground command may be hung or far too long. Stop it, rerun long work as `agenthq run-watched -- <cmd>`, " +
+                    "narrow searches to the project, and continue; if you are blocked, report to the PM.",
+                pmLine = "worker ${s.id.take(8)} (${s.role ?: "?"}) is BUSY with no tool progress for ${fmt(silentFor)} on ticket $ticket " +
+                    "and no watched job (long or hung foreground call?). Nudge queued until its turn ends; interrupt it if it stays stuck.",
             )
         }
         return key
