@@ -6,6 +6,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.superiorsoftllc.agenthq.daemon.AgentHqDaemon
 import com.superiorsoftllc.agenthq.mailbox.JsonMailStore
@@ -101,7 +102,7 @@ class AskOtherRealDaemonUiTest {
         val port = boot()
         val c = Controller(scope)
         runDesktopComposeUiTest(1400, 900) {
-            setContent { App(c, "ws://127.0.0.1:$port/ws", null, tabs = com.superiorsoftllc.agenthq.ui.plugin.TabFactory(com.superiorsoftllc.agenthq.plugins.core.CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.InfantryAgents + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat)) }
+            setContent { App(c, "ws://127.0.0.1:$port/ws", null, tabs = com.superiorsoftllc.agenthq.ui.plugin.TabFactory(com.superiorsoftllc.agenthq.plugins.core.CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.InfantryAgents + com.superiorsoftllc.agenthq.plugins.official.InfantryCli + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat)) }
             waitUntil(timeoutMillis = waitMs) { c.state.value.connection.state == ConnState.CONNECTED }
             runBlocking { c.spawn("hello") }
             val sessionId = run {
@@ -118,7 +119,7 @@ class AskOtherRealDaemonUiTest {
                 put("reason", "r"); put("allowOther", false)
             }), true).get()
             waitUntil(timeoutMillis = waitMs) { onAllNodes(hasTestTag(QUESTION_OTHER_ROW_TAG)).fetchSemanticsNodes().isNotEmpty() }
-            onNodeWithTag(QUESTION_CANCEL_TAG).performClick()
+            onNodeWithTag(QUESTION_CANCEL_TAG).performScrollTo().performClick()
             waitUntil(timeoutMillis = waitMs) { onAllNodes(hasTestTag(QUESTION_OTHER_ROW_TAG)).fetchSemanticsNodes().isEmpty() }
 
             // 2. plain `agenthq ask --option ...` (blocking prompt_ask, no --other): the prompt popup.
