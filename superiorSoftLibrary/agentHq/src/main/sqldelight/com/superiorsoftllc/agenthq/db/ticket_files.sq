@@ -40,3 +40,20 @@ GROUP BY b.ticket_id;
 
 recordedTickets:
 SELECT DISTINCT ticket_id FROM ticket_files;
+
+-- DAEMON-CONTEXT-1: how many tickets changed one path (the document frequency behind the hub-file cutoff).
+pathFrequency:
+SELECT COUNT(DISTINCT ticket_id) FROM ticket_files WHERE path = ?;
+
+-- DAEMON-CONTEXT-1: the 'Files read' line of a ticket's done report, one row per ticket (latest wins).
+CREATE TABLE IF NOT EXISTS ticket_files_read (
+    ticket_id TEXT NOT NULL PRIMARY KEY,
+    line TEXT NOT NULL,
+    recorded_at INTEGER NOT NULL
+);
+
+saveFilesRead:
+INSERT OR REPLACE INTO ticket_files_read(ticket_id, line, recorded_at) VALUES (?, ?, ?);
+
+filesReadFor:
+SELECT line FROM ticket_files_read WHERE ticket_id = ?;

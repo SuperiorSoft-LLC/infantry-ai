@@ -19,6 +19,8 @@ class TicketContextComposer(
     private val skills: SkillsSource = SkillsSource.NONE,
     /** NOTES-1: the started role's own notes in the ticket's project, listed after `knowledge`. */
     private val roleNotes: RoleNotesSource = RoleNotesSource.NONE,
+    /** DAEMON-CONTEXT-1: the related tickets and their files, assembled by the daemon into the first prompt. */
+    private val related: RelatedWorkSource = RelatedWorkSource.NONE,
 ) : TicketContext {
     override fun compose(input: ContextInput): ComposedContext {
         val core = input.title + "\n\n" + input.description
@@ -41,6 +43,7 @@ class TicketContextComposer(
             add("ticket" to core)
             // IMG-3: right after the ticket it illustrates, so the worker reads the images with the brief.
             imagesSection(input.images)?.let { add("images" to it) }
+            input.ticketId?.let { runCatching { related.block(it, input.description) }.getOrNull() }?.let { add("related" to it) }
             if (includeLinked && input.links.isNotEmpty()) {
                 val linkedTickets = input.links.joinToString("\n") { link ->
                     val singleLineTitle = link.title.replace('\r', ' ').replace('\n', ' ')
@@ -160,7 +163,7 @@ class TicketContextComposer(
          */
         const val FINISH_LINE = "WHEN YOU ARE FINISHED: run `agenthq send starter \"<message>\"` (the starter is who started this " +
             "ticket; if `starter` fails, use `agenthq send pm`). The message must give: the commit sha, what changed, " +
-            "what you tested and what you did not test, and any problem. Then stop. Do not keep working after you mail."
+            "what you tested and what you did not test, any problem, and a line 'Files read: <paths>' listing the files you read (a report without it is refused). Then stop. Do not keep working after you mail."
 
         /** BUG-MAIL-2: the recipient alias for the session that started the sender's ticket. */
         const val STARTER = "starter"

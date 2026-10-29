@@ -102,6 +102,26 @@ class TicketFiles(
 
     fun recordedTicketIds(): Set<String> = q.recordedTickets().executeAsList().toSet()
 
+    /** DAEMON-CONTEXT-1: how many recorded tickets changed [path]. */
+    fun pathFrequency(path: String): Int = q.pathFrequency(path).executeAsOne().toInt()
+
+    /**
+     * DAEMON-CONTEXT-1: the files of a ticket that may still be running: its recorded rows, else (no recording before
+     * done) the diff of its branch against its base, live from git. Empty when it has neither.
+     */
+    fun liveFiles(ticket: TicketRow): List<TicketFile> {
+        forTicket(ticket.id).takeIf { it.isNotEmpty() }?.let { return it }
+        val repo = repoFor(ticket.projectId)?.takeIf { it.isDirectory } ?: return emptyList()
+        val tip = ticket.branch?.let { revParse(repo, it) } ?: return emptyList()
+        val base = ticket.base?.let { revParse(repo, it) } ?: return emptyList()
+        return diff(repo, base, tip).map { it.copy(ticketId = ticket.id) }
+    }
+
+    /** DAEMON-CONTEXT-1: stores the 'Files read' line of [ticketId]'s done report. */
+    fun saveFilesRead(ticketId: String, line: String) = q.saveFilesRead(ticketId, line, clock())
+
+    fun filesRead(ticketId: String): String? = q.filesReadFor(ticketId).executeAsOneOrNull()
+
     // ---- write side ------------------------------------------------------------------------------------------------
 
     /** Records [ticket]'s files from git (see the class note), replacing its rows. Never throws on a git failure. */
