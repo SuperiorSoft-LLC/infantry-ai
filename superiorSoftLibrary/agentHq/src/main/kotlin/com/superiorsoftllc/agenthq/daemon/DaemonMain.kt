@@ -756,6 +756,8 @@ class AgentHqDaemon(
             }
             // BUG-M2-11b-2: `session.keepAliveMinutes` decides, per launch, whether a session's process is kept (plan section 8).
             val settings = SettingsService(store)
+            // STALL-3: the hooks and the process watch read the tool profiles in force from here on (refreshed per launch).
+            com.superiorsoftllc.agenthq.runner.ToolProfiles.active = settings.toolProfiles()
             // Ticket 55d60a5e: resolved now, while the database answers; /health and its watchdog never read it later.
             val healthSettings = HealthSettings(
                 dbTimeoutMs = settings.limit(LimitRegistry.HEALTH_DB_TIMEOUT_SECONDS) * 1000L,
@@ -812,11 +814,20 @@ class AgentHqDaemon(
                 // STALL-1 (ticket 802c64d5): and the watch shims first on PATH (gradle/mvn/npm/yarn/pnpm run watched), unless
                 // the owner turned the forced watch off (`limits.watch.forced` = 0).
                 buildEnv = {
+                    // STALL-3: the tool profiles are read at every launch; a changed list rewrites the shims.
+                    val profiles = settings.toolProfiles()
+                    if (profiles != com.superiorsoftllc.agenthq.runner.ToolProfiles.active) {
+                        com.superiorsoftllc.agenthq.runner.ToolProfiles.active = profiles
+                        watchShimDir?.let { dir ->
+                            runCatching { com.superiorsoftllc.agenthq.runner.WatchShims.install(dir, com.superiorsoftllc.agenthq.runner.WatchShims.launcher(agentHqBin)) }
+                        }
+                    }
                     settings.buildLimits().sessionEnv(System.getenv("GRADLE_OPTS")) +
                         com.superiorsoftllc.agenthq.runner.WatchShims.sessionEnv(
                             watchShimDir, childEnv["PATH"] ?: System.getenv("PATH"),
                             forced = settings.limit(LimitRegistry.WATCH_FORCED) != 0L,
                             treeWaitMinutes = settings.limit(LimitRegistry.WATCH_TREE_WAIT_MINUTES),
+                            profiles = profiles,
                         )
                 },
                 // No-hard-coded-limits S2: the watchdog and silent sweeper read limits.watchdog.* live.
@@ -1472,6 +1483,7 @@ class AgentHqDaemon(
                 quietSeconds = bgNotifier::quietSeconds,
                 stallMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.WATCH_STALL_MINUTES), LimitRegistry.WATCH_STALL_MINUTES) },
                 pmOf = ::stallPmOf,
+                foregroundStallMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.WATCH_FOREGROUND_STALL_MINUTES), LimitRegistry.WATCH_FOREGROUND_STALL_MINUTES) },
             ).also { it.start() }
             // PIPELINE-WATCHDOG: derives per-agent pending/stalled/quiet state, nudges, then tells the PM and the owner.
             val agentWatchdog = com.superiorsoftllc.agenthq.mailbox.AgentWatchdog(
@@ -1807,7 +1819,7 @@ class AgentHqDaemon(
                 ownerQuestions = ownerQuestions,
                 handover = handover,
                 processWatch = processWatch,
-                background = listOf(AutoCloseable { usageRefresher.stop() }, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, healthGate),
+                background = listOf(AutoCloseable { usageRefresher.stop() }, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate),
                 processWatchScheduler = processWatchScheduler,
                 healthSettings = healthSettings,
             )

@@ -14,5 +14,14 @@ object PiLaunchExtras {
     /** Always-on extras the daemon installs at startup (independent of [args], so neither overwrites the other). */
     @Volatile var builtIn: (workingDir: File?, env: Map<String, String>) -> List<String> = { _, _ -> emptyList() }
 
-    fun all(workingDir: File?, env: Map<String, String>): List<String> = builtIn(workingDir, env) + args(workingDir, env)
+    /**
+     * STALL-3: a contributor that throws (a registration whose store is gone, e.g. a stopped daemon's closed database)
+     * costs only its own extras, never the pi start.
+     */
+    fun all(workingDir: File?, env: Map<String, String>): List<String> =
+        listOf(builtIn, args).flatMap { c ->
+            runCatching { c(workingDir, env) }
+                .onFailure { System.err.println("[agentHq] pi launch extra skipped: ${it.message}") }
+                .getOrDefault(emptyList())
+        }
 }

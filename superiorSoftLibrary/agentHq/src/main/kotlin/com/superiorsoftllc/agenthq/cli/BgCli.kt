@@ -32,8 +32,8 @@ internal object BgCli {
     const val BEAT_MS = 15_000L
     private val json = Json { ignoreUnknownKeys = true }
 
-    /** Built-in `--notify` patterns: Gradle's verdict and Kotlin compiler errors. Replaced by `AGENTHQ_BG_NOTIFY_PATTERNS`. */
-    val DEFAULT_PATTERNS = listOf("BUILD SUCCESSFUL", "BUILD FAILED", "^e: ")
+    /** Built-in `--notify` patterns: every tool profile's `notifyOn` (STALL-3). Replaced by `AGENTHQ_BG_NOTIFY_PATTERNS`. */
+    val DEFAULT_PATTERNS: List<String> get() = com.superiorsoftllc.agenthq.runner.ToolProfiles.notifyPatterns()
     const val PATTERNS_ENV = "AGENTHQ_BG_NOTIFY_PATTERNS"
     private const val MAIN_CLASS = "com.superiorsoftllc.agenthq.cli.CliMainKt"
 
@@ -277,6 +277,8 @@ internal object BgCli {
         globals: List<String> = emptyList(),
         open: () -> FrameStream,
     ): Int {
+        // STALL-3: the tool profiles the daemon handed this session (its settings merged over the shipped defaults).
+        com.superiorsoftllc.agenthq.runner.ToolProfiles.active = com.superiorsoftllc.agenthq.runner.ToolProfiles.fromEnv(getenv).orEmpty()
         val parsed = parse(args)
         if (parsed is Parsed.Bad) {
             err.appendLine("error: ${parsed.message}")
@@ -429,8 +431,8 @@ internal object BgCli {
     /** How long the runner waits for the output pipe's EOF after the command exited before it reports anyway. */
     const val EOF_GRACE_MS = 2_000L
 
-    /** Children a command may leave behind on purpose; named, never waited on (a Gradle or Kotlin daemon). */
-    val DETACHED_DAEMON = Regex("(?i)GradleDaemon|org\\.gradle\\.launcher\\.daemon|KotlinCompileDaemon|kotlin-daemon")
+    /** Children a command may leave behind on purpose; named, never waited on (every tool profile's `daemons`, STALL-3). */
+    val DETACHED_DAEMON: Regex get() = com.superiorsoftllc.agenthq.runner.ToolProfiles.daemonRegex()
 
     /** The END sentinel the runner writes after the process wait returns: `[agenthq:done exit=0 elapsed=1m2s bytes=0]`. */
     fun endLine(exit: Int?, elapsedMs: Long, bytes: Long): String =
@@ -441,13 +443,8 @@ internal object BgCli {
         return if (s < 60) "${s}s" else "${s / 60}m${s % 60}s"
     }
 
-    /** Gradle (wrapper or not) gets `--console=plain` unless the caller chose a console: rich output hides progress from a log. */
-    fun withPlainConsole(cmd: List<String>): List<String> {
-        val base = File(cmd.firstOrNull() ?: return cmd).name.lowercase().substringBefore('.')
-        if (base != "gradlew" && base != "gradle") return cmd
-        if (cmd.drop(1).any { it.startsWith("--console") }) return cmd
-        return listOf(cmd[0], "--console=plain") + cmd.drop(1)
-    }
+    /** The command's tool-profile `args` (a plain console: rich output hides progress from a log) unless the caller chose. */
+    fun withProfileArgs(cmd: List<String>): List<String> = com.superiorsoftllc.agenthq.runner.ToolProfiles.withArgs(cmd)
 
     /** [getenv] without the shim dir on PATH, so a shim never resolves to itself. */
     fun withoutShimDir(getenv: (String) -> String?): (String) -> String? {
@@ -535,7 +532,7 @@ internal object BgCli {
                 resolveCommand(p.command, cwd, resolveEnv)
                     ?: throw java.io.IOException("Cannot run program \"${p.command.first()}\": not found on PATH or in ${cwd.absolutePath}")
             }
-            doSpawn(withPlainConsole(command))
+            doSpawn(withProfileArgs(command))
         } catch (e: Exception) {
             // `bg wait` must not block forever on a command that never started, and a `--notify` caller must get its mail.
             val line = "$CANNOT_START ${p.shown}: ${e.message}"

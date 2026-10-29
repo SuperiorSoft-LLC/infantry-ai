@@ -79,6 +79,7 @@ class SettingsService(
             SANDBOX_ALLOWED_DIRS to JsonArray(sandboxAllowedDirs().map(::JsonPrimitive)),
             ALLOWED_MODELS to JsonArray(allowedModels().patterns.map(::JsonPrimitive)),
             ALLOWED_ROLES to JsonArray(allowedRoles().patterns.map(::JsonPrimitive)),
+            TOOL_PROFILES to toolProfileOverrides(),
         ) + LimitRegistry.ALL.associate { it.key to JsonPrimitive(limit(it)) } + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
     )
 
@@ -347,6 +348,7 @@ class SettingsService(
             SANDBOX_ALLOWED_DIRS -> JsonArray(requireAllowedDirs(value).map(::JsonPrimitive))
             ALLOWED_MODELS -> JsonArray(requireAllowedModels(value).map(::JsonPrimitive))
             ALLOWED_ROLES -> JsonArray(requireAllowedModels(value, ALLOWED_ROLES).map { JsonPrimitive(it.lowercase()) })
+            TOOL_PROFILES -> requireToolProfiles(value)
             else -> LimitRegistry.get(key)?.let { JsonPrimitive(requireLimit(it, value)) }
                 ?: declaredField(key)?.let { com.superiorsoftllc.agenthq.plugin.api.ConfigFieldValidator.validate(it, value) }
                 ?: throw IllegalArgumentException("unknown setting '$key'")
@@ -436,6 +438,32 @@ class SettingsService(
         val stored = store.settings.get(key)?.value ?: return default
         val parsed = runCatching { (Json.parseToJsonElement(stored) as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull }.getOrNull()
         return parsed?.takeIf { it in range } ?: default
+    }
+
+    /**
+     * STALL-3 (ticket d258b738): the stored tool-profile overrides (`[]` while unset), merged by name over the shipped
+     * defaults by [toolProfiles]. A bad stored value is ignored (the defaults stay in force).
+     */
+    private fun toolProfileOverrides(): JsonArray = store.settings.get(TOOL_PROFILES)?.value
+        ?.let { runCatching { Json.parseToJsonElement(it) as? JsonArray }.getOrNull() } ?: JsonArray(emptyList())
+
+    /** STALL-3: the tool profiles in force, read at every run launch: the defaults with the stored overrides merged in. */
+    fun toolProfiles(): List<com.superiorsoftllc.agenthq.runner.ToolProfile> {
+        val tp = com.superiorsoftllc.agenthq.runner.ToolProfiles
+        return runCatching { tp.merge(tp.DEFAULTS, tp.parse(toolProfileOverrides().toString())) }.getOrDefault(tp.DEFAULTS)
+    }
+
+    private fun requireToolProfiles(value: JsonElement): JsonElement {
+        val tp = com.superiorsoftllc.agenthq.runner.ToolProfiles
+        require(value is JsonArray) { "setting '$TOOL_PROFILES' must be a JSON array of tool profiles" }
+        try {
+            tp.merge(tp.DEFAULTS, tp.parse(value.toString()))
+        } catch (e: IllegalArgumentException) {
+            throw IllegalArgumentException("setting '$TOOL_PROFILES': ${e.message}")
+        } catch (e: kotlinx.serialization.SerializationException) {
+            throw IllegalArgumentException("setting '$TOOL_PROFILES': ${e.message}")
+        }
+        return value
     }
 
     /**
@@ -553,6 +581,8 @@ class SettingsService(
         const val KEEP_ALIVE_ENV = "AGENTHQ_SESSION_KEEP_ALIVE_MINUTES"
         /** USER-PORTRAIT: base64 PNG/WebP (<= 256 KB) of the human's portrait; "" clears it. */
         const val USER_PORTRAIT = "user.portrait"
+        /** STALL-3: tool-profile overrides (docs/STALL.md), a JSON array merged by name over the shipped defaults. */
+        const val TOOL_PROFILES = com.superiorsoftllc.agenthq.runner.ToolProfiles.SETTING
         const val PROMPTS_TIMEOUT_SEC = "prompts.timeoutSec"
         const val DEFAULT_PROMPT_TIMEOUT_SEC = 600
         /** ASK-TIMER (1.139.0): `deny` (default) | `approve`: what an unanswered tool approval resolves as at its timeout. */

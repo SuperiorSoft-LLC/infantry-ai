@@ -228,6 +228,11 @@ object LimitRegistry {
         "Stall detector: how long a ticket worker may sit idle with no job, or BUSY and silent after its job ended, before it is nudged and its PM is told.",
         max = 1440, zeroMeans = "never nudged",
     )
+    val WATCH_FOREGROUND_STALL_MINUTES = LimitDef(
+        "limits.watch.foregroundStallMinutes", 10, "minutes",
+        "Stall detector: how long a ticket worker may stay BUSY with no tool progress and no watched job (a long or hung foreground call) before it is nudged and its PM is told.",
+        max = 1440, zeroMeans = "never nudged",
+    )
     val WATCH_TREE_JOB_SECONDS = LimitDef(
         "limits.watch.treeJobSeconds", 30, "seconds",
         "How long a process under a worker's harness (one the daemon did not launch) must have run for its end to be told to the worker.",
@@ -324,7 +329,7 @@ object LimitRegistry {
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
-        WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_FORCED, WATCH_TREE_WAIT_MINUTES,
+        WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_FORCED, WATCH_TREE_WAIT_MINUTES,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE,
