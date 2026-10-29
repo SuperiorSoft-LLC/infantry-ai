@@ -64,6 +64,16 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
         val actionScope = s.actionScope
         val host = s.host
         val flags = ui.flags
+        // CONFIG-11: the daemon's compiled sections join the generated dialog (only when its contract serves them); below it, none.
+        val serves = state.connection.servesConfigSchema
+        androidx.compose.runtime.SideEffect {
+            s.tabs.config.applyDaemon(
+                schema = state.daemonConfigSchema.takeIf { serves },
+                values = state.daemonConfigValues.takeIf { serves },
+                error = state.daemonConfigError,
+                writer = if (serves) { node, key, value -> controller.setDaemonConfig(node, key, value) is com.superiorsoftllc.agenthq.ui.net.CommandResult.Sent } else null,
+            )
+        }
         ConfigDialog(
             flags,
             onFlags = { next ->
@@ -128,7 +138,7 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
             drawn = children.flattened().filter { it !is PlaceholderBlock }.mapNotNull { sectionEntries[it.id] }.toSet(),
             // CONFIG-5: with a compiled manifest (snapshot) every tab and card is generated from it; without one the
             // hand-written sections and tabs are drawn as before.
-            plan = { present -> s.tabs.config.snapshot?.let { snap -> ConfigPlan.of(snap, present, children.flattened().filter { it !is PlaceholderBlock }.map { it.id }.toSet()) } },
+            plan = { present -> s.tabs.config.planDeclarations?.let { snap -> ConfigPlan.of(snap, present, children.flattened().filter { it !is PlaceholderBlock }.map { it.id }.toSet()) } },
             sections = { config ->
                 // CONFIG-3: a generated tab (Appearance) draws its cards from the compiled manifest first, instead of the
                 // hand-written sections they replace; with no card (no jar, or no snapshot and no local declaration) nothing changes.

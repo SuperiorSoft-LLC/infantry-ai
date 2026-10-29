@@ -4,6 +4,15 @@ import androidx.compose.ui.test.ComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.onAllNodesWithTag
+import com.superiorsoftllc.agenthq.plugin.api.ConfigChangedFrame
+import com.superiorsoftllc.agenthq.plugin.api.ConfigSetFrame
+import com.superiorsoftllc.agenthq.ui.plugin.config.GENERATED_CARD_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.plugin.config.GENERATED_DAEMON_ERROR_TAG
+import com.superiorsoftllc.agenthq.ui.plugin.config.GENERATED_FIELD_TAG_PREFIX
+import com.superiorsoftllc.agenthq.ui.plugin.config.GENERATED_READONLY_TAG_PREFIX
+import kotlinx.coroutines.runBlocking
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -152,38 +161,84 @@ class ConfigSettingsPersistenceUiTest {
     }
 
     private val daemonSchema = ConfigSchemaFrame(
-        7, listOf(ConfigDeclaration("daemon.Acme_Hook", "Hook", listOf(ConfigFieldDeclaration("Acme_Hook.timeoutSec", "number", default = JsonPrimitive(5), scope = "daemon")))),
+        7, listOf(ConfigDeclaration("daemon.Acme_Hook", "Hook", listOf(ConfigFieldDeclaration("Acme_Hook.timeoutSec", "number", label = "Timeout", default = JsonPrimitive(5), min = 1.0, max = 60.0, scope = "daemon")), tab = "General")),
     )
     private val wire = Json { encodeDefaults = true }
+    private val cardTag = GENERATED_CARD_TAG_PREFIX + "daemon.Acme_Hook/Hook"
+    private val fieldTag = GENERATED_FIELD_TAG_PREFIX + "daemon.Acme_Hook/Acme_Hook.timeoutSec"
 
-    @Test fun aClientOnAnOlderDaemonContractKeepsTheHandWrittenDaemonSections() {
+    private fun daemonFrames(rev: Long = 7, value: Int = 9, schema: ConfigSchemaFrame = daemonSchema) = listOf(
+        Envelope(Envelope.CONFIG_SCHEMA, wire.encodeToString(ConfigSchemaFrame.serializer(), schema)),
+        Envelope(Envelope.CONFIG_VALUES, wire.encodeToString(ConfigValuesFrame.serializer(), ConfigValuesFrame(rev, listOf(NodeConfigEntry("daemon.Acme_Hook", "Acme_Hook.timeoutSec", JsonPrimitive(value), "user"))))),
+    )
+
+    @Test fun aClientOnAnOlderDaemonContractKeepsTheHandWrittenDaemonSectionsAndIgnoresConfigFrames() {
         val tabs = factory()
-        host(tabs, contract = "1.141.0") { controller ->
+        // The same frames a 1.142.0 daemon would send: below the contract they must change nothing in the dialog.
+        host(tabs, contract = "1.141.0", frames = daemonFrames()) { controller ->
             assertFalse(controller.state.value.connection.servesConfigSchema, "1.141.0 does not serve config_schema")
-            assertNull(controller.state.value.daemonConfigSchema)
-            assertNull(controller.state.value.daemonConfigValues)
             onNodeWithTag(CONFIG_TAB_TAG_PREFIX + ConfigTab.GENERAL.name).performClick()
             waitForIdle()
             onNodeWithTag(CONFIG_SECTION_TAG_PREFIX + ConfigEntry.LIFECYCLE.name).performScrollTo().assertExists()
+            onNodeWithTag(cardTag).assertDoesNotExist()
+            assertTrue(tabs.config.daemonDecls.isEmpty(), "the gate keeps the daemon's sections out of the dialog")
         }
     }
 
-    @Test fun aClientOnTheNewContractTakesTheDaemonConfigFramesAndTheDialogStillOpens() {
+    @Test fun aClientOnTheNewContractAsksForConfigAndTheDialogShowsTheDaemonSectionFromTheFrames() {
         val tabs = factory()
-        val values = ConfigValuesFrame(7, listOf(NodeConfigEntry("daemon.Acme_Hook", "Acme_Hook.timeoutSec", JsonPrimitive(9), "user")))
-        val frames = listOf(
-            Envelope(Envelope.CONFIG_SCHEMA, wire.encodeToString(ConfigSchemaFrame.serializer(), daemonSchema)),
-            Envelope(Envelope.CONFIG_VALUES, wire.encodeToString(ConfigValuesFrame.serializer(), values)),
-        )
-        host(tabs, frames = frames) { controller ->
+        withConfigDialogLink(tabs, frames = daemonFrames()) { controller, link ->
             assertTrue(controller.state.value.connection.servesConfigSchema)
+            assertTrue(link.sent.any { it.type == Envelope.CONFIG_GET }, "config_get is requested on connect: ${link.sent.map { it.type }}")
             waitUntil(timeoutMillis = 10_000) { controller.state.value.daemonConfigValues != null }
             assertEquals(daemonSchema, controller.state.value.daemonConfigSchema)
-            assertEquals(JsonPrimitive(9), controller.state.value.daemonConfigValues!!.rows.single().value)
             onNodeWithTag(CONFIG_TAB_TAG_PREFIX + ConfigTab.GENERAL.name).performClick()
             waitForIdle()
+            onNodeWithTag(cardTag).performScrollTo().assertExists()
+            onNodeWithTag(fieldTag).performScrollTo().assertExists()
             onNodeWithTag(CONFIG_SECTION_TAG_PREFIX + ConfigEntry.LIFECYCLE.name).performScrollTo().assertExists()
+            assertEquals(JsonPrimitive(9), tabs.resolvedConfig.json("daemon.Acme_Hook", "Acme_Hook.timeoutSec"))
             assertNotNull(tabs.config.snapshot)
+        }
+    }
+
+    @Test fun editingADaemonFieldSendsConfigSetWithTheRevShowsTheRefusalAndFollowsConfigChanged() {
+        val tabs = factory()
+        withConfigDialogLink(tabs, frames = daemonFrames()) { controller, link ->
+            waitUntil(timeoutMillis = 10_000) { controller.state.value.daemonConfigValues != null }
+            onNodeWithTag(CONFIG_TAB_TAG_PREFIX + ConfigTab.GENERAL.name).performClick()
+            waitForIdle()
+            runBlocking { assertTrue(tabs.config.set("daemon.Acme_Hook", "Acme_Hook.timeoutSec", JsonPrimitive(12))) }
+            val sent = wire.decodeFromString(ConfigSetFrame.serializer(), link.sent.last { it.type == Envelope.CONFIG_SET }.data)
+            assertEquals(ConfigSetFrame("daemon.Acme_Hook", "Acme_Hook.timeoutSec", JsonPrimitive(12), 7), sent)
+            // The daemon's refusal text shows inline on the card, and the old value stays.
+            link.push(Envelope(Envelope.ERROR, "config_set refused: stale config rev 7 (now 8)"))
+            waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag(GENERATED_DAEMON_ERROR_TAG).fetchSemanticsNodes().isNotEmpty() }
+            onNodeWithTag(GENERATED_DAEMON_ERROR_TAG).performScrollTo().assertTextContains("stale config rev 7 (now 8)")
+            assertEquals(JsonPrimitive(9), tabs.resolvedConfig.json("daemon.Acme_Hook", "Acme_Hook.timeoutSec"))
+            // Another client's write arrives as config_changed: the field follows live and the refusal clears.
+            link.push(Envelope(Envelope.CONFIG_CHANGED, wire.encodeToString(ConfigChangedFrame.serializer(), ConfigChangedFrame("daemon.Acme_Hook", "Acme_Hook.timeoutSec", JsonPrimitive(30), "other", 8))))
+            waitUntil(timeoutMillis = 10_000) { tabs.resolvedConfig.json("daemon.Acme_Hook", "Acme_Hook.timeoutSec") == JsonPrimitive(30) }
+            waitUntil(timeoutMillis = 10_000) { onAllNodesWithTag(GENERATED_DAEMON_ERROR_TAG).fetchSemanticsNodes().isEmpty() }
+            // The next write carries the rev the push moved to.
+            runBlocking { tabs.config.set("daemon.Acme_Hook", "Acme_Hook.timeoutSec", null) }
+            val reset = wire.decodeFromString(ConfigSetFrame.serializer(), link.sent.last { it.type == Envelope.CONFIG_SET }.data)
+            assertEquals(ConfigSetFrame("daemon.Acme_Hook", "Acme_Hook.timeoutSec", null, 8), reset)
+        }
+    }
+
+    @Test fun aDaemonSectionFromAnUnsignedPluginIsReadOnlyAndNeverShowsASecretField() {
+        val tabs = factory()
+        val schema = ConfigSchemaFrame(7, listOf(ConfigDeclaration("daemon.Acme_Hook", "Hook", listOf(
+            ConfigFieldDeclaration("Acme_Hook.timeoutSec", "number", label = "Timeout", scope = "daemon"),
+            ConfigFieldDeclaration("Acme_Hook.token", "secret", label = "Token", scope = "daemon"),
+        ), tab = "General", readOnly = true)))
+        withConfigDialogLink(tabs, frames = daemonFrames(schema = schema)) { controller, _ ->
+            waitUntil(timeoutMillis = 10_000) { controller.state.value.daemonConfigValues != null }
+            onNodeWithTag(CONFIG_TAB_TAG_PREFIX + ConfigTab.GENERAL.name).performClick()
+            waitForIdle()
+            onNodeWithTag(GENERATED_READONLY_TAG_PREFIX + "daemon.Acme_Hook").performScrollTo().assertExists()
+            onNodeWithTag(GENERATED_FIELD_TAG_PREFIX + "daemon.Acme_Hook/Acme_Hook.token").assertDoesNotExist()
         }
     }
 }

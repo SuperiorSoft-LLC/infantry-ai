@@ -681,6 +681,8 @@ data class AppState(
     val daemonConfigSchema: com.superiorsoftllc.agenthq.plugin.api.ConfigSchemaFrame? = null,
     /** CONFIG-8: the daemon's last `config_values`, kept current by `config_changed`. */
     val daemonConfigValues: com.superiorsoftllc.agenthq.plugin.api.ConfigValuesFrame? = null,
+    /** CONFIG-11: the daemon's last `config_set` refusal text (stale rev, validator), cleared by the next accepted write. */
+    val daemonConfigError: String? = null,
     /** USAGE-1 (contract 1.141.0): the last `usage_meter` answer; null = never answered. */
     val usageMeter: com.superiorsoftllc.agenthq.ui.protocol.UsageMeterReport? = null,
     /**
@@ -1322,6 +1324,7 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
             ticketError = if (ticketRefusal) env.data else s.ticketError,
             runs = if (commandRefusal) s.runs.copy(commandError = env.data, commandsRevision = s.runs.commandsRevision + 1) else s.runs,
             promptError = if (promptRefusal) env.data else s.promptError,
+            daemonConfigError = if (env.data.startsWith("config_set ")) env.data.substringAfter(": ", env.data) else s.daemonConfigError,
             promptsLoading = if (promptRefusal) false else s.promptsLoading,
             skillError = if (skillRefusal) env.data else s.skillError,
             skillsLoading = if (skillRefusal) false else s.skillsLoading,
@@ -1720,13 +1723,13 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     Envelope.CONFIG_SCHEMA -> runCatching { json.decodeFromString(com.superiorsoftllc.agenthq.plugin.api.ConfigSchemaFrame.serializer(), env.data) }
         .getOrNull()?.let { s.copy(daemonConfigSchema = it) } ?: s
     Envelope.CONFIG_VALUES -> runCatching { json.decodeFromString(com.superiorsoftllc.agenthq.plugin.api.ConfigValuesFrame.serializer(), env.data) }
-        .getOrNull()?.let { s.copy(daemonConfigValues = it) } ?: s
+        .getOrNull()?.let { s.copy(daemonConfigValues = it, daemonConfigError = null) } ?: s
     Envelope.CONFIG_CHANGED -> runCatching { json.decodeFromString(com.superiorsoftllc.agenthq.plugin.api.ConfigChangedFrame.serializer(), env.data) }
         .getOrNull()?.let { c ->
             val old = s.daemonConfigValues ?: com.superiorsoftllc.agenthq.plugin.api.ConfigValuesFrame(c.rev)
             val rows = old.rows.filterNot { it.nodeId == c.node && it.key == c.key } +
                 (c.value?.let { listOf(com.superiorsoftllc.agenthq.plugin.api.NodeConfigEntry(c.node, c.key, it, c.by)) } ?: emptyList())
-            s.copy(daemonConfigValues = old.copy(rev = c.rev, rows = rows))
+            s.copy(daemonConfigValues = old.copy(rev = c.rev, rows = rows), daemonConfigError = null)
         } ?: s
 
     Envelope.USAGE_METER -> runCatching { json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.UsageMeterReport.serializer(), env.data) }
