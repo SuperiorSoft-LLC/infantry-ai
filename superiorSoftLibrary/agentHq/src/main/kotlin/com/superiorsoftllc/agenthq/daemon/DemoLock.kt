@@ -60,9 +60,13 @@ class DemoLock(
     /** Role id -> session id of the seeded sessions, so mail addressed by role resolves to the same allow-list. */
     @Volatile private var roleToSession: Map<String, String> = emptyMap()
 
-    /** The extra `ready` keys: `demo=lock demoNotice=<base64url>`; empty when off. */
+    /**
+     * The extra `ready` keys: `demo=lock demoNotice=<base64url>` (read by plugins/demo/Demo_Lock), plus the generic
+     * `access=restricted` (the UI skips the owner-only reads) and `notices=demo_limit` (the turn-limit refusal is a notice,
+     * not an error banner) that core understands; empty when off.
+     */
     fun readyFields(): String = if (!enabled) "" else
-        " demo=lock" + if (notice.isBlank()) "" else " demoNotice=" + Base64.getUrlEncoder().withoutPadding().encodeToString(notice.toByteArray(Charsets.UTF_8))
+        " demo=lock access=restricted notices=" + DemoTurnLimit.PREFIX + if (notice.isBlank()) "" else " demoNotice=" + Base64.getUrlEncoder().withoutPadding().encodeToString(notice.toByteArray(Charsets.UTF_8))
 
     /**
      * Find or create the demo project and its two sessions, then close the session door ([SessionManager.demoLocked]).

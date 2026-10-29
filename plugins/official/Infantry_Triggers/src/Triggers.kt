@@ -99,7 +99,7 @@ private fun TriggerCard(t: TriggerView, state: AppState, triggers: TriggersConte
     var showEvents by remember(t.id) { mutableStateOf(false) }
     var editing by remember(t.id) { mutableStateOf(false) }
     val live = state.connection.isLive
-    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
     val canWrite = state.connection.canWrite
     val now = Clock.System.now().toEpochMilliseconds()
     // The rows are history the daemon keeps; refresh them whenever the trigger changes while they are open.

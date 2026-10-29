@@ -68,7 +68,7 @@ private data class SkillDraft(
 fun SkillsPane(link: LinkContext, ctx: SkillsContext, onInsert: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val live = link.live
-    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
     val canWrite = link.canWrite
     var query by remember { mutableStateOf("") }
     var draft by remember { mutableStateOf<SkillDraft?>(null) }

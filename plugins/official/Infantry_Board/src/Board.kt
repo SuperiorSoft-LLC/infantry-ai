@@ -240,8 +240,8 @@ class BoardPaneHost internal constructor(
     private val hoverState: State<DragHover?>,
 ) {
     val live: Boolean get() = deps.live
-    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
-    val canWrite: Boolean get() = deps.canWrite
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
+    val canWrite: Boolean @Composable get() = deps.canWrite
     val creating: Boolean get() = creatingState.value
     internal val hover: DragHover? get() = hoverState.value
 
@@ -262,7 +262,7 @@ fun BoardPaneFrame(deps: BoardDeps, onOpenAgent: (String) -> Unit, content: @Com
     val actionScope = rememberCoroutineScope()
     val creating = remember { mutableStateOf(false) }
     val live = deps.live
-    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
     val canWrite = deps.canWrite
     val projectId = deps.session.activeProjectId
     // The shell hands over a new context on every state change; the effects and the drop session read the current one.
@@ -396,7 +396,7 @@ class BoardCardItem internal constructor(
 fun BoardColumnsSection(board: BoardPaneHost, modifier: Modifier = Modifier, card: @Composable ColumnScope.(BoardCardItem) -> Unit) {
     val backlog = board.deps.tickets
     val live = board.live
-    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
     val canWrite = board.canWrite
     val drag = board.drag
     val session = board.session
@@ -594,8 +594,8 @@ class BoardCardHost internal constructor(
     val ticket: Ticket get() = item.ticket
     val deps: BoardDeps get() = board.deps
     val live: Boolean get() = board.live
-    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
-    val canWrite: Boolean get() = board.canWrite
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
+    val canWrite: Boolean @Composable get() = board.canWrite
     /** The edit form is open (the summary toggles it). */
     val open: Boolean get() = openState.value
     val dropNote: String? get() = item.dropNote
@@ -732,7 +732,7 @@ fun TicketCardEditSection(card: BoardCardHost, modifier: Modifier = Modifier) {
 fun TicketCardActionsSection(card: BoardCardHost, modifier: Modifier = Modifier) {
     val t = card.ticket
     val live = card.live
-    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
     val canWrite = card.canWrite
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
         when (t.status) {

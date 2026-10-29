@@ -97,7 +97,7 @@ fun RolesPane(deps: RolesDeps, onSessionStarted: () -> Unit, onOpenAgent: (Strin
                     }
                     if (r.source == "CUSTOM") Chip("custom", Palette.Info)
                     if (count > 0) { Spacer(Modifier.width(4.dp)); Chip("$count", Palette.Accent) }
-                    RoleRowMenu(r, live = deps.link.live, locked = deps.link.demoLock, onEdit = { selected = r.id; creating = false; editingId = r.id })
+                    RoleRowMenu(r, live = deps.link.live, locked = !com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current.canWrite, onEdit = { selected = r.id; creating = false; editingId = r.id })
                 }
             }
             TextButton(onClick = { creating = true }, enabled = deps.link.canWrite) { Text("+ New role", fontSize = 12.sp) }
@@ -133,7 +133,7 @@ private fun RoleDetail(
     // FORM-MODAL-2: the profile being created (id null) or edited in the shared modal; null = closed.
     var profileDraft by remember(role.id) { mutableStateOf<AgentProfile?>(null) }
     val live = deps.link.live
-    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
     val canWrite = deps.link.canWrite
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -326,7 +326,7 @@ private fun ProfileEditorModal(role: Role, initial: AgentProfile, deps: RolesDep
     var instructions by remember(key) { mutableStateOf(initial.instructions.orEmpty()) }
     var error by remember(key) { mutableStateOf<String?>(null) }
     val live = deps.link.live
-    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
     val canWrite = deps.link.canWrite
     EditorModal(
         title = if (initial.id == null) "New profile in ${role.name}" else "Edit profile",
@@ -379,8 +379,8 @@ private fun RoleRowMenu(r: Role, live: Boolean, locked: Boolean, onEdit: () -> U
             contentAlignment = Alignment.Center,
         ) { androidx.compose.material3.Icon(AhqIcons.MoreHoriz, contentDescription = null, tint = if (live) Palette.Muted else Palette.Border, modifier = Modifier.size(14.dp)) }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }, modifier = Modifier.background(Palette.Raised)) {
-            // DEMO-LOCK (ticket 9bf81983): the locked daemon refuses role_save, so Edit role is dimmed and says why.
-            DemoLockTooltip(locked) { m ->
+            // DEMO-MERGE-1: role_save is a write; Edit role is dimmed and says why while writes are refused.
+            WritePolicyTooltip { m ->
                 DropdownMenuItem(
                     text = { Text("Edit role", color = if (locked) Palette.Border else Palette.Text, fontSize = 12.sp) },
                     onClick = { menuOpen = false; onEdit() },

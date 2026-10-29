@@ -145,11 +145,12 @@ fun ProjectPicker(state: AppState, controller: Controller) {
             }
         }
         Spacer(Modifier.width(6.dp))
-        // DEMO-LOCK (ticket 2f154f5f): the daemon refuses every project change; both boxes are dimmed and say why.
-        val demo = state.connection.demoLock
-        NewProjectBox(enabled = live && !demo, label = if (demo) com.superiorsoftllc.agenthq.ui.model.DEMO_DISABLED_TOOLTIP else NEW_PROJECT_LABEL) { creating = true }
+        // DEMO-MERGE-1: a project change is a write; both boxes are dimmed and say why while writes are refused.
+        val policy = com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current
+        val writeLocked = !policy.canWrite
+        NewProjectBox(enabled = live && !writeLocked, label = policy.label(NEW_PROJECT_LABEL)) { creating = true }
         Spacer(Modifier.width(6.dp))
-        EditProjectBox(enabled = live && current != null && !demo, label = if (demo) com.superiorsoftllc.agenthq.ui.model.DEMO_DISABLED_TOOLTIP else EDIT_PROJECT_LABEL) { editing = true }
+        EditProjectBox(enabled = live && current != null && !writeLocked, label = policy.label(EDIT_PROJECT_LABEL)) { editing = true }
     }
 
     if (editing && current != null) ProjectConfigDialog(state, controller, current, live, onDismiss = { editing = false })

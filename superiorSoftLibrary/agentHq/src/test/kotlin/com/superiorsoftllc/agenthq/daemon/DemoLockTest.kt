@@ -41,7 +41,7 @@ class DemoLockTest {
     @Test
     fun `ready carries demo=lock and the notice base64url`() {
         val fields = locked().readyFields()
-        assertTrue(fields.startsWith(" demo=lock demoNotice="))
+        assertTrue(fields.startsWith(" demo=lock access=restricted notices=demo_limit demoNotice="), fields)
         val encoded = fields.substringAfter("demoNotice=")
         assertEquals("This is a demo.", String(java.util.Base64.getUrlDecoder().decode(encoded)))
     }

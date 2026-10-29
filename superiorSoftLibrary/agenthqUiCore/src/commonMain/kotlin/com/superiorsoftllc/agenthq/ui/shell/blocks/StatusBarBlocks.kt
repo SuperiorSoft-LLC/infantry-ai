@@ -155,16 +155,16 @@ object StatusBuildStamp : Block("buildStamp", "$FOOTER_NODE.buildStamp") {
 object StatusConfigCog : Block("configCog", "$FOOTER_NODE.configCog") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val ctx = LocalShellContext.current ?: return
-        val window = ctx.window
-        // DEMO-LOCK: every setting is refused by the daemon, so the cog is dimmed and says why.
-        val demo = ctx.link.demoLock
+        val window = (LocalShellContext.current ?: return).window
+        // DEMO-MERGE-1: a module's write policy that refuses writes dims the cog and says why (default: allowed).
+        val policy = com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current
+        val locked = !policy.canWrite
         Box(
             scope.modifier.padding(start = 10.dp).size(24.dp)
-                .clickable(enabled = !demo, role = Role.Button) { window.openConfig() }
-                .semantics { contentDescription = if (demo) com.superiorsoftllc.agenthq.ui.model.DEMO_DISABLED_TOOLTIP else "Configuration" },
+                .clickable(enabled = !locked, role = Role.Button) { window.openConfig() }
+                .semantics { contentDescription = if (locked) policy.reason ?: "Configuration" else "Configuration" },
             contentAlignment = Alignment.Center,
-        ) { Icon(AhqIcons.Cog, contentDescription = null, tint = if (demo) Palette.Border else Palette.Muted, modifier = Modifier.size(14.dp)) }
+        ) { Icon(AhqIcons.Cog, contentDescription = null, tint = if (locked) Palette.Border else Palette.Muted, modifier = Modifier.size(14.dp)) }
     }
 }
 

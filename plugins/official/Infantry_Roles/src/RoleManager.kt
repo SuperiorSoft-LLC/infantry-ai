@@ -178,8 +178,8 @@ class RoleFormDraft(
     val onDone: () -> Unit,
 ) {
     val live: Boolean get() = deps.link.live
-    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
-    val canWrite: Boolean get() = deps.link.canWrite
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
+    val canWrite: Boolean @Composable get() = deps.link.canWrite
     val canEdit: Boolean get() = deps.roles.canEdit
 }
 

@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.board
 
+import androidx.compose.runtime.Composable
 import com.superiorsoftllc.agenthq.ui.*
 import com.superiorsoftllc.agenthq.ui.shell.blocks.*
 
@@ -32,8 +33,8 @@ class BoardDeps(
     constructor(ctx: ShellContext) : this(ctx.link, ctx.session, ctx.tickets, ctx.roles, ctx.executor, ctx.layout)
 
     val live: Boolean get() = link.live
-    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
-    val canWrite: Boolean get() = link.canWrite
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
+    val canWrite: Boolean @Composable get() = link.canWrite
 
     /** The session [id] runs, if the sidebar knows it. */
     fun agent(id: String?): AgentView? = id?.let { wanted -> roles.agents.firstOrNull { it.id == wanted } }

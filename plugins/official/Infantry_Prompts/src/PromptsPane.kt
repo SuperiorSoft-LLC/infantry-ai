@@ -60,7 +60,7 @@ private data class PromptDraft(val editing: String? = null, val name: String = "
 fun PromptsPane(link: LinkContext, ctx: PromptsContext, onInsert: (String) -> Unit) {
     val scope = rememberCoroutineScope()
     val live = link.live
-    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
     val canWrite = link.canWrite
     var query by remember { mutableStateOf("") }
     var draft by remember { mutableStateOf<PromptDraft?>(null) }

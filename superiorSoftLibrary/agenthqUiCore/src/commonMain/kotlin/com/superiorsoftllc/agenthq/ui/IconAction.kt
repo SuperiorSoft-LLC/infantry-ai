@@ -97,12 +97,14 @@ fun IconAction(
 }
 
 /**
- * DEMO-LOCK (ticket db5b3b70): under the lock [content]'s (disabled) control says "Disabled in the demo" on hover; with
- * the lock off it is [content] alone, unchanged.
+ * DEMO-MERGE-1: when the nearest [com.superiorsoftllc.agenthq.ui.shell.WritePolicy] refuses writes and gives a reason,
+ * [content]'s (disabled) control says that reason on hover; otherwise it is [content] alone, unchanged.
  */
 @Composable
-fun DemoLockTooltip(locked: Boolean, content: @Composable (Modifier) -> Unit) {
-    if (locked) IconActionTooltipBox(com.superiorsoftllc.agenthq.ui.model.DEMO_DISABLED_TOOLTIP, describe = false, content = content)
+fun WritePolicyTooltip(content: @Composable (Modifier) -> Unit) {
+    val policy = com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current
+    val reason = policy.reason?.takeIf { !policy.canWrite }
+    if (reason != null) IconActionTooltipBox(reason, describe = false, content = content)
     else content(Modifier)
 }
 

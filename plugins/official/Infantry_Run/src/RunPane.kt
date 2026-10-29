@@ -141,8 +141,8 @@ class RunPaneHost internal constructor(
 ) {
     val runs: RunsState = context.runs
     val live: Boolean = link.live
-    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
-    val canWrite: Boolean = link.canWrite
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
+    val canWrite: Boolean @Composable get() = link.canWrite
     val picked: CommandSpecView? = runs.commands.firstOrNull { it.id == pickedId.value } ?: runs.commands.firstOrNull()
     val current: RunState? = runs.current
     /** The run going now (one at a time), whichever pill is selected. */
@@ -278,7 +278,7 @@ fun RunEmptySection(run: RunPaneHost, modifier: Modifier = Modifier) {
 fun RunToolbarSection(run: RunPaneHost, modifier: Modifier = Modifier) {
     val runs = run.runs
     val live = run.live
-    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
     val canWrite = run.canWrite
     val inFlight = run.inFlight
     val picked = run.picked

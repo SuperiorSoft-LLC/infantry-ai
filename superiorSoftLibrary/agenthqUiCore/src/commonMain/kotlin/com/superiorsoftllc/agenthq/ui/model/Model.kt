@@ -91,15 +91,27 @@ data class ConnectionInfo(
     val historySince: Long? = null,
     /** BUILD-STAMP-1: the daemon's build string (`ready` build=), e.g. 1.0.1+20261023.1432.e85b223; null from an older daemon. */
     val daemonBuild: String? = null,
-    /** DEMO-LOCK (ticket 2f154f5f): the daemon announced `demo=lock` in `ready`: it refuses everything but the demo agents. */
-    val demoLock: Boolean = false,
-    /** DEMO-LOCK: the pinned demo notice (`ready` demoNotice=, base64url), null when none. */
-    val demoNotice: String? = null,
+    /**
+     * DEMO-MERGE-1: every `key=value` field of the last `ready`, verbatim. Core reads only the generic ones (`access`);
+     * a module that adapts the UI to a particular deployment reads its own.
+     */
+    val readyFields: Map<String, String> = emptyMap(),
+    /**
+     * DEMO-MERGE-1: refusals the daemon declared as notices (`ready` notices=code,code): the latest message per code. Such a
+     * refusal is not an error banner; a module shows it.
+     */
+    val notices: Map<String, String> = emptyMap(),
 ) {
     val isLive: Boolean get() = state == ConnState.CONNECTED
 
-    /** DEMO-LOCK (ticket db5b3b70): a write control may be enabled: live, and not a locked demo daemon (which refuses every write). */
-    val canWrite: Boolean get() = isLive && !demoLock
+    /**
+     * DEMO-MERGE-1: the daemon serves this link a restricted surface (`ready` access=restricted): it refuses the owner-only
+     * reads (configuration, host processes, the command catalog), so the UI does not ask for them.
+     */
+    val restricted: Boolean get() = readyFields["access"] == "restricted"
+
+    /** A write control may be enabled: live, and the nearest [com.superiorsoftllc.agenthq.ui.shell.WritePolicy] allows writes. */
+    val canWrite: Boolean @androidx.compose.runtime.Composable get() = isLive && com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current.canWrite
 
     /**
      * Contract 1.11.0: the daemon puts every prompt on its session's stream as a `turn`, so the transcript
@@ -1309,8 +1321,8 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
         if (inOrder) withTodos.copy(statusDetail = p.detail) else withTodos
     }
 
-    // Ticket 9bf81983: the demo's per-visitor turn limit replaces the pinned demo notice; it is not an error banner.
-    Envelope.ERROR -> demoLimitReached(env.data)?.let { s.copy(connection = s.connection.copy(demoNotice = it)) }
+    // DEMO-MERGE-1: a refusal whose code the daemon declared a notice (`ready` notices=) is kept for a module to show, not an error banner.
+    Envelope.ERROR -> declaredNotice(s.connection, env.data)?.let { (code, msg) -> s.copy(connection = s.connection.copy(notices = s.connection.notices + (code to msg))) }
         ?: requeueRefused(s, env) ?: if (env.sessionId == null) {
         // A refused command. If it was this window's spawn, no session is coming: stop waiting for one.
         // P10-C: a `prompt_*` refusal also lands inline in the Prompts tab and ends its loading state.
@@ -1874,8 +1886,8 @@ private fun ready(s: AppState, env: Envelope): AppState {
             instance = instance,
             historySince = fields["since"]?.toLongOrNull(),
             daemonBuild = fields["build"]?.takeIf { it.isNotBlank() },
-            demoLock = fields["demo"] == "lock",
-            demoNotice = fields["demoNotice"]?.let(::decodeDemoNotice),
+            readyFields = fields,
+            notices = emptyMap(),
         ),
         // PROMPT-2: the daemon resends every prompt still open right after `ready`; one resolved while the link was
         // down must not keep its card.
@@ -2118,15 +2130,13 @@ fun ticketTagLabel(ticketId: String, title: String?): String {
 fun ticketTagFull(ticketId: String, title: String?): String =
     title?.trim()?.takeIf { it.isNotEmpty() }?.let { "$ticketId $it" } ?: ticketId
 
-/** DEMO-LOCK (ticket 2f154f5f): the `ready` demoNotice= value is base64url (no padding) UTF-8; null when it does not decode. */
-@OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
-internal fun decodeDemoNotice(encoded: String): String? = runCatching {
-    kotlin.io.encoding.Base64.UrlSafe.withPadding(kotlin.io.encoding.Base64.PaddingOption.ABSENT_OPTIONAL).decode(encoded).decodeToString()
-}.getOrNull()?.takeIf { it.isNotBlank() }
-
-/** Ticket 9bf81983: the daemon's `demo_limit <message>` refusal (a visitor's turns are used up): the message, else null. */
-internal fun demoLimitReached(data: String): String? =
-    data.takeIf { it.startsWith("demo_limit ") }?.removePrefix("demo_limit ")?.trim()?.takeIf { it.isNotEmpty() }
-
-/** DEMO-LOCK: the tooltip on every control the demo dims. */
-const val DEMO_DISABLED_TOOLTIP = "Disabled in the demo"
+/**
+ * DEMO-MERGE-1: [data] is `<code> <message>` with a code the daemon declared in `ready` notices= (comma separated): the
+ * code and the message, else null.
+ */
+internal fun declaredNotice(c: ConnectionInfo, data: String): Pair<String, String>? {
+    val declared = c.readyFields["notices"]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty()
+    val code = data.substringBefore(' ')
+    val message = data.substringAfter(' ', "").trim()
+    return if (code in declared && message.isNotEmpty()) code to message else null
+}

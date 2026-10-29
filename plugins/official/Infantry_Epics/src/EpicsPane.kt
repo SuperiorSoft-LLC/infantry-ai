@@ -70,7 +70,7 @@ private data class EpicDraft(val name: String = "", val goal: String = "")
 fun EpicsPane(state: AppState, epics: EpicsContext) {
     val scope = rememberCoroutineScope()
     val live = state.connection.isLive
-    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
     val canWrite = state.connection.canWrite
     val active = state.activeProject
     var draft by remember(active?.id) { mutableStateOf<EpicDraft?>(null) }

@@ -71,7 +71,7 @@ private fun ProfileRow(p: AgentProfile, state: AppState, roles: RolesContext, ex
     var editing by remember(p.id) { mutableStateOf(false) }
     var first by remember(p.id) { mutableStateOf("") }
     val live = state.connection.isLive
-    // DEMO-MERGE-1: write controls follow canWrite (not live under a demo-locked daemon); reads keep live.
+    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
     val canWrite = state.connection.canWrite
     val role = state.role(p.role)
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
