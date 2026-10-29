@@ -31,5 +31,12 @@
     {"type": "board.card.note", "title": "Card note", "parents": ["board.card"]},
     {"type": "board.card.edit", "title": "Card edit form", "parents": ["board.card"]},
     {"type": "board.card.actions", "title": "Card actions", "parents": ["board.card"]}
+  ],
+  "actions": [
+    { "id": "board.ticket.save", "label": "New or edit a ticket", "kind": "write", "frames": ["ticket_save", "ticket_link", "ticket_unlink"] },
+    { "id": "board.ticket.move", "label": "Move or start a ticket", "kind": "write", "frames": ["ticket_move", "ticket_reorder"] },
+    { "id": "board.ticket.delete", "label": "Delete a ticket", "kind": "destructive", "frames": ["ticket_delete"] },
+    { "id": "board.ticket.start", "label": "Start the next ticket", "kind": "spawn", "frames": ["ticket_start_next"] },
+    { "id": "images.upload", "label": "Attach an image", "kind": "write", "frames": ["image_upload"] }
   ]
 }

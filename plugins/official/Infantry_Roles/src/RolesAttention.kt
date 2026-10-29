@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.roles
 
+import com.superiorsoftllc.agenthq.ui.shell.gate
 import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.background
@@ -97,10 +98,10 @@ fun RolesPane(deps: RolesDeps, onSessionStarted: () -> Unit, onOpenAgent: (Strin
                     }
                     if (r.source == "CUSTOM") Chip("custom", Palette.Info)
                     if (count > 0) { Spacer(Modifier.width(4.dp)); Chip("$count", Palette.Accent) }
-                    RoleRowMenu(r, live = deps.link.live, locked = !com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current.canWrite, onEdit = { selected = r.id; creating = false; editingId = r.id })
+                    RoleRowMenu(r, live = deps.link.live, locked = !deps.link.gate("roles.save").allowed, onEdit = { selected = r.id; creating = false; editingId = r.id })
                 }
             }
-            TextButton(onClick = { creating = true }, enabled = deps.link.canWrite) { Text("+ New role", fontSize = 12.sp) }
+            TextButton(onClick = { creating = true }, enabled = deps.link.gate("roles.save").enabled) { Text("+ New role", fontSize = 12.sp) }
         }
         Box(Modifier.width(1.dp).fillMaxHeight().background(Palette.Border))
         Box(Modifier.weight(1f).fillMaxHeight()) {
@@ -133,8 +134,8 @@ private fun RoleDetail(
     // FORM-MODAL-2: the profile being created (id null) or edited in the shared modal; null = closed.
     var profileDraft by remember(role.id) { mutableStateOf<AgentProfile?>(null) }
     val live = deps.link.live
-    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
-    val canWrite = deps.link.canWrite
+    // POLICY-1: write controls are named actions gated by the daemon's policy (and any write policy); reads keep live.
+    val canWrite = deps.link.gate("roles.save").enabled
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -150,7 +151,7 @@ private fun RoleDetail(
             }
             Chip(role.source.lowercase().replace('_', ' '), if (role.source == "CUSTOM") Palette.Info else Palette.Muted)
             Spacer(Modifier.width(6.dp))
-            OutlinedButton(onClick = { onEditingChange(!editing) }, enabled = deps.link.canWrite) { Text(if (editing) "Close editor" else "Edit role") }
+            OutlinedButton(onClick = { onEditingChange(!editing) }, enabled = deps.link.gate("roles.save").enabled) { Text(if (editing) "Close editor" else "Edit role") }
         }
         if (editing) RoleEditor(role, deps.roles, iconsSupported = deps.roles.iconsSupported, onSaved = { onEditingChange(false) })
         Text("Instructions (persona)", color = Palette.Muted, fontSize = 10.sp)
@@ -169,7 +170,7 @@ private fun RoleDetail(
             IconAction(
                 AhqIcons.Add, "New profile in ${role.name}",
                 onClick = { profileDraft = AgentProfile(name = "", role = role.id, instructions = role.persona) },
-                enabled = deps.link.canWrite, style = IconActionStyle.TEXT, modifier = Modifier.testTag(PROFILE_ADD_BUTTON_TAG),
+                enabled = deps.link.gate("agents.profile.save").enabled, style = IconActionStyle.TEXT, modifier = Modifier.testTag(PROFILE_ADD_BUTTON_TAG),
             )
         }
         if (profiles.isEmpty()) Text("No profile yet: create one to start a session as this role.", color = Palette.Muted, fontSize = 11.sp)
@@ -248,13 +249,13 @@ private fun RoleBindingEditor(role: Role, deps: RolesDeps) {
         )
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Effort", color = Palette.Muted, fontSize = 11.sp)
-            Chip("default", if (effort == null) Palette.Accent else Palette.Muted, Modifier.clickable(enabled = deps.link.canWrite) { effort = null })
+            Chip("default", if (effort == null) Palette.Accent else Palette.Muted, Modifier.clickable(enabled = deps.link.gate("roles.save").enabled) { effort = null })
             ROLE_EFFORT_LEVELS.forEach { level ->
-                Chip(level, if (effort == level) Palette.Accent else Palette.Muted, Modifier.testTag(ROLE_BINDING_EFFORT_TAG_PREFIX + level).clickable(enabled = deps.link.canWrite) { effort = level })
+                Chip(level, if (effort == level) Palette.Accent else Palette.Muted, Modifier.testTag(ROLE_BINDING_EFFORT_TAG_PREFIX + level).clickable(enabled = deps.link.gate("roles.save").enabled) { effort = level })
             }
         }
         Button(
-            enabled = deps.link.canWrite,
+            enabled = deps.link.gate("roles.save").enabled,
             modifier = Modifier.testTag(ROLE_BINDING_SAVE_TAG),
             onClick = {
                 // Untouched = the stored harness/model exactly, even when the frames have not landed or no longer list it.
@@ -275,10 +276,10 @@ private fun ProfileCard(p: AgentProfile, deps: RolesDeps, onSessionStarted: () -
             Chip(p.provider ?: deps.executor.providers.firstOrNull { it.default }?.id?.let { "$it (default)" } ?: "default provider")
             Spacer(Modifier.width(4.dp))
             Chip(p.model ?: "default model")
-            TextButton(onClick = onEdit, enabled = deps.link.canWrite, modifier = Modifier.testTag(PROFILE_EDIT_TAG_PREFIX + (p.id ?: p.name))) {
+            TextButton(onClick = onEdit, enabled = deps.link.gate("agents.profile.save").enabled, modifier = Modifier.testTag(PROFILE_EDIT_TAG_PREFIX + (p.id ?: p.name))) {
                 Text("Edit", fontSize = 11.sp)
             }
-            TextButton(onClick = { p.id?.let { id -> actionScope.launch { deps.roles.deleteProfile(id) } } }, enabled = deps.link.canWrite) {
+            TextButton(onClick = { p.id?.let { id -> actionScope.launch { deps.roles.deleteProfile(id) } } }, enabled = deps.link.gate("agents.profile.delete", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE).enabled) {
                 Text("Delete", color = Palette.Danger, fontSize = 11.sp)
             }
         }
@@ -290,7 +291,7 @@ private fun ProfileCard(p: AgentProfile, deps: RolesDeps, onSessionStarted: () -
             )
             Spacer(Modifier.width(6.dp))
             Button(
-                enabled = deps.link.canWrite && first.isNotBlank() && p.id != null,
+                enabled = deps.link.gate("agents.profile.save").enabled && first.isNotBlank() && p.id != null,
                 onClick = {
                     actionScope.launch {
                         if (deps.roles.spawnAs(p.id!!, first.trim()) is CommandResult.Sent) { first = ""; onSessionStarted() }
@@ -326,8 +327,8 @@ private fun ProfileEditorModal(role: Role, initial: AgentProfile, deps: RolesDep
     var instructions by remember(key) { mutableStateOf(initial.instructions.orEmpty()) }
     var error by remember(key) { mutableStateOf<String?>(null) }
     val live = deps.link.live
-    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
-    val canWrite = deps.link.canWrite
+    // POLICY-1: write controls are named actions gated by the daemon's policy (and any write policy); reads keep live.
+    val canWrite = deps.link.gate("roles.save").enabled
     EditorModal(
         title = if (initial.id == null) "New profile in ${role.name}" else "Edit profile",
         onSave = {

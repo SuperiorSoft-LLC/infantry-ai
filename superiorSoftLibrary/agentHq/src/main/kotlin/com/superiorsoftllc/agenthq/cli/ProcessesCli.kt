@@ -30,9 +30,13 @@ internal object ProcessesCli {
         else -> ProcessesRequest("reap", args[1].toLong())
     }
 
+    /** POLICY-1 (1.143.0): the frame [req] goes as: a list is `processes`, a reap `processes_reap`. */
+    fun frameType(req: ProcessesRequest): String = if (req.op == "list") Envelope.PROCESSES else Envelope.PROCESSES_REAP
+
     suspend fun request(stream: FrameStream, req: ProcessesRequest): ProcessesAnswer {
         val answer = stream.request(
-            Envelope(Envelope.PROCESSES, json.encodeToString(ProcessesRequest.serializer(), req)),
+            // POLICY-1 (1.143.0): a reap is the `processes_reap` frame, so a read-only policy can still list.
+            Envelope(frameType(req), json.encodeToString(ProcessesRequest.serializer(), req)),
             answerType = Envelope.PROCESSES,
             what = "processes",
             idempotent = req.op == "list",

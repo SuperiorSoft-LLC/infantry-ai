@@ -690,12 +690,12 @@ fun noticeColour(kind: NoticeKind): Color = when (kind) {
 @Composable
 fun InterruptButton(agent: AgentView, live: Boolean, controller: Controller) {
     val actionScope = rememberCoroutineScope()
-    val policy = com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current
+    val gate = com.superiorsoftllc.agenthq.ui.shell.rememberGate("chat.interrupt")
     val busy = isBusy(agent)
     IconAction(
-        AhqIcons.Stop, policy.label(STOP_TURN_LABEL),
+        AhqIcons.Stop, gate.label(STOP_TURN_LABEL),
         onClick = { actionScope.launch { controller.interrupt(agent.id) } },
-        enabled = policy.canWrite && live && busy,
+        enabled = gate.allowed && live && busy,
         modifier = Modifier.testTag(INTERRUPT_BUTTON_TAG),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
     )
@@ -739,9 +739,16 @@ internal fun PromptBox(
     val host = LocalPlatformHost.current
     val snapshot = controller.state.collectAsState().value
     val live = snapshot.connection.isLive
-    // DEMO-MERGE-1: the nearest write policy (default allow-all) dims the composer's write controls and says why.
-    val policy = com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current
-    val writeLocked = !policy.canWrite
+    // DEMO-MERGE-1 / POLICY-1: each write control is a named action gated by the daemon's policy (and any write policy); the
+    // generic gate covers what has no action of its own (a slash command typed into the box).
+    val policy = com.superiorsoftllc.agenthq.ui.shell.rememberGate("")
+    val swap = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.swap")
+    val spawn = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.spawn", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN)
+    val reap = com.superiorsoftllc.agenthq.ui.shell.rememberGate("host.processes.reap", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE)
+    val remove = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.delete")
+    val kill = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.kill")
+    val restart = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.restart")
+    val writeLocked = !policy.allowed
     // COMPOSER-NEWLINE-1: the box keeps its own caret so Shift+Enter can break the line exactly there. A value set
     // from outside (cleared after a send, a slash row picked) wins and puts the caret at its end.
     var field by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
@@ -833,7 +840,7 @@ internal fun PromptBox(
                 Text(
                     when {
                         // DEMO-MERGE-1: no new agents while writes are refused; with none selected the box says what to do.
-                        writeLocked && (spawnMode || a == null) -> "Pick an agent to message it"
+                        !spawn.allowed && (spawnMode || a == null) -> "Pick an agent to message it"
                         spawnMode || a == null -> "Task for a NEW agent. Enter to spawn, Shift+Enter for a new line"
                         isBusy(a) -> "Agent is busy. Enter to queue: sent as its next turn when this one ends"
                         blocker != null -> "Waiting: $blocker"
@@ -892,19 +899,19 @@ internal fun PromptBox(
                     else -> "Send"
                 },
                 onSubmit, shortcut = "Enter", enabled = live && (value.isNotBlank() || attachments.isNotEmpty()) && !attachBusy && blocker == null &&
-                    !(writeLocked && (spawnMode || a == null || value.trimStart().startsWith("/"))),
+                    !(!spawn.allowed && (spawnMode || a == null)) && !(writeLocked && value.trimStart().startsWith("/")),
                 style = IconActionStyle.FILLED,
             )
             if (a != null && !spawnMode) {
                 // DEMO-MERGE-1: switching changes the agent's harness/model (a write), so it stays visible but dimmed.
-                IconAction(AhqIcons.SwapHoriz, policy.label(SWITCH_AGENT_LABEL), onSwitchAgent, shortcut = SWITCH_AGENT_SHORTCUT, enabled = !writeLocked)
+                IconAction(AhqIcons.SwapHoriz, swap.label(SWITCH_AGENT_LABEL), onSwitchAgent, shortcut = SWITCH_AGENT_SHORTCUT, enabled = swap.allowed)
             } else {
                 IconAction(
                     if (spawnMode) AhqIcons.Close else AhqIcons.PersonAdd,
-                    if (spawnMode) "Cancel new agent" else policy.label(NEW_AGENT_LABEL),
+                    if (spawnMode) "Cancel new agent" else spawn.label(NEW_AGENT_LABEL),
                     onSpawnToggle, shortcut = NEW_AGENT_SHORTCUT,
                     // DEMO-MERGE-1: a new session is a write; the button is dimmed with the reason as its tooltip.
-                    enabled = spawnMode || !writeLocked,
+                    enabled = spawnMode || spawn.allowed,
                 )
             }
             if (a != null && !spawnMode) {
@@ -917,9 +924,9 @@ internal fun PromptBox(
                 val running = a.session.state in setOf(SessionState.STARTING, SessionState.BUSY, SessionState.WAITING_INPUT)
                 // Ticket a7f33ba2: the old Kill slot reaps this session's background jobs and leaves the session alive.
                 IconAction(
-                    AhqIcons.Cancel, policy.label(STOP_BACKGROUND_LABEL),
+                    AhqIcons.Cancel, reap.label(STOP_BACKGROUND_LABEL),
                     onClick = { actionScope.launch { controller.stopBackgroundProcesses(a.id) } }, shortcut = STOP_BACKGROUND_SHORTCUT,
-                    enabled = live && !writeLocked && backgroundProcessPids(a.session).isNotEmpty(),
+                    enabled = live && reap.allowed && backgroundProcessPids(a.session).isNotEmpty(),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
                 )
                 // SESSION-RM-1: on an ended session there is nothing left to end, so the same trash button removes it
@@ -929,8 +936,8 @@ internal fun PromptBox(
                     var confirmingRemove by remember(a.id) { mutableStateOf(false) }
                     IconAction(
                         // DEMO-MERGE-1: the delete is a write.
-                        AhqIcons.DeleteForever, policy.label(REMOVE_AGENT_LABEL),
-                        onClick = { confirmingRemove = true }, enabled = live && !writeLocked,
+                        AhqIcons.DeleteForever, remove.label(REMOVE_AGENT_LABEL),
+                        onClick = { confirmingRemove = true }, enabled = live && remove.allowed,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Palette.Danger),
                     )
                     if (confirmingRemove) {
@@ -941,14 +948,14 @@ internal fun PromptBox(
                     }
                 } else {
                     IconAction(
-                        AhqIcons.DeleteForever, policy.label(END_SESSION_LABEL),
-                        onClick = { actionScope.launch { controller.endSession(a.id) } }, shortcut = END_SESSION_SHORTCUT, enabled = live && !writeLocked,
+                        AhqIcons.DeleteForever, kill.label(END_SESSION_LABEL),
+                        onClick = { actionScope.launch { controller.endSession(a.id) } }, shortcut = END_SESSION_SHORTCUT, enabled = live && kill.allowed,
                         style = IconActionStyle.FILLED,
                         colors = ButtonDefaults.buttonColors(containerColor = Palette.Danger, contentColor = androidx.compose.ui.graphics.Color.White),
                     )
                 }
                 var confirmingRestart by remember(a.id) { mutableStateOf(false) }
-                IconAction(AhqIcons.Refresh, policy.label(RESTART_SESSION_LABEL), onClick = { confirmingRestart = true }, enabled = live && !writeLocked)
+                IconAction(AhqIcons.Refresh, restart.label(RESTART_SESSION_LABEL), onClick = { confirmingRestart = true }, enabled = live && restart.allowed)
                 if (confirmingRestart) {
                     RestartSessionDialog(
                         a, snapshot, onDismiss = { confirmingRestart = false },

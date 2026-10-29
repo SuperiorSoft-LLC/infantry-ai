@@ -102,6 +102,10 @@ class ConfigDaemonScopeRealDaemonUiTest {
             roles = RoleService(File(state, "roles")),
             modelCatalogs = com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs.EMPTY,
             workingDir = state,
+            // POLICY-1 gap 9: never the defaults, which read the process's state dir; this test's own temp one only.
+            ownerToken = com.superiorsoftllc.agenthq.daemon.OwnerCredential.ensure(state),
+            demoLock = { false },
+            policies = com.superiorsoftllc.agenthq.policy.PolicyRuntime(emptyList(), { null }, null, state),
         )
         daemon.server.start(wait = false)
         val stop = { daemon.server.stop(0, 200); daemon.close() }

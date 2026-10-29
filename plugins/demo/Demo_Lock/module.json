@@ -1,9 +1,9 @@
 {
   "name": "Demo_Lock",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "apiVersion": 2,
   "author": "Infantry AI",
-  "description": "Demo build only: wraps the app so that, against a demo-locked daemon (ready demo=lock), every write control is dimmed with \"Disabled in the demo\" and the demo notice is available to the blocks below.",
+  "description": "The demo policy preset (policies/demo.json: which actions the demo turns off and why, its seats, turn limit and notice; read by the daemon) and, in the demo build, the demo notice around the app for Demo_Banner. The dimming itself is core's policy gate.",
   "tier": "official",
   "sequence": [],
   "entry": "com.superiorsoftllc.agenthq.plugins.demo.lock.DemoLockPlugin",

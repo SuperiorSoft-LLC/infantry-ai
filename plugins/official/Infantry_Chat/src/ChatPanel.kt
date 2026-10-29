@@ -269,13 +269,17 @@ fun chatPanelHost(
     val state by controller.state.collectAsState()
     val scope = rememberCoroutineScope()
     val agent = sessionId?.let { state.agents[it] }
-    // DEMO-MERGE-1: the nearest write policy (default allow-all); a new agent and a harness switch are writes.
-    val writeLocked = !com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current.canWrite
-    LaunchedEffect(state.harnessPickerAsk) { state.harnessPickerAsk?.takeIf { !writeLocked }?.let { chat.openSwitch(it.sessionId, it.harness) } }
-    // New agent (or the Switch agent picker) opened before writes were refused is closed the moment they are; the
-    // spawn rows and the picker never show while the policy refuses writes.
-    LaunchedEffect(writeLocked) { if (writeLocked) { chat.spawnMode = false; chat.switchAsk = null } }
-    val spawnOpen = chat.spawnMode && !writeLocked
+    // POLICY-1: a new agent (agents.spawn) and a harness switch (agents.swap) are named actions, gated by the daemon's policy.
+    val spawnAllowed = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.spawn", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN).allowed
+    val swapAllowed = com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.swap").allowed
+    LaunchedEffect(state.harnessPickerAsk) { state.harnessPickerAsk?.takeIf { swapAllowed }?.let { chat.openSwitch(it.sessionId, it.harness) } }
+    // New agent (or the Switch agent picker) opened before the action was turned off is closed the moment it is; the
+    // spawn rows and the picker never show while the policy refuses them.
+    LaunchedEffect(spawnAllowed, swapAllowed) {
+        if (!spawnAllowed) chat.spawnMode = false
+        if (!swapAllowed) chat.switchAsk = null
+    }
+    val spawnOpen = chat.spawnMode && spawnAllowed
     // CP-1b: every time New agent opens (and on reconnect while open), re-read the model catalog.
     LaunchedEffect(chat.spawnMode || chat.switchAsk != null, state.connection.isLive) {
         if ((chat.spawnMode || chat.switchAsk != null) && state.connection.isLive) controller.refreshModelCatalog()

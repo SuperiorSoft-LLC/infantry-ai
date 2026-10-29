@@ -385,6 +385,9 @@ class Controller(
             CommandResult.Refused("not connected to a daemon (${_state.value.connection.state.name.lowercase()}) - nothing was sent")
         } else if (client.send(env)) CommandResult.Sent else CommandResult.Refused("the connection dropped while sending - nothing was sent")
 
+    /** POLICY-1 (docs/POLICY.md): the owner's ONE switch; the daemon answers every client with the new `policy` frame. */
+    suspend fun selectPolicy(presetId: String): CommandResult = report(send(Envelope(Envelope.POLICY_SET, presetId.trim())))
+
     private fun report(r: CommandResult): CommandResult {
         if (r is CommandResult.Refused) _state.update { it.withNotice(Clock.System.now().toEpochMilliseconds(), r.reason, null, NoticeKind.ERROR) }
         return r
@@ -589,6 +592,9 @@ class Controller(
      * USER-PORTRAIT: store [png] (already downscaled) as the daemon's `user.portrait`; null resets to the bundled default.
      * The shown portrait changes only when the daemon answers `settings`.
      */
+    /** POLICY-1 (1.143.0): the daemon serves `processes_reap`, the killing half of `processes`. */
+    private fun splitsReap(): Boolean = contractAtLeast(_state.value.connection.contract, 1, 143)
+
     private fun hasProcessWatch(): Boolean =
         contractAtLeast(_state.value.connection.contract, ProcessWatchView.SINCE_MAJOR, ProcessWatchView.SINCE_MINOR)
 
@@ -600,7 +606,7 @@ class Controller(
     /** ROGUE-1: reap one process ([pid]) or, with null, every rogue one. The daemon refuses anything its sessions did not start. */
     suspend fun reapProcesses(pid: Long?): CommandResult {
         if (!hasProcessWatch()) return report(CommandResult.Refused("this daemon has no process detector (contract 1.120.0)"))
-        return report(send(if (pid == null) WireRequests.processes("reap_rogue") else WireRequests.processes("reap", pid)))
+        return report(send(if (pid == null) WireRequests.processes("reap_rogue", splitReap = splitsReap()) else WireRequests.processes("reap", pid, splitsReap())))
     }
 
     /** ROGUE-1: the daemon's `processes.autoReap` (default off). Shown changed only when the daemon answers `settings`. */
@@ -1786,7 +1792,7 @@ class Controller(
         if (pids.isEmpty()) return report(CommandResult.Refused("session $sessionId has no background processes"))
         if (!hasProcessWatch()) return report(CommandResult.Refused("this daemon has no process detector (contract 1.120.0)"))
         var last: CommandResult = CommandResult.Refused("nothing reaped")
-        for (pid in pids) last = report(send(WireRequests.processes("reap", pid)))
+        for (pid in pids) last = report(send(WireRequests.processes("reap", pid, splitsReap())))
         return last
     }
 

@@ -14,5 +14,8 @@
       "id": "infantry.epics",
       "container": "center"
     }
+  ],
+  "actions": [
+    { "id": "epics.save", "label": "New or edit an epic", "kind": "write", "frames": ["epic_save", "epic_base"] }
   ]
 }

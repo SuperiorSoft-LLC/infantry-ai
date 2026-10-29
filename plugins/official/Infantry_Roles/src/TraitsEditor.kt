@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.roles
 
+import com.superiorsoftllc.agenthq.ui.shell.gate
 import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.layout.Arrangement
@@ -44,8 +45,8 @@ internal fun RoleTraitsEditor(role: Role, deps: RolesDeps) {
     val traits = deps.traits
     val scope = rememberCoroutineScope()
     val live = deps.link.live
-    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
-    val canWrite = deps.link.canWrite
+    // POLICY-1: write controls are named actions gated by the daemon's policy (and any write policy); reads keep live.
+    val canWrite = deps.link.gate("roles.save").enabled
     val bound = traits.idsFor(role.id)
     fun set(ids: List<String>) { scope.launch { traits.setForRole(role.id, ids) } }
 

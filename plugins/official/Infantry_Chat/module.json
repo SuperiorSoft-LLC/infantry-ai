@@ -43,5 +43,14 @@
       ],
       "block": "infantry.shell.config.reasoning"
     }
+  ],
+  "actions": [
+    { "id": "chat.interrupt", "label": "Stop the turn", "kind": "write", "frames": ["interrupt"] },
+    { "id": "agents.spawn", "label": "New agent", "kind": "spawn", "frames": ["new"] },
+    { "id": "agents.swap", "label": "Switch agent", "kind": "write", "frames": ["session_swap", "agent_swap"] },
+    { "id": "agents.kill", "label": "End session", "kind": "destructive", "frames": ["kill"] },
+    { "id": "agents.delete", "label": "Remove agent", "kind": "destructive", "frames": ["session_delete"] },
+    { "id": "agents.restart", "label": "Restart session", "kind": "destructive", "frames": ["session_restart"] },
+    { "id": "host.processes.reap", "label": "Stop background processes", "kind": "destructive", "frames": ["processes_reap"] }
   ]
 }

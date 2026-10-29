@@ -15,6 +15,10 @@ class DemoTurnLimit(
     val windowMillis: Long,
     private val file: File?,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** POLICY-1: the refusal code (the preset's `turnLimitCode`), declared a notice in `ready`. */
+    val code: String = PREFIX,
+    /** POLICY-1: the refusal text (the preset's `turnLimitText`); `{turns}` and `{window}` are filled in. */
+    private val text: String = TEXT,
 ) {
     private val turns = HashMap<String, ArrayDeque<Long>>()
 
@@ -27,7 +31,7 @@ class DemoTurnLimit(
     fun refusal(client: String): String? {
         val now = clock()
         val used = turns[client]?.apply { removeAll { now - it >= windowMillis } }?.size ?: 0
-        return if (used >= perClient) "$PREFIX ${message()}" else null
+        return if (used >= perClient) "$code ${message()}" else null
     }
 
     /** One turn of [client] reached an agent. */
@@ -40,7 +44,7 @@ class DemoTurnLimit(
     fun message(): String {
         val hours = windowMillis / HOUR_MILLIS
         val per = if (hours == 24L) "day" else "$hours hours"
-        return "Demo limit reached: $perClient turns per visitor per $per"
+        return text.replace("{turns}", perClient.toString()).replace("{window}", per)
     }
 
     private fun load() {
@@ -71,6 +75,8 @@ class DemoTurnLimit(
 
     companion object {
         const val PREFIX = "demo_limit"
+        /** The text when the preset names none (core names no demo wording). */
+        const val TEXT = "Turn limit reached: {turns} turns per visitor per {window}"
         const val TURNS_ENV = "AGENTHQ_DEMO_TURNS_PER_IP"
         const val WINDOW_ENV = "AGENTHQ_DEMO_TURN_WINDOW_HOURS"
         /** Comma-separated peers whose `X-Forwarded-For` is believed (the host's reverse proxy). Default: loopback. */

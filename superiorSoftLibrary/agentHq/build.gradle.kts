@@ -391,6 +391,9 @@ tasks.register<Sync>("dockerContext") {
     from(rootProject.layout.projectDirectory.file("docker/entrypoint.sh"))
     // SANDBOX-1: the Landlock launcher the Dockerfile compiles (limits.sandbox.mode).
     from(rootProject.layout.projectDirectory.file("docker/landlock-exec.c"))
+    // POLICY-1: the policy presets the plugins ship as data (the demo preset: plugins/demo/Demo_Lock/policies); the Dockerfile
+    // points AGENTHQ_POLICY_DIRS at /opt/agenthq/policies. A preset is only active when selected (AGENTHQ_DEMO_LOCK=1 selects demo).
+    from(rootProject.layout.projectDirectory.dir("plugins/demo/Demo_Lock/policies")) { into("agenthq/policies") }
     into(layout.buildDirectory.dir("docker"))
 }
 

@@ -155,14 +155,17 @@ object StatusBuildStamp : Block("buildStamp", "$FOOTER_NODE.buildStamp") {
 object StatusConfigCog : Block("configCog", "$FOOTER_NODE.configCog") {
     @Composable
     override fun Render(scope: BlockScope) {
-        val window = (LocalShellContext.current ?: return).window
-        // DEMO-MERGE-1: a module's write policy that refuses writes dims the cog and says why (default: allowed).
-        val policy = com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current
-        val locked = !policy.canWrite
+        val shell = LocalShellContext.current ?: return
+        val window = shell.window
+        // DEMO-MERGE-1 / POLICY-1: the cog follows the `settings.save` action (the daemon's policy, a module's write policy)
+        // and says why when off; the owner who may switch the policy always reaches it (the Policy card is in there).
+        val gate = com.superiorsoftllc.agenthq.ui.shell.rememberGate("settings.save")
+        // Not the link: the configuration opens offline too; only a refusal (a reason) locks it.
+        val locked = gate.reason != null && !(shell.link.live && shell.link.policy.canSwitch)
         Box(
             scope.modifier.padding(start = 10.dp).size(24.dp)
                 .clickable(enabled = !locked, role = Role.Button) { window.openConfig() }
-                .semantics { contentDescription = if (locked) policy.reason ?: "Configuration" else "Configuration" },
+                .semantics { contentDescription = if (locked) gate.reason ?: "Configuration" else "Configuration" },
             contentAlignment = Alignment.Center,
         ) { Icon(AhqIcons.Cog, contentDescription = null, tint = if (locked) Palette.Border else Palette.Muted, modifier = Modifier.size(14.dp)) }
     }

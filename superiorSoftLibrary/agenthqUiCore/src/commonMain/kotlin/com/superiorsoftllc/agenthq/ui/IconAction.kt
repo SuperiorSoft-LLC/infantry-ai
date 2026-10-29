@@ -102,8 +102,10 @@ fun IconAction(
  */
 @Composable
 fun WritePolicyTooltip(content: @Composable (Modifier) -> Unit) {
-    val policy = com.superiorsoftllc.agenthq.ui.shell.LocalWritePolicy.current
-    val reason = policy.reason?.takeIf { !policy.canWrite }
+    // POLICY-1: inside [com.superiorsoftllc.agenthq.ui.shell.Gated] the gate's own decision; elsewhere the generic write's
+    // (the daemon's policy and the nearest write policy), so a control that only checks `canWrite` says the policy's reason.
+    val gate = com.superiorsoftllc.agenthq.ui.shell.LocalActionGate.current ?: com.superiorsoftllc.agenthq.ui.shell.rememberGate("")
+    val reason = gate.reason?.takeIf { !gate.enabled && gate.reason.isNotBlank() }
     if (reason != null) IconActionTooltipBox(reason, describe = false, content = content)
     else content(Modifier)
 }

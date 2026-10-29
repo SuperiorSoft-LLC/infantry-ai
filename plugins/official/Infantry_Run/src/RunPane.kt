@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.run
 
+import com.superiorsoftllc.agenthq.ui.shell.gate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -141,8 +142,8 @@ class RunPaneHost internal constructor(
 ) {
     val runs: RunsState = context.runs
     val live: Boolean = link.live
-    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
-    val canWrite: Boolean @Composable get() = link.canWrite
+    /** POLICY-1: the named action [actionId] may be performed now (live, and the daemon's policy allows it). */
+    @Composable fun can(actionId: String, kind: String = com.superiorsoftllc.agenthq.plugin.api.ActionKind.WRITE): Boolean = link.gate(actionId, kind).enabled
     val picked: CommandSpecView? = runs.commands.firstOrNull { it.id == pickedId.value } ?: runs.commands.firstOrNull()
     val current: RunState? = runs.current
     /** The run going now (one at a time), whichever pill is selected. */
@@ -278,8 +279,9 @@ fun RunEmptySection(run: RunPaneHost, modifier: Modifier = Modifier) {
 fun RunToolbarSection(run: RunPaneHost, modifier: Modifier = Modifier) {
     val runs = run.runs
     val live = run.live
-    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
-    val canWrite = run.canWrite
+    // POLICY-1: write controls are named actions gated by the daemon's policy (and any write policy); reads keep live.
+    val canWrite = run.can("runs.start", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN)
+    val canStop = run.can("runs.stop", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE)
     val inFlight = run.inFlight
     val picked = run.picked
     var menuOpen by remember { mutableStateOf(false) }
@@ -323,7 +325,7 @@ fun RunToolbarSection(run: RunPaneHost, modifier: Modifier = Modifier) {
         }
         OutlinedButton(
             onClick = run::stop,
-            enabled = canWrite && inFlight,
+            enabled = canStop && inFlight,
             modifier = Modifier.testTag(RUN_STOP_TAG),
         ) { Text("Stop", fontSize = 12.sp) }
         if (runs.commands.isNotEmpty()) {

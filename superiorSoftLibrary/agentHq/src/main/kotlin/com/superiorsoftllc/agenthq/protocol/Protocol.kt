@@ -264,6 +264,9 @@ data class Envelope(
         /** Contract 1.120.0 (ROGUE-1): [com.superiorsoftllc.agenthq.session.ProcessesRequest] -> [com.superiorsoftllc.agenthq.session.ProcessesAnswer]: list / reap the processes this daemon's sessions started. */
         const val PROCESSES = "processes"
 
+        /** Contract 1.143.0 (POLICY-1): the KILLING half of [PROCESSES], split off so a read-only policy can list processes: a [com.superiorsoftllc.agenthq.session.ProcessesRequest] with op `reap` | `reap_rogue`, answered by `processes`. A `processes` frame whose op is not `list` is still served but gated as this action. */
+        const val PROCESSES_REAP = "processes_reap"
+
         /** Contract 1.120.0 (ROGUE-1): pushed to every client when free RAM drops under `processes.floorMb` (a [com.superiorsoftllc.agenthq.session.ProcessReport]), at most once per 10 min. */
         const val PROCESS_PRESSURE = "process_pressure"
         const val MAIL_REFUSED = "mail_refused"

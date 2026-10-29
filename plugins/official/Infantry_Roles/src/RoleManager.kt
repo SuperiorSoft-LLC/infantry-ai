@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.roles
 
+import com.superiorsoftllc.agenthq.ui.shell.gate
 import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.background
@@ -111,7 +112,7 @@ fun RoleManagerHint(modifier: Modifier = Modifier) {
 /** The list page (New role, then a row per role); nothing while a role is open. [modifier] goes on New role. */
 @Composable
 fun RoleManagerList(deps: RolesDeps, nav: RoleManagerNav, modifier: Modifier = Modifier) =
-    RoleManagerList(deps.roles.roles, deps.roles.bindings, deps.roles.traits, deps.link.canWrite, nav, modifier)
+    RoleManagerList(deps.roles.roles, deps.roles.bindings, deps.roles.traits, deps.link.gate("roles.save").enabled, nav, modifier)
 
 /** S2: [RoleManagerList] over the shell context's [roles], their [bindings] and [traits]; [live] enables New role. */
 @Composable
@@ -178,8 +179,8 @@ class RoleFormDraft(
     val onDone: () -> Unit,
 ) {
     val live: Boolean get() = deps.link.live
-    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
-    val canWrite: Boolean @Composable get() = deps.link.canWrite
+    // POLICY-1: write controls are named actions gated by the daemon's policy (and any write policy); reads keep live.
+    val canWrite: Boolean @Composable get() = deps.link.gate("roles.save").enabled
     val canEdit: Boolean get() = deps.roles.canEdit
 }
 

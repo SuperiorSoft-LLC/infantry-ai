@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.triggers
 
+import com.superiorsoftllc.agenthq.ui.shell.gate
 import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.background
@@ -82,7 +83,7 @@ internal fun TriggersPane(state: AppState, triggers: TriggersContext) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("${state.triggers.size} triggers" + state.trippedTriggerCount.takeIf { it > 0 }?.let { ", $it tripped" }.orEmpty(), color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.weight(1f))
-            Button(onClick = { creating = !creating }, enabled = state.connection.canWrite) { Text(if (creating) "Close" else "+ New trigger", fontSize = 12.sp) }
+            Button(onClick = { creating = !creating }, enabled = state.connection.gate("triggers.save").enabled) { Text(if (creating) "Close" else "+ New trigger", fontSize = 12.sp) }
         }
         if (creating) TriggerForm(state, triggers, onDone = { creating = false })
         if (state.triggers.isEmpty() && !creating) {
@@ -99,8 +100,9 @@ private fun TriggerCard(t: TriggerView, state: AppState, triggers: TriggersConte
     var showEvents by remember(t.id) { mutableStateOf(false) }
     var editing by remember(t.id) { mutableStateOf(false) }
     val live = state.connection.isLive
-    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
-    val canWrite = state.connection.canWrite
+    // POLICY-1: write controls are named actions gated by the daemon's policy (and any write policy); reads keep live.
+    val canWrite = state.connection.gate("triggers.fire").enabled
+    val canDelete = state.connection.gate("triggers.delete", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE).enabled
     val now = Clock.System.now().toEpochMilliseconds()
     // The rows are history the daemon keeps; refresh them whenever the trigger changes while they are open.
     LaunchedEffect(t.id, t.state, t.trippedAt, t.lastFiredAt, showEvents, live) { if (showEvents && live) triggers.loadEvents(t.id) }
@@ -143,9 +145,9 @@ private fun TriggerCard(t: TriggerView, state: AppState, triggers: TriggersConte
             )
             Text("Enabled", color = Palette.Muted, fontSize = 11.sp)
             TextButton(onClick = { showEvents = !showEvents }) { Text(if (showEvents) "Hide events" else "Events", fontSize = 11.sp) }
-            TextButton(onClick = { editing = !editing }, enabled = state.connection.canWrite) { Text(if (editing) "Close" else "Edit", fontSize = 11.sp) }
+            TextButton(onClick = { editing = !editing }, enabled = state.connection.gate("triggers.save").enabled) { Text(if (editing) "Close" else "Edit", fontSize = 11.sp) }
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = { actionScope.launch { triggers.delete(t.id) } }, enabled = canWrite) { Text("Delete", color = Palette.Danger, fontSize = 11.sp) }
+            TextButton(onClick = { actionScope.launch { triggers.delete(t.id) } }, enabled = canDelete) { Text("Delete", color = Palette.Danger, fontSize = 11.sp) }
         }
         if (editing) TriggerForm(state, triggers, onDone = { editing = false }, existing = t)
         if (showEvents) TriggerEvents(t, state, triggers)

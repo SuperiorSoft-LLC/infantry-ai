@@ -31,6 +31,11 @@ data class Envelope(
 ) {
     companion object {
         const val READY = "ready"
+        /** POLICY-1 (docs/POLICY.md): the daemon's active policy (JSON PolicyWire), after `ready` and on every switch. */
+        const val POLICY = "policy"
+        /** POLICY-1: ask for the `policy` frame again; `policy_set` is the owner's switch (data: the preset id). */
+        const val POLICY_GET = "policy_get"
+        const val POLICY_SET = "policy_set"
         const val PROMPT = "prompt"
         const val STDOUT = "stdout"
         const val STDERR = "stderr"
@@ -145,6 +150,8 @@ data class Envelope(
         // Contract 1.120.0 (ROGUE-1): `processes` {op: list|reap|reap_rogue, pid?} is answered by `processes`
         // (a ProcessesAnswer); `process_pressure` (a ProcessReport) is pushed when free RAM drops under the floor.
         const val PROCESSES = "processes"
+        /** Contract 1.143.0 (POLICY-1): `processes_reap` {op: reap|reap_rogue, pid?}, the killing half of `processes`. */
+        const val PROCESSES_REAP = "processes_reap"
         const val PROCESS_PRESSURE = "process_pressure"
 
         // Contract 1.92.0 (STATS-1): `session_stats_get` {"sessionId"} asks for one session's statistics, read by the
@@ -2049,8 +2056,9 @@ object WireRequests {
         Envelope(Envelope.SESSION_STATS_GET, JsonObject(mapOf("sessionId" to JsonPrimitive(sessionId))).toString())
 
     /** ROGUE-1 (1.120.0): list the tracked processes (`op=list`), reap one (`reap` + [pid]) or every rogue one (`reap_rogue`). */
-    fun processes(op: String = "list", pid: Long? = null): Envelope = Envelope(
-        Envelope.PROCESSES,
+    /** POLICY-1 (1.143.0): a reap goes as `processes_reap` ([splitReap]: the daemon serves it); below that, as `processes`. */
+    fun processes(op: String = "list", pid: Long? = null, splitReap: Boolean = true): Envelope = Envelope(
+        if (op != "list" && splitReap) Envelope.PROCESSES_REAP else Envelope.PROCESSES,
         JsonObject(buildMap { put("op", JsonPrimitive(op)); if (pid != null) put("pid", JsonPrimitive(pid)) }).toString(),
     )
 

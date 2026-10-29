@@ -14,5 +14,10 @@
       "id": "infantry.triggers",
       "container": "center"
     }
+  ],
+  "actions": [
+    { "id": "triggers.save", "label": "New or edit a trigger", "kind": "write", "frames": ["trigger_save"] },
+    { "id": "triggers.fire", "label": "Fire, arm or disable a trigger", "kind": "write", "frames": ["trigger_fire", "trigger_arm", "trigger_disable"] },
+    { "id": "triggers.delete", "label": "Delete a trigger", "kind": "destructive", "frames": ["trigger_delete"] }
   ]
 }

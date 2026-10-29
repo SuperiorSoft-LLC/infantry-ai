@@ -14,5 +14,9 @@
       "id": "infantry.prompts",
       "container": "right"
     }
+  ],
+  "actions": [
+    { "id": "prompts.save", "label": "Add or edit a prompt", "kind": "write", "frames": ["prompt_save"] },
+    { "id": "prompts.delete", "label": "Delete a prompt", "kind": "destructive", "frames": ["prompt_delete"] }
   ]
 }

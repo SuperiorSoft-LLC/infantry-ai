@@ -11,5 +11,8 @@
   "buildOrder": 200,
   "fills": [
     "infantry.shell.header"
+  ],
+  "actions": [
+    { "id": "projects.save", "label": "New or edit a project", "kind": "write", "frames": ["project_save", "project_base", "project_config"] }
   ]
 }

@@ -14,5 +14,9 @@
       "id": "infantry.profiles",
       "container": "center"
     }
+  ],
+  "actions": [
+    { "id": "agents.profile.save", "label": "Save a profile", "kind": "write", "frames": ["agent_save"] },
+    { "id": "agents.profile.delete", "label": "Delete a profile", "kind": "destructive", "frames": ["agent_delete"] }
   ]
 }

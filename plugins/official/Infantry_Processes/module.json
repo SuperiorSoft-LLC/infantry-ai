@@ -11,5 +11,9 @@
   "buildOrder": 200,
   "fills": [
     "infantry.shell.footer.processesBadge"
+  ],
+  "actions": [
+    { "id": "host.processes.read", "label": "List background processes", "kind": "read", "frames": ["processes"] },
+    { "id": "host.processes.reap", "label": "Reap background processes", "kind": "destructive", "frames": ["processes_reap"] }
   ]
 }

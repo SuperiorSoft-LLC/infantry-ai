@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.profiles
 
+import com.superiorsoftllc.agenthq.ui.shell.gate
 import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.foundation.background
@@ -71,8 +72,9 @@ private fun ProfileRow(p: AgentProfile, state: AppState, roles: RolesContext, ex
     var editing by remember(p.id) { mutableStateOf(false) }
     var first by remember(p.id) { mutableStateOf("") }
     val live = state.connection.isLive
-    // DEMO-MERGE-1: write controls follow canWrite (live, and the nearest WritePolicy allows writes); reads keep live.
-    val canWrite = state.connection.canWrite
+    // POLICY-1: write controls are named actions gated by the daemon's policy (and any write policy); reads keep live.
+    val canWrite = state.connection.gate("agents.profile.save").enabled
+    val canDelete = state.connection.gate("agents.profile.delete", com.superiorsoftllc.agenthq.plugin.api.ActionKind.DESTRUCTIVE).enabled
     val role = state.role(p.role)
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -86,7 +88,7 @@ private fun ProfileRow(p: AgentProfile, state: AppState, roles: RolesContext, ex
             Spacer(Modifier.width(4.dp))
             Chip(p.model ?: "default model")
             OutlinedButton(onClick = { editing = !editing }, enabled = canWrite, modifier = Modifier.padding(start = 6.dp)) { Text(if (editing) "Close" else "Edit", fontSize = 11.sp) }
-            TextButton(onClick = { p.id?.let { id -> actionScope.launch { roles.deleteProfile(id) } } }, enabled = canWrite && p.id != null) {
+            TextButton(onClick = { p.id?.let { id -> actionScope.launch { roles.deleteProfile(id) } } }, enabled = canDelete && p.id != null) {
                 Text("Delete", color = Palette.Danger, fontSize = 11.sp)
             }
         }
