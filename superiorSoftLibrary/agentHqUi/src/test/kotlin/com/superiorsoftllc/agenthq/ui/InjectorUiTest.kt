@@ -78,7 +78,7 @@ class InjectorUiTest {
     }
 
     private fun factory(vararg modules: AgentHqModule, allowInject: Map<String, List<String>> = emptyMap(), shellOverrides: List<AcceptedShellOverride> = emptyList()) =
-        TabFactory(CoreModules.all + modules, shellOverrides = shellOverrides, allowInject = { allowInject[it].orEmpty() })
+        TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.InfantryAgents + com.superiorsoftllc.agenthq.plugins.official.attention.InfantryAttention + modules, shellOverrides = shellOverrides, allowInject = { allowInject[it].orEmpty() })
 
     /** A fake link that never dials (frontend/ui-test-flake-causes). */
     private class NoDialLink(scope: CoroutineScope) : DaemonClient(scope) {

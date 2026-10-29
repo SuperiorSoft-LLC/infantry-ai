@@ -65,7 +65,7 @@ class MemoryPaneOverridesUiTest {
             ModuleManifest("Acme_Notes", "1.0.0", author = "Acme", license = "NOASSERTION", shell = listOf(decl)),
             tier = Tier.COMMUNITY, shell = mapOf("acme" to override),
         )
-        val f = TabFactory(CoreModules.all + InfantryNotes + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Notes", decl.nodeId, decl.name, decl.mode)))
+        val f = TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.InfantryAgents + InfantryNotes + module, shellOverrides = listOf(AcceptedShellOverride("Acme_Notes", decl.nodeId, decl.name, decl.mode)))
         assertEquals(emptyList(), f.problems)
         // The override goes into the Notes tab's tree, not the window's.
         assertSame(f.baseRoot, f.shellRoot)
