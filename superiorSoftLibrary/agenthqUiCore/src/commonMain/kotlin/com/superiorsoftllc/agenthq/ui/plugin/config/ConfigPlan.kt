@@ -67,6 +67,13 @@ class ConfigPlan private constructor(val cards: List<PlanCard>, val uncovered: L
     }
 
     companion object {
+        /** CONFIG-6: the 11 once-ownerless sections, in display order; each now has an owner's declaration. */
+        val MOVED: List<ConfigEntry> = listOf(
+            ConfigEntry.THEME, ConfigEntry.BLUR, ConfigEntry.USER_PORTRAIT, ConfigEntry.MARKDOWN_ENGINE, ConfigEntry.REASONING,
+            ConfigEntry.TAB_GROUPS, ConfigEntry.AGENT_SCOPE, ConfigEntry.PROGRESS_STALE, ConfigEntry.LIFECYCLE,
+            ConfigEntry.CLI_LOCATIONS, ConfigEntry.TOOL_APPROVAL,
+        )
+
         /**
          * [declarations] (the snapshot's), [present] (the hand-written sections this host has) and [blockIds] (the ids of the
          * fills the dialog can draw): cards with fields, block cards whose fill exists, and the sections left over.
@@ -86,7 +93,8 @@ class ConfigPlan private constructor(val cards: List<PlanCard>, val uncovered: L
                 }
             }.sortedBy { it.declaration.order }
             val covered = cards.mapNotNull { it.entry }.toSet()
-            return ConfigPlan(cards, ConfigEntry.entries.filter { it in present && it !in covered })
+            // CONFIG-6: a MOVED section shows only through its owner's card, so removing the owner removes the section.
+            return ConfigPlan(cards, ConfigEntry.entries.filter { it in present && it !in covered && it !in MOVED })
         }
     }
 }

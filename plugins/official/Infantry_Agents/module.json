@@ -14,5 +14,34 @@
       "id": "infantry.agents",
       "panel": "left"
     }
+  ],
+  "config": [
+    {
+      "node": "infantry.shell.config.progressStale",
+      "group": "Progress bars: stale after",
+      "title": "Progress bars: stale after",
+      "tab": "General",
+      "order": 80,
+      "keywords": [
+        "progress",
+        "stale",
+        "minutes"
+      ],
+      "block": "infantry.shell.config.progressStale"
+    },
+    {
+      "node": "infantry.shell.config.cliLocations",
+      "group": "CLI locations",
+      "title": "CLI locations",
+      "tab": "Agents",
+      "order": 100,
+      "keywords": [
+        "harness",
+        "install",
+        "path",
+        "cli"
+      ],
+      "block": "infantry.shell.config.cliLocations"
+    }
   ]
 }

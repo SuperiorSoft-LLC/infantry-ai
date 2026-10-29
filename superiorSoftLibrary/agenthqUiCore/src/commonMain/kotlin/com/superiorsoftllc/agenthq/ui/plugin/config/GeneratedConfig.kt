@@ -86,7 +86,7 @@ class ConfigCard(val module: String, val declaration: ConfigDeclaration) {
 fun generatedCards(factory: TabFactory?, tab: ConfigTab?): List<ConfigCard> {
     if (factory == null || tab == null || tab !in GENERATED_TABS) return emptyList()
     return factory.config.declarations
-        .filter { it.declaration.tab == tab.label && it.declaration.fields.isNotEmpty() }
+        .filter { it.declaration.tab == tab.label && it.declaration.fields.isNotEmpty() && it.declaration.block == null }
         .sortedBy { it.declaration.order }
         .map { ConfigCard(it.module, it.declaration) }
 }

@@ -62,6 +62,22 @@ class ConfigPlanTest {
         assertEquals("About", plan.tabOf(ConfigEntry.UPDATES))
     }
 
+    @Test fun `a moved section shows only through its owner's declaration`() {
+        val owned = ConfigPlan.MOVED.filter { it != ConfigEntry.THEME && it != ConfigEntry.BLUR && it != ConfigEntry.TAB_GROUPS }
+        val decls = owned.map { e -> ModuleDeclaration("Owner", ConfigDeclaration(configSectionNode(e), e.title, tab = e.tab.label, block = configSectionNode(e))) }
+        val present = ConfigPlan.MOVED.toSet()
+        // With every owner there, nothing is left over; remove one owner and only its section goes.
+        assertTrue(ConfigPlan.of(decls, present, emptySet()).uncovered.none { it in owned })
+        val without = ConfigPlan.of(decls.filterNot { it.declaration.block == configSectionNode(ConfigEntry.MARKDOWN_ENGINE) }, present, emptySet())
+        assertEquals(listOf(ConfigEntry.MARKDOWN_ENGINE), owned.filter { e -> without.tabOf(e) == null || without.cards.none { it.entry == e } })
+        assertTrue(ConfigPlan.MOVED.all { it !in without.uncovered })
+    }
+
+    @Test fun `core declares the two shell-owned sections`() {
+        val core = ConfigTree.parse(CoreConfig.JSON, mutableListOf(), "core")
+        for (e in CoreConfig.SHELL_OWNED) assertTrue(core.any { it.block == configSectionNode(e) }, e.name)
+    }
+
     @Test fun `search matches title, label, description and keywords`() {
         val field = ConfigFieldDeclaration("k", "text", label = "Frobnicate level", description = "How hard to wibble")
         val plan = ConfigPlan.of(listOf(form("Acme", "Widgets", keywords = listOf("sprocket"), fields = arrayOf(field))), emptySet(), emptySet())
@@ -79,7 +95,7 @@ class ConfigPlanTest {
         val problems = mutableListOf<String>()
         val decls = ConfigTree.parse(CoreConfig.JSON, problems, "core")
         assertEquals(emptyList(), problems)
-        val trust = decls.filter { it.block != null }
+        val trust = decls.filter { it.block != null && it.locked }
         assertEquals(9, trust.size)
         assertTrue(trust.all { it.locked && it.tab != null && it.fields.isEmpty() })
         for (e in CoreConfig.TRUST) {
@@ -92,8 +108,9 @@ class ConfigPlanTest {
         // And generated from core's declarations alone, the trust tabs come out in today's order.
         val factory = TabFactory(CoreModules.all, configApi = NoDaemon)
         val plan = ConfigPlan.of(factory.configTree.declarations, present, emptySet())
-        assertEquals(ConfigTab.entries.map { it.label }, plan.tabs)
-        assertEquals(CoreConfig.TRUST, plan.cards.mapNotNull { it.entry })
+        // CONFIG-6: a moved section is drawn only by its owner, so core alone has no Appearance tab and no Agents section.
+        assertEquals(ConfigTab.entries.map { it.label }.filter { it != "Appearance" }, plan.tabs)
+        assertEquals(CoreConfig.SHELL_OWNED + CoreConfig.TRUST, plan.cards.mapNotNull { it.entry })
     }
 
     @Test fun `only core may declare a locked section, and a block is placed once`() {

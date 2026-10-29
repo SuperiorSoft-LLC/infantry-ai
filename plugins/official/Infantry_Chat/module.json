@@ -11,5 +11,37 @@
   "buildOrder": 200,
   "fills": [
     "infantry.shell.center"
+  ],
+  "config": [
+    {
+      "node": "infantry.shell.config.markdownEngine",
+      "group": "Markdown engine",
+      "title": "Markdown engine",
+      "tab": "Appearance",
+      "order": 40,
+      "keywords": [
+        "markdown",
+        "table",
+        "chat",
+        "format",
+        "renderer"
+      ],
+      "block": "infantry.shell.config.markdownEngine"
+    },
+    {
+      "node": "infantry.shell.config.reasoning",
+      "group": "Agent reasoning",
+      "title": "Agent reasoning",
+      "tab": "Appearance",
+      "order": 50,
+      "keywords": [
+        "reasoning",
+        "thinking",
+        "thought",
+        "panel",
+        "inline"
+      ],
+      "block": "infantry.shell.config.reasoning"
+    }
   ]
 }

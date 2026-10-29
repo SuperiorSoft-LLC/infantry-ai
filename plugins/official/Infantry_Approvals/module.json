@@ -11,5 +11,25 @@
   "buildOrder": 200,
   "fills": [
     "infantry.shell.questions"
+  ],
+  "config": [
+    {
+      "node": "infantry.shell.config.toolApproval",
+      "group": "Tool approval",
+      "title": "Tool approval",
+      "tab": "Agents",
+      "order": 110,
+      "keywords": [
+        "permission",
+        "approve",
+        "tools",
+        "timer",
+        "timeout",
+        "prompt",
+        "expiry",
+        "indefinite"
+      ],
+      "block": "infantry.shell.config.toolApproval"
+    }
   ]
 }
