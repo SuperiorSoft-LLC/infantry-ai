@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.approvals
 
+import com.superiorsoftllc.agenthq.plugin.api.ConfigDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
@@ -16,6 +17,9 @@ val InfantryApprovals = AgentHqModule(
         name = "Infantry_Approvals", version = "1.0.0", author = "Infantry AI",
         description = "The questions pill: open owner questions the owner cannot see inline, one click from the asking chat.",
         fills = listOf(FillDeclaration(QUESTIONS_FILL_ID)),
+        config = listOf(
+            ConfigDeclaration(node = "infantry.shell.config.toolApproval", group = "Tool approval", tab = "Agents", order = 110, title = "Tool approval", keywords = listOf("permission", "approve", "tools", "timer", "timeout", "prompt", "expiry", "indefinite"), block = "infantry.shell.config.toolApproval"),
+        ),
     ),
     fills = mapOf(QUESTIONS_FILL_ID to ShellQuestionPill),
 )

@@ -55,6 +55,8 @@ val InfantrySettings = AgentHqModule(
             ConfigDeclaration(
                 SETTINGS_TAB_ID, "Tabs",
                 listOf(ConfigFieldDeclaration(TabGroups.GROUPED, ConfigFieldTypes.CHECKBOX, "Group the setup tabs under Settings")),
+                tab = "Appearance", order = 60, title = "Tab groups", keywords = listOf("settings", "tabs", "group", "sub-tabs", "strip"),
+                block = "infantry.shell.config.tabGroups",
             ),
         ),
     ),

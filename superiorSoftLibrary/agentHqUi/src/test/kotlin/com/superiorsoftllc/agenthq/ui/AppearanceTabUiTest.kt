@@ -31,6 +31,7 @@ import com.superiorsoftllc.agenthq.ui.plugin.config.NODE_FIELD_OPTION_TAG_PREFIX
 import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigApi
 import com.superiorsoftllc.agenthq.ui.plugin.config.NodeConfigLoad
 import com.superiorsoftllc.agenthq.ui.protocol.Envelope
+import com.superiorsoftllc.agenthq.ui.shell.uiPrefsOverride
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,6 +41,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -48,11 +50,22 @@ private const val THEME_NODE = "infantry.shell.theme"
 /**
  * CONFIG-3 (docs/CONFIG-MANIFEST-DESIGN.md section 4): with Infantry_Appearance loaded, Configuration > Appearance builds its
  * Theme and Blur cards from the compiled manifest (the daemon's snapshot here), and a change made in a card reaches the
- * ThemeBlock, which re-themes the window. Without the plugin the hand-written sections stay.
+ * ThemeBlock, which re-themes the window. Without the plugin those two cards are simply absent.
  */
 @OptIn(ExperimentalTestApi::class)
 class AppearanceTabUiTest {
-    @AfterTest fun restore() { Palette.theme = ThemeSettings() }
+    private var savedOverride: MutableMap<String, String>? = null
+
+    /** QA-CONFIG-3: Appearance is scope=device, so its values live in the host prefs: pin an empty in-memory store, never the machine's. */
+    @BeforeTest fun pinPrefs() {
+        savedOverride = uiPrefsOverride
+        uiPrefsOverride = mutableMapOf()
+    }
+
+    @AfterTest fun restore() {
+        uiPrefsOverride = savedOverride
+        Palette.theme = ThemeSettings()
+    }
 
     private val stored = LinkedHashMap<Pair<String, String>, NodeConfigEntry>()
     private var manifest: ConfigManifest? = null
@@ -122,7 +135,7 @@ class AppearanceTabUiTest {
             onNodeWithTag(CONFIG_SECTION_TAG_PREFIX + ConfigEntry.BLUR.name).assertExists()
             onNodeWithTag(THEME_DARK_SWITCH_TAG).assertDoesNotExist()
             onNodeWithTag(BLUR_SWITCH_TAG).assertDoesNotExist()
-            // The other Appearance sections are still the hand-written ones.
+            // CONFIG-6: the markdown section is Infantry_Chat's block card in the same tab, the portrait is Appearance's own.
             onNodeWithTag(CONFIG_SECTION_TAG_PREFIX + ConfigEntry.MARKDOWN_ENGINE.name).assertExists()
 
             val dark = NODE_FIELD_CHECK_TAG_PREFIX + "$THEME_NODE/dark"
@@ -133,14 +146,20 @@ class AppearanceTabUiTest {
             onNodeWithTag(dark).performClick()
             waitUntil(timeoutMillis = 10_000) { !Palette.theme.dark }
             onNodeWithTag(dark).assertIsOff()
-            assertEquals("TEAL", stored[THEME_NODE to "accent"]?.value?.toString()?.trim('"'))
+            // The fields are scope=device (QA-CONFIG-3): they persist on this device and never become a daemon row.
+            assertEquals(emptyList(), stored.keys.filter { it.first == THEME_NODE })
         }
     }
 
-    @Test fun withoutThePluginTheHandWrittenSectionsStay() {
+    @Test fun withoutThePluginThereAreNoThemeOrBlurCards() {
+        // CONFIG-5/6: the dialog is generated from the declarations, so Theme and Blur exist only while Infantry_Appearance is loaded;
+        // the tab itself stays for the cards other plugins declare there (Infantry_Chat's markdown engine).
         withAppearance(factory(withAppearance = false)) {
-            onNodeWithTag(THEME_DARK_SWITCH_TAG).performScrollTo().assertExists()
-            onNodeWithTag(BLUR_SWITCH_TAG).performScrollTo().assertExists()
+            onNodeWithTag(THEME_DARK_SWITCH_TAG).assertDoesNotExist()
+            onNodeWithTag(BLUR_SWITCH_TAG).assertDoesNotExist()
+            onNodeWithTag(CONFIG_SECTION_TAG_PREFIX + ConfigEntry.THEME.name).assertDoesNotExist()
+            onNodeWithTag(CONFIG_SECTION_TAG_PREFIX + ConfigEntry.BLUR.name).assertDoesNotExist()
+            onNodeWithTag(CONFIG_SECTION_TAG_PREFIX + ConfigEntry.MARKDOWN_ENGINE.name).assertExists()
             onAllNodesWithTag(GENERATED_CARD_TAG_PREFIX + THEME_NODE + "/Theme").assertCountEquals(0)
         }
     }
