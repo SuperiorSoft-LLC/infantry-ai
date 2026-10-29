@@ -19,6 +19,28 @@ class InstallProfileTest {
     private val perUserInstallDir = File(localAppData, "AgentHQ").absoluteFile
     private fun env(vararg pairs: Pair<String, String>): (String) -> String? = mapOf("LOCALAPPDATA" to localAppData, *pairs)::get
 
+    @Test fun devBuildDefaultsToItsOwnStateDirAndPort() {
+        val dev = InstallProfile.properties(env(), home, cliBin = null, installDir = null, dev = true)
+        assertEquals(File(localAppData, "SuperiorSoft/InfantryAI-dev").absoluteFile, File(dev.getValue("AGENTHQ_STATE_DIR")))
+        assertEquals("8798", dev.getValue("AGENTHQ_PORT"))
+        val release = InstallProfile.properties(env(), home, cliBin = null, installDir = null, dev = false)
+        assertEquals(prodState, File(release.getValue("AGENTHQ_STATE_DIR")))
+        assertEquals("8797", release.getValue("AGENTHQ_PORT"))
+        // env overrides still win on a dev build
+        val custom = File(home, "elsewhere").absoluteFile
+        val over = InstallProfile.properties(
+            env("AGENTHQ_INSTALL_STATE_DIR" to custom.path, "AGENTHQ_INSTALL_PORT" to "9123"),
+            home, cliBin = null, installDir = null, dev = true,
+        )
+        assertEquals(custom, File(over.getValue("AGENTHQ_STATE_DIR")))
+        assertEquals("9123", over.getValue("AGENTHQ_PORT"))
+    }
+
+    @Test fun devBuildIsMarkedByTheLauncherProperty() {
+        assertTrue(InstallProfile.isDevBuild { if (it == "agenthq.plugins.devTrust") "true" else null })
+        assertFalse(InstallProfile.isDevBuild { null })
+    }
+
     @Test fun productionDefaultsDifferFromDev() {
         val props = InstallProfile.properties(env(), home)
         val port = props.getValue("AGENTHQ_PORT").toInt()
