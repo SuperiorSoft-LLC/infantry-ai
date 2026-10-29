@@ -7,6 +7,8 @@ import com.superiorsoftllc.agenthq.ui.block.layout.Block
 import com.superiorsoftllc.agenthq.ui.block.layout.GroupBlock
 import com.superiorsoftllc.agenthq.ui.block.layout.PlaceholderBlock
 import com.superiorsoftllc.agenthq.ui.shell.blocks.CoreShell
+import com.superiorsoftllc.agenthq.ui.shell.blocks.SETTINGS_SLOT
+import com.superiorsoftllc.agenthq.plugin.api.FillDeclaration
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -69,7 +71,7 @@ class ShellFillsTest {
         // infantry.shell.board; RUNTIME-16: Infantry_Alerts the sound and voice slots;
         // RUNTIME-18: Infantry_Processes the status bar's processes badge; RUNTIME-26: no core module is left.
         val f = TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.roles.InfantryRoles + com.superiorsoftllc.agenthq.plugins.official.board.InfantryBoard + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.approvals.InfantryApprovals + com.superiorsoftllc.agenthq.plugins.official.assistant.InfantryAssistant + com.superiorsoftllc.agenthq.plugins.official.changes.InfantryChanges + com.superiorsoftllc.agenthq.plugins.official.usage.InfantryUsage + com.superiorsoftllc.agenthq.plugins.official.attention.InfantryAttention + com.superiorsoftllc.agenthq.plugins.official.alerts.InfantryAlerts + com.superiorsoftllc.agenthq.plugins.official.appearance.InfantryAppearance + com.superiorsoftllc.agenthq.plugins.official.processes.InfantryProcesses)
-        CoreShell.slots.forEach { id -> assertTrue(f.baseRoot.find(id) !is PlaceholderBlock, "$id is still empty") }
+        (CoreShell.slots - SETTINGS_SLOT).forEach { id -> assertTrue(f.baseRoot.find(id) !is PlaceholderBlock, "$id is still empty") }
         assertEquals("Infantry_Roles", f.fillModules["infantry.shell.roles"])
         assertEquals("Infantry_Board", f.fillModules["infantry.shell.board"])
         assertEquals("Infantry_Alerts", f.fillModules["infantry.shell.sound"])
@@ -80,6 +82,30 @@ class ShellFillsTest {
         assertEquals(listOf("infantry.shell.changes"), f.tabTreeRoots.map { it.id }) // RUNTIME-25: Infantry_Changes (fills the diff slot) brings its own tab tree
         assertEquals("Infantry_Changes", f.fillModules["infantry.shell.diff"])
         assertEquals(emptyList(), f.problems)
+    }
+
+    private fun settingsModule(name: String, block: Block, replaces: String? = null) =
+        AgentHqModule(ModuleManifest(name, "1.0.0", author = "Acme", license = "NOASSERTION", fills = listOf(FillDeclaration(SETTINGS_SLOT, replaces = replaces))), tier = Tier.CORE, fills = mapOf(SETTINGS_SLOT to block))
+
+    @Test fun `CONFIG-10b a throwaway settings plugin replaces the default surface and the default returns without it`() {
+        val default = GroupBlock(SETTINGS_SLOT)
+        val acme = GroupBlock(SETTINGS_SLOT)
+        // Without the replacement the default fill takes the slot.
+        val alone = TabFactory(listOf(settingsModule("Infantry_Settings", default)))
+        assertSame(default, alone.baseRoot.find(SETTINGS_SLOT))
+        assertEquals(emptyList(), alone.problems)
+        // With it, fills[].replaces hands the slot over; the default stays loaded but unused.
+        val both = TabFactory(listOf(settingsModule("Infantry_Settings", default), settingsModule("Acme_Settings", acme, replaces = "Infantry_Settings")))
+        assertSame(acme, both.baseRoot.find(SETTINGS_SLOT))
+        assertEquals("Acme_Settings", both.fillModules[SETTINGS_SLOT])
+        assertTrue(both.modules.any { it.manifest.name == "Infantry_Settings" })
+        // Order does not matter, and no replaces key keeps first-wins.
+        val reversed = TabFactory(listOf(settingsModule("Acme_Settings", acme, replaces = "Infantry_Settings"), settingsModule("Infantry_Settings", default)))
+        assertSame(acme, reversed.baseRoot.find(SETTINGS_SLOT))
+        val plain = TabFactory(listOf(settingsModule("Infantry_Settings", default), settingsModule("Acme_Settings", acme)))
+        assertSame(default, plain.baseRoot.find(SETTINGS_SLOT))
+        // The empty slot draws the generated default (no fill at all).
+        assertEquals(null, assertIs<PlaceholderBlock>(TabFactory(emptyList()).baseRoot.find(SETTINGS_SLOT)).default)
     }
 
     @Test fun `the compiled modules are found through the service loader`() {

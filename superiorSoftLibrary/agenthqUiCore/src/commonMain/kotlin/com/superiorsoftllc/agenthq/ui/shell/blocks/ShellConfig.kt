@@ -133,8 +133,13 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
                 // CONFIG-3: a generated tab (Appearance) draws its cards from the compiled manifest first, instead of the
                 // hand-written sections they replace; with no card (no jar, or no snapshot and no local declaration) nothing changes.
                 val plan = config.plan
-                val kids = children.flattened().filter { c -> c !is PlaceholderBlock }
-                if (plan != null) {
+                val all = children.flattened().filter { c -> c !is PlaceholderBlock }
+                val surface = all.firstOrNull { it.id == SETTINGS_SLOT }
+                val kids = all.filter { it.id != SETTINGS_SLOT }
+                if (surface != null) {
+                    // CONFIG-10b: a replacement settings plugin draws the body (the frame and trust sections stay core).
+                    CompositionLocalProvider(LocalConfigDialogHost provides config) { RenderPlaced(listOf(surface)) }
+                } else if (plan != null) {
                     val placed = plan.cards.mapNotNull { it.block }.toSet()
                     CompositionLocalProvider(LocalConfigDialogHost provides config) {
                         for (card in plan.cardsOf(config.tabLabel.orEmpty())) {
@@ -204,6 +209,12 @@ const val CONFIG_SETTINGS = "$CONFIG.settings"
  */
 val CONFIG_OWNED_SECTION_SLOTS: List<String> = listOf("limits", "roles", "voice", "incomingSound", "questions").map { "$CONFIG.$it" }
 
+/**
+ * CONFIG-10b: the settings surface slot (docs/CONFIG-MANIFEST-DESIGN.md section 12). Empty, the dialog draws the generated
+ * body from the snapshot; a plugin's fill (fills[].replaces "Infantry_Settings") draws in its place, on the same config.
+ */
+const val SETTINGS_SLOT = "infantry.shell.settings"
+
 val ShellConfig = ConfigBlock(
-    listOf(ShellConfigSettings.asPlaceholder()) + CONFIG_OWNED_SECTION_SLOTS.map { PlaceholderBlock(it, null) } + ShellConfigTrust,
+    listOf(ShellConfigSettings.asPlaceholder(), PlaceholderBlock(SETTINGS_SLOT, null)) + CONFIG_OWNED_SECTION_SLOTS.map { PlaceholderBlock(it, null) } + ShellConfigTrust,
 )

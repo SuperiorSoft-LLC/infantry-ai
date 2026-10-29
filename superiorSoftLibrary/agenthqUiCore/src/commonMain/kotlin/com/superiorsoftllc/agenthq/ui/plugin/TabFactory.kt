@@ -603,9 +603,12 @@ class TabFactory(
         var layoutTypes: BlockTypes? = null
         val fillers = LinkedHashMap<String, String>()
         val trees = LinkedHashMap<String, Pair<String, Block>>()
+        // CONFIG-10b: fills[].replaces: (replaced module, node) pairs whose fill gives way to the replacing module's.
+        val replacedFills = modules.flatMap { m -> m.manifest.fills.filter { it.replaces != null && it.node in m.fills }.map { it.replaces!! to it.node } }.toSet()
         for (m in modules) {
             val name = m.manifest.name
             for ((node, b) in m.fills) when {
+                (name to node) in replacedFills -> problems += "$name: fill of $node replaced by another module's (fills[].replaces); unused"
                 m.tier == Tier.COMMUNITY -> problems += "$name: fill of $node refused: only a core module fills a shell slot"
                 node !in m.manifest.fillNodes -> problems += "$name: fill of $node is not declared in its module.json; refused"
                 node !in CoreShell.slots -> problems += "$name: fill of $node refused: it is not an empty shell slot"
