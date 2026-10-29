@@ -218,3 +218,4 @@ com/superiorsoftllc/agenthq/worktree/WorktreeManager.kt:DEFAULT_MAX_CHANGES|pend
 com/superiorsoftllc/agenthq/runner/BuildPriority.kt:JOB_OBJECT_EXTENDED_LIMIT_INFORMATION|Win32 API constant (job object flag / info class), not a limit
 com/superiorsoftllc/agenthq/runner/BuildPriority.kt:JOB_OBJECT_LIMIT_BREAKAWAY_OK|Win32 API constant (job object flag / info class), not a limit
 com/superiorsoftllc/agenthq/runner/BuildPriority.kt:JOB_OBJECT_LIMIT_PRIORITY_CLASS|Win32 API constant (job object flag / info class), not a limit
+com/superiorsoftllc/agenthq/usagemeter/UsageMeter.kt:DEFAULT_KEEP_WEEKS|pending S2-S4 (not yet routed through LimitRegistry; already overridable via AGENTHQ_USAGE_METER_KEEP_WEEKS)

@@ -56,12 +56,17 @@ class AutoProgressTest {
 
     @Test
     fun overlayDerivesOnlyForABusyTicketSession_andIgnoresAStoredAutoBar() {
-        val base = SessionRecord(id = "s", provider = "pi", workingDir = ".", spawnedAt = 0, lastHeartbeat = 0, state = SessionState.BUSY, ticketId = "t")
-        assertEquals("auto", AutoProgress.overlay(base, 3, 1L, 1L, 2L)?.origin)
-        assertNull(AutoProgress.overlay(base.copy(ticketId = null), 3, 1L, 1L, 2L))
-        assertNull(AutoProgress.overlay(base.copy(state = SessionState.IDLE), 3, 1L, 1L, 2L))
-        val stored = base.copy(state = SessionState.IDLE, progress = AutoProgress.derive(signals(2)))
-        assertNull(AutoProgress.overlay(stored, 3, 1L, 1L, 2L))
+        // AutoProgress hooks are process-global; a daemon test earlier in the JVM leaves ones that can throw (overlay swallows that to null).
+        val (h, w, st) = Triple(AutoProgress.history, AutoProgress.weightOf, AutoProgress.staleMs)
+        AutoProgress.history = { _, _ -> emptyList() }; AutoProgress.weightOf = { null }; AutoProgress.staleMs = { 0L }
+        try {
+            val base = SessionRecord(id = "s", provider = "pi", workingDir = ".", spawnedAt = 0, lastHeartbeat = 0, state = SessionState.BUSY, ticketId = "t")
+            assertEquals("auto", AutoProgress.overlay(base, 3, 1L, 1L, 2L)?.origin)
+            assertNull(AutoProgress.overlay(base.copy(ticketId = null), 3, 1L, 1L, 2L))
+            assertNull(AutoProgress.overlay(base.copy(state = SessionState.IDLE), 3, 1L, 1L, 2L))
+            val stored = base.copy(state = SessionState.IDLE, progress = AutoProgress.derive(signals(2)))
+            assertNull(AutoProgress.overlay(stored, 3, 1L, 1L, 2L))
+        } finally { AutoProgress.history = h; AutoProgress.weightOf = w; AutoProgress.staleMs = st }
     }
 
     @Test

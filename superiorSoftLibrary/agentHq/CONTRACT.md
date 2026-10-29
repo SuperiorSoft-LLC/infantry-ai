@@ -2171,6 +2171,8 @@ apart from the 1.3.0, 1.4.0, 1.5.0, 1.6.0 and 1.28.0 additions marked in the tab
 | `limits` | list of `ProviderLimits` (JSON), the answer and a push after each `usage` (1.59.0) | daemon → client |
 | `usage_get` | — (empty): request the plan meters and pacing allowance (1.119.0) | client → daemon |
 | `usage_report` | `UsageReport` (JSON) `{meters, rule, observedAt}`, answering `usage_get` (1.119.0) and `usage_set` (1.121.0) | daemon → client |
+| `usage_meter_get` | — (empty): request the daily token/cost rollups (1.141.0, USAGE-1) | client → daemon |
+| `usage_meter` | `{rows, keepWeeks, generatedAt}` (JSON), answering `usage_meter_get` (1.141.0, USAGE-1) | daemon → client |
 | `ticket_files` | `TicketFilesQuery` (JSON) `{ticketId?, paths?, related?, backfill?, all?, limit?, top?}`: the files a ticket changed / the tickets a path glob was changed by / related tickets' files / backfill (1.137.0) | client → daemon |
 | `ticket_files_report` | `TicketFilesReport` (JSON) `{text}`, capped compact lines, answering `ticket_files` (1.137.0) | daemon → client |
 | `usage_set` | `UsageSet` (JSON): a meter's manual percent / override set or cleared, and/or the pacing rule; refused = `error` `usage_set refused: ...` (1.121.0) | client → daemon |

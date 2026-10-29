@@ -30,6 +30,12 @@ class AgentQuickRefCommandsTest {
             // `bg run` really executes what follows `--`: keep its parse (the quickref's own words) but run a harmless command.
             val sep = args.indexOf("--")
             if (args.firstOrNull() == "bg" && sep >= 0) args = args.take(sep) + listOf("--", "java", "-version")
+            // `bg run --notify` detaches a wrapper JVM from the test worker's classpath and really starts a job: check the parse only.
+            if (args.firstOrNull() == "bg" && "--notify" in args) {
+                val parsed = BgCli.parse(args.drop(1))
+                assertTrue(parsed is BgCli.Parsed.Run, "quickref command is not a valid command: `$line` -> $parsed")
+                continue
+            }
             val out = StringBuilder()
             val err = StringBuilder()
             val exit = Cli.run((if (args.firstOrNull() == "bg") listOf("bg", "--port", deadPort.toString()) + args.drop(1) else args + listOf("--port", deadPort.toString())).toTypedArray(), out, err, { env[it] })

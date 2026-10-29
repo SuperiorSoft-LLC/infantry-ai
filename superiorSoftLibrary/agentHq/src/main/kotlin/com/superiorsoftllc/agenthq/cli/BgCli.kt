@@ -263,8 +263,8 @@ internal object BgCli {
             val w = File(f.parentFile ?: File("."), "javaw.exe")
             if (f.name.equals("java.exe", ignoreCase = true) && w.isFile) w.path else j
         }
-        val args = listOf(javaCmd, "-cp", System.getProperty("java.class.path"), MAIN_CLASS) + globals +
-            listOf("bg", "run") + p.copy(jobId = id).optionArgs() + listOf("--") + command
+        val args = listOf(javaCmd, "-cp", System.getProperty("java.class.path"), MAIN_CLASS) +
+            listOf("bg", "run") + globals + p.copy(jobId = id).optionArgs() + listOf("--") + command
         val nul = File(if (hostIsWindows()) "NUL" else "/dev/null")
         val wrapperLog = File(dir, "$id.wrapper.log")
         val log = File(dir, "$id.log")

@@ -27,7 +27,7 @@ class ProgressDisplayModelTest {
         assertEquals(ProgressTone.Stale, stale.tone)
         assertTrue(stale.detail.endsWith("no update for 6 min"), stale.detail)
         assertEquals(ProgressTone.Running, progressDisplay(p, now = 6 * min, staleMin = 10).tone, "the setting moves the threshold")
-        assertEquals(Palette.Accent, progressColor(stale.tone), "stale is amber")
+        assertEquals(Palette.Warn, progressColor(stale.tone), "stale is amber")
     }
 
     @Test fun `done is green and full, failed is red`() {
