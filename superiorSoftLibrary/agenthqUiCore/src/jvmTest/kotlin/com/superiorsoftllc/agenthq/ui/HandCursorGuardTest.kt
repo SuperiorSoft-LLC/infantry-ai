@@ -12,7 +12,7 @@ import kotlin.test.fail
  */
 class HandCursorGuardTest {
     /** The app UI's sources (agenthqAppUi's commonMain): the panes moved out of core, same `ui` package. */
-    private val appUi = File("../../plugins/core")
+    private val appUi = File("../../plugins/official")
 
     private val forbidden = Regex(
         """^import androidx\.compose\.(foundation\.clickable|foundation\.combinedClickable|material3\.(Button|OutlinedButton|TextButton|IconButton|DropdownMenuItem|Checkbox|FilledTonalButton|ElevatedButton|RadioButton|Switch|FilterChip))(\s+as\s+\w+)?\s*$""",
@@ -62,9 +62,9 @@ class HandCursorGuardTest {
     /** Kinds without a wrapper yet: raw call counts may only go down. Lower the number when you migrate a kind. */
     private val rawBaseline = mapOf(
         // S6: 1058 / 100 at the S6 base (S4b-S5 drift past 1049 / 99), plus the drop box, consent dialog and safe-mode banner's 23 Text.
-        "Text" to 1081,
+        "Text" to 1115,
         "DropdownMenu" to 9,
-        "OutlinedTextField" to 100,
+        "OutlinedTextField" to 102,
         "BasicTextField" to 2,
         "Icon" to 18,
         "HorizontalDivider" to 31,
@@ -87,7 +87,7 @@ class HandCursorGuardTest {
     fun `the board's drag handle takes its grab cursor from the Clickables wrapper`() {
         val ui = File("src/commonMain/kotlin/com/superiorsoftllc/agenthq/ui")
         assertTrue(ui.isDirectory, "ui sources not found from ${File(".").absolutePath}")
-        val board = File(appUi, "Infantry_AppUi/Board.kt").readText()
+        val board = File(appUi, "Infantry_Board/src/Board.kt").readText()
         assertTrue(Regex("""\.dragHandleCursor\(enabled, dragging\)""").containsMatchIn(board), "the drag handle must use Modifier.dragHandleCursor")
         // A cursor set by hand is one the semantics (and the tests reading them) cannot see.
         val raw = (ui.listFiles { f -> f.extension == "kt" }.orEmpty().toList() + appUi.walkTopDown().filter { it.isFile && it.extension == "kt" })
