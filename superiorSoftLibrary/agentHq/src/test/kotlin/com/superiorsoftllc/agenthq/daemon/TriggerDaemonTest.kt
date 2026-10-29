@@ -87,9 +87,9 @@ class TriggerDaemonTest {
         fixture.client.awaitAfter(mark, "the trigger re-armed after the run succeeded") { frame ->
             frame.type == Envelope.TRIGGER && trigger(frame).let { it.id == trigger.id && it.state == "armed" }
         }
-        // Reaching "armed" is only possible from a run that ended SUCCEEDED, which the trigger records
-        // only for a session that is IDLE with exit code 0 -- so this is a fact to assert, not a wait.
-        assertEquals("IDLE", fixture.daemon.manager.get(session.id)?.state?.name, "a successful run leaves its session IDLE")
+        // Reaching "armed" is only possible from a run that ended SUCCEEDED (IDLE, exit 0 at that moment). The session
+        // may be re-prompted right after, so its live state is not asserted here; the exit code is final.
+        assertEquals(0, fixture.daemon.manager.get(session.id)?.lastExitCode, "a successful run exits 0")
 
         assertEquals(listOf("started"), events(fixture, trigger.id).map { it.disposition })
     }
