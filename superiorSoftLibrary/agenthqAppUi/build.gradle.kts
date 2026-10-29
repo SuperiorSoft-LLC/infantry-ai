@@ -20,6 +20,8 @@ plugins {
 val generatedModuleListRoot = layout.buildDirectory.dir("generated/moduleList")
 val generatedModuleListDir = generatedModuleListRoot.map { it.dir("commonMain/kotlin") }
 val generatedJvmListDir = generatedModuleListRoot.map { it.dir("jvmMain/kotlin") }
+val generatedConfigWebDir = generatedModuleListRoot.map { it.dir("generatedConfigWeb/kotlin") }
+val generatedConfigAndroidDir = generatedModuleListRoot.map { it.dir("generatedConfigAndroid/kotlin") }
 val generatedCompiledInListDir = generatedModuleListRoot.map { it.dir("compiledIn/kotlin") }
 // RUNTIME-3: the official modules that have sources (their own projects; settings.gradle.kts scans the same folder).
 val officialModuleProjects = rootProject.file("plugins/official").listFiles { f -> f.isDirectory && !f.name.startsWith("_") && File(f, "build.gradle.kts").isFile }
@@ -41,7 +43,7 @@ val generateModuleList = tasks.register("generateModuleList") {
             val name = m["name"] as String
             check(name == f.parentFile.name) { "${f.path}: name $name is not its folder's" }
             val entry = (m["entry"] as? String)?.takeIf { it.isNotBlank() } ?: error("${f.path}: no entry (its ModuleSource)")
-            listOf(name, entry, (m["buildOrder"] as? Number)?.toInt() ?: Int.MAX_VALUE, official)
+            listOf(name, entry, (m["buildOrder"] as? Number)?.toInt() ?: Int.MAX_VALUE, official, m["config"] ?: emptyList<Any>())
         }
         val modules = (read(manifests.files, false) + read(officialManifests.files, true))
             .sortedWith(compareBy({ it[2] as Int }, { it[0] as String }))
@@ -72,16 +74,44 @@ val generateModuleList = tasks.register("generateModuleList") {
             appendLine("    override fun modules(): List<AgentHqModule> = CoreModules.all")
             appendLine("}")
         }
-        fun actual(list: List<List<Any>>, doc: String) = buildString {
+        fun actual(list: List<List<Any>>, doc: String, withConfig: Boolean = false) = buildString {
             appendLine(header)
             appendLine(pkg)
             appendLine()
             appendLine("import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource")
             appendLine()
             appendLine("/** $doc */")
-            appendLine("internal actual fun compiledModuleSources(): List<ModuleSource> = listOf(")
-            list.forEach { appendLine("    ${it[1]}(), // ${it[0]}${if (it[3] == true) " (official)" else ""}") }
-            appendLine(")")
+            appendLine("internal actual fun compiledModuleSources(): List<ModuleSource> {")
+            if (withConfig) appendLine("    GeneratedConfig.install()")
+            appendLine("    return listOf(")
+            list.forEach { appendLine("        ${it[1]}(), // ${it[0]}${if (it[3] == true) " (official)" else ""}") }
+            appendLine("    )")
+            appendLine("}")
+        }
+        // CONFIG-9: web and Android compile the module `config` in: GeneratedConfig.JSON = each module's config, in load order.
+        fun generatedConfig(list: List<List<Any>>, platform: String): String {
+            val json = list.filter { (it[4] as? List<*>)?.isNotEmpty() == true }
+                .joinToString(",", "[", "]") { """{"module":${groovy.json.JsonOutput.toJson(it[0])},"config":${groovy.json.JsonOutput.toJson(it[4])}}""" }
+            // the text must equal the concatenation of the modules' config (module order, nothing dropped)
+            val expected = list.filter { (it[4] as? List<*>)?.isNotEmpty() == true }.map { mapOf("module" to it[0], "config" to it[4]) }
+            check(groovy.json.JsonSlurper().parseText(json) == expected) { "GeneratedConfig.JSON is not the concatenation of the modules' config" }
+            val chunks = json.chunked(8000).joinToString(",\n        ") { "\"\"\"" + it.replace("$", "\${'$'}") + "\"\"\"" }
+            return buildString {
+                appendLine(header)
+                appendLine(pkg)
+                appendLine()
+                appendLine("import com.superiorsoftllc.agenthq.ui.plugin.config.CompiledConfig")
+                appendLine()
+                appendLine("/** CONFIG-9: the compile-time config of the $platform build (docs/CONFIG-MANIFEST-DESIGN.md section 7). */")
+                appendLine("internal object GeneratedConfig {")
+                appendLine("    const val PLATFORM: String = \"$platform\"")
+                appendLine("    val JSON: String = listOf(")
+                appendLine("        $chunks")
+                appendLine("    ).joinToString(\"\")")
+                appendLine()
+                appendLine("    fun install() = CompiledConfig.install(JSON, PLATFORM)")
+                appendLine("}")
+            }
         }
         val base = root.get().asFile
         base.deleteRecursively()
@@ -89,7 +119,9 @@ val generateModuleList = tasks.register("generateModuleList") {
             File(base, "$dir/kotlin/com/superiorsoftllc/agenthq/plugins/core").apply { mkdirs() }.resolve(file).writeText(text)
         write("commonMain", "CoreModules.kt", common)
         write("jvmMain", "CoreModules.jvm.kt", actual(modules.filter { it[3] != true }, "RUNTIME-3: desktop: core only; the official modules load at run time from their signed jars."))
-        write("compiledIn", "CoreModules.compiledIn.kt", actual(modules, "RUNTIME-3: web and Android: core and official, compiled in (D9)."))
+        write("compiledIn", "CoreModules.compiledIn.kt", actual(modules, "RUNTIME-3: web and Android: core and official, compiled in (D9).", withConfig = true))
+        write("generatedConfigWeb", "GeneratedConfig.kt", generatedConfig(modules, "web"))
+        write("generatedConfigAndroid", "GeneratedConfig.kt", generatedConfig(modules, "android"))
     }
 }
 
@@ -119,10 +151,12 @@ kotlin {
         // RUNTIME-3: web and Android compile the official modules in (the same sources as the desktop jar).
         wasmJsMain {
             kotlin.srcDir(generateModuleList.map { generatedCompiledInListDir.get() })
+            kotlin.srcDir(generateModuleList.map { generatedConfigWebDir.get() })
             dependencies { officialModuleProjects.forEach { implementation(project(it)) } }
         }
         androidMain {
             kotlin.srcDir(generateModuleList.map { generatedCompiledInListDir.get() })
+            kotlin.srcDir(generateModuleList.map { generatedConfigAndroidDir.get() })
             dependencies { officialModuleProjects.forEach { implementation(project(it)) } }
         }
         commonMain.dependencies {
