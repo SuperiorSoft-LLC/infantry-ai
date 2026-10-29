@@ -8,6 +8,7 @@ import com.superiorsoftllc.agenthq.ui.block.layout.config
 import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
 import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
 import com.superiorsoftllc.agenthq.ui.plugin.config.FieldType
+import com.superiorsoftllc.agenthq.ui.shell.ConfigValues
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -26,9 +27,12 @@ class WeatherPlugin : UiPlugin {
 class WeatherBadge(id: String) : Block("acme.weather.badge", id) {
     @Composable
     override fun Render(scope: BlockScope) {
-        val cfg = scope.config()
-        label(cfg.string("city"), cfg.string("unit"), cfg.int("every"))
+        val cfg: ConfigValues = scope.config()
+        label(cfg)
     }
+
+    /** CONFIG-7b: names the ConfigValues type in a signature, so the class links only if the community loader lets the jar see it. */
+    fun label(cfg: ConfigValues): String = label(cfg.string("city"), cfg.string("unit"), cfg.int("every"))
 
     /** What the badge shows for the values it was handed (the test calls this with the live resolved values). */
     fun label(city: String?, unit: String?, every: Int?): String = "${city ?: "Oslo"} ${unit ?: "C"} /${every ?: 15}m"

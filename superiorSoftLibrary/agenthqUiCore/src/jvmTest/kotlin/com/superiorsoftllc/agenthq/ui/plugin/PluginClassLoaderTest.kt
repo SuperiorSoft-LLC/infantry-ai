@@ -31,6 +31,17 @@ class PluginClassLoaderTest {
     }
 
     @Test
+    fun `a community loader sees ConfigValues and nothing else in ui shell`() {
+        val dir = Files.createTempDirectory("plugin-loader").toFile()
+        PluginClassLoader(dir, File(dir, "empty.jar"), javaClass.classLoader, Tier.COMMUNITY).use { loader ->
+            val name = "com.superiorsoftllc.agenthq.ui.shell.ConfigValues"
+            assertEquals(name, loader.loadClass(name).name)
+            for (hidden in listOf("com.superiorsoftllc.agenthq.ui.shell.ConfigContext", "com.superiorsoftllc.agenthq.ui.shell.EmptyConfig", "${name}Fake"))
+                assertFailsWith<ClassNotFoundException>("$hidden must stay hidden") { loader.loadClass(hidden) }
+        }
+    }
+
+    @Test
     fun `an official loader also sees ui shell, the ui root kit and the host types official jars link, a community loader does not, and the daemon client stays hidden from both`() {
         val dir = Files.createTempDirectory("plugin-loader").toFile()
         val jar = File(dir, "empty.jar")

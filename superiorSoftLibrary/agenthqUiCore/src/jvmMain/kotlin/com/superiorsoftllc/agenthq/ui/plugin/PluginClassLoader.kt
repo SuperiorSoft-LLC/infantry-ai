@@ -41,7 +41,7 @@ class PluginClassLoader(private val dir: File, jar: File, parent: ClassLoader, f
             return real.loadClass(name)
         }
         override fun getResource(name: String) = if (allowed(name.removeSuffix(".class").replace('/', '.'))) real.getResource(name) else null
-        private fun allowed(n: String) = HIDDEN.none { n.startsWith(it) } && (ALLOWED.any { n.startsWith(it) } || (official && officialAllowed(n)))
+        private fun allowed(n: String) = HIDDEN.none { n.startsWith(it) } && (ALLOWED.any { n.startsWith(it) } || n == CONFIG_VALUES || (official && officialAllowed(n)))
     }
 
     private companion object {
@@ -57,6 +57,8 @@ class PluginClassLoader(private val dir: File, jar: File, parent: ClassLoader, f
             return r.startsWith("shell.") || r.startsWith("sound.") || r.startsWith("voice.") || '.' !in r ||
                 OFFICIAL_NET.any { r == it || r.startsWith("$it$") }
         }
+        /** CONFIG-7b: TabContext.config / BlockScope.config return this one `ui.shell` type; a plugin must be able to name it. Exact match, nothing else in ui.shell. */
+        const val CONFIG_VALUES = "com.superiorsoftllc.agenthq.ui.shell.ConfigValues"
         val ALLOWED = listOf("java.", "javax.", "kotlin.", "kotlinx.", "androidx.compose", "org.jetbrains.compose", "org.jetbrains.skiko", "com.superiorsoftllc.agenthq.plugin.api.", "com.superiorsoftllc.agenthq.ui.plugin.",
             "com.superiorsoftllc.agenthq.ui.model.", "com.superiorsoftllc.agenthq.ui.protocol.", "com.superiorsoftllc.agenthq.ui.block.")
         val HIDDEN = listOf("com.superiorsoftllc.agenthq.ui.plugin.DaemonLink", "com.superiorsoftllc.agenthq.ui.plugin.PluginClassLoader", "com.superiorsoftllc.agenthq.ui.plugin.config.DaemonNodeConfigApi", "com.superiorsoftllc.agenthq.ui.plugin.JvmEndpointAccess")
