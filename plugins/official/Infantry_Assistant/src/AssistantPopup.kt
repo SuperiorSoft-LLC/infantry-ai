@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.ui
+package com.superiorsoftllc.agenthq.plugins.official.assistant
+
+import com.superiorsoftllc.agenthq.ui.*
 
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat

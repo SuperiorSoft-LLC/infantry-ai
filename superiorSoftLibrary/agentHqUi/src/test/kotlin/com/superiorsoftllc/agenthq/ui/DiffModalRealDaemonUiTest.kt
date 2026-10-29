@@ -1,5 +1,10 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.approvals.*
+import com.superiorsoftllc.agenthq.plugins.official.assistant.*
+import com.superiorsoftllc.agenthq.plugins.official.changes.*
+import com.superiorsoftllc.agenthq.plugins.official.chat.*
+
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.ExperimentalTestApi

@@ -8,10 +8,10 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.superiorsoftllc.agenthq.ui.AssistantPopupChat
-import com.superiorsoftllc.agenthq.ui.AssistantPopupFrame
-import com.superiorsoftllc.agenthq.ui.AssistantPopupHeader
-import com.superiorsoftllc.agenthq.ui.AssistantPopupResize
+import com.superiorsoftllc.agenthq.plugins.official.assistant.AssistantPopupChat
+import com.superiorsoftllc.agenthq.plugins.official.assistant.AssistantPopupFrame
+import com.superiorsoftllc.agenthq.plugins.official.assistant.AssistantPopupHeader
+import com.superiorsoftllc.agenthq.plugins.official.assistant.AssistantPopupResize
 import com.superiorsoftllc.agenthq.ui.TITLE_BAR_HEIGHT
 import com.superiorsoftllc.agenthq.ui.shell.AssistantContext
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
