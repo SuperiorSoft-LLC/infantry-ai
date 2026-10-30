@@ -351,3 +351,5 @@ Secrets guard: `./gradlew verifySecretsNotTracked` fails if keys, keystores or t
 ---
 
 <p align="center">© SuperiorSoft LLC. Infantry AI is a product of SuperiorSoft LLC.</p>
+
+Daemon: what the core is and the orchestrator/runner split are in [docs/DAEMON-CORE.md](docs/DAEMON-CORE.md).
