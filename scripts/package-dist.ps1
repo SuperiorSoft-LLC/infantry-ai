@@ -208,8 +208,15 @@ try {
   if ((Get-Item -LiteralPath $destExe).Length -ne $srcExe.Length) { Fail "integrity: $($srcExe.Name) size differs from the build" }
   $srcCount = Get-Count $image.FullName
   $destCount = Get-Count $dest
-  if ($destCount.Files -ne ($srcCount.Files + 2)) { Fail "integrity: file count $($destCount.Files) != $($srcCount.Files) + 2 (BUILD-INFO, MANIFEST)" }
-  if ($destCount.Bytes -ne ($srcCount.Bytes + (Get-Item (Join-Path $dest 'BUILD-INFO.txt')).Length + (Get-Item (Join-Path $dest 'MANIFEST.txt')).Length)) {
+  # The image may already carry its own BUILD-INFO.txt (the build writes one); our copy replaces it, so count only what is added.
+  $addFiles = 0; $addBytes = 0
+  foreach ($n in 'BUILD-INFO.txt', 'MANIFEST.txt') {
+    $s = Join-Path $image.FullName $n
+    $d = (Get-Item -LiteralPath (Join-Path $dest $n)).Length
+    if (Test-Path -LiteralPath $s) { $addBytes += $d - (Get-Item -LiteralPath $s).Length } else { $addFiles++; $addBytes += $d }
+  }
+  if ($destCount.Files -ne ($srcCount.Files + $addFiles)) { Fail "integrity: file count $($destCount.Files) != $($srcCount.Files) + $addFiles (BUILD-INFO, MANIFEST)" }
+  if ($destCount.Bytes -ne ($srcCount.Bytes + $addBytes)) {
     Fail "integrity: byte total differs from the build"
   }
   if (-not ((Get-Content -LiteralPath (Join-Path $dest 'BUILD-INFO.txt')) -contains "sha=$full")) { Fail "integrity: BUILD-INFO sha does not match $full" }
