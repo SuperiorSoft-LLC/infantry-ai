@@ -165,7 +165,14 @@ class NodeConfigState(
     fun own(node: String, key: String): NodeConfigEntry? =
         daemonStored[node]?.get(key)?.takeIf { daemonFields.containsKey(node to key) }?.let { NodeConfigEntry(node, key, it, ConfigSetBy.USER) } ?: stored[node]?.get(key)
 
+    /**
+     * DEMO-FIX-1: the daemon's policy is `restricted` (a read-only lock): its node-config rows are not offered and the seed
+     * POST is refused (403), so [load] makes no call and everything resolves to the declared defaults.
+     */
+    var daemonRowsClosed: Boolean = false
+
     suspend fun load() {
+        if (daemonRowsClosed) { replace(emptyList()); return }
         load = NodeConfigLoad.LOADING
         apply(api.seed(tree.seed()))
         if (error == null) { publishManifest(); afterLoad(this) }
