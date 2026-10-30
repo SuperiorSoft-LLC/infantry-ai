@@ -68,4 +68,13 @@ class CompiledConfigTest {
         assertFailsWith<IllegalArgumentException> { ConfigFieldValidator.validate(list, JsonArray(listOf(JsonPrimitive(0)))) }
         assertFailsWith<IllegalArgumentException> { ConfigFieldValidator.validate(list, JsonPrimitive("x")) }
     }
+
+    @Test fun `textarea is a built-in string type`() {
+        val f = ConfigFieldDeclaration("note", ConfigFieldTypes.TEXTAREA)
+        assertTrue(ConfigFieldTypes.TEXTAREA in ConfigFieldTypes.BUILT_IN)
+        ConfigFieldValidator.validate(f, JsonPrimitive("a\nb"))
+        assertFailsWith<IllegalArgumentException> { ConfigFieldValidator.validate(f, JsonPrimitive(3)) }
+        assertNull(FieldTypes.validateBuiltIn(f, JsonPrimitive("a\nb")))
+        assertEquals("Not text", FieldTypes.validateBuiltIn(f, JsonArray(emptyList())))
+    }
 }

@@ -99,7 +99,9 @@ object ConfigFieldTypes {
     const val CLASSES = "classes"
     /** CONFIG-9: a JSON array whose items are checked against the field's `item`. */
     const val LIST = "list"
-    val BUILT_IN = setOf(TEXT, NUMBER, CHECKBOX, SELECT, MULTI_SELECT, IMPLEMENTATION, TOGGLE, RADIO, COLOR, CLASSES, LIST)
+    /** CONFIG-FIELDS-1: a string like [TEXT], drawn as a multi-line box. */
+    const val TEXTAREA = "textarea"
+    val BUILT_IN = setOf(TEXT, TEXTAREA, NUMBER, CHECKBOX, SELECT, MULTI_SELECT, IMPLEMENTATION, TOGGLE, RADIO, COLOR, CLASSES, LIST)
 }
 
 /** Who wrote a stored value: the merged JSON tree on first load, or the user from the configuration view. */
@@ -194,7 +196,7 @@ object ConfigFieldValidator {
                 require(COLOR.matches(text())) { "setting '$name' must be #RRGGBB or #AARRGGBB" }
                 prim!!
             }
-            ConfigFieldTypes.TEXT, ConfigFieldTypes.IMPLEMENTATION -> { text(); prim!! }
+            ConfigFieldTypes.TEXT, ConfigFieldTypes.TEXTAREA, ConfigFieldTypes.IMPLEMENTATION -> { text(); prim!! }
             ConfigFieldTypes.CLASSES -> {
                 val obj = value as? kotlinx.serialization.json.JsonObject
                 require(obj != null && obj.values.all { it is kotlinx.serialization.json.JsonPrimitive && it.isString }) { "setting '$name' must be an object of strings" }
