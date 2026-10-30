@@ -4374,7 +4374,7 @@ internal object Cli {
               settings [get [<key>]]   The daemon's durable settings, one `key = value` per line
               settings set <key> <value>   Store one (a number, true/false, JSON, or text); a refusal names the accepted range
               settings limits     Every limit (caps, thresholds, timeouts): value, default, range, what 0 means, its env name
-              processes [--all]   Rogue background processes (Gradle/Kotlin daemons, node, JVMs) left by ended or idle sessions,
+              processes [--all]   Rogue background processes (build daemons, node, JVMs) left by ended or idle sessions,
                                   with MB, age and owner session; --all adds healthy ones and heavy processes that are not ours
               processes reap <pid> | --all   Kill one process (or every rogue one) that a session of this daemon started;
                                   anything else is refused. Setting processes.autoReap (default off) reaps rogue ones on a timer

@@ -76,15 +76,15 @@ object LimitRegistry {
         min = 1, zeroIsUnlimited = false,
     )
 
-    /** Ticket 66153313 (contract 1.132.0): Gradle worker cap handed to worker sessions' builds. */
+    /** Ticket 66153313 (contract 1.132.0): build worker cap handed to worker sessions (the tool profiles' env templates). */
     val BUILD_MAX_WORKERS = LimitDef(
         "limits.build.maxWorkers", com.superiorsoftllc.agenthq.runner.BuildLimits.defaultMaxWorkers().toLong(), "workers",
-        "Gradle workers (org.gradle.workers.max) a worker session's build may use; default logical cores - 2.",
+        "Parallel build workers a worker session's build may use (each tool profile's env templates pass it on, e.g. ${'$'}{maxWorkers}); default logical cores - 2.",
         max = 4096,
     )
     val BUILD_MAX_PARALLEL_FORKS = LimitDef(
         "limits.build.maxParallelForks", 0, "forks",
-        "Test JVM forks per test task in a worker session's build.",
+        "Parallel test processes per test task in a worker session's build (the tool profiles' ${'$'}{maxParallelForks}).",
         max = 4096, zeroMeans = "the build script's own default",
     )
     val CPU_ALERT_PERCENT = LimitDef(
@@ -253,9 +253,18 @@ object LimitRegistry {
         "How long a process under a worker's harness (one the daemon did not launch) must have run for its end to be told to the worker.",
         min = 1, max = 86_400, zeroIsUnlimited = false,
     )
+    /**
+     * STACK-NEUTRAL-1: the process/build watch tooling as a whole (process ledger and reaping, build limits env, PATH shims
+     * and harness hooks). Opt-in: a fresh install starts with 0; an install that existed before is migrated to 1 once.
+     */
+    val WATCH_ENABLED = LimitDef(
+        "limits.watch.enabled", 0, "switch",
+        "1 = the watch tooling is on: worker processes are tracked and reaped with their session, worker builds get the build limits env of the tool profiles, and long commands run through the watched runner; 0 = off: nothing tracked, nothing killed, no build env, plain exit codes and logs.",
+        max = 1, zeroIsUnlimited = false,
+    )
     val WATCH_FORCED = LimitDef(
         "limits.watch.forced", 1, "switch",
-        "1 = every worker session runs gradle/mvn/npm/yarn/pnpm (PATH shims) and, through its harness hook, ./gradlew, java -jar and backgrounded shell commands through the watched runner; 0 = off for every session (owner only).",
+        "1 = every worker session runs the tool profiles' shimmed programs (PATH shims) and, through its harness hook, their long commands and backgrounded shell commands through the watched runner; 0 = off for every session (owner only). Needs limits.watch.enabled = 1.",
         max = 1, zeroIsUnlimited = false,
     )
     val WATCH_TREE_WAIT_MINUTES = LimitDef(
@@ -459,7 +468,7 @@ object LimitRegistry {
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
-        WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_EXEMPT_WHEN_TICKET_DONE, WATCH_NOTICE_DEDUPE, WATCH_HANDLED_KEEP_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_FORCED, WATCH_TREE_WAIT_MINUTES,
+        WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_EXEMPT_WHEN_TICKET_DONE, WATCH_NOTICE_DEDUPE, WATCH_HANDLED_KEEP_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_ENABLED, WATCH_FORCED, WATCH_TREE_WAIT_MINUTES,
         WATCH_NOTICE_LINE_CHARS, WATCH_LOG_MAX_MB, WATCH_LOG_TOTAL_MB, WATCH_LOG_KEEP_JOBS, WATCH_LOG_KEEP_DAYS, WATCH_MIN_FREE_MB, WATCH_FILE_IDLE_SECONDS,
         WATCH_READ_MAX_KB, WATCH_TAIL_READ_KB, WATCH_SPACE_CHECK_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,

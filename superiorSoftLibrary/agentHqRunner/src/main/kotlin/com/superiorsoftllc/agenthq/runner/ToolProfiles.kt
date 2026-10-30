@@ -47,9 +47,42 @@ data class ToolProfile(
     val redirects: List<String> = emptyList(),
     /** STALL-4: options of [commands] whose value is a log file (`--log-file`, as `--log-file x` or `--log-file=x`). */
     val logFlags: List<String> = emptyList(),
+    /**
+     * STACK-NEUTRAL-1: command-line regexes of the tool's CLIENT process (the one a build is started with): a live session
+     * running one keeps a [sharedDaemon] it may use alive when the session that started the daemon closes.
+     */
+    val clients: List<String> = emptyList(),
+    /** STACK-NEUTRAL-1: the [daemons] are shared between sessions and the gate: spared or handed over at a session's close. */
+    val sharedDaemon: Boolean = false,
+    /** STACK-NEUTRAL-1: process image regexes (full match, `.exe` optional) the processes list shows when no session owns them. */
+    val heavyImages: List<String> = emptyList(),
+    /** STACK-NEUTRAL-1: command-line regexes (found anywhere) the ledger may adopt by a session's worktree path. */
+    val heavyCommands: List<String> = emptyList(),
+    /** STACK-NEUTRAL-1: the concurrency env every worker session gets for this tool, from the build limits. */
+    val env: List<EnvTemplate> = emptyList(),
     /** In an override: drop the default entry of this [name]. */
     val disabled: Boolean = false,
 )
+
+/**
+ * STACK-NEUTRAL-1: one env value a worker session gets. [value] may name the build limits as `${maxWorkers}` and
+ * `${maxParallelForks}`; [onlyIf] (one of [LIMITS]) leaves the template out while that limit is 0 (unlimited). Templates of
+ * one [name] are joined with [join], after the daemon's own value of that variable when [inherit] is set.
+ */
+@Serializable
+data class EnvTemplate(
+    val name: String,
+    val value: String,
+    val onlyIf: String? = null,
+    val join: String = " ",
+    val inherit: Boolean = true,
+) {
+    companion object {
+        const val MAX_WORKERS = "maxWorkers"
+        const val MAX_PARALLEL_FORKS = "maxParallelForks"
+        val LIMITS = setOf(MAX_WORKERS, MAX_PARALLEL_FORKS)
+    }
+}
 
 object ToolProfiles {
     const val RESOURCE = "/watch/tool-profiles.json"
@@ -86,12 +119,18 @@ object ToolProfiles {
 
     fun validate(p: ToolProfile) {
         require(p.name.isNotBlank()) { "a tool profile needs a name" }
-        (p.daemons + p.notifyOn + p.failureMarkers + p.redirects).forEach { re ->
+        (p.daemons + p.notifyOn + p.failureMarkers + p.redirects + p.clients + p.heavyImages + p.heavyCommands).forEach { re ->
             runCatching { Regex(re) }.exceptionOrNull()?.let { throw IllegalArgumentException("tool profile '${p.name}': bad regex '$re' (${it.message})") }
         }
         p.shim?.forEach { s -> require(s in p.commands) { "tool profile '${p.name}': shim '$s' is not one of its commands" } }
         (p.commands + p.shim.orEmpty()).forEach { c ->
             require(c.matches(Regex("[A-Za-z0-9._+-]{1,64}"))) { "tool profile '${p.name}': bad command name '$c'" }
+        }
+        p.env.forEach { t ->
+            require(t.name.matches(Regex("[A-Za-z_][A-Za-z0-9_]{0,127}"))) { "tool profile '${p.name}': bad env name '${t.name}'" }
+            require(t.onlyIf == null || t.onlyIf in EnvTemplate.LIMITS) {
+                "tool profile '${p.name}': env onlyIf must be one of ${EnvTemplate.LIMITS.joinToString()}, was '${t.onlyIf}'"
+            }
         }
     }
 
@@ -133,6 +172,44 @@ object ToolProfiles {
     fun daemonRegex(list: List<ToolProfile> = active): Regex {
         val parts = list.flatMap { it.daemons }
         return if (parts.isEmpty()) Regex("(?!)") else Regex("(?i)" + parts.joinToString("|") { "(?:$it)" })
+    }
+
+    /** STACK-NEUTRAL-1: the daemons of [ToolProfile.sharedDaemon] profiles (matches nothing when there are none). */
+    fun sharedDaemonRegex(list: List<ToolProfile> = active): Regex = daemonRegex(list.filter { it.sharedDaemon })
+
+    /** STACK-NEUTRAL-1: the name of the profile whose [ToolProfile.daemons] match [command], or null. */
+    fun daemonProfile(command: String, list: List<ToolProfile> = active): String? =
+        list.firstOrNull { p -> p.daemons.isNotEmpty() && daemonRegex(listOf(p)).containsMatchIn(command) }?.name
+
+    /** STACK-NEUTRAL-1: one regex over every profile's [ToolProfile.clients] (matches nothing when there are none). */
+    fun clientRegex(list: List<ToolProfile> = active): Regex = anyOf(list.flatMap { it.clients })
+
+    /** STACK-NEUTRAL-1: process images worth listing when unattributed; use with [Regex.matches]. */
+    fun heavyImageRegex(list: List<ToolProfile> = active): Regex {
+        val parts = list.flatMap { it.heavyImages }.distinct()
+        return if (parts.isEmpty()) Regex("(?!)") else Regex("(?i)(?:" + parts.joinToString("|") { "(?:$it)" } + ")(?:\\.exe)?")
+    }
+
+    /** STACK-NEUTRAL-1: command lines the ledger may adopt by worktree path; use with [Regex.containsMatchIn]. */
+    fun heavyCommandRegex(list: List<ToolProfile> = active): Regex = anyOf(list.flatMap { it.heavyCommands })
+
+    private fun anyOf(parts: List<String>): Regex =
+        if (parts.isEmpty()) Regex("(?!)") else Regex("(?i)" + parts.distinct().joinToString("|") { "(?:$it)" })
+
+    /**
+     * STACK-NEUTRAL-1: every profile's [ToolProfile.env] filled from the limits, in profile order; [inherited] is the
+     * daemon's own environment (a variable the templates name is appended to, never replaced). 0 = unlimited.
+     */
+    fun sessionEnv(maxWorkers: Int, maxParallelForks: Int, inherited: (String) -> String? = { null }, list: List<ToolProfile> = active): Map<String, String> {
+        val values = mapOf(EnvTemplate.MAX_WORKERS to maxWorkers, EnvTemplate.MAX_PARALLEL_FORKS to maxParallelForks)
+        val out = LinkedHashMap<String, String>()
+        for (t in list.flatMap { it.env }) {
+            if (t.onlyIf != null && (values[t.onlyIf] ?: 0) <= 0) continue
+            val v = values.entries.fold(t.value) { acc, (k, n) -> acc.replace("\${$k}", n.toString()) }
+            val before = out[t.name] ?: (if (t.inherit) inherited(t.name)?.trim()?.takeIf { it.isNotEmpty() } else null)
+            out[t.name] = if (before == null) v else before + t.join + v
+        }
+        return out
     }
 
     /** The default `--notify` patterns: every profile's [ToolProfile.notifyOn]. */

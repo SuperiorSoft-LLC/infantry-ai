@@ -25,6 +25,35 @@ class BuildLimitsSettingTest {
         dir.deleteRecursively()
     }
 
+    /** STACK-NEUTRAL-1: the watch tooling is opt-in; an existing install is migrated to on once, a fresh one stays off. */
+    @Test
+    fun watchEnabledMigratesOnceByInstallAge() {
+        val fresh = SettingsService(store, env = { null })
+        assertEquals(false, fresh.watchEnabled(), "unset = off")
+        assertEquals(0L, fresh.migrateWatchEnabled { false })
+        assertEquals(null, fresh.migrateWatchEnabled { true }, "stored: the migration never runs again")
+        assertEquals(false, fresh.watchEnabled())
+
+        val dir2 = Files.createTempDirectory("agenthq-watch-mig").toFile()
+        SqlAgentHqStore.open(File(dir2, "agenthq.db").absolutePath).use { s2 ->
+            val existing = SettingsService(s2, env = { null })
+            assertEquals(1L, existing.migrateWatchEnabled { true })
+            assertEquals(true, existing.watchEnabled())
+            existing.set("limits.watch.enabled", JsonPrimitive(0))
+            assertEquals(false, existing.watchEnabled(), "the owner can switch it off")
+            assertEquals(null, existing.migrateWatchEnabled { true })
+        }
+        dir2.deleteRecursively()
+
+        val dir3 = Files.createTempDirectory("agenthq-watch-env").toFile()
+        SqlAgentHqStore.open(File(dir3, "agenthq.db").absolutePath).use { s3 ->
+            val viaEnv = SettingsService(s3, env = mapOf("AGENTHQ_LIMIT_WATCH_ENABLED" to "1")::get)
+            assertEquals(null, viaEnv.migrateWatchEnabled { false }, "an env value wins; nothing is stored")
+            assertEquals(true, viaEnv.watchEnabled())
+        }
+        dir3.deleteRecursively()
+    }
+
     @Test
     fun defaultsAreListed() {
         assertEquals(BuildLimits(BuildPriority.BELOW_NORMAL, BuildLimits.defaultMaxWorkers(), 0), settings.buildLimits())

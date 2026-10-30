@@ -776,6 +776,12 @@ class AgentHqDaemon(
             val settings = SettingsService(store)
             // STALL-3: the hooks and the process watch read the tool profiles in force from here on (refreshed per launch).
             com.superiorsoftllc.agenthq.runner.ToolProfiles.active = settings.toolProfiles()
+            // STACK-NEUTRAL-1: the watch tooling is opt-in; an install that existed before keeps it on (migrated once).
+            settings.migrateWatchEnabled {
+                sessionStore.load().isNotEmpty() ||
+                    File(com.superiorsoftllc.agenthq.session.stateDir(), com.superiorsoftllc.agenthq.session.ProcessLedger.FILE_NAME).isFile
+            }
+                ?.let { println("[agentHq] limits.watch.enabled set to $it (${if (it == 1L) "existing install: watch tooling kept on" else "fresh install: watch tooling off until enabled"})") }
             // Ticket 55d60a5e: resolved now, while the database answers; /health and its watchdog never read it later.
             val healthSettings = HealthSettings(
                 dbTimeoutMs = settings.limit(LimitRegistry.HEALTH_DB_TIMEOUT_SECONDS) * 1000L,
@@ -844,10 +850,12 @@ class AgentHqDaemon(
                             runCatching { com.superiorsoftllc.agenthq.runner.WatchShims.install(dir, com.superiorsoftllc.agenthq.runner.WatchShims.launcher(agentHqBin)) }
                         }
                     }
-                    settings.buildLimits().sessionEnv(System.getenv("GRADLE_OPTS")) +
+                    // STACK-NEUTRAL-1: with the watch tooling off a session gets no build env and no shims or hooks.
+                    val watchOn = settings.watchEnabled()
+                    (if (watchOn) settings.buildLimits().sessionEnv(System::getenv, profiles) else emptyMap()) +
                         com.superiorsoftllc.agenthq.runner.WatchShims.sessionEnv(
                             watchShimDir, childEnv["PATH"] ?: System.getenv("PATH"),
-                            forced = settings.limit(LimitRegistry.WATCH_FORCED) != 0L,
+                            forced = watchOn && settings.limit(LimitRegistry.WATCH_FORCED) != 0L,
                             treeWaitMinutes = settings.limit(LimitRegistry.WATCH_TREE_WAIT_MINUTES),
                             profiles = profiles,
                         ) +
@@ -910,6 +918,7 @@ class AgentHqDaemon(
                 com.superiorsoftllc.agenthq.session.host.OsProcessTable,
                 config = settings::processWatchConfig,
                 cpuAlert = settings::cpuAlert,
+                enabled = settings::watchEnabled,
                 onPressure = { report ->
                     val envelope = Envelope(
                         Envelope.PROCESS_PRESSURE,

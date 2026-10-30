@@ -313,7 +313,7 @@ class SessionLifecycleTest {
             buildEnv = {
                 com.superiorsoftllc.agenthq.runner.BuildLimits(
                     com.superiorsoftllc.agenthq.runner.BuildPriority.BELOW_NORMAL, workers, 0,
-                ).sessionEnv(null)
+                ).sessionEnv()
             },
         )
 

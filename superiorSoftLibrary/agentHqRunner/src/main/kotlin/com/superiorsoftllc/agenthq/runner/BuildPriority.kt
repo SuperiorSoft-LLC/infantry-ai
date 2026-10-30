@@ -50,36 +50,23 @@ data class BuildLimits(
     val maxParallelForks: Int = 0,
 ) {
     /**
-     * The env every worker session gets. [inheritedGradleOpts] is the daemon's own GRADLE_OPTS: the caps are appended to it,
-     * never replace it. Gradle forwards the client's `-D` system properties to the build, so `org.gradle.workers.max`
-     * and `org.gradle.project.*` (project properties) apply to a `./gradlew` run anywhere below the session.
+     * The env every worker session gets: the generic priority and caps ([PRIORITY_ENV], [MAX_WORKERS_ENV], [MAX_FORKS_ENV]),
+     * plus what each tool profile's `env` templates make of them (STACK-NEUTRAL-1: the Gradle `-D` caps are data in the
+     * gradle profile, not code). [inherited] is the daemon's own environment: a variable a template names is appended to.
      */
-    fun sessionEnv(inheritedGradleOpts: String? = null): Map<String, String> {
-        val opts = buildList {
-            inheritedGradleOpts?.trim()?.takeIf { it.isNotEmpty() }?.let(::add)
-            if (maxWorkers > 0) add("-Dorg.gradle.workers.max=$maxWorkers")
-            // A Kotlin daemon is shared and may be reused from a Normal-priority build; in-process keeps the compiler in
-            // this session's own Gradle JVM, under its priority and its worker cap.
-            add("-Dorg.gradle.project.kotlin.compiler.execution.strategy=in-process")
-            if (maxParallelForks > 0) FORK_PROPERTIES.forEach { add("-Dorg.gradle.project.$it=$maxParallelForks") }
-        }
-        return buildMap {
+    fun sessionEnv(inherited: (String) -> String? = { null }, profiles: List<ToolProfile> = ToolProfiles.active): Map<String, String> =
+        buildMap {
             put(PRIORITY_ENV, priority.key)
             if (maxWorkers > 0) put(MAX_WORKERS_ENV, maxWorkers.toString())
             if (maxParallelForks > 0) put(MAX_FORKS_ENV, maxParallelForks.toString())
-            put(GRADLE_OPTS_ENV, opts.joinToString(" "))
+            putAll(ToolProfiles.sessionEnv(maxWorkers, maxParallelForks, inherited, profiles))
         }
-    }
 
     companion object {
         /** Read by the runner (the priority to apply) and by scripts/agenthq-gate.sh (its own fallback outside a session). */
         const val PRIORITY_ENV = "AGENTHQ_BUILD_PRIORITY"
         const val MAX_WORKERS_ENV = "AGENTHQ_BUILD_MAX_WORKERS"
         const val MAX_FORKS_ENV = "AGENTHQ_BUILD_MAX_FORKS"
-        const val GRADLE_OPTS_ENV = "GRADLE_OPTS"
-
-        /** The test-fork properties this repo's build scripts read (agentHq and agentHqUi build.gradle.kts). */
-        val FORK_PROPERTIES = listOf("agenthq.testForks", "agenthq.uiTestForks")
 
         /** Logical cores minus 2 (at least 1): the owner keeps two cores for the desktop. */
         fun defaultMaxWorkers(cores: Int = Runtime.getRuntime().availableProcessors()): Int = (cores - 2).coerceAtLeast(1)
