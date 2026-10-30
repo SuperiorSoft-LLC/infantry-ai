@@ -65,6 +65,12 @@ class BgJobNotifier(
     private val readMaxBytes: () -> Long = { 256 * 1024L },
     /** STALL-4: how far from a file's end a notice's tail is read (`limits.watch.tailReadKB`); also the longest partial line kept. */
     private val tailReadBytes: () -> Long = { 64 * 1024L },
+    /** STALL-6: drops the still-queued notices of [threadId] to [to] (those whose subject is [subject], null = all); returns how many. */
+    private val drop: (threadId: String, to: String, reason: String, subject: String?) -> Int = { _, _, _, _ -> 0 },
+    /** STALL-6: `limits.watch.noticeDedupe`: handled / superseded / one-per-kind rules; false = every notice goes out. */
+    private val dedupe: () -> Boolean = { true },
+    /** STALL-6: how long ended / handled jobs are remembered (`limits.watch.handledKeepMinutes`). */
+    private val keepMs: () -> Long = { 24 * 60 * 60_000L },
 ) : BgJobListener {
     /** Where the watcher is in one watched file: only the bytes appended since are read. */
     private class Cursor {
@@ -92,6 +98,30 @@ class BgJobNotifier(
     private val regexCache = ConcurrentHashMap<String, Regex?>()
     private val endedAt = ConcurrentHashMap<String, Long>()
 
+    /** STALL-6: a job that ended (its `done`/`expired` ran), kept to supersede its late notices. */
+    private class Finished(val sessionId: String, val label: String, val endedAt: Long) { @Volatile var handled = false }
+
+    private val finished = ConcurrentHashMap<String, Finished>()
+
+    /** STALL-6: job id -> when its owner handled it (read its result after the end, or `bg ack`). */
+    private val handled = ConcurrentHashMap<String, Long>()
+
+    /** STALL-6: job id -> the one-per-job notice kinds already sent ([KIND_EOF], [KIND_END]). */
+    private val sentKinds = ConcurrentHashMap<String, MutableSet<String>>()
+
+    /**
+     * STALL-6: [sessionId]'s session has seen [jobId]'s result (read its log/status after it ended, or `agenthq bg ack`):
+     * its queued notices are dropped and no later one is sent. Returns how many queued notices were dropped.
+     */
+    fun ack(sessionId: String, jobId: String): Int {
+        handled[jobId] = clock()
+        finished[jobId]?.handled = true
+        return runCatching { drop("bg:$jobId", sessionId, "handled: the job's result was already read", null) }.getOrDefault(0)
+    }
+
+    /** True when [jobId] was acked / read after its end, or superseded by a newer job. */
+    fun isHandled(jobId: String): Boolean = handled.containsKey(jobId)
+
     /** When a job of [sessionId] last ended (bg job or a process under its harness); the stall detector reads it. */
     fun lastEndedAt(sessionId: String): Long? = endedAt[sessionId]
 
@@ -103,8 +133,14 @@ class BgJobNotifier(
     /** True when [job]'s notice should go out now (see DELIVERY above). */
     private fun deliverable(sessionId: String, job: BgJob): Boolean = !(job.attached && runCatching { inTurn(sessionId) }.getOrDefault(false))
 
-    private fun deliver(sessionId: String, job: BgJob, req: MailSendRequest, meter: () -> Unit = WatchMeter::event) {
+    private fun deliver(sessionId: String, job: BgJob, req: MailSendRequest, meter: () -> Unit = WatchMeter::event, kind: String? = null) {
         if (!deliverable(sessionId, job)) return
+        if (dedupe()) {
+            if (handled.containsKey(job.id)) return
+            // One 'closed output' and one 'finished' notice per job; a 'closed output' notice after the end is stale.
+            if (kind == KIND_EOF && finished.containsKey(job.id)) return
+            if (kind != null && !sentKinds.computeIfAbsent(job.id) { ConcurrentHashMap.newKeySet() }.add(kind)) return
+        }
         meter()
         send(req)
     }
@@ -129,9 +165,12 @@ class BgJobNotifier(
     ) {
         if (job.notify == null) return
         ended(sessionId)
+        finish(sessionId, job)
         val w = watches.remove(job.id)
         val lines = tailOf(job, tail)
         val verdict = if (exitCode == null) "exit unknown" else "exit $exitCode"
+        // STALL-6 (c): `cmd > out.txt; echo EXIT=$?` reports the echo's status, not the command's: say so, never a bare exit 0.
+        val wrapperExit = wrapperExitOf(lines)?.takeIf { exitCode == null || it != exitCode.toString() }
         val facts = buildList {
             if (bytes == 0L) add(t("job.done.empty", job))
             else if (bytes != null) add(t("job.done.bytes", job, "bytes" to bytes, "complete" to if (eof == false) "." else ", complete (EOF)."))
@@ -142,6 +181,8 @@ class BgJobNotifier(
             }
             if (marker != null) add(t("job.done.marker", job, "marker" to marker.take(lineChars())))
             if (pipeNoFail == true) add(t("job.done.pipe", job))
+            if (wrapperExit != null) add(t("job.done.wrapperExit", job, "code" to (exitCode ?: "?"), "inner" to wrapperExit))
+            else if (exitCode != null && WRAPPER_LABEL.containsMatchIn(job.label)) add(t("job.done.wrapperLabel", job))
         }
         deliver(
             sessionId, job,
@@ -152,12 +193,14 @@ class BgJobNotifier(
                 matched = w?.matches.orEmpty(),
                 lines = lines,
             ),
+            kind = KIND_END,
         )
     }
 
     override fun expired(sessionId: String, job: BgJob) {
         if (job.notify == null) return
         ended(sessionId)
+        finish(sessionId, job)
         val w = watches.remove(job.id)
         // The runner writes `<id>.exit` right after its process wait returns: a runner lost later (or a daemon restart
         // that missed its `done`) still has the real exit code on disk.
@@ -172,7 +215,21 @@ class BgJobNotifier(
                 matched = w?.matches.orEmpty(),
                 lines = tailOf(job, null),
             ),
+            kind = KIND_END,
         )
+    }
+
+    /** STALL-6: [job] ended: remembered for superseding, and its queued 'closed output, still running' notice is now stale. */
+    private fun finish(sessionId: String, job: BgJob) {
+        finished[job.id] = Finished(sessionId, job.label, clock())
+        if (dedupe()) runCatching { drop("bg:${job.id}", sessionId, "superseded: the job has finished", t("job.eof.subject", job)) }
+    }
+
+    /** The exit number a wrapper's last non-blank output line prints (`EXIT=1`), else null. */
+    private fun wrapperExitOf(lines: List<String>): String? {
+        val last = lines.lastOrNull { it.isNotBlank() } ?: return null
+        val re = regex(WatchNotices.text("job.done.wrapperPattern")) ?: return null
+        return re.find(last)?.groupValues?.getOrNull(1)
     }
 
     /** STALL-1: the command closed its output pipe and still runs: told once, never as done. */
@@ -187,6 +244,7 @@ class BgJobNotifier(
                 matched = emptyList(),
                 lines = tailOf(job, null),
             ),
+            kind = KIND_EOF,
         )
     }
 
@@ -208,8 +266,10 @@ class BgJobNotifier(
 
     override fun scanned() {
         val now = clock()
-        val live = jobs().filter { it.second.notify != null }
+        val all = jobs()
+        val live = all.filter { it.second.notify != null }
         watches.keys.retainAll(live.map { it.second.id }.toSet())
+        if (dedupe()) supersede(all, now)
         for ((sid, job) in live) {
             val notify = job.notify ?: continue
             val w = watches.computeIfAbsent(job.id) { Watch(job.startedAt) }
@@ -271,6 +331,22 @@ class BgJobNotifier(
                         lines = tailOf(job, null),
                     ),
                 )
+            }
+        }
+    }
+
+    /**
+     * STALL-6 (b): a job that ended is superseded when the same session started a newer job with the same label after the
+     * end: its queued and future notices are dropped. Also forgets ended jobs older than [keepMs].
+     */
+    private fun supersede(all: List<Pair<String, BgJob>>, now: Long) {
+        for ((id, f) in finished) {
+            if (now - f.endedAt > keepMs()) { finished.remove(id); handled.remove(id); sentKinds.remove(id); continue }
+            if (f.handled) continue
+            if (all.any { (sid, j) -> sid == f.sessionId && j.id != id && j.label == f.label && j.startedAt >= f.endedAt }) {
+                f.handled = true
+                handled[id] = now
+                runCatching { drop("bg:$id", f.sessionId, "superseded: a newer job with the same label started", null) }
             }
         }
     }
@@ -423,10 +499,17 @@ class BgJobNotifier(
                     append("last ${lines.size} lines:\n")
                     lines.forEach { append("  ").append(cut(it)).append('\n') }
                 }
+                if (dedupe()) append(WatchNotices.text("job.ackHint", "id" to job.id)).append('\n')
             },
         )
 
     companion object {
+        private const val KIND_EOF = "eof"
+        private const val KIND_END = "end"
+
+        /** A command line that echoes `$?` itself: the watched exit code is the shell's, not the command's. */
+        private val WRAPPER_LABEL = Regex("""echo\s+\S*\$\?""")
+
         /** The last [n] lines of [f], read from at most its last [maxBytes]; empty when it is gone or unreadable. */
         fun readTail(f: File, n: Int, maxBytes: Long): List<String> = runCatching {
             if (!f.isFile) return emptyList()

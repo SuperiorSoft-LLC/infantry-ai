@@ -163,7 +163,7 @@ data class BgNotify(
 )
 
 /**
- * One `bg_job` request. [op] is `beat` (register or heartbeat: an upsert), `done`, `eof` (STALL-1: the output closed while the command still runs), or `list`. On `done` the wrapper adds
+ * One `bg_job` request. [op] is `beat` (register or heartbeat: an upsert), `done`, `eof` (STALL-1: the output closed while the command still runs), `ack` (STALL-6: the session has seen the job's result; its queued notices are dropped), or `list`. On `done` the wrapper adds
  * the command's [exitCode] and its last output lines ([tail]) for a `--notify` job's notice.
  */
 @Serializable

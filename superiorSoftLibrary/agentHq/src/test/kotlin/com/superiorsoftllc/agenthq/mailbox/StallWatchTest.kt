@@ -39,8 +39,8 @@ class StallWatchTest {
 
     private fun log(text: String = "") = File.createTempFile("stall", ".log").apply { deleteOnExit(); writeText(text) }
 
-    private fun job(log: File?, attached: Boolean = false, optOut: String? = null) =
-        BgJob("j1", "gradle test", pid = 1, startedAt = now, logPath = log?.absolutePath, notify = BgNotify(), attached = attached, optOut = optOut)
+    private fun job(log: File?, attached: Boolean = false, optOut: String? = null, id: String = "j1") =
+        BgJob(id, "gradle test", pid = 1, startedAt = now, logPath = log?.absolutePath, notify = BgNotify(), attached = attached, optOut = optOut)
 
     private fun min(m: Long) { now += m * 60_000L }
 
@@ -132,7 +132,7 @@ class StallWatchTest {
         n.done("s", job(log()), 0, emptyList(), bytes = 0, eof = true)
         assertTrue(sent[0].subject.contains("exit 0, no output"), sent[0].subject)
         assertTrue(sent[0].body.contains("NO output (EOF, 0 bytes)"), sent[0].body)
-        n.done("s", job(log()), 0, listOf("x"), bytes = 2, eof = false, survivors = listOf("4242 java -jar server.jar"))
+        n.done("s", job(log(), id = "j2"), 0, listOf("x"), bytes = 2, eof = false, survivors = listOf("4242 java -jar server.jar"))
         assertTrue(sent[1].body.contains("output pipe is still open") && sent[1].body.contains("4242"), sent[1].body)
     }
 
@@ -151,7 +151,7 @@ class StallWatchTest {
         File(f.absolutePath.removeSuffix(".log") + ".exit").apply { deleteOnExit(); writeText("7") }
         n.expired("s", job(f))
         assertTrue(sent[0].subject.contains("finished, exit 7"), sent[0].subject)
-        n.expired("s", job(log("b\n")))
+        n.expired("s", job(log("b\n"), id = "j2"))
         assertTrue(sent[1].body.contains("runner lost, exit unknown"), sent[1].body)
     }
 

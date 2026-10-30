@@ -360,6 +360,19 @@ class Mailbox(
         }
     }
 
+    /**
+     * STALL-6: drops the still-QUEUED messages of [threadId] to [to] that [match]: they become [MessageState.UNDELIVERABLE]
+     * with [reason] (visible, never silent) and are never delivered. Returns how many were dropped.
+     */
+    fun dropQueued(threadId: String, to: String, reason: String, match: (Message) -> Boolean = { true }): Int {
+        val events = synchronized(lock) {
+            messages.values.filter { it.threadId == threadId && it.to == to && it.state == MessageState.QUEUED && match(it) }
+                .map { it.id }.flatMap { markUndeliverableLocked(it, reason) }
+        }
+        emit(events)
+        return events.size
+    }
+
     private fun markDeliveredLocked(messageId: String): List<MailEvent> {
         val current = messages[messageId] ?: return emptyList()
         if (current.state != MessageState.QUEUED) return emptyList()
