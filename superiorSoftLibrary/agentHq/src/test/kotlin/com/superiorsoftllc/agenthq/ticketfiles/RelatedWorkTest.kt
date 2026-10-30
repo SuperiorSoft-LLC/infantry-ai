@@ -26,7 +26,7 @@ class RelatedWorkTest {
     fun rendersTicketsWithShortPathsAndMoreCount() {
         val own = setOf("${lib}Board.kt")
         val files = (1..8).map { "${lib}F$it.kt" } + "${lib}Board.kt"
-        val text = RelatedBlock.render(own, listOf(view("ticket-aaaa1111", *files.toTypedArray())), { false })
+        val text = assertNotNull(RelatedBlock.render(own, listOf(view("ticket-aaaa1111", *files.toTypedArray())), { false }))
         assertTrue("ticket-aaaa1111 [done] ticket/aaaa1111-s" in text, text)
         assertTrue("M agentHq/Board.kt" in text, text)
         assertFalse("src/main/kotlin" in text, text)
@@ -38,7 +38,7 @@ class RelatedWorkTest {
     fun listsOnlyOverlappingOrSameModuleFilesAndDropsHubs() {
         val own = setOf("${lib}Board.kt")
         val other = "superiorSoftLibrary/agentHqUi/src/Elsewhere.kt"
-        val text = RelatedBlock.render(own, listOf(view("ticket-aaaa1111", "${lib}Board.kt", "${lib}Hub.kt", other)), { it.endsWith("Hub.kt") })
+        val text = assertNotNull(RelatedBlock.render(own, listOf(view("ticket-aaaa1111", "${lib}Board.kt", "${lib}Hub.kt", other)), { it.endsWith("Hub.kt") }))
         assertTrue("agentHq/Board.kt" in text)
         assertFalse("Hub.kt" in text)
         assertFalse("Elsewhere.kt" in text)
@@ -47,15 +47,19 @@ class RelatedWorkTest {
     @Test
     fun capsTicketsLinesAndSize() {
         val tickets = (1..6).map { view("ticket-aaaa000$it", "${lib}A$it.kt", "${lib}B$it.kt") }
-        val text = RelatedBlock.render(setOf("${lib}A1.kt"), tickets, { false })
-        assertTrue(text.lines().size <= 10, text)
-        assertTrue(text.length <= 2000, "about 500 tokens: ${text.length}")
+        val text = assertNotNull(RelatedBlock.render(setOf("${lib}A1.kt"), tickets, { false }, maxTickets = 3))
+        assertTrue(text.length <= 1500, "about 400 tokens: ${text.length}")
         assertTrue("ticket-aaaa0004" !in text)
+        // KNOWLEDGE-PTR-1: the character cap (limits.ticketFiles.briefChars) cuts tickets, never a line in half.
+        val tight = assertNotNull(RelatedBlock.render(setOf("${lib}A1.kt"), tickets, { false }, maxChars = 300))
+        assertTrue(tight.length <= 300, "${tight.length}: $tight")
+        assertTrue("ticket-aaaa0001" in tight && "ticket-aaaa0003" !in tight, tight)
     }
 
     @Test
-    fun noRelatedTicketsGivesTheFallbackLine() {
-        assertEquals(RelatedBlock.NONE_LINE, RelatedBlock.render(emptySet(), emptyList(), { false }))
+    fun noRelatedTicketsGivesNoBlock() {
+        // KNOWLEDGE-PTR-1: the block appears only when related tickets exist (no "none found" line in every prompt).
+        assertNull(RelatedBlock.render(emptySet(), emptyList(), { false }))
     }
 
     private fun db(): com.superiorsoftllc.agenthq.db.AgentHQDatabase =
@@ -88,10 +92,10 @@ class RelatedWorkTest {
     }
 
     @Test
-    fun liveSourceWithNothingKnownFallsBack() {
+    fun liveSourceWithNothingKnownGivesNoBlock() {
         val rows = mapOf("ticket-bbbbbbb1" to row("ticket-bbbbbbb1", "nothing to see", TicketStatus.IN_PROGRESS))
         val source = LiveRelatedWork(TicketFiles(db(), { rows.values.toList() }, { null }), { rows[it] })
-        assertEquals(RelatedBlock.NONE_LINE, source.block("ticket-bbbbbbb1", "nothing to see"))
+        assertNull(source.block("ticket-bbbbbbb1", "nothing to see"))
         assertNull(source.block("ticket-missing", ""))
     }
 

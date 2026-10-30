@@ -23,7 +23,11 @@ class TicketContextComposer(
     private val related: RelatedWorkSource = RelatedWorkSource.NONE,
 ) : TicketContext {
     override fun compose(input: ContextInput): ComposedContext {
-        val core = input.title + "\n\n" + input.description
+        val relatedBlock = input.ticketId?.let { runCatching { related.block(it, input.description) }.getOrNull() }
+        // KNOWLEDGE-PTR-1: the live related block supersedes the description's stored RELATED (auto) block, so the prompt
+        // does not carry both; with no live block (switched off, nothing found) the stored one stays as written.
+        val description = if (relatedBlock != null) com.superiorsoftllc.agenthq.ticketfiles.RelatedDescriptionBlock.strip(input.description) else input.description
+        val core = input.title + "\n\n" + description
         val switches = effective(input.includeLinkedOverride, input.includeSkillsOverride)
         val includeLinked = switches.includeLinkedTasksContext.value
         val sections = buildList {
@@ -43,7 +47,7 @@ class TicketContextComposer(
             add("ticket" to core)
             // IMG-3: right after the ticket it illustrates, so the worker reads the images with the brief.
             imagesSection(input.images)?.let { add("images" to it) }
-            input.ticketId?.let { runCatching { related.block(it, input.description) }.getOrNull() }?.let { add("related" to it) }
+            relatedBlock?.let { add("related" to it) }
             if (includeLinked && input.links.isNotEmpty()) {
                 val linkedTickets = input.links.joinToString("\n") { link ->
                     val singleLineTitle = link.title.replace('\r', ' ').replace('\n', ' ')

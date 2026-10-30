@@ -1175,6 +1175,7 @@ internal object Cli {
             "start" -> startTicket(stream, parsed, out, err, getenv)
             "link" -> linkTicket(stream, parsed, out, err, getenv)
             "files" -> ticketFiles(stream, parsed, out, err, getenv)
+            "related" -> relatedTicket(stream, parsed, out, err, getenv)
             else -> showTicket(stream, parsed, out, err, getenv)
         }
     }
@@ -1495,6 +1496,78 @@ internal object Cli {
             return 1
         }
         out.appendLine("created ${shortTicketId(ticket.id)}" + if (images != null) " (${ticket.images.size} image(s))" else "")
+        val linked = linkRelatedTo(stream, ticket, parsed.relatedTo, projectId.orEmpty(), err) ?: return 1
+        relatedNote(linked).forEach(out::appendLine)
+        return 0
+    }
+
+    /**
+     * KNOWLEDGE-PTR-1: each `--related-to <id|prefix>` becomes a `relates_to` link (the board then refreshes the ticket's
+     * RELATED (auto) block). Answers the ticket as stored after the last link; null after printing why.
+     */
+    private suspend fun linkRelatedTo(stream: FrameStream, ticket: Ticket, ids: List<String>, projectId: String, err: Appendable): Ticket? {
+        var current = ticket
+        for (given in ids) {
+            val other = resolveTicketId(stream, given.trim(), projectId, err) ?: return null
+            val request = TicketLinkRequest(ticketId = current.id, relatedId = other, type = TicketLinkType.RELATES_TO)
+            val answer = stream.request(
+                Envelope(Envelope.TICKET_LINK, json.encodeToString(TicketLinkRequest.serializer(), request)),
+                answerType = Envelope.TICKET, what = "ticket_link", idempotent = false,
+            )
+            current = json.decodeFromString(Ticket.serializer(), answer.data)
+        }
+        return current
+    }
+
+    /** KNOWLEDGE-PTR-1: the stored RELATED (auto) block's header and series suggestion, one line each (none = empty). */
+    private fun relatedNote(ticket: Ticket): List<String> {
+        val block = storedRelatedBlock(ticket.description) ?: return emptyList()
+        val lines = block.lines()
+        return listOfNotNull(
+            lines.firstOrNull()?.takeIf { it.startsWith("RELATED (auto, ") }?.substringBefore(';')?.let { "$it) atop the description: read those files first" },
+            lines.firstOrNull { it.startsWith("Series ") },
+        )
+    }
+
+    /** The text of the RELATED (auto) block atop [description], markers excluded; null when it has none. */
+    private fun storedRelatedBlock(description: String): String? {
+        val begin = com.superiorsoftllc.agenthq.ticketfiles.RelatedDescriptionBlock.BEGIN
+        val end = com.superiorsoftllc.agenthq.ticketfiles.RelatedDescriptionBlock.END
+        if (!description.startsWith(begin)) return null
+        val stop = description.indexOf(end).takeIf { it > 0 } ?: return null
+        return description.substring(begin.length, stop).trim()
+    }
+
+    /**
+     * KNOWLEDGE-PTR-1: `ticket related <id|prefix> [--suggest]`: prints the ticket's RELATED (auto) block. With --suggest
+     * the daemon first rebuilds it from the board and the file index (a save of the ticket's own title, so the human text
+     * is untouched); the block's own switch (`related.descriptionBlock`) and the ticket's `related: off` line still apply.
+     */
+    private suspend fun relatedTicket(
+        stream: FrameStream,
+        parsed: ParsedArgs,
+        out: Appendable,
+        err: Appendable,
+        getenv: (String) -> String?,
+    ): Int {
+        checkContract(stream, err)
+        val found = resolveTicket(stream, parsed.args[1].trim(), boardProjectOf(parsed, getenv), err) ?: return 1
+        val ticket = if (parsed.suggest) {
+            val payload = json.encodeToString(TicketSave.serializer(), TicketSave(id = found.id, title = found.title))
+            val answer = stream.request(Envelope(Envelope.TICKET_SAVE, payload), answerType = Envelope.TICKET, what = "ticket_save", idempotent = true)
+            json.decodeFromString(Ticket.serializer(), answer.data)
+        } else {
+            json.decodeFromString(
+                Ticket.serializer(),
+                stream.request(Envelope(Envelope.TICKET_GET, found.id), Envelope.TICKET, "ticket_get", idempotent = true).data,
+            )
+        }
+        val block = storedRelatedBlock(ticket.description)
+        out.appendLine(
+            block ?: ("${shortTicketId(ticket.id)}: no RELATED block (nothing related found" +
+                (if (parsed.suggest) "" else "; `agenthq ticket related ${shortTicketId(ticket.id)} --suggest` rebuilds it") +
+                "). Files: agenthq ticket files ${shortTicketId(ticket.id)} --related"),
+        )
         return 0
     }
 
@@ -1569,7 +1642,9 @@ internal object Cli {
             if (parsed.contextLimit != null) add("context limit ${ticket.contextLimit?.let(com.superiorsoftllc.agenthq.session.ContextLimits::label) ?: "-"}")
             if (images != null) add("${ticket.images.size} image(s)")
         }
-        out.appendLine("updated ${shortTicketId(ticket.id)} (saved: ${saved.joinToString(", ")})")
+        val linked = linkRelatedTo(stream, ticket, parsed.relatedTo, projectId.orEmpty(), err) ?: return 1
+        out.appendLine("updated ${shortTicketId(ticket.id)} (saved: ${(saved + listOfNotNull(parsed.relatedTo.takeIf { it.isNotEmpty() }?.let { "related ${it.size}" })).joinToString(", ")})")
+        relatedNote(linked).forEach(out::appendLine)
         return 0
     }
 
@@ -4273,6 +4348,8 @@ internal object Cli {
                                   In Progress. A refused or held start exits 1 with the reason
               ticket link <id|prefix> <otherId|prefix> <type>   Link one ticket to another (see the link types)
               ticket files <id|prefix> [--related] | --path <glob> | --backfill   Files a ticket changed / tickets that changed a path / related tickets' files
+              ticket related <id|prefix> [--suggest]   The ticket's RELATED (auto) block (series, linked, same-file tickets and their
+                                  files); --suggest rebuilds it first. ticket create/update --related-to <id|prefix> (repeatable) links one
               remote on|off|status  Let the daemon accept outside (Tailscale) connections; prints the ws address
                                   and token. Takes effect on the next daemon restart.
               bg run [--name L] [--keep] -- CMD  Run CMD as a registered background job (session reads Running; --keep: survives the session closing); bg list|status|logs|stop ID
@@ -4483,6 +4560,9 @@ internal object Cli {
         /** TICKET-FILES: `ticket files --path <glob>` (repeatable), `--related`, `--backfill`, `--limit <n>`. */
         val filePaths: List<String> = emptyList(),
         val related: Boolean = false,
+        /** KNOWLEDGE-PTR-1: `ticket create|update --related-to <id|prefix>` (repeatable), `ticket related <id> --suggest`. */
+        val relatedTo: List<String> = emptyList(),
+        val suggest: Boolean = false,
         val backfill: Boolean = false,
         val limit: String? = null,
         val bottom: Boolean = false,
@@ -4650,6 +4730,8 @@ internal object Cli {
         val options = mutableListOf<String>()
         val images = mutableListOf<String>()
         val removeImages = mutableListOf<String>()
+        val relatedTo = mutableListOf<String>()
+        var suggest = false
         var multi = false
         var other = false
         var noOther = false
@@ -4934,6 +5016,14 @@ internal object Cli {
                     related = true
                     i++
                 }
+                "--related-to" -> {
+                    relatedTo += flagValue(args, ++i) ?: return fail(err, "--related-to expects a ticket id or prefix (see: agenthq tickets)")
+                    i++
+                }
+                "--suggest" -> {
+                    suggest = true
+                    i++
+                }
                 "--backfill" -> {
                     backfill = true
                     i++
@@ -5092,6 +5182,8 @@ internal object Cli {
             options = options.toList(),
             images = images.toList(),
             removeImages = removeImages.toList(),
+            relatedTo = relatedTo.toList(),
+            suggest = suggest,
             multi = multi,
             other = other,
             noOther = noOther,
@@ -5314,6 +5406,11 @@ internal object Cli {
         val args = parsed.args
         fun blank(index: Int) = args.getOrNull(index)?.isBlank() != false
         return when (args.firstOrNull()) {
+            "related" -> if (blank(1)) {
+                "ticket related requires a ticket id: agenthq ticket related <id|prefix> [--suggest]"
+            } else {
+                null
+            }
             "files" -> TicketFilesCli.usageError(args.getOrNull(1)?.takeIf { it.isNotBlank() }, parsed.filePaths, parsed.backfill, parsed.limit)
             "show" -> if (blank(1)) {
                 "ticket show requires a ticket id: agenthq ticket show <id|prefix> (see: agenthq tickets)"
@@ -5324,8 +5421,8 @@ internal object Cli {
                 blank(1) -> "ticket update requires a ticket id: agenthq ticket update <id|prefix> [--title ...] [--desc ...] [--role <id>] [--provider <id>] [--model <id>] [--epic <id|prefix>]"
                 parsed.title == null && parsed.description == null && parsed.role == null &&
                     parsed.provider == null && parsed.model == null && parsed.weight == null && parsed.contextLimit == null && parsed.epic == null &&
-                    parsed.images.isEmpty() && parsed.removeImages.isEmpty() ->
-                    "ticket update needs something to change: --title, --desc, --role, --provider, --model, --weight, --context-limit, --epic, --image or --remove-image"
+                    parsed.images.isEmpty() && parsed.removeImages.isEmpty() && parsed.relatedTo.isEmpty() ->
+                    "ticket update needs something to change: --title, --desc, --role, --provider, --model, --weight, --context-limit, --epic, --image, --remove-image or --related-to"
                 parsed.title?.isBlank() == true -> "ticket update --title cannot be blank"
                 else -> roleUsageError(parsed.role)
             }

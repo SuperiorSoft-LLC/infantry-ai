@@ -168,6 +168,8 @@ class TicketBoard(
      * no branch and no worktree, and the daemon's own checkout is never used for it.
      */
     private val projectDirectory: (projectId: String?) -> String? = { null },
+    /** KNOWLEDGE-PTR-1 (C): the stored RELATED (auto) block a save or a `relates_to` link writes atop the description. */
+    private val relatedDescription: RelatedDescription = RelatedDescription.NONE,
 ) {
     /** ROUTING-1: the (ticket, reason) pairs already reported through [routingRefused]. */
     private val reportedRoutingRefusals = java.util.Collections.synchronizedSet(HashSet<String>())
@@ -492,6 +494,10 @@ class TicketBoard(
             else -> request.contextLimit.also { v -> com.superiorsoftllc.agenthq.session.ContextLimits.problem(v)?.let { throw IllegalArgumentException(it) } }
         }
         validateExecutorPins(agentId, provider, model)
+        // KNOWLEDGE-PTR-1 (C): a save that sets the title or the description rewrites the stored RELATED (auto) block.
+        val described = if (title != null || description != null) {
+            describeRelated(editing, title ?: existing!!.title, description ?: existing?.description.orEmpty(), projectId, extraLink = null)
+        } else null
 
         var primary = editing ?: ""
         val outcome = commit { s ->
@@ -501,7 +507,7 @@ class TicketBoard(
                     TicketRow(
                         id = primary,
                         title = title!!,
-                        description = description ?: "",
+                        description = described ?: description ?: "",
                         ticketType = type,
                         status = createStatus,
                         position = 0, // renumbered to the bottom of its column
@@ -529,7 +535,7 @@ class TicketBoard(
                     title = title ?: row.title,
                     projectId = projectId,
                     epicId = epicId,
-                    description = description ?: row.description,
+                    description = described ?: description ?: row.description,
                     ticketType = if (clearType) null else type ?: row.ticketType,
                     agentId = agentId,
                     provider = provider,
@@ -551,6 +557,14 @@ class TicketBoard(
         // IMG-3: an image this save dropped goes once no ticket references it (after the commit, still under the lock).
         existing?.let { before -> releaseImages(before.projectId, before.images - imagePaths.toSet()) }
         return answer(primary, outcome)
+    }
+
+    /** KNOWLEDGE-PTR-1 (C): the description to store with its RELATED (auto) block rewritten; null = store it as given. */
+    private fun describeRelated(id: String?, title: String, description: String, projectId: String?, extraLink: TicketLinkRow?): String? {
+        if (relatedDescription === RelatedDescription.NONE) return null
+        val (rows, links) = store.transaction { store.tickets.all() to store.tickets.links() }
+        return runCatching { relatedDescription.describe(RelatedDraft(id, title, description, projectId, rows, links + listOfNotNull(extraLink))) }
+            .getOrNull()?.takeIf { it.length <= MAX_DESCRIPTION_LENGTH }
     }
 
     /** IMG-3: delete each of [dropped] that no ticket on the board still references. */
@@ -1340,7 +1354,14 @@ class TicketBoard(
     @Synchronized
     fun link(request: TicketLinkRequest): TicketAnswer {
         val (primary, link) = normalise(request)
+        // KNOWLEDGE-PTR-1 (C): a `relates_to` link (ticket_create/update relatedTo) refreshes the asking ticket's RELATED block.
+        val described = if (link.type == TicketLinkType.RELATES_TO) {
+            store.transaction { store.tickets.get(primary) }?.let { row ->
+                describeRelated(primary, row.title, row.description, row.projectId, extraLink = link)?.takeIf { it != row.description }
+            }
+        } else null
         val outcome = commit { s ->
+            described?.let { d -> s.rows[primary]?.let { s.rows[primary] = it.copy(description = d) } }
             s.require(link.ticketId)
             s.require(link.relatedId)
             if (link.type == TicketLinkType.BLOCKED_BY || link.type == TicketLinkType.CHILD_OF) {
