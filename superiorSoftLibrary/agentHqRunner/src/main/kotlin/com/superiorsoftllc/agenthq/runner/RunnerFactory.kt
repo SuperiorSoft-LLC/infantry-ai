@@ -1,12 +1,13 @@
 package com.superiorsoftllc.agenthq.runner
 
-import com.superiorsoftllc.agenthq.session.InfantryEnv
-
 /** Selects the runner from `AGENTHQ_RUNNER` (default `piped`). */
 object RunnerFactory {
     const val ENV = "AGENTHQ_RUNNER"
 
-    fun fromFlag(flag: String? = InfantryEnv.get(ENV)): ProcessRunner =
+    /** `INFANTRY_RUNNER` (the product-name alias) wins over `AGENTHQ_RUNNER`; the same rule as the daemon's InfantryEnv, kept here so the runner imports nothing of the daemon. */
+    fun envFlag(): String? = System.getenv("INFANTRY_RUNNER") ?: System.getenv(ENV)
+
+    fun fromFlag(flag: String? = envFlag()): ProcessRunner =
         when (flag?.trim()?.lowercase()) {
             null, "", "piped", "pipe", "default" -> PipedProcessRunner()
             "pty", "pty4j" -> PtyProcessRunner()

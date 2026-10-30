@@ -174,7 +174,7 @@ class TriggerService(
         require(request.coalesceMs >= 0) { "coalesceMs must be >= 0" }
         require(request.ceilingRuns >= 1) { "ceilingRuns must be >= 1" }
         require(request.ceilingWindowMs >= 1_000) { "ceilingWindowMs must be >= 1000" }
-        require(request.intervalMs == null || request.intervalMs >= MIN_INTERVAL_MS) {
+        require(request.intervalMs == null || request.intervalMs!! >= MIN_INTERVAL_MS) {
             "a schedule interval must be at least 1 minute (intervalMs >= $MIN_INTERVAL_MS), got ${request.intervalMs}"
         }
         val existing = request.id?.trim()?.takeIf { it.isNotEmpty() }?.let { id ->

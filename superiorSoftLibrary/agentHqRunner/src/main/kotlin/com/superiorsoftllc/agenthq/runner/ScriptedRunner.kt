@@ -109,7 +109,7 @@ class ScriptedProcess(
  * One provider-shaped `text` line carrying exactly [text] -- the stdin the child received, JSON-escaped
  * by the serializer so quotes, braces and non-ASCII survive the round trip unchanged.
  */
-internal fun echoLine(text: String): String =
+fun echoLine(text: String): String =
     JsonObject(mapOf("type" to JsonPrimitive("text"), "text" to JsonPrimitive(text))).toString()
 
 /**

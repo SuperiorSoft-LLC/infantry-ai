@@ -425,7 +425,7 @@ class TicketBoard(
         val editing = request.id?.trim()?.takeIf { it.isNotEmpty() }
         val title = request.title?.let { checkTitle(it) }
         val description = request.description?.let { checkDescription(it) }
-        val clearType = request.ticketType != null && request.ticketType.isBlank()
+        val clearType = request.ticketType != null && request.ticketType!!.isBlank()
         val type = request.ticketType?.takeIf { it.isNotBlank() }?.let { checkType(it) }
         if (editing == null) require(title != null) { "title is required to create a ticket" }
         // BACKLOG (1.131.0): a create enters todo (default) or backlog; an edit never changes the column.
@@ -444,7 +444,7 @@ class TicketBoard(
         }
         val agentId = when {
             // ORIGIN-SCRUB-1a: an older client's `role:<retired id>` is stored under the id that replaced it.
-            request.agentId != null -> request.agentId.trim().takeIf { it.isNotEmpty() }?.let(::normalizeRoleAgentId)
+            request.agentId != null -> request.agentId!!.trim().takeIf { it.isNotEmpty() }?.let(::normalizeRoleAgentId)
             existing != null -> existing.agentId
             // BUG-ROLE-3: no role given means unassigned, never the first profile's role.
             else -> null
@@ -453,23 +453,23 @@ class TicketBoard(
         validateAgentId(agentId, checkCatalog = request.agentId != null)
         val provider = when {
             request.provider == null -> existing?.provider
-            else -> request.provider.trim().lowercase().takeIf { it.isNotEmpty() }
+            else -> request.provider!!.trim().lowercase().takeIf { it.isNotEmpty() }
         }
         val model = when {
             request.model == null -> existing?.model
-            else -> request.model.trim().takeIf { it.isNotEmpty() }
+            else -> request.model!!.trim().takeIf { it.isNotEmpty() }
         }
         // MVP Sprint-Zero: a blank or absent projectId on an edit keeps the project the ticket already has.
         val projectId = request.projectId?.trim()?.takeIf { it.isNotEmpty() } ?: existing?.projectId
         // M2-17 (contract 1.60.0): absent or null keeps the current epic; on an edit an empty one clears it (None).
         val epicId = when {
             request.epicId == null -> existing?.epicId
-            else -> request.epicId.trim().takeIf { it.isNotEmpty() }
+            else -> request.epicId!!.trim().takeIf { it.isNotEmpty() }
         }
         val useWorktree = request.useWorktree ?: existing?.useWorktree
         val worktreeBranch = when {
             request.worktreeBranch == null -> existing?.worktreeBranch
-            else -> request.worktreeBranch.trim().takeIf { it.isNotEmpty() }
+            else -> request.worktreeBranch!!.trim().takeIf { it.isNotEmpty() }
         }
         val includeLinkedTasksContext = request.includeLinkedTasksContext ?: existing?.includeLinkedTasksContext
         // P10-K11 (K-D9): absent or null keeps the stored list and `[]` clears it; the mode and the switch keep the same way.

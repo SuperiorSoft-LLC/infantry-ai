@@ -88,7 +88,7 @@ object ProcessTree {
     }
 
     /** [members] without [daemon]-matching processes and anything whose parent chain (within [members]) reaches one. */
-    internal fun withoutDaemons(members: List<ProcessHandle>, daemon: Regex): List<ProcessHandle> {
+    fun withoutDaemons(members: List<ProcessHandle>, daemon: Regex): List<ProcessHandle> {
         val byPid = members.associateBy { it.pid() }
         val excluded = HashSet<Long>()
         members.filter { daemon.containsMatchIn(commandLine(it)) }.forEach { excluded += it.pid() }

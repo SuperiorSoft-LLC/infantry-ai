@@ -365,7 +365,7 @@ class PendingPrompts(
     private fun onExpiry(request: PromptRequest, policy: PromptTimeoutPolicy): Resolution = when {
         request.kind == PromptKinds.TOOL_APPROVAL ->
             Resolution.Approval(Decision.parse(request.recommended) ?: policy.onTimeout.decision)
-        request.recommended != null -> Resolution.Question(Answer(listOf(request.recommended), null, answered = true))
+        request.recommended != null -> Resolution.Question(Answer(listOf(request.recommended!!), null, answered = true))
         else -> Resolution.Question(Answer.NONE)
     }
 

@@ -348,7 +348,7 @@ object EventNormalizer {
      * here -- the content it is writing -- never a file it reads. A call whose input does not have that shape yields null.
      */
     /** Contract 1.127.0 (TODO-OVERLAY-1): the to-do list a to-do tool call carries, or null for any other call. Only the items are kept. */
-    internal fun todoListOf(toolName: String, obj: JsonObject): List<com.superiorsoftllc.agenthq.protocol.todo.TodoItemPayload>? {
+    fun todoListOf(toolName: String, obj: JsonObject): List<com.superiorsoftllc.agenthq.protocol.todo.TodoItemPayload>? {
         val part = obj["part"] as? JsonObject
         val state = part?.get("state") as? JsonObject
         val input = listOfNotNull(obj["input"] as? JsonObject, state?.get("input") as? JsonObject, part?.get("input") as? JsonObject)
@@ -356,7 +356,7 @@ object EventNormalizer {
         return com.superiorsoftllc.agenthq.protocol.todo.TodoAdapters.parse(toolName, input)
     }
 
-    internal fun fileWriteOf(toolName: String, obj: JsonObject): FileWrite? {
+    fun fileWriteOf(toolName: String, obj: JsonObject): FileWrite? {
         val name = toolName.lowercase()
         if (name !in WRITE_TOOLS && name !in EDIT_TOOLS && name !in PATCH_TOOLS) return null
         val part = obj["part"] as? JsonObject

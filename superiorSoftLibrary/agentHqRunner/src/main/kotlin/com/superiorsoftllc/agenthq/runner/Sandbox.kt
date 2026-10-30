@@ -160,7 +160,7 @@ class SandboxPlan(
     }
 
     /** The CLI's own session/state dirs (read-write); its CONFIG stays read-only under [home]. */
-    internal fun stateDirsOf(cli: String?, launchEnv: Map<String, String>): List<String> {
+    fun stateDirsOf(cli: String?, launchEnv: Map<String, String>): List<String> {
         fun xdg(name: String, fallback: String) = (launchEnv[name] ?: env(name))?.takeIf { it.isNotBlank() } ?: File(home, fallback).path
         return when (cli) {
             "opencode" -> listOf(

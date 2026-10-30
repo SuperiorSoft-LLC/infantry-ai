@@ -28,6 +28,9 @@ dependencyResolutionManagement {
 // The directory prefix is kept from the monorepo so ":superiorSoftLibrary:..." project paths stay valid.
 include(":superiorSoftLibrary")
 include(":superiorSoftLibrary:agentHq")
+// CORE-SPLIT-1/2 (docs/DAEMON-CORE.md): leaf modules carved out of agentHq; package names unchanged.
+include(":superiorSoftLibrary:agentHqProtocol")
+include(":superiorSoftLibrary:agentHqRunner")
 include(":superiorSoftLibrary:agenthqUiCore")
 include(":superiorSoftLibrary:agenthqAppUi")
 // RUNTIME-3: an official module with sources (plugins/official/<Module>/build.gradle.kts) builds as its own project and

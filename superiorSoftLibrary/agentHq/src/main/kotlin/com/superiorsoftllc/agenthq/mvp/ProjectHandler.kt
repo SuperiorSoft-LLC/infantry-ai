@@ -95,7 +95,7 @@ class ProjectHandler(
             val project = when {
                 request.clear -> store.setBaseBranch(request.projectId, null)
                 request.branch != null -> {
-                    val name = ProjectBaseCheck.checkName(request.branch)
+                    val name = ProjectBaseCheck.checkName(request.branch!!)
                     val check = baseCheck ?: throw IllegalArgumentException("this daemon has no repository to check a base branch against")
                     store.setBaseBranch(request.projectId, name) { project, branch -> check.check(project, branch) }
                 }

@@ -292,7 +292,7 @@ class OwnerQuestions(
         orphan(now) { !sessionExists(it.sessionId) || (now - it.createdAt >= ttlMs && !sessionBusy(it.sessionId)) }
         val picked = synchronized(lock) {
             repository.all()
-                .filter { it.state == QuestionStates.OPEN && it.defaultAfterMin != null && now >= it.createdAt + it.defaultAfterMin * MINUTE_MS }
+                .filter { it.state == QuestionStates.OPEN && it.defaultAfterMin != null && now >= it.createdAt + it.defaultAfterMin!! * MINUTE_MS }
                 .map {
                     it.copy(
                         state = QuestionStates.AUTO,

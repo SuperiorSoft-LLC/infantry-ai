@@ -40,27 +40,27 @@ object TodoAdapters {
     }
 }
 
-internal const val TODO_MAX_ITEMS = 50
-internal const val TODO_MAX_TEXT = 200
+const val TODO_MAX_ITEMS = 50
+const val TODO_MAX_TEXT = 200
 
 /** A `todos` value is an array, or (a captured haiku quirk) the same array encoded as a JSON string. */
-internal fun todoArray(element: JsonElement?): JsonArray? = when (element) {
+fun todoArray(element: JsonElement?): JsonArray? = when (element) {
     is JsonArray -> element
     is JsonPrimitive -> if (element.isString) runCatching { Json.parseToJsonElement(element.content) as? JsonArray }.getOrNull() else null
     else -> null
 }
 
-internal fun JsonObject.str(vararg keys: String): String? =
+fun JsonObject.str(vararg keys: String): String? =
     keys.firstNotNullOfOrNull { k -> (this[k] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() } }
 
-internal fun normalizeTodoStatus(raw: String?): String = when (raw?.lowercase()) {
+fun normalizeTodoStatus(raw: String?): String = when (raw?.lowercase()) {
     "completed", "complete", "done", "cancelled", "canceled" -> TodoItemPayload.DONE
     "in_progress", "in-progress", "inprogress", "active", "running" -> TodoItemPayload.IN_PROGRESS
     else -> TodoItemPayload.PENDING
 }
 
 /** Items with text only; an empty or all-invalid array is a valid, empty list (the agent cleared it). */
-internal fun itemsOf(array: JsonArray, textKeys: Array<String>): List<TodoItemPayload> =
+fun itemsOf(array: JsonArray, textKeys: Array<String>): List<TodoItemPayload> =
     array.mapNotNull { e ->
         val o = e as? JsonObject ?: return@mapNotNull null
         val text = o.str(*textKeys) ?: return@mapNotNull null

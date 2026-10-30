@@ -15,12 +15,13 @@ class LimitsGuardTest {
     @get:org.junit.Rule
     val timeout: org.junit.rules.Timeout = org.junit.rules.Timeout.seconds(60)
 
-    private val main = File("src/main/kotlin")
+    // CORE-SPLIT-1/2: protocol and runner live in leaf modules; the rule still covers them (relative paths are per module root).
+    private val roots = listOf(File("src/main/kotlin"), File("../agentHqProtocol/src/main/kotlin"), File("../agentHqRunner/src/main/kotlin"))
     private val constant = Regex("""^\s*(?:(?:private|internal|public) )?(?:const )?val ([A-Z][A-Z0-9_]*)\s*(?::\s*[A-Za-z]+)?\s*=\s*[0-9]""")
     private val limitLike = Regex("[A-Z0-9_]*(MAX|LIMIT|CAP|TIMEOUT|DEADLINE|GRACE|FLOOR|THRESHOLD|STALL|QUIET|TTL|RETENTION|BUDGET|WINDOW|INTERVAL|DEFAULT_|_MS$|_MIN$|_MB$|_SEC$|_MILLIS$|KEEP|FOLD|CAPACITY|LINES|BYTES|CHARS|WIDTH)[A-Z0-9_]*")
 
-    private fun found(): Set<String> = main.walkTopDown().filter { it.isFile && it.extension == "kt" }.flatMap { file ->
-        val rel = file.relativeTo(main).invariantSeparatorsPath
+    private fun found(): Set<String> = roots.flatMap { root -> root.walkTopDown().filter { it.isFile && it.extension == "kt" }.map { root to it }.toList() }.flatMap { (root, file) ->
+        val rel = file.relativeTo(root).invariantSeparatorsPath
         file.readLines().mapNotNull { line ->
             constant.find(line)?.groupValues?.get(1)?.takeIf { limitLike.matches(it) }?.let { "$rel:$it" }
         }

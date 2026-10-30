@@ -62,8 +62,8 @@ class ProjectStore(
                 "no project '${editing.take(80)}' (project_save creates a project only when it carries no id)",
             )
         val name = request.name?.let { checkName(it) } ?: existing.name
-        val goal = if (request.goal == null) existing.goal else checkGoal(request.goal)
-        val directory = if (request.directory == null) existing.directory else checkDirectory(request.directory)
+        val goal = if (request.goal == null) existing.goal else checkGoal(request.goal!!)
+        val directory = if (request.directory == null) existing.directory else checkDirectory(request.directory!!)
         val updated = existing.copy(name = name, goal = goal, directory = directory)
         projects[editing] = updated
         persist(updated)

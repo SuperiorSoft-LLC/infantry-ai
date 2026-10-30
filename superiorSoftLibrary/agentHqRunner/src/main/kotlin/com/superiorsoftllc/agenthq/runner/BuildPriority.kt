@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 
 /** The CPU priority a worker session (and so every build it starts) runs at: setting `limits.build.priority`. */
-enum class BuildPriority(val key: String, val nice: Int, internal val windowsClass: Int) {
+enum class BuildPriority(val key: String, val nice: Int, val windowsClass: Int) {
     NORMAL("normal", 0, 0x0000_0020),
     BELOW_NORMAL("belownormal", 10, 0x0000_4000),
     IDLE("idle", 19, 0x0000_0040),
@@ -117,7 +117,7 @@ object ProcessPriority {
     /** The class a Windows process runs at, for tests and diagnostics; null when unknown or not Windows. */
     fun windowsPriorityClass(pid: Long): Int? = if (!isWindows) null else runCatching { WindowsJob.priorityClass(pid) }.getOrNull()
 
-    internal fun logOnce(kind: String, message: String) {
+    fun logOnce(kind: String, message: String) {
         if (logged.add(kind)) System.err.println("[agentHq] build priority: $message (logged once)")
     }
 
@@ -138,7 +138,7 @@ private interface JobApi : StdCallLibrary {
     "PerProcessUserTimeLimit", "PerJobUserTimeLimit", "LimitFlags", "MinimumWorkingSetSize", "MaximumWorkingSetSize",
     "ActiveProcessLimit", "Affinity", "PriorityClass", "SchedulingClass",
 )
-internal class JobBasicLimit : Structure() {
+class JobBasicLimit : Structure() {
     @JvmField var PerProcessUserTimeLimit: Long = 0
     @JvmField var PerJobUserTimeLimit: Long = 0
     @JvmField var LimitFlags: Int = 0
@@ -155,7 +155,7 @@ internal class JobBasicLimit : Structure() {
 @Structure.FieldOrder(
     "BasicLimitInformation", "IoInfo", "ProcessMemoryLimit", "JobMemoryLimit", "PeakProcessMemoryUsed", "PeakJobMemoryUsed",
 )
-internal class JobExtendedLimit : Structure() {
+class JobExtendedLimit : Structure() {
     @JvmField var BasicLimitInformation: JobBasicLimit = JobBasicLimit()
 
     /** IO_COUNTERS: six ULONGLONGs, unused. */
