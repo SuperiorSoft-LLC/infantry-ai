@@ -24,7 +24,7 @@ import com.superiorsoftllc.agenthq.stories.JsonStoryStore
 import com.superiorsoftllc.agenthq.ui.net.Controller
 import com.superiorsoftllc.agenthq.usage.LimitService
 import com.superiorsoftllc.agenthq.usage.LimitSource
-import com.superiorsoftllc.agenthq.usage.LimitWindow
+import com.superiorsoftllc.agenthq.daemon.api.usage.LimitWindow
 import com.superiorsoftllc.agenthq.usage.ProviderLimits
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
