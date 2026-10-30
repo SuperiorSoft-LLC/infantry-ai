@@ -184,7 +184,6 @@ class McpServeTest {
                 "agenthq_spawn", "agenthq_prompt", "agenthq_message", "agenthq_kill", "agenthq_session_remove", "agenthq_session_restart",
                 "agenthq_ticket_create", "agenthq_ticket_update", // MCP-1 (agenthq_ticket_get is Infantry_Board's daemon tool: absent without the plugin)
                 "agenthq_ticket_start", // BUG-ASSIGN-1
-                "agenthq_epic_base", // BASE-1c
                 "agenthq_ticket_delete", // MCP-DEL-1
             "agenthq_ticket_move", // MCP-MOVE-1
                 "agenthq_inbox", "agenthq_read", // MAIL-MCP-1
@@ -305,6 +304,11 @@ class McpServeTest {
         }
     }
 
+    /** RUNTIME-LOAD-4: tool -> the policy action Infantry_Board's manifest gates it by (the action of the frame it sends). */
+    private val MOVED_TO_BOARD = mapOf(
+        "agenthq_epic_base" to "epics.save",
+    )
+
     private val TICKET_GET_GOLDEN = """{"name":"agenthq_ticket_get","description":"Read ONE ticket back: title, verbatim description, status, project, role/agent, provider, model, branch, worker session, attached images.","inputSchema":{"type":"object","properties":{"ticketId":{"type":"string","description":"Full ticket id, or its 8-char suffix."}},"required":["ticketId"],"additionalProperties":false},"annotations":{"readOnlyHint":true,"destructiveHint":false,"openWorldHint":false}}"""
 
     /**
@@ -354,6 +358,34 @@ class McpServeTest {
                     "effectiveProvider", "effectiveProviderSource", "effectiveModel", "effectiveModelSource", "effectiveRule", "branch", "sessionId", "images"),
                 ticket.keys.toList(), "the answer's fields and their order",
             )
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    /**
+     * RUNTIME-LOAD-4 (F5): the board tools moved from this MCP server into Infantry_Board's daemon half keep their descriptors
+     * byte for byte: each equals its entry in `golden/core-mcp-tools-before-f5.json`, the `tools/list` this server answered
+     * before the move. The manifest gates each by the action of the frame it sends.
+     */
+    @Test
+    fun movedBoardToolsComeFromTheBoardPluginUnchanged() {
+        val root = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Board")
+        try {
+            val fixture = DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-plugin").toFile(), pluginsRoot = root)
+                .also { fixtures += it }
+            fixture.client.await(Envelope.READY)
+            val served = serve("--port", fixture.port.toString())
+            initialize(served)
+            val tools = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject }
+            val golden = Json.parseToJsonElement(javaClass.getResource("/golden/core-mcp-tools-before-f5.json")!!.readText()).jsonArray
+                .map { it.jsonObject }.associateBy { it["name"]!!.jsonPrimitive.content }
+            val manifest = Json.parseToJsonElement(File(root, "official/Infantry_Board/module.json").readText()).jsonObject["daemon"]!!.jsonObject["tools"]!!.jsonArray
+                .map { it.jsonObject }.associateBy { it["name"]!!.jsonPrimitive.content }
+            MOVED_TO_BOARD.forEach { (name, action) ->
+                assertEquals(golden.getValue(name), tools.single { it["name"]!!.jsonPrimitive.content == name }, "the descriptor of $name changed in the move")
+                assertEquals(action, manifest.getValue(name)["action"]!!.jsonPrimitive.content, "the action of $name")
+            }
         } finally {
             root.deleteRecursively()
         }

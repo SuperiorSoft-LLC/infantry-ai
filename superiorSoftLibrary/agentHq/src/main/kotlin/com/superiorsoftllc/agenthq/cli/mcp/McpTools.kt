@@ -111,7 +111,6 @@ internal class McpTools(
                     McpWatchTools.WATCH_FILE -> watch.watchFile(arguments)
                     McpTicketTools.CREATE -> tickets.create(stream, arguments)
                     McpTicketTools.UPDATE -> tickets.update(stream, arguments)
-                    McpTicketTools.EPIC_BASE -> tickets.epicBase(stream, arguments)
                     McpTicketTools.DELETE -> tickets.delete(stream, arguments)
                     McpTicketTools.MOVE -> tickets.move(stream, arguments)
                     McpTicketTools.START -> writes.startTicket(stream, arguments, McpTicketTools.START)

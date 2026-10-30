@@ -195,36 +195,6 @@ internal class McpTicketTools(
     }
 
     /**
-     * BASE-1c (contract 1.82.0): read, set or clear ONE epic's base branch over `epic_base` -- the frame
-     * `agenthq epic base` sends -- so the daemon runs the same set-time check. Answers the epic's id, name, project and
-     * base branch ("" = none).
-     */
-    suspend fun epicBase(stream: FrameStream, arguments: JsonObject): ToolResult {
-        val epicId = arguments.string("epicId") ?: return refused("$EPIC_BASE needs an epicId")
-        val clear = (arguments["clear"] as? JsonPrimitive)?.let { it.booleanOrNull ?: (it.contentOrNull?.trim() == "true") } ?: false
-        val request = com.superiorsoftllc.agenthq.epics.EpicBaseRequest(epicId, arguments.string("branch"), clear)
-        val answer = try {
-            // A set or clear writes the same value again on a re-send, so it is safe to repeat after a dropped link.
-            stream.request(
-                Envelope(Envelope.EPIC_BASE, json.encodeToString(com.superiorsoftllc.agenthq.epics.EpicBaseRequest.serializer(), request)),
-                answerType = Envelope.EPIC,
-                what = "epic_base",
-                idempotent = true,
-            )
-        } catch (e: Exception) {
-            return refused("$EPIC_BASE refused: ${e.message ?: e.javaClass.simpleName}")
-        }
-        val epic = runCatching { json.decodeFromString(com.superiorsoftllc.agenthq.epics.Epic.serializer(), answer.data) }
-            .getOrElse { return refused("$EPIC_BASE: malformed epic answer from the daemon: ${it.message}") }
-        return ToolResult(json.encodeToString(JsonObject.serializer(), buildJsonObject {
-            put("epicId", epic.id)
-            put("name", epic.name)
-            put("projectId", epic.projectId)
-            put("baseBranch", epic.baseBranch)
-        }))
-    }
-
-    /**
      * BUG-ASSIGN-1: the answer to a create or an update SAYS what was saved, read from the daemon's answer (never echoed
      * from the request): the fields this call set that the stored ticket now holds, each with its stored value, and the
      * next step. An agent that pinned a role, provider and model reads back that they were saved.
@@ -336,13 +306,11 @@ internal class McpTicketTools(
 
         /** BUG-ASSIGN-1: start ONE ticket through the board (served by [McpWriteTools.startTicket], under its guardrails). */
         const val START = "agenthq_ticket_start"
-        /** BASE-1c (contract 1.82.0): read, set or clear an epic's base branch (the epic's tickets cut from it). */
-        const val EPIC_BASE = "agenthq_epic_base"
         /** MCP-DEL-1: delete ONE ticket (refused while it is in progress). */
         const val DELETE = "agenthq_ticket_delete"
         /** MCP-MOVE-1: move ONE ticket to a status (done, todo, ...); a start goes through [START]. */
         const val MOVE = "agenthq_ticket_move"
-        val NAMES = listOf(CREATE, UPDATE, START, EPIC_BASE, DELETE, MOVE)
+        val NAMES = listOf(CREATE, UPDATE, START, DELETE, MOVE)
 
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false; explicitNulls = false }
 
@@ -465,18 +433,6 @@ internal class McpTicketTools(
                 required = listOf("ticketId"),
             ) {
                 put("ticketId", prop("Full ticket id, or its 8-char suffix."))
-            })
-            add(tool(
-                EPIC_BASE,
-                "Read, set or clear ONE epic's base branch: new tickets in the epic cut their branch from it, " +
-                    "overriding the project's base. A branch that does not resolve where tickets are cut is refused " +
-                    "with the reason. Tickets already started keep their recorded base.",
-                readOnly = false,
-                required = listOf("epicId"),
-            ) {
-                put("epicId", prop("Full epic id."))
-                put("branch", prop("Branch to set; omit (with clear unset) to read."))
-                put("clear", boolProp("true removes the setting; the epic's tickets fall back to the project's base."))
             })
             add(tool(
                 DELETE,
