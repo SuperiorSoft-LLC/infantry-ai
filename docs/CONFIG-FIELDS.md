@@ -119,7 +119,7 @@ all, never by a compile-time import between plugins. Today this works for tab so
 | G5 **done** (CONFIG-FIELDS-2; `select` is a dropdown only with `display:"dropdown"`, default stays option buttons) | `placeholder`, color swatch `palette`, real dropdown for `select` | S (0.5 d) | UI polish |
 | G6 | `since`, `renamedFrom` migration marker | S (1 d) | loader step after compile |
 | G7 | declaration-level `requires.contract` | S (0.5 d) | hide group when daemon contract is older |
-| G8 **audited: gate MISSING** (`ConfigContext.values(nodeId)` answers any node; only `config.read` exists as a daemon policy action, no UI-side gate or test) | verify `config.read` cross-node gate exists and has a test | S (0.5 d) | audit item, may already be built |
+| G8 **done** (CONFIG-FIELDS-3: `ConfigReadGate` + `GatedConfig`; community reads other nodes only with `config.read` declared in `services` and allowed in modules.json, core/official trusted, `configReadGate:false` dev switch; host wiring of `GatedConfig` per module is the remaining step) | gate + test | S (0.5 d) | `ConfigReadGateTest`, `GatedConfigTest` |
 | G9 **done** (CONFIG-FIELDS-2, `ConfigValues.configAs<T>()`) | `scope.configAs<T>()` typed bean | S (0.5 d) | kotlinx.serialization over the resolved map |
 | G10 | scripted blank-shell E2E (empty plugins tree, temp state dir, port 8812) | M (2 d) | asserts section 1 items (a)-(d); the pre-launch QA gate wants it |
 | G11 | generic block `dependsOn` registry ids for bean binding | M (1.5 d) | host injects the config-chosen provider; today only `implementation` fields |

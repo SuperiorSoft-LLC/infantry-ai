@@ -42,6 +42,8 @@ data class ModulesConfig(
     val folders: List<PluginFolder> = DEFAULT_FOLDERS,
     val modules: Map<String, ModuleSetting> = emptyMap(),
     val demoLock: DemoLockConfig = DemoLockConfig(),
+    /** CONFIG-FIELDS-3 (G8): false turns the cross-node `config.read` gate off. Trusted dev mode only; default on. */
+    val configReadGate: Boolean = true,
 ) {
     fun setting(module: String): ModuleSetting = modules[module] ?: ModuleSetting()
 
