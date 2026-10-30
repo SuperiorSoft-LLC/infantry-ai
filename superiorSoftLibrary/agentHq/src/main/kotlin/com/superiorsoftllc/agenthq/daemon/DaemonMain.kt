@@ -1699,6 +1699,15 @@ class AgentHqDaemon(
                     com.superiorsoftllc.agenthq.daemon.plugins.CoreDaemonServices(
                         manager, agents, projectStore, daemonConfig, keystore, policies,
                         getenv = pluginEnv, firstTurn = pluginFirstTurn, limits = settings::limit,
+                        // DP-4a: tickets / epics / board for plugins, over the board built above (host-applied policy and scope).
+                        boardServices = com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardServices(
+                            board = { board }, epicStore = { epics }, sessions = { manager.list() }, link = { orchestratorHub.link },
+                            gate = { type, data ->
+                                val envelope = Envelope(type, data)
+                                policies.current.takeIf { !it.isEmpty }?.let { com.superiorsoftllc.agenthq.policy.PolicyRuntime.actionRefusal(it, envelope, policies.actionOf(envelope)) }
+                            },
+                            baseCheck = { epic, branch -> baseCheck.check(projectStore.get(epic.projectId), branch) },
+                        ),
                     ),
                     stateDir(),
                 )

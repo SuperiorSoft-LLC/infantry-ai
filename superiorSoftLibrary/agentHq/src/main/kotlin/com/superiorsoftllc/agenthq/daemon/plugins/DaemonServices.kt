@@ -26,6 +26,11 @@ interface DaemonServices {
     /** The policy, read at call time (the runtime is built after the host). */
     fun policy(): Policy
 
+    /** DP-4a: the board, over the daemon's own TicketBoard / EpicStore (docs/DAEMON-BOARD-API.md). Default: no board. */
+    val tickets: com.superiorsoftllc.agenthq.daemon.api.board.Tickets get() = com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.tickets
+    val epics: com.superiorsoftllc.agenthq.daemon.api.board.Epics get() = com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.epics
+    val board: com.superiorsoftllc.agenthq.daemon.api.board.Board get() = com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.board
+
     companion object {
         /** No daemon behind it: empty lists, no config, the open policy. */
         val NONE: DaemonServices = object : DaemonServices {

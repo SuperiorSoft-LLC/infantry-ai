@@ -141,3 +141,19 @@ one (`planDeclarations`); with none (daemon not yet connected, or an older daemo
 the client-local settings (theme, blur, markdown, voice, sound...). Removing it would leave the Config dialog empty offline and on a blank
 install before the first snapshot. `ConfigEntry` is also the `present` key set the generated path takes (`ConfigPlan.of(snap, present, ...)`)
 and anchors 13 UI test files. Prerequisite: client-local sections declared in a snapshot the client ships itself, then `ConfigEntry` can go.
+
+## 8. BOARD-API-1 (DP-4a): the API the board family (F5) needs now exists
+
+`DaemonApi` 1.2.0 (additive) adds `tickets`, `epics` and `board` (`agentHqDaemonApi/.../api/board/BoardApi.kt`, `BOARD_API_VERSION` 1.0.0),
+bound locally over `TicketBoard` / `EpicStore` (`daemon/plugins/LocalBoardServices.kt`) and wired in `DaemonMain` through
+`CoreDaemonServices`. Nothing moved or was deleted: frames, CLI and MCP are unchanged. The host applies policy and project scope to
+every call; community plugins need the grants `tickets.read|write|delete|start`, `epics.read|write` (`GrantedBoard`).
+
+* **F5 is unblocked in this respect:** a board/ticket tool can now be written as a plugin half over `api.tickets` (pass
+  `call.caller.copy(activeSession = call.clientSessionId)` as the `Caller`, so the host scopes it to the calling session).
+* **Not migrated (the "prove it" item):** `agenthq_ticket_get` stays in the CLI MCP server. Deleting it breaks the tests that call it
+  through `McpTicketTools.GET` against plain daemons that load no plugins (`McpTicketToolsTest`, `McpBoardShortIdE2eTest`,
+  `McpTicketImagesE2eTest`, `McpTicketDeleteE2eTest`, `AgentTicketStartE2eTest`, `McpServeTest`), which must be re-pointed at a daemon
+  with `Infantry_Board` loaded first. Instead `LocalBoardServicesTest` proves the API carries every field the tool answers
+  (byte-identical JSON rendered from `TicketInfo`). That re-pointing is the first job of DP-5 / the F5 ticket.
+* The old `BuiltinToolsListGuardTest` reason ("needs ProjectScope as an API helper") is now only the test re-pointing above.
