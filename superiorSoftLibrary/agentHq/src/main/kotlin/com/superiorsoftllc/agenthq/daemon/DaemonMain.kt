@@ -1538,7 +1538,14 @@ class AgentHqDaemon(
                 maxPerPodSource = if (podSpawnCap == null) ({ settings.limitCap(LimitRegistry.MAX_PER_POD) }) else null,
                 maxDepthSource = if (podSpawnDepth == null) ({ settings.limitCap(LimitRegistry.MAX_DEPTH) }) else null,
                 pendingOf = orchestrator::pendingNodes,
+                // RUNTIME-LOAD-6: the persisted spawner chain, and a finished ticket's idle worker no longer holds a slot.
+                all = { manager.list() },
+                released = { r ->
+                    !r.live && r.ticketId != null && runCatching { board.get(r.ticketId!!) }.getOrNull()
+                        .let { t -> t == null || t.status != com.superiorsoftllc.agenthq.protocol.TicketStatus.IN_PROGRESS || t.sessionId != r.id }
+                },
             )
+            val ticketStartCharge = TicketStartCharge(spawnGuard, { board }, manager::get, manager::setSpawner)
             orchestrator.sessionStartedSink = { _, sessionId, parent -> spawnGuard.record(sessionId, parent); manager.setSpawner(sessionId, parent) }
             settings.limitEnvProblems().forEach { println("[agentHq] limit ignored: $it") }
             println("[agentHq] pod spawn cap=${podSpawnCap ?: settings.limit(LimitRegistry.MAX_PER_POD)} depth=${podSpawnDepth ?: settings.limit(LimitRegistry.MAX_DEPTH)} (cap 0 = unlimited; settings limits.concurrency.*; session-originated spawns only)")
@@ -1748,6 +1755,8 @@ class AgentHqDaemon(
                     com.superiorsoftllc.agenthq.plugin.host.PluginFolders.devTrust(),
                     bundled,
                 )
+                // RUNTIME-LOAD-6: the spawn service starts tickets through the board services built just below (one scope, one charge).
+                var pluginBoardServices: com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardServices? = null
                 val host = com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.load(
                     resolution,
                     com.superiorsoftllc.agenthq.plugin.host.PluginFolders.config(root),
@@ -1763,7 +1772,8 @@ class AgentHqDaemon(
                                 policies.current.takeIf { !it.isEmpty }?.let { com.superiorsoftllc.agenthq.policy.PolicyRuntime.actionRefusal(it, envelope, policies.actionOf(envelope)) }
                             },
                             baseCheck = { epic, branch -> baseCheck.check(projectStore.get(epic.projectId), branch) },
-                        ),
+                            chargedMove = ticketStartCharge::move,
+                        ).also { pluginBoardServices = it },
                         ticketEventStream = ticketEvents,
                         agentRegistry = agentRegistry,
                         // RUNTIME-LOAD-5: the sessions read model (host-scoped), with the replay buffer for transcripts.
@@ -1776,6 +1786,29 @@ class AgentHqDaemon(
                                     )
                                 }
                             },
+                            gate = { type ->
+                                val envelope = Envelope(type, "")
+                                policies.current.takeIf { !it.isEmpty }?.let { com.superiorsoftllc.agenthq.policy.PolicyRuntime.actionRefusal(it, envelope, policies.actionOf(envelope)) }
+                            },
+                        ),
+                        // RUNTIME-LOAD-6: the host spawn service: depth, concurrency and kill scope keyed by the calling session.
+                        spawnService = com.superiorsoftllc.agenthq.daemon.plugins.LocalSpawns(
+                            sessions = { manager.list() },
+                            guard = spawnGuard,
+                            limit = { def -> settings.limitCap(def) },
+                            tickets = { pluginBoardServices!!.tickets },
+                            create = { request ->
+                                bindSessionOnSpawn(
+                                    manager, agents,
+                                    SpawnOptions(agentId = request.agentId, role = request.role, projectId = request.projectId, contextLimit = request.contextLimit),
+                                    repo,
+                                ) ?: throw IllegalArgumentException("the daemon could not bind a session for this spawn")
+                            },
+                            firstTask = { record, task ->
+                                val turn = if (record.neverRun) pluginFirstTurn(record, task) else task
+                                manager.resume(record.id, turn)
+                            },
+                            setSpawner = manager::setSpawner,
                             gate = { type ->
                                 val envelope = Envelope(type, "")
                                 policies.current.takeIf { !it.isEmpty }?.let { com.superiorsoftllc.agenthq.policy.PolicyRuntime.actionRefusal(it, envelope, policies.actionOf(envelope)) }
@@ -3470,7 +3503,9 @@ private suspend fun handleConnection(
                     // BUG-MAIL-2: a move run from inside a session (`agenthq ticket move`, which names its session on
                     // the frame) records that session as the ticket's starter. A UI move names none: nothing recorded.
                     val starter = envelope.sessionId?.takeIf { manager.get(it) != null }
-                    board.move(TicketMove.decode(envelope.data), startedBy = starter).reply(direct)
+                    // RUNTIME-LOAD-6: a start from inside a session is charged to its pod like a spawn (depth, pod cap).
+                    TicketStartCharge(spawnGuard, { board }, manager::get, manager::setSpawner)
+                        .move(TicketMove.decode(envelope.data), starter).reply(direct)
                 }
                 Envelope.TICKET_LINK -> boardRequest(envelope.type) {
                     board.link(TicketLinkRequest.decode(envelope.data, envelope.type)).reply(direct)

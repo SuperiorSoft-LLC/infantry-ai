@@ -56,6 +56,11 @@ class LocalBoardServices(
     /** The active preset's refusal of a frame of this type and payload, or null. */
     private val gate: (type: String, data: String) -> String?,
     private val baseCheck: ((Epic, String) -> Unit)? = null,
+    /**
+     * RUNTIME-LOAD-6: a start's move, charged to the starter's pod (`daemon.TicketStartCharge`); null = the board's move as is
+     * (a test without a spawn guard).
+     */
+    private val chargedMove: ((TicketMove, String?) -> com.superiorsoftllc.agenthq.backlog.TicketAnswer)? = null,
 ) {
     private val createKeys = ConcurrentHashMap<String, String>()
 
@@ -198,7 +203,8 @@ class LocalBoardServices(
             // A start is a spawn: a preset that refuses `ticket_start_next` refuses it here too, besides the move's own gate.
             gate(Envelope.TICKET_START_NEXT, "")?.let { return BoardResult.Refused(it) }
             return withTicket(Envelope.TICKET_MOVE, id, by) { b, w, t ->
-                val answer = b.move(TicketMove(id = t.id, status = TicketStatus.IN_PROGRESS), startedBy = starterOf(w)).ticket
+                val move = TicketMove(id = t.id, status = TicketStatus.IN_PROGRESS)
+                val answer = (chargedMove?.invoke(move, starterOf(w)) ?: b.move(move, startedBy = starterOf(w))).ticket
                 val start = answer.start ?: TicketStart(ok = false, reason = "start_refused", detail = "the board gave no start answer")
                 BoardResult.Ok(StartResult(info(answer), start.ok, start.reason, start.detail))
             }

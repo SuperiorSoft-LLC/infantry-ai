@@ -40,6 +40,9 @@ interface DaemonServices {
     /** RUNTIME-LOAD-5: the sessions read model, host-scoped ([LocalSessionReads]). Default: none (every call Unavailable). */
     val sessionReads: com.superiorsoftllc.agenthq.daemon.api.sessions.SessionReads get() = com.superiorsoftllc.agenthq.daemon.api.sessions.NoSessionReads
 
+    /** RUNTIME-LOAD-6: the host spawn service ([LocalSpawns]). Default: none (every call Unavailable). */
+    val spawns: com.superiorsoftllc.agenthq.daemon.api.spawns.Spawns get() = com.superiorsoftllc.agenthq.daemon.api.spawns.NoSpawns
+
     companion object {
         /** No daemon behind it: empty lists, no config, the open policy. */
         val NONE: DaemonServices = object : DaemonServices {

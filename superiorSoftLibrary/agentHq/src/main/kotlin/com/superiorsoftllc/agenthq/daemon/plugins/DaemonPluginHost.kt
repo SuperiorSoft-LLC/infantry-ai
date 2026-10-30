@@ -500,6 +500,9 @@ class DaemonPluginHost private constructor(
         // RUNTIME-LOAD-5: the sessions read model behind this plugin's grants (community: default deny).
         override val sessionReads: com.superiorsoftllc.agenthq.daemon.api.sessions.SessionReads =
             GrantedSessionReads({ services.sessionReads }) { grant -> !p.community || grant in p.setting.allow }
+        // RUNTIME-LOAD-6: the host spawn service behind this plugin's grants (community: `sessions.spawn`, default deny).
+        override val spawns: com.superiorsoftllc.agenthq.daemon.api.spawns.Spawns =
+            GrantedSpawns({ services.spawns }) { grant -> !p.community || grant in p.setting.allow }
         // AGENT-REGISTRY-1: the agent registry, scoped to this plugin (its own declared ids; enable/disable trusted tiers only).
         override val agents: com.superiorsoftllc.agenthq.daemon.api.agents.Agents = object : com.superiorsoftllc.agenthq.daemon.api.agents.Agents {
             private val registry get() = services.agentRegistry

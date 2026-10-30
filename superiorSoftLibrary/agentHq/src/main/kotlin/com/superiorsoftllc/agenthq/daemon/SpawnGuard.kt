@@ -26,9 +26,14 @@ class SpawnRefused(message: String) : IllegalArgumentException(message)
  *    by the daemon and not EXITED / FAILED / ORPHANED; an IDLE session still counts, because it is still there.
  *    A pod node not yet started counts too ([pendingOf]), so a multi-node pod cannot slip past the cap.
  *
- * The lineage is in memory, for the life of the daemon: after a restart every surviving session is a root again.
- * It bounds a runaway cascade within one daemon's life, which is where the G2 one happened; it is not an access
+ * RUNTIME-LOAD-6: the lineage is the sessions' persisted `spawnerSessionId` chain ([all]), with the in-memory map
+ * as a fast path, so a session keeps its depth and its pod across a daemon restart. A spawner the daemon no longer
+ * holds still counts as one level up (refusing on the safe side). It bounds a runaway cascade; it is not an access
  * control, since any client may name (or not name) a session.
+ *
+ * TICKET STARTS are charged too (RUNTIME-LOAD-6): a session-originated `ticket_move` to in_progress that would run a
+ * worker goes through [admitIf], and the worker joins the starter's pod. A worker stops holding a slot once it is not
+ * live and [released] says so (the daemon: its ticket left In Progress), so finished tickets never fill a pm's pod.
  *
  * CONCURRENCY. [admit] holds one lock across check-then-create, so two spawns from one pod cannot both take the
  * last slot. [record] takes NO lock: the orchestrator calls it from its worker thread while a connection may hold
@@ -44,6 +49,10 @@ class SpawnGuard(
     /** The live pod cap / depth limit (settings `limits.concurrency.*`), read at every check; null = the fixed value above. */
     private val maxPerPodSource: (() -> Int)? = null,
     private val maxDepthSource: (() -> Int)? = null,
+    /** RUNTIME-LOAD-6: every session the daemon holds, for the persisted lineage; empty = the in-memory lineage only. */
+    private val all: () -> List<SessionRecord> = { emptyList() },
+    /** RUNTIME-LOAD-6: a session that is not live and no longer holds a slot (a worker whose ticket left In Progress). */
+    private val released: (SessionRecord) -> Boolean = { false },
 ) {
     init {
         require(maxPerPod >= 0) { "the pod spawn cap must be 0 or more, was $maxPerPod" }
@@ -70,12 +79,12 @@ class SpawnGuard(
      * Where a spawn from [origin] would place its sessions, or null when [origin] is not a session this daemon holds
      * (not charged). Throws [SpawnRefused] when [requested] more sessions would break the depth rule or the pod cap.
      */
-    fun check(origin: String?, requested: Int = 1): Placement? {
+    fun check(origin: String?, requested: Int = 1, narrowDepth: Int? = null): Placement? {
         val from = origin?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         if (sessions(from) == null) return null
-        val parent = lineage[from] ?: Placement(root = from, depth = 0)
+        val parent = placementOf(from) ?: Placement(root = from, depth = 0)
         val child = Placement(root = parent.root, depth = parent.depth + 1)
-        val depthLimit = maxDepth
+        val depthLimit = narrowDepth?.let { minOf(it, maxDepth) } ?: maxDepth
         val podCap = maxPerPod
         if (child.depth > depthLimit) {
             throw SpawnRefused(
@@ -102,6 +111,16 @@ class SpawnGuard(
     fun <T> admit(origin: String?, requested: Int = 1, create: (Placement?) -> T): T =
         synchronized(admission) { create(check(origin, requested)) }
 
+    /**
+     * RUNTIME-LOAD-6: [admit] when [charged] (a ticket start that would run a worker), else [create] under the same lock
+     * with no check, so a start that runs nothing is never refused and two starts still cannot race for the last slot.
+     */
+    fun <T> admitIf(origin: String?, charged: Boolean, create: (Placement?) -> T): T =
+        synchronized(admission) { create(if (charged) check(origin) else null) }
+
+    /** True when [record] holds a slot: not ended, and live or not [released]. */
+    fun holds(record: SessionRecord): Boolean = record.state !in ENDED && (record.live || !released(record))
+
     /** [sessionId] was started from inside [origin]: it joins [origin]'s pod one level down. No-op when not charged. */
     fun record(sessionId: String, origin: String?) {
         val from = origin?.trim()?.takeIf { it.isNotEmpty() } ?: return
@@ -115,8 +134,23 @@ class SpawnGuard(
         podRoots[podId] = root
     }
 
-    /** Where [sessionId] sits, or null when it is a root (or unknown). */
-    fun placementOf(sessionId: String): Placement? = lineage[sessionId]
+    /**
+     * Where [sessionId] sits, or null when it is a root (or unknown): the in-memory lineage, else the persisted
+     * `spawnerSessionId` chain (bounded, cycle-safe).
+     */
+    fun placementOf(sessionId: String): Placement? {
+        lineage[sessionId]?.let { return it }
+        var at = sessions(sessionId)?.spawnerSessionId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        var depth = 1
+        val seen = mutableSetOf(sessionId)
+        while (depth < MAX_CHAIN && seen.add(at)) {
+            lineage[at]?.let { return Placement(it.root, it.depth + depth) }
+            val up = sessions(at)?.spawnerSessionId?.trim()?.takeIf { it.isNotEmpty() } ?: break
+            at = up
+            depth++
+        }
+        return Placement(root = at, depth = depth)
+    }
 
     /**
      * Live sessions started from inside pod [root], plus the not-yet-started nodes of pods submitted from it. The
@@ -125,8 +159,10 @@ class SpawnGuard(
      */
     fun liveIn(root: String): Int {
         val pending = podRoots.entries.filter { it.value == root }.sumOf { pendingOf(it.key) }
-        val live = lineage.entries.count { (id, at) ->
-            at.root == root && sessions(id)?.state?.let { it !in ENDED } == true
+        val ids = lineage.keys + all().filter { it.spawnerSessionId != null }.map { it.id }
+        val live = ids.count { id ->
+            val record = sessions(id)
+            record != null && holds(record) && placementOf(id)?.root == root
         }
         return live + pending
     }
@@ -147,6 +183,7 @@ class SpawnGuard(
         const val MAX_DEPTH_ENV = "AGENTHQ_POD_SPAWN_DEPTH"
 
         private val ENDED = setOf(SessionState.EXITED, SessionState.FAILED, SessionState.ORPHANED)
+        private const val MAX_CHAIN = 64
 
     }
 }

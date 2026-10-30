@@ -276,7 +276,7 @@ concurrency count. The seam:
 
 | family | tools | next seam |
 |---|---|---|
-| spawn / control | `agenthq_ticket_start`, `agenthq_spawn`, `agenthq_prompt`, `agenthq_kill`, `agenthq_session_restart`, `agenthq_session_remove` | RUNTIME-LOAD-6: `api.spawns` above |
+| spawn / control | `agenthq_ticket_start`, `agenthq_spawn`, `agenthq_prompt`, `agenthq_kill`, `agenthq_session_restart`, `agenthq_session_remove` | `api.spawns` built (section 12, RUNTIME-LOAD-6 slice 1); the tools move in RUNTIME-LOAD-7 |
 | F6 mail | `agenthq_inbox`, `agenthq_read`, `agenthq_message` | a `daemon.api.mail` read/send service with the `MailGateHook` already in the API; the caller is the session (`clientSessionId`), cross-project refusal in the host |
 | F6 pipeline | `agenthq_pipeline`, `agenthq_pipeline_record` | the same frames through `ToolCall.request` (no new API); a Pipeline official plugin |
 | F6 watch | `agenthq_watch_file` | a DaemonApi watch surface (the watcher runs where the files are: the `localFiles` idea for watches, i.e. the MCP client keeps the watcher and the daemon gets the events) |
@@ -289,3 +289,70 @@ descriptors + actions, read answers through the plugin, the unreachable-daemon t
 `McpBoardShortIdE2eTest`, `BacklogLaneE2eTest`, `BoardSummaryTest`, `LocalBoardServicesTest`, `BuiltinToolsListGuardTest`,
 `McpPluginToolTimeoutTest`, agenthqUiCore `BlankShellE2ETest`. Not run: the full suite, wasm/Android builds, a live agent session
 against an installed daemon.
+
+## 12. RUNTIME-LOAD-6 (ticket 8f5509ad), slice 1: the host spawn service `api.spawns`
+
+Split (the ticket allows it): this slice builds the host service and charges ticket starts. The tools move in RUNTIME-LOAD-7
+(below). The service is additive, so nothing calls it until the tools move. Until then the CLI's `McpGuardrails` stays and the
+daemon's own charge (below) applies to both paths.
+
+**API (DaemonApi 1.7.0, additive):** `api.spawns` (`daemon.api.spawns.Spawns`), bound by core's `LocalSpawns` behind
+`GrantedSpawns` (bundled/official trusted; community needs `sessions.spawn`, default deny).
+
+| operation | what the host does |
+|---|---|
+| `admit(by, narrowing, kind)` | the limits in force for the caller, or the refusal (depth, concurrency, pod cap); reads only |
+| `spawn(request, by, narrowing)` | admit + create (as `new` binds a session) + record the caller as spawner, under ONE lock inside the pod guard's; the task runs as the first turn |
+| `startTicket(ref, by, narrowing)` | the ticket in the caller's scope (`api.tickets.get`); a healthy in-progress ticket passes and starts nothing; else admit + the board's start under the same lock |
+| `mayKill(ref, by)` | contract 1.114.0's kill rule (own spawns; a pm its own project; never itself; an owner without a session, any) |
+| `target(ref, by)` | the one session a prompt / restart / remove acts on (full id or unique prefix) |
+
+* **Caller** = the daemon's record of `Caller.activeSession` (a tool sets it from `ToolCall.clientSessionId`). Fail closed, as the
+  read model is: an agent connection without a session, or a session the daemon does not know, is refused.
+* **Depth** = the caller's place in the `SpawnGuard` lineage. It is the persisted `spawnerSessionId` chain now (the in-memory map is
+  only a fast path), so it survives a daemon restart. A spawner the daemon no longer holds still counts as one level. The client's
+  `--mcp-depth` claim counts only when it is deeper.
+* **Concurrency** = the caller's spawns (`spawnerSessionId == caller`) that hold a slot: not ended, not released, not killed unless
+  running again. An owner connection without a session is counted per `SpawnNarrowing.clientKey` (one per `agenthq mcp serve`), in memory.
+* **Limits** = `limits.concurrency.maxDepth` / `mcpMaxSpawns`. The client's `--max-depth` / `--max-spawns` only narrow (min). The
+  pod cap (`maxPerPod`, BUG-G2d) applies under them.
+* **Refusal texts** are `McpWriteTools`', bare (a tool prefixes `<tool> refused: `). "This MCP server" becomes "This session" (or
+  "This connection" for an owner connection without a session).
+
+**Ticket starts are charged (all paths):** `daemon.TicketStartCharge` is the one path of a session's ticket start. It covers the
+`ticket_move` frame (`agenthq ticket move|start`, the CLI's MCP `ticket_start`), `api.tickets.start` and `api.spawns.startTicket`. A
+move by a session the daemon holds that would run a worker (a todo ticket, or an in-progress one whose worker cannot carry it) is
+checked against the depth limit and the pod cap. The board's move runs under the guard's lock, and the worker joins the starter's pod
+with the starter recorded as its `spawnerSessionId`. A UI / person move, a queue drain or the repair sweep is not charged.
+
+**Fixed on the way:** `api.tickets.start` (BOARD-API-1) started a worker with no guard at all, so a plugin could start tickets past
+every limit. It now goes through the same charge.
+
+**Release rule (new, so charging cannot stall the board):** a session that is not live and whose ticket left In Progress (done,
+review, todo, deleted), or whose ticket now names another worker, no longer holds a pod or concurrency slot. Without this rule a pm
+would fill its pod with finished, idle workers after four tickets.
+
+**Deviations (deliberate):** (1) the client's `--max-depth` / `--max-spawns` used to REPLACE the daemon setting. They now only narrow
+(a larger value is ignored). (2) `--allow-kill-any` is moot. An owner connection without a session may kill any session, as before.
+A session-bearing connection is held to the rule whatever the flag says. (3) A pm's own project comes from the daemon's record, not
+the MCP process's `AGENTHQ_PROJECT_ID`. (4) After a restart a session keeps its depth (before: every session was a root again).
+(5) A session's `agenthq ticket move <id> in_progress` from depth >= the limit is now refused by the daemon (before: only the MCP
+tool refused it).
+
+Expensive to reverse: persisting depth through `spawnerSessionId`. Records written from now on carry the starter as the worker's
+spawner, and the kill rule and the read model already read that field.
+
+Tests run: `LocalSpawnsTest` (depth, narrowing, concurrency, release, ticket start outcomes, kill scope, fail closed, owner per-client,
+policy gate, grant, pod cap), `SpawnGuardLineageTest`, `SpawnGuardLimitSettingTest`, `SpawnCascadeDaemonTest`, `TicketStartDaemonTest`,
+`McpOrchestrationE2eTest`, `AgentTicketStartE2eTest`, `LocalSessionReadsTest`, `LocalBoardServicesTest`. Not run: the full suite,
+wasm/Android, a live agent session against an installed daemon.
+
+**Left for RUNTIME-LOAD-7 (the tools move), and its seam:**
+
+| step | what |
+|---|---|
+| wire | `agenthq mcp serve` sends its narrowing in the `plugin_tool_call` client object (`maxDepth`, `maxSpawns`, `depth`, `clientKey`), surfaced as `ToolCall.clientNarrowing` (DaemonApi 1.8.0 or folded into 1.7.0 before release); contract bump |
+| Infantry_Board | `agenthq_ticket_start` over `api.spawns.startTicket` (answers as `McpWriteTools.startAnswer`) |
+| Infantry_Agents | `agenthq_spawn` (`ticketId` -> `startTicket`, with the `disagreement` checks), `agenthq_kill` (`mayKill`, then the `kill` frame), `agenthq_prompt` / `agenthq_session_restart` / `agenthq_session_remove` (`target`, then their frames on the caller's connection) |
+| delete | `McpGuardrails`, `McpLineage`, those tools in `cli/mcp`; `BuiltinToolsListGuardTest` ratchet 12 -> 6 |
+| tests | golden descriptors (`core-mcp-tools-before-f5.json`), `McpOrchestrationE2eTest`, `AgentTicketStartE2eTest`, `McpPluginToolTimeoutTest`, `BlankShellE2ETest` |
