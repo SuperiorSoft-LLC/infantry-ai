@@ -35,6 +35,26 @@ import kotlin.test.assertTrue
  */
 class McpServeTest {
 
+    /** The deleted McpTicketFilesTools.descriptors(), as it served them (TICKET-FILES, contract 1.137.0). */
+    private val TICKET_FILES_GOLDEN = """[
+        {"name":"agenthq_ticket_files",
+         "description":"Files changed by a ticket (status A/M/D/R, +added -removed, path), or with `path` the tickets that changed matching files (glob, `**` ok; no wildcard = any path containing it). Recorded when each ticket went done, kept after its branch is deleted. Cheaper than grepping git history.",
+         "inputSchema":{"type":"object","properties":{
+            "ticketId":{"type":"string","description":"ticket id, e.g. ticket-55476f3c or 55476f3c"},
+            "path":{"type":"string","description":"path or glob, e.g. **/TicketBoard.kt"},
+            "limit":{"type":"integer","description":"most lines (default: limits.ticketFiles.maxLines)"}},
+            "required":[],"additionalProperties":false},
+         "annotations":{"readOnlyHint":true,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false}},
+        {"name":"agenthq_ticket_related_files",
+         "description":"Call this BEFORE grepping: the tickets that changed the same files as this ticket (ranked by overlap), and the union of the files they changed, each with the ticket ids that touched it.",
+         "inputSchema":{"type":"object","properties":{
+            "ticketId":{"type":"string","description":"ticket id, e.g. ticket-55476f3c"},
+            "top":{"type":"integer","description":"how many related tickets (default: limits.ticketFiles.relatedTop)"},
+            "limit":{"type":"integer","description":"most file lines (default: limits.ticketFiles.maxLines)"}},
+            "required":["ticketId"],"additionalProperties":false},
+         "annotations":{"readOnlyHint":true,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false}}
+    ]"""
+
     private val fixtures = mutableListOf<DaemonFixture>()
     private val servers = mutableListOf<Served>()
 
@@ -155,7 +175,6 @@ class McpServeTest {
                 "agenthq_pipeline", "agenthq_pipeline_record", // PIPE-1
                 "agenthq_role_list", "agenthq_role_get", "agenthq_role_update", "agenthq_role_create", "agenthq_role_delete", "agenthq_project_config_get", "agenthq_project_config_set", // ROLE-EDIT-1, LANE-CAPS
                 "agenthq_usage", // USAGE-PACE (1.119.0): listed after the project tools, before ask
-                "agenthq_ticket_files", "agenthq_ticket_related_files", // TICKET-FILES (1.137.0)
                 "agenthq_ask", // ASK-1
                 "agenthq_progress", // PROGRESS-1 (1.117.0)
                 "agenthq_processes", "agenthq_processes_reap", // ROGUE-1 (1.120.0)
@@ -227,6 +246,47 @@ class McpServeTest {
         assertFalse("roster" in pod, "no roster unless a project is named: $pod")
 
         served.close()
+    }
+
+    /**
+     * DAEMON-PLUGINS-1: the TICKET-FILES tools moved from this MCP server into Infantry_Board's daemon plugin. Loaded from its
+     * built jar, the daemon lists them (after this server's own) with the EXACT descriptors the deleted
+     * McpTicketFilesTools served ([TICKET_FILES_GOLDEN], copied from it), the same argument errors, and the same answer as
+     * the daemon's own `ticket_files` frame. Without the plugin they are not listed (the test above).
+     */
+    @Test
+    fun ticketFilesToolsComeFromTheBoardPluginUnchanged() {
+        val root = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Board")
+        try {
+            val fixture = DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-plugin").toFile(), pluginsRoot = root)
+                .also { fixtures += it }
+            fixture.client.await(Envelope.READY)
+            val served = serve("--port", fixture.port.toString())
+            initialize(served)
+
+            val tools = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject }
+            assertEquals(listOf("agenthq_ticket_files", "agenthq_ticket_related_files"), tools.takeLast(2).map { it["name"]!!.jsonPrimitive.content })
+            assertEquals(Json.parseToJsonElement(TICKET_FILES_GOLDEN), JsonArray(tools.takeLast(2)), "the descriptors changed in the move")
+
+            // The argument errors, word for word.
+            fun text(result: JsonObject) = result["content"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content
+            val neither = served.callTool("agenthq_ticket_files")
+            assertEquals(true, neither["isError"]!!.jsonPrimitive.content.toBoolean())
+            assertEquals("give exactly one of ticketId or path", text(neither))
+            assertEquals("ticketId is required", text(served.callTool("agenthq_ticket_related_files")))
+
+            // The answer is the daemon's own `ticket_files` answer (a bare short id is the ticket `ticket-<id>`).
+            fixture.client.send(Envelope(Envelope.TICKET_FILES, """{"ticketId":"ticket-55476f3c"}""", requestId = "direct"))
+            val direct = fixture.client.awaitWhere("the direct ticket_files answer") { it.requestId == "direct" }
+            assertEquals(Envelope.TICKET_FILES_REPORT, direct.type, direct.data)
+            val viaPlugin = served.callTool("agenthq_ticket_files", """{"ticketId":"55476f3c"}""")
+            assertEquals(false, viaPlugin["isError"]!!.jsonPrimitive.content.toBoolean(), "$viaPlugin")
+            assertEquals(com.superiorsoftllc.agenthq.ticketfiles.TicketFilesReport.decode(direct.data).text, text(viaPlugin))
+            val related = served.callTool("agenthq_ticket_related_files", """{"ticketId":"ticket-55476f3c","top":3}""")
+            assertEquals(false, related["isError"]!!.jsonPrimitive.content.toBoolean(), "$related")
+        } finally {
+            root.deleteRecursively()
+        }
     }
 
     @Test

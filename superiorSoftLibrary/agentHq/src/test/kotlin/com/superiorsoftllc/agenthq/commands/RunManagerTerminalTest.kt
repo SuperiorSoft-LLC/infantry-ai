@@ -61,7 +61,7 @@ class RunManagerTerminalTest {
             scrollbackBytes = { scrollback }, history = { history }, inputBytesPerSecond = { rate }, inputMaxFrameBytes = { maxFrame },
             inputQueueBytes = { queue }, maxCols = { maxCols }, maxRows = { maxRows },
         ),
-        demoLock = { demo },
+        restricted = { demo },
     )
 
     private fun start(m: RunManager, data: String = """{"commandId":"build"}"""): String {
@@ -198,11 +198,11 @@ class RunManagerTerminalTest {
         assertEquals(1000 to 3, t.size)
     }
 
-    @Test fun `the demo lock refuses an interactive start and any input`() {
+    @Test fun `a restricted policy refuses an interactive start and any input`() {
         val m = manager(FakeTerminal(), demo = true)
         assertEquals(Envelope.ERROR, m.start("""{"commandId":"build","interactive":true}""").reply.type)
         val id = start(m) // a plain run still starts
-        assertTrue(m.input("""{"runId":"$id","data":"${"x".b64()}"}""")!!.data.contains("demo lock"))
+        assertTrue(m.input("""{"runId":"$id","data":"${"x".b64()}"}""")!!.data.contains("restricted policy"))
     }
 
     @Test fun `run_list returns the kept runs newest first and forgets the oldest past the history cap`() {

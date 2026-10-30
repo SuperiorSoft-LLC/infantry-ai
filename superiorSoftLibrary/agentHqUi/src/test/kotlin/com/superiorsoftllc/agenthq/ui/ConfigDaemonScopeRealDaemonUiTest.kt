@@ -104,7 +104,6 @@ class ConfigDaemonScopeRealDaemonUiTest {
             workingDir = state,
             // POLICY-1 gap 9: never the defaults, which read the process's state dir; this test's own temp one only.
             ownerToken = com.superiorsoftllc.agenthq.daemon.OwnerCredential.ensure(state),
-            demoLock = { false },
             policies = com.superiorsoftllc.agenthq.policy.PolicyRuntime(emptyList(), { null }, null, state),
         )
         daemon.server.start(wait = false)

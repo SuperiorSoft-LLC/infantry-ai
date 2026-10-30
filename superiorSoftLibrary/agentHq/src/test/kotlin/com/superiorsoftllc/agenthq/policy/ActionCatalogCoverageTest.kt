@@ -42,7 +42,7 @@ class ActionCatalogCoverageTest {
     }
 
     @Test fun `the gates' own lists are mapped too`() {
-        val missing = (FrameGate.DEMO_LOCK_ALLOWED + AgentFrames.ALLOWED + FrameGate.OWNER_ONLY) - ActionCatalog.frames
+        val missing = (AgentFrames.ALLOWED + FrameGate.OWNER_ONLY) - ActionCatalog.frames
         assertTrue(missing.isEmpty(), "frames on FrameGate/AgentFrames lists but in no ActionCatalog action: $missing")
     }
 

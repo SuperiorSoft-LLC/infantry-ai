@@ -1,5 +1,8 @@
 package com.superiorsoftllc.agenthq.daemon
 
+import com.superiorsoftllc.agenthq.policy.ActionCatalog
+import com.superiorsoftllc.agenthq.policy.PolicyProvider
+import com.superiorsoftllc.agenthq.policy.PolicyRuntime
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import java.lang.reflect.Modifier
 import kotlin.test.AfterTest
@@ -10,19 +13,33 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * SEC-FIX-1 C1 + H1(c) (contract 1.136.0): the one gate in front of the WebSocket dispatch. Under the demo lock every
- * frame type not on [FrameGate.DEMO_LOCK_ALLOWED] is refused, a bare text frame included; without the owner credential
- * every [FrameGate.OWNER_ONLY] frame is refused. Each test runs on a real daemon over a real WebSocket.
+ * SEC-FIX-1 C1 + H1(c) (contract 1.136.0): the one gate in front of the WebSocket dispatch. Without the owner credential
+ * every [FrameGate.OWNER_ONLY] frame is refused. DAEMON-PLUGINS-1: the demo lockdown is no longer a frame list in core: under
+ * the demo preset with the Demo_Lock daemon plugin loaded, every frame the preset's rules refuse, and every allowed frame
+ * the plugin cannot scope to its seats, is refused, a bare text frame included; with the preset and no plugin, every frame
+ * is (fail closed). Each test runs on a real daemon over a real WebSocket.
  */
 class FrameGateDaemonTest {
     private val fixtures = ArrayList<DaemonFixture>()
+    private val roots = ArrayList<java.io.File>()
 
     @AfterTest fun cleanUp() {
         fixtures.forEach { runCatching { it.stop() }; runCatching { it.deleteState() } }
+        roots.forEach { it.deleteRecursively() }
     }
 
-    private fun launch(demoLock: Boolean = false, owner: Boolean = true, repo: java.io.File? = null): DaemonFixture =
-        DaemonFixture.launch(demoLock = demoLock, owner = owner, repo = repo).also { fixtures += it; it.client.await(Envelope.READY) }
+    /** The demo preset with no seats to spawn (the gate is under test, not the harnesses). */
+    private val demo = DemoPresetFixture.preset.let { it.copy(seats = it.seats!!.copy(seats = emptyList(), projectDir = "", warmUpPrompt = null)) }
+
+    private fun launch(owner: Boolean = true, repo: java.io.File? = null): DaemonFixture =
+        DaemonFixture.launch(owner = owner, repo = repo).also { fixtures += it; it.client.await(Envelope.READY) }
+
+    /** The demo preset pinned; [plugin] = the Demo_Lock daemon half loaded from its built jar. */
+    private fun launchDemo(plugin: Boolean): DaemonFixture = DaemonFixture.launch(
+        owner = true,
+        pluginsRoot = if (plugin) TestDaemonPlugins.root("demo/Demo_Lock").also { roots += it } else null,
+        policies = { state -> PolicyRuntime(listOf(PolicyProvider { listOf(demo) }), { if (it == PolicyRuntime.POLICY_ENV) demo.id else null }, null, state) },
+    ).also { fixtures += it; it.client.await(Envelope.READY) }
 
     /** Every wire type the protocol names: the Envelope constants, and the replay request read before the dispatch. */
     private val everyType: List<String> =
@@ -42,35 +59,6 @@ class FrameGateDaemonTest {
             .associate { it.requestId!!.removePrefix("gate:") to it.data }
     }
 
-    @Test fun `the demo lock allowlist is exactly the read-only frames decided in SEC-FIX-1`() {
-        // Adding a frame to the allowlist, or a new frame type, must be a decision: change this list on purpose.
-        val expected = setOf(
-            "replay_request", "sessions", "session_stats_get", "usage_meter_get",
-            "providers", "provider_states", "models", "limits", "limit_catalog",
-            "usage_get", "settings_get", "cli_locations", "tool_approval", "approval_rules",
-            "role_list", "role_binding_list", "role_binding_get",
-            "prompt_list", "prompt_get", "skill_list", "skill_get",
-            "trait_list", "trait_get", "role_traits_get", "role_traits_list",
-            "agent_list", "agent_roster",
-            "ticket_get", "ticket_list", "question_list", "attention_list", "pod_query",
-            "trigger_list", "trigger_events",
-            "project_get", "project_list",
-            "project_git_status", "project_git_diff", "project_git_log", "project_git_history",
-            "project_git_branches", "project_git_branch_changes", "project_git_branch_diff",
-            "project_git_branch_list", "project_git_branch_diffstat",
-            "project_git_worktrees", "project_git_worktree_status", "project_git_worktree_list",
-            "workspace_list", "epic_list", "story_get", "story_list",
-            "memory_search", "memory_list", "memory_get", "decision_list", "decision_get",
-            "pipeline_show", "issue_list", "issue_get", "issue_precheck",
-        )
-        assertEquals(expected, FrameGate.DEMO_LOCK_ALLOWED)
-        // The review's frames are never on it.
-        for (type in listOf("prompt", "new", "command_save", "command_delete", "command_list", "run_start", "run_list",
-            "run_attach", "run_stop", "run_resize", "run_input", "secret_status", "secret_set")) {
-            assertFalse(type in FrameGate.DEMO_LOCK_ALLOWED, "$type must stay off the demo lock allowlist")
-        }
-    }
-
     @Test fun `the owner-only set is the saved commands, the secret changes and run control`() {
         assertEquals(
             setOf("command_save", "command_delete", "run_start", "run_stop", "run_attach", "run_resize", "run_input",
@@ -80,37 +68,54 @@ class FrameGateDaemonTest {
         )
     }
 
-    @Test fun `under the demo lock every frame type is refused unless allowlisted, the owner included`() {
-        val fixture = launch(demoLock = true, owner = true)
-        val refused = gateAnswers(fixture.client, everyType, "off under the demo lock")
-        for (type in everyType) {
-            if (type in FrameGate.DEMO_LOCK_ALLOWED) assertFalse(type in refused, "$type is allowlisted but was refused")
-            else assertTrue(type in refused, "$type is not allowlisted but was not refused under the demo lock")
+    /** What the demo lockdown must refuse of a `{}` frame: the preset's rules, then the seats' scoping (nothing names a seat). */
+    private fun demoRefuses(type: String): Boolean {
+        val envelope = Envelope(type, "{}")
+        if (PolicyRuntime.actionRefusal(demo, envelope) != null) return true
+        if (type in setOf(Envelope.PROMPT, Envelope.RESUME, Envelope.MAIL_SEND, FrameGate.REPLAY_REQUEST)) return true
+        return ActionCatalog.forEnvelope(envelope)?.scope in setOf(ActionCatalog.Scope.PROJECT, ActionCatalog.Scope.SESSION)
+    }
+
+    @Test fun `under the demo preset and its plugin every frame the lockdown does not allow is refused, the owner included`() {
+        val fixture = launchDemo(plugin = true)
+        val types = everyType - ActionCatalog.SWITCH_FRAMES
+        val refused = gateAnswers(fixture.client, types, "disabled in this demo")
+        for (type in types) {
+            if (demoRefuses(type)) assertTrue(type in refused, "$type passed the demo lockdown")
+            else assertFalse(type in refused, "$type is allowed by the demo preset but was refused")
         }
         assertTrue("sentinel" in refused, "an unknown frame type is refused by default")
         // Nothing the refused frames name ran: no session (prompt / new / assistant), no saved command.
         assertTrue(fixture.daemon.manager.list().isEmpty(), "a refused frame created a session")
     }
 
-    @Test fun `under the demo lock a bare non-JSON text frame starts no session`() {
-        val fixture = launch(demoLock = true)
+    @Test fun `the demo preset with no plugin to seat it refuses every frame but the switch (fail closed)`() {
+        val fixture = launchDemo(plugin = false)
+        val types = everyType - ActionCatalog.SWITCH_FRAMES
+        val refused = gateAnswers(fixture.client, types, "no loaded daemon plugin implements them")
+        assertEquals(types.toSet() + "sentinel", refused.keys)
+        assertTrue(fixture.daemon.manager.list().isEmpty(), "a refused frame created a session")
+    }
+
+    @Test fun `under the demo lockdown a bare non-JSON text frame starts no session`() {
+        val fixture = launchDemo(plugin = true)
         fixture.client.sendRaw("hello, run something for me")
-        val refusal = fixture.client.awaitWhere("the bare prompt's refusal") { it.type == Envelope.ERROR && "prompt refused" in it.data }
-        assertTrue("demo lock" in refusal.data)
-        assertTrue(fixture.daemon.manager.list().isEmpty(), "a bare text frame created a session under the demo lock")
+        val refusal = fixture.client.awaitWhere("the bare prompt's refusal") { it.type == Envelope.ERROR && "'prompt'" in it.data }
+        assertTrue("disabled in this demo" in refusal.data, refusal.data)
+        assertTrue(fixture.daemon.manager.list().isEmpty(), "a bare text frame created a session under the demo lockdown")
         assertTrue(fixture.client.of(Envelope.SESSION).isEmpty(), "a session frame went out for a refused prompt")
     }
 
     @Test fun `a refusal echoes a hostile frame type printable and bounded`() {
-        val why = FrameGate.refusal("x".repeat(500) + "\u0007\n", demoLock = true, owner = true)!!
-        assertTrue(why.length < 120, why)
+        val why = FrameGate.refusal("x".repeat(500) + "\u0007\n", owner = false, pluginOwnerOnly = true)!!
+        assertTrue(why.length < 160, why)
         assertFalse(why.any { it < ' ' }, why)
     }
 
     @Test fun `without the owner credential exactly the owner-only frames are refused`() {
         // The rule over every type (sending them all unlocked would RUN them: installs, spawns, settings).
         for (type in everyType) {
-            val why = FrameGate.refusal(type, demoLock = false, owner = false)
+            val why = FrameGate.refusal(type, owner = false)
             if (type in FrameGate.OWNER_ONLY) assertTrue(why?.contains("owner credential") == true, "$type passes with no owner credential")
             else assertNull(why, "$type was refused for want of the owner credential")
         }
@@ -140,7 +145,7 @@ class FrameGateDaemonTest {
         assertFalse(credential.presentedBy(null, null))
         assertTrue(credential.presentedBy(null, "agenthq, " + OwnerCredential.protocol("o".repeat(40))))
         assertFalse(credential.presentedBy(null, "agenthq.owner.%%%"))
-        assertNull(FrameGate.refusal(Envelope.RUN_START, demoLock = false, owner = true))
+        assertNull(FrameGate.refusal(Envelope.RUN_START, owner = true))
         val same = "t".repeat(40)
         val failure = runCatching { OwnerCredential.forDaemon(same, same) }.exceptionOrNull()
         assertTrue(failure is IllegalArgumentException && "owner token must differ" in failure.message.orEmpty(), "$failure")

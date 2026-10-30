@@ -142,6 +142,10 @@ import io.ktor.server.response.respondText
 import io.ktor.server.response.header
 import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
+import io.ktor.server.routing.route
+import io.ktor.server.request.receiveText
+import io.ktor.server.request.path
+import io.ktor.server.request.httpMethod
 import io.ktor.server.websocket.DefaultWebSocketServerSession
 import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.webSocket
@@ -205,8 +209,6 @@ private const val DEFAULT_DB_NAME = "agenthq.db"
 private const val SESSION_CLOSE_GRACE_MS = 3_000L
 private const val SESSION_REPLAY_REQUEST_TYPE = "replay_request"
 private const val SESSION_REPLAY_GAP_TYPE = "replay_gap"
-/** Ticket 9bf81983: the frames a demo visitor's turn limit counts (each makes an agent run). */
-private val DEMO_COUNTED_TURNS = setOf(Envelope.PROMPT, Envelope.RESUME, Envelope.MAIL_SEND)
 
 /** POLICY-1 (docs/POLICY.md): daemon -> client, the active policy (JSON PolicyWire); answers `policy_get` / `policy_set` too. */
 internal const val POLICY_FRAME = "policy"
@@ -343,6 +345,9 @@ private val TERMINAL = setOf(SessionState.EXITED, SessionState.FAILED, SessionSt
  * 1.1.0) that submit a pod and read its state back.
  */
 fun main() {
+    // DAEMON-PLUGINS-1: an install (installDist, docker, headless) ships its daemon plugins in `<install>/modules`; it is the
+    // bundled root unless AGENTHQ_BUNDLED_MODULES or the property already names one (bundled = trusted, owner decision).
+    installModules()?.let { if (System.getProperty(com.superiorsoftllc.agenthq.plugin.host.PluginFolders.BUNDLED_PROPERTY) == null) System.setProperty(com.superiorsoftllc.agenthq.plugin.host.PluginFolders.BUNDLED_PROPERTY, it.absolutePath) }
     // BUG-PORT-1-STATEDIR: one daemon per state dir, decided before anything opens the database.
     val stateLock = try {
         StateDirLock.acquire(stateDir())
@@ -608,8 +613,15 @@ class AgentHqDaemon(
              * handed to a spawned agent; only a connection presenting it may send [FrameGate.OWNER_ONLY] frames.
              */
             ownerToken: String = OwnerCredential.ensure(stateDir()),
-            /** SEC-FIX-1: the demo lock (`AGENTHQ_DEMO_LOCK`), read per frame; a test passes its own. */
-            demoLock: () -> Boolean = { com.superiorsoftllc.agenthq.plugin.host.PluginFolders.demoLock() },
+            /**
+             * DAEMON-PLUGINS-1: the plugins root (`<root>/core|official|community/<Module>`); null = the environment's
+             * (`AGENTHQ_PLUGINS_ROOT`, else `<stateDir>/plugins`, plus the bundled root). A test passes a temp folder.
+             */
+            pluginsRoot: File? = null,
+            /** DAEMON-PLUGINS-1: which official daemon jars load unsigned; null = the bundled root and `agenthq.plugins.devTrust`. */
+            pluginTrust: com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.Trust? = null,
+            /** DAEMON-PLUGINS-1: the environment the plugins read (`DaemonApi.env`, only declared names); a test passes its own. */
+            pluginEnv: (String) -> String? = { com.superiorsoftllc.agenthq.session.InfantryEnv.get(it) },
             /**
              * Contract 1.3.0: the providers a spawn may name besides [provider], from `AGENTHQ_PROVIDERS`.
              * Empty (the default when the variable is unset) = this daemon serves [provider] only.
@@ -698,21 +710,18 @@ class AgentHqDaemon(
             /** ROGUE-1: free RAM for the process watch; the tab-shots renderer pins it so the host's RAM never adds a low-memory notice. */
             memory: com.superiorsoftllc.agenthq.session.MemorySource = com.superiorsoftllc.agenthq.session.OsMemorySource,
             /**
-             * POLICY-1 (docs/POLICY.md): the ONE switch: which policy preset is active (env-pinned, the `AGENTHQ_DEMO_LOCK`
-             * shorthand, or the owner's Settings pick). Its seated lockdown is DEMO-LOCK's. A test passes its own.
+             * POLICY-1 (docs/POLICY.md): the ONE switch: which policy preset is active (env-pinned, a preset's `selectWhenEnv`,
+             * or the owner's Settings pick). A seated preset's lockdown is a daemon plugin's (`seats` hook). A test passes its own.
              */
             policies: com.superiorsoftllc.agenthq.policy.PolicyRuntime = com.superiorsoftllc.agenthq.policy.PolicyRuntime.fromEnvironment(stateDir()),
         ): AgentHqDaemon {
             // SANDBOX-1: the scoped token sandboxed agents get instead of the owner token (in memory only, new every start).
             val agentToken = if (token != null) AgentFrames.newToken() else null
-            val policy = AccessPolicy.of(host, token, agentToken = agentToken).let { base ->
-                // Ticket 9bf81983: the public visitor token is admitted ONLY under a seated lock (never in the normal app).
-                // POLICY-1: read per request from the ACTIVE preset's lock, so a Settings switch opens or closes it with no
-                // restart. One present at start is checked now, so a bad one still stops the daemon starting.
-                val visitor = { policies.lock.takeIf { it.enabled }?.publicToken }
-                visitor()?.let(base::withDemoToken)
-                base.withDemoTokens(visitor)
-            }
+            // DAEMON-PLUGINS-1: the daemon plugins, loaded once the managers they reach exist (below); every seam reads this
+            // holder, so until then (and with no daemon plugin) each answers neutrally.
+            val pluginHost = java.util.concurrent.atomic.AtomicReference(com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.empty())
+            // DAEMON-PLUGINS-1 (`admission`): the guest tokens an official plugin admits NOW (read per request).
+            val policy = AccessPolicy.of(host, token, agentToken = agentToken).withGuestTokens { pluginHost.get().guestTokens() }
             // SEC-FIX-1: built once; refused when it equals the access token every agent is handed.
             val ownerCredential = OwnerCredential.forDaemon(ownerToken, token)
             // PORT-1: FIRST, because the mail base and every session's AGENTHQ_URL below carry the port.
@@ -949,12 +958,12 @@ class AgentHqDaemon(
             // BUG-RUN-STUB-1: a saved command is a real process whatever the provider; [runner] is the stub's
             // ScriptedRunner under AGENTHQ_PROVIDER=stub and would only replay the script.
             // RUN-CONSOLE (1.134.0): the run gets a pty (pipes if pty4j cannot load here); its scrollback and the run
-            // history follow `limits.run.*`; the demo lock refuses interactive runs and run_input (no raw shell).
+            // history follow `limits.run.*`; a restricted policy refuses interactive runs and run_input (no raw shell).
             // SECRETS-1: the daemon-owned keystore, in the state dir. SECRETS-2: a run reads its secrets' fields from it.
             val keystore = Keystore(stateDir())
-            // POLICY-1: "locked" follows the ACTIVE preset (a Settings switch included), read per call; the env shorthand
-            // with no seated preset installed still locks (SEC-FIX-1's fallback).
-            val locked: () -> Boolean = { policies.lock.enabled || demoLock() }
+            // POLICY-1: "restricted" follows the ACTIVE preset (a Settings switch included), read per call. A seated preset is
+            // always restricted (secrets and interactive runs locked), as the seated lockdown was before it became a plugin.
+            val locked: () -> Boolean = { policies.current.let { it.restricted == true || it.seats != null } }
             val runManager = com.superiorsoftllc.agenthq.commands.RunManager(
                 { commandStore.registry }, com.superiorsoftllc.agenthq.runner.PipedProcessRunner(),
                 emit = { env -> for (c in clients.toList()) c.trySend(env) },
@@ -968,7 +977,7 @@ class AgentHqDaemon(
                     maxCols = { settings.limitCap(LimitRegistry.RUN_MAX_COLS) },
                     maxRows = { settings.limitCap(LimitRegistry.RUN_MAX_ROWS) },
                 ),
-                demoLock = locked,
+                restricted = locked,
                 // SEC-FIX-1 H1(b): user secrets only; a built-in (the update token) never reaches a run.
                 secrets = com.superiorsoftllc.agenthq.keystore.KeystoreHandler.runSecrets(keystore::fields),
             )
@@ -1143,10 +1152,10 @@ class AgentHqDaemon(
                 projectName = { id -> projectStore.get(id).name },
                 push = { envelope -> for (client in clients) client.trySend(envelope) },
             )
-            // SECRETS-1 / SECRETS-2: the keystore's frames; the demo lock refuses every change.
+            // SECRETS-1 / SECRETS-2: the keystore's frames; a restricted policy refuses every change.
             val keystoreFrames = KeystoreHandler(
                 keystore = keystore,
-                demoLock = locked,
+                restricted = locked,
                 push = { envelope -> for (client in clients) client.trySend(envelope) },
             )
             // P10-K6: the issues log, over the same file. The declared session is the author AND the scope of the active
@@ -1562,25 +1571,79 @@ class AgentHqDaemon(
                     "(runs closed ORPHANED, open pods INTERRUPTED)",
             )
 
-            // DEMO-LOCK / POLICY-1: a seated preset's project and sessions exist before anything is delivered or served.
-            val seatFirstTurn = { s: com.superiorsoftllc.agenthq.session.SessionRecord, prompt: String ->
+            // COPY-1: the session cap's refusal text is the active preset's (read per refusal, so a switch applies at once).
+            manager.sessionCapText = { policies.current.sessionCapText }
+            // DAEMON-PLUGINS-1: a plugin's first turn into a never-run session is composed like a client's first message.
+            val pluginFirstTurn = { s: com.superiorsoftllc.agenthq.session.SessionRecord, prompt: String ->
                 val instance = manager.instance(s.id)
                 firstTurn(instance, s.role, s.agentId, prompt, knowledge.section(s.projectId, s.role), skillsSource.section(instance))
             }
-            policies.lock.seed(projectStore, manager, agents)
-            // COPY-1: the session cap's refusal text is the active preset's (read per refusal, so a switch applies at once).
-            manager.sessionCapText = { policies.current.sessionCapText }
-            // Ticket 9bf81983: each seeded session's first run starts now, composed like a visitor's first message.
-            policies.lock.warmUp(manager, compose = seatFirstTurn)
-            // POLICY-1: a Settings switch re-seeds (idempotent) and opens or closes the session door; each connection is told itself.
-            policies.onChange { runtime ->
-                manager.demoLocked = false
-                runCatching { runtime.lock.seed(projectStore, manager, agents); runtime.lock.warmUp(manager, compose = seatFirstTurn) }
-                    // GAP-AUDIT-1 (f): not only logged: the policy frame the connections are sent next carries it to the owner.
-                    .onFailure { System.err.println("[agentHq] policy '${runtime.current.id}': seating failed: ${it.message}") }
-                    .let { r -> runtime.seatingFailed(r.exceptionOrNull()?.let { "seating failed: ${it.message ?: it::class.simpleName}" }) }
-                manager.demoLocked = runtime.lock.enabled
-                println("[agentHq] policy switched to '${runtime.current.id}'")
+
+            // PLUGINS-1: the daemon reads the same plugins root and rules as the desktop (no UI here); GET /plugins lists them.
+            // CONFIG-8: the daemon's own config manifest, compiled from the loaded modules' `daemon.config`.
+            val daemonConfig = DaemonConfig(settings, store)
+            daemonConfig.onChanged = { changed ->
+                val frame = Envelope(Envelope.CONFIG_CHANGED, json.encodeToString(com.superiorsoftllc.agenthq.plugin.api.ConfigChangedFrame.serializer(), changed))
+                for (client in clients) client.trySend(frame)
+            }
+            // POLICY-1: resolved under the ACTIVE preset's restriction, and again on every switch (GET /plugins reads the latest).
+            val firstResolution = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.agenthq.plugin.host.Resolution?>(null)
+            fun resolvePlugins() = DaemonPlugins.resolve(
+                stateDir(),
+                env = { name -> if (pluginsRoot != null && name == com.superiorsoftllc.agenthq.plugin.host.PluginFolders.ROOT_ENV) pluginsRoot.absolutePath else if (pluginsRoot != null && name == com.superiorsoftllc.agenthq.plugin.host.PluginFolders.BUNDLED_ENV) null else System.getenv(name) },
+                property = { name -> if (pluginsRoot != null && name == com.superiorsoftllc.agenthq.plugin.host.PluginFolders.BUNDLED_PROPERTY) null else System.getProperty(name) },
+                locked = locked(),
+                onResolved = { r -> firstResolution.compareAndSet(null, r); daemonConfig.load(r).forEach { line -> System.err.println(line) } },
+            )
+            val pluginsNow = java.util.concurrent.atomic.AtomicReference(resolvePlugins())
+            // DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md): the daemon half of every module the rules let through, loaded ONCE,
+            // before anything is delivered or served (a plugin seats its sessions in its start). A module that fails its
+            // rules, trust or start is logged and left out; the daemon starts either way.
+            firstResolution.get()?.let { resolution ->
+                val root = java.io.File(pluginsNow.get().root)
+                val bundled = if (pluginsRoot != null) null else com.superiorsoftllc.agenthq.plugin.host.PluginFolders.bundledRoot()
+                val host = com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.load(
+                    resolution,
+                    com.superiorsoftllc.agenthq.plugin.host.PluginFolders.config(root),
+                    pluginTrust ?: com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.Trust(
+                        com.superiorsoftllc.agenthq.plugin.host.OfficialTrust.infantryKeys(root, bundled),
+                        com.superiorsoftllc.agenthq.plugin.host.PluginFolders.devTrust(),
+                        bundled,
+                    ),
+                    com.superiorsoftllc.agenthq.daemon.plugins.CoreDaemonServices(
+                        manager, agents, projectStore, daemonConfig, keystore, policies,
+                        getenv = pluginEnv, firstTurn = pluginFirstTurn, limits = settings::limit,
+                    ),
+                    stateDir(),
+                )
+                pluginHost.set(host)
+            }
+            val plugins = pluginHost.get()
+            // A guest token present at start is checked now, so a bad one still stops the daemon starting.
+            plugins.guestTokens().forEach { policy.guestDigestOf(it) }
+            manager.spawnGate = { role, projectId -> plugins.spawnRefusal(role, projectId) }
+            policies.attach(object : com.superiorsoftllc.agenthq.policy.PolicyRuntime.Extensions {
+                override fun presets() = plugins.presets()
+                override fun seatsClaimed() = plugins.seatsClaimed
+                override fun notice() = plugins.notice()
+                override fun action(envelope: Envelope) = plugins.actionFor(envelope)
+                override fun frameActions() = plugins.frameActions()
+            })
+            policies.onChange { runtime -> println("[agentHq] policy switched to '${runtime.current.id}'") }
+            policies.onChange { pluginsNow.set(resolvePlugins()) }
+            // DAEMON-PLUGINS-1 (`events`): every frame the daemon pushes to all its clients, to the plugins' listeners.
+            if (plugins.hasPlugins) {
+                val pluginEvents = Channel<Envelope>(Channel.UNLIMITED)
+                clients.add(pluginEvents)
+                Thread({
+                    kotlinx.coroutines.runBlocking {
+                        for (e in pluginEvents) {
+                            plugins.broadcast(e)
+                            // `sessions` hook: a session's status push, as the session it is now.
+                            if (e.type == Envelope.SESSION) e.sessionId?.let(manager::get)?.let { plugins.sessionChanged("status", com.superiorsoftllc.agenthq.daemon.plugins.CoreDaemonServices.info(it)) }
+                        }
+                    }
+                }, "daemon-plugin-events").apply { isDaemon = true }.start()
             }
             // Deliver anything that was queued before the last shutdown to a session already at rest.
             mail.onStartup()
@@ -1598,31 +1661,18 @@ class AgentHqDaemon(
                 },
             )
 
-            // PLUGINS-1: the daemon reads the same plugins root and rules as the desktop (no UI here); GET /plugins lists them.
-            // CONFIG-8: the daemon's own config manifest, compiled from the loaded modules' `daemon.config`.
-            val daemonConfig = DaemonConfig(settings, store)
-            daemonConfig.onChanged = { changed ->
-                val frame = Envelope(Envelope.CONFIG_CHANGED, json.encodeToString(com.superiorsoftllc.agenthq.plugin.api.ConfigChangedFrame.serializer(), changed))
-                for (client in clients) client.trySend(frame)
-            }
-            // POLICY-1: resolved under the ACTIVE preset's lock, and again on every switch (GET /plugins reads the latest).
-            fun resolvePlugins() = DaemonPlugins.resolve(stateDir(), locked = locked(), onResolved = { daemonConfig.load(it).forEach { line -> System.err.println(line) } })
-            val pluginsNow = java.util.concurrent.atomic.AtomicReference(resolvePlugins())
-            policies.onChange { pluginsNow.set(resolvePlugins()) }
-
             val server = embeddedServer(CIO, port = boundPort, host = host) {
                 install(WebSockets)
                 install(ContentNegotiation) { json() }
                 // Before routing, so a refused request never reaches a handler (the mailbox included).
-                installAccessPolicy(policy, webBundle::isAsset, currentLock = { policies.lock })
+                installAccessPolicy(policy, webBundle::isAsset, httpGate = plugins::httpRefusal, publicRoute = plugins::isPublicRoute)
                 routing {
-                    // Ticket 9bf81983: the demo's public visitor token, so a visitor lands connected (404 when none).
-                    get(DemoLock.VISITOR_TOKEN_PATH) {
-                        val visitor = policies.lock.publicToken
-                        if (policies.lock.enabled && visitor != null && policy.hasDemoToken) {
-                            call.response.header(io.ktor.http.HttpHeaders.CacheControl, "no-store")
-                            call.respondText(visitor)
-                        } else call.respond(io.ktor.http.HttpStatusCode.NotFound, "no demo visitor token")
+                    // DAEMON-PLUGINS-1: each plugin's declared top-level routes, and every plugin's own `/plugins/<id>/...`.
+                    for ((method, path) in plugins.topLevelRoutes()) {
+                        route(path, io.ktor.http.HttpMethod.parse(method)) { handle { answerPluginRoute(call, plugins) } }
+                    }
+                    route("${com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.PLUGIN_PREFIX}{module}/{path...}") {
+                        handle { answerPluginRoute(call, plugins) }
                     }
                     get("/health") {
                         // Ticket 55d60a5e: the database part runs on the gate's own thread, bounded; a stuck database
@@ -1663,7 +1713,7 @@ class AgentHqDaemon(
                         )
                     }
                     get("/attention") { call.respond(attention.list()) }
-                    get("/plugins") { call.respond(pluginsNow.get()) }
+                    get("/plugins") { call.respond(pluginsNow.get().withDaemon(plugins)) }
                     // P1 step 2 (6s B): the per-node UI configuration the window seeds and edits.
                     val nodeConfigStore = NodeConfigStore((store as SqlAgentHqStore).database)
                     nodeConfigRoutes(nodeConfigStore)
@@ -1672,7 +1722,7 @@ class AgentHqDaemon(
                     // CONFIG-8: `GET /config/schema` (+ `/config/values`), the HTTP twin of the config_schema / config_values frames.
                     daemonConfigRoutes(daemonConfig)
                     // Phase 6 agent-facing mail API: how a spawned CLI agent answers a delivered message.
-                    mailRoutes(mail, mailbox) { request -> policies.lock.mailRefusal(request) }
+                    mailRoutes(mail, mailbox) { request -> plugins.mailRefusal(request.from, request.to, request.allowCrossProject) }
                     // SERVER-UPDATE-3 (1.110.0): status / check / apply for the headless daemon's own updates.
                     updateRoutes(
                         updates ?: com.superiorsoftllc.agenthq.update.ServerUpdateService.fromEnvironment(
@@ -1765,7 +1815,7 @@ class AgentHqDaemon(
                             handover = handover,
                             processWatch = processWatch,
                             ownerCredential = ownerCredential,
-                            demoLock = demoLock,
+                            plugins = plugins,
                             daemonConfig = daemonConfig,
                             tier = call.attributes.getOrNull(ACCESS_TIER) ?: AccessTier.OWNER,
                             policies = policies,
@@ -1819,7 +1869,7 @@ class AgentHqDaemon(
                 ownerQuestions = ownerQuestions,
                 handover = handover,
                 processWatch = processWatch,
-                background = listOf(AutoCloseable { usageRefresher.stop() }, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate),
+                background = listOf(AutoCloseable { usageRefresher.stop() }, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate, plugins),
                 processWatchScheduler = processWatchScheduler,
                 healthSettings = healthSettings,
             )
@@ -2351,8 +2401,8 @@ private suspend fun handleConnection(
     processWatch: com.superiorsoftllc.agenthq.session.ProcessWatch? = null,
     /** SEC-FIX-1 (1.136.0): who is the owner ([FrameGate.OWNER_ONLY]); null = no connection is. */
     ownerCredential: OwnerCredential? = null,
-    /** SEC-FIX-1 (1.136.0): the demo lock, read per frame ([FrameGate.DEMO_LOCK_ALLOWED]). */
-    demoLock: () -> Boolean = { false },
+    /** DAEMON-PLUGINS-1: the daemon plugins: their gates, frames and tools (docs/DAEMON-PLUGINS.md); none by default. */
+    plugins: com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost = com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.empty(),
     /** CONFIG-8 (1.142.0): the daemon's declared config (`config_*` frames); the default declares nothing. */
     daemonConfig: DaemonConfig,
     /** SANDBOX-1: what this connection was admitted as; an AGENT (the scoped token) may send only [AgentFrames.ALLOWED]. */
@@ -2371,9 +2421,22 @@ private suspend fun handleConnection(
     ) == true
     val outgoing = Channel<Envelope>(Channel.UNLIMITED)
     clients.add(outgoing)
+    // DAEMON-PLUGINS-1: a plugin tool's own requests on this connection (requestId `plugin:<uuid>`, fed to [inbound]) are
+    // answered to the waiting tool, never sent to the client.
+    val pluginWaiters = java.util.concurrent.ConcurrentHashMap<String, kotlinx.coroutines.CompletableDeferred<Envelope>>()
     val sender = session.launch {
         for (envelope in outgoing) {
+            envelope.requestId?.let { pluginWaiters.remove(it) }?.let { waiter -> waiter.complete(envelope); continue }
             session.send(Frame.Text(json.encodeToString(Envelope.serializer(), envelope)))
+        }
+    }
+    // DAEMON-PLUGINS-1: every frame the loop below reads: the client's, then a plugin tool's requests on its behalf.
+    val inbound = Channel<String>(Channel.UNLIMITED)
+    val inboundPump = session.launch {
+        try {
+            for (frame in session.incoming) (frame as? Frame.Text)?.readText()?.let { inbound.send(it) }
+        } finally {
+            inbound.close()
         }
     }
 
@@ -2512,7 +2575,10 @@ private suspend fun handleConnection(
                 // BUILD-STAMP-1: additive key (no contract bump): the daemon's build string, e.g. 1.0.1+20261023.1432.e85b223.
                 "build=${com.superiorsoftllc.agenthq.update.BuildInfo.current}" +
                 // DEMO-LOCK / POLICY-1: additive keys of the active preset, none in production (the UI dims what the daemon refuses).
-                policies.readyFields(),
+                policies.readyFields() +
+                // DAEMON-PLUGINS-1: the plugins' `ready` hooks (fail open); a key core already sent is not repeated.
+                plugins.readyFields().entries.filter { (k, _) -> !Regex("(^| )${Regex.escape(k)}=").containsMatchIn(policies.readyFields()) && k !in CORE_READY_KEYS }
+                    .joinToString("") { (k, v) -> " $k=$v" },
         ),
     )
     // POLICY-1: the active policy right after `ready`, and again on every switch (each connection its own canSwitch).
@@ -2571,33 +2637,29 @@ private suspend fun handleConnection(
     // BUG-G2d: the session the last `new` named as its origin; the session the next prompt creates is charged to it.
     var spawnOrigin: String? = null
     try {
-        for (frame in session.incoming) {
-            val text = (frame as? Frame.Text)?.readText() ?: continue
+        for (text in inbound) {
             val envelope = runCatching { json.decodeFromString(Envelope.serializer(), text) }.getOrNull()
                 ?: Envelope(Envelope.PROMPT, text)
-            // SEC-FIX-1: the one gate, before every branch below (the bare-text prompt and the replay included). Its plain
-            // demo-lock frame list applies only when `AGENTHQ_DEMO_LOCK` is set but no installed preset took it (fail closed).
-            FrameGate.refusal(envelope.type, demoLock() && policies.current.isEmpty, owner)?.let { why ->
+            // DAEMON-PLUGINS-1: who sent this frame, as the plugins' gates and tools see it.
+            val caller = com.superiorsoftllc.agenthq.daemon.api.Caller(
+                owner = owner, agent = tier == AccessTier.AGENT,
+                remoteAddress = session.call.request.local.remoteAddress,
+                forwardedFor = session.call.request.headers["X-Forwarded-For"], activeSession = active,
+            )
+            // SEC-FIX-1: the one gate, before every branch below (the bare-text prompt and the replay included).
+            FrameGate.refusal(envelope.type, owner, plugins.ownerOnly(envelope.type))?.let { why ->
                 outgoing.trySend(Envelope(Envelope.ERROR, why, requestId = envelope.requestId))
                 continue
             }
-            // POLICY-1: the active preset, by the frame's named action (then the seated lockdown, when it has seats).
+            // POLICY-1: the active preset, by the frame's named action.
             policies.frameRefusal(envelope, active, owner)?.let { reason ->
                 outgoing.trySend(Envelope(Envelope.ERROR, reason).copy(requestId = envelope.requestId))
                 continue
             }
-            // Ticket 9bf81983: under a seated lock, the client IP this connection's visitor turns are charged to.
-            val lockNow = policies.lock
-            val turnLimit = lockNow.turnLimit?.takeIf { lockNow.enabled }
-            val turnClient = turnLimit?.let {
-                DemoTurnLimit.clientIp(session.call.request.local.remoteAddress, session.call.request.headers["X-Forwarded-For"], lockNow.trustedProxies)
-            }.orEmpty()
-            // Ticket 9bf81983: a visitor turn over this client's limit is refused before it reaches an agent.
-            if (turnLimit != null && envelope.type in DEMO_COUNTED_TURNS) {
-                turnLimit.refusal(turnClient)?.let { reason ->
-                    outgoing.trySend(Envelope(Envelope.ERROR, reason).copy(requestId = envelope.requestId))
-                    continue
-                }
+            // DAEMON-PLUGINS-1 (`frameGate`, fail closed): the plugins' own gates (a seated lockdown scopes frames here).
+            plugins.frameRefusal(envelope, caller)?.let { reason ->
+                outgoing.trySend(Envelope(Envelope.ERROR, reason).copy(requestId = envelope.requestId))
+                continue
             }
             if (envelope.type == SESSION_REPLAY_REQUEST_TYPE) {
                 val sessionId = envelope.sessionId
@@ -2664,7 +2726,7 @@ private suspend fun handleConnection(
                                 envelope.data
                             }
                             active = manager.resume(envelope.sessionId, turn).id
-                            turnLimit?.record(turnClient)
+                            plugins.turnAccepted(envelope, caller)
                             null
                         } catch (e: RunInFlightException) {
                             // 1.96.0: typed, so the client that sent it (its requestId is echoed below) can queue it again.
@@ -3001,7 +3063,8 @@ private suspend fun handleConnection(
                         } catch (e: Exception) {
                             Envelope(Envelope.ERROR, "ticket_files failed: ${e.message ?: e::class.simpleName}")
                         }
-                        outgoing.trySend(answer)
+                        // DAEMON-PLUGINS-1: echoes the request's id, so a correlated caller (a plugin tool) gets its own answer.
+                        outgoing.trySend(answer.copy(requestId = envelope.requestId))
                     }
                     null
                 }
@@ -3419,7 +3482,7 @@ private suspend fun handleConnection(
                     } else {
                         try {
                             active = manager.resume(id, prompt).id
-                            turnLimit?.record(turnClient)
+                            plugins.turnAccepted(envelope, caller)
                             null
                         } catch (e: Exception) {
                             Envelope(Envelope.ERROR, e.message ?: "resume failed")
@@ -3637,7 +3700,7 @@ private suspend fun handleConnection(
                     } else {
                         when (val result = mail.send(request)) {
                             is MailResult.Sent -> {
-                                turnLimit?.record(turnClient)
+                                plugins.turnAccepted(envelope, caller)
                                 // Report the CURRENT state, not the QUEUED snapshot: the pump already
                                 // ran, so a sender learns whether it landed or failed in this reply.
                                 val current = mailbox.message(result.message.id) ?: result.message
@@ -3828,7 +3891,44 @@ private suspend fun handleConnection(
                 com.superiorsoftllc.agenthq.policy.ActionCatalog.POLICY_GET -> policyEnvelope()
                 com.superiorsoftllc.agenthq.policy.ActionCatalog.POLICY_SET -> policies.select(envelope.data)?.let { Envelope(Envelope.ERROR, "policy_set refused: $it") }
 
-                else -> Envelope(Envelope.ERROR, "unknown frame type '${envelope.type}'")
+                // DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md section 3): the plugins' tools, as MCP `tools/list` entries.
+                com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.PLUGIN_TOOLS -> Envelope(
+                    com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.PLUGIN_TOOLS,
+                    json.encodeToString(JsonArray.serializer(), plugins.toolDescriptors()),
+                )
+                // DAEMON-PLUGINS-1: `{name, arguments}` -> `plugin_tool_result {name, text, isError}`. Off the loop: a tool may
+                // send frames on this connection itself (each through every gate above, as this caller) and wait for them.
+                com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.PLUGIN_TOOL_CALL -> {
+                    val call = runCatching { json.parseToJsonElement(envelope.data) as? JsonObject }.getOrNull()
+                    val name = (call?.get("name") as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+                    if (call == null || name == null) {
+                        Envelope(Envelope.ERROR, "plugin_tool_call expects {\"name\": \"<tool>\", \"arguments\": {...}}")
+                    } else {
+                        val arguments = call["arguments"] as? JsonObject ?: JsonObject(emptyMap())
+                        val requestId = envelope.requestId
+                        session.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            val result = plugins.callTool(name, arguments, caller) { request, timeoutMs ->
+                                val id = "plugin:" + UUID.randomUUID()
+                                val waiter = kotlinx.coroutines.CompletableDeferred<Envelope>()
+                                pluginWaiters[id] = waiter
+                                inbound.trySend(json.encodeToString(Envelope.serializer(), request.copy(requestId = id)))
+                                kotlinx.coroutines.runBlocking { kotlinx.coroutines.withTimeoutOrNull(timeoutMs) { waiter.await() } }
+                                    ?: run { pluginWaiters.remove(id); Envelope(Envelope.ERROR, "${request.type} got no answer in $timeoutMs ms") }
+                            }
+                            val payload = JsonObject(mapOf(
+                                "name" to kotlinx.serialization.json.JsonPrimitive(name),
+                                "text" to kotlinx.serialization.json.JsonPrimitive(result.text),
+                                "isError" to kotlinx.serialization.json.JsonPrimitive(result.isError),
+                            ))
+                            outgoing.trySend(Envelope(com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.PLUGIN_TOOL_RESULT, json.encodeToString(JsonObject.serializer(), payload), requestId = requestId))
+                        }
+                        null
+                    }
+                }
+
+                // DAEMON-PLUGINS-1: a frame a plugin declared and answers; anything else is unknown.
+                else -> if (plugins.handlesFrame(envelope.type)) plugins.answerFrame(envelope, caller)
+                else Envelope(Envelope.ERROR, "unknown frame type '${envelope.type}'")
             }
             // BUG-MCP-RACE-1: the direct answer echoes the request's id; a push (sent elsewhere) never carries one.
             reply?.let { outgoing.trySend(if (direct && it.requestId == null) it.copy(requestId = envelope.requestId) else it) }
@@ -3839,6 +3939,8 @@ private suspend fun handleConnection(
         println("[agentHq] ws closed")
         clients.remove(outgoing)
         policySubscription.close()
+        inboundPump.cancel()
+        pluginWaiters.values.forEach { it.cancel() }
         askJobs.cancel()
         modelsRequests.close()
         modelsWorker.cancel()
@@ -4108,3 +4210,31 @@ private fun podAnswer(orchestrator: Orchestrator, podId: String): Envelope {
 private const val QUESTION_SWEEP_MS = 15_000L
 /** The [SessionClosed.reason]s after which the session cannot read an answer any more (a failed turn is resumable and keeps its questions). */
 private val ORPHANING_CLOSE_REASONS = setOf("session killed", "session removed", "session restarted")
+
+/** DAEMON-PLUGINS-1: one HTTP request to a plugin route, answered by its plugin ([DaemonPluginHost.answerRoute]); 404 when none. */
+private suspend fun answerPluginRoute(call: io.ktor.server.application.ApplicationCall, plugins: com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost) {
+    val request = call.request
+    val body = if (request.httpMethod == io.ktor.http.HttpMethod.Get) "" else runCatching { call.receiveText() }.getOrDefault("")
+    val reply = plugins.answerRoute(
+        com.superiorsoftllc.agenthq.daemon.api.HttpCall(
+            method = request.httpMethod.value,
+            path = request.path(),
+            query = request.queryParameters.entries().associate { it.key to it.value.firstOrNull().orEmpty() },
+            headers = request.headers.entries().filter { !it.key.equals(io.ktor.http.HttpHeaders.Authorization, ignoreCase = true) }
+                .associate { it.key to it.value.firstOrNull().orEmpty() },
+            body = body,
+            remoteAddress = request.local.remoteAddress,
+        ),
+    ) ?: com.superiorsoftllc.agenthq.daemon.api.HttpReply(404, "no plugin answers ${request.httpMethod.value} ${request.path()}")
+    reply.headers.forEach { (k, v) -> call.response.header(k, v) }
+    call.respondText(reply.body, io.ktor.http.ContentType.parse(reply.contentType), io.ktor.http.HttpStatusCode.fromValue(reply.status))
+}
+
+/** The `ready` keys core itself sends; a plugin's `ready` hook may not repeat them. */
+private val CORE_READY_KEYS = setOf("provider", "contract", "instance", "since", "build", "notice")
+
+/** `<install>/modules` next to the `lib/` folder holding this daemon's jar, or null (a dev run from classes). */
+private fun installModules(): File? = runCatching {
+    val code = File(AgentHqDaemon::class.java.protectionDomain.codeSource.location.toURI())
+    code.takeIf { it.isFile && it.parentFile?.name == "lib" }?.parentFile?.parentFile?.let { File(it, "modules") }?.takeIf { it.isDirectory }
+}.getOrNull()

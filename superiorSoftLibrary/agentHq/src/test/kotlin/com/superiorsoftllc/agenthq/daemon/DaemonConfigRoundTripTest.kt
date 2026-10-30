@@ -57,7 +57,7 @@ class DaemonConfigRoundTripTest {
         state.deleteRecursively()
     }
 
-    private fun boot(): DaemonFixture = DaemonFixture.launch(stateDir = state).also { fixtures += it }
+    private fun boot(): DaemonFixture = DaemonFixture.launch(stateDir = state, pluginsRoot = pluginsRoot).also { fixtures += it }
 
     private fun set(value: kotlinx.serialization.json.JsonElement?, expectRev: Long?) =
         Envelope(Envelope.CONFIG_SET, json.encodeToString(ConfigSetFrame.serializer(), ConfigSetFrame(node, key, value, expectRev)))

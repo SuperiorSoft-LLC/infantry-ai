@@ -91,7 +91,7 @@ class PolicyOneSwitchRealDaemonUiTest {
             sessionStore = JsonSessionStore(File(state, "sessions.json")),
             mailStore = JsonMailStore(File(state, "mailbox.json")),
             store = SqlAgentHqStore.open(File(state, "agenthq.db").absolutePath),
-            mailBaseUrl = "http://127.0.0.1:1", token = null, ownerToken = owner, demoLock = { false },
+            mailBaseUrl = "http://127.0.0.1:1", token = null, ownerToken = owner,
             storyStore = JsonStoryStore(File(state, "stories.json")),
             roles = RoleService(File(state, "roles")),
             modelCatalogs = com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs.EMPTY,

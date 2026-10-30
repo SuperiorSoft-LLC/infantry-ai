@@ -56,7 +56,7 @@ class RunManagerSecretsTest {
 
     private fun manager(t: TerminalRunner, demo: Boolean = false) = RunManager(
         { registry }, ScriptedRunner(StubScript(stdoutLines = listOf("x"))), { frames += it },
-        terminal = t, demoLock = { demo }, secrets = com.superiorsoftllc.agenthq.keystore.KeystoreHandler.runSecrets({ store[it] }),
+        terminal = t, restricted = { demo }, secrets = com.superiorsoftllc.agenthq.keystore.KeystoreHandler.runSecrets({ store[it] }),
     )
 
     private fun everyFrame() = frames.joinToString("\n") { f ->
@@ -89,7 +89,7 @@ class RunManagerSecretsTest {
         assertTrue(all.contains("using ${SecretScrubber.MASK} and ${SecretScrubber.MASK}"), all)
     }
 
-    @Test fun `an unknown secret, a daemon setting field, or the demo lock refuses the run without a value`() {
+    @Test fun `an unknown secret, a daemon setting field, or a restricted policy refuses the run without a value`() {
         val m = manager(FakeTerminal())
         val unknown = m.start("""{"commandId":"unknown"}""").reply
         assertEquals(Envelope.ERROR, unknown.type)
@@ -100,8 +100,8 @@ class RunManagerSecretsTest {
 
         val locked = manager(FakeTerminal(), demo = true).start("""{"commandId":"sign"}""").reply
         assertEquals(Envelope.ERROR, locked.type)
-        assertTrue(locked.data.contains("demo lock"))
-        // A run with no secret still starts under the demo lock.
+        assertTrue(locked.data.contains("restricted policy"))
+        // A run with no secret still starts under a restricted policy.
         assertEquals(Envelope.RUN, manager(FakeTerminal(), demo = true).start("""{"commandId":"plain"}""").reply.type)
     }
 

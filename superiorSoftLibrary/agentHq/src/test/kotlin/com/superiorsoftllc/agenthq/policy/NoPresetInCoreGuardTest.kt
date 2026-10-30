@@ -7,14 +7,14 @@ import kotlin.test.assertTrue
 
 /**
  * POLICY-1 layering rule: the mechanism is core/SDK, the demo preset's VALUES are the plugin's. Fails when core (daemon
- * `policy/`, `DemoLock`) or the SDK's policy model names the demo preset or one of its values.
+ * `policy/`, the daemon plugin host) or the SDK's policy model names the demo preset or one of its values.
  */
 class NoPresetInCoreGuardTest {
     /** plugins/demo/Demo_Lock/policies/demo.json -> the repo root. */
     private val repo = generateSequence(DemoPresetFixture.file.absoluteFile) { it.parentFile }.drop(5).first()
     private val core = listOf(
         "superiorSoftLibrary/agentHq/src/main/kotlin/com/superiorsoftllc/agenthq/policy",
-        "superiorSoftLibrary/agentHq/src/main/kotlin/com/superiorsoftllc/agenthq/daemon/DemoLock.kt",
+        "superiorSoftLibrary/agentHq/src/main/kotlin/com/superiorsoftllc/agenthq/daemon/plugins",
         "superiorSoftLibrary/agenthqPlugins/src/commonMain/kotlin/com/superiorsoftllc/agenthq/plugin/api/ActionPolicy.kt",
     ).map { File(repo, it) }.flatMap { f -> if (f.isDirectory) f.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList() else listOf(f) }
 

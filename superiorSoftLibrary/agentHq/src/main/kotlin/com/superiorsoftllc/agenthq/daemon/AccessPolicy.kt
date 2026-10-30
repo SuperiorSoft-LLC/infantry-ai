@@ -54,51 +54,48 @@ class AccessPolicy private constructor(
     /** SANDBOX-1: the digest of the daemon's scoped agent token; null = no agent tier. See [AgentFrames]. */
     private val agentDigest: ByteArray? = null,
     /**
-     * Ticket 9bf81983 (demo-build): the digest of the seated lock's PUBLIC visitor token NOW; null = none. POLICY-1: read per
-     * request, so it follows the active policy preset ([withDemoTokens]). See [withDemoToken].
+     * DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md section 4, `admission`): the digests of the GUEST tokens admitted NOW, read
+     * per request (an official or core plugin's admission hook names the tokens; none = none). See [withGuestTokens].
      */
-    private val demoDigest: () -> ByteArray? = { null },
+    private val guestDigests: () -> List<ByteArray> = { emptyList() },
 ) {
     /**
-     * Ticket 9bf81983: also admit the demo lock's public visitor token. Only a locked daemon calls this (DemoLock refuses
-     * every frame and route outside its allow-list for every token), so this token can do nothing the lock does not allow.
-     * Refused: no owner token (a tokenless daemon), a short token, or one equal to the owner or agent token.
+     * DAEMON-PLUGINS-1: also admit the guest tokens [current] names NOW (read per request, so a plugin opens or closes
+     * admission with no restart). A guest can do only what the plugin's own gates allow it. A token that breaks
+     * [guestDigestOf]'s rules is logged once and not admitted (a running daemon cannot refuse to start).
      */
-    fun withDemoToken(token: String): AccessPolicy {
-        val d = demoDigestOf(token)
-        return AccessPolicy(bindHost, tokenDigest, browserHostNames, agentDigest) { d }
-    }
-
-    /**
-     * POLICY-1: admit the visitor token [current] names NOW (null = none), so a Settings switch to or from a seated preset
-     * opens or closes visitor admission without a restart. The same rules as [withDemoToken]; a token that breaks them is
-     * logged and not admitted (a running daemon cannot refuse to start).
-     */
-    fun withDemoTokens(current: () -> String?): AccessPolicy {
-        val cache = java.util.concurrent.atomic.AtomicReference<Pair<String, ByteArray?>?>(null)
+    fun withGuestTokens(current: () -> List<String>): AccessPolicy {
+        val cache = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
+        val refused = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
         return AccessPolicy(bindHost, tokenDigest, browserHostNames, agentDigest) {
-            current()?.let { token ->
-                cache.get()?.takeIf { it.first == token }?.second ?: runCatching { demoDigestOf(token) }
-                    .onFailure { System.err.println("[agentHq] visitor token not admitted: ${it.message}") }
-                    .getOrNull().also { cache.set(token to it) }
+            current().mapNotNull { token ->
+                cache[token] ?: if (token in refused) null else runCatching { guestDigestOf(token) }
+                    .onFailure { refused += token; System.err.println("[agentHq] guest token not admitted: ${it.message}") }
+                    .getOrNull()?.also { cache[token] = it }
             }
         }
     }
 
-    private fun demoDigestOf(token: String): ByteArray {
-        val owner = tokenDigest ?: throw AccessConfigurationException("a demo public token needs an owner token: set $TOKEN_FILE_ENV or $TOKEN_ENV")
+    /**
+     * A guest token's digest. Throws [AccessConfigurationException] for no owner token (a tokenless daemon), a short
+     * token, or one equal to the owner or agent token; the daemon checks the tokens present at start with it.
+     */
+    fun guestDigestOf(token: String): ByteArray {
+        val owner = tokenDigest ?: throw AccessConfigurationException("a guest token needs an owner token: set $TOKEN_FILE_ENV or $TOKEN_ENV")
         if (token.length < MIN_TOKEN_LENGTH || token.any { it.isWhitespace() || it.isISOControl() }) {
-            throw AccessConfigurationException("the demo public token must be at least $MIN_TOKEN_LENGTH characters, no whitespace")
+            throw AccessConfigurationException("a guest token must be at least $MIN_TOKEN_LENGTH characters, no whitespace")
         }
         val d = digest(token)
         if (MessageDigest.isEqual(d, owner) || (agentDigest?.let { MessageDigest.isEqual(d, it) } ?: false)) {
-            throw AccessConfigurationException("the demo public token must not be the owner token")
+            throw AccessConfigurationException("a guest token must not be the owner token")
         }
         return d
     }
 
-    /** Ticket 9bf81983: true when a demo public token is admitted now (the visitor-token route answers only then). */
-    val hasDemoToken: Boolean get() = demoDigest() != null
+    /** True when a guest token is admitted now. */
+    val hasGuestToken: Boolean get() = guestDigests().isNotEmpty()
+
+    private fun guestMatches(d: ByteArray): Boolean = guestDigests().any { MessageDigest.isEqual(d, it) }
 
     /**
      * SANDBOX-1: the tier of a request [check] admitted: [AccessTier.AGENT] when it presented the scoped agent token, else
@@ -135,10 +132,10 @@ class AccessPolicy private constructor(
         authorization: String?,
         webSocketProtocols: String? = null,
         webAsset: Boolean = false,
+        /** DAEMON-PLUGINS-1: an official plugin's declared public route (`daemon.publicRoutes`), checked like a bundle file. */
+        publicRoute: Boolean = false,
     ): Refusal? {
-        if (webAsset) return checkWebAsset(host, origin)
-        // Ticket 9bf81983: the public visitor token, read by the page like a bundle file (it is public by design).
-        if (path == DemoLock.VISITOR_TOKEN_PATH && demoDigest() != null) return checkWebAsset(host, origin)
+        if (webAsset || publicRoute) return checkWebAsset(host, origin)
         if (origin != null && path == BROWSER_PATH) return checkBrowser(host, origin, authorization, webSocketProtocols)
         if (origin != null) {
             return Refusal(
@@ -223,7 +220,7 @@ class AccessPolicy private constructor(
         val expected = tokenDigest ?: return false
         if (presented.isEmpty()) return false
         return MessageDigest.isEqual(digest(presented), expected) || (agentDigest?.let { MessageDigest.isEqual(digest(presented), it) } ?: false) ||
-            (demoDigest()?.let { MessageDigest.isEqual(digest(presented), it) } ?: false)
+            guestMatches(digest(presented))
     }
 
     private fun bearerMatches(authorization: String?): Boolean {
@@ -237,7 +234,7 @@ class AccessPolicy private constructor(
         // too; what it may do is decided by its tier ([tierOf], [AgentFrames]).
         val d = digest(presented)
         return MessageDigest.isEqual(d, expected) || (agentDigest?.let { MessageDigest.isEqual(d, it) } ?: false) ||
-            (demoDigest()?.let { MessageDigest.isEqual(d, it) } ?: false)
+            guestMatches(d)
     }
 
     companion object {
@@ -465,9 +462,17 @@ class AccessPolicy private constructor(
 /** SANDBOX-1: the [AccessTier] the access policy admitted a call with. */
 val ACCESS_TIER = io.ktor.util.AttributeKey<AccessTier>("agenthq.accessTier")
 
-fun Application.installAccessPolicy(policy: AccessPolicy, isWebAsset: (String) -> Boolean = { false }, demoLock: DemoLock = DemoLock(false), currentLock: () -> DemoLock = { demoLock }) {
+fun Application.installAccessPolicy(
+    policy: AccessPolicy,
+    isWebAsset: (String) -> Boolean = { false },
+    /** DAEMON-PLUGINS-1: the plugins' HTTP gates (`httpGate`, fail closed): null = pass, else the 403 text. */
+    httpGate: (method: String, path: String, webAsset: Boolean) -> String? = { _, _, _ -> null },
+    /** DAEMON-PLUGINS-1: true for an official plugin's declared public route (answered without the bearer token). */
+    publicRoute: (method: String, path: String) -> Boolean = { _, _ -> false },
+) {
     intercept(ApplicationCallPipeline.Plugins) {
         val path = call.request.path()
+        val method = call.request.httpMethod.value
         val protocols = call.request.headers.getAll(HttpHeaders.SecWebSocketProtocol)?.joinToString(",")
         val webAsset = call.request.httpMethod == io.ktor.http.HttpMethod.Get && isWebAsset(path)
         val refusal = policy.check(
@@ -477,11 +482,11 @@ fun Application.installAccessPolicy(policy: AccessPolicy, isWebAsset: (String) -
             authorization = call.request.headers[HttpHeaders.Authorization],
             webSocketProtocols = protocols,
             webAsset = webAsset,
+            publicRoute = publicRoute(method, path),
         )
         if (refusal == null) {
-            // DEMO-LOCK (ticket 2f154f5f): default-deny on every route for every token, the owner's included.
-            // POLICY-1: the lock of the policy active NOW (a Settings switch takes effect on the next request).
-            currentLock().httpRefusal(call.request.httpMethod.value, path, webAsset)?.let { reason ->
+            // DAEMON-PLUGINS-1: a plugin's HTTP gate refuses for every token, the owner's included (a seated lockdown).
+            httpGate(method, path, webAsset)?.let { reason ->
                 call.respond(HttpStatusCode.Forbidden, reason)
                 finish()
                 return@intercept

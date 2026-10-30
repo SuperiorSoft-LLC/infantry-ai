@@ -41,20 +41,20 @@ class PolicySwitchDaemonTest {
         reason = "seated test", seats = SeatsSpec(projectName = "Seated test"),
     )
 
+    private val roots = ArrayList<File>()
+
     @AfterTest fun cleanUp() {
         fixtures.forEach { runCatching { it.stop() }; runCatching { it.deleteState() } }
+        roots.forEach { it.deleteRecursively() }
     }
 
     private fun launch(): DaemonFixture = DaemonFixture.launch(
         token = access,
-        policies = { state ->
-            PolicyRuntime(
-                listOf(PolicyProvider { listOf(seated) }),
-                // The deployment's visitor token is configured all along; only the active preset decides its admission.
-                { name -> if (name == DemoLock.PUBLIC_TOKEN_ENV) visitor else null },
-                File(state, PolicyRuntime.SELECTION_FILE), state,
-            )
-        },
+        policies = { state -> PolicyRuntime(listOf(PolicyProvider { listOf(seated) }), { null }, File(state, PolicyRuntime.SELECTION_FILE), state) },
+        // DAEMON-PLUGINS-1: the seats are the Demo_Lock daemon plugin's, loaded from its built jar. The deployment's visitor
+        // token is configured all along; only the active preset decides its admission.
+        pluginsRoot = TestDaemonPlugins.root("demo/Demo_Lock").also { roots += it },
+        pluginEnv = { name -> if (name == PUBLIC_TOKEN_ENV) visitor else null },
     ).also { fixtures += it; it.client.await(Envelope.READY) }
 
     private fun switch(f: DaemonFixture, id: String) {
@@ -89,7 +89,7 @@ class PolicySwitchDaemonTest {
     }.isSuccess
 
     private fun visitorRoute(f: DaemonFixture): HttpResponse<String> = http.send(
-        HttpRequest.newBuilder(URI.create("http://127.0.0.1:${f.port}${DemoLock.VISITOR_TOKEN_PATH}")).GET().build(),
+        HttpRequest.newBuilder(URI.create("http://127.0.0.1:${f.port}$VISITOR_TOKEN_PATH")).GET().build(),
         HttpResponse.BodyHandlers.ofString(),
     )
 
@@ -117,15 +117,21 @@ class PolicySwitchDaemonTest {
         assertTrue(visitorRoute(f).statusCode() != 200)
     }
 
-    @Test fun `the daemon's plugin view takes the lock it is given over the env (gap 1)`() {
+    @Test fun `the daemon's plugin view takes the restriction it is given (gap 1)`() {
         val state = kotlin.io.path.createTempDirectory("policy-plugins").toFile()
         try {
-            val envOn: (String) -> String? = { if (it == DemoLock.ENV) "1" else null }
-            assertTrue(DaemonPlugins.resolve(state, env = { null }, log = {}, locked = true).demoLock, "a switched-on lock reaches the plugins")
-            assertFalse(DaemonPlugins.resolve(state, env = envOn, log = {}, locked = false).demoLock, "the active preset wins over the env")
-            assertTrue(DaemonPlugins.resolve(state, env = envOn, log = {}).demoLock, "no lock given: the env alone, as before")
+            assertTrue(DaemonPlugins.resolve(state, env = { null }, log = {}, locked = true).locked, "a switched-on restriction reaches the plugins")
+            assertFalse(DaemonPlugins.resolve(state, env = { null }, log = {}, locked = false).locked)
+            // DAEMON-PLUGINS-1: core reads no demo env: only the active preset restricts.
+            assertFalse(DaemonPlugins.resolve(state, env = { if (it == "AGENTHQ_DEMO_LOCK") "1" else null }, log = {}).locked)
         } finally {
             state.deleteRecursively()
         }
+    }
+
+    private companion object {
+        /** Demo_Lock's deployment env and route (the plugin's own names; core names neither). */
+        const val PUBLIC_TOKEN_ENV = "AGENTHQ_DEMO_PUBLIC_TOKEN"
+        const val VISITOR_TOKEN_PATH = "/demo/visitor-token"
     }
 }

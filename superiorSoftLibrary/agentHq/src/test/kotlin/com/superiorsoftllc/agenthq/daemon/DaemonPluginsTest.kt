@@ -23,8 +23,8 @@ class DaemonPluginsTest {
         assertEquals(mapOf("Infantry_A" to "loaded", "Acme_Hello" to "loaded", "Acme_Broken" to "refused"), open.modules.associate { it.name to it.state })
         assertTrue(log.any { it.startsWith("[plugins] Acme_Broken (community): refused - invalid module.json") })
 
-        val locked = DaemonPlugins.resolve(File("unused"), env = { mapOf(PluginFolders.ROOT_ENV to root.absolutePath, PluginFolders.DEMO_LOCK_ENV to "on")[it] }, property = { null }, log = {})
-        assertTrue(locked.demoLock)
+        val locked = DaemonPlugins.resolve(File("unused"), env = { if (it == PluginFolders.ROOT_ENV) root.absolutePath else null }, property = { null }, log = {}, locked = true)
+        assertTrue(locked.locked)
         assertEquals("locked", locked.modules.single { it.name == "Acme_Hello" }.state)
         assertEquals("loaded", locked.modules.single { it.name == "Infantry_A" }.state)
     }

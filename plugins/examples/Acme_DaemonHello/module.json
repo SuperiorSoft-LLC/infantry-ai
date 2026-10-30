@@ -1,0 +1,19 @@
+{
+  "name": "Acme_DaemonHello",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Acme (example)",
+  "license": "NOASSERTION",
+  "description": "Reference daemon plugin (DAEMON-PLUGINS-1): one tool (acme_hello), one route (GET /plugins/Acme_DaemonHello/hello) and one hook (ready). Daemon half only; copy it as a community module and grant it in modules.json.",
+  "daemon": {
+    "entry": "com.acme.daemonhello.HelloDaemon",
+    "jar": "daemon/build/libs/Acme_DaemonHello-daemon.jar",
+    "apiAtLeast": "1.0.0",
+    "tools": [
+      { "name": "acme_hello", "action": "acme.hello.read", "kind": "read", "description": "Greets the caller and counts the daemon's sessions." }
+    ],
+    "hooks": ["ready"],
+    "env": ["ACME_HELLO_FAIL"],
+    "limits": { "callTimeoutMs": 2000 }
+  }
+}

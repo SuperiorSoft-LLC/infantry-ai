@@ -322,6 +322,32 @@ object LimitRegistry {
         min = 1, max = 3600, zeroIsUnlimited = false,
     )
 
+    /** DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md section 5): a daemon plugin's defaults; its module.json `daemon.limits` override them. */
+    val PLUGIN_CALL_TIMEOUT_MS = LimitDef(
+        "limits.plugins.callTimeoutMs", 2_000, "ms",
+        "How long one daemon plugin hook, frame or route call may run before the plugin is disabled (a module's daemon.limits.callTimeoutMs overrides it).",
+        min = 1, zeroIsUnlimited = false,
+    )
+    val PLUGIN_TOOL_TIMEOUT_MS = LimitDef(
+        "limits.plugins.toolTimeoutMs", 60_000, "ms",
+        "How long one daemon plugin tool call may run before the plugin is disabled (daemon.limits.toolTimeoutMs overrides it); agenthq mcp serve waits a quarter longer for the answer.",
+        min = 1, zeroIsUnlimited = false,
+    )
+    val PLUGIN_ROUTE_RATE = LimitDef(
+        "limits.plugins.routeRequestsPerMinute", 600, "requests",
+        "HTTP requests a minute one daemon plugin's routes answer before 429 (daemon.limits.routeRequestsPerMinute overrides it).",
+    )
+    val PLUGIN_START_TIMEOUT_MS = LimitDef(
+        "limits.plugins.startTimeoutMs", 30_000, "ms",
+        "How long a daemon plugin's start (and each policy-change callback) may run before the plugin is disabled.",
+        min = 1, zeroIsUnlimited = false,
+    )
+    val PLUGIN_STOP_TIMEOUT_MS = LimitDef(
+        "limits.plugins.stopTimeoutMs", 5_000, "ms",
+        "How long the daemon waits for a daemon plugin's stop when it closes.",
+        min = 1, zeroIsUnlimited = false,
+    )
+
     val ALL: List<LimitDef> = listOf(
         MAX_PER_POD, MAX_SESSIONS, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
@@ -331,6 +357,7 @@ object LimitRegistry {
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
         WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_FORCED, WATCH_TREE_WAIT_MINUTES,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
+        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS,
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,

@@ -63,6 +63,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     // PLUGINS-1: the module manifest and loading rules, shared with the desktop UI.
     implementation(project(":superiorSoftLibrary:agenthqPlugins"))
+    // DAEMON-PLUGINS-1: the API daemon plugins compile against (docs/DAEMON-PLUGINS.md).
+    implementation(project(":superiorSoftLibrary:agentHqDaemonApi"))
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)
@@ -328,6 +330,8 @@ tasks.withType<Test>().configureEach {
     jvmArgumentProviders += CommandLineArgumentProvider { listOf("-javaagent:${agentJar.get().asFile.absolutePath}") }
     maxParallelForks = providers.gradleProperty("agenthq.testForks").map { it.toInt() }.getOrElse(4)
     maxHeapSize = "2g"
+    // DAEMON-PLUGINS-1: the daemon tests load the real daemon halves (TestDaemonPlugins), so their jars are built first.
+    dependsOn(":daemon-plugin-demo-Demo_Lock:jar", ":daemon-plugin-official-Infantry_Board:jar", ":daemon-plugin-examples-Acme_DaemonHello:jar")
 }
 
 tasks.withType<Test>().configureEach {
@@ -375,6 +379,22 @@ tasks.register("perfProfile") {
     dependsOn(":superiorSoftLibrary:agentHqUi:perfProfile")
 }
 
+// DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md): an install ships its daemon plugins in `<install>/modules/official/<Module>/`
+// (module.json, `policies/`, the built daemon jar): the bundled root the daemon defaults to (bundled = trusted). Every
+// official module with a daemon half is in installDist; the docker image adds the demo lock.
+fun daemonModuleDirs(folder: String): List<File> = rootProject.file("plugins/$folder")
+    .listFiles { f -> f.isDirectory && !f.name.startsWith("_") && File(f, "daemon/build.gradle.kts").isFile }.orEmpty().sortedBy { it.name }
+fun CopySpec.daemonModules(folder: String, prefix: String) {
+    for (dir in daemonModuleDirs(folder)) from(dir) {
+        include("module.json", "policies/**", "daemon/build/libs/${dir.name}-daemon.jar")
+        into("$prefix/modules/official/${dir.name}")
+    }
+}
+tasks.named<Sync>("installDist") {
+    daemonModuleDirs("official").forEach { dependsOn(":daemon-plugin-official-${it.name}:jar") }
+    daemonModules("official", ".")
+}
+
 // DOCKER-1: the build context for the headless daemon image: `agenthq/` (installDist) + the Dockerfile. Nothing is pushed.
 //   ./gradlew :superiorSoftLibrary:agentHq:dockerContext
 //   docker build -t infantryai/infantry-ai:dev superiorSoftLibrary/agentHq/build/docker
@@ -394,6 +414,9 @@ tasks.register<Sync>("dockerContext") {
     // POLICY-1: the policy presets the plugins ship as data (the demo preset: plugins/demo/Demo_Lock/policies); the Dockerfile
     // points AGENTHQ_POLICY_DIRS at /opt/agenthq/policies. A preset is only active when selected (AGENTHQ_DEMO_LOCK=1 selects demo).
     from(rootProject.layout.projectDirectory.dir("plugins/demo/Demo_Lock/policies")) { into("agenthq/policies") }
+    // DAEMON-PLUGINS-1: the demo lock's daemon half (bundled, so trusted); inert unless a seated preset is active.
+    daemonModuleDirs("demo").forEach { dependsOn(":daemon-plugin-demo-${it.name}:jar") }
+    daemonModules("demo", "agenthq")
     into(layout.buildDirectory.dir("docker"))
 }
 

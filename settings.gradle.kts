@@ -60,6 +60,19 @@ file("plugins/community").listFiles { f -> f.isDirectory && !f.name.startsWith("
 }
 // PLUGINS-2: the starter template builds and tests like any community module, so a copy of it is known to build. The
 // loader never sees it: it is outside core/ and community/, and a folder starting with "_" is not a module.
+// DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md): the daemon API every daemon half compiles against, and each module's daemon half
+// (`plugins/<folder>/<Module>/daemon`) as `:daemon-plugin-<folder>-<Module>` (flat: Gradle 9 will not configure directory-less parents), apart from the `:plugins:*` UI projects.
+include(":superiorSoftLibrary:agentHqDaemonApi")
+listOf("core", "official", "demo", "community", "examples").forEach { folder ->
+    file("plugins/$folder").listFiles { f -> f.isDirectory && !f.name.startsWith("_") && java.io.File(f, "daemon/build.gradle.kts").isFile }.orEmpty().sortedBy { it.name }.forEach { dir ->
+        include(":daemon-plugin-$folder-${dir.name}")
+        project(":daemon-plugin-$folder-${dir.name}").projectDir = java.io.File(dir, "daemon")
+    }
+}
+if (file("plugins/_template/daemon/build.gradle.kts").isFile) {
+    include(":daemon-plugin-_template")
+    project(":daemon-plugin-_template").projectDir = file("plugins/_template/daemon")
+}
 if (file("plugins/_template/build.gradle.kts").isFile) {
     include(":plugins:_template")
     project(":plugins:_template").projectDir = file("plugins/_template")
