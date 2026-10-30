@@ -1790,15 +1790,28 @@ class SessionManager(
     // --- internals ------------------------------------------------------------------------------
 
     private val cliRunnerForHarnesses: ProcessRunner = cliRunner
-    private val adopted = java.util.concurrent.ConcurrentHashMap<String, Configured>()
+    private val adopted = java.util.concurrent.ConcurrentHashMap<String, Pair<com.superiorsoftllc.agenthq.harness.Harness, Configured>>()
 
-    /** A configured provider, else a registry harness adapted into one (WIRE-4). Both stay valid. */
+    /** HARNESS-PLUGIN-3 H4: a harness module's `harness.aliases` (alias -> id), consulted when no provider or harness has the id itself. */
+    @Volatile var harnessAliases: (String) -> String? = { null }
+
+    /**
+     * A configured provider, else a registry harness adapted into one (WIRE-4). Both stay valid. HARNESS-PLUGIN-3 H4: the
+     * adapted one is only reused while the registry still holds THAT harness, so an unloaded (or reloaded) module's harness
+     * is gone (or new) for the next spawn.
+     */
     private fun lookup(id: String): Configured? {
         configured[id]?.let { return it }
-        adopted[id]?.let { return it }
-        val harness = harnesses?.resolve(id) as? com.superiorsoftllc.agenthq.harness.CliHarness ?: return null
+        val harness = harnesses?.resolve(id) as? com.superiorsoftllc.agenthq.harness.CliHarness
+        if (harness == null) {
+            adopted.remove(id)
+            return harnessAliases(id)?.takeIf { it != id && (it in configured || harnesses?.resolve(it) != null) }?.let { lookup(it) }
+        }
+        adopted[id]?.let { (h, c) -> if (h === harness) return c }
         val p = com.superiorsoftllc.agenthq.provider.HarnessProvider(harness)
-        return adopted.computeIfAbsent(id) { Configured(p, p.transport() ?: cliRunnerForHarnesses) }
+        val c = Configured(p, p.transport() ?: cliRunnerForHarnesses)
+        adopted[id] = harness to c
+        return c
     }
 
     /** The configured provider [id] names; null or blank = the default. Unknown = refused, never substituted. */

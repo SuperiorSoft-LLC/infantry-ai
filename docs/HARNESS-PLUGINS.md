@@ -112,6 +112,30 @@ May call (`HarnessHost`, handed to `HarnessPlugin.register` through the registra
 Contract version: the existing `HARNESS_CONTRACT_VERSION` exact-match handshake stays; moving the types is a major bump
 (see 3.7).
 
+**As built in H3 (HARNESS-PLUGIN-3): bridge, not move.** The plan above moves the daemon's harness types into the API
+module. H3 instead adds a NEW, self-contained contract in `agentHqHarnessApi`
+(`com.superiorsoftllc.agenthq.harness.api`). It depends only on the Kotlin stdlib. `HarnessApiImportGuardTest` checks that
+it imports nothing from the daemon. The daemon's 1.x types stay where they are, and the built-in pi/claude/opencode keep the
+1.x path unchanged.
+
+* Surface (2.0.0): `HarnessPlugin` (`pluginId`, `contractVersion` with no default, `register`, `unload`),
+  `HarnessRegistrar` (`host`, `register`), and `Harness` (`id`, `capabilities`, `process(request)` -> `HarnessProcess`,
+  `newTranslator()`). Also `HarnessRequest`, `ToolApproval`, `HarnessCapability`, `HarnessEvent` and `HarnessTranslator`.
+  `HarnessHost` provides `moduleId`, `apiVersion`, `stateDir`, `log`, `setting(key)`, `resolveCli(tool)`,
+  `start(process, listener)`, `mcpLaunch(env)`, `watchLauncher(env)` and `ask(sessionId, question)`.
+* A 2.x harness is **declarative**. It returns the argv/env and a translator. The daemon launches, sandboxes, gates and
+  kills the process, exactly as it does for a built-in (`ApiCliHarness` is a `CliHarness`).
+* Bridge: `ApiHarnessPluginBridge` wraps a 2.x plugin as a 1.x `HarnessPlugin`, so the ONE `HarnessRegistry` holds both.
+  The registry checks a bridge with `HarnessApiVersion.refusal` (semver: same major, minor not newer than the daemon's).
+  Every other plugin keeps the exact-match 1.x check.
+* Class loader: `HarnessApiClassLoader` exposes only `kotlin.*`, `kotlinx.serialization.*`, `kotlinx.coroutines.*` and
+  `...harness.api.*`, and hides the daemon's `META-INF/services`. The runner and protocol packages are NOT exposed (the
+  plan above listed them): process launching goes through `HarnessHost.start`, or through the daemon via `process()`.
+* Trade-off: the built-ins do not get the new contract yet, so for now two contracts coexist. In return, H3 has no
+  migration risk, and the 2.x surface was designed small instead of inheriting every 1.x member (`sessionAdapter`,
+  `commands`, `conversationCarry`, etc.). H6-H8 either port each built-in to 2.x or grow 2.x by minors (members with
+  defaults only). No wire change was made: the `providers`, `new` and `models` frames are untouched.
+
 ### 3.2 The folder source
 
 A harness ships as a **module** like any other plugin (`plugins/<tier>/<Module>/module.json`), with a `harness` block:
@@ -184,8 +208,8 @@ installed harnesses.
 |---|---|---|
 | **H1** | `JarHarnessPluginSource` (+ `folder(dir)`): jars outside the class path, one loader each, only the jar's own services entries, failures attributed per jar. Test plugin packed at test time. **Done in this ticket, not wired.** | S |
 | H2 | Zero-harness core: drop `ProviderFactory.DEFAULT`, start with none, "not installed" wording, routing defaults skip absent harnesses, stub hidden, no unconditional `opencode/` write, `harnesses` empty state. Fixes B1-B7. | M |
-| H3 | `agentHqHarnessApi` module + `HarnessHost` + `HarnessApiClassLoader`; move the API types (contract 2.0.0). | M |
-| H4 | module.json `harness` block, ModuleResolver -> `JarHarnessPluginSource`, trust/grants; build registry after module resolution (today `loadHarnesses()` runs at daemon build, before `DaemonPluginHost.load`); example `plugins/examples/Acme_EchoHarness`. | M |
+| H3 | `agentHqHarnessApi` module + `HarnessHost` + `HarnessApiClassLoader`; ~~move the API types~~ a new 2.0.0 contract bridged into the 1.x registry (see 3.1 "As built"). **Done (HARNESS-PLUGIN-3).** | M |
+| H4 | module.json `harness` block, ModuleResolver -> `JarHarnessPluginSource`, trust/grants; build registry after module resolution (today `loadHarnesses()` runs at daemon build, before `DaemonPluginHost.load`); example `plugins/examples/Acme_EchoHarness`. **Done (HARNESS-PLUGIN-3)**: `HarnessModules` loads harness modules after module resolution and re-syncs on every re-resolution. Desktop app staging/signing of an official harness half is deferred to H6, the first official harness module. | M |
 | H5 | Contributions replacing core branches: watch, sandbox, stats, usage, denial/usage events, CLI + installer from manifest, UI icon/installable from manifest. | L (split per contribution) |
 | H6 | pi -> `plugins/official/Infantry_Pi` (incl. `PiLaunchExtras`, todo extension, tool-bridge experiment). | M |
 | H7 | claude -> `Infantry_Claude`, one layer (fold `ClaudeCodeProvider` into the plugin). | L |
@@ -204,3 +228,54 @@ Trade-off recorded: a separate harness plugin kind (this design) versus making h
 (`DaemonApi`). Daemon halves see only `DaemonApi`, which has no process, stream or session-adapter types; growing it to carry
 them would couple every daemon plugin to the harness contract. A distinct `harness` block on the same module, the same
 resolver and the same trust rules gives one install story with two narrow APIs.
+
+## 4. Security review (HARNESS-PLUGIN-3, H3 + H4)
+
+### 4.1 What a harness plugin can do
+
+* **Its code runs inside the daemon JVM**, with the daemon's OS rights. `HarnessApiClassLoader` is an API boundary: it
+  stops a jar from linking against daemon classes by name. It is **not a sandbox**: reflection, `java.io` and
+  `java.lang.Process` are all reachable. The security boundary is the **trust gate in front of loading**. Code that is not
+  trusted never runs, because every rule is checked before the jar is opened.
+* **Its agent process is launched by the daemon, not by the plugin.** `Harness.process()` only returns argv/env. The
+  daemon spawns that process through the same `CliHarness` path as a built-in. The session's policy, sandbox and spawn
+  gates (`manager.spawnGate` -> daemon-half `spawnGate` hooks, including **Demo_Lock** seats) and tool approval therefore
+  apply unchanged. These gates are role/project level and run before any harness is asked for a command, so a harness
+  plugin cannot opt out of them. `HarnessHost.start` (direct launch) is refused unless the module declares `harness.cli`,
+  and for community modules also holds that grant.
+* **Host services are scoped per module** (`ModuleHarnessHost`). It reads settings it declared (and, for community
+  modules, was granted `harness.setting:<key>` for). It resolves only its own declared CLI. `mcpLaunch`, `watchLauncher`
+  and `ask` work only when declared in `harness.hooks` (and, for community modules, granted `harness.hook.<kind>`). Its
+  `stateDir` is `plugin-data/<Module>/`. Its log lines are prefixed `[harness <Module>]`.
+* Trust tiers are the same as for daemon halves: bundled/devTrust load; official needs `OfficialTrust` (signed); community
+  needs enabled + `harness.code` + one grant per declared hook, setting and CLI. A community module may not take an id or
+  alias that is already installed, and trusted tiers load first. Default deny; a failing gate refuses that module only.
+* **Unload**: disabling or removing the module (on the next re-resolution, i.e. a policy/modules change, or on a restart)
+  removes its ids from the registry, calls `unload()` and closes its class loader. The next spawn of that id gets
+  "harness '<id>' is not installed".
+
+### 4.2 Threats and the tests that pin them
+
+| threat | mitigation | test |
+|---|---|---|
+| community harness loaded without consent | `harness.code` grant required, checked before the jar is opened | `HarnessModulesTest` "a community harness without the harness code grant is refused and never loaded"; `EchoHarnessModuleDaemonTest` "...without the harness code grant is never loaded" (whole daemon) |
+| community harness uses a hook/setting/CLI it was not granted | one grant per declaration; host re-checks each call | `HarnessModulesTest` "...needs a grant for each hook it declares, and its cli"; `ModuleHarnessHostTest` (all 3) |
+| community harness shadows an installed id (e.g. registers `claude`) | id/alias collision refused; trusted tiers load first | `HarnessModulesTest` "a community harness may not shadow an installed id" |
+| tampered official jar | `OfficialTrust` signature check unless bundled/devTrust | `HarnessModulesTest` "an official jar that is neither bundled nor signed is refused" |
+| plugin built for an unknown/newer API | semver refusal with a clear message, before the jar is opened; manifest and code must agree | `HarnessModulesTest` "an unknown contract is refused with a clear message..."; `ApiHarnessPluginTest` "the API version is semver..." |
+| manifest lies about what the code registers | registered ids must be `harness.ids`; `pluginId` must be the module name | `HarnessModulesTest` "a plugin registering ids the manifest does not declare..." |
+| throwing plugin takes down the daemon or a session | every plugin call is guarded and attributed to the plugin; a translator throw becomes an `Error` event for that run | `ApiHarnessPluginTest` "a throwing plugin is isolated and attributed" |
+| plugin links against daemon internals | API module imports nothing from the daemon; the loader exposes only runtimes + API | `HarnessApiImportGuardTest` (all 3); `ApiHarnessPluginTest` "the plugin class loader sees the harness API and nothing else" |
+| disabled module keeps running | sync unloads it and closes its loader; a later spawn is "not installed" | `HarnessModulesTest` "disabling the module unloads its harness..."; `EchoHarnessModuleDaemonTest` (module removed) |
+| missing / misplaced jar | refused (jar must be inside the module folder), never fatal | `HarnessModulesTest` "a missing jar is refused, never fatal" |
+
+### 4.3 Residual risks (accepted, for later steps)
+
+* Trusted (bundled/official/granted community) harness code is fully trusted in-process. The class loader does not limit
+  what it can do, the same as daemon halves.
+* There is no timeout or CPU guard on synchronous plugin calls (`process`, `translate`). A hanging plugin blocks the
+  thread that called it (not audited: whether any caller is a shared daemon thread).
+* A session already running when its module is unloaded keeps its adapter. Classes it has not loaded yet may then fail;
+  that failure surfaces as an attributed `Error` for that run.
+* A module enable/disable takes effect on the next module re-resolution (policy or modules change) or on a restart.
+  `/plugins` does not yet show harness status (`HarnessModules.status` has it); that is UI work for H5.

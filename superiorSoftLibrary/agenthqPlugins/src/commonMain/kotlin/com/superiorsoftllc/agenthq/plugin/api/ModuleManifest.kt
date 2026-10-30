@@ -101,6 +101,11 @@ data class ModuleManifest(
     val fieldTypes: List<String> = emptyList(),
     /** NS3 (docs/NORTH-STAR-DESIGN.md 1a, 4c): the daemon capabilities the module needs and the optional ones it wants. */
     val daemon: DaemonCapabilities? = null,
+    /**
+     * HARNESS-PLUGIN-3 H4 (docs/HARNESS-PLUGINS.md section 3.2): the module ships a harness (a harness API 2.x jar). Read by
+     * the daemon only; trust and grants as for a daemon half. Null = no harness.
+     */
+    val harness: HarnessDeclaration? = null,
     /** POLICY-1 (docs/POLICY.md section 1): the named actions the module's controls perform; a policy may turn each off. */
     val actions: List<ActionDeclaration> = emptyList(),
     /**
@@ -130,6 +135,42 @@ object FillDeclarationSerializer : JsonTransformingSerializer<FillDeclaration>(F
     override fun transformDeserialize(element: JsonElement): JsonElement =
         if (element is JsonPrimitive && element.isString) JsonObject(mapOf("node" to element)) else element
 }
+
+/**
+ * HARNESS-PLUGIN-3 H4: module.json `harness`. The manifest is a truthful index the UI can show without loading code: the
+ * plugin must register exactly [ids], and its `pluginId` must be the module name.
+ */
+@Serializable
+data class HarnessDeclaration(
+    /** The harness jar, a path inside the module folder (e.g. `harness/build/libs/Acme_EchoHarness-harness.jar`). */
+    val jar: String? = null,
+    /** The harness API version the jar was built against (`2.0.0`); must match the plugin's own `contractVersion`. */
+    val contract: String? = null,
+    /** The harness ids the plugin registers (stored ids: sessions, roles, tickets, routing). */
+    val ids: List<String> = emptyList(),
+    /** Alternative names for an id (`{"pi-agent": "pi"}`); an alias never shadows a registered id. */
+    val aliases: Map<String, String> = emptyMap(),
+    /** The harness's own CLI tool, when it has one. */
+    val cli: HarnessCliDeclaration? = null,
+    /** An icon inside the module folder (svg/png), for pickers. */
+    val icon: String? = null,
+    /** Setting keys the harness reads through its host. */
+    val settings: List<String> = emptyList(),
+    /** Host hooks the harness uses: watch, mcp, ask (calls), sandbox, stats, usage (contributions, later). */
+    val hooks: List<String> = emptyList(),
+)
+
+/** HARNESS-PLUGIN-3 H4: `harness.cli`, the CLI the harness drives; [install] is how the harness installer gets it. */
+@Serializable
+data class HarnessCliDeclaration(
+    val id: String,
+    val command: String? = null,
+    val install: HarnessCliInstall? = null,
+)
+
+/** `harness.cli.install`: an npm package and the bin script inside it. */
+@Serializable
+data class HarnessCliInstall(val npm: String? = null, val bin: String? = null)
 
 /** NS3 (1a): `daemon.needs` (refused = the module does not work) and `daemon.wants` (refused = it degrades). */
 @Serializable

@@ -99,6 +99,8 @@ class DaemonCoreGuardTest {
         val LEAF_MODULES = mapOf(
             "agentHqProtocol" to setOf("protocol", "session", "harness"),
             "agentHqRunner" to setOf("runner"),
+            // HARNESS-PLUGIN-3 H3: the harness plugin API (package harness.api); HarnessApiImportGuardTest is stricter still.
+            "agentHqHarnessApi" to setOf("harness"),
         )
 
         /** What a leaf module may import from the agenthq tree: packages that live in a leaf module (and the shared types of session/harness it carries). */

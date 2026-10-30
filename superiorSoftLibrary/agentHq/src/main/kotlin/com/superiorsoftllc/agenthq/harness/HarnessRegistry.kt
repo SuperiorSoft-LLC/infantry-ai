@@ -103,7 +103,10 @@ class HarnessRegistry(
             return PluginOutcome.Failed(fail(label, PluginFailurePhase.REGISTER, t))
         }
         if (pluginId.isBlank()) return refuse(label, RefusalReason.INVALID_ID, "plugin '$label' declares a blank plugin id")
-        if (declared !in supportedVersions) {
+        // HARNESS-PLUGIN-3 H3: an API 2.x plugin (through its bridge) is checked by the semver rule, anything else exact-match.
+        if (plugin is ApiHarnessPluginBridge) {
+            HarnessApiVersion.refusal(declared)?.let { return refuse(pluginId, RefusalReason.VERSION_MISMATCH, "plugin '$pluginId' $it") }
+        } else if (declared !in supportedVersions) {
             return refuse(
                 pluginId, RefusalReason.VERSION_MISMATCH,
                 "plugin '$pluginId' implements harness contract '$declared'; this daemon implements " +

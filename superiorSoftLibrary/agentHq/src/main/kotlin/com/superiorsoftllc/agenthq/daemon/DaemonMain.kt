@@ -1679,6 +1679,10 @@ class AgentHqDaemon(
                 val frame = Envelope(Envelope.CONFIG_CHANGED, json.encodeToString(com.superiorsoftllc.agenthq.plugin.api.ConfigChangedFrame.serializer(), changed))
                 for (client in clients) client.trySend(frame)
             }
+            // HARNESS-PLUGIN-3 H4: the harness modules, set once the first resolution and the daemon halves are loaded (below).
+            val harnessModulesRef = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.agenthq.daemon.plugins.HarnessModules?>(null)
+            val harnessModulesRoot = java.util.concurrent.atomic.AtomicReference<java.io.File?>(null)
+            fun harnessModulesConfig() = com.superiorsoftllc.agenthq.plugin.host.PluginFolders.config(harnessModulesRoot.get()!!)
             // POLICY-1: resolved under the ACTIVE preset's restriction, and again on every switch (GET /plugins reads the latest).
             val firstResolution = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.agenthq.plugin.host.Resolution?>(null)
             fun resolvePlugins() = DaemonPlugins.resolve(
@@ -1686,7 +1690,11 @@ class AgentHqDaemon(
                 env = { name -> if (pluginsRoot != null && name == com.superiorsoftllc.agenthq.plugin.host.PluginFolders.ROOT_ENV) pluginsRoot.absolutePath else if (pluginsRoot != null && name == com.superiorsoftllc.agenthq.plugin.host.PluginFolders.BUNDLED_ENV) null else System.getenv(name) },
                 property = { name -> if (pluginsRoot != null && name == com.superiorsoftllc.agenthq.plugin.host.PluginFolders.BUNDLED_PROPERTY) null else System.getProperty(name) },
                 locked = locked(),
-                onResolved = { r -> firstResolution.compareAndSet(null, r); daemonConfig.load(r).forEach { line -> System.err.println(line) } },
+                onResolved = { r ->
+                    firstResolution.compareAndSet(null, r); daemonConfig.load(r).forEach { line -> System.err.println(line) }
+                    // HARNESS-PLUGIN-3 H4: a re-resolution (a policy switch) loads / unloads harness modules to match.
+                    harnessModulesRef.get()?.let { hm -> runCatching { hm.sync(r, harnessModulesConfig()) }.onFailure { System.err.println("[harness] module sync failed: ${it.message}") } }
+                },
             )
             val pluginsNow = java.util.concurrent.atomic.AtomicReference(resolvePlugins())
             // DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md): the daemon half of every module the rules let through, loaded ONCE,
@@ -1695,14 +1703,15 @@ class AgentHqDaemon(
             firstResolution.get()?.let { resolution ->
                 val root = java.io.File(pluginsNow.get().root)
                 val bundled = if (pluginsRoot != null) null else com.superiorsoftllc.agenthq.plugin.host.PluginFolders.bundledRoot()
+                val trustNow = pluginTrust ?: com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.Trust(
+                    com.superiorsoftllc.agenthq.plugin.host.OfficialTrust.infantryKeys(root, bundled),
+                    com.superiorsoftllc.agenthq.plugin.host.PluginFolders.devTrust(),
+                    bundled,
+                )
                 val host = com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.load(
                     resolution,
                     com.superiorsoftllc.agenthq.plugin.host.PluginFolders.config(root),
-                    pluginTrust ?: com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.Trust(
-                        com.superiorsoftllc.agenthq.plugin.host.OfficialTrust.infantryKeys(root, bundled),
-                        com.superiorsoftllc.agenthq.plugin.host.PluginFolders.devTrust(),
-                        bundled,
-                    ),
+                    trustNow,
                     com.superiorsoftllc.agenthq.daemon.plugins.CoreDaemonServices(
                         manager, agents, projectStore, daemonConfig, keystore, policies,
                         getenv = pluginEnv, firstTurn = pluginFirstTurn, limits = settings::limit,
@@ -1720,6 +1729,29 @@ class AgentHqDaemon(
                     stateDir(),
                 )
                 pluginHost.set(host)
+                // HARNESS-PLUGIN-3 H4 (docs/HARNESS-PLUGINS.md 3.2): each loaded module's `harness` block, into the ONE registry,
+                // AFTER module resolution and with the daemon halves' trust. The built-ins (class path, 1.x) are already in it.
+                val harnessModules = com.superiorsoftllc.agenthq.daemon.plugins.HarnessModules(
+                    harnesses, trustNow,
+                    com.superiorsoftllc.agenthq.harness.HarnessHostServices(
+                        setting = { module, key -> daemonConfig.value(module, key) },
+                        resolveCli = { cliId, command -> executableResolver.resolve(com.superiorsoftllc.agenthq.executables.CliTools.forCommand(cliId, cliId, command)).path },
+                        mcpLaunch = { env -> AgentHqMcp.launch(env).let { com.superiorsoftllc.agenthq.harness.api.HarnessProcess(it.argv, env = it.env) } },
+                        watchLauncher = { env -> if (WatchHooks.on(env)) WatchHooks.launcher(agentHqBin) ?: "agenthq" else null },
+                        ask = { sessionId, q ->
+                            val answer = pendingPrompts.askQuestion(sessionId, com.superiorsoftllc.agenthq.prompts.QuestionSpec(
+                                q.question, q.options.map { com.superiorsoftllc.agenthq.protocol.PromptOption(it) }, timeoutMillis = q.timeoutMillis, recommended = q.recommended,
+                            ))
+                            com.superiorsoftllc.agenthq.harness.api.HarnessAnswer(answer.answers, answer.otherText, answer.answered)
+                        },
+                    ),
+                    stateDir(),
+                    reserved = { manager.providers.map { it.id }.toSet() },
+                )
+                harnessModulesRoot.set(root)
+                harnessModules.sync(resolution, com.superiorsoftllc.agenthq.plugin.host.PluginFolders.config(root))
+                manager.harnessAliases = harnessModules::alias
+                harnessModulesRef.set(harnessModules)
             }
             val plugins = pluginHost.get()
             // ORCH-1: `AGENTHQ_ORCHESTRATOR_PROVIDER` (default local) picks the binding callers' link answers from; a plugin offers
@@ -1976,7 +2008,7 @@ class AgentHqDaemon(
                 ownerQuestions = ownerQuestions,
                 handover = handover,
                 processWatch = processWatch,
-                background = listOf(AutoCloseable { usageRefresher.stop() }, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate, plugins),
+                background = listOf(AutoCloseable { usageRefresher.stop() }, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate, plugins, AutoCloseable { harnessModulesRef.get()?.close() }),
                 processWatchScheduler = processWatchScheduler,
                 healthSettings = healthSettings,
             )

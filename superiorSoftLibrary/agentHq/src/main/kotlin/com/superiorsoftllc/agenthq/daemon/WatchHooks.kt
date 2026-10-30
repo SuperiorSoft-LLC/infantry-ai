@@ -45,7 +45,7 @@ object WatchHooks {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    private fun on(env: Map<String, String>) = env["AGENTHQ_WATCH"] == "on" && !env[AccessPolicy.MAIL_BASE_ENV].isNullOrBlank()
+    internal fun on(env: Map<String, String>) = env["AGENTHQ_WATCH"] == "on" && !env[AccessPolicy.MAIL_BASE_ENV].isNullOrBlank()
 
     /**
      * The `--settings` JSON for a claude session whose env is [env], or null when its watch is off. The header values are
