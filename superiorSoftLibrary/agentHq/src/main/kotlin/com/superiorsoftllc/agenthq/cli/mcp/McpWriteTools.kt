@@ -435,6 +435,17 @@ internal class McpWriteTools(
      */
     suspend fun removeSession(stream: FrameStream, arguments: JsonObject): ToolResult {
         val snapshot = decodeSessions(stream.await(Envelope.SESSIONS))
+        val requested = arguments.string("sessionId")
+        // SESSION-GHOST-1: an id the daemon does not list is a clean no-op, not an error (a UI ghost row may still show it).
+        if (requested != null && snapshot.none { it.id.startsWith(requested) }) {
+            fenced(stream, Envelope(Envelope.SESSION_DELETE, requested)) // makes the daemon re-push its list to every client
+            return ok(buildJsonObject {
+                put("sessionId", requested)
+                put("ok", false)
+                put("removed", false)
+                put("reason", "not on this daemon")
+            })
+        }
         val session = resolveSession(snapshot, arguments) { return it }
         val force = (arguments["force"] as? JsonPrimitive)?.booleanOrNull == true
         if (session.live) {

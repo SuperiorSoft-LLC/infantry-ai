@@ -1847,7 +1847,11 @@ class Controller(
             val killed = kill(sessionId, force = true)
             if (killed is CommandResult.Refused) return killed
         }
-        return deleteSession(sessionId)
+        val sent = deleteSession(sessionId)
+        // SESSION-GHOST-1: Remove works for any row. A row with no live run goes now; if the daemon does hold it, its
+        // `sessions` push puts it back (the delete was refused), and one it does not hold stays gone.
+        if (sent is CommandResult.Sent && !running) _state.update { it.copy(agents = it.agents - sessionId).let { n -> if (n.selectedId == sessionId) n.copy(selectedId = null) else n } }
+        return sent
     }
 
     suspend fun submitPod(goal: String, nodes: List<NodeSpec>, maxConcurrency: Int = 1): CommandResult =
