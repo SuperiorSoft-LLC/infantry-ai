@@ -98,6 +98,7 @@ class DaemonPluginHost private constructor(
     private val frameHandlers = ConcurrentHashMap<String, FrameEntry>()
     private val routeEntries = ConcurrentHashMap<String, RouteEntry>()
     private val frameGates = CopyOnWriteArrayList<Registered<FrameGateHook>>()
+    private val orchestratorBindings = CopyOnWriteArrayList<Pair<String, com.superiorsoftllc.agenthq.daemon.api.orchestrator.OrchestratorBinding>>()
     private val httpGates = CopyOnWriteArrayList<Registered<HttpGateHook>>()
     private val admissions = CopyOnWriteArrayList<Registered<AdmissionHook>>()
     private val mailGates = CopyOnWriteArrayList<Registered<MailGateHook>>()
@@ -148,6 +149,9 @@ class DaemonPluginHost private constructor(
     }
 
     /** The guest bearer tokens admitted now (official/core admission hooks only); fail open (none). */
+    /** ORCH-1: the orchestrator bindings plugins offered, for the daemon to register on its hub. */
+    fun orchestratorBindings(): List<Pair<String, com.superiorsoftllc.agenthq.daemon.api.orchestrator.OrchestratorBinding>> = orchestratorBindings.toList()
+
     fun guestTokens(): List<String> = admissions.flatMap { a ->
         if (a.owner.guard.disabled) emptyList() else a.owner.call("admission") { a.value.guestTokens() }.getOrDefault(emptyList())
     }
@@ -478,6 +482,7 @@ class DaemonPluginHost private constructor(
             override fun ready(hook: ReadyHook) { declare("ready"); readyHooks += Registered(p, hook) }
             override fun turns(hook: TurnHook) { declare("turns"); turnHooks += Registered(p, hook) }
             override fun sessions(hook: SessionHook) { declare("sessions"); sessionHooks += Registered(p, hook) }
+            override fun orchestratorBinding(providerId: String, binding: com.superiorsoftllc.agenthq.daemon.api.orchestrator.OrchestratorBinding) { declare("orchestratorBinding"); orchestratorBindings += providerId to binding }
             override fun policyProvider(hook: PresetProviderHook) { declare("policyProvider"); presetHooks += Registered(p, hook) }
         }
 
@@ -492,7 +497,7 @@ class DaemonPluginHost private constructor(
         const val PLUGIN_TOOL_CALL = "plugin_tool_call"
         const val PLUGIN_TOOL_RESULT = "plugin_tool_result"
         const val PLUGIN_PREFIX = "/plugins/"
-        val HOOK_KINDS = setOf("frameGate", "httpGate", "admission", "mailGate", "spawnGate", "ready", "turns", "sessions", "policyProvider", "seats")
+        val HOOK_KINDS = setOf("frameGate", "httpGate", "admission", "mailGate", "spawnGate", "ready", "turns", "sessions", "policyProvider", "orchestratorBinding", "seats")
         private val METHODS = setOf("GET", "POST", "PUT", "DELETE", "PATCH")
         private val TOOL_NAME = Regex("^[a-z][a-z0-9_]{2,63}$")
         private val READY_KEY = Regex("^[a-zA-Z][a-zA-Z0-9_]{0,31}$")

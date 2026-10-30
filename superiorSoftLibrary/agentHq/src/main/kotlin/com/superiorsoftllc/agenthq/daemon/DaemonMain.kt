@@ -92,7 +92,8 @@ import com.superiorsoftllc.agenthq.mailbox.MessageState
 import com.superiorsoftllc.agenthq.mailbox.ThreadSummary
 import com.superiorsoftllc.agenthq.mailbox.WaitingOn
 import com.superiorsoftllc.agenthq.orchestration.Orchestrator
-import com.superiorsoftllc.agenthq.orchestration.refusalOrNull
+import com.superiorsoftllc.agenthq.daemon.api.orchestrator.refusalOrNull
+import com.superiorsoftllc.agenthq.daemon.api.orchestrator.valueOr
 import com.superiorsoftllc.agenthq.orchestration.PodFirstTurn
 import com.superiorsoftllc.agenthq.orchestration.PodStatus
 import com.superiorsoftllc.agenthq.orchestration.PodSubmitRequest
@@ -628,6 +629,8 @@ class AgentHqDaemon(
             pluginTrust: com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.Trust? = null,
             /** DAEMON-PLUGINS-1: the environment the plugins read (`DaemonApi.env`, only declared names); a test passes its own. */
             pluginEnv: (String) -> String? = { com.superiorsoftllc.agenthq.session.InfantryEnv.get(it) },
+            /** ORCH-1: orchestrator bindings offered besides the plugins' (selected by `AGENTHQ_ORCHESTRATOR_PROVIDER` through [pluginEnv]); a test passes its fake remote. */
+            orchestratorBindings: List<Pair<String, com.superiorsoftllc.agenthq.daemon.api.orchestrator.OrchestratorBinding>> = emptyList(),
             /**
              * Contract 1.3.0: the providers a spawn may name besides [provider], from `AGENTHQ_PROVIDERS`.
              * Empty (the default when the variable is unset) = this daemon serves [provider] only.
@@ -1027,7 +1030,47 @@ class AgentHqDaemon(
                 budget.restore(providerId, runs.size, runs.sumOf { r -> r.usage?.let { it.input + it.output + it.reasoning } ?: 0L })
             }
             val launchGate = LaunchGate(providerStates, budget, attention)
-            manager.launchGate = { providerId, origin, ticketId -> launchGate.check(providerId, origin, ticketId = ticketId) }
+            // ORCH-1: the runner reaches the orchestration side only through this hub's link (docs/DAEMON-CORE.md 6.5). The local
+            // binding answers from the functions below; the board and the ticket files exist later, so they are filled in then.
+            val orchBoard = java.util.concurrent.atomic.AtomicReference<TicketBoard?>(null)
+            val orchTicketFiles = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.agenthq.ticketfiles.TicketFiles?>(null)
+            val orchestratorHub = com.superiorsoftllc.agenthq.daemon.api.orchestrator.OrchestratorHub(
+                local = com.superiorsoftllc.agenthq.daemon.api.orchestrator.LocalOrchestratorLink(
+                    runner = object : com.superiorsoftllc.agenthq.daemon.api.orchestrator.RunnerLink { override fun ticketIdOf(sessionId: String): String? = manager.get(sessionId)?.ticketId },
+                    services = com.superiorsoftllc.agenthq.daemon.api.orchestrator.LocalOrchestratorServices(
+                        reviewReport = { ticketId, _, body ->
+                            ticketId?.let { tid ->
+                                val row = store.tickets.get(tid)
+                                val line = com.superiorsoftllc.agenthq.ticketfiles.FilesReadCheck.extract(body)
+                                val refusal = com.superiorsoftllc.agenthq.ticketfiles.FilesReadCheck.refusal(body, row?.status == com.superiorsoftllc.agenthq.protocol.TicketStatus.DONE)
+                                if (refusal == null && line != null) runCatching { orchTicketFiles.get()?.saveFilesRead(tid, line) }
+                                refusal
+                            }
+                        },
+                        ticketOf = { ticketId -> runCatching { orchBoard.get()?.get(ticketId) }.getOrNull()?.let { com.superiorsoftllc.agenthq.daemon.api.orchestrator.TicketRef(it.sessionId, it.projectId) } },
+                        starterOf = { workerSessionId -> orchBoard.get()?.starterOf(workerSessionId) },
+                        launchDecision = { providerId, unattended, ticketId ->
+                            when (val d = launchGate.check(providerId, if (unattended) LaunchOrigin.UNATTENDED else LaunchOrigin.HUMAN, ticketId = ticketId)) {
+                                GateDecision.Allow -> com.superiorsoftllc.agenthq.daemon.api.orchestrator.LaunchVerdict.Allow
+                                is GateDecision.Warn -> com.superiorsoftllc.agenthq.daemon.api.orchestrator.LaunchVerdict(com.superiorsoftllc.agenthq.daemon.api.orchestrator.LaunchVerdict.WARN, d.reason)
+                                is GateDecision.Refused -> com.superiorsoftllc.agenthq.daemon.api.orchestrator.LaunchVerdict(com.superiorsoftllc.agenthq.daemon.api.orchestrator.LaunchVerdict.REFUSED, d.reason, d.disposition)
+                            }
+                        },
+                    ),
+                ),
+                runner = object : com.superiorsoftllc.agenthq.daemon.api.orchestrator.RunnerLink { override fun ticketIdOf(sessionId: String): String? = manager.get(sessionId)?.ticketId },
+            )
+            val orchestratorLink: com.superiorsoftllc.agenthq.daemon.api.orchestrator.OrchestratorLink = orchestratorHub.link
+            manager.launchGate = { providerId, origin, ticketId ->
+                when (val v = orchestratorLink.launchDecision(providerId, origin == LaunchOrigin.UNATTENDED, ticketId).valueOr(com.superiorsoftllc.agenthq.daemon.api.orchestrator.LaunchVerdict.Allow)) {
+                    com.superiorsoftllc.agenthq.daemon.api.orchestrator.LaunchVerdict.Allow -> GateDecision.Allow
+                    else -> when (v.kind) {
+                        com.superiorsoftllc.agenthq.daemon.api.orchestrator.LaunchVerdict.WARN -> GateDecision.Warn(v.reason)
+                        com.superiorsoftllc.agenthq.daemon.api.orchestrator.LaunchVerdict.REFUSED -> GateDecision.Refused(v.reason, v.disposition)
+                        else -> GateDecision.Allow
+                    }
+                }
+            }
             manager.silentSink = { session, minutes ->
                 attention.raise(
                     kind = AttentionKind.STALLED,
@@ -1312,6 +1355,7 @@ class AgentHqDaemon(
             // whenever that session comes to rest (see MailRouter's delivery policy). Built before the
             // triggers (TRIGGER-NUDGE): a schedule's catch-up fire on boot mails through it.
             val mailbox = Mailbox(mailStore)
+            orchBoard.set(board)
             // BUG-S3: mail to an agent swapped onto another harness opens a fresh session there (4.2, lazily).
             val bindFreshSession = { agentId: String ->
                 bindSessionOnSpawn(manager, agents, SpawnOptions(agentId = agentId, projectId = agents.get(agentId)?.projectId), repo)
@@ -1319,7 +1363,7 @@ class AgentHqDaemon(
             val mail = MailRouter(
                 manager, mailbox, agents, mailBase,
                 agentsSendToken = token != null, bindFreshSession = bindFreshSession,
-                knowledge = knowledge, skills = skillsSource, starterOf = board::starterOf,
+                knowledge = knowledge, skills = skillsSource, starterOf = { sid -> orchestratorLink.starterOf(sid).valueOr(null) },
             )
             // Story 9.5: triggers -- stored, coalesced, tripped on any non-success, their starts unattended.
             // TRIGGER-NUDGE (contract 1.105.0): a `prompt` action is mail to the target in the trigger's project.
@@ -1344,7 +1388,7 @@ class AgentHqDaemon(
             val doneWorkerReaper = DoneWorkerReaper(
                 manager = manager,
                 enabled = projectStore::autoRemovesDoneWorkers,
-                ticketOf = { ticketId -> runCatching { board.get(ticketId) }.getOrNull()?.let { it.sessionId to it.projectId } },
+                ticketOf = { ticketId -> orchestratorLink.ticketOf(ticketId).valueOr(null)?.let { it.sessionId to it.projectId } },
                 executor = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "agenthq-done-worker-reaper").also { it.isDaemon = true } },
                 onRemoved = {
                     val pushed = Envelope(Envelope.SESSIONS, json.encodeToString(JsonArray(manager.list().map { json.encodeToJsonElement(SessionRecordSerializer, it) })))
@@ -1359,15 +1403,7 @@ class AgentHqDaemon(
                 repoFor = { projectId -> board.cutRepo(projectId) },
             )
             relatedRef.set(com.superiorsoftllc.agenthq.ticketfiles.LiveRelatedWork(ticketFiles, ticket = { id -> store.tickets.get(id) }))
-            val orchestratorLink: com.superiorsoftllc.agenthq.orchestration.OrchestratorLink = com.superiorsoftllc.agenthq.orchestration.LocalOrchestratorLink { from, body ->
-                manager.get(from)?.ticketId?.takeIf { it.isNotBlank() }?.let { tid ->
-                    val row = store.tickets.get(tid)
-                    val line = com.superiorsoftllc.agenthq.ticketfiles.FilesReadCheck.extract(body)
-                    val refusal = com.superiorsoftllc.agenthq.ticketfiles.FilesReadCheck.refusal(body, row?.status == com.superiorsoftllc.agenthq.protocol.TicketStatus.DONE)
-                    if (refusal == null && line != null) runCatching { ticketFiles.saveFilesRead(tid, line) }
-                    refusal
-                }
-            }
+            orchTicketFiles.set(ticketFiles)
             mail.reportCheck = { from, body -> orchestratorLink.reviewReport(from, body).refusalOrNull() }
             val ticketFilesText = com.superiorsoftllc.agenthq.ticketfiles.TicketFilesText(ticketFiles) { id -> store.tickets.get(id)?.title }
             val ticketFilesExec = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
@@ -1662,6 +1698,10 @@ class AgentHqDaemon(
                 pluginHost.set(host)
             }
             val plugins = pluginHost.get()
+            // ORCH-1: `AGENTHQ_ORCHESTRATOR_PROVIDER` (default local) picks the binding callers' link answers from; a plugin offers
+            // bindings through hooks.orchestratorBinding. An unknown or failing provider keeps the local binding and is logged.
+            (orchestratorBindings + plugins.orchestratorBindings()).forEach { (id, binding) -> runCatching { orchestratorHub.register(id, binding) } }
+            orchestratorHub.select(pluginEnv("AGENTHQ_ORCHESTRATOR_PROVIDER")?.trim().orEmpty())?.let { System.err.println(it) }
             // A guest token present at start is checked now, so a bad one still stops the daemon starting.
             plugins.guestTokens().forEach { policy.guestDigestOf(it) }
             manager.spawnGate = { role, projectId -> plugins.spawnRefusal(role, projectId) }
