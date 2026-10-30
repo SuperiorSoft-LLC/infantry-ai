@@ -15,12 +15,14 @@ import java.util.ServiceLoader
  * that cannot be opened, lists no plugin or lists a broken one becomes a failing [PluginCandidate] labelled with the jar's
  * name, so it surfaces as a plugin failure and never hides the other jars. [jars] is read on every [candidates] call.
  *
- * Not wired into the daemon yet: trust (bundled / official / community grants) and the module.json `harness` block come
- * with step H2, through the module resolver the daemon halves already use.
+ * HARNESS-PLUGIN-3 H3: with a [bridge], the jar's harness API 2.x plugins (`META-INF/services/` + the API's
+ * [com.superiorsoftllc.agenthq.harness.api.HarnessPlugin]) are found too, each handed to [bridge] (an [ApiHarnessPluginBridge]
+ * with the module's host). The daemon loads module jars this way, below a [HarnessApiClassLoader] (H4: `HarnessModules`).
  */
 class JarHarnessPluginSource(
     private val jars: () -> List<File>,
     private val parent: ClassLoader = HarnessPlugin::class.java.classLoader,
+    private val bridge: ((com.superiorsoftllc.agenthq.harness.api.HarnessPlugin) -> HarnessPlugin)? = null,
 ) : HarnessPluginSource {
 
     override fun candidates(): List<PluginCandidate> = jars().flatMap(::candidatesOf)
@@ -33,13 +35,21 @@ class JarHarnessPluginSource(
             val found = ServiceLoader.load(HarnessPlugin::class.java, loader).stream()
                 .filter { it.type().classLoader === loader }
                 .map { provider -> PluginCandidate("$label:${provider.type().name}") { provider.get() } }
-                .toList()
+                .toList() + apiCandidates(label, loader)
             found.ifEmpty { listOf(failing(label, IllegalStateException("${jar.name} lists no HarnessPlugin in META-INF/services"))) }
         } catch (e: ServiceConfigurationError) {
             listOf(failing(label, e))
         } catch (e: Exception) {
             listOf(failing(label, e))
         }
+    }
+
+    private fun apiCandidates(label: String, loader: ClassLoader): List<PluginCandidate> {
+        val wrap = bridge ?: return emptyList()
+        return ServiceLoader.load(com.superiorsoftllc.agenthq.harness.api.HarnessPlugin::class.java, loader).stream()
+            .filter { it.type().classLoader === loader }
+            .map { provider -> PluginCandidate("$label:${provider.type().name}") { wrap(provider.get()) } }
+            .toList()
     }
 
     private fun failing(label: String, cause: Throwable) = PluginCandidate(label) { throw cause }

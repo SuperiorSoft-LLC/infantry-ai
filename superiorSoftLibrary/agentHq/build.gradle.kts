@@ -65,6 +65,8 @@ dependencies {
     implementation(project(":superiorSoftLibrary:agenthqPlugins"))
     // DAEMON-PLUGINS-1: the API daemon plugins compile against (docs/DAEMON-PLUGINS.md).
     implementation(project(":superiorSoftLibrary:agentHqDaemonApi"))
+    // HARNESS-PLUGIN-3 H3: the API harness plugins compile against (docs/HARNESS-PLUGINS.md section 3.1); a leaf.
+    implementation(project(":superiorSoftLibrary:agentHqHarnessApi"))
     // CORE-SPLIT-1/2: the wire contract and the process runner are leaf modules; `api` keeps their types visible to :agentHqUi as before.
     api(project(":superiorSoftLibrary:agentHqProtocol"))
     api(project(":superiorSoftLibrary:agentHqRunner"))

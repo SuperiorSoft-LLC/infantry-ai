@@ -66,6 +66,7 @@ file("plugins/community").listFiles { f -> f.isDirectory && !f.name.startsWith("
 // DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md): the daemon API every daemon half compiles against, and each module's daemon half
 // (`plugins/<folder>/<Module>/daemon`) as `:daemon-plugin-<folder>-<Module>` (flat: Gradle 9 will not configure directory-less parents), apart from the `:plugins:*` UI projects.
 include(":superiorSoftLibrary:agentHqDaemonApi")
+include(":superiorSoftLibrary:agentHqHarnessApi")
 listOf("core", "official", "demo", "community", "examples").forEach { folder ->
     file("plugins/$folder").listFiles { f -> f.isDirectory && !f.name.startsWith("_") && java.io.File(f, "daemon/build.gradle.kts").isFile }.orEmpty().sortedBy { it.name }.forEach { dir ->
         include(":daemon-plugin-$folder-${dir.name}")
