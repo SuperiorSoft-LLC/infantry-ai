@@ -78,6 +78,12 @@ data class ConfigFieldDeclaration(
     val maxLength: Int? = null,
     /** CONFIG-FIELDS-2: shown only while sibling [ConfigVisibleWhen.key] equals [ConfigVisibleWhen.eq]; a hidden field is not validated. */
     val visibleWhen: ConfigVisibleWhen? = null,
+    /** CONFIG-FIELDS-2: hint shown in an empty text box. */
+    val placeholder: String? = null,
+    /** CONFIG-FIELDS-2: a `color` field offers these `#RRGGBB` swatches next to its box. */
+    val palette: List<String> = emptyList(),
+    /** CONFIG-FIELDS-2: `dropdown` draws a `select` as a menu; null keeps the option buttons. */
+    val display: String? = null,
 )
 
 /** CONFIG-FIELDS-2: show a field only while the sibling field [key] holds [eq] (compared as text; `true`/`false` for a checkbox). */

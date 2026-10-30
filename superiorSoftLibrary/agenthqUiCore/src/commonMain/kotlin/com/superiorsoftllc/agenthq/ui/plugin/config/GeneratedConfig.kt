@@ -168,7 +168,7 @@ private fun GeneratedField(factory: TabFactory, card: ConfigCard, f: ConfigField
                     )
                     Text(if (on) "On" else "Off", fontSize = 12.sp)
                 }
-                ConfigFieldTypes.SELECT -> for (o in f.options) Option(tag, o, f.optionLabels[o] ?: o, (value as? JsonPrimitive)?.content == o, editable) { write(JsonPrimitive(o)) }
+                ConfigFieldTypes.SELECT -> if (f.display == "dropdown") SelectDropdown(f, tag, value, editable, ::write) else for (o in f.options) Option(tag, o, f.optionLabels[o] ?: o, (value as? JsonPrimitive)?.content == o, editable) { write(JsonPrimitive(o)) }
                 ConfigFieldTypes.RADIO -> Column(Modifier.selectableGroup()) {
                     for (o in f.options) {
                         val picked = (value as? JsonPrimitive)?.content == o
