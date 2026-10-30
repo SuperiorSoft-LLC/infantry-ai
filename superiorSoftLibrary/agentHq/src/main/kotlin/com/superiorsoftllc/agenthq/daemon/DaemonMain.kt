@@ -2736,7 +2736,7 @@ private suspend fun handleConnection(
                 remoteAddress = session.call.request.local.remoteAddress,
                 forwardedFor = session.call.request.headers["X-Forwarded-For"], activeSession = active,
             )
-            // POLICY-1: the active preset, by the frame's named action. First, so a lock's neutral refusal wins over the owner-gate text (DEMO-FIX-1).
+            // POLICY-1: the active preset, by the frame's named action. First, so a lock's neutral refusal wins over the owner-gate text.
             policies.frameRefusal(envelope, active, owner)?.let { reason ->
                 outgoing.trySend(Envelope(Envelope.ERROR, reason).copy(requestId = envelope.requestId))
                 continue

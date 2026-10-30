@@ -115,7 +115,7 @@ already exposes": all three depend on `ProjectScope` (reads `AGENTHQ_SESSION_ID`
 one-request `ToolCall.request` cannot do. Moving them needs an API-side session model plus a `ToolCall` streaming/fence primitive and
 `ProjectScope` as an API helper (the same blocker as the Infantry_Board family, F5). Do it with F5, not as a stopgap.
 
-## 5. Not run
+## 5. Not run (RUNTIME-LOAD-1; RUNTIME-LOAD-2 ran agentHq (2737 tests), agentHqUi, agenthqUiCore jvmTest incl. BlankShellE2ETest: green after fixing two DEMO-FIX-1 leftovers; not run: wasm/Android builds, a live harness install)
 
 The full `agentHq:test` suite, `agentHqUi` and wasm/Android builds, `BlankShellE2ETest`, any live harness install. Run: the five test
 classes named in section 3 plus `*DaemonPlugin*` and `*HarnessInstall*`; and `installDist` with both measurement runs above.
