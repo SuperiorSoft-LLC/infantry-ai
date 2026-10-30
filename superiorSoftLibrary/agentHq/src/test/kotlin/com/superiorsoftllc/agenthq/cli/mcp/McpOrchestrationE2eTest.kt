@@ -251,7 +251,6 @@ class McpOrchestrationE2eTest {
             "agenthq_ticket_create", "agenthq_ticket_update",
             "agenthq_ticket_start", // BUG-ASSIGN-1 (agenthq_list_harnesses: Infantry_Agents, RUNTIME-LOAD-2; roles, ask, project config: Infantry_Roles / _Attention / _Settings, RUNTIME-LOAD-3)
             "agenthq_inbox", "agenthq_read", // MAIL-MCP-1
-            "agenthq_progress", // PROGRESS-1 (1.117.0)
             "agenthq_watch_file", // STALL-4
             "agenthq_pipeline", "agenthq_pipeline_record", // PIPE-1
         )

@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.cli.mcp
 
 import com.superiorsoftllc.agenthq.cli.Cli
+import com.superiorsoftllc.agenthq.daemon.AccessPolicy
 import com.superiorsoftllc.agenthq.daemon.DaemonFixture
 import com.superiorsoftllc.agenthq.daemon.saveProfile
 import com.superiorsoftllc.agenthq.protocol.Envelope
@@ -187,7 +188,6 @@ class McpServeTest {
                 "agenthq_inbox", "agenthq_read", // MAIL-MCP-1
                 "agenthq_pipeline", "agenthq_pipeline_record", // PIPE-1
                 // ROLE-EDIT-1, LANE-CAPS, ASK-1: the role, project config and ask tools are daemon plugin tools now (RUNTIME-LOAD-3).
-                "agenthq_progress", // PROGRESS-1 (1.117.0)
                 "agenthq_watch_file", // STALL-4
             ),
             tools.map { it["name"]!!.jsonPrimitive.content },
@@ -680,18 +680,55 @@ class McpServeTest {
         served.close()
     }
 
-    /** Contract 1.117.0: outside a session agenthq_progress is a no-op that says so; a bad mode is a tool error. */
+    /**
+     * Contract 1.117.0: outside a session agenthq_progress is a no-op that says so; a bad mode is a tool error. RUNTIME-LOAD-4: the
+     * tool is Infantry_Agents' daemon tool (descriptor golden-checked); inside a session it reports for that session and answers
+     * the line the API's ProgressText prints; without the plugin it is not listed.
+     */
     @Test
     fun progressToolIsHarmlessOutsideASession() {
+        val root = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Agents")
+        try {
+            val fixture = DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-plugin").toFile(), pluginsRoot = root)
+                .also { fixtures += it }
+            val sessionId = seedSession(fixture)
+            val served = serve("--port", fixture.port.toString())
+            initialize(served)
+            val tools = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject }
+            val golden = Json.parseToJsonElement(javaClass.getResource("/golden/core-mcp-tools-before-f5.json")!!.readText()).jsonArray
+                .map { it.jsonObject }.single { it["name"]!!.jsonPrimitive.content == "agenthq_progress" }
+            assertEquals(golden, tools.single { it["name"]!!.jsonPrimitive.content == "agenthq_progress" }, "the descriptor changed in the move")
+            val ok = served.callTool("agenthq_progress", """{"mode":"percent","percent":40}""")
+            assertEquals("false", ok["isError"]!!.jsonPrimitive.content, "$ok")
+            assertTrue(ok["content"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content.startsWith("not running inside an Infantry AI session"), "$ok")
+            val bad = served.callTool("agenthq_progress", """{"mode":"guess"}""")
+            assertEquals("true", bad["isError"]!!.jsonPrimitive.content, "$bad")
+            assertEquals("agenthq_progress: unknown mode 'guess' (percent, plan, step, bytes, count, status, done, fail, clear, get)",
+                bad["content"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content)
+            served.close()
+
+            val inSession = serve("--port", fixture.port.toString(), env = mapOf(AccessPolicy.SESSION_ID_ENV to sessionId))
+            initialize(inSession)
+            val reported = inSession.callTool("agenthq_progress", """{"mode":"count","done":3,"total":5,"label":"unit tests"}""")
+            assertEquals("false", reported["isError"]!!.jsonPrimitive.content, "$reported")
+            val line = reported["content"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content
+            assertTrue(line.startsWith("60% 3/5") && "- unit tests" in line, line)
+            val stored = assertNotNull(fixture.daemon.manager.get(sessionId)!!.progress, "the report reached the calling session")
+            assertEquals(3L, stored.done)
+            inSession.close()
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun progressToolIsGoneWithoutInfantryAgents() {
         val fixture = launch()
         fixture.client.await(Envelope.READY)
         val served = serve("--port", fixture.port.toString())
         initialize(served)
-        val ok = served.callTool("agenthq_progress", """{"mode":"percent","percent":40}""")
-        assertEquals("false", ok["isError"]!!.jsonPrimitive.content, "$ok")
-        assertTrue(ok["content"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content.startsWith("not running inside an Infantry AI session"), "$ok")
-        val bad = served.callTool("agenthq_progress", """{"mode":"guess"}""")
-        assertEquals("true", bad["isError"]!!.jsonPrimitive.content, "$bad")
+        val tools = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content }
+        assertTrue("agenthq_progress" !in tools, "$tools")
         served.close()
     }
 

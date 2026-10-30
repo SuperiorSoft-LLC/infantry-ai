@@ -35,6 +35,8 @@ class AgentsDaemonPlugin : DaemonPlugin {
         api.tools.register(HarnessStatusTool)
         api.tools.register(HarnessInstallTool)
         api.tools.register(ListHarnessesTool)
+        // RUNTIME-LOAD-4 (F5): the session's own progress report.
+        api.tools.register(ProgressTool)
     }
 }
 
