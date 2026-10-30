@@ -2,7 +2,6 @@ package com.superiorsoftllc.agenthq.cli.mcp
 
 import com.superiorsoftllc.agenthq.cli.FrameStream
 import com.superiorsoftllc.agenthq.cli.TicketImageFiles
-import com.superiorsoftllc.agenthq.cli.TicketPlacement
 import com.superiorsoftllc.agenthq.cli.TicketPrefixMatch
 import com.superiorsoftllc.agenthq.cli.TicketStarter
 import com.superiorsoftllc.agenthq.cli.matchTicketPrefix
@@ -22,7 +21,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 
@@ -108,93 +106,6 @@ internal class McpTicketTools(
     }
 
     /**
-     * MCP-MOVE-1: move ONE ticket to a status over `ticket_move` -- the frame `agenthq ticket move` sends -- so an agent
-     * can finish its ticket (`done`) without the CLI. A move INTO in_progress is the board's start and goes through
-     * [START] (guardrails, worker); `pending` is derived by the daemon and refused there. The session is named as origin.
-     *
-     * BUG-REORDER (ticket-63df1aba): ticket order is priority, and the move can place the ticket in its column with ONE
-     * of `before` / `after` (just above / below that ticket), `top`, `bottom` or `position` (0 = top) -- `agenthq ticket
-     * move --before|--after|--top|--bottom|--position`, through the same [TicketPlacement]. With a placement the status
-     * may be left out: the ticket is reordered where it is.
-     */
-    suspend fun move(stream: FrameStream, arguments: JsonObject): ToolResult {
-        val requested = arguments.string("ticketId") ?: return refused("$MOVE needs a ticketId")
-        val rawPosition = arguments["position"]?.let { it as? JsonPrimitive }
-        val position = rawPosition?.let { p -> p.contentOrNull?.trim()?.toIntOrNull() ?: return refused("$MOVE: position must be a whole number, 0 = the top") }
-        val placement = TicketPlacement(arguments.flag("top"), arguments.flag("bottom"), arguments.string("before"), arguments.string("after"), position)
-        if (placement.named > 1) return refused("$MOVE takes one of before, after, top, bottom, position")
-        val status = arguments.string("status")?.lowercase()
-        if (status == null && placement.named == 0) return refused("$MOVE needs a status, or a place in the column (before, after, top, bottom or position)")
-        if (status == TicketStatus.IN_PROGRESS) return refused("$MOVE refused: to start a ticket use $START")
-        val ticket = findTicket(stream, requested, getenv).getOrElse { return refused("$MOVE refused: ${it.message ?: "no ticket '$requested'"}") }
-        val target = if (placement.named == 0) {
-            null
-        } else {
-            // --before/--after resolve their target on the whole board, like the ticket itself.
-            val board = try {
-                val answer = stream.request(Envelope(Envelope.TICKET_LIST, ""), answerType = Envelope.TICKETS, what = "ticket_list", idempotent = true)
-                json.decodeFromString(ListSerializer(Ticket.serializer()), answer.data)
-            } catch (e: Exception) {
-                return refused("$MOVE refused: ${e.message ?: e.javaClass.simpleName}")
-            }
-            placement.resolve(ticket, status, board).getOrElse { return refused("$MOVE refused: ${it.message}") }
-        }
-        val session = getenv(AccessPolicy.SESSION_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }
-        val move = com.superiorsoftllc.agenthq.protocol.TicketMove(id = ticket.id, status = status, position = target)
-        val answer = try {
-            // NOT idempotent: a dropped request is reported, never re-sent blind.
-            stream.request(
-                Envelope(Envelope.TICKET_MOVE, json.encodeToString(com.superiorsoftllc.agenthq.protocol.TicketMove.serializer(), move), session),
-                answerType = Envelope.TICKET,
-                what = "ticket_move",
-                idempotent = false,
-            )
-        } catch (e: Exception) {
-            return refused("$MOVE refused: ${e.message ?: e.javaClass.simpleName}")
-        }
-        val moved = runCatching { json.decodeFromString(Ticket.serializer(), answer.data) }
-            .getOrElse { return refused("$MOVE: malformed ticket answer from the daemon: ${it.message}") }
-        return ToolResult(json.encodeToString(JsonObject.serializer(), JsonObject(summary(moved) + buildJsonObject {
-            put("position", moved.position)
-            put("message", "Moved ticket ${shortTicketId(moved.id)} -> ${moved.status}" + if (target != null) " at position ${moved.position}" else "")
-        })))
-    }
-
-    /**
-     * MCP-DEL-1: delete ONE ticket over `ticket_delete` -- the frame the CLI's `ticket delete` sends -- after resolving
-     * the id exactly like [update] (a full id, or the 8-char suffix). An unknown or ambiguous id is refused before any
-     * frame is sent. A ticket IN PROGRESS is refused HERE, MCP-side: its live worker holds it, so the agent must stop
-     * that worker first. The board's own delete is unchanged for the human (the UI and CLI may still remove one).
-     * Answers the deleted ticket's id and title, read from the resolved ticket.
-     */
-    suspend fun delete(stream: FrameStream, arguments: JsonObject): ToolResult {
-        val requested = arguments.string("ticketId") ?: return refused("$DELETE needs a ticketId")
-        val ticket = findTicket(stream, requested, getenv).getOrElse { return refused("$DELETE refused: ${it.message ?: "no ticket '$requested'"}") }
-        val short = shortTicketId(ticket.id)
-        if (ticket.status == TicketStatus.IN_PROGRESS) {
-            return refused(
-                "$DELETE refused: ticket $short is in progress (worker session ${ticket.sessionId ?: "unknown"}); " +
-                    "stop its worker first (agenthq_kill), then delete it.",
-            )
-        }
-        val answer = try {
-            // NOT idempotent: a dropped request is reported, never re-sent blind.
-            stream.request(Envelope(Envelope.TICKET_DELETE, ticket.id), answerType = Envelope.TICKETS, what = "ticket_delete", idempotent = false)
-        } catch (e: Exception) {
-            return refused("$DELETE refused: ${e.message ?: e.javaClass.simpleName}")
-        }
-        val board = runCatching { json.decodeFromString(ListSerializer(Ticket.serializer()), answer.data) }
-            .getOrElse { return refused("$DELETE: malformed board answer from the daemon: ${it.message}") }
-        if (board.any { it.id == ticket.id }) return refused("$DELETE: the daemon answered but ticket $short is still on the board")
-        return ToolResult(json.encodeToString(JsonObject.serializer(), buildJsonObject {
-            put("ticketId", ticket.id)
-            put("title", ticket.title)
-            put("deleted", true)
-            put("message", "Deleted ticket $short: ${ticket.title}")
-        }))
-    }
-
-    /**
      * BUG-ASSIGN-1: the answer to a create or an update SAYS what was saved, read from the daemon's answer (never echoed
      * from the request): the fields this call set that the stored ticket now holds, each with its stored value, and the
      * next step. An agent that pinned a role, provider and model reads back that they were saved.
@@ -253,10 +164,6 @@ internal class McpTicketTools(
     private fun JsonObject.string(key: String): String? =
         (this[key] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
 
-    /** A boolean argument; `"true"` as a string counts, as `clear` reads it. Absent = false. */
-    private fun JsonObject.flag(key: String): Boolean =
-        (this[key] as? JsonPrimitive)?.let { it.booleanOrNull ?: (it.contentOrNull?.trim() == "true") } ?: false
-
     /**
      * IMG-3: the `images` argument, an array of path strings; null when absent (keep the stored ones), `[]` clears.
      * Anything but an array of strings is refused here; WHERE each path points is the daemon's check (uploads/ticket).
@@ -306,11 +213,7 @@ internal class McpTicketTools(
 
         /** BUG-ASSIGN-1: start ONE ticket through the board (served by [McpWriteTools.startTicket], under its guardrails). */
         const val START = "agenthq_ticket_start"
-        /** MCP-DEL-1: delete ONE ticket (refused while it is in progress). */
-        const val DELETE = "agenthq_ticket_delete"
-        /** MCP-MOVE-1: move ONE ticket to a status (done, todo, ...); a start goes through [START]. */
-        const val MOVE = "agenthq_ticket_move"
-        val NAMES = listOf(CREATE, UPDATE, START, DELETE, MOVE)
+        val NAMES = listOf(CREATE, UPDATE, START)
 
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false; explicitNulls = false }
 
@@ -434,54 +337,11 @@ internal class McpTicketTools(
             ) {
                 put("ticketId", prop("Full ticket id, or its 8-char suffix."))
             })
-            add(tool(
-                DELETE,
-                "Delete ONE ticket from the board (full id or the 8-char id `tickets` prints), with its links. An " +
-                    "unknown or ambiguous id is refused and nothing is deleted. A ticket in progress is refused: stop " +
-                    "its worker first. One ticket per call; there is no bulk delete. The answer names the deleted " +
-                    "ticket's id and title.",
-                readOnly = false,
-                destructive = true,
-                required = listOf("ticketId"),
-            ) {
-                put("ticketId", prop("Full ticket id, or its 8-char suffix."))
-            })
-            add(tool(
-                MOVE,
-                "Move ONE ticket to a status (full id or 8-char id), e.g. done when your work is finished, or todo, " +
-                    "or backlog (parked: never started until moved back to todo), " +
-                    "and/or reorder it: ticket order inside a column is priority (the board and `tickets` list it top " +
-                    "first). Give at most one of before / after (just above / below that ticket), top, bottom or " +
-                    "position (0 = top); with one of them the status may be left out and the ticket is reordered in " +
-                    "its own column. Same as `agenthq ticket move [status] --before|--after|--top|--bottom|--position`. " +
-                    "To START a ticket use $START; pending is " +
-                    "set by the daemon from open prerequisites and is refused here. The answer reads back the stored " +
-                    "ticket and its position (0 = top).",
-                readOnly = false,
-                required = listOf("ticketId"),
-            ) {
-                put("ticketId", prop("Full ticket id, or its 8-char suffix."))
-                put("status", prop("Target status, e.g. done, todo, backlog. Optional when before, top or bottom is given."))
-                put("before", prop("Place the ticket just above this ticket (full id or 8-char suffix), which must be in the target column."))
-                put("after", prop("Place the ticket just below this ticket (full id or 8-char suffix), which must be in the target column."))
-                put("top", boolProp("Place the ticket at the top of the column (highest priority)."))
-                put("bottom", boolProp("Place the ticket at the bottom of the column."))
-                put("position", buildJsonObject {
-                    put("type", "integer")
-                    put("minimum", 0)
-                    put("description", "Place the ticket at this index of the column, 0 = the top (past the end = the bottom).")
-                })
-            })
         }
 
         private fun pathsProp(description: String) = buildJsonObject {
             put("type", "array")
             put("items", buildJsonObject { put("type", "string") })
-            put("description", description)
-        }
-
-        private fun boolProp(description: String) = buildJsonObject {
-            put("type", "boolean")
             put("description", description)
         }
 

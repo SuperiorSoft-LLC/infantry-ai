@@ -15,5 +15,7 @@ class BoardDaemonPlugin : DaemonPlugin {
         api.tools.register(TicketFilesTools.Related)
         // RUNTIME-LOAD-4 (F5): the board's write tools, moved out of the CLI's MCP server.
         api.tools.register(EpicBaseTool)
+        api.tools.register(TicketMoveTool(api))
+        api.tools.register(TicketDeleteTool(api))
     }
 }

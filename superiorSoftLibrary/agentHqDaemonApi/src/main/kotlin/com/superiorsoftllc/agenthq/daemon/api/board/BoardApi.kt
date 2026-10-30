@@ -27,8 +27,11 @@ import kotlinx.serialization.Serializable
  *    for each operation: [GRANT_TICKETS_READ], [GRANT_TICKETS_WRITE], [GRANT_TICKETS_DELETE], [GRANT_TICKETS_START],
  *    [GRANT_EPICS_READ], [GRANT_EPICS_WRITE]. No grant = [BoardResult.Refused] ("missing grant ..."); the default is deny.
  */
-/** 1.2.0 (CONTEXT-LIMIT-1, additive): [TicketInfo] carries the context limit and the effective one. */
-const val BOARD_API_VERSION = "1.2.0"
+/**
+ * 1.2.0 (CONTEXT-LIMIT-1, additive): [TicketInfo] carries the context limit and the effective one.
+ * 1.3.0 (RUNTIME-LOAD-4, additive): the shared pure rules [TicketRefs] (short ids) and [TicketPlacement] (where a move puts a ticket).
+ */
+const val BOARD_API_VERSION = "1.3.0"
 
 const val GRANT_TICKETS_READ = "tickets.read"
 const val GRANT_TICKETS_WRITE = "tickets.write"

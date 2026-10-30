@@ -193,13 +193,13 @@ class McpTicketImagesE2eTest {
             payload(agent.callTool("agenthq_ticket_get", """{"ticketId":"$t2"}""")).images(),
             "an absolute path under uploads/ticket is stored as its relPath",
         )
-        payload(agent.callTool(McpTicketTools.DELETE, """{"ticketId":"$t2"}"""))
+        payload(agent.callTool("agenthq_ticket_delete", """{"ticketId":"$t2"}"""))
         assertTrue(b.isFile, "a file another ticket still references stays")
         val got3 = payload(agent.callTool("agenthq_ticket_get", """{"ticketId":"$t3"}"""))
         assertEquals(listOf(relB, relC), got3.images(), "the other ticket still lists the shared image")
 
         // (5) deleting a ticket deletes its unshared images.
-        payload(agent.callTool(McpTicketTools.DELETE, """{"ticketId":"$t3"}"""))
+        payload(agent.callTool("agenthq_ticket_delete", """{"ticketId":"$t3"}"""))
         assertFalse(b.exists(), "b is no longer referenced by any ticket: deleted")
         assertFalse(c.exists(), "c was only t3's: deleted")
 

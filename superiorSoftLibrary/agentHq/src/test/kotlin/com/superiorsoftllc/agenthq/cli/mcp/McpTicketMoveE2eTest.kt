@@ -106,7 +106,7 @@ class McpTicketMoveE2eTest {
     @Test
     fun anAgentReordersTicketsInsideAColumnThroughMcpServe() {
         val stateDir = tempDir("agenthq-mcp-move-daemon")
-        val fixture = DaemonFixture.launch(stateDir = stateDir).also { fixtures += it; it.client.await(Envelope.READY) }
+        val fixture = DaemonFixture.launch(stateDir = stateDir, pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot()).also { fixtures += it; it.client.await(Envelope.READY) }
         val project = tempDir("agenthq-mcp-move-project")
         McpServeConfig.fileIn(project).apply { parentFile.mkdirs() }.writeText("""{"projectId":"$PROJECT"}""")
         val agent = serve(fixture, project)
@@ -121,48 +121,48 @@ class McpTicketMoveE2eTest {
         assertEquals(listOf("A", "B", "C", "D"), todo())
 
         // top, with no status: reordered in its own column, the answer reads back the stored place.
-        val topped = payload(agent.callTool(McpTicketTools.MOVE, """{"ticketId":"${ids["C"]}","top":true}"""))
+        val topped = payload(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["C"]}","top":true}"""))
         assertEquals(TicketStatus.TODO, topped.str("status"))
         assertEquals("0", topped.str("position"), "$topped")
         assertEquals(listOf("C", "A", "B", "D"), todo())
 
         // bottom, by the 8-char suffix.
-        payload(agent.callTool(McpTicketTools.MOVE, """{"ticketId":"${shortTicketId(ids.getValue("C"))}","bottom":true}"""))
+        payload(agent.callTool("agenthq_ticket_move", """{"ticketId":"${shortTicketId(ids.getValue("C"))}","bottom":true}"""))
         assertEquals(listOf("A", "B", "D", "C"), todo())
 
         // before, moving DOWN (the lifted-out index) and UP, the target named by its suffix.
-        payload(agent.callTool(McpTicketTools.MOVE, """{"ticketId":"${ids["A"]}","before":"${shortTicketId(ids.getValue("C"))}"}"""))
+        payload(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["A"]}","before":"${shortTicketId(ids.getValue("C"))}"}"""))
         assertEquals(listOf("B", "D", "A", "C"), todo())
-        payload(agent.callTool(McpTicketTools.MOVE, """{"ticketId":"${ids["C"]}","status":"todo","before":"${ids["B"]}"}"""))
+        payload(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["C"]}","status":"todo","before":"${ids["B"]}"}"""))
         assertEquals(listOf("C", "B", "D", "A"), todo())
 
         // after (just below) and a raw position (0 = top).
-        payload(agent.callTool(McpTicketTools.MOVE, """{"ticketId":"${ids["C"]}","after":"${ids["A"]}"}"""))
+        payload(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["C"]}","after":"${ids["A"]}"}"""))
         assertEquals(listOf("B", "D", "A", "C"), todo())
-        payload(agent.callTool(McpTicketTools.MOVE, """{"ticketId":"${ids["A"]}","position":0}"""))
+        payload(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["A"]}","position":0}"""))
         assertEquals(listOf("A", "B", "D", "C"), todo())
-        payload(agent.callTool(McpTicketTools.MOVE, """{"ticketId":"${ids["C"]}","status":"todo","position":1}"""))
+        payload(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["C"]}","status":"todo","position":1}"""))
         assertEquals(listOf("A", "C", "B", "D"), todo())
 
         // A plain status move still works and lands at the bottom of the new column.
-        payload(agent.callTool(McpTicketTools.MOVE, """{"ticketId":"${ids["D"]}","status":"done"}"""))
+        payload(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["D"]}","status":"done"}"""))
         assertEquals(listOf("A", "C", "B"), todo())
 
         // Refusals change nothing.
         val before = fixture.daemon.board.list()
-        assertRefused(agent.callTool(McpTicketTools.MOVE, """{"ticketId":"${ids["A"]}"}"""), "needs a status")
-        assertRefused(agent.callTool(McpTicketTools.MOVE, """{"ticketId":"${ids["A"]}","top":true,"bottom":true}"""), "one of before, after, top, bottom, position")
-        assertRefused(agent.callTool(McpTicketTools.MOVE, """{"ticketId":"${ids["A"]}","before":"${ids["A"]}"}"""), "before itself")
-        assertRefused(agent.callTool(McpTicketTools.MOVE, """{"ticketId":"${ids["A"]}","before":"${ids["D"]}"}"""), "is in done, not todo")
-        assertRefused(agent.callTool(McpTicketTools.MOVE, """{"ticketId":"${ids["A"]}","before":"zzzzzzzz-no-such-ticket"}"""), "no ticket")
-        assertRefused(agent.callTool(McpTicketTools.MOVE, """{"ticketId":"${ids["A"]}","position":-1}"""), "position must be 0 or more")
-        assertRefused(agent.callTool(McpTicketTools.MOVE, """{"ticketId":"${ids["A"]}","position":"x"}"""), "whole number")
+        assertRefused(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["A"]}"}"""), "needs a status")
+        assertRefused(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["A"]}","top":true,"bottom":true}"""), "one of before, after, top, bottom, position")
+        assertRefused(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["A"]}","before":"${ids["A"]}"}"""), "before itself")
+        assertRefused(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["A"]}","before":"${ids["D"]}"}"""), "is in done, not todo")
+        assertRefused(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["A"]}","before":"zzzzzzzz-no-such-ticket"}"""), "no ticket")
+        assertRefused(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["A"]}","position":-1}"""), "position must be 0 or more")
+        assertRefused(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["A"]}","position":"x"}"""), "whole number")
         assertEquals(before, fixture.daemon.board.list(), "a refused move leaves the board unchanged")
 
         // The order is stored: a daemon booted again on the same state lists it.
         agent.close()
         fixture.stop()
-        val again = DaemonFixture.launch(stateDir = stateDir).also { fixtures += it; it.client.await(Envelope.READY) }
+        val again = DaemonFixture.launch(stateDir = stateDir, pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot()).also { fixtures += it; it.client.await(Envelope.READY) }
         assertEquals(listOf("A", "C", "B"), todo(again.daemon.board.list()), "the order survives a restart")
     }
 

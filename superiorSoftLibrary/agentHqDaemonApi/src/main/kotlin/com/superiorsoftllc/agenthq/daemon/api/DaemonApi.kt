@@ -58,8 +58,9 @@ interface DaemonApi {
     val board: com.superiorsoftllc.agenthq.daemon.api.board.Board get() = com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.board
 
     companion object {
+        // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
-        const val VERSION = "1.3.0"
+        const val VERSION = "1.4.0"
     }
 }
 

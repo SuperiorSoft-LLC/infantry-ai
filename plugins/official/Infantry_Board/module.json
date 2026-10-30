@@ -12,12 +12,14 @@
   "daemon": {
     "entry": "com.superiorsoftllc.agenthq.plugins.official.board.daemon.BoardDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Board-daemon.jar",
-    "apiAtLeast": "1.2.0",
+    "apiAtLeast": "1.4.0",
     "tools": [
       { "name": "agenthq_ticket_get", "action": "board.read", "kind": "read", "description": "Read ONE ticket back." },
       { "name": "agenthq_ticket_files", "action": "board.files.read", "kind": "read", "description": "A ticket's changed files, or the tickets that changed a path." },
       { "name": "agenthq_ticket_related_files", "action": "board.files.read", "kind": "read", "description": "The files of the tickets related to a ticket." },
-      { "name": "agenthq_epic_base", "action": "epics.save", "kind": "write", "description": "Read, set or clear ONE epic's base branch." }
+      { "name": "agenthq_epic_base", "action": "epics.save", "kind": "write", "description": "Read, set or clear ONE epic's base branch." },
+      { "name": "agenthq_ticket_move", "action": "board.ticket.move", "kind": "write", "description": "Move or reorder ONE ticket." },
+      { "name": "agenthq_ticket_delete", "action": "board.ticket.delete", "kind": "destructive", "description": "Delete ONE ticket." }
     ]
   },
   "fills": [

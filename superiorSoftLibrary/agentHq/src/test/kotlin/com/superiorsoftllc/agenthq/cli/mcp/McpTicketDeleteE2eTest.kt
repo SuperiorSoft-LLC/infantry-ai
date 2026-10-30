@@ -122,7 +122,7 @@ class McpTicketDeleteE2eTest {
         val first = create("delete me by full id")
         val keep = create("stays on the board")
         assertTrue(first in boardIds() && keep in boardIds(), "both tickets were created: ${boardIds()}")
-        val deleted = payload(agent.callTool(McpTicketTools.DELETE, """{"ticketId":"$first"}"""))
+        val deleted = payload(agent.callTool("agenthq_ticket_delete", """{"ticketId":"$first"}"""))
         assertEquals(first, deleted.str("ticketId"), "$deleted")
         assertEquals("delete me by full id", deleted.str("title"), "$deleted")
         assertEquals(setOf(keep), boardIds(), "only the named ticket was deleted")
@@ -130,20 +130,20 @@ class McpTicketDeleteE2eTest {
 
         // 4) the 8-char suffix the board prints resolves like ticket_save's.
         val second = create("delete me by suffix")
-        val bySuffix = payload(agent.callTool(McpTicketTools.DELETE, """{"ticketId":"${shortTicketId(second)}"}"""))
+        val bySuffix = payload(agent.callTool("agenthq_ticket_delete", """{"ticketId":"${shortTicketId(second)}"}"""))
         assertEquals(second, bySuffix.str("ticketId"), "$bySuffix")
         assertEquals(setOf(keep), boardIds(), "the suffix deleted exactly that ticket")
 
         // 2) an unknown id is refused, and nothing is deleted.
         val before = board.list()
-        assertRefused(agent.callTool(McpTicketTools.DELETE, """{"ticketId":"zzzzzzzz-no-such-ticket"}"""), "no ticket")
+        assertRefused(agent.callTool("agenthq_ticket_delete", """{"ticketId":"zzzzzzzz-no-such-ticket"}"""), "no ticket")
         assertEquals(before, board.list(), "an unknown id leaves the board unchanged")
 
         // 3) a ticket in progress (a worker holds it) is refused with the way out, and nothing is deleted.
         board.move(TicketMove(keep, TicketStatus.IN_PROGRESS), startOnInProgress = false)
         val held = board.list()
         assertEquals(TicketStatus.IN_PROGRESS, held.single { it.id == keep }.status)
-        assertRefused(agent.callTool(McpTicketTools.DELETE, """{"ticketId":"$keep"}"""), "stop its worker first")
+        assertRefused(agent.callTool("agenthq_ticket_delete", """{"ticketId":"$keep"}"""), "stop its worker first")
         assertEquals(held, board.list(), "an in-progress ticket leaves the board unchanged")
     }
 
