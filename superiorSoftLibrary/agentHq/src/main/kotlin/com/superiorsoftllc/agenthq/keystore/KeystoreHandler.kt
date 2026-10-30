@@ -51,7 +51,7 @@ class SecretEntryRow(val name: String, val fields: List<SecretFieldRow>)
 
 /**
  * [secrets]: the built-in single-value secrets. 1.135.0 (SECRETS-2): [entries] the user's key/value secrets, and [locked]
- * (the demo lock is on: nothing can be changed and no run gets a secret).
+ * (a restricted policy is active: nothing can be changed and no run gets a secret).
  */
 @Serializable
 class SecretState(
@@ -65,7 +65,7 @@ class SecretState(
  * SECRETS-1 (contract 1.102.0): `secret_set` / `secret_clear` / `secret_import` / `secret_status`, each answered by one
  * `secret_state` and pushed to every client after a change. No frame carries a value back. A refusal never echoes the frame's data.
  * SECRETS-2 (1.135.0): `secret_field_set` / `secret_field_delete` / `secret_delete` edit the user's key/value secrets (any
- * valid name but a built-in's). Under the demo lock every change is refused.
+ * valid name but a built-in's). Under a restricted policy every change is refused.
  */
 class KeystoreHandler(
     private val keystore: Keystore,
@@ -73,7 +73,7 @@ class KeystoreHandler(
     private val env: (String) -> String? = InfantryEnv::get,
     private val push: (Envelope) -> Unit = {},
     private val json: Json = Json { ignoreUnknownKeys = false; encodeDefaults = true },
-    private val demoLock: () -> Boolean = { false },
+    private val restricted: () -> Boolean = { false },
 ) {
     fun answer(envelope: Envelope): Envelope? {
         val reply = when (envelope.type) {
@@ -120,17 +120,17 @@ class KeystoreHandler(
             keystore.names().filter { it !in builtIn }.map { name ->
                 SecretEntryRow(name, keystore.describe(name).map { SecretFieldRow(it.name, it.tail) })
             },
-            locked = demoLock(),
+            locked = restricted(),
         )
     }
 
     /**
      * PLUGIN-ENDPOINTS-2 (D3): the value of one field of `plugin.<module>`, for the desktop host's EndpointAccess of that module.
-     * FrameGate already holds it to the owner connection and refuses it under the demo lock; refused here too under the lock.
+     * FrameGate already holds it to the owner connection and refuses it under a restricted policy; refused here too under the lock.
      */
     private fun pluginSecret(envelope: Envelope): Envelope {
         val frame = envelope.type
-        if (demoLock()) return Envelope(Envelope.ERROR, "$frame refused: secrets are locked under the demo lock")
+        if (restricted()) return Envelope(Envelope.ERROR, "$frame refused: secrets are locked under a restricted policy")
         return try {
             val req = json.decodeFromString(PluginSecretGet.serializer(), envelope.data)
             Keystore.checkField(req.field)
@@ -160,7 +160,7 @@ class KeystoreHandler(
     }
 
     private inline fun change(frame: String, block: () -> Unit): Envelope =
-        if (demoLock()) Envelope(Envelope.ERROR, "$frame refused: secrets are locked under the demo lock") else request(frame, block)
+        if (restricted()) Envelope(Envelope.ERROR, "$frame refused: secrets are locked under a restricted policy") else request(frame, block)
 
     private inline fun request(frame: String, block: () -> Unit): Envelope = try {
         block()

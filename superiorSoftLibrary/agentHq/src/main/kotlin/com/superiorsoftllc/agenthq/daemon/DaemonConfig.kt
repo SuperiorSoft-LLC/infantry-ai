@@ -28,6 +28,8 @@ class DaemonConfig(private val settings: SettingsService, private val store: Age
     private val revision = AtomicLong(System.currentTimeMillis())
     @Volatile private var declared: List<ConfigDeclaration> = emptyList()
     @Volatile private var fields: Map<String, Pair<String, ConfigFieldDeclaration>> = emptyMap()
+    /** DAEMON-PLUGINS-1: which module declared each field, so a daemon plugin reads only its own ([value]). */
+    @Volatile private var owners: Map<String, String> = emptyMap()
 
     /** Told after a write with the frame to push to every other client; the daemon wires it to its client list. */
     @Volatile var onChanged: ((ConfigChangedFrame) -> Unit)? = null
@@ -40,6 +42,7 @@ class DaemonConfig(private val settings: SettingsService, private val store: Age
     fun load(resolution: Resolution): List<String> {
         val log = mutableListOf<String>()
         val byKey = LinkedHashMap<String, Pair<String, ConfigFieldDeclaration>>()
+        val ownerOf = HashMap<String, String>()
         val out = mutableListOf<ConfigDeclaration>()
         for (status in resolution.loaded) {
             val readOnly = status.tier == Tier.COMMUNITY
@@ -52,15 +55,20 @@ class DaemonConfig(private val settings: SettingsService, private val store: Age
                     }
                 }.map { it.copy(scope = ConfigScopes.DAEMON) }
                 if (kept.isEmpty() && decl.block == null) continue
-                kept.forEach { byKey[it.key] = decl.node to it }
+                kept.forEach { byKey[it.key] = decl.node to it; ownerOf[it.key] = status.name }
                 out += decl.copy(fields = kept, readOnly = readOnly, locked = false)
             }
         }
+        owners = ownerOf
         if (out != declared) { fields = byKey; declared = out; revision.incrementAndGet() }
         return log
     }
 
     fun schema() = ConfigSchemaFrame(rev, declared)
+
+    /** DAEMON-PLUGINS-1: the stored value of field [key] as text, when [module] declared it; else null. */
+    fun value(module: String, key: String): String? =
+        if (owners[key] != module) null else settings.storedDeclared(key)?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { p -> p.isString }?.content ?: it.toString() }
 
     fun values(): ConfigValuesFrame = ConfigValuesFrame(rev, fields.entries.mapNotNull { (key, nodeField) ->
         settings.storedDeclared(key)?.let { NodeConfigEntry(nodeField.first, key, it, ConfigSetBy.USER, store.settings.get(key)?.updatedAt ?: 0) }

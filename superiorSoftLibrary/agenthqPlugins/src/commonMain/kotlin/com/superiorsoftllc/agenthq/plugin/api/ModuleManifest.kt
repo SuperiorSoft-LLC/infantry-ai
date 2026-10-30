@@ -138,6 +138,49 @@ data class DaemonCapabilities(
     val wants: List<String> = emptyList(),
     /** CONFIG-8: the module's daemon-side config, the same schema as [ModuleManifest.config]; only `scope:"daemon"` fields are served. */
     val config: List<ConfigDeclaration> = emptyList(),
+    /**
+     * DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md): the class implementing the daemon API's `DaemonPlugin`, in [jar]. Both null =
+     * the module runs no daemon code (every key below is then ignored).
+     */
+    val entry: String? = null,
+    /** DAEMON-PLUGINS-1: the daemon half's jar, a path inside the module folder (e.g. `daemon/build/libs/Acme_Hello-daemon.jar`). */
+    val jar: String? = null,
+    /** DAEMON-PLUGINS-1: the lowest daemon API version (semver) the daemon half needs; a newer one refuses the module. */
+    val apiAtLeast: String? = null,
+    /** DAEMON-PLUGINS-1: the tools the daemon half registers, each with its own policy action. */
+    val tools: List<DaemonToolDeclaration> = emptyList(),
+    /** DAEMON-PLUGINS-1: the client frames the daemon half answers, each with its own policy action. */
+    val frames: List<DaemonFrameDeclaration> = emptyList(),
+    /** DAEMON-PLUGINS-1: the hook kinds the daemon half registers (`frameGate`, `httpGate`, `admission`, ...). */
+    val hooks: List<String> = emptyList(),
+    /** DAEMON-PLUGINS-1: top-level routes (`GET /path`) the daemon half answers; core/official only. */
+    val routes: List<String> = emptyList(),
+    /** DAEMON-PLUGINS-1: routes answered without the bearer token; core/official only. */
+    val publicRoutes: List<String> = emptyList(),
+    /** DAEMON-PLUGINS-1: environment variables the daemon half may read. */
+    val env: List<String> = emptyList(),
+    /** DAEMON-PLUGINS-1: keystore secrets the daemon half may read. */
+    val secrets: List<String> = emptyList(),
+    /** DAEMON-PLUGINS-1: per-plugin limits; unset fields take the host's defaults. */
+    val limits: DaemonPluginLimits = DaemonPluginLimits(),
+)
+
+/** DAEMON-PLUGINS-1: one daemon tool: its name, its policy action id and kind, and a one-line description. */
+@Serializable
+data class DaemonToolDeclaration(val name: String, val action: String, val kind: String = "read", val description: String = "")
+
+/** DAEMON-PLUGINS-1: one plugin-defined frame; [ownerOnly] frames are refused to a community module. */
+@Serializable
+data class DaemonFrameDeclaration(val type: String, val action: String, val kind: String = "read", val ownerOnly: Boolean = false)
+
+/** DAEMON-PLUGINS-1: a daemon half's limits; null = the host default. [memoryMbHint] is reported, not enforced. */
+@Serializable
+data class DaemonPluginLimits(
+    val callTimeoutMs: Long? = null,
+    val toolTimeoutMs: Long? = null,
+    val cpuMsPerCall: Long? = null,
+    val routeRequestsPerMinute: Int? = null,
+    val memoryMbHint: Int? = null,
 )
 
 /**

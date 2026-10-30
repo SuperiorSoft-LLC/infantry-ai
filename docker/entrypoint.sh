@@ -32,7 +32,7 @@ elif [ -n "${AGENTHQ_TOKEN_FILE:-}" ] && [ ! -s "$AGENTHQ_TOKEN_FILE" ] && [ -z 
 fi
 
 # DEMO-LOCK (ticket 2f154f5f): the demo project's directory is a git repository the two seeded agents work in. Made once,
-# on the first locked start, in the /work volume; the daemon then seeds the project and its two sessions (daemon/DemoLock.kt).
+# on the first locked start, in the /work volume; the Demo_Lock daemon plugin then seeds the project and its two sessions (plugins/demo/Demo_Lock/daemon).
 case "${AGENTHQ_DEMO_LOCK:-0}" in
   1|true|on|yes)
     # Ticket 9bf81983: the PUBLIC visitor token the page fills in (default-deny under the lock, never the owner token).

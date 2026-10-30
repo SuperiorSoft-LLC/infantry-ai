@@ -14,5 +14,11 @@
   "events": [],
   "tabs": [{ "id": "example.starter", "container": "center" }],
   "panels": [{ "id": "example.starter.side", "panel": "left" }],
-  "interceptors": [{ "target": "example.starter", "name": "count", "kind": "around" }]
+  "interceptors": [{ "target": "example.starter", "name": "count", "kind": "around" }],
+  "daemon": {
+    "entry": "com.example.starter.daemon.StarterDaemon",
+    "jar": "daemon/build/libs/Example_Starter-daemon.jar",
+    "apiAtLeast": "1.0.0",
+    "tools": [{ "name": "example_sessions", "action": "example.starter.read", "kind": "read", "description": "How many sessions the daemon runs." }]
+  }
 }

@@ -3,11 +3,20 @@
   "version": "1.1.0",
   "apiVersion": 2,
   "author": "Infantry AI",
-  "description": "The demo policy preset (policies/demo.json: which actions the demo turns off and why, its seats, turn limit and notice; read by the daemon) and, in the demo build, the demo notice around the app for Demo_Banner. The dimming itself is core's policy gate.",
+  "description": "The demo policy preset (policies/demo.json: which actions the demo turns off and why, its seats, turn limit and notice; read by the daemon) and, in the demo build, the demo notice around the app for Demo_Banner. The dimming itself is core's policy gate; its daemon half (daemon/) is the seated lockdown: the visitor token, the per-IP turn limit, the seeded sessions and their warm-up.",
   "tier": "official",
   "sequence": [],
   "entry": "com.superiorsoftllc.agenthq.plugins.demo.lock.DemoLockPlugin",
   "buildOrder": 890,
+  "daemon": {
+    "entry": "com.superiorsoftllc.agenthq.plugins.demo.lock.daemon.DemoLockPlugin",
+    "jar": "daemon/build/libs/Demo_Lock-daemon.jar",
+    "apiAtLeast": "1.0.0",
+    "hooks": ["seats", "frameGate", "httpGate", "admission", "mailGate", "spawnGate", "ready", "turns"],
+    "routes": ["GET /demo/visitor-token"],
+    "publicRoutes": ["GET /demo/visitor-token"],
+    "env": ["AGENTHQ_DEMO_NOTICE", "AGENTHQ_DEMO_DIR", "AGENTHQ_DEMO_SEATS", "AGENTHQ_DEMO_PUBLIC_TOKEN", "AGENTHQ_DEMO_PUBLIC_TOKEN_FILE", "AGENTHQ_DEMO_TURNS_PER_IP", "AGENTHQ_DEMO_TURN_WINDOW_HOURS", "AGENTHQ_DEMO_TRUSTED_PROXIES"]
+  },
   "shell": [
     { "node": "infantry.shell.frame", "name": "lock", "mode": "wrap" }
   ]

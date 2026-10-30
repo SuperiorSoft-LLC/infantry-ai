@@ -218,7 +218,7 @@ data class Envelope(
         const val RUN_ATTACH = "run_attach"
         /** client -> daemon: `{"runId", "cols", "rows"}`; resizes the run's pty, no answer unless refused. */
         const val RUN_RESIZE = "run_resize"
-        /** client -> daemon: `{"runId", "data": base64}`; keys into a run started interactive; never under the demo lock. */
+        /** client -> daemon: `{"runId", "data": base64}`; keys into a run started interactive; never under a restricted policy. */
         const val RUN_INPUT = "run_input"
         const val RESUME = "resume"
         const val NEW = "new"
@@ -643,13 +643,13 @@ data class Envelope(
         const val SECRET_STATE = "secret_state"
         // SECRETS-2 (contract 1.135.0): the user's key/value secrets. `secret_field_set` ({name, field, value}),
         // `secret_field_delete` ({name, field}: the secret goes with its last field) and `secret_delete` ({name}) are answered
-        // by `secret_state`, which gains `entries` ([{name, fields:[{name, tail}]}]) and `locked`. Refused under the demo lock.
+        // by `secret_state`, which gains `entries` ([{name, fields:[{name, tail}]}]) and `locked`. Refused under a restricted policy.
         const val SECRET_FIELD_SET = "secret_field_set"
         const val SECRET_FIELD_DELETE = "secret_field_delete"
         const val SECRET_DELETE = "secret_delete"
         // PLUGIN-ENDPOINTS-2 (contract 1.138.0): `plugin_secret_get` ({module, field}) reads ONE field of the secret
         // `plugin.<module lowercased>` for the desktop host's EndpointAccess of that module. Owner connection only, refused under
-        // the demo lock (FrameGate), fields `AGENTHQ_*` refused. Answered directly (never pushed) by `plugin_secret`
+        // a restricted policy, fields `AGENTHQ_*` refused. Answered directly (never pushed) by `plugin_secret`
         // ({module, field, value}; value null = not set). The value is never logged, stored or handed to the plugin.
         const val PLUGIN_SECRET_GET = "plugin_secret_get"
         const val PLUGIN_SECRET = "plugin_secret"

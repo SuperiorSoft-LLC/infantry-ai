@@ -15,11 +15,19 @@ data class PluginStatusWire(
     val version: String? = null,
     val author: String? = null,
     val license: String? = null,
+    /** DAEMON-PLUGINS-1: its daemon half: `loaded`, `refused: why`, `failed: why`; null = it has none. */
+    val daemon: String? = null,
+    /** DAEMON-PLUGINS-1: the daemon tools its daemon half registered. */
+    val tools: List<String> = emptyList(),
 )
 
-/** PLUGINS-1: `GET /plugins`: the plugins root the daemon scanned, whether the demo lock is on, and every module found. */
+/** PLUGINS-1: `GET /plugins`: the plugins root the daemon scanned, whether a restricted policy locks it, and every module found. */
 @Serializable
-data class PluginsWire(val root: String, val demoLock: Boolean, val modules: List<PluginStatusWire>)
+data class PluginsWire(val root: String, val locked: Boolean, val modules: List<PluginStatusWire>) {
+    /** DAEMON-PLUGINS-1: the same with each module's daemon half as [host] holds it. */
+    fun withDaemon(host: com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost): PluginsWire =
+        copy(modules = modules.map { m -> host.status(m.name)?.let { m.copy(daemon = it, tools = host.toolsOf(m.name)) } ?: m })
+}
 
 /**
  * PLUGINS-1: the headless daemon's view of the modules. It applies the same folders, modules.json and trust rules as
@@ -32,20 +40,19 @@ object DaemonPlugins {
         env: (String) -> String? = System::getenv,
         property: (String) -> String? = System::getProperty,
         log: (String) -> Unit = { System.err.println(it) },
-        /** POLICY-1: the daemon's lock now (its active preset's); null = the env alone, as before. */
-        locked: Boolean? = null,
+        /** POLICY-1: whether the active preset is restricted (official modules marked so stay off). */
+        locked: Boolean = false,
         /** CONFIG-8: told the whole resolution (the daemon compiles its config manifest from it). */
         onResolved: (com.superiorsoftllc.agenthq.plugin.host.Resolution) -> Unit = {},
     ): PluginsWire {
         val root = PluginFolders.root(stateDir, env, property)
         val config = PluginFolders.config(root, log)
-        val demoLock = locked ?: PluginFolders.demoLock(env)
-        val resolution = ModuleResolver.resolve(PluginFolders.scan(root, config), config, demoLock)
-        log("[plugins] daemon root ${root.absolutePath}${if (demoLock) " (demo lock on)" else ""}: ${resolution.loaded.size} loaded")
+        val resolution = ModuleResolver.resolve(PluginFolders.scan(root, config, PluginFolders.bundledRoot(env, property)), config, locked)
+        log("[plugins] daemon root ${root.absolutePath}${if (locked) " (locked)" else ""}: ${resolution.loaded.size} loaded")
         resolution.log.forEach(log)
         onResolved(resolution)
         return PluginsWire(
-            root.absolutePath, demoLock,
+            root.absolutePath, locked,
             resolution.statuses.map { s ->
                 PluginStatusWire(s.name, s.tier.name.lowercase(), s.state.name.lowercase(), s.reason, s.manifest?.version, s.manifest?.author, s.manifest?.license)
             },

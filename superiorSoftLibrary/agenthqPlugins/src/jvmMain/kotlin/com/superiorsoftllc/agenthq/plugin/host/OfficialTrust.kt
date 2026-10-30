@@ -58,11 +58,17 @@ object OfficialTrust {
      * Why official module [c] may not load; null = signed by an Infantry key (a cert of [keys] whose fingerprint is
      * [pinned] in the binary) and its module.json is the signed one. [pinned] is overridable for tests only.
      */
-    fun refusal(c: ModuleCandidate, keys: List<X509Certificate>, pinned: Set<String> = PINNED_FINGERPRINTS): String? {
+    fun refusal(c: ModuleCandidate, keys: List<X509Certificate>, pinned: Set<String> = PINNED_FINGERPRINTS): String? =
+        refusal(c, c.manifest?.jar, keys, pinned)
+
+    /**
+     * DAEMON-PLUGINS-1: the same checks for the jar [jarPath] of [c] (the daemon half's `daemon.jar`, or the UI [ModuleManifest.jar]).
+     */
+    fun refusal(c: ModuleCandidate, jarPath: String?, keys: List<X509Certificate>, pinned: Set<String> = PINNED_FINGERPRINTS): String? {
         val pins = pinned.map(::normalize).toSet()
         val m = c.manifest ?: return "no module.json"
         val dir = File(c.dir ?: return "no folder")
-        val jarName = m.jar?.takeIf { it.isNotBlank() } ?: return "module.json names no jar to verify"
+        val jarName = jarPath?.takeIf { it.isNotBlank() } ?: return "module.json names no jar to verify"
         val jar = File(dir, jarName)
         if (!jar.isFile) return "jar $jarName not found"
         if (!jar.canonicalPath.startsWith(dir.canonicalPath + File.separator)) return "jar $jarName is outside the module folder"

@@ -8,7 +8,7 @@ import java.io.File
 /**
  * POLICY-1: the demo preset as the demo plugin ships it (plugins/demo/Demo_Lock/policies/demo.json), read from the repo so
  * the daemon's demo tests run against the plugin's data, not against values in core. Plus the FROZEN allow-lists of the
- * pre-POLICY-1 DemoLock (DemoLock.READ_FRAMES / PROJECT_READ_FRAMES), the parity baseline.
+ * pre-POLICY-1 demo lock (its READ_FRAMES / PROJECT_READ_FRAMES), the parity baseline.
  */
 object DemoPresetFixture {
     val file: File by lazy {
@@ -43,10 +43,4 @@ object DemoPresetFixture {
 
     /** The old `DemoLock.ALLOWED_TYPES`: every frame the lock let through in some form. */
     val ALLOWED_TYPES: Set<String> = READ_FRAMES + PROJECT_READ_FRAMES + setOf("replay_request", Envelope.PROMPT, Envelope.RESUME, Envelope.MAIL_SEND)
-
-    /** The demo lock the old `DemoLock(enabled = true, notice = ...)` was: the demo preset's values. */
-    fun lock(notice: String = "") = DemoLock(
-        enabled = true, notice = notice, projectDir = preset.seats!!.projectDir, projectName = preset.seats!!.projectName,
-        seats = DemoLock.parseSeats(preset.seats!!.seats), preset = preset,
-    )
 }

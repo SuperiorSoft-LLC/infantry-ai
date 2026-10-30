@@ -768,8 +768,11 @@ class SessionManager(
 
     // --- reads ----------------------------------------------------------------------------------
 
-    /** DEMO-LOCK (ticket 2f154f5f): set by the demo seed once its two sessions exist; [startNew] then refuses. */
-    @Volatile var demoLocked: Boolean = false
+    /**
+     * DAEMON-PLUGINS-1 (`spawnGate` hook): asked before [startNew] creates anything (role, project); a non-null answer is the
+     * refusal. The default refuses nothing.
+     */
+    @Volatile var spawnGate: (role: String?, projectId: String?) -> String? = { _, _ -> null }
 
     fun list(): List<SessionRecord> = sessions.values.sortedBy { it.spawnedAt }
 
@@ -838,8 +841,8 @@ class SessionManager(
         /** Contract 1.115.0: create the installation-wide Assistant; set on the FIRST `session` frame, so no client ever sees it as an ordinary agent. */
         global: Boolean = false,
     ): SessionRecord {
-        // DEMO-LOCK (ticket 2f154f5f): once the demo seed exists no path (frame, mail, trigger, ticket) may create a session.
-        if (demoLocked) throw IllegalArgumentException("demo: new sessions are disabled in this demo")
+        // DAEMON-PLUGINS-1: a plugin's spawn gate binds every path (frame, mail, trigger, ticket) that creates a session.
+        spawnGate(role, projectId)?.let { throw IllegalArgumentException(it) }
         busyTwin(null, agentId, ticketId)?.let { throw IllegalArgumentException(twinRefusal("start", agentId, ticketId, it)) }
         val chosen = resolveProvider(providerId).provider
         val sessionModel = spawnModel(model)

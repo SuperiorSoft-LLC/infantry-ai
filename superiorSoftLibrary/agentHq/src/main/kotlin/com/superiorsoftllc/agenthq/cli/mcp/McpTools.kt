@@ -66,8 +66,22 @@ internal class McpTools(
     private val projectConfig = McpProjectConfigTools()
     private val usage = McpUsageTools()
 
-    /** TICKET-FILES (contract 1.137.0): `agenthq_ticket_files` / `agenthq_ticket_related_files`. */
-    private val ticketFiles = McpTicketFilesTools()
+    /** DAEMON-PLUGINS-1: the daemon plugins' tools (TICKET-FILES' two tools are Infantry_Board's now). */
+    private val plugins = McpPluginTools()
+    @Volatile private var pluginNames: Set<String>? = null
+
+    /** DAEMON-PLUGINS-1: the daemon plugins' tools for `tools/list`; none when the daemon has none or is unreachable. */
+    fun pluginDescriptors(): JsonArray {
+        val list = runCatching {
+            val stream = connect()
+            try { runBlocking { plugins.descriptors(stream) } } finally { stream.close() }
+        }.getOrElse { JsonArray(emptyList()) }
+        pluginNames = list.mapNotNull { ((it as? JsonObject)?.get("name") as? JsonPrimitive)?.contentOrNull }.toSet()
+        return list
+    }
+
+    /** True when [name] is a daemon plugin's tool (the daemon is asked once when `tools/list` has not been). */
+    fun isPluginTool(name: String): Boolean = name in (pluginNames ?: run { pluginDescriptors(); pluginNames.orEmpty() })
 
     /** ROGUE-1 (contract 1.120.0): `agenthq_processes` / `agenthq_processes_reap`. */
     private val processTools = McpProcessTools()
@@ -109,8 +123,6 @@ internal class McpTools(
                     McpRoleTools.DELETE -> roles.delete(stream, arguments)
                     McpProjectConfigTools.GET -> projectConfig.get(stream, arguments)
                     McpUsageTools.USAGE -> usage.usage(stream)
-                    McpTicketFilesTools.FILES -> ticketFiles.files(stream, arguments)
-                    McpTicketFilesTools.RELATED -> ticketFiles.related(stream, arguments)
                     McpProjectConfigTools.SET -> projectConfig.set(stream, arguments)
                     McpProcessTools.LIST -> processTools.list(stream, arguments)
                     McpProcessTools.REAP -> processTools.reap(stream, arguments)
@@ -121,7 +133,7 @@ internal class McpTools(
                     McpTicketTools.DELETE -> tickets.delete(stream, arguments)
                     McpTicketTools.MOVE -> tickets.move(stream, arguments)
                     McpTicketTools.START -> writes.startTicket(stream, arguments, McpTicketTools.START)
-                    else -> ToolResult("Unknown tool: $name", isError = true)
+                    else -> plugins.call(stream, name, arguments)
                 }
             }
         } catch (e: Exception) {
@@ -428,7 +440,7 @@ internal class McpTools(
         /** HARNESS-INSTALL-1: detect / install the harness CLIs (claude, opencode, pi) through npm, on a local or remote daemon. */
         const val HARNESS_STATUS = "agenthq_harness_status"
         const val HARNESS_INSTALL = "agenthq_harness_install"
-        val NAMES = setOf(LIST_SESSIONS, GET_SESSION, POD_STATE, BOARD, LIST_HARNESSES, HARNESS_STATUS, HARNESS_INSTALL) + McpWriteTools.NAMES + McpMailTools.NAMES + McpTicketTools.NAMES + McpQuestionTools.NAMES + McpProgressTools.NAMES + McpPipelineTools.NAMES + McpRoleTools.NAMES + McpProjectConfigTools.NAMES + McpUsageTools.NAMES + McpTicketFilesTools.NAMES + McpProcessTools.NAMES
+        val NAMES = setOf(LIST_SESSIONS, GET_SESSION, POD_STATE, BOARD, LIST_HARNESSES, HARNESS_STATUS, HARNESS_INSTALL) + McpWriteTools.NAMES + McpMailTools.NAMES + McpTicketTools.NAMES + McpQuestionTools.NAMES + McpProgressTools.NAMES + McpPipelineTools.NAMES + McpRoleTools.NAMES + McpProjectConfigTools.NAMES + McpUsageTools.NAMES + McpProcessTools.NAMES
 
         /** The one, fixed message a tool answers with when nothing is listening at the daemon address. */
         const val DAEMON_UNREACHABLE =
@@ -568,7 +580,6 @@ internal class McpTools(
             McpRoleTools.descriptors().forEach { add(it) }
             McpProjectConfigTools.descriptors().forEach { add(it) }
             McpUsageTools.descriptors().forEach { add(it) }
-            McpTicketFilesTools.descriptors().forEach { add(it) }
             McpQuestionTools.descriptors().forEach { add(it) }
             McpProgressTools.descriptors().forEach { add(it) }
             McpProcessTools.descriptors().forEach { add(it) }

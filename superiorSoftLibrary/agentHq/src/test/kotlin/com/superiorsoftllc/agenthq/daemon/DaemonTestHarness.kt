@@ -318,8 +318,10 @@ class DaemonFixture private constructor(
             webBundle: WebBundle = WebBundle.EMPTY,
             /** SEC-FIX-1: the main [client] presents the owner credential; false connects it as an agent would. */
             owner: Boolean = true,
-            /** SEC-FIX-1: the demo lock, off unless a test sets it, so the operator's AGENTHQ_DEMO_LOCK never leaks in. */
-            demoLock: Boolean = false,
+            /** DAEMON-PLUGINS-1: the plugins root the daemon loads its daemon plugins from ([TestDaemonPlugins.root]); null = none. */
+            pluginsRoot: File? = null,
+            pluginTrust: com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.Trust? = null,
+            pluginEnv: (String) -> String? = { null },
             /**
              * POLICY-1: the policy presets and the switch. Default: production only, over the fixture's OWN state dir (never
              * the process's, gap 9), so the operator's AGENTHQ_POLICY / policy.preset never leaks in.
@@ -367,7 +369,9 @@ class DaemonFixture private constructor(
                 handoffTimeoutMs = handoffTimeoutMs,
                 webBundle = webBundle,
                 ownerToken = OwnerCredential.ensure(stateDir),
-                demoLock = { demoLock },
+                pluginsRoot = pluginsRoot ?: TestDaemonPlugins.none(stateDir),
+                pluginTrust = pluginTrust ?: TestDaemonPlugins.trustAll,
+                pluginEnv = pluginEnv,
                 policies = policies?.invoke(stateDir) ?: com.superiorsoftllc.agenthq.policy.PolicyRuntime(emptyList(), { null }, null, stateDir),
             )
             beforeStart(daemon)

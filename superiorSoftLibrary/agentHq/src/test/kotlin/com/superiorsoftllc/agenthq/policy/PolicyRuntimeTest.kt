@@ -40,7 +40,6 @@ class PolicyRuntimeTest {
         assertNull(r.pinnedBy)
         assertEquals("", r.readyFields())
         for (t in listOf(Envelope.TICKET_SAVE, Envelope.KILL, "anything_new")) assertNull(r.frameRefusal(Envelope(t, "{}"), null, owner = false), t)
-        assertFalse(r.lock.enabled)
     }
 
     @Test fun `the owner flips by the one setting, it persists, and back`() {
@@ -81,7 +80,7 @@ class PolicyRuntimeTest {
         assertFalse(pinned.wire(owner = true).canSwitch)
         val demo = runtime(mapOf(DemoPresetFixture.preset.selectWhenEnv!! to "1"))
         assertEquals(DemoPresetFixture.preset.id, demo.current.id)
-        assertTrue(demo.lock.enabled, "the demo preset has seats")
+        assertTrue(demo.current.seats != null, "the demo preset has seats (a daemon plugin implements them)")
         assertTrue(demo.readyFields().startsWith(" demo=lock access=restricted notices=demo_limit"), demo.readyFields())
         assertEquals(PolicyPreset.PRODUCTION, runtime(mapOf(DemoPresetFixture.preset.selectWhenEnv!! to "0")).current.id)
     }

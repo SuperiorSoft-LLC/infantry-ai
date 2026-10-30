@@ -258,10 +258,10 @@ class KeystoreTest {
     }
 
     @Test
-    fun `the demo lock refuses every change and says so in the state`() {
+    fun `a restricted policy refuses every change and says so in the state`() {
         val ks = Keystore(dir(), env = { null }, vault = null)
         ks.setField("deploy", "TOKEN", secret)
-        val h = KeystoreHandler(ks, env = { null }, demoLock = { true })
+        val h = KeystoreHandler(ks, env = { null }, restricted = { true })
         for (frame in listOf(
             Envelope(Envelope.SECRET_FIELD_SET, """{"name":"deploy","field":"TOKEN","value":"x-y-z-w"}"""),
             Envelope(Envelope.SECRET_FIELD_DELETE, """{"name":"deploy","field":"TOKEN"}"""),
@@ -270,7 +270,7 @@ class KeystoreTest {
         )) {
             val reply = h.answer(frame)!!
             assertEquals(Envelope.ERROR, reply.type, frame.type)
-            assertTrue(reply.data.contains("demo lock"))
+            assertTrue(reply.data.contains("restricted policy"))
         }
         assertEquals(secret, ks.field("deploy", "TOKEN"))
         val status = h.answer(Envelope(Envelope.SECRET_STATUS, "{}"))!!

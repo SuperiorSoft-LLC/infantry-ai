@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.daemon
+package com.superiorsoftllc.agenthq.plugins.demo.lock.daemon
 
 import java.io.File
 import java.nio.file.Files
@@ -7,8 +7,8 @@ import java.nio.file.StandardCopyOption
 /**
  * Ticket 9bf81983 (demo-build): at most [perClient] visitor turns per client IP in a rolling [windowMillis], so the demo
  * notice's "You have 10 turns" is true. A turn is a prompt / resume / mail_send a client sends that reaches an agent;
- * the daemon's own start-up warm-up never passes here. Every turn's time is kept in [file] (one `ip<TAB>epochMillis`
- * line each), so the count survives a restart. Both numbers come from the deployment's env ([fromEnvironment]).
+ * the plugin's own start-up warm-up never passes here. Every turn's time is kept in [file] (one `ip<TAB>epochMillis`
+ * line each), so the count survives a restart. Both numbers come from the preset, each overridable by the deployment's env.
  */
 class DemoTurnLimit(
     val perClient: Int,
@@ -84,17 +84,6 @@ class DemoTurnLimit(
         const val FILE_NAME = "demo-turns.tsv"
         private const val HOUR_MILLIS = 3_600_000L
         private val LOOPBACK = setOf("127.0.0.1", "::1", "0:0:0:0:0:0:0:1")
-
-        /** Null (no limit) unless both numbers are set and positive: the deployment's seed env supplies them. */
-        fun fromEnvironment(dir: File, getenv: (String) -> String? = System::getenv): DemoTurnLimit? {
-            val turns = getenv(TURNS_ENV)?.trim()?.toIntOrNull()?.takeIf { it > 0 }
-            val hours = getenv(WINDOW_ENV)?.trim()?.toLongOrNull()?.takeIf { it > 0 }
-            if (turns == null || hours == null) {
-                System.err.println("[agentHq] DEMO LOCK: no turn limit ($TURNS_ENV and $WINDOW_ENV must both be positive)")
-                return null
-            }
-            return DemoTurnLimit(turns, hours * HOUR_MILLIS, File(dir, FILE_NAME))
-        }
 
         fun trustedProxies(getenv: (String) -> String? = System::getenv): Set<String> =
             getenv(TRUSTED_PROXIES_ENV)?.split(',')?.map { normalize(it) }?.filter { it.isNotEmpty() }?.toSet()?.takeIf { it.isNotEmpty() }

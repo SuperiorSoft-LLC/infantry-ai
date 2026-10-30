@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.143.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.144.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -9,6 +9,21 @@ a stub, or one that does not exist yet) is behind the daemon.
 > before you write your first test. It is short, it needs no tools beyond `read`, and a merge will be held
 > without it. It covers the RED-before-implementation rule, the mutation check, how to write a test that
 > cannot pass vacuously, and the durability rules (commit by explicit path, early).
+
+### DAEMON-PLUGINS-1 (contract 1.144.0, additive + behavioural): daemon plugins, their tools, frames and routes
+
+A module's `daemon` object (module.json) can name a daemon half (`entry`, `jar`, `apiAtLeast`), loaded under the same
+trust rules as the UI (official: signed or bundled; community: `enabled` plus grants). See `docs/DAEMON-PLUGINS.md`.
+
+- `plugin_tools` (no payload) is answered by `plugin_tools`: a JSON array of tool descriptors `{name, description, inputSchema, annotations, module, action}`, one per tool a loaded daemon plugin registered. `agenthq mcp serve` appends them to its `tools/list` (without `module`/`action`).
+- `plugin_tool_call` (`{name, arguments}`) is answered by `plugin_tool_result` (`{name, text, isError}`), with the request's `requestId`. The call is gated by the tool's own policy action (module.json `daemon.tools[].action`); a frame the tool sends on the caller's behalf passes every gate the caller's own frames pass. Both frames are on the agent tier.
+- A plugin's own frames (`daemon.frames`) and routes (`/plugins/<module>/...`, and declared top-level routes such as `GET /demo/visitor-token`) are served the same way; an unknown frame type is still `unknown frame type`.
+- `GET /plugins` modules gain `daemon` (the daemon half's state: `loaded`, `refused: <why>`, `failed: <why>` (a start or call failed and the plugin is disabled), or absent) and `tools`.
+- New limits (Settings > Limits, `settings_set`): `limits.plugins.callTimeoutMs` (2000), `limits.plugins.toolTimeoutMs` (60000), `limits.plugins.routeRequestsPerMinute` (600, 0 = unlimited), `limits.plugins.startTimeoutMs` (30000), `limits.plugins.stopTimeoutMs` (5000): a plugin's defaults, which its module.json `daemon.limits` override. Read when the plugin loads.
+- The `ticket_files` MCP tools (`agenthq_ticket_files`, `agenthq_ticket_related_files`) are now the Infantry_Board daemon plugin's: same names, schemas, answers and gating (`board.files.read`).
+- Behavioural: the seated lockdown (1.136.0's frame allowlist, the visitor token, the per-IP turn limit) is no longer core's; it is the Demo_Lock daemon plugin's (hook `seats`). A preset with `seats` that no loaded plugin implements refuses every frame but the policy switch (fail closed). `AGENTHQ_DEMO_LOCK` alone no longer locks anything: it selects the demo preset (its `selectWhenEnv`), whose lockdown the plugin enforces.
+
+A client below 1.144.0 never sends these frames; on a daemon below 1.144.0 `plugin_tools` is an unknown frame, which the MCP server treats as "no plugin tools".
 
 ### POLICY-1 (contract 1.143.0, additive + behavioural): named actions and the policy switch
 

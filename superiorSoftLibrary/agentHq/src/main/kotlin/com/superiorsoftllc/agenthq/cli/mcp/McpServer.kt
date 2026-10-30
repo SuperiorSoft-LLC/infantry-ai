@@ -2,6 +2,7 @@ package com.superiorsoftllc.agenthq.cli.mcp
 
 import com.superiorsoftllc.agenthq.protocol.EventVocabulary
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -79,11 +80,11 @@ internal class McpServer(
         return when (method) {
             "initialize" -> result(id, initializeResult(params))
             "ping" -> result(id, JsonObject(emptyMap()))
-            "tools/list" -> result(id, buildJsonObject { put("tools", McpTools.descriptors()) })
+            "tools/list" -> result(id, buildJsonObject { put("tools", JsonArray(McpTools.descriptors() + tools.pluginDescriptors())) })
             "tools/call" -> {
                 val name = (params["name"] as? JsonPrimitive)?.contentOrNull
                     ?: return error(id, INVALID_PARAMS, "Invalid params: tools/call requires a tool name")
-                if (name !in McpTools.NAMES) return error(id, INVALID_PARAMS, "Unknown tool: $name")
+                if (name !in McpTools.NAMES && !tools.isPluginTool(name)) return error(id, INVALID_PARAMS, "Unknown tool: $name")
                 val arguments = params["arguments"] as? JsonObject ?: JsonObject(emptyMap())
                 result(id, tools.call(name, arguments).toJson())
             }

@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.daemon
+package com.superiorsoftllc.agenthq.plugins.demo.lock.daemon
 
 import com.superiorsoftllc.agenthq.plugin.api.PolicyPreset
 import com.superiorsoftllc.agenthq.plugin.api.SeatsSpec
@@ -20,7 +20,7 @@ class TurnLimitTextTest {
     private fun limitOf(preset: PolicyPreset): DemoTurnLimit = DemoLock.of(preset, { null }, state).turnLimit!!
 
     @Test fun `the demo preset's text is the refusal`() {
-        val demo = DemoPresetFixture.preset.let { it.copy(seats = it.seats!!.copy(turnsPerIp = 1, turnWindowHours = 24)) }
+        val demo = DemoPreset.preset.let { it.copy(seats = it.seats!!.copy(turnsPerIp = 1, turnWindowHours = 24)) }
         val limit = limitOf(demo)
         limit.record("203.0.113.5")
         assertEquals("demo_limit Demo limit reached: 1 turns per visitor per day", limit.refusal("203.0.113.5"))

@@ -91,8 +91,8 @@ class RunManager(
      */
     private val terminal: TerminalRunner? = null,
     private val limits: RunLimits = RunLimits(),
-    /** Demo lock: no interactive run, no keyboard into a run (no raw shell), and no run gets a secret (SECRETS-2). */
-    private val demoLock: () -> Boolean = { false },
+    /** A restricted policy (its `restricted`): no interactive run, no keyboard into a run (no raw shell), and no run gets a secret (SECRETS-2). */
+    private val restricted: () -> Boolean = { false },
     /**
      * SECRETS-2: a keystore secret's fields by name (null = no such secret). Read on the daemon's side at `run_start`;
      * the values go only into the child's environment and are masked in everything it prints.
@@ -130,7 +130,7 @@ class RunManager(
 
     /**
      * `run_start {"commandId", "interactive"?, "cols"?, "rows"?}`. [interactive] (1.134.0) lets a console type
-     * into the run and is refused under the demo lock; cols / rows size the pty before its first byte (clamped, 1.136.0).
+     * into the run and is refused under a restricted policy; cols / rows size the pty before its first byte (clamped, 1.136.0).
      * The run gets its saved command's secrets (1.135.0) and no others: a `secrets` override is refused (1.136.0, SEC-FIX-1).
      */
     fun start(data: String): Started {
@@ -138,7 +138,7 @@ class RunManager(
         val commandId = (obj?.get("commandId") as? JsonPrimitive)?.takeIf { it.isString }?.content
             ?: return refuse("run_start expects {\"commandId\":\"<id>\"}")
         val interactive = (obj["interactive"] as? JsonPrimitive)?.booleanOrNull ?: false
-        if (interactive && demoLock()) return refuse("run_start refused: interactive runs are off under the demo lock")
+        if (interactive && restricted()) return refuse("run_start refused: interactive runs are off under a restricted policy")
         val cols = clampCols((obj["cols"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 } ?: DEFAULT_COLS)
         val rows = clampRows((obj["rows"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 } ?: DEFAULT_ROWS)
         // SEC-FIX-1 H1(a): a run gets its SAVED command's secrets only; a request naming more is refused, never merged.
@@ -192,7 +192,7 @@ class RunManager(
 
     /**
      * `run_input {"runId", "data": base64}`: keyboard bytes into the run's pty. Only for a run started interactive and
-     * never under the demo lock. SEC-FIX-1 M2: at most `limits.run.inputMaxFrameBytes` per frame and
+     * never under a restricted policy. SEC-FIX-1 M2: at most `limits.run.inputMaxFrameBytes` per frame and
      * `limits.run.inputBytesPerSecond` per run; the bytes are queued (at most `limits.run.inputQueueBytes`) for the
      * run's own writer thread, so a slow pty never holds the WebSocket loop. Null when queued, else an ERROR.
      */
@@ -206,7 +206,7 @@ class RunManager(
         val bytes = runCatching { Base64.getDecoder().decode(encoded) }.getOrNull()
             ?: return Envelope(Envelope.ERROR, "run_input expects {\"runId\", \"data\": base64}")
         if (bytes.size > maxFrame) return inputTooBig(maxFrame)
-        if (demoLock()) return Envelope(Envelope.ERROR, "run_input refused: typing into a run is off under the demo lock")
+        if (restricted()) return Envelope(Envelope.ERROR, "run_input refused: typing into a run is off under a restricted policy")
         val run = synchronized(lock) { inFlight }?.takeIf { it.runId == runId }
             ?: return Envelope(Envelope.ERROR, "run_input refused: no such run in flight")
         if (!run.interactive) return Envelope(Envelope.ERROR, "run_input refused: the run was not started interactive")
@@ -263,7 +263,7 @@ class RunManager(
         fun no(why: String) = Result.failure<Map<String, String>>(IllegalArgumentException(why))
         if (names.isEmpty()) return Result.success(emptyMap())
         if (names.size > maxRunSecrets) return no("a run takes at most $maxRunSecrets secrets")
-        if (demoLock()) return no("secrets are locked under the demo lock")
+        if (restricted()) return no("secrets are locked under a restricted policy")
         val env = LinkedHashMap<String, String>()
         for (name in names) {
             if (!com.superiorsoftllc.agenthq.keystore.Keystore.isName(name)) return no("invalid secret name")
