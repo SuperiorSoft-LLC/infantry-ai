@@ -126,7 +126,7 @@ class McpTicketDeleteE2eTest {
         assertEquals(first, deleted.str("ticketId"), "$deleted")
         assertEquals("delete me by full id", deleted.str("title"), "$deleted")
         assertEquals(setOf(keep), boardIds(), "only the named ticket was deleted")
-        assertRefused(agent.callTool(McpTicketTools.GET, """{"ticketId":"$first"}"""), "no ticket")
+        assertRefused(agent.callTool("agenthq_ticket_get", """{"ticketId":"$first"}"""), "no ticket")
 
         // 4) the 8-char suffix the board prints resolves like ticket_save's.
         val second = create("delete me by suffix")

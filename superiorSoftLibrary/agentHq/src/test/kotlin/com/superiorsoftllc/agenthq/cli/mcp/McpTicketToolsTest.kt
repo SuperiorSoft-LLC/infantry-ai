@@ -139,7 +139,7 @@ class McpTicketToolsTest {
         assertEquals("proj-mcp", stored.projectId, "the session's AGENTHQ_PROJECT_ID is the default project")
         assertEquals("todo", stored.status)
 
-        val read = call(McpTicketTools.GET, args("ticketId" to id.takeLast(8))).payload()
+        val read = call("agenthq_ticket_get", args("ticketId" to id.takeLast(8))).payload()
         assertEquals(brief, read.field("description"))
         assertEquals("role:backend", read.field("agentId"))
         assertEquals("haiku", read.field("model"))
@@ -169,6 +169,6 @@ class McpTicketToolsTest {
         assertTrue(board(fixture).none { it.title == "bad model" })
         assertTrue(call(McpTicketTools.CREATE, JsonObject(emptyMap())).isError(), "a title is required")
         assertTrue(call(McpTicketTools.UPDATE, args("ticketId" to "nope0000")).isError(), "an unknown ticket is refused")
-        assertTrue(call(McpTicketTools.GET, args("ticketId" to "nope0000")).isError())
+        assertTrue(call("agenthq_ticket_get", args("ticketId" to "nope0000")).isError())
     }
 }

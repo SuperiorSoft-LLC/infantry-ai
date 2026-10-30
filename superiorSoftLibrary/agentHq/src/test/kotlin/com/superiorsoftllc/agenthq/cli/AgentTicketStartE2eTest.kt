@@ -440,7 +440,7 @@ class AgentTicketStartE2eTest {
         assertTrue("PROVIDER: claude" in lines, "ticket show must print the provider: ${shown.out}")
         assertTrue("MODEL: sonnet" in lines, "ticket show must print the model: ${shown.out}")
 
-        val got = mcp(rig)(McpTicketTools.GET, args("ticketId" to shortId))
+        val got = mcp(rig)("agenthq_ticket_get", args("ticketId" to shortId))
         assertFalse(got.isError(), got.text())
         assertEquals("claude", got.payload().field("provider"), got.text())
         assertEquals("sonnet", got.payload().field("model"), got.text())

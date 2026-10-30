@@ -129,7 +129,7 @@ class McpBoardShortIdE2eTest {
             val short = shortTicketId(id)
             val line = assertNotNull(lines.singleOrNull { it.trimStart().startsWith("$short | ") }, "exactly one board line must start with $short: $lines")
             assertTrue(!line.contains("ticket-"), "the board line carries the short id, not a cut full id: $line")
-            val got = payload(agent.callTool(McpTicketTools.GET, """{"ticketId":"$short"}"""))
+            val got = payload(agent.callTool("agenthq_ticket_get", """{"ticketId":"$short"}"""))
             assertEquals(id, got.str("ticketId"), "the board's short id must round-trip into ticket_get")
         }
         val longLine = lines.single { it.trimStart().startsWith(shortTicketId(ids[0])) }
@@ -138,7 +138,7 @@ class McpBoardShortIdE2eTest {
         val byHead = ids.groupBy { it.removePrefix("ticket-").take(1) }
         val (sharedHead, colliding) = byHead.entries.first { it.value.size >= 2 }
         for (typed in listOf(sharedHead, "ticket-$sharedHead")) {
-            val refusal = agent.callTool(McpTicketTools.GET, """{"ticketId":"$typed"}""")
+            val refusal = agent.callTool("agenthq_ticket_get", """{"ticketId":"$typed"}""")
             assertRefused(refusal, "ambiguous")
             for (id in colliding) assertTrue(text(refusal).contains(id), "the ambiguity must list $id: ${text(refusal)}")
             assertTrue(text(refusal).contains("Board ticket") || text(refusal).contains("LLLL"), "it lists the titles: ${text(refusal)}")
@@ -146,8 +146,8 @@ class McpBoardShortIdE2eTest {
         // A head prefix that only one ticket carries resolves, with or without the scheme.
         val unique = ids.first { id -> ids.count { it.removePrefix("ticket-").startsWith(id.removePrefix("ticket-").take(3)) } == 1 }
         val head3 = unique.removePrefix("ticket-").take(3)
-        assertEquals(unique, payload(agent.callTool(McpTicketTools.GET, """{"ticketId":"$head3"}""")).str("ticketId"))
-        assertEquals(unique, payload(agent.callTool(McpTicketTools.GET, """{"ticketId":"ticket-$head3"}""")).str("ticketId"))
+        assertEquals(unique, payload(agent.callTool("agenthq_ticket_get", """{"ticketId":"$head3"}""")).str("ticketId"))
+        assertEquals(unique, payload(agent.callTool("agenthq_ticket_get", """{"ticketId":"ticket-$head3"}""")).str("ticketId"))
     }
 
     private companion object {

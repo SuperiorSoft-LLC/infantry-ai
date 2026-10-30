@@ -83,7 +83,7 @@ that takes more than 75 s now errors where it used to wait 15 minutes. `npm view
 | F2 (list_harnesses done, RUNTIME-LOAD-2; the three session tools: section 6) | `agenthq_list_harnesses` + `agenthq_list_sessions` / `agenthq_get_session` / `agenthq_pod_state` into the Infantry_Agents half (read-only frames) | S-M | Same pattern, no new API |
 | F3 (done, RUNTIME-LOAD-3) | Roles tools (5) into an Infantry_Roles daemon half (agent-caller persona rule moves with it) | M | Next family with a ready owner module |
 | F4 (done, RUNTIME-LOAD-3) | `agenthq_ask` into Infantry_Attention; project config tools into Infantry_Settings | S each | One frame each |
-| F5 | Tickets/epic/board/progress tools into Infantry_Board (`ProjectScope` as an API helper) | M | Biggest family, riskiest scope rules |
+| F5 | Tickets/epic/board/progress tools into Infantry_Board (`ProjectScope` as an API helper); `agenthq_ticket_get` DONE in BOARD-API-2, rest in section 9 | M | Biggest family, riskiest scope rules |
 | F6 | Mail, pipeline, `watch_file` (needs a DaemonApi surface for watch hooks) | M | Needs new API surface |
 | F7 | A folder source for `HarnessPluginSource` + a harness API module; move `pi`, then `claude`, then `opencode` | L | Contract design; `pi` first, fewest daemon internals |
 | F8 (stopped, RUNTIME-LOAD-3: section 7) | Core Config `ConfigEntry` fallback removed (G13) | S-M | Independent of the daemon |
@@ -157,3 +157,24 @@ every call; community plugins need the grants `tickets.read|write|delete|start`,
   with `Infantry_Board` loaded first. Instead `LocalBoardServicesTest` proves the API carries every field the tool answers
   (byte-identical JSON rendered from `TicketInfo`). That re-pointing is the first job of DP-5 / the F5 ticket.
 * The old `BuiltinToolsListGuardTest` reason ("needs ProjectScope as an API helper") is now only the test re-pointing above.
+
+## 9. BOARD-API-2: the first F5 slice (ticket read tools) and what is left
+
+`agenthq_ticket_get` is now Infantry_Board's daemon tool (`TicketGetTool`, over `api.tickets.get` with
+`call.caller.copy(activeSession = call.clientSessionId)`; policy action `board.read`, kind `read`, the action of the `ticket_get` /
+`ticket_list` frames it used to send). `agenthq_ticket_files` / `agenthq_ticket_related_files` were already there (TICKET-FILES). The six
+tests that called `McpTicketTools.GET` on plain daemons now load the built Infantry_Board jar (`TestDaemonPlugins.boardRoot`);
+`McpServeTest.ticketGetComesFromTheBoardPluginUnchanged` holds the byte-for-byte descriptor, the answer's field order and the action; the
+plain-daemon `tools/list` no longer has the tool (vanishes cleanly). `BuiltinToolsListGuardTest` ceiling 23 -> 22.
+
+What is left of F5 in core, and why each stays for now:
+
+| tool | why it stays |
+|---|---|
+| `agenthq_board` | NOT a pure read of tickets: `BoardSummary.render` also needs the daemon's `SessionRecord`s (who works on which card, git commit of the sessions). Needs a sessions read model in the API (or `Board.summary` rendered by the host) first. |
+| `agenthq_ticket_create`, `_update`, `_move`, `_delete` | The WRITE side: image upload/attach (`TicketImageFiles`, local file paths the MCP process reads and uploads over `image_upload`), `TicketPlacement` (before/after/top/bottom), and weight/role/provider/model validation texts must stay byte-identical. The Tickets API covers the operations (DP-4a); the MCP process's local file access is the blocker: a plugin runs in the daemon and cannot read the agent's files. Next ticket. |
+| `agenthq_ticket_start` | `McpWriteTools.startTicket` runs under `McpGuardrails` (spawn depth, concurrency, kill scope), which is host-side CLI code (DP-11), and polls the worker via `TicketStarter`. |
+| `agenthq_epic_base` | Needs `Epics.setBase` plus the same scope and refusal texts; small once the write tools move (same ticket). |
+| `agenthq_progress` | Not a board tool; a session-progress report. Moves with the Agents family. |
+
+Not run for this slice: wasm/Android builds.
