@@ -173,16 +173,6 @@ tasks.register<JavaExec>("roleCatalog") {
     providers.gradleProperty("roles").orNull?.takeIf { it.isNotBlank() }?.let { args(it) }
 }
 
-// Phase 2 comparison harness: drive ONE prompt through the selected provider + runner and print a
-// compact summary (exit code, line counts, session id, elapsed). Same runner and same stdin-EOF
-// delivery for both CLIs, so opencode-vs-claude is an apples-to-apples comparison.
-tasks.register<JavaExec>("probeProvider") {
-    group = "application"
-    description = "One-shot probe of AGENTHQ_PROVIDER through AGENTHQ_RUNNER (Phase 0/2 comparison)."
-    mainClass.set("com.superiorsoftllc.agenthq.probe.ProviderProbeKt")
-    classpath = sourceSets["main"].runtimeClasspath
-}
-
 // VerifyMigrationTask proves a hand-written .sqm migration reproduces the .sq schema. It is
 // disabled repo-wide BY DESIGN (same line as superiorSoftLibrary/build.gradle.kts:97): the
 // `runs` table is brand new, there is no shipped v0 to migrate, and a false mismatch here would
@@ -334,7 +324,7 @@ tasks.withType<Test>().configureEach {
     maxParallelForks = providers.gradleProperty("agenthq.testForks").map { it.toInt() }.getOrElse(4)
     maxHeapSize = "2g"
     // DAEMON-PLUGINS-1: the daemon tests load the real daemon halves (TestDaemonPlugins), so their jars are built first.
-    dependsOn(":daemon-plugin-demo-Demo_Lock:jar", ":daemon-plugin-official-Infantry_Board:jar", ":daemon-plugin-examples-Acme_DaemonHello:jar", ":daemon-plugin-examples-Acme_PolicyHook:jar")
+    dependsOn(":daemon-plugin-demo-Demo_Lock:jar", ":daemon-plugin-official-Infantry_Board:jar", ":daemon-plugin-official-Infantry_Usage:jar", ":daemon-plugin-official-Infantry_Processes:jar", ":daemon-plugin-examples-Acme_DaemonHello:jar", ":daemon-plugin-examples-Acme_PolicyHook:jar")
 }
 
 tasks.withType<Test>().configureEach {

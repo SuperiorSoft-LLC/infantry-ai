@@ -55,6 +55,22 @@ class McpServeTest {
          "annotations":{"readOnlyHint":true,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false}}
     ]"""
 
+    /** The deleted McpUsageTools / McpProcessTools descriptors, as they were served (USAGE-PACE 1.119.0, ROGUE-1 1.120.0). */
+    private val USAGE_PROCESSES_GOLDEN = """[
+        {"name":"agenthq_usage",
+         "description":"Read plan usage per meter (claude = the Claude subscription, also spent by pi/opencode running anthropic/* models; opencode-go; others): percent of the plan window used (the highest window), when it resets, points ahead/under an even burn, and how many ticket workers the pacing rule allows versus how many run. An agent's ticket start beyond the allowance is refused, with the reason. Unknown usage = no pacing (fail open). Text summary first, then the JSON report.",
+         "inputSchema":{"type":"object","properties":{},"required":[],"additionalProperties":false},
+         "annotations":{"readOnlyHint":true,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false}},
+        {"name":"agenthq_processes",
+         "description":"List rogue background processes (Gradle/Kotlin daemons, node, JVMs) left behind by ended or idle sessions, with MB, age and owner session, plus free RAM against the floor. all=true also lists healthy tracked processes and heavy processes that are not ours (never reapable).",
+         "inputSchema":{"type":"object","properties":{"all":{"type":"string","description":"true to include healthy tracked and unattributed processes."}},"required":[],"additionalProperties":false},
+         "annotations":{"readOnlyHint":true,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false}},
+        {"name":"agenthq_processes_reap",
+         "description":"Kill one process (pid) or every rogue one (all=true). Only a process a session of this daemon provably started (pid and start time recorded) is killed; anything else is refused.",
+         "inputSchema":{"type":"object","properties":{"pid":{"type":"string","description":"The process id to kill."},"all":{"type":"string","description":"true to reap every rogue process."}},"required":[],"additionalProperties":false},
+         "annotations":{"readOnlyHint":false,"destructiveHint":true,"idempotentHint":true,"openWorldHint":false}}
+    ]"""
+
     private val fixtures = mutableListOf<DaemonFixture>()
     private val servers = mutableListOf<Served>()
 
@@ -174,11 +190,9 @@ class McpServeTest {
                 "agenthq_inbox", "agenthq_read", // MAIL-MCP-1
                 "agenthq_pipeline", "agenthq_pipeline_record", // PIPE-1
                 "agenthq_role_list", "agenthq_role_get", "agenthq_role_update", "agenthq_role_create", "agenthq_role_delete", "agenthq_project_config_get", "agenthq_project_config_set", // ROLE-EDIT-1, LANE-CAPS
-                "agenthq_usage", // USAGE-PACE (1.119.0): listed after the project tools, before ask
                 "agenthq_ask", // ASK-1
                 "agenthq_progress", // PROGRESS-1 (1.117.0)
                 "agenthq_watch_file", // STALL-4
-                "agenthq_processes", "agenthq_processes_reap", // ROGUE-1 (1.120.0)
             ),
             tools.map { it["name"]!!.jsonPrimitive.content },
         )
@@ -285,6 +299,53 @@ class McpServeTest {
             assertEquals(com.superiorsoftllc.agenthq.ticketfiles.TicketFilesReport.decode(direct.data).text, text(viaPlugin))
             val related = served.callTool("agenthq_ticket_related_files", """{"ticketId":"ticket-55476f3c","top":3}""")
             assertEquals(false, related["isError"]!!.jsonPrimitive.content.toBoolean(), "$related")
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    /**
+     * DAEMON-PLUGINS-3: `agenthq_usage`, `agenthq_processes` and `agenthq_processes_reap` moved from this MCP server into the
+     * Infantry_Usage / Infantry_Processes daemon plugins. Same descriptors ([USAGE_PROCESSES_GOLDEN]), same argument errors,
+     * same answers as the daemon's own frames rendered by the shared API text helpers.
+     */
+    @Test
+    fun usageAndProcessesToolsComeFromTheirPluginsUnchanged() {
+        val root = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Usage", "official/Infantry_Processes")
+        try {
+            val fixture = DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-plugin").toFile(), pluginsRoot = root)
+                .also { fixtures += it }
+            fixture.client.await(Envelope.READY)
+            val served = serve("--port", fixture.port.toString())
+            initialize(served)
+
+            val tools = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject }
+            val mine = tools.filter { it["name"]!!.jsonPrimitive.content in setOf("agenthq_usage", "agenthq_processes", "agenthq_processes_reap") }
+                .sortedBy { listOf("agenthq_usage", "agenthq_processes", "agenthq_processes_reap").indexOf(it["name"]!!.jsonPrimitive.content) }
+            assertEquals(Json.parseToJsonElement(USAGE_PROCESSES_GOLDEN), JsonArray(mine), "the descriptors changed in the move")
+
+            fun text(result: JsonObject) = result["content"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content
+            fun isError(result: JsonObject) = result["isError"]!!.jsonPrimitive.content.toBoolean()
+            // The argument errors, word for word.
+            val none = served.callTool("agenthq_processes_reap")
+            assertEquals(true, isError(none))
+            assertEquals("agenthq_processes_reap needs exactly one of pid or all=true", text(none))
+            assertEquals("agenthq_processes_reap: pid must be a number", text(served.callTool("agenthq_processes_reap", """{"pid":"abc"}""")))
+
+            // The usage answer: the shared text, a blank line, then the JSON report of the daemon's own `usage_get` answer.
+            fixture.client.send(Envelope(Envelope.USAGE_GET, "", requestId = "direct"))
+            val direct = fixture.client.awaitWhere("the direct usage_get answer") { it.requestId == "direct" || it.type == Envelope.USAGE_REPORT }
+            val report = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+                .decodeFromString(com.superiorsoftllc.agenthq.daemon.api.usage.UsageReport.serializer(), direct.data)
+            val usage = served.callTool("agenthq_usage")
+            assertEquals(false, isError(usage), "$usage")
+            assertTrue(text(usage).startsWith(com.superiorsoftllc.agenthq.daemon.api.usage.UsageText.render(report)), text(usage))
+
+            // The processes list: the shared text, not an error.
+            val list = served.callTool("agenthq_processes")
+            assertEquals(false, isError(list), "$list")
+            assertTrue(text(list).contains("memory:"), text(list))
+            assertTrue(text(list).contains("rogue ("), text(list))
         } finally {
             root.deleteRecursively()
         }

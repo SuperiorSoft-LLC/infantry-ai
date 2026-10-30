@@ -16,8 +16,6 @@ class BuiltinToolsListGuardTest {
     /** tool -> why it is still in core. All are "migration pending" (family + blocker, docs/DAEMON-PLUGINS.md section 6). */
     private val inCore: Map<String, String> = buildMap {
         fun family(reason: String, vararg tools: String) = tools.forEach { put(it, reason) }
-        family("pending: Infantry_Processes daemon half; ProcessesCli.render is shared with the CLI", "agenthq_processes", "agenthq_processes_reap")
-        family("pending: Infantry_Settings usage half; UsageText.render is shared with the CLI", "agenthq_usage")
         family("pending: Infantry_Roles daemon half; agent-caller persona rule moves with it", "agenthq_role_create", "agenthq_role_delete", "agenthq_role_get", "agenthq_role_list", "agenthq_role_update")
         family("pending: Infantry_Board daemon half; needs ProjectScope as an API helper", "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_ticket_get", "agenthq_ticket_move", "agenthq_ticket_delete", "agenthq_ticket_start", "agenthq_epic_base", "agenthq_board", "agenthq_progress")
         family("pending: a Mail/Chat daemon half", "agenthq_inbox", "agenthq_read", "agenthq_message")
@@ -38,5 +36,5 @@ class BuiltinToolsListGuardTest {
         assertTrue(inCore.values.all { it.length > 15 })
     }
 
-    private companion object { const val CEILING = 37 }
+    private companion object { const val CEILING = 34 }
 }

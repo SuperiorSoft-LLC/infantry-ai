@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.usage
 
+import com.superiorsoftllc.agenthq.daemon.api.usage.LimitWindow
+
 import com.superiorsoftllc.agenthq.daemon.DaemonFixture
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.EventVocabulary

@@ -11,11 +11,11 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
 import com.superiorsoftllc.agenthq.session.host.LifecyclePolicy
-import com.superiorsoftllc.agenthq.usage.ManualUsage
-import com.superiorsoftllc.agenthq.usage.PacingRule
-import com.superiorsoftllc.agenthq.usage.UsageOverride
+import com.superiorsoftllc.agenthq.daemon.api.usage.ManualUsage
+import com.superiorsoftllc.agenthq.daemon.api.usage.PacingRule
+import com.superiorsoftllc.agenthq.daemon.api.usage.UsageOverride
 import com.superiorsoftllc.agenthq.usage.UsagePacing
-import com.superiorsoftllc.agenthq.usage.UsageSet
+import com.superiorsoftllc.agenthq.daemon.api.usage.UsageSet
 
 /**
  * The daemon's closed set of durable project-level settings: `context.includeLinkedTasksContext` and, since P10-K11
@@ -279,7 +279,7 @@ class SettingsService(
         require(!touchesMeter || meter.isNotEmpty()) { "usage_set needs a meter" }
         request.manualPercent?.let { pct ->
             require(pct in 0.0..100.0) { "percent must be in 0..100" }
-            require(request.manualResetsAt == null || request.manualResetsAt > now) { "resetsAt must be in the future" }
+            require(request.manualResetsAt.let { it == null || it > now }) { "resetsAt must be in the future" }
         }
         request.overrideUntil?.let { until ->
             require(until > now) { "override 'until' must be in the future" }
@@ -518,8 +518,8 @@ class SettingsService(
     }
 
     /** Ticket 66153313: the sustained-CPU attention rule, read at every process-watch pass. Default 90 % for 10 min; 0 min = off. */
-    fun cpuAlert(): com.superiorsoftllc.agenthq.session.CpuAlertConfig {
-        return com.superiorsoftllc.agenthq.session.CpuAlertConfig(
+    fun cpuAlert(): com.superiorsoftllc.agenthq.daemon.api.processes.CpuAlertConfig {
+        return com.superiorsoftllc.agenthq.daemon.api.processes.CpuAlertConfig(
             percent = limit(LimitRegistry.CPU_ALERT_PERCENT).toInt(),
             minutes = limit(LimitRegistry.CPU_ALERT_MINUTES).toInt(),
         )

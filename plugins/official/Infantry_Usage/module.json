@@ -9,6 +9,14 @@
   "entry": "com.superiorsoftllc.agenthq.plugins.official.usage.UsagePlugin",
   "jar": "build/libs/Infantry_Usage.jar",
   "buildOrder": 160,
+  "daemon": {
+    "entry": "com.superiorsoftllc.agenthq.plugins.official.usage.daemon.UsageDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_Usage-daemon.jar",
+    "apiAtLeast": "1.0.0",
+    "tools": [
+      { "name": "agenthq_usage", "action": "usage.read", "kind": "read", "description": "Plan usage per meter and the pacing allowance." }
+    ]
+  },
   "tabs": [
     {
       "id": "infantry.usage",

@@ -180,9 +180,9 @@ import com.superiorsoftllc.agenthq.usage.RunUsage
 import com.superiorsoftllc.agenthq.usage.UsageRecorder
 import com.superiorsoftllc.agenthq.usage.LimitService
 import com.superiorsoftllc.agenthq.usage.ProviderLimits
-import com.superiorsoftllc.agenthq.usage.UsageMeters
+import com.superiorsoftllc.agenthq.daemon.api.usage.UsageMeters
 import com.superiorsoftllc.agenthq.usage.UsagePacing
-import com.superiorsoftllc.agenthq.usage.UsageReport
+import com.superiorsoftllc.agenthq.daemon.api.usage.UsageReport
 import com.superiorsoftllc.agenthq.role.Role
 import com.superiorsoftllc.agenthq.role.RoleIds
 import com.superiorsoftllc.agenthq.role.RoleService
@@ -906,7 +906,7 @@ class AgentHqDaemon(
                 onPressure = { report ->
                     val envelope = Envelope(
                         Envelope.PROCESS_PRESSURE,
-                        json.encodeToString(com.superiorsoftllc.agenthq.session.ProcessReport.serializer(), report),
+                        json.encodeToString(com.superiorsoftllc.agenthq.daemon.api.processes.ProcessReport.serializer(), report),
                     )
                     println("[agentHq] memory pressure: ${report.freeMb} MB free (floor ${report.floorMb}), ${report.rogue.size} rogue process(es)")
                     for (c in clients.toList()) c.trySend(envelope)
@@ -2423,7 +2423,7 @@ private suspend fun handleConnection(
     /** U1: the plan-limit meters a `limits` request reads. */
     limits: LimitService = LimitService.NONE,
     /** USAGE-PACE (1.119.0): the meters and allowances a `usage_get` request reads. */
-    usagePacing: UsagePacing = UsagePacing({ emptyList() }, { com.superiorsoftllc.agenthq.usage.PacingRule.DEFAULT }, { emptyMap() }, { emptyMap() }, { emptyList() }),
+    usagePacing: UsagePacing = UsagePacing({ emptyList() }, { com.superiorsoftllc.agenthq.daemon.api.usage.PacingRule.DEFAULT }, { emptyMap() }, { emptyMap() }, { emptyList() }),
     /** TICKET-FILES (contract 1.137.0): answers `ticket_files` (query -> capped text); null = this daemon serves none. */
     ticketFiles: ((com.superiorsoftllc.agenthq.ticketfiles.TicketFilesQuery) -> String)? = null,
     /** CLIPATH-1 (contract 1.73.0): `cli_locations` / `cli_location_set`; null = this daemon serves neither. */
@@ -2516,14 +2516,14 @@ private suspend fun handleConnection(
         for (request in processesRequests) {
             val answer = try {
                 val watch = processWatch ?: throw IllegalArgumentException("this daemon has no process watch")
-                val req = if (request.data.isBlank()) com.superiorsoftllc.agenthq.session.ProcessesRequest()
-                else json.decodeFromString(com.superiorsoftllc.agenthq.session.ProcessesRequest.serializer(), request.data)
+                val req = if (request.data.isBlank()) com.superiorsoftllc.agenthq.daemon.api.processes.ProcessesRequest()
+                else json.decodeFromString(com.superiorsoftllc.agenthq.daemon.api.processes.ProcessesRequest.serializer(), request.data)
                 // POLICY-1 (1.143.0): `processes_reap` only kills (its policy action is destructive); listing is `processes`.
                 require(request.type != Envelope.PROCESSES_REAP || req.op != "list") { "processes_reap only reaps: list with `processes`" }
                 Envelope(
                     Envelope.PROCESSES,
                     json.encodeToString(
-                        com.superiorsoftllc.agenthq.session.ProcessesAnswer.serializer(),
+                        com.superiorsoftllc.agenthq.daemon.api.processes.ProcessesAnswer.serializer(),
                         com.superiorsoftllc.agenthq.session.ProcessFrames.answer(watch, req),
                     ),
                 )
@@ -3121,7 +3121,8 @@ private suspend fun handleConnection(
                         } catch (e: Exception) {
                             Envelope(Envelope.ERROR, "usage_get failed: ${e.message ?: e::class.simpleName}")
                         }
-                        outgoing.trySend(answer)
+                        // DAEMON-PLUGINS-3: echoes the request's id (null for a CLI), so a plugin tool gets its own answer.
+                        outgoing.trySend(answer.copy(requestId = envelope.requestId))
                     }
                     null
                 }
@@ -3130,7 +3131,7 @@ private suspend fun handleConnection(
                 Envelope.USAGE_SET -> try {
                     val service = settings as? com.superiorsoftllc.agenthq.settings.SettingsService
                         ?: throw IllegalArgumentException("this daemon has no usage settings")
-                    service.applyUsage(com.superiorsoftllc.agenthq.usage.UsageSet.decode(envelope.data))
+                    service.applyUsage(com.superiorsoftllc.agenthq.daemon.api.usage.UsageSet.decode(envelope.data))
                     Envelope(Envelope.USAGE_REPORT, json.encodeToString(UsageReport.serializer(), usagePacing.report()))
                 } catch (e: IllegalArgumentException) {
                     Envelope(Envelope.ERROR, "usage_set refused: ${e.message ?: "invalid request"}")

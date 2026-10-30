@@ -63,15 +63,18 @@ class SessionDeleteDaemonTest {
     }
 
     @Test
-    fun deletingAnUnknownSessionIsRefusedAndChangesNothing() {
+    fun deletingAnUnknownSessionIsACleanNoOpThatRepushesTheList() {
         val fixture = DaemonFixture.launch()
         try {
             fixture.client.await(Envelope.READY)
             val kept = spawnFinished(fixture, "one")
 
+            // SESSION-GHOST-1: an unknown id is a clean no-op that re-pushes the sessions list; no error frame.
+            val pushesBefore = fixture.client.frames.count { it.type == Envelope.SESSIONS }
+            val errorsBefore = fixture.client.frames.count { it.type == Envelope.ERROR }
             fixture.send(Envelope(Envelope.SESSION_DELETE, "no-such-session"))
-            val refusal = fixture.client.await(Envelope.ERROR)
-            assertTrue(refusal.data.startsWith("session_delete refused:"), refusal.data)
+            fixture.await(what = "a sessions push after the no-op delete") { fixture.client.frames.count { it.type == Envelope.SESSIONS } > pushesBefore }
+            assertEquals(errorsBefore, fixture.client.frames.count { it.type == Envelope.ERROR }, "no error frame")
 
             assertEquals(listOf(kept), fixture.daemon.manager.list().map { it.id }, "an unknown id deletes nothing")
         } finally {

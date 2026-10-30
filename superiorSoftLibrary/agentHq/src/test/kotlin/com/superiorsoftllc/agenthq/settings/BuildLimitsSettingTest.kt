@@ -3,7 +3,7 @@ package com.superiorsoftllc.agenthq.settings
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
 import com.superiorsoftllc.agenthq.runner.BuildLimits
 import com.superiorsoftllc.agenthq.runner.BuildPriority
-import com.superiorsoftllc.agenthq.session.CpuAlertConfig
+import com.superiorsoftllc.agenthq.daemon.api.processes.CpuAlertConfig
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
 import java.nio.file.Files

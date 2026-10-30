@@ -135,26 +135,24 @@ class DaemonCoreGuardTest {
 
         /** PLUGIN NOW: a mechanism and an official plugin exist (or can be written today); only the move is left. */
         val PLUGIN_NOW = mapOf(
-            "backlog" to "board and ticket features: Infantry_Board daemon half (mechanism: DaemonApi frames + tools)",
-            "epics" to "board feature, moves with Infantry_Board",
-            "stories" to "board feature, moves with Infantry_Board",
-            "mvp" to "board feature, moves with Infantry_Board",
-            "ticketfiles" to "ticket file tools already migrated; the store follows Infantry_Board",
-            "context" to "ticket context composer for worker prompts, moves with Infantry_Board",
-            "brief" to "lead-to-worker brief, moves with Infantry_Board",
-            "ledger" to "asked/done ledger of the board's workers",
             "pipeline" to "Pipeline official plugin (agenthq_pipeline tools)",
             "issues" to "project knowledge: issues, a Knowledge plugin",
             "decisions" to "project knowledge: decisions, a Knowledge plugin",
             "memory" to "project knowledge: notes, a Knowledge plugin",
             "prompts" to "prompt templates: Infantry_Prompts daemon half",
             "images" to "chat uploads: Infantry_Chat daemon half",
-            "experiments" to "experiment bridging pi tool calls; delete or move with the pi harness",
-            "probe" to "developer comparison tool for providers, not daemon",
         )
 
         /** PLUGIN LATER: needs a missing mechanism first; the blocker is named. */
         val PLUGIN_LATER = mapOf(
+            "backlog" to "blocker: DaemonApi has no ticket/board/epic surface and DaemonMain, TicketBoard, the story handlers and the mailbox name each other directly; see docs/DAEMON-BOARD-API.md",
+            "epics" to "blocker: DaemonApi has no ticket/board/epic surface and DaemonMain, TicketBoard, the story handlers and the mailbox name each other directly; see docs/DAEMON-BOARD-API.md",
+            "stories" to "blocker: DaemonApi has no ticket/board/epic surface and DaemonMain, TicketBoard, the story handlers and the mailbox name each other directly; see docs/DAEMON-BOARD-API.md",
+            "mvp" to "blocker: DaemonApi has no ticket/board/epic surface and DaemonMain, TicketBoard, the story handlers and the mailbox name each other directly; see docs/DAEMON-BOARD-API.md",
+            "ticketfiles" to "blocker: DaemonApi has no ticket/board/epic surface and DaemonMain, TicketBoard, the story handlers and the mailbox name each other directly; see docs/DAEMON-BOARD-API.md",
+            "context" to "blocker: DaemonApi has no ticket/board/epic surface and DaemonMain, TicketBoard, the story handlers and the mailbox name each other directly; see docs/DAEMON-BOARD-API.md",
+            "brief" to "blocker: DaemonApi has no ticket/board/epic surface and DaemonMain, TicketBoard, the story handlers and the mailbox name each other directly; see docs/DAEMON-BOARD-API.md",
+            "ledger" to "blocker: DaemonApi has no ticket/board/epic surface and DaemonMain, TicketBoard, the story handlers and the mailbox name each other directly; see docs/DAEMON-BOARD-API.md",
             "claude" to "blocker: concrete Claude adapter is already a HarnessPlugin, but ProviderFactory, HarnessModelCatalogs, Sandbox and DaemonMain name it, so built-ins are not registered through the SPI",
             "opencode" to "blocker: same as claude (ProviderFactory and DaemonMain name OpenCodeServeAdapter)",
             "role" to "blocker: roles are bound into SessionManager spawn and mail addressing; needs a DaemonApi role surface",
@@ -164,6 +162,7 @@ class DaemonCoreGuardTest {
             "triggers" to "blocker: DaemonApi has schedule() but no spawn-with-binding or ticket-transition events",
             "commands" to "blocker: RunManager needs a pty/runner surface in DaemonApi",
             "cli" to "blocker: the agenthq CLI and MCP server import protocol, session and daemon types; needs the agentHqCore module split first",
+            "experiments" to "blocker: the pi tool bridge hooks PiLaunchExtras, SessionStatsService taggers and reads AgentHqMcp/AccessPolicy internals; needs a harness launch-extras hook and an MCP tool-exposure surface in DaemonApi",
             "client" to "blocker: the console client shares protocol and mailbox types; moves with cli",
         )
     }

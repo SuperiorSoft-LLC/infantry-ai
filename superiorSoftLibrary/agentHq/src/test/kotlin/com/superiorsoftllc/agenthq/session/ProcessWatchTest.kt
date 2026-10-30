@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.session
 
+import com.superiorsoftllc.agenthq.daemon.api.processes.*
+
 import com.superiorsoftllc.agenthq.session.host.KeptProcess
 import com.superiorsoftllc.agenthq.session.host.ProcessTable
 import java.io.File
