@@ -139,10 +139,12 @@ fun PaceTabContent(state: AppState, pace: PaceContext, meter: UsageMeterContext)
                         "(6 hours by default, set in Settings). Forecast = a projection, not a promise.",
                     color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
                 )
+                val markers = PaceSessions.markers(state.usageMeter?.requests.orEmpty(), view.report.generatedAt)
                 for (s in view.report.series) {
                     val totals = state.usageMeter?.let { PaceTokens.totals(it.rows, s.provider) }
-                    PaceCard(s, view.report.generatedAt, totals)
+                    PaceCard(s, view.report.generatedAt, totals, markers)
                 }
+                PaceSessionsPanel(state.usageMeter?.requests, view.report.series, view.report.generatedAt)
             }
         }
     }

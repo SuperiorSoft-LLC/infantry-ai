@@ -73,7 +73,7 @@ const val PACE_BURN_TAG = "pace-burn"
  * soft area fill, first / last time labels, the dashed forecast to reset, and an explicit line when a value is clipped.
  */
 @Composable
-fun PaceCard(s: PaceSeries, now: Long, tokens: PaceTokens.Totals?) {
+fun PaceCard(s: PaceSeries, now: Long, tokens: PaceTokens.Totals?, markers: List<PaceSessions.Marker> = emptyList()) {
     var metric by remember(s.key) { mutableStateOf(PaceMetric.PACE) }
     var range by remember(s.key) { mutableStateOf(PaceRange.WINDOW) }
     var scale by remember(s.key, metric) { mutableStateOf<PaceScale>(PaceScale.Fit) }
@@ -138,7 +138,8 @@ fun PaceCard(s: PaceSeries, now: Long, tokens: PaceTokens.Totals?) {
                 Text(spec.emptyText.orEmpty(), color = Palette.Muted, fontSize = 12.sp)
             }
         } else {
-            ChartBody(s, metric, spec, hoverT) { hoverT = it }
+            val mine = markers.filter { it.meter.equals(s.provider, true) }
+            ChartBody(s, metric, spec, hoverT, markers = mine) { hoverT = it }
             val withDate = spec.t1 - spec.t0 > 24 * 3_600_000L
             Row(Modifier.fillMaxWidth().padding(start = 52.dp, top = 2.dp)) {
                 Text(PaceChartModel.time(spec.t0, withDate), color = Palette.Muted, fontSize = 10.sp)
@@ -146,6 +147,10 @@ fun PaceCard(s: PaceSeries, now: Long, tokens: PaceTokens.Totals?) {
                 Text(PaceChartModel.time(spec.t1, withDate), color = Palette.Muted, fontSize = 10.sp)
             }
             Legend(spec)
+            if (mine.isNotEmpty()) Text(
+                "Marks: ● solid tick = a session started, ○ dashed tick = a session ended (see Sessions below).",
+                color = Palette.Muted, fontSize = 10.sp,
+            )
         }
         BurnPanel(s, range, now)
         // The tooltip line: exact value and time of the hovered / tapped point (touch needs no hover).
@@ -210,7 +215,7 @@ private fun Swatch(color: Color, dash: FloatArray?) {
 }
 
 @Composable
-private fun ChartBody(s: PaceSeries, metric: PaceMetric, spec: ChartSpec, hoverT: Long?, height: androidx.compose.ui.unit.Dp = 130.dp, onHover: (Long?) -> Unit) {
+private fun ChartBody(s: PaceSeries, metric: PaceMetric, spec: ChartSpec, hoverT: Long?, height: androidx.compose.ui.unit.Dp = 130.dp, markers: List<PaceSessions.Marker> = emptyList(), onHover: (Long?) -> Unit) {
     val desc = "${s.provider} ${s.window} ${metric.label} chart, ${spec.actual.sumOf { it.pts.size }} readings, momentum ${s.trend.word}"
     Row(Modifier.fillMaxWidth().height(height)) {
         BoxWithConstraints(Modifier.width(52.dp).height(height)) {
@@ -277,6 +282,15 @@ private fun ChartBody(s: PaceSeries, metric: PaceMetric, spec: ChartSpec, hoverT
                 }
                 c?.let { drawLine(PaceColors.currentForecast, Offset(x(it.pts[0].first), y(it.pts[0].second)), Offset(x(it.pts[1].first), y(it.pts[1].second)), 2.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f))) }
                 r?.let { drawLine(PaceColors.recentForecast, Offset(x(it.pts[0].first), y(it.pts[0].second)), Offset(x(it.pts[1].first), y(it.pts[1].second)), 2.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f, 8f))) }
+                // PACE-TREND-2: a session started (solid tick, filled dot) or ended (dashed tick, hollow dot); the shape differs, never colour alone.
+                for (m in markers) if (m.t in spec.t0..spec.t1) {
+                    if (m.start) {
+                        drawLine(Palette.Text, Offset(x(m.t), 0f), Offset(x(m.t), 18f), 2f); drawCircle(Palette.Text, 4f, Offset(x(m.t), 18f))
+                    } else {
+                        drawLine(Palette.Muted, Offset(x(m.t), 0f), Offset(x(m.t), 18f), 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 3f)))
+                        drawCircle(Palette.Muted, 4f, Offset(x(m.t), 18f), style = Stroke(1.5f))
+                    }
+                }
                 // The hovered / tapped point.
                 hoverT?.let { PaceChartModel.nearest(spec, it) }?.let { (t, v) ->
                     drawLine(Palette.Muted, Offset(x(t), 0f), Offset(x(t), h), 1f)
