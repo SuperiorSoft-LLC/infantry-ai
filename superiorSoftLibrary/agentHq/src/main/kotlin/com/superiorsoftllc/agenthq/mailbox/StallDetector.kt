@@ -40,6 +40,12 @@ class StallDetector(
     private val clock: () -> Long = System::currentTimeMillis,
     /** STALL-3: `limits.watch.foregroundStallMinutes` (10); [Long.MAX_VALUE] = never. */
     private val foregroundStallMs: () -> Long = { Long.MAX_VALUE },
+    /** STALL-5: `limits.watch.exemptWhenTicketDone` (1); off = a done ticket or a delivered final report is watched like any other. */
+    private val exemptWhenDone: () -> Boolean = { true },
+    /** STALL-5: the ticket is done. */
+    private val ticketDone: (ticketId: String) -> Boolean = { false },
+    /** STALL-5: the session mailed its final report (its last mail to the starter is newer than anything anyone sent it). */
+    private val reportDelivered: (SessionRecord) -> Boolean = { false },
 ) {
     private val told = ConcurrentHashMap<String, String>()
     private val executor = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "agenthq-stall-detector").also { it.isDaemon = true } }
@@ -68,7 +74,10 @@ class StallDetector(
     /** The key of the stall [s] is in now (told once per key), or null when it is not stalled. */
     private fun check(s: SessionRecord, now: Long, stall: Long): String? {
         val ticket = s.ticketId ?: return null
-        if (!runCatching { ticketInProgress(ticket) }.getOrDefault(false)) return null
+        val exempt = exemptWhenDone()
+        val active = runCatching { ticketInProgress(ticket) || (!exempt && ticketDone(ticket)) }.getOrDefault(false)
+        if (!active) return null
+        if (exempt && runCatching { reportDelivered(s) }.getOrDefault(false)) return null
         val silentFor = now - s.lastHeartbeat
         if (!s.isBusy()) {
             if (s.state != SessionState.IDLE || s.bgJobs.isNotEmpty() || s.backgroundWork != null) return null

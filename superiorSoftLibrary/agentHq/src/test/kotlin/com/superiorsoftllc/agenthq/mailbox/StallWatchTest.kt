@@ -190,6 +190,9 @@ class StallWatchTest {
         var ended: Long? = null
         var waiting = false
         var inProgress = true
+        var done = false
+        var delivered = false
+        var exempt = true
         val detector = StallDetector(
             manager, send = { sent += it; MailResult.Refused("t") },
             ticketInProgress = { inProgress },
@@ -200,6 +203,7 @@ class StallWatchTest {
             recipientOf = { "pm" },
             clock = { System.currentTimeMillis() + offsetMin * 60_000 },
             foregroundStallMs = { foregroundMin?.let { it * 60_000L } ?: Long.MAX_VALUE },
+            exemptWhenDone = { exempt }, ticketDone = { done }, reportDelivered = { delivered },
         )
         fun at(m: Long) { offsetMin = m; detector.tick() }
         fun record(id: String): SessionRecord = manager.get(id)!!
@@ -222,6 +226,33 @@ class StallWatchTest {
         assertEquals(1, r.sent.count { it.to == "pm" })
         assertEquals("stalled", r.record(s.id).watchLabel)
         assertTrue(r.manager.get(s.id) != null)
+    }
+
+    @Test
+    fun stall5_aDeliveredFinalReport_orADoneTicket_isNotNudged_andTheOffSwitchRestoresTheNudge() {
+        val r = StallRig(autoExit = true)
+        val s = r.manager.startNew("work", ticketId = "t1")
+        r.settle(s.id)
+        r.delivered = true
+        r.at(10)
+        assertTrue(r.sent.isEmpty(), "final report delivered: exempt")
+        r.delivered = false; r.inProgress = false; r.done = true
+        r.at(11)
+        assertTrue(r.sent.isEmpty(), "ticket done: exempt")
+        r.exempt = false
+        r.at(12)
+        assertEquals(1, r.sent.count { it.to == s.id }, "switch off: a done ticket is nudged again")
+        assertTrue(r.sent.none { (it.subject.orEmpty() + it.body).contains("report to", ignoreCase = true) })
+    }
+
+    @Test
+    fun stall5_theOffSwitchNudgesADeliveredReportToo() {
+        val r = StallRig(autoExit = true)
+        val s = r.manager.startNew("work", ticketId = "t1")
+        r.settle(s.id)
+        r.delivered = true; r.exempt = false
+        r.at(10)
+        assertEquals(1, r.sent.count { it.to == s.id })
     }
 
     @Test

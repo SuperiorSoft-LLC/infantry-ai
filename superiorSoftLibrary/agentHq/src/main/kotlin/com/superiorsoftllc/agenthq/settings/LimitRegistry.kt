@@ -233,6 +233,11 @@ object LimitRegistry {
         "Stall detector: how long a ticket worker may stay BUSY with no tool progress and no watched job (a long or hung foreground call) before it is nudged and the watch's recipient rule (watch.escalateTo) is told.",
         max = 1440, zeroMeans = "never nudged",
     )
+    val WATCH_EXEMPT_WHEN_TICKET_DONE = LimitDef(
+        "limits.watch.exemptWhenTicketDone", 1, "switch",
+        "1 = a session whose ticket is done, or that already mailed its final report, gets no idle nudge and no failure notice for a non-zero exit; 0 = watch it like any other.",
+        max = 1, zeroIsUnlimited = false,
+    )
     val WATCH_TREE_JOB_SECONDS = LimitDef(
         "limits.watch.treeJobSeconds", 30, "seconds",
         "How long a process under a worker's harness (one the daemon did not launch) must have run for its end to be told to the worker.",
@@ -406,7 +411,7 @@ object LimitRegistry {
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
-        WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_FORCED, WATCH_TREE_WAIT_MINUTES,
+        WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_EXEMPT_WHEN_TICKET_DONE, WATCH_TREE_JOB_SECONDS, WATCH_FORCED, WATCH_TREE_WAIT_MINUTES,
         WATCH_NOTICE_LINE_CHARS, WATCH_LOG_MAX_MB, WATCH_LOG_TOTAL_MB, WATCH_LOG_KEEP_JOBS, WATCH_LOG_KEEP_DAYS, WATCH_MIN_FREE_MB, WATCH_FILE_IDLE_SECONDS,
         WATCH_READ_MAX_KB, WATCH_TAIL_READ_KB, WATCH_SPACE_CHECK_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,

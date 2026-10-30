@@ -1516,6 +1516,7 @@ class AgentHqDaemon(
                 sessions = manager, mailbox = mailbox, send = mail::send,
                 ticketOf = { id -> store.transaction { store.tickets.get(id) } },
                 idleNoticeMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.IDLE_NOTICE_MINUTES), LimitRegistry.IDLE_NOTICE_MINUTES) },
+                exemptWhenDone = { settings.limit(LimitRegistry.WATCH_EXEMPT_WHEN_TICKET_DONE) != 0L },
             ).also { it.start() }
             // STALL-4: the watch's recipient rule (`watch.escalateTo`): `starter` = the ticket's starter session, else the
             // user through the UI; `user` = always the user; `none` = nobody. No role is assumed to exist.
@@ -1572,6 +1573,12 @@ class AgentHqDaemon(
                 stallMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.WATCH_STALL_MINUTES), LimitRegistry.WATCH_STALL_MINUTES) },
                 recipientOf = ::watchRecipientOf,
                 foregroundStallMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.WATCH_FOREGROUND_STALL_MINUTES), LimitRegistry.WATCH_FOREGROUND_STALL_MINUTES) },
+                exemptWhenDone = { settings.limit(LimitRegistry.WATCH_EXEMPT_WHEN_TICKET_DONE) != 0L },
+                ticketDone = { id -> store.transaction { store.tickets.get(id) }?.status == com.superiorsoftllc.agenthq.protocol.TicketStatus.DONE },
+                reportDelivered = { s ->
+                    val starter = s.ticketId?.let { id -> store.transaction { store.tickets.get(id) } }?.startedBy
+                    com.superiorsoftllc.agenthq.mailbox.FinishNoticeMonitor.reportDelivered(mailbox, s, starter)
+                },
             ).also { it.start() }
             // PIPELINE-WATCHDOG: derives per-agent pending/stalled/quiet state, nudges, then tells the PM and the owner.
             val agentWatchdog = com.superiorsoftllc.agenthq.mailbox.AgentWatchdog(
