@@ -51,7 +51,7 @@ object LimitRegistry {
         "How many live sessions a session (or MCP connection) may grow its pod by; the worker concurrency cap.",
         legacyEnv = listOf("AGENTHQ_POD_SPAWN_CAP"),
     )
-    /** DEMO-RESTRICT (ticket f9e181af): the daemon-wide cap on sessions working at once (SessionManager). */
+    /** LIMITS: the daemon-wide cap on sessions working at once (SessionManager). */
     val MAX_SESSIONS = LimitDef(
         "limits.concurrency.maxSessions", 0, "sessions",
         "How many sessions of this whole daemon may be OPEN at once: working on a turn, or idle with their CLI process kept alive (session.keepAliveMinutes). At the cap a new session, or a turn for a session with no live process, is refused until one is stopped or times out.",

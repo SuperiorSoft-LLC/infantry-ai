@@ -18,7 +18,7 @@ import java.io.File
  * ANSI (Phase 0 finding #4) -- ideal for a line-oriented pipe reader.
  */
 object OpenCodeCommand {
-    /** Free model: the daemon demo must never burn a metered model (Phase 0 used the same one). */
+    /** Free model: the daemon must never burn a metered model by default (Phase 0 used the same one). */
     const val DEFAULT_MODEL = "opencode/deepseek-v4.1-flash-free"
 
     /**

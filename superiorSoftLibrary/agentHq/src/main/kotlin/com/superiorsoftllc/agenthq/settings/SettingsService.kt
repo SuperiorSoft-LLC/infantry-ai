@@ -147,7 +147,7 @@ class SettingsService(
     }
 
     /**
-     * DEMO-RESTRICT (ticket f9e181af): the model allowlist in force, read at every check: the stored setting (a JSON array
+     * LIMITS: the model allowlist in force, read at every check: the stored setting (a JSON array
      * of patterns; `[]` = no restriction, overriding the env), else env AGENTHQ_ALLOWED_MODELS (comma separated), else none.
      */
     fun allowedModels(): ModelAllowlist {
@@ -157,7 +157,7 @@ class SettingsService(
         return ModelAllowlist.parse(env(ModelAllowlist.ENV))
     }
 
-    /** DEMO-RESTRICT: the role allowlist: stored `limits.roles.allowed` (`[]` = all, beats the env) > env AGENTHQ_ALLOWED_ROLES > all. */
+    /** LIMITS: the role allowlist: stored `limits.roles.allowed` (`[]` = all, beats the env) > env AGENTHQ_ALLOWED_ROLES > all. */
     fun allowedRoles(): ModelAllowlist {
         store.settings.get(ALLOWED_ROLES)?.value
             ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonArray)?.mapNotNull { e -> (e as? JsonPrimitive)?.content } }.getOrNull() }
@@ -212,7 +212,7 @@ class SettingsService(
                     )
                 },
             ),
-            // DEMO-RESTRICT: the model allowlist (not a number, so beside the list): [] = every model is allowed.
+            // LIMITS: the model allowlist (not a number, so beside the list): [] = every model is allowed.
             "allowedModels" to JsonObject(
                 mapOf(
                     "key" to JsonPrimitive(ALLOWED_MODELS),
@@ -379,7 +379,7 @@ class SettingsService(
 
     /** Read on every launch decision, never cached (plan section 8). */
     fun keepAliveMinutes(): Int {
-        // DEMO-RESTRICT: no stored value -> env AGENTHQ_SESSION_KEEP_ALIVE_MINUTES (a bad one is ignored) -> the default.
+        // LIMITS: no stored value -> env AGENTHQ_SESSION_KEEP_ALIVE_MINUTES (a bad one is ignored) -> the default.
         val stored = store.settings.get(KEEP_ALIVE_MINUTES)?.value
             ?: return env(KEEP_ALIVE_ENV)?.trim()?.toIntOrNull()?.takeIf { it in KEEP_ALIVE_RANGE }
                 ?: LifecyclePolicy.DEFAULT_KEEP_ALIVE_MINUTES
@@ -611,7 +611,7 @@ class SettingsService(
         const val INCLUDE_SKILLS_CONTEXT = "context.includeSkillsContext"
         const val SKILL_IDS = "context.skillIds"
         const val KEEP_ALIVE_MINUTES = "session.keepAliveMinutes"
-        /** DEMO-RESTRICT: the environment layer of [KEEP_ALIVE_MINUTES] (the stored setting wins). */
+        /** LIMITS: the environment layer of [KEEP_ALIVE_MINUTES] (the stored setting wins). */
         const val KEEP_ALIVE_ENV = "AGENTHQ_SESSION_KEEP_ALIVE_MINUTES"
         /** USER-PORTRAIT: base64 PNG/WebP (<= 256 KB) of the human's portrait; "" clears it. */
         const val USER_PORTRAIT = "user.portrait"
@@ -665,7 +665,7 @@ class SettingsService(
         const val LIMITS_BUILD_PRIORITY = "limits.build.priority"
         const val SANDBOX_ALLOWED_DIRS = "limits.sandbox.allowedDirs"
         const val SANDBOX_ALLOWED_DIRS_ENV = "AGENTHQ_LIMIT_SANDBOX_ALLOWED_DIRS"
-        /** DEMO-RESTRICT: the model allowlist, see [ModelAllowlist]. */
+        /** LIMITS: the model allowlist, see [ModelAllowlist]. */
         const val ALLOWED_MODELS = ModelAllowlist.SETTING
         const val ALLOWED_ROLES = ModelAllowlist.ROLES_SETTING
         val LIMITS_BUILD_MAX_WORKERS = LimitRegistry.BUILD_MAX_WORKERS.key

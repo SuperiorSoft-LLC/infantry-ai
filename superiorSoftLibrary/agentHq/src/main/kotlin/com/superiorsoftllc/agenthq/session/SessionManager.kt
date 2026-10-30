@@ -180,18 +180,18 @@ class SessionManager(
     }
 
     /**
-     * DEMO-RESTRICT (ticket f9e181af): the model allowlist in force, read at every check; the daemon points it at the
+     * LIMITS: the model allowlist in force, read at every check; the daemon points it at the
      * setting `limits.models.allowed`. [com.superiorsoftllc.agenthq.settings.ModelAllowlist.NONE] = every model.
      */
     @Volatile
     var allowedModels: () -> com.superiorsoftllc.agenthq.settings.ModelAllowlist = { com.superiorsoftllc.agenthq.settings.ModelAllowlist.NONE }
 
-    /** DEMO-RESTRICT: the role allowlist in force (`limits.roles.allowed`), read at every check; NONE = every role. */
+    /** LIMITS: the role allowlist in force (`limits.roles.allowed`), read at every check; NONE = every role. */
     @Volatile
     var allowedRoles: () -> com.superiorsoftllc.agenthq.settings.ModelAllowlist = { com.superiorsoftllc.agenthq.settings.ModelAllowlist.NONE }
 
     /**
-     * DEMO-RESTRICT: refuse [role] when a role allowlist is in force and does not name it. A session with no role (an
+     * LIMITS: refuse [role] when a role allowlist is in force and does not name it. A session with no role (an
      * anonymous console) is not a role choice and passes. Throws [IllegalArgumentException]; no restriction = no-op.
      */
     fun requireAllowedRole(role: String?) {
@@ -200,12 +200,12 @@ class SessionManager(
         require(allowlist.allows(wanted)) { "role '${wanted.take(80)}' is not allowed on this server. ${allowlist.describe()}" }
     }
 
-    /** DEMO-RESTRICT: `limits.concurrency.maxSessions` in force, read at every start; [Int.MAX_VALUE] = no cap. */
+    /** LIMITS: `limits.concurrency.maxSessions` in force, read at every start; [Int.MAX_VALUE] = no cap. */
     @Volatile
     var maxSessions: () -> Int = { Int.MAX_VALUE }
 
     /**
-     * DEMO-RESTRICT: refuse [model] when an allowlist is in force and does not name it. A null [model] is the harness
+     * LIMITS: refuse [model] when an allowlist is in force and does not name it. A null [model] is the harness
      * default: [provider] (when given) resolves it, and a default that is unknown or not allowed is refused too, since
      * the run would spend it. Throws [IllegalArgumentException] naming the allowed models; no restriction = no-op.
      */
@@ -226,13 +226,13 @@ class SessionManager(
     }
 
     /**
-     * DEMO-RESTRICT: whether [sessionId]'s CLI process is still alive between turns (kept by `session.keepAliveMinutes`).
+     * LIMITS: whether [sessionId]'s CLI process is still alive between turns (kept by `session.keepAliveMinutes`).
      * A seam so a test can say which sessions hold one; the daemon reads the session host.
      */
     @Volatile
     var hasLiveProcess: (String) -> Boolean = { host.hasProcess(it) }
 
-    /** DEMO-RESTRICT: [record] is OPEN: working on a turn, or resting with its CLI process kept alive. */
+    /** LIMITS: [record] is OPEN: working on a turn, or resting with its CLI process kept alive. */
     private fun isOpen(record: SessionRecord): Boolean =
         runs.containsKey(record.id) || record.state in WORKING || runCatching { hasLiveProcess(record.id) }.getOrDefault(false)
 
@@ -243,11 +243,11 @@ class SessionManager(
     /** COPY-1: the active policy preset's `sessionCapText` (the daemon installs it); null = [SESSION_CAP_REFUSED]. */
     @Volatile var sessionCapText: () -> String? = { null }
 
-    /** DEMO-RESTRICT: how many sessions are OPEN now (working, or idle with a live kept process); `maxSessions` bounds it. */
+    /** LIMITS: how many sessions are OPEN now (working, or idle with a live kept process); `maxSessions` bounds it. */
     fun openCount(): Int = sessions.values.count(::isOpen)
 
     /**
-     * DEMO-RESTRICT: the refusal for one more open session, or null while `limits.concurrency.maxSessions` has room.
+     * LIMITS: the refusal for one more open session, or null while `limits.concurrency.maxSessions` has room.
      * [sessionId] (a session about to take a turn) passes when it is already open: it holds its slot already.
      */
     fun sessionCapRefusal(sessionId: String? = null): String? {
@@ -846,7 +846,7 @@ class SessionManager(
         busyTwin(null, agentId, ticketId)?.let { throw IllegalArgumentException(twinRefusal("start", agentId, ticketId, it)) }
         val chosen = resolveProvider(providerId).provider
         val sessionModel = spawnModel(model)
-        // DEMO-RESTRICT: both refused BEFORE anything exists (no-ops while neither setting is set).
+        // LIMITS: both refused BEFORE anything exists (no-ops while neither setting is set).
         requireAllowedModel(sessionModel, chosen)
         if (!global) requireAllowedRole(role)
         sessionCapRefusal()?.let { throw SessionCapException(it) }
@@ -984,7 +984,7 @@ class SessionManager(
                 "configured with (configured: ${configured.keys.joinToString()})"
         }
         if (prompt.isNotBlank()) {
-            // DEMO-RESTRICT: a turn spends the session's model and takes a working slot; refused before anything changes.
+            // LIMITS: a turn spends the session's model and takes a working slot; refused before anything changes.
             requireAllowedModel(session.model, lookup(session.provider)?.provider)
             if (!session.global) requireAllowedRole(session.role)
             sessionCapRefusal(sessionId)?.let { throw SessionCapException(it) }
@@ -1291,7 +1291,7 @@ class SessionManager(
     /**
      * Ticket 7e9bed2a: BUSY but silent. Only FLAGS ([silentSink]); a session is ended here ONLY when it is provably dead: its
      * record claims a turn with no run in this daemon and no live pid ([isStaleLive]), or its run names a child pid that is gone.
-     * Work that is demonstrably running (a registered bg job, a live gate run for it) is never silent. A live pid is never killed.
+     * Work that is visibly running (a registered bg job, a live gate run for it) is never silent. A live pid is never killed.
      */
     fun sweepSilent() {
         val now = clock()
@@ -1954,13 +1954,13 @@ internal fun modelProblem(model: String): String? = when {
 class RunInFlightException(val sessionId: String, message: String) : IllegalStateException(message)
 
 /**
- * DEMO-RESTRICT (ticket f9e181af): how a `limits.concurrency.maxSessions` refusal starts (the UI shows it as it is).
+ * LIMITS: how a `limits.concurrency.maxSessions` refusal starts (the UI shows it as it is).
  * COPY-1: neutral, as every deployment shows it; a policy preset's `sessionCapText` replaces it.
  */
 const val SESSION_CAP_REFUSED = "Session limit reached"
 
-/** DEMO-RESTRICT: the states of a session working on a turn, counted against `limits.concurrency.maxSessions`. */
+/** LIMITS: the states of a session working on a turn, counted against `limits.concurrency.maxSessions`. */
 private val WORKING = setOf(SessionState.STARTING, SessionState.BUSY, SessionState.WAITING_INPUT)
 
-/** DEMO-RESTRICT: a start refused by `limits.concurrency.maxSessions`; nothing was created or started. */
+/** LIMITS: a start refused by `limits.concurrency.maxSessions`; nothing was created or started. */
 class SessionCapException(message: String) : IllegalArgumentException(message)

@@ -13,7 +13,7 @@ class RoleBindingHandler(
     private val roles: RoleService,
     private val providerIds: () -> Set<String>,
     private val effortLevels: Set<String>,
-    /** DEMO-RESTRICT: refuses a model the allowlist does not name (throws [IllegalArgumentException]); default = any. */
+    /** LIMITS: refuses a model the allowlist does not name (throws [IllegalArgumentException]); default = any. */
     private val modelCheck: (String) -> Unit = {},
     private val clock: () -> Long = System::currentTimeMillis,
 ) {

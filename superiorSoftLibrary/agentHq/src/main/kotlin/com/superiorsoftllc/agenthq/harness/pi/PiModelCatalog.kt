@@ -49,7 +49,7 @@ class PiModelCatalog(
         } catch (e: Exception) {
             return fallback("pi --list-models failed: ${reason(e)}")
         }
-        // DEMO-RESTRICT: a Pi with no models cannot run anything, so pickers show it dimmed instead of selectable.
+        // LIMITS: a Pi with no models cannot run anything, so pickers show it dimmed instead of selectable.
         if (listed.isEmpty()) return listOf(ProviderModels(ID, "", ID, emptyList(), "pi --list-models listed no models", unavailable = true))
         return rows(listed)
     }

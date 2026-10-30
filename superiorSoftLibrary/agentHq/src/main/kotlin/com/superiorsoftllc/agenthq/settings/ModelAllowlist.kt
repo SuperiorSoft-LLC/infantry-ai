@@ -1,7 +1,7 @@
 package com.superiorsoftllc.agenthq.settings
 
 /**
- * DEMO-RESTRICT (ticket f9e181af): the models this daemon lets a session, ticket or role run on. Empty = no restriction
+ * LIMITS: the models this daemon lets a session, ticket or role run on. Empty = no restriction
  * (the normal app). Read at every check from the setting `limits.models.allowed` (a JSON array of patterns), else env
  * `AGENTHQ_ALLOWED_MODELS` (comma separated), else empty.
  *
@@ -37,7 +37,7 @@ data class ModelAllowlist(
         const val ENV = "AGENTHQ_ALLOWED_MODELS"
         val NONE = ModelAllowlist(emptyList())
 
-        /** DEMO-RESTRICT: the role allowlist's setting and env (same matching, see [roles]). */
+        /** LIMITS: the role allowlist's setting and env (same matching, see [roles]). */
         const val ROLES_SETTING = "limits.roles.allowed"
         const val ROLES_ENV = "AGENTHQ_ALLOWED_ROLES"
 

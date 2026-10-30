@@ -39,7 +39,7 @@ private val mailJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 fun Route.mailRoutes(
     mail: MailRouter,
     mailbox: Mailbox,
-    /** DEMO-LOCK (ticket 2f154f5f): a non-null answer refuses the send (403) before the mailbox sees it. */
+    /** MAIL-GATE: a non-null answer refuses the send (403) before the mailbox sees it. */
     sendGuard: (MailSendRequest) -> String? = { null },
 ) {
 

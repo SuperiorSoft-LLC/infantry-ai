@@ -331,7 +331,7 @@ tasks.withType<Test>().configureEach {
     maxParallelForks = providers.gradleProperty("agenthq.testForks").map { it.toInt() }.getOrElse(4)
     maxHeapSize = "2g"
     // DAEMON-PLUGINS-1: the daemon tests load the real daemon halves (TestDaemonPlugins), so their jars are built first.
-    dependsOn(":daemon-plugin-demo-Demo_Lock:jar", ":daemon-plugin-official-Infantry_Board:jar", ":daemon-plugin-examples-Acme_DaemonHello:jar")
+    dependsOn(":daemon-plugin-demo-Demo_Lock:jar", ":daemon-plugin-official-Infantry_Board:jar", ":daemon-plugin-examples-Acme_DaemonHello:jar", ":daemon-plugin-examples-Acme_PolicyHook:jar")
 }
 
 tasks.withType<Test>().configureEach {
