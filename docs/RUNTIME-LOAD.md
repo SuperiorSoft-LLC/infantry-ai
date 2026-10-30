@@ -83,7 +83,7 @@ that takes more than 75 s now errors where it used to wait 15 minutes. `npm view
 | F2 (list_harnesses done, RUNTIME-LOAD-2; the three session tools: section 6) | `agenthq_list_harnesses` + `agenthq_list_sessions` / `agenthq_get_session` / `agenthq_pod_state` into the Infantry_Agents half (read-only frames) | S-M | Same pattern, no new API |
 | F3 (done, RUNTIME-LOAD-3) | Roles tools (5) into an Infantry_Roles daemon half (agent-caller persona rule moves with it) | M | Next family with a ready owner module |
 | F4 (done, RUNTIME-LOAD-3) | `agenthq_ask` into Infantry_Attention; project config tools into Infantry_Settings | S each | One frame each |
-| F5 | Tickets/epic/board/progress tools into Infantry_Board (`ProjectScope` as an API helper); `agenthq_ticket_get` DONE in BOARD-API-2, rest in section 9 | M | Biggest family, riskiest scope rules |
+| F5 (mostly done, RUNTIME-LOAD-4: section 10) | Tickets/epic/board/progress tools into Infantry_Board / Infantry_Agents; left: `agenthq_ticket_start`, `agenthq_board`, the three session reads | M | Biggest family, riskiest scope rules |
 | F6 | Mail, pipeline, `watch_file` (needs a DaemonApi surface for watch hooks) | M | Needs new API surface |
 | F7 | A folder source for `HarnessPluginSource` + a harness API module; move `pi`, then `claude`, then `opencode` | L | Contract design; `pi` first, fewest daemon internals |
 | F8 (stopped, RUNTIME-LOAD-3: section 7) | Core Config `ConfigEntry` fallback removed (G13) | S-M | Independent of the daemon |
@@ -178,3 +178,42 @@ What is left of F5 in core, and why each stays for now:
 | `agenthq_progress` | Not a board tool; a session-progress report. Moves with the Agents family. |
 
 Not run for this slice: wasm/Android builds.
+
+## 10. RUNTIME-LOAD-4 (F5, ticket 61177938): the board write tools, progress; what is left
+
+One commit per group, ordered by risk. Each: descriptor byte-identical to the pre-move `tools/list` (golden file
+`agentHq/src/test/resources/golden/core-mcp-tools-before-f5.json`, checked by `McpServeTest.movedBoardToolsComeFromTheBoardPluginUnchanged`
+and the progress test), deleted from `cli/mcp`, the tests that call it re-pointed at a daemon with the built plugin jar, ratchet lowered.
+
+| group | tools | where | how | ratchet |
+|---|---|---|---|---|
+| G1 (5418e3d5) | `agenthq_epic_base` | Infantry_Board | the same `epic_base` frame on the caller's connection; action `epics.save` | 22 -> 21 |
+| G2 (8b02fdba) | `agenthq_ticket_move`, `agenthq_ticket_delete` | Infantry_Board | ticket found through `api.tickets.get` (host scope); write = the same `ticket_move` / `ticket_delete` frame; placement and short ids are ONE rule in the API (`board.TicketPlacement`, `TicketRefs`), the CLI's `ticket move` uses it too | 21 -> 19 |
+| G4 (76799eba) | `agenthq_progress` | Infantry_Agents | the same `progress` frame for the MCP process's session; model + text moved unchanged to `daemon.api.progress` (core keeps aliases) | 19 -> 18 |
+| G3 (dea23ca0) | `agenthq_ticket_create`, `agenthq_ticket_update` | Infantry_Board | `api.tickets.create/update` (+`contextLimit`), `Tickets.mayFile` checks an explicit project BEFORE any upload; images over the new local-file contract | 18 -> 16 |
+
+**API (DaemonApi 1.4.0, BOARD_API_VERSION 1.3.0, all additive):** `TicketRefs`, `TicketPlacement`, `TicketImages`, `ContextLimits`,
+`LocalFiles`/`LocalFile`, `DaemonTool.localFiles`, `ToolCall.clientProjectId`, `TicketDraft/TicketPatch.contextLimit`, `Tickets.mayFile`
+(default `Unavailable`; `GrantedBoard` needs `tickets.write`), `daemon.api.progress` (`SessionProgress`, `ProgressReport`, `ProgressText`).
+
+**Wire 1.147.0 (additive, CONTRACT.md):** the blocker of section 9 (a plugin runs in the daemon and cannot read the agent's files) is
+solved universally, not for images only: a tool declares which arguments hold local paths; `plugin_tools` lists them as `localFiles`;
+`agenthq mcp serve`, which runs where the files are, sends each such file inline (`{path, size, base64?}`, bytes up to 10 MB, size only
+above) and its default project as `client.projectId`. Location-transparent: it works the same against a remote daemon.
+
+**Deviations (deliberate, all narrowing):** (1) as for `ticket_get`, the host scope is fail closed: an agent connection with no session,
+or a session the daemon does not know, is refused where the CLI path widened it. (2) A create whose project comes from the MCP
+server's default (`--project` / `mcp.json`) is now scope-checked too; before, only an explicit `projectId` was. A worker whose config
+names a foreign project is refused (`ticket_save refused: ...`). (3) A host wait that times out words it `<frame> got no answer in N ms`
+instead of the CLI stream's `no answer to <frame> within Nms`. (4) An agent may hand a tool a pre-encoded file object; it is read as
+the bytes it carries (the caller's own bytes either way).
+
+**Left in core, and why (not moved, no stopgap):**
+
+| tool | blocker |
+|---|---|
+| `agenthq_ticket_start` | Runs under THIS MCP process's guardrails: spawn depth from its local lineage file and the set of sessions it opened (`McpGuardrails`, `spawned`), state that lives in the client process, and it is the same code path as `agenthq_spawn ticketId`. Needs DP-11: guardrails as a host service keyed by the calling session, then both move together. |
+| `agenthq_board` | `BoardSummary.render` needs the daemon's session records (worker live state, activity, git commit): needs a sessions read model in the API. |
+| `agenthq_list_sessions`, `agenthq_get_session`, `agenthq_pod_state` | Same session read model (`SessionRecord` ~40 fields, `BoardSummary.liveState/activity`); `get_session` streams a replay fenced by a second `sessions` frame, which a one-request `ToolCall.request` cannot do (needs a stream/fence primitive). `pod_state` also reads the roster and pod frames. |
+
+Not run: wasm/Android builds, a live agent session against an installed daemon.
