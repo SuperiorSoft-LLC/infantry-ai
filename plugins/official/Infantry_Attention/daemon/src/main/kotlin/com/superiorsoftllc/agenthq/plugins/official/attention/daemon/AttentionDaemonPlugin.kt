@@ -1,0 +1,149 @@
+package com.superiorsoftllc.agenthq.plugins.official.attention.daemon
+
+import com.superiorsoftllc.agenthq.daemon.api.DaemonApi
+import com.superiorsoftllc.agenthq.daemon.api.DaemonPlugin
+import com.superiorsoftllc.agenthq.daemon.api.DaemonTool
+import com.superiorsoftllc.agenthq.daemon.api.ToolCall
+import com.superiorsoftllc.agenthq.daemon.api.ToolResult
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.put
+
+/**
+ * RUNTIME-LOAD-3 (docs/RUNTIME-LOAD.md, F4): Infantry_Attention's daemon half. ASK-1's `agenthq_ask`, the MCP form of
+ * `agenthq ask --recommend`, was built into the CLI's MCP server; now it sends the same `question_ask` frame on the caller's
+ * connection and returns the question id AT ONCE (the owner's pick arrives as mail in thread `question:<id>`). The asker is the
+ * session the MCP process runs in ([ToolCall.clientSessionId], `AGENTHQ_SESSION_ID`); outside a session there is nobody to
+ * deliver the answer to. Same name, schema, answer and gating (`questions.ask`).
+ */
+class AttentionDaemonPlugin : DaemonPlugin {
+    override fun start(api: DaemonApi) {
+        api.tools.register(AskTool)
+    }
+}
+
+object AskTool : DaemonTool {
+    const val NAME = "agenthq_ask"
+    private const val ANSWER_TIMEOUT_MS = 45_000L
+    /** `QuestionAsk` limits of the wire contract (agentHqProtocol): the schema states them, the daemon enforces them. */
+    private const val QUESTION_MAX = 2_000
+    private const val REASON_MAX = 200
+    private const val OPTIONS_MAX = 8
+    private const val DEFAULT_AFTER_MIN_FIRST = 1
+    private const val DEFAULT_AFTER_MIN_LAST = 1_440
+    private val json = Json { ignoreUnknownKeys = true }
+
+    override val name = NAME
+    override val description =
+        "USE THIS when a decision has 2-4 real options and the owner's preference matters (design, priority, destructive or irreversible choices); the owner wants it used for those. Do NOT use it for trivia or anything already decided. Ask the owner to choose, WITHOUT waiting. Give 2-8 options (label + one-line consequence), exactly one " +
+            "recommended option and why. Returns a questionId at once: carry on with other work; the owner's pick " +
+            "arrives as mail in thread question:<id>. Optional defaultAfterMin auto-picks your recommendation if " +
+            "the owner has not answered by then (off unless set). The owner may answer with their own text instead of an option: that mail reads \"Custom answer from the owner: <text>\" and is NOT one of your options. Rate limited per agent."
+    override val inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("question", buildJsonObject {
+                put("type", "string")
+                put("description", "The question, at most $QUESTION_MAX characters.")
+            })
+            put("options", buildJsonObject {
+                put("type", "array")
+                put("minItems", 2)
+                put("maxItems", OPTIONS_MAX)
+                put("items", buildJsonObject {
+                    put("type", "object")
+                    put("properties", buildJsonObject {
+                        put("label", buildJsonObject { put("type", "string") })
+                        put("description", buildJsonObject {
+                            put("type", "string")
+                            put("description", "One line: what happens if the owner picks this.")
+                        })
+                    })
+                    put("required", buildJsonArray { add(JsonPrimitive("label")) })
+                    put("additionalProperties", false)
+                })
+            })
+            put("recommended", buildJsonObject {
+                put("type", "string")
+                put("description", "The label of the ONE option you recommend.")
+            })
+            put("reason", buildJsonObject {
+                put("type", "string")
+                put("description", "Why you recommend it, at most $REASON_MAX characters.")
+            })
+            put("allowOther", buildJsonObject {
+                put("type", "boolean")
+                put("default", true)
+                put("description", "The owner can always answer with their own text (\"Other\"); set false ONLY for a question that must stay option-only.")
+            })
+            put("defaultAfterMin", buildJsonObject {
+                put("type", "integer")
+                put("minimum", DEFAULT_AFTER_MIN_FIRST)
+                put("maximum", DEFAULT_AFTER_MIN_LAST)
+                put("description", "Auto-pick the recommended option after this many minutes unanswered. Omit = wait.")
+            })
+        })
+        put("required", buildJsonArray { listOf("question", "options", "recommended", "reason").forEach { add(JsonPrimitive(it)) } })
+        put("additionalProperties", false)
+    }
+    override val annotations = buildJsonObject {
+        put("readOnlyHint", false)
+        put("destructiveHint", false)
+        put("idempotentHint", false)
+        put("openWorldHint", false)
+    }
+
+    private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
+
+    private fun refused(text: String) = ToolResult(text, isError = true)
+
+    override fun call(call: ToolCall): ToolResult {
+        val arguments = call.arguments
+        val session = call.clientSessionId?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return refused("$NAME needs the asking session in AGENTHQ_SESSION_ID (set for every session Infantry AI spawns)")
+        val options = (arguments["options"] as? JsonArray)?.map { element ->
+            val option = element as? JsonObject ?: return refused("$NAME: each option is {label, description}")
+            buildJsonObject {
+                put("label", option.string("label") ?: return refused("$NAME: an option needs a label"))
+                put("description", option.string("description").orEmpty())
+            }
+        } ?: return refused("$NAME needs options: [{label, description}, ...]")
+        // The frame is `QuestionAsk` (agentHqProtocol): defaults left out, as the old typed encode left them out.
+        val request = buildJsonObject {
+            put("question", arguments.string("question") ?: return refused("$NAME needs a question"))
+            put("options", JsonArray(options))
+            put("recommended", arguments.string("recommended") ?: return refused("$NAME needs recommended (one option's label)"))
+            put("reason", arguments.string("reason") ?: return refused("$NAME needs a reason for the recommendation"))
+            val allowOther = (arguments["allowOther"] as? JsonPrimitive)?.booleanOrNull != false
+            if (!allowOther) put("allowOther", false)
+            (arguments["defaultAfterMin"] as? JsonPrimitive)?.intOrNull?.let { put("defaultAfterMin", it) }
+        }
+        return try {
+            val reply = call.request("question_ask", json.encodeToString(JsonObject.serializer(), request), sessionId = session, timeoutMs = ANSWER_TIMEOUT_MS)
+            when (reply.type) {
+                "question_asked" -> {
+                    val asked = json.parseToJsonElement(reply.data) as? JsonObject ?: return refused("question_ask: malformed answer")
+                    ToolResult(json.encodeToString(JsonObject.serializer(), buildJsonObject {
+                        put("questionId", asked.string("questionId").orEmpty())
+                        put("note", asked.string("note") ?: NON_BLOCKING_NOTE)
+                    }))
+                }
+                "error" -> refused(reply.data.ifBlank { "question_ask failed" })
+                else -> refused("question_ask: unexpected answer ${reply.type}")
+            }
+        } catch (e: Exception) {
+            refused(e.message ?: "question_ask failed")
+        }
+    }
+
+    /** `QuestionAsked.NON_BLOCKING_NOTE`, the default the daemon leaves out of the frame. */
+    private const val NON_BLOCKING_NOTE =
+        "non-blocking: carry on with other work; the owner's answer arrives as mail in thread question:<id>"
+}

@@ -9,6 +9,18 @@
   "entry": "com.superiorsoftllc.agenthq.plugins.official.roles.RolesPlugin",
   "jar": "build/libs/Infantry_Roles.jar",
   "buildOrder": 40,
+  "daemon": {
+    "entry": "com.superiorsoftllc.agenthq.plugins.official.roles.daemon.RolesDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_Roles-daemon.jar",
+    "apiAtLeast": "1.1.0",
+    "tools": [
+      { "name": "agenthq_role_list", "action": "roles.read", "kind": "read", "description": "Every role: id, name, description, source." },
+      { "name": "agenthq_role_get", "action": "roles.read", "kind": "read", "description": "One role in full, with its persona." },
+      { "name": "agenthq_role_update", "action": "roles.save", "kind": "write", "description": "Update a role's persona and description." },
+      { "name": "agenthq_role_create", "action": "roles.save", "kind": "write", "description": "Create a role (non-agent caller only)." },
+      { "name": "agenthq_role_delete", "action": "roles.delete", "kind": "destructive", "description": "Delete or reset a role (non-agent caller only)." }
+    ]
+  },
   "tabs": [
     {
       "id": "infantry.roles",

@@ -16,12 +16,9 @@ class BuiltinToolsListGuardTest {
     /** tool -> why it is still in core. All are "migration pending" (family + blocker, docs/DAEMON-PLUGINS.md section 6). */
     private val inCore: Map<String, String> = buildMap {
         fun family(reason: String, vararg tools: String) = tools.forEach { put(it, reason) }
-        family("pending: Infantry_Roles daemon half; agent-caller persona rule moves with it", "agenthq_role_create", "agenthq_role_delete", "agenthq_role_get", "agenthq_role_list", "agenthq_role_update")
         family("pending: Infantry_Board daemon half; needs ProjectScope as an API helper", "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_ticket_get", "agenthq_ticket_move", "agenthq_ticket_delete", "agenthq_ticket_start", "agenthq_epic_base", "agenthq_board", "agenthq_progress")
         family("pending: a Mail/Chat daemon half", "agenthq_inbox", "agenthq_read", "agenthq_message")
         family("pending: a Pipeline official plugin", "agenthq_pipeline", "agenthq_pipeline_record")
-        family("pending: Infantry_Attention daemon half", "agenthq_ask")
-        family("pending: Infantry_Settings daemon half", "agenthq_project_config_get", "agenthq_project_config_set")
         family("pending: Infantry_Agents daemon half; McpGuardrails moves with it", "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_spawn", "agenthq_prompt", "agenthq_kill", "agenthq_session_restart", "agenthq_session_remove")
         family("pending: file watch is a daemon behaviour (watch hooks), needs a DaemonApi surface", "agenthq_watch_file")
     }
@@ -50,6 +47,23 @@ class BuiltinToolsListGuardTest {
         assertTrue("\"agenthq_list_harnesses\"" in manifest, "Infantry_Agents/module.json must declare the tool")
     }
 
+    /** RUNTIME-LOAD-3: the roles, ask and project config tools are daemon halves of Infantry_Roles / _Attention / _Settings, wired nowhere in core. */
+    @Test fun `roles ask and project config tools are not wired in core and their modules declare them`() {
+        val moved = mapOf(
+            "Infantry_Roles" to listOf("agenthq_role_list", "agenthq_role_get", "agenthq_role_update", "agenthq_role_create", "agenthq_role_delete"),
+            "Infantry_Attention" to listOf("agenthq_ask"),
+            "Infantry_Settings" to listOf("agenthq_project_config_get", "agenthq_project_config_set"),
+        )
+        val sources = mcp.walkTopDown().filter { it.isFile && it.extension == "kt" }.map { it.readText() }.toList()
+        moved.forEach { (module, tools) ->
+            val manifest = File(TestDaemonPlugins.repo, "plugins/official/$module/module.json").readText()
+            tools.forEach { tool ->
+                assertTrue(sources.none { "\"$tool\"" in it }, "$tool must come from plugins/official/$module/daemon, not cli/mcp")
+                assertTrue("\"$tool\"" in manifest, "$module/module.json must declare $tool")
+            }
+        }
+    }
+
     @Test fun `every built-in tool in core is on the list with a reason`() {
         val found = mcp.walkTopDown().filter { it.isFile && it.extension == "kt" }
             .flatMap { Regex("\"(agenthq_[a-z_]+)\"").findAll(it.readText()).map { m -> m.groupValues[1] } }.toSet()
@@ -60,5 +74,5 @@ class BuiltinToolsListGuardTest {
         assertTrue(inCore.values.all { it.length > 15 })
     }
 
-    private companion object { const val CEILING = 31 }
+    private companion object { const val CEILING = 23 }
 }

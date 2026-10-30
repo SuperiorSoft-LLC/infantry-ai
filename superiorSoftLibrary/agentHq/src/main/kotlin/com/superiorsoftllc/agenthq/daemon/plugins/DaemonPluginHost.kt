@@ -267,12 +267,14 @@ class DaemonPluginHost private constructor(
      * `plugin_tool_call`: runs tool [name] with [arguments] as [caller]; [request] dispatches a frame on the caller's own
      * connection and waits for its answer. The policy has already gated the call by the tool's action.
      */
-    fun callTool(name: String, arguments: JsonObject, caller: Caller, request: (Envelope, Long) -> Envelope): ToolResult {
+    fun callTool(name: String, arguments: JsonObject, caller: Caller, client: JsonObject = JsonObject(emptyMap()), request: (Envelope, Long) -> Envelope): ToolResult {
         val entry = toolEntries[name] ?: return ToolResult("Unknown tool: $name", isError = true)
         if (entry.owner.guard.disabled) return ToolResult("$name is unavailable: plugin ${entry.owner.id} is disabled", isError = true)
         val call = object : ToolCall {
             override val arguments = arguments
             override val caller = caller
+            override val clientSessionId = (client["sessionId"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+            override val clientRole = (client["role"] as? JsonPrimitive)?.takeIf { it.isString }?.content
             override fun request(type: String, data: String, sessionId: String?, timeoutMs: Long): Frame =
                 request(Envelope(type, data, sessionId), timeoutMs).toFrame()
         }

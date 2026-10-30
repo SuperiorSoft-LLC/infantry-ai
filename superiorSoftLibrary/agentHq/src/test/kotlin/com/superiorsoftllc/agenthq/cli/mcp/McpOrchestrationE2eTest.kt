@@ -243,16 +243,14 @@ class McpOrchestrationE2eTest {
             "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_board",
             "agenthq_spawn", "agenthq_prompt", "agenthq_message", "agenthq_kill", "agenthq_session_remove", "agenthq_session_restart",
             "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_ticket_get",
-            "agenthq_ticket_start", // BUG-ASSIGN-1 (agenthq_list_harnesses: Infantry_Agents daemon half, RUNTIME-LOAD-2)
+            "agenthq_ticket_start", // BUG-ASSIGN-1 (agenthq_list_harnesses: Infantry_Agents, RUNTIME-LOAD-2; roles, ask, project config: Infantry_Roles / _Attention / _Settings, RUNTIME-LOAD-3)
             "agenthq_epic_base", // BASE-1c
             "agenthq_ticket_delete", // MCP-DEL-1
             "agenthq_ticket_move", // MCP-MOVE-1
             "agenthq_inbox", "agenthq_read", // MAIL-MCP-1
-            "agenthq_ask", // ASK-1
             "agenthq_progress", // PROGRESS-1 (1.117.0)
             "agenthq_watch_file", // STALL-4
             "agenthq_pipeline", "agenthq_pipeline_record", // PIPE-1
-            "agenthq_role_list", "agenthq_role_get", "agenthq_role_update", "agenthq_role_create", "agenthq_role_delete", "agenthq_project_config_get", "agenthq_project_config_set", // ROLE-EDIT-1, LANE-CAPS
         )
     }
 }

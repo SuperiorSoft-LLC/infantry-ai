@@ -9,6 +9,14 @@
   "entry": "com.superiorsoftllc.agenthq.plugins.official.attention.AttentionPlugin",
   "jar": "build/libs/Infantry_Attention.jar",
   "buildOrder": 150,
+  "daemon": {
+    "entry": "com.superiorsoftllc.agenthq.plugins.official.attention.daemon.AttentionDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_Attention-daemon.jar",
+    "apiAtLeast": "1.1.0",
+    "tools": [
+      { "name": "agenthq_ask", "action": "questions.ask", "kind": "write", "description": "Ask the owner to choose between options, without waiting." }
+    ]
+  },
   "tabs": [
     {
       "id": "infantry.attention",

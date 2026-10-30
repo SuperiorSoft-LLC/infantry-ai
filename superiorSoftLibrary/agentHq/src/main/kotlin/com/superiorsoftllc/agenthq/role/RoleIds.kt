@@ -53,13 +53,7 @@ object RoleIds {
      * once by [RoleIdMigration] when the database opens, and a request from an older client naming a retired id is
      * accepted through [normalize]. A retired id is never published again.
      */
-    val RETIRED: Map<String, String> = mapOf(
-        "git" to "version-control",
-        "i18n" to "localization",
-        "brainstormer" to "ideation",
-        "bot" to "automation",
-        "chief-of-staff" to "assistant",
-    )
+    val RETIRED: Map<String, String> = com.superiorsoftllc.agenthq.daemon.api.roles.RetiredRoleIds.MAP
 
     /** The built-in id for a user-defined role (its real id is its file's name). */
     const val CUSTOM: String = "custom"
