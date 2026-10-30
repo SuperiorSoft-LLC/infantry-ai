@@ -175,7 +175,7 @@ is the only place that sees both sides):
 | both | the frames of `protocol` | client-facing; also what an orchestrator UI speaks |
 
 Missing for it to be an explicit, versioned, transport-neutral interface: (1) one interface type (this ticket adds
-`OrchestratorLink` with one operation as the proof); (2) a data model for every seam (today several pass daemon classes such as
+`OrchestratorLink` with one operation as the proof; ORCH-1 extended it, section 6.7); (2) a data model for every seam (today several pass daemon classes such as
 `SessionRecord`, `Message`, `TicketRow`); (3) version and capability negotiation; (4) an error model with *unavailable*; (5) event
 delivery with ordering and replay (today in-process callbacks); (6) a binding registry keyed by `orchestrator.provider`.
 
@@ -258,3 +258,29 @@ binding is possible. File:line are `DaemonMain.kt` unless noted.
 
 No daemon source today names an HTTP/WebSocket client toward an orchestrator (the only `java.net.http` users are the update
 check, `ClientMain` and the CLI, none of them orchestrator traffic), so the transport guard passes from day one.
+
+### 6.7 ORCH-1: what shipped, what is left, degrade rules
+
+**Shipped.** `daemon.api.orchestrator.OrchestratorLink` (contract 1.1.0) now lives in `agentHqDaemonApi`, beside `RunnerLink`
+(orchestrator -> runner: `ticketIdOf`), `LocalOrchestratorLink`, and `OrchestratorHub` (the registry plus the one link callers
+hold). Plugins offer a binding with `api.hooks.orchestratorBinding(id, binding)` (declare `orchestratorBinding` in
+`daemon.hooks`); `AGENTHQ_ORCHESTRATOR_PROVIDER` (default `local`) picks it at startup, after plugins load; an unknown or failing
+provider keeps the local binding and logs. Operations: `reviewReport` (mail), `ticketOf`, `starterOf` (board/tickets),
+`launchDecision` (policy/usage). Routed in `DaemonMain`: `mail.reportCheck`, `MailRouter.starterOf`, `DoneWorkerReaper.ticketOf`,
+`manager.launchGate`. Local mode calls the same functions with the same arguments.
+
+**Degrade rules** (what a caller does on `Unavailable`; nothing is queued by callers because every routed operation is a read or
+idempotent): `reviewReport` -> no refusal; `ticketOf` -> unknown ticket (nothing reaped); `starterOf` -> no starter (mail takes its
+non-ticket route); `launchDecision` -> allow, the runner keeps its own guards. Mail is persisted by the mailbox BEFORE any
+delivery attempt, so an unavailable orchestrator cannot lose mail. A remote binding owns retry (exponential, idempotent on the
+natural key) and, for future event operations, an outbox with per-session sequence numbers. Proven by
+`RemoteOrchestratorFakeTest` (create ticket, send mail, spawn+finish; slow and unavailable).
+
+**Guards.** `OrchestratorBoundaryGuardTest` (runner<->orchestrator package imports are a ratchet; the interface module imports
+nothing of the daemon) and `DaemonCoreGuardTest` (no transport next to the link).
+
+**Left (follow-ups, exact lists).** (1) Remaining operations of 6.6: `skillsFor`, `ticketOf` for `FinishNoticeMonitor` (needs the
+ticket row, not `TicketRef`), `ticketTransition` event, `sessionEvent` stream, `usageRecord`, `acceptMail`/`deliveryResult` (split
+`MailRouter` routing from `MailDelivery`). (2) Shrink `OrchestratorBoundaryGuardTest.BASELINE` (51 imports in 30 pairs; biggest:
+`cli>memory` 14, `cli>issues` 9, `cli>pipeline` 8, `backlog>session` 7, `backlog>worktree` 7, `orchestration>session` 7). The `cli>*`
+entries are wire DTOs that belong in `agentHqProtocol`. (3) `orchestrator.provider` as a declared setting instead of the env var.

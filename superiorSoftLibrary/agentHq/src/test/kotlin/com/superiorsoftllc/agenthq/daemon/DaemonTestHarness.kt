@@ -322,6 +322,7 @@ class DaemonFixture private constructor(
             pluginsRoot: File? = null,
             pluginTrust: com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.Trust? = null,
             pluginEnv: (String) -> String? = { null },
+            orchestratorBindings: List<Pair<String, com.superiorsoftllc.agenthq.daemon.api.orchestrator.OrchestratorBinding>> = emptyList(),
             /**
              * POLICY-1: the policy presets and the switch. Default: production only, over the fixture's OWN state dir (never
              * the process's, gap 9), so the operator's AGENTHQ_POLICY / policy.preset never leaks in.
@@ -372,6 +373,7 @@ class DaemonFixture private constructor(
                 pluginsRoot = pluginsRoot ?: TestDaemonPlugins.none(stateDir),
                 pluginTrust = pluginTrust ?: TestDaemonPlugins.trustAll,
                 pluginEnv = pluginEnv,
+                orchestratorBindings = orchestratorBindings,
                 policies = policies?.invoke(stateDir) ?: com.superiorsoftllc.agenthq.policy.PolicyRuntime(emptyList(), { null }, null, stateDir),
             )
             beforeStart(daemon)

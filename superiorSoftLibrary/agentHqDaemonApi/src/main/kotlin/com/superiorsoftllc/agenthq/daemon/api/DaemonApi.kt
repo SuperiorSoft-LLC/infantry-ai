@@ -259,4 +259,7 @@ interface Hooks {
     fun turns(hook: TurnHook)
     fun sessions(hook: SessionHook)
     fun policyProvider(hook: PresetProviderHook)
+
+    /** ORCH-1: offer a binding for `orchestrator.provider = <providerId>`; the daemon selects it at start when that setting names it. */
+    fun orchestratorBinding(providerId: String, binding: com.superiorsoftllc.agenthq.daemon.api.orchestrator.OrchestratorBinding)
 }

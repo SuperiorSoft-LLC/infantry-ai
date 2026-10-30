@@ -19,7 +19,8 @@ class DaemonCoreGuardTest {
     /** CORE-SPLIT-1/2: the packages that now live in their own leaf Gradle module (module -> its source root). */
     private val leaves = LEAF_MODULES.mapValues { (m, _) -> File(root, "superiorSoftLibrary/$m/src/main/kotlin/com/superiorsoftllc/agenthq") }
 
-    private fun sources() = (listOf(main) + leaves.values).flatMap { r -> r.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList() }
+    private val daemonApi = File(root, "superiorSoftLibrary/agentHqDaemonApi/src/main/kotlin/com/superiorsoftllc/agenthq")
+    private fun sources() = (listOf(main, daemonApi) + leaves.values).flatMap { r -> r.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList() }
     private fun code(f: File) = f.readLines().withIndex().filter { (_, l) ->
         val t = l.trim(); !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*")
     }
@@ -130,7 +131,7 @@ class DaemonCoreGuardTest {
             "update" to "self-update of the daemon install; DaemonMain wires it directly",
             "notify" to "the spoken-push frame helper of the protocol",
             "provider" to "AgentProvider abstraction used by SessionManager; ClaudeCodeProvider and OpenCodeProvider inside it are concrete (see claude, opencode)",
-            "orchestration" to "the pod/node DAG scheduler and, since DAEMON-CORE-1, OrchestratorLink (the orchestrator seam); the scheduler itself is orchestrator side",
+            "orchestration" to "the pod/node DAG scheduler; the scheduler is orchestrator side (the orchestrator seam, OrchestratorLink, lives in agentHqDaemonApi since ORCH-1)",
         )
 
         /** PLUGIN NOW: a mechanism and an official plugin exist (or can be written today); only the move is left. */
