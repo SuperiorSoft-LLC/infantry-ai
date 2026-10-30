@@ -5,12 +5,16 @@ import com.superiorsoftllc.agenthq.protocol.HarnessInstallReport
 import com.superiorsoftllc.agenthq.protocol.HarnessInstallRequest
 import com.superiorsoftllc.agenthq.protocol.HarnessInstallResult
 import com.superiorsoftllc.agenthq.protocol.HarnessInstallStatusRequest
+import com.superiorsoftllc.agenthq.daemon.api.harness.HarnessInstallText
 import kotlinx.serialization.json.Json
 
 /**
  * HARNESS-INSTALL-1: `harness-status` / `harness-install` and the MCP `agenthq_harness_status` / `agenthq_harness_install`
  * read and write the same two frames and print the same text, so a remote or headless daemon is driven exactly like a local one.
  */
+private typealias ApiReport = com.superiorsoftllc.agenthq.daemon.api.harness.HarnessInstallReport
+private typealias ApiResult = com.superiorsoftllc.agenthq.daemon.api.harness.HarnessInstallResult
+
 internal object HarnessInstallClient {
     /** An npm install of three CLIs can take minutes; the 20 s answer window of an ordinary read would cut it off. */
     const val INSTALL_TIMEOUT_MS = 15 * 60_000L
@@ -33,39 +37,16 @@ internal object HarnessInstallClient {
         ).let { json.decodeFromString(HarnessInstallResult.serializer(), it.data) }
     }
 
-    fun render(report: HarnessInstallReport, out: Appendable) {
-        out.appendLine("id | state | version | where | package")
-        for (h in report.harnesses) {
-            out.appendLine(
-                buildString {
-                    append(h.id).append(" | ").append(h.state).append(" | ").append(h.installedVersion ?: "-")
-                    append(" | ").append(h.path?.let { if (h.managed) "$it (app-managed)" else it } ?: "-")
-                    append(" | ").append(h.npmPackage)
-                    h.wanted?.let { append(" | pinned: ").append(it) }
-                    h.latest?.let { append(" | latest: ").append(it) }
-                },
-            )
-        }
-        out.appendLine("install dir: ${report.prefixDir}")
-        out.appendLine(report.npmPath?.let { "npm: $it" } ?: "npm: NOT FOUND")
-        report.guidance?.let { out.appendLine(it) }
-        out.appendLine(SIGN_IN)
-    }
+    /** The printed tables are the API's [HarnessInstallText] (the Infantry_Agents tools print the same); the wire types are re-read as its models. */
+    fun render(report: HarnessInstallReport, out: Appendable) =
+        HarnessInstallText.render(json.decodeFromString(ApiReport.serializer(), json.encodeToString(HarnessInstallReport.serializer(), report)), out)
 
-    fun render(result: HarnessInstallResult, out: Appendable) {
-        for (line in result.log) out.appendLine(line)
-        for (o in result.outcomes) {
-            out.appendLine("${o.id}: ${o.result}" + (o.version?.let { " $it" } ?: "") + (o.message?.let { " - $it" } ?: ""))
-        }
-        if (result.outcomes.isEmpty()) out.appendLine("nothing to install: every harness is already installed")
-        render(result.report, out)
-    }
+    fun render(result: HarnessInstallResult, out: Appendable) =
+        HarnessInstallText.render(json.decodeFromString(ApiResult.serializer(), json.encodeToString(HarnessInstallResult.serializer(), result)), out)
 
     fun failed(result: HarnessInstallResult): Boolean = result.outcomes.any { it.result == "failed" }
 
-    const val SIGN_IN =
-        "Sign-in is separate: each CLI keeps its own login (run `claude` once, `opencode auth login`, or set the provider's " +
-            "API-key environment variable). Infantry AI stores no key."
+    const val SIGN_IN = HarnessInstallText.SIGN_IN
 
     private val json = Json { ignoreUnknownKeys = true }
 }

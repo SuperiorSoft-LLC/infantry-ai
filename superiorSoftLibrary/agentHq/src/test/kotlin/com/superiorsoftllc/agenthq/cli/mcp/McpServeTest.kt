@@ -13,6 +13,7 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import java.io.BufferedReader
 import java.io.PipedReader
 import java.io.PipedWriter
@@ -180,7 +181,7 @@ class McpServeTest {
             listOf(
                 "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_board",
                 "agenthq_list_harnesses", // BUG-ASSIGN-1
-                "agenthq_harness_status", "agenthq_harness_install", // HARNESS-INSTALL-1
+                "agenthq_harness_install", // HARNESS-INSTALL-1 (agenthq_harness_status: Infantry_Agents daemon half, RUNTIME-LOAD-1)
                 "agenthq_spawn", "agenthq_prompt", "agenthq_message", "agenthq_kill", "agenthq_session_remove", "agenthq_session_restart",
                 "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_ticket_get", // MCP-1
                 "agenthq_ticket_start", // BUG-ASSIGN-1
@@ -346,6 +347,60 @@ class McpServeTest {
             assertEquals(false, isError(list), "$list")
             assertTrue(text(list).contains("memory:"), text(list))
             assertTrue(text(list).contains("rogue ("), text(list))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    /** RUNTIME-LOAD-1: the deleted McpTools descriptor of `agenthq_harness_status`, as it was served (HARNESS-INSTALL-1, 1.100.0). */
+    private val HARNESS_STATUS_GOLDEN = """{"name":"agenthq_harness_status",
+         "description":"Which harness CLIs (claude, opencode, pi) are installed on the daemon's machine: state installed / missing / outdated, the version, where it runs from, and whether npm is available. checkLatest=true asks npm for the latest version too (slower). Install the missing ones with agenthq_harness_install.",
+         "inputSchema":{"type":"object","properties":{"checkLatest":{"type":"boolean","description":"Also ask npm for each CLI's latest version (default false)."}},"additionalProperties":false},
+         "annotations":{"readOnlyHint":true}}"""
+
+    /** RUNTIME-LOAD-1: `agenthq_harness_status` comes from Infantry_Agents unchanged: descriptor, and the answer the old code gave. */
+    @Test
+    fun harnessStatusToolComesFromInfantryAgentsUnchanged() {
+        val root = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Agents")
+        try {
+            val fixture = DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-plugin").toFile(), pluginsRoot = root)
+                .also { fixtures += it }
+            fixture.client.await(Envelope.READY)
+            val served = serve("--port", fixture.port.toString())
+            initialize(served)
+            val tools = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject }
+            assertEquals(Json.parseToJsonElement(HARNESS_STATUS_GOLDEN), tools.single { it["name"]!!.jsonPrimitive.content == "agenthq_harness_status" }, "the descriptor changed in the move")
+
+            // The answer is what the old in-core code built from the daemon's own frame: {"report":<wire report>,"text":<table>}.
+            fixture.client.send(Envelope(Envelope.HARNESS_INSTALL_STATUS, "{}", requestId = "direct"))
+            val direct = fixture.client.awaitWhere("the direct harness_install_status answer") { it.requestId == "direct" || it.type == Envelope.HARNESS_INSTALL_STATUS }
+            val wire = Json { ignoreUnknownKeys = true }.decodeFromString(com.superiorsoftllc.agenthq.protocol.HarnessInstallReport.serializer(), direct.data)
+            val old = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = true }
+            val expected = old.encodeToString(JsonObject.serializer(), kotlinx.serialization.json.buildJsonObject {
+                put("report", old.encodeToJsonElement(com.superiorsoftllc.agenthq.protocol.HarnessInstallReport.serializer(), wire))
+                put("text", StringBuilder().also { com.superiorsoftllc.agenthq.cli.HarnessInstallClient.render(wire, it) }.toString())
+            })
+            val got = served.callTool("agenthq_harness_status")
+            assertEquals(false, got["isError"]!!.jsonPrimitive.content.toBoolean(), "$got")
+            assertEquals(expected, got["content"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    /** RUNTIME-LOAD-1: with Infantry_Agents absent the tool disappears cleanly: not listed; install stays in core. */
+    @Test
+    fun harnessStatusToolIsGoneWithoutInfantryAgents() {
+        val root = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root()
+        try {
+            val fixture = DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-plugin").toFile(), pluginsRoot = root)
+                .also { fixtures += it }
+            fixture.client.await(Envelope.READY)
+            val served = serve("--port", fixture.port.toString())
+            initialize(served)
+            val tools = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content }
+            assertTrue("agenthq_harness_status" !in tools, "$tools")
+            assertTrue("agenthq_harness_install" in tools, "install stays in core: $tools")
         } finally {
             root.deleteRecursively()
         }

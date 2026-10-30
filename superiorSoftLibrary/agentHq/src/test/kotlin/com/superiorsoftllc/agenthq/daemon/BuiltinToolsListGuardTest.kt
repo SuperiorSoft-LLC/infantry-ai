@@ -22,8 +22,16 @@ class BuiltinToolsListGuardTest {
         family("pending: a Pipeline official plugin", "agenthq_pipeline", "agenthq_pipeline_record")
         family("pending: Infantry_Attention daemon half", "agenthq_ask")
         family("pending: Infantry_Settings daemon half", "agenthq_project_config_get", "agenthq_project_config_set")
-        family("pending: Infantry_Agents daemon half; McpGuardrails moves with it", "agenthq_list_harnesses", "agenthq_harness_status", "agenthq_harness_install", "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_spawn", "agenthq_prompt", "agenthq_kill", "agenthq_session_restart", "agenthq_session_remove")
+        family("pending: Infantry_Agents daemon half; McpGuardrails moves with it", "agenthq_list_harnesses", "agenthq_harness_install", "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_spawn", "agenthq_prompt", "agenthq_kill", "agenthq_session_restart", "agenthq_session_remove")
         family("pending: file watch is a daemon behaviour (watch hooks), needs a DaemonApi surface", "agenthq_watch_file")
+    }
+
+    /** RUNTIME-LOAD-1: `agenthq_harness_status` is Infantry_Agents' daemon half; a second copy in core would shadow the plugin's tool. */
+    @Test fun `harness status is not wired in core and the Infantry_Agents module declares it`() {
+        val inCoreSource = mcp.walkTopDown().filter { it.isFile && it.extension == "kt" }.filter { "agenthq_harness_status" in it.readText() }.map { it.name }.toList()
+        assertEquals(emptyList<String>(), inCoreSource, "agenthq_harness_status must come from plugins/official/Infantry_Agents/daemon, not cli/mcp")
+        val manifest = File(TestDaemonPlugins.repo, "plugins/official/Infantry_Agents/module.json").readText()
+        assertTrue("\"agenthq_harness_status\"" in manifest, "Infantry_Agents/module.json must declare the tool")
     }
 
     @Test fun `every built-in tool in core is on the list with a reason`() {
@@ -36,5 +44,5 @@ class BuiltinToolsListGuardTest {
         assertTrue(inCore.values.all { it.length > 15 })
     }
 
-    private companion object { const val CEILING = 34 }
+    private companion object { const val CEILING = 33 }
 }
