@@ -86,20 +86,10 @@ data class NewAgentModalModel(
      * How the chosen harness treats a limit, as the daemon reports it (`supported` / `best_effort` / `unsupported`, plus
      * how), or null when no harness is chosen or the daemon is older and does not say.
      */
-    val contextLimitSupport: ProviderInfo?
-        get() = executor.harness?.let { h -> harnesses.firstOrNull { it.id == h } }?.takeIf { it.contextLimit != null }
+    val contextLimitSupport: ProviderInfo? get() = contextLimitProvider(harnesses, executor.harness)
 
     /** The line under the context limit field: the chosen harness's support in words. */
-    val contextLimitNote: String
-        get() {
-            val info = contextLimitSupport ?: return if (executor.harness == null) "Pick a harness to see whether it honours a limit." else "This harness does not report whether it honours a limit."
-            val how = info.contextLimitHow?.takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
-            return when (info.contextLimit) {
-                "supported" -> "${info.id} applies the limit$how"
-                "best_effort" -> "${info.id} applies it best effort$how"
-                else -> "${info.id} does not apply a limit (it is recorded, not applied)$how"
-            }
-        }
+    val contextLimitNote: String get() = contextLimitNoteFor(harnesses, executor.harness)
 
     /** The `new` frame's data for Add: the picked harness+model (null = daemon defaults), the role, the role binding's effort, the context limit. */
     fun spawnData(): String = spawnOptionsData(executor.picked, roleId?.let { bindings[it]?.effort }, roleId, contextLimit = contextLimit)

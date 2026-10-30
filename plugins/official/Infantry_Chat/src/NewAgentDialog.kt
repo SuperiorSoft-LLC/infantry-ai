@@ -327,7 +327,7 @@ private fun ExecutorStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> 
         }
         // The dialog surface is light: rows take its content color instead of the dark panels' Palette.Text.
         ExecutorPicker(m.executor, { update(m.withExecutor(it)) }, tags = NEW_AGENT_EXECUTOR_TAGS, textColor = AlertDialogDefaults.textContentColor)
-        ContextLimitField(m, update)
+        NewAgentContextLimit(m, update)
     }
 }
 
@@ -336,17 +336,10 @@ private fun ExecutorStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> 
  * The line under it says how the chosen harness treats a limit (applied, best effort, or recorded only).
  */
 @Composable
-private fun ContextLimitField(m: NewAgentModalModel, update: (NewAgentModalModel) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Checkbox(m.contextLimitOn, { update(m.withContextLimitOn(it)) }, modifier = Modifier.testTag(NEW_AGENT_CONTEXT_LIMIT_SWITCH_TAG))
-        Text("Context limit (off = the harness default)", fontSize = 12.sp, color = AlertDialogDefaults.textContentColor)
-    }
-    if (m.contextLimitOn) {
-        OutlinedTextField(
-            m.contextLimitText, { update(m.withContextLimitText(it)) }, placeholder = { Text("200k, 1m or 150000") }, singleLine = true,
-            isError = m.missingField == NewAgentField.CONTEXT_LIMIT,
-            modifier = Modifier.fillMaxWidth().testTag(NEW_AGENT_CONTEXT_LIMIT_TAG), colors = visibleBorderFieldColors(),
-        )
-    }
-    Text(m.contextLimitNote, color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(NEW_AGENT_CONTEXT_LIMIT_NOTE_TAG))
+private fun NewAgentContextLimit(m: NewAgentModalModel, update: (NewAgentModalModel) -> Unit) {
+    ContextLimitField(
+        m.contextLimitOn, m.contextLimitText, m.contextLimitNote, m.missingField == NewAgentField.CONTEXT_LIMIT,
+        ContextLimitTags(NEW_AGENT_CONTEXT_LIMIT_SWITCH_TAG, NEW_AGENT_CONTEXT_LIMIT_TAG, NEW_AGENT_CONTEXT_LIMIT_NOTE_TAG),
+        onOn = { update(m.withContextLimitOn(it)) }, onText = { update(m.withContextLimitText(it)) },
+    )
 }

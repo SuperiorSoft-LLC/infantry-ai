@@ -226,6 +226,8 @@ fun CenterHeader(
             Spacer(Modifier.width(6.dp))
         }
         Chip("runs ${a.session.runCount}")
+        // CONTEXT-LIMIT-2: the session's context limit; nothing when none is set.
+        state.contextLimitChip(a)?.let { Spacer(Modifier.width(6.dp)); ContextLimitChipView(it) }
         // Contract 1.13.0: what this session's runs reported using; nothing at all when none reported.
         a.usageTotals?.let { t -> Spacer(Modifier.width(6.dp)); Chip("${compact(t.input)} in / ${compact(t.output)} out", Palette.Info) }
         }

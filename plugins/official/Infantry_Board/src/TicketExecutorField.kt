@@ -37,6 +37,12 @@ const val TICKET_MODEL_INHERIT_TAG = "ticket-model-inherit"
 /** TICKET-EXEC-UI: a card's effective executor line ("runs on <provider> (<source>) / <model> (<source>)"), + ticket id. */
 const val TICKET_EXECUTOR_LINE_TAG_PREFIX = "ticket-executor-"
 
+/** CONTEXT-LIMIT-2: a card's effective context limit line, + ticket id. */
+const val TICKET_CONTEXT_LIMIT_LINE_TAG_PREFIX = "ticket-context-limit-line-"
+
+/** CONTEXT-LIMIT-2: the ticket forms' context limit switch, size field and support line. */
+val TICKET_CONTEXT_LIMIT_TAGS = ContextLimitTags("ticket-context-limit-switch", "ticket-context-limit", "ticket-context-limit-note")
+
 /** TICKET-EXEC-UI: the ticket forms' executor picker tags; the harness "inherit" chip is `ticket-harness-inherit`. */
 val TICKET_EXECUTOR_TAGS = ExecutorPickerTags(
     harness = { "ticket-harness-$it" },

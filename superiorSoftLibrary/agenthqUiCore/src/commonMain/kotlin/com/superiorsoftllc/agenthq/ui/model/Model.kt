@@ -892,6 +892,13 @@ data class AppState(
      * harness default from the `providers` frame -- and, failing both, the model the last run reported using.
      * Any part that cannot be known is null, so its chip is hidden rather than guessed.
      */
+    /**
+     * CONTEXT-LIMIT-2: the session's context limit chip; null when it has none. The support rides on the session; the how
+     * text is the harness's, from the `providers` frame.
+     */
+    fun contextLimitChip(a: AgentView): ContextLimitChip? =
+        sessionContextLimitChip(a.session, providers)
+
     fun sessionExecutor(a: AgentView): SessionExecutor {
         val harness = a.session.provider.takeIf { it.isNotBlank() }
         val full = a.session.model?.takeIf { it.isNotBlank() }
