@@ -55,8 +55,7 @@ that is renamed or deleted must leave the table. Lines in PLUGIN_NOW/PLUGIN_LATE
 | `provider` | AgentProvider abstraction used by SessionManager; the concrete providers in it follow `claude` and `opencode` |
 | `orchestration` | the pod/node DAG scheduler (orchestrator side, section 6) and `OrchestratorLink`, the seam |
 
-**PLUGIN NOW** (mechanism exists, only the move is left): `backlog`, `epics`, `stories`, `mvp`, `ticketfiles`, `context`,
-`brief`, `ledger` (all Infantry_Board's daemon half); `pipeline` (Pipeline plugin); `issues`, `decisions`, `memory` (a Knowledge
+**PLUGIN NOW** (mechanism exists, only the move is left): `pipeline` (Pipeline plugin); `issues`, `decisions`, `memory` (a Knowledge
 plugin); `prompts` (Infantry_Prompts); `images` (Infantry_Chat).
 
 DAEMON-PLUGINS-3: `probe` (a one-off provider comparison `main()` and its `probeProvider` Gradle task) was dead and is deleted. `experiments` (the pi tool bridge) cannot move yet, see below.
@@ -64,6 +63,7 @@ DAEMON-PLUGINS-3: `probe` (a one-off provider comparison `main()` and its `probe
 **PLUGIN LATER (blocker named)**
 | package | blocker |
 |---|---|
+| `backlog`, `epics`, `stories`, `mvp`, `ticketfiles`, `context`, `brief`, `ledger` (Infantry_Board's daemon half) | DaemonApi has no ticket/board/epic surface and `DaemonMain`, `TicketBoard`, the story handlers and the mailbox name each other directly; DaemonApi board surface first, see `docs/DAEMON-BOARD-API.md` (DAEMON-PLUGINS-3 design, built after launch) |
 | `claude`, `opencode` | the adapters are already `HarnessPlugin`s, but ProviderFactory, HarnessModelCatalogs, Sandbox and DaemonMain name them, so built-ins are not registered through the SPI |
 | `role`, `agents` | roles and profiles are bound into SessionManager spawn and mail addressing; needs a DaemonApi role surface / spawn-binding hook |
 | `questions`, `attention` | usage, mailbox and triggers raise attention items directly (reverse dependency); needs attention in the API first |

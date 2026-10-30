@@ -118,8 +118,8 @@ daemon frames. The frames are the **abstract daemon data contract** (core); a to
 | tool(s) | frames | class | plan |
 |---|---|---|---|
 | `agenthq_ticket_files`, `agenthq_ticket_related_files` | `ticket_files` | concrete | **MIGRATED** (this ticket): `plugins/official/Infantry_Board/daemon` (`board.files.read`), deleted from core |
-| `agenthq_usage` | `usage_get` | concrete | next: needs `UsageText.render` moved into the plugin (the CLI `agenthq usage` shares it) |
-| `agenthq_processes`, `agenthq_processes_reap` | `processes`, `processes_reap` | concrete | Infantry_Processes daemon half; `ProcessesCli.render` moves with it |
+| `agenthq_usage` | `usage_get` | concrete | **MIGRATED** (DAEMON-PLUGINS-3): `plugins/official/Infantry_Usage/daemon` (`usage.read`); `UsageReport`/`UsageText` live in agentHqDaemonApi |
+| `agenthq_processes`, `agenthq_processes_reap` | `processes`, `processes_reap` | concrete | **MIGRATED** (DAEMON-PLUGINS-3): `plugins/official/Infantry_Processes/daemon` (`host.processes.read`, `host.processes.reap`); models and `ProcessesText` live in agentHqDaemonApi |
 | `agenthq_role_*` | `role_*` | concrete | Infantry_Roles daemon half (the agent-caller persona/description rule moves with it) |
 | `agenthq_ticket_create/update/get/move/delete/start`, `agenthq_epic_base`, `agenthq_board` | `ticket_*`, `epic_*`, `sessions` | concrete | Infantry_Board daemon half; needs the ProjectScope guard as a shared helper in the API |
 | `agenthq_inbox`, `agenthq_read`, `agenthq_message` | `mail_*` | concrete | Infantry_Chat (or a Mail) daemon half |
