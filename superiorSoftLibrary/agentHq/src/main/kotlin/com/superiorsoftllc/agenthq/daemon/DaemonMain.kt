@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.daemon
 
+import com.superiorsoftllc.agenthq.prompts.promptTimeoutOverride
 import com.superiorsoftllc.agenthq.protocol.MessageOrigin
 import com.superiorsoftllc.agenthq.session.isBusy
 import com.superiorsoftllc.agenthq.session.InfantryEnv
@@ -2756,7 +2757,7 @@ private suspend fun handleConnection(
                         // continues exactly that one. A missing or non-resumable session is refused here,
                         // never silently forked into a new session the client did not ask for.
                         try {
-                            val named = manager.get(envelope.sessionId)
+                            val named = manager.get(envelope.sessionId!!)
                             named?.let { launchWarning(manager, it.provider)?.let(outgoing::trySend) }
                             // A bound-but-never-run session takes its persona and identity with this first turn,
                             // from its OWN binding (not this connection's `new`), as a delivered message does.
@@ -2767,7 +2768,7 @@ private suspend fun handleConnection(
                             } else {
                                 envelope.data
                             }
-                            active = manager.resume(envelope.sessionId, turn).id
+                            active = manager.resume(envelope.sessionId!!, turn).id
                             plugins.turnAccepted(envelope, caller)
                             null
                         } catch (e: RunInFlightException) {
@@ -3143,7 +3144,7 @@ private suspend fun handleConnection(
                     val decoded = AgentProfile.decode(envelope.data)
                     // CP-3: a NEW agent is bound to the project it names; one that names none (a CLI call outside
                     // any project) is bound to the DEFAULT project, never left global. A known agent keeps its own.
-                    val isNew = decoded.id.isNullOrBlank() || agents.get(decoded.id.trim()) == null
+                    val isNew = decoded.id.isNullOrBlank() || agents.get(decoded.id!!.trim()) == null
                     val bound = if (isNew && decoded.projectId.isNullOrBlank()) decoded.copy(projectId = projects.defaultProjectId()) else decoded
                     val saved = agents.save(bound)
                     Envelope(Envelope.AGENT, json.encodeToString(AgentProfile.serializer(), saved))

@@ -100,7 +100,7 @@ private val WINDOWS = System.getProperty("os.name").orEmpty().lowercase().contai
  * tab or quote (or an empty one) goes in quotes, an embedded `"` becomes `\"`, and backslashes before a quote (or
  * the closing quote) are doubled. Each argument comes back out of CommandLineToArgvW exactly as given.
  */
-internal fun windowsCommandLine(argv: List<String>): String = argv.joinToString(" ") { arg ->
+fun windowsCommandLine(argv: List<String>): String = argv.joinToString(" ") { arg ->
     if (arg.isNotEmpty() && arg.none { it == ' ' || it == '\t' || it == '"' }) return@joinToString arg
     buildString {
         append('"')

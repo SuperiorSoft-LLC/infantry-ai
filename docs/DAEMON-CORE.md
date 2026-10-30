@@ -87,11 +87,28 @@ strongly connected graph (`session` <-> `runner` <-> `provider` <-> `harness` <-
 `harness`; `DaemonMain.kt` is 4300 lines naming ~40 packages), so a module cut either fails to compile or needs interfaces
 that are the real work. Exact plan, one ticket per step, each keeps the build green:
 
-1. **CORE-SPLIT-1** move `protocol` + `Frame` types out of `session`/`harness` references (3 imports) so `protocol` is a leaf; create module `agentHqProtocol` (contract + wire DTOs). Small.
-2. **CORE-SPLIT-2** `runner` becomes a leaf (1 back-import of `session`); module `agentHqRunner`. Small.
+1. **CORE-SPLIT-1 (DONE, ticket e7fb5a60)** move `protocol` + `Frame` types out of `session`/`harness` references (3 imports) so `protocol` is a leaf; create module `agentHqProtocol` (contract + wire DTOs). Small.
+2. **CORE-SPLIT-2 (DONE, ticket e7fb5a60)** `runner` becomes a leaf (1 back-import of `session`); module `agentHqRunner`. Small.
 3. **CORE-SPLIT-3** invert the `session`->`provider`->`harness`->`session` cycle: `Harness`/`AgentProvider` interfaces and `SessionEvent` types into `agentHqCore`; `ClaudeCodeProvider`, `OpenCodeProvider`, `harness/claude|pi|descriptor|install` into `agentHqHarnesses`. Medium; depends on DAEMON-PLUGINS-2 registering built-ins via the SPI.
 4. **CORE-SPLIT-4** cut `DaemonMain.kt` into core bootstrap plus `feature wiring` (what DAEMON-PLUGINS-2 moves out); then `agentHqCore` holds `protocol, session, harness (api), mailbox, policy, settings, db, keystore, runner, daemon/plugins` and the dependency rule (core imports no feature module) becomes a Gradle fact instead of a test.
 5. License split follows: `agentHqCore` + `agentHqDaemonApi` MPL-2.0, features Apache-2.0.
+
+### License readiness (CORE-SPLIT-A, ticket e7fb5a60)
+
+Physically core today (own Gradle module, depends on no other agentHq module and no plugin module; `DaemonCoreGuardTest` checks it):
+
+* `superiorSoftLibrary/agentHqProtocol` (`:superiorSoftLibrary:agentHqProtocol`): package `protocol` (wire contract and DTOs), plus the two
+  wire types it needs, which keep their package names: `session.SessionState`, `session.SleepHint`/`WaitHint`, `session.RunPhaseOverlay` and
+  `harness.HarnessCommand` (+ `CommandAction`, `StandardCommands`, `CommandLine(s)`). `protocol` was made a leaf by moving those declarations here instead of
+  importing `session`/`harness`; `SpawnOptions.promptTimeoutOverride()` (which named `prompts`) became an extension in `prompts/SpawnPromptTimeout.kt`.
+  The leaf's `internal` members became public (tests and the daemon are now in another module).
+* `superiorSoftLibrary/agentHqRunner` (`:superiorSoftLibrary:agentHqRunner`): package `runner` (ProcessRunner, PtyProcessRunner, watch shims,
+  ToolProfiles, ...). Its one back-import of `session.InfantryEnv` was inverted by letting `RunnerFactory` read `INFANTRY_RUNNER`/`AGENTHQ_RUNNER` itself.
+* `superiorSoftLibrary/agentHqDaemonApi` and `superiorSoftLibrary/agenthqPlugins` were already separate modules.
+
+Still inside `superiorSoftLibrary/agentHq` (not yet physical): `session`, `harness` (apart from `HarnessCommand.kt`), `daemon`, `policy`,
+`settings`, `db`, `keystore` and every other package, until CORE-SPLIT-3/4. No license file or header has been added; the owner signs off
+this directory list first.
 
 ## 5. Guards (`DaemonCoreGuardTest`, `NoDemoInDaemonCoreGuardTest`)
 

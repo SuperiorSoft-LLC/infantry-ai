@@ -65,6 +65,9 @@ dependencies {
     implementation(project(":superiorSoftLibrary:agenthqPlugins"))
     // DAEMON-PLUGINS-1: the API daemon plugins compile against (docs/DAEMON-PLUGINS.md).
     implementation(project(":superiorSoftLibrary:agentHqDaemonApi"))
+    // CORE-SPLIT-1/2: the wire contract and the process runner are leaf modules; `api` keeps their types visible to :agentHqUi as before.
+    api(project(":superiorSoftLibrary:agentHqProtocol"))
+    api(project(":superiorSoftLibrary:agentHqRunner"))
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.ktor.server.core)
     implementation(libs.ktor.server.cio)

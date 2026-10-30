@@ -16,7 +16,10 @@ class DaemonCoreGuardTest {
     private val root = TestDaemonPlugins.repo
     private val main = File(root, "superiorSoftLibrary/agentHq/src/main/kotlin/com/superiorsoftllc/agenthq")
 
-    private fun sources() = main.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
+    /** CORE-SPLIT-1/2: the packages that now live in their own leaf Gradle module (module -> its source root). */
+    private val leaves = LEAF_MODULES.mapValues { (m, _) -> File(root, "superiorSoftLibrary/$m/src/main/kotlin/com/superiorsoftllc/agenthq") }
+
+    private fun sources() = (listOf(main) + leaves.values).flatMap { r -> r.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList() }
     private fun code(f: File) = f.readLines().withIndex().filter { (_, l) ->
         val t = l.trim(); !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*")
     }
@@ -41,7 +44,7 @@ class DaemonCoreGuardTest {
     }
 
     @Test fun `every top-level package is classified with a reason, none stale`() {
-        val actual = main.listFiles { f -> f.isDirectory }!!.map { it.name }.toSet()
+        val actual = (listOf(main) + leaves.values).flatMap { r -> r.listFiles { f -> f.isDirectory }!!.map { it.name } }.toSet()
         val lists = listOf(CORE, STAYS, PLUGIN_NOW, PLUGIN_LATER)
         val listed = lists.flatMap { it.keys }
         assertEquals(emptySet<String>(), actual - listed.toSet(), "unclassified package(s): add each to exactly one list with a reason")
@@ -49,6 +52,26 @@ class DaemonCoreGuardTest {
         assertEquals(listed.toSet().size, listed.size, "a package is classified twice")
         assertTrue(lists.flatMap { it.values }.all { it.length >= 12 }, "every classification needs a real reason")
         assertTrue(PLUGIN_LATER.values.all { "blocker:" in it }, "plugin-later entries name their blocker as 'blocker: ...'")
+    }
+
+    @Test fun `the leaf modules depend on no other agentHq module and no plugin module`() {
+        for ((module, packages) in LEAF_MODULES) {
+            val gradle = File(root, "superiorSoftLibrary/$module/build.gradle.kts")
+            assertTrue(gradle.isFile, "$module has no build.gradle.kts")
+            val projectDeps = gradle.readLines().filter { it.trim().let { t -> !t.startsWith("//") && "project(" in t } }
+            assertTrue(projectDeps.isEmpty(), "$module is a leaf: it must not depend on any project, found:\n${projectDeps.joinToString("\n")}")
+            assertTrue("include(\":superiorSoftLibrary:$module\")" in File(root, "settings.gradle.kts").readText(), "$module is not included in settings.gradle.kts")
+            val src = leaves.getValue(module)
+            assertEquals(packages, src.listFiles { f -> f.isDirectory }!!.map { it.name }.toSet(), "$module holds exactly these top-level packages")
+            val bad = src.walkTopDown().filter { it.isFile && it.extension == "kt" }.flatMap { f ->
+                code(f).filter { (_, l) ->
+                    l.trim().let { t -> t.startsWith("import com.superiorsoftllc.agenthq.") &&
+                        !(t.removePrefix("import com.superiorsoftllc.agenthq.").let { r -> LEAF_PACKAGES.any { r == it || r.startsWith("$it.") } }) }
+                }.map { (i, l) -> "${f.name}:${i + 1}: ${l.trim()}" }
+            }.toList()
+            assertTrue(bad.isEmpty(), "$module imports daemon code that is not in a leaf module:\n${bad.joinToString("\n")}")
+        }
+        assertTrue(File(root, "superiorSoftLibrary/agentHq/build.gradle.kts").readText().let { b -> LEAF_MODULES.keys.all { "project(\":superiorSoftLibrary:$it\")" in b } }, "agentHq must depend on each leaf module")
     }
 
     @Test fun `the doc lists every package`() {
@@ -71,6 +94,15 @@ class DaemonCoreGuardTest {
     }
 
     companion object {
+        /** CORE-SPLIT-1/2: leaf Gradle modules and the top-level packages each owns (package names unchanged). */
+        val LEAF_MODULES = mapOf(
+            "agentHqProtocol" to setOf("protocol", "session", "harness"),
+            "agentHqRunner" to setOf("runner"),
+        )
+
+        /** What a leaf module may import from the agenthq tree: packages that live in a leaf module (and the shared types of session/harness it carries). */
+        private val LEAF_PACKAGES = setOf("protocol", "runner", "session.SessionState", "session.SleepHint", "session.WaitHint", "session.RunPhaseOverlay", "harness.HarnessCommand", "harness.CommandAction", "harness.StandardCommands", "harness.CommandLine", "harness.CommandLines")
+
         /** CORE: the abstraction layer. Stays by definition (docs/DAEMON-CORE.md section 2). */
         val CORE = mapOf(
             "protocol" to "the wire contract and frames: the abstract data contract between UI and daemon",
@@ -117,7 +149,7 @@ class DaemonCoreGuardTest {
             "memory" to "project knowledge: notes, a Knowledge plugin",
             "prompts" to "prompt templates: Infantry_Prompts daemon half",
             "images" to "chat uploads: Infantry_Chat daemon half",
-            "experiments" to "pitoolbridge experiment for pi; delete or move with the pi harness",
+            "experiments" to "experiment bridging pi tool calls; delete or move with the pi harness",
             "probe" to "developer comparison tool for providers, not daemon",
         )
 

@@ -48,17 +48,6 @@ data class SpawnOptions(
     /** ASK-TIMER (1.139.0, ADDITIVE): this session's `prompts.onTimeout` (`deny` | `approve`); null = global. Unknown refuses the spawn. */
     val promptOnTimeout: String? = null,
 ) {
-    /** ASK-TIMER: the session prompt-timer override this spawn asks for; null = none. Refused ([IllegalArgumentException]) when invalid. */
-    fun promptTimeoutOverride(): com.superiorsoftllc.agenthq.prompts.PromptTimeoutOverride? {
-        promptTimeoutSec?.let { require(it in 0..86_400) { "promptTimeoutSec must be 0..86400 (0 = no timer), got $it" } }
-        val action = promptOnTimeout?.let {
-            com.superiorsoftllc.agenthq.prompts.TimeoutAction.parse(it)
-                ?: throw IllegalArgumentException("promptOnTimeout must be one of ${com.superiorsoftllc.agenthq.prompts.TimeoutAction.WIRE.joinToString()}")
-        }
-        if (promptTimeoutSec == null && action == null) return null
-        return com.superiorsoftllc.agenthq.prompts.PromptTimeoutOverride(promptTimeoutSec, action)
-    }
-
     companion object {
         /** Decode a `new` frame's JSON data, or throw [IllegalArgumentException] saying what is wrong. */
         fun decode(text: String): SpawnOptions = StrictJson.decode(serializer(), text, "new payload")
@@ -99,7 +88,7 @@ data class ProviderInfo(
  * half-applied. A misspelt key (`"provder"`) or a field from a newer contract must not quietly fall back
  * to a default the client did not ask for.
  */
-internal object StrictJson {
+object StrictJson {
     private val strict = Json { ignoreUnknownKeys = false }
 
     fun <T> decode(serializer: KSerializer<T>, text: String, what: String): T = try {

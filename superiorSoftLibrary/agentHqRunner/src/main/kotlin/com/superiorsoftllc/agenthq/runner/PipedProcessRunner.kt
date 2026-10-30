@@ -93,9 +93,9 @@ private class PipedRunningProcess(
 }
 
 /** Kills a child and its descendants. Windows has no tree kill in the JVM, so use `taskkill /T`. */
-internal object ProcessTreeKiller {
+object ProcessTreeKiller {
     /** The one place the Windows tree-kill argv is built: `/T` (descendants) is required on BOTH the graceful and forced path. */
-    internal fun taskkillArgs(pid: Long, force: Boolean): List<String> =
+    fun taskkillArgs(pid: Long, force: Boolean): List<String> =
         listOf("taskkill", "/PID", pid.toString(), "/T") + if (force) listOf("/F") else emptyList()
 
     private val isWindows get() = System.getProperty("os.name").orEmpty().lowercase().contains("win")
