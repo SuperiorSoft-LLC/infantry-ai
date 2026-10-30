@@ -1655,7 +1655,11 @@ class TicketBoard(
 
     /** TICKET-WEIGHT: the mapping's choice for [row] when [WeightExecutors.applies] (nothing else pins an executor), else null. */
     private fun weightChoice(row: TicketRow, boundProvider: String?, boundModel: String?): WeightExecutor? =
-        if (WeightExecutors.applies(row.weight, row.provider, row.model, boundProvider, boundModel)) weightExecutors().forWeight(row.weight) else null
+        if (WeightExecutors.applies(row.weight, row.provider, row.model, boundProvider, boundModel)) {
+            // H2: a weight route naming a harness that is not installed is skipped (model with it, which only fits that
+            // harness), so the ticket runs on the first installed one; with none installed the start says so.
+            weightExecutors().forWeight(row.weight)?.takeIf { e -> e.provider == null || sessions?.hasProvider(e.provider) != false }
+        } else null
 
     /**
      * ROUTING-1: the first rule of [row]'s project that matches it, or null when the ticket pins its own provider or model

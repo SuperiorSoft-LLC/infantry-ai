@@ -328,13 +328,15 @@ class DaemonFixture private constructor(
              * the process's, gap 9), so the operator's AGENTHQ_POLICY / policy.preset never leaks in.
              */
             policies: ((File) -> com.superiorsoftllc.agenthq.policy.PolicyRuntime)? = null,
+            /** H2: the default provider; the stub unless a test boots the zero-harness daemon ([com.superiorsoftllc.agenthq.provider.NoHarnessProvider]). */
+            defaultProvider: AgentProvider? = null,
         ): DaemonFixture {
             val opened: AgentHqStore = store ?: SqlAgentHqStore.open(storePath, holderLabel, busyTimeoutMs)
-            val provider = StubProvider(script = script, delayMs = 0)
+            val provider = defaultProvider ?: StubProvider(script = script, delayMs = 0)
             val daemon = AgentHqDaemon.build(
                 port = port,
                 provider = provider,
-                runner = runner ?: provider.transport()!!,
+                runner = runner ?: provider.transport() ?: com.superiorsoftllc.agenthq.runner.ScriptedRunner(script, 0),
                 sessionStore = JsonSessionStore(File(stateDir, "sessions.json")),
                 mailStore = JsonMailStore(File(stateDir, "mailbox.json")),
                 store = opened,

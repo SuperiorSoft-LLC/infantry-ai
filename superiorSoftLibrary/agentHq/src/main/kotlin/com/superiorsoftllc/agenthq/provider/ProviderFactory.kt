@@ -3,7 +3,7 @@ package com.superiorsoftllc.agenthq.provider
 import com.superiorsoftllc.agenthq.session.InfantryEnv
 
 /**
- * Selects the agent provider from `AGENTHQ_PROVIDER` (default `opencode`, i.e. Phase 1 parity).
+ * Selects the agent provider from `AGENTHQ_PROVIDER` (default: the first registered harness, see [defaultId]).
  *
  * Dispatch is CONFIGURATION-driven, like `AGENTHQ_RUNNER` for the transport: the string names a
  * provider and a registry resolves it. A `register` seam lets a new provider be wired without the
@@ -22,7 +22,14 @@ import com.superiorsoftllc.agenthq.session.InfantryEnv
  */
 object ProviderFactory {
     const val ENV = "AGENTHQ_PROVIDER"
-    const val DEFAULT = "opencode"
+
+    /**
+     * H2: there is no hard-coded default. With no `AGENTHQ_PROVIDER` the default is the first registered harness (built-ins
+     * register `opencode` first, so a normal install is unchanged), else [NoHarnessProvider]. `stub` is a test provider and
+     * is never picked as a default.
+     */
+    internal fun defaultId(ids: Collection<String> = builders.keys): String =
+        ids.firstOrNull { it != "stub" && it != NoHarnessProvider.ID } ?: NoHarnessProvider.ID
 
     private val builders = LinkedHashMap<String, () -> AgentProvider>(
         mapOf(
@@ -71,12 +78,12 @@ object ProviderFactory {
     internal fun ids(): List<String> = builders.keys.toList()
 
     /**
-     * Resolve a provider by its configured name. Blank/null selects [DEFAULT].
+     * Resolve a provider by its configured name. Blank/null selects [defaultId].
      * Unknown names fail loudly with the known ids, rather than silently falling back.
      */
     fun fromFlag(flag: String?): AgentProvider {
         val raw = flag?.trim()?.lowercase().orEmpty()
-        if (raw.isEmpty()) return builders.getValue(DEFAULT).invoke()
+        if (raw.isEmpty()) return builders[defaultId()]?.invoke() ?: NoHarnessProvider
         val builder = builderFor(raw) ?: error("Unknown $ENV='$flag' (known: ${builders.keys.sorted()}).")
         return builder()
     }
@@ -121,6 +128,13 @@ object ProviderFactory {
      */
     private fun builderFor(name: String): (() -> AgentProvider)? =
         builders[name] ?: aliases[name]?.let { builders[it] }
+
+    /** TEST-ONLY (H2): run [block] with an EMPTY builder table, the zero-harness daemon, then restore it. */
+    internal fun <T> withNoBuilders(block: () -> T): T {
+        val saved = LinkedHashMap(builders)
+        builders.clear()
+        try { return block() } finally { builders.clear(); builders.putAll(saved) }
+    }
 
     /**
      * Extension point: wire another provider by configuration name. Used by tests to register a
