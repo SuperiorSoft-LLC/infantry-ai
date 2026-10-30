@@ -4269,8 +4269,17 @@ private suspend fun answerPluginRoute(call: io.ktor.server.application.Applicati
 /** The `ready` keys core itself sends; a plugin's `ready` hook may not repeat them. */
 private val CORE_READY_KEYS = setOf("provider", "contract", "instance", "since", "build", "notice")
 
-/** `<install>/modules` next to the `lib/` folder holding this daemon's jar, or null (a dev run from classes). */
-private fun installModules(): File? = runCatching {
-    val code = File(AgentHqDaemon::class.java.protectionDomain.codeSource.location.toURI())
-    code.takeIf { it.isFile && it.parentFile?.name == "lib" }?.parentFile?.parentFile?.let { File(it, "modules") }?.takeIf { it.isDirectory }
-}.getOrNull()
+/**
+ * The install's bundled modules root, one place per layout (docs/DAEMON-PLUGINS.md section 9), or null (a dev run from classes):
+ * installDist / headless / docker: `<install>/modules` next to the `lib/` folder holding this daemon's jar; the desktop app
+ * image (jpackage, jars in `app/`, no `lib/`): `<compose.application.resources.dir>/modules`, the folder its launcher also
+ * names in `agenthq.plugins.bundled` (that property wins when set).
+ */
+internal fun installModules(
+    code: File? = runCatching { File(AgentHqDaemon::class.java.protectionDomain.codeSource.location.toURI()) }.getOrNull(),
+    property: (String) -> String? = System::getProperty,
+): File? {
+    val lib = code?.takeIf { it.isFile && it.parentFile?.name == "lib" }?.parentFile?.parentFile?.let { File(it, "modules") }
+    val appImage = property("compose.application.resources.dir")?.takeIf { it.isNotBlank() }?.let { File(it, "modules") }
+    return listOfNotNull(lib, appImage).firstOrNull { it.isDirectory }
+}

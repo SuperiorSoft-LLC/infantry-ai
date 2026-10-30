@@ -181,6 +181,24 @@ its hook run; a throwing hook disables only it; refused without grants; gone whe
   halves). The daemon sets `agenthq.plugins.bundled` to that folder when unset, so they load as **bundled = trusted** (owner
   answer to question 97479106) without a signature. Without them the ticket-files tools are not listed and a seated preset is
   fail closed: nothing is lost silently.
+* **The bundled root, one place per install layout** (PACKAGE-1; `installModules()` in DaemonMain, `AGENTHQ_BUNDLED_MODULES`
+  or `-Dagenthq.plugins.bundled` win when set):
+
+  | layout | jars | bundled root | set by |
+  |---|---|---|---|
+  | `installDist`, headless archive | `<install>/lib/` | `<install>/modules` | the daemon (the `lib/` parent) |
+  | docker image | `/opt/agenthq/lib/` | `/opt/agenthq/modules` | the daemon (the `lib/` parent) |
+  | desktop app image (jpackage: createDistributable, MSI/EXE) | `<app>/app/` | `<app>/app/resources/modules` | the launcher (`-Dagenthq.plugins.bundled=$APPDIR/resources/modules`); the daemon falls back to `<compose.application.resources.dir>/modules` |
+
+  The desktop image carries the daemon halves in the same module folder as the UI jar: `stageOfficialModules` copies each
+  official module's module.json `daemon.jar` and `policies/` next to its signed UI jar and signs the daemon jar with the same
+  key (`-Pihq.keystore` / `-Pihq.devSign`); `verifyOfficialModulesPackaged` checks the signature. Demo halves
+  (`plugins/demo/*/daemon`) never enter the desktop image (it stages `plugins/official` only); the docker context keeps them.
+* **The guard**: what a daemon half is lives in one place, `gradle/daemon-halves.gradle.kts` (a module.json with a `daemon`
+  block; its `daemon.jar`). `stageOfficialModules`, `prepareDistributableResources` (what every desktop package task packs),
+  `installDist` and `dockerContext` fail the build when a staged module declares a daemon jar that is not there, or a module with
+  a half is not staged; `verifyDaemonHalvesGuard` (in agentHq `check`) tests that check. At run time a declared half whose jar
+  is missing is logged at startup and listed in `GET /plugins` as `refused: jar missing: daemon.jar <path> is not in <folder> ...`.
 * **Dev runs** scan the repo's `plugins/` (modules.json folders `core`, `official`, `community`), with `devTrust` for official
   jars. `plugins/demo` is not a modules.json folder, so a dev demo needs the bundled root (or a copy into `official/`).
 * **Gradle projects** are flat, `:daemon-plugin-<folder>-<Module>` (Gradle 9 refuses directory-less parents), plus

@@ -328,7 +328,8 @@ class DaemonPluginHost private constructor(
         val jarPath = d.jar?.takeIf { it.isNotBlank() } ?: return refuse("daemon.entry without daemon.jar")
         val jar = File(dir, jarPath)
         if (!jar.canonicalPath.startsWith(dir.canonicalPath + File.separator)) return refuse("daemon.jar $jarPath is outside the module folder")
-        if (!jar.isFile) return refuse("daemon.jar $jarPath not found (build it: :daemon-plugin-<folder>-$id:jar)")
+        // PACKAGE-1: a declared half whose jar is not there (a build that did not ship it, or a dev tree not built yet).
+        if (!jar.isFile) return refuse("jar missing: daemon.jar $jarPath is not in ${dir.path} (build it: :daemon-plugin-<folder>-$id:jar; a package ships it)")
         if (status.tier == Tier.OFFICIAL && !trust.trusts(dir)) {
             OfficialTrust.refusal(ModuleCandidate(dir.name, status.tier, dir.absolutePath, m), jarPath, trust.keys)?.let { return refuse("official daemon jar refused: $it") }
         }

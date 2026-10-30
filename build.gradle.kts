@@ -11,6 +11,8 @@ plugins {
 
 // BUILD-STAMP-1: the version+time+sha string every build carries (rootProject.extra["agenthqBuild"]); see the script.
 apply(from = rootProject.file("gradle/build-stamp.gradle.kts"))
+// PACKAGE-1: what a module's daemon half is, and the check every packaging task runs on it; see the script.
+apply(from = rootProject.file("gradle/daemon-halves.gradle.kts"))
 
 // ---------------------------------------------------------------------------------------------
 // SEC-SECRETS-1 guard. Standalone on purpose (NOT wired into `check`): run it explicitly, e.g. from
