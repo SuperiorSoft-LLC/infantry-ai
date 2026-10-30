@@ -1,6 +1,7 @@
-package com.superiorsoftllc.agenthq.session
+package com.superiorsoftllc.agenthq.plugins.official.processes.daemon
 
-import com.superiorsoftllc.agenthq.session.host.ProcessTable
+import com.superiorsoftllc.agenthq.daemon.api.processes.ProcInfo
+import com.superiorsoftllc.agenthq.daemon.api.processes.Processes
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.File
@@ -41,14 +42,13 @@ private data class LedgerFile(val ownerId: String, val entries: List<LedgerEntry
  * [isProtected] guards the daemon, its ancestors and the app's own runtime: such a process is never recorded.
  */
 class ProcessLedger(
-    private val source: ProcessSource,
-    private val table: ProcessTable,
+    private val os: Processes,
     private val file: File? = null,
     private val ownerId: String? = null,
     private val clock: () -> Long = System::currentTimeMillis,
-    private val isProtected: (ProcInfo) -> Boolean = { false },
+    private val isProtected: (ProcInfo) -> Boolean = os::isProtected,
     /** STACK-NEUTRAL-1: the tool profiles in force; their `heavyCommands` say what [adopt] may adopt by worktree path. */
-    private val profiles: () -> List<com.superiorsoftllc.agenthq.runner.ToolProfile> = { com.superiorsoftllc.agenthq.runner.ToolProfiles.active },
+    private val profiles: () -> List<com.superiorsoftllc.agenthq.daemon.api.processes.ProcessToolProfile> = os::toolProfiles,
 ) {
     private val entries = LinkedHashMap<Long, LedgerEntry>()
 
@@ -63,7 +63,7 @@ class ProcessLedger(
     fun get(pid: Long): LedgerEntry? = entries[pid]
 
     /** Every live OS process with its command line, for naming what the ledger does not own. */
-    fun allProcesses(): List<ProcInfo> = runCatching { source.all() }.getOrDefault(emptyList())
+    fun allProcesses(): List<ProcInfo> = runCatching { os.snapshot() }.getOrDefault(emptyList())
 
     /**
      * Adopt heavy runtimes the tree walk missed (their parent died before a tick saw them). Ownership is inferred only
@@ -80,7 +80,7 @@ class ProcessLedger(
         val all = allProcesses()
         if (all.isEmpty()) return
         val byPid = all.associateBy { it.pid }
-        val heavy = com.superiorsoftllc.agenthq.runner.ToolProfiles.heavyCommandRegex(runCatching(profiles).getOrDefault(emptyList()))
+        val heavy = ProfileRx.heavyCommand(runCatching(profiles).getOrDefault(emptyList()))
         var changed = false
         for (p in all) {
             if (!heavy.containsMatchIn(p.command)) continue
@@ -91,7 +91,7 @@ class ProcessLedger(
             var hops = 0
             while (up != null && hops++ < 32 && owner == null) {
                 val e = entries[up]
-                if (e != null && table.startInstant(up) == e.startedAt) owner = e.sessionId
+                if (e != null && os.startInstant(up) == e.startedAt) owner = e.sessionId
                 up = byPid[up]?.parentPid
             }
             if (owner == null && (p.parentPid == null || p.parentPid !in byPid)) {
@@ -140,9 +140,9 @@ class ProcessLedger(
         val walked = HashSet<Long>()
         for ((sessionId, pids) in roots) {
             for (pid in pids) {
-                source.info(pid)?.let { changed = record(it, sessionId, root = true) || changed }
+                os.info(pid)?.let { changed = record(it, sessionId, root = true) || changed }
                 walked += pid
-                for (p in source.descendants(pid)) {
+                for (p in os.descendants(pid)) {
                     changed = record(p, sessionId, root = false) || changed
                     walked += p.pid
                 }
@@ -152,7 +152,7 @@ class ProcessLedger(
         for (entry in entries.values.toList()) {
             if (entry.pid in walked) continue
             walked += entry.pid
-            for (p in source.descendants(entry.pid)) {
+            for (p in os.descendants(entry.pid)) {
                 changed = record(p, entry.sessionId, root = false) || changed
                 walked += p.pid
             }
@@ -170,7 +170,7 @@ class ProcessLedger(
     }
 
     private fun prune(): Boolean {
-        val gone = entries.values.filter { e -> runCatching { table.startInstant(e.pid) }.getOrNull() != e.startedAt }
+        val gone = entries.values.filter { e -> runCatching { os.startInstant(e.pid) }.getOrNull() != e.startedAt }
         gone.forEach { entries.remove(it.pid) }
         return gone.isNotEmpty()
     }
@@ -182,7 +182,7 @@ class ProcessLedger(
         runCatching {
             val parsed = JSON.decodeFromString(LedgerFile.serializer(), f.readText())
             if (parsed.ownerId == me) parsed.entries.forEach { entries[it.pid] = it }
-        }.onFailure { System.err.println("[agentHq] process ledger unreadable, starting empty: ${it.message}") }
+        }.onFailure { System.err.println("[Infantry_Processes] process ledger unreadable, starting empty: ${it.message}") }
     }
 
     private fun save() {
@@ -193,7 +193,7 @@ class ProcessLedger(
             val tmp = File(f.parentFile, f.name + ".tmp")
             tmp.writeText(JSON.encodeToString(LedgerFile.serializer(), LedgerFile(me, entries.values.toList())))
             if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f) }
-        }.onFailure { System.err.println("[agentHq] process ledger write failed: ${it.message}") }
+        }.onFailure { System.err.println("[Infantry_Processes] process ledger write failed: ${it.message}") }
     }
 
     companion object {

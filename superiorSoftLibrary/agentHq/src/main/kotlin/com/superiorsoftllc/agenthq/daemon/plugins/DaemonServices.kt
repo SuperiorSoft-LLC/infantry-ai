@@ -43,6 +43,15 @@ interface DaemonServices {
     /** RUNTIME-LOAD-6: the host spawn service ([LocalSpawns]). Default: none (every call Unavailable). */
     val spawns: com.superiorsoftllc.agenthq.daemon.api.spawns.Spawns get() = com.superiorsoftllc.agenthq.daemon.api.spawns.NoSpawns
 
+    /** STACK-NEUTRAL-2: the host process service ([com.superiorsoftllc.agenthq.session.LocalProcesses]); null = none. */
+    val processHost: com.superiorsoftllc.agenthq.session.LocalProcesses? get() = null
+
+    /** STACK-NEUTRAL-2: the per-launch env seam; null = none. */
+    val launchEnvHost: com.superiorsoftllc.agenthq.session.LaunchEnvHost? get() = null
+
+    /** STACK-NEUTRAL-2: read access to `limits.*` / `watch.*` / `processes.*` settings. */
+    val pluginSettings: com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings get() = com.superiorsoftllc.agenthq.daemon.api.processes.NoPluginSettings
+
     companion object {
         /** No daemon behind it: empty lists, no config, the open policy. */
         val NONE: DaemonServices = object : DaemonServices {

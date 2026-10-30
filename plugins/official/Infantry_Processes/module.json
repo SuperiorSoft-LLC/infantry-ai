@@ -12,7 +12,7 @@
   "daemon": {
     "entry": "com.superiorsoftllc.agenthq.plugins.official.processes.daemon.ProcessesDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Processes-daemon.jar",
-    "apiAtLeast": "1.0.0",
+    "apiAtLeast": "1.8.0",
     "tools": [
       { "name": "agenthq_processes", "action": "host.processes.read", "kind": "read", "description": "List rogue background processes and free RAM." },
       { "name": "agenthq_processes_reap", "action": "host.processes.reap", "kind": "destructive", "description": "Kill one rogue process or all of them." }

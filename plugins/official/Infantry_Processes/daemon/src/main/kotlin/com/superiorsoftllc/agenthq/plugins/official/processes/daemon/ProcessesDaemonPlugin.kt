@@ -20,11 +20,23 @@ import kotlinx.serialization.json.put
  * DAEMON-PLUGINS-3: Infantry_Processes' daemon half. `agenthq_processes` / `agenthq_processes_reap` (ROGUE-1, contract
  * 1.120.0) were built into the CLI's MCP server; now each is one `processes` / `processes_reap` frame on the caller's own
  * connection, rendered by the API's shared [ProcessesText]. Same names, schemas, answers and gating.
+ *
+ * STACK-NEUTRAL-2: and the process WATCH itself (ledger, rogue detection, close-time reaping, CPU rule, the build-limits env and
+ * the watch shims env), built only on `api.processes`, `api.launchEnv` and `api.settings`. The plugin removed or disabled = core
+ * runs with no watch: nothing recorded, nothing killed, no build env, `AGENTHQ_WATCH=off`, plain bg exit notices.
  */
 class ProcessesDaemonPlugin : DaemonPlugin {
+    private var watch: ProcessWatchService? = null
+
     override fun start(api: DaemonApi) {
         api.tools.register(ProcessesTools.ListTool)
         api.tools.register(ProcessesTools.ReapTool)
+        watch = ProcessWatchService.start(api)
+    }
+
+    override fun stop() {
+        watch?.close()
+        watch = null
     }
 }
 
@@ -52,7 +64,7 @@ object ProcessesTools {
     object ListTool : DaemonTool {
         override val name = LIST
         override val description =
-            "List rogue background processes (Gradle/Kotlin daemons, node, JVMs) left behind by ended or idle sessions, with MB, " +
+            "List rogue background processes (build daemons, node, JVMs) left behind by ended or idle sessions, with MB, " +
                 "age and owner session, plus free RAM against the floor. all=true also lists healthy tracked processes and heavy " +
                 "processes that are not ours (never reapable)."
         override val inputSchema = schema(listOf("all" to "true to include healthy tracked and unattributed processes."))

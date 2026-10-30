@@ -1,9 +1,6 @@
-package com.superiorsoftllc.agenthq.session
+package com.superiorsoftllc.agenthq.plugins.official.processes.daemon
 
 import com.superiorsoftllc.agenthq.daemon.api.processes.*
-
-import com.superiorsoftllc.agenthq.session.host.KeptProcess
-import com.superiorsoftllc.agenthq.session.host.ProcessTable
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -13,49 +10,156 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** ROGUE-1: the ledger proves ownership by pid + start instant; only provably ours, ended or idle-heavy, is reaped. */
-class ProcessWatchTest {
-    /** A fake OS: live processes by pid; a parent that dies leaves its children with a dangling parent pid (Windows). */
-    private class FakeOs : ProcessSource, ProcessTable, MemorySource {
-        val procs = LinkedHashMap<Long, ProcInfo>()
-        val mb = HashMap<Long, Long>()
-        val killed = mutableListOf<Long>()
-        var free: Long? = 16_000
+/*
+ * STACK-NEUTRAL-2: ProcessWatchTest ported from core. The watch runs against a FAKE `api.processes` ([FakeOs]): its process table,
+ * memory, sessions, gate lock and start-instant-checked kill. Same scenarios, same expectations as the core test it replaces.
+ */
 
-        fun start(pid: Long, parent: Long?, cmd: String, at: Long, memMb: Long = 50) {
-            procs[pid] = ProcInfo(pid, parent, cmd, at); mb[pid] = memMb
-        }
-        fun exit(pid: Long) { procs.remove(pid) }
+internal enum class SessionState { IDLE, BUSY, EXITED, FAILED, ORPHANED }
 
-        override fun descendants(rootPid: Long): List<ProcInfo> {
-            val out = mutableListOf<ProcInfo>()
-            var frontier = setOf(rootPid)
-            while (frontier.isNotEmpty()) {
-                val next = procs.values.filter { it.parentPid in frontier && it.pid !in out.map { o -> o.pid } }
-                out += next; frontier = next.map { it.pid }.toSet()
-            }
-            return out
-        }
-        override fun info(pid: Long) = procs[pid]?.copy(parentPid = null)
-        override fun all() = procs.values.toList()
-        override fun startInstant(pid: Long) = procs[pid]?.startedAt
-        override fun killTree(pid: Long, startedAt: Long) {
-            if (procs[pid]?.startedAt != startedAt) return
-            (descendants(pid).map { it.pid } + pid).forEach { killed += it; procs.remove(it) }
-        }
-        val alone = mutableListOf<Long>()
-        override fun killOne(pid: Long, startedAt: Long) {
-            if (procs[pid]?.startedAt != startedAt) return
-            killed += pid; alone += pid; procs.remove(pid)
-        }
-        override fun freeMb() = free
-        override fun totalMb() = 32_000L
-        override fun processes() = procs.values.map { ProcMem(it.pid, it.command.substringBefore(' '), mb[it.pid] ?: 0) }
+internal data class KeptProcess(val pid: Long, val startedAt: Long?, val label: String)
+
+internal data class BgJob(val id: String, val label: String, val pid: Long, val startedAt: Long, val keep: Boolean = false)
+
+/** What the host would know of a session; [watched] is what `api.processes.sessions()` shows the plugin. */
+internal data class SessionRecord(
+    val id: String,
+    val provider: String,
+    val workingDir: String,
+    val spawnedAt: Long,
+    val lastHeartbeat: Long,
+    val state: SessionState,
+    val keptProcess: KeptProcess? = null,
+    val lastOutputAt: Long? = null,
+    val worktreePath: String? = null,
+    val bgJobs: List<BgJob> = emptyList(),
+    val ticketId: String? = null,
+) {
+    fun watched() = WatchedSession(
+        id, state.name, state == SessionState.BUSY, bgJobs.isNotEmpty(), lastOutputAt ?: lastHeartbeat,
+        listOfNotNull(keptProcess?.pid).distinct(), worktreePath, ticketId, keepPidsOf(this), bgJobs.map { it.pid },
+    )
+}
+
+internal fun keepPidsOf(r: SessionRecord): Set<Long> = (r.bgJobs.filter { it.keep }.map { it.pid } + listOfNotNull(r.keptProcess?.pid)).toSet()
+
+/** The gate lock directory, as core's GateLock reads and releases it. */
+internal class FileGate(private val dir: () -> File?, private val pidAlive: (Long) -> Boolean) : GateLockView {
+    override fun read(): GateOwner? {
+        val d = dir()?.takeIf { it.isDirectory } ?: return null
+        val fields = runCatching { File(d, "owner.txt").takeIf { it.isFile }?.readText() }.getOrNull()
+            ?.split(Regex("\\s+"))?.mapNotNull { t -> t.indexOf('=').takeIf { it > 0 }?.let { t.substring(0, it) to t.substring(it + 1) } }
+            ?.toMap().orEmpty()
+        val pid = fields["pid"]?.toLongOrNull() ?: runCatching { File(d, "pid").takeIf { it.isFile }?.readText()?.trim()?.toLongOrNull() }.getOrNull()
+        return GateOwner(pid, fields["ticket"]?.ifBlank { null }, fields["session"]?.ifBlank { null })
     }
 
+    override fun holderAlive(owner: GateOwner) = owner.pid?.let(pidAlive) == true
+
+    override fun releaseIfOwnedBy(sessionId: String, ticketId: String?, killedPids: Set<Long>): String? {
+        val d = dir()?.takeIf { it.isDirectory } ?: return null
+        val owner = read() ?: return null
+        if (!owner.named) return null
+        val names = owner.session == sessionId ||
+            (ticketId != null && owner.ticket?.removePrefix("ticket-") != null && owner.ticket?.removePrefix("ticket-") == ticketId.removePrefix("ticket-"))
+        if (!names) return null
+        val holderGone = owner.pid == null || owner.pid?.let(pidAlive) != true || owner.pid in killedPids
+        if (!holderGone || !d.deleteRecursively()) return null
+        return "gate lock ${d.path} released"
+    }
+}
+
+/** The bundled profiles the watch reads (gradle, kotlin, runtimes, mcp), as `api.processes.toolProfiles()` shows them. */
+internal val DEFAULTS = listOf(
+    ProcessToolProfile(
+        "gradle", daemons = listOf("GradleDaemon", "org\\.gradle\\.launcher\\.daemon"), sharedDaemon = true,
+        clients = listOf("gradlew", "GradleWrapperMain", "GradleMain"), heavyImages = listOf("gradle.*"), heavyCommands = listOf("gradle"),
+        env = listOf(
+            ProcessEnvTemplate("GRADLE_OPTS", "-Dorg.gradle.workers.max=\${maxWorkers}", "maxWorkers"),
+            ProcessEnvTemplate("GRADLE_OPTS", "-Dorg.gradle.project.kotlin.compiler.execution.strategy=in-process"),
+            ProcessEnvTemplate("GRADLE_OPTS", "-Dorg.gradle.project.agenthq.testForks=\${maxParallelForks}", "maxParallelForks"),
+            ProcessEnvTemplate("GRADLE_OPTS", "-Dorg.gradle.project.agenthq.uiTestForks=\${maxParallelForks}", "maxParallelForks"),
+        ),
+    ),
+    ProcessToolProfile("kotlin", daemons = listOf("KotlinCompileDaemon", "kotlin-daemon"), sharedDaemon = true, heavyImages = listOf("kotlin.*"), heavyCommands = listOf("kotlin")),
+    ProcessToolProfile(
+        "runtimes",
+        heavyImages = listOf("java", "javaw", "node", "opencode", "docker.*", "com\\.docker.*", "vmmem.*", "wsl.*", "bun", "pi"),
+        heavyCommands = listOf("java", "node"),
+    ),
+    ProcessToolProfile("mcp", heavyCommands = listOf("npx", "playwright", "modelcontextprotocol")),
+)
+
+/** The daemon, its ancestors and the app's own runtime, as the host guards them. */
+private val PROTECTED = generateSequence(ProcessHandle.current()) { it.parent().orElse(null) }.map { it.pid() }.toSet()
+
+/** A fake `api.processes`: live processes by pid; a parent that dies leaves its children with a dangling parent pid (Windows). */
+internal open class FakeOs : Processes {
+    val procs = LinkedHashMap<Long, ProcInfo>()
+    val mb = HashMap<Long, Long>()
+    val killed = mutableListOf<Long>()
+    val alone = mutableListOf<Long>()
+    var free: Long? = 16_000
+    var profiles: List<ProcessToolProfile> = DEFAULTS
+    var sessionList: () -> List<WatchedSession> = { emptyList() }
+    var gate: GateLockView = NoProcesses.gateLock
+    val cpuNs = HashMap<Long, Long>()
+
+    fun start(pid: Long, parent: Long?, cmd: String, at: Long, memMb: Long = 50) {
+        procs[pid] = ProcInfo(pid, parent, cmd, at); mb[pid] = memMb
+    }
+
+    fun exit(pid: Long) { procs.remove(pid) }
+
+    override fun descendants(rootPid: Long): List<ProcInfo> {
+        val out = mutableListOf<ProcInfo>()
+        var frontier = setOf(rootPid)
+        while (frontier.isNotEmpty()) {
+            val next = procs.values.filter { it.parentPid in frontier && it.pid !in out.map { o -> o.pid } }
+            out += next; frontier = next.map { it.pid }.toSet()
+        }
+        return out
+    }
+
+    override fun info(pid: Long) = procs[pid]?.copy(parentPid = null)
+    override fun snapshot() = procs.values.toList()
+    override fun startInstant(pid: Long) = procs[pid]?.startedAt
+
+    override fun kill(pid: Long, startedAt: Long, tree: Boolean): KillResult {
+        if (procs[pid]?.startedAt != startedAt) return KillResult.Refused("gone")
+        if (tree) (descendants(pid).map { it.pid } + pid).forEach { killed += it; procs.remove(it) }
+        else { killed += pid; alone += pid; procs.remove(pid) }
+        return KillResult.Killed(pid, tree)
+    }
+
+    override fun isProtected(p: ProcInfo) = p.pid in PROTECTED
+    override val ownerId: String? = "me"
+    override fun freeMb() = free
+    override fun totalMb() = 32_000L
+    override fun memory() = procs.values.map { ProcMem(it.pid, it.command.substringBefore(' '), mb[it.pid] ?: 0) }
+    override fun cpuNanos(pid: Long) = cpuNs[pid]
+    override fun sessions() = sessionList()
+    override fun onSessionClosed(listener: (SessionClosed) -> Unit) = AutoCloseable {}
+    override fun onDaemonShutdown(listener: () -> Unit) = AutoCloseable {}
+    override val gateLock: GateLockView get() = gate
+    override fun toolProfiles() = profiles
+    override fun toolProfilesEnv() = "AGENTHQ_TOOL_PROFILES" to "[]"
+    override fun shimDir(): String? = null
+    override fun inheritedEnv(name: String): String? = null
+    override fun serve(handler: ProcessesHandler) = AutoCloseable {}
+    override fun publishPressure(reportJson: String) {}
+    override fun raiseAlert(outcome: String, detail: String) {}
+}
+
+/** ROGUE-1: the ledger proves ownership by pid + start instant; only provably ours, ended or idle-heavy, is reaped. */
+class ProcessWatchTest {
     private var now = 10_000_000L
     private val os = FakeOs()
     private val sessions = LinkedHashMap<String, SessionRecord>()
+
+    init {
+        os.sessionList = { sessions.values.map { it.watched() } }
+    }
 
     private fun session(id: String, kept: Long, state: SessionState = SessionState.IDLE, lastOutputAt: Long? = now) {
         sessions[id] = SessionRecord(
@@ -65,19 +169,23 @@ class ProcessWatchTest {
     }
 
     private fun watch(
-        ledger: ProcessLedger = ProcessLedger(os, os, clock = { now }),
+        ledger: ProcessLedger = ProcessLedger(os, clock = { now }),
         config: ProcessWatchConfig = ProcessWatchConfig(),
         pressure: MutableList<ProcessReport> = mutableListOf(),
         lockAlive: Boolean = false,
         lockHolder: Long? = null,
-        gateLock: GateLock = GateLock(dir = { null }),
-        profiles: List<com.superiorsoftllc.agenthq.runner.ToolProfile> = com.superiorsoftllc.agenthq.runner.ToolProfiles.DEFAULTS,
+        gateLock: GateLockView? = null,
+        profiles: List<ProcessToolProfile> = DEFAULTS,
         enabled: () -> Boolean = { true },
-    ) = ProcessWatch(
-        ledger, { sessions.values.toList() }, os, os, { config }, { now }, onPressure = { pressure += it },
-        lockHolderAlive = { lockAlive }, lockHolderPid = { lockHolder }, gateLock = gateLock,
-        profiles = { profiles }, enabled = enabled,
-    )
+    ): ProcessWatch {
+        os.profiles = profiles
+        os.gate = gateLock ?: object : GateLockView {
+            override fun read() = if (lockHolder != null || lockAlive) GateOwner(lockHolder ?: 1L, null, null) else null
+            override fun holderAlive(owner: GateOwner) = lockAlive || (owner.pid != null && owner.pid in os.procs && lockHolder != null)
+            override fun releaseIfOwnedBy(sessionId: String, ticketId: String?, killedPids: Set<Long>): String? = null
+        }
+        return ProcessWatch(ledger, os, { config }, { now }, onPressure = { pressure += it }, enabled = enabled, log = {})
+    }
 
     // Pids far above anything real, so the test JVM's own ancestry (protected) never collides.
     private val harness = 900_100L
@@ -243,7 +351,7 @@ class ProcessWatchTest {
         val ownerShell = 900_650L
         os.start(ownerShell, null, "pwsh.exe", 500)
         os.start(900_651L, ownerShell, "node C:/work/.worktrees/ticket-aaa-fix/node_modules/.bin/vite", 6_000, memMb = 600)
-        val ledger = ProcessLedger(os, os, clock = { now })
+        val ledger = ProcessLedger(os, clock = { now })
         val w = watch(ledger)
         w.tick()
         assertNull(ledger.get(900_651L))
@@ -258,7 +366,7 @@ class ProcessWatchTest {
         sessions["s1"] = sessions.getValue("s1").copy(worktreePath = "C:/work/.worktrees/ticket-aaa")
         os.start(gradleDaemon, 777_777L, "java GradleDaemon -Duser.dir=C:/work/.worktrees/ticket-aaa-fix", 6_000, memMb = 900)
         os.start(kotlinDaemon, 777_778L, "java KotlinCompileDaemon C:\\work\\.worktrees\\ticket-aaa\\build", 6_000, memMb = 900)
-        val ledger = ProcessLedger(os, os, clock = { now })
+        val ledger = ProcessLedger(os, clock = { now })
         watch(ledger).tick()
         assertNull(ledger.get(gradleDaemon), "ticket-aaa is not ticket-aaa-fix")
         assertEquals("s1", ledger.get(kotlinDaemon)?.sessionId)
@@ -269,7 +377,7 @@ class ProcessWatchTest {
         session("s1", harness)
         sessions["s1"] = sessions.getValue("s1").copy(worktreePath = "C:/work/.worktrees/ticket-aaa-fix")
         os.start(gradleDaemon, 777_777L, "java GradleDaemon -Duser.dir=C:/work/.worktrees/ticket-aaa-fix", 6_000, memMb = 900)
-        val ledger = ProcessLedger(os, os, clock = { now }, profiles = { emptyList() })
+        val ledger = ProcessLedger(os, clock = { now }, profiles = { emptyList() })
         watch(ledger, profiles = emptyList()).tick()
         assertNull(ledger.get(gradleDaemon))
     }
@@ -297,7 +405,7 @@ class ProcessWatchTest {
 
     @Test fun `protected processes are never recorded`() {
         gradleUnder("s1")
-        val ledger = ProcessLedger(os, os, clock = { now }, isProtected = { it.pid == gradleDaemon })
+        val ledger = ProcessLedger(os, clock = { now }, isProtected = { it.pid == gradleDaemon })
         watch(ledger).tick()
         assertFalse(ledger.entries().any { it.pid == gradleDaemon })
     }
@@ -323,7 +431,7 @@ class ProcessWatchTest {
 
     @Test fun `auto-reap is off by default and reaps rogue when on`() {
         gradleUnder("s1")
-        val ledger = ProcessLedger(os, os, clock = { now })
+        val ledger = ProcessLedger(os, clock = { now })
         val w = watch(ledger)
         w.tick()
         sessions.remove("s1")
@@ -337,11 +445,11 @@ class ProcessWatchTest {
     @Test fun `the ledger survives a restart for its owner only`() {
         val dir = Files.createTempDirectory("ledger").toFile()
         try {
-            val f = File(dir, ProcessLedger.FILE_NAME)
+            val f = File(dir, "process-ledger.json")
             gradleUnder("s1")
-            ProcessLedger(os, os, f, "me", { now }).observe(mapOf("s1" to listOf(harness)))
-            assertEquals(3, ProcessLedger(os, os, f, "me", { now }).entries().size)
-            assertTrue(ProcessLedger(os, os, f, "other", { now }).entries().isEmpty())
+            ProcessLedger(os, f, "me", { now }).observe(mapOf("s1" to listOf(harness)))
+            assertEquals(3, ProcessLedger(os, f, "me", { now }).entries().size)
+            assertTrue(ProcessLedger(os, f, "other", { now }).entries().isEmpty())
         } finally {
             dir.deleteRecursively()
         }
@@ -427,7 +535,7 @@ class ProcessWatchTest {
         busyTree()
         val lockDir = java.io.File(kotlin.io.path.createTempDirectory("gl").toFile(), "agenthq-gate.lock").apply { mkdirs() }
         java.io.File(lockDir, "owner.txt").writeText("session=s1 pid=$bash")
-        val lock = GateLock(dir = { lockDir }, pidAlive = { it in os.procs })
+        val lock: GateLockView = FileGate({ lockDir }) { it in os.procs }
         val w = watch(gateLock = lock)
         w.tick()
         close()
@@ -442,7 +550,7 @@ class ProcessWatchTest {
         val lockDir = java.io.File(kotlin.io.path.createTempDirectory("gl").toFile(), "agenthq-gate.lock").apply { mkdirs() }
         java.io.File(lockDir, "pid").writeText("$stranger")
         os.start(stranger, null, "bash gate.sh", 2_000)
-        val lock = GateLock(dir = { lockDir }, pidAlive = { it in os.procs })
+        val lock: GateLockView = FileGate({ lockDir }) { it in os.procs }
         val w = watch(gateLock = lock)
         w.tick()
         close()
@@ -466,7 +574,7 @@ class ProcessWatchTest {
         w.tick()
         sessions["s1"] = sessions.getValue("s1").copy(bgJobs = listOf(BgJob("j", "gate", wrapper, 7_200, keep = true)))
         close()
-        val keep = ProcessWatch.keepPidsOf(sessions.getValue("s1"))
+        val keep = keepPidsOf(sessions.getValue("s1"))
         assertEquals(setOf(wrapper), keep)
         w.reapSession("s1", now, keep)
         assertTrue(wrapper in os.procs && gate in os.procs, "kept job survives")
@@ -487,7 +595,7 @@ class ProcessWatchTest {
         assertTrue(gradleDaemon in os.procs)
 
         // handed over: another live session runs a gradle client
-        val ledger = ProcessLedger(os, os, clock = { now })
+        val ledger = ProcessLedger(os, clock = { now })
         w = watch(ledger)
         val h2 = 900_710L
         os.start(h2, null, "claude --s2", 1_000)
@@ -554,17 +662,11 @@ class ProcessWatchTest {
         assertTrue(other in os.procs && otherChild in os.procs, "a live session is untouched")
     }
 
-    @Test fun `tasklist and ps output parse`() {
-        val t = OsMemorySource.parseTasklist("\"java.exe\",\"1234\",\"Console\",\"1\",\"1,234,567 K\"\r\n\"x.exe\",\"9\",\"S\",\"0\",\"2.048 K\"\r\n")
-        assertEquals(listOf(ProcMem(1234, "java.exe", 1205), ProcMem(9, "x.exe", 2)), t)
-        assertEquals(listOf(ProcMem(77, "node", 500)), OsMemorySource.parsePs("   77 512000 /usr/bin/node\n"))
-    }
-
     // STACK-NEUTRAL-1: the watch reads what a build daemon is from the tool profiles, and has an off switch.
 
     @Test fun `watch off - nothing is recorded, nothing is killed, the report carries free RAM only`() {
         busyTree()
-        val ledger = ProcessLedger(os, os, clock = { now })
+        val ledger = ProcessLedger(os, clock = { now })
         val w = watch(ledger, config = ProcessWatchConfig(autoReap = true), enabled = { false })
         w.tick()
         assertTrue(ledger.entries().isEmpty(), "off: the ledger records nothing")
@@ -582,7 +684,7 @@ class ProcessWatchTest {
     @Test fun `watch switched on later picks the tree up from then on`() {
         busyTree()
         var on = false
-        val ledger = ProcessLedger(os, os, clock = { now })
+        val ledger = ProcessLedger(os, clock = { now })
         val w = watch(ledger, enabled = { on })
         w.tick()
         assertTrue(ledger.entries().isEmpty())
@@ -604,8 +706,8 @@ class ProcessWatchTest {
     }
 
     @Test fun `a non-gradle shared daemon from a data profile is spared for a live gate holder and handed to its client`() {
-        val acme = com.superiorsoftllc.agenthq.runner.ToolProfile(
-            name = "acme", commands = listOf("acme"), daemons = listOf("acme-build-server"), sharedDaemon = true,
+        val acme = ProcessToolProfile(
+            name = "acme", daemons = listOf("acme-build-server"), sharedDaemon = true,
             clients = listOf("""\bacme build\b"""), heavyImages = listOf("acme.*"),
         )
         val server = 900_730L
@@ -624,7 +726,7 @@ class ProcessWatchTest {
         assertTrue(server in os.procs, "spared: the gate-lock holder may use the shared acme daemon")
 
         // without the gate holder, handed to another live session that runs an acme client
-        val ledger = ProcessLedger(os, os, clock = { now })
+        val ledger = ProcessLedger(os, clock = { now })
         val w2 = watch(ledger, profiles = listOf(acme))
         val h2 = 900_740L
         os.start(h2, null, "claude --s2", 1_000)
@@ -650,19 +752,7 @@ class ProcessWatchTest {
 
 /** Ticket 66153313: CPU share per tracked process and the sustained-CPU alert. */
 class ProcessWatchCpuTest {
-    private class Os : ProcessSource, ProcessTable, MemorySource, CpuSource {
-        val procs = LinkedHashMap<Long, ProcInfo>()
-        val cpuNs = HashMap<Long, Long>()
-        override fun descendants(rootPid: Long): List<ProcInfo> = procs.values.filter { it.parentPid == rootPid }
-        override fun info(pid: Long) = procs[pid]?.copy(parentPid = null)
-        override fun all() = procs.values.toList()
-        override fun startInstant(pid: Long) = procs[pid]?.startedAt
-        override fun killTree(pid: Long, startedAt: Long) {}
-        override fun freeMb() = 16_000L
-        override fun totalMb() = 32_000L
-        override fun processes() = procs.values.map { ProcMem(it.pid, "java", 100) }
-        override fun cpuNanos(pid: Long) = cpuNs[pid]
-    }
+    private class Os : FakeOs()
 
     private var now = 10_000_000L
     private val os = Os()
@@ -680,11 +770,11 @@ class ProcessWatchCpuTest {
     private var cfg = CpuAlertConfig(percent = 50, minutes = 2)
     private val alerts = mutableListOf<ProcessReport>()
 
-    private fun watch() = ProcessWatch(
-        ProcessLedger(os, os, clock = { now }), { sessions }, os, os, clock = { now },
-        lockHolderAlive = { false }, lockHolderPid = { null }, gateLock = GateLock(dir = { null }),
-        cpu = os, cores = 4, cpuAlert = { cfg },
-    ).also { it.onCpuSustained = { r -> alerts += r } }
+    private fun watch(): ProcessWatch {
+        os.sessionList = { sessions.map { it.watched() } }
+        return ProcessWatch(ProcessLedger(os, clock = { now }), os, clock = { now }, cores = 4, cpuAlert = { cfg }, log = {})
+            .also { it.onCpuSustained = { r -> alerts += r } }
+    }
 
     /** Advance [seconds]; the harness burns [harnessCores] cores and gradle [gradleCores] meanwhile. */
     private fun pass(w: ProcessWatch, seconds: Long, harnessCores: Double, gradleCores: Double) {
@@ -745,10 +835,8 @@ class ProcessWatchCpuTest {
         val m = CpuMeter({ pid -> if (pid == 1L) 5_000_000_000L else null }, cores = 2)
         m.sample(listOf(1L), 0)
         assertEquals(mapOf(1L to 0.0), m.sample(listOf(1L), 1_000))
-        val back = CpuMeter(object : CpuSource {
-            var n = 10_000_000_000L
-            override fun cpuNanos(pid: Long): Long = n.also { n -= 1_000_000_000L }
-        }, cores = 2)
+        var n = 10_000_000_000L
+        val back = CpuMeter({ n.also { n -= 1_000_000_000L } }, cores = 2)
         back.sample(listOf(1L), 0)
         assertTrue(back.sample(listOf(1L), 1_000).isEmpty())
     }

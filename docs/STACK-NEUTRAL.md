@@ -121,3 +121,14 @@ profile = generic kill; a non-Gradle shared daemon from a data profile spared an
 stack outside the pending allowlist, which may only shrink), plus `SessionLifecycleTest`, `ToolProfilesTest`,
 `BgJobNotifierTest`, `StallHookTest`, `StallRunnerTest`, `LimitSettingsTest`, `LimitsGuardTest`,
 `SessionProcessIntegrationTest`. No full suite (staging gate).
+
+## 6. STACK-NEUTRAL-2 (ticket c8e72d7f): the watch is a plugin (DaemonApi 1.8.0)
+
+`api.processes` (snapshot/info/descendants/startInstant/memory/freeMb/totalMb/cpuNanos, `kill(pid, startedAt, tree)` = the only path to
+`OsProcessTable.killTree/killOne`, re-checks start instant, refuses daemon/ancestors/java.home, logs the asker; sessions()/sessionRoots()
+with worktree, state, ticket, keep set; onSessionClosed; onDaemonShutdown; gateLock; toolProfiles; serve(handler) for the `processes` frames;
+publishPressure; raiseAlert), `api.launchEnv.contribute(name){LaunchInfo->Map}` (registration order, a failing contributor skipped) and
+`api.settings.limit/stored` (limits.*, watch.*, processes.* only). Community: grant `daemon.processes`, never `kill`.
+Moved to `Infantry_Processes/daemon`: ProcessWatch, ProcessLedger, CpuMeter/CpuSustain, ProcessFrames, build-limits env + shims env
+(`WatchLaunchEnv`). Core keeps `session/ProcessHost.kt` (LocalProcesses, LaunchEnvHost, OS sources, guard). Plugin absent/disabled = no watch,
+`AGENTHQ_WATCH=off`. The `limits.watch.enabled` switch still gates the plugin's behaviour.

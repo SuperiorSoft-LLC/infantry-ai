@@ -1,23 +1,28 @@
-package com.superiorsoftllc.agenthq.session
+package com.superiorsoftllc.agenthq.plugins.official.processes.daemon
 
-import com.superiorsoftllc.agenthq.daemon.api.processes.*
-
-import com.superiorsoftllc.agenthq.session.host.ProcessTable
-import kotlinx.serialization.Serializable
-import java.lang.management.ManagementFactory
-import java.util.concurrent.TimeUnit
+import com.superiorsoftllc.agenthq.daemon.api.processes.CpuAlertConfig
+import com.superiorsoftllc.agenthq.daemon.api.processes.KillResult
+import com.superiorsoftllc.agenthq.daemon.api.processes.ProcInfo
+import com.superiorsoftllc.agenthq.daemon.api.processes.ProcessReport
+import com.superiorsoftllc.agenthq.daemon.api.processes.Processes
+import com.superiorsoftllc.agenthq.daemon.api.processes.ProcessesAnswer
+import com.superiorsoftllc.agenthq.daemon.api.processes.ProcessesRequest
+import com.superiorsoftllc.agenthq.daemon.api.processes.TrackedProcess
+import com.superiorsoftllc.agenthq.daemon.api.processes.WatchedSession
 
 /*
- * ROGUE-1 (ticket 8a40b481, contract 1.120.0): the rogue background process detector.
+ * ROGUE-1 (ticket 8a40b481, contract 1.120.0), moved out of core by STACK-NEUTRAL-2: the rogue background process detector.
  *
  * ROGUE = a [ProcessLedger] entry (so provably started by one of this daemon's sessions) whose owner session was removed
  * or has ended, OR whose owner sits idle (no turn, no bg job, no output for [ProcessWatchConfig.idleMinutes]) while the
  * process holds at least [ProcessWatchConfig.heavyMb]. A live session's own harness process is never rogue by idleness.
  * UNATTRIBUTED = heavy runtimes (java, node, docker, WSL...) the ledger cannot prove are ours: shown, never reaped.
+ *
+ * Everything the plugin does to the OS goes through `api.processes` ([Processes]): the process table, the memory figures, the
+ * session roots, the gate lock and the start-instant-checked kill.
  */
 
-/** The detector's settings. Auto-reap is opt-in. */
-@Serializable
+/** The detector's settings (`processes.*`). Auto-reap is opt-in. */
 data class ProcessWatchConfig(
     val idleMinutes: Int = 30,
     val heavyMb: Long = 500,
@@ -26,26 +31,8 @@ data class ProcessWatchConfig(
     val autoReap: Boolean = false,
 )
 
-
-
-
-/** Cumulative CPU time of a process, in nanoseconds; null when it is gone or the OS will not say. Injected for tests. */
-fun interface CpuSource {
-    fun cpuNanos(pid: Long): Long?
-}
-
-/** The real one: [ProcessHandle.Info.totalCpuDuration], no subprocess and no native code. */
-object OsCpuSource : CpuSource {
-    override fun cpuNanos(pid: Long): Long? =
-        ProcessHandle.of(pid).flatMap { it.info().totalCpuDuration() }.map { it.toNanos() }.orElse(null)
-}
-
-/**
- * Ticket 66153313: per-process CPU share from two samples of cumulative CPU time: delta CPU / (delta wall x cores) x 100,
- * so 100 means every logical core was busy. A pid seen for the first time (or whose counter went backwards: a reused pid)
- * has no share until its next sample.
- */
-class CpuMeter(private val source: CpuSource, private val cores: Int = Runtime.getRuntime().availableProcessors()) {
+/** Ticket 66153313: per-process CPU share from two samples of cumulative CPU time (100 = every logical core busy). */
+class CpuMeter(private val cpuNanos: (Long) -> Long?, private val cores: Int = Runtime.getRuntime().availableProcessors()) {
     private var last: Map<Long, Long> = emptyMap()
     private var lastAt: Long? = null
 
@@ -55,7 +42,7 @@ class CpuMeter(private val source: CpuSource, private val cores: Int = Runtime.g
 
     /** Sample [pids] at [nowMs]; returns (and keeps) the shares since the previous sample. */
     fun sample(pids: Collection<Long>, nowMs: Long): Map<Long, Double> {
-        val now = pids.associateWith { runCatching { source.cpuNanos(it) }.getOrNull() }.filterValues { it != null }.mapValues { it.value!! }
+        val now = pids.associateWith { runCatching { cpuNanos(it) }.getOrNull() }.filterValues { it != null }.mapValues { it.value!! }
         val prevAt = lastAt
         val wallNs = prevAt?.let { (nowMs - it) * 1_000_000.0 } ?: 0.0
         shares = if (wallNs <= 0.0) emptyMap() else now.mapNotNull { (pid, ns) ->
@@ -89,63 +76,6 @@ class CpuSustain {
     }
 }
 
-/** One process's memory as the OS lists it. */
-data class ProcMem(val pid: Long, val image: String, val mb: Long)
-
-/** Free RAM and per-process memory. Injected so a test can stage pressure. */
-interface MemorySource {
-    fun freeMb(): Long?
-    fun totalMb(): Long?
-
-    /** Every process with its resident memory. Costs a subprocess on the real one: call only on demand. */
-    fun processes(): List<ProcMem>
-}
-
-/** The real one: the JVM's OS bean for free RAM (no subprocess); `tasklist` (Windows) or `ps` for per-process memory. */
-object OsMemorySource : MemorySource {
-    private val bean get() = ManagementFactory.getOperatingSystemMXBean() as? com.sun.management.OperatingSystemMXBean
-
-    override fun freeMb(): Long? = bean?.freeMemorySize?.let { it / MB }
-    override fun totalMb(): Long? = bean?.totalMemorySize?.let { it / MB }
-
-    override fun processes(): List<ProcMem> {
-        val windows = System.getProperty("os.name").orEmpty().startsWith("Windows", ignoreCase = true)
-        val argv = if (windows) listOf("tasklist", "/FO", "CSV", "/NH") else listOf("ps", "-A", "-o", "pid=,rss=,comm=")
-        val text = runCatching {
-            val p = ProcessBuilder(argv).redirectErrorStream(true).redirectInput(ProcessBuilder.Redirect.from(nullDevice(windows))).start()
-            val out = p.inputStream.bufferedReader().readText()
-            if (!p.waitFor(15, TimeUnit.SECONDS)) p.destroyForcibly()
-            out
-        }.getOrElse { return emptyList() }
-        return if (windows) parseTasklist(text) else parsePs(text)
-    }
-
-    private fun nullDevice(windows: Boolean) = java.io.File(if (windows) "NUL" else "/dev/null")
-
-    /** `"java.exe","1234","Console","1","1,234,567 K"`: the separator in the size depends on the locale. */
-    internal fun parseTasklist(text: String): List<ProcMem> = text.lineSequence().mapNotNull { line ->
-        val cells = Regex("\"([^\"]*)\"").findAll(line).map { it.groupValues[1] }.toList()
-        if (cells.size < 5) return@mapNotNull null
-        val pid = cells[1].toLongOrNull() ?: return@mapNotNull null
-        val kb = cells[4].filter { it.isDigit() }.toLongOrNull() ?: return@mapNotNull null
-        ProcMem(pid, cells[0], kb / 1024)
-    }.toList()
-
-    /** `  1234 567890 java` (rss in KB). */
-    internal fun parsePs(text: String): List<ProcMem> = text.lineSequence().mapNotNull { line ->
-        val parts = line.trim().split(Regex("\\s+"), limit = 3)
-        if (parts.size < 3) return@mapNotNull null
-        val pid = parts[0].toLongOrNull() ?: return@mapNotNull null
-        val kb = parts[1].toLongOrNull() ?: return@mapNotNull null
-        ProcMem(pid, parts[2].substringAfterLast('/'), kb / 1024)
-    }.toList()
-
-    private const val MB = 1024L * 1024L
-}
-
-/** Ticket b785f383: one session closing, as [SessionManager.onSessionClosed] reports it. */
-data class SessionClosed(val sessionId: String, val at: Long, val keepPids: Set<Long>, val reason: String)
-
 /** What a reap request came to. */
 sealed interface ReapResult {
     data class Reaped(val process: TrackedProcess) : ReapResult
@@ -153,50 +83,35 @@ sealed interface ReapResult {
 }
 
 /**
- * The detector: [tick] on a slow timer feeds the ledger from [sessions]; [report] classifies; [reap] / [reapRogue] kill
+ * The detector: [tick] on a slow timer feeds the ledger from the sessions; [report] classifies; [reap] / [reapRogue] kill
  * only ledger entries whose pid and start instant still match. [onPressure] hears a report when free RAM drops under the
  * floor, at most once per [pressureEveryMs]; [onReaped] hears each kill (auto or asked).
  */
 class ProcessWatch(
     private val ledger: ProcessLedger,
-    private val sessions: () -> List<SessionRecord>,
-    private val memory: MemorySource,
-    private val table: ProcessTable,
+    private val os: Processes,
     private val config: () -> ProcessWatchConfig = { ProcessWatchConfig() },
     private val clock: () -> Long = System::currentTimeMillis,
     private val onPressure: (ProcessReport) -> Unit = {},
     private val onReaped: (TrackedProcess) -> Unit = {},
     private val pressureEveryMs: Long = 10 * 60_000L,
     private val autoReapEveryMs: Long = 60_000L,
-    /** True while the gate lock's holder pid is alive: its build daemons are not orphans. */
-    private val lockHolderAlive: () -> Boolean = ::gateLockHolderAlive,
-    /** The gate lock holder's pid, null when there is no lock; a shared build daemon it may use is never closed with a session. */
-    private val lockHolderPid: () -> Long? = ::gateLockHolderPid,
-    /** Ticket 7e9bed2a: the gate lock a closing session's owner.txt may name; released in the same close-time cleanup. */
-    private val gateLock: GateLock = GateLock(),
-    /** Ticket 66153313: cumulative CPU per pid, sampled on every [tick]. */
-    cpu: CpuSource = OsCpuSource,
     cores: Int = Runtime.getRuntime().availableProcessors(),
     /** Ticket 66153313: the sustained-CPU rule, read on every [tick]. */
     private val cpuAlert: () -> CpuAlertConfig = { CpuAlertConfig() },
-    /**
-     * STACK-NEUTRAL-1: the tool profiles in force. What is a build daemon, a shared one, its client and a heavy runtime is
-     * read from them; a process no profile names gets the generic treatment (a session's tree member, never spared).
-     */
-    private val profiles: () -> List<com.superiorsoftllc.agenthq.runner.ToolProfile> = { com.superiorsoftllc.agenthq.runner.ToolProfiles.active },
-    /**
-     * STACK-NEUTRAL-1: the watch's off switch (`limits.watch.enabled`), read at every entry point. Off = nothing recorded,
-     * nothing reaped, no pressure or CPU alert; [report] answers free RAM only.
-     */
+    /** The watch's off switch (`limits.watch.enabled`), read at every entry point. Off = nothing recorded, nothing reaped. */
     private val enabled: () -> Boolean = { true },
+    private val log: (String) -> Unit = { println("[Infantry_Processes] $it") },
 ) {
     private fun on(): Boolean = runCatching(enabled).getOrDefault(false)
-    private fun tools(): List<com.superiorsoftllc.agenthq.runner.ToolProfile> = runCatching(profiles).getOrDefault(emptyList())
+    private fun tools() = runCatching { os.toolProfiles() }.getOrDefault(emptyList())
+    private fun sessions(): List<WatchedSession> = runCatching { os.sessions() }.getOrDefault(emptyList())
+    private fun protectedPid(pid: Long) = os.isProtected(ProcInfo(pid, null, "", null))
 
-    private val cpuMeter = CpuMeter(cpu, cores)
+    private val cpuMeter = CpuMeter(os::cpuNanos, cores)
     private val cpuSustain = CpuSustain()
 
-    /** Ticket 66153313: told once per episode when agent CPU stays high (the daemon raises an attention item). */
+    /** Ticket 66153313: told once per episode when agent CPU stays high (the host raises an attention item). */
     @Volatile
     var onCpuSustained: (ProcessReport) -> Unit = {}
 
@@ -204,20 +119,20 @@ class ProcessWatch(
     private var lastAutoReapAt: Long? = null
 
     /** The roots of every session that may still own a live process: its kept harness pid and its running child pid. */
-    private fun roots(records: List<SessionRecord>): Map<String, Collection<Long>> =
-        records.associate { r -> r.id to listOfNotNull(r.keptProcess?.pid, r.childPid).distinct() }.filterValues { it.isNotEmpty() }
+    private fun roots(records: List<WatchedSession>): Map<String, Collection<Long>> =
+        records.associate { r -> r.id to r.rootPids }.filterValues { it.isNotEmpty() }
 
     /**
      * Ticket 7e9bed2a: the catch-up for a lock the close-time release could not take (its holder was still dying then, or the
      * daemon was down): the lock's owner.txt names a session this daemon knows as ended and the holder pid is dead.
      * An unknown session, a live holder, or a lock without owner.txt is left alone.
      */
-    private fun releaseEndedOwnersLock(records: List<SessionRecord>) {
-        val owner = runCatching { gateLock.read() }.getOrNull() ?: return
+    private fun releaseEndedOwnersLock(records: List<WatchedSession>) {
+        val owner = runCatching { os.gateLock.read() }.getOrNull() ?: return
         val s = owner.session?.let { id -> records.firstOrNull { it.id == id } } ?: return
-        if (s.state !in ENDED) return
-        runCatching { gateLock.releaseIfOwnedBy(s.id, s.ticketId) }
-            .onSuccess { if (it != null) println("[agentHq] gate lock catch-up: $it (session ${s.id} ended)") }
+        if (!s.ended) return
+        runCatching { os.gateLock.releaseIfOwnedBy(s.id, s.ticketId) }
+            .onSuccess { if (it != null) log("gate lock catch-up: $it (session ${s.id} ended)") }
     }
 
     /** One timer pass: observe; warn under pressure; auto-reap when on. Cheap unless pressure or auto-reap fires. */
@@ -234,7 +149,7 @@ class ProcessWatch(
         val total = if (shares.isEmpty() && ledger.entries().isNotEmpty()) null else shares.values.sum()
         val cpuCfg = runCatching(cpuAlert).getOrDefault(CpuAlertConfig())
         if (cpuSustain.update(total, cpuCfg, now)) runCatching { onCpuSustained(report()) }
-        val free = runCatching { memory.freeMb() }.getOrNull()
+        val free = runCatching { os.freeMb() }.getOrNull()
         if (free != null && free < cfg.floorMb && lastPressureAt.let { it == null || now - it >= pressureEveryMs }) {
             lastPressureAt = now
             runCatching { onPressure(report()) }
@@ -251,19 +166,19 @@ class ProcessWatch(
         val cfg = config()
         val cpuCfg = runCatching(cpuAlert).getOrDefault(CpuAlertConfig())
         if (!on()) {
-            val free = runCatching { memory.freeMb() }.getOrNull()
+            val free = runCatching { os.freeMb() }.getOrNull()
             return ProcessReport(
-                freeMb = free, totalMb = runCatching { memory.totalMb() }.getOrNull(), floorMb = cfg.floorMb,
+                freeMb = free, totalMb = runCatching { os.totalMb() }.getOrNull(), floorMb = cfg.floorMb,
                 underPressure = free != null && free < cfg.floorMb, autoReap = false,
                 cpuAlertPercent = cpuCfg.percent, cpuAlertMinutes = cpuCfg.minutes,
             )
         }
         val tools = tools()
-        val heavy = com.superiorsoftllc.agenthq.runner.ToolProfiles.heavyImageRegex(tools)
-        val daemons = com.superiorsoftllc.agenthq.runner.ToolProfiles.daemonRegex(tools)
+        val heavy = ProfileRx.heavyImages(tools)
+        val daemons = ProfileRx.daemons(tools)
         val now = clock()
         val bySession = sessions().associateBy { it.id }
-        val mem = runCatching { memory.processes() }.getOrDefault(emptyList())
+        val mem = runCatching { os.memory() }.getOrDefault(emptyList())
         val mbByPid = mem.associate { it.pid to it.mb }
         val tracked = ledger.entries().map { e ->
             val mb = mbByPid[e.pid]
@@ -275,26 +190,26 @@ class ProcessWatch(
         }
         val ledgerPids = tracked.mapTo(HashSet()) { it.pid }
         val candidates = mem.filter {
-            it.pid !in ledgerPids && it.pid !in protectedPids && heavy.matches(it.image) && it.mb >= UNATTRIBUTED_MIN_MB
+            it.pid !in ledgerPids && !protectedPid(it.pid) && heavy.matches(it.image) && it.mb >= UNATTRIBUTED_MIN_MB
         }.sortedByDescending { it.mb }
         val info = if (candidates.isEmpty()) emptyMap() else ledger.allProcesses().associateBy { it.pid }
-        val lockAlive = if (candidates.isEmpty()) true else runCatching(lockHolderAlive).getOrDefault(true)
-        // STACK-NEUTRAL-1: an MCP server or `opencode serve` no session of ours started is the owner's own (Claude Desktop,
-        // opencode): never listed, never reaped. Ours are ledger entries and show under their session.
+        val lockAlive = if (candidates.isEmpty()) true else runCatching { os.gateLock.read()?.let(os.gateLock::holderAlive) ?: false }.getOrDefault(true)
+        // An MCP server or `opencode serve` no session of ours started is the owner's own (Claude Desktop, opencode): never
+        // listed, never reaped. Ours are ledger entries and show under their session.
         val unattributed = candidates.filter { c -> info[c.pid]?.let { ProcessLedger.isHarnessHelper(it.command) } != true }
             .take(UNATTRIBUTED_MAX).map { c ->
                 val p = info[c.pid]
                 val orphan = p != null && !lockAlive && daemons.containsMatchIn(p.command)
-                val tool = if (orphan) com.superiorsoftllc.agenthq.runner.ToolProfiles.daemonProfile(p!!.command, tools) else null
+                val tool = if (orphan) ProfileRx.daemonProfile(p!!.command, tools) else null
                 TrackedProcess(
                     c.pid, p?.command?.let(ProcessLedger::describe) ?: c.image, null, p?.startedAt, c.mb,
                     orphan,
                     if (orphan) "orphan build daemon${tool?.let { " ($it)" }.orEmpty()}: no owning session, no live gate-lock holder" else null,
                 )
             }
-        val free = runCatching { memory.freeMb() }.getOrNull()
+        val free = runCatching { os.freeMb() }.getOrNull()
         return ProcessReport(
-            freeMb = free, totalMb = runCatching { memory.totalMb() }.getOrNull(), floorMb = cfg.floorMb,
+            freeMb = free, totalMb = runCatching { os.totalMb() }.getOrNull(), floorMb = cfg.floorMb,
             underPressure = free != null && free < cfg.floorMb, autoReap = cfg.autoReap,
             tracked = tracked, unattributed = unattributed,
             agentCpuPercent = cpuMeter.shares.takeIf { it.isNotEmpty() }?.values?.sum()?.let(::round1),
@@ -309,13 +224,13 @@ class ProcessWatch(
         if (command.startsWith("Playwright MCP | ") || command.startsWith("MCP server | "))
             command.replaceFirst(" | ", " for session ${sessionId.take(8)} | ") else command
 
-    /** Reap one ledger entry. Refused for anything else (STACK-NEUTRAL-1: no process outside the ledger, ever), a recycled pid, or a live session's own harness. */
+    /** Reap one ledger entry. Refused for anything else (no process outside the ledger, ever), a recycled pid, or a live session's own harness. */
     @Synchronized
     fun reap(pid: Long): ReapResult {
         if (!on()) return ReapResult.Refused(OFF_REASON)
         val entry = ledger.get(pid) ?: return ReapResult.Refused("pid $pid was not started by an Infantry AI session; it is never reaped")
         val owner = sessions().firstOrNull { it.id == entry.sessionId }
-        if (entry.root && owner != null && owner.state !in ENDED) {
+        if (entry.root && owner != null && !owner.ended) {
             return ReapResult.Refused("pid $pid is session ${entry.sessionId}'s own harness; kill the session instead")
         }
         val view = report().tracked.firstOrNull { it.pid == pid } ?: TrackedProcess(pid, entry.command, entry.sessionId, entry.startedAt)
@@ -347,9 +262,9 @@ class ProcessWatch(
         val killed = reapProcesses(sessionId, closedAt, keepPids, reason)
         // Ticket 7e9bed2a: the same close also lets go of the gate lock this session's run owned (never a lock owner.txt does not name it for).
         val ticketId = runCatching { sessions().firstOrNull { it.id == sessionId }?.ticketId }.getOrNull()
-        runCatching { gateLock.releaseIfOwnedBy(sessionId, ticketId, killed.mapTo(HashSet()) { it.pid }) }
-            .onSuccess { line -> if (line != null) println("[agentHq] close cleanup: $line (session $sessionId)") }
-            .onFailure { System.err.println("[agentHq] close cleanup: gate lock release failed for $sessionId: ${it.message}") }
+        runCatching { os.gateLock.releaseIfOwnedBy(sessionId, ticketId, killed.mapTo(HashSet()) { it.pid }) }
+            .onSuccess { line -> if (line != null) log("close cleanup: $line (session $sessionId)") }
+            .onFailure { System.err.println("[Infantry_Processes] close cleanup: gate lock release failed for $sessionId: ${it.message}") }
         return killed
     }
 
@@ -362,27 +277,27 @@ class ProcessWatch(
         fun ancestors(pid: Long): Sequence<Long> =
             generateSequence(all[pid]?.parentPid) { all[it]?.parentPid }.take(64)
         val minePids = mine.mapTo(HashSet()) { it.pid }
-        val holder = runCatching(lockHolderPid).getOrNull()
-        val holderUses = holder != null && holder !in minePids && holder !in protectedPids &&
-            runCatching { table.startInstant(holder) }.getOrNull() != null
-        val liveOthers = records.filter { it.id != sessionId && it.state !in ENDED }.mapTo(HashSet()) { it.id }
+        val holder = runCatching { os.gateLock.read()?.pid }.getOrNull()
+        val holderUses = holder != null && holder !in minePids && !protectedPid(holder) &&
+            runCatching { os.startInstant(holder) }.getOrNull() != null
+        val liveOthers = records.filter { it.id != sessionId && !it.ended }.mapTo(HashSet()) { it.id }
         val tools = tools()
-        val shared = com.superiorsoftllc.agenthq.runner.ToolProfiles.sharedDaemonRegex(tools)
-        val clients = com.superiorsoftllc.agenthq.runner.ToolProfiles.clientRegex(tools)
+        val shared = ProfileRx.sharedDaemons(tools)
+        val clients = ProfileRx.clients(tools)
         val otherClient = ledger.entries().firstOrNull { it.sessionId in liveOthers && clients.containsMatchIn(it.command) }?.sessionId
 
         val doomed = ArrayList<LedgerEntry>()
         for (e in mine) {
             when {
                 e.startedAt > closedAt -> Unit // started after the close: a restart's new run
-                e.pid in protectedPids -> Unit
+                protectedPid(e.pid) -> Unit
                 e.pid in keepPids || ancestors(e.pid).any { it in keepPids } ->
-                    println("[agentHq] close cleanup: kept pid ${e.pid} (${e.command}) of session $sessionId")
+                    log("close cleanup: kept pid ${e.pid} (${e.command}) of session $sessionId")
                 shared.containsMatchIn(e.command) && holderUses ->
-                    println("[agentHq] close cleanup: spared shared daemon pid ${e.pid} of session $sessionId (gate-lock holder $holder alive)")
+                    log("close cleanup: spared shared daemon pid ${e.pid} of session $sessionId (gate-lock holder $holder alive)")
                 shared.containsMatchIn(e.command) && otherClient != null -> {
                     ledger.reassign(e.pid, otherClient)
-                    println("[agentHq] close cleanup: shared daemon pid ${e.pid} handed from session $sessionId to $otherClient")
+                    log("close cleanup: shared daemon pid ${e.pid} handed from session $sessionId to $otherClient")
                 }
                 else -> doomed += e
             }
@@ -390,7 +305,7 @@ class ProcessWatch(
         val doomedPids = doomed.mapTo(HashSet()) { it.pid }
         // Leaf first: the deepest process, then the latest started.
         val order = doomed.sortedWith(compareByDescending<LedgerEntry> { ancestors(it.pid).count() }.thenByDescending { it.startedAt })
-        val mem = if (order.isEmpty()) emptyMap() else runCatching { memory.processes() }.getOrDefault(emptyList()).associate { it.pid to it.mb }
+        val mem = if (order.isEmpty()) emptyMap() else runCatching { os.memory() }.getOrDefault(emptyList()).associate { it.pid to it.mb }
         return order.mapNotNull { e ->
             // A live descendant we do not kill (kept, foreign, newer, shared) must survive: then the process goes alone.
             val spareBelow = all.values.any { p -> p.pid !in doomedPids && ancestors(p.pid).any { it == e.pid } }
@@ -411,83 +326,48 @@ class ProcessWatch(
         val now = clock()
         return ledger.entries().map { it.sessionId }.distinct().flatMap { id ->
             val owner = bySession[id]
-            if (owner != null && owner.state !in ENDED) return@flatMap emptyList()
+            if (owner != null && !owner.ended) return@flatMap emptyList()
             // A FAILED session is resumable: its registered bg jobs stay, as at the failed turn's own close.
-            val keep = owner?.let { o -> keepPidsOf(o) + (if (o.state == SessionState.FAILED) o.bgJobs.map { it.pid } else emptyList()) }.orEmpty()
+            val keep = owner?.let { o -> o.keepPids + (if (o.state == "FAILED") o.bgJobPids else emptyList()) }.orEmpty()
             reapSession(id, now, keep, owner?.let { "$reason: session ended (${it.state})" } ?: "$reason: session removed")
         }
     }
 
     private fun kill(entry: LedgerEntry, view: TrackedProcess, tree: Boolean = true): ReapResult {
-        if (entry.pid in protectedPids) return ReapResult.Refused("pid ${entry.pid} is Infantry AI itself")
-        val actual = runCatching { table.startInstant(entry.pid) }.getOrNull()
+        if (protectedPid(entry.pid)) return ReapResult.Refused("pid ${entry.pid} is Infantry AI itself")
+        val actual = runCatching { os.startInstant(entry.pid) }.getOrNull()
         if (actual != entry.startedAt) {
             ledger.forget(entry.pid)
             return ReapResult.Refused("pid ${entry.pid} is gone (or now another process); nothing killed")
         }
-        runCatching { if (tree) table.killTree(entry.pid, entry.startedAt) else table.killOne(entry.pid, entry.startedAt) }
-            .onFailure { return ReapResult.Refused("killing pid ${entry.pid} failed: ${it.message}") }
+        when (val r = runCatching { os.kill(entry.pid, entry.startedAt, tree) }.getOrElse { KillResult.Refused("killing pid ${entry.pid} failed: ${it.message}") }) {
+            is KillResult.Refused -> return ReapResult.Refused(r.reason)
+            is KillResult.Killed -> Unit
+        }
         ledger.forget(entry.pid)
-        println("[agentHq] reaped pid ${entry.pid} (${entry.command}) of session ${entry.sessionId}: ${view.reason ?: "asked"}")
+        log("reaped pid ${entry.pid} (${entry.command}) of session ${entry.sessionId}: ${view.reason ?: "asked"}")
         runCatching { onReaped(view) }
         return ReapResult.Reaped(view)
     }
 
-    private fun rogueReason(e: LedgerEntry, owner: SessionRecord?, mb: Long?, cfg: ProcessWatchConfig, now: Long): String? {
+    private fun rogueReason(e: LedgerEntry, owner: WatchedSession?, mb: Long?, cfg: ProcessWatchConfig, now: Long): String? {
         if (owner == null) return "session removed"
-        if (owner.state in ENDED) return "session ended (${owner.state})"
-        if (e.root || owner.isBusy() || owner.bgJobs.isNotEmpty()) return null
+        if (owner.ended) return "session ended (${owner.state})"
+        if (e.root || owner.busy || owner.hasBgJobs) return null
         if (mb == null || mb < cfg.heavyMb) return null
-        val quietMs = now - (owner.lastOutputAt ?: owner.lastHeartbeat)
+        val quietMs = now - owner.lastActivityAt
         val idleMs = cfg.idleMinutes * 60_000L
         return if (quietMs >= idleMs) "session idle ${quietMs / 60_000} min, holding $mb MB" else null
     }
 
     companion object {
-        private val ENDED = setOf(SessionState.EXITED, SessionState.FAILED, SessionState.ORPHANED)
-
         const val OFF_REASON = "the process watch is off (limits.watch.enabled = 0): nothing is tracked or reaped"
-
-        /** What a closing session keeps alive: its `bg run --keep` wrappers and a harness the host still holds. */
-        fun keepPidsOf(record: SessionRecord): Set<Long> =
-            (record.bgJobs.filter { it.keep }.map { it.pid } + listOfNotNull(record.keptProcess?.pid)).toSet()
-
-        /** `%TEMP%\agenthq-gate.lock\pid`, or null when there is no lock. */
-        fun gateLockHolderPid(): Long? {
-            val dir = System.getenv("TEMP") ?: System.getProperty("java.io.tmpdir") ?: return null
-            return java.io.File(dir, "agenthq-gate.lock/pid").takeIf { it.isFile }?.readText()?.trim()?.toLongOrNull()
-        }
         private const val UNATTRIBUTED_MIN_MB = 200L
-
-        /** `%TEMP%\agenthq-gate.lock\pid` names the gate's holder; true when that pid is alive. */
-        fun gateLockHolderAlive(): Boolean {
-            val dir = System.getenv("TEMP") ?: System.getProperty("java.io.tmpdir") ?: return false
-            val pid = java.io.File(dir, "agenthq-gate.lock/pid").takeIf { it.isFile }?.readText()?.trim()?.toLongOrNull() ?: return false
-            return ProcessHandle.of(pid).map { it.isAlive }.orElse(false)
-        }
         private const val UNATTRIBUTED_MAX = 10
-
-        /** The daemon and every ancestor (the app that launched it): never recorded, listed or killed. */
-        val protectedPids: Set<Long> by lazy {
-            generateSequence(ProcessHandle.current()) { it.parent().orElse(null) }.map { it.pid() }.toSet()
-        }
-
-        /**
-         * The guard the daemon hands [ProcessLedger]: the daemon, its ancestors, and anything run by the app's own bundled
-         * runtime (the daemon's `java.home`), such as the agenthq CLI and MCP servers.
-         */
-        fun isProtected(p: ProcInfo): Boolean {
-            if (p.pid in protectedPids) return true
-            val home = System.getProperty("java.home")?.takeIf { it.isNotBlank() } ?: return false
-            val cmd = p.command.trim().removePrefix("\"")
-            return cmd.startsWith(home, ignoreCase = true)
-        }
     }
 }
 
-
-
-/** The daemon's `processes` frame, kept apart from the socket so a test drives it with a fake [ProcessWatch]. */
+/** The `processes` frame, kept apart from the socket so a test drives it with a fake [ProcessWatch]. */
 object ProcessFrames {
     /** Throws [IllegalArgumentException] for an unknown op or a `reap` with no pid. */
     fun answer(watch: ProcessWatch, request: ProcessesRequest): ProcessesAnswer = when (request.op) {

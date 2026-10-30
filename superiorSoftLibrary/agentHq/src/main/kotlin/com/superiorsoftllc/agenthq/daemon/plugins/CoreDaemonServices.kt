@@ -46,6 +46,10 @@ class CoreDaemonServices(
     private val sessionReadModel: com.superiorsoftllc.agenthq.daemon.api.sessions.SessionReads? = null,
     /** RUNTIME-LOAD-6: the host spawn service; null = none. */
     private val spawnService: com.superiorsoftllc.agenthq.daemon.api.spawns.Spawns? = null,
+    /** STACK-NEUTRAL-2: the host process service, the per-launch env seam and the plugin settings reader; null = none. */
+    override val processHost: com.superiorsoftllc.agenthq.session.LocalProcesses? = null,
+    override val launchEnvHost: com.superiorsoftllc.agenthq.session.LaunchEnvHost? = null,
+    override val pluginSettings: com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings = com.superiorsoftllc.agenthq.daemon.api.processes.NoPluginSettings,
 ) : DaemonServices {
     override val spawns get() = spawnService ?: com.superiorsoftllc.agenthq.daemon.api.spawns.NoSpawns
     override val sessionReads get() = sessionReadModel ?: com.superiorsoftllc.agenthq.daemon.api.sessions.NoSessionReads

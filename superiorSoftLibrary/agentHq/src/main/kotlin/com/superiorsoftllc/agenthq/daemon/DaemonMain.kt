@@ -208,8 +208,6 @@ import kotlin.system.exitProcess
 private const val DEFAULT_PORT = DaemonPort.DEFAULT
 private const val DEFAULT_DB_NAME = "agenthq.db"
 
-/** Ticket b785f383: how long a closed session's own exit handlers get before its leftover processes are killed. */
-private const val SESSION_CLOSE_GRACE_MS = 3_000L
 private const val SESSION_REPLAY_REQUEST_TYPE = "replay_request"
 private const val SESSION_REPLAY_GAP_TYPE = "replay_gap"
 
@@ -479,13 +477,12 @@ class AgentHqDaemon(
     /** TICKET-HANDOVER: switches ticket workers across harnesses with a handoff turn; stopped first by [close]. */
     val handover: SessionHandover? = null,
     /** Ticket b785f383: [close] kills what ended or removed sessions left running (after the manager's own shutdown). */
-    private val processWatch: com.superiorsoftllc.agenthq.session.ProcessWatch? = null,
+    private val processHost: com.superiorsoftllc.agenthq.session.LocalProcesses? = null,
     /**
      * Ticket 3b30398d: the schedulers [build] started (usage refresh, agent watchdog), stopped early by [close]; and the
      * process-watch scheduler, stopped by [close] after its last reap. A daemon that is closed leaves no thread running.
      */
     private val background: List<AutoCloseable> = emptyList(),
-    private val processWatchScheduler: AutoCloseable? = null,
     /** Ticket 55d60a5e: the health limits [build] resolved at start-up; [main] starts the watchdog from them. */
     val healthSettings: HealthSettings = HealthSettings(
         dbTimeoutMs = LimitRegistry.HEALTH_DB_TIMEOUT_SECONDS.default * 1000L,
@@ -571,9 +568,8 @@ class AgentHqDaemon(
         runCatching { orchestrator.close() }
         runCatching { manager.shutdown() }
         // Ticket b785f383: a clean stop leaves nothing of an ended or removed session behind; live sessions' bg jobs stay.
-        runCatching { processWatch?.reapEnded("daemon shutdown") }
-        // Ticket 3b30398d: then its scheduler goes (pending close-time reaps are covered by the reap above).
-        runCatching { processWatchScheduler?.close() }
+        // STACK-NEUTRAL-2: the process-watch plugin (if loaded) sweeps them from its own shutdown listener.
+        runCatching { processHost?.fireShutdown() }
         // Everything the kills above queued is applied before the store is released; see the KDoc.
         runCatching { board.close() }
         // CLIPATH-1: launches after this no longer read this daemon's (about to close) store for overrides.
@@ -779,7 +775,7 @@ class AgentHqDaemon(
             // STACK-NEUTRAL-1: the watch tooling is opt-in; an install that existed before keeps it on (migrated once).
             settings.migrateWatchEnabled {
                 sessionStore.load().isNotEmpty() ||
-                    File(com.superiorsoftllc.agenthq.session.stateDir(), com.superiorsoftllc.agenthq.session.ProcessLedger.FILE_NAME).isFile
+                    File(com.superiorsoftllc.agenthq.session.stateDir(), "process-ledger.json").isFile
             }
                 ?.let { println("[agentHq] limits.watch.enabled set to $it (${if (it == 1L) "existing install: watch tooling kept on" else "fresh install: watch tooling off until enabled"})") }
             // Ticket 55d60a5e: resolved now, while the database answers; /health and its watchdog never read it later.
@@ -824,6 +820,27 @@ class AgentHqDaemon(
                 com.superiorsoftllc.agenthq.runner.SandboxSupport.status(sandboxConfig().enabled) +
                     (if (sandboxConfig().enabled && token == null) "; WARNING: this daemon has no token, so agents reach it unauthenticated over loopback (set AGENTHQ_TOKEN_FILE)" else "")
             }
+            // STACK-NEUTRAL-2: the per-launch env seam (`api.launchEnv`). Core's base: the watch OFF unless a plugin turns it on, the
+            // tool profiles and the tree-wait cap the runner a session starts reads, and the runner's space limits.
+            val launchEnvHost = com.superiorsoftllc.agenthq.session.LaunchEnvHost(base = { _ ->
+                com.superiorsoftllc.agenthq.runner.WatchShims.sessionEnv(
+                    null, null, forced = false,
+                    treeWaitMinutes = settings.limit(LimitRegistry.WATCH_TREE_WAIT_MINUTES),
+                    profiles = settings.toolProfiles(),
+                ) +
+                    // STALL-4: the runner's space limits and the follow-redirects switch reach every run a session starts.
+                    com.superiorsoftllc.agenthq.cli.BgCli.watchLimitEnv(
+                        logMaxMb = settings.limit(LimitRegistry.WATCH_LOG_MAX_MB),
+                        logTotalMb = settings.limit(LimitRegistry.WATCH_LOG_TOTAL_MB),
+                        keepJobs = settings.limit(LimitRegistry.WATCH_LOG_KEEP_JOBS),
+                        keepDays = settings.limit(LimitRegistry.WATCH_LOG_KEEP_DAYS),
+                        minFreeMb = settings.limit(LimitRegistry.WATCH_MIN_FREE_MB),
+                        fileIdleSeconds = settings.limit(LimitRegistry.WATCH_FILE_IDLE_SECONDS),
+                        followRedirects = settings.watchFollowRedirects(),
+                        spaceCheckSeconds = settings.limit(LimitRegistry.WATCH_SPACE_CHECK_SECONDS),
+                        tailReadKb = settings.limit(LimitRegistry.WATCH_TAIL_READ_KB),
+                    )
+            })
             val manager = SessionManager(
                 provider,
                 sandboxed(runner),
@@ -841,7 +858,7 @@ class AgentHqDaemon(
                 // Ticket 66153313: every worker run gets the build limits (priority, Gradle workers, forks) of the settings.
                 // STALL-1 (ticket 802c64d5): and the watch shims first on PATH (gradle/mvn/npm/yarn/pnpm run watched), unless
                 // the owner turned the forced watch off (`limits.watch.forced` = 0).
-                buildEnv = {
+                buildEnv = { info ->
                     // STALL-3: the tool profiles are read at every launch; a changed list rewrites the shims.
                     val profiles = settings.toolProfiles()
                     if (profiles != com.superiorsoftllc.agenthq.runner.ToolProfiles.active) {
@@ -850,27 +867,9 @@ class AgentHqDaemon(
                             runCatching { com.superiorsoftllc.agenthq.runner.WatchShims.install(dir, com.superiorsoftllc.agenthq.runner.WatchShims.launcher(agentHqBin)) }
                         }
                     }
-                    // STACK-NEUTRAL-1: with the watch tooling off a session gets no build env and no shims or hooks.
-                    val watchOn = settings.watchEnabled()
-                    (if (watchOn) settings.buildLimits().sessionEnv(System::getenv, profiles) else emptyMap()) +
-                        com.superiorsoftllc.agenthq.runner.WatchShims.sessionEnv(
-                            watchShimDir, childEnv["PATH"] ?: System.getenv("PATH"),
-                            forced = watchOn && settings.limit(LimitRegistry.WATCH_FORCED) != 0L,
-                            treeWaitMinutes = settings.limit(LimitRegistry.WATCH_TREE_WAIT_MINUTES),
-                            profiles = profiles,
-                        ) +
-                        // STALL-4: the runner's space limits and the follow-redirects switch reach every run a session starts.
-                        com.superiorsoftllc.agenthq.cli.BgCli.watchLimitEnv(
-                            logMaxMb = settings.limit(LimitRegistry.WATCH_LOG_MAX_MB),
-                            logTotalMb = settings.limit(LimitRegistry.WATCH_LOG_TOTAL_MB),
-                            keepJobs = settings.limit(LimitRegistry.WATCH_LOG_KEEP_JOBS),
-                            keepDays = settings.limit(LimitRegistry.WATCH_LOG_KEEP_DAYS),
-                            minFreeMb = settings.limit(LimitRegistry.WATCH_MIN_FREE_MB),
-                            fileIdleSeconds = settings.limit(LimitRegistry.WATCH_FILE_IDLE_SECONDS),
-                            followRedirects = settings.watchFollowRedirects(),
-                            spaceCheckSeconds = settings.limit(LimitRegistry.WATCH_SPACE_CHECK_SECONDS),
-                            tailReadKb = settings.limit(LimitRegistry.WATCH_TAIL_READ_KB),
-                        )
+                    // STACK-NEUTRAL-2: core's base env (watch off, the profiles, the runner's space limits), then every plugin's
+                    // contributions (the process-watch plugin adds the build limits, the shims and `AGENTHQ_WATCH=on`).
+                    launchEnvHost.collect(info)
                 },
                 // No-hard-coded-limits S2: the watchdog and silent sweeper read limits.watchdog.* live.
                 limitSource = settings::limit,
@@ -915,73 +914,23 @@ class AgentHqDaemon(
             // PROGRESS-ALL: every working ticket session shows a daemon-computed estimate (no model call, zero tokens).
             com.superiorsoftllc.agenthq.session.AutoProgressHistory(store).install(settings)
             val clients = CopyOnWriteArrayList<Channel<Envelope>>()
-            // ROGUE-1 (contract 1.120.0): the rogue process detector. The ledger records only what a session tree started
-            // (pid + start instant, owned by this state dir); a slow timer feeds it and warns under memory pressure.
-            val processWatch = com.superiorsoftllc.agenthq.session.ProcessWatch(
-                com.superiorsoftllc.agenthq.session.ProcessLedger(
-                    com.superiorsoftllc.agenthq.session.OsProcessSource,
-                    com.superiorsoftllc.agenthq.session.host.OsProcessTable,
-                    File(com.superiorsoftllc.agenthq.session.stateDir(), com.superiorsoftllc.agenthq.session.ProcessLedger.FILE_NAME),
-                    instanceId,
-                    isProtected = com.superiorsoftllc.agenthq.session.ProcessWatch::isProtected,
-                ),
-                manager::list,
-                memory,
-                com.superiorsoftllc.agenthq.session.host.OsProcessTable,
-                config = settings::processWatchConfig,
-                cpuAlert = settings::cpuAlert,
-                enabled = settings::watchEnabled,
-                onPressure = { report ->
-                    val envelope = Envelope(
-                        Envelope.PROCESS_PRESSURE,
-                        json.encodeToString(com.superiorsoftllc.agenthq.daemon.api.processes.ProcessReport.serializer(), report),
-                    )
-                    println("[agentHq] memory pressure: ${report.freeMb} MB free (floor ${report.floorMb}), ${report.rogue.size} rogue process(es)")
-                    for (c in clients.toList()) c.trySend(envelope)
-                },
+            // STACK-NEUTRAL-2: the host side of `api.processes` (the OS table, the start-instant-checked kill, the session roots, the
+            // close event, the gate lock). The detector, the ledger and the reaping are Infantry_Processes' daemon half.
+            val alertSink = java.util.concurrent.atomic.AtomicReference<(String, String) -> Unit> { _, _ -> }
+            val localProcesses = com.superiorsoftllc.agenthq.session.LocalProcesses(
+                source = com.superiorsoftllc.agenthq.session.OsProcessSource,
+                table = com.superiorsoftllc.agenthq.session.host.OsProcessTable,
+                memory = memory,
+                sessionList = manager::list,
+                profiles = { com.superiorsoftllc.agenthq.runner.ToolProfiles.active },
+                shimDirectory = { watchShimDir },
+                inherited = { name -> childEnv[name] ?: System.getenv(name) },
+                pressure = { reportJson -> for (c in clients.toList()) c.trySend(Envelope(Envelope.PROCESS_PRESSURE, reportJson)) },
+                alert = { outcome, detail -> alertSink.get().invoke(outcome, detail) },
+                instanceId = instanceId,
             )
-            val processWatchExec = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
-                Thread(r, "agenthq-process-watch").also { it.isDaemon = true }
-            }
-            // Ticket 3b30398d: shut down by close() (it used to outlive every daemon); the interval is read before each pass.
-            val processWatchScheduler = AutoCloseable {
-                processWatchExec.shutdownNow()
-                runCatching { processWatchExec.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS) }
-            }
-            val watchIntervalMs = { settings.limit(com.superiorsoftllc.agenthq.settings.LimitRegistry.PROCESS_WATCH_INTERVAL_SECONDS) * 1000L }
-            fun scheduleWatchPass() {
-                runCatching {
-                    processWatchExec.schedule(
-                        {
-                            runCatching { processWatch.tick() }.onFailure { System.err.println("[agentHq] process watch failed: ${it.message}") }
-                            if (!processWatchExec.isShutdown) scheduleWatchPass()
-                        },
-                        watchIntervalMs(), java.util.concurrent.TimeUnit.MILLISECONDS,
-                    )
-                } // RejectedExecutionException once close() shut it down: nothing more to schedule.
-            }
-            scheduleWatchPass()
-            // Ticket b785f383: a closing session's background processes die with it, after a grace for its own exit
-            // handlers; deterministic and separate from the opt-in auto reap. The first pass catches up after a crash.
-            manager.onSessionClosed = { c ->
-                // After close() the scheduler refuses; the shutdown reap (reapEnded) already covered this session.
-                runCatching {
-                    processWatchExec.schedule(
-                        {
-                            runCatching { processWatch.reapSession(c.sessionId, c.at, c.keepPids, c.reason) }
-                                .onFailure { System.err.println("[agentHq] close cleanup of ${c.sessionId} failed: ${it.message}") }
-                        },
-                        SESSION_CLOSE_GRACE_MS, java.util.concurrent.TimeUnit.MILLISECONDS,
-                    )
-                }
-            }
-            processWatchExec.schedule(
-                {
-                    runCatching { processWatch.reapEnded("daemon start") }
-                        .onFailure { System.err.println("[agentHq] start-up cleanup failed: ${it.message}") }
-                },
-                watchIntervalMs(), java.util.concurrent.TimeUnit.MILLISECONDS,
-            )
+            // Ticket b785f383: a closing session's background processes die with it (the plugin's listener does it, after a grace).
+            manager.onSessionClosed = { c -> localProcesses.fireSessionClosed(c) }
             // PROMPT-1: `prompts.timeoutSec` is read at every open; every request / resolution goes to every client.
             val pendingPrompts = com.superiorsoftllc.agenthq.prompts.PendingPrompts(
                 timeoutMillis = { settings.promptTimeoutSec() * 1000L },
@@ -1029,16 +978,11 @@ class AgentHqDaemon(
             )
             val attention = AttentionStore(store.attention)
             attention.eventSink = { item -> broadcastAttention(clients, item) }
-            // Ticket 66153313: agent processes held the CPU above `limits.cpu.alertPercent` for `limits.cpu.alertMinutes`.
-            processWatch.onCpuSustained = { report ->
-                val top = report.tracked.filter { it.cpuPercent != null }.sortedByDescending { it.cpuPercent }.take(3)
-                    .joinToString("; ") { "pid ${it.pid} ${it.cpuPercent}% ${it.command.take(60)}" }
-                val detail = "Agent processes have used ${report.agentCpuPercent}% of all CPU cores for ${report.cpuAlertMinutes}+ min " +
-                    "(threshold ${report.cpuAlertPercent}%; settings limits.cpu.alertPercent / limits.cpu.alertMinutes, 0 min = off). " +
-                    "Top: ${top.ifEmpty { "none sampled" }}"
-                println("[agentHq] sustained CPU: $detail")
-                runCatching { attention.raise(com.superiorsoftllc.agenthq.attention.AttentionKind.CEILING, outcome = "cpu_sustained", detail = detail) }
-                    .onFailure { System.err.println("[agentHq] cpu attention not raised: ${it.message}") }
+            // Ticket 66153313 (via `api.processes.raiseAlert`): the process-watch plugin reports agent CPU held above the limit.
+            alertSink.set { outcome, detail ->
+                println("[agentHq] $outcome: $detail")
+                runCatching { attention.raise(com.superiorsoftllc.agenthq.attention.AttentionKind.CEILING, outcome = outcome, detail = detail) }
+                    .onFailure { System.err.println("[agentHq] $outcome attention not raised: ${it.message}") }
             }
             // Story 9.7b: observed limit state per provider -- persisted, pushed, and put back after a restart.
             val providerStates = ProviderStateTracker(
@@ -1764,6 +1708,9 @@ class AgentHqDaemon(
                     com.superiorsoftllc.agenthq.daemon.plugins.CoreDaemonServices(
                         manager, agents, projectStore, daemonConfig, keystore, policies,
                         getenv = pluginEnv, firstTurn = pluginFirstTurn, limits = settings::limit,
+                        // STACK-NEUTRAL-2: api.processes / api.launchEnv / api.settings.
+                        processHost = localProcesses, launchEnvHost = launchEnvHost,
+                        pluginSettings = settings.forPlugins(),
                         // DP-4a: tickets / epics / board for plugins, over the board built above (host-applied policy and scope).
                         boardServices = com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardServices(
                             board = { board }, epicStore = { epics }, sessions = { manager.list() }, link = { orchestratorHub.link },
@@ -2046,7 +1993,7 @@ class AgentHqDaemon(
                             imageUploads = com.superiorsoftllc.agenthq.images.ImageUploadHandler(projectStore, clock = clock),
                             ownerQuestions = ownerQuestions,
                             handover = handover,
-                            processWatch = processWatch,
+                            processHost = localProcesses,
                             ownerCredential = ownerCredential,
                             plugins = plugins,
                             daemonConfig = daemonConfig,
@@ -2101,9 +2048,8 @@ class AgentHqDaemon(
                 chatImageRetention = chatImageRetention,
                 ownerQuestions = ownerQuestions,
                 handover = handover,
-                processWatch = processWatch,
+                processHost = localProcesses,
                 background = listOf(AutoCloseable { usageRefresher.stop() }, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate, plugins, AutoCloseable { harnessModulesRef.get()?.close() }),
-                processWatchScheduler = processWatchScheduler,
                 healthSettings = healthSettings,
             )
         }
@@ -2631,7 +2577,7 @@ private suspend fun handleConnection(
     /** TICKET-HANDOVER: a ticket worker's harness switch goes through a handoff turn; null = switched at once. */
     handover: SessionHandover? = null,
     /** ROGUE-1 (contract 1.120.0): `processes`; null = this daemon serves none. */
-    processWatch: com.superiorsoftllc.agenthq.session.ProcessWatch? = null,
+    processHost: com.superiorsoftllc.agenthq.session.LocalProcesses? = null,
     /** SEC-FIX-1 (1.136.0): who is the owner ([FrameGate.OWNER_ONLY]); null = no connection is. */
     ownerCredential: OwnerCredential? = null,
     /** DAEMON-PLUGINS-1: the daemon plugins: their gates, frames and tools (docs/DAEMON-PLUGINS.md); none by default. */
@@ -2705,7 +2651,7 @@ private suspend fun handleConnection(
     val processesWorker = session.launch(kotlinx.coroutines.Dispatchers.IO) {
         for (request in processesRequests) {
             val answer = try {
-                val watch = processWatch ?: throw IllegalArgumentException("this daemon has no process watch")
+                val watch = processHost?.frameHandler() ?: throw IllegalArgumentException("this daemon has no process watch")
                 val req = if (request.data.isBlank()) com.superiorsoftllc.agenthq.daemon.api.processes.ProcessesRequest()
                 else json.decodeFromString(com.superiorsoftllc.agenthq.daemon.api.processes.ProcessesRequest.serializer(), request.data)
                 // POLICY-1 (1.143.0): `processes_reap` only kills (its policy action is destructive); listing is `processes`.
@@ -2714,7 +2660,7 @@ private suspend fun handleConnection(
                     Envelope.PROCESSES,
                     json.encodeToString(
                         com.superiorsoftllc.agenthq.daemon.api.processes.ProcessesAnswer.serializer(),
-                        com.superiorsoftllc.agenthq.session.ProcessFrames.answer(watch, req),
+                        watch.answer(req),
                     ),
                 )
             } catch (e: Exception) {

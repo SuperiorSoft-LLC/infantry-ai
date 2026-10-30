@@ -552,6 +552,16 @@ class SettingsService(
      * (0 = each build script's own default).
      */
     /** STACK-NEUTRAL-1: `limits.watch.enabled`, read live. */
+    /**
+     * STACK-NEUTRAL-2: what `api.settings` shows a plugin: the numeric limits of [LimitRegistry] by key, and the stored JSON of
+     * `limits.*`, `watch.*` and `processes.*` keys. Read only; nothing else of the store is reachable.
+     */
+    fun forPlugins(): com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings = object : com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings {
+        override fun limit(key: String): Long? = LimitRegistry.ALL.firstOrNull { it.key == key }?.let { this@SettingsService.limit(it) }
+        override fun stored(key: String): String? =
+            if (PLUGIN_READABLE.any { key.startsWith(it) }) store.settings.get(key)?.value else null
+    }
+
     fun watchEnabled(): Boolean = limit(LimitRegistry.WATCH_ENABLED) != 0L
 
     /**
@@ -720,6 +730,7 @@ class SettingsService(
         const val EXIT_DONE = "done"
         private val EXIT_BEHAVIORS = listOf(EXIT_LEAVE, EXIT_DONE)
         /** ROGUE-1 (1.120.0): the rogue process detector (auto-reap is opt-in, default false). */
+        private val PLUGIN_READABLE = listOf("limits.", "watch.", "processes.")
         const val PROCESSES_AUTO_REAP = "processes.autoReap"
         const val PROCESSES_IDLE_MINUTES = "processes.idleMinutes"
         const val PROCESSES_HEAVY_MB = "processes.heavyMb"
