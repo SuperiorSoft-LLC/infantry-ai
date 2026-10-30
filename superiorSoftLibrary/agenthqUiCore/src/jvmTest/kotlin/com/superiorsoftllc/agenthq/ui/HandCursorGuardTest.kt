@@ -69,7 +69,8 @@ class HandCursorGuardTest {
         // description, rule lines; its selectable row now carries the hand) and ActionGate.kt +1 (label inside the wrapped
         // TextButton), STALL-2 Sidebar.kt +1 (watch-state label), UsageMeterPane.kt +1 (job-watcher counters).
         // CONFIG-FIELDS-2: +3 Text (select dropdown label and items, placeholder), +1 DropdownMenu (select display: dropdown).
-        "Text" to 1161,
+        // CONFIG-FIELDS-4: +4 Text in GroupEditor.kt (nested field label, row heading, Remove and Add button labels; the buttons are the wrapped TextButton).
+        "Text" to 1165,
         "DropdownMenu" to 10,
         "OutlinedTextField" to 104,
         "BasicTextField" to 2,

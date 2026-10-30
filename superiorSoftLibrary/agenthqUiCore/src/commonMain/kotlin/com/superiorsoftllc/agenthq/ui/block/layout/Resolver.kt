@@ -7,6 +7,7 @@ import androidx.compose.runtime.remember
 import com.superiorsoftllc.agenthq.plugin.api.GrantPattern
 import com.superiorsoftllc.agenthq.ui.LocalCoreTier
 import com.superiorsoftllc.agenthq.ui.ModuleTier
+import com.superiorsoftllc.agenthq.ui.plugin.ModuleScope
 
 /** BLOCKS-LAYOUT L5: how an override takes a node over (module.json `shell[].mode`). */
 object OverrideModes {
@@ -108,11 +109,11 @@ class OverrideBlock(
         // S4d: a community wrap draws without the core tier; the node it wraps is drawn back at the tier around it.
         if (community) {
             val outer = LocalCoreTier.current
-            ModuleTier(false) { override.content(scope, TierBlock(inner, outer)) }
+            ModuleTier(false) { ModuleScope(module) { override.content(scope, TierBlock(inner, outer)) } }
         } else override.content(scope, inner)
     } else {
         val s = if (inner.wearsHostSurface) BlockScope(scope.modifier.then(LocalHostSurface.current), scope.box, scope.row, scope.blockId) else scope
-        if (community) ModuleTier(false) { override.content(s, null) } else override.content(s, null)
+        if (community) ModuleTier(false) { ModuleScope(module) { override.content(s, null) } } else override.content(s, null)
     }
 
     override val wearsHostSurface: Boolean get() = inner.wearsHostSurface
@@ -204,7 +205,7 @@ class InjectedBlock(
     override fun Render(scope: BlockScope) =
         // GAP-AUDIT-1 (a): an injection (and an override's before / after) that throws in the probe draws nothing.
         GuardedBlock(OverrideHealth.key(module, "inject", id), content, fallback = {}) {
-            if (community) ModuleTier(false) { content(scope) } else content(scope)
+            if (community) ModuleTier(false) { ModuleScope(module) { content(scope) } } else content(scope)
         }
 }
 

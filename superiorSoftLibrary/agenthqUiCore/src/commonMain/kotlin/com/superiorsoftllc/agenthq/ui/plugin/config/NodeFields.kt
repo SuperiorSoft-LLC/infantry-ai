@@ -116,7 +116,8 @@ fun NodeFields(factory: TabFactory, node: String, fields: List<DeclaredField>, e
                         }
                     }
                     ConfigFieldTypes.CLASSES -> ClassesEditor(f, tag, value, can, ::write)
-                    ConfigFieldTypes.LIST -> ListEditor(f, tag, value, can, ::write)
+                    ConfigFieldTypes.LIST -> f.field.objectItemFields()?.let { ObjectListEditor(f.field, it, tag, value, can, ::write) } ?: ListEditor(f, tag, value, can, ::write)
+                    ConfigFieldTypes.GROUP -> GroupEditor(f.field.fields, tag, value, can, ::write)
                     ConfigFieldTypes.IMPLEMENTATION -> {
                         val registry = f.field.registry.orEmpty()
                         val current = (value as? JsonPrimitive)?.content

@@ -198,7 +198,8 @@ private fun GeneratedField(factory: TabFactory, card: ConfigCard, f: ConfigField
                 }
                 // EXAMPLE-1: CONFIG-9's editors, as the Plugins view draws them (the card showed these read-only).
                 ConfigFieldTypes.CLASSES -> ClassesEditor(declared, tag, value, editable, ::write)
-                ConfigFieldTypes.LIST -> ListEditor(declared, tag, value, editable, ::write)
+                ConfigFieldTypes.LIST -> f.objectItemFields()?.let { ObjectListEditor(f, it, tag, value, editable, ::write) } ?: ListEditor(declared, tag, value, editable, ::write)
+                ConfigFieldTypes.GROUP -> GroupEditor(f.fields, tag, value, editable, ::write)
                 else -> factory.fieldTypes[f.type]?.let { RegisteredEditor(factory, f, value, editable, ::write) } ?: Chip(value?.toString() ?: "unset")
             }
             problem?.let { Chip(it, Palette.Danger) }

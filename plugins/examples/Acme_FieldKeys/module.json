@@ -13,7 +13,16 @@
         { "key": "code", "type": "text", "label": "Code", "required": true, "pattern": "[A-Z]{3}", "patternMessage": "Three capital letters", "minLength": 3, "maxLength": 3, "placeholder": "ABC" },
         { "key": "mode", "type": "select", "label": "Mode", "options": ["auto", "custom"], "default": "auto", "display": "dropdown" },
         { "key": "customText", "type": "text", "label": "Custom text", "maxLength": 40, "placeholder": "Shown when Mode is custom", "visibleWhen": { "key": "mode", "eq": "custom" } },
-        { "key": "accent", "type": "color", "label": "Accent", "default": "#3B82F6", "palette": ["#3B82F6", "#10B981", "#F59E0B", "#EF4444"] }
+        { "key": "accent", "type": "color", "label": "Accent", "default": "#3B82F6", "palette": ["#3B82F6", "#10B981", "#F59E0B", "#EF4444"] },
+        { "key": "primary", "type": "group", "label": "Primary server", "fields": [
+          { "key": "host", "type": "text", "label": "Host", "required": true, "minLength": 2, "placeholder": "db.example.com" },
+          { "key": "port", "type": "number", "label": "Port", "min": 1, "max": 65535, "default": 5432 }
+        ] },
+        { "key": "servers", "type": "list", "label": "Servers", "fields": [
+          { "key": "host", "type": "text", "label": "Host", "required": true, "minLength": 2 },
+          { "key": "port", "type": "number", "label": "Port", "min": 1, "max": 65535, "default": 5432 },
+          { "key": "tls", "type": "checkbox", "label": "Use TLS", "default": false }
+        ] }
       ]
     }
   ]
