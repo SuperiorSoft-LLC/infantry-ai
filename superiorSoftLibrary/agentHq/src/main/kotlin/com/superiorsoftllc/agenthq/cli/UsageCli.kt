@@ -14,7 +14,8 @@ import kotlinx.serialization.json.Json
  */
 internal object UsageCli {
     const val USAGE = "usage: agenthq usage [show] | set <meter> <percent> [<resetsInMinutes>] | clear <meter> | " +
-        "override <meter> <workers|none> [<hours>] | override <meter> clear | rule <60:3,80:2,1|on|off|default>"
+        "override <meter> <workers|none> [<hours>] | override <meter> clear | rule <60:3,80:2,1|on|off|default> | " +
+        "history [<meter>] [<window label>] [<90m|24h|7d>]"
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -29,6 +30,7 @@ internal object UsageCli {
                 (args[2].lowercase() in setOf("none", "clear") || args[2].toIntOrNull() != null) &&
                 (args.size == 3 || (args[2].lowercase() != "clear" && args[3].toDoubleOrNull() != null))
             "rule" -> args.size == 2
+            "history" -> historyQuery(args.drop(1)) != null
             else -> false
         }
         return if (ok) null else USAGE
@@ -73,7 +75,44 @@ internal object UsageCli {
         }
     }
 
+    private val SINCE = Regex("""\d+(\.\d+)?[mhdMHD]""")
+
+    /**
+     * PACE-TREND-1: `usage history [<meter>] [<window label>] [<since: 90m|24h|7d>]` -> the `pace_get` JSON query; null = malformed.
+     * The first word that is not a duration is the meter, the second the window label. The answer comes from the optional
+     * Infantry_Pace daemon plugin; without it the daemon answers an error frame.
+     */
+    fun historyQuery(words: List<String>): String? {
+        val o = LinkedHashMap<String, kotlinx.serialization.json.JsonElement>()
+        val names = mutableListOf<String>()
+        for (w in words) {
+            if (SINCE.matches(w)) {
+                if ("sinceHours" in o) return null
+                val n = w.dropLast(1).toDouble()
+                o["sinceHours"] = kotlinx.serialization.json.JsonPrimitive(when (w.last().lowercaseChar()) { 'm' -> n / 60.0; 'h' -> n; else -> n * 24.0 })
+            } else names += w
+        }
+        if (names.size > 2) return null
+        names.getOrNull(0)?.let { o["provider"] = kotlinx.serialization.json.JsonPrimitive(it) }
+        names.getOrNull(1)?.let { o["window"] = kotlinx.serialization.json.JsonPrimitive(it) }
+        return kotlinx.serialization.json.JsonObject(o).toString()
+    }
+
+    private suspend fun history(stream: FrameStream, args: List<String>, out: Appendable, err: Appendable): Int {
+        val query = historyQuery(args.drop(1)) ?: run { err.appendLine("error: $USAGE"); return 2 }
+        return try {
+            val answer = stream.request(Envelope("pace_get", query), "pace_report", "pace_get", idempotent = true, timeoutMs = 45_000L)
+            val text = json.parseToJsonElement(answer.data).let { (it as kotlinx.serialization.json.JsonObject)["text"] }
+            out.appendLine((text as? kotlinx.serialization.json.JsonPrimitive)?.content ?: answer.data)
+            0
+        } catch (e: Exception) {
+            err.appendLine("error: ${e.message ?: "pace_get failed"} (is the Infantry_Pace plugin installed and enabled?)")
+            1
+        }
+    }
+
     suspend fun run(stream: FrameStream, args: List<String>, out: Appendable, err: Appendable): Int {
+        if (args.firstOrNull()?.lowercase() == "history") return history(stream, args, out, err)
         val set = try {
             toSet(stream, args)
         } catch (e: IllegalArgumentException) {

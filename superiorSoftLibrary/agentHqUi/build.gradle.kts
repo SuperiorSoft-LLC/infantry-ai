@@ -49,6 +49,8 @@ dependencies {
     // RUNTIME-10: and Infantry_Stats and Infantry_Usage (the Stats and Usage pane tests draw them).
     testImplementation(project(":plugins:official:Infantry_Stats"))
     testImplementation(project(":plugins:official:Infantry_Usage"))
+// PACE-TREND-1: and Infantry_Pace (the pace chart card, its screenshots in both themes).
+testImplementation(project(":plugins:official:Infantry_Pace"))
     // RUNTIME-11: and Infantry_Epics and Infantry_Review (the Epics pane test draws it; the tab shots open both).
     testImplementation(project(":plugins:official:Infantry_Epics"))
     testImplementation(project(":plugins:official:Infantry_Review"))

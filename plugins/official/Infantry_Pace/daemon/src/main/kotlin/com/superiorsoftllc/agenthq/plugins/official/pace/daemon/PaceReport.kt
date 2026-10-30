@@ -34,6 +34,7 @@ object PaceReport {
             put("retentionDays", settings.retentionDays)
             put("lookbackShortHours", settings.lookbackShortHours)
             put("lookbackLongHours", settings.lookbackLongHours)
+            put("burnWindowHours", settings.burnWindowHours)
             put("deadBand", settings.deadBand)
             put("series", JsonArray(series.map { it.first }))
             put("text", series.joinToString("\n") { it.second }.ifBlank { "no pacing history recorded yet (the recorder samples the plan meters while this plugin is enabled)" })
@@ -53,6 +54,8 @@ object PaceReport {
         // Segment ids over the WHOLE history so they stay stable whatever the range asked for.
         val segmentOf = HashMap<PaceSample, Int>()
         PaceMath.splitAtResets(all).forEachIndexed { i, seg -> seg.forEach { segmentOf[it] = i } }
+        val burnOf = HashMap<PaceSample, Double>()
+        PaceMath.splitAtResets(all).forEach { seg -> PaceMath.burnRates(seg, s.burnWindowHours).forEach { (p, b) -> burnOf[p] = b } }
         val thinned = thin(shown, q.maxPoints)
         val obj = buildJsonObject {
             put("provider", provider); put("window", window); put("windowMinutes", minutes)
@@ -71,6 +74,7 @@ object PaceReport {
                     put("d", p.paceDelta?.let { JsonPrimitive(it) } ?: JsonNull)
                     put("j", p.projectedPercent?.let { JsonPrimitive(it) } ?: JsonNull)
                     put("s", segmentOf[p] ?: 0)
+                    put("b", burnOf[p]?.let { JsonPrimitive(it) } ?: JsonNull)
                 })
             })
             put("momentum", headline.name)

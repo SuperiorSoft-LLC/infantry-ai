@@ -188,6 +188,37 @@ class PaceTest {
         )
     }
 
+    @Test fun `idle usage - burn rate 0, pace delta drifting down, momentum FALLING`() {
+        val reset = 168 * h
+        val now = 84 * h
+        // 8 hourly samples, usage flat at 50% the whole time; the even-pace line keeps advancing
+        val series = (0..7).map { i ->
+            val t = now - (7 - i) * h
+            val elapsed = t.toDouble() / reset
+            sample(t, 50.0, reset, pace = 50.0 - elapsed * 100, proj = 50.0 / elapsed)
+        }
+        val burn = PaceMath.burnRates(series, 1.0)
+        assertEquals(7, burn.size, "the first sample has no hour behind it")
+        assertTrue(burn.all { it.second == 0.0 }, "nothing done = burn rate 0")
+        assertTrue(series.zipWithNext().all { (a, b) -> b.paceDelta!! < a.paceDelta!! }, "pace delta falls every hour")
+        assertEquals(Momentum.FALLING, PaceMath.momentum(series, now, 6.0).momentum)
+        // and it shows up in the report
+        val store = PaceStore(tmp())
+        series.forEach { s -> store.record(MeterReading("claude", s.window, weekMin, s.percent, s.resetsAt, s.observedAt, s.paceDelta, s.projectedPercent)) }
+        val pts = PaceReport.build(store, PaceSettings(), PaceQuery(), now)["series"]!!.jsonArray[0].jsonObject["points"]!!.jsonArray
+        assertEquals("0.0", pts.last().jsonObject["b"]!!.jsonPrimitive.content)
+    }
+
+    @Test fun `burn rate is points per hour over the rolling window and a reset does not leak into it`() {
+        val s = listOf(sample(0, 10.0), sample(1 * h, 12.0), sample(2 * h, 16.0), sample(3 * h, 16.0))
+        assertEquals(listOf(2.0, 4.0, 0.0), PaceMath.burnRates(s, 1.0).map { it.second })
+        assertEquals(listOf(3.0, 2.0), PaceMath.burnRates(s, 2.0).map { it.second })
+        val r1 = 100 * h
+        val two = (0..3).map { sample(it * h, 90.0 + it, r1) } + (4..7).map { sample(it * h, 2.0 + it, r1 + 168 * h) }
+        val perSegment = PaceMath.splitAtResets(two).flatMap { PaceMath.burnRates(it, 1.0) }
+        assertTrue(perSegment.all { it.second == 1.0 }, "split first, then rate: the drop at the reset is not a burn")
+    }
+
     @Test fun `a forecast that stays under says so`() {
         val now = 84 * h
         val series = (0..6).map { sample(now - (6 - it) * h, 20.0 + 0.1 * it, 168 * h) }
@@ -217,6 +248,7 @@ class PaceTest {
         assertEquals(0, s.retentionDays)
         assertEquals(2.5, s.deadBand)
         assertEquals(3, s.minSamples)
+        assertEquals(1.0, s.burnWindowHours)
         assertEquals(6.0, s.lookbackShortHours)
         assertEquals(PaceSettings(), PaceSettings.from { null })
     }

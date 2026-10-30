@@ -29,6 +29,9 @@ kotlin {
             implementation(compose.runtime)
             implementation(compose.foundation)
             implementation(compose.material3)
+            implementation(libs.kotlinx.serialization.json)
+            implementation(libs.kotlinx.datetime)
+            implementation(libs.kotlinx.coroutines.core)
         }
         // The ServiceLoader entry is JVM only: on Android the generated module list already names UsagePlugin.
         jvmMain { resources.srcDir("jvmResources") }

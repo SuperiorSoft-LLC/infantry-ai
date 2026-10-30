@@ -26,6 +26,8 @@ data class PaceSettings(
     val deadBand: Double = 0.25,
     val minSamples: Int = 3,
     val minSpanHours: Double = 2.0,
+    /** The burn rate is the change in percent used per hour over this rolling window. */
+    val burnWindowHours: Double = 1.0,
 ) {
     companion object {
         /** Reads each key through [get] (null/blank/unparsable = default). */
@@ -39,6 +41,7 @@ data class PaceSettings(
                 deadBand = num("pace.deadBand")?.takeIf { it >= 0 } ?: d.deadBand,
                 minSamples = num("pace.minSamples")?.toInt()?.coerceAtLeast(2) ?: d.minSamples,
                 minSpanHours = num("pace.minSpanHours")?.takeIf { it >= 0 } ?: d.minSpanHours,
+                burnWindowHours = num("pace.burnWindowHours")?.takeIf { it > 0 } ?: d.burnWindowHours,
             )
         }
     }
@@ -132,6 +135,22 @@ object PaceMath {
         if (sxx < 1e-12) return null
         val sxy = xs.indices.sumOf { (xs[it] - mx) * (points[it].second - my) }
         return sxy / sxx
+    }
+
+    /**
+     * Burn rate over time for ONE window segment (oldest first): at each sample, (percent now - percent one rolling window ago)
+     * / hours between them, in points per hour. The reference is the newest sample at or before `t - windowHours`; a sample
+     * with no such reference yet has no burn rate. Idle usage reads 0.
+     */
+    fun burnRates(segment: List<PaceSample>, windowHours: Double): List<Pair<PaceSample, Double>> {
+        val out = mutableListOf<Pair<PaceSample, Double>>()
+        val cutoffMs = (windowHours * HOUR_MS).toLong()
+        for (p in segment) {
+            val ref = segment.lastOrNull { it.observedAt <= p.observedAt - cutoffMs } ?: continue
+            val hours = (p.observedAt - ref.observedAt) / HOUR_MS
+            if (hours > 0) out += p to (p.percent - ref.percent) / hours
+        }
+        return out
     }
 
     /** Points of [segment] observed in the last [hours] before [now]. */

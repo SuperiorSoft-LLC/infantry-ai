@@ -30,6 +30,7 @@
           { "key": "pace.lookbackLongHours", "type": "number", "label": "Long lookback (hours)", "default": 24, "min": 1, "max": 720, "step": 1, "scope": "daemon", "order": 3 },
           { "key": "pace.deadBand", "type": "number", "label": "Flat band (points per hour)", "default": 0.25, "min": 0, "max": 20, "step": 0.1, "scope": "daemon", "order": 4, "description": "A slope smaller than this reads as FLAT, not RISING or FALLING." },
           { "key": "pace.minSamples", "type": "number", "label": "Samples needed for a forecast", "default": 3, "min": 2, "max": 100, "step": 1, "scope": "daemon", "order": 5 },
+          { "key": "pace.burnWindowHours", "type": "number", "label": "Burn rate window (hours)", "default": 1, "min": 0.25, "max": 48, "step": 0.25, "scope": "daemon", "order": 7, "description": "Burn rate = points of percent used per hour over this rolling window." },
           { "key": "pace.minSpanHours", "type": "number", "label": "Hours those samples must span", "default": 2, "min": 0, "max": 48, "step": 1, "scope": "daemon", "order": 6 }
         ]
       }
