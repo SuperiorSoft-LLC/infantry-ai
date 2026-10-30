@@ -6,7 +6,8 @@
     "args": ["--console=plain"],
     "argsUnless": ["--console"],
     "daemons": ["GradleDaemon", "org\\.gradle\\.launcher\\.daemon"],
-    "notifyOn": ["BUILD SUCCESSFUL", "BUILD FAILED"]
+    "notifyOn": ["BUILD SUCCESSFUL", "BUILD FAILED"],
+    "failureMarkers": ["BUILD FAILED", "^FAILURE: "]
   },
   {
     "name": "kotlin",
@@ -15,9 +16,19 @@
     "daemons": ["KotlinCompileDaemon", "kotlin-daemon"],
     "notifyOn": ["^e: "]
   },
-  { "name": "maven", "commands": ["mvnw", "mvn"], "shim": ["mvn"] },
+  { "name": "maven", "commands": ["mvnw", "mvn"], "shim": ["mvn"], "failureMarkers": ["\\[INFO\\] BUILD FAILURE", "^\\[ERROR\\] BUILD FAILURE"], "logFlags": ["--log-file", "-l"] },
   { "name": "npm", "commands": ["npm"] },
   { "name": "yarn", "commands": ["yarn"] },
   { "name": "pnpm", "commands": ["pnpm"] },
-  { "name": "java-jar", "commands": ["java"], "shim": [], "longIf": ["-jar"] }
+  { "name": "java-jar", "commands": ["java"], "shim": [], "longIf": ["-jar"] },
+  {
+    "name": "shell-redirects",
+    "commands": [],
+    "shim": [],
+    "redirects": [
+      "(?:^|[^0-9&>|<])(?:[12]|&)?>>?\\s*(?!&)(\"[^\"]+\"|'[^']+'|[^\\s;|&<>()]+)",
+      "\\|\\s*tee\\s+(?:-a\\s+)?(\"[^\"]+\"|'[^']+'|[^\\s;|&<>()]+)",
+      "(?i)\\|\\s*(?:Out-File|Tee-Object|Add-Content|Set-Content)\\s+(?:-(?:FilePath|Path|LiteralPath)\\s+)?(\"[^\"]+\"|'[^']+'|[^\\s;|&<>()]+)"
+    ]
+  }
 ]

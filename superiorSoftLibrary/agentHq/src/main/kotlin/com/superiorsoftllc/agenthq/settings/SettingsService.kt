@@ -80,6 +80,9 @@ class SettingsService(
             ALLOWED_MODELS to JsonArray(allowedModels().patterns.map(::JsonPrimitive)),
             ALLOWED_ROLES to JsonArray(allowedRoles().patterns.map(::JsonPrimitive)),
             TOOL_PROFILES to toolProfileOverrides(),
+            WATCH_NOTICES to JsonObject(watchNotices().mapValues { JsonPrimitive(it.value) }),
+            WATCH_ESCALATE_TO to JsonPrimitive(watchEscalateTo()),
+            WATCH_FOLLOW_REDIRECTS to JsonPrimitive(watchFollowRedirects()),
         ) + LimitRegistry.ALL.associate { it.key to JsonPrimitive(limit(it)) } + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
     )
 
@@ -349,6 +352,12 @@ class SettingsService(
             ALLOWED_MODELS -> JsonArray(requireAllowedModels(value).map(::JsonPrimitive))
             ALLOWED_ROLES -> JsonArray(requireAllowedModels(value, ALLOWED_ROLES).map { JsonPrimitive(it.lowercase()) })
             TOOL_PROFILES -> requireToolProfiles(value)
+            WATCH_NOTICES -> requireWatchNotices(value)
+            WATCH_ESCALATE_TO -> JsonPrimitive(
+                (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it in com.superiorsoftllc.agenthq.runner.WatchNotices.ESCALATE_VALUES }
+                    ?: throw IllegalArgumentException("setting '$WATCH_ESCALATE_TO' must be one of ${com.superiorsoftllc.agenthq.runner.WatchNotices.ESCALATE_VALUES.joinToString { "\"$it\"" }}"),
+            )
+            WATCH_FOLLOW_REDIRECTS -> JsonPrimitive(requireBoolean(key, value))
             else -> LimitRegistry.get(key)?.let { JsonPrimitive(requireLimit(it, value)) }
                 ?: declaredField(key)?.let { com.superiorsoftllc.agenthq.plugin.api.ConfigFieldValidator.validate(it, value) }
                 ?: throw IllegalArgumentException("unknown setting '$key'")
@@ -451,6 +460,31 @@ class SettingsService(
     fun toolProfiles(): List<com.superiorsoftllc.agenthq.runner.ToolProfile> {
         val tp = com.superiorsoftllc.agenthq.runner.ToolProfiles
         return runCatching { tp.merge(tp.DEFAULTS, tp.parse(toolProfileOverrides().toString())) }.getOrDefault(tp.DEFAULTS)
+    }
+
+    /** STALL-4: the stored notice-wording overrides (key -> template; empty while unset or unreadable). */
+    fun watchNotices(): Map<String, String> = store.settings.get(WATCH_NOTICES)?.value
+        ?.let { runCatching { com.superiorsoftllc.agenthq.runner.WatchNotices.parse(it) }.getOrNull() } ?: emptyMap()
+
+    /** STALL-4: who else hears a watch escalation: `starter` (default; else the user), `user` or `none`. */
+    fun watchEscalateTo(): String = store.settings.get(WATCH_ESCALATE_TO)?.value
+        ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonPrimitive)?.content }.getOrNull() }
+        ?.takeIf { it in com.superiorsoftllc.agenthq.runner.WatchNotices.ESCALATE_VALUES } ?: "starter"
+
+    /** STALL-4: whether the runner follows a file the command line redirects its output to (default off). */
+    fun watchFollowRedirects(): Boolean = runCatching { storedBoolean(WATCH_FOLLOW_REDIRECTS)?.booleanOrNull }.getOrNull() ?: false
+
+    private fun requireWatchNotices(value: JsonElement): JsonElement {
+        require(value is JsonObject && value.values.all { it is JsonPrimitive && it.isString }) {
+            "setting '$WATCH_NOTICES' must be a JSON object of notice key -> template string"
+        }
+        val map = value.mapValues { (it.value as JsonPrimitive).content }
+        try {
+            com.superiorsoftllc.agenthq.runner.WatchNotices.validate(map)
+        } catch (e: IllegalArgumentException) {
+            throw IllegalArgumentException("setting '$WATCH_NOTICES': ${e.message}")
+        }
+        return value
     }
 
     private fun requireToolProfiles(value: JsonElement): JsonElement {
@@ -583,6 +617,12 @@ class SettingsService(
         const val USER_PORTRAIT = "user.portrait"
         /** STALL-3: tool-profile overrides (docs/STALL.md), a JSON array merged by name over the shipped defaults. */
         const val TOOL_PROFILES = com.superiorsoftllc.agenthq.runner.ToolProfiles.SETTING
+        /** STALL-4: watch notice wording overrides (docs/STALL.md), a JSON object merged by key over `watch/notices.json`. */
+        const val WATCH_NOTICES = com.superiorsoftllc.agenthq.runner.WatchNotices.SETTING
+        /** STALL-4: the watch's recipient rule for escalations: `starter` | `user` | `none`. */
+        const val WATCH_ESCALATE_TO = com.superiorsoftllc.agenthq.runner.WatchNotices.ESCALATE_SETTING
+        /** STALL-4: `true` = the runner follows files a command line redirects its output to (default `false`). */
+        const val WATCH_FOLLOW_REDIRECTS = "watch.followRedirects"
         const val PROMPTS_TIMEOUT_SEC = "prompts.timeoutSec"
         const val DEFAULT_PROMPT_TIMEOUT_SEC = 600
         /** ASK-TIMER (1.139.0): `deny` (default) | `approve`: what an unanswered tool approval resolves as at its timeout. */

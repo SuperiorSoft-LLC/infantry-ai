@@ -177,6 +177,7 @@ class McpServeTest {
                 "agenthq_usage", // USAGE-PACE (1.119.0): listed after the project tools, before ask
                 "agenthq_ask", // ASK-1
                 "agenthq_progress", // PROGRESS-1 (1.117.0)
+                "agenthq_watch_file", // STALL-4
                 "agenthq_processes", "agenthq_processes_reap", // ROGUE-1 (1.120.0)
             ),
             tools.map { it["name"]!!.jsonPrimitive.content },

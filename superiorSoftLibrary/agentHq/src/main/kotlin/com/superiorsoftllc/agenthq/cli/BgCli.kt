@@ -61,6 +61,8 @@ internal object BgCli {
             /** STALL-2: `--shell <exe> --script-b64 <b64>`: the command is this script, run by that shell (no `--` part). */
             val shell: String? = null,
             val scriptB64: String? = null,
+            /** STALL-4: `--follow <path>` (repeatable): growth of these files counts as the job's output. */
+            val follow: List<String> = emptyList(),
         ) : Parsed {
             /** The script a hook passed, decoded; null for a plain `-- <cmd...>` run. */
             val script: String? get() = scriptB64?.let { com.superiorsoftllc.agenthq.runner.WatchRewrite.decode(it) }
@@ -83,6 +85,29 @@ internal object BgCli {
                 hook?.let { add("--hook"); add(it) }
                 shell?.let { add("--shell"); add(it) }
                 scriptB64?.let { add("--script-b64"); add(it) }
+                follow.forEach { add("--follow"); add(it) }
+            }
+        }
+        /**
+         * STALL-4: `agenthq watch-file <path> [--until-pid N] [--idle-seconds S] [--name L] [--notify-on RE]...`: watch a
+         * file another process writes, with the quiet / heartbeat / pattern / done notices of a watched job.
+         */
+        data class WatchFile(
+            val path: String,
+            val untilPid: Long? = null,
+            val idleSeconds: Long? = null,
+            val name: String? = null,
+            val notifyOn: List<String> = emptyList(),
+            /** Internal: set on the detached wrapper. */
+            val jobId: String? = null,
+        ) : Parsed {
+            fun optionArgs(): List<String> = buildList {
+                add(path)
+                untilPid?.let { add("--until-pid"); add(it.toString()) }
+                idleSeconds?.let { add("--idle-seconds"); add(it.toString()) }
+                name?.let { add("--name"); add(it) }
+                notifyOn.forEach { add("--notify-on"); add(it) }
+                jobId?.let { add("--job-id"); add(it) }
             }
         }
         /** STALL-1: `agenthq unwatched --reason <text> -- <cmd...>`: the explicit opt-out; [reason] is required. */
@@ -114,6 +139,7 @@ internal object BgCli {
                 var hook: String? = null
                 var shell: String? = null
                 var scriptB64: String? = null
+                val follow = ArrayList<String>()
                 var i = 0
                 while (i < opts.size) {
                     when (opts[i]) {
@@ -141,6 +167,7 @@ internal object BgCli {
                         "--script-b64" -> scriptB64 = opts.getOrNull(++i)?.takeIf { s ->
                             runCatching { com.superiorsoftllc.agenthq.runner.WatchRewrite.decode(s) }.isSuccess
                         } ?: return Parsed.Bad("--script-b64 expects a base64url script")
+                        "--follow" -> follow += opts.getOrNull(++i)?.takeIf { it.isNotBlank() } ?: return Parsed.Bad("--follow expects a file path")
                         else -> return Parsed.Bad("bg run: unknown option '${opts[i]}' (put the command after --)")
                     }
                     i++
@@ -148,7 +175,7 @@ internal object BgCli {
                 when {
                     scriptB64 != null && command.isNotEmpty() -> Parsed.Bad("bg run: --script-b64 and a command after -- are exclusive")
                     scriptB64 == null && command.isEmpty() -> Parsed.Bad("bg run expects a command after --, e.g. agenthq bg run --name gate -- gradlew test")
-                    else -> Parsed.Run(name, command, keep, notify, notifyOn, defaults, tail, timeout, jobId, attached, shim, hook, shell, scriptB64)
+                    else -> Parsed.Run(name, command, keep, notify, notifyOn, defaults, tail, timeout, jobId, attached, shim, hook, shell, scriptB64, follow)
                 }
             }
             "unwatched" -> {
@@ -162,6 +189,32 @@ internal object BgCli {
                     else -> Parsed.Unwatched(reason, command)
                 }
             }
+            "watch-file" -> {
+                val path = rest.firstOrNull()?.takeIf { !it.startsWith("--") }
+                    ?: return Parsed.Bad("watch-file expects a file path: agenthq watch-file <path> [--until-pid N] [--idle-seconds S]")
+                var untilPid: Long? = null
+                var idle: Long? = null
+                var name: String? = null
+                var jobId: String? = null
+                val notifyOn = ArrayList<String>()
+                var i = 1
+                while (i < rest.size) {
+                    when (rest[i]) {
+                        "--until-pid" -> untilPid = rest.getOrNull(++i)?.toLongOrNull()?.takeIf { it > 0 } ?: return Parsed.Bad("--until-pid expects a process id")
+                        "--idle-seconds" -> idle = rest.getOrNull(++i)?.toLongOrNull()?.takeIf { it > 0 } ?: return Parsed.Bad("--idle-seconds expects a positive number of seconds")
+                        "--name" -> name = rest.getOrNull(++i)?.takeIf { it.isNotBlank() } ?: return Parsed.Bad("--name expects a label")
+                        "--notify-on" -> {
+                            val re = rest.getOrNull(++i)?.takeIf { it.isNotEmpty() } ?: return Parsed.Bad("--notify-on expects a regex")
+                            runCatching { Regex(re) }.exceptionOrNull()?.let { return Parsed.Bad("--notify-on: bad regex '$re' (${it.message})") }
+                            notifyOn += re
+                        }
+                        "--job-id" -> jobId = rest.getOrNull(++i)?.takeIf { it.matches(Regex("[A-Za-z0-9-]{1,40}")) } ?: return Parsed.Bad("--job-id expects an id")
+                        else -> return Parsed.Bad("watch-file: unknown option '${rest[i]}'")
+                    }
+                    i++
+                }
+                Parsed.WatchFile(path, untilPid, idle, name, notifyOn, jobId)
+            }
             "wait" -> {
                 val id = rest.firstOrNull()?.takeIf { !it.startsWith("--") } ?: return Parsed.Bad("bg wait expects a job id")
                 when {
@@ -174,7 +227,7 @@ internal object BgCli {
             "list" -> if (rest.isEmpty()) Parsed.Show("list", null) else Parsed.Bad("bg list takes no arguments")
             "status", "logs", "stop" ->
                 if (rest.size == 1) Parsed.Show(verb, rest[0]) else Parsed.Bad("bg $verb expects one job id")
-            else -> Parsed.Bad("unknown bg command '$verb' (run, list, status, logs, stop, wait)")
+            else -> Parsed.Bad("unknown bg command '$verb' (run, list, status, logs, stop, wait, watch-file)")
         }
     }
 
@@ -256,7 +309,9 @@ internal object BgCli {
                 listOf(shell, "/d", "/c", f.absolutePath)
             }
             else -> {
-                val f = File(dir, "$id.sh").apply { writeText(script + "\n") }
+                // STALL-4 item 3: `a | tail` exits with a's failure, not tail's 0 (a shell without pipefail skips the line).
+                val pipefail = if (PIPE.containsMatchIn(script)) "(set -o pipefail) 2>/dev/null && set -o pipefail\n" else ""
+                val f = File(dir, "$id.sh").apply { writeText(pipefail + script + "\n") }
                 listOf(shell, f.absolutePath.replace('\\', '/'))
             }
         }
@@ -313,6 +368,12 @@ internal object BgCli {
                     val s = open()
                     Reporter({ req -> send(s, session, req) }, { s.close() })
                 }
+                is Parsed.WatchFile ->
+                    if (parsed.jobId == null) detachWatchFile(parsed, session, globals, out, err, cwd)
+                    else watchFile(parsed, session, getenv, err) {
+                        val s = open()
+                        Reporter({ req -> send(s, session, req) }, { s.close() })
+                    }
                 is Parsed.Wait -> waitFor(parsed, session, out, err, open)
                 is Parsed.Show -> show(parsed, session, out, err, open)
                 is Parsed.Bad -> 2
@@ -373,22 +434,10 @@ internal object BgCli {
         }
         val id = UUID.randomUUID().toString().take(8)
         val dir = logDir().also { it.mkdirs() }
-        val javaCmd = ProcessHandle.current().info().command().orElse("java").let { j ->
-            val f = File(j)
-            val w = File(f.parentFile ?: File("."), "javaw.exe")
-            if (f.name.equals("java.exe", ignoreCase = true) && w.isFile) w.path else j
-        }
-        val args = listOf(javaCmd, "-cp", System.getProperty("java.class.path"), MAIN_CLASS) +
-            listOf("bg", "run") + globals + p.copy(jobId = id).optionArgs() + (if (command.isEmpty()) emptyList() else listOf("--") + command)
-        val nul = File(if (hostIsWindows()) "NUL" else "/dev/null")
         val wrapperLog = File(dir, "$id.wrapper.log")
         val log = File(dir, "$id.log")
         val wrapper = try {
-            ProcessBuilder(args)
-                .redirectInput(ProcessBuilder.Redirect.from(nul))
-                .redirectOutput(ProcessBuilder.Redirect.DISCARD)
-                .redirectError(wrapperLog)
-                .start()
+            startWrapper(listOf("bg", "run") + globals + p.copy(jobId = id).optionArgs() + (if (command.isEmpty()) emptyList() else listOf("--") + command), wrapperLog)
         } catch (e: Exception) {
             err.appendLine("error: bg run: cannot start the bg wrapper: ${e.message}; job NOT started")
             return 127
@@ -414,6 +463,94 @@ internal object BgCli {
         return 0
     }
 
+    /** This same CLI started as a detached wrapper with [cliArgs]: no console (javaw on Windows, issue I2), stderr to [wrapperLog]. */
+    private fun startWrapper(cliArgs: List<String>, wrapperLog: File): Process {
+        val javaCmd = ProcessHandle.current().info().command().orElse("java").let { j ->
+            val f = File(j)
+            val w = File(f.parentFile ?: File("."), "javaw.exe")
+            if (f.name.equals("java.exe", ignoreCase = true) && w.isFile) w.path else j
+        }
+        val nul = File(if (hostIsWindows()) "NUL" else "/dev/null")
+        return ProcessBuilder(listOf(javaCmd, "-cp", System.getProperty("java.class.path"), MAIN_CLASS) + cliArgs)
+            .redirectInput(ProcessBuilder.Redirect.from(nul))
+            .redirectOutput(ProcessBuilder.Redirect.DISCARD)
+            .redirectError(wrapperLog)
+            .start()
+    }
+
+    /**
+     * STALL-4 item 2a, `agenthq watch-file <path>`: start the detached watcher and return. The file is never copied: the
+     * daemon reads only what is appended ([com.superiorsoftllc.agenthq.mailbox.BgJobNotifier]), so the caller ends its
+     * turn and spends no tokens until a notice (quiet, heartbeat, pattern, done) arrives.
+     */
+    private fun detachWatchFile(p: Parsed.WatchFile, session: String?, globals: List<String>, out: Appendable, err: Appendable, cwd: File): Int {
+        if (session == null) {
+            err.appendLine("error: watch-file needs AGENTHQ_SESSION_ID (the session the notices are mailed to); run it from an agent session")
+            return 2
+        }
+        val path = File(p.path).let { if (it.isAbsolute) it else File(cwd, p.path) }.absoluteFile.normalize().path
+        val id = UUID.randomUUID().toString().take(8)
+        val dir = logDir().also { it.mkdirs() }
+        try {
+            startWrapper(listOf("bg", "watch-file") + globals + p.copy(path = path, jobId = id).optionArgs(), File(dir, "$id.wrapper.log"))
+        } catch (e: Exception) {
+            err.appendLine("error: watch-file: cannot start the watcher: ${e.message}")
+            return 127
+        }
+        out.appendLine("watching $path as bg job $id" + (p.untilPid?.let { " until pid $it exits" } ?: ""))
+        out.appendLine("You will get a COMMS mail when it goes quiet, matches a pattern, or is done. End your turn now; do not sleep or poll.")
+        return 0
+    }
+
+    /**
+     * STALL-4: the detached `watch-file` wrapper: registers the job (no log of its own, [BgJob.follow] = the file) and
+     * beats until it is done: [Parsed.WatchFile.untilPid] exited, or, with no pid, the file has not grown for the idle time
+     * ([IDLE_ENV], `limits.watch.fileIdleSeconds`). A deleted or rotated file is not an error: its size is just read again.
+     */
+    internal fun watchFile(
+        p: Parsed.WatchFile,
+        session: String?,
+        getenv: (String) -> String?,
+        err: Appendable,
+        pidAlive: (Long) -> Boolean = { pid -> ProcessHandle.of(pid).map { it.isAlive }.orElse(false) },
+        pollMs: Long = 1_000L,
+        connect: () -> Reporter,
+    ): Int {
+        val id = p.jobId ?: UUID.randomUUID().toString().take(8)
+        val file = File(p.path)
+        val idleMs = (p.idleSeconds ?: getenv(IDLE_ENV)?.trim()?.toLongOrNull()?.takeIf { it > 0 } ?: 120L) * 1000L
+        val notify = BgNotify(patterns = (p.notifyOn + com.superiorsoftllc.agenthq.runner.ToolProfiles.notifyPatterns()).distinct())
+        val job = BgJob(
+            id, p.name ?: "watch ${file.name}".take(80), ProcessHandle.current().pid(), System.currentTimeMillis(),
+            notify = notify, cmdPid = p.untilPid, follow = listOf(file.path), idleSeconds = idleMs / 1000,
+        )
+        val reporter = if (session == null) null else runCatching(connect).getOrElse { err.appendLine("warning: daemon unreachable (${it.message})"); null }
+        fun call(req: BgJobRequest) { runCatching { reporter?.send?.invoke(req) }.onFailure { err.appendLine("warning: bg_job: ${it.message}") } }
+        call(BgJobRequest("beat", job))
+        val started = System.currentTimeMillis()
+        var lastLen = if (file.isFile) file.length() else -1L
+        var lastGrowth = started
+        var grown = 0L
+        var nextBeat = started + BEAT_MS
+        while (true) {
+            Thread.sleep(pollMs)
+            val now = System.currentTimeMillis()
+            val len = if (file.isFile) file.length() else -1L
+            if (len != lastLen) {
+                if (len > lastLen && lastLen >= 0) grown += len - lastLen else if (len > 0) grown += len
+                lastLen = len
+                lastGrowth = now
+            }
+            val done = p.untilPid?.let { !runCatching { pidAlive(it) }.getOrDefault(false) } ?: (now - lastGrowth >= idleMs)
+            if (done) break
+            if (now >= nextBeat) { call(BgJobRequest("beat", job)); nextBeat = now + BEAT_MS }
+        }
+        val tail = com.superiorsoftllc.agenthq.mailbox.BgJobNotifier.readTail(file, 200, envLong(getenv, TAIL_READ_ENV, 64) * 1024L)
+        call(BgJobRequest("done", jobId = id, exitCode = null, tail = tail, bytes = grown, eof = true))
+        runCatching { reporter?.close?.invoke() }
+        return 0
+    }
+
     /** STALL-1: the env a watched command's children get, so a nested shim call runs the real program directly. */
     const val WATCHED_ENV = "AGENTHQ_WATCHED"
     /** STALL-1: the PATH dir of the shims; skipped when a shim resolves the real program. */
@@ -425,6 +562,37 @@ internal object BgCli {
     /** STALL-2: seconds the runner waits for a command's tree after its exit (`limits.watch.treeWaitMinutes`; 0 = none). */
     const val TREE_WAIT_ENV = "AGENTHQ_WATCH_TREE_WAIT_SECONDS"
     const val DEFAULT_TREE_WAIT_SECONDS = 1800L
+    /** STALL-4: the runner's space limits (`limits.watch.*`), handed to every session by the daemon. */
+    const val LOG_MAX_ENV = "AGENTHQ_WATCH_LOG_MAX_MB"
+    const val LOG_TOTAL_ENV = "AGENTHQ_WATCH_LOG_TOTAL_MB"
+    const val KEEP_JOBS_ENV = "AGENTHQ_WATCH_LOG_KEEP_JOBS"
+    const val KEEP_DAYS_ENV = "AGENTHQ_WATCH_LOG_KEEP_DAYS"
+    const val MIN_FREE_ENV = "AGENTHQ_WATCH_MIN_FREE_MB"
+    const val IDLE_ENV = "AGENTHQ_WATCH_FILE_IDLE_SECONDS"
+    const val SPACE_CHECK_ENV = "AGENTHQ_WATCH_SPACE_CHECK_SECONDS"
+    const val TAIL_READ_ENV = "AGENTHQ_WATCH_TAIL_READ_KB"
+    /** STALL-4: `1` = follow the files a command line redirects its output to (`watch.followRedirects`; default off). */
+    const val FOLLOW_REDIRECTS_ENV = "AGENTHQ_WATCH_FOLLOW_REDIRECTS"
+
+    /** STALL-4: the env [runJob] / [watchFile] read their limits from. */
+    fun watchLimitEnv(
+        logMaxMb: Long, logTotalMb: Long, keepJobs: Long, keepDays: Long, minFreeMb: Long, fileIdleSeconds: Long, followRedirects: Boolean,
+        spaceCheckSeconds: Long = 5, tailReadKb: Long = 64,
+    ): Map<String, String> =
+        mapOf(
+            SPACE_CHECK_ENV to spaceCheckSeconds.toString(), TAIL_READ_ENV to tailReadKb.toString(),
+            LOG_MAX_ENV to logMaxMb.toString(), LOG_TOTAL_ENV to logTotalMb.toString(), KEEP_JOBS_ENV to keepJobs.toString(),
+            KEEP_DAYS_ENV to keepDays.toString(), MIN_FREE_ENV to minFreeMb.toString(), IDLE_ENV to fileIdleSeconds.toString(),
+            FOLLOW_REDIRECTS_ENV to if (followRedirects) "1" else "0",
+        )
+
+    private fun envLong(getenv: (String) -> String?, key: String, default: Long): Long = getenv(key)?.trim()?.toLongOrNull()?.takeIf { it >= 0 } ?: default
+
+    /** STALL-4 item 3: a single `|` (not `||`) outside quotes is taken as a pipe. */
+    private val PIPE = Regex("""(?<!\|)\|(?!\|)""")
+
+    /** STALL-4 item 3: the shells a `pipefail` line is prepended for (their exit code is then the pipeline's first failure). */
+    private val PIPEFAIL_SHELLS = setOf("bash", "zsh", "ksh", "sh")
 
     private fun describe(h: ProcessHandle) = "${h.pid()} ${com.superiorsoftllc.agenthq.runner.ProcessTree.commandLine(h).ifEmpty { "?" }.take(80)}"
 
@@ -435,8 +603,9 @@ internal object BgCli {
     val DETACHED_DAEMON: Regex get() = com.superiorsoftllc.agenthq.runner.ToolProfiles.daemonRegex()
 
     /** The END sentinel the runner writes after the process wait returns: `[agenthq:done exit=0 elapsed=1m2s bytes=0]`. */
-    fun endLine(exit: Int?, elapsedMs: Long, bytes: Long): String =
-        "[agenthq:done exit=${exit ?: "unknown"} elapsed=${fmtElapsed(elapsedMs)} bytes=$bytes]"
+    fun endLine(exit: Int?, elapsedMs: Long, bytes: Long, warnings: List<String> = emptyList()): String =
+        "[agenthq:done exit=${exit ?: "unknown"} elapsed=${fmtElapsed(elapsedMs)} bytes=$bytes" +
+            warnings.joinToString("") { " warning=\"${it.replace('"', '\'')}\"" } + "]"
 
     fun fmtElapsed(ms: Long): String {
         val s = (ms / 1000).coerceAtLeast(0)
@@ -488,16 +657,40 @@ internal object BgCli {
         err: Appendable,
         cwd: File,
         spawn: ((List<String>) -> Process)? = null,
+        /** STALL-4: free bytes on the log's disk (tests inject a low value). */
+        freeSpace: (File) -> Long = { f -> (f.absoluteFile.parentFile ?: f.absoluteFile).usableSpace },
         connect: () -> Reporter,
     ): Int {
         val id = p.jobId ?: UUID.randomUUID().toString().take(8)
+        // STALL-4 item 4a: old job logs go first (finished ones past the count / total, any past the age).
+        runCatching {
+            com.superiorsoftllc.agenthq.runner.LogPrune.prune(
+                logDir(), envLong(getenv, KEEP_JOBS_ENV, 50), envLong(getenv, KEEP_DAYS_ENV, 7),
+                envLong(getenv, LOG_TOTAL_ENV, 500) * com.superiorsoftllc.agenthq.runner.CappedLog.MB, setOf(id),
+            )
+        }
         val log = File(logDir().also { it.mkdirs() }, "$id.log")
         val exitFile = File(logDir(), "$id.exit").also { it.delete() }
         val label = p.name ?: p.shown.take(80)
         val notify = if (!p.notify) null else BgNotify(p.notifyTail, patternsFor(p, getenv), p.notifyTimeout)
         val beatLineMs = (getenv(BEAT_LINE_ENV)?.toLongOrNull()?.takeIf { it > 0 } ?: 60L) * 1000L
         val started = System.currentTimeMillis()
-        var job = BgJob(id, label, ProcessHandle.current().pid(), started, logPath = log.absolutePath, keep = p.keep, notify = notify, attached = p.attached)
+        // STALL-4 item 2b: files the output goes to: `--follow` always; a redirect in the command line only when
+        // `watch.followRedirects` is on, else it is named in the quiet notice's hint (the default watches the output buffer).
+        val redirected = runCatching { com.superiorsoftllc.agenthq.runner.ToolProfiles.redirectTargets(p.shown, cwd) }.getOrDefault(emptyList())
+        val followAll = getenv(FOLLOW_REDIRECTS_ENV)?.trim() == "1"
+        val followed = (p.follow.map { f -> File(f).let { if (it.isAbsolute) it else File(cwd, f) }.absoluteFile.normalize().path } +
+            (if (followAll) redirected else emptyList())).distinct()
+        var job = BgJob(
+            id, label, ProcessHandle.current().pid(), started, logPath = log.absolutePath, keep = p.keep, notify = notify, attached = p.attached,
+            follow = followed, redirects = redirected.filter { it !in followed },
+        )
+        // STALL-4 item 3: a pipe whose exit code is the last command's (a shell given on the command line, or cmd / PowerShell).
+        val shellName = (p.shell ?: p.command.firstOrNull())?.let { com.superiorsoftllc.agenthq.runner.ToolProfiles.baseName(it) }
+        val pipeNoFail = PIPE.containsMatchIn(p.script ?: p.command.drop(1).joinToString(" ")) &&
+            (if (p.script != null) shellName !in PIPEFAIL_SHELLS else (shellName in PIPEFAIL_SHELLS + setOf("cmd", "pwsh", "powershell")) && p.command.none { "pipefail" in it })
+        val markers = com.superiorsoftllc.agenthq.runner.ToolProfiles.failureMarkers()
+        var marker: String? = null
         // No session (run outside an agent) or no daemon: the command still runs; only the flag is missing.
         var reporter: Reporter? = null
         var connected = false
@@ -551,18 +744,35 @@ internal object BgCli {
         // A shim call's harness should see only the command's own output on stdout; the runner's own lines go to stderr.
         val own: Appendable = if (p.shim != null || p.hook != null) err else out
         own.appendLine("bg job $id: $label (log ${log.absolutePath})")
-        val writer = log.bufferedWriter()
+        // STALL-4 item 4: the log is capped (head cut, tail kept) and paused below the free-space floor.
+        val writer = com.superiorsoftllc.agenthq.runner.CappedLog(
+            log, envLong(getenv, LOG_MAX_ENV, 50) * com.superiorsoftllc.agenthq.runner.CappedLog.MB,
+            envLong(getenv, MIN_FREE_ENV, 200) * com.superiorsoftllc.agenthq.runner.CappedLog.MB, freeSpace,
+            spaceCheckMs = envLong(getenv, SPACE_CHECK_ENV, 5).coerceAtLeast(1) * 1000L,
+        )
+        var pauseTold = false
         val keepLines = p.notifyTail ?: 200
         val tail = ArrayDeque<String>()
         val ioLock = Any()
         var ended = false
-        fun emit(line: String, runner: Boolean) = synchronized(ioLock) {
-            runCatching { writer.appendLine(line); writer.flush() }
-            (if (runner) own else out).appendLine(line)
-            if (!runner) {
-                tail.addLast(line)
-                if (tail.size > keepLines) tail.removeFirst()
+        var paused: String? = null
+        fun emit(line: String, runner: Boolean) {
+            synchronized(ioLock) {
+                writer.appendLine(line)
+                (if (runner) own else out).appendLine(line)
+                if (!runner) {
+                    tail.addLast(line)
+                    if (tail.size > keepLines) tail.removeFirst()
+                    if (marker == null) markers.firstOrNull { it.containsMatchIn(line) }?.let { marker = line.trim().take(200) }
+                }
+                if (writer.pausedReason != null && !pauseTold) {
+                    pauseTold = true
+                    paused = writer.pausedReason
+                    own.appendLine(com.superiorsoftllc.agenthq.runner.WatchNotices.text("runner.logPaused", "reason" to writer.pausedReason))
+                }
             }
+            // Told once, outside the io lock: the daemon stops its quiet notices for the job and says why, neutrally.
+            paused?.let { reason -> paused = null; job = job.copy(logPaused = reason); call(BgJobRequest("beat", job)) }
         }
         emit("[agenthq:start pid=${child.pid()} at=${java.time.Instant.ofEpochMilli(started)} cmd=${p.shown.take(80)}${p.hook?.let { " via=$it-hook" } ?: ""}]", runner = true)
         call(BgJobRequest("beat", job))
@@ -571,7 +781,7 @@ internal object BgCli {
             synchronized(ioLock) {
                 if (!ended) runCatching {
                     writer.appendLine("[agenthq:done exit=unknown elapsed=${fmtElapsed(System.currentTimeMillis() - started)} reason=runner stopped]")
-                    writer.flush()
+                    writer.close()
                 }
             }
         }
@@ -644,11 +854,16 @@ internal object BgCli {
         if (!eof) {
             emit("[agenthq:note output still open after exit: ${survivors.size} child process(es) hold it${survivors.firstOrNull()?.let { ": $it" } ?: ""}]", runner = true)
         }
-        emit(endLine(code, System.currentTimeMillis() - started, bytes), runner = true)
+        val foundMarker = marker?.takeIf { code == 0 }
+        val warnings = listOfNotNull(
+            foundMarker?.let { com.superiorsoftllc.agenthq.runner.WatchNotices.text("runner.marker", "marker" to it) },
+            if (pipeNoFail) com.superiorsoftllc.agenthq.runner.WatchNotices.text("runner.pipe") else null,
+        )
+        emit(endLine(code, System.currentTimeMillis() - started, bytes, warnings), runner = true)
         synchronized(ioLock) { ended = true; runCatching { writer.close() } }
         runCatching { Runtime.getRuntime().removeShutdownHook(hook) }
         val lines = synchronized(ioLock) { tail.toList() }
-        call(BgJobRequest("done", jobId = id, exitCode = code, tail = lines, bytes = bytes, eof = eof, survivors = survivors))
+        call(BgJobRequest("done", jobId = id, exitCode = code, tail = lines, bytes = bytes, eof = eof, survivors = survivors, marker = foundMarker, pipeNoFail = pipeNoFail.takeIf { it }))
         close()
         own.appendLine("bg job $id exited $code")
         return code
