@@ -73,13 +73,27 @@ interface DaemonApi {
      */
     val spawns: com.superiorsoftllc.agenthq.daemon.api.spawns.Spawns get() = com.superiorsoftllc.agenthq.daemon.api.spawns.NoSpawns
 
+    /**
+     * STACK-NEUTRAL-2 (1.8.0, additive): the host process services (docs/STACK-NEUTRAL.md section 6): the OS process table, the
+     * start-instant-checked kill, the session roots, the session-closed event and the gate lock. Official / core tier; a community
+     * plugin needs the grant `daemon.processes` and never gets `kill`. A daemon without one lists nothing and kills nothing.
+     */
+    val processes: com.superiorsoftllc.agenthq.daemon.api.processes.Processes get() = com.superiorsoftllc.agenthq.daemon.api.processes.NoProcesses
+
+    /** STACK-NEUTRAL-2 (1.8.0, additive): contribute environment variables to every session launch. Fail open. */
+    val launchEnv: com.superiorsoftllc.agenthq.daemon.api.processes.LaunchEnv get() = com.superiorsoftllc.agenthq.daemon.api.processes.NoLaunchEnv
+
+    /** STACK-NEUTRAL-2 (1.8.0, additive): read access to `limits.*`, `watch.*` and `processes.*` settings. */
+    val settings: com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings get() = com.superiorsoftllc.agenthq.daemon.api.processes.NoPluginSettings
+
     companion object {
+        // 1.8.0 (STACK-NEUTRAL-2, additive): `processes`, `launchEnv`, `settings` (daemon.api.processes).
         // 1.7.0 (RUNTIME-LOAD-6, additive): `spawns` (daemon.api.spawns): host spawn / ticket start / kill guardrails.
         // 1.6.0 (RUNTIME-LOAD-5, additive): `sessionReads` (daemon.api.sessions), SessionText, board.BoardLines.
         // 1.5.0 (AGENT-REGISTRY-1, additive): `agents` (daemon.api.agents.Agents) and module.json `agents`.
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
-        const val VERSION = "1.7.0"
+        const val VERSION = "1.8.0"
     }
 }
 

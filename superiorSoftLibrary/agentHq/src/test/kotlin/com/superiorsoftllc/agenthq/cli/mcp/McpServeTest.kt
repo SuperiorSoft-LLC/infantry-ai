@@ -65,7 +65,7 @@ class McpServeTest {
          "inputSchema":{"type":"object","properties":{},"required":[],"additionalProperties":false},
          "annotations":{"readOnlyHint":true,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false}},
         {"name":"agenthq_processes",
-         "description":"List rogue background processes (Gradle/Kotlin daemons, node, JVMs) left behind by ended or idle sessions, with MB, age and owner session, plus free RAM against the floor. all=true also lists healthy tracked processes and heavy processes that are not ours (never reapable).",
+         "description":"List rogue background processes (build daemons, node, JVMs) left behind by ended or idle sessions, with MB, age and owner session, plus free RAM against the floor. all=true also lists healthy tracked processes and heavy processes that are not ours (never reapable).",
          "inputSchema":{"type":"object","properties":{"all":{"type":"string","description":"true to include healthy tracked and unattributed processes."}},"required":[],"additionalProperties":false},
          "annotations":{"readOnlyHint":true,"destructiveHint":false,"idempotentHint":true,"openWorldHint":false}},
         {"name":"agenthq_processes_reap",

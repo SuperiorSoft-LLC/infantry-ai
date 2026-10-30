@@ -134,7 +134,7 @@ class SessionManager(
      * Ticket 66153313: the build limits env of every run (priority, Gradle worker cap, test forks, in-process Kotlin), read
      * per run so a settings change applies to the next launch. Worker sessions only: the owner's own Gradle never sees it.
      */
-    private val buildEnv: () -> Map<String, String> = { emptyMap() },
+    private val buildEnv: (com.superiorsoftllc.agenthq.daemon.api.processes.LaunchInfo) -> Map<String, String> = { emptyMap() },
     /**
      * No-hard-coded-limits S2: the live `limits.watchdog.*` settings, read at every pass so a change applies at once. Null
      * (tests) = the fixed [deadlineMs], [stallMs], [ticketDeadlineMs], [killRetryMs] and [silentMs] above.
@@ -1260,7 +1260,7 @@ class SessionManager(
         // daemon) so it can address a colleague without a delivered prompt having taught it who it is.
         // BUG-808ce596: and WHO it runs as -- its role and bound agent profile, when it has them -- on every
         // run, so a role-only spawn (the New agent modal) knows its role from the env too.
-        val limitsEnv = runCatching(buildEnv).onFailure { System.err.println("[agentHq] build limits env failed: ${it.message}") }.getOrDefault(emptyMap())
+        val limitsEnv = runCatching { buildEnv(com.superiorsoftllc.agenthq.daemon.api.processes.LaunchInfo(session.id, session.role, session.projectId)) }.onFailure { System.err.println("[agentHq] build limits env failed: ${it.message}") }.getOrDefault(emptyMap())
         val runEnv = childEnv + limitsEnv + buildMap {
             put(AccessPolicy.SESSION_ID_ENV, session.id)
             session.projectId?.let { put(AccessPolicy.PROJECT_ID_ENV, it) }
@@ -1557,7 +1557,7 @@ class SessionManager(
 
     /**
      * Ticket b785f383: called when a session closes (kill, remove, restart, a turn ending FAILED), so the daemon can kill
-     * the background processes it left (see [ProcessWatch.reapSession]). Set once by the daemon; never fails the caller.
+     * the background processes it left (see the process-watch plugin). Set once by the daemon; never fails the caller.
      */
     @Volatile
     var onSessionClosed: (SessionClosed) -> Unit = {}
@@ -1571,7 +1571,7 @@ class SessionManager(
      */
     private fun closed(sessionId: String, reason: String, record: SessionRecord? = sessions[sessionId], resumable: Boolean = false) {
         val keep = record?.let { r ->
-            if (resumable) ProcessWatch.keepPidsOf(r) + r.bgJobs.map { it.pid } else ProcessWatch.keepPidsOf(r.copy(keptProcess = null))
+            if (resumable) ProcessGuard.keepPidsOf(r) + r.bgJobs.map { it.pid } else ProcessGuard.keepPidsOf(r.copy(keptProcess = null))
         }.orEmpty()
         onSessionClosed(SessionClosed(sessionId, clock(), keep, reason))
     }

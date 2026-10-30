@@ -20,7 +20,7 @@ data class BackgroundWork(
 )
 
 /** One live process as the scanner sees it. */
-data class ProcInfo(val pid: Long, val parentPid: Long?, val command: String, val startedAt: Long?)
+typealias ProcInfo = com.superiorsoftllc.agenthq.daemon.api.processes.ProcInfo
 
 /** The OS process tree under a root. Injected so a test can fake it. */
 interface ProcessSource {
@@ -81,7 +81,7 @@ object BackgroundWorkScanner {
     private fun classify(all: List<ProcInfo>, rootStartedAt: Long?): Pair<List<ProcInfo>, Set<Long>> {
         val ignored = HashSet<Long>()
         for (p in all.sortedBy { it.startedAt ?: 0L }) {
-            val launchHelper = rootStartedAt != null && p.startedAt != null && p.startedAt - rootStartedAt <= LAUNCH_GRACE_MS
+            val launchHelper = rootStartedAt != null && p.startedAt?.let { it - rootStartedAt <= LAUNCH_GRACE_MS } == true
             if (launchHelper || HELPER.containsMatchIn(p.command) || p.parentPid in ignored) ignored += p.pid
         }
         return all.filter { it.pid !in ignored } to ignored
@@ -92,7 +92,7 @@ object BackgroundWorkScanner {
         val ignored = HashSet<Long>()
         // Parents first by start time, so a helper's whole subtree is ignored with it.
         for (p in all.sortedBy { it.startedAt ?: 0L }) {
-            val launchHelper = rootStartedAt != null && p.startedAt != null && p.startedAt - rootStartedAt <= LAUNCH_GRACE_MS
+            val launchHelper = rootStartedAt != null && p.startedAt?.let { it - rootStartedAt <= LAUNCH_GRACE_MS } == true
             if (launchHelper || HELPER.containsMatchIn(p.command) || p.parentPid in ignored) ignored += p.pid
         }
         val work = all.filter { it.pid !in ignored }

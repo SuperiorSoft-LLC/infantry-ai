@@ -3,6 +3,7 @@
 // `daemon.jar` names the jar this builds. `:daemon-plugin-official-Infantry_Processes:jar`.
 plugins {
     kotlin("jvm")
+    alias(libs.plugins.kotlinSerialization)
 }
 
 kotlin {

@@ -503,6 +503,33 @@ class DaemonPluginHost private constructor(
         // RUNTIME-LOAD-6: the host spawn service behind this plugin's grants (community: `sessions.spawn`, default deny).
         override val spawns: com.superiorsoftllc.agenthq.daemon.api.spawns.Spawns =
             GrantedSpawns({ services.spawns }) { grant -> !p.community || grant in p.setting.allow }
+        // STACK-NEUTRAL-2: the host process service (official / core; community needs `daemon.processes` and never kills), the
+        // per-launch env seam and the settings reader. A listener / contributor ends with the plugin (closeables).
+        override val processes: com.superiorsoftllc.agenthq.daemon.api.processes.Processes by lazy {
+            val host = services.processHost
+            if (host == null || (p.community && "daemon.processes" !in p.setting.allow)) com.superiorsoftllc.agenthq.daemon.api.processes.NoProcesses
+            else {
+                val view = host.view(p.id, mayKill = !p.community)
+                object : com.superiorsoftllc.agenthq.daemon.api.processes.Processes by view {
+                    override fun onSessionClosed(listener: (com.superiorsoftllc.agenthq.daemon.api.processes.SessionClosed) -> Unit) =
+                        view.onSessionClosed { c -> if (!p.guard.disabled) p.call("processes.onSessionClosed") { listener(c) } }.also { p.closeables += it }
+                    // Not a closeable: the plugin is stopped (with the other background closers) BEFORE the sessions are shut down, and
+                    // the last-moment sweep of what they left must still reach it afterwards.
+                    override fun onDaemonShutdown(listener: () -> Unit) =
+                        view.onDaemonShutdown { if (!p.guard.disabled) listener() }
+                    override fun serve(handler: com.superiorsoftllc.agenthq.daemon.api.processes.ProcessesHandler) =
+                        view.serve(handler).also { p.closeables += it }
+                }
+            }
+        }
+        override val launchEnv: com.superiorsoftllc.agenthq.daemon.api.processes.LaunchEnv = object : com.superiorsoftllc.agenthq.daemon.api.processes.LaunchEnv {
+            override fun contribute(name: String, contributor: (com.superiorsoftllc.agenthq.daemon.api.processes.LaunchInfo) -> Map<String, String>): AutoCloseable {
+                check(!p.community || "daemon.processes" in p.setting.allow) { "missing grant 'daemon.processes' in modules.json" }
+                val host = services.launchEnvHost ?: return AutoCloseable {}
+                return host.contribute(p.id, name) { info -> if (p.guard.disabled) emptyMap() else contributor(info) }.also { p.closeables += it }
+            }
+        }
+        override val settings: com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings get() = services.pluginSettings
         // AGENT-REGISTRY-1: the agent registry, scoped to this plugin (its own declared ids; enable/disable trusted tiers only).
         override val agents: com.superiorsoftllc.agenthq.daemon.api.agents.Agents = object : com.superiorsoftllc.agenthq.daemon.api.agents.Agents {
             private val registry get() = services.agentRegistry
