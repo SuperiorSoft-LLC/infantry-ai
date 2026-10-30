@@ -70,11 +70,12 @@ class HandCursorGuardTest {
         // TextButton), STALL-2 Sidebar.kt +1 (watch-state label), UsageMeterPane.kt +1 (job-watcher counters).
         // CONFIG-FIELDS-2: +3 Text (select dropdown label and items, placeholder), +1 DropdownMenu (select display: dropdown).
         // CONFIG-FIELDS-4: +4 Text in GroupEditor.kt (nested field label, row heading, Remove and Add button labels; the buttons are the wrapped TextButton).
-        "Text" to 1165,
+        // HARNESS-PLUGIN-4 H5a: +1 Text (ModulesSection harness row) and +1 Icon (HarnessIcon's manifest painter), both display-only.
+        "Text" to 1166,
         "DropdownMenu" to 10,
         "OutlinedTextField" to 104,
         "BasicTextField" to 2,
-        "Icon" to 18,
+        "Icon" to 19,
         "HorizontalDivider" to 31,
     )
 

@@ -11,8 +11,8 @@ object HarnessInstallSetting {
     const val SINCE_MAJOR = 1
     const val SINCE_MINOR = 100
 
-    /** The ids the installer can install, in listing order. Other CLI rows (git, node) get no install controls. */
-    val INSTALLABLE = setOf("claude", "opencode", "pi")
+    // HARNESS-PLUGIN-4 H5a: no fixed installable list here. The ids the daemon's installer can install are exactly the ids
+    // in its report (the built-ins and every loaded harness module's `harness.cli.install`); git and node rows get no controls.
 
     fun statusText(s: HarnessInstallStatus): String = when (s.state) {
         "installed" -> "Installed" + versionSuffix(s)

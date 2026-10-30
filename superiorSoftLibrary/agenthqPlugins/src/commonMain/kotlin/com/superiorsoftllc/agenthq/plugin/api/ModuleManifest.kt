@@ -152,7 +152,7 @@ data class HarnessDeclaration(
     val aliases: Map<String, String> = emptyMap(),
     /** The harness's own CLI tool, when it has one. */
     val cli: HarnessCliDeclaration? = null,
-    /** An icon inside the module folder (svg/png), for pickers. */
+    /** An icon inside the module folder (svg/png), for pickers and pills (H5a: drawn for [ids] and [aliases]). */
     val icon: String? = null,
     /** Setting keys the harness reads through its host. */
     val settings: List<String> = emptyList(),
@@ -160,12 +160,16 @@ data class HarnessDeclaration(
     val hooks: List<String> = emptyList(),
 )
 
-/** HARNESS-PLUGIN-3 H4: `harness.cli`, the CLI the harness drives; [install] is how the harness installer gets it. */
+/**
+ * HARNESS-PLUGIN-3 H4: `harness.cli`, the CLI the harness drives; [install] is how the harness installer gets it.
+ * H5a: [command] is a bare name searched on PATH (default [id]); [label] is how Settings names it (default [command]).
+ */
 @Serializable
 data class HarnessCliDeclaration(
     val id: String,
     val command: String? = null,
     val install: HarnessCliInstall? = null,
+    val label: String? = null,
 )
 
 /** `harness.cli.install`: an npm package and the bin script inside it. */

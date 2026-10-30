@@ -210,11 +210,63 @@ installed harnesses.
 | H2 | Zero-harness core: drop `ProviderFactory.DEFAULT`, start with none, "not installed" wording, routing defaults skip absent harnesses, stub hidden, no unconditional `opencode/` write, `harnesses` empty state. Fixes B1-B7. | M |
 | H3 | `agentHqHarnessApi` module + `HarnessHost` + `HarnessApiClassLoader`; ~~move the API types~~ a new 2.0.0 contract bridged into the 1.x registry (see 3.1 "As built"). **Done (HARNESS-PLUGIN-3).** | M |
 | H4 | module.json `harness` block, ModuleResolver -> `JarHarnessPluginSource`, trust/grants; build registry after module resolution (today `loadHarnesses()` runs at daemon build, before `DaemonPluginHost.load`); example `plugins/examples/Acme_EchoHarness`. **Done (HARNESS-PLUGIN-3)**: `HarnessModules` loads harness modules after module resolution and re-syncs on every re-resolution. Desktop app staging/signing of an official harness half is deferred to H6, the first official harness module. | M |
-| H5 | Contributions replacing core branches: watch, sandbox, stats, usage, denial/usage events, CLI + installer from manifest, UI icon/installable from manifest. | L (split per contribution) |
+| H5 | Contributions replacing core branches: watch, sandbox, stats, usage, denial/usage events, CLI + installer from manifest, UI icon/installable from manifest. Split into **H5a-H5f** (section 3.8); **H5a done (HARNESS-PLUGIN-4)**. | L (split per contribution) |
 | H6 | pi -> `plugins/official/Infantry_Pi` (incl. `PiLaunchExtras`, todo extension, tool-bridge experiment). | M |
 | H7 | claude -> `Infantry_Claude`, one layer (fold `ClaudeCodeProvider` into the plugin). | L |
 | H8 | opencode -> `Infantry_OpenCode` as a `HarnessPlugin` (serve adapter, permissions, MCP merge, watch plugin). | L |
 | H9 | Guard test: core jar has no harness class and no harness id literal (extend `DaemonCoreGuardTest`). | S |
+
+### 3.8 H5 split into slices (HARNESS-PLUGIN-4)
+
+One slice per contribution, each S or M, each mergeable alone. Rules for every slice:
+
+* **Harness API**: only 2.x **minor** additions: a new member with a default (`= null` / no-op) on `Harness`, or a new
+  `HarnessEvent` subtype. A 2.0.0 jar keeps loading on a 2.x daemon (`HarnessApiVersion.refusal` already accepts an older
+  minor). Nothing is removed or re-typed. A new `HarnessEvent` subtype is binary compatible because plugins *produce*
+  events and never switch over them; a plugin that does `when (event)` exhaustively gets a compile warning on rebuild, not
+  a runtime break.
+* **Wire**: unchanged unless a slice says so; if it must change, an additive contract minor with a CONTRACT.md entry.
+* **Core**: the new path names no harness; it reads the manifest or calls the contribution by harness id. The built-in
+  `when (harness)` branches stay until H6-H8 move pi/claude/opencode, and each of those steps deletes the branch it replaces.
+* **Trust**: bundled/official get what they declare. A community module needs one grant per declaration (as in 4.1);
+  an ungranted declaration refuses the whole module before its jar is opened.
+
+| slice | what | order / why | contract effect | community grants | tests |
+|---|---|---|---|---|---|
+| **H5a** | CLI + installer from `harness.cli` (+ `install`), UI icon from `harness.icon`, installable set from the daemon's report, `GET /plugins` harness status | 1st: no API change, and every later slice benefits from an installable, visible harness | wire 1.145.0 additive (`GET /plugins` `harness`, `harnessIds`; install report lists module CLIs); API none; module.json `harness.cli.label` added | `harness.cli`, **`harness.cli.install`** (new) | **done**, see 3.8.1 |
+| H5b | denial event: `HarnessEvent.Denial(tool, reason)`; check that the existing `Usage` event reaches the usage meter / stats (not verified here) | 2nd: smallest API step, takes the claude `permission_denials` / opencode rejection shapes out of `EventNormalizer` for plugins | API **2.1.0** (new event subtype); wire none (it maps onto the existing denial frame) | none (data about its own run) | a 2.1 translator emitting `Denial` gives the same frame as a built-in denial; a 2.0.0 jar still loads on 2.1; a malformed event becomes an attributed `Error` |
+| H5c | usage source: `Harness.usageSource(): HarnessUsageSource? = null` (plan/quota poll) for `Limits` | 3rd: independent of sessions; `Limits` already takes a list of sources | API 2.2.0; wire none (rows in the existing usage frame, tagged by harness id) | `harness.hook.usage` | the module's source shows in the usage frame; ungranted refused; a throwing or slow source is isolated (timeout) and attributed |
+| H5d | stats: `Harness.stats(): HarnessStats? = null` (read its own session store into the stats taggers) | 4th: needs H5b's events to be complete | API 2.3.0; wire none | `harness.hook.stats` | `SessionStatsService` reads a module's rows with no harness branch; ungranted refused; a throw is isolated |
+| H5e | watch: `Harness.watch(env, launcher): WatchContribution? = null` (extra argv/env, files to write in its own `stateDir`) | 5th: touches launch; `HarnessHost.watchLauncher` (H3) already exists | API 2.4.0; wire none | `harness.hook.watch` (exists) | a watched echo run gets the launcher on its argv; nothing is written outside `plugin-data/<Module>/`; ungranted refused |
+| H5f | sandbox: `Harness.sandbox(dirs): SandboxContribution? = null` (extra readable/writable dirs and env names). The daemon still builds and applies the sandbox | last: highest risk, since it widens what the agent process may touch | API 2.5.0; wire none | `harness.hook.sandbox`; a community module may only add dirs under its own `plugin-data/` and the session worktree (the daemon checks every path) | a dir outside the allowed roots is refused, never applied; a sandboxed echo run sees only what it asked for and was allowed; ungranted refused |
+
+H5b-H5f may ship in one API minor if they land together. The table gives each its own minor so that each can merge alone.
+
+#### 3.8.1 H5a as built
+
+* **Manifest**: `harness.cli` = `{id, command?, label?, install?: {npm, bin?}}`. The checks (`ManifestHarnessCli.refusal`, run
+  before the jar is opened) are: `id` matches the harness id pattern and is not a built-in CLI (`CliTools.KNOWN`, npm) or
+  another loaded module's; `command` is a bare name, never a path; `npm` is an npm package name (it reaches npm as ONE argv
+  element, so it can never be a flag such as `--registry=...`); `bin` is relative inside the package (no `..`, `\`, `:`).
+* **Resolver**: `CliTool.prefixBin` (new, optional) is where the installer's `npm install -g --prefix` leaves the CLI on
+  Windows (`node_modules/<npm>/<bin>`, then `<command>.cmd`); elsewhere `<prefix>/bin/<command>`. Built-in tools leave it
+  null and keep the `HarnessPrefix` table, unchanged.
+* **Installer**: `HarnessInstaller(fromModules = HarnessModules::installables)` lists the built-ins first (same order),
+  then each LOADED module's `cli.install`. A built-in id wins. The list is re-read on every call, so a module loaded or
+  unloaded since is seen. The package and the pinned version (`AGENTHQ_<ID>_VERSION`, `-` -> `_`) are re-checked before
+  npm runs.
+* **Daemon**: `HarnessHost.resolveCli` resolves through the module's manifest tool, so it finds a CLI the installer put
+  in the prefix. Settings > CLI locations lists module tools after the built-ins and descriptors. `GET /plugins` modules
+  carry `harness` (`HarnessModules.status`) and `harnessIds`.
+* **UI**: `HarnessInstallSetting.INSTALLABLE` is gone. A CLI row gets install controls when the daemon's install report
+  has its id. `HarnessIcon` draws a loaded module's `harness.icon` (svg/png, inside the module folder) for its ids and
+  aliases before the built-in glyph table. Trusted tiers claim first, and a community module cannot repaint an id that
+  has a built-in glyph or that another module claimed. Plugins > Modules shows a harness row (icon, ids, and the daemon's
+  state when the daemon is 1.145.0 or newer, read from `GET /plugins`). Web/Android modules have no folder, so they keep
+  the built-in glyphs (a compiled-in icon is later work).
+* **Example**: `plugins/examples/Acme_EchoHarness` declares `cli` (`acme-echo`, npm `@acme/echo-harness-cli`) and
+  `icons/echo.svg`. Its run still needs no CLI; the block is the reference for H6's pi module.
+* Built-in pi/claude/opencode are unchanged (same table, same order, same ids).
 
 ### 3.7 Expensive to reverse
 
@@ -268,6 +320,9 @@ resolver and the same trust rules gives one install story with two narrow APIs.
 | plugin links against daemon internals | API module imports nothing from the daemon; the loader exposes only runtimes + API | `HarnessApiImportGuardTest` (all 3); `ApiHarnessPluginTest` "the plugin class loader sees the harness API and nothing else" |
 | disabled module keeps running | sync unloads it and closes its loader; a later spawn is "not installed" | `HarnessModulesTest` "disabling the module unloads its harness..."; `EchoHarnessModuleDaemonTest` (module removed) |
 | missing / misplaced jar | refused (jar must be inside the module folder), never fatal | `HarnessModulesTest` "a missing jar is refused, never fatal" |
+| H5a: community module installs an npm package (runs its install scripts) without consent | `harness.cli` **and** `harness.cli.install` grants; an ungranted module is refused, so its CLI is neither listed nor installable | `ManifestHarnessInstallTest` "an ungranted community cli and install is refused..." |
+| H5a: manifest smuggles an npm flag, a path command, a `..` bin, or takes a built-in CLI id (e.g. `git`, `claude`) | `ManifestHarnessCli.refusal` before the jar is opened; npm spec re-checked before npm runs | `ManifestHarnessInstallTest` "a cli block that could reach a flag, a path or a built-in is refused..." |
+| H5a: community module repaints a built-in or another module's harness icon | trusted tiers claim first; community may not claim an id with a built-in glyph; icon path must stay inside the module folder | `HarnessManifestUiTest` "pills draw the manifest icon..." |
 
 ### 4.3 Residual risks (accepted, for later steps)
 
@@ -278,4 +333,8 @@ resolver and the same trust rules gives one install story with two narrow APIs.
 * A session already running when its module is unloaded keeps its adapter. Classes it has not loaded yet may then fail;
   that failure surfaces as an attributed `Error` for that run.
 * A module enable/disable takes effect on the next module re-resolution (policy or modules change) or on a restart.
-  `/plugins` does not yet show harness status (`HarnessModules.status` has it); that is UI work for H5.
+  `GET /plugins` and Plugins > Modules now show harness status (H5a).
+* H5a: an installed module CLI stays in `harness-tools/` after its module is removed (the same as a built-in CLI). It is
+  no longer listed or launched, but it is not deleted.
+* H5a: the UI reads icon files from this client's own plugins folder. A remote daemon's modules are not drawn with their
+  icons unless the same module is installed locally.

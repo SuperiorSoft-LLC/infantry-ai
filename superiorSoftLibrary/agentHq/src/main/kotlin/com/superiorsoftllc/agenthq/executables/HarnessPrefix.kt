@@ -8,7 +8,22 @@ import java.io.File
  * only because the user asked the app for it. A null prefix contributes nothing.
  */
 object HarnessPrefix {
-    /** Windows: the package's native bin, then `<dir>\<cmd>.cmd`; elsewhere `<dir>/bin/<cmd>`. */
+    /**
+     * Windows: the package's native bin, then `<dir>\<cmd>.cmd`; elsewhere `<dir>/bin/<cmd>`. A tool that carries its own
+     * [CliTool.prefixBin] (a harness module's manifest) uses that; the others the built-in table.
+     */
+    fun locations(e: ExecutableEnvironment, tool: CliTool, prefix: String?): List<String> {
+        val rel = tool.prefixBin ?: return locations(e, tool.id, prefix)
+        prefix ?: return emptyList()
+        val command = tool.commandNames.firstOrNull() ?: tool.id
+        return if (e.os == HostOs.WINDOWS) {
+            listOf(e.join(prefix, rel), e.join(prefix, "$command.cmd"))
+        } else {
+            listOf(e.join(prefix, "bin", command))
+        }
+    }
+
+    /** The built-in table: the three harness CLIs the daemon still ships (H6-H8 move them into their modules). */
     fun locations(e: ExecutableEnvironment, toolId: String, prefix: String?): List<String> {
         prefix ?: return emptyList()
         val nativeRel = when (toolId) {

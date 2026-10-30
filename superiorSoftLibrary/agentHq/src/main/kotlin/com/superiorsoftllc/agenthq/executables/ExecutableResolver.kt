@@ -48,7 +48,7 @@ class ExecutableResolver(
             if (problem(tool, fromEnv) == null) return Resolution(tool, fromEnv, Source.ENVIRONMENT, null, tried.toList(), null)
         }
 
-        for (candidate in (HarnessPrefix.locations(environment, tool.id, harnessPrefix) + tool.defaults(environment)).distinct()) {
+        for (candidate in (HarnessPrefix.locations(environment, tool, harnessPrefix) + tool.defaults(environment)).distinct()) {
             tried += candidate
             if (problem(tool, candidate) == null) return Resolution(tool, candidate, Source.DEFAULT_LOCATION, null, tried.toList(), null)
         }

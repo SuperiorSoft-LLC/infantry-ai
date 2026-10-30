@@ -22,6 +22,12 @@ package com.superiorsoftllc.agenthq.ui
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.platform.LocalDensity
+import org.jetbrains.compose.resources.decodeToImageBitmap
+import org.jetbrains.compose.resources.decodeToSvgPainter
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathFillType
@@ -136,9 +142,44 @@ object AhqHarnessIcons {
         ).build()
 }
 
-/** ROLE-PILL-ICONS-1: the glyph of a harness, ahead of its id on a harness pill. Decorative: the id sits beside it. */
+/** HARNESS-PLUGIN-4 H5a: the [HarnessIconKey] of an icon drawn from a module's `harness.icon`: `manifest:<path>`. */
+const val MANIFEST_ICON_KEY_PREFIX = "manifest:"
+
+/** Decoded manifest icons by path, so a pill does not read and decode its file on every composition. Null = undecodable. */
+private val manifestIconCache = HashMap<String, Any?>()
+
+/**
+ * ROLE-PILL-ICONS-1: the glyph of a harness, ahead of its id on a harness pill. Decorative: the id sits beside it.
+ * HARNESS-PLUGIN-4 H5a: a loaded module's `harness.icon` ([com.superiorsoftllc.agenthq.ui.model.HarnessManifestIcons]) wins;
+ * otherwise (or when its file does not decode) the built-in table, then [AhqHarnessIcons.FALLBACK].
+ */
 @Composable
 fun HarnessIcon(harnessId: String, size: Int = 11, tint: Color = Palette.Muted, modifier: Modifier = Modifier) {
+    val factory = LocalTabFactory.current
+    val icons = remember(factory) {
+        com.superiorsoftllc.agenthq.ui.model.HarnessManifestIcons.of(factory.statuses) { AhqHarnessIcons.resolve(it) != AhqHarnessIcons.FALLBACK }
+    }
+    val path = icons[harnessId.trim().lowercase()]
+    val host = com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost.current
+    val density = LocalDensity.current
+    val painter: Painter? = path?.let { p ->
+        remember(p, host) {
+            val cached = manifestIconCache.getOrPut(p) {
+                runCatching {
+                    val bytes = host.readBytes(p) ?: return@runCatching null
+                    if (com.superiorsoftllc.agenthq.ui.model.HarnessManifestIcons.isSvg(p)) bytes.decodeToSvgPainter(density) else BitmapPainter(bytes.decodeToImageBitmap())
+                }.getOrNull()
+            }
+            cached as? Painter
+        }
+    }
+    if (painter != null) {
+        Icon(
+            painter, contentDescription = null, tint = tint,
+            modifier = modifier.size(size.dp).testTag(harnessIconTag(harnessId)).semantics { harnessIconKey = MANIFEST_ICON_KEY_PREFIX + path },
+        )
+        return
+    }
     val key = AhqHarnessIcons.resolve(harnessId)
     Icon(
         AhqHarnessIcons.forHarness(harnessId), contentDescription = null, tint = tint,

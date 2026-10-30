@@ -11,6 +11,9 @@ import com.superiorsoftllc.agenthq.harness.ModuleHarnessHost
 import com.superiorsoftllc.agenthq.harness.PluginFailure
 import com.superiorsoftllc.agenthq.harness.PluginOutcome
 import com.superiorsoftllc.agenthq.harness.UnloadOutcome
+import com.superiorsoftllc.agenthq.executables.CliTool
+import com.superiorsoftllc.agenthq.harness.install.InstallableHarness
+import com.superiorsoftllc.agenthq.harness.install.ManifestHarnessCli
 import com.superiorsoftllc.agenthq.plugin.api.HarnessDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ModuleSetting
 import com.superiorsoftllc.agenthq.plugin.api.ModulesConfig
@@ -43,7 +46,7 @@ class HarnessModules(
     private val log: (String) -> Unit = { System.err.println(it) },
 ) : AutoCloseable {
 
-    private class Loaded(val module: String, val pluginId: String, val ids: List<String>, val aliases: Map<String, String>, val source: JarHarnessPluginSource)
+    private class Loaded(val module: String, val pluginId: String, val ids: List<String>, val aliases: Map<String, String>, val source: JarHarnessPluginSource, val declaration: HarnessDeclaration)
 
     private val lock = Any()
     private val loaded = LinkedHashMap<String, Loaded>()
@@ -57,6 +60,19 @@ class HarnessModules(
 
     /** Every loaded module's `harness.aliases`, for the session manager's id lookup. */
     fun alias(name: String): String? = synchronized(lock) { loaded.values.firstNotNullOfOrNull { it.aliases[name] } }
+
+    /**
+     * HARNESS-PLUGIN-4 H5a: the `harness.cli` tool of every LOADED module (a refused or ungranted module has none), for the
+     * resolver, Settings > CLI locations and [ModuleHarnessHost.resolveCli].
+     */
+    fun cliTools(): List<CliTool> = synchronized(lock) { loaded.values.mapNotNull { it.declaration.cli } }.map(ManifestHarnessCli::tool)
+
+    /** The tool of the loaded module whose `harness.cli.id` is [cliId], or null. */
+    fun cliTool(cliId: String): CliTool? = cliTools().firstOrNull { it.id == cliId }
+
+    /** H5a: what the harness installer may install for the loaded modules: each `harness.cli` with an npm `install`. */
+    fun installables(): List<InstallableHarness> =
+        synchronized(lock) { loaded.values.mapNotNull { it.declaration.cli } }.mapNotNull(ManifestHarnessCli::installable)
 
     /** Bring the registry in line with [resolution]: load what is newly loaded, unload what is not loaded any more. */
     fun sync(resolution: Resolution, config: ModulesConfig) {
@@ -139,7 +155,7 @@ class HarnessModules(
         if (declared != h.contract) { source.close(); return refuse(id, "the plugin implements harness API '${declared?.take(40)}' but module.json harness.contract says '${h.contract}'") }
         when (val o = registry.register(plugin, "module:$id")) {
             is PluginOutcome.Accepted -> {
-                synchronized(lock) { loaded[id] = Loaded(id, pluginId, o.harnessIds, h.aliases, source) }
+                synchronized(lock) { loaded[id] = Loaded(id, pluginId, o.harnessIds, h.aliases, source, h) }
                 statuses[id] = "loaded"
                 log("[harness] harness of $id (${status.tier.name.lowercase()}) loaded: ${o.harnessIds}")
             }
@@ -158,6 +174,10 @@ class HarnessModules(
         if (h.ids.toSet().size != h.ids.size) return "harness.ids lists an id twice"
         h.hooks.firstOrNull { it !in ModuleHarnessHost.HOOK_KINDS }?.let { return "unknown harness hook '${it.take(40)}' (known: ${ModuleHarnessHost.HOOK_KINDS.joinToString()})" }
         h.aliases.entries.firstOrNull { (a, target) -> target !in h.ids || !ID.matches(a) || a in h.ids }?.let { return "harness.aliases '${it.key.take(40)}' must name one of harness.ids and not be one" }
+        h.cli?.let { cli ->
+            ManifestHarnessCli.refusal(cli)?.let { return it }
+            if (synchronized(lock) { loaded.values.any { it.declaration.cli?.id == cli.id } }) return "harness.cli.id '${cli.id}' is already declared by another loaded harness module"
+        }
         val taken = registry.harnessIds().toSet() + reserved()
         if (tier != Tier.COMMUNITY) return null
         val allow = setting.allow.toSet()
@@ -165,6 +185,8 @@ class HarnessModules(
         (h.ids + h.aliases.keys).firstOrNull { it in taken }?.let { return "community harness id '$it' is already taken (a community harness may not shadow an installed one)" }
         val needed = buildList {
             if (h.cli != null) add(ModuleHarnessHost.CLI_GRANT)
+            // H5a: an npm install runs the package's install scripts on this machine, a right of its own.
+            if (h.cli?.install?.npm != null) add(CLI_INSTALL_GRANT)
             h.hooks.forEach { add("harness.hook.$it") }
             h.settings.forEach { add("harness.setting:$it") }
         }
@@ -174,5 +196,8 @@ class HarnessModules(
 
     companion object {
         val ID = Regex("[a-z0-9][a-z0-9-]{0,39}")
+
+        /** H5a: a community module's `harness.cli.install` needs this grant (beside `harness.cli`). */
+        const val CLI_INSTALL_GRANT = "harness.cli.install"
     }
 }

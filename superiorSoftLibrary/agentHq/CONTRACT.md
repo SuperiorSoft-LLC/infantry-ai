@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.144.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.145.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -9,6 +9,15 @@ a stub, or one that does not exist yet) is behind the daemon.
 > before you write your first test. It is short, it needs no tools beyond `read`, and a merge will be held
 > without it. It covers the RED-before-implementation rule, the mutation check, how to write a test that
 > cannot pass vacuously, and the durability rules (commit by explicit path, early).
+
+### HARNESS-PLUGIN-4 H5a (contract 1.145.0, additive): harness CLI install and status from the module manifest
+
+See `docs/HARNESS-PLUGINS.md` 3.8.
+
+- `GET /plugins` modules gain `harness` (the module's `harness` block: `loaded`, `refused: <why>`, `failed: <why>`, or absent when it has none) and `harnessIds` (the ids it registered).
+- `harness_install_status` / `harness_install` (1.100.0) also list and install the CLI of every LOADED harness module that declares `harness.cli.install.npm` (after the built-in claude, opencode, pi, in that order; a built-in id wins). A community module needs the `harness.cli` and `harness.cli.install` grants, else it is refused and its CLI is not offered (`harness_install` with its id is refused as an unknown harness). `cli_locations` lists the same tools. Clients should treat every id in the report as installable (no fixed list).
+
+A client below 1.145.0 ignores the new fields; on a daemon below 1.145.0 they are absent.
 
 ### DAEMON-PLUGINS-1 (contract 1.144.0, additive + behavioural): daemon plugins, their tools, frames and routes
 
