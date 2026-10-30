@@ -181,7 +181,7 @@ class McpServeTest {
         val tools = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject }
         assertEquals(
             listOf(
-                "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_board",
+                // RUNTIME-LOAD-5: list_sessions, get_session, pod_state (Infantry_Agents) and board (Infantry_Board) are plugin tools now.
                 "agenthq_spawn", "agenthq_prompt", "agenthq_message", "agenthq_kill", "agenthq_session_remove", "agenthq_session_restart",
                 "agenthq_ticket_start", // BUG-ASSIGN-1
                 "agenthq_inbox", "agenthq_read", // MAIL-MCP-1
@@ -196,9 +196,6 @@ class McpServeTest {
             assertEquals("object", schema["type"]!!.jsonPrimitive.content, "inputSchema of ${tool["name"]}")
             assertTrue("properties" in schema, "inputSchema of ${tool["name"]} lists its properties")
         }
-        val getSchema = tools[1]["inputSchema"]!!.jsonObject
-        assertEquals(listOf("sessionId"), getSchema["required"]!!.jsonArray.map { it.jsonPrimitive.content })
-        assertEquals("integer", getSchema["properties"]!!.jsonObject["lines"]!!.jsonObject["type"]!!.jsonPrimitive.content)
 
         // stdout is protocol only: the banner went to stderr.
         assertTrue(served.stderr.contains("agenthq mcp: serving"), "banner belongs on stderr: ${served.stderr}")
@@ -209,7 +206,11 @@ class McpServeTest {
 
     @Test
     fun eachReadOnlyToolAnswersFromTheDaemon() {
-        val fixture = launch()
+        // RUNTIME-LOAD-5: the session reads are Infantry_Agents' daemon tools, over the host's sessions read model.
+        val fixture = DaemonFixture.launch(
+            StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-test").toFile(),
+            pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot("official/Infantry_Agents"),
+        ).also { fixtures += it }
         val sessionId = seedSession(fixture)
         val served = serve("--port", fixture.port.toString())
         initialize(served)
@@ -363,6 +364,50 @@ class McpServeTest {
             root.deleteRecursively()
         }
     }
+
+    /**
+     * RUNTIME-LOAD-5 (F5 remainder): the session reads moved into Infantry_Agents' daemon half and `agenthq_board` into
+     * Infantry_Board's keep their descriptors byte for byte (golden `core-mcp-tools-before-f5.json`), each gated by the action of the
+     * frame it used to send. The board answers with the same lines `agenthq board` prints.
+     */
+    @Test
+    fun movedSessionAndBoardReadsComeFromThePluginsUnchanged() {
+        val root = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Board", "official/Infantry_Agents")
+        try {
+            val fixture = DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-plugin").toFile(), pluginsRoot = root)
+                .also { fixtures += it }
+            fixture.client.await(Envelope.READY)
+            val served = serve("--port", fixture.port.toString())
+            initialize(served)
+            val tools = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject }
+            val golden = Json.parseToJsonElement(javaClass.getResource("/golden/core-mcp-tools-before-f5.json")!!.readText()).jsonArray
+                .map { it.jsonObject }.associateBy { it["name"]!!.jsonPrimitive.content }
+            for ((module, moved) in MOVED_READS) {
+                val manifest = Json.parseToJsonElement(File(root, "official/$module/module.json").readText()).jsonObject["daemon"]!!.jsonObject["tools"]!!.jsonArray
+                    .map { it.jsonObject }.associateBy { it["name"]!!.jsonPrimitive.content }
+                moved.forEach { (name, action) ->
+                    assertEquals(golden.getValue(name), tools.single { it["name"]!!.jsonPrimitive.content == name }, "the descriptor of $name changed in the move")
+                    assertEquals(action, manifest.getValue(name)["action"]!!.jsonPrimitive.content, "the action of $name")
+                }
+            }
+            val board = payload(served.callTool("agenthq_board"))
+            assertEquals("all", board["scope"]!!.jsonPrimitive.content, "an owner caller with no default project sees every project: $board")
+            assertEquals(listOf("board is empty: no tickets"), board["board"]!!.jsonArray.map { it.jsonPrimitive.content })
+            assertEquals("true", served.callTool("agenthq_get_session", "{}")["isError"]!!.jsonPrimitive.content, "sessionId is required")
+            served.close()
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    private val MOVED_READS = mapOf(
+        "Infantry_Agents" to mapOf(
+            "agenthq_list_sessions" to "sessions.read",
+            "agenthq_get_session" to "sessions.replay",
+            "agenthq_pod_state" to "agents.read",
+        ),
+        "Infantry_Board" to mapOf("agenthq_board" to "board.read"),
+    )
 
     /**
      * RUNTIME-LOAD-4 (F5): the board tools moved from this MCP server into Infantry_Board's daemon half keep their descriptors

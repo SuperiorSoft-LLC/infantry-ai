@@ -151,7 +151,7 @@ Tests: `LocalBoardServicesTest` (golden per operation, scope, policy, Unavailabl
   `ticket_move` AND `ticket_start_next` (a start is a spawn), so it is stricter than a bare move.
 * **Grants** (community plugins; official / bundled are trusted; default deny; named in modules.json `allow`): `tickets.read`
   (get, list, starterOf, ticketOf, workerOf, board columns/brief), `tickets.write` (create, update, move, link, unlink, reorder),
-  `tickets.delete`, `tickets.start`, `epics.read` (get, list), `epics.write` (create, setBase).
+  `tickets.delete`, `tickets.start`, `epics.read` (get, list), `epics.write` (create, setBase). RUNTIME-LOAD-5 (DaemonApi 1.6.0): the sessions read model adds `sessions.read` and `sessions.transcript` (docs/RUNTIME-LOAD.md section 11).
 * **Deviations from section 3:** `Tickets.get` also resolves short ids (what `tickets` prints); `move` refuses `in_progress` (use
   `start`); `starterOf`/`workerOf` go through `OrchestratorLink` (Unavailable passes through), `ticketOf(session)` reads the session
   record; `workerOf(ticket)` is new (the link's ticket-to-session direction). `Epics` has get / list / create / setBase only: core has no

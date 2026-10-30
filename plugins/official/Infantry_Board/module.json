@@ -12,7 +12,7 @@
   "daemon": {
     "entry": "com.superiorsoftllc.agenthq.plugins.official.board.daemon.BoardDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Board-daemon.jar",
-    "apiAtLeast": "1.4.0",
+    "apiAtLeast": "1.6.0",
     "tools": [
       { "name": "agenthq_ticket_get", "action": "board.read", "kind": "read", "description": "Read ONE ticket back." },
       { "name": "agenthq_ticket_files", "action": "board.files.read", "kind": "read", "description": "A ticket's changed files, or the tickets that changed a path." },
@@ -21,7 +21,8 @@
       { "name": "agenthq_ticket_move", "action": "board.ticket.move", "kind": "write", "description": "Move or reorder ONE ticket." },
       { "name": "agenthq_ticket_delete", "action": "board.ticket.delete", "kind": "destructive", "description": "Delete ONE ticket." },
       { "name": "agenthq_ticket_create", "action": "board.ticket.save", "kind": "write", "description": "Create a ticket (images from the caller's own files)." },
-      { "name": "agenthq_ticket_update", "action": "board.ticket.save", "kind": "write", "description": "Edit ONE ticket (images from the caller's own files)." }
+      { "name": "agenthq_ticket_update", "action": "board.ticket.save", "kind": "write", "description": "Edit ONE ticket (images from the caller's own files)." },
+      { "name": "agenthq_board", "action": "board.read", "kind": "read", "description": "The board in one call: tickets by column with their workers." }
     ]
   },
   "fills": [

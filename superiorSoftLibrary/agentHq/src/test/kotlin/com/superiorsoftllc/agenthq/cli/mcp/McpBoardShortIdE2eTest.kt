@@ -124,7 +124,7 @@ class McpBoardShortIdE2eTest {
             payload(agent.callTool("agenthq_ticket_create", """{"title":"$title"}""")).str("ticketId")
         }
 
-        val lines = payload(agent.callTool(McpTools.BOARD)).getValue("board").jsonArray.map { it.jsonPrimitive.content }
+        val lines = payload(agent.callTool("agenthq_board")).getValue("board").jsonArray.map { it.jsonPrimitive.content }
         for (id in ids) {
             val short = shortTicketId(id)
             val line = assertNotNull(lines.singleOrNull { it.trimStart().startsWith("$short | ") }, "exactly one board line must start with $short: $lines")
