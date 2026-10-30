@@ -149,8 +149,6 @@ class DaemonCoreGuardTest {
             "memory" to "project knowledge: notes, a Knowledge plugin",
             "prompts" to "prompt templates: Infantry_Prompts daemon half",
             "images" to "chat uploads: Infantry_Chat daemon half",
-            "experiments" to "experiment bridging pi tool calls; delete or move with the pi harness",
-            "probe" to "developer comparison tool for providers, not daemon",
         )
 
         /** PLUGIN LATER: needs a missing mechanism first; the blocker is named. */
@@ -164,6 +162,7 @@ class DaemonCoreGuardTest {
             "triggers" to "blocker: DaemonApi has schedule() but no spawn-with-binding or ticket-transition events",
             "commands" to "blocker: RunManager needs a pty/runner surface in DaemonApi",
             "cli" to "blocker: the agenthq CLI and MCP server import protocol, session and daemon types; needs the agentHqCore module split first",
+            "experiments" to "blocker: the pi tool bridge hooks PiLaunchExtras, SessionStatsService taggers and reads AgentHqMcp/AccessPolicy internals; needs a harness launch-extras hook and an MCP tool-exposure surface in DaemonApi",
             "client" to "blocker: the console client shares protocol and mailbox types; moves with cli",
         )
     }

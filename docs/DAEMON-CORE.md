@@ -57,7 +57,9 @@ that is renamed or deleted must leave the table. Lines in PLUGIN_NOW/PLUGIN_LATE
 
 **PLUGIN NOW** (mechanism exists, only the move is left): `backlog`, `epics`, `stories`, `mvp`, `ticketfiles`, `context`,
 `brief`, `ledger` (all Infantry_Board's daemon half); `pipeline` (Pipeline plugin); `issues`, `decisions`, `memory` (a Knowledge
-plugin); `prompts` (Infantry_Prompts); `images` (Infantry_Chat); `experiments`, `probe` (developer tools: delete or move).
+plugin); `prompts` (Infantry_Prompts); `images` (Infantry_Chat).
+
+DAEMON-PLUGINS-3: `probe` (a one-off provider comparison `main()` and its `probeProvider` Gradle task) was dead and is deleted. `experiments` (the pi tool bridge) cannot move yet, see below.
 
 **PLUGIN LATER (blocker named)**
 | package | blocker |
@@ -67,6 +69,7 @@ plugin); `prompts` (Infantry_Prompts); `images` (Infantry_Chat); `experiments`, 
 | `questions`, `attention` | usage, mailbox and triggers raise attention items directly (reverse dependency); needs attention in the API first |
 | `triggers` | DaemonApi has `schedule()` but no spawn-with-binding or ticket-transition events |
 | `commands` | RunManager needs a pty/runner surface in DaemonApi |
+| `experiments` | the pi tool bridge hooks `PiLaunchExtras`, `SessionStatsService` taggers and reads `AgentHqMcp`/`AccessPolicy` internals; needs a harness launch-extras hook and an MCP tool-exposure surface in DaemonApi |
 | `cli`, `client` | the `agenthq` CLI/MCP server and console client are clients of the daemon, not daemon, but import protocol/session/daemon types; they leave with the agentHqCore split (section 4) |
 
 Measured coupling (imports between top-level packages, `agentHq/src/main`): `daemon` imports 31 packages, `cli` 18, `backlog`
