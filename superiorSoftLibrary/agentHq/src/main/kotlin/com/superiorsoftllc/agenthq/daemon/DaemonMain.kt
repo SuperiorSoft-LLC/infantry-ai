@@ -2736,14 +2736,14 @@ private suspend fun handleConnection(
                 remoteAddress = session.call.request.local.remoteAddress,
                 forwardedFor = session.call.request.headers["X-Forwarded-For"], activeSession = active,
             )
-            // SEC-FIX-1: the one gate, before every branch below (the bare-text prompt and the replay included).
-            FrameGate.refusal(envelope.type, owner, plugins.ownerOnly(envelope.type))?.let { why ->
-                outgoing.trySend(Envelope(Envelope.ERROR, why, requestId = envelope.requestId))
-                continue
-            }
-            // POLICY-1: the active preset, by the frame's named action.
+            // POLICY-1: the active preset, by the frame's named action. First, so a lock's neutral refusal wins over the owner-gate text (DEMO-FIX-1).
             policies.frameRefusal(envelope, active, owner)?.let { reason ->
                 outgoing.trySend(Envelope(Envelope.ERROR, reason).copy(requestId = envelope.requestId))
+                continue
+            }
+            // SEC-FIX-1: the owner gate, before every branch below (the bare-text prompt and the replay included).
+            FrameGate.refusal(envelope.type, owner, plugins.ownerOnly(envelope.type))?.let { why ->
+                outgoing.trySend(Envelope(Envelope.ERROR, why, requestId = envelope.requestId))
                 continue
             }
             // DAEMON-PLUGINS-1 (`frameGate`, fail closed): the plugins' own gates (a seated lockdown scopes frames here).

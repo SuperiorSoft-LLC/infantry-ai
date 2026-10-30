@@ -118,7 +118,10 @@ class ServerUpdateState(private val api: ServerUpdateApi, private val scope: Cor
     val view: StateFlow<ServerUpdateView> = _view.asStateFlow()
     private var expected: String? = null
 
-    fun refresh() { scope.launch { load(checkNow = false) } }
+    /** DEMO-FIX-1: false under a restricted (read-only) daemon policy, where `GET /update/status` is refused (403): no call is made. */
+    var available: Boolean = true
+
+    fun refresh() { if (available) scope.launch { load(checkNow = false) } }
 
     fun check() { scope.launch { _view.update { it.copy(phase = ServerUpdateView.Phase.CHECKING, message = null) }; load(checkNow = true) } }
 
@@ -174,6 +177,7 @@ class ServerUpdateState(private val api: ServerUpdateApi, private val scope: Cor
 
     /** The link came back (after the restart, or any reconnect): read the status again and say whether the new version is running. */
     fun onReconnected() {
+        if (!available) return
         scope.launch {
             val result = api.status()
             _view.update { v ->

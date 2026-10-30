@@ -287,6 +287,8 @@ fun App(
         com.superiorsoftllc.agenthq.ui.model.ServerUpdateState(com.superiorsoftllc.agenthq.ui.net.HttpServerUpdateApi(url, token.ifBlank { null }), actionScope)
     }
     val serverView by serverUpdate.view.collectAsState()
+    // DEMO-FIX-1: a restricted (read-only) daemon policy refuses these two reads; the window does not make them.
+    serverUpdate.available = !state.connection.policy.restricted
     LaunchedEffect(serverUpdate, state.connection.isLive) { if (state.connection.isLive) serverUpdate.onReconnected() }
     val serverMismatch = com.superiorsoftllc.agenthq.ui.model.ServerVersionCheck.mismatch(host.appVersion, serverView.status?.version, state.connection.contract)
     fun switchTo(c: ServerChoice) {
@@ -337,6 +339,7 @@ fun App(
     LaunchedEffect(controller) { DaemonLink.window.pluginSecret = controller::pluginSecret }
     // P1 step 2 (6s B): once the link is live, the merged config tree seeds the daemon's node_config and the window takes its copy.
     val linkLive = state.connection.isLive
+    tabs.config.daemonRowsClosed = state.connection.policy.restricted
     LaunchedEffect(tabs, linkLive) { if (linkLive && tabs.config.load != NodeConfigLoad.LOADED) tabs.config.load() }
     // P1 step 2 (6s E): a tab its strip's settings switch off while it is open hands the strip back to its home tab.
     LaunchedEffect(tabs.config.stored) {

@@ -60,3 +60,16 @@ Docker image build and `docker/smoke.sh`, the droplet compose overlay, Landlock 
 (10 real model turns), real visitor prompts through the page, the `-Pdemo=true` Android build, a second browser (Chromium only).
 On this Windows host the seated agents ran with the operator's own opencode config and without Landlock, so the sandbox half of
 "nothing reaches the owner's files" is unverified.
+
+## DEMO-FIX-1 results (follow-ups 1 to 3)
+
+| # | Fix | Proof |
+|---|---|---|
+| 1 | Under a `restricted` daemon policy the window makes no `POST /node-config/seed` and no `GET /update/status` (`NodeConfigState.daemonRowsClosed`, `ServerUpdateState.available`, set from `connection.policy.restricted` in `App.kt`). Nothing is opened in the lock. | `RestrictedPolicyCallsTest` (3 tests: no call when closed, still seeds / asks when not). Browser console not re-run. |
+| 2 | `plugin_tools` is classed as a read: new catalog action `plugin.tools.list` (READ), added to `demo.json` `allow`. `plugin_tool_call` stays gated by the called tool's own action. | `FrameGateDaemonTest`: the demo lists tools; a call to an unlisted tool is `demo: 'plugin_tool_call' is disabled in this demo`. |
+| 3 | The policy refusal now runs before the owner gate (`DaemonMain.kt`), so a lock's neutral text wins and never names `X-AgentHQ-Owner`. With no policy active the owner gate answers as before. | `FrameGateDaemonTest`: non-owner `secret_set` / `run_start` / `run_input` / `command_save` under the demo get `disabled in this demo`, no owner text. |
+
+Attack script, same method as above (fresh `dockerContext -Pdemo=true`, port 8812, temp state dir, `demo-seed.env` values, inherited `AGENTHQ_*` cleared):
+`node docker/demo-lock-attack.mjs --scenarios` -> `RESULT: PASS (only the allow-list got through)`; `apply an update (HTTP)` 403, other-project reads DENIED, git path escapes REFUSED.
+Daemon stopped by PID afterwards.
+
