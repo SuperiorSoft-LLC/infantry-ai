@@ -181,7 +181,6 @@ class McpServeTest {
             listOf(
                 "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_board",
                 "agenthq_list_harnesses", // BUG-ASSIGN-1
-                "agenthq_harness_install", // HARNESS-INSTALL-1 (agenthq_harness_status: Infantry_Agents daemon half, RUNTIME-LOAD-1)
                 "agenthq_spawn", "agenthq_prompt", "agenthq_message", "agenthq_kill", "agenthq_session_remove", "agenthq_session_restart",
                 "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_ticket_get", // MCP-1
                 "agenthq_ticket_start", // BUG-ASSIGN-1
@@ -358,6 +357,40 @@ class McpServeTest {
          "inputSchema":{"type":"object","properties":{"checkLatest":{"type":"boolean","description":"Also ask npm for each CLI's latest version (default false)."}},"additionalProperties":false},
          "annotations":{"readOnlyHint":true}}"""
 
+    private val HARNESS_INSTALL_GOLDEN = """{"name":"agenthq_harness_install",
+         "description":"npm-install harness CLIs on the daemon's machine, into Infantry AI's own prefix dir (no admin rights, no user data touched; idempotent). ids: which ones (default: every missing one). update=true also refreshes outdated ones. Needs Node/npm on that machine (the answer says so when it is missing). Sign-in is still the user's: each CLI keeps its own login. Can take minutes.",
+         "inputSchema":{"type":"object","properties":{"ids":{"type":"array","items":{"type":"string"},"description":"Harness ids to install, from: claude, opencode, pi. Default: all missing."},"update":{"type":"boolean","description":"Also update installed CLIs that are outdated (default false)."}},"additionalProperties":false},
+         "annotations":{"readOnlyHint":true}}"""
+
+    /** RUNTIME-LOAD-2: `agenthq_harness_install` comes from Infantry_Agents with the descriptor it had in core, and a call reaches the daemon's frame. */
+    @Test
+    fun harnessInstallToolComesFromInfantryAgentsUnchanged() {
+        val root = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Agents")
+        try {
+            val fixture = DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-plugin").toFile(), pluginsRoot = root)
+                .also { fixtures += it }
+            fixture.client.await(Envelope.READY)
+            val served = serve("--port", fixture.port.toString())
+            initialize(served)
+            val tools = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject }
+            assertEquals(Json.parseToJsonElement(HARNESS_INSTALL_GOLDEN), tools.single { it["name"]!!.jsonPrimitive.content == "agenthq_harness_install" }, "the descriptor changed in the move")
+            assertTrue(tools.none { "timeoutMs" in it }, "the timeout is bookkeeping for the MCP server, not part of the MCP descriptor")
+            // The daemon's own list carries each tool's effective timeout: the 15 minutes both harness tools declare.
+            fixture.client.send(Envelope("plugin_tools", "", requestId = "timeouts"))
+            val raw = Json.parseToJsonElement(fixture.client.awaitWhere("the plugin_tools answer") { it.type == "plugin_tools" }.data).jsonArray.map { it.jsonObject }
+            assertEquals(
+                mapOf("agenthq_harness_install" to 900_000L, "agenthq_harness_status" to 900_000L),
+                raw.filter { it["name"]!!.jsonPrimitive.content.startsWith("agenthq_harness_") }.associate { it["name"]!!.jsonPrimitive.content to it["timeoutMs"]!!.jsonPrimitive.content.toLong() },
+            )
+            // An unknown id installs nothing: the daemon's own refusal comes back as the tool's error, through the plugin's frame request.
+            val got = served.callTool("agenthq_harness_install", """{"ids":["no-such-harness"]}""")
+            assertEquals(true, got["isError"]!!.jsonPrimitive.content.toBoolean(), "$got")
+            assertTrue("unknown harness no-such-harness" in got["content"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content, "$got")
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
     /** RUNTIME-LOAD-1: `agenthq_harness_status` comes from Infantry_Agents unchanged: descriptor, and the answer the old code gave. */
     @Test
     fun harnessStatusToolComesFromInfantryAgentsUnchanged() {
@@ -388,7 +421,7 @@ class McpServeTest {
         }
     }
 
-    /** RUNTIME-LOAD-1: with Infantry_Agents absent the tool disappears cleanly: not listed; install stays in core. */
+    /** RUNTIME-LOAD-1/2: with Infantry_Agents absent harness status and install disappear cleanly: not listed, no error. */
     @Test
     fun harnessStatusToolIsGoneWithoutInfantryAgents() {
         val root = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root()
@@ -400,7 +433,7 @@ class McpServeTest {
             initialize(served)
             val tools = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content }
             assertTrue("agenthq_harness_status" !in tools, "$tools")
-            assertTrue("agenthq_harness_install" in tools, "install stays in core: $tools")
+            assertTrue("agenthq_harness_install" !in tools, "install left core with the plugin: $tools")
         } finally {
             root.deleteRecursively()
         }

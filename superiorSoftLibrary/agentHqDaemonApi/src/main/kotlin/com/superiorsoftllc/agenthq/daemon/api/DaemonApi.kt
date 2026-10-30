@@ -151,6 +151,11 @@ interface DaemonTool {
     val inputSchema: JsonObject
     /** MCP tool annotations (`readOnlyHint`, ...); empty = none. */
     val annotations: JsonObject get() = JsonObject(emptyMap())
+    /**
+     * How long one call may run, in ms (RUNTIME-LOAD-2); null = the module's / default tool timeout. The daemon caps it at
+     * limits.plugins.toolMaxTimeoutMs, and the MCP client waits a quarter longer than the effective value.
+     */
+    val timeoutMs: Long? get() = null
     fun call(call: ToolCall): ToolResult
 }
 

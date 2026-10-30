@@ -389,6 +389,11 @@ object LimitRegistry {
         "How long one daemon plugin tool call may run before the plugin is disabled (daemon.limits.toolTimeoutMs overrides it); agenthq mcp serve waits a quarter longer for the answer.",
         min = 1, zeroIsUnlimited = false,
     )
+    val PLUGIN_TOOL_MAX_TIMEOUT_MS = LimitDef(
+        "limits.plugins.toolMaxTimeoutMs", 1_800_000, "ms",
+        "The ceiling for a plugin tool's own declared timeoutMs (a long tool such as a harness install opts in; it can never wait longer than this).",
+        min = 1, zeroIsUnlimited = false,
+    )
     val PLUGIN_ROUTE_RATE = LimitDef(
         "limits.plugins.routeRequestsPerMinute", 600, "requests",
         "HTTP requests a minute one daemon plugin's routes answer before 429 (daemon.limits.routeRequestsPerMinute overrides it).",
@@ -415,7 +420,7 @@ object LimitRegistry {
         WATCH_NOTICE_LINE_CHARS, WATCH_LOG_MAX_MB, WATCH_LOG_TOTAL_MB, WATCH_LOG_KEEP_JOBS, WATCH_LOG_KEEP_DAYS, WATCH_MIN_FREE_MB, WATCH_FILE_IDLE_SECONDS,
         WATCH_READ_MAX_KB, WATCH_TAIL_READ_KB, WATCH_SPACE_CHECK_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
-        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS,
+        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS,
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,

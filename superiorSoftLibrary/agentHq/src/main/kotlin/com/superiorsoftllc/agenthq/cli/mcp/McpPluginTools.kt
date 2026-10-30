@@ -9,6 +9,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.longOrNull
 
 /**
  * DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md section 3): the daemon plugins' tools, served by this MCP server next to its
@@ -18,19 +19,29 @@ import kotlinx.serialization.json.contentOrNull
  */
 internal class McpPluginTools {
 
+    /** Each listed tool's effective timeout (the daemon's `timeoutMs`), so a call waits as long as its own tool may run. */
+    private val timeouts = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
     /** The daemon's plugin tools, as MCP descriptors (the daemon's bookkeeping keys stripped). */
     suspend fun descriptors(stream: FrameStream): JsonArray {
         val answer = stream.request(Envelope(PLUGIN_TOOLS), PLUGIN_TOOLS, PLUGIN_TOOLS, idempotent = true)
         val all = json.parseToJsonElement(answer.data) as? JsonArray ?: return JsonArray(emptyList())
-        return JsonArray(all.mapNotNull { (it as? JsonObject)?.let { d -> JsonObject(d - setOf("module", "action")) } })
+        timeouts.clear()
+        return JsonArray(all.mapNotNull { (it as? JsonObject)?.let { d ->
+            val name = (d["name"] as? JsonPrimitive)?.contentOrNull
+            val ms = (d["timeoutMs"] as? JsonPrimitive)?.longOrNull
+            if (name != null && ms != null) timeouts[name] = ms
+            JsonObject(d - setOf("module", "action", "timeoutMs"))
+        } })
     }
 
     suspend fun call(stream: FrameStream, name: String, arguments: JsonObject): ToolResult {
         val payload = JsonObject(mapOf("name" to JsonPrimitive(name), "arguments" to arguments))
+        if (!timeouts.containsKey(name)) runCatching { descriptors(stream) }
         val answer = stream.request(
             Envelope(PLUGIN_TOOL_CALL, json.encodeToString(JsonObject.serializer(), payload)), PLUGIN_TOOL_RESULT, PLUGIN_TOOL_CALL,
             // A tool may change state; never sent twice.
-            idempotent = false, timeoutMs = answerWaitMs(),
+            idempotent = false, timeoutMs = answerWaitMs(timeouts[name]),
         )
         val result = json.parseToJsonElement(answer.data) as? JsonObject ?: return ToolResult("malformed plugin_tool_result", isError = true)
         return ToolResult(
@@ -43,8 +54,9 @@ internal class McpPluginTools {
         const val PLUGIN_TOOLS = "plugin_tools"
         const val PLUGIN_TOOL_CALL = "plugin_tool_call"
         const val PLUGIN_TOOL_RESULT = "plugin_tool_result"
-        /** The daemon disables a tool past limits.plugins.toolTimeoutMs; this waits a quarter longer for its answer. */
-        private fun answerWaitMs(): Long = LimitRegistry.fromEnv(LimitRegistry.PLUGIN_TOOL_TIMEOUT_MS, System::getenv).let { it + it / 4 }
+        /** The daemon disables a tool past its own timeout (default limits.plugins.toolTimeoutMs); this waits a quarter longer. */
+        internal fun answerWaitMs(toolTimeoutMs: Long?): Long =
+            (toolTimeoutMs ?: LimitRegistry.fromEnv(LimitRegistry.PLUGIN_TOOL_TIMEOUT_MS, System::getenv)).let { it + it / 4 }
         private val json = Json { ignoreUnknownKeys = true }
     }
 }
