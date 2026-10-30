@@ -6,7 +6,7 @@
 //    handleConnection in DaemonMain.kt, names resolved through protocol/Protocol.kt) and every HTTP route (get/post/...
 //    calls under daemon/), then sends each with the OWNER token against a locked daemon and prints the full table.
 //    Every frame is sent naming a SEEDED session (the worst case for the lock) with a junk payload. A frame counts as
-//    DENIED when the daemon answers it with an error starting "demo:"; anything else (an answer, another error, silence)
+//    DENIED when the daemon answers it with an error starting "demo:" (or the owner-credential refusal of FrameGate); anything else (an answer, another error, silence)
 //    means it passed the lock. The script fails (exit 1) when anything outside the allow-list passed.
 // 2. --scenarios: the named attacks (project, third session, sandbox flip, model allowlist, paid model, token read).
 import fs from 'node:fs'
@@ -21,7 +21,11 @@ const token = fs.readFileSync(process.env.DEMO_TOKEN_FILE, 'utf8').trim()
 const scenarios = process.argv.includes('--scenarios')
 
 // ---- frame types from the code -------------------------------------------------------------------------------------
-const protocol = fs.readFileSync(path.join(src, 'protocol', 'Protocol.kt'), 'utf8')
+// CORE-SPLIT-A moved Protocol.kt into its own module (agentHqProtocol).
+const protocolFile = [path.join(src, 'protocol', 'Protocol.kt'),
+  path.join(here, '..', 'superiorSoftLibrary', 'agentHqProtocol', 'src', 'main', 'kotlin', 'com', 'superiorsoftllc', 'agenthq', 'protocol', 'Protocol.kt')]
+  .find(f => fs.existsSync(f))
+const protocol = fs.readFileSync(protocolFile, 'utf8')
 const consts = Object.fromEntries([...protocol.matchAll(/const val ([A-Z0-9_]+) = "([^"]+)"/g)].map(m => [m[1], m[2]]))
 const daemon = fs.readFileSync(path.join(src, 'daemon', 'DaemonMain.kt'), 'utf8')
 const start = daemon.indexOf('private suspend fun handleConnection(')
@@ -38,7 +42,7 @@ for (const m of body.matchAll(/envelope\.type == ([A-Z_]+_TYPE)/g)) {
 }
 // ---- HTTP routes from the code -------------------------------------------------------------------------------------
 const routes = []
-for (const f of fs.readdirSync(path.join(src, 'daemon'))) {
+for (const f of fs.readdirSync(path.join(src, 'daemon')).filter(n => n.endsWith('.kt'))) {
   const text = fs.readFileSync(path.join(src, 'daemon', f), 'utf8')
   for (const m of text.matchAll(/\b(get|post|put|delete|patch|webSocket)\("(\/[^"]*)"/g)) routes.push([m[1], m[2], f])
 }
@@ -82,7 +86,8 @@ async function send(c, type, data, sessionId, ms = 1500) {
   c.ws.send(JSON.stringify({ type, data, sessionId, requestId }))
   const f = await c.wait(x => x.requestId === requestId, ms)
   if (!f) return { denied: false, detail: '(no direct answer)' }
-  const denied = f.type === 'error' && f.data.startsWith('demo:')
+  // SEC-FIX-1: an owner-only frame (secret_set, run_*) on a connection without the owner credential is refused by FrameGate first.
+  const denied = f.type === 'error' && (f.data.startsWith('demo:') || /^\w+ refused: it needs the owner credential/.test(f.data))
   return { denied, detail: `${f.type}: ${String(f.data).replace(/\s+/g, ' ').slice(0, 90)}` }
 }
 
