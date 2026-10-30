@@ -102,16 +102,19 @@ class AgentTicketStartE2eTest {
      * [repoConfigured] false is the owner's daemon (BUG-REGRESS-1): no `AGENTHQ_REPO`, running INSIDE the project
      * checkout, so a ticket start cuts its worktree from the checkout it runs in (BUG-WT-1).
      */
-    private fun rig(repoConfigured: Boolean = true): Rig {
+    private fun rig(repoConfigured: Boolean = true, agentsPlugin: Boolean = false): Rig {
         val scratch = Files.createTempDirectory("agenthq-assign-scratch").toFile()
         val repo = newGitRepo("agenthq-assign")
         cleanups += { scratch.deleteRecursively(); repo.deleteRecursively() }
         val claude = GatedRunner()
+        // RUNTIME-LOAD-2: agenthq_list_harnesses is Infantry_Agents' daemon half; a test that calls it loads the built plugin.
+        val plugins = if (agentsPlugin) com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Agents").also { cleanups += { it.deleteRecursively() } } else null
         val fixture = DaemonFixture.launch(
             repo = repo.takeIf { repoConfigured },
             context = FakeTicketContext("HANG"),
             additionalProviders = listOf(ListingHarness("claude", listOf("haiku", "sonnet", "opus"), claude)),
             workingDir = if (repoConfigured) File(scratch, "workdir").apply { mkdirs() } else repo,
+            pluginsRoot = plugins,
         )
         cleanups += { fixture.stop(); fixture.deleteState() }
         fixture.client.await(Envelope.READY)
@@ -381,7 +384,7 @@ class AgentTicketStartE2eTest {
 
     @Test
     fun `an agent lists the harnesses it may pin and each one's models, through MCP and the CLI`() {
-        val rig = rig()
+        val rig = rig(agentsPlugin = true)
         val listed = mcp(rig)(LIST_HARNESSES, JsonObject(emptyMap()))
         assertFalse(listed.isError(), listed.text())
         val harnesses = listed.payload()["harnesses"]!!.jsonArray.map { it.jsonObject }

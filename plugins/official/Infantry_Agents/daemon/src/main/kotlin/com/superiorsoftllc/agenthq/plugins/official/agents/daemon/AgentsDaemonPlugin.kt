@@ -5,9 +5,15 @@ import com.superiorsoftllc.agenthq.daemon.api.DaemonPlugin
 import com.superiorsoftllc.agenthq.daemon.api.DaemonTool
 import com.superiorsoftllc.agenthq.daemon.api.ToolCall
 import com.superiorsoftllc.agenthq.daemon.api.ToolResult
+import com.superiorsoftllc.agenthq.daemon.api.harness.HarnessCatalogText
 import com.superiorsoftllc.agenthq.daemon.api.harness.HarnessInstallReport
 import com.superiorsoftllc.agenthq.daemon.api.harness.HarnessInstallResult
 import com.superiorsoftllc.agenthq.daemon.api.harness.HarnessInstallText
+import com.superiorsoftllc.agenthq.daemon.api.harness.ProviderInfo
+import com.superiorsoftllc.agenthq.daemon.api.harness.ProviderModels
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -28,6 +34,7 @@ class AgentsDaemonPlugin : DaemonPlugin {
     override fun start(api: DaemonApi) {
         api.tools.register(HarnessStatusTool)
         api.tools.register(HarnessInstallTool)
+        api.tools.register(ListHarnessesTool)
     }
 }
 
@@ -144,5 +151,68 @@ object HarnessInstallTool : DaemonTool {
         }
     } catch (e: Exception) {
         ToolResult(e.message ?: "harness_install failed", isError = true)
+    }
+}
+
+/** BUG-ASSIGN-1 -> RUNTIME-LOAD-2: what a ticket may pin, from the `providers` and `models` frames; merged by the API's [HarnessCatalogText]. */
+object ListHarnessesTool : DaemonTool {
+    const val NAME = "agenthq_list_harnesses"
+    private const val ANSWER_TIMEOUT_MS = 20_000L
+    private val readJson = Json { ignoreUnknownKeys = true }
+    private val outJson = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = true }
+
+    override val name = NAME
+    override val description =
+        "List the harnesses a ticket can run on: each harness id (the value of a ticket's provider) with its " +
+            "models (the values of its model), which one is the default, and whether its CLI is available. " +
+            "Pin them with agenthq_ticket_create / agenthq_ticket_update, then start the ticket with " +
+            "agenthq_ticket_start."
+    override val inputSchema = buildJsonObject {
+        put("type", "object")
+        putJsonObject("properties") {}
+        put("additionalProperties", false)
+    }
+    override val annotations = buildJsonObject { put("readOnlyHint", true) }
+
+    override fun call(call: ToolCall): ToolResult = try {
+        val providersReply = call.request("providers", timeoutMs = ANSWER_TIMEOUT_MS)
+        if (providersReply.type == "error") {
+            ToolResult(providersReply.data.ifBlank { "providers failed" }, isError = true)
+        } else {
+            val providers = readJson.decodeFromString(ListSerializer(ProviderInfo.serializer()), providersReply.data)
+            var catalogError: String? = null
+            val catalog = try {
+                val reply = call.request("models", timeoutMs = ANSWER_TIMEOUT_MS)
+                check(reply.type != "error") { reply.data.ifBlank { "models failed" } }
+                readJson.decodeFromString(ListSerializer(ProviderModels.serializer()), reply.data)
+            } catch (e: Exception) {
+                catalogError = e.message ?: e.javaClass.simpleName
+                emptyList()
+            }
+            val harnesses = HarnessCatalogText.merge(providers, catalog, catalogError)
+            ToolResult(
+                outJson.encodeToString(
+                    JsonObject.serializer(),
+                    buildJsonObject {
+                        put("harnesses", buildJsonArray {
+                            harnesses.forEach { harness ->
+                                add(buildJsonObject {
+                                    put("id", harness.id)
+                                    put("default", harness.default)
+                                    put("defaultModel", harness.defaultModel)
+                                    put("models", harness.models?.let { models -> buildJsonArray { models.forEach { add(JsonPrimitive(it)) } } } ?: JsonNull)
+                                    put("available", harness.available)
+                                    put("unavailableReason", harness.unavailableReason)
+                                    put("note", harness.note)
+                                })
+                            }
+                        })
+                        put("howToUse", HarnessCatalogText.HOW_TO_PIN)
+                    },
+                ),
+            )
+        }
+    } catch (e: Exception) {
+        ToolResult(e.message ?: "list_harnesses failed", isError = true)
     }
 }

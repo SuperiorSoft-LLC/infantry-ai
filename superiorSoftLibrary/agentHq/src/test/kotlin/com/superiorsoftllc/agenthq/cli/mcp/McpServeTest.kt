@@ -180,7 +180,6 @@ class McpServeTest {
         assertEquals(
             listOf(
                 "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_board",
-                "agenthq_list_harnesses", // BUG-ASSIGN-1
                 "agenthq_spawn", "agenthq_prompt", "agenthq_message", "agenthq_kill", "agenthq_session_remove", "agenthq_session_restart",
                 "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_ticket_get", // MCP-1
                 "agenthq_ticket_start", // BUG-ASSIGN-1
@@ -362,6 +361,41 @@ class McpServeTest {
          "inputSchema":{"type":"object","properties":{"ids":{"type":"array","items":{"type":"string"},"description":"Harness ids to install, from: claude, opencode, pi. Default: all missing."},"update":{"type":"boolean","description":"Also update installed CLIs that are outdated (default false)."}},"additionalProperties":false},
          "annotations":{"readOnlyHint":true}}"""
 
+    private val LIST_HARNESSES_GOLDEN = """{"name":"agenthq_list_harnesses",
+         "description":"List the harnesses a ticket can run on: each harness id (the value of a ticket's provider) with its models (the values of its model), which one is the default, and whether its CLI is available. Pin them with agenthq_ticket_create / agenthq_ticket_update, then start the ticket with agenthq_ticket_start.",
+         "inputSchema":{"type":"object","properties":{},"additionalProperties":false},
+         "annotations":{"readOnlyHint":true}}"""
+
+    /** RUNTIME-LOAD-2: `agenthq_list_harnesses` comes from Infantry_Agents with its old descriptor; the answer lists the daemon's own providers, with the old keys. */
+    @Test
+    fun listHarnessesToolComesFromInfantryAgentsUnchanged() {
+        val root = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Agents")
+        try {
+            val fixture = DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-plugin").toFile(), pluginsRoot = root)
+                .also { fixtures += it }
+            fixture.client.await(Envelope.READY)
+            val served = serve("--port", fixture.port.toString())
+            initialize(served)
+            val tools = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject }
+            assertEquals(Json.parseToJsonElement(LIST_HARNESSES_GOLDEN), tools.single { it["name"]!!.jsonPrimitive.content == "agenthq_list_harnesses" }, "the descriptor changed in the move")
+
+            fixture.client.send(Envelope(Envelope.PROVIDERS, "", requestId = "direct"))
+            val direct = fixture.client.awaitWhere("the direct providers answer") { it.type == Envelope.PROVIDERS }
+            val ids = Json.parseToJsonElement(direct.data).jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.content }
+            val got = served.callTool("agenthq_list_harnesses")
+            assertEquals(false, got["isError"]!!.jsonPrimitive.content.toBoolean(), "$got")
+            val payload = Json.parseToJsonElement(got["content"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content).jsonObject
+            assertEquals(ids, payload["harnesses"]!!.jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.content })
+            assertEquals(
+                setOf("id", "default", "defaultModel", "models", "available", "unavailableReason", "note"),
+                payload["harnesses"]!!.jsonArray.first().jsonObject.keys,
+            )
+            assertEquals(com.superiorsoftllc.agenthq.daemon.api.harness.HarnessCatalogText.HOW_TO_PIN, payload["howToUse"]!!.jsonPrimitive.content)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
     /** RUNTIME-LOAD-2: `agenthq_harness_install` comes from Infantry_Agents with the descriptor it had in core, and a call reaches the daemon's frame. */
     @Test
     fun harnessInstallToolComesFromInfantryAgentsUnchanged() {
@@ -434,6 +468,7 @@ class McpServeTest {
             val tools = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content }
             assertTrue("agenthq_harness_status" !in tools, "$tools")
             assertTrue("agenthq_harness_install" !in tools, "install left core with the plugin: $tools")
+            assertTrue("agenthq_list_harnesses" !in tools, "list_harnesses left core with the plugin: $tools")
         } finally {
             root.deleteRecursively()
         }

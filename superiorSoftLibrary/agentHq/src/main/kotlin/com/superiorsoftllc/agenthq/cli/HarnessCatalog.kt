@@ -41,32 +41,15 @@ internal object HarnessCatalog {
             catalogError = e.message ?: e.javaClass.simpleName
             emptyList()
         }
-        return providers.map { info ->
-            val rows = catalog.filter { it.provider == info.id }
-            val models = info.models?.takeIf { it.isNotEmpty() }
-                ?: rows.flatMap { it.models }.distinct().takeIf { it.isNotEmpty() }
-            val notes = buildList {
-                if (info.modelsStale) add("model list is last-known: the latest refresh failed")
-                rows.mapNotNullTo(this) { it.note }
-                if (models == null && catalogError != null) add("model catalog unavailable: $catalogError")
-            }.distinct()
-            Harness(
-                id = info.id,
-                default = info.default,
-                defaultModel = info.defaultModel,
-                models = models,
-                available = info.available,
-                unavailableReason = info.unavailableReason,
-                note = notes.joinToString("; ").ifEmpty { null },
-            )
-        }
+        return com.superiorsoftllc.agenthq.daemon.api.harness.HarnessCatalogText.merge(
+            providers.map { json.decodeFromString(com.superiorsoftllc.agenthq.daemon.api.harness.ProviderInfo.serializer(), json.encodeToString(ProviderInfo.serializer(), it)) },
+            catalog.map { json.decodeFromString(com.superiorsoftllc.agenthq.daemon.api.harness.ProviderModels.serializer(), json.encodeToString(ProviderModels.serializer(), it)) },
+            catalogError,
+        ).map { Harness(it.id, it.default, it.defaultModel, it.models, it.available, it.unavailableReason, it.note) }
     }
 
     /** How a listed harness is used, said the same way by the CLI and the MCP tool. */
-    const val HOW_TO_PIN =
-        "Pin a harness id as a ticket's provider and one of its models as its model (ticket create / update), then " +
-            "start the ticket (ticket start). A harness that lists models refuses any other; one with no list takes " +
-            "any model id its CLI accepts."
+    const val HOW_TO_PIN = com.superiorsoftllc.agenthq.daemon.api.harness.HarnessCatalogText.HOW_TO_PIN
 
     private val json = Json { ignoreUnknownKeys = true }
 }

@@ -243,7 +243,7 @@ class McpOrchestrationE2eTest {
             "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_board",
             "agenthq_spawn", "agenthq_prompt", "agenthq_message", "agenthq_kill", "agenthq_session_remove", "agenthq_session_restart",
             "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_ticket_get",
-            "agenthq_list_harnesses", "agenthq_ticket_start", // BUG-ASSIGN-1
+            "agenthq_ticket_start", // BUG-ASSIGN-1 (agenthq_list_harnesses: Infantry_Agents daemon half, RUNTIME-LOAD-2)
             "agenthq_epic_base", // BASE-1c
             "agenthq_ticket_delete", // MCP-DEL-1
             "agenthq_ticket_move", // MCP-MOVE-1

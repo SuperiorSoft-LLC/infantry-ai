@@ -39,8 +39,10 @@ Size: S = under a day, one ticket; M = a few tickets; L = a design plus a contra
 |---|---|---|---|
 | Daemon plugin host + tools from `modules/official/*` | `daemon/plugins/DaemonPluginHost.kt` | **yes** (3 halves before, 4 after this ticket) | done |
 | `agenthq_harness_status` | was `cli/mcp/McpTools.kt`; now `plugins/official/Infantry_Agents/daemon` | **yes (this ticket)** | done |
-| `agenthq_harness_install` | `cli/mcp/McpTools.kt` | no | S, blocked: a plugin tool call is cut off at `limits.plugins.toolTimeoutMs`, and the MCP client waits only 1.25x the global value; an npm install runs minutes. Needs per-tool timeouts first (below, F1) |
-| 32 other built-in MCP tools (roles 5, tickets 9, mail 3, pipeline 2, ask, project config 2, harnesses/sessions/spawn 9, watch_file) | `cli/mcp/Mcp*Tools.kt`, ratchet `BuiltinToolsListGuardTest` | no | M each family (DAEMON-PLUGINS.md section 6) |
+| `agenthq_harness_install` | was `cli/mcp/McpTools.kt`; now `plugins/official/Infantry_Agents/daemon` | **yes (RUNTIME-LOAD-2, F1)** | done |
+| `agenthq_list_harnesses` | was `cli/mcp/McpTools.kt`; now `plugins/official/Infantry_Agents/daemon` | **yes (RUNTIME-LOAD-2, F2)** | done |
+| `agenthq_list_sessions`, `agenthq_get_session`, `agenthq_pod_state` | `cli/mcp/McpTools.kt` | no | M, see section 6: they are not pure frame reads |
+| 30 other built-in MCP tools (roles 5, tickets 9, mail 3, pipeline 2, ask, project config 2, sessions/spawn 7, watch_file) | `cli/mcp/Mcp*Tools.kt`, ratchet `BuiltinToolsListGuardTest` | no | M each family (DAEMON-PLUGINS.md section 6) |
 | Harness plugins `claude`, `pi` | `harness/claude`, `harness/pi`, `META-INF/services/...HarnessPlugin` in the daemon jar | no (ServiceLoader on the daemon's own classpath) | L: needs a harness API module, a folder source for `HarnessPluginSource` (none exists), trust rules |
 | Harness plugin `opencode` (provider) | `provider/ProviderFactory.kt` `builders` map | no | L, same as above; `stub` is test/E2E only |
 | Harness descriptors (JSON) | `harness/descriptor/HarnessDescriptorLoader.kt` | **yes** | done (cannot express `pi`'s session adapter or `claude`'s model catalog, so it does not replace them) |
@@ -77,8 +79,8 @@ that takes more than 75 s now errors where it used to wait 15 minutes. `npm view
 
 | # | Follow-up | Size | Why this order |
 |---|---|---|---|
-| F1 | Per-tool timeout in the plugin tool contract (`McpPluginTools.answerWaitMs` reads the tool's declared `toolTimeoutMs`); then move `agenthq_harness_install` | S | Unblocks the last two harness tools; removes the edge above |
-| F2 | `agenthq_list_harnesses` + `agenthq_list_sessions` / `agenthq_get_session` / `agenthq_pod_state` into the Infantry_Agents half (read-only frames) | S-M | Same pattern, no new API |
+| F1 (done, RUNTIME-LOAD-2) | Per-tool timeout in the plugin tool contract (`McpPluginTools.answerWaitMs` reads the tool's declared `toolTimeoutMs`); then move `agenthq_harness_install` | S | Unblocks the last two harness tools; removes the edge above |
+| F2 (list_harnesses done, RUNTIME-LOAD-2; the three session tools: section 6) | `agenthq_list_harnesses` + `agenthq_list_sessions` / `agenthq_get_session` / `agenthq_pod_state` into the Infantry_Agents half (read-only frames) | S-M | Same pattern, no new API |
 | F3 | Roles tools (5) into an Infantry_Roles daemon half (agent-caller persona rule moves with it) | M | Next family with a ready owner module |
 | F4 | `agenthq_ask` into Infantry_Attention; project config tools into Infantry_Settings | S each | One frame each |
 | F5 | Tickets/epic/board/progress tools into Infantry_Board (`ProjectScope` as an API helper) | M | Biggest family, riskiest scope rules |
@@ -87,6 +89,31 @@ that takes more than 75 s now errors where it used to wait 15 minutes. `npm view
 | F8 | Core Config `ConfigEntry` fallback removed (G13) | S-M | Independent of the daemon |
 | F9 | The 20 UI modules, one per project (B1-B6 of the audit), kit exported to the filtered loader (contract bump) | L | UI-first per D11 once F1-F6 settle |
 | F10 | Daemon feature services as plugins (D11: later) | L | Parked by the owner |
+
+## 6. RUNTIME-LOAD-2 (F1, F2)
+
+**F1: per-tool timeout as data.** `DaemonTool.timeoutMs` (default null = the module's `daemon.limits.toolTimeoutMs`, else
+`limits.plugins.toolTimeoutMs`, 60 s). The daemon runs the call under `min(timeoutMs, limits.plugins.toolMaxTimeoutMs)` (new limit,
+default 30 min, so a plugin cannot opt in to an unbounded wait) and lists the effective value as `timeoutMs` in its `plugin_tools`
+descriptors (additive key; `agenthq mcp serve` strips it from `tools/list` and waits 1.25x that value for the call, `McpPluginTools.answerWaitMs`).
+`agenthq_harness_status` (15 min, as the CLI allowed; fixes the >75 s regression above) and `agenthq_harness_install` (15 min) declare it;
+the module-wide `limits.toolTimeoutMs` in Infantry_Agents' `module.json` is gone, so the other tools keep the 60 s default. No frame
+changes shape (a new optional key in a descriptor the MCP server consumes), so no contract bump; CONTRACT.md notes the limit.
+- `agenthq_harness_install` moved: descriptor byte-identical to the deleted one (`McpServeTest.harnessInstallToolComesFromInfantryAgentsUnchanged`),
+  text from the shared `HarnessInstallText`, a failed harness still makes the result an error, gated by `harness.install` (write).
+  Absent plugin: not listed, no error (`harnessStatusToolIsGoneWithoutInfantryAgents`). Ratchet `CEILING` 33 -> 32.
+
+**F2: `agenthq_list_harnesses` moved** (frames `providers` + `models`, action `harness.read`). The merge of the two answers is the API's
+`HarnessCatalogText.merge` (models `ProviderInfo` / `ProviderModels` in `daemon.api.harness`), which the CLI's `HarnessCatalog` now
+calls too, so `agenthq harnesses` and the tool cannot drift. Descriptor byte-identical; the answer keeps its keys and `howToUse`.
+One wording difference: if the `models` frame fails, the note says the daemon's error text where the old code said the stream's
+exception message. Ratchet 32 -> 31.
+
+**Not moved, and why:** `agenthq_list_sessions`, `agenthq_get_session`, `agenthq_pod_state`. They are not "pure reads of what DaemonApi
+already exposes": all three depend on `ProjectScope` (reads `AGENTHQ_SESSION_ID`, the privileged-role rule), on the wire `SessionRecord`
+(about 40 fields, `BoardSummary`, `ProgressReducer`), and `get_session` streams a replay fenced by a second `sessions` frame, which a
+one-request `ToolCall.request` cannot do. Moving them needs an API-side session model plus a `ToolCall` streaming/fence primitive and
+`ProjectScope` as an API helper (the same blocker as the Infantry_Board family, F5). Do it with F5, not as a stopgap.
 
 ## 5. Not run
 
