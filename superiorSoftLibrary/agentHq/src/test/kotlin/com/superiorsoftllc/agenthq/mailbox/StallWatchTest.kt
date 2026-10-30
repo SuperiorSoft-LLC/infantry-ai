@@ -246,6 +246,16 @@ class StallWatchTest {
     }
 
     @Test
+    fun stall5_aSessionTheDaemonNoLongerKnows_isNotNudged() {
+        val r = StallRig(autoExit = true)
+        val s = r.manager.startNew("work", ticketId = "t1")
+        r.settle(s.id)
+        r.manager.delete(s.id)
+        r.at(10)
+        assertTrue(r.sent.isEmpty(), r.sent.map { it.subject }.toString())
+    }
+
+    @Test
     fun stall5_theOffSwitchNudgesADeliveredReportToo() {
         val r = StallRig(autoExit = true)
         val s = r.manager.startNew("work", ticketId = "t1")
