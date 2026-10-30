@@ -72,6 +72,12 @@ data class Project(
      * `project_config`. An older daemon omits the key, which a client reads as "no experiment on".
      */
     val experiments: Map<String, String> = emptyMap(),
+    /**
+     * PROJECT-DATA-1 (additive, no version bump): the project's generic data, string key to string value (namespaced keys such as
+     * `build.root`; a value may hold JSON text). No key is special to the daemon and none ships with a default. Set only with
+     * `project_config` (`data` / `unsetData`). An older daemon omits the key, which a client reads as "no data".
+     */
+    val data: Map<String, String> = emptyMap(),
 )
 
 /**
@@ -114,6 +120,10 @@ data class ProjectConfigRequest(
     val routingRules: List<RoutingRule>? = null,
     /** Contract 1.126.0: experiment switches merged into [Project.experiments] (`on`/`off`); absent = unchanged. */
     val experiments: Map<String, String>? = null,
+    /** PROJECT-DATA-1 (additive, no version bump): entries merged into [Project.data]; absent = unchanged. */
+    val data: Map<String, String>? = null,
+    /** PROJECT-DATA-1 (additive, no version bump): keys removed from [Project.data] (an absent key is not an error); absent = unchanged. */
+    val unsetData: List<String>? = null,
 ) {
     companion object {
         fun decode(text: String): ProjectConfigRequest = StrictJson.decode(serializer(), text, "project_config payload")

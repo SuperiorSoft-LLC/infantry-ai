@@ -26,6 +26,8 @@ data class ProjectConfigPatch(
     val autoRemoveDoneWorkers: Boolean? = null,
     val routingRules: List<RoutingRuleRecord>? = null,
     val experiments: Map<String, String>? = null,
+    val data: Map<String, String>? = null,
+    val unsetData: List<String>? = null,
 )
 
 @Serializable
@@ -35,4 +37,5 @@ data class ProjectConfigView(
     val autoRemoveDoneWorkers: Boolean = false,
     val routingRules: List<RoutingRuleRecord> = emptyList(),
     val experiments: Map<String, String> = emptyMap(),
+    val data: Map<String, String> = emptyMap(),
 )

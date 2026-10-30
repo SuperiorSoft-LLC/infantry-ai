@@ -42,7 +42,9 @@ CREATE TABLE IF NOT EXISTS projects (
     -- EXPERIMENTS-1 (48.sqm): JSON object experiment key -> "on"/"off"; absent = off.
     experiments TEXT NOT NULL DEFAULT '{}',
     -- ROUTING-1 (49.sqm): JSON array of RoutingRule, in order; '[]' = no rules. Declared LAST.
-    routing_rules TEXT NOT NULL DEFAULT '[]'
+    routing_rules TEXT NOT NULL DEFAULT '[]',
+    -- PROJECT-DATA-1 (54.sqm): JSON object key -> string value, generic project data; '{}' = none. Declared LAST.
+    project_data TEXT NOT NULL DEFAULT '{}'
 );
 
 -- Every project, in creation order (ties fall back to id so the order is total and stable).
@@ -57,9 +59,9 @@ SELECT * FROM projects ORDER BY created_at ASC, id ASC;
 -- The insert only lands for a new id, so `created_at` keeps the row's original value and an edit
 -- can never reorder the listing.
 insertProjectIgnore:
-INSERT OR IGNORE INTO projects(id, name, goal, created_at, directory, base_branch, lane_caps, auto_remove_done_workers, experiments, routing_rules) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT OR IGNORE INTO projects(id, name, goal, created_at, directory, base_branch, lane_caps, auto_remove_done_workers, experiments, routing_rules, project_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- The edit half: overwrites everything but the id and created_at (and the retired story_ids
 -- column, which neither this nor the insert above touches any more).
 updateProject:
-UPDATE projects SET name = ?, goal = ?, directory = ?, base_branch = ?, lane_caps = ?, auto_remove_done_workers = ?, experiments = ?, routing_rules = ? WHERE id = ?;
+UPDATE projects SET name = ?, goal = ?, directory = ?, base_branch = ?, lane_caps = ?, auto_remove_done_workers = ?, experiments = ?, routing_rules = ?, project_data = ? WHERE id = ?;

@@ -1753,10 +1753,14 @@ internal object Cli {
         val projectId = args[2].trim()
         val autoRemove = if (args[1] == "set" && args[3].trim() == AUTO_REMOVE_SETTING) onOff(args[4]) else null
         val experiment = if (args[1] == "set" && args[3].trim().startsWith(EXPERIMENT_PREFIX)) mapOf(args[3].trim().removePrefix(EXPERIMENT_PREFIX) to args[4].trim()) else null
-        val caps = if (args[1] == "set" && autoRemove == null && experiment == null) mapOf(args[3].trim() to args[4].trim().toInt()) else null
+        // PROJECT-DATA-1: `set <id> <key> <value>` with a dotted key stores generic project data; `unset <id> <key>` removes it.
+        val isData = args[1] == "set" && autoRemove == null && experiment == null && args[3].trim().contains('.')
+        val data = if (isData) mapOf(args[3].trim() to args[4]) else null
+        val unsetData = if (args[1] == "unset") listOf(args[3].trim()) else null
+        val caps = if (args[1] == "set" && autoRemove == null && experiment == null && !isData) mapOf(args[3].trim() to args[4].trim().toInt()) else null
         val payload = json.encodeToString(
             com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest.serializer(),
-            com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest(projectId = projectId, laneCaps = caps, autoRemoveDoneWorkers = autoRemove, experiments = experiment),
+            com.superiorsoftllc.agenthq.protocol.ProjectConfigRequest(projectId = projectId, laneCaps = caps, autoRemoveDoneWorkers = autoRemove, experiments = experiment, data = data, unsetData = unsetData),
         )
         val answer = stream.request(Envelope(Envelope.PROJECT_CONFIG, payload), Envelope.PROJECT, "project_config", idempotent = true)
         val project = try {
@@ -1770,6 +1774,8 @@ internal object Cli {
         for ((role, cap) in project.laneCaps) out.appendLine("  $role $cap")
         out.appendLine("$AUTO_REMOVE_SETTING: ${if (project.autoRemoveDoneWorkers) "on" else "off"} (a done ticket's worker session is ended and removed)")
         for ((k, v) in project.experiments) out.appendLine("$EXPERIMENT_PREFIX$k: $v (experimental)")
+        if (project.data.isNotEmpty()) out.appendLine("project data:")
+        for ((k, v) in project.data) out.appendLine("  $k = $v")
         return 0
     }
 
@@ -4392,6 +4398,8 @@ internal object Cli {
                                   (then AGENTHQ_BASE_BRANCH, else the start is refused). Tickets already started keep their base.
               project config get <projectId>   Each role's cap on concurrent agents (LANE-CAPS; unlisted roles run 1)
               project config set <projectId> <role> <n>   Set a role's cap (n >= 1); lowering never stops a running agent
+              project config set <projectId> <dotted.key> <value>   Store generic project data (e.g. build.root); get lists it as 'key = value'
+              project config unset <projectId> <dotted.key>   Remove a project data key
               project config set <projectId> auto-remove-done-workers on|off   End and remove a done ticket's worker session (default off)
               project routing <projectId> [--file <rules.json> | --clear]   The task routing rules (ROUTING-1): print them, replace
                                   them with a JSON array ({name, weights?, ticketTypes?, role?, provider, model, effort?, setRole?},
@@ -5321,12 +5329,14 @@ internal object Cli {
     /** BASE-1a: the usage error for a `project` invocation, or null when it is valid. */
     private fun projectUsageError(parsed: ParsedArgs): String? {
         val args = parsed.args
-        val usage = "agenthq project base <projectId> [<branch>|--clear] | branches <projectId> | rename <projectId> \"<name>\" | config get <projectId> | config set <projectId> <role> <n> | config set <projectId> $AUTO_REMOVE_SETTING on|off | routing <projectId> [--file <rules.json>|--clear]"
+        val usage = "agenthq project base <projectId> [<branch>|--clear] | branches <projectId> | rename <projectId> \"<name>\" | config get <projectId> | config set <projectId> <role> <n> | config set <projectId> $AUTO_REMOVE_SETTING on|off | config set <projectId> <dotted.key> <value> | config unset <projectId> <dotted.key> | routing <projectId> [--file <rules.json>|--clear]"
         return when {
             args.firstOrNull() == "config" -> when {
                 args.getOrNull(1) == "get" && args.size == 3 && args[2].isNotBlank() -> null
                 args.getOrNull(1) == "set" && args.size == 5 && args[2].isNotBlank() && args[3].trim() == AUTO_REMOVE_SETTING ->
                     if (onOff(args[4]) != null) null else "project config set <projectId> $AUTO_REMOVE_SETTING takes on or off: $usage"
+                args.getOrNull(1) == "set" && args.size == 5 && args[2].isNotBlank() && args[3].trim().contains('.') && args[4].isNotBlank() -> null
+                args.getOrNull(1) == "unset" && args.size == 4 && args[2].isNotBlank() && args[3].isNotBlank() -> null
                 args.getOrNull(1) == "set" && args.size == 5 && args[2].isNotBlank() && args[3].isNotBlank() &&
                     (args[4].trim().toIntOrNull() ?: 0) >= 1 -> null
                 else -> "project config takes get <projectId> or set <projectId> <role> <n >= 1>: $usage"

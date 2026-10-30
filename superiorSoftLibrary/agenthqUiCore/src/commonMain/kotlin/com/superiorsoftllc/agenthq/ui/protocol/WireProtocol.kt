@@ -1380,6 +1380,8 @@ data class Project(
     val autoRemoveDoneWorkers: Boolean = false,
     /** Contract 1.126.0 (EXPERIMENTS-1): named project switches, key to `on`; a key not listed is off. */
     val experiments: Map<String, String> = emptyMap(),
+    /** PROJECT-DATA-1 (additive, no version bump): generic project data, string key to string value. */
+    val data: Map<String, String> = emptyMap(),
 )
 
 /** Contract 1.111.0 (LANE-CAPS) `project_config`, answered by `project`: [laneCaps] merges into the stored caps; null reads. */
@@ -1391,6 +1393,10 @@ data class ProjectConfigRequest(
     val autoRemoveDoneWorkers: Boolean? = null,
     /** Contract 1.126.0: switches merged into `Project.experiments` (`on`/`off`); null = unchanged. */
     val experiments: Map<String, String>? = null,
+    /** PROJECT-DATA-1 (additive, no version bump): entries merged into `Project.data`; null = unchanged. */
+    val data: Map<String, String>? = null,
+    /** PROJECT-DATA-1 (additive, no version bump): keys removed from `Project.data`; null = unchanged. */
+    val unsetData: List<String>? = null,
 )
 
 /**
