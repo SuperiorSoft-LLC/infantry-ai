@@ -48,6 +48,7 @@ internal class GrantedBoard(private val tickets: () -> Tickets, private val epic
         override fun starterOf(sessionId: String, by: Caller) = need(GRANT_TICKETS_READ) { tickets().starterOf(sessionId, by) }
         override fun ticketOf(sessionId: String, by: Caller) = need(GRANT_TICKETS_READ) { tickets().ticketOf(sessionId, by) }
         override fun workerOf(ticketId: String, by: Caller) = need(GRANT_TICKETS_READ) { tickets().workerOf(ticketId, by) }
+        override fun mayFile(projectId: String, by: Caller) = need(GRANT_TICKETS_WRITE) { tickets().mayFile(projectId, by) }
     }
 
     val epicsApi: Epics = object : Epics {

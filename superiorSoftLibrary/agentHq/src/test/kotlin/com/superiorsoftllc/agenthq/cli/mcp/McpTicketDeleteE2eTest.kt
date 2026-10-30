@@ -115,7 +115,7 @@ class McpTicketDeleteE2eTest {
         val agent = serve(fixture, project)
 
         fun create(title: String): String =
-            payload(agent.callTool(McpTicketTools.CREATE, """{"title":"$title"}""")).str("ticketId")
+            payload(agent.callTool("agenthq_ticket_create", """{"title":"$title"}""")).str("ticketId")
         fun boardIds() = board.list().map { it.id }.toSet()
 
         // 1) create, delete by full id: the answer names it, the board no longer holds it, ticket_get refuses it.

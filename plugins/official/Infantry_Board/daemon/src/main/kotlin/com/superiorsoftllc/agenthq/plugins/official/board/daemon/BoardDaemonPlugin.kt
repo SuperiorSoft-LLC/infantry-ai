@@ -17,5 +17,7 @@ class BoardDaemonPlugin : DaemonPlugin {
         api.tools.register(EpicBaseTool)
         api.tools.register(TicketMoveTool(api))
         api.tools.register(TicketDeleteTool(api))
+        api.tools.register(TicketCreateTool(api))
+        api.tools.register(TicketUpdateTool(api))
     }
 }

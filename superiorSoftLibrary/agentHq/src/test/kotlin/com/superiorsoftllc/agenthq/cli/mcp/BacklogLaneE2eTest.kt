@@ -122,7 +122,7 @@ class BacklogLaneE2eTest {
         fun status(id: String) = fixture.daemon.board.list().single { it.id == id }.status
 
         // Create: MCP status backlog, CLI --status backlog, and a plain create still entering the sprint.
-        val viaMcp = payload(agent.callTool(McpTicketTools.CREATE, """{"title":"Parked by MCP","role":"backend","status":"backlog"}"""))
+        val viaMcp = payload(agent.callTool("agenthq_ticket_create", """{"title":"Parked by MCP","role":"backend","status":"backlog"}"""))
         assertEquals(TicketStatus.BACKLOG, viaMcp.str("status"))
         val mcpId = viaMcp.str("ticketId")
         val created = cli(fixture, "ticket", "create", "--title", "Parked by CLI", "--role", "backend", "--project", PROJECT, "--status", "backlog")
@@ -140,7 +140,7 @@ class BacklogLaneE2eTest {
         val badCli = cli(fixture, "ticket", "create", "--title", "x", "--project", PROJECT, "--status", "done")
         assertEquals(2, badCli.exit, "a create --status done is a usage error: ${badCli.out}${badCli.err}")
         assertTrue(badCli.err.contains("backlog"), badCli.err)
-        val badMcp = agent.callTool(McpTicketTools.CREATE, """{"title":"x","status":"in_progress"}""")
+        val badMcp = agent.callTool("agenthq_ticket_create", """{"title":"x","status":"in_progress"}""")
         assertEquals("true", badMcp["isError"]!!.jsonPrimitive.content, "an MCP create into in_progress is refused: $badMcp")
         assertEquals(3, fixture.daemon.board.list().size, "refused creates store nothing")
 

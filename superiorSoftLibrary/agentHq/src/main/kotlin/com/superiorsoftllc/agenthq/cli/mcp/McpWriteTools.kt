@@ -293,7 +293,7 @@ internal class McpWriteTools(
     private fun disagreement(ticket: Ticket, arguments: JsonObject): String? {
         val asked = TicketStarter.roleOf(ticket)
         val short = shortTicketId(ticket.id)
-        val fix = "Change the ticket with ${McpTicketTools.UPDATE} (role / provider / model), then start it with " +
+        val fix = "Change the ticket with agenthq_ticket_update (role / provider / model), then start it with " +
             "${McpTicketTools.START} ticketId $short."
         arguments.string("role")?.let { role ->
             // The same role spelled as the ticket stores it (`role:backend`) or in capitals is the same role.
@@ -314,7 +314,7 @@ internal class McpWriteTools(
         }
         if (arguments.string("task") != null) {
             return "$SPAWN refused: a ticket's worker is briefed from the ticket itself, so a task is not sent with it. " +
-                "Put the brief in the ticket's description (${McpTicketTools.UPDATE}), then start it with " +
+                "Put the brief in the ticket's description (agenthq_ticket_update), then start it with " +
                 "${McpTicketTools.START} ticketId $short."
         }
         return null

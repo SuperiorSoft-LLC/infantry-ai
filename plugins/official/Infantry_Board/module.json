@@ -19,7 +19,9 @@
       { "name": "agenthq_ticket_related_files", "action": "board.files.read", "kind": "read", "description": "The files of the tickets related to a ticket." },
       { "name": "agenthq_epic_base", "action": "epics.save", "kind": "write", "description": "Read, set or clear ONE epic's base branch." },
       { "name": "agenthq_ticket_move", "action": "board.ticket.move", "kind": "write", "description": "Move or reorder ONE ticket." },
-      { "name": "agenthq_ticket_delete", "action": "board.ticket.delete", "kind": "destructive", "description": "Delete ONE ticket." }
+      { "name": "agenthq_ticket_delete", "action": "board.ticket.delete", "kind": "destructive", "description": "Delete ONE ticket." },
+      { "name": "agenthq_ticket_create", "action": "board.ticket.save", "kind": "write", "description": "Create a ticket (images from the caller's own files)." },
+      { "name": "agenthq_ticket_update", "action": "board.ticket.save", "kind": "write", "description": "Edit ONE ticket (images from the caller's own files)." }
     ]
   },
   "fills": [

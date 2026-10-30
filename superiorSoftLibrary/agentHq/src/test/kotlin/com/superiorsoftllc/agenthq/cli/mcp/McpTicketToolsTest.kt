@@ -115,17 +115,18 @@ class McpTicketToolsTest {
     private val brief = "## Scope\n\n1. first line\n   - indented \"quoted\" `code`\n\n2. second; with \$(not-a-shell) & | chars\r\nend"
 
     @Test
-    fun `tools list has ticket create, update and get`() {
+    fun `core lists only ticket start, create, update and get are Infantry_Board tools`() {
         val names = McpTools.descriptors().map { it.jsonObject["name"]!!.jsonPrimitive.content }
         assertTrue(names.containsAll(McpTicketTools.NAMES), names.toString())
         assertTrue(McpTicketTools.NAMES.all { it in McpTools.NAMES })
+        assertTrue(listOf("agenthq_ticket_create", "agenthq_ticket_update", "agenthq_ticket_get").none { it in names }, names.toString())
     }
 
     @Test
     fun `create stores a multi-line description verbatim with role, provider and model, and get reads it back`() {
         val fixture = launch()
         val call = serve(fixture, mapOf(AccessPolicy.PROJECT_ID_ENV to "proj-mcp"))
-        val created = call(McpTicketTools.CREATE, args(
+        val created = call("agenthq_ticket_create", args(
             "title" to "MCP ticket", "description" to brief, "role" to "Backend", "provider" to "claude", "model" to "haiku",
         ))
         assertFalse(created.isError(), created.text())
@@ -149,8 +150,8 @@ class McpTicketToolsTest {
     fun `update changes only the fields given, description verbatim`() {
         val fixture = launch()
         val call = serve(fixture)
-        val id = call(McpTicketTools.CREATE, args("title" to "before", "provider" to "claude", "model" to "haiku")).payload().field("ticketId")!!
-        val updated = call(McpTicketTools.UPDATE, args("ticketId" to id.takeLast(8), "description" to brief, "model" to "sonnet", "role" to "qa"))
+        val id = call("agenthq_ticket_create", args("title" to "before", "provider" to "claude", "model" to "haiku")).payload().field("ticketId")!!
+        val updated = call("agenthq_ticket_update", args("ticketId" to id.takeLast(8), "description" to brief, "model" to "sonnet", "role" to "qa"))
         assertFalse(updated.isError(), updated.text())
         val stored = board(fixture).single { it.id == id }
         assertEquals("before", stored.title, "an absent title keeps the stored one")
@@ -164,11 +165,11 @@ class McpTicketToolsTest {
     fun `the daemon's refusals come back as tool errors, nothing coerced`() {
         val fixture = launch()
         val call = serve(fixture)
-        val bad = call(McpTicketTools.CREATE, args("title" to "bad model", "provider" to "claude", "model" to "haikuu"))
+        val bad = call("agenthq_ticket_create", args("title" to "bad model", "provider" to "claude", "model" to "haikuu"))
         assertTrue(bad.isError(), bad.text())
         assertTrue(board(fixture).none { it.title == "bad model" })
-        assertTrue(call(McpTicketTools.CREATE, JsonObject(emptyMap())).isError(), "a title is required")
-        assertTrue(call(McpTicketTools.UPDATE, args("ticketId" to "nope0000")).isError(), "an unknown ticket is refused")
+        assertTrue(call("agenthq_ticket_create", JsonObject(emptyMap())).isError(), "a title is required")
+        assertTrue(call("agenthq_ticket_update", args("ticketId" to "nope0000")).isError(), "an unknown ticket is refused")
         assertTrue(call("agenthq_ticket_get", args("ticketId" to "nope0000")).isError())
     }
 }

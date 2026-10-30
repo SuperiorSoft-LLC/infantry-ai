@@ -139,6 +139,7 @@ class LocalBoardServices(
             val save = TicketSave(
                 title = draft.title, description = draft.description, projectId = projectId, epicId = draft.epicId, ticketType = draft.ticketType,
                 agentId = draft.agentId, provider = draft.provider, model = draft.model, weight = draft.weight, images = draft.images, status = draft.status,
+                contextLimit = draft.contextLimit,
             )
             val created = b.save(save).ticket
             key?.let { createKeys[it] = created.id }
@@ -149,6 +150,7 @@ class LocalBoardServices(
             val save = TicketSave(
                 id = t.id, title = patch.title, description = patch.description, ticketType = patch.ticketType, epicId = patch.epicId,
                 agentId = patch.agentId, provider = patch.provider, model = patch.model, weight = patch.weight, images = patch.images,
+                contextLimit = patch.contextLimit,
             )
             BoardResult.Ok(info(b.save(save).ticket))
         }
@@ -226,6 +228,10 @@ class LocalBoardServices(
                     if (refusal != null) BoardResult.Refused(refusal) else BoardResult.Ok(ref?.let { TicketBinding(it.sessionId, it.projectId) })
                 }
             }
+        }
+
+        override fun mayFile(projectId: String, by: Caller): BoardResult<Unit> = op(Envelope.TICKET_SAVE, by) { _, w ->
+            foreign(w, "the target project", projectId.trim())?.let { BoardResult.Refused(it) } ?: BoardResult.Ok(Unit)
         }
 
         /** A read about a session: the link must exist, the policy allows reads, and the session must be in the caller's scope. */

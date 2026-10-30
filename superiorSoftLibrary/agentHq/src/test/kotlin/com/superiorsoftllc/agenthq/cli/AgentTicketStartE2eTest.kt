@@ -253,7 +253,7 @@ class AgentTicketStartE2eTest {
         val rig = rig()
         val call = mcp(rig)
         val title = "Wire the payments API"
-        val created = call(McpTicketTools.CREATE, args("title" to title, "role" to "backend", "provider" to "claude", "model" to "haiku"))
+        val created = call("agenthq_ticket_create", args("title" to title, "role" to "backend", "provider" to "claude", "model" to "haiku"))
         assertFalse(created.isError(), created.text())
         val ticketId = created.payload().field("ticketId")!!
 
@@ -305,12 +305,12 @@ class AgentTicketStartE2eTest {
         val rig = rig()
         val call = mcp(rig)
         val title = "Index the ledger"
-        val ticketId = call(McpTicketTools.CREATE, args("title" to title, "role" to "backend", "provider" to "claude", "model" to "haiku"))
+        val ticketId = call("agenthq_ticket_create", args("title" to title, "role" to "backend", "provider" to "claude", "model" to "haiku"))
             .payload().field("ticketId")!!
 
         val conflicting = call(SPAWN, args("ticketId" to ticketId.takeLast(8), "role" to "fullstack"))
         assertTrue(conflicting.isError(), "a role the ticket does not have must be refused, not ignored: ${conflicting.text()}")
-        assertTrue(conflicting.text().contains(McpTicketTools.UPDATE), conflicting.text())
+        assertTrue(conflicting.text().contains("agenthq_ticket_update"), conflicting.text())
         assertEquals(TicketStatus.TODO, board(rig.fixture).single { it.id == ticketId }.status, "a refused spawn starts nothing")
 
         val spawned = call(SPAWN, args("ticketId" to ticketId.takeLast(8)))
@@ -342,7 +342,7 @@ class AgentTicketStartE2eTest {
         val (rig, head) = dirtyCheckoutRig()
         val call = mcp(rig)
         val title = "Wire the payouts API"
-        val created = call(McpTicketTools.CREATE, args("title" to title, "role" to "backend", "provider" to "claude", "model" to "haiku"))
+        val created = call("agenthq_ticket_create", args("title" to title, "role" to "backend", "provider" to "claude", "model" to "haiku"))
         assertFalse(created.isError(), created.text())
         val ticketId = created.payload().field("ticketId")!!
 
@@ -403,16 +403,16 @@ class AgentTicketStartE2eTest {
     fun `CONTEXT-LIMIT-1 ticket create and update carry a context limit, off clears it, a typo is refused, the CLI sets it too`() {
         val rig = rig()
         val call = mcp(rig)
-        val created = call(McpTicketTools.CREATE, args("title" to "Big refactor", "contextLimit" to "500k"))
+        val created = call("agenthq_ticket_create", args("title" to "Big refactor", "contextLimit" to "500k"))
         assertFalse(created.isError(), created.text())
         val ticketId = created.payload().field("ticketId")!!
         assertEquals(500_000, board(rig.fixture).single { it.id == ticketId }.contextLimit)
 
-        val bad = call(McpTicketTools.UPDATE, args("ticketId" to ticketId.takeLast(8), "contextLimit" to "200"))
+        val bad = call("agenthq_ticket_update", args("ticketId" to ticketId.takeLast(8), "contextLimit" to "200"))
         assertTrue(bad.isError(), bad.text())
         assertEquals(500_000, board(rig.fixture).single { it.id == ticketId }.contextLimit, "a refused limit changes nothing")
 
-        val cleared = call(McpTicketTools.UPDATE, args("ticketId" to ticketId.takeLast(8), "contextLimit" to "off"))
+        val cleared = call("agenthq_ticket_update", args("ticketId" to ticketId.takeLast(8), "contextLimit" to "off"))
         assertFalse(cleared.isError(), cleared.text())
         assertEquals(listOf("contextLimit"), cleared.payload()["saved"]!!.jsonArray.map { it.jsonPrimitive.content })
         assertEquals(null, board(rig.fixture).single { it.id == ticketId }.contextLimit)
@@ -430,9 +430,9 @@ class AgentTicketStartE2eTest {
     fun `ticket update answers that it saved role, provider and model`() {
         val rig = rig()
         val call = mcp(rig)
-        val ticketId = call(McpTicketTools.CREATE, args("title" to "Tune the cache")).payload().field("ticketId")!!
+        val ticketId = call("agenthq_ticket_create", args("title" to "Tune the cache")).payload().field("ticketId")!!
 
-        val updated = call(McpTicketTools.UPDATE, args("ticketId" to ticketId.takeLast(8), "role" to "backend", "provider" to "claude", "model" to "sonnet"))
+        val updated = call("agenthq_ticket_update", args("ticketId" to ticketId.takeLast(8), "role" to "backend", "provider" to "claude", "model" to "sonnet"))
         assertFalse(updated.isError(), updated.text())
         val answer = updated.payload()
         assertEquals("backend", answer.field("role"))
@@ -508,16 +508,16 @@ class AgentTicketStartE2eTest {
     fun `a role refused at create or update names the valid role ids, through MCP and the CLI`() {
         val rig = rig()
         val call = mcp(rig)
-        val ticketId = call(McpTicketTools.CREATE, args("title" to "Name the roles", "role" to "backend")).payload().field("ticketId")!!
+        val ticketId = call("agenthq_ticket_create", args("title" to "Name the roles", "role" to "backend")).payload().field("ticketId")!!
 
         // A display name is refused, never matched to a role id; the refusal lists the ids to use instead.
-        val updated = call(McpTicketTools.UPDATE, args("ticketId" to ticketId.takeLast(8), "role" to "Backend Developer"))
+        val updated = call("agenthq_ticket_update", args("ticketId" to ticketId.takeLast(8), "role" to "Backend Developer"))
         assertTrue(updated.isError(), "a display name is not a role id: ${updated.text()}")
         val listed = roleIdsIn(updated.text())
         assertTrue(listOf("backend", "fullstack", "qa").all { it in listed }, "the refusal names the valid role ids: ${updated.text()}")
         assertEquals("role:backend", board(rig.fixture).single { it.id == ticketId }.agentId, "a refused role changes nothing")
 
-        val created = call(McpTicketTools.CREATE, args("title" to "Never saved", "role" to "Backend Developer"))
+        val created = call("agenthq_ticket_create", args("title" to "Never saved", "role" to "Backend Developer"))
         assertTrue(created.isError(), created.text())
         assertTrue("backend" in roleIdsIn(created.text()), "the create refusal names them too: ${created.text()}")
 
@@ -535,7 +535,7 @@ class AgentTicketStartE2eTest {
     @Test
     fun `a ticket created without a role stays unassigned, through MCP and the CLI`() {
         val rig = rig()
-        val created = mcp(rig)(McpTicketTools.CREATE, args("title" to "No role given"))
+        val created = mcp(rig)("agenthq_ticket_create", args("title" to "No role given"))
         assertFalse(created.isError(), created.text())
         val viaMcp = board(rig.fixture).single { it.title == "No role given" }
         assertNull(viaMcp.agentId, "MCP create without a role must store no role, never the first profile's")
@@ -563,13 +563,13 @@ class AgentTicketStartE2eTest {
     fun `a role id outside the catalog is refused at create and update, through MCP and the CLI`() {
         val rig = rig()
         val call = mcp(rig)
-        val created = call(McpTicketTools.CREATE, args("title" to "Unknown role", "role" to "backend-developer"))
+        val created = call("agenthq_ticket_create", args("title" to "Unknown role", "role" to "backend-developer"))
         assertTrue(created.isError(), "an unknown role id must be refused at create: ${created.text()}")
         assertTrue("backend" in roleIdsIn(created.text()), "the refusal names the valid ids: ${created.text()}")
         assertTrue(board(rig.fixture).none { it.title == "Unknown role" }, "a refused create saves nothing")
 
-        val ticketId = call(McpTicketTools.CREATE, args("title" to "Known role", "role" to "backend")).payload().field("ticketId")!!
-        val updated = call(McpTicketTools.UPDATE, args("ticketId" to ticketId.takeLast(8), "role" to "backend-developer"))
+        val ticketId = call("agenthq_ticket_create", args("title" to "Known role", "role" to "backend")).payload().field("ticketId")!!
+        val updated = call("agenthq_ticket_update", args("ticketId" to ticketId.takeLast(8), "role" to "backend-developer"))
         assertTrue(updated.isError(), "an unknown role id must be refused at update: ${updated.text()}")
         assertTrue("backend" in roleIdsIn(updated.text()), updated.text())
         assertEquals("role:backend", board(rig.fixture).single { it.id == ticketId }.agentId, "a refused update changes nothing")
@@ -650,7 +650,7 @@ class AgentTicketStartE2eTest {
         val call = mcp(rig)
         val title = "Ship the develop work"
         val created = call(
-            McpTicketTools.CREATE,
+            "agenthq_ticket_create",
             args("title" to title, "projectId" to a, "role" to "backend", "provider" to "claude", "model" to "haiku"),
         )
         assertFalse(created.isError(), created.text())
@@ -667,7 +667,7 @@ class AgentTicketStartE2eTest {
 
         // Project B has no setting: its agent's start still cuts from HEAD. On the gated claude harness too, so it stays
         // In Progress while it is read (the stub would finish it at once).
-        val createdB = call(McpTicketTools.CREATE, args("title" to "B work", "projectId" to b, "role" to "fullstack", "provider" to "claude", "model" to "haiku"))
+        val createdB = call("agenthq_ticket_create", args("title" to "B work", "projectId" to b, "role" to "fullstack", "provider" to "claude", "model" to "haiku"))
         assertFalse(createdB.isError(), createdB.text())
         val idB = createdB.payload().field("ticketId")!!
         val startedB = call(TICKET_START, args("ticketId" to idB))

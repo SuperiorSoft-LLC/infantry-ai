@@ -116,7 +116,7 @@ class McpTicketAnswerRaceE2eTest {
     fun ticketCreateAndUpdateAnswerWithTheirOwnTicketWhileAStartedTicketIsBeingPushed() {
         val gated = GatedRunner()
         val state = tempDir("agenthq-mcp-race-daemon")
-        val fixture = DaemonFixture.launch(stateDir = state, runner = gated, workingDir = File(state, "workdir").apply { mkdirs() })
+        val fixture = DaemonFixture.launch(stateDir = state, runner = gated, workingDir = File(state, "workdir").apply { mkdirs() }, pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot())
             .also { fixtures += it; it.client.await(Envelope.READY) }
         val board = fixture.daemon.board
         val root = tempDir("agenthq-mcp-race-project")
@@ -124,7 +124,7 @@ class McpTicketAnswerRaceE2eTest {
         val agent = serve(fixture, root)
 
         // Ticket A, started: its gated run stays open, so A stays in progress.
-        val a = payload(agent.callTool(McpTicketTools.CREATE, """{"title":"Ticket A","role":"backend"}""")).str("ticketId")
+        val a = payload(agent.callTool("agenthq_ticket_create", """{"title":"Ticket A","role":"backend"}""")).str("ticketId")
         val started = agent.callTool(McpTicketTools.START, """{"ticketId":"$a"}""")
         assertEquals("false", started["isError"]!!.jsonPrimitive.content, "start must succeed: ${text(started)}")
         fixture.await(what = "A's worker run") { gated.prompts.isNotEmpty() }
@@ -142,14 +142,14 @@ class McpTicketAnswerRaceE2eTest {
 
         repeat(ROUNDS) { round ->
             val title = "Ticket B$round"
-            val created = payload(agent.callTool(McpTicketTools.CREATE, """{"title":"$title"}"""))
+            val created = payload(agent.callTool("agenthq_ticket_create", """{"title":"$title"}"""))
             val b = created.str("ticketId")
             assertNotEquals(a, b, "round $round: agenthq_ticket_create answered with the STARTED ticket A's id")
             assertEquals(title, board.get(b).title, "round $round: the id agenthq_ticket_create returned is not the new ticket")
             assertEquals(title, created.str("title"), "round $round: the create answer describes another ticket: $created")
 
             val renamed = "$title renamed"
-            val updated = payload(agent.callTool(McpTicketTools.UPDATE, """{"ticketId":"$b","title":"$renamed"}"""))
+            val updated = payload(agent.callTool("agenthq_ticket_update", """{"ticketId":"$b","title":"$renamed"}"""))
             assertEquals(b, updated.str("ticketId"), "round $round: agenthq_ticket_update answered with another ticket's id")
             assertEquals(renamed, updated.str("title"), "round $round: the update answer describes another ticket: $updated")
         }

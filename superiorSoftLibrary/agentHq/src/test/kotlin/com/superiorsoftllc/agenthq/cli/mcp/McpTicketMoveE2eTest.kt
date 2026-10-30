@@ -112,7 +112,7 @@ class McpTicketMoveE2eTest {
         val agent = serve(fixture, project)
 
         val ids = listOf("A", "B", "C", "D").associateWith { title ->
-            payload(agent.callTool(McpTicketTools.CREATE, """{"title":"$title"}""")).str("ticketId")
+            payload(agent.callTool("agenthq_ticket_create", """{"title":"$title"}""")).str("ticketId")
         }
         val titles = ids.entries.associate { (k, v) -> v to k }
         fun todo(board: List<com.superiorsoftllc.agenthq.protocol.Ticket>) =

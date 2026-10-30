@@ -146,7 +146,7 @@ class TicketImageAttachE2eTest {
 
     private fun setUp(name: String): Triple<DaemonFixture, File, String> {
         val state = tempDir("agenthq-img-attach-daemon")
-        val fixture = DaemonFixture.launch(stateDir = state, runner = GatedRunner(), workingDir = File(state, "workdir").apply { mkdirs() })
+        val fixture = DaemonFixture.launch(stateDir = state, runner = GatedRunner(), workingDir = File(state, "workdir").apply { mkdirs() }, pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot())
             .also { fixtures += it; it.client.await(Envelope.READY) }
         val root = tempDir("agenthq-img-attach-project")
         return Triple(fixture, root, fixture.createProject(name, root))
@@ -170,7 +170,7 @@ class TicketImageAttachE2eTest {
 
         // Create with a local file: it is uploaded, and the ticket's images holds its relPath.
         val a = pngFile("screenshot-a")
-        val created = payload(agent.callTool(McpTicketTools.CREATE, """{"title":"Has a screenshot","images":${quoted(a.absolutePath)}}"""))
+        val created = payload(agent.callTool("agenthq_ticket_create", """{"title":"Has a screenshot","images":${quoted(a.absolutePath)}}"""))
         val t1 = created.str("ticketId")
         val relA = created.images().single()
         assertTrue(relA.startsWith(".agenthq/uploads/ticket/") && relA.endsWith(".png"), "stored as a ticket upload: $relA")
@@ -179,26 +179,26 @@ class TicketImageAttachE2eTest {
         assertTrue(created.str("message").contains("1 image(s)"), "the answer says the image was saved: $created")
 
         // The same bytes again land at the same path (the image upload dedupe).
-        val again = payload(agent.callTool(McpTicketTools.CREATE, """{"title":"Same bytes","images":${quoted(pngFile("copy", salt = "screenshot-a").absolutePath)}}"""))
+        val again = payload(agent.callTool("agenthq_ticket_create", """{"title":"Same bytes","images":${quoted(pngFile("copy", salt = "screenshot-a").absolutePath)}}"""))
         assertEquals(listOf(relA), again.images(), "identical bytes give the same path")
 
         // addImages appends a local file; removeImages drops one, named by its original file.
         val b = pngFile("screenshot-b")
-        val added = payload(agent.callTool(McpTicketTools.UPDATE, """{"ticketId":"$t1","addImages":${quoted(b.absolutePath)}}"""))
+        val added = payload(agent.callTool("agenthq_ticket_update", """{"ticketId":"$t1","addImages":${quoted(b.absolutePath)}}"""))
         assertEquals(2, added.images().size, "addImages keeps the stored image and adds one: ${added.images()}")
         assertEquals(relA, added.images().first())
         val relB = added.images()[1]
-        val removed = payload(agent.callTool(McpTicketTools.UPDATE, """{"ticketId":"$t1","removeImages":${quoted(a.absolutePath)}}"""))
+        val removed = payload(agent.callTool("agenthq_ticket_update", """{"ticketId":"$t1","removeImages":${quoted(a.absolutePath)}}"""))
         assertEquals(listOf(relB), removed.images(), "removeImages by the original file drops that image")
         // ...or by its stored file name.
-        val byName = payload(agent.callTool(McpTicketTools.UPDATE, """{"ticketId":"$t1","removeImages":${quoted(relB.substringAfterLast('/'))}}"""))
+        val byName = payload(agent.callTool("agenthq_ticket_update", """{"ticketId":"$t1","removeImages":${quoted(relB.substringAfterLast('/'))}}"""))
         assertEquals(emptyList(), byName.images())
 
         // A removal naming an image the ticket does not have, or images together with addImages, is refused.
         val before = board.get(t1)
-        assertRefused(agent.callTool(McpTicketTools.UPDATE, """{"ticketId":"$t1","removeImages":["nope.png"]}"""), "has no image 'nope.png'")
+        assertRefused(agent.callTool("agenthq_ticket_update", """{"ticketId":"$t1","removeImages":["nope.png"]}"""), "has no image 'nope.png'")
         assertRefused(
-            agent.callTool(McpTicketTools.UPDATE, """{"ticketId":"$t1","images":[],"addImages":${quoted(b.absolutePath)}}"""),
+            agent.callTool("agenthq_ticket_update", """{"ticketId":"$t1","images":[],"addImages":${quoted(b.absolutePath)}}"""),
             "not both",
         )
         assertEquals(before, board.get(t1), "a refused edit leaves the ticket unchanged")
@@ -209,11 +209,11 @@ class TicketImageAttachE2eTest {
             val ticketsBefore = board.list().size
             val uploadsBefore = uploads(root)
             assertRefused(
-                agent.callTool(McpTicketTools.CREATE, """{"title":"Never saved","images":${quoted(good.absolutePath, bad.absolutePath)}}"""),
+                agent.callTool("agenthq_ticket_create", """{"title":"Never saved","images":${quoted(good.absolutePath, bad.absolutePath)}}"""),
                 why,
             )
             assertRefused(
-                agent.callTool(McpTicketTools.UPDATE, """{"ticketId":"$t1","addImages":${quoted(good.absolutePath, bad.absolutePath)}}"""),
+                agent.callTool("agenthq_ticket_update", """{"ticketId":"$t1","addImages":${quoted(good.absolutePath, bad.absolutePath)}}"""),
                 why,
             )
             assertEquals(ticketsBefore, board.list().size, "a refused create saves no ticket (${bad.name})")

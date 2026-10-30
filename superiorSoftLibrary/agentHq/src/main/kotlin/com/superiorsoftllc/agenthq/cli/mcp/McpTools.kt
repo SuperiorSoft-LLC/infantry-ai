@@ -48,9 +48,6 @@ internal class McpTools(
     /** P11-B: spawn / prompt / message / kill, with the server's depth, concurrency and kill-scope guardrails. */
     private val writes = McpWriteTools(guardrails, getenv, defaultProjectId)
 
-    /** MCP-1: ticket create / update / get, over the CLI's own `ticket_save` / `ticket_list` frames. */
-    private val tickets = McpTicketTools(getenv, defaultProjectId)
-
     /** MAIL-MCP-1: inbox / read, over the CLI's own `mail_inbox` / `mail_read` frames. */
     private val mail = McpMailTools(getenv)
     private val pipeline = McpPipelineTools(getenv)
@@ -63,7 +60,7 @@ internal class McpTools(
     /** ROLE-EDIT-1: the role catalog (`agenthq_role_*`); an agent caller may only edit persona and description. */
 
     /** DAEMON-PLUGINS-1: the daemon plugins' tools (TICKET-FILES' two tools are Infantry_Board's now). */
-    private val plugins = McpPluginTools(getenv)
+    private val plugins = McpPluginTools(getenv, defaultProjectId)
     @Volatile private var pluginNames: Set<String>? = null
 
     /** DAEMON-PLUGINS-1: the daemon plugins' tools for `tools/list`; none when the daemon has none or is unreachable. */
@@ -105,8 +102,6 @@ internal class McpTools(
                     McpPipelineTools.SHOW -> pipeline.show(stream, arguments)
                     McpPipelineTools.RECORD -> pipeline.record(stream, arguments)
                     McpWatchTools.WATCH_FILE -> watch.watchFile(arguments)
-                    McpTicketTools.CREATE -> tickets.create(stream, arguments)
-                    McpTicketTools.UPDATE -> tickets.update(stream, arguments)
                     McpTicketTools.START -> writes.startTicket(stream, arguments, McpTicketTools.START)
                     else -> plugins.call(stream, name, arguments)
                 }

@@ -183,7 +183,6 @@ class McpServeTest {
             listOf(
                 "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_board",
                 "agenthq_spawn", "agenthq_prompt", "agenthq_message", "agenthq_kill", "agenthq_session_remove", "agenthq_session_restart",
-                "agenthq_ticket_create", "agenthq_ticket_update", // MCP-1 (agenthq_ticket_get is Infantry_Board's daemon tool: absent without the plugin)
                 "agenthq_ticket_start", // BUG-ASSIGN-1
                 "agenthq_inbox", "agenthq_read", // MAIL-MCP-1
                 "agenthq_pipeline", "agenthq_pipeline_record", // PIPE-1
@@ -307,6 +306,8 @@ class McpServeTest {
         "agenthq_epic_base" to "epics.save",
         "agenthq_ticket_move" to "board.ticket.move",
         "agenthq_ticket_delete" to "board.ticket.delete",
+        "agenthq_ticket_create" to "board.ticket.save",
+        "agenthq_ticket_update" to "board.ticket.save",
     )
 
     private val TICKET_GET_GOLDEN = """{"name":"agenthq_ticket_get","description":"Read ONE ticket back: title, verbatim description, status, project, role/agent, provider, model, branch, worker session, attached images.","inputSchema":{"type":"object","properties":{"ticketId":{"type":"string","description":"Full ticket id, or its 8-char suffix."}},"required":["ticketId"],"additionalProperties":false},"annotations":{"readOnlyHint":true,"destructiveHint":false,"openWorldHint":false}}"""

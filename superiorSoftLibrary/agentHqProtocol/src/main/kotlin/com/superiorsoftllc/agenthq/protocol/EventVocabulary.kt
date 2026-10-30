@@ -383,7 +383,8 @@ object EventVocabulary {
     // **1.144.0 (DAEMON-PLUGINS-1, ticket-fb588e94) is ADDITIVE + BEHAVIOURAL**: `plugin_tools` -> `plugin_tools` (the daemon plugins' tool descriptors), `plugin_tool_call` ({name, arguments}) -> `plugin_tool_result` ({name, text, isError}); plugin frames and routes; `GET /plugins` modules gain `daemon`, `tools`. The seated lockdown (1.136.0's allowlist included) is a daemon plugin's: a seated preset no plugin implements refuses every frame but the switch. See CONTRACT.md.
     // **1.145.0 (HARNESS-PLUGIN-4 H5a, ticket-24a2706c) is ADDITIVE**: `GET /plugins` modules gain `harness` (the harness block's state) and `harnessIds`; `harness_install_status` also lists the CLIs harness modules declare in `harness.cli.install`. See CONTRACT.md.
     // **1.146.0 (CONTEXT-LIMIT-1, ticket-1a983d71) is ADDITIVE**: a per-session context limit. `new` (SpawnOptions) and `ticket_save` take `contextLimit` (tokens; 0 clears on a ticket), tickets carry `contextLimit` + `effectiveContextLimit`, sessions `contextLimit` + `contextLimitSupport`, `providers` entries `contextLimit` (supported / best_effort / unsupported) + `contextLimitHow`. See CONTRACT.md and docs/CONTEXT-LIMIT.md.
-    const val VERSION = "1.146.0"
+    // **1.147.0 (RUNTIME-LOAD-4, ticket-61177938) is ADDITIVE**: a `plugin_tools` descriptor may list `localFiles` (argument keys naming files on the caller's machine); `plugin_tool_call` then carries those files inline (`{path, size, base64?}`) and `client.projectId` (the MCP server's default project). See CONTRACT.md.
+    const val VERSION = "1.147.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA
