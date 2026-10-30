@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
  * period after the idle limit. A real failure is sent once per window.
  */
 class FinishNoticeMonitorTest {
-    private class Rig(idleMinutes: Long = IDLE_MIN) {
+    private class Rig(idleMinutes: Long = IDLE_MIN, exempt: Boolean = true) {
         var now = System.currentTimeMillis() + 1_000
         val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = true), tempSessionStore(), killGraceMs = 50)
         val mailbox = Mailbox(MemMailStore(), MailLimits(), clock = { now })
@@ -29,6 +29,7 @@ class FinishNoticeMonitorTest {
             ticketOf = { TicketRow(id = "t1", title = "T", status = status, position = 0, createdAt = 1, updatedAt = 1, sessionId = owner, startedBy = "pm") },
             commitOf = { null }, clock = { now },
             idleNoticeMs = { if (idleMinutes == 0L) Long.MAX_VALUE else idleMinutes * 60_000L },
+            exemptWhenDone = { exempt },
         )
         fun exit(code: Int, session: String = sessionId) = monitor.onSessionEvent(SessionEvent.Exit(session, code))
         fun minutes(n: Long) { now += n * 60_000L }
@@ -48,6 +49,37 @@ class FinishNoticeMonitorTest {
         val text = (r.subject.orEmpty() + "\n" + r.body).lowercase()
         assertFalse(text.contains("failure") || text.contains("failed") || text.contains("did not finish cleanly"), text)
         assertTrue(r.body.contains("Worker finished its turn and is waiting for instructions (ticket still open)."), r.body)
+    }
+
+    @Test
+    fun stall5_a_non_zero_exit_after_done_or_a_delivered_report_is_silent() {
+        val done = Rig()
+        done.status = "done"
+        done.mailbox.send(MailSendRequest(from = "system", to = done.sessionId, subject = "x", body = "x"))
+        done.exit(1)
+        assertEquals(0, done.sent.size)
+        val reported = Rig()
+        reported.now += 10
+        reported.mailbox.send(MailSendRequest(from = reported.sessionId, to = "pm", subject = "report", body = "done"))
+        reported.exit(1)
+        assertEquals(0, reported.sent.size)
+    }
+
+    @Test
+    fun stall5_a_non_zero_exit_with_no_report_and_the_ticket_open_is_still_a_failure() {
+        val r = Rig()
+        r.exit(1)
+        assertEquals(1, r.sent.size)
+        assertTrue(r.sent[0].subject.orEmpty().contains("AUTOMATIC FAILURE"))
+    }
+
+    @Test
+    fun stall5_the_off_switch_restores_the_failure_notice_after_done() {
+        val r = Rig(exempt = false)
+        r.status = "done"
+        r.exit(1)
+        assertEquals(1, r.sent.size)
+        assertTrue(r.sent[0].subject.orEmpty().contains("AUTOMATIC FAILURE"))
     }
 
     @Test

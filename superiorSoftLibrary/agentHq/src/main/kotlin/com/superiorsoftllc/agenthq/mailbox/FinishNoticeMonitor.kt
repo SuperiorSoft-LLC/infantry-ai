@@ -39,6 +39,8 @@ class FinishNoticeMonitor(
     private val clock: () -> Long = System::currentTimeMillis,
     /** How long a worker may wait at rest, with no mail either way, before its starter is told; [Long.MAX_VALUE] = never. */
     private val idleNoticeMs: () -> Long = { LimitRegistry.minutesMs(LimitRegistry.IDLE_NOTICE_MINUTES.default, LimitRegistry.IDLE_NOTICE_MINUTES) },
+    /** STALL-5: `limits.watch.exemptWhenTicketDone`; off = a non-zero exit after done is a failure notice as before. */
+    private val exemptWhenDone: () -> Boolean = { true },
 ) {
     /** One stretch of a worker at rest with its ticket open: [since] is when it began (or its last sign of work). */
     private class IdlePeriod(@Volatile var since: Long) {
@@ -89,8 +91,14 @@ class FinishNoticeMonitor(
         if (lastNoticed.put(session.id, run) == run) return
         val killed = event.killOutcome != null
         if (killed && (ticket.status == TicketStatus.DONE || session.killedBy in QUIET_KILLERS)) return
-        val failed = killed || event.code != 0
         val done = ticket.status == TicketStatus.DONE
+        // STALL-5: a non-zero exit after the ticket is done (or the final report was mailed) is a normal end, not a failure.
+        if (!killed && event.code != 0 && exemptWhenDone() && (done || reportDelivered(mailbox, session, starter))) {
+            println("[agentHq] finish notice: ${session.id} ended with exit code ${event.code} after its work was delivered; no failure notice")
+            idle.remove(session.id)
+            return
+        }
+        val failed = killed || event.code != 0
         if (!failed && !done) {
             // A clean end of turn with the ticket open: the worker is waiting, not failing. Same period while no mail moved.
             val now = clock()
@@ -193,6 +201,15 @@ class FinishNoticeMonitor(
 
     companion object {
         const val SYSTEM = "system"
+
+        /** STALL-5: the session's last mail to [starter] is newer than any mail it received from anyone but `system`. */
+        fun reportDelivered(mailbox: Mailbox, session: SessionRecord, starter: String?): Boolean {
+            if (starter == null) return false
+            val sent = mailbox.outbox(session.id).filter { it.to == starter }.maxOfOrNull { it.sentAt } ?: return false
+            val received = listOfNotNull(session.id, session.agentId).flatMap { mailbox.inbox(it) }
+                .filter { it.from != SYSTEM }.maxOfOrNull { it.sentAt } ?: 0L
+            return sent > received
+        }
         /** Kills the daemon makes as routine housekeeping: no failure notice. */
         private val QUIET_KILLERS = setOf("done-worker reaper", "ticket start rollback")
         private const val TAIL_LINES = 12
