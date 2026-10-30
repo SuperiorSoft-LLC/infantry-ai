@@ -86,7 +86,14 @@ interface DaemonApi {
     /** STACK-NEUTRAL-2 (1.8.0, additive): read access to `limits.*`, `watch.*` and `processes.*` settings. */
     val settings: com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings get() = com.superiorsoftllc.agenthq.daemon.api.processes.NoPluginSettings
 
+    /**
+     * PACE-TREND-1 (1.10.0, additive): the plan meters, read-only (daemon.api.usage.MeterReading). A community plugin needs the
+     * grant `usage.read`. A daemon without meters reads nothing.
+     */
+    val meters: com.superiorsoftllc.agenthq.daemon.api.usage.Meters get() = com.superiorsoftllc.agenthq.daemon.api.usage.NoMeters
+
     companion object {
+        // 1.10.0 (PACE-TREND-1, additive): `meters` (daemon.api.usage.Meters), the current reading of every provider window.
         // 1.9.0 (RUNTIME-LOAD-7, additive): `ToolCall.clientNarrowing` (the MCP client's depth / spawn narrowing).
         // 1.8.0 (STACK-NEUTRAL-2, additive): `processes`, `launchEnv`, `settings` (daemon.api.processes).
         // 1.7.0 (RUNTIME-LOAD-6, additive): `spawns` (daemon.api.spawns): host spawn / ticket start / kill guardrails.
@@ -94,7 +101,7 @@ interface DaemonApi {
         // 1.5.0 (AGENT-REGISTRY-1, additive): `agents` (daemon.api.agents.Agents) and module.json `agents`.
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
-        const val VERSION = "1.9.0"
+        const val VERSION = "1.10.0"
     }
 }
 

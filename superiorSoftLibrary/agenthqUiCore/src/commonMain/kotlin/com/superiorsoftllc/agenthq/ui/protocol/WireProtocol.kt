@@ -161,6 +161,10 @@ data class Envelope(
         // Contract 1.141.0 (USAGE-1): `usage_meter_get` -> `usage_meter` (a UsageMeterReport), daily tokens/cost by role, model, source.
         const val USAGE_METER_GET = "usage_meter_get"
         const val USAGE_METER = "usage_meter"
+        // PACE-TREND-1 (the Infantry_Pace daemon half, DaemonApi 1.10.0): `pace_get` (a JSON query: provider, window, sinceHours) ->
+        // `pace_report` (JSON: per provider window the history points, momentum and forecast). The UI keeps the answer as text.
+        const val PACE_GET = "pace_get"
+        const val PACE_REPORT = "pace_report"
 
         // Daemon settings. BUG-M2-11e reads and writes `session.keepAliveMinutes` (contract 1.68.0) through them.
         // `settings_get` (data = a key, or empty for all) and `settings_set` are answered by `settings` (a JSON object).

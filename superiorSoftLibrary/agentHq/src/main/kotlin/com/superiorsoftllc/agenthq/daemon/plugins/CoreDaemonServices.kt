@@ -50,6 +50,8 @@ class CoreDaemonServices(
     override val processHost: com.superiorsoftllc.agenthq.session.LocalProcesses? = null,
     override val launchEnvHost: com.superiorsoftllc.agenthq.session.LaunchEnvHost? = null,
     override val pluginSettings: com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings = com.superiorsoftllc.agenthq.daemon.api.processes.NoPluginSettings,
+    /** PACE-TREND-1: the plan meters' current readings; null = none. */
+    override val meters: com.superiorsoftllc.agenthq.daemon.api.usage.Meters = com.superiorsoftllc.agenthq.daemon.api.usage.NoMeters,
 ) : DaemonServices {
     override val spawns get() = spawnService ?: com.superiorsoftllc.agenthq.daemon.api.spawns.NoSpawns
     override val sessionReads get() = sessionReadModel ?: com.superiorsoftllc.agenthq.daemon.api.sessions.NoSessionReads

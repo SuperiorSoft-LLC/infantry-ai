@@ -71,6 +71,7 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
     override val skills: SkillsContext = CoreSkills(state, shell.controller)
     override val usage: UsageContext = CoreUsage(shell.controller)
     override val meter: UsageMeterContext = CoreUsageMeter(shell.controller)
+    override val pace: PaceContext = CorePace(shell.controller)
     override val epics: EpicsContext = CoreEpics(shell.controller)
     override val review: ReviewContext = CoreReview(shell.controller)
     override val pods: PodsContext = CorePods(shell.controller)
@@ -227,6 +228,11 @@ class CoreUsage(private val controller: Controller) : UsageContext {
     override suspend fun refreshUsage(force: Boolean): CommandResult = controller.refreshUsage(force)
     override suspend fun usageSet(set: com.superiorsoftllc.agenthq.ui.protocol.UsageSet): CommandResult = controller.usageSet(set)
     override suspend fun sessionStats(sessionId: String): CommandResult = controller.requestSessionStats(sessionId)
+}
+
+/** PACE-TREND-1: [controller]'s pace history request. */
+class CorePace(private val controller: Controller) : PaceContext {
+    override suspend fun refresh(query: String): CommandResult = controller.requestPace(query)
 }
 
 /** USAGE-1: [controller]'s usage meter request. */

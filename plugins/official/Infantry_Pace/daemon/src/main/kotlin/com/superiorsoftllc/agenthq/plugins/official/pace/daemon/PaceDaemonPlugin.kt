@@ -1,0 +1,123 @@
+package com.superiorsoftllc.agenthq.plugins.official.pace.daemon
+
+import com.superiorsoftllc.agenthq.daemon.api.DaemonApi
+import com.superiorsoftllc.agenthq.daemon.api.DaemonPlugin
+import com.superiorsoftllc.agenthq.daemon.api.DaemonTool
+import com.superiorsoftllc.agenthq.daemon.api.Frame
+import com.superiorsoftllc.agenthq.daemon.api.ToolCall
+import com.superiorsoftllc.agenthq.daemon.api.ToolResult
+import com.superiorsoftllc.agenthq.daemon.api.usage.Meters
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.put
+import java.io.File
+
+/**
+ * PACE-TREND-1: Infantry_Pace's daemon half. While the plugin is enabled it samples the plan meters (`api.meters`, the data
+ * SOURCE; no dependency on Stats) every [SAMPLE_PERIOD_MS], keeps the history in its own folder, prunes by `pace.retentionDays`
+ * on start and hourly, and answers `pace_get` frames and the `agenthq_pace` tool. Disabled or removed = nothing is recorded
+ * and core is unchanged.
+ */
+class PaceDaemonPlugin : DaemonPlugin {
+    private var recorder: PaceRecorder? = null
+    private val closers = mutableListOf<AutoCloseable>()
+
+    override fun start(api: DaemonApi) {
+        val store = PaceStore(File(api.stateDir, "samples.jsonl"))
+        val settings = { PaceSettings.from(api::config) }
+        val rec = PaceRecorder(store, api.meters, settings)
+        recorder = rec
+        rec.pruneNow()
+        closers += api.schedule("pace-sample", SAMPLE_PERIOD_MS) { rec.tick() }
+        closers += api.schedule("pace-prune", PRUNE_PERIOD_MS) { rec.pruneNow() }
+        api.frames.handle("pace_get") { frame: Frame, _ ->
+            val answer = try {
+                PaceReport.build(store, settings(), PaceQueries.parse(frame.data), System.currentTimeMillis()).toString()
+            } catch (e: Exception) {
+                return@handle Frame("error", "pace_get failed: ${e.message ?: e::class.simpleName}", frame.sessionId, frame.requestId)
+            }
+            Frame("pace_report", answer, frame.sessionId, frame.requestId)
+        }
+        api.tools.register(PaceTool(store, settings))
+        rec.tick()
+    }
+
+    override fun stop() {
+        closers.forEach { runCatching { it.close() } }
+        closers.clear()
+        recorder = null
+    }
+
+    companion object {
+        const val SAMPLE_PERIOD_MS = 60_000L
+        const val PRUNE_PERIOD_MS = 3_600_000L
+    }
+}
+
+/** Reads the meters and records each reading; prunes by retention. */
+class PaceRecorder(private val store: PaceStore, private val meters: Meters, private val settings: () -> PaceSettings) {
+    /** One pass: every readable window becomes a sample unless it is a repeat. Returns how many were kept. */
+    fun tick(): Int = try {
+        meters.read().count { store.record(it) }
+    } catch (e: Exception) {
+        0 // a missing grant or a meter read failing must never take the plugin down; the next tick tries again
+    }
+
+    fun pruneNow(): Int = store.prune(settings().retentionDays)
+}
+
+object PaceQueries {
+    private val json = Json { ignoreUnknownKeys = true }
+
+    /** Parses a `pace_get` body (empty = everything). `sinceHours` is relative to now. */
+    fun parse(data: String, now: Long = System.currentTimeMillis()): PaceQuery {
+        if (data.isBlank()) return PaceQuery()
+        val o: JsonObject = json.parseToJsonElement(data).jsonObject
+        val since = o["sinceMs"]?.jsonPrimitive?.longOrNull
+            ?: o["sinceHours"]?.jsonPrimitive?.doubleOrNull?.let { now - (it * 3_600_000.0).toLong() }
+            ?: 0L
+        return PaceQuery(
+            provider = o["provider"]?.jsonPrimitive?.contentOrNull,
+            window = o["window"]?.jsonPrimitive?.contentOrNull,
+            sinceMs = since.coerceAtLeast(0),
+            maxPoints = o["maxPoints"]?.jsonPrimitive?.intOrNull?.coerceIn(2, 5000) ?: 400,
+        )
+    }
+}
+
+class PaceTool(private val store: PaceStore, private val settings: () -> PaceSettings) : DaemonTool {
+    override val name = "agenthq_pace"
+    override val description =
+        "Read the pacing history the daemon recorded from the plan meters: per provider window the percent used, the pace delta, " +
+            "the projected landing at reset, the momentum (RISING / FLAT / FALLING) and the forecast to reset. " +
+            "Text summary first, then the JSON (points are newest-kept and thinned)."
+    override val inputSchema = buildJsonObject {
+        put("type", "object")
+        put("properties", buildJsonObject {
+            put("provider", buildJsonObject { put("type", "string"); put("description", "Only this meter (claude, codex, opencode-go, ...)") })
+            put("window", buildJsonObject { put("type", "string"); put("description", "Only this window label (e.g. '5h limit')") })
+            put("sinceHours", buildJsonObject { put("type", "number"); put("description", "Only points from the last N hours (default: all)") })
+        })
+        put("required", buildJsonArray {})
+        put("additionalProperties", false)
+    }
+    override val annotations = buildJsonObject {
+        put("readOnlyHint", true); put("destructiveHint", false); put("idempotentHint", true); put("openWorldHint", false)
+    }
+
+    override fun call(call: ToolCall): ToolResult = try {
+        val report = PaceReport.build(store, settings(), PaceQueries.parse(call.arguments.toString()), System.currentTimeMillis())
+        val text = report["text"]!!.jsonPrimitive.content
+        ToolResult(text + "\n\n" + report.toString())
+    } catch (e: Exception) {
+        ToolResult(e.message ?: "agenthq_pace failed", isError = true)
+    }
+}

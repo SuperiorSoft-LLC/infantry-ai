@@ -1711,6 +1711,8 @@ class AgentHqDaemon(
                         // STACK-NEUTRAL-2: api.processes / api.launchEnv / api.settings.
                         processHost = localProcesses, launchEnvHost = launchEnvHost,
                         pluginSettings = settings.forPlugins(),
+                        // PACE-TREND-1: api.meters, the current reading of every provider window (the cached live read).
+                        meters = com.superiorsoftllc.agenthq.usage.PacingMeters(usagePacing),
                         // DP-4a: tickets / epics / board for plugins, over the board built above (host-applied policy and scope).
                         boardServices = com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardServices(
                             board = { board }, epicStore = { epics }, sessions = { manager.list() }, link = { orchestratorHub.link },
