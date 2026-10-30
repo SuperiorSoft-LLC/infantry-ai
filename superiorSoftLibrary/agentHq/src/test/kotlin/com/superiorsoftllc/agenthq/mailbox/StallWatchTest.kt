@@ -34,7 +34,7 @@ class StallWatchTest {
         heartbeatCapMs = { 60 * 60_000L },
         inTurn = { busy },
         pidAlive = { alive },
-        pmOf = { "pm" },
+        recipientOf = { "pm" },
     )
 
     private fun log(text: String = "") = File.createTempFile("stall", ".log").apply { deleteOnExit(); writeText(text) }
@@ -75,7 +75,7 @@ class StallWatchTest {
         assertTrue(sent[0].subject.contains("still running after 15m"), sent[0].subject)
         assertTrue(sent[0].body.contains("its process is still running"), sent[0].body)
         assertTrue(sent[0].body.contains("no output since"), sent[0].body)
-        assertTrue(sent[0].body.contains("Decide: keep waiting"), sent[0].body)
+        assertTrue(sent[0].body.contains("If you are waiting on it, end your turn"), sent[0].body)
         min(29); n.scanned()
         assertEquals(1, sent.size, "the second beat is 30 min after the first")
         min(1); n.scanned()
@@ -197,7 +197,7 @@ class StallWatchTest {
             lastJobEndedAt = { ended },
             quietSeconds = { null },
             stallMs = { 5 * 60_000L },
-            pmOf = { "pm" },
+            recipientOf = { "pm" },
             clock = { System.currentTimeMillis() + offsetMin * 60_000 },
             foregroundStallMs = { foregroundMin?.let { it * 60_000L } ?: Long.MAX_VALUE },
         )
@@ -251,7 +251,7 @@ class StallWatchTest {
         r.at(10)
         assertTrue(r.sent.isEmpty(), "ended 4 min ago")
         r.at(12); r.at(13)
-        assertEquals(1, r.sent.count { it.to == s.id && it.subject.contains("your job ended") })
+        assertEquals(1, r.sent.count { it.to == s.id && it.subject.contains("a job ended") })
         assertEquals(1, r.sent.count { it.to == "pm" })
     }
 

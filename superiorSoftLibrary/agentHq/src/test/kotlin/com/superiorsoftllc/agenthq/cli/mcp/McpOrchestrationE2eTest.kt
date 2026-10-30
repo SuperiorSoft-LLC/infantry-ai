@@ -251,6 +251,7 @@ class McpOrchestrationE2eTest {
             "agenthq_inbox", "agenthq_read", // MAIL-MCP-1
             "agenthq_ask", // ASK-1
             "agenthq_progress", // PROGRESS-1 (1.117.0)
+            "agenthq_watch_file", // STALL-4
             "agenthq_usage", // USAGE-PACE (1.119.0)
             "agenthq_processes", "agenthq_processes_reap", // ROGUE-1 (1.120.0)
             "agenthq_pipeline", "agenthq_pipeline_record", // PIPE-1

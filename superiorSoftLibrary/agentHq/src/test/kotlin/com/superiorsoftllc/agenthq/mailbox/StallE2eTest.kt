@@ -196,7 +196,7 @@ class StallE2eTest {
         val stall = StallDetector(
             r.manager, send = r.router::send,
             ticketInProgress = { true }, deliberateWait = { false }, lastJobEndedAt = { null }, quietSeconds = { null },
-            stallMs = { 5 * 60_000L }, pmOf = { null }, clock = { r.now },
+            stallMs = { 5 * 60_000L }, recipientOf = { null }, clock = { r.now },
         )
         val requests = r.provider.requests.get()
         val starts = r.runner.processes.size

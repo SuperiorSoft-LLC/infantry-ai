@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.mailbox
 
+import com.superiorsoftllc.agenthq.runner.WatchNotices
 import com.superiorsoftllc.agenthq.session.SessionManager
 import com.superiorsoftllc.agenthq.session.SessionRecord
 import com.superiorsoftllc.agenthq.session.SessionState
@@ -10,16 +11,17 @@ import java.util.concurrent.TimeUnit
 
 /**
  * STALL-1 (ticket 802c64d5) item 5: the daemon's STALL DETECTOR, a timer with no LLM. It nudges a ticket worker (one mail,
- * which wakes a session at rest) and sends its PM one line, never kills or restarts it, in two states:
+ * which wakes a session at rest) and sends the recipient rule's address one line (STALL-4: the ticket's starter, else the
+ * user; every text is a [WatchNotices] template that names no role), never kills or restarts it, in these states:
  *  - IDLE: the ticket is In Progress, the session is at rest for [stallMs] with no job running (no bg job, no process
  *    under its harness), and it is not waiting deliberately ([deliberateWait]: an open owner question, a mail it is
  *    waiting on an answer to).
  *  - BUSY BUT SILENT: a turn is in flight, a job of the session ended ([lastJobEndedAt]: a bg job's end, or a process
  *    under its harness gone) after the session's last sign of life, and nothing happened for [stallMs] since. The nudge
- *    mail queues until that turn ends (a turn in flight cannot be written into); the PM line goes out at once.
+ *    mail queues until that turn ends (a turn in flight cannot be written into); the line goes out at once.
  *  - BUSY IN THE FOREGROUND (STALL-3): a turn is in flight with no tool progress for [foregroundStallMs] and no watched job
  *    of the session running, even though no job ended: a long or hung foreground call (`find /` over everything, a build
- *    the hooks could not rewrite). Same nudge and PM line, keyed by the last sign of life.
+ *    the hooks could not rewrite). Same nudge and line, keyed by the last sign of life.
  * Each stretch is told once (keyed by the last sign of life). It also writes every session's watch label
  * ([SessionManager.setWatchLabel]): `watching <job> (quiet 2m)`, `watch OFF: <reason>`, `busy, silent 7m`, `stalled`,
  * `idle`; a session with no ticket and no job gets none.
@@ -33,8 +35,8 @@ class StallDetector(
     private val quietSeconds: (jobId: String) -> Long?,
     /** `limits.watch.stallMinutes` (5); [Long.MAX_VALUE] = never. */
     private val stallMs: () -> Long,
-    /** Who gets the one line: the ticket's starter, else the `pm` role. */
-    private val pmOf: (SessionRecord) -> String?,
+    /** STALL-4: who gets the one line (the daemon's recipient rule, [WatchNotices.USER] = the user); null = nobody. */
+    private val recipientOf: (SessionRecord) -> String?,
     private val clock: () -> Long = System::currentTimeMillis,
     /** STALL-3: `limits.watch.foregroundStallMinutes` (10); [Long.MAX_VALUE] = never. */
     private val foregroundStallMs: () -> Long = { Long.MAX_VALUE },
@@ -73,13 +75,12 @@ class StallDetector(
             if (silentFor < stall || runCatching { deliberateWait(s) }.getOrDefault(true)) return null
             val key = "idle:${s.lastHeartbeat}"
             if (told.put(s.id, key) != key) {
+                val v = vars(s, ticket, silentFor)
                 nudge(
                     s, key,
-                    subject = "[AUTOMATIC] stall check: idle ${fmt(silentFor)} with ticket $ticket In Progress",
-                    body = "Your ticket $ticket is In Progress, you have been at rest for ${fmt(silentFor)} and no job of yours is " +
-                        "running. Continue the work; if you are blocked, mail the PM what blocks you; if you are done, move the " +
-                        "ticket and report. (Waiting on a reply? Then this was sent in error: say so to the PM.)",
-                    pmLine = "worker ${s.id.take(8)} (${s.role ?: "?"}) idle ${fmt(silentFor)} on ticket $ticket with no job running; nudged.",
+                    subject = WatchNotices.text("stall.idle.subject", *v),
+                    body = WatchNotices.text("stall.idle.body", *v),
+                    line = WatchNotices.text("stall.idle.line", *v),
                 )
             }
             return key
@@ -88,13 +89,12 @@ class StallDetector(
         if (now - ended < stall || silentFor < stall) return null
         val key = "busy:$ended"
         if (told.put(s.id, key) != key) {
+            val v = vars(s, ticket, silentFor) + ("ago" to fmt(now - ended))
             nudge(
                 s, key,
-                subject = "[AUTOMATIC] stall check: your job ended ${fmt(now - ended)} ago and you have been silent since",
-                body = "A job you started ended ${fmt(now - ended)} ago (see the job notice in this mailbox), and your turn has shown " +
-                    "no tool call or output since. Do not wait on it any longer: read its result and continue, or report to the PM.",
-                pmLine = "worker ${s.id.take(8)} (${s.role ?: "?"}) is BUSY but silent ${fmt(silentFor)}; its job ended ${fmt(now - ended)} ago. " +
-                    "Nudge queued until its turn ends; interrupt it if it stays stuck.",
+                subject = WatchNotices.text("stall.busy.subject", *v),
+                body = WatchNotices.text("stall.busy.body", *v),
+                line = WatchNotices.text("stall.busy.line", *v),
             )
         }
         return key
@@ -106,24 +106,25 @@ class StallDetector(
         if (limit == Long.MAX_VALUE || limit <= 0 || silentFor < limit || s.bgJobs.isNotEmpty()) return null
         val key = "busy-fg:${s.lastHeartbeat}"
         if (told.put(s.id, key) != key) {
+            val v = vars(s, ticket, silentFor)
             nudge(
                 s, key,
-                subject = "[AUTOMATIC] stall check: busy ${fmt(silentFor)} with no tool progress",
-                body = "Your turn has shown no tool call or output for ${fmt(silentFor)} and no watched job of yours is running: a " +
-                    "foreground command may be hung or far too long. Stop it, rerun long work as `agenthq run-watched -- <cmd>`, " +
-                    "narrow searches to the project, and continue; if you are blocked, report to the PM.",
-                pmLine = "worker ${s.id.take(8)} (${s.role ?: "?"}) is BUSY with no tool progress for ${fmt(silentFor)} on ticket $ticket " +
-                    "and no watched job (long or hung foreground call?). Nudge queued until its turn ends; interrupt it if it stays stuck.",
+                subject = WatchNotices.text("stall.foreground.subject", *v),
+                body = WatchNotices.text("stall.foreground.body", *v),
+                line = WatchNotices.text("stall.foreground.line", *v),
             )
         }
         return key
     }
 
-    private fun nudge(s: SessionRecord, key: String, subject: String, body: String, pmLine: String) {
+    private fun vars(s: SessionRecord, ticket: String, silentFor: Long): Array<Pair<String, Any?>> =
+        arrayOf("session" to s.id.take(8), "role" to (s.role ?: "?"), "ticket" to ticket, "silent" to fmt(silentFor))
+
+    private fun nudge(s: SessionRecord, key: String, subject: String, body: String, line: String) {
         WatchMeter.stall()
         send(MailSendRequest(from = FinishNoticeMonitor.SYSTEM, to = s.id, subject = subject, threadId = "stall:${s.id}", body = body + "\n"))
-        pmOf(s)?.let { pm ->
-            send(MailSendRequest(from = FinishNoticeMonitor.SYSTEM, to = pm, subject = "[AUTOMATIC] $pmLine".take(200), threadId = "stall:${s.id}:pm", body = pmLine + "\n"))
+        runCatching { recipientOf(s) }.getOrNull()?.takeIf { it != s.id }?.let { to ->
+            send(MailSendRequest(from = FinishNoticeMonitor.SYSTEM, to = to, subject = "[AUTOMATIC] $line".take(200), threadId = "stall:${s.id}:watch", body = line + "\n"))
         }
         println("[agentHq] stall detector: ${s.id} $key")
     }

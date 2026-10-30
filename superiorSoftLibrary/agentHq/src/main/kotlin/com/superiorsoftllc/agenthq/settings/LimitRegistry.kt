@@ -220,17 +220,17 @@ object LimitRegistry {
     )
     val WATCH_HEARTBEAT_CAP_MINUTES = LimitDef(
         "limits.watch.heartbeatCapMinutes", 60, "minutes",
-        "The largest interval between watch heartbeats (they start at limits.bg.notifyTimeoutMinutes and double); the first beat at it also tells the PM.",
+        "The largest interval between watch heartbeats (they start at limits.bg.notifyTimeoutMinutes and double); the first beat at it is also told to the watch's recipient rule (watch.escalateTo).",
         min = 1, max = 1440, zeroIsUnlimited = false,
     )
     val WATCH_STALL_MINUTES = LimitDef(
         "limits.watch.stallMinutes", 5, "minutes",
-        "Stall detector: how long a ticket worker may sit idle with no job, or BUSY and silent after its job ended, before it is nudged and its PM is told.",
+        "Stall detector: how long a ticket worker may sit idle with no job, or BUSY and silent after its job ended, before it is nudged and the watch's recipient rule (watch.escalateTo) is told.",
         max = 1440, zeroMeans = "never nudged",
     )
     val WATCH_FOREGROUND_STALL_MINUTES = LimitDef(
         "limits.watch.foregroundStallMinutes", 10, "minutes",
-        "Stall detector: how long a ticket worker may stay BUSY with no tool progress and no watched job (a long or hung foreground call) before it is nudged and its PM is told.",
+        "Stall detector: how long a ticket worker may stay BUSY with no tool progress and no watched job (a long or hung foreground call) before it is nudged and the watch's recipient rule (watch.escalateTo) is told.",
         max = 1440, zeroMeans = "never nudged",
     )
     val WATCH_TREE_JOB_SECONDS = LimitDef(
@@ -247,6 +247,57 @@ object LimitRegistry {
         "limits.watch.treeWaitMinutes", 30, "minutes",
         "After a watched command exits, how long the runner waits for the rest of its process tree (Job Object / subreaper; build daemons excluded) before it reports done anyway, naming the survivors.",
         max = 1440, zeroMeans = "no tree wait (done at the command's own exit)",
+    )
+    /** STALL-4 (ticket 14ac9383) item 4: the watch under tight disk, memory or message space. */
+    val WATCH_NOTICE_LINE_CHARS = LimitDef(
+        "limits.watch.noticeLineChars", 200, "characters",
+        "A watch notice's output lines are cut to this many characters, so one huge line cannot blow up a mail or the model context.",
+        min = 20, max = 4000, zeroIsUnlimited = false,
+    )
+    val WATCH_LOG_MAX_MB = LimitDef(
+        "limits.watch.logMaxMB", 50, "MB",
+        "The largest log file the watched runner writes per job; past it the head is cut (the tail is kept, with a 'truncated N bytes' marker).",
+        max = 100_000, zeroMeans = "no per-job cap",
+    )
+    val WATCH_LOG_TOTAL_MB = LimitDef(
+        "limits.watch.logTotalMB", 500, "MB",
+        "The most space all finished job logs may take together; the oldest finished jobs are pruned past it.",
+        max = 1_000_000, zeroMeans = "no total cap",
+    )
+    val WATCH_LOG_KEEP_JOBS = LimitDef(
+        "limits.watch.logKeepJobs", 50, "jobs",
+        "How many finished jobs' log files are kept; older ones are pruned when a job starts.",
+        max = 100_000, zeroMeans = "kept regardless of count",
+    )
+    val WATCH_LOG_KEEP_DAYS = LimitDef(
+        "limits.watch.logKeepDays", 7, "days",
+        "Finished jobs' log files older than this are pruned when a job starts.",
+        max = 3650, zeroMeans = "kept regardless of age",
+    )
+    val WATCH_MIN_FREE_MB = LimitDef(
+        "limits.watch.minFreeMB", 200, "MB",
+        "Below this much free disk space the runner stops writing a job's log file and keeps streaming its output to the console only (told once).",
+        max = 1_000_000, zeroMeans = "never paused",
+    )
+    val WATCH_READ_MAX_KB = LimitDef(
+        "limits.watch.readMaxKB", 256, "KB",
+        "The most a watch pass reads from one watched file; a bigger jump since the last pass skips to its tail (the file is never copied).",
+        min = 1, max = 1_048_576, zeroIsUnlimited = false,
+    )
+    val WATCH_TAIL_READ_KB = LimitDef(
+        "limits.watch.tailReadKB", 64, "KB",
+        "How far from a watched file's end a notice's last lines are read (and the longest unfinished line kept between passes).",
+        min = 1, max = 65_536, zeroIsUnlimited = false,
+    )
+    val WATCH_SPACE_CHECK_SECONDS = LimitDef(
+        "limits.watch.spaceCheckSeconds", 5, "seconds",
+        "How often the watched runner checks the free disk space against limits.watch.minFreeMB while it writes a job log.",
+        min = 1, max = 3600, zeroIsUnlimited = false,
+    )
+    val WATCH_FILE_IDLE_SECONDS = LimitDef(
+        "limits.watch.fileIdleSeconds", 120, "seconds",
+        "`agenthq watch-file` with no --until-pid: the file is done once it has not grown for this long.",
+        min = 1, max = 86_400, zeroIsUnlimited = false,
     )
     val BG_NOTIFY_PATTERN_GRACE_SECONDS = LimitDef(
         "limits.bg.notifyPatternGraceSeconds", 20, "seconds",
@@ -356,6 +407,8 @@ object LimitRegistry {
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
         WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_FORCED, WATCH_TREE_WAIT_MINUTES,
+        WATCH_NOTICE_LINE_CHARS, WATCH_LOG_MAX_MB, WATCH_LOG_TOTAL_MB, WATCH_LOG_KEEP_JOBS, WATCH_LOG_KEEP_DAYS, WATCH_MIN_FREE_MB, WATCH_FILE_IDLE_SECONDS,
+        WATCH_READ_MAX_KB, WATCH_TAIL_READ_KB, WATCH_SPACE_CHECK_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
         PLUGIN_CALL_TIMEOUT_MS, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS,
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,

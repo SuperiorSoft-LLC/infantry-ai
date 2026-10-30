@@ -134,6 +134,17 @@ data class BgJob(
     val optOut: String? = null,
     /** STALL-1: the pid of the command itself (the wrapper's child), null when not known. */
     val cmdPid: Long? = null,
+    /**
+     * STALL-4: files whose growth counts as the job's output (quiet timer, heartbeat, patterns, tail): `agenthq watch-file`,
+     * `--follow <path>`, or a redirect the runner followed (`watch.followRedirects`). Only their appended tail is read.
+     */
+    val follow: List<String> = emptyList(),
+    /** STALL-4: files the command line sends its output to that are NOT followed (the quiet notice names them in a hint). */
+    val redirects: List<String> = emptyList(),
+    /** STALL-4: why the runner stopped writing [logPath] (low disk space); null = it writes it. */
+    val logPaused: String? = null,
+    /** STALL-4: `watch-file` with no pid: done once [follow] has not grown for this many seconds. */
+    val idleSeconds: Long? = null,
 )
 
 /**
@@ -168,6 +179,10 @@ data class BgJobRequest(
     val eof: Boolean? = null,
     /** STALL-1: on `done`, child processes still alive after the command ended (`pid command`), detached daemons excluded. */
     val survivors: List<String>? = null,
+    /** STALL-4: on `done` with exit 0, the first tool-profile failure marker the output matched (`BUILD FAILED`). */
+    val marker: String? = null,
+    /** STALL-4: on `done`, the command line had a pipe and its shell runs without pipefail (the exit code is the last command's). */
+    val pipeNoFail: Boolean? = null,
 )
 
 /** BG-NOTIFY: what [SessionManager] tells about registered jobs beyond the record change. */

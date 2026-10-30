@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.mailbox
 
+import com.superiorsoftllc.agenthq.runner.WatchNotices
 import com.superiorsoftllc.agenthq.session.BgJob
 import com.superiorsoftllc.agenthq.session.BgJobListener
 import com.superiorsoftllc.agenthq.session.ProcInfo
@@ -28,8 +29,11 @@ import java.util.concurrent.ConcurrentHashMap
  *  - QUIET: no new output line (the runner's own `[agenthq:` lines do not count) for [quietMs]; once per quiet stretch.
  *  - HEARTBEAT: still running after the job's timeout ([defaultTimeoutMs], 15 min), then after 2x, 4x that interval, up to
  *    [heartbeatCapMs]; independent of the log (frozen, vanished, or the watcher failing to read it): elapsed, watch state,
- *    last lines or "no output since", whether the process still exists. The first beat at the cap also tells the PM.
+ *    last lines or "no output since", whether the process still exists. The first beat at the cap is also told to the
+ *    recipient rule's address (STALL-4: the ticket's starter, else the user; the text names no role).
  *  - TREE JOB ENDED ([treeJobEnded]): a long process under the harness that the daemon did not launch is gone (layer 5).
+ *
+ * WORDING (STALL-4): every text comes from [WatchNotices] (resource `watch/notices.json`, setting `watch.notices`).
  *
  * DELIVERY: an [BgJob.attached] job (a PATH shim, the caller's foreground) whose session still has its turn in flight
  * ([inTurn]) is NOT mailed: that turn saw the end on its own console. Its end is recorded ([lastEndedAt]) for the stall
@@ -45,28 +49,43 @@ class BgJobNotifier(
     private val clock: () -> Long = System::currentTimeMillis,
     /** No new output for this long = one QUIET notice; [Long.MAX_VALUE] = never. */
     private val quietMs: () -> Long = { 5 * 60_000L },
-    /** The heartbeat interval stops growing here; the first beat at it tells the PM. */
+    /** The heartbeat interval stops growing here; the first beat at it is also told to [recipientOf]. */
     private val heartbeatCapMs: () -> Long = { 60 * 60_000L },
     /** Whether [sessionId] has a turn in flight right now. */
     private val inTurn: (sessionId: String) -> Boolean = { false },
     private val pidAlive: (Long) -> Boolean = { pid -> ProcessHandle.of(pid).map { it.isAlive }.orElse(false) },
-    /** Who is told about [sessionId] on the PM ladder (its ticket's starter, else the `pm` role); null = nobody. */
-    private val pmOf: (sessionId: String) -> String? = { null },
+    /**
+     * STALL-4: who else hears about [sessionId] (a long wait at the cap, an opt-out): the daemon's recipient rule
+     * ([WatchNotices.ESCALATE_SETTING]), [WatchNotices.USER] = the user through the UI; null = nobody.
+     */
+    private val recipientOf: (sessionId: String) -> String? = { null },
+    /** STALL-4: a notice line is cut to this many characters (`limits.watch.noticeLineChars`). */
+    private val lineChars: () -> Int = { 200 },
+    /** STALL-4: the most bytes one pass reads from one file (`limits.watch.readMaxKB`). */
+    private val readMaxBytes: () -> Long = { 256 * 1024L },
+    /** STALL-4: how far from a file's end a notice's tail is read (`limits.watch.tailReadKB`); also the longest partial line kept. */
+    private val tailReadBytes: () -> Long = { 64 * 1024L },
 ) : BgJobListener {
-    private class Watch(val startedAt: Long) {
-        var offset = 0L
+    /** Where the watcher is in one watched file: only the bytes appended since are read. */
+    private class Cursor {
+        var offset = -1L
         var partial = ""
+    }
+
+    private class Watch(val startedAt: Long) {
+        val cursors = HashMap<String, Cursor>()
         val matches = ArrayList<String>()
         var firstMatchAt = 0L
         var beatsSent = 0
         var nextBeatAt = 0L
         var interval = 0L
-        var pmTold = false
+        var escalated = false
         var lastOutputAt = startedAt
         var quietSent = false
         var readError: String? = null
         var errorSent = false
         var optOutSeen = false
+        var pausedSent = false
     }
 
     private val watches = ConcurrentHashMap<String, Watch>()
@@ -90,9 +109,12 @@ class BgJobNotifier(
         send(req)
     }
 
+    private fun t(key: String, job: BgJob, vararg values: Pair<String, Any?>): String =
+        WatchNotices.text(key, "id" to job.id, "label" to job.label.take(60), "elapsed" to elapsed(job), *values)
+
     /**
      * The wrapper said its command ended with [exitCode]; [tail] = its last lines (null: read from the log). [bytes],
-     * [eof] and [survivors] are the STALL-1 end facts (null from an older wrapper).
+     * [eof] and [survivors] are the STALL-1 end facts, [marker] and [pipeNoFail] the STALL-4 ones (null from an older wrapper).
      */
     fun done(
         sessionId: String,
@@ -102,6 +124,8 @@ class BgJobNotifier(
         bytes: Long? = null,
         eof: Boolean? = null,
         survivors: List<String>? = null,
+        marker: String? = null,
+        pipeNoFail: Boolean? = null,
     ) {
         if (job.notify == null) return
         ended(sessionId)
@@ -109,25 +133,22 @@ class BgJobNotifier(
         val lines = tailOf(job, tail)
         val verdict = if (exitCode == null) "exit unknown" else "exit $exitCode"
         val facts = buildList {
-            if (bytes == 0L) add("It ended with NO output (EOF, 0 bytes): nothing was printed, which is not an error by itself.")
-            else if (bytes != null) add("Output: $bytes bytes" + if (eof == false) "." else ", complete (EOF).")
+            if (bytes == 0L) add(t("job.done.empty", job))
+            else if (bytes != null) add(t("job.done.bytes", job, "bytes" to bytes, "complete" to if (eof == false) "." else ", complete (EOF)."))
             if (eof == false) {
-                add(
-                    "Its output pipe is still open: a child it started outlives it" +
-                        (survivors?.takeIf { it.isNotEmpty() }?.let { " (${it.joinToString("; ") { s -> s.take(100) }})" } ?: "") +
-                        ". The command itself has ended; the exit code is its own.",
-                )
+                add(t("job.done.pipeOpen", job, "survivors" to (survivors?.takeIf { it.isNotEmpty() }?.let { " (${it.joinToString("; ") { s -> s.take(100) }})" } ?: "")))
             } else if (!survivors.isNullOrEmpty()) {
-                add("Still running after it: ${survivors.joinToString("; ") { it.take(100) }}.")
+                add(t("job.done.survivors", job, "survivors" to survivors.joinToString("; ") { it.take(100) }))
             }
+            if (marker != null) add(t("job.done.marker", job, "marker" to marker.take(lineChars())))
+            if (pipeNoFail == true) add(t("job.done.pipe", job))
         }
         deliver(
             sessionId, job,
             mail(
                 sessionId, job,
-                subject = "[AUTOMATIC] bg job ${job.id} finished, $verdict${if (bytes == 0L) ", no output" else ""}: ${job.label.take(60)}",
-                head = "Background job ${job.id} (${job.label}) finished after ${elapsed(job)}, $verdict." +
-                    facts.joinToString("") { "\n$it" },
+                subject = t("job.done.subject", job, "verdict" to verdict + (if (marker != null) ", failure marker" else ""), "noOutput" to if (bytes == 0L) ", no output" else ""),
+                head = t("job.done.head", job, "verdict" to verdict) + facts.joinToString("") { "\n$it" },
                 matched = w?.matches.orEmpty(),
                 lines = lines,
             ),
@@ -142,20 +163,12 @@ class BgJobNotifier(
         // that missed its `done`) still has the real exit code on disk.
         val code = job.logPath?.let { File(it.removeSuffix(".log") + ".exit") }?.takeIf { it.isFile }
             ?.let { runCatching { it.readText().trim().toInt() }.getOrNull() }
-        val head = if (code != null) {
-            "Background job ${job.id} (${job.label}) ended after ${elapsed(job)}, exit $code (read from its exit file; " +
-                "its runner did not report it to the daemon, e.g. a daemon restart)."
-        } else {
-            "Background job ${job.id} (${job.label}) is gone after ${elapsed(job)}: its runner was stopped or died " +
-                "before it reported an exit code (runner lost, exit unknown). Check `agenthq bg logs ${job.id}`."
-        }
         deliver(
             sessionId, job,
             mail(
                 sessionId, job,
-                subject = if (code != null) "[AUTOMATIC] bg job ${job.id} finished, exit $code: ${job.label.take(60)}"
-                else "[AUTOMATIC] bg job ${job.id} ended without an exit code: ${job.label.take(60)}",
-                head = head,
+                subject = if (code != null) t("job.vanished.subjectExit", job, "exit" to code) else t("job.vanished.subjectUnknown", job),
+                head = if (code != null) t("job.vanished.headExit", job, "exit" to code) else t("job.vanished.headUnknown", job),
                 matched = w?.matches.orEmpty(),
                 lines = tailOf(job, null),
             ),
@@ -169,9 +182,8 @@ class BgJobNotifier(
             sessionId, job,
             mail(
                 sessionId, job,
-                subject = "[AUTOMATIC] bg job ${job.id} closed its output and is still running: ${job.label.take(60)}",
-                head = "Background job ${job.id} (${job.label}) closed its output (EOF after ${bytes ?: "?"} bytes) after " +
-                    "${elapsed(job)}, but its process is still running: it has NOT ended. You will be told when it exits.",
+                subject = t("job.eof.subject", job),
+                head = t("job.eof.head", job, "bytes" to (bytes ?: "?")),
                 matched = emptyList(),
                 lines = tailOf(job, null),
             ),
@@ -187,12 +199,9 @@ class BgJobNotifier(
             MailSendRequest(
                 from = FinishNoticeMonitor.SYSTEM,
                 to = sessionId,
-                subject = "[AUTOMATIC] a background process of yours ended: ${job.command.take(60)}",
+                subject = WatchNotices.text("tree.ended.subject", "command" to job.command.take(60)),
                 threadId = "tree:$sessionId:${job.pid}",
-                body = "A process your harness started in the background ended after $ranFor (pid ${job.pid}):\n" +
-                    "  ${job.command.take(400)}\n" +
-                    "Its exit code is unknown: the daemon did not launch it. Read its output with your harness's own tool. " +
-                    "Next time run long jobs as `agenthq run-watched -- <cmd>` to get the exit code and log tail here.\n",
+                body = WatchNotices.text("tree.ended.body", "ranFor" to ranFor, "pid" to job.pid, "commandFull" to job.command.take(400)) + "\n",
             ),
         )
     }
@@ -208,9 +217,20 @@ class BgJobNotifier(
                 w.optOutSeen = true
                 optedOut(sid, job)
             }
-            if (job.logPath != null) {
-                val err = runCatching { readNew(job, w, notify.patterns.mapNotNull(::regex), now) }.exceptionOrNull()
+            if (watched(job)) {
+                val patterns = notify.patterns.mapNotNull(::regex)
+                val err = runCatching {
+                    job.logPath?.takeIf { job.logPaused == null }?.let { readNew(it, own = true, w, patterns, now) }
+                    job.follow.forEach { readNew(it, own = false, w, patterns, now) }
+                }.exceptionOrNull()
                 w.readError = err?.let { it.message ?: it.javaClass.simpleName }
+            }
+            if (job.logPaused != null && !w.pausedSent) {
+                w.pausedSent = true
+                deliver(
+                    sid, job,
+                    mail(sid, job, subject = t("job.logPaused.subject", job), head = t("job.logPaused.head", job, "reason" to job.logPaused), matched = emptyList(), lines = emptyList()),
+                )
             }
             if (w.matches.isNotEmpty() && now - w.firstMatchAt >= patternGraceMs()) {
                 val matched = w.matches.toList()
@@ -219,8 +239,8 @@ class BgJobNotifier(
                     sid, job,
                     mail(
                         sid, job,
-                        subject = "[AUTOMATIC] bg job ${job.id} matched '${matched.first().take(60)}' (still running)",
-                        head = "Background job ${job.id} (${job.label}) printed a line you asked to be told about and is still running after ${elapsed(job)}.",
+                        subject = t("job.match.subject", job, "match" to matched.first().take(60)),
+                        head = t("job.match.head", job),
                         matched = matched,
                         lines = tailOf(job, null),
                     ),
@@ -232,16 +252,21 @@ class BgJobNotifier(
                 if (w.readError != null) w.errorSent = true
                 heartbeat(sid, job, w, now)
                 w.quietSent = true
-            } else if (job.logPath != null && !w.quietSent && quietMs().let { it != Long.MAX_VALUE && it > 0 && now - w.lastOutputAt >= it }) {
+            } else if (watched(job) && job.logPaused == null && !w.quietSent &&
+                quietMs().let { it != Long.MAX_VALUE && it > 0 && now - w.lastOutputAt >= it }
+            ) {
                 w.quietSent = true
+                // STALL-4 item 2c: output redirected to a file the watch does not follow gets one neutral hint.
+                val hint = job.redirects.filter { it !in job.follow }.firstOrNull()?.let { "\n" + t("job.quiet.redirectHint", job, "path" to it) } ?: ""
                 deliver(
                     sid, job,
                     mail(
                         sid, job,
-                        subject = "[AUTOMATIC] bg job ${job.id} quiet for ${fmt(now - w.lastOutputAt)}: ${job.label.take(60)}",
-                        head = "Background job ${job.id} (${job.label}) has printed nothing for ${fmt(now - w.lastOutputAt)} and is " +
-                            (if (alive(job)) "still running" else "no longer running (its end report has not arrived yet)") +
-                            " after ${elapsed(job)}. Decide: keep waiting (end your turn), investigate, or report to the PM.",
+                        subject = t("job.quiet.subject", job, "quiet" to fmt(now - w.lastOutputAt)),
+                        head = t(
+                            "job.quiet.head", job, "quiet" to fmt(now - w.lastOutputAt),
+                            "state" to WatchNotices.text(if (alive(job)) "job.quiet.running" else "job.quiet.gone"),
+                        ) + hint,
                         matched = emptyList(),
                         lines = tailOf(job, null),
                     ),
@@ -249,6 +274,9 @@ class BgJobNotifier(
             }
         }
     }
+
+    /** True when the job has an output to watch: the runner's log, or files it follows. */
+    private fun watched(job: BgJob) = job.logPath != null || job.follow.isNotEmpty()
 
     /** Beats at T, then 2T and 4T later... (T = the job's timeout or [defaultTimeoutMs]); the interval stops at the cap. */
     private fun heartbeatDue(w: Watch, timeoutMinutes: Int?, now: Long): Boolean {
@@ -265,10 +293,11 @@ class BgJobNotifier(
     private fun heartbeat(sid: String, job: BgJob, w: Watch, now: Long) {
         w.beatsSent++
         val lines = tailOf(job, null)
+        val primary = job.follow.firstOrNull() ?: job.logPath
         val logState = when {
             w.readError != null -> "the watcher could not read the log (${w.readError})"
-            job.logPath == null -> "no log (output not watched${job.optOut?.let { ": watch OFF, $it" } ?: ""})"
-            !File(job.logPath).isFile -> "the log is gone (${job.logPath.takeLast(80)})"
+            primary == null -> "no log (output not watched${job.optOut?.let { ": watch OFF, $it" } ?: ""})"
+            !File(primary).isFile -> "the log is gone (${primary.takeLast(80)})"
             lines.isEmpty() || now - w.lastOutputAt >= 60_000L -> "no output since ${java.time.Instant.ofEpochMilli(w.lastOutputAt)}"
             else -> "last output ${fmt(now - w.lastOutputAt)} ago"
         }
@@ -277,25 +306,22 @@ class BgJobNotifier(
             sid, job,
             mail(
                 sid, job,
-                subject = "[AUTOMATIC] bg job ${job.id} still running after ${elapsed(job)}: ${job.label.take(60)}",
-                head = "Background job ${job.id} (${job.label}) is still running after ${elapsed(job)}; $logState; $proc. " +
-                    "Decide: keep waiting (end your turn again; next status in ${fmt(w.interval)}), investigate " +
-                    "(`agenthq bg stop ${job.id}` if it is hung), or report to the PM.",
+                subject = t("job.heartbeat.subject", job),
+                head = t("job.heartbeat.head", job, "logState" to logState, "proc" to proc, "next" to fmt(w.interval)),
                 matched = emptyList(),
                 lines = lines,
             ),
             WatchMeter::heartbeat,
         )
         val cap = heartbeatCapMs()
-        if (!w.pmTold && w.interval >= cap) {
-            w.pmTold = true
-            pmOf(sid)?.let { pm ->
+        if (!w.escalated && w.interval >= cap) {
+            w.escalated = true
+            runCatching { recipientOf(sid) }.getOrNull()?.let { to ->
                 send(
                     MailSendRequest(
-                        from = FinishNoticeMonitor.SYSTEM, to = pm, threadId = "bg:${job.id}:pm",
-                        subject = "[AUTOMATIC] worker ${sid.take(8)} has waited ${elapsed(job)} on bg job ${job.id} with no end",
-                        body = "Session $sid has waited ${elapsed(job)} on `${job.label.take(80)}` ($logState; $proc). " +
-                            "Status mails go on every ${fmt(cap)}.\n",
+                        from = FinishNoticeMonitor.SYSTEM, to = to, threadId = "bg:${job.id}:watch",
+                        subject = t("escalate.longWait.subject", job, "session" to sid.take(8)),
+                        body = t("escalate.longWait.body", job, "sessionFull" to sid, "label" to job.label.take(80), "logState" to logState, "proc" to proc, "cap" to fmt(cap)) + "\n",
                     ),
                 )
             }
@@ -305,12 +331,12 @@ class BgJobNotifier(
     private fun optedOut(sid: String, job: BgJob) {
         WatchMeter.optOut()
         println("[agentHq] watch OFF for session $sid: ${job.label.take(80)} (reason: ${job.optOut})")
-        pmOf(sid)?.let { pm ->
+        runCatching { recipientOf(sid) }.getOrNull()?.let { to ->
             send(
                 MailSendRequest(
-                    from = FinishNoticeMonitor.SYSTEM, to = pm, threadId = "optout:$sid",
-                    subject = "[AUTOMATIC] watch OFF: ${sid.take(8)} runs `${job.label.take(50)}` unwatched",
-                    body = "Session $sid opted out of the output watch for `${job.label.take(80)}`: ${job.optOut}\n",
+                    from = FinishNoticeMonitor.SYSTEM, to = to, threadId = "optout:$sid",
+                    subject = t("escalate.optOut.subject", job, "session" to sid.take(8), "label" to job.label.take(50)),
+                    body = t("escalate.optOut.body", job, "sessionFull" to sid, "label" to job.label.take(80), "reason" to job.optOut) + "\n",
                 ),
             )
         }
@@ -318,41 +344,54 @@ class BgJobNotifier(
 
     private fun alive(job: BgJob): Boolean = runCatching { pidAlive(job.cmdPid ?: job.pid) }.getOrDefault(true)
 
-    /** Reads the bytes appended to [job]'s log since the last pass and records the lines that match. */
-    private fun readNew(job: BgJob, w: Watch, patterns: List<Regex>, now: Long) {
-        val f = job.logPath?.let { File(it) }?.takeIf { it.isFile } ?: return
+    /**
+     * Reads the bytes appended to [path] since the last pass and records the lines that match. STALL-4 item 4b: never a
+     * copy of the file: at most [readMaxBytes] per pass (a bigger jump skips to its tail), a partial line kept to
+     * [tailReadBytes] chars; a deleted file reads nothing, a shorter one (truncated, rotated) is read again from its start.
+     * In the runner's own log ([own]) its `[agenthq:` lines are not output; in a followed file every byte is.
+     */
+    private fun readNew(path: String, own: Boolean, w: Watch, patterns: List<Regex>, now: Long) {
+        val f = File(path).takeIf { it.isFile } ?: return
+        val c = w.cursors.getOrPut(path) { Cursor() }
         val len = f.length()
-        // Truncated or rotated (a new, shorter file at the same path): start again from its beginning.
-        if (len < w.offset) { w.offset = 0L; w.partial = "" }
-        if (len == w.offset) return
-        val bytes = RandomAccessFile(f, "r").use { r ->
-            r.seek(w.offset)
-            ByteArray((len - w.offset).toInt()).also { r.readFully(it) }
+        // A followed file that already had content: only what is appended from now on is new output.
+        if (c.offset < 0) c.offset = if (own) 0L else len
+        if (len < c.offset) { c.offset = 0L; c.partial = "" }
+        if (len == c.offset) return
+        var from = c.offset
+        val maxRead = readMaxBytes().coerceAtLeast(1024L)
+        if (len - from > maxRead) { from = len - maxRead; c.partial = "" }
+        val buf = ByteArray((len - from).toInt())
+        var got = 0
+        RandomAccessFile(f, "r").use { r ->
+            r.seek(from)
+            while (got < buf.size) { val k = r.read(buf, got, buf.size - got); if (k < 0) break; got += k }
         }
-        w.offset = len
-        val text = w.partial + String(bytes, Charsets.UTF_8)
+        c.offset = from + got
+        if (got == 0) return
+        if (!own) { w.lastOutputAt = now; w.quietSent = false }
+        val text = c.partial + String(buf, 0, got, Charsets.UTF_8)
         val parts = text.split('\n')
-        w.partial = parts.last()
+        c.partial = parts.last().takeLast(tailReadBytes().coerceIn(1024L, Int.MAX_VALUE.toLong()).toInt())
         for (line in parts.dropLast(1)) {
             val l = line.trimEnd('\r')
-            if (!l.startsWith("[agenthq:")) {
+            if (own && !l.startsWith("[agenthq:")) {
                 w.lastOutputAt = now
                 w.quietSent = false
             }
             if (patterns.any { it.containsMatchIn(l) }) {
                 if (w.matches.isEmpty()) w.firstMatchAt = now
-                w.matches += l
+                w.matches += l.take(lineChars())
             }
         }
     }
 
     private fun regex(p: String): Regex? = regexCache.computeIfAbsent(p) { runCatching { Regex(it) }.getOrNull() }
 
+    /** [job]'s last lines: [given] (the wrapper's), else read from the END of its followed file or log, never the whole file. */
     private fun tailOf(job: BgJob, given: List<String>?): List<String> {
         val n = (job.notify?.tailLines ?: defaultTailLines()).coerceAtLeast(1)
-        val lines = given ?: job.logPath?.let { File(it) }?.takeIf { it.isFile }?.let { f ->
-            runCatching { f.readLines() }.getOrNull()
-        }.orEmpty()
+        val lines = given ?: (job.follow.firstOrNull() ?: job.logPath)?.let { readTail(File(it), n, tailReadBytes()) }.orEmpty()
         return lines.takeLast(n)
     }
 
@@ -362,6 +401,9 @@ class BgJobNotifier(
         val s = (ms / 1000).coerceAtLeast(0)
         return if (s < 60) "${s}s" else "${s / 60}m${s % 60}s"
     }
+
+    /** STALL-4 item 4c: a notice carries a bounded tail, each line cut to [lineChars]. */
+    private fun cut(line: String): String { val max = lineChars().coerceAtLeast(20); return if (line.length <= max) line else line.take(max) + "…" }
 
     private fun mail(sessionId: String, job: BgJob, subject: String, head: String, matched: List<String>, lines: List<String>) =
         MailSendRequest(
@@ -373,15 +415,34 @@ class BgJobNotifier(
                 append(head).append('\n')
                 if (matched.isNotEmpty()) {
                     append("matched:\n")
-                    matched.takeLast(lines.size.coerceAtLeast(1)).forEach { append("  ").append(it.take(400)).append('\n') }
+                    matched.takeLast(lines.size.coerceAtLeast(1)).forEach { append("  ").append(cut(it)).append('\n') }
                 }
                 job.logPath?.let { append("log: ").append(it).append('\n') }
+                job.follow.forEach { append("following: ").append(it).append('\n') }
                 if (lines.isNotEmpty()) {
                     append("last ${lines.size} lines:\n")
-                    lines.forEach { append("  ").append(it.take(400)).append('\n') }
+                    lines.forEach { append("  ").append(cut(it)).append('\n') }
                 }
             },
         )
+
+    companion object {
+        /** The last [n] lines of [f], read from at most its last [maxBytes]; empty when it is gone or unreadable. */
+        fun readTail(f: File, n: Int, maxBytes: Long): List<String> = runCatching {
+            if (!f.isFile) return emptyList()
+            RandomAccessFile(f, "r").use { r ->
+                val len = r.length()
+                val from = (len - maxBytes.coerceAtLeast(1024L)).coerceAtLeast(0L)
+                val buf = ByteArray((len - from).toInt())
+                r.seek(from)
+                var got = 0
+                while (got < buf.size) { val k = r.read(buf, got, buf.size - got); if (k < 0) break; got += k }
+                val lines = String(buf, 0, got, Charsets.UTF_8).split('\n').map { it.trimEnd('\r') }
+                // A read that starts mid-file starts mid-line; a file ending in a newline leaves one empty last part.
+                (if (from > 0) lines.drop(1) else lines).dropLastWhile { it.isEmpty() }.takeLast(n)
+            }
+        }.getOrDefault(emptyList())
+    }
 }
 
 /**

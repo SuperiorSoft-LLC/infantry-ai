@@ -837,6 +837,18 @@ class AgentHqDaemon(
                             forced = settings.limit(LimitRegistry.WATCH_FORCED) != 0L,
                             treeWaitMinutes = settings.limit(LimitRegistry.WATCH_TREE_WAIT_MINUTES),
                             profiles = profiles,
+                        ) +
+                        // STALL-4: the runner's space limits and the follow-redirects switch reach every run a session starts.
+                        com.superiorsoftllc.agenthq.cli.BgCli.watchLimitEnv(
+                            logMaxMb = settings.limit(LimitRegistry.WATCH_LOG_MAX_MB),
+                            logTotalMb = settings.limit(LimitRegistry.WATCH_LOG_TOTAL_MB),
+                            keepJobs = settings.limit(LimitRegistry.WATCH_LOG_KEEP_JOBS),
+                            keepDays = settings.limit(LimitRegistry.WATCH_LOG_KEEP_DAYS),
+                            minFreeMb = settings.limit(LimitRegistry.WATCH_MIN_FREE_MB),
+                            fileIdleSeconds = settings.limit(LimitRegistry.WATCH_FILE_IDLE_SECONDS),
+                            followRedirects = settings.watchFollowRedirects(),
+                            spaceCheckSeconds = settings.limit(LimitRegistry.WATCH_SPACE_CHECK_SECONDS),
+                            tailReadKb = settings.limit(LimitRegistry.WATCH_TAIL_READ_KB),
                         )
                 },
                 // No-hard-coded-limits S2: the watchdog and silent sweeper read limits.watchdog.* live.
@@ -1462,27 +1474,51 @@ class AgentHqDaemon(
                 ticketOf = { id -> store.transaction { store.tickets.get(id) } },
                 idleNoticeMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.IDLE_NOTICE_MINUTES), LimitRegistry.IDLE_NOTICE_MINUTES) },
             ).also { it.start() }
-            // STALL-1: who hears about a worker's long wait or stall: its ticket's starter, else the `pm` role.
-            fun stallPmOf(s: com.superiorsoftllc.agenthq.session.SessionRecord?): String? {
-                val ticket = s?.ticketId?.let { id -> runCatching { store.transaction { store.tickets.get(id) } }.getOrNull() }
-                return ticket?.startedBy?.takeIf { it.isNotBlank() && it != s?.id } ?: s?.let { "pm" }
+            // STALL-4: the watch's recipient rule (`watch.escalateTo`): `starter` = the ticket's starter session, else the
+            // user through the UI; `user` = always the user; `none` = nobody. No role is assumed to exist.
+            com.superiorsoftllc.agenthq.runner.WatchNotices.overrides = { settings.watchNotices() }
+            fun watchRecipientOf(s: com.superiorsoftllc.agenthq.session.SessionRecord?): String? {
+                if (s == null) return null
+                return when (settings.watchEscalateTo()) {
+                    "none" -> null
+                    "user" -> com.superiorsoftllc.agenthq.runner.WatchNotices.USER
+                    else -> s.ticketId?.let { id -> runCatching { store.transaction { store.tickets.get(id) } }.getOrNull() }
+                        ?.startedBy?.takeIf { it.isNotBlank() && it != s.id } ?: com.superiorsoftllc.agenthq.runner.WatchNotices.USER
+                }
+            }
+            // Mail to [WatchNotices.USER] is an attention item (the UI), never mail to a role that may not exist.
+            val watchSend: (com.superiorsoftllc.agenthq.mailbox.MailSendRequest) -> com.superiorsoftllc.agenthq.mailbox.MailResult = { req ->
+                if (req.to == com.superiorsoftllc.agenthq.runner.WatchNotices.USER) {
+                    val sid = req.threadId?.split(':')?.getOrNull(1)?.takeIf { manager.get(it) != null }
+                    runCatching {
+                        attention.raise(
+                            kind = com.superiorsoftllc.agenthq.attention.AttentionKind.STALLED,
+                            sessionId = sid, ticketId = sid?.let { manager.get(it)?.ticketId },
+                            outcome = "watch_notice", detail = (req.subject.removePrefix("[AUTOMATIC] ") + "\n" + req.body).trim().take(2000),
+                        )
+                    }
+                    com.superiorsoftllc.agenthq.mailbox.MailResult.Refused("raised for the user as an attention item")
+                } else mail.send(req)
             }
             // BG-NOTIFY (ticket 245a7d31): `bg run --notify` jobs mail their session on exit / pattern / timeout, waking it.
             val bgNotifier = com.superiorsoftllc.agenthq.mailbox.BgJobNotifier(
                 jobs = { manager.list().flatMap { r -> r.bgJobs.map { r.id to it } } },
-                send = mail::send,
+                send = watchSend,
                 defaultTailLines = { settings.limit(LimitRegistry.BG_NOTIFY_TAIL_LINES).toInt() },
                 defaultTimeoutMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.BG_NOTIFY_TIMEOUT_MINUTES), LimitRegistry.BG_NOTIFY_TIMEOUT_MINUTES) },
                 patternGraceMs = { settings.limit(LimitRegistry.BG_NOTIFY_PATTERN_GRACE_SECONDS) * 1000L },
                 quietMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.WATCH_QUIET_MINUTES), LimitRegistry.WATCH_QUIET_MINUTES) },
                 heartbeatCapMs = { settings.limit(LimitRegistry.WATCH_HEARTBEAT_CAP_MINUTES) * 60_000L },
                 inTurn = { sid -> manager.get(sid)?.isBusy() == true },
-                pmOf = { sid -> stallPmOf(manager.get(sid)) },
+                recipientOf = { sid -> watchRecipientOf(manager.get(sid)) },
+                lineChars = { settings.limit(LimitRegistry.WATCH_NOTICE_LINE_CHARS).toInt() },
+                readMaxBytes = { settings.limit(LimitRegistry.WATCH_READ_MAX_KB) * 1024L },
+                tailReadBytes = { settings.limit(LimitRegistry.WATCH_TAIL_READ_KB) * 1024L },
             )
             manager.bgJobListener = bgNotifier
             // STALL-1 item 5: idle or BUSY-but-silent ticket workers are nudged and their PM told; no model call, no kill.
             val stallDetector = com.superiorsoftllc.agenthq.mailbox.StallDetector(
-                sessions = manager, send = mail::send,
+                sessions = manager, send = watchSend,
                 ticketInProgress = { id -> store.transaction { store.tickets.get(id) }?.status == com.superiorsoftllc.agenthq.protocol.TicketStatus.IN_PROGRESS },
                 deliberateWait = { s ->
                     mailbox.waiting().any { it.session == s.id } ||
@@ -1491,7 +1527,7 @@ class AgentHqDaemon(
                 lastJobEndedAt = bgNotifier::lastEndedAt,
                 quietSeconds = bgNotifier::quietSeconds,
                 stallMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.WATCH_STALL_MINUTES), LimitRegistry.WATCH_STALL_MINUTES) },
-                pmOf = ::stallPmOf,
+                recipientOf = ::watchRecipientOf,
                 foregroundStallMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.WATCH_FOREGROUND_STALL_MINUTES), LimitRegistry.WATCH_FOREGROUND_STALL_MINUTES) },
             ).also { it.start() }
             // PIPELINE-WATCHDOG: derives per-agent pending/stalled/quiet state, nudges, then tells the PM and the owner.
@@ -3564,7 +3600,7 @@ private suspend fun handleConnection(
                             require(sid != null && req.jobId != null) { "done expects a sessionId and a jobId" }
                             manager.bgJobDone(sid, req.jobId)?.let { job ->
                                 (manager.bgJobListener as? com.superiorsoftllc.agenthq.mailbox.BgJobNotifier)?.let { n ->
-                                    runCatching { n.done(sid, job, req.exitCode, req.tail, req.bytes, req.eof, req.survivors) }
+                                    runCatching { n.done(sid, job, req.exitCode, req.tail, req.bytes, req.eof, req.survivors, req.marker, req.pipeNoFail) }
                                         .onFailure { System.err.println("[agentHq] bg notify failed for ${job.id}: ${it.message}") }
                                 }
                             }

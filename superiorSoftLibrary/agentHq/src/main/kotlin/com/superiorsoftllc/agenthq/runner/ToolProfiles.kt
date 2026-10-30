@@ -35,6 +35,18 @@ data class ToolProfile(
     val daemons: List<String> = emptyList(),
     /** Log-line regexes a `bg run --notify` job is watched for by default (a build verdict, a compiler error). */
     val notifyOn: List<String> = emptyList(),
+    /**
+     * STALL-4: output-line regexes that mean the command failed whatever its exit code (`BUILD FAILED`): an exit 0 with
+     * one of them in the output is reported as `exit=0 but output contains failure marker: ...`.
+     */
+    val failureMarkers: List<String> = emptyList(),
+    /**
+     * STALL-4: command-line regexes whose group 1 is a file the output is sent to (`> x.log`, `| tee x.log`,
+     * `Out-File x.log`). Followed only with `--follow` / `watch.followRedirects`; else named in the quiet notice's hint.
+     */
+    val redirects: List<String> = emptyList(),
+    /** STALL-4: options of [commands] whose value is a log file (`--log-file`, as `--log-file x` or `--log-file=x`). */
+    val logFlags: List<String> = emptyList(),
     /** In an override: drop the default entry of this [name]. */
     val disabled: Boolean = false,
 )
@@ -74,7 +86,7 @@ object ToolProfiles {
 
     fun validate(p: ToolProfile) {
         require(p.name.isNotBlank()) { "a tool profile needs a name" }
-        (p.daemons + p.notifyOn).forEach { re ->
+        (p.daemons + p.notifyOn + p.failureMarkers + p.redirects).forEach { re ->
             runCatching { Regex(re) }.exceptionOrNull()?.let { throw IllegalArgumentException("tool profile '${p.name}': bad regex '$re' (${it.message})") }
         }
         p.shim?.forEach { s -> require(s in p.commands) { "tool profile '${p.name}': shim '$s' is not one of its commands" } }
@@ -125,4 +137,39 @@ object ToolProfiles {
 
     /** The default `--notify` patterns: every profile's [ToolProfile.notifyOn]. */
     fun notifyPatterns(list: List<ToolProfile> = active): List<String> = list.flatMap { it.notifyOn }.distinct()
+
+    /** STALL-4: every profile's failure markers, compiled (bad ones dropped). */
+    fun failureMarkers(list: List<ToolProfile> = active): List<Regex> =
+        list.flatMap { it.failureMarkers }.distinct().mapNotNull { runCatching { Regex(it) }.getOrNull() }
+
+    /** Paths that are never a log: the null devices. */
+    private val NULL_TARGETS = setOf("/dev/null", "nul", "\$null", "nul:")
+
+    /**
+     * STALL-4 item 2: the files [commandLine] sends its output to, by every profile's [ToolProfile.redirects] and, for the
+     * program words of a profile, its [ToolProfile.logFlags]; relative paths taken against [cwd]. A path with a shell
+     * variable (`$X`, `%X%`) cannot be known here and is skipped, as are the null devices.
+     */
+    fun redirectTargets(commandLine: String, cwd: File, list: List<ToolProfile> = active): List<String> {
+        val found = ArrayList<String>()
+        for (re in list.flatMap { it.redirects }.distinct()) {
+            val r = runCatching { Regex(re) }.getOrNull() ?: continue
+            r.findAll(commandLine).forEach { m -> m.groups[1]?.value?.let(found::add) }
+        }
+        val words = commandLine.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        for (p in list.filter { it.logFlags.isNotEmpty() }) {
+            if (words.none { w -> p.commands.any { it.equals(baseName(w), ignoreCase = true) } }) continue
+            words.forEachIndexed { i, w ->
+                for (flag in p.logFlags) {
+                    if (w == flag) words.getOrNull(i + 1)?.let(found::add)
+                    else if (w.startsWith("$flag=")) found += w.removePrefix("$flag=")
+                }
+            }
+        }
+        return found.asSequence()
+            .map { it.trim().trim('"', '\'') }
+            .filter { it.isNotEmpty() && it.lowercase() !in NULL_TARGETS && !it.contains('$') && !it.contains('%') && !it.startsWith("&") }
+            .map { f -> File(f).let { if (it.isAbsolute) it else File(cwd, f) }.absoluteFile.normalize().path }
+            .distinct().toList()
+    }
 }

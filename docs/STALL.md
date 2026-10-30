@@ -84,7 +84,7 @@ that rewrites the command again is **not detected** (we use no post-call hook th
 **Opting out.**
 
 - one command: `agenthq unwatched --reason "<why>" -- <cmd...>` (reason required; registered, counted, shown as
-  `watch OFF: <reason>`, told to the PM once, still covered by the heartbeat and the stall detector). An `agenthq bg ...`,
+  `watch OFF: <reason>`, escalated once by `watch.escalateTo`, still covered by the heartbeat and the stall detector). An `agenthq bg ...`,
   `run-watched` or `unwatched` call is never rewritten.
 - every session (owner only): `limits.watch.forced` = 0: no shims, no hook rewrite (`AGENTHQ_WATCH=off`).
 - one tool: a profile override with `"disabled": true` (below).
@@ -140,8 +140,8 @@ Layers, strongest first; each event is named by what is known:
 5. **pid gone** for processes the daemon did not launch: the process-tree watch (`SessionManager.trackTreeJobs`).
 6. **heartbeat** (`BgJobNotifier`): 15 min (`limits.bg.notifyTimeoutMinutes`), then 30, 60 up to
    `limits.watch.heartbeatCapMinutes` (60); independent of the log: elapsed, last lines or "no output since", log gone,
-   watcher read error, process alive or gone, "decide: keep waiting, investigate, or report to the PM". The first beat at
-   the cap tells the PM once.
+   watcher read error, process alive or gone, "if you are waiting on it, end your turn again; if it looks hung, check its
+   log or stop it". The first beat at the cap is escalated once (`watch.escalateTo`, STALL-4).
 
 Watcher events (`BgJobNotifier`, daemon core, no LLM): new lines (pattern matches), EOF while running, done, vanished
 (runner lost: the exit file is read when present, else "runner lost, exit unknown"), QUIET (no new non-runner line for
@@ -158,17 +158,67 @@ Stall detector (`StallDetector`, every 30 s, `limits.watch.stallMinutes` = 5): I
 no open owner question, not waiting on a mail reply) and BUSY-BUT-SILENT (turn in flight, a job ended after the last sign
 of life, silent since), and (STALL-3) BUSY-IN-THE-FOREGROUND (turn in flight, no tool progress and no watched job for
 `limits.watch.foregroundStallMinutes`, 10, even though no job ended: a hung `find` over everything, a long build the hooks
-could not rewrite; 0 = never). One nudge to the worker and one line to the PM (the ticket's starter, else `pm`) per stretch.
-Never kills or restarts. A BUSY turn cannot be written into: the nudge queues; the PM line goes out at once.
+could not rewrite; 0 = never). One nudge to the session and one escalation line (`watch.escalateTo`, STALL-4) per stretch.
+Never kills or restarts. A BUSY turn cannot be written into: the nudge queues; the escalation line goes out at once.
 
 Opt-out: `agenthq unwatched --reason "<why>" -- <cmd...>` (reason required). The command runs with the caller's stdio and
 no log, but is registered with its reason: printed in the daemon log, counted (`WatchMeter.optOuts`), shown as
-`watch OFF: <reason>`, reported to the PM once, and still covered by the heartbeat and the stall detector. The owner-only
+`watch OFF: <reason>`, escalated once (`watch.escalateTo`), and still covered by the heartbeat and the stall detector. The owner-only
 `limits.watch.forced` = 0 turns the shims off for every session (`AGENTHQ_WATCH=off`); shipped default 1.
 
 Visibility: `SessionRecord.watchLabel` (`watching <job> (quiet 2m)`, `watch OFF: <reason>`, `busy, silent 7m`, `stalled`,
 `idle`; none for a session with no ticket and no job). `WatchMeter` counts events, heartbeats, opt-outs and stall nudges
 (counts only; it says the watch uses no model tokens).
+
+## STALL-4: role-neutral wording, file watching, masked exit codes, limited space
+
+**Wording is data.** Every text the watch sends (job notices, heartbeats, stall nudges, escalation lines, the runner's
+own notes) is a template in `src/main/resources/watch/notices.json` (`WatchNotices`), with `{placeholders}`. The setting
+`watch.notices` (JSON object, key -> template) rewords any of them for a project or a plugin. No template names a role or
+assumes a recipient exists (a user may have no PM): `Stall4WatchDataTest` fails on `PM`, `owner`, `worker` or
+`report to` in a shipped template, and the setting refuses an override that uses one.
+
+**Recipient rule.** Where a notice must reach someone besides the session (heartbeat cap, opt-out, stall line),
+`watch.escalateTo` decides: `starter` (default: the ticket's starter session, else the user through the UI as an
+attention item), `user` (always the UI), `none`. The text names no one.
+
+**File watching is an option; the default is unchanged** (the output buffer is watched, as before):
+
+- `agenthq watch-file <path> [--until-pid N] [--idle-seconds S] [--name L] [--notify-on RE]` (MCP `agenthq_watch_file`):
+  a detached watcher with the same quiet / heartbeat / pattern / done notices. Done = the pid exited, or with no pid the
+  file did not grow for `limits.watch.fileIdleSeconds` (120). Zero tokens while it runs.
+- `agenthq run-watched --follow <path> -- <cmd>` (repeatable), or `watch.followRedirects` = true (default false): the
+  runner detects redirects in the command line and counts the growth of those files as output (quiet timer, heartbeat,
+  stall detector, patterns, tail).
+- With the default (off), a command line that redirects to a file gets one hint in its quiet notice: "Output sent to a
+  file is not visible to the watcher; to follow it use: agenthq watch-file <path>."
+- Redirect patterns are tool-profile data: `redirects` (regexes, group 1 = the file: `>`, `>>`, `2>`, `| tee`,
+  `Out-File`/`Tee-Object`, in the `shell-redirects` profile) and `logFlags` (a tool's own log option, e.g. maven
+  `--log-file` / `-l`). Null devices and paths with a shell variable are skipped.
+
+**Masked exit codes.** A hooked bash/sh/zsh script with a pipe gets `set -o pipefail` (when the shell has it), so
+`gradle test | tail` exits with gradle's failure. A pipe whose shell has no pipefail (cmd, PowerShell, an explicit
+`bash -c "a | b"`) is named in the done line (`warning="pipe without pipefail..."`) and the notice. Tool profiles declare
+`failureMarkers` (gradle `BUILD FAILED`, `^FAILURE: `; maven `BUILD FAILURE`): an exit 0 whose output matched one ends
+as `[agenthq:done exit=0 ... warning="exit=0 but output contains failure marker: BUILD FAILED ..."]`, and the notice
+says so.
+
+### Limits and space
+
+| Setting | Default | What it bounds |
+|---|---|---|
+| `limits.watch.logMaxMB` | 50 | one job log; past it the head is cut, the tail kept behind `[agenthq:truncated N bytes ...]` (0 = no cap) |
+| `limits.watch.logTotalMB` | 500 | all finished job logs together; oldest finished jobs pruned past it |
+| `limits.watch.logKeepJobs` | 50 | finished jobs whose logs are kept (pruned when a job starts) |
+| `limits.watch.logKeepDays` | 7 | age past which any job's files are pruned (an unfinished one only by age) |
+| `limits.watch.minFreeMB` | 200 | free disk floor: below it the runner stops writing the log, keeps streaming the console, says so once |
+| `limits.watch.spaceCheckSeconds` | 5 | how often the free space is checked |
+| `limits.watch.readMaxKB` | 256 | the most read from one watched file per pass (a bigger jump skips to its tail; nothing is copied) |
+| `limits.watch.tailReadKB` | 64 | how far from a file's end a notice's tail is read; the longest partial line kept |
+| `limits.watch.noticeLineChars` | 200 | each notice line is cut to this (`limits.bg.notifyTailLines` bounds the line count) |
+| `limits.watch.fileIdleSeconds` | 120 | `watch-file` with no pid: done once the file stopped growing this long |
+
+A deleted watched file reads nothing; a shorter one (truncated, rotated) is read again from its start; neither fails.
 
 ## 4. Remaining
 
