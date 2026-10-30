@@ -11,7 +11,16 @@ data class HarnessLine(
     val harness: String, val turns: Long, val tokensPerTurn: Long?, val avgContext: Long?, val cacheHit: Double?, val estCost: Double?,
 )
 
-enum class CostBy(val label: String) { SESSION("Session"), TICKET("Ticket"), ROLE("Role"), MODEL("Model") }
+enum class CostBy(val label: String) { SESSION("Session"), TICKET("Ticket"), ROLE("Role"), MODEL("Model"), HARNESS("Harness") }
+
+/** Human names for ids, filled by the host from what it knows (ticket titles, session roles); a missing id falls back to the short id. */
+data class CostNames(val tickets: Map<String, String> = emptyMap(), val sessions: Map<String, String> = emptyMap())
+
+/** One ranked row of the cost panel: [label] first, [detail] the muted id or harness, [share] 0..1 of the priced total, null cost = no price. */
+data class CostRow(val key: String, val label: String, val detail: String?, val turns: Int, val cost: Double?, val share: Double?)
+
+/** The panel's rows plus the priced total and how many rows have no price. */
+data class CostTable(val rows: List<CostRow>, val total: Double?, val turns: Int, val unpriced: Int)
 
 /** Pure derivations over recorded requests, rows and the daemon's price table. Nothing is invented: a missing field stays null. */
 object UsageRequestView {
@@ -75,6 +84,41 @@ object UsageRequestView {
         CostBy.TICKET -> r.ticketId?.take(8) ?: "(no ticket)"
         CostBy.ROLE -> r.role
         CostBy.MODEL -> "${r.harness}/${r.model ?: NA}"
+        CostBy.HARNESS -> r.harness
+    }
+
+    /** "1 turn", "2 turns". */
+    fun turns(n: Int): String = if (n == 1) "1 turn" else "$n turns"
+
+    /** A share 0..1 as "12%", "<1%" for a sliver, "n/a" when unknown. */
+    fun share(v: Double?): String = when {
+        v == null -> NA
+        v > 0 && v < 0.005 -> "<1%"
+        else -> "${(v * 100).roundToLong()}%"
+    }
+
+    private fun short(id: String) = id.take(8)
+
+    private fun label(r: UsageMeterRequest, by: CostBy, names: CostNames): Pair<String, String?> = when (by) {
+        CostBy.SESSION -> (names.sessions[r.sessionId] ?: r.role) to short(r.sessionId)
+        CostBy.TICKET -> r.ticketId?.let { (names.tickets[it] ?: short(it)) to short(it) } ?: ("(no ticket)" to null)
+        CostBy.ROLE -> r.role to null
+        CostBy.MODEL -> (r.model ?: NA) to r.harness
+        CostBy.HARNESS -> r.harness to null
+    }
+
+    /** Ranked rows, biggest cost first, unpriced rows last; share is of the priced total. Nothing is invented. */
+    fun costTable(report: UsageMeterReport, by: CostBy, names: CostNames = CostNames()): CostTable {
+        val groups = report.requests.groupBy { costKey(it, by) }
+        val raw = groups.map { (k, rs) ->
+            val e = rs.map { estimate(it, report.prices) }
+            val (label, detail) = label(rs.first(), by, names)
+            CostRow(k, label, detail, rs.size, if (e.any { it != null }) e.sumOf { it ?: 0.0 } else null, null)
+        }
+        val total = raw.mapNotNull { it.cost }.takeIf { it.isNotEmpty() }?.sum()
+        val rows = raw.map { it.copy(share = if (it.cost != null && total != null && total > 0) it.cost / total else null) }
+            .sortedWith(compareByDescending<CostRow> { it.cost ?: -1.0 }.thenByDescending { it.turns })
+        return CostTable(rows, total, raw.sumOf { it.turns }, raw.count { it.cost == null })
     }
 
     /** Estimated cost per key, biggest first; a key whose requests have no price shows null. */
