@@ -210,3 +210,5 @@ its hook run; a throwing hook disables only it; refused without grants; gone whe
 * **Gaps**: `memoryMbHint` is not enforced (one JVM); the SDK's `PluginFolders.demoLock()` / the UI's demo-lock module rules
   (`DemoLockConfig`) are UI-side and not part of this ticket; the remaining built-in tools of section 6 stay in core until
   their helpers move.
+
+What the daemon core is, the target list for the migration above, and the orchestrator/runner split: [DAEMON-CORE.md](DAEMON-CORE.md).

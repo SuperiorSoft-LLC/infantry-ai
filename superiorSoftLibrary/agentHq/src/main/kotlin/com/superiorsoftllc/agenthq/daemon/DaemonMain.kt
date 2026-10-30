@@ -91,6 +91,7 @@ import com.superiorsoftllc.agenthq.mailbox.MessageState
 import com.superiorsoftllc.agenthq.mailbox.ThreadSummary
 import com.superiorsoftllc.agenthq.mailbox.WaitingOn
 import com.superiorsoftllc.agenthq.orchestration.Orchestrator
+import com.superiorsoftllc.agenthq.orchestration.refusalOrNull
 import com.superiorsoftllc.agenthq.orchestration.PodFirstTurn
 import com.superiorsoftllc.agenthq.orchestration.PodStatus
 import com.superiorsoftllc.agenthq.orchestration.PodSubmitRequest
@@ -1353,7 +1354,7 @@ class AgentHqDaemon(
                 repoFor = { projectId -> board.cutRepo(projectId) },
             )
             relatedRef.set(com.superiorsoftllc.agenthq.ticketfiles.LiveRelatedWork(ticketFiles, ticket = { id -> store.tickets.get(id) }))
-            mail.reportCheck = { from, body ->
+            val orchestratorLink: com.superiorsoftllc.agenthq.orchestration.OrchestratorLink = com.superiorsoftllc.agenthq.orchestration.LocalOrchestratorLink { from, body ->
                 manager.get(from)?.ticketId?.takeIf { it.isNotBlank() }?.let { tid ->
                     val row = store.tickets.get(tid)
                     val line = com.superiorsoftllc.agenthq.ticketfiles.FilesReadCheck.extract(body)
@@ -1362,6 +1363,7 @@ class AgentHqDaemon(
                     refusal
                 }
             }
+            mail.reportCheck = { from, body -> orchestratorLink.reviewReport(from, body).refusalOrNull() }
             val ticketFilesText = com.superiorsoftllc.agenthq.ticketfiles.TicketFilesText(ticketFiles) { id -> store.tickets.get(id)?.title }
             val ticketFilesExec = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
                 Thread(r, "agenthq-ticket-files").also { it.isDaemon = true }

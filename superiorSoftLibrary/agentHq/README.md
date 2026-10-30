@@ -131,3 +131,7 @@ TBD.
 
 <!-- OWNER: contribution guidelines / CLA / code of conduct, if any. -->
 TBD.
+
+## Daemon core
+
+What the daemon core is (and what is plugin, with reasons), the guards that keep the line, and how the daemon could split into an orchestrator and a runner: [`docs/DAEMON-CORE.md`](docs/DAEMON-CORE.md).

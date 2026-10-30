@@ -1,0 +1,240 @@
+# DAEMON-CORE-1: what the daemon core is (ticket ad656fe1)
+
+Owner principle: **core is the abstraction layer**: abstractions, configuration, the tools to modify configuration, and the
+abstract data contract between UI and daemon. Everything concrete is a plugin (docs/DAEMON-PLUGINS.md). This note defines the
+daemon core by that rule, classifies every other daemon package as the target list of DAEMON-PLUGINS-2, makes the line
+checkable (`DaemonCoreGuardTest`), and records how the daemon could split into an orchestrator and a runner (section 6).
+Licensing follows the line: core MPL-2.0, everything else Apache-2.0, split by directory.
+
+## 1. The rule
+
+A thing is **core** when removing it would stop a plugin from being written or a client from talking to the daemon, and it names
+no product feature. A thing is **plugin** when it is a concrete behaviour built on core's abstractions (a board, a tool family,
+a harness adapter, a policy preset, a demo). A thing that is concrete but cannot leave yet is **stays in core** with the reason
+that holds it, and shrinks with DAEMON-PLUGINS-2.
+
+## 2. The core list (verified against `superiorSoftLibrary/agentHq/src/main`)
+
+| core item | where | reason |
+|---|---|---|
+| wire contract and frames | `protocol` (`Protocol.kt`, `CONTRACT.md`) | the abstract data contract between UI and daemon; version bump only when a frame changes |
+| session lifecycle | `session` (`SessionManager`, `Session`, `SessionStore`, `session/host`) | spawn, resume, restart, kill and the process ledger every harness runs under |
+| harness abstraction | `harness` (`Harness`, `HarnessPlugin`, `HarnessRegistry`, `CliHarness`, `HarnessCommand`) | the interface third parties implement; the adapters under it are not core |
+| mail routing and the mailbox | `mailbox` (`Mailbox`, `MailRouter`, `MailStore`, `Message`), `daemon/MailHttp.kt` | the routing mechanism and durable queue; the monitors in the package are product rules (section 3) |
+| plugin host | `daemon/plugins` (`DaemonPluginHost`, `PluginGuard`, `DaemonApiClassLoader`, `DaemonServices`), `daemon/DaemonPlugins.kt`, `agentHqDaemonApi` | loads, isolates, grants and limits daemon plugins; the module `agentHqDaemonApi` is the plugin-facing API |
+| policy mechanism | `policy` (`ActionCatalog`, `PolicyProvider`, `PolicyRuntime`), `daemon/FrameGate.kt`, `daemon/AccessPolicy.kt` | who may do what; presets, seats and gates are data and plugins on top |
+| configuration | `settings` (`SettingsService`, `LimitRegistry`, `ProjectSettings`, `ModelAllowlist`), `daemon/DaemonConfig.kt`, `ConfigManifestHttp.kt`, `NodeConfigHttp.kt` | the unified config and the frames/tools to modify it |
+| storage abstraction | `db` (`AgentHQDatabase`), `keystore` | the one SQLite entry point and the secret store behind plugin secret grants |
+| watch and run mechanism | `runner` (`ProcessRunner`, `PtyProcessRunner`, `WatchShims`, `WatchLog`, `WatchNotices`, `Sandbox`), `daemon/WatchHooks.kt` | how a command runs and is watched; `ToolProfiles` (gradle, mvn, npm...) are data on the mechanism |
+| daemon bootstrap and transport | `daemon` (`DaemonMain`, `HealthGate`, `StateDirLock`, `RemoteAccess`, `OwnerCredential`, `/ws`, `/mail/*`, `/hooks/*`, `/health`) | starts the above in order and serves the contract |
+
+Everything else is either a **stays** (not abstract, cannot leave yet) or a plugin (section 3). Concrete code that lives inside a
+core package (examples: `session/AutoProgress*`, `session/ToolApprovals`, `mailbox/StallDetector`, `FinishNoticeMonitor`,
+`ReportBackMonitor`, `AgentWatchdog`, `daemon/DoneWorkerReaper`, `AssistantService`, `SlashCommands`, `Roster`, `UpdateHttp`)
+is listed in the guard's reason for its package and moves package-by-package in DAEMON-PLUGINS-2.
+
+## 3. Classification of every top-level package
+
+`DaemonCoreGuardTest` holds the same table as code: a new package fails the build until it is classified, and a package
+that is renamed or deleted must leave the table. Lines in PLUGIN_NOW/PLUGIN_LATER/STAYS are the DAEMON-PLUGINS-2 target list.
+
+**CORE** (stays by definition): `protocol`, `daemon`, `policy`, `settings`, `db`, `keystore`, `harness`, `runner`.
+
+**STAYS in core (reason)**
+| package | reason |
+|---|---|
+| `session` | SessionManager and the process ledger are core; AutoProgress, ToolApprovals, SleepHint, RetrievalClassifier are plugin candidates |
+| `mailbox` | Mailbox/MailRouter/MailStore are core; the Stall/Watchdog/ReportBack/FinishNotice monitors are product rules |
+| `persistence` | AgentHqStore and the records are shared by every feature table; shrinks as features take their own tables |
+| `worktree` | git working copies, runner side, used by SessionManager and the board alike |
+| `projectgit` | git status/diff/commit helpers over worktree, runner side; moves with the Git plugin once DaemonApi has a git surface |
+| `usage`, `usagemeter`, `stats`, `tokens` | limits, metering and the harness-neutral RequestUsage record are fed by every harness stream |
+| `executables` | resolves harness and tool binaries for the runner |
+| `update` | self-update of the install; DaemonMain wires it directly |
+| `notify` | the spoken-push frame helper of the protocol |
+| `provider` | AgentProvider abstraction used by SessionManager; the concrete providers in it follow `claude` and `opencode` |
+| `orchestration` | the pod/node DAG scheduler (orchestrator side, section 6) and `OrchestratorLink`, the seam |
+
+**PLUGIN NOW** (mechanism exists, only the move is left): `backlog`, `epics`, `stories`, `mvp`, `ticketfiles`, `context`,
+`brief`, `ledger` (all Infantry_Board's daemon half); `pipeline` (Pipeline plugin); `issues`, `decisions`, `memory` (a Knowledge
+plugin); `prompts` (Infantry_Prompts); `images` (Infantry_Chat); `experiments`, `probe` (developer tools: delete or move).
+
+**PLUGIN LATER (blocker named)**
+| package | blocker |
+|---|---|
+| `claude`, `opencode` | the adapters are already `HarnessPlugin`s, but ProviderFactory, HarnessModelCatalogs, Sandbox and DaemonMain name them, so built-ins are not registered through the SPI |
+| `role`, `agents` | roles and profiles are bound into SessionManager spawn and mail addressing; needs a DaemonApi role surface / spawn-binding hook |
+| `questions`, `attention` | usage, mailbox and triggers raise attention items directly (reverse dependency); needs attention in the API first |
+| `triggers` | DaemonApi has `schedule()` but no spawn-with-binding or ticket-transition events |
+| `commands` | RunManager needs a pty/runner surface in DaemonApi |
+| `cli`, `client` | the `agenthq` CLI/MCP server and console client are clients of the daemon, not daemon, but import protocol/session/daemon types; they leave with the agentHqCore split (section 4) |
+
+Measured coupling (imports between top-level packages, `agentHq/src/main`): `daemon` imports 31 packages, `cli` 18, `backlog`
+11, `session` 10. `protocol` imports `session` (2) and `harness` (1) and `runner` imports `session` (1): those three
+back-references are what the module split must break first.
+
+## 4. Making the line physical
+
+Done now (additive, no behaviour or wire change, contract version unchanged):
+
+* **package-level split by classification** with `DaemonCoreGuardTest` (section 5);
+* `agentHqDaemonApi` is already its own module and the only thing a daemon plugin compiles against;
+* the plugin-facing API cannot be reached the other way: `agentHq` depends on no `:plugins:*` or `daemon-plugin-*` project
+  (guarded), and its sources name no `agenthq.plugins.*` package.
+
+Not done, with the reason: the **Gradle module split** (`agentHqCore`) is not a mechanical change today. The packages form one
+strongly connected graph (`session` <-> `runner` <-> `provider` <-> `harness` <-> `daemon`; `protocol` imports `session` and
+`harness`; `DaemonMain.kt` is 4300 lines naming ~40 packages), so a module cut either fails to compile or needs interfaces
+that are the real work. Exact plan, one ticket per step, each keeps the build green:
+
+1. **CORE-SPLIT-1** move `protocol` + `Frame` types out of `session`/`harness` references (3 imports) so `protocol` is a leaf; create module `agentHqProtocol` (contract + wire DTOs). Small.
+2. **CORE-SPLIT-2** `runner` becomes a leaf (1 back-import of `session`); module `agentHqRunner`. Small.
+3. **CORE-SPLIT-3** invert the `session`->`provider`->`harness`->`session` cycle: `Harness`/`AgentProvider` interfaces and `SessionEvent` types into `agentHqCore`; `ClaudeCodeProvider`, `OpenCodeProvider`, `harness/claude|pi|descriptor|install` into `agentHqHarnesses`. Medium; depends on DAEMON-PLUGINS-2 registering built-ins via the SPI.
+4. **CORE-SPLIT-4** cut `DaemonMain.kt` into core bootstrap plus `feature wiring` (what DAEMON-PLUGINS-2 moves out); then `agentHqCore` holds `protocol, session, harness (api), mailbox, policy, settings, db, keystore, runner, daemon/plugins` and the dependency rule (core imports no feature module) becomes a Gradle fact instead of a test.
+5. License split follows: `agentHqCore` + `agentHqDaemonApi` MPL-2.0, features Apache-2.0.
+
+## 5. Guards (`DaemonCoreGuardTest`, `NoDemoInDaemonCoreGuardTest`)
+
+* (a) no core source names a plugin-owned package (`agenthq.plugins.`, `com.acme.`), and `agentHq/build.gradle.kts` has no
+  `:plugins:`/`daemon-plugin` project dependency;
+* (b) the classification table of section 3 is complete, exclusive, current, every entry has a reason, every plugin-later entry
+  names a `blocker:`, and this file names every package; DAEMON-PLUGINS-2 deletes rows as it migrates (the test fails if a
+  deleted package stays listed);
+* (c) `NoDemoInDaemonCoreGuardTest` stays green and unchanged;
+* (d) transport guard for the orchestrator link (section 6.5).
+
+**Build your own daemon core as a top-level daemon plugin.** The mechanism supports *extending* core, not *replacing* it. A
+top-level (official/core tier) daemon plugin can add frames, tools, hooks, routes, policy presets, limits and top-level/public
+routes, so a product can ship its own board, policy or demo lock on the stock core (Demo_Lock is the worked example). What it
+cannot do is replace a core component (SessionManager, the mailbox, the store, the harness registry, the transport): they are
+constructed by `DaemonMain`, not resolved through the host. Gap, named as a blocker: **DAEMON-CORE-2: component bindings**
+(resolve `SessionManager`, `Mailbox`, `OrchestratorLink`, store by a setting such as `core.<component>.provider`, same shape
+as `orchestrator.provider` below). Until then "own core" means "own plugins on the shared core" or a fork of `DaemonMain`.
+
+## 6. Orchestrator vs runner
+
+Product direction (owner): a hosted **orchestration** service people pay for (board/tickets, mail and routing, policy,
+usage/stats, accounts) while the **workers stay on the user's machine** (harness sessions, working copies, git, builds, the
+watch runner). Source code never leaves the machine; only orchestration data crosses. Local-only mode keeps working unchanged:
+nothing in this section changes behaviour. Note the name clash: `orchestration/Orchestrator` today is the *pod DAG scheduler*;
+"orchestrator" below means the future service side.
+
+### 6.1 Every daemon area, classified (evidence from the code)
+
+| area | side | evidence |
+|---|---|---|
+| `session` (SessionManager, Session, SessionStore, host/) | **runner** | spawns processes via `runner`, owns child env, working dir, process ledger, `ConversationLog` on disk |
+| `harness`, `provider`, `claude`, `opencode`, `executables` | **runner** | `ProcessBuilder`/`ProcessRunner`, binaries, PTY, CLI installs (grep: harness 9 files, runner 7, session 6, provider 4) |
+| `runner` (+ `daemon/WatchHooks`) | **runner** | processes, PTY, sandbox, watch shims |
+| `worktree`, `projectgit` | **runner** | git CLI, branches, worktrees on disk (`GitCli`, `Worktree*`) |
+| `commands`, `images`, `update` | **runner** | cwd-bound commands, uploads under `<project>/.agenthq`, install/updater |
+| `keystore` | **runner** (secrets stay local) | OS vault master key (`OsVaults`) |
+| `backlog`, `epics`, `stories`, `mvp`, `pipeline`, `ticketfiles`(rules), `context`, `brief`, `ledger` | **orchestrator** | tickets, status machine, linking, prompts for workers: state and rules; two leaks: `TicketBoard` takes `SessionManager`, `worktree` (7 imports), and ticket rows carry file paths |
+| `orchestration` (pod DAG) | **orchestrator** | pure scheduling over `SessionManager`; its only runner contact is spawn/events |
+| `role`, `agents`, `prompts`, `triggers`, `attention`, `questions`, `decisions`, `issues`, `memory` | **orchestrator** | persona, knowledge and notification state; no process or file access beyond the store (grep: none of `backlog`, `epics`, `stories`, `mvp`, `role`, `agents`, `triggers`, `attention`, `questions`, `memory` references `ProcessBuilder` or `ProcessRunner`) |
+| `policy` (ActionCatalog, PolicyRuntime, FrameGate) | **shared** | decisions are orchestrator-authored, enforcement must run on the runner for every frame it executes (a hosted policy may only *tighten*, section 6.4) |
+| `usage`, `usagemeter`, `stats`, `tokens` | **shared** | meter is measured on the runner, aggregated and limited by the orchestrator |
+| `mailbox` | **shared** | routing/state is orchestrator; *delivery* is runner (`MailDelivery` resumes a local session) |
+| `protocol`, `settings`, `persistence`, `db` | **shared** | the contract, config and storage both sides need; each side keeps its own store |
+| `daemon` (transport, AccessPolicy, plugin host) | **runner** today | the local server; an orchestrator would have its own |
+
+### 6.2 The contract between them as it exists today
+
+There is no explicit contract. The nearest thing is a set of **function-valued seams** wired in `DaemonMain.kt` (the daemon
+is the only place that sees both sides):
+
+| direction | seam (where wired) | carries |
+|---|---|---|
+| orchestrator -> runner | `MailDelivery.deliver(Message)` (`Mailbox`/`MailRouter`, `DaemonMain` ~1313) | mail for a session: resume it with a prompt, outcome delivered/queued/failed |
+| orchestrator -> runner | `SessionManager.spawn/resume/kill` through `bindSessionOnSpawn` (~1312, ~2882), `Orchestrator.sessionStartedSink` (~1459) | start/stop a session with role, provider, model, project, ticket, parent |
+| orchestrator -> runner | `TicketBoard` + `Worktree*` | cut a ticket branch/worktree for a worker |
+| runner -> orchestrator | `SessionEvent` stream into `MailRouter.onSessionEvent` and `manager.eventSink` (~1546) | status, finished, usage, progress events |
+| runner -> orchestrator | `manager.launchGate` (~1025), `manager.skillsFor` (~1215), `manager.spawnGate` (~1662) | "may this launch?", "which skills for this agent/ticket", "plugin refusal" |
+| runner -> orchestrator | `mail.reportCheck` (~1356, **now through `OrchestratorLink.reviewReport`**) | a worker's report mail, answered with a refusal or accept |
+| runner -> orchestrator | `board.transitionSink` (~1371), `starterOf = board::starterOf` (~1317), `ticketOf` (~1342, ~1476) | ticket state reads and transitions |
+| both | the frames of `protocol` | client-facing; also what an orchestrator UI speaks |
+
+Missing for it to be an explicit, versioned, transport-neutral interface: (1) one interface type (this ticket adds
+`OrchestratorLink` with one operation as the proof); (2) a data model for every seam (today several pass daemon classes such as
+`SessionRecord`, `Message`, `TicketRow`); (3) version and capability negotiation; (4) an error model with *unavailable*; (5) event
+delivery with ordering and replay (today in-process callbacks); (6) a binding registry keyed by `orchestrator.provider`.
+
+### 6.3 Coupling points that block a split (rough size)
+
+| coupling | size |
+|---|---|
+| **One database**: `AgentHqStore` holds tickets, sessions, attention, settings, usage, roles, pods in one SQLite; `persistence` imports `usage`, `role`, `attention`, `session` | **L**: one store per side, plus migrations |
+| **MailRouter <-> SessionManager**: `MailRouter(manager, mailbox, ...)` lists sessions, resumes, reads `ticketId`/`agentId`; `FinishNoticeMonitor`/`AgentWatchdog` read ticket + session together | **L**: routing vs delivery split; `MailDelivery` is the right edge, the rest of the router is not |
+| **TicketBoard owns worktrees**: `backlog` imports `worktree` (7), `session` (7); `board.cutRepo`, branches | **M**: ticket rows carry `worktreeBranch`/`useWorktree`, upload paths relative to the project dir |
+| **File paths in tickets and prompts**: `Tickets.kt` (worktree fields), `TicketContextComposer`, `ticketfiles` (git diff names) | **M**: paths are runner-local; the orchestrator must treat them as opaque |
+| **Policy enforcement**: `FrameGate` uses `PolicyRuntime`, seats, plugins in-process | **M**: define "hosted policy may tighten only" and ship the active preset as data |
+| **Usage/limits**: `SessionManager.launchGate`, `usage` read settings and attention | **M**: events out, decisions in, through the link |
+| **DaemonMain wiring**: 4300 lines build both sides with direct references (`board`, `manager`, `triggers`, `attention`) | **L**: first 4 CORE-SPLIT steps, plus move wiring into bindings |
+| **Auth and identity**: `AccessPolicy`, owner/agent tokens are local; no accounts | **M**: device pairing, section 6.4 |
+| **Triggers/DoneWorkerReaper/AutoProgress**: orchestration rules calling `SessionManager` | **S** each |
+
+### 6.4 Baby steps (smallest first; policy layer's role in each)
+
+1. **Interface + local binding (this ticket, done in part).** `OrchestratorLink`, `OrchestratorReply`, `LocalOrchestratorLink`
+   in `orchestration/OrchestratorLink.kt`; `mail.reportCheck` goes through it. Next in this step: one operation per seam of
+   6.2, each with a plain data model, then move the interface into `agentHqDaemonApi` and add `orchestrator.provider` (default
+   `local`) resolved at startup. Policy: unchanged; the local binding is the only one.
+2. **Outbound-only connection from a runner to a remote orchestrator.** A binding plugin (`orchestrator.provider = <plugin id>`)
+   opens one outbound, authenticated, TLS channel; the runner polls or streams; nothing listens. Operations carry orchestration
+   data only: tickets, mail text, usage numbers, session status; never file contents, diffs or transcripts unless the user's
+   settings say so. Policy: the active preset still decides what the *local* frame gate lets through.
+3. **Accounts and device pairing.** Pair a machine with an account by a code the owner approves on the device; per-device
+   revocable credential held in the keystore. Auth is the binding's concern, callers never see it. Policy: pairing is an
+   owner-only action in the `ActionCatalog`.
+4. **Security review.** A hosted service that can ask a runner to start sessions is a remote-execution channel. Required before
+   it ships: every remote-originated spawn/resume/kill passes `FrameGate` and the active policy as a *non-owner caller* with a
+   seat; a remote policy can tighten, never loosen, local rules; the runner keeps the final say (project allow-list, spawn
+   guards, budget, kill switch, an owner "disconnect orchestrator" toggle); remote operations audit-logged; replay and
+   idempotency keys on spawn. Policy: this step is mostly the policy layer's, and is why the policy layer is core.
+
+### 6.5 Location transparency: the interface
+
+Rule (owner, hard): the runner side, plugins, harness adapters and the UI never know where the orchestration lives. They hold
+an `OrchestratorLink` and call it identically whether it answers in-process or remotely. Local vs remote is a **binding**,
+chosen by one setting resolved at startup (`orchestrator.provider = local | <plugin id>`), swappable by a plugin. No caller has
+an if/else on it.
+
+* **Operations**: one method per seam of 6.2, each `(plain data in) -> OrchestratorReply<plain data out>`. Today:
+  `reviewReport(from, body)`. Planned (step 1): `acceptMail`, `deliveryResult`, `sessionEvent`, `launchDecision(provider,
+  origin, ticket)`, `skillsFor(agent, ticket)`, `ticketTransition`, `ticketOf`, `starterOf`, `usageRecord`.
+* **Versioning**: `OrchestratorLink.CONTRACT_VERSION` (semver). Adding an operation is minor; changing meaning is major. A
+  binding that finds a peer it does not speak returns `Unavailable("version")`; callers never branch on the version.
+* **Error model**: every operation returns `Ok(value)` or `Unavailable(reason)`; no exceptions for expected failures. A refusal
+  is a *value* (`Ok(text)`), not an error. Each caller owns its fail mode for `Unavailable` and documents it (reviewReport:
+  fail open, i.e. no refusal, so a worker is never blocked by a dead service; launch decisions: fail to the local default).
+* **Idempotency and ordering**: every operation is idempotent on a natural key it carries (session id + message id, ticket id +
+  transition id); a repeated call after `Unavailable` is safe. Events (`sessionEvent`, `usageRecord`) are ordered per session
+  by a monotonic sequence number and a binding may batch or re-send; consumers dedupe by `(session, seq)`.
+* **Auth** is entirely the binding's: callers pass no token, URL or host.
+* **Guard**: `DaemonCoreGuardTest` fails when any source naming `OrchestratorLink`, other than a class under
+  `orchestration/binding/`, names a transport (`java.net.http`, `HttpClient`, `HttpURLConnection`, `WebSocket`, `okhttp`,
+  `ktor.client`, `http(s)://`, `ws(s)://`); the `DaemonMain` wiring is checked on its link lines.
+* **Done as proof**: `OrchestratorLink` + `LocalOrchestratorLink`; `DaemonMain` builds the local binding and
+  `mail.reportCheck` calls `orchestratorLink.reviewReport(...)`. Behaviour identical (same function, same arguments).
+
+### 6.6 Call sites that bypass the interface today (and what each needs)
+
+Each is a direct call between the runner and orchestrator sides that must route through `OrchestratorLink` before a remote
+binding is possible. File:line are `DaemonMain.kt` unless noted.
+
+| call site | needs |
+|---|---|
+| `manager.launchGate` (1025) | `launchDecision(provider, origin, ticket)` |
+| `manager.skillsFor` (1215) | `skillsFor(agent, ticket)` |
+| `MailRouter(... starterOf = board::starterOf ...)` (1317) | `starterOf(session)` |
+| `mailbox` send/deliver: `MailRouter.send/pump` against `SessionManager` (`mailbox/MailRouter.kt`) | split routing (orchestrator) from `MailDelivery` (runner); `acceptMail` + `deliveryResult` |
+| `MailRouter.onSessionEvent` / `manager.eventSink` (1546) | `sessionEvent` stream with sequence numbers |
+| `FinishNoticeMonitor(ticketOf = ...)` (1342), second `ticketOf` (1476) | `ticketOf(id)` |
+| `board.transitionSink` (1371) -> `triggers`, `DoneWorkerReaper`, ticket-files record | `ticketTransition` event, consumers subscribe to it |
+| `orchestrator.sessionStartedSink` (1459), `bindSessionOnSpawn` (1312, 2882) | `spawn` as a *command from* the orchestrator (step 4) |
+| `AgentWatchdog`/`ReportBackMonitor` -> `AttentionStore` (`mailbox/*.kt`) | attention is raised by the orchestrator from `sessionEvent`, not by runner-side monitors |
+| `usage` writes from `SessionManager` (`usage/*`, `usagemeter`) | `usageRecord` |
+| `mail.reportCheck` (1356) | **routed through the link** (done) |
+
+No daemon source today names an HTTP/WebSocket client toward an orchestrator (the only `java.net.http` users are the update
+check, `ClientMain` and the CLI, none of them orchestrator traffic), so the transport guard passes from day one.
