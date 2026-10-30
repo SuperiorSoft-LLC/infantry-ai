@@ -139,4 +139,27 @@ class SessionDeleteModelTest {
             scope.cancel()
         }
     }
+
+    @Test
+    fun `removing a ghost row the daemon does not hold drops it client-side`() {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        try {
+            val link = RecordingDaemonClient(scope)
+            val controller = Controller(scope, link)
+            runBlocking {
+                link.push(Envelope(Envelope.READY, "contract=1.28.0 provider=stub instance=i1"))
+                link.push(sessions(rec("live", SessionState.BUSY), rec("ghost")))
+            }
+            val known = Watch()
+            while (controller.state.value.agents.size < 2 && known.passed) runBlocking { delay(10) }
+            // The daemon never answers a delete for "ghost" with a list change: the row must still go.
+            assertTrue(runBlocking { controller.removeSession("ghost") } is CommandResult.Sent)
+            assertEquals(setOf("live"), controller.state.value.agents.keys)
+            // After a reconnect the daemon's full list is authoritative: a row it omits is dropped.
+            runBlocking { link.push(sessions(rec("live", SessionState.BUSY))) }
+            assertEquals(setOf("live"), controller.state.value.agents.keys)
+        } finally {
+            scope.cancel()
+        }
+    }
 }

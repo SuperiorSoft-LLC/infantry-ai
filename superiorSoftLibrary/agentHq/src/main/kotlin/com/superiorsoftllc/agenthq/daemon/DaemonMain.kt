@@ -3661,7 +3661,9 @@ private suspend fun handleConnection(
                         Envelope(Envelope.ERROR, "session_delete expects '<sessionId>'")
                     } else {
                         try {
-                            manager.delete(id)
+                            // SESSION-GHOST-1: an id this daemon does not hold is already gone: a clean no-op, but the
+                            // fresh `sessions` push below still goes out so a client holding a ghost row reconciles.
+                            if (manager.get(id) != null) manager.delete(id)
                             // Contract 1.26.0: the delete itself gets no direct reply -- every client
                             // (not just the one that asked) hears about it through a fresh `sessions`
                             // push, exactly like any other session-list mutation.
