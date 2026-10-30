@@ -19,5 +19,7 @@ class BoardDaemonPlugin : DaemonPlugin {
         api.tools.register(TicketDeleteTool(api))
         api.tools.register(TicketCreateTool(api))
         api.tools.register(TicketUpdateTool(api))
+        // RUNTIME-LOAD-5 (F5 remainder): the board summary, over the host's sessions read model.
+        api.tools.register(BoardTool(api))
     }
 }

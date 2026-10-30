@@ -84,7 +84,7 @@ internal class McpServer(
             "tools/call" -> {
                 val name = (params["name"] as? JsonPrimitive)?.contentOrNull
                     ?: return error(id, INVALID_PARAMS, "Invalid params: tools/call requires a tool name")
-                if (name !in McpTools.NAMES && !tools.isPluginTool(name)) return error(id, INVALID_PARAMS, "Unknown tool: $name")
+                if (name !in McpTools.NAMES && !tools.isPluginTool(name) && tools.daemonAnswered) return error(id, INVALID_PARAMS, "Unknown tool: $name")
                 val arguments = params["arguments"] as? JsonObject ?: JsonObject(emptyMap())
                 result(id, tools.call(name, arguments).toJson())
             }

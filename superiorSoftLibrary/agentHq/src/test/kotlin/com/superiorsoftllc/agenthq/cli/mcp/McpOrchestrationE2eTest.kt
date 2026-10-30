@@ -128,7 +128,11 @@ class McpOrchestrationE2eTest {
             echoPrompt = true,
         )
         // A paced runner (each scripted line ~RUN_PACE_MS apart) so a turn is still running when step 5 kills it.
-        val fixture = DaemonFixture.launch(script, ScriptedRunner(script, RUN_PACE_MS), tempDir("agenthq-mcp-e2e-daemon"))
+        // RUNTIME-LOAD-5: the session and board reads are Infantry_Agents' / Infantry_Board's daemon tools.
+        val fixture = DaemonFixture.launch(
+            script, ScriptedRunner(script, RUN_PACE_MS), tempDir("agenthq-mcp-e2e-daemon"),
+            pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot("official/Infantry_Agents"),
+        )
             .also { fixtures += it; it.client.await(Envelope.READY) }
         val manager = fixture.daemon.manager
 
@@ -148,7 +152,7 @@ class McpOrchestrationE2eTest {
         )
         val tools = orchestrator.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray
             .map { it.jsonObject.str("name") }.toSet()
-        assertEquals(ALL_TOOLS, tools)
+        assertTrue(tools.containsAll(ALL_TOOLS), "every tool the orchestration uses is listed (core and plugin halves): $tools")
 
         // 2) a role-first spawn carrying a task; no projectId on the call, so it lands in mcp.json's project.
         val spawned = payload(orchestrator.callTool("agenthq_spawn", """{"role":"qa","task":"$TASK"}"""))
@@ -246,7 +250,7 @@ class McpOrchestrationE2eTest {
         const val LONG_TASK = "now run the full regression suite"
         const val RUN_PACE_MS = 400L
         val ALL_TOOLS = setOf(
-            "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_board",
+            "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_board", // RUNTIME-LOAD-5: plugin tools
             "agenthq_spawn", "agenthq_prompt", "agenthq_message", "agenthq_kill", "agenthq_session_remove", "agenthq_session_restart",
             "agenthq_ticket_start", // BUG-ASSIGN-1 (agenthq_list_harnesses: Infantry_Agents, RUNTIME-LOAD-2; roles, ask, project config: Infantry_Roles / _Attention / _Settings, RUNTIME-LOAD-3)
             "agenthq_inbox", "agenthq_read", // MAIL-MCP-1

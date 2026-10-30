@@ -12,7 +12,7 @@
   "daemon": {
     "entry": "com.superiorsoftllc.agenthq.plugins.official.agents.daemon.AgentsDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Agents-daemon.jar",
-    "apiAtLeast": "1.5.0",
+    "apiAtLeast": "1.6.0",
     "tools": [
       { "name": "agenthq_agent_list", "action": "agents.registry.read", "kind": "read", "description": "Every agent in the agent registry, enabled or not." },
       { "name": "agenthq_agent_get", "action": "agents.registry.read", "kind": "read", "description": "One agent of the registry in full." },
@@ -21,7 +21,10 @@
       { "name": "agenthq_harness_status", "action": "harness.install.read", "kind": "read", "description": "Which harness CLIs are installed on the daemon's machine." },
       { "name": "agenthq_harness_install", "action": "harness.install", "kind": "write", "description": "npm-install harness CLIs on the daemon's machine." },
       { "name": "agenthq_list_harnesses", "action": "harness.read", "kind": "read", "description": "The harnesses a ticket can run on, with their models." },
-      { "name": "agenthq_progress", "action": "agents.report", "kind": "write", "description": "Report how far along the calling session's long job is." }
+      { "name": "agenthq_progress", "action": "agents.report", "kind": "write", "description": "Report how far along the calling session's long job is." },
+      { "name": "agenthq_list_sessions", "action": "sessions.read", "kind": "read", "description": "The sessions the daemon knows, in the caller's scope." },
+      { "name": "agenthq_get_session", "action": "sessions.replay", "kind": "read", "description": "One session's status and the tail of its transcript." },
+      { "name": "agenthq_pod_state", "action": "agents.read", "kind": "read", "description": "Profiles by role, sessions by status, a project's roster, a pod." }
     ]
   },
   "panels": [

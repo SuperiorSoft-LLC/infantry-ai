@@ -1766,6 +1766,21 @@ class AgentHqDaemon(
                         ),
                         ticketEventStream = ticketEvents,
                         agentRegistry = agentRegistry,
+                        // RUNTIME-LOAD-5: the sessions read model (host-scoped), with the replay buffer for transcripts.
+                        sessionReadModel = com.superiorsoftllc.agenthq.daemon.plugins.LocalSessionReads(
+                            sessions = { manager.list() },
+                            replay = { id ->
+                                streamSequencer.replayAfter(id, 0)?.let { batch ->
+                                    com.superiorsoftllc.agenthq.daemon.plugins.LocalSessionReads.Replay(
+                                        batch.gap?.let { json.encodeToString(SessionReplayGapPayload.serializer(), it) }, batch.frames,
+                                    )
+                                }
+                            },
+                            gate = { type ->
+                                val envelope = Envelope(type, "")
+                                policies.current.takeIf { !it.isEmpty }?.let { com.superiorsoftllc.agenthq.policy.PolicyRuntime.actionRefusal(it, envelope, policies.actionOf(envelope)) }
+                            },
+                        ),
                     ),
                     stateDir(),
                 )

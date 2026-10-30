@@ -37,6 +37,9 @@ interface DaemonServices {
     /** AGENT-REGISTRY-1: the daemon's agent registry; null = none (plugins see [com.superiorsoftllc.agenthq.daemon.api.agents.NoAgents]). */
     val agentRegistry: com.superiorsoftllc.agenthq.agents.registry.AgentRegistry? get() = null
 
+    /** RUNTIME-LOAD-5: the sessions read model, host-scoped ([LocalSessionReads]). Default: none (every call Unavailable). */
+    val sessionReads: com.superiorsoftllc.agenthq.daemon.api.sessions.SessionReads get() = com.superiorsoftllc.agenthq.daemon.api.sessions.NoSessionReads
+
     companion object {
         /** No daemon behind it: empty lists, no config, the open policy. */
         val NONE: DaemonServices = object : DaemonServices {

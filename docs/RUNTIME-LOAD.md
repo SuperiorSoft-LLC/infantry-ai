@@ -83,7 +83,7 @@ that takes more than 75 s now errors where it used to wait 15 minutes. `npm view
 | F2 (list_harnesses done, RUNTIME-LOAD-2; the three session tools: section 6) | `agenthq_list_harnesses` + `agenthq_list_sessions` / `agenthq_get_session` / `agenthq_pod_state` into the Infantry_Agents half (read-only frames) | S-M | Same pattern, no new API |
 | F3 (done, RUNTIME-LOAD-3) | Roles tools (5) into an Infantry_Roles daemon half (agent-caller persona rule moves with it) | M | Next family with a ready owner module |
 | F4 (done, RUNTIME-LOAD-3) | `agenthq_ask` into Infantry_Attention; project config tools into Infantry_Settings | S each | One frame each |
-| F5 (mostly done, RUNTIME-LOAD-4: section 10) | Tickets/epic/board/progress tools into Infantry_Board / Infantry_Agents; left: `agenthq_ticket_start`, `agenthq_board`, the three session reads | M | Biggest family, riskiest scope rules |
+| F5 (all but one done, RUNTIME-LOAD-4/5: sections 10, 11) | Tickets/epic/board/progress/session-read tools into Infantry_Board / Infantry_Agents; left: `agenthq_ticket_start` (RUNTIME-LOAD-6, with spawn/kill and the host spawn service) | M | Biggest family, riskiest scope rules |
 | F6 | Mail, pipeline, `watch_file` (needs a DaemonApi surface for watch hooks) | M | Needs new API surface |
 | F7 | A folder source for `HarnessPluginSource` + a harness API module; move `pi`, then `claude`, then `opencode` | L | Contract design; `pi` first, fewest daemon internals |
 | F8 (stopped, RUNTIME-LOAD-3: section 7) | Core Config `ConfigEntry` fallback removed (G13) | S-M | Independent of the daemon |
@@ -217,3 +217,75 @@ the bytes it carries (the caller's own bytes either way).
 | `agenthq_list_sessions`, `agenthq_get_session`, `agenthq_pod_state` | Same session read model (`SessionRecord` ~40 fields, `BoardSummary.liveState/activity`); `get_session` streams a replay fenced by a second `sessions` frame, which a one-request `ToolCall.request` cannot do (needs a stream/fence primitive). `pod_state` also reads the roster and pod frames. |
 
 Not run: wasm/Android builds, a live agent session against an installed daemon.
+
+## 11. RUNTIME-LOAD-5 (F5 remainder, ticket 11c26ffe): the sessions read model; session and board reads moved
+
+**API (DaemonApi 1.6.0, additive):** `api.sessionReads` (`daemon.api.sessions.SessionReads`), bound by core's `LocalSessionReads`
+over the daemon's session records and replay buffer, behind `GrantedSessionReads`.
+
+* `SessionView`: the read-only projection of a session that the tools print (ids, role, provider/model, project, state, run phase,
+  live, last action/output/event, background-work label, progress, run count, last exit/error, ticket, checkout paths, spawner).
+  It carries no provider session id, environment, credentials, persona or transcript.
+* `caller(by)`, `scope(by, requested, default)`, `list(by, projectId|null)`, `find(ref, by)`: the HOST applies the project scope with
+  `ProjectScope`'s rules, the same implementation as the board API, seeing the caller as the record of `Caller.activeSession`. It
+  fails closed: an agent connection without a session, or with a session the daemon does not know, is refused. Each read is gated
+  by the active preset like the frame it replaces (`sessions`, `replay_request`).
+* `transcript(id, by)`: the host renders the replay buffer (the text-delta join, turn origin, stderr/error/finish/gap marks the CLI used).
+  This removes the client-side `sessions` fence and its 10 s timeout.
+* Grants: bundled/official modules are trusted. A community module needs `sessions.read`, and `sessions.transcript` for transcripts
+  (default deny).
+* Shared pure text: `daemon.api.sessions.SessionText` (live state, ago, activity, status) and `daemon.api.board.BoardLines` (the board
+  lines). Core's `BoardSummary` delegates to them, so `agenthq board` and the tool print the same lines.
+
+**Moved (descriptors byte-identical to `golden/core-mcp-tools-before-f5.json`, `McpServeTest.movedSessionAndBoardReadsComeFromThePluginsUnchanged`; deleted from `cli/mcp`; ratchet 16 -> 12):**
+
+| tool | where | action | timeoutMs |
+|---|---|---|---|
+| `agenthq_list_sessions` | Infantry_Agents | `sessions.read` | 30 000 |
+| `agenthq_get_session` | Infantry_Agents | `sessions.replay` | 30 000 |
+| `agenthq_pod_state` | Infantry_Agents (profiles, roster and pod over the same `agent_list` / `agent_roster` / `pod_query` frames) | `agents.read` | 30 000 |
+| `agenthq_board` | Infantry_Board (tickets over `api.tickets.list`, each worker through `find` in the caller's scope, git tips bounded to 60 s in all) | `board.read` | 120 000 |
+
+**MCP server fix (all plugin tools):** while the daemon is unreachable, a tool this server does not know is no longer "Unknown tool";
+the call answers the fixed `DAEMON_UNREACHABLE` text, as core tools do. A plugin tool missing from the cached listing makes the server
+list again (a daemon started after `tools/list` is picked up).
+
+**Deviations (deliberate, all narrowing):** (1) fail closed, as for the board API: a session id the daemon does not know is refused
+where `list_sessions` listed every project. (2) The host does not read the MCP process's `AGENTHQ_PROJECT_ID` as a session's own
+project; it uses the session record, then the client's default project. (3) A worker session with no project cannot list every
+project. (4) A board line's worker is the session the caller may see; one in a foreign project reads as `worker <id> gone`.
+
+**Split out: RUNTIME-LOAD-6, the host spawn service + `agenthq_ticket_start`.** `ticket_start` shares guardrail STATE with
+`agenthq_spawn` / `agenthq_kill`: the open-spawn set, the lineage depth file and the kill scope, all held in the MCP process
+(`McpGuardrails`). Moving it alone would leave two guardrail states, so a worker started through the plugin would escape the client's
+concurrency count. The seam:
+
+* `api.spawns` (DaemonApi 1.7.0), a host service keyed by the CALLING session. It is built on the daemon's existing `SpawnGuard`
+  (BUG-G2d, host-side for `new` / `pod_submit`) and extended to ticket starts (`ticket_move` -> handOut), which today it does not charge.
+  Depth comes from the host lineage (`spawnerSessionId` chain, persisted, so it survives a restart, unlike the in-memory lineage).
+  The open-spawn count comes from live sessions whose spawner is the caller. The client's `--max-depth` / `--max-spawns` /
+  `--mcp-depth` only narrow (min / max with the daemon setting); `--allow-kill-any` holds only for an owner connection without a session.
+* Operations: `admit(by, requested)` -> placement or refusal (the texts of `McpWriteTools`, wording "this session" for "this MCP
+  server"); `startTicket(ref, by)` (admit + the board start + record, under one lock); `mayKill(sessionId, by)` (the kill rule of
+  `McpWriteTools.killRefusal`).
+* Then `agenthq_ticket_start`, `agenthq_spawn`, `agenthq_kill` (and prompt / restart / remove with them) move to Infantry_Agents /
+  Infantry_Board, `McpGuardrails` + `McpLineage` are deleted, and the guardrail tests prove that a plugin cannot exceed depth,
+  concurrency or kill scope (the limits live in the host and the plugin only passes narrowing values).
+
+**What remains in core after this (12 tools), and the next seam of each:**
+
+| family | tools | next seam |
+|---|---|---|
+| spawn / control | `agenthq_ticket_start`, `agenthq_spawn`, `agenthq_prompt`, `agenthq_kill`, `agenthq_session_restart`, `agenthq_session_remove` | RUNTIME-LOAD-6: `api.spawns` above |
+| F6 mail | `agenthq_inbox`, `agenthq_read`, `agenthq_message` | a `daemon.api.mail` read/send service with the `MailGateHook` already in the API; the caller is the session (`clientSessionId`), cross-project refusal in the host |
+| F6 pipeline | `agenthq_pipeline`, `agenthq_pipeline_record` | the same frames through `ToolCall.request` (no new API); a Pipeline official plugin |
+| F6 watch | `agenthq_watch_file` | a DaemonApi watch surface (the watcher runs where the files are: the `localFiles` idea for watches, i.e. the MCP client keeps the watcher and the daemon gets the events) |
+| F8 | core Config `ConfigEntry` fallback | independent of the daemon (section 7) |
+| F9 | the 20 UI modules, kit exported to the filtered loader | UI-first per D11 once F5/F6 settle |
+| F10 | daemon feature services as plugins | parked (D11) |
+
+Tests run for this slice: `LocalSessionReadsTest` (scope, fail closed, grants, policy gate, host transcript), `McpServeTest` (golden
+descriptors + actions, read answers through the plugin, the unreachable-daemon text), `McpOrchestrationE2eTest`,
+`McpBoardShortIdE2eTest`, `BacklogLaneE2eTest`, `BoardSummaryTest`, `LocalBoardServicesTest`, `BuiltinToolsListGuardTest`,
+`McpPluginToolTimeoutTest`, agenthqUiCore `BlankShellE2ETest`. Not run: the full suite, wasm/Android builds, a live agent session
+against an installed daemon.
