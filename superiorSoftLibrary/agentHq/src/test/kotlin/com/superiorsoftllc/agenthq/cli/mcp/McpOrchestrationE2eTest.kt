@@ -31,8 +31,8 @@ import kotlin.test.assertTrue
  * REAL [Cli.run] serving MCP over its stdin/stdout seam (newline-delimited JSON-RPC 2.0, exactly what a child
  * process speaks), started in a project directory whose `.agenthq/mcp.json` supplies the default project and the
  * guardrails. Nested agents are simulated the way the daemon makes them: a second `mcp serve` running with
- * `AGENTHQ_SESSION_ID` set to the spawned session's id, sharing the lineage directory, so its depth comes from what
- * the parent server recorded -- not from a flag.
+ * `AGENTHQ_SESSION_ID` set to the spawned session's id, so its depth comes from the daemon's record of who spawned it
+ * (RUNTIME-LOAD-7: the host spawn service) -- not from a flag or a file.
  *
  * docs/MCP.md "Orchestrating agents" walks through the same steps.
  */
@@ -77,7 +77,7 @@ class McpOrchestrationE2eTest {
     }
 
     /** Starts `agenthq mcp serve` in [cwd] as the MCP server of [sessionId] (null = the top-level orchestrator). */
-    private fun serve(fixture: DaemonFixture, cwd: File, lineage: File, sessionId: String? = null): Served {
+    private fun serve(fixture: DaemonFixture, cwd: File, sessionId: String? = null): Served {
         val toServer = PipedWriter()
         val serverIn = PipedReader(toServer, 1 shl 16)
         val fromServer = PipedReader(1 shl 16)
@@ -85,7 +85,7 @@ class McpOrchestrationE2eTest {
         val stderr = StringBuffer()
         val served = Served(PrintWriter(toServer), BufferedReader(fromServer), stderr)
         val env = mapOf("AGENTHQ_SESSION_ID" to sessionId)
-        val args = arrayOf("mcp", "serve", "--port", fixture.port.toString(), "--lineage-dir", lineage.path)
+        val args = arrayOf("mcp", "serve", "--port", fixture.port.toString())
         served.worker = thread(name = "mcp-serve-e2e", isDaemon = true) {
             Cli.run(args, serverOut, stderr, { env[it] }, { serverIn }, cwd = cwd)
             serverOut.close()
@@ -132,6 +132,7 @@ class McpOrchestrationE2eTest {
         val fixture = DaemonFixture.launch(
             script, ScriptedRunner(script, RUN_PACE_MS), tempDir("agenthq-mcp-e2e-daemon"),
             pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot("official/Infantry_Agents"),
+            podSpawnDepth = 2,
         )
             .also { fixtures += it; it.client.await(Envelope.READY) }
         val manager = fixture.daemon.manager
@@ -140,14 +141,13 @@ class McpOrchestrationE2eTest {
         val project = tempDir("agenthq-mcp-e2e-project")
         McpServeConfig.fileIn(project).apply { parentFile.mkdirs() }
             .writeText("""{"projectId":"$PROJECT","maxDepth":2,"maxSpawns":2}""")
-        val lineage = tempDir("agenthq-mcp-e2e-lineage")
-        val orchestrator = serve(fixture, project, lineage)
+        val orchestrator = serve(fixture, project)
 
         // 1) initialize, then the 7 tools.
         val init = initialize(orchestrator)
         assertEquals("agenthq", init["serverInfo"]!!.jsonObject.str("name"), "$init")
         assertTrue(
-            orchestrator.stderr.contains("depth 0/2, max 2 open spawns, kill own spawns only, project $PROJECT"),
+            orchestrator.stderr.contains("depth 0/2, max 2 open spawns, project $PROJECT"),
             "the server took its defaults from .agenthq/mcp.json: ${orchestrator.stderr}",
         )
         val tools = orchestrator.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray
@@ -191,18 +191,23 @@ class McpOrchestrationE2eTest {
             "the scripted reply follows the mail in the transcript: $transcript",
         )
 
-        // 6a) the depth guardrail, end to end through the lineage: the lead's own MCP server is at depth 1 (what the
-        // orchestrator recorded), so it may spawn a worker at depth 2 = maxDepth -- and that worker may not spawn.
-        val leadServer = serve(fixture, project, lineage, sessionId = lead)
+        // 6a) the depth guardrail, end to end through the daemon's own record of who spawned whom: the lead was spawned by the
+        // orchestrator (an owner connection, no session), so it is a root; its worker is at depth 1, the worker's own helper at depth 2
+        // = maxDepth -- and that helper may not spawn.
+        val leadServer = serve(fixture, project, sessionId = lead)
         initialize(leadServer)
-        assertTrue(leadServer.stderr.contains("depth 1/2"), "the lead's server read its depth from the lineage: ${leadServer.stderr}")
         val worker = payload(leadServer.callTool("agenthq_spawn", """{"role":"qa"}"""))
-        assertEquals(2, worker["depth"]!!.jsonPrimitive.int)
+        assertEquals(1, worker["depth"]!!.jsonPrimitive.int)
         val workerId = worker.str("sessionId")
-        val workerServer = serve(fixture, project, lineage, sessionId = workerId)
+        assertEquals(lead, manager.get(workerId)!!.spawnerSessionId, "the daemon recorded the lead as the worker's spawner")
+        val workerServer = serve(fixture, project, sessionId = workerId)
         initialize(workerServer)
+        val helper = payload(workerServer.callTool("agenthq_spawn", """{"role":"qa"}"""))
+        assertEquals(2, helper["depth"]!!.jsonPrimitive.int)
+        val helperServer = serve(fixture, project, sessionId = helper.str("sessionId"))
+        initialize(helperServer)
         val before = manager.list().size
-        assertRefused(workerServer.callTool("agenthq_spawn", """{"role":"qa"}"""), "depth limit")
+        assertRefused(helperServer.callTool("agenthq_spawn", """{"role":"qa"}"""), "depth limit")
         assertEquals(before, manager.list().size, "the refused spawn created nothing")
 
         // 6b) the concurrency guardrail: the orchestrator holds the lead, one more fills maxSpawns=2, the next is refused.

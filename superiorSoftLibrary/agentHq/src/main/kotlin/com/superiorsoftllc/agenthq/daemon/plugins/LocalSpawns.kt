@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * RUNTIME-LOAD-6 (docs/RUNTIME-LOAD.md section 12): the LOCAL binding of [Spawns], the guardrails `agenthq mcp serve` kept in its
- * own process (`McpGuardrails`, `McpLineage`), now held by the daemon for every client and plugin:
+ * own process (`McpGuardrails`, `McpLineage`, deleted in RUNTIME-LOAD-7), now held by the daemon for every client and plugin:
  *
  *  - depth = the caller's place in the [SpawnGuard] lineage (persisted `spawnerSessionId` chain), at least the client's claimed depth;
  *  - open spawns = the sessions whose spawner is the caller and that hold a slot ([SpawnGuard.holds], not killed unless live again);
@@ -151,6 +151,9 @@ class LocalSpawns(
         return SessionsResult.Ok(result)
     }
 
+    /** Sessions a caller was cleared to kill: once killed they stay released if revived to rest (BUG-KILL-IDLE-1), since a new run clears `killOutcome`. */
+    private val released: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
     override fun mayKill(ref: String, by: Caller): SessionsResult<SessionView> {
         gate(Envelope.KILL)?.let { return SessionsResult.Refused(it) }
         val all = sessions()
@@ -160,7 +163,9 @@ class LocalSpawns(
             is SessionsResult.Ok -> r.value
             else -> return r.map()
         }
-        return killRefusal(session, w)?.let { SessionsResult.Refused(it) } ?: SessionsResult.Ok(SessionViews.of(session))
+        killRefusal(session, w)?.let { return SessionsResult.Refused(it) }
+        released.add(session.id)
+        return SessionsResult.Ok(SessionViews.of(session))
     }
 
     override fun target(ref: String, by: Caller): SessionsResult<SessionView> {
@@ -213,7 +218,7 @@ class LocalSpawns(
     private fun open(w: Who, narrowing: SpawnNarrowing, all: List<SessionRecord>): List<String> {
         val byId = all.associateBy { it.id }
         val mine = if (w.id != null) all.filter { it.spawnerSessionId == w.id } else ownerSet(narrowing).mapNotNull { byId[it] }
-        val holding = mine.filter { guard.holds(it) && (it.live || it.killOutcome == null) }.map { it.id }
+        val holding = mine.filter { guard.holds(it) && (it.live || (it.killOutcome == null && it.id !in released)) }.map { it.id }
         if (w.id == null) ownerSet(narrowing).retainAll(holding.toSet())
         return holding
     }

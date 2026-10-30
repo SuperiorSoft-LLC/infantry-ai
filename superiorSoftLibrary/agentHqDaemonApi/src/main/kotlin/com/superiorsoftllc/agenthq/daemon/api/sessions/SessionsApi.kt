@@ -39,6 +39,11 @@ data class SessionView(
     val repoRoot: String? = null,
     /** The session that spawned this one (contract 1.114.0), or null. */
     val spawnerSessionId: String? = null,
+    /** RUNTIME-LOAD-7 (1.9.0): the session's context limit in tokens and the harness's support for it, or null. */
+    val contextLimit: Int? = null,
+    val contextLimitSupport: String? = null,
+    /** RUNTIME-LOAD-7 (1.9.0): how the last kill ended (`KillOutcome` name), or null. */
+    val killOutcome: String? = null,
 )
 
 /** The project a read is scoped to ([projectId] null = every project) and why the call may not have what it asked for, if so. */

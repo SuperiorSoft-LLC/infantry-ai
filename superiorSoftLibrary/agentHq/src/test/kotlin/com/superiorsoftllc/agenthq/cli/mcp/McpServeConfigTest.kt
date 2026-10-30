@@ -53,9 +53,8 @@ class McpServeConfigTest {
     /** Runs `mcp serve` with stdin already at EOF: it logs its effective config, then exits 0. */
     private fun startOnly(cwd: File, vararg flags: String): Run {
         val stderr = StringBuilder()
-        val lineage = projectDir().path
         val exit = Cli.run(
-            arrayOf("mcp", "serve", "--port", "1", "--lineage-dir", lineage, *flags),
+            arrayOf("mcp", "serve", "--port", "1", *flags),
             StringBuilder(), stderr, { null }, { StringReader("") }, cwd = cwd,
         )
         return Run(exit, stderr.toString())
@@ -97,7 +96,7 @@ class McpServeConfigTest {
         val run = startOnly(projectDir("""{"projectId":"alpha","maxDepth":1,"maxSpawns":3,"allowKillAny":true}"""))
         assertEquals(0, run.exit, run.stderr)
         assertTrue(
-            run.stderr.contains("agenthq mcp: depth 0/1, max 3 open spawns, kill any session, project alpha"),
+            run.stderr.contains("agenthq mcp: depth 0/1, max 3 open spawns, project alpha"),
             "the effective config comes from the file: ${run.stderr}",
         )
     }
@@ -110,7 +109,7 @@ class McpServeConfigTest {
         )
         assertEquals(0, run.exit, run.stderr)
         assertTrue(
-            run.stderr.contains("agenthq mcp: depth 0/1, max 5 open spawns, kill own spawns only, project beta"),
+            run.stderr.contains("agenthq mcp: depth 0/1, max 5 open spawns, project beta"),
             "flags win, the file fills the rest: ${run.stderr}",
         )
     }
@@ -120,7 +119,7 @@ class McpServeConfigTest {
         val run = startOnly(projectDir())
         assertEquals(0, run.exit, run.stderr)
         assertTrue(
-            run.stderr.contains("agenthq mcp: depth 0/daemon limits.concurrency.maxDepth, max daemon limits.concurrency.mcpMaxSpawns open spawns, kill own spawns only, no default project"),
+            run.stderr.contains("agenthq mcp: depth 0/daemon limits.concurrency.maxDepth, max daemon limits.concurrency.mcpMaxSpawns open spawns, no default project"),
             run.stderr,
         )
     }
@@ -142,7 +141,8 @@ class McpServeConfigTest {
 
     @Test
     fun spawnWithoutAProjectIdUsesTheConfiguredDefault() {
-        val fixture = DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-config-d").toFile())
+        val fixture = DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-config-d").toFile(),
+            pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot("official/Infantry_Agents"))
             .also { fixtures += it; it.client.await(Envelope.READY) }
         val cwd = projectDir("""{"projectId":"alpha"}""")
 
@@ -153,7 +153,7 @@ class McpServeConfigTest {
         val stdout = BufferedReader(fromServer)
         val stdin = PrintWriter(toServer)
         val stderr = StringBuffer()
-        val args = arrayOf("mcp", "serve", "--port", fixture.port.toString(), "--lineage-dir", projectDir().path)
+        val args = arrayOf("mcp", "serve", "--port", fixture.port.toString())
         val worker = thread(name = "mcp-serve-config", isDaemon = true) {
             Cli.run(args, serverOut, stderr, { null }, { serverIn }, cwd = cwd)
             serverOut.close()

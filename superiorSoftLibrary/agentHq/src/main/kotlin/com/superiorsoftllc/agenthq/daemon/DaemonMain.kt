@@ -1742,7 +1742,7 @@ class AgentHqDaemon(
                         spawnService = com.superiorsoftllc.agenthq.daemon.plugins.LocalSpawns(
                             sessions = { manager.list() },
                             guard = spawnGuard,
-                            limit = { def -> settings.limitCap(def) },
+                            limit = { def -> if (def == LimitRegistry.MAX_DEPTH && podSpawnDepth != null) podSpawnDepth else settings.limitCap(def) }, // a test pins the depth through podSpawnDepth
                             tickets = { pluginBoardServices!!.tickets },
                             create = { request ->
                                 bindSessionOnSpawn(
@@ -2906,7 +2906,7 @@ private suspend fun handleConnection(
                             }
                             active = manager.resume(envelope.sessionId!!, turn).id
                             plugins.turnAccepted(envelope, caller)
-                            null
+                            pluginSessionsAck(envelope, manager)
                         } catch (e: RunInFlightException) {
                             // 1.96.0: typed, so the client that sent it (its requestId is echoed below) can queue it again.
                             Envelope(Envelope.ERROR, "$RUN_IN_FLIGHT ${e.sessionId}: ${e.message}")
@@ -3699,7 +3699,7 @@ private suspend fun handleConnection(
                     } else {
                         try {
                             manager.kill(id, force = parts.drop(1).any { it.equals("force", ignoreCase = true) })
-                            null
+                            pluginSessionsAck(envelope, manager)
                         } catch (e: Exception) {
                             Envelope(Envelope.ERROR, e.message ?: "kill failed")
                         }
@@ -3802,7 +3802,7 @@ private suspend fun handleConnection(
                     require(sessionId.isNotEmpty()) { "expects a sessionId" }
                     val force = body["force"]?.jsonPrimitive?.contentOrNull == "true"
                     manager.restart(sessionId, force)
-                    null
+                    pluginSessionsAck(envelope, manager)
                 } catch (e: IllegalArgumentException) {
                     Envelope(Envelope.ERROR, "session_restart refused: ${e.message ?: "invalid request"}")
                 } catch (e: Exception) {
@@ -3824,7 +3824,7 @@ private suspend fun handleConnection(
                             val sessionsElements = manager.list().map { json.encodeToJsonElement(SessionRecordSerializer, it) }
                             val pushed = Envelope(Envelope.SESSIONS, json.encodeToString(JsonArray(sessionsElements)))
                             for (client in clients) client.trySend(pushed)
-                            null
+                            if (envelope.requestId?.startsWith("plugin:") == true) pushed else null
                         } catch (e: IllegalArgumentException) {
                             Envelope(Envelope.ERROR, "session_delete refused: ${e.message}")
                         }
@@ -4146,6 +4146,16 @@ private suspend fun handleConnection(
         sender.cancel()
     }
 }
+
+/**
+ * RUNTIME-LOAD-7: `kill`, a named `prompt`, `session_restart` and `session_delete` answer nothing on success (a refusal is an `error`).
+ * A plugin tool waits for its own request id, so for those requests (id `plugin:<uuid>`) success is the `sessions` list after the
+ * write: the connection handles frames in order, so it is the fence the CLI's MCP server drew with a trailing `sessions` request.
+ */
+private fun pluginSessionsAck(envelope: Envelope, manager: SessionManager): Envelope? =
+    if (envelope.requestId?.startsWith("plugin:") == true) {
+        Envelope(Envelope.SESSIONS, json.encodeToString(JsonArray(manager.list().map { json.encodeToJsonElement(SessionRecordSerializer, it) })))
+    } else null
 
 private fun splitResume(data: String): Pair<String?, String?> {
     val newline = data.indexOf('\n')

@@ -16,10 +16,8 @@ class BuiltinToolsListGuardTest {
     /** tool -> why it is still in core. All are "migration pending" (family + blocker, docs/DAEMON-PLUGINS.md section 6). */
     private val inCore: Map<String, String> = buildMap {
         fun family(reason: String, vararg tools: String) = tools.forEach { put(it, reason) }
-        family("pending: Infantry_Board daemon half; runs under this MCP process's own spawn guardrails (depth lineage, open-spawn set), which must become a host service first (DP-11), shared with agenthq_spawn ticketId", "agenthq_ticket_start")
         family("pending: a Mail/Chat daemon half", "agenthq_inbox", "agenthq_read", "agenthq_message")
         family("pending: a Pipeline official plugin", "agenthq_pipeline", "agenthq_pipeline_record")
-        family("pending: Infantry_Agents daemon half; McpGuardrails moves with it (RUNTIME-LOAD-6: the host spawn service)", "agenthq_spawn", "agenthq_prompt", "agenthq_kill", "agenthq_session_restart", "agenthq_session_remove")
         family("pending: file watch is a daemon behaviour (watch hooks), needs a DaemonApi surface", "agenthq_watch_file")
     }
 
@@ -54,12 +52,14 @@ class BuiltinToolsListGuardTest {
             "Infantry_Attention" to listOf("agenthq_ask"),
             // RUNTIME-LOAD-4: the session's own progress report moved with the Agents family.
             // RUNTIME-LOAD-5: the session reads, over the host's sessions read model.
-            "Infantry_Agents" to listOf("agenthq_progress", "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state"),
+            "Infantry_Agents" to listOf("agenthq_progress", "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state",
+                // RUNTIME-LOAD-7 (F5 last): the spawn family, over the host spawn service.
+                "agenthq_spawn", "agenthq_prompt", "agenthq_kill", "agenthq_session_restart", "agenthq_session_remove"),
             "Infantry_Settings" to listOf("agenthq_project_config_get", "agenthq_project_config_set"),
             // BOARD-API-2: the ticket read tools (the files pair moved earlier, with TICKET-FILES).
             // RUNTIME-LOAD-4 (F5): the board's write tools.
             "Infantry_Board" to listOf("agenthq_ticket_get", "agenthq_ticket_files", "agenthq_ticket_related_files", "agenthq_epic_base", "agenthq_ticket_move", "agenthq_ticket_delete",
-                "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_board"),
+                "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_board", "agenthq_ticket_start"),
         )
         val sources = mcp.walkTopDown().filter { it.isFile && it.extension == "kt" }.map { it.readText() }.toList()
         moved.forEach { (module, tools) ->
@@ -81,5 +81,5 @@ class BuiltinToolsListGuardTest {
         assertTrue(inCore.values.all { it.length > 15 })
     }
 
-    private companion object { const val CEILING = 12 }
+    private companion object { const val CEILING = 6 }
 }

@@ -125,7 +125,7 @@ class McpTicketAnswerRaceE2eTest {
 
         // Ticket A, started: its gated run stays open, so A stays in progress.
         val a = payload(agent.callTool("agenthq_ticket_create", """{"title":"Ticket A","role":"backend"}""")).str("ticketId")
-        val started = agent.callTool(McpTicketTools.START, """{"ticketId":"$a"}""")
+        val started = agent.callTool("agenthq_ticket_start", """{"ticketId":"$a"}""")
         assertEquals("false", started["isError"]!!.jsonPrimitive.content, "start must succeed: ${text(started)}")
         fixture.await(what = "A's worker run") { gated.prompts.isNotEmpty() }
 

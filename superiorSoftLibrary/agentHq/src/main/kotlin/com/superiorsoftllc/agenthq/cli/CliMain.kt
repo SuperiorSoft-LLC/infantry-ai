@@ -88,10 +88,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
-import com.superiorsoftllc.agenthq.cli.mcp.McpGuardrails
 import com.superiorsoftllc.agenthq.cli.mcp.McpConfigException
-import com.superiorsoftllc.agenthq.cli.mcp.McpLineage
-import com.superiorsoftllc.agenthq.cli.mcp.McpWriteTools
+import com.superiorsoftllc.agenthq.cli.mcp.KillScope
+import com.superiorsoftllc.agenthq.cli.mcp.McpNarrowing
 import com.superiorsoftllc.agenthq.cli.mcp.McpServeConfig
 import com.superiorsoftllc.agenthq.cli.mcp.McpServer
 import com.superiorsoftllc.agenthq.cli.mcp.McpTools
@@ -382,18 +381,17 @@ internal object Cli {
                 err.appendLine("error: ${e.message}")
                 return 2
             }
-            val guardrails = try {
-                mcpGuardrails(parsed, config, getenv)
+            val narrowing = try {
+                mcpNarrowing(parsed, config, getenv)
             } catch (e: UsageFailure) {
                 err.appendLine("error: ${e.message}")
                 return 2
             }
             err.appendLine(
-                "agenthq mcp: depth ${guardrails.depth}/${guardrails.maxDepth ?: "daemon limits.concurrency.maxDepth"}, max ${guardrails.maxSpawns ?: "daemon limits.concurrency.mcpMaxSpawns"} open spawns, " +
-                    "kill ${if (guardrails.allowKillAny) "any session" else "own spawns only"}, " +
+                "agenthq mcp: depth ${narrowing.depth ?: 0}/${narrowing.maxDepth ?: "daemon limits.concurrency.maxDepth"}, max ${narrowing.maxSpawns ?: "daemon limits.concurrency.mcpMaxSpawns"} open spawns, " +
                     (config.projectId?.let { "project $it" } ?: "no default project"),
             )
-            val tools = McpTools({ FrameStream.open(target, err) }, guardrails, getenv, defaultProjectId = config.projectId)
+            val tools = McpTools({ FrameStream.open(target, err) }, narrowing, getenv, defaultProjectId = config.projectId)
             return McpServer(input().buffered(), out, err, tools).serve()
         }
 
@@ -925,7 +923,7 @@ internal object Cli {
 
     /** Contract 1.114.0: the scope rule `agenthq_kill` uses, evaluated for the CLI caller. */
     private fun killScopeRefusal(session: SessionRecord, snapshot: List<SessionRecord>, getenv: (String) -> String?): String? =
-        McpWriteTools(McpGuardrails(), getenv).killRefusal(session, snapshot)
+        KillScope.refusal(session, snapshot, getenv)
 
     /** Sends `kill` and waits for the session list that follows it; returns the session afterwards, or null with [err] written. */
     private suspend fun killAndWait(stream: FrameStream, session: SessionRecord, force: Boolean, err: Appendable): SessionRecord? {
@@ -989,7 +987,7 @@ internal object Cli {
             }
             if (session.live) {
                 if (!parsed.force) {
-                    err.appendLine("error: ${McpWriteTools.liveRefusal(session)}")
+                    err.appendLine("error: ${KillScope.liveRefusal(session)}")
                     return@runBlocking 1
                 }
                 killScopeRefusal(session, snapshot, getenv)?.let { err.appendLine("error: session rm refused: $it"); return@runBlocking 1 }
@@ -1002,7 +1000,7 @@ internal object Cli {
                 val frame = stream.next(SESSION_RM_POLL_MS) ?: continue
                 when {
                     frame.type == Envelope.ERROR && frame.sessionId == null -> {
-                        err.appendLine("error: ${frame.data.removePrefix(McpWriteTools.DELETE_REFUSED)}")
+                        err.appendLine("error: ${frame.data.removePrefix(KillScope.DELETE_REFUSED)}")
                         return@runBlocking 1
                     }
                     frame.type == Envelope.SESSIONS -> {
@@ -4494,9 +4492,9 @@ internal object Cli {
               runs <podId>        List a pod's runs with outcome and session id
               cancel <podId>      Cancel a pod gracefully (--force to kill the trees)
               mcp serve           Serve Infantry AI tools (read + spawn/prompt/message/kill) as an MCP server on stdio
-              mcp serve --max-depth <n> --max-spawns <n> [--allow-kill-any] [--mcp-depth <n>] [--lineage-dir <dir>]
+              mcp serve --max-depth <n> --max-spawns <n> [--allow-kill-any] [--mcp-depth <n>]
                         [--project <id>]   defaults also read from ./.agenthq/mcp.json (flags win), see docs/MCP.md
-                                  Write-tool guardrails (defaults 2 / 4 / own spawns only), see docs/MCP.md
+                                  Narrow the daemon's spawn limits (--allow-kill-any is moot), see docs/MCP.md
 
             Where to connect (first one given wins):
               --url URL           A ws:// or wss:// daemon URL, e.g. ws://10.0.0.5:8787/ws
@@ -4586,7 +4584,6 @@ internal object Cli {
         val maxDepth: Int? = null,
         val maxSpawns: Int? = null,
         val allowKillAny: Boolean = false,
-        val lineageDir: String? = null,
         // `memory save` (P10-K3).
         val folder: String? = null,
         // NOTES-1: `memory ... --scope project|role|session [--role <id>]`.
@@ -4645,25 +4642,20 @@ internal object Cli {
     )
 
     /**
-     * The write tools' guardrails. Depth: `--mcp-depth`, else `AGENTHQ_MCP_DEPTH`, else the depth an MCP server
-     * recorded for this process's own session (`AGENTHQ_SESSION_ID`) in the lineage directory, else 0.
+     * The guardrail values this MCP server narrows the daemon's limits with (RUNTIME-LOAD-7): `--max-depth` / `--max-spawns` (or
+     * `.agenthq/mcp.json`), and the depth `--mcp-depth` / `AGENTHQ_MCP_DEPTH` claims. They travel in every plugin tool call; the host
+     * only narrows with them. `clientKey` names this server process.
      */
-    private fun mcpGuardrails(parsed: ParsedArgs, config: McpServeConfig, getenv: (String) -> String?): McpGuardrails {
-        val lineage = McpLineage(
-            (parsed.lineageDir ?: getenv(McpGuardrails.LINEAGE_DIR_ENV)?.trim()?.takeIf { it.isNotEmpty() })
-                ?.let(::File) ?: McpLineage.defaultDir(),
-        )
-        val envDepth = getenv(McpGuardrails.DEPTH_ENV)?.trim()?.takeIf { it.isNotEmpty() }?.let {
+    private fun mcpNarrowing(parsed: ParsedArgs, config: McpServeConfig, getenv: (String) -> String?): McpNarrowing {
+        val envDepth = getenv(McpNarrowing.DEPTH_ENV)?.trim()?.takeIf { it.isNotEmpty() }?.let {
             it.toIntOrNull()?.takeIf { d -> d >= 0 }
-                ?: throw UsageFailure("${McpGuardrails.DEPTH_ENV} must be a whole number >= 0, got '$it'")
+                ?: throw UsageFailure("${McpNarrowing.DEPTH_ENV} must be a whole number >= 0, got '$it'")
         }
-        val depth = parsed.mcpDepth ?: envDepth ?: lineage.depthOf(getenv(AccessPolicy.SESSION_ID_ENV)) ?: 0
-        return McpGuardrails(
-            depth = depth,
+        return McpNarrowing(
+            depth = parsed.mcpDepth ?: envDepth,
             maxDepth = config.maxDepth,
             maxSpawns = config.maxSpawns,
-            allowKillAny = config.allowKillAny ?: false,
-            lineage = lineage,
+            clientKey = java.util.UUID.randomUUID().toString(),
         )
     }
 
@@ -4709,7 +4701,6 @@ internal object Cli {
         var maxDepth: Int? = null
         var maxSpawns: Int? = null
         var allowKillAny = false
-        var lineageDir: String? = null
         var folder: String? = null
         var scope: String? = null
         var say: String? = null
@@ -5099,10 +5090,6 @@ internal object Cli {
                     allowKillAny = true
                     i++
                 }
-                "--lineage-dir" -> {
-                    lineageDir = flagValue(args, ++i) ?: return fail(err, "--lineage-dir expects a directory path")
-                    i++
-                }
                 "--help", "-h" -> {
                     help = true
                     i++
@@ -5161,7 +5148,6 @@ internal object Cli {
             maxDepth = maxDepth,
             maxSpawns = maxSpawns,
             allowKillAny = allowKillAny,
-            lineageDir = lineageDir,
             folder = folder,
             scope = scope,
             say = say,

@@ -41,6 +41,12 @@ class AgentsDaemonPlugin : DaemonPlugin {
         api.tools.register(SessionReadTools.ListSessions(api))
         api.tools.register(SessionReadTools.GetSession(api))
         api.tools.register(SessionReadTools.PodState(api))
+        // RUNTIME-LOAD-7 (F5 last): spawn, prompt, kill, restart and remove, over the host spawn service.
+        api.tools.register(SpawnTools.Spawn(api))
+        api.tools.register(SpawnTools.Prompt(api))
+        api.tools.register(SpawnTools.Kill(api))
+        api.tools.register(SpawnTools.Restart(api))
+        api.tools.register(SpawnTools.Remove(api))
         // AGENT-REGISTRY-1: the agent registry's list / get / enable / disable.
         AgentRegistryTools.all { api.agents }.forEach(api.tools::register)
     }

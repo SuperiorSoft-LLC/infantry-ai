@@ -332,7 +332,7 @@ every limit. It now goes through the same charge.
 review, todo, deleted), or whose ticket now names another worker, no longer holds a pod or concurrency slot. Without this rule a pm
 would fill its pod with finished, idle workers after four tickets.
 
-**Deviations (deliberate):** (1) the client's `--max-depth` / `--max-spawns` used to REPLACE the daemon setting. They now only narrow
+**Deviations (deliberate):** (0) A killed session revived to rest stays released (BUG-KILL-IDLE-1): the host remembers, in memory, the sessions it cleared a kill for (`LocalSpawns.released`), since a new run clears `killOutcome`; a restart of the daemon forgets it. The `mcp serve` startup line no longer names the kill scope. (1) the client's `--max-depth` / `--max-spawns` used to REPLACE the daemon setting. They now only narrow
 (a larger value is ignored). (2) `--allow-kill-any` is moot. An owner connection without a session may kill any session, as before.
 A session-bearing connection is held to the rule whatever the flag says. (3) A pm's own project comes from the daemon's record, not
 the MCP process's `AGENTHQ_PROJECT_ID`. (4) After a restart a session keeps its depth (before: every session was a root again).
@@ -347,7 +347,7 @@ policy gate, grant, pod cap), `SpawnGuardLineageTest`, `SpawnGuardLimitSettingTe
 `McpOrchestrationE2eTest`, `AgentTicketStartE2eTest`, `LocalSessionReadsTest`, `LocalBoardServicesTest`. Not run: the full suite,
 wasm/Android, a live agent session against an installed daemon.
 
-**Left for RUNTIME-LOAD-7 (the tools move), and its seam:**
+**Left for RUNTIME-LOAD-7 (the tools move), and its seam (done: section 13):**
 
 | step | what |
 |---|---|
@@ -356,3 +356,47 @@ wasm/Android, a live agent session against an installed daemon.
 | Infantry_Agents | `agenthq_spawn` (`ticketId` -> `startTicket`, with the `disagreement` checks), `agenthq_kill` (`mayKill`, then the `kill` frame), `agenthq_prompt` / `agenthq_session_restart` / `agenthq_session_remove` (`target`, then their frames on the caller's connection) |
 | delete | `McpGuardrails`, `McpLineage`, those tools in `cli/mcp`; `BuiltinToolsListGuardTest` ratchet 12 -> 6 |
 | tests | golden descriptors (`core-mcp-tools-before-f5.json`), `McpOrchestrationE2eTest`, `AgentTicketStartE2eTest`, `McpPluginToolTimeoutTest`, `BlankShellE2ETest` |
+
+## 13. RUNTIME-LOAD-7 (ticket bb12002a): the spawn tools move to plugins over `api.spawns`
+
+Closes F5. `agenthq mcp serve` now serves six tools itself (`agenthq_message`, `agenthq_inbox`, `agenthq_read`, `agenthq_pipeline`,
+`agenthq_pipeline_record`, `agenthq_watch_file`); `BuiltinToolsListGuardTest`'s ratchet is 6.
+
+| tool | plugin | host call | action (gate) |
+|---|---|---|---|
+| `agenthq_ticket_start` | Infantry_Board (`TicketStartTool`) | `spawns.startTicket` | `board.ticket.move` |
+| `agenthq_spawn` | Infantry_Agents (`SpawnTools.Spawn`) | `spawns.spawn`; with `ticketId`: `tickets.get` + the `disagreement` checks + `spawns.startTicket` | `agents.spawn` |
+| `agenthq_prompt` | Infantry_Agents | `spawns.target`, then the `prompt` frame | `chat.prompt` |
+| `agenthq_kill` | Infantry_Agents | `spawns.mayKill`, then the `kill` frame | `agents.kill` |
+| `agenthq_session_restart` | Infantry_Agents | `spawns.target`, then `session_restart` | `agents.restart` |
+| `agenthq_session_remove` | Infantry_Agents | `spawns.target` (a miss = SESSION-GHOST-1 no-op), `mayKill` for force, then `kill` / `session_delete` | `agents.delete` |
+
+**Wire (DaemonApi 1.9.0, additive, CONTRACT.md addendum):** the `plugin_tool_call` `client` object carries `maxDepth`, `maxSpawns`, `depth`
+(from `--max-depth` / `--max-spawns` / `.agenthq/mcp.json` / `--mcp-depth` / `AGENTHQ_MCP_DEPTH`) and `clientKey` (a random id per `mcp serve`
+process). `DaemonPluginHost.callTool` parses them into `ToolCall.clientNarrowing`; tools pass it to `api.spawns`, which only narrows. The caller
+is `call.caller.copy(activeSession = call.clientSessionId ?: ...)`. Both modules need `apiAtLeast` 1.9.0.
+
+**Answers:** same names, descriptors (byte-identical to `golden/core-mcp-tools-before-f5.json`) and answer JSON. The shared texts of a ticket start
+are `daemon.api.spawns.SpawnText` (Board's tool and `agenthq_spawn ticketId` print through it). `SessionView` gained `contextLimit`,
+`contextLimitSupport`, `killOutcome` (additive) for the spawn and kill answers. Each tool declares its own `timeoutMs` (spawn / start 120 s, prompt /
+kill / restart 45 s, remove 90 s).
+
+**Fence for frames that answer nothing on success:** `kill`, a named `prompt`, `session_restart` and `session_delete` answer nothing when they succeed
+(a refusal is an `error`), so a plugin request would time out. For a request id `plugin:<uuid>` the daemon now answers with the `sessions` list after
+the write (`pluginSessionsAck`, as `role_save` already answers a plugin). The connection handles frames in order, so it is the same fence the old
+trailing `sessions` request drew. Other clients see no change.
+
+**Deleted:** `McpGuardrails`, `McpLineage` (and `--lineage-dir`, `AGENTHQ_MCP_LINEAGE_DIR`), `McpTicketTools`, and the six tools in `McpWriteTools`
+(it keeps `agenthq_message` until F6). `--max-depth` / `--max-spawns` / `--mcp-depth` are `McpNarrowing` values. The CLI's `session rm|kill` keep the
+kill rule in `cli/mcp/KillScope`.
+
+**Deviations (deliberate):** (1) `--allow-kill-any` and `allowKillAny` in `.agenthq/mcp.json` are accepted and ignored. (2) A session spawned by an
+owner connection (no session id) is a root, depth 0 (before: the lineage file recorded depth 1 for it). Its own `mcp serve` therefore may spawn one
+level deeper than it used to. (3) `--max-depth` / `--max-spawns` larger than the daemon's setting are ignored (section 12). (4) A queued ticket start
+answers `queuedFor` with the lane only (`TicketInfo` has no `queuedFor`). (5) The spawn answer's `status` is the session state as the host lists it
+after the task was sent.
+
+Tests run: `McpServeTest` (incl. `movedSpawnToolsComeFromTheAgentsPluginUnchanged`, the golden check of all six), `McpWriteToolsTest` (the guardrail
+tests through the plugins: depth, narrowing never widens, concurrency, kill scope), `McpOrchestrationE2eTest`, `AgentTicketStartE2eTest`,
+`McpPluginToolTimeoutTest`, `BlankShellE2ETest`, `BuiltinToolsListGuardTest`, `LocalBoardServicesTest`, `LocalSpawnsTest`, `McpTicketToolsTest`,
+`McpServeConfigTest`. Not run: the full suite, wasm/Android, a live agent session against an installed daemon.

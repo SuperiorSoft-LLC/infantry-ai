@@ -157,7 +157,7 @@ class BacklogLaneE2eTest {
         assertEquals(cliBoard.out.trim().lines().first().trim(), mcpBoard.first(), "CLI and MCP print the same board")
 
         // Every start path is refused naming the lane, and the ticket stays in Backlog with no worker.
-        val mcpStart = agent.callTool(McpTicketTools.START, """{"ticketId":"$mcpId"}""")
+        val mcpStart = agent.callTool("agenthq_ticket_start", """{"ticketId":"$mcpId"}""")
         assertTrue(text(mcpStart).contains("Backlog lane"), "agenthq_ticket_start names the lane: ${text(mcpStart)}")
         val cliStart = cli(fixture, "ticket", "start", shortTicketId(cliId))
         assertEquals(1, cliStart.exit, cliStart.out)

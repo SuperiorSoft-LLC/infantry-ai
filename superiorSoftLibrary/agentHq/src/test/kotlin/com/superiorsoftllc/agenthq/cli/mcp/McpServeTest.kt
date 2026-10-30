@@ -182,8 +182,8 @@ class McpServeTest {
         assertEquals(
             listOf(
                 // RUNTIME-LOAD-5: list_sessions, get_session, pod_state (Infantry_Agents) and board (Infantry_Board) are plugin tools now.
-                "agenthq_spawn", "agenthq_prompt", "agenthq_message", "agenthq_kill", "agenthq_session_remove", "agenthq_session_restart",
-                "agenthq_ticket_start", // BUG-ASSIGN-1
+                // RUNTIME-LOAD-7: spawn, prompt, kill, session_restart, session_remove (Infantry_Agents) and ticket_start (Infantry_Board) are plugin tools now.
+                "agenthq_message",
                 "agenthq_inbox", "agenthq_read", // MAIL-MCP-1
                 "agenthq_pipeline", "agenthq_pipeline_record", // PIPE-1
                 // ROLE-EDIT-1, LANE-CAPS, ASK-1: the role, project config and ask tools are daemon plugin tools now (RUNTIME-LOAD-3).
@@ -309,7 +309,41 @@ class McpServeTest {
         "agenthq_ticket_delete" to "board.ticket.delete",
         "agenthq_ticket_create" to "board.ticket.save",
         "agenthq_ticket_update" to "board.ticket.save",
+        "agenthq_ticket_start" to "board.ticket.move", // RUNTIME-LOAD-7
     )
+
+    /** RUNTIME-LOAD-7: the spawn family moved into Infantry_Agents, gated by the action of the frame each used to send. */
+    private val MOVED_TO_AGENTS = mapOf(
+        "agenthq_spawn" to "agents.spawn",
+        "agenthq_prompt" to "chat.prompt",
+        "agenthq_kill" to "agents.kill",
+        "agenthq_session_restart" to "agents.restart",
+        "agenthq_session_remove" to "agents.delete",
+    )
+
+    /** RUNTIME-LOAD-7: the five spawn tools keep their descriptors byte for byte (golden `core-mcp-tools-before-f5.json`). */
+    @Test
+    fun movedSpawnToolsComeFromTheAgentsPluginUnchanged() {
+        val root = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Board", "official/Infantry_Agents")
+        try {
+            val fixture = DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-plugin").toFile(), pluginsRoot = root)
+                .also { fixtures += it }
+            fixture.client.await(Envelope.READY)
+            val served = serve("--port", fixture.port.toString())
+            initialize(served)
+            val tools = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject }
+            val golden = Json.parseToJsonElement(javaClass.getResource("/golden/core-mcp-tools-before-f5.json")!!.readText()).jsonArray
+                .map { it.jsonObject }.associateBy { it["name"]!!.jsonPrimitive.content }
+            val manifest = Json.parseToJsonElement(File(root, "official/Infantry_Agents/module.json").readText()).jsonObject["daemon"]!!.jsonObject["tools"]!!.jsonArray
+                .map { it.jsonObject }.associateBy { it["name"]!!.jsonPrimitive.content }
+            MOVED_TO_AGENTS.forEach { (name, action) ->
+                assertEquals(golden.getValue(name), tools.single { it["name"]!!.jsonPrimitive.content == name }, "the descriptor of $name changed in the move")
+                assertEquals(action, manifest.getValue(name)["action"]!!.jsonPrimitive.content, "the action of $name")
+            }
+        } finally {
+            root.deleteRecursively()
+        }
+    }
 
     private val TICKET_GET_GOLDEN = """{"name":"agenthq_ticket_get","description":"Read ONE ticket back: title, verbatim description, status, project, role/agent, provider, model, branch, worker session, attached images.","inputSchema":{"type":"object","properties":{"ticketId":{"type":"string","description":"Full ticket id, or its 8-char suffix."}},"required":["ticketId"],"additionalProperties":false},"annotations":{"readOnlyHint":true,"destructiveHint":false,"openWorldHint":false}}"""
 
