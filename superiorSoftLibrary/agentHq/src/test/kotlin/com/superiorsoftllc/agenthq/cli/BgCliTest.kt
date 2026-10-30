@@ -29,6 +29,7 @@ class BgCliTest {
     @Test fun `list status logs stop`() {
         assertEquals(BgCli.Parsed.Show("list", null), BgCli.parse(listOf("list")))
         assertEquals(BgCli.Parsed.Show("stop", "ab12"), BgCli.parse(listOf("stop", "ab12")))
+        assertEquals(BgCli.Parsed.Show("ack", "ab12"), BgCli.parse(listOf("ack", "ab12")))
         assertTrue(BgCli.parse(listOf("logs")) is BgCli.Parsed.Bad)
         assertTrue(BgCli.parse(listOf("nope")) is BgCli.Parsed.Bad)
         assertTrue(BgCli.parse(emptyList()) is BgCli.Parsed.Bad)

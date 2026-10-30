@@ -225,9 +225,9 @@ internal object BgCli {
                 }
             }
             "list" -> if (rest.isEmpty()) Parsed.Show("list", null) else Parsed.Bad("bg list takes no arguments")
-            "status", "logs", "stop" ->
+            "status", "logs", "stop", "ack" ->
                 if (rest.size == 1) Parsed.Show(verb, rest[0]) else Parsed.Bad("bg $verb expects one job id")
-            else -> Parsed.Bad("unknown bg command '$verb' (run, list, status, logs, stop, wait, watch-file)")
+            else -> Parsed.Bad("unknown bg command '$verb' (run, list, status, logs, stop, wait, ack, watch-file)")
         }
     }
 
@@ -970,7 +970,16 @@ internal object BgCli {
                 return 0
             }
             val job = jobs.firstOrNull { it.id == p.id }
+            if (p.verb == "ack") {
+                // STALL-6: "I have seen this job's result": the daemon drops its queued and future notices.
+                runCatching { send(stream, session, BgJobRequest("ack", jobId = p.id)) }.onFailure { err.appendLine("error: ack failed (${it.message})"); return 1 }
+                out.appendLine("acked ${p.id}: its queued and future notices are dropped")
+                return 0
+            }
             if (job == null) {
+                // A finished job's result was read here (log or status): STALL-6 marks it handled, so a notice still queued
+                // for it is dropped. A running job is not acked by a read; its end is still news.
+                if (p.verb != "stop") runCatching { send(stream, session, BgJobRequest("ack", jobId = p.id)) }
                 // A finished job's log stays at its well-known path, so `logs` still answers.
                 if (p.verb == "logs") return logsOf(File(logDir(), p.id + ".log"), out, err)
                 err.appendLine("error: no running bg job '${p.id}'")

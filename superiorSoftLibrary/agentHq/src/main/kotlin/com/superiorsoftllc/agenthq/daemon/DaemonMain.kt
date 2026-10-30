@@ -1579,6 +1579,9 @@ class AgentHqDaemon(
                 lineChars = { settings.limit(LimitRegistry.WATCH_NOTICE_LINE_CHARS).toInt() },
                 readMaxBytes = { settings.limit(LimitRegistry.WATCH_READ_MAX_KB) * 1024L },
                 tailReadBytes = { settings.limit(LimitRegistry.WATCH_TAIL_READ_KB) * 1024L },
+                drop = { thread, to, reason, subject -> mailbox.dropQueued(thread, to, reason) { m -> subject == null || m.subject == subject } },
+                dedupe = { settings.limit(LimitRegistry.WATCH_NOTICE_DEDUPE) != 0L },
+                keepMs = { settings.limit(LimitRegistry.WATCH_HANDLED_KEEP_MINUTES) * 60_000L },
             )
             manager.bgJobListener = bgNotifier
             // STALL-1 item 5: idle or BUSY-but-silent ticket workers are nudged and their PM told; no model call, no kill.
@@ -3737,6 +3740,10 @@ private suspend fun handleConnection(
                                         .onFailure { System.err.println("[agentHq] bg eof notice failed for ${job.id}: ${it.message}") }
                                 }
                             }
+                        }
+                        "ack" -> {
+                            require(sid != null && req.jobId != null) { "ack expects a sessionId and a jobId" }
+                            (manager.bgJobListener as? com.superiorsoftllc.agenthq.mailbox.BgJobNotifier)?.ack(sid, req.jobId)
                         }
                         "list" -> Unit
                         else -> throw IllegalArgumentException("unknown op '${req.op.take(40)}'")

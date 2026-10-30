@@ -128,6 +128,7 @@ agenthq bg list
 agenthq bg status <id>
 agenthq bg logs <id>
 agenthq bg stop <id>
+agenthq bg ack <id>      # STALL-6: "I have seen this job's result": the daemon drops its queued and future notices
 ```
 
 **Never sleep or poll to wait for it: `--notify` (BG-NOTIFY).**
@@ -142,6 +143,14 @@ The command's program is resolved before it starts: a bare name is looked up in 
 PATH with PATHEXT, so `gradlew.bat`, `gradlew` and `agenthq` (a `.cmd` shim) all work from a worktree root. A command
 that cannot be found or started is NOT a job: `bg run` prints `error: ... job NOT started` and exits 127, with no job
 id to wait on. If a detached wrapper still fails to start it, the daemon mails you `exited 127` at once.
+
+**Handled jobs (STALL-6).** A notice can reach you late (it is held until your turn ends). Reading a finished job's log or
+status (`agenthq bg logs|status <id>`) or `agenthq bg ack <id>` marks it handled: its queued and later notices are dropped.
+A newer job with the same name/command from your session also supersedes the old job's notices; a job sends at most one
+"closed its output, still running" and one "finished" notice, and the first is dropped once the second is due. Off switch:
+setting `limits.watch.noticeDedupe` = 0. **Exit status:** run the command itself (`bg run --notify -- gradlew test`), never
+`gradlew test > out.txt; echo EXIT=$?`: the watcher reports the exit of the wrapper shell (the echo's 0), and the notice
+says so when the output ends in an `EXIT=n` line that differs.
 
 `agenthq bg wait <id>` is a fallback, ONLY for when your harness is not woken by mail: it blocks and returns the exit code. Add `--timeout <MIN>` to bound the wait.
 

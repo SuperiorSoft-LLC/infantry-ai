@@ -238,6 +238,16 @@ object LimitRegistry {
         "1 = a session whose ticket is done, or that already mailed its final report, gets no idle nudge and no failure notice for a non-zero exit; 0 = watch it like any other.",
         max = 1, zeroIsUnlimited = false,
     )
+    val WATCH_NOTICE_DEDUPE = LimitDef(
+        "limits.watch.noticeDedupe", 1, "switch",
+        "STALL-6: 1 = a bg job's queued and future notices are dropped once its owner read its log/status after it ended or ran `agenthq bg ack <id>`, a newer job with the same label superseded it, or its end made the 'closed output' notice stale; one 'closed output' and one 'finished' notice per job at most. 0 = every notice is sent.",
+        max = 1, zeroIsUnlimited = false,
+    )
+    val WATCH_HANDLED_KEEP_MINUTES = LimitDef(
+        "limits.watch.handledKeepMinutes", 1440, "minutes",
+        "STALL-6: how long the daemon remembers that a bg job was handled/ended (to drop its late notices) before forgetting it.",
+        min = 1, max = 100_000, zeroIsUnlimited = false,
+    )
     val WATCH_TREE_JOB_SECONDS = LimitDef(
         "limits.watch.treeJobSeconds", 30, "seconds",
         "How long a process under a worker's harness (one the daemon did not launch) must have run for its end to be told to the worker.",
@@ -449,7 +459,7 @@ object LimitRegistry {
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
-        WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_EXEMPT_WHEN_TICKET_DONE, WATCH_TREE_JOB_SECONDS, WATCH_FORCED, WATCH_TREE_WAIT_MINUTES,
+        WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_EXEMPT_WHEN_TICKET_DONE, WATCH_NOTICE_DEDUPE, WATCH_HANDLED_KEEP_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_FORCED, WATCH_TREE_WAIT_MINUTES,
         WATCH_NOTICE_LINE_CHARS, WATCH_LOG_MAX_MB, WATCH_LOG_TOTAL_MB, WATCH_LOG_KEEP_JOBS, WATCH_LOG_KEEP_DAYS, WATCH_MIN_FREE_MB, WATCH_FILE_IDLE_SECONDS,
         WATCH_READ_MAX_KB, WATCH_TAIL_READ_KB, WATCH_SPACE_CHECK_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
