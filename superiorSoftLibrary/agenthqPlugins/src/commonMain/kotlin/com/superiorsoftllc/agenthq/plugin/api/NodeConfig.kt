@@ -84,6 +84,8 @@ data class ConfigFieldDeclaration(
     val palette: List<String> = emptyList(),
     /** CONFIG-FIELDS-2: `dropdown` draws a `select` as a menu; null keeps the option buttons. */
     val display: String? = null,
+    /** CONFIG-FIELDS-4 (G3): a `group` field's nested fields; on a `list` it makes each item an object of these fields. */
+    val fields: List<ConfigFieldDeclaration> = emptyList(),
 )
 
 /** CONFIG-FIELDS-2: show a field only while the sibling field [key] holds [eq] (compared as text; `true`/`false` for a checkbox). */
@@ -120,7 +122,9 @@ object ConfigFieldTypes {
     const val LIST = "list"
     /** CONFIG-FIELDS-1: a string like [TEXT], drawn as a multi-line box. */
     const val TEXTAREA = "textarea"
-    val BUILT_IN = setOf(TEXT, TEXTAREA, NUMBER, CHECKBOX, SELECT, MULTI_SELECT, IMPLEMENTATION, TOGGLE, RADIO, COLOR, CLASSES, LIST)
+    /** CONFIG-FIELDS-4 (G3): a JSON object whose keys are the field's nested `fields`; an unknown key is kept. */
+    const val GROUP = "group"
+    val BUILT_IN = setOf(TEXT, TEXTAREA, NUMBER, CHECKBOX, SELECT, MULTI_SELECT, IMPLEMENTATION, TOGGLE, RADIO, COLOR, CLASSES, LIST, GROUP)
 }
 
 /** Who wrote a stored value: the merged JSON tree on first load, or the user from the configuration view. */
@@ -252,9 +256,23 @@ object ConfigFieldValidator {
             ConfigFieldTypes.LIST -> {
                 val arr = value as? kotlinx.serialization.json.JsonArray
                 require(arr != null) { "setting '$name' must be an array" }
-                val item = field.item ?: ConfigFieldDeclaration(name, ConfigFieldTypes.TEXT)
+                val item = field.item ?: if (field.fields.isNotEmpty()) ConfigFieldDeclaration(name, ConfigFieldTypes.GROUP, fields = field.fields) else ConfigFieldDeclaration(name, ConfigFieldTypes.TEXT)
                 arr.forEach { validate(item.copy(key = name), it) }
                 arr
+            }
+            ConfigFieldTypes.GROUP -> {
+                val obj = value as? kotlinx.serialization.json.JsonObject
+                require(obj != null) { "setting '$name' must be an object" }
+                for (child in field.fields) {
+                    if (!isVisible(child) { obj[it] }) continue
+                    val v = obj[child.key]
+                    if (v == null || v is kotlinx.serialization.json.JsonNull) {
+                        checkRules(child, null)?.let { require(false) { "setting '$name.${child.key}': $it" } }
+                    } else {
+                        try { validate(child, v) } catch (e: IllegalArgumentException) { throw IllegalArgumentException("setting '$name': ${e.message}") }
+                    }
+                }
+                obj
             }
             else -> value
         }

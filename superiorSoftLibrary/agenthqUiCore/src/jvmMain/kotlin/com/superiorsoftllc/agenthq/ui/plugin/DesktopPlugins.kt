@@ -120,7 +120,7 @@ object DesktopPlugins {
         val shellOverrides = resolution.shellOverrides.filter { it.module !in refused }
         val changes = ModuleChanges { request -> change(root, withBundles, demoLock, request, bundled).also { c -> (c as? ModuleChange.Applied)?.log?.forEach(say); say("[plugins] ${c.message}") } }
         val factory = TabFactory(modules, preferences, services = { services[it] ?: NoPluginServices }, events = bus, statuses = statuses(resolution), changes = changes, shellOverrides = shellOverrides,
-            allowInject = { config.setting(it).allowInject }, allowOverride = { config.setting(it).allowOverride })
+            allowInject = { config.setting(it).allowInject }, allowOverride = { config.setting(it).allowOverride }, modulesConfig = config)
         built = factory
         // NS3: Registered > "Export section…": <stateDir>/exports/<Section>.ihq, signed with this installation's export key.
         fun exportNode(node: String): Pair<String, CompositionExport.Outcome> {

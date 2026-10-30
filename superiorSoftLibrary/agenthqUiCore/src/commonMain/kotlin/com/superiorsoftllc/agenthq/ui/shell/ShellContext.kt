@@ -935,6 +935,10 @@ interface ConfigValues {
     fun overridden(key: String): Boolean = false
     /** CONFIG-FIELDS-2: the raw resolved JSON of [key]; null where unset (and for fakes that only type their values). */
     fun json(key: String): kotlinx.serialization.json.JsonElement? = null
+    /** CONFIG-FIELDS-4 (G3): a `group` field as a [ConfigValues] of its own keys; null where unset or not an object. */
+    fun obj(key: String): ConfigValues? = null
+    /** CONFIG-FIELDS-4 (G3): a `list` of objects as one [ConfigValues] per item; null where unset or any item is not an object. */
+    fun list(key: String): List<ConfigValues>? = null
 }
 
 /**
@@ -990,3 +994,6 @@ class GatedConfig(private val inner: ConfigContext, private val allows: (nodeId:
     override fun values(nodeId: String): ConfigValues = if (allows(nodeId)) inner.values(nodeId) else EmptyConfig
     override fun <T : Any> implementation(type: KClass<T>, key: String): T? = inner.implementation(type, key)
 }
+
+/** CONFIG-FIELDS-4: [inner] with a different [config] (one module's gated view); every other slot is [inner]'s. */
+class ScopedShellContext(inner: ShellContext, override val config: ConfigContext) : ShellContext by inner

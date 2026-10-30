@@ -59,10 +59,10 @@ Every field is `{ key, type, label, ...properties }`. Stored values are plain JS
 | `multiSelect` | string[] | chips | built |
 | `color` | `#RRGGBB` / `#AARRGGBB` | hex box | built (no swatch picker) |
 | `classes` | `{slot: "tok tok"}` | one row per slot, allow-list | built |
-| `list` | array of `item` | add/remove rows (scalar items) | built (object rows missing: G3) |
+| `list` | array of `item` | add/remove rows (scalar items) | built (object rows via `fields[]`: G3 done, CONFIG-FIELDS-4) |
 | `implementation` | registry key | dropdown of registry keys | built |
 | `secret` | write-only | masked box | **not built** (G4). Secrets today live in the Secrets section and never in a field |
-| `group` | object of nested `fields` | titled sub-card | **not built** (G3) |
+| `group` | object of nested `fields` | indented sub-card, recursive | built (CONFIG-FIELDS-4) |
 | custom | any | module `FieldType` | built |
 
 ## 3. Per-field properties
@@ -114,12 +114,12 @@ all, never by a compile-time import between plugins. Today this works for tab so
 |---|---|---|---|
 | G1 **done** (CONFIG-FIELDS-2) | `required`, `pattern`, `minLength`, `maxLength` in both validators + editor error | S (0.5 d) | add optional keys to `ConfigFieldDeclaration`; extend `ConfigFieldValidator` and `validateBuiltIn`; tests. Not trivial enough for this ticket because the dialog Save-button logic needs a pass |
 | G2 **done** (CONFIG-FIELDS-2) | `visibleWhen` (sibling key eq) | S (0.5 d) | hide the editor in `NodeFields` and skip validation of a hidden field |
-| G3 | `group` type and `list` with object items (`fields[]`) | M (2 d) | recursive editor and validator; stored as object / array of objects |
+| G3 **done** (CONFIG-FIELDS-4: recursive `ConfigFieldValidator`, `GroupEditor`, `ConfigValues.obj/list`, `configAs<T>()` nested; example in Acme_FieldKeys) | `group` type and `list` with object items (`fields[]`) | M (2 d) | recursive editor and validator; stored as object / array of objects |
 | G4 | `secret` field | M (1.5 d) | must write to the Secrets store, never `node_config`; ties to the daemon secrets API; owner call on scope |
 | G5 **done** (CONFIG-FIELDS-2; `select` is a dropdown only with `display:"dropdown"`, default stays option buttons) | `placeholder`, color swatch `palette`, real dropdown for `select` | S (0.5 d) | UI polish |
 | G6 | `since`, `renamedFrom` migration marker | S (1 d) | loader step after compile |
 | G7 | declaration-level `requires.contract` | S (0.5 d) | hide group when daemon contract is older |
-| G8 **done** (CONFIG-FIELDS-3: `ConfigReadGate` + `GatedConfig`; community reads other nodes only with `config.read` declared in `services` and allowed in modules.json, core/official trusted, `configReadGate:false` dev switch; host wiring of `GatedConfig` per module is the remaining step) | gate + test | S (0.5 d) | `ConfigReadGateTest`, `GatedConfigTest` |
+| G8 **done** (CONFIG-FIELDS-3: `ConfigReadGate` + `GatedConfig`; community reads other nodes only with `config.read` declared in `services` and allowed in modules.json, core/official trusted, `configReadGate:false` dev switch; wired per module in CONFIG-FIELDS-4: `ModuleScope` swaps the reader-scoped `GatedConfig` into `LocalShellContext` wherever a community module draws; `ConfigReadScopeTest`) | gate + test | S (0.5 d) | `ConfigReadGateTest`, `GatedConfigTest` |
 | G9 **done** (CONFIG-FIELDS-2, `ConfigValues.configAs<T>()`) | `scope.configAs<T>()` typed bean | S (0.5 d) | kotlinx.serialization over the resolved map |
 | G10 **done** (CONFIG-FIELDS-3: `BlankShellE2ETest`; command in section 9) | scripted blank-shell E2E (empty plugins tree, temp state dir, port 8812) | M (2 d) | asserts section 1 items (a)-(d); the pre-launch QA gate wants it |
 | G11 | generic block `dependsOn` registry ids for bean binding | M (1.5 d) | host injects the config-chosen provider; today only `implementation` fields |
@@ -161,3 +161,12 @@ Still hard-wired in a blank install (section 1 items): (a) the UI modules of the
 (`agenthqUiCore/.../plugin/CompiledModules.kt`; the test passes `compiled = emptyList()`); (b) daemon features live in the daemon jar
 (`agentHq/.../daemon/DaemonPlugins.kt` resolves modules, loads no code); (c) harnesses `claude`/`pi` on the daemon classpath; (d) the
 hand-written fallback `ConfigTab`/`ShellConfigSettings.kt` when no snapshot exists. Not scripted: a real daemon on 8812 and a rendered Settings dialog.
+
+## 10. Group and list-of-objects fields (CONFIG-FIELDS-4, G3)
+
+`{"type":"group","fields":[...]}` stores a JSON object; `{"type":"list","fields":[...]}` (or `item:{"type":"group","fields":[...]}`) stores an array of objects.
+`ConfigFieldValidator` recurses (required/rules/`visibleWhen` per nested field; unknown keys in the object are kept). The editors are `GroupEditor` /
+`ObjectListEditor` (`ui/plugin/config/GroupEditor.kt`), used by `NodeFields` and the generated Settings card; every change writes the whole object back.
+Readers: `ConfigValues.obj(key)`, `ConfigValues.list(key)`, or `configAs<T>()` with nested `@Serializable` classes. `fields` is a new optional key, so old
+manifests are unchanged (`LegacyConfigStructureTest`). Example: `plugins/examples/Acme_FieldKeys` (`primary` group, `servers` list). No wire change.
+Section 9's hard-wired list is unaffected. Not covered by tests: the rendered Compose editor (compiles on jvm and wasm only).

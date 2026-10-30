@@ -104,6 +104,8 @@ internal class JsonValues(private val values: Map<String, JsonElement>, private 
     override fun boolean(key: String): Boolean? = prim(key)?.takeIf { !it.isString }?.booleanOrNull
     override fun classes(slot: String, key: String): List<String>? =
         ((values[key] as? kotlinx.serialization.json.JsonObject)?.get(slot) as? JsonPrimitive)?.takeIf { it.isString }?.content?.split(' ')?.filter { it.isNotEmpty() }
+    override fun obj(key: String): ConfigValues? = (values[key] as? kotlinx.serialization.json.JsonObject)?.let { JsonValues(it) }
+    override fun list(key: String): List<ConfigValues>? = (values[key] as? JsonArray)?.map { (it as? kotlinx.serialization.json.JsonObject)?.let { o -> JsonValues(o) } ?: return null }
     override fun strings(key: String): List<String>? = (values[key] as? JsonArray)?.let { a ->
         a.map { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content ?: return null }
     }

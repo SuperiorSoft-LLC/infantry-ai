@@ -412,6 +412,8 @@ class TabFactory(
     private val allowOverride: (module: String) -> Collection<String> = { emptyList() },
     /** P1 step 2: where the node config is stored (the window's daemon; a test passes a fake). */
     private val configApi: NodeConfigApi = DaemonNodeConfigApi,
+    /** CONFIG-FIELDS-4 (G8): the owner's modules.json; `configReadGate` and the `config.read` grant decide what a community module reads. */
+    private val modulesConfig: com.superiorsoftllc.agenthq.plugin.api.ModulesConfig = com.superiorsoftllc.agenthq.plugin.api.ModulesConfig(),
 ) {
     val modules: List<AgentHqModule> = modules.toList()
     /** TOAST-1: where a module's `Notifications.notify` lands in the window; the window sets it to its controller's. */
@@ -789,6 +791,15 @@ class TabFactory(
     fun title(tab: TabProvider, state: AppState): String =
         interceptors[tab.id].orEmpty().foldRight({ tab.title(state) }) { i, proceed -> i.title?.let { t -> { t(state, proceed) } } ?: proceed }()
 
+    /** CONFIG-FIELDS-4: whether [module] reads config through a gate (a community module with the gate on); others read as before. */
+    fun configGated(module: String): Boolean = modulesConfig.configReadGate && byModule[module]?.tier == Tier.COMMUNITY
+
+    /** CONFIG-FIELDS-4: whether [module] may read [node]'s config (`ConfigReadGate`). An unknown module is not gated. */
+    fun configReadAllows(module: String, node: String): Boolean {
+        val m = byModule[module] ?: return true
+        return com.superiorsoftllc.agenthq.plugin.host.ConfigReadGate.allows(module, m.manifest, m.tier, modulesConfig, node)
+    }
+
     /** The module that draws [id], for the Community badge. */
     fun moduleOf(id: String): AgentHqModule? = find(id)?.let { byModule[it.module] }
 
@@ -809,14 +820,14 @@ class TabFactory(
         val community = module?.tier == Tier.COMMUNITY
         val core = module?.tier.isCoreTier()
         if (!community && hooks.isEmpty() && top.isEmpty() && bottom.isEmpty()) {
-            ModuleTier(core) { tab.content(own) }
+            ModuleTier(core) { ModuleScope(tab.module) { tab.content(own) } }
             return
         }
-        val inner = hooks.foldRight<TabInterceptor, @Composable () -> Unit>({ ModuleTier(core) { tab.content(own) } }) { i, proceed ->
+        val inner = hooks.foldRight<TabInterceptor, @Composable () -> Unit>({ ModuleTier(core) { ModuleScope(tab.module) { tab.content(own) } } }) { i, proceed ->
             i.content?.let { wrap -> { wrap(own, proceed) } } ?: proceed
         }
         Column {
-            top.forEach { (owner, b) -> ModuleTier(byModule[owner]?.tier.isCoreTier()) { b.content(context.forModule(services(owner))) } }
+            top.forEach { (owner, b) -> ModuleTier(byModule[owner]?.tier.isCoreTier()) { ModuleScope(owner) { b.content(context.forModule(services(owner))) } } }
             if (community) CommunityBadge(module!!.manifest)
             hooks.forEach { it.before?.invoke(own) }
             Box(Modifier.weight(1f)) {
@@ -824,7 +835,7 @@ class TabFactory(
                 CompositionLocalProvider(LocalContentColor provides Palette.Text) { inner() }
             }
             hooks.forEach { it.after?.invoke(own) }
-            bottom.forEach { (owner, b) -> ModuleTier(byModule[owner]?.tier.isCoreTier()) { b.content(context.forModule(services(owner))) } }
+            bottom.forEach { (owner, b) -> ModuleTier(byModule[owner]?.tier.isCoreTier()) { ModuleScope(owner) { b.content(context.forModule(services(owner))) } } }
         }
     }
 
@@ -966,10 +977,10 @@ private fun ColumnScope.PanelSection(factory: TabFactory, section: PanelProvider
         if (module?.tier == Tier.COMMUNITY) {
             Column {
                 CommunityBadge(module.manifest)
-                CompositionLocalProvider(LocalContentColor provides Palette.Text) { ModuleTier(false) { section.content(own) } }
+                CompositionLocalProvider(LocalContentColor provides Palette.Text) { ModuleTier(false) { ModuleScope(section.module) { section.content(own) } } }
             }
         } else {
-            ModuleTier(module?.tier.isCoreTier()) { section.content(own) }
+            ModuleTier(module?.tier.isCoreTier()) { ModuleScope(section.module) { section.content(own) } }
         }
     }
 }
