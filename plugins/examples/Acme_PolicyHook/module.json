@@ -1,0 +1,18 @@
+{
+  "name": "Acme_PolicyHook",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Acme (example)",
+  "license": "NOASSERTION",
+  "description": "Reference daemon plugin (DAEMON-PLUGINS-2): a tool (acme_policy_check) that asks the daemon's policy for a frame's action and refusal, and a frameGate hook that counts frames by action kind. Never refuses anything itself. Copy it as a community module.",
+  "daemon": {
+    "entry": "com.acme.policyhook.PolicyHookDaemon",
+    "jar": "daemon/build/libs/Acme_PolicyHook-daemon.jar",
+    "apiAtLeast": "1.0.0",
+    "tools": [
+      { "name": "acme_policy_check", "action": "acme.policy.read", "kind": "read", "description": "Reports the policy action of a frame type, whether the active preset refuses it, and how many frames of each kind the daemon saw." }
+    ],
+    "hooks": ["frameGate"],
+    "limits": { "callTimeoutMs": 2000 }
+  }
+}

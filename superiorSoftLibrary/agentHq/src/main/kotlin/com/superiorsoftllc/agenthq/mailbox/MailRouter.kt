@@ -247,7 +247,7 @@ class MailRouter(
         manager.busyTwin(session.id, session.agentId, session.ticketId)?.let {
             return DeliveryOutcome.Retry("session ${it.id} of the same agent / ticket has a run in flight")
         }
-        // DEMO-RESTRICT: the daemon already runs limits.concurrency.maxSessions sessions: queue until one finishes.
+        // LIMITS: the daemon already runs limits.concurrency.maxSessions sessions: queue until one finishes.
         manager.sessionCapRefusal(session.id)?.let { return DeliveryOutcome.Retry(it) }
         if (!session.resumable && !session.neverRun) {
             return DeliveryOutcome.Failed(

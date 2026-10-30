@@ -1,0 +1,42 @@
+package com.superiorsoftllc.agenthq.daemon
+
+import java.io.File
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+/**
+ * DAEMON-PLUGINS-2 ratchet: every built-in agent tool still in core (`cli/mcp`) is on an explicit list with its reason.
+ * A new tool in core fails here (write it as a daemon plugin, docs/DAEMON-PLUGINS.md section 8); a migrated tool must leave
+ * the list. The list may only shrink: [CEILING] is lowered with each migration.
+ */
+class BuiltinToolsListGuardTest {
+    private val mcp = File(TestDaemonPlugins.repo, "superiorSoftLibrary/agentHq/src/main/kotlin/com/superiorsoftllc/agenthq/cli/mcp")
+
+    /** tool -> why it is still in core. All are "migration pending" (family + blocker, docs/DAEMON-PLUGINS.md section 6). */
+    private val inCore: Map<String, String> = buildMap {
+        fun family(reason: String, vararg tools: String) = tools.forEach { put(it, reason) }
+        family("pending: Infantry_Processes daemon half; ProcessesCli.render is shared with the CLI", "agenthq_processes", "agenthq_processes_reap")
+        family("pending: Infantry_Settings usage half; UsageText.render is shared with the CLI", "agenthq_usage")
+        family("pending: Infantry_Roles daemon half; agent-caller persona rule moves with it", "agenthq_role_create", "agenthq_role_delete", "agenthq_role_get", "agenthq_role_list", "agenthq_role_update")
+        family("pending: Infantry_Board daemon half; needs ProjectScope as an API helper", "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_ticket_get", "agenthq_ticket_move", "agenthq_ticket_delete", "agenthq_ticket_start", "agenthq_epic_base", "agenthq_board", "agenthq_progress")
+        family("pending: a Mail/Chat daemon half", "agenthq_inbox", "agenthq_read", "agenthq_message")
+        family("pending: a Pipeline official plugin", "agenthq_pipeline", "agenthq_pipeline_record")
+        family("pending: Infantry_Attention daemon half", "agenthq_ask")
+        family("pending: Infantry_Settings daemon half", "agenthq_project_config_get", "agenthq_project_config_set")
+        family("pending: Infantry_Agents daemon half; McpGuardrails moves with it", "agenthq_list_harnesses", "agenthq_harness_status", "agenthq_harness_install", "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_spawn", "agenthq_prompt", "agenthq_kill", "agenthq_session_restart", "agenthq_session_remove")
+        family("pending: file watch is a daemon behaviour (watch hooks), needs a DaemonApi surface", "agenthq_watch_file")
+    }
+
+    @Test fun `every built-in tool in core is on the list with a reason`() {
+        val found = mcp.walkTopDown().filter { it.isFile && it.extension == "kt" }
+            .flatMap { Regex("\"(agenthq_[a-z_]+)\"").findAll(it.readText()).map { m -> m.groupValues[1] } }.toSet()
+        assertTrue(found.size > 20, "the tool sources were not found under $mcp")
+        assertEquals(emptySet(), found - inCore.keys, "new built-in tools in core: write them as daemon plugins, or list them with a reason")
+        assertEquals(emptySet(), inCore.keys - found, "listed tools that left core: delete them from the list (it only shrinks)")
+        assertTrue(inCore.size <= CEILING, "the list grew past $CEILING")
+        assertTrue(inCore.values.all { it.length > 15 })
+    }
+
+    private companion object { const val CEILING = 37 }
+}

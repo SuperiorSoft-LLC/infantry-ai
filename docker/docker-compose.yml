@@ -29,30 +29,10 @@ services:
       # daemon cannot see the droplet's public address, so the browser UI refuses other hosts until this is set.
       AGENTHQ_WEB_HOSTS: ${AGENTHQ_WEB_HOSTS:-}
       # --- Limits (settings/LimitRegistry.kt; env AGENTHQ_LIMIT_<KEY>, also changeable live in Settings > Limits) ---
-      # Sessions one session / MCP connection may grow its pod by (the worker concurrency cap). Demo: 2.
-      AGENTHQ_LIMIT_CONCURRENCY_MAX_PER_POD: ${AGENTHQ_LIMIT_CONCURRENCY_MAX_PER_POD:-2}
-      # Sessions of the whole daemon OPEN at once (working, or idle with their CLI process kept alive), any path: UI, CLI,
-      # tickets, MCP. At the cap a 3rd start is refused with "Demo busy: 2 agents are open". 0 = unlimited. Demo: 2.
-      AGENTHQ_LIMIT_CONCURRENCY_MAX_SESSIONS: ${AGENTHQ_LIMIT_CONCURRENCY_MAX_SESSIONS:-2}
-      # How long an idle agent keeps its CLI process (and so its slot above), in minutes (setting session.keepAliveMinutes;
-      # the stored setting wins). 0 = one-shot: a slot is held only while a turn runs. Normal app default 30. Demo: 2.
-      AGENTHQ_SESSION_KEEP_ALIVE_MINUTES: ${AGENTHQ_SESSION_KEEP_ALIVE_MINUTES:-2}
-      # Model allowlist (comma separated; `*` = any characters, e.g. opencode-go/*-free). Only these models can be picked
-      # or run; every other model is refused by the daemon and hidden in the pickers. Empty = every model. Demo: the one
-      # free Go model that works with the owner's opencode-go credential.
-      AGENTHQ_ALLOWED_MODELS: ${AGENTHQ_ALLOWED_MODELS:-opencode-go/beam-free}
-      # Role allowlist (comma separated role ids, `*` allowed): only these roles can be started, given a ticket or picked
-      # in the New agent dialog; the daemon refuses every other one. Empty = every role.
-      # Optional, OFF in the demo (default empty = all roles); set e.g. AGENTHQ_ALLOWED_ROLES=pm,backend to narrow it.
-      AGENTHQ_ALLOWED_ROLES: ${AGENTHQ_ALLOWED_ROLES:-}
-      # Sessions one MCP connection may hold open at once. Demo: 2.
-      AGENTHQ_LIMIT_CONCURRENCY_MCP_MAX_SPAWNS: ${AGENTHQ_LIMIT_CONCURRENCY_MCP_MAX_SPAWNS:-2}
       # How deep spawns may nest (1 = a session may spawn, its spawns may not).
       AGENTHQ_LIMIT_CONCURRENCY_MAX_DEPTH: ${AGENTHQ_LIMIT_CONCURRENCY_MAX_DEPTH:-1}
       # Agents of one role at once in a project (when the project sets no lane cap).
       AGENTHQ_LIMIT_CONCURRENCY_LANE_DEFAULT: ${AGENTHQ_LIMIT_CONCURRENCY_LANE_DEFAULT:-1}
-      # Highest worker count the usage pacing rule accepts. Demo: 2.
-      AGENTHQ_LIMIT_PACING_MAX_WORKERS_CEILING: ${AGENTHQ_LIMIT_PACING_MAX_WORKERS_CEILING:-2}
       # Gradle workers / test forks a worker session's build may use (a 1-vCPU droplet: 1).
       AGENTHQ_LIMIT_BUILD_MAX_WORKERS: ${AGENTHQ_LIMIT_BUILD_MAX_WORKERS:-1}
       AGENTHQ_LIMIT_BUILD_MAX_PARALLEL_FORKS: ${AGENTHQ_LIMIT_BUILD_MAX_PARALLEL_FORKS:-1}

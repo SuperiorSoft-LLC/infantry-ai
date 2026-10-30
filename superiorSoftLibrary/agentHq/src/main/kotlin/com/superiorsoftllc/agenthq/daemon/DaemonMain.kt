@@ -349,6 +349,10 @@ fun main() {
     // DAEMON-PLUGINS-1: an install (installDist, docker, headless) ships its daemon plugins in `<install>/modules`; it is the
     // bundled root unless AGENTHQ_BUNDLED_MODULES or the property already names one (bundled = trusted, owner decision).
     installModules()?.let { if (System.getProperty(com.superiorsoftllc.agenthq.plugin.host.PluginFolders.BUNDLED_PROPERTY) == null) System.setProperty(com.superiorsoftllc.agenthq.plugin.host.PluginFolders.BUNDLED_PROPERTY, it.absolutePath) }
+    com.superiorsoftllc.agenthq.policy.LegacyLockEnvCheck.verdict({ System.getenv(it) })?.let {
+        System.err.println("[agentHq] WARNING: ${it.message}")
+        if (it.refuse) exitProcess(2)
+    }
     // BUG-PORT-1-STATEDIR: one daemon per state dir, decided before anything opens the database.
     val stateLock = try {
         StateDirLock.acquire(stateDir())
@@ -858,7 +862,7 @@ class AgentHqDaemon(
             )
             // BUG-M2-11f: a new keep-alive value applies to the processes already kept, not only to the next launch.
             settings.onKeepAliveChanged = manager::lifecyclePolicyChanged
-            // DEMO-RESTRICT (ticket f9e181af): the model allowlist and the daemon-wide working-session cap, read live.
+            // LIMITS: the model allowlist and the daemon-wide working-session cap, read live.
             // POLICY-1: the active preset's lists apply while the settings (and their env) are empty.
             manager.allowedModels = { settings.allowedModels().takeIf { it.restricts } ?: com.superiorsoftllc.agenthq.settings.ModelAllowlist.parse(policies.current.allowedModels.joinToString(",")) }
             manager.allowedRoles = { settings.allowedRoles().takeIf { it.restricts } ?: com.superiorsoftllc.agenthq.settings.ModelAllowlist.roles(policies.current.allowedRoles.joinToString(",")) }
@@ -1999,7 +2003,7 @@ private fun broadcast(
         }
 
         is SessionEvent.Stdout -> {
-            // Demo trick kept from Phase 1: the child's lines are visible in the daemon terminal.
+            // Kept from Phase 1: the child's lines are visible in the daemon terminal.
             println("[${event.sessionId.take(8)}] ${event.line}")
             val raw = Envelope(Envelope.STDOUT, event.line, event.sessionId)
             val taskTodos = claudeTasks.feed(event.sessionId, event.line)
@@ -2446,7 +2450,7 @@ private suspend fun handleConnection(
     /** SANDBOX-1: what this connection was admitted as; an AGENT (the scoped token) may send only [AgentFrames.ALLOWED]. */
     tier: AccessTier = AccessTier.OWNER,
     /**
-     * POLICY-1: the active policy preset gates every frame by its named action (its seated lockdown = DEMO-LOCK's, for every
+     * POLICY-1: the active policy preset gates every frame by its named action (its seated lockdown, for every
      * tier); this connection is sent the `policy` frame after `ready` and again on every switch.
      */
     policies: com.superiorsoftllc.agenthq.policy.PolicyRuntime = com.superiorsoftllc.agenthq.policy.PolicyRuntime(emptyList(), { null }, null, java.io.File(".")),
@@ -2612,7 +2616,7 @@ private suspend fun handleConnection(
                 "instance=${identity.instance} since=${identity.historySince} " +
                 // BUILD-STAMP-1: additive key (no contract bump): the daemon's build string, e.g. 1.0.1+20261023.1432.e85b223.
                 "build=${com.superiorsoftllc.agenthq.update.BuildInfo.current}" +
-                // DEMO-LOCK / POLICY-1: additive keys of the active preset, none in production (the UI dims what the daemon refuses).
+                // POLICY-1: additive keys of the active preset, none in production (the UI dims what the daemon refuses).
                 policies.readyFields() +
                 // DAEMON-PLUGINS-1: the plugins' `ready` hooks (fail open); a key core already sent is not repeated.
                 plugins.readyFields().entries.filter { (k, _) -> !Regex("(^| )${Regex.escape(k)}=").containsMatchIn(policies.readyFields()) && k !in CORE_READY_KEYS }
@@ -2867,7 +2871,7 @@ private suspend fun handleConnection(
                         // that counts.
                         try {
                             val options = SpawnOptions.decode(data)
-                            // DEMO-RESTRICT: a role the allowlist leaves out is refused now, with nothing bound.
+                            // LIMITS: a role the allowlist leaves out is refused now, with nothing bound.
                             manager.requireAllowedRole(agents.resolveSpawn(options).role)
                             // BUG-G2d (1.58.0): a `new` that names the session it comes from (`agenthq_spawn`) is
                             // charged to that session's pod: checked NOW, so a refusal binds nothing and leaves no
@@ -4193,7 +4197,7 @@ private fun modelCatalog(
 }
 
 /**
- * DEMO-RESTRICT (ticket f9e181af): the `models` answer narrowed to [allowlist]: every row keeps only its allowed models,
+ * LIMITS: the `models` answer narrowed to [allowlist]: every row keeps only its allowed models,
  * a row left empty is dropped, and a harness left with none at all becomes one `unavailable` row saying why, so pickers
  * show it dimmed. No restriction = [rows] unchanged.
  */
@@ -4213,7 +4217,7 @@ internal fun allowedCatalog(rows: List<ProviderModels>, allowlist: com.superiors
 }
 
 /**
- * DEMO-RESTRICT: the `providers` answer under [allowlist]: each harness's listed models narrowed to the allowed ones, and
+ * LIMITS: the `providers` answer under [allowlist]: each harness's listed models narrowed to the allowed ones, and
  * one whose list names no allowed model marked unavailable with the reason. No restriction = [infos] unchanged.
  */
 internal fun allowedProviders(infos: List<ProviderInfo>, allowlist: com.superiorsoftllc.agenthq.settings.ModelAllowlist): List<ProviderInfo> {

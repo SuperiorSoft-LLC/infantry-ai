@@ -2,7 +2,7 @@
 
 Optional. A module that only adds UI needs no `daemon/` folder; delete it. A daemon half runs **inside the daemon**: tools
 agents can call, frames, HTTP routes and hooks. The design is in [docs/DAEMON-PLUGINS.md](../../../docs/DAEMON-PLUGINS.md); the
-reference plugin with a tool, a route and a hook is [plugins/examples/Acme_DaemonHello](../../examples/Acme_DaemonHello).
+reference plugin with a tool, a route and a hook is [plugins/examples/Acme_DaemonHello](../../examples/Acme_DaemonHello).  A second one, with a policy lookup and a frameGate hook, is [plugins/examples/Acme_PolicyHook](../../examples/Acme_PolicyHook).
 
 ## Make it yours
 

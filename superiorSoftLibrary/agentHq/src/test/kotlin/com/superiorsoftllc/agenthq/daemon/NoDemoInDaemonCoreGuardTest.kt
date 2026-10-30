@@ -33,4 +33,12 @@ class NoDemoInDaemonCoreGuardTest {
         }
         assertTrue(hits.isEmpty(), "demo lock symbols in core daemon code (they belong in plugins/demo/Demo_Lock/daemon):\n${hits.joinToString("\n")}")
     }
+
+    @Test fun `core daemon sources have no demo word at all, comments and settings keys included`() {
+        val word = Regex("(?i)(^|[^a-z])demo")
+        val hits = main.walkTopDown().filter { it.isFile && it.extension == "kt" }.flatMap { f ->
+            f.readLines().withIndex().filter { (_, l) -> word.containsMatchIn(l) }.map { (i, l) -> "${f.name}:${i + 1}: ${l.trim().take(120)}" }
+        }.toList()
+        assertTrue(hits.isEmpty(), "the word demo in core daemon sources (values come from the Demo_Lock plugin and preset):\n${hits.joinToString("\n")}")
+    }
 }
