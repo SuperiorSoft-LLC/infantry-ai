@@ -4,51 +4,50 @@ import com.superiorsoftllc.agenthq.context.RelatedBlock
 import com.superiorsoftllc.agenthq.context.RelatedFile
 import com.superiorsoftllc.agenthq.context.RelatedTicketView
 import com.superiorsoftllc.agenthq.context.RelatedWorkSource
+import com.superiorsoftllc.agenthq.persistence.TicketLinkRow
 import com.superiorsoftllc.agenthq.persistence.TicketRow
 
 /**
  * DAEMON-CONTEXT-1: builds the related block from the file index, for a ticket that may still be running. Its own files
  * are the recorded ones or, before done, its branch's live diff; files named in its text (paths, class names) seed the
- * search too. Related = tickets named by id in the text first, then by Jaccard overlap on the non-hub files.
+ * search too. KNOWLEDGE-PTR-1: related = the tickets linked to it or named by id first, then the other tickets of its
+ * series (title label, [TicketFamily]), then by Jaccard overlap on the non-hub files ([RelatedTickets]). The caps, the
+ * instruction line and the off switch are [config] (`related.*`, `limits.ticketFiles.brief*`); a ticket whose text carries
+ * the [RelatedDescriptionBlock.OPT_OUT] line gets no block. A done ticket's files come from the stored index, so the block
+ * still works after its worktree and branch are gone.
  */
 class LiveRelatedWork(
     private val files: TicketFiles,
     private val ticket: (String) -> TicketRow?,
-    private val hubShare: Double = HUB_SHARE,
-    private val minTicketsForHubs: Int = MIN_TICKETS_FOR_HUBS,
+    private val rows: () -> Collection<TicketRow> = { emptyList() },
+    private val links: () -> Collection<TicketLinkRow> = { emptyList() },
+    private val config: () -> RelatedConfig = { RelatedConfig.DEFAULT },
+    hubShare: Double = HUB_SHARE,
+    minTicketsForHubs: Int = MIN_TICKETS_FOR_HUBS,
 ) : RelatedWorkSource {
+    private val resolver = RelatedTickets(files, hubShare, minTicketsForHubs)
 
     override fun block(ticketId: String, description: String): String? = runCatching {
+        val cfg = config()
+        if (!cfg.brief || RelatedDescriptionBlock.optedOut(description)) return@runCatching null
         val row = ticket(ticketId) ?: return@runCatching null
-        val text = row.title + "\n" + description
-        val recorded = files.recordedTicketIds().size
-        val hubCache = HashMap<String, Boolean>()
-        fun isHub(path: String) = hubCache.getOrPut(path) {
-            recorded >= minTicketsForHubs && files.pathFrequency(path).toDouble() / recorded >= hubShare
-        }
-        val own = files.liveFiles(row).map { it.path }.filterNot(::isHub).toMutableSet()
-        if (own.isEmpty()) own += mentionedGlobs(text).flatMap { files.forPaths(listOf(it)) }.map { it.path }.filterNot(::isHub)
-
-        val named = idsNamed(text).filter { it != ticketId && ticket(it) != null }
-        val shared = HashMap<String, Int>()
-        for (path in own) {
-            for (f in files.forPaths(listOf(path)).filter { it.path == path && it.ticketId != ticketId }) shared.merge(f.ticketId, 1, Int::plus)
-        }
-        val ranked = shared.map { (id, n) ->
-            val total = files.forTicket(id).count { !isHub(it.path) }
-            id to n.toDouble() / (own.size + total - n).coerceAtLeast(1)
-        }.sortedWith(compareByDescending<Pair<String, Double>> { it.second }.thenBy { it.first }).map { it.first }
-        val chosen = (named + ranked).distinct().take(3)
-
-        val views = chosen.mapNotNull { id ->
-            val t = ticket(id) ?: return@mapNotNull null
+        val all = rows().let { list -> if (list.any { it.id == ticketId }) list else list + row }
+        // A ticket named in the text or found in the index that the board listing missed is still resolved by id.
+        val set = resolver.resolve(
+            ticketId = ticketId, title = row.title, description = description, projectId = row.projectId,
+            rows = all, links = links().toList(), extraIds = emptyList(), cfg = cfg,
+            maxTickets = cfg.briefTickets, linkedFirst = true, filesOf = files::liveFiles, self = row, lookup = ticket,
+        )
+        val views = set.entries.map { e ->
+            val t = e.row
             RelatedTicketView(
-                id = id, title = t.title, status = t.status, branch = t.branch,
-                outcome = t.description.lineSequence().map(String::trim).firstOrNull(String::isNotEmpty).orEmpty(),
-                files = files.liveFiles(t).map { RelatedFile(it.path, it.status) },
+                id = t.id, title = t.title, status = t.status, branch = t.branch,
+                outcome = RelatedDescriptionBlock.strip(t.description).lineSequence().map(String::trim).firstOrNull(String::isNotEmpty).orEmpty(),
+                files = e.files.map { RelatedFile(it.path, it.status, (it.added ?: 0) + (it.removed ?: 0)) },
+                reason = e.reason.label, sha = e.sha,
             )
         }
-        RelatedBlock.render(own, views, ::isHub)
+        RelatedBlock.render(set.own, views, set.isHub, cfg.briefTickets, cfg.briefFiles, cfg.briefChars, cfg.instruction)
     }.getOrNull()
 
     companion object {

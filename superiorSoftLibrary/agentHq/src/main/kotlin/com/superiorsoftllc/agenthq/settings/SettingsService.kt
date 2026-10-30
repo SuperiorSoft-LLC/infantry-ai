@@ -83,6 +83,11 @@ class SettingsService(
             WATCH_NOTICES to JsonObject(watchNotices().mapValues { JsonPrimitive(it.value) }),
             WATCH_ESCALATE_TO to JsonPrimitive(watchEscalateTo()),
             WATCH_FOLLOW_REDIRECTS to JsonPrimitive(watchFollowRedirects()),
+            RELATED_BRIEF to JsonPrimitive(relatedConfig().brief),
+            RELATED_BRIEF_INSTRUCTION to JsonPrimitive(relatedConfig().instruction),
+            RELATED_DESCRIPTION_BLOCK to JsonPrimitive(relatedConfig().descriptionBlock),
+            RELATED_FAMILY_PATTERN to JsonPrimitive(relatedConfig().familyPattern),
+            RELATED_SUGGEST_NUMBER to JsonPrimitive(relatedConfig().suggestNumber),
         ) + LimitRegistry.ALL.associate { it.key to JsonPrimitive(limit(it)) } + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
     )
 
@@ -358,6 +363,12 @@ class SettingsService(
                     ?: throw IllegalArgumentException("setting '$WATCH_ESCALATE_TO' must be one of ${com.superiorsoftllc.agenthq.runner.WatchNotices.ESCALATE_VALUES.joinToString { "\"$it\"" }}"),
             )
             WATCH_FOLLOW_REDIRECTS -> JsonPrimitive(requireBoolean(key, value))
+            RELATED_BRIEF, RELATED_DESCRIPTION_BLOCK, RELATED_SUGGEST_NUMBER -> JsonPrimitive(requireBoolean(key, value))
+            RELATED_BRIEF_INSTRUCTION -> JsonPrimitive(
+                (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.length <= 1000 && '\n' !in it }
+                    ?: throw IllegalArgumentException("setting '$key' must be one line of text, at most 1000 characters (\"\" = no instruction line)"),
+            )
+            RELATED_FAMILY_PATTERN -> JsonPrimitive(requireFamilyPattern(value))
             else -> LimitRegistry.get(key)?.let { JsonPrimitive(requireLimit(it, value)) }
                 ?: declaredField(key)?.let { com.superiorsoftllc.agenthq.plugin.api.ConfigFieldValidator.validate(it, value) }
                 ?: throw IllegalArgumentException("unknown setting '$key'")
@@ -371,6 +382,41 @@ class SettingsService(
         )
         if (key == KEEP_ALIVE_MINUTES) runCatching { onKeepAliveChanged?.invoke() }
         return all()
+    }
+
+    /**
+     * KNOWLEDGE-PTR-1 (b8ca2bf7): the related-tickets switches, texts and caps, read at every start and ticket save. An
+     * unreadable stored value falls back to its default.
+     */
+    fun relatedConfig(): com.superiorsoftllc.agenthq.ticketfiles.RelatedConfig {
+        val d = com.superiorsoftllc.agenthq.ticketfiles.RelatedConfig.DEFAULT
+        fun bool(key: String, default: Boolean) = runCatching { storedBoolean(key)?.booleanOrNull }.getOrNull() ?: default
+        fun text(key: String, default: String) = store.settings.get(key)?.value
+            ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.getOrNull() } ?: default
+        fun cap(def: LimitDef) = limit(def).toInt()
+        return com.superiorsoftllc.agenthq.ticketfiles.RelatedConfig(
+            brief = bool(RELATED_BRIEF, d.brief),
+            instruction = text(RELATED_BRIEF_INSTRUCTION, d.instruction),
+            descriptionBlock = bool(RELATED_DESCRIPTION_BLOCK, d.descriptionBlock),
+            familyPattern = text(RELATED_FAMILY_PATTERN, d.familyPattern).takeIf { it.isEmpty() || validFamilyPattern(it) } ?: d.familyPattern,
+            suggestNumber = bool(RELATED_SUGGEST_NUMBER, d.suggestNumber),
+            briefTickets = cap(LimitRegistry.RELATED_BRIEF_TICKETS),
+            briefFiles = cap(LimitRegistry.RELATED_BRIEF_FILES),
+            briefChars = cap(LimitRegistry.RELATED_BRIEF_CHARS),
+            blockTickets = cap(LimitRegistry.RELATED_BLOCK_TICKETS),
+            blockFiles = cap(LimitRegistry.RELATED_BLOCK_FILES),
+            blockChars = cap(LimitRegistry.RELATED_BLOCK_CHARS),
+        )
+    }
+
+    private fun validFamilyPattern(text: String): Boolean = runCatching { Regex(text).toPattern().matcher("").groupCount() >= 2 }.getOrDefault(false)
+
+    private fun requireFamilyPattern(value: JsonElement): String {
+        val text = (value as? JsonPrimitive)?.takeIf { it.isString }?.content
+        require(text != null && (text.isEmpty() || validFamilyPattern(text))) {
+            "setting '$RELATED_FAMILY_PATTERN' must be a regular expression with two groups (1 = series label, 2 = number), or \"\" for no families"
+        }
+        return text
     }
 
     override fun includeLinkedTasksContext(): Boolean? = storedBoolean(INCLUDE_LINKED_TASKS_CONTEXT)?.booleanOrNull
@@ -623,6 +669,12 @@ class SettingsService(
         const val WATCH_ESCALATE_TO = com.superiorsoftllc.agenthq.runner.WatchNotices.ESCALATE_SETTING
         /** STALL-4: `true` = the runner follows files a command line redirects its output to (default `false`). */
         const val WATCH_FOLLOW_REDIRECTS = "watch.followRedirects"
+        /** KNOWLEDGE-PTR-1 (b8ca2bf7): see [relatedConfig]; all default on. */
+        const val RELATED_BRIEF = "related.brief"
+        const val RELATED_BRIEF_INSTRUCTION = "related.briefInstruction"
+        const val RELATED_DESCRIPTION_BLOCK = "related.descriptionBlock"
+        const val RELATED_FAMILY_PATTERN = "related.familyPattern"
+        const val RELATED_SUGGEST_NUMBER = "related.suggestNumber"
         const val PROMPTS_TIMEOUT_SEC = "prompts.timeoutSec"
         const val DEFAULT_PROMPT_TIMEOUT_SEC = 600
         /** ASK-TIMER (1.139.0): `deny` (default) | `approve`: what an unanswered tool approval resolves as at its timeout. */

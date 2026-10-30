@@ -1258,6 +1258,7 @@ class AgentHqDaemon(
                 includeSkillsContext = { settings.includeSkillsContext() },
             )
             val relatedRef = java.util.concurrent.atomic.AtomicReference(com.superiorsoftllc.agenthq.context.RelatedWorkSource.NONE)
+            val relatedDescriptionRef = java.util.concurrent.atomic.AtomicReference(com.superiorsoftllc.agenthq.backlog.RelatedDescription.NONE)
             val ticketContext = context ?: TicketContextComposer(
                 settings, knowledge, skillsSource,
                 roleNotes = com.superiorsoftllc.agenthq.context.RoleNotesSource { project, role ->
@@ -1325,6 +1326,8 @@ class AgentHqDaemon(
                     runCatching { projectStore.get(projectId) }.getOrNull()
                         ?.directory?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory }
                 },
+                // KNOWLEDGE-PTR-1 (C): set once the file index exists (it needs the board's cutRepo); NONE until then.
+                relatedDescription = com.superiorsoftllc.agenthq.backlog.RelatedDescription { draft -> relatedDescriptionRef.get().describe(draft) },
             )
             board.eventSink = { event -> broadcastBoard(clients, event) }
             boardRef = board
@@ -1408,7 +1411,14 @@ class AgentHqDaemon(
                 tickets = store.tickets::all,
                 repoFor = { projectId -> board.cutRepo(projectId) },
             )
-            relatedRef.set(com.superiorsoftllc.agenthq.ticketfiles.LiveRelatedWork(ticketFiles, ticket = { id -> store.tickets.get(id) }))
+            relatedRef.set(
+                com.superiorsoftllc.agenthq.ticketfiles.LiveRelatedWork(
+                    ticketFiles, ticket = { id -> store.tickets.get(id) },
+                    rows = { store.tickets.all() }, links = { store.tickets.links() }, config = settings::relatedConfig,
+                ),
+            )
+            // KNOWLEDGE-PTR-1 (C): the stored RELATED (auto) block a ticket save writes at the top of its description.
+            relatedDescriptionRef.set(com.superiorsoftllc.agenthq.ticketfiles.RelatedDescriptionWriter(ticketFiles, settings::relatedConfig))
             orchTicketFiles.set(ticketFiles)
             mail.reportCheck = { from, body -> orchestratorLink.reviewReport(from, body).refusalOrNull() }
             val ticketFilesText = com.superiorsoftllc.agenthq.ticketfiles.TicketFilesText(ticketFiles) { id -> store.tickets.get(id)?.title }

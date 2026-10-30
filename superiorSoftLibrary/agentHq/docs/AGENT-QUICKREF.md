@@ -25,6 +25,20 @@ agenthq ticket files --path TicketBoard.kt
 
 `--related` lists the files changed by the tickets that touched the same files, ranked. Without it, `ticket files` lists the files that ticket changed (status, +/-). `--path` (glob ok) lists the tickets that changed matching paths.
 
+**Related tickets travel with the ticket** (KNOWLEDGE-PTR-1)
+
+```
+agenthq ticket related <ticket-id>
+agenthq ticket related <ticket-id> --suggest
+agenthq ticket create --title "USAGE-3 the next step" --desc "One line brief." --related-to <ticket-id>
+agenthq ticket update <ticket-id> --related-to <ticket-id>
+```
+
+- A ticket save writes a `RELATED (auto, N tickets, M files)` block atop the description: its series first (same title label, `USAGE-1`, `USAGE-2`; `USAGE-UI` is another series), then the tickets linked to it (`relatedTo` / `--related-to`, stored as `relates_to` links), then the tickets that changed the same files, each with its files and `git show <sha>`. The text below the block is never changed. `--suggest` (MCP: `agenthq_ticket_update` with `relatedTo: []`) rebuilds it.
+- New ticket: use that block, add `relatedTo` with the ids you already know, and reuse the series label. A title with a known label and no number (`USAGE: x`) gets the next number suggested in the answer; the title is never rewritten.
+- A worker's start message carries the live `RELATED WORK` block and one line telling it to read those files first.
+- Off switches: `related.brief` (start block), `related.descriptionBlock` (stored block), `related.suggestNumber`; `related.familyPattern` ("" = no series), `related.briefInstruction`; caps `limits.ticketFiles.brief*` / `limits.ticketFiles.block*`. One ticket opts out with a line `related: off` in its description.
+
 **Check related tickets before you start** (APP-KNOWLEDGE)
 
 Before you start, check the linkedTickets section of your brief, then the board (`agenthq board`) for tickets that touch the same work, then their changed files (`agenthq ticket files <ticket-id> --related`). Reuse their work and cite their ids in your report. If none are related, say so in one line and carry on.

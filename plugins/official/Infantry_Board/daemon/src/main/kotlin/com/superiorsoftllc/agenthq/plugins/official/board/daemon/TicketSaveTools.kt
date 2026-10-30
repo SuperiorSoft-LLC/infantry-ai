@@ -118,7 +118,7 @@ internal object TicketSave {
     /** What a create / update set, as BUG-ASSIGN-1 reads it back from the stored ticket. */
     class Fields(
         val title: Boolean, val description: Boolean, val agentId: Boolean, val provider: Boolean, val model: Boolean,
-        val weight: Boolean, val contextLimit: Boolean, val images: Boolean,
+        val weight: Boolean, val contextLimit: Boolean, val images: Boolean, val related: Boolean = false,
     )
 
     /**
@@ -136,6 +136,7 @@ internal object TicketSave {
             if (set.weight) add("weight" to "weight ${ticket.weight ?: "cleared"}")
             if (set.contextLimit) add("contextLimit" to "context limit ${ticket.contextLimit?.let(ContextLimits::label) ?: "cleared"}")
             if (set.images) add("images" to "${ticket.images.size} image(s)")
+            if (set.related) add("relatedTo" to "related ${ticket.links.count { it.type == RELATES_TO }} ticket(s)")
         }
         val short = WireTickets.shortId(ticket.id)
         val what = fields.joinToString(", ") { it.second }.ifEmpty { "nothing new" }
@@ -144,12 +145,60 @@ internal object TicketSave {
         } else {
             "Nothing runs until it is started: call $START with ticketId $short."
         }
-        val message = (if (created) "Created ticket $short (${ticket.status}); saved $what. " else "Saved on ticket $short: $what. ") + next
+        val note = relatedNote(ticket.description)
+        val message = (if (created) "Created ticket $short (${ticket.status}); saved $what. " else "Saved on ticket $short: $what. ") + next +
+            note.related.orEmpty() + note.suggestion?.let { " $it" }.orEmpty()
         return ToolResult(json.encodeToString(JsonObject.serializer(), JsonObject(TicketGetTool.summary(ticket) + buildJsonObject {
             put("saved", buildJsonArray { fields.forEach { add(JsonPrimitive(it.first)) } })
+            note.suggestion?.let { put("suggestion", it) }
             put("message", message)
         })))
     }
+
+    /** KNOWLEDGE-PTR-1: the stored RELATED (auto) block's header and series suggestion, as the answer words them. */
+    class RelatedNote(val related: String?, val suggestion: String?)
+
+    private const val RELATED_BEGIN = "<!-- RELATED (auto) -->"
+    private const val RELATES_TO = "relates_to"
+
+    /** Reads the block the daemon wrote atop [description] (core's RelatedDescriptionBlock); none = nothing to say. */
+    fun relatedNote(description: String): RelatedNote {
+        if (!description.startsWith(RELATED_BEGIN)) return RelatedNote(null, null)
+        val lines = description.lineSequence().drop(1).takeWhile { !it.startsWith("<!-- /RELATED") }.toList()
+        val first = lines.firstOrNull().orEmpty()
+        val head = first.takeIf { it.startsWith("RELATED (auto, ") }?.removePrefix("RELATED (auto, ")?.substringBefore(';')
+        return RelatedNote(
+            related = head?.let { " Related: $it, listed in the RELATED (auto) block atop the description; read those files first." },
+            suggestion = lines.firstOrNull { it.startsWith("Series ") },
+        )
+    }
+
+    /** KNOWLEDGE-PTR-1: `relatedTo`, ticket ids (full or 8-char) this ticket relates to; null when absent. */
+    fun relatedTo(args: JsonObject, tool: String): List<String>? {
+        val value = args["relatedTo"] ?: return null
+        if (value is JsonNull) return null
+        val array = value as? JsonArray ?: fail("$tool refused: relatedTo must be an array of ticket ids")
+        return array.map { item ->
+            (item as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf(String::isNotEmpty)
+                ?: fail("$tool refused: relatedTo must be an array of ticket ids")
+        }.distinct()
+    }
+
+    /** Links [ticket] `relates_to` each of [ids] (the board refreshes its RELATED block); answers the ticket as stored after. */
+    fun linkRelated(api: DaemonApi, call: ToolCall, ticket: TicketInfo, ids: List<String>, tool: String): TicketInfo {
+        var current = ticket
+        for (id in ids) {
+            val other = WireTickets.find(api, call, id).getOrElse { fail("$tool: saved, but relatedTo '${id.take(80)}': ${it.message}") }
+            current = result(api.tickets.link(current.id, other.id, RELATES_TO, WireTickets.by(call)), tool)
+        }
+        return current
+    }
+
+    fun JsonObjectBuilder.relatedToProp() = put("relatedTo", pathsProp(
+        "Ticket ids (full or 8-char) this ticket relates to: stored as relates_to links, listed first in the RELATED (auto) " +
+            "block the daemon writes atop the description and in the worker's start brief. On update, [] links nothing and " +
+            "rebuilds that block (the `ticket related --suggest` of the CLI).",
+    ))
 
     fun <T> result(r: BoardResult<T>, tool: String): T = when (r) {
         is BoardResult.Ok -> r.value
@@ -203,6 +252,7 @@ class TicketCreateTool(private val api: DaemonApi) : DaemonTool {
             contextLimitProp()
             put("images", pathsProp("Images to attach: local image file paths (png, jpeg, gif or webp, at most 10 MB each; each is uploaded to the project's .agenthq/uploads/ticket/), or paths already stored there. A missing, oversized or non-image file refuses the call and nothing is saved. The board shows them as attachments and the started worker's brief lists them."))
             put("status", prop("Column the new ticket enters: todo (default, the current sprint) or backlog (parked, never started until moved to todo)."))
+            relatedToProp()
         }
     }
     override val annotations = ToolArgs.annotations(readOnly = false)
@@ -229,10 +279,13 @@ class TicketCreateTool(private val api: DaemonApi) : DaemonTool {
             images = images,
             status = ToolArgs.string(args, "status")?.lowercase(),
         )
-        val ticket = TicketSave.result(api.tickets.create(draft, by), tool)
+        val relatedTo = TicketSave.relatedTo(args, tool)
+        val created = TicketSave.result(api.tickets.create(draft, by), tool)
+        val ticket = relatedTo?.let { TicketSave.linkRelated(api, call, created, it, tool) } ?: created
         TicketSave.saved(ticket, TicketSave.Fields(
             title = true, description = draft.description != null, agentId = draft.agentId != null, provider = draft.provider != null,
             model = draft.model != null, weight = draft.weight != null, contextLimit = draft.contextLimit != null, images = draft.images != null,
+            related = relatedTo != null,
         ), created = true)
     }
 }
@@ -255,6 +308,7 @@ class TicketUpdateTool(private val api: DaemonApi) : DaemonTool {
             contextLimitProp()
             put("images", pathsProp("The ticket's full image list, replacing the stored one ([] removes all): local image files (uploaded, as for ${TicketSave.CREATE}) or paths already under the project's .agenthq/uploads/ticket/. Not with addImages / removeImages. A removed image's file is deleted once no ticket references it."))
             put("addImages", pathsProp("Images to ADD to the stored list: local image files (png, jpeg, gif or webp, at most 10 MB each) or stored paths."))
+            relatedToProp()
             put("removeImages", pathsProp("Images to REMOVE from the stored list, each named by its stored path (as agenthq_ticket_get answers it), its file name, or the original local file. Naming an image the ticket does not have refuses the call."))
         }
     }
@@ -284,8 +338,10 @@ class TicketUpdateTool(private val api: DaemonApi) : DaemonTool {
             }
             else -> null
         }
+        val relatedTo = TicketSave.relatedTo(args, tool)
         val patch = TicketPatch(
-            title = ToolArgs.string(args, "title"),
+            // KNOWLEDGE-PTR-1: relatedTo (even []) re-saves the stored title, which makes the board rebuild the RELATED block.
+            title = ToolArgs.string(args, "title") ?: relatedTo?.let { existing.title },
             description = TicketSave.verbatim(args, "description"),
             agentId = TicketSave.roleAgentId(ToolArgs.string(args, "role")),
             provider = ToolArgs.string(args, "provider"),
@@ -294,10 +350,12 @@ class TicketUpdateTool(private val api: DaemonApi) : DaemonTool {
             contextLimit = TicketSave.contextLimit(args, tool),
             images = images,
         )
-        val ticket = TicketSave.result(api.tickets.update(existing.id, patch, WireTickets.by(call)), tool)
+        val updated = TicketSave.result(api.tickets.update(existing.id, patch, WireTickets.by(call)), tool)
+        val ticket = relatedTo?.let { TicketSave.linkRelated(api, call, updated, it, tool) } ?: updated
         TicketSave.saved(ticket, TicketSave.Fields(
-            title = patch.title != null, description = patch.description != null, agentId = patch.agentId != null, provider = patch.provider != null,
+            title = ToolArgs.string(args, "title") != null, description = patch.description != null, agentId = patch.agentId != null, provider = patch.provider != null,
             model = patch.model != null, weight = patch.weight != null, contextLimit = patch.contextLimit != null, images = patch.images != null,
+            related = relatedTo != null,
         ), created = false)
     }
 }

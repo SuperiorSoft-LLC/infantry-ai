@@ -324,6 +324,39 @@ object LimitRegistry {
         min = 1, max = 100, zeroIsUnlimited = false,
     )
 
+    /** KNOWLEDGE-PTR-1 (b8ca2bf7): the RELATED WORK block of a ticket's start message (related.brief). */
+    val RELATED_BRIEF_TICKETS = LimitDef(
+        "limits.ticketFiles.briefTickets", 5, "tickets",
+        "How many related tickets (linked, named, same series, same files) the RELATED WORK block of a ticket's start message lists.",
+        min = 1, max = 100, zeroIsUnlimited = false,
+    )
+    val RELATED_BRIEF_FILES = LimitDef(
+        "limits.ticketFiles.briefFilesPerTicket", 5, "files",
+        "How many changed files of each related ticket the RELATED WORK block of a start message names; the rest is counted.",
+        max = 100, zeroIsUnlimited = false,
+    )
+    val RELATED_BRIEF_CHARS = LimitDef(
+        "limits.ticketFiles.briefChars", 1500, "characters",
+        "The most characters of the RELATED WORK block of a start message (the prompt is re-read every turn, so it stays small).",
+        min = 200, max = 20_000, zeroIsUnlimited = false,
+    )
+    /** KNOWLEDGE-PTR-1: the stored `RELATED (auto ...)` block at the top of a description (related.descriptionBlock). */
+    val RELATED_BLOCK_TICKETS = LimitDef(
+        "limits.ticketFiles.blockTickets", 8, "tickets",
+        "How many related tickets the stored RELATED (auto) block at the top of a ticket description lists.",
+        min = 1, max = 100, zeroIsUnlimited = false,
+    )
+    val RELATED_BLOCK_FILES = LimitDef(
+        "limits.ticketFiles.blockFiles", 5, "files",
+        "How many files per related ticket, and top files in all, the stored RELATED (auto) block of a description names.",
+        max = 100, zeroIsUnlimited = false,
+    )
+    val RELATED_BLOCK_CHARS = LimitDef(
+        "limits.ticketFiles.blockChars", 2500, "characters",
+        "The most characters of the stored RELATED (auto) block of a description; lines past it are dropped.",
+        min = 200, max = 20_000, zeroIsUnlimited = false,
+    )
+
     /** SEC-FIX-2a (SECRETS-2): how many secrets a saved command or one run_start may name. */
     val RUN_MAX_SECRETS = LimitDef(
         "limits.secrets.maxPerRun", 16, "secrets",
@@ -420,6 +453,7 @@ object LimitRegistry {
         WATCH_NOTICE_LINE_CHARS, WATCH_LOG_MAX_MB, WATCH_LOG_TOTAL_MB, WATCH_LOG_KEEP_JOBS, WATCH_LOG_KEEP_DAYS, WATCH_MIN_FREE_MB, WATCH_FILE_IDLE_SECONDS,
         WATCH_READ_MAX_KB, WATCH_TAIL_READ_KB, WATCH_SPACE_CHECK_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
+        RELATED_BRIEF_TICKETS, RELATED_BRIEF_FILES, RELATED_BRIEF_CHARS, RELATED_BLOCK_TICKETS, RELATED_BLOCK_FILES, RELATED_BLOCK_CHARS,
         PLUGIN_CALL_TIMEOUT_MS, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS,
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE,
