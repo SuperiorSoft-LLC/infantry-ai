@@ -219,6 +219,7 @@ fun main(args: Array<String>) {
  * agenthq ticket move <id> <status>            move one ticket to a column (backlog, todo, in_progress, pending, done)
  * agenthq ticket move <id> --before <id>|--after <id>|--top|--bottom|--position <n>   reorder inside its column (order = priority)
  * agenthq ticket start <id>                    start ticket work (never with a spawn): its role/provider/model, its own branch
+ * agenthq agent-def list|show <id>|enable <id>|disable <id>   the agent registry (AGENT-REGISTRY-1): built-in and plugin agents
  * agenthq harnesses                            the harnesses (provider ids) a ticket can pin, and each one's models
  * agenthq harness-status [--check]            which harness CLIs (claude, opencode, pi) are installed / missing / outdated (--check asks npm for the latest)
  * agenthq harness-install [id...] [--update]  npm-install the missing harness CLIs into the app prefix (--update refreshes outdated ones)
@@ -425,6 +426,7 @@ internal object Cli {
                 "ticket" -> ticket(stream, parsed, out, err, getenv)
                 "harnesses" -> harnesses(stream, out, err)
                 "harness-status" -> harnessStatus(stream, parsed, out, err)
+                "agent-def" -> AgentDefCli.run(stream, parsed.args, out, err, getenv)
                 "harness-install" -> harnessInstall(stream, parsed, out, err)
                 "processes" -> processes(stream, parsed, out, err)
                 "agents" -> agents(stream, parsed, out, err, getenv)
@@ -4384,6 +4386,8 @@ internal object Cli {
                                   with MB, age and owner session; --all adds healthy ones and heavy processes that are not ours
               processes reap <pid> | --all   Kill one process (or every rogue one) that a session of this daemon started;
                                   anything else is refused. Setting processes.autoReap (default off) reaps rogue ones on a timer
+              agent-def list|show <id>|enable <id>|disable <id>   The agent registry: every agent (built-in roles, plugin
+                                  agents), one in full, or the user's enable/disable (refused for an agent caller)
               harness-status      Which harness CLIs are installed / missing / outdated; harness-install [id...] [--update] installs them via npm
               epics --project <id> List that project's epics, with each one's goal and story count
               epic show <id|prefix> [--project <id>]   One epic: its title, then its tickets as ID | STATUS | TITLE | AGENT
@@ -5289,6 +5293,7 @@ internal object Cli {
         "harnesses" -> if (parsed.args.isNotEmpty()) "harnesses takes no arguments: agenthq harnesses" else null
         "harness-status" -> if (parsed.args.isNotEmpty()) "harness-status takes no arguments: agenthq harness-status [--check]" else null
         "harness-install" -> null
+        "agent-def" -> AgentDefCli.usageError(parsed.args)
         "processes" -> ProcessesCli.usageError(parsed.args, parsed.all)
         "epic" -> epicUsageError(parsed, getenv)
         "project" -> projectUsageError(parsed)
@@ -5498,7 +5503,7 @@ internal object Cli {
         "submit", "watch", "pods", "runs", "logs", "cancel", "tickets", "board", "ticket", "agents", "send", "inbox",
         "read", "threads", "thread", "waiting", "epics", "stories", "epic", "project", "mcp", "knowledge", "memory", "decision", "pipeline", "notify", "issue",
         "trait", "skill", "role", "ask", "harnesses", "harness-status", "harness-install", "image", "session", "remote", "bg", "kill", "usage",
-        "processes", "settings",
+        "processes", "settings", "agent-def",
     )
 
     /** `agenthq remote on|off|status`: edits `<stateDir>/network.properties`; takes effect on the next daemon restart. */

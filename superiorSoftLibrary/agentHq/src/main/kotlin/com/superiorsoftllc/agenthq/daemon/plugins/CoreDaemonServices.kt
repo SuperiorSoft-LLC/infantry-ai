@@ -40,6 +40,8 @@ class CoreDaemonServices(
     private val boardServices: LocalBoardServices? = null,
     /** DP-4b: the ticket event stream; null = none. */
     private val ticketEventStream: com.superiorsoftllc.agenthq.daemon.api.board.TicketEvents? = null,
+    /** AGENT-REGISTRY-1: the agent registry; null = none. */
+    override val agentRegistry: com.superiorsoftllc.agenthq.agents.registry.AgentRegistry? = null,
 ) : DaemonServices {
     override val ticketEvents: com.superiorsoftllc.agenthq.daemon.api.board.TicketEvents get() = ticketEventStream ?: com.superiorsoftllc.agenthq.daemon.api.board.NoTicketEvents
     override fun limit(def: com.superiorsoftllc.agenthq.settings.LimitDef): Long = limits(def)

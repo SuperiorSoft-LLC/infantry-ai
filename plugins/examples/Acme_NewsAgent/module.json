@@ -1,0 +1,29 @@
+{
+  "name": "Acme_NewsAgent",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Acme (example)",
+  "license": "NOASSERTION",
+  "description": "Reference agent plugin (AGENT-REGISTRY-1, docs/AGENT-REGISTRY.md section 7): an agent built with no code orchestration. One agent (acme-news, with a schedule), one feed-fetch tool (acme_news_fetch: plain HTTP, RSS/Atom/text) and a periodic feed refresh that keeps the agent's instructions carrying the latest headlines. Copy it as a community module and grant it in modules.json: daemon.code, daemon.tool, daemon.env:ACME_NEWS_FEED_URL, agents.contribute.",
+  "agents": [
+    {
+      "id": "acme-news",
+      "name": "News",
+      "description": "Reads a news feed and briefs you in the chat.",
+      "instructions": "You are a news desk. Use the acme_news_fetch tool to read the feed, then answer with a short briefing: the top items, one line each, newest first. Never invent an item that is not in the feed.",
+      "tools": ["acme_news_fetch"],
+      "schedule": { "everyMinutes": 60, "prompt": "Brief me on what is new in the feed since your last briefing." },
+      "ui": { "color": "#0ea5e9", "icon": "newspaper" }
+    }
+  ],
+  "daemon": {
+    "entry": "com.acme.newsagent.NewsAgentDaemon",
+    "jar": "daemon/build/libs/Acme_NewsAgent-daemon.jar",
+    "apiAtLeast": "1.5.0",
+    "tools": [
+      { "name": "acme_news_fetch", "action": "acme.news.read", "kind": "read", "description": "Fetch a news feed (plain HTTP/HTTPS, RSS, Atom or text) and list its item titles." }
+    ],
+    "env": ["ACME_NEWS_FEED_URL"],
+    "limits": { "toolTimeoutMs": 20000 }
+  }
+}
