@@ -4,6 +4,7 @@
 // Do NOT add a dependency on :agentHq here: a plugin must never see daemon internals.
 plugins {
     kotlin("jvm")
+    alias(libs.plugins.kotlinSerialization)
 }
 
 kotlin {

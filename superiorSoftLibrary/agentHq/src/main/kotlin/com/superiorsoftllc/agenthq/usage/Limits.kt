@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.usage
 
+import com.superiorsoftllc.agenthq.daemon.api.usage.LimitWindow
 import com.superiorsoftllc.agenthq.session.InfantryEnv
 
 import kotlinx.serialization.Serializable
@@ -30,22 +31,6 @@ import java.util.concurrent.TimeUnit
  * NO SIGNAL IS NEVER 0%. A source that cannot answer gives `status = "unknown"`, no windows and a [ProviderLimits.reason].
  */
 
-/** One plan-limit window of one provider. [percent] null = unknown. [paceDelta] = percent minus the elapsed share. */
-@Serializable
-data class LimitWindow(
-    val provider: String,
-    /** "Current session", "Current week", "5h limit", "Weekly limit", "Monthly limit". */
-    val label: String,
-    val windowMinutes: Int,
-    val percent: Double?,
-    /** Epoch millis. */
-    val resetsAt: Long?,
-    val observedAt: Long,
-    /** "live" (the provider's usage endpoint). "stream" and "estimate" are reserved for later sources. */
-    val source: String,
-    /** Points ahead (+) or under (-) an even pace through the window; null when percent or resetsAt is unknown. */
-    val paceDelta: Double?,
-)
 
 /** One provider's windows (wire: the `limits` frame carries a list of these). */
 @Serializable

@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.usage
 
+import com.superiorsoftllc.agenthq.daemon.api.usage.*
+
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
 import com.superiorsoftllc.agenthq.settings.SettingsService
 import java.io.File
@@ -174,5 +176,9 @@ class UsagePacingTest {
         assertTrue(settings.usageManual().isEmpty())
         assertFailsWith<IllegalArgumentException> { settings.applyUsage(UsageSet(), now) }
         assertFalse(UsageText.parseRule("off", settings.usagePacing()).toString().contains("\"enabled\":true"))
+    }
+
+    @Test fun `the API ceiling default is the registry default`() {
+        kotlin.test.assertEquals(com.superiorsoftllc.agenthq.settings.LimitRegistry.PACING_CEILING.default.toInt(), PacingRule.PACING_CEILING_DEFAULT)
     }
 }

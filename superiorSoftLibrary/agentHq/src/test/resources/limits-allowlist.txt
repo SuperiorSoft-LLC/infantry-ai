@@ -210,8 +210,6 @@ com/superiorsoftllc/agenthq/update/GitHubReleases.kt:MAX_REDIRECTS|pending S2-S4
 com/superiorsoftllc/agenthq/update/Updater.kt:MAX_CHECKSUM_BYTES|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/agenthq/update/Updater.kt:MAX_INSTALLER_BYTES|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/agenthq/usage/Limits.kt:DEFAULT_MIN_INTERVAL_MS|pending S2-S4 (not yet routed through LimitRegistry)
-com/superiorsoftllc/agenthq/usage/Pacing.kt:DEFAULT_MAX_WORKERS|pending S2-S4 (not yet routed through LimitRegistry)
-com/superiorsoftllc/agenthq/usage/Pacing.kt:MANUAL_TTL_MS|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/agenthq/usage/UsageRefresher.kt:IDLE_RECHECK_MS|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/agenthq/usage/UsageRefresher.kt:MAX_BACKOFF_MS|pending S2-S4 (not yet routed through LimitRegistry)
 com/superiorsoftllc/agenthq/worktree/WorktreeManager.kt:DEFAULT_MAX_CHANGES|pending S2-S4 (not yet routed through LimitRegistry)

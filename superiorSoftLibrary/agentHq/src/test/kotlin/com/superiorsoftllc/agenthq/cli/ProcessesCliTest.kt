@@ -1,9 +1,9 @@
 package com.superiorsoftllc.agenthq.cli
 
-import com.superiorsoftllc.agenthq.session.ProcessReport
-import com.superiorsoftllc.agenthq.session.ProcessesAnswer
-import com.superiorsoftllc.agenthq.session.ProcessesRequest
-import com.superiorsoftllc.agenthq.session.TrackedProcess
+import com.superiorsoftllc.agenthq.daemon.api.processes.ProcessReport
+import com.superiorsoftllc.agenthq.daemon.api.processes.ProcessesAnswer
+import com.superiorsoftllc.agenthq.daemon.api.processes.ProcessesRequest
+import com.superiorsoftllc.agenthq.daemon.api.processes.TrackedProcess
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
