@@ -14,6 +14,11 @@
     3. copies the app image to <build.root>\builds\<sha>\, writes BUILD-INFO.txt + MANIFEST.txt there,
     4. runs copy-integrity checks (exe exists and size matches, file count and bytes match, BUILD-INFO sha matches),
     5. only after the checks pass, replaces <build.root>\current\ with the same copy.
+    BUILD-PLUGINS-1: -Preset / -Include / -Exclude pick which plugins the build carries (ids, classes and presets are data in
+    plugins/build-presets.json; default = everything). Core and official plugins cannot be left out (error with the reason).
+    Left-out plugins are absent from the staged modules, the daemon halves and the signed set; the build REPORTS included/excluded in
+    builds\<sha>.build-manifest.json and (when anything is left out) packages them signed in builds\<sha>.optional-plugins\ with a
+    catalog.json (id, version, class, jar, sha256, grants) for the plugin manager's local-directory catalog.
     No tests are run. The worktree is removed afterwards.
 
   Backup mode (-BackupState): read-only copy of the owner state dir (-StateDir or AGENTHQ_STATE_DIR) into
@@ -23,6 +28,8 @@
   powershell -File scripts/package-dist.ps1 -Sha <sha> -DryRun        # print resolved paths, build nothing
   powershell -File scripts/package-dist.ps1 -Sha <sha>                # devSign build
   powershell -File scripts/package-dist.ps1 -Sha <sha> -Keystore <p12> -KeyAlias <alias>
+  powershell -File scripts/package-dist.ps1 -Sha <sha> -Preset no-optional        # leave every optional plugin out
+  powershell -File scripts/package-dist.ps1 -Sha <sha> -Exclude Infantry_Stats    # leave one out
   powershell -File scripts/package-dist.ps1 -BackupState -StateDir <dir> [-DryRun]
 #>
 [CmdletBinding()]
@@ -33,11 +40,15 @@ param(
   [string]$StateDir,
   [string]$Keystore,
   [string]$KeyAlias,
+  [string[]]$Include,       # BUILD-PLUGINS-1: keep only these optional plugins (the other optional ones are left out)
+  [string[]]$Exclude,       # BUILD-PLUGINS-1: leave these optional plugins out (core/official are refused)
+  [string]$Preset,          # BUILD-PLUGINS-1: a named preset from plugins/build-presets.json (full, no-optional, core-only)
   [string]$ReleaseBranch = 'feature-agenthq-mvp',
   [string]$ProjectId = $env:AGENTHQ_PROJECT_ID
 )
 
 $repo = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'plugin-selection.ps1')
 
 function Fail([string]$Message) {
   [Console]::Error.WriteLine("PACKAGE-DIST refused: $Message")
@@ -124,6 +135,12 @@ $full = $full.Trim()
 git -C $repo merge-base --is-ancestor $full $ReleaseBranch 2>$null
 if ($LASTEXITCODE -ne 0) { Fail "$full is not on $ReleaseBranch; build only sha's that the release branch contains" }
 
+# BUILD-PLUGINS-1: resolve the selection first, so a refused one (core excluded, unknown id) stops before anything is written.
+$pluginsRoot = Join-Path $repo 'plugins'
+try {
+  $selection = Resolve-PluginSelection @(Get-PluginInventory $pluginsRoot) $pluginsRoot $Include $Exclude $Preset
+} catch { Fail "plugin selection: $($_.Exception.Message)" }
+
 $root = Get-BuildRoot
 $buildsDir = Join-Path $root.Path 'builds'
 $dest = Join-Path $buildsDir $full
@@ -143,6 +160,7 @@ $gradleArgs = @(':superiorSoftLibrary:agentHqUi:createDistributable', '--no-para
   '-Dorg.gradle.jvmargs=-XX:MaxMetaspaceSize=2g -Xmx3g',
   # the worktree is detached, so the packaging guard sees HEAD; the sha was checked to be on $ReleaseBranch above
   '-PallowAnyBranch=true') + $signArgs
+if ($selection.Excluded.Count -gt 0) { $gradleArgs += @("-Pihq.excludePlugins=$($selection.Excluded -join ',')", '-Pihq.optionalOut=true') }
 
 if ($DryRun) {
   Write-Output "DRY-RUN build: sha=$full (on $ReleaseBranch)"
@@ -150,6 +168,8 @@ if ($DryRun) {
   Write-Output "  output=$dest"
   Write-Output "  current=$current"
   Write-Output "  manifest=$dest\MANIFEST.txt"
+  Write-Output "  plugins: preset=$(if ($Preset) { $Preset } else { 'full' }) included=$($selection.Included.Count) excluded=[$($selection.Excluded -join ', ')]"
+  Write-Output "  build-manifest=$buildsDir\$full.build-manifest.json optional-plugins=$buildsDir\$full.optional-plugins\ (when anything is excluded)"
   Write-Output "  signing=$signing$(if ($signing -eq 'devSign') { ' (no key given: throwaway dev key, not for release)' })"
   Write-Output "  worktree=<TEMP>\package-dist-<sha8>-<rand> (removed after)"
   Write-Output "  gradle: .\gradlew.bat $($gradleArgs -join ' ')"
@@ -193,6 +213,25 @@ try {
     Fail "integrity: byte total differs from the build"
   }
   if (-not ((Get-Content -LiteralPath (Join-Path $dest 'BUILD-INFO.txt')) -contains "sha=$full")) { Fail "integrity: BUILD-INFO sha does not match $full" }
+
+  # BUILD-PLUGINS-1: the included/excluded report and the left-out plugins' packages, next to the build.
+  $inventory = @(Get-PluginInventory (Join-Path $tmp 'plugins'))
+  $manifestPath = Join-Path $buildsDir "$full.build-manifest.json"
+  $optionalDest = Join-Path $buildsDir "$full.optional-plugins"
+  if (Test-Path -LiteralPath $optionalDest) { Remove-Item -LiteralPath $optionalDest -Recurse -Force }
+  if ($selection.Excluded.Count -gt 0) {
+    $optionalSrc = Join-Path $tmp 'superiorSoftLibrarygentHqUiuild\official-modules\optional-plugins'
+    if (-not (Test-Path -LiteralPath $optionalSrc)) { Fail "no optional-plugins output at $optionalSrc" }
+    Invoke-Robocopy (Join-Path $optionalSrc 'official') $optionalDest
+    $catalog = New-OptionalCatalog $optionalDest $inventory
+    if (@($catalog.plugins).Count -ne $selection.Excluded.Count) { Fail "catalog has $(@($catalog.plugins).Count) plugin(s), expected $($selection.Excluded.Count)" }
+    $catalog | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $optionalDest 'catalog.json') -Encoding UTF8
+  }
+  $report = New-BuildManifest $inventory $selection $full $signing $Preset
+  $stagedOfficial = @(Get-ChildItem -LiteralPath (Join-Path $dest 'appesources\modules\official') -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+  foreach ($x in $selection.Excluded) { if ($stagedOfficial -contains $x) { Fail "integrity: excluded plugin $x is still in the build" } }
+  $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
+  Write-Output "PACKAGE-DIST plugins: included=$($selection.Included.Count) excluded=[$($selection.Excluded -join ', ')] report=$manifestPath$(if ($selection.Excluded.Count) { " optional=$optionalDest" })"
 
   # Only now replace current\.
   $partial = Join-Path $root.Path 'current.partial'
