@@ -9,6 +9,15 @@
   "entry": "com.superiorsoftllc.agenthq.plugins.official.SettingsPlugin",
   "jar": "build/libs/Infantry_Settings.jar",
   "buildOrder": 120,
+  "daemon": {
+    "entry": "com.superiorsoftllc.agenthq.plugins.official.settings.daemon.SettingsDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_Settings-daemon.jar",
+    "apiAtLeast": "1.1.0",
+    "tools": [
+      { "name": "agenthq_project_config_get", "action": "projects.save", "kind": "write", "description": "A project's per-role agent caps and routing rules." },
+      { "name": "agenthq_project_config_set", "action": "projects.save", "kind": "write", "description": "Set a project's agent caps, routing rules, experiments." }
+    ]
+  },
   "tabs": [
     {
       "id": "infantry.settings",

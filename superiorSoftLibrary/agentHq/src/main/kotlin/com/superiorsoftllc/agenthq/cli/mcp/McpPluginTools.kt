@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.cli.mcp
 
 import com.superiorsoftllc.agenthq.cli.FrameStream
+import com.superiorsoftllc.agenthq.daemon.AccessPolicy
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.settings.LimitRegistry
 import kotlinx.serialization.json.Json
@@ -17,7 +18,7 @@ import kotlinx.serialization.json.longOrNull
  * of such a name is one `plugin_tool_call`, answered by `plugin_tool_result {text, isError}`. The daemon gates the call by
  * the tool's own policy action and this connection's token, so this side holds no rule of its own.
  */
-internal class McpPluginTools {
+internal class McpPluginTools(private val getenv: (String) -> String? = System::getenv) {
 
     /** Each listed tool's effective timeout (the daemon's `timeoutMs`), so a call waits as long as its own tool may run. */
     private val timeouts = java.util.concurrent.ConcurrentHashMap<String, Long>()
@@ -36,7 +37,12 @@ internal class McpPluginTools {
     }
 
     suspend fun call(stream: FrameStream, name: String, arguments: JsonObject): ToolResult {
-        val payload = JsonObject(mapOf("name" to JsonPrimitive(name), "arguments" to arguments))
+        // RUNTIME-LOAD-3: who runs this MCP process (an agent session or a person), for the tools whose rule depends on it.
+        val client = JsonObject(listOfNotNull(
+            getenv(AccessPolicy.SESSION_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }?.let { "sessionId" to JsonPrimitive(it) },
+            getenv("AGENTHQ_ROLE")?.trim()?.takeIf { it.isNotEmpty() }?.let { "role" to JsonPrimitive(it) },
+        ).toMap())
+        val payload = JsonObject(mapOf("name" to JsonPrimitive(name), "arguments" to arguments, "client" to client))
         if (!timeouts.containsKey(name)) runCatching { descriptors(stream) }
         val answer = stream.request(
             Envelope(PLUGIN_TOOL_CALL, json.encodeToString(JsonObject.serializer(), payload)), PLUGIN_TOOL_RESULT, PLUGIN_TOOL_CALL,

@@ -54,7 +54,7 @@ interface DaemonApi {
 
     companion object {
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
-        const val VERSION = "1.0.0"
+        const val VERSION = "1.1.0"
     }
 }
 
@@ -162,6 +162,13 @@ interface DaemonTool {
 interface ToolCall {
     val arguments: JsonObject
     val caller: Caller
+    /**
+     * RUNTIME-LOAD-3 (1.1.0, additive): the session (`AGENTHQ_SESSION_ID`) and role (`AGENTHQ_ROLE`) of the MCP process that made the
+     * call, as it reported them; null = none, i.e. a person running `agenthq mcp serve`. A client's own claim, like the environment
+     * it read: use it only to narrow what a call may do (the roles tools' agent-caller rule), never to widen it.
+     */
+    val clientSessionId: String? get() = null
+    val clientRole: String? get() = null
     /**
      * Sends frame [type] on the CALLER's own connection, through every gate the caller's own frames pass, and returns the
      * answer to it (the frame carrying its request id). An error answer comes back as a frame of type `error`.

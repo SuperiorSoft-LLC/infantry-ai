@@ -81,12 +81,12 @@ that takes more than 75 s now errors where it used to wait 15 minutes. `npm view
 |---|---|---|---|
 | F1 (done, RUNTIME-LOAD-2) | Per-tool timeout in the plugin tool contract (`McpPluginTools.answerWaitMs` reads the tool's declared `toolTimeoutMs`); then move `agenthq_harness_install` | S | Unblocks the last two harness tools; removes the edge above |
 | F2 (list_harnesses done, RUNTIME-LOAD-2; the three session tools: section 6) | `agenthq_list_harnesses` + `agenthq_list_sessions` / `agenthq_get_session` / `agenthq_pod_state` into the Infantry_Agents half (read-only frames) | S-M | Same pattern, no new API |
-| F3 | Roles tools (5) into an Infantry_Roles daemon half (agent-caller persona rule moves with it) | M | Next family with a ready owner module |
-| F4 | `agenthq_ask` into Infantry_Attention; project config tools into Infantry_Settings | S each | One frame each |
+| F3 (done, RUNTIME-LOAD-3) | Roles tools (5) into an Infantry_Roles daemon half (agent-caller persona rule moves with it) | M | Next family with a ready owner module |
+| F4 (done, RUNTIME-LOAD-3) | `agenthq_ask` into Infantry_Attention; project config tools into Infantry_Settings | S each | One frame each |
 | F5 | Tickets/epic/board/progress tools into Infantry_Board (`ProjectScope` as an API helper) | M | Biggest family, riskiest scope rules |
 | F6 | Mail, pipeline, `watch_file` (needs a DaemonApi surface for watch hooks) | M | Needs new API surface |
 | F7 | A folder source for `HarnessPluginSource` + a harness API module; move `pi`, then `claude`, then `opencode` | L | Contract design; `pi` first, fewest daemon internals |
-| F8 | Core Config `ConfigEntry` fallback removed (G13) | S-M | Independent of the daemon |
+| F8 (stopped, RUNTIME-LOAD-3: section 7) | Core Config `ConfigEntry` fallback removed (G13) | S-M | Independent of the daemon |
 | F9 | The 20 UI modules, one per project (B1-B6 of the audit), kit exported to the filtered loader (contract bump) | L | UI-first per D11 once F1-F6 settle |
 | F10 | Daemon feature services as plugins (D11: later) | L | Parked by the owner |
 
@@ -119,3 +119,25 @@ one-request `ToolCall.request` cannot do. Moving them needs an API-side session 
 
 The full `agentHq:test` suite, `agentHqUi` and wasm/Android builds, `BlankShellE2ETest`, any live harness install. Run: the five test
 classes named in section 3 plus `*DaemonPlugin*` and `*HarnessInstall*`; and `installDist` with both measurement runs above.
+
+## 7. RUNTIME-LOAD-3 (F3, F4, F8)
+
+**F3: roles tools** (`agenthq_role_list/get/update/create/delete`) moved to a new `Infantry_Roles` daemon half (actions `roles.read`,
+`roles.save`, `roles.delete`, the ones the frames already had). **F4:** `agenthq_ask` to `Infantry_Attention` (`questions.ask`),
+`agenthq_project_config_get/set` to `Infantry_Settings` (`projects.save`, as the `project_config` frame, read included, so Demo_Lock and
+presets behave as before). Each half is `daemon/build.gradle.kts` + a `daemon` block in `module.json`; packaging picks it up through
+`gradle/daemon-halves.gradle.kts` unchanged (`verifyDaemonHalvesGuard` green). Core classes `McpRoleTools`, `McpQuestionTools`,
+`McpProjectConfigTools` deleted; ratchet `CEILING` 31 -> 23; `OrchestratorBoundaryGuardTest` baseline `cli>role` 3 -> 1.
+
+DaemonApi 1.1.0 (additive): `ToolCall.clientSessionId` / `clientRole`, the MCP process's `AGENTHQ_SESSION_ID` / `AGENTHQ_ROLE`, sent by
+`agenthq mcp serve` as `client` in `plugin_tool_call`. They carry the agent-caller persona rule (agent = either set, or the connection holds
+the agent token) and the asker of `agenthq_ask`. A client's own claim, used only to narrow. New API models: `daemon.api.roles`
+(`RoleRecord`, `RoleSaveRequest`, `RetiredRoleIds`, now also read by core `RoleIds`) and `daemon.api.project` (`ProjectConfigPatch/View`).
+Daemon fix: `role_save` / `role_delete` answered only by broadcast; a plugin request (`plugin:` id) now also gets a direct, id-echoing reply.
+Plugin tool lists are sorted by name, so `tools/list` order of these tools changed (set unchanged).
+
+**F8: not done.** The `ConfigEntry` fallback is not independent. `ConfigDialog` draws from the snapshot plan only when the daemon has sent
+one (`planDeclarations`); with none (daemon not yet connected, or an older daemon) it shows the hand-written `ConfigEntry` tabs, which hold
+the client-local settings (theme, blur, markdown, voice, sound...). Removing it would leave the Config dialog empty offline and on a blank
+install before the first snapshot. `ConfigEntry` is also the `present` key set the generated path takes (`ConfigPlan.of(snap, present, ...)`)
+and anchors 13 UI test files. Prerequisite: client-local sections declared in a snapshot the client ships itself, then `ConfigEntry` can go.

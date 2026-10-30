@@ -117,7 +117,7 @@ class McpServeTest {
         }
     }
 
-    private fun serve(vararg connection: String): Served {
+    private fun serve(vararg connection: String, env: Map<String, String> = emptyMap()): Served {
         val toServer = PipedWriter()
         val serverIn = PipedReader(toServer, 1 shl 16)
         val fromServer = PipedReader(1 shl 16)
@@ -125,7 +125,7 @@ class McpServeTest {
         val stderr = StringBuffer()
         val served = Served(PrintWriter(toServer), BufferedReader(fromServer), stderr)
         served.worker = thread(name = "mcp-serve", isDaemon = true) {
-            val code = Cli.run(arrayOf("mcp", "serve", *connection), serverOut, stderr, { null }, { serverIn })
+            val code = Cli.run(arrayOf("mcp", "serve", *connection), serverOut, stderr, { env[it] }, { serverIn })
             served.exit = code
             serverOut.close()
         }
@@ -188,8 +188,7 @@ class McpServeTest {
             "agenthq_ticket_move", // MCP-MOVE-1
                 "agenthq_inbox", "agenthq_read", // MAIL-MCP-1
                 "agenthq_pipeline", "agenthq_pipeline_record", // PIPE-1
-                "agenthq_role_list", "agenthq_role_get", "agenthq_role_update", "agenthq_role_create", "agenthq_role_delete", "agenthq_project_config_get", "agenthq_project_config_set", // ROLE-EDIT-1, LANE-CAPS
-                "agenthq_ask", // ASK-1
+                // ROLE-EDIT-1, LANE-CAPS, ASK-1: the role, project config and ask tools are daemon plugin tools now (RUNTIME-LOAD-3).
                 "agenthq_progress", // PROGRESS-1 (1.117.0)
                 "agenthq_watch_file", // STALL-4
             ),
@@ -469,8 +468,107 @@ class McpServeTest {
             assertTrue("agenthq_harness_status" !in tools, "$tools")
             assertTrue("agenthq_harness_install" !in tools, "install left core with the plugin: $tools")
             assertTrue("agenthq_list_harnesses" !in tools, "list_harnesses left core with the plugin: $tools")
+            // RUNTIME-LOAD-3: the roles, ask and project config tools left core with their plugins too.
+            assertEquals(emptyList<String>(), tools.filter { it.startsWith("agenthq_role_") || it.startsWith("agenthq_project_config_") || it == "agenthq_ask" }, "$tools")
         } finally {
             root.deleteRecursively()
+        }
+    }
+
+    private fun text(result: JsonObject) = result["content"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content
+    private fun isError(result: JsonObject) = result["isError"]!!.jsonPrimitive.content.toBoolean()
+
+    private fun withPlugins(vararg modules: String, env: Map<String, String> = emptyMap(), body: (Served, List<JsonObject>) -> Unit) {
+        val root = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root(*modules)
+        try {
+            val fixture = DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-plugin").toFile(), pluginsRoot = root)
+                .also { fixtures += it }
+            fixture.client.await(Envelope.READY)
+            val served = serve("--port", fixture.port.toString(), env = env)
+            initialize(served)
+            body(served, served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject })
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    /** RUNTIME-LOAD-3 (F3): the five roles tools come from Infantry_Roles with the schemas and hints they had in core; the agent-caller rule holds. */
+    @Test
+    fun rolesToolsComeFromInfantryRolesUnchanged() {
+        val names = listOf("agenthq_role_list", "agenthq_role_get", "agenthq_role_update", "agenthq_role_create", "agenthq_role_delete")
+        withPlugins("official/Infantry_Roles") { person, tools ->
+            assertEquals(names.sorted(), tools.map { it["name"]!!.jsonPrimitive.content }.filter { it in names })
+            fun annotations(name: String) = tools.single { it["name"]!!.jsonPrimitive.content == name }["annotations"]!!.jsonObject.mapValues { it.value.jsonPrimitive.content.toBoolean() }
+            assertEquals(mapOf("readOnlyHint" to true, "destructiveHint" to false, "idempotentHint" to true, "openWorldHint" to false), annotations("agenthq_role_list"))
+            assertEquals(mapOf("readOnlyHint" to false, "destructiveHint" to true, "idempotentHint" to false, "openWorldHint" to false), annotations("agenthq_role_delete"))
+            val update = tools.single { it["name"]!!.jsonPrimitive.content == "agenthq_role_update" }["inputSchema"]!!.jsonObject
+            assertEquals(listOf("id", "persona", "description", "name", "color", "icon"), update["properties"]!!.jsonObject.keys.toList())
+            assertEquals(listOf("id"), update["required"]!!.jsonArray.map { it.jsonPrimitive.content })
+            assertEquals(false, update["additionalProperties"]!!.jsonPrimitive.content.toBoolean())
+
+            val listed = Json.parseToJsonElement(text(person.callTool("agenthq_role_list"))).jsonArray.map { it.jsonObject }
+            val backend = listed.single { it["id"]!!.jsonPrimitive.content == "backend" }
+            assertEquals(setOf("id", "name", "description", "source", "personaChars"), backend.keys)
+            assertEquals("backend", Json.parseToJsonElement(text(person.callTool("agenthq_role_get", """{"id":"backend"}"""))).jsonObject["id"]!!.jsonPrimitive.content)
+            val unknown = person.callTool("agenthq_role_get", """{"id":"no-such-role"}""")
+            assertTrue(isError(unknown) && text(unknown) == "agenthq_role_get: unknown role 'no-such-role'", "$unknown")
+
+            // A person creates, renames and deletes a role.
+            val created = person.callTool("agenthq_role_create", """{"id":"zz-test","name":"ZZ Test","persona":"one"}""")
+            assertTrue(!isError(created) && text(created).startsWith("saved role 'zz-test' (3 persona characters)"), "$created")
+            assertTrue(isError(person.callTool("agenthq_role_create", """{"id":"zz-test","name":"again"}""")))
+            assertTrue(!isError(person.callTool("agenthq_role_update", """{"id":"zz-test","name":"ZZ Renamed"}""")))
+            assertEquals("deleted role 'zz-test'", text(person.callTool("agenthq_role_delete", """{"id":"zz-test"}""")))
+        }
+        // An agent (AGENTHQ_ROLE / AGENTHQ_SESSION_ID in the MCP process) may only update persona and description of an existing role.
+        for (env in listOf(mapOf("AGENTHQ_ROLE" to "backend"), mapOf("AGENTHQ_SESSION_ID" to "agent-1"))) {
+            withPlugins("official/Infantry_Roles", env = env) { agent, _ ->
+                assertEquals("agenthq_role_create needs a non-agent caller: an agent may only update the persona and description of an existing role", text(agent.callTool("agenthq_role_create", """{"id":"zz-agent","name":"x"}""")))
+                assertEquals("agenthq_role_delete needs a non-agent caller: an agent may not delete roles", text(agent.callTool("agenthq_role_delete", """{"id":"zz-agent"}""")))
+                assertEquals("agenthq_role_update: an agent may change only persona and description; name need a non-agent caller", text(agent.callTool("agenthq_role_update", """{"id":"backend","name":"x"}""")))
+                val ok = agent.callTool("agenthq_role_update", """{"id":"backend","description":"agent edit"}""")
+                assertTrue(!isError(ok) && text(ok).startsWith("saved role 'backend'"), "$ok")
+                // Reading stays open to an agent.
+                assertTrue(!isError(agent.callTool("agenthq_role_list")))
+            }
+        }
+    }
+
+    /** RUNTIME-LOAD-3 (F4): `agenthq_ask` comes from Infantry_Attention; the asker is the MCP process's own session. */
+    @Test
+    fun askToolComesFromInfantryAttention() {
+        val args = """{"question":"Which?","options":[{"label":"A","description":"a"},{"label":"B"}],"recommended":"A","reason":"simplest"}"""
+        withPlugins("official/Infantry_Attention") { person, tools ->
+            val ask = tools.single { it["name"]!!.jsonPrimitive.content == "agenthq_ask" }
+            assertEquals(listOf("question", "options", "recommended", "reason"), ask["inputSchema"]!!.jsonObject["required"]!!.jsonArray.map { it.jsonPrimitive.content })
+            assertEquals(listOf("question", "options", "recommended", "reason", "allowOther", "defaultAfterMin"), ask["inputSchema"]!!.jsonObject["properties"]!!.jsonObject.keys.toList())
+            assertEquals(false, ask["annotations"]!!.jsonObject["readOnlyHint"]!!.jsonPrimitive.content.toBoolean())
+            val noSession = person.callTool("agenthq_ask", args)
+            assertTrue(isError(noSession) && text(noSession).startsWith("agenthq_ask needs the asking session in AGENTHQ_SESSION_ID"), "$noSession")
+        }
+        withPlugins("official/Infantry_Attention", env = mapOf("AGENTHQ_SESSION_ID" to "agent-1")) { agent, _ ->
+            assertEquals("agenthq_ask needs options: [{label, description}, ...]", text(agent.callTool("agenthq_ask", """{"question":"q"}""")))
+            // With a session the call reaches the daemon's question_ask: its own answer (a question id or its refusal), never the session message.
+            val sent = agent.callTool("agenthq_ask", args)
+            assertTrue("needs the asking session" !in text(sent), "$sent")
+        }
+    }
+
+    /** RUNTIME-LOAD-3 (F4): the project config tools come from Infantry_Settings; argument errors are the ones core gave, the daemon answers the frame. */
+    @Test
+    fun projectConfigToolsComeFromInfantrySettings() {
+        withPlugins("official/Infantry_Settings") { served, tools ->
+            assertEquals(listOf("agenthq_project_config_get", "agenthq_project_config_set"), tools.map { it["name"]!!.jsonPrimitive.content }.filter { it.startsWith("agenthq_project_config_") })
+            val set = tools.single { it["name"]!!.jsonPrimitive.content == "agenthq_project_config_set" }["inputSchema"]!!.jsonObject
+            assertEquals(listOf("projectId", "role", "cap", "autoRemoveDoneWorkers", "routingRules", "experiment", "value"), set["properties"]!!.jsonObject.keys.toList())
+            assertEquals("agenthq_project_config_get needs a projectId", text(served.callTool("agenthq_project_config_get")))
+            assertEquals("agenthq_project_config_set needs a role (with a cap), autoRemoveDoneWorkers, or routingRules", text(served.callTool("agenthq_project_config_set", """{"projectId":"p"}""")))
+            assertEquals("agenthq_project_config_set: autoRemoveDoneWorkers must be true or false, was 'maybe'", text(served.callTool("agenthq_project_config_set", """{"projectId":"p","autoRemoveDoneWorkers":"maybe"}""")))
+            assertEquals("agenthq_project_config_set needs a cap of 1 or more", text(served.callTool("agenthq_project_config_set", """{"projectId":"p","role":"backend","cap":"0"}""")))
+            assertTrue(text(served.callTool("agenthq_project_config_set", """{"projectId":"p","routingRules":"not json"}""")).startsWith("agenthq_project_config_set: routingRules must be a JSON array of {name, weights?"))
+            // The daemon's own answer to the frame comes back as the tool's result: an unknown project is its refusal, not a plugin error.
+            val unknown = served.callTool("agenthq_project_config_get", """{"projectId":"no-such-project"}""")
+            assertTrue(isError(unknown) && "unexpected answer" !in text(unknown), "$unknown")
         }
     }
 

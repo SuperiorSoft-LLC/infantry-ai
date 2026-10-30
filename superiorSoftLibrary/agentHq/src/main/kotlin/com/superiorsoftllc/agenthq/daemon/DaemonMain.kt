@@ -3097,7 +3097,8 @@ private suspend fun handleConnection(
                 Envelope.ROLE_SAVE -> try {
                     val saved = roles.save(RoleSave.decode(envelope.data))
                     broadcastRole(clients, saved)
-                    null
+                    // RUNTIME-LOAD-3: a plugin tool waits for its own request id; the broadcast above carries none.
+                    if (envelope.requestId?.startsWith("plugin:") == true) Envelope(Envelope.ROLE, json.encodeToString(Role.serializer(), saved)) else null
                 } catch (e: IllegalArgumentException) {
                     Envelope(Envelope.ERROR, "role_save refused: ${e.message ?: "invalid role"}")
                 } catch (e: Exception) {
@@ -3114,7 +3115,7 @@ private suspend fun handleConnection(
                     val push = if (remaining != null) Envelope(Envelope.ROLE, json.encodeToString(Role.serializer(), remaining))
                     else Envelope(Envelope.ROLE_REMOVED, id)
                     for (client in clients) client.trySend(push)
-                    null
+                    if (envelope.requestId?.startsWith("plugin:") == true) push else null
                 } catch (e: IllegalArgumentException) {
                     Envelope(Envelope.ERROR, "role_delete refused: ${e.message ?: "invalid role"}")
                 } catch (e: Exception) {
@@ -4002,7 +4003,7 @@ private suspend fun handleConnection(
                         val arguments = call["arguments"] as? JsonObject ?: JsonObject(emptyMap())
                         val requestId = envelope.requestId
                         session.launch(kotlinx.coroutines.Dispatchers.IO) {
-                            val result = plugins.callTool(name, arguments, caller) { request, timeoutMs ->
+                            val result = plugins.callTool(name, arguments, caller, call["client"] as? JsonObject ?: JsonObject(emptyMap())) { request, timeoutMs ->
                                 val id = "plugin:" + UUID.randomUUID()
                                 val waiter = kotlinx.coroutines.CompletableDeferred<Envelope>()
                                 pluginWaiters[id] = waiter
