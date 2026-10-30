@@ -2,7 +2,7 @@ package com.superiorsoftllc.agenthq.ui.plugin.config
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import com.superiorsoftllc.agenthq.ui.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.DropdownMenu

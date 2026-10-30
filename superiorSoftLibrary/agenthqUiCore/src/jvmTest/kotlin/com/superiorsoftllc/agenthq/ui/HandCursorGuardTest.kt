@@ -68,8 +68,9 @@ class HandCursorGuardTest {
         // QA-FIX-2: +14 display-only Text (none clickable): POLICY-1 ConfigPolicySection.kt +11 (status, choice label and
         // description, rule lines; its selectable row now carries the hand) and ActionGate.kt +1 (label inside the wrapped
         // TextButton), STALL-2 Sidebar.kt +1 (watch-state label), UsageMeterPane.kt +1 (job-watcher counters).
-        "Text" to 1158,
-        "DropdownMenu" to 9,
+        // CONFIG-FIELDS-2: +3 Text (select dropdown label and items, placeholder), +1 DropdownMenu (select display: dropdown).
+        "Text" to 1161,
+        "DropdownMenu" to 10,
         "OutlinedTextField" to 104,
         "BasicTextField" to 2,
         "Icon" to 18,
