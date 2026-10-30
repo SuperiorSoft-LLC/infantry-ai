@@ -52,6 +52,9 @@ interface DaemonServices {
     /** STACK-NEUTRAL-2: read access to `limits.*` / `watch.*` / `processes.*` settings. */
     val pluginSettings: com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings get() = com.superiorsoftllc.agenthq.daemon.api.processes.NoPluginSettings
 
+    /** PACE-TREND-1: the plan meters (current readings); default: none. */
+    val meters: com.superiorsoftllc.agenthq.daemon.api.usage.Meters get() = com.superiorsoftllc.agenthq.daemon.api.usage.NoMeters
+
     companion object {
         /** No daemon behind it: empty lists, no config, the open policy. */
         val NONE: DaemonServices = object : DaemonServices {

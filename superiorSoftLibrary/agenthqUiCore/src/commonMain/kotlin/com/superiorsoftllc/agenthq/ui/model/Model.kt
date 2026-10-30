@@ -714,6 +714,8 @@ data class AppState(
     val daemonConfigError: String? = null,
     /** USAGE-1 (contract 1.141.0): the last `usage_meter` answer; null = never answered. */
     val usageMeter: com.superiorsoftllc.agenthq.ui.protocol.UsageMeterReport? = null,
+    /** PACE-TREND-1: the last `pace_report` answer as the daemon sent it (JSON text; the Infantry_Pace tab parses it); null = none. */
+    val paceReport: String? = null,
     /**
      * BUG-M2-11e: the daemon's `session.keepAliveMinutes`, as its last `settings` frame said. Null = not read yet (or a
      * daemon older than contract 1.68.0, which has no such setting): the control says so instead of guessing a value.
@@ -1774,6 +1776,8 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
                 (c.value?.let { listOf(com.superiorsoftllc.agenthq.plugin.api.NodeConfigEntry(c.node, c.key, it, c.by)) } ?: emptyList())
             s.copy(daemonConfigValues = old.copy(rev = c.rev, rows = rows), daemonConfigError = null)
         } ?: s
+
+    Envelope.PACE_REPORT -> s.copy(paceReport = env.data)
 
     Envelope.USAGE_METER -> runCatching { json.decodeFromString(com.superiorsoftllc.agenthq.ui.protocol.UsageMeterReport.serializer(), env.data) }
         .getOrNull()?.let { s.copy(usageMeter = it) } ?: s

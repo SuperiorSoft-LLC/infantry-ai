@@ -1,0 +1,47 @@
+{
+  "name": "Infantry_Pace",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "description": "Pacing trend charts for every harness: history of percent used, pace delta and the forecast to reset, with up/down momentum.",
+  "tier": "official",
+  "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.official.pace.PacePlugin",
+  "jar": "build/libs/Infantry_Pace.jar",
+  "buildOrder": 170,
+  "daemon": {
+    "entry": "com.superiorsoftllc.agenthq.plugins.official.pace.daemon.PaceDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_Pace-daemon.jar",
+    "apiAtLeast": "1.10.0",
+    "tools": [
+      { "name": "agenthq_pace", "action": "pace.read", "kind": "read", "description": "Pacing history, momentum and the forecast to reset per provider window." }
+    ],
+    "frames": [
+      { "type": "pace_get", "action": "pace.read", "kind": "read" }
+    ],
+    "config": [
+      {
+        "node": "infantry.pace", "group": "Pacing trend", "title": "Pacing trend", "tab": "Plugins", "order": 910,
+        "applies": "Applies to: the pacing history the daemon keeps and the momentum / forecast it computes.",
+        "keywords": ["pace", "pacing", "trend", "forecast", "momentum", "history"],
+        "fields": [
+          { "key": "pace.retentionDays", "type": "number", "label": "Keep history (days, 0 = keep all)", "default": 60, "min": 0, "max": 3650, "step": 1, "scope": "daemon", "order": 1 },
+          { "key": "pace.lookbackShortHours", "type": "number", "label": "Short lookback (hours)", "default": 6, "min": 1, "max": 168, "step": 1, "scope": "daemon", "order": 2 },
+          { "key": "pace.lookbackLongHours", "type": "number", "label": "Long lookback (hours)", "default": 24, "min": 1, "max": 720, "step": 1, "scope": "daemon", "order": 3 },
+          { "key": "pace.deadBand", "type": "number", "label": "Flat band (points per hour)", "default": 0.25, "min": 0, "max": 20, "step": 0.1, "scope": "daemon", "order": 4, "description": "A slope smaller than this reads as FLAT, not RISING or FALLING." },
+          { "key": "pace.minSamples", "type": "number", "label": "Samples needed for a forecast", "default": 3, "min": 2, "max": 100, "step": 1, "scope": "daemon", "order": 5 },
+          { "key": "pace.minSpanHours", "type": "number", "label": "Hours those samples must span", "default": 2, "min": 0, "max": 48, "step": 1, "scope": "daemon", "order": 6 }
+        ]
+      }
+    ]
+  },
+  "tabs": [
+    {
+      "id": "infantry.pace",
+      "container": "center"
+    }
+  ],
+  "actions": [
+    { "id": "pace.read", "label": "Read pacing history", "kind": "read", "frames": ["pace_get"] }
+  ]
+}

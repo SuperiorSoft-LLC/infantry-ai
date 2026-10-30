@@ -527,6 +527,9 @@ class Controller(
         if (!contractAtLeast(_state.value.connection.contract, 1, 92)) CommandResult.Refused("this daemon does not report session statistics (contract 1.92.0)")
         else send(WireRequests.sessionStatsGet(sessionId))
 
+    /** PACE-TREND-1: ask the Infantry_Pace daemon half for the pacing history ([query] = its JSON query, empty = all); answered by `pace_report`. */
+    suspend fun requestPace(query: String = ""): CommandResult = send(Envelope(Envelope.PACE_GET, query))
+
     /** USAGE-1: ask for the daily token/cost rows (contract 1.141.0); the answer is a `usage_meter` frame the reducer keeps. */
     suspend fun requestUsageMeter(): CommandResult =
         if (!contractAtLeast(_state.value.connection.contract, 1, 141)) CommandResult.Refused("this daemon has no usage meter (contract 1.141.0)")

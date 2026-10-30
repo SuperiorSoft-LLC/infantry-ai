@@ -531,6 +531,12 @@ class DaemonPluginHost private constructor(
             }
         }
         override val settings: com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings get() = services.pluginSettings
+        // PACE-TREND-1: the plan meters, read-only; a community plugin needs the grant `usage.read` (default deny: reads nothing).
+        override val meters: com.superiorsoftllc.agenthq.daemon.api.usage.Meters = object : com.superiorsoftllc.agenthq.daemon.api.usage.Meters {
+            override fun read() = if (p.community && "usage.read" !in p.setting.allow) {
+                error("missing grant 'usage.read' in modules.json")
+            } else services.meters.read()
+        }
         // AGENT-REGISTRY-1: the agent registry, scoped to this plugin (its own declared ids; enable/disable trusted tiers only).
         override val agents: com.superiorsoftllc.agenthq.daemon.api.agents.Agents = object : com.superiorsoftllc.agenthq.daemon.api.agents.Agents {
             private val registry get() = services.agentRegistry

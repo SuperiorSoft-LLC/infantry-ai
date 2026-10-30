@@ -83,6 +83,8 @@ interface ShellContext {
     val usage: UsageContext get() = NoUsage
     /** USAGE-1 (additive): the daemon usage meter's daily token/cost rows, for the Stats tab's by-day / by-week view. */
     val meter: UsageMeterContext get() = NoUsageMeter
+    /** PACE-TREND-1 (additive): the pacing history request behind the official Infantry_Pace tab. */
+    val pace: PaceContext get() = NoPace
     /** RUNTIME-11 (additive): the epic requests behind the official Infantry_Epics tab. */
     val epics: EpicsContext get() = NoEpics
     /** RUNTIME-11 (additive): what the official Infantry_Review tab may do with a queued node. */
@@ -487,6 +489,17 @@ interface UsageMeterContext {
 /** No usage meter: every request refused. */
 object NoUsageMeter : UsageMeterContext {
     override suspend fun refresh(): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
+}
+
+/** PACE-TREND-1: asks the daemon's pace plugin for its report; the answer lands in the window's state ([AppState.paceReport]). */
+interface PaceContext {
+    /** [query] is the `pace_get` JSON (provider, window, sinceHours); empty = everything. */
+    suspend fun refresh(query: String = ""): CommandResult
+}
+
+/** No pace plugin on the daemon, or no window: every request refused. */
+object NoPace : PaceContext {
+    override suspend fun refresh(query: String): CommandResult = CommandResult.Refused(SHELL_DOMAIN_MISSING)
 }
 
 /** The daemon link: whether it is up and which contract the daemon announced. */
