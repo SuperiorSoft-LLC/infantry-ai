@@ -70,7 +70,7 @@ object ActionCatalog {
         a("memory.read", READ, E.MEMORY_LIST, E.MEMORY_SEARCH, E.MEMORY_GET, scope = Scope.PROJECT),
         a("pipeline.read", READ, E.PIPELINE_SHOW, scope = Scope.PROJECT),
         a("policy.read", READ, POLICY_GET),
-        // DEMO-FIX-1: listing the daemon plugins' tools is a read; a call is gated by the called tool's own action.
+        // Listing the daemon plugins' tools is a read; a call is gated by the called tool's own action.
         a("plugin.tools.list", READ, PLUGIN_TOOLS),
 
         // Chat and sessions.

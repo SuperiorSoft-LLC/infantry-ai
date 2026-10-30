@@ -100,8 +100,6 @@ internal class McpTools(
                     GET_SESSION -> getSession(stream, arguments)
                     POD_STATE -> podState(stream, arguments)
                     BOARD -> board(stream, arguments)
-                    LIST_HARNESSES -> listHarnesses(stream)
-                    HARNESS_INSTALL -> harnessInstall(stream, arguments)
                     McpWriteTools.SPAWN -> writes.spawn(stream, arguments)
                     McpWriteTools.PROMPT -> writes.prompt(stream, arguments)
                     McpWriteTools.MESSAGE -> writes.message(stream, arguments)
@@ -350,42 +348,6 @@ internal class McpTools(
             put("board", buildJsonArray { lines.forEach { add(JsonPrimitive(it)) } })
         })
     }
-    /**
-     * BUG-ASSIGN-1: what an agent may pin on a ticket -- every harness (= provider id) and each one's models -- read
-     * the same way as `agenthq harnesses` ([HarnessCatalog]). `models` is null when the harness lists none.
-     */
-    private suspend fun listHarnesses(stream: FrameStream): ToolResult {
-        val harnesses = HarnessCatalog.read(stream)
-        return ok(buildJsonObject {
-            put("harnesses", buildJsonArray {
-                harnesses.forEach { harness ->
-                    add(buildJsonObject {
-                        put("id", harness.id)
-                        put("default", harness.default)
-                        put("defaultModel", harness.defaultModel)
-                        put("models", harness.models?.let { models -> buildJsonArray { models.forEach { add(JsonPrimitive(it)) } } } ?: JsonNull)
-                        put("available", harness.available)
-                        put("unavailableReason", harness.unavailableReason)
-                        put("note", harness.note)
-                    })
-                }
-            })
-            put("howToUse", HarnessCatalog.HOW_TO_PIN)
-        })
-    }
-
-    /** HARNESS-INSTALL-1: the same `harness_install` as `agenthq harness-install`; a failed harness makes the result an error. */
-    private suspend fun harnessInstall(stream: FrameStream, arguments: JsonObject): ToolResult {
-        val ids = (arguments["ids"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { s -> s.isNotEmpty() } }.orEmpty()
-        val update = (arguments["update"] as? JsonPrimitive)?.contentOrNull == "true"
-        val result = HarnessInstallClient.install(stream, ids, update)
-        val payload = buildJsonObject {
-            put("result", json.encodeToJsonElement(com.superiorsoftllc.agenthq.protocol.HarnessInstallResult.serializer(), result))
-            put("text", StringBuilder().also { HarnessInstallClient.render(result, it) }.toString())
-        }
-        return ToolResult(json.encodeToString(JsonObject.serializer(), payload), isError = HarnessInstallClient.failed(result))
-    }
-
     private suspend fun fetchSessions(stream: FrameStream): List<SessionRecord> =
         decodeSessions(stream.request(Envelope(Envelope.SESSIONS), Envelope.SESSIONS, "sessions", idempotent = true))
 
@@ -420,12 +382,7 @@ internal class McpTools(
         const val POD_STATE = "agenthq_pod_state"
         const val BOARD = "agenthq_board"
 
-        /** BUG-ASSIGN-1: the harnesses (= provider ids) a ticket may pin, and each one's models. */
-        const val LIST_HARNESSES = "agenthq_list_harnesses"
-
-        /** HARNESS-INSTALL-1: detect / install the harness CLIs (claude, opencode, pi) through npm, on a local or remote daemon. */
-        const val HARNESS_INSTALL = "agenthq_harness_install"
-        val NAMES = setOf(LIST_SESSIONS, GET_SESSION, POD_STATE, BOARD, LIST_HARNESSES, HARNESS_INSTALL) + McpWriteTools.NAMES + McpMailTools.NAMES + McpTicketTools.NAMES + McpQuestionTools.NAMES + McpProgressTools.NAMES + McpWatchTools.NAMES + McpPipelineTools.NAMES + McpRoleTools.NAMES + McpProjectConfigTools.NAMES
+        val NAMES = setOf(LIST_SESSIONS, GET_SESSION, POD_STATE, BOARD) + McpWriteTools.NAMES + McpMailTools.NAMES + McpTicketTools.NAMES + McpQuestionTools.NAMES + McpProgressTools.NAMES + McpWatchTools.NAMES + McpPipelineTools.NAMES + McpRoleTools.NAMES + McpProjectConfigTools.NAMES
 
         /** The one, fixed message a tool answers with when nothing is listening at the daemon address. */
         const val DAEMON_UNREACHABLE =
@@ -507,38 +464,6 @@ internal class McpTools(
                     putJsonObject("projectId") {
                         put("type", "string")
                         put("description", "Project whose tickets to summarise. Default: the caller's own project; \"all\" (pm / owner callers only) covers every project, each line prefixed [projectId].")
-                    }
-                }
-                put("additionalProperties", false)
-            })
-            add(tool(
-                LIST_HARNESSES,
-                "List the harnesses a ticket can run on: each harness id (the value of a ticket's provider) with its " +
-                    "models (the values of its model), which one is the default, and whether its CLI is available. " +
-                    "Pin them with agenthq_ticket_create / agenthq_ticket_update, then start the ticket with " +
-                    "agenthq_ticket_start.",
-            ) {
-                put("type", "object")
-                putJsonObject("properties") {}
-                put("additionalProperties", false)
-            })
-            add(tool(
-                HARNESS_INSTALL,
-                "npm-install harness CLIs on the daemon's machine, into Infantry AI's own prefix dir (no admin rights, no user data " +
-                    "touched; idempotent). ids: which ones (default: every missing one). update=true also refreshes outdated ones. " +
-                    "Needs Node/npm on that machine (the answer says so when it is missing). Sign-in is still the user's: each CLI keeps " +
-                    "its own login. Can take minutes.",
-            ) {
-                put("type", "object")
-                putJsonObject("properties") {
-                    putJsonObject("ids") {
-                        put("type", "array")
-                        putJsonObject("items") { put("type", "string") }
-                        put("description", "Harness ids to install, from: claude, opencode, pi. Default: all missing.")
-                    }
-                    putJsonObject("update") {
-                        put("type", "boolean")
-                        put("description", "Also update installed CLIs that are outdated (default false).")
                     }
                 }
                 put("additionalProperties", false)

@@ -22,7 +22,7 @@ class BuiltinToolsListGuardTest {
         family("pending: a Pipeline official plugin", "agenthq_pipeline", "agenthq_pipeline_record")
         family("pending: Infantry_Attention daemon half", "agenthq_ask")
         family("pending: Infantry_Settings daemon half", "agenthq_project_config_get", "agenthq_project_config_set")
-        family("pending: Infantry_Agents daemon half; McpGuardrails moves with it", "agenthq_list_harnesses", "agenthq_harness_install", "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_spawn", "agenthq_prompt", "agenthq_kill", "agenthq_session_restart", "agenthq_session_remove")
+        family("pending: Infantry_Agents daemon half; McpGuardrails moves with it", "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_spawn", "agenthq_prompt", "agenthq_kill", "agenthq_session_restart", "agenthq_session_remove")
         family("pending: file watch is a daemon behaviour (watch hooks), needs a DaemonApi surface", "agenthq_watch_file")
     }
 
@@ -32,6 +32,22 @@ class BuiltinToolsListGuardTest {
         assertEquals(emptyList<String>(), inCoreSource, "agenthq_harness_status must come from plugins/official/Infantry_Agents/daemon, not cli/mcp")
         val manifest = File(TestDaemonPlugins.repo, "plugins/official/Infantry_Agents/module.json").readText()
         assertTrue("\"agenthq_harness_status\"" in manifest, "Infantry_Agents/module.json must declare the tool")
+    }
+
+    /** RUNTIME-LOAD-2: install joined status in Infantry_Agents; its tool timeout is the tool's own data, not a module-wide limit. */
+    @Test fun `harness install is not wired in core and the Infantry_Agents module declares it`() {
+        val inCoreSource = mcp.walkTopDown().filter { it.isFile && it.extension == "kt" }.filter { "agenthq_harness_install" in it.readText() }.map { it.name }.toList()
+        assertEquals(emptyList<String>(), inCoreSource, "agenthq_harness_install must come from plugins/official/Infantry_Agents/daemon, not cli/mcp")
+        val manifest = File(TestDaemonPlugins.repo, "plugins/official/Infantry_Agents/module.json").readText()
+        assertTrue("\"agenthq_harness_install\"" in manifest, "Infantry_Agents/module.json must declare the tool")
+        assertTrue("toolTimeoutMs" !in manifest, "a long tool declares DaemonTool.timeoutMs instead of raising the whole module's limit")
+    }
+
+    @Test fun `list harnesses is not wired in core and the Infantry_Agents module declares it`() {
+        val inCoreSource = mcp.walkTopDown().filter { it.isFile && it.extension == "kt" }.filter { Regex("\"agenthq_list_harnesses\"").containsMatchIn(it.readText()) }.map { it.name }.toList()
+        assertEquals(emptyList<String>(), inCoreSource, "agenthq_list_harnesses must come from plugins/official/Infantry_Agents/daemon, not cli/mcp")
+        val manifest = File(TestDaemonPlugins.repo, "plugins/official/Infantry_Agents/module.json").readText()
+        assertTrue("\"agenthq_list_harnesses\"" in manifest, "Infantry_Agents/module.json must declare the tool")
     }
 
     @Test fun `every built-in tool in core is on the list with a reason`() {
@@ -44,5 +60,5 @@ class BuiltinToolsListGuardTest {
         assertTrue(inCore.values.all { it.length > 15 })
     }
 
-    private companion object { const val CEILING = 33 }
+    private companion object { const val CEILING = 31 }
 }

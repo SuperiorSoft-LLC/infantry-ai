@@ -244,6 +244,10 @@ class DaemonPluginHost private constructor(
 
     // ---- tools ------------------------------------------------------------------------------------------------------
 
+    /** The wall clock one call of [tool] gets: its own declared timeoutMs capped at limits.plugins.toolMaxTimeoutMs, else the module's. */
+    private fun toolTimeoutMs(owner: Loaded, tool: DaemonTool): Long =
+        tool.timeoutMs?.takeIf { it > 0 }?.coerceAtMost(services.limit(LimitRegistry.PLUGIN_TOOL_MAX_TIMEOUT_MS)) ?: owner.toolTimeoutMs
+
     /** `plugin_tools`: every healthy plugin tool, as MCP `tools/list` entries. */
     fun toolDescriptors(): JsonArray = JsonArray(
         toolEntries.values.filter { !it.owner.guard.disabled }.sortedBy { it.tool.name }.map { e ->
@@ -254,6 +258,7 @@ class DaemonPluginHost private constructor(
                 if (e.tool.annotations.isNotEmpty()) put("annotations", e.tool.annotations)
                 put("module", JsonPrimitive(e.owner.id))
                 put("action", JsonPrimitive(e.action.id))
+                put("timeoutMs", JsonPrimitive(toolTimeoutMs(e.owner, e.tool)))
             })
         },
     )
@@ -271,7 +276,7 @@ class DaemonPluginHost private constructor(
             override fun request(type: String, data: String, sessionId: String?, timeoutMs: Long): Frame =
                 request(Envelope(type, data, sessionId), timeoutMs).toFrame()
         }
-        return entry.owner.call("tool($name)", entry.owner.toolTimeoutMs) { entry.tool.call(call) }
+        return entry.owner.call("tool($name)", toolTimeoutMs(entry.owner, entry.tool)) { entry.tool.call(call) }
             .getOrElse { ToolResult("$name failed: ${it.message ?: it::class.simpleName}", isError = true) }
     }
 

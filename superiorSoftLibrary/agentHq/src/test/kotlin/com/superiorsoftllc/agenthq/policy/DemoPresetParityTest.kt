@@ -18,7 +18,8 @@ class DemoPresetParityTest {
             ActionPolicyMatcher.allows(preset.disable, preset.allow, a.id, a.kind)
         }.toSet()
         assertEquals(emptySet(), DemoPresetFixture.ALLOWED_TYPES - allowed, "the old lock allowed these, the preset refuses them")
-        assertEquals(emptySet(), allowed - DemoPresetFixture.ALLOWED_TYPES, "the preset allows these, the old lock refused them")
+        // DEMO-FIX-1 deliberately added one read: listing the plugins' tools (a call is still gated by the tool's own action).
+        assertEquals(setOf("plugin_tools"), allowed - DemoPresetFixture.ALLOWED_TYPES, "the preset allows these, the old lock refused them")
     }
 
     @Test fun `the old per-project reads are the catalog's PROJECT scope`() {
