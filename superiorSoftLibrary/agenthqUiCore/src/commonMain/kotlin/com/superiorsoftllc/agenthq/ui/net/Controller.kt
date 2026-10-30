@@ -1122,7 +1122,7 @@ class Controller(
      */
     suspend fun createTicket(
         title: String, description: String, ticketType: String?, agentId: String?, epicId: String? = null,
-        provider: String? = null, model: String? = null,
+        provider: String? = null, model: String? = null, contextLimit: Int? = null,
     ): CommandResult {
         if (title.isBlank()) return report(CommandResult.Refused("a ticket needs a title"))
         val body = buildJsonObject {
@@ -1133,6 +1133,8 @@ class Controller(
             if (!epicId.isNullOrBlank()) put("epicId", epicId)
             if (!provider.isNullOrBlank()) put("provider", provider.trim())
             if (!model.isNullOrBlank()) put("model", model.trim())
+            // CONTEXT-LIMIT-2: only a set limit is sent; none = the harness's own window.
+            if (contextLimit != null && contextLimit > 0) put("contextLimit", contextLimit)
             // UI-BOARD-PROJ: a ticket created from the Board joins the project the shell is scoped to.
             activeProjectId?.let { put("projectId", it) }
         }
@@ -1150,7 +1152,7 @@ class Controller(
     suspend fun editTicket(
         id: String, title: String? = null, description: String? = null, epicId: String? = null,
         agentId: String? = null, provider: String? = null, model: String? = null,
-        images: List<String>? = null,
+        images: List<String>? = null, contextLimit: Int? = null,
     ): CommandResult {
         if (title != null && title.isBlank()) return report(CommandResult.Refused("a ticket needs a title"))
         if (images != null && !contractAtLeast(_state.value.connection.contract, 1, 84)) {
@@ -1167,6 +1169,8 @@ class Controller(
             if (agentId != null) put("agentId", agentId.trim())
             if (provider != null) put("provider", provider.trim())
             if (model != null) put("model", model.trim())
+            // CONTEXT-LIMIT-2: null = unchanged, 0 = clear, else the new size in tokens.
+            if (contextLimit != null) put("contextLimit", contextLimit)
             // IMG-4: the full list replaces the stored one; [] removes every image.
             if (images != null) put("images", kotlinx.serialization.json.JsonArray(images.map { JsonPrimitive(it) }))
         }

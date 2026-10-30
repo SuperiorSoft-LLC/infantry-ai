@@ -411,6 +411,10 @@ object TicketColumns {
 @Serializable
 data class ExecutorField(val value: String? = null, val source: String = "default")
 
+/** CONTEXT-LIMIT-1: a ticket's effective limit: [source] `ticket` / `default`, [support] and [how] of its harness. */
+@Serializable
+data class EffectiveContextLimit(val value: Int? = null, val source: String, val support: String? = null, val how: String? = null)
+
 /** Contract 1.6.0: the executor a ticket will actually run on. */
 @Serializable
 data class EffectiveExecutor(
@@ -468,6 +472,9 @@ data class Ticket(
     /** BRANCH-PER-TASK 1/3: the commit that branch was cut from, once a start cut it. */
     val base: String? = null,    /** Contract 1.30.0 / M2-14: the epic the ticket is filed under; null = none. */
     val epicId: String? = null,
+    /** CONTEXT-LIMIT-1 (1.146.0): the ticket's own context limit in tokens; null = none. */
+    val contextLimit: Int? = null,
+    val effectiveContextLimit: EffectiveContextLimit? = null,
     /**
      * IMG-3 (contract 1.84.0): the ticket's images, in attach order, each a relPath under its project directory
      * (`.agenthq/uploads/ticket/<sha256>.<ext>`). Empty from an older daemon.
@@ -1078,6 +1085,9 @@ data class SessionRecord(
     /** Contract 1.6.0: the ticket a hand-out started this session for. */
     val ticketId: String? = null,
     val unattended: Boolean = false,
+    /** CONTEXT-LIMIT-1 (1.146.0): the limit the session started with (tokens) and how its harness honours it; null = none. */
+    val contextLimit: Int? = null,
+    val contextLimitSupport: String? = null,
     /** The project the session is bound to (the daemon's `SessionRecord.projectId`); null = no project. */
     val projectId: String? = null,
     /**

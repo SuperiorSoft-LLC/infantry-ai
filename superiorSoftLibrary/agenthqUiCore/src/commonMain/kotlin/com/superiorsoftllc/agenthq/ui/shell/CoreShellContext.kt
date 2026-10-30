@@ -438,10 +438,10 @@ class CoreTickets(private val state: AppState, private val controller: Controlle
     override val error: String? get() = state.ticketError
     override fun ticket(id: String?): Ticket? = state.ticket(id)
     override fun column(status: String): List<Ticket> = state.column(status)
-    override suspend fun create(title: String, description: String, agentId: String?, epicId: String?, provider: String?, model: String?) =
-        controller.createTicket(title, description, null, agentId, epicId, provider, model)
-    override suspend fun edit(id: String, title: String?, description: String?, epicId: String?, agentId: String?, provider: String?, model: String?, images: List<String>?) =
-        controller.editTicket(id, title, description, epicId, agentId, provider, model, images)
+    override suspend fun create(title: String, description: String, agentId: String?, epicId: String?, provider: String?, model: String?, contextLimit: Int?) =
+        controller.createTicket(title, description, null, agentId, epicId, provider, model, contextLimit)
+    override suspend fun edit(id: String, title: String?, description: String?, epicId: String?, agentId: String?, provider: String?, model: String?, images: List<String>?, contextLimit: Int?) =
+        controller.editTicket(id, title, description, epicId, agentId, provider, model, images, contextLimit)
     override suspend fun delete(id: String) = controller.deleteTicket(id)
     override suspend fun move(id: String, status: String, position: Int?) = controller.moveTicket(id, status, position = position)
     override suspend fun reorder(id: String, position: Int) = controller.reorderTicket(id, position)

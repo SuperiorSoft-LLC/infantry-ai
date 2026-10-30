@@ -2,6 +2,7 @@ package com.superiorsoftllc.agenthq.plugins.official.roles
 
 import com.superiorsoftllc.agenthq.ui.shell.gate
 import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.agenthq.ui.model.sessionContextLimitChip
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -183,6 +184,7 @@ private fun RoleDetail(
             sessions.forEach { a ->
                 Row(Modifier.fillMaxWidth().clickable { onOpenAgent(a.id) }.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(a.session.worktreeBranch ?: a.id.take(8), color = Palette.Text, fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                    sessionContextLimitChip(a.session, deps.executor.providers)?.let { ContextLimitChipView(it); Spacer(Modifier.width(4.dp)) }
                     Chip(a.stateText, stateColor(a.session.state, false))
                 }
             }
