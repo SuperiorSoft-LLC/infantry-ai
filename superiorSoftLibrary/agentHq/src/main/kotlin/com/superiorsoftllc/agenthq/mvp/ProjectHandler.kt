@@ -111,7 +111,9 @@ class ProjectHandler(
             val autoRemove = request.autoRemoveDoneWorkers
             val rules = request.routingRules
             val experiments = request.experiments
-            if (caps.isNullOrEmpty() && autoRemove == null && rules == null && experiments.isNullOrEmpty()) projectEnvelope(store.get(request.projectId))
+            val data = request.data
+            val unsetData = request.unsetData
+            if (caps.isNullOrEmpty() && autoRemove == null && rules == null && experiments.isNullOrEmpty() && data.isNullOrEmpty() && unsetData.isNullOrEmpty()) projectEnvelope(store.get(request.projectId))
             else {
                 // ROUTING-1: the rules are validated first (a refused list writes nothing), then the caps: a refused cap
                 // writes nothing either, so nothing else is changed by a refused request.
@@ -121,7 +123,7 @@ class ProjectHandler(
                 if (checkedRules != null) project = store.setRoutingRules(request.projectId, checkedRules)
                 if (autoRemove != null) project = store.setAutoRemoveDoneWorkers(request.projectId, autoRemove)
                 if (!experiments.isNullOrEmpty()) project = store.setExperiments(request.projectId, experiments)
-                if (!experiments.isNullOrEmpty()) project = store.setExperiments(request.projectId, experiments)
+                if (!data.isNullOrEmpty() || !unsetData.isNullOrEmpty()) project = store.setData(request.projectId, data.orEmpty(), unsetData.orEmpty())
                 projectEnvelope(project.also(onConfigChanged))
             }
         }

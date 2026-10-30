@@ -91,6 +91,7 @@ class SqlProjectPersistence(
                     Json.decodeFromString<List<com.superiorsoftllc.agenthq.protocol.RoutingRule>>(row.routing_rules)
                 }.getOrDefault(emptyList()),
                 experiments = runCatching { Json.decodeFromString<Map<String, String>>(row.experiments) }.getOrDefault(emptyMap()),
+                data = runCatching { Json.decodeFromString<Map<String, String>>(row.project_data) }.getOrDefault(emptyMap()),
             )
         }
 
@@ -107,6 +108,7 @@ class SqlProjectPersistence(
             auto_remove_done_workers = if (project.autoRemoveDoneWorkers) 1L else 0L,
             routing_rules = Json.encodeToString(project.routingRules),
             experiments = Json.encodeToString(project.experiments),
+            project_data = Json.encodeToString(project.data),
         ).value
         // The insert reports how many rows it actually wrote: 1 for a create, 0 when the id was
         // already there -- and SQLDelight drops every statement after the first in a label, so the
@@ -121,6 +123,7 @@ class SqlProjectPersistence(
                 auto_remove_done_workers = if (project.autoRemoveDoneWorkers) 1L else 0L,
                 routing_rules = Json.encodeToString(project.routingRules),
                 experiments = Json.encodeToString(project.experiments),
+                project_data = Json.encodeToString(project.data),
                 id = project.id,
             )
         }

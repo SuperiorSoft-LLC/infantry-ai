@@ -164,6 +164,40 @@ class ProjectStore(
         return updated
     }
 
+    /**
+     * PROJECT-DATA-1 (additive, no version bump): merge [set] into project [id]'s generic data and remove the keys in [unset]. A key is
+     * 1..[DATA_KEY_MAX] chars of letters, digits, `.`, `_`, `-` (first a letter or digit); a value is at most [DATA_VALUE_MAX]
+     * chars and not blank; at most [DATA_MAX_ENTRIES] entries. Any refusal writes nothing. No key is special.
+     */
+    @Synchronized
+    fun setData(id: String, set: Map<String, String>, unset: List<String> = emptyList()): Project {
+        val existing = get(id)
+        val merged = existing.data.toMutableMap()
+        for (rawKey in unset) merged.remove(checkDataKey(rawKey))
+        for ((rawKey, value) in set) {
+            val key = checkDataKey(rawKey)
+            require(value.isNotBlank()) { "data '$key' has a blank value (use unset to remove it)" }
+            require(value.length <= DATA_VALUE_MAX) { "data '$key' value is ${value.length} chars, the limit is $DATA_VALUE_MAX" }
+            merged[key] = value
+        }
+        require(merged.size <= DATA_MAX_ENTRIES) { "a project holds at most $DATA_MAX_ENTRIES data entries" }
+        if (merged == existing.data) return existing
+        val updated = existing.copy(data = merged.toSortedMap())
+        projects[existing.id] = updated
+        persist(updated)
+        return updated
+    }
+
+    private fun checkDataKey(raw: String): String {
+        val key = raw.trim()
+        require(DATA_KEY.matches(key)) { "data key '${key.take(DATA_KEY_MAX)}' is not a name of 1..$DATA_KEY_MAX letters, digits, '.', '_' or '-'" }
+        return key
+    }
+
+    /** PROJECT-DATA-1: project [projectId]'s data value for [key] (null when unset or no such project). */
+    @Synchronized
+    fun dataOf(projectId: String?, key: String): String? = projects[projectId?.trim().orEmpty()]?.data?.get(key)
+
     /** ROUTING-1: project [projectId]'s routing rules (empty when it has none, or there is no such project). */
     @Synchronized
     fun routingRulesOf(projectId: String?): List<com.superiorsoftllc.agenthq.protocol.RoutingRule> =
@@ -213,6 +247,12 @@ class ProjectStore(
     companion object {
         const val MAX_NAME_LENGTH = 200
         const val MAX_GOAL_LENGTH = 100_000
+
+        /** PROJECT-DATA-1: limits of the generic project data store. */
+        const val DATA_KEY_MAX = 80
+        const val DATA_VALUE_MAX = 4096
+        const val DATA_MAX_ENTRIES = 200
+        private val DATA_KEY = Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,79}")
 
         private fun checkName(raw: String): String {
             val name = raw.trim()

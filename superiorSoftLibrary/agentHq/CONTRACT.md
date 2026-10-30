@@ -215,6 +215,10 @@ Behavioural; `contract=1.136.0` (1.135.0 is SECRETS-2). Every client frame passe
 
 Not a wire change. The agent watchdog is a per-project opt-in stored as `Project.experiments["agentWatchdog"] = "on"` (absent = off, the default), set with `project_config.experiments` and read by the daemon at every watchdog tick (a flip needs no restart). While off, the watchdog sends nothing for that project's sessions (no nudge, no PM mail, no attention item) and shows them IDLE. `AGENTHQ_WATCHDOG=off` stays a global hard off. Mail from `system` or a `trigger:` sender is never a pending item.
 
+### Note (no version bump): generic project data (PROJECT-DATA-1, ticket-d7b40594)
+
+Additive. `Project.data` (string key to string value; absent from an older daemon = none) is set with `project_config.data` (merged) and `project_config.unsetData` (keys removed); a read is a `project_config` with neither. Keys: 1..80 chars of letters, digits, `.`, `_`, `-`, first a letter or digit; values: not blank, at most 4096 chars (JSON text allowed); at most 200 entries; a refusal writes nothing. No key is special and none ships with a default. Stored in `projects.project_data` (54.sqm). CLI: `agenthq project config set <projectId> <dotted.key> <value>`, `config unset <projectId> <dotted.key>`, `config get` lists `  key = value`. MCP: `agenthq_project_config_set` `dataKey` + `value` / `dataUnset`; `agenthq_project_config_get` returns `data`.
+
 ### What changed in 1.127.0 (TODO-OVERLAY-1, ticket-8bea1a4d) - the agent's own to-do list
 
 Additive; `contract=1.127.0`. `status.todos` (`[{text, status: pending|in_progress|done, activeText?}]`) is set on the status frame of a to-do tool call (claude `TodoWrite`, opencode `todowrite`) and is the FULL list: a client REPLACES its list, an empty list clears it. Only these items are sent, never other tool arguments. Omitted otherwise; an older daemon never sends it. Replay: it rides the sequenced status frame like any other.

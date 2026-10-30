@@ -64,6 +64,7 @@ private fun ToolCall.send(patch: ProjectConfigPatch): ToolResult = try {
                 put("autoRemoveDoneWorkers", project.autoRemoveDoneWorkers)
                 put("routingRules", json.encodeToJsonElement(ListSerializer(RoutingRuleRecord.serializer()), project.routingRules))
                 put("experiments", buildJsonObject { project.experiments.forEach { (k, v) -> put(k, v) } })
+                put("data", buildJsonObject { project.data.forEach { (k, v) -> put(k, v) } })
                 put("note", "routingRules: first match wins, the last is the default row; a ticket's own provider/model pin always wins. max concurrent agents per role; a role not listed runs 1. autoRemoveDoneWorkers: a done ticket's worker session is ended and removed")
             }))
         }
@@ -100,7 +101,9 @@ object ProjectConfigSetTool : DaemonTool {
                 "ticketTypes or role). A provider/model its harness does not list is refused; Opus only as pi + " +
                 "anthropic/claude-opus-5-5. \"[]\" clears the rules.",
             "experiment" to "an experiment switch name (a name the daemon knows); needs value.",
-            "value" to "on or off, for experiment.",
+            "value" to "on or off, for experiment; or the string to store, for dataKey.",
+            "dataKey" to "a generic project data key, e.g. build.root (letters, digits, . _ -; max 80); needs value to set it.",
+            "dataUnset" to "a generic project data key to remove.",
         ),
         listOf("projectId"),
     )
@@ -122,6 +125,12 @@ object ProjectConfigSetTool : DaemonTool {
             "true" -> true
             "false" -> false
             else -> return refused("$NAME: autoRemoveDoneWorkers must be true or false, was '${autoRaw.take(20)}'")
+        }
+        // PROJECT-DATA-1 (1.129.0): `dataKey` with `value` stores generic project data; `dataUnset` removes a key.
+        arguments.string("dataUnset")?.let { return call.send(ProjectConfigPatch(projectId, unsetData = listOf(it))) }
+        arguments.string("dataKey")?.let { key ->
+            val value = arguments.string("value") ?: return refused("$NAME: dataKey needs a value")
+            return call.send(ProjectConfigPatch(projectId, data = mapOf(key to value)))
         }
         // EXPERIMENTS-1 (1.126.0): `experiment` (a key) with `value` (on/off) is a change of its own.
         arguments.string("experiment")?.let { key ->

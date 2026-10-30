@@ -1,0 +1,6 @@
+-- PROJECT-DATA-1 -- migration v54 -> v55: a project carries a JSON object of generic string data (key -> value), e.g. build.root.
+-- NOT NULL DEFAULT '{}' so every existing project reads back as "no data". No key is special and none has a default.
+--
+-- NEXT MIGRATION: 55.sqm
+
+ALTER TABLE projects ADD COLUMN project_data TEXT NOT NULL DEFAULT '{}';

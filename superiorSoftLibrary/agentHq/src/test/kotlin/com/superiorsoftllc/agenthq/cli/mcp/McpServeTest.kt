@@ -650,7 +650,7 @@ class McpServeTest {
         withPlugins("official/Infantry_Settings") { served, tools ->
             assertEquals(listOf("agenthq_project_config_get", "agenthq_project_config_set"), tools.map { it["name"]!!.jsonPrimitive.content }.filter { it.startsWith("agenthq_project_config_") })
             val set = tools.single { it["name"]!!.jsonPrimitive.content == "agenthq_project_config_set" }["inputSchema"]!!.jsonObject
-            assertEquals(listOf("projectId", "role", "cap", "autoRemoveDoneWorkers", "routingRules", "experiment", "value"), set["properties"]!!.jsonObject.keys.toList())
+            assertEquals(listOf("projectId", "role", "cap", "autoRemoveDoneWorkers", "routingRules", "experiment", "value", "dataKey", "dataUnset"), set["properties"]!!.jsonObject.keys.toList())
             assertEquals("agenthq_project_config_get needs a projectId", text(served.callTool("agenthq_project_config_get")))
             assertEquals("agenthq_project_config_set needs a role (with a cap), autoRemoveDoneWorkers, or routingRules", text(served.callTool("agenthq_project_config_set", """{"projectId":"p"}""")))
             assertEquals("agenthq_project_config_set: autoRemoveDoneWorkers must be true or false, was 'maybe'", text(served.callTool("agenthq_project_config_set", """{"projectId":"p","autoRemoveDoneWorkers":"maybe"}""")))
