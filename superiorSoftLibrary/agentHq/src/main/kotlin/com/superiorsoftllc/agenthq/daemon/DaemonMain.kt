@@ -1117,7 +1117,9 @@ class AgentHqDaemon(
                 com.superiorsoftllc.agenthq.harness.pi.PiLaunchExtras.builtIn = { dir, env -> todo(dir, env) + watch(dir, env) }
             }
             // STALL-2: the opencode watch plugin, named in every serve's inline config while its session's watch is on.
-            WatchHooks.openCodePlugin = runCatching { WatchHooks.install(File(stateDir(), "opencode"), WatchHooks.OPENCODE_RESOURCE, "agenthq-watch.js") }
+            // H2: it belongs to the opencode harness, so it is written only when opencode is present (no `opencode/` dir otherwise).
+            val opencodePresent = (listOf(provider) + additionalProviders).any { it.id == "opencode" } || "opencode" in harnesses.harnessIds()
+            WatchHooks.openCodePlugin = if (!opencodePresent) null else runCatching { WatchHooks.install(File(stateDir(), "opencode"), WatchHooks.OPENCODE_RESOURCE, "agenthq-watch.js") }
                 .onFailure { System.err.println("[agentHq] opencode watch plugin not written: ${it.message}") }.getOrNull()
             // STALL-2: claude's watch hook settings go to a file here (inline JSON loses its quotes through the Windows .cmd shim).
             WatchHooks.settingsDir = File(stateDir(), "watch")
@@ -4113,7 +4115,9 @@ private inline fun boardRequest(frame: String, block: () -> Envelope?): Envelope
  * with the model its runs use when a spawn names none, as resolved right now.
  */
 internal fun providerInfos(manager: SessionManager, harnesses: HarnessRegistry? = null): List<ProviderInfo> {
-    val configured = manager.providers.map { p -> providerInfo(p, p.id == manager.providerId) }
+    // H2: the placeholder default of a zero-harness daemon is not a harness and is never listed.
+    val configured = manager.providers.filter { it !is com.superiorsoftllc.agenthq.provider.NoHarnessProvider }
+        .map { p -> providerInfo(p, p.id == manager.providerId) }
     // WIRE-1: a harness a plugin registered is listed beside the providers (a configured provider of
     // the same id wins, so `claude` appears once).
     val known = configured.map { it.id }.toSet()

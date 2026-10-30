@@ -1394,6 +1394,11 @@ internal object Cli {
         checkContract(stream, err)
         val harnesses = HarnessCatalog.read(stream)
         out.appendLine(HARNESS_HEADER)
+        // H2: an empty list is the truth of a daemon with no harness; say how to get one (the built-in installer).
+        if (harnesses.isEmpty()) {
+            out.appendLine(NO_HARNESS_HINT)
+            return@runBlocking 0
+        }
         for (harness in harnesses) {
             out.appendLine(
                 buildString {
@@ -5405,6 +5410,10 @@ internal object Cli {
 
     /** BUG-ASSIGN-1: the `harnesses` table header. */
     private const val HARNESS_HEADER = "HARNESS | DEFAULT | MODELS"
+
+    /** H2: printed under the header when the daemon lists no harness. */
+    internal const val NO_HARNESS_HINT =
+        "No harness installed. Install one: agenthq harness-install <id> (MCP: agenthq_harness_install), or drop a harness module into plugins/."
 
     /** PROMPT-5: how long `ask` waits past its timeout for the daemon's `prompt_answer`. */
     private const val ASK_GRACE_MS = 10_000L

@@ -325,3 +325,14 @@ class ExecutorPickerModelTest {
         assertEquals("quiet", fresh().withHarness("quiet").harness)
     }
 }
+
+/** H2: a daemon with no harness gives the picker an empty list; the line it shows says to install one. */
+class ExecutorPickerEmptyStateTest {
+    @Test
+    fun `an empty harness list has nothing picked and the empty state says to install one`() {
+        val empty = ExecutorPickerModel(emptyList(), emptyList())
+        assertTrue(empty.harnesses.isEmpty())
+        assertNull(empty.harness)
+        assertTrue(ExecutorPickerModel.NO_HARNESS_TEXT.startsWith("No harness installed, install one"), ExecutorPickerModel.NO_HARNESS_TEXT)
+    }
+}

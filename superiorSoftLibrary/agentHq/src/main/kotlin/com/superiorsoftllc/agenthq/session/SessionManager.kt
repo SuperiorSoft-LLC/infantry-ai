@@ -166,6 +166,9 @@ class SessionManager(
         }
     }
 
+    /** H2: whether a spawn naming [id] resolves right now (a configured provider or a registered harness). */
+    fun hasProvider(id: String): Boolean = lookup(id.trim().lowercase()) != null
+
     /** The providers a spawn may name (contract 1.3.0), the default first. */
     val providers: List<AgentProvider> get() = configured.values.map { it.provider }
 
@@ -175,7 +178,8 @@ class SessionManager(
      * [startNew] applies the same check, and is the one that counts.
      */
     fun checkSpawn(providerId: String?, model: String?) {
-        resolveProvider(providerId)
+        // H2: naming no provider on a zero-harness daemon is saveable (a profile, a role binding); only the START refuses.
+        if (!(providerId.isNullOrBlank() && provider is com.superiorsoftllc.agenthq.provider.NoHarnessProvider)) resolveProvider(providerId)
         spawnModel(model)?.let { requireAllowedModel(it, null) }
     }
 
@@ -1800,10 +1804,20 @@ class SessionManager(
     /** The configured provider [id] names; null or blank = the default. Unknown = refused, never substituted. */
     private fun resolveProvider(id: String?): Configured {
         val wanted = id?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
-            ?: return configured.getValue(provider.id)
+            ?: return configured.getValue(provider.id).also {
+                // H2: the default is "none" when no harness is installed; say what to do instead of failing in a launch.
+                if (it.provider is com.superiorsoftllc.agenthq.provider.NoHarnessProvider) {
+                    throw IllegalArgumentException(com.superiorsoftllc.agenthq.provider.NoHarnessProvider.NOT_INSTALLED)
+                }
+            }
         return lookup(wanted) ?: throw IllegalArgumentException(
-            "provider '${wanted.take(80)}' is not configured on this daemon " +
-                "(configured: ${configured.keys.joinToString()})",
+            if (provider is com.superiorsoftllc.agenthq.provider.NoHarnessProvider && configured.size == 1) {
+                "harness '${wanted.take(80)}' is not installed. ${com.superiorsoftllc.agenthq.provider.NoHarnessProvider.NOT_INSTALLED}"
+            } else {
+                // H2: "not installed" is the truth (the old "not configured" wording stays for callers that match on it).
+                "provider '${wanted.take(80)}' is not configured on this daemon: harness '${wanted.take(80)}' is not installed " +
+                    "(configured: ${configured.keys.filter { it != com.superiorsoftllc.agenthq.provider.NoHarnessProvider.ID }.joinToString()})"
+            },
         )
     }
 
