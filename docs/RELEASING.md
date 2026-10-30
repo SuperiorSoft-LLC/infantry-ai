@@ -1,5 +1,32 @@
 # Releasing AgentHQ (RELEASE-AUTO-1)
 
+## Package a build locally (BUILD-LOC-1): the one procedure
+
+Every local build goes through `scripts/package-dist.ps1`. Output locations are project data, never code:
+
+| Setting | Meaning |
+|---|---|
+| `build.root` | The one build folder. Outputs: `<build.root>\builds\<sha>\` (one subfolder per sha, never a new top-level folder) and `<build.root>\current\` (the last build that passed the copy-integrity checks). |
+| `build.backupRoot` | Where the owner state backup goes: `<build.backupRoot>\agenthq-state-backup\<stamp>\` (read-only copy). |
+
+Read order: env override (`AGENTHQ_BUILD_ROOT`, `AGENTHQ_BUILD_BACKUPROOT`), then the daemon's project config for the
+project (`agenthq project config get <projectId>`). If a setting is missing the script stops with exit 2 and writes nothing.
+
+```powershell
+powershell -File scripts/package-dist.ps1 -Sha <sha> -DryRun      # prints the resolved paths and the gradle command; builds nothing
+powershell -File scripts/package-dist.ps1 -Sha <sha>              # devSign build (says so; not for release)
+powershell -File scripts/package-dist.ps1 -Sha <sha> -Keystore <p12> -KeyAlias <alias>   # signed; needs env IHQ_STOREPASS
+powershell -File scripts/package-dist.ps1 -BackupState -StateDir <owner state dir> -DryRun  # -DryRun first, then without it
+```
+
+What a build does: the sha must be on `feature-agenthq-mvp`; it is built in a clean detached worktree under `%TEMP%` with
+`:superiorSoftLibrary:agentHqUi:createDistributable --no-parallel --no-daemon` and `-Dorg.gradle.jvmargs=-XX:MaxMetaspaceSize=2g -Xmx3g`.
+The app image is copied to `builds\<sha>\`, which gets `BUILD-INFO.txt` and a one-line `MANIFEST.txt` (sha, UTC time,
+`signed` or `devSign`). Integrity checks (exe present and same size, file count and bytes, BUILD-INFO sha) run before
+`current\` is replaced. A build runs no tests. Run it as a background job (`agenthq bg run --notify`), since it takes minutes.
+
+Old folders from before BUILD-LOC-1 are never deleted by the script; remove them by hand after the owner agrees.
+
 Pushing a tag `v<MAJOR.MINOR.BUILD>` runs `.github/workflows/release.yml`, which builds the Windows app and the
 Android APK and publishes them to that tag's GitHub Release.
 
