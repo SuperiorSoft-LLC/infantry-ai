@@ -149,7 +149,7 @@ class McpTicketImagesE2eTest {
     fun ticketsCarryImagesThroughMcpAndTheWorkerBriefListsThem() {
         val gated = GatedRunner()
         val state = tempDir("agenthq-mcp-img-daemon")
-        val fixture = DaemonFixture.launch(stateDir = state, runner = gated, workingDir = File(state, "workdir").apply { mkdirs() })
+        val fixture = DaemonFixture.launch(stateDir = state, runner = gated, workingDir = File(state, "workdir").apply { mkdirs() }, pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot())
             .also { fixtures += it; it.client.await(Envelope.READY) }
         val board = fixture.daemon.board
         val root = tempDir("agenthq-mcp-img-project")

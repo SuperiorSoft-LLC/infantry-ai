@@ -112,7 +112,7 @@ class McpBoardShortIdE2eTest {
 
     @Test
     fun boardLinesCarryTheShortIdAndItRoundTripsIntoTicketGet() {
-        val fixture = DaemonFixture.launch(stateDir = tempDir("agenthq-mcp-board-daemon")).also { fixtures += it; it.client.await(Envelope.READY) }
+        val fixture = DaemonFixture.launch(stateDir = tempDir("agenthq-mcp-board-daemon"), pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot()).also { fixtures += it; it.client.await(Envelope.READY) }
         val project = tempDir("agenthq-mcp-board-project")
         McpServeConfig.fileIn(project).apply { parentFile.mkdirs() }.writeText("""{"projectId":"$PROJECT"}""")
         val agent = serve(fixture, project)

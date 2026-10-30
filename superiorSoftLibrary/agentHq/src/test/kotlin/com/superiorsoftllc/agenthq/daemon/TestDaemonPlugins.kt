@@ -20,6 +20,15 @@ object TestDaemonPlugins {
     /** Trusts every official module (a test has no signing key). */
     val trustAll = DaemonPluginHost.Trust(emptyList(), devTrust = true, bundledRoot = null)
 
+    private val boardRoots = java.util.concurrent.CopyOnWriteArrayList<File>()
+    init { Runtime.getRuntime().addShutdownHook(Thread { boardRoots.forEach { runCatching { it.deleteRecursively() } } }) }
+
+    /**
+     * BOARD-API-2: a plugins root holding the built Infantry_Board daemon jar (+ [more] official modules), for a test whose daemon
+     * must serve `agenthq_ticket_get`; deleted when the test JVM exits.
+     */
+    fun boardRoot(vararg more: String): File = root("official/Infantry_Board", *more).also { boardRoots += it }
+
     /** An empty plugins root under [stateDir]: the daemon loads no plugin and never reads the environment's root. */
     fun none(stateDir: File): File = File(stateDir, "no-plugins").apply {
         mkdirs()

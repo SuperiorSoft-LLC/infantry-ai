@@ -108,7 +108,7 @@ class AgentTicketStartE2eTest {
         cleanups += { scratch.deleteRecursively(); repo.deleteRecursively() }
         val claude = GatedRunner()
         // RUNTIME-LOAD-2: agenthq_list_harnesses is Infantry_Agents' daemon half; a test that calls it loads the built plugin.
-        val plugins = if (agentsPlugin) com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Agents").also { cleanups += { it.deleteRecursively() } } else null
+        val plugins = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot(*(if (agentsPlugin) arrayOf("official/Infantry_Agents") else emptyArray()))
         val fixture = DaemonFixture.launch(
             repo = repo.takeIf { repoConfigured },
             context = FakeTicketContext("HANG"),

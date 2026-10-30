@@ -62,6 +62,8 @@ class McpTicketToolsTest {
         null,
         Files.createTempDirectory("agenthq-mcp-ticket-test").toFile(),
         additionalProviders = listOf(ListingProvider("claude", listOf("haiku", "sonnet", "opus"))),
+        // BOARD-API-2: agenthq_ticket_get is Infantry_Board's daemon half.
+        pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot(),
     ).also { fixtures += it; it.client.await(Envelope.READY) }
 
     /** One `agenthq mcp serve` over pipes; returns a tools/call function. */

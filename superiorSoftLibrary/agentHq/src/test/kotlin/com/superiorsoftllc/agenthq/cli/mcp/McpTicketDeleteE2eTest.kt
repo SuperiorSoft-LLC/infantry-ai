@@ -108,7 +108,7 @@ class McpTicketDeleteE2eTest {
 
     @Test
     fun anAgentDeletesTicketsThroughMcpServe() {
-        val fixture = DaemonFixture.launch(stateDir = tempDir("agenthq-mcp-del-daemon")).also { fixtures += it; it.client.await(Envelope.READY) }
+        val fixture = DaemonFixture.launch(stateDir = tempDir("agenthq-mcp-del-daemon"), pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot()).also { fixtures += it; it.client.await(Envelope.READY) }
         val board = fixture.daemon.board
         val project = tempDir("agenthq-mcp-del-project")
         McpServeConfig.fileIn(project).apply { parentFile.mkdirs() }.writeText("""{"projectId":"$PROJECT"}""")
