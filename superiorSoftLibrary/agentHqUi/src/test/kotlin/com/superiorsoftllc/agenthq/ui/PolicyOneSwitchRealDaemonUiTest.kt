@@ -64,8 +64,13 @@ class PolicyOneSwitchRealDaemonUiTest {
         // The demo plugin's preset, as shipped (the daemon reads the plugin's data; core names no preset).
         val shipped = generateSequence(File("").absoluteFile) { it.parentFile }
             .map { File(it, "plugins/demo/Demo_Lock/policies/demo.json") }.first { it.isFile }
-        shipped.copyTo(File(state, "plugins/demo/Demo_Lock/policies/demo.json").apply { parentFile.mkdirs() })
-        demoId = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }.decodeFromString(PolicyPreset.serializer(), shipped.readText()).id
+        // DAEMON-PLUGINS-1: the preset's `seats` are claimed by the Demo_Lock daemon plugin, which this plugins root does not
+        // load; with seats and no claimant the daemon fails closed with its own text. This test is the one-switch refusal,
+        // so it ships the preset minus its seats (the seated lockdown is the Demo_Lock plugin's own test).
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true; encodeDefaults = true }
+        val preset = json.decodeFromString(PolicyPreset.serializer(), shipped.readText()).copy(seats = null)
+        File(state, "plugins/demo/Demo_Lock/policies/demo.json").apply { parentFile.mkdirs() }.writeText(json.encodeToString(PolicyPreset.serializer(), preset))
+        demoId = preset.id
         savedPrefs = uiPrefsOverride
         uiPrefsOverride = mutableMapOf()
     }
