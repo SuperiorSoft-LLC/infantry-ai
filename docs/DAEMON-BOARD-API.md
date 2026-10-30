@@ -177,3 +177,10 @@ way in: the three core consumers (`core.triggers`, `core.done-worker-reaper`, `c
   `TicketDone(files)` payloads (the event carries ids and columns; read the ticket or `ticket_files` for the rest); `EpicChanged` is not
   built (the epics have no event source yet); the stream is fed by the local board, not routed through `OrchestratorLink` (a remote
   orchestrator would feed the same log in a later step). Tests: `TicketEventLogTest`, `LocalBoardServicesTest` (grant).
+
+## CONTEXT-LIMIT-1: `BOARD_API_VERSION` 1.2.0 (additive)
+
+`TicketInfo` gains `contextLimit` (the ticket's limit in tokens, null = none), `effectiveContextLimit`,
+`effectiveContextLimitSource` (`ticket` / `default`) and `contextLimitSupport` (`supported` / `best_effort` / `unsupported`
+for the ticket's effective harness), all defaulted, so a plugin built on 1.1.0 is unaffected. Infantry_Board's
+`agenthq_ticket_get` renders them byte for byte as core's summary does (`LocalBoardServicesTest`). See docs/CONTEXT-LIMIT.md.

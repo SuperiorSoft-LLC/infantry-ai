@@ -55,19 +55,20 @@ class ProviderSpawnDaemonTest {
 
         assertEquals(
             listOf(
-                ProviderInfo(id = "stub", default = true, defaultModel = null),
-                ProviderInfo(id = "second", default = false, defaultModel = "second-default"),
+                ProviderInfo(id = "stub", default = true, defaultModel = null, contextLimit = "unsupported", contextLimitHow = "this harness declares no context limit mapping"),
+                ProviderInfo(id = "second", default = false, defaultModel = "second-default", contextLimit = "unsupported", contextLimitHow = "this harness declares no context limit mapping"),
             ),
             json.decodeFromString(ListSerializer(ProviderInfo.serializer()), answer.data),
         )
         // The literal bytes a UI parses: every field present, nulls included. AGENT-UX-10 adds `models`
         // (null here: the stub has no model catalogue) and `modelsStale`; CLIPATH-1 (1.73.0) adds `available`
-        // and `unavailableReason` (the stub providers need no CLI, so both are available).
+        // and `unavailableReason` (the stub providers need no CLI, so both are available); CONTEXT-LIMIT-1 (1.146.0) adds
+        // `contextLimit` / `contextLimitHow` (a provider that declares no mapping says so).
         assertEquals(
             """[{"id":"stub","default":true,"defaultModel":null,"models":null,"modelsStale":false,""" +
-                """"available":true,"unavailableReason":null},""" +
+                """"available":true,"unavailableReason":null,"contextLimit":"unsupported","contextLimitHow":"this harness declares no context limit mapping"},""" +
                 """{"id":"second","default":false,"defaultModel":"second-default","models":null,"modelsStale":false,""" +
-                """"available":true,"unavailableReason":null}]""",
+                """"available":true,"unavailableReason":null,"contextLimit":"unsupported","contextLimitHow":"this harness declares no context limit mapping"}]""",
             answer.data,
         )
     }

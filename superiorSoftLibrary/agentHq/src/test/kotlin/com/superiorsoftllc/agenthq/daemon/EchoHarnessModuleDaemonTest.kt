@@ -93,6 +93,23 @@ class EchoHarnessModuleDaemonTest {
             }
             assertEquals("echo", first.daemon.manager.list().single().provider)
             assertTrue(first.client.of(Envelope.ERROR).isEmpty(), "errors: ${first.client.of(Envelope.ERROR)}")
+            assertTrue(first.client.of(Envelope.STDOUT).none { it.data.contains("context limit:") }, "no limit: nothing reaches the plugin")
+
+            // CONTEXT-LIMIT-1: the plugin's declared capability is listed, and a spawn's limit reaches its translator (API 2.1).
+            val from = first.client.mark()
+            first.send(Envelope(Envelope.PROVIDERS))
+            val echo = json.decodeFromString(
+                ListSerializer(ProviderInfo.serializer()),
+                first.client.awaitAfter(from, "providers") { it.type == Envelope.PROVIDERS }.data,
+            ).single()
+            assertEquals("supported", echo.contextLimit)
+            assertTrue(echo.contextLimitHow.orEmpty().contains("ECHO_CONTEXT_LIMIT"), "how: ${echo.contextLimitHow}")
+            first.send(Envelope(Envelope.NEW, """{"provider":"echo","contextLimit":200000}"""))
+            first.send(Envelope(Envelope.PROMPT, "ping with a limit"))
+            first.client.awaitWhere("the limit echoed by the plugin", timeoutMs = 60_000) {
+                it.type == Envelope.STDOUT && it.data.contains("context limit: 200000")
+            }
+            assertEquals(200_000, first.daemon.manager.list().single { it.contextLimit != null }.contextLimit)
         } finally {
             first.stop()
         }

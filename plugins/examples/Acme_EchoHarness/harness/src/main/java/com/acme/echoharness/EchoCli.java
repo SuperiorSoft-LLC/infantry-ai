@@ -15,6 +15,8 @@ public final class EchoCli {
         StringBuilder prompt = new StringBuilder();
         for (String line; (line = in.readLine()) != null; ) prompt.append(line).append('\n');
         System.out.println("session: echo-" + Integer.toHexString(prompt.toString().hashCode()));
+        String limit = System.getenv("ECHO_CONTEXT_LIMIT");
+        if (limit != null) System.out.println("context limit: " + limit);
         for (String line : prompt.toString().split("\n")) System.out.println(prefix + ": " + line);
         System.out.flush();
     }

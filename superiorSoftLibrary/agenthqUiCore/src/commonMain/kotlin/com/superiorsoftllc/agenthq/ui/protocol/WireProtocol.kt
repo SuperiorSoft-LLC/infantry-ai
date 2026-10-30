@@ -945,6 +945,9 @@ data class ProviderInfo(
     /** CLIPATH-1 (1.73.0): false when the daemon cannot find this provider's CLI; [unavailableReason] says why. */
     val available: Boolean = true,
     val unavailableReason: String? = null,
+    /** CONTEXT-LIMIT-1 (1.146.0): `supported` / `best_effort` / `unsupported` for a session context limit, and how; null = older daemon. */
+    val contextLimit: String? = null,
+    val contextLimitHow: String? = null,
 )
 
 /**

@@ -190,6 +190,11 @@ class LocalBoardServicesTest {
         put("role", t.agentId?.takeIf { it.startsWith("role:") }?.removePrefix("role:"))
         put("provider", t.provider); put("model", t.model)
         put("weight", kotlinx.serialization.json.JsonPrimitive(t.weight))
+        put("contextLimit", kotlinx.serialization.json.JsonPrimitive(t.contextLimit))
+        if (t.effectiveContextLimitSource != null) {
+            put("effectiveContextLimit", kotlinx.serialization.json.JsonPrimitive(t.effectiveContextLimit))
+            put("effectiveContextLimitSource", t.effectiveContextLimitSource); put("contextLimitSupport", t.contextLimitSupport)
+        }
         put("effectiveProvider", t.effectiveProvider); put("effectiveProviderSource", t.effectiveProviderSource)
         put("effectiveModel", t.effectiveModel); put("effectiveModelSource", t.effectiveModelSource); put("effectiveRule", t.effectiveRule)
         put("branch", t.branch); put("sessionId", t.sessionId)

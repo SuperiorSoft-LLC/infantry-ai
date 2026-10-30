@@ -36,7 +36,11 @@ import java.util.concurrent.atomic.AtomicLong
  *  - [abortTurn]: `{"type":"abort"}`; the turn ends on the `agent_settled {"aborted":true}` it produces (its
  *    `response/abort` may arrive later and is ignored); the process lives on;
  *  - a dialog `extension_ui_request` (select / confirm / input / editor) is answered cancelled: no one is at a TUI;
- *  - [close]: stdin EOF (pi exits 0 on it, in 26 ms in the probe).
+ *  - [close]: stdin EOF (pi exits 0 on it, in 26 ms in the probe);
+ *  - CONTEXT-LIMIT-1 ([CAPABILITY], best effort): with a context limit on the run, a turn that settles cleanly is held for
+ *    `get_session_stats`; when its `contextUsage.tokens` is over the limit the adapter sends `compact` and ends the turn on
+ *    the compact's response, so the next turn starts compacted. pi has no flag or env for its threshold (only settings
+ *    files: `compaction.reserveTokens`), so one turn can still grow past the limit.
  *
  * Every stdout line still goes out VERBATIM ([AdapterSink.output]); the agent event records are the ones `--mode json`
  * prints, and the extra `response` / `extension_ui_request` records map to nothing.
@@ -78,7 +82,7 @@ class PiSessionAdapter(
 
     private fun nextId(kind: String) = "agenthq-$kind-${ids.incrementAndGet()}"
 
-    private class Turn(private val sink: AdapterSink, val promptId: String) {
+    private class Turn(private val sink: AdapterSink, val promptId: String, val contextLimit: Int?) {
         private val ended = AtomicBoolean(false)
         val abortRequested = AtomicBoolean(false)
 
@@ -98,6 +102,10 @@ class PiSessionAdapter(
         @Volatile private var child: RunningProcess? = null
         @Volatile private var active: Turn? = null
         @Volatile private var knownSession: String? = null
+
+        /** CONTEXT-LIMIT-1: a settled turn held for the context check (stats, then maybe compact), with the id we wait for. */
+        @Volatile private var held: Turn? = null
+        @Volatile private var heldFor: String? = null
 
         override val pid: Long? get() = child?.pid
         override val isAlive: Boolean get() = exitCode == null && child?.isAlive == true
@@ -141,7 +149,7 @@ class PiSessionAdapter(
                         turn.abortRequested.get() || aborted -> turn.end(TurnEnd.INTERRUPTED, null, null)
                         else -> when (val v = turn.verdict.terminal(0, "")) {
                             is HarnessEvent.Error -> turn.end(TurnEnd.FAILED, null, v.message)
-                            else -> turn.end(TurnEnd.COMPLETED, 0, null)
+                            else -> if (turn.contextLimit == null || !hold(turn, statsLine(nextId("stats")))) turn.end(TurnEnd.COMPLETED, 0, null)
                         }
                     }
                 }
@@ -149,7 +157,43 @@ class PiSessionAdapter(
             }
         }
 
+        /** Holds [turn] until the response to [line] arrives; false (end it now) when the line cannot be written. */
+        private fun hold(turn: Turn, line: String): Boolean {
+            val process = child ?: return false
+            held = turn
+            heldFor = parse(line)?.str("id")
+            return runCatching { process.writeInput(line + "\n") }.isSuccess.also { if (!it) { held = null; heldFor = null } }
+        }
+
+        private fun release(detail: String? = null) {
+            val turn = held ?: return
+            held = null
+            heldFor = null
+            detail?.let(sink::detail)
+            turn.end(TurnEnd.COMPLETED, 0, null)
+        }
+
+        private fun onContextResponse(record: JsonObject) {
+            val turn = held ?: return
+            val data = record["data"] as? JsonObject
+            when (record.str("command")) {
+                "get_session_stats" -> {
+                    val tokens = (data?.get("contextUsage") as? JsonObject)?.str("tokens")?.toLongOrNull()
+                    val limit = turn.contextLimit ?: return release()
+                    if (record.str("success") == "false" || tokens == null || tokens <= limit) return release()
+                    sink.detail("context limit: $tokens tokens is over $limit, compacting")
+                    if (!hold(turn, compactLine(nextId("compact")))) release()
+                }
+                "compact" -> release(
+                    if (record.str("success") == "false") "context limit: pi refused the compaction (${record.str("error") ?: "no reason"})"
+                    else "context limit: compacted ${data?.str("tokensBefore") ?: "?"} -> ~${data?.str("estimatedTokensAfter") ?: "?"} tokens",
+                )
+                else -> release()
+            }
+        }
+
         private fun onResponse(record: JsonObject) {
+            if (held != null && record.str("id") == heldFor) return onContextResponse(record)
             when (record.str("command")) {
                 "get_state" -> {
                     val id = (record["data"] as? JsonObject)?.str("sessionId")?.takeIf { it.isNotBlank() } ?: return
@@ -193,7 +237,7 @@ class PiSessionAdapter(
         }
 
         fun send(request: RunRequest) {
-            val turn = Turn(sink, nextId("prompt")).also { active = it }
+            val turn = Turn(sink, nextId("prompt"), request.contextLimit?.takeIf { it > 0 }).also { active = it }
             val process = child
             if (process == null || !isAlive) {
                 active = null
@@ -209,6 +253,7 @@ class PiSessionAdapter(
 
         /** Stops the TURN; the process lives on. The turn ends on the `agent_settled` pi prints for it. */
         fun abort(): Boolean {
+            held?.let { h -> held = null; heldFor = null; h.end(TurnEnd.INTERRUPTED, null, null); return true }
             val turn = active ?: return true
             turn.abortRequested.set(true)
             val process = child ?: return false
@@ -234,6 +279,18 @@ class PiSessionAdapter(
         }.toString()
 
         internal fun stateLine(id: String): String = buildJsonObject { put("id", id); put("type", "get_state") }.toString()
+
+        /** CONTEXT-LIMIT-1: pi's current context use (`data.contextUsage.tokens`, docs/rpc-commands.md "get_session_stats"). */
+        internal fun statsLine(id: String): String = buildJsonObject { put("id", id); put("type", "get_session_stats") }.toString()
+
+        /** CONTEXT-LIMIT-1: pi's manual compaction (docs/rpc-commands.md "compact"). */
+        internal fun compactLine(id: String): String = buildJsonObject { put("id", id); put("type", "compact") }.toString()
+
+        /** CONTEXT-LIMIT-1: what pi's persistent session does with a context limit (see the class comment). */
+        val CAPABILITY = com.superiorsoftllc.agenthq.harness.ContextLimitCapability(
+            com.superiorsoftllc.agenthq.harness.ContextLimitSupport.BEST_EFFORT,
+            "pi compacts after a turn that ends over the limit (rpc get_session_stats + compact); one turn can pass it",
+        )
 
         /** Stops the current run and keeps the process (`agent_settled {"aborted":true}` in 9 ms in the probe). */
         internal fun abortLine(id: String): String = buildJsonObject { put("id", id); put("type", "abort") }.toString()

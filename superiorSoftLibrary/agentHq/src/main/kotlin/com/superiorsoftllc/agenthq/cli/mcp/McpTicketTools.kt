@@ -13,6 +13,7 @@ import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.Ticket
 import com.superiorsoftllc.agenthq.protocol.TicketSave
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
+import com.superiorsoftllc.agenthq.session.ContextLimits
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -61,6 +62,7 @@ internal class McpTicketTools(
             provider = arguments.string("provider"),
             model = arguments.string("model"),
             weight = arguments.weight(),
+            contextLimit = arguments.contextLimit(CREATE) { return it },
             images = images,
             status = arguments.string("status")?.lowercase(),
         )
@@ -98,6 +100,7 @@ internal class McpTicketTools(
             provider = arguments.string("provider"),
             model = arguments.string("model"),
             weight = arguments.weight(),
+            contextLimit = arguments.contextLimit(UPDATE) { return it },
             images = images,
         )
         val ticket = save(stream, save, UPDATE) { return it }
@@ -235,6 +238,7 @@ internal class McpTicketTools(
             if (save.provider != null && ticket.provider != null) add("provider" to "provider ${ticket.provider}")
             if (save.model != null && ticket.model != null) add("model" to "model ${ticket.model}")
             if (save.weight != null) add("weight" to "weight ${ticket.weight ?: "cleared"}")
+            if (save.contextLimit != null) add("contextLimit" to "context limit ${ticket.contextLimit?.let(ContextLimits::label) ?: "cleared"}")
             if (save.images != null) add("images" to "${ticket.images.size} image(s)")
         }
         val short = shortTicketId(ticket.id)
@@ -311,6 +315,17 @@ internal class McpTicketTools(
     }
 
     /** A text field kept exactly as given (newlines, indentation, trailing spaces); null only when absent. */
+    /**
+     * CONTEXT-LIMIT-1: `contextLimit` as [ContextLimits.parse] reads it (`200000`, `200k`, `1m`); `off` / `0` / blank = clear
+     * ([TicketContextLimit.CLEAR]); absent = keep (null). A value out of range is refused through [refusal].
+     */
+    private inline fun JsonObject.contextLimit(tool: String, refusal: (ToolResult) -> Nothing): Int? {
+        val raw = (this["contextLimit"] as? JsonPrimitive)?.contentOrNull ?: return null
+        val parsed = ContextLimits.parse(raw)
+        parsed.error?.let { refusal(refused("$tool refused: $it")) }
+        return parsed.value ?: com.superiorsoftllc.agenthq.protocol.TicketContextLimit.CLEAR
+    }
+
     private fun JsonObject.weight(): Int? = (this["weight"] as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toIntOrNull()
 
     private fun JsonObject.verbatim(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
@@ -380,6 +395,12 @@ internal class McpTicketTools(
             put("provider", ticket.provider)
             put("model", ticket.model)
             put("weight", ticket.weight)
+            put("contextLimit", ticket.contextLimit)
+            ticket.effectiveContextLimit?.let { e ->
+                put("effectiveContextLimit", e.value)
+                put("effectiveContextLimitSource", e.source)
+                put("contextLimitSupport", e.support)
+            }
             put("effectiveProvider", ticket.effectiveExecutor?.provider?.value)
             put("effectiveProviderSource", ticket.effectiveExecutor?.provider?.source)
             put("effectiveModel", ticket.effectiveExecutor?.model?.value)
@@ -408,6 +429,7 @@ internal class McpTicketTools(
                 put("provider", prop("Harness (provider id) that runs it, e.g. claude or opencode: see agenthq_list_harnesses."))
                 put("model", prop("Model pin, one of that harness's models: see agenthq_list_harnesses."))
                 put("weight", JsonObject(mapOf("type" to JsonPrimitive("integer"), "description" to JsonPrimitive("Ticket weight 1-5 by how likely the ticket is to come back wrong, not its size: 4-5 wire/contract, daemon, auth or project scope, concurrency/SSR timing, Android build, or more than one module; 3 gate fixes, bisects, UI that depends on daemon behaviour; 1-2 copy, icons, renames, docs (mechanical, one owner file). 0 clears it on update. With no provider/model pin the ticket starts on the project's first matching routing rule (project_config routingRules), else the weight mapping (tickets.weightExecutors); an explicit pin always wins. Set a weight on every ticket before start."))))
+                put("contextLimit", JsonObject(mapOf("type" to JsonPrimitive("string"), "description" to JsonPrimitive(McpWriteTools.CONTEXT_LIMIT_HELP + " Shown on the ticket as effectiveContextLimit (source ticket / default); off clears it on update."))))
                 put("images", pathsProp("Images to attach: local image file paths (png, jpeg, gif or webp, at most 10 MB each; each is uploaded to the project's .agenthq/uploads/ticket/), or paths already stored there. A missing, oversized or non-image file refuses the call and nothing is saved. The board shows them as attachments and the started worker's brief lists them."))
                 put("status", prop("Column the new ticket enters: todo (default, the current sprint) or backlog (parked, never started until moved to todo)."))
             })
@@ -426,6 +448,7 @@ internal class McpTicketTools(
                 put("provider", prop("Harness (provider id) pin: see agenthq_list_harnesses."))
                 put("model", prop("Model pin, one of that harness's models: see agenthq_list_harnesses."))
                 put("weight", JsonObject(mapOf("type" to JsonPrimitive("integer"), "description" to JsonPrimitive("Ticket weight 1-5 by how likely the ticket is to come back wrong, not its size: 4-5 wire/contract, daemon, auth or project scope, concurrency/SSR timing, Android build, or more than one module; 3 gate fixes, bisects, UI that depends on daemon behaviour; 1-2 copy, icons, renames, docs (mechanical, one owner file). 0 clears it on update. With no provider/model pin the ticket starts on the project's first matching routing rule (project_config routingRules), else the weight mapping (tickets.weightExecutors); an explicit pin always wins. Set a weight on every ticket before start."))))
+                put("contextLimit", JsonObject(mapOf("type" to JsonPrimitive("string"), "description" to JsonPrimitive(McpWriteTools.CONTEXT_LIMIT_HELP + " Shown on the ticket as effectiveContextLimit (source ticket / default); off clears it on update."))))
                 put("images", pathsProp("The ticket's full image list, replacing the stored one ([] removes all): local image files (uploaded, as for $CREATE) or paths already under the project's .agenthq/uploads/ticket/. Not with addImages / removeImages. A removed image's file is deleted once no ticket references it."))
                 put("addImages", pathsProp("Images to ADD to the stored list: local image files (png, jpeg, gif or webp, at most 10 MB each) or stored paths."))
                 put("removeImages", pathsProp("Images to REMOVE from the stored list, each named by its stored path (as agenthq_ticket_get answers it), its file name, or the original local file. Naming an image the ticket does not have refuses the call."))

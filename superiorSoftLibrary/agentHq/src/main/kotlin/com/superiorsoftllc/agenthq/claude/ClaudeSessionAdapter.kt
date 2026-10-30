@@ -71,14 +71,15 @@ class ClaudeSessionAdapter(
      */
     override fun fingerprint(request: RunRequest, env: Map<String, String>): String =
         argv("claude", request, resume = null, env).joinToString("\u0000") + "\u0000" +
-            request.workingDir?.absolutePath + "\u0000" + env.toSortedMap()
+            request.workingDir?.absolutePath + "\u0000" + (env + ClaudeContextLimit.env(request.contextLimit)).toSortedMap()
 
     override fun launch(request: RunRequest, env: Map<String, String>, runner: ProcessRunner, sink: AdapterSink): HostedProcess {
         val resume = request.resumeSessionId?.takeIf { it.isNotBlank() }
         val command = argv(executable(), request, resume, env)
         val process = Process(sink)
         // Claude Code 2.1.30x has no TodoWrite headless; this enables TaskCreate/TaskUpdate (mapped to `todos` by ClaudeTaskTools).
-        process.start(runner, command, request, env + ("CLAUDE_CODE_ENABLE_TODO_TOOLS" to "1"))
+        // CONTEXT-LIMIT-1: the limit rides the env (in the fingerprint above, so a change restarts + resumes).
+        process.start(runner, command, request, env + ("CLAUDE_CODE_ENABLE_TODO_TOOLS" to "1") + ClaudeContextLimit.env(request.contextLimit))
         sink.detail(
             "claude stream-json session (${process.pid?.let { "pid $it" } ?: "no OS process"})" +
                 (resume?.let { ", resuming provider session $it" } ?: ""),

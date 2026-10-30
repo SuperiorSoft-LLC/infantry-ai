@@ -87,6 +87,12 @@ class ApiCliHarness(
     override val capabilities: Set<HarnessCapability> =
         runCatching { api.capabilities }.getOrDefault(emptySet()).mapTo(LinkedHashSet()) { HarnessCapability.valueOf(it.name) }
 
+    /** CONTEXT-LIMIT-1: API 2.1 [ApiHarness.contextLimit]; a 2.0 plugin (or a throwing getter) is unsupported. */
+    override val contextLimit: ContextLimitCapability =
+        runCatching { api.contextLimit }.getOrNull()
+            ?.let { ContextLimitCapability(ContextLimitSupport.valueOf(it.support.name), it.how) }
+            ?: ContextLimitCapability.UNSUPPORTED
+
     private class GuardedTranslator(
         private val pluginId: String,
         private val inner: com.superiorsoftllc.agenthq.harness.api.HarnessTranslator,
@@ -121,6 +127,7 @@ class ApiCliHarness(
                 ToolApproval.ALLOW_ALL -> ApiToolApproval.ALLOW_ALL
                 ToolApproval.ASK -> ApiToolApproval.ASK
             },
+            contextLimit,
         )
 
         fun ApiEvent.toInternal(): HarnessEvent = when (this) {

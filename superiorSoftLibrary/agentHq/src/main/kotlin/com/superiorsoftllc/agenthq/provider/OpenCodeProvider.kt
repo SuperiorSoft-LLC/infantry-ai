@@ -30,6 +30,17 @@ class OpenCodeProvider(
 
     override val id: String = "opencode"
 
+    /**
+     * CONTEXT-LIMIT-1: not mapped, reported honestly. Verified on opencode 1.18.35: its compaction threshold is the model's
+     * `limit.input - compaction.reserved` (or `limit.context - output`), and an inline override of a model's limit is refused
+     * unless it also names `limit.output` ("Missing key ...limit.output"), which the daemon does not know per model.
+     */
+    override fun contextLimit(): com.superiorsoftllc.agenthq.harness.ContextLimitCapability =
+        com.superiorsoftllc.agenthq.harness.ContextLimitCapability(
+            com.superiorsoftllc.agenthq.harness.ContextLimitSupport.UNSUPPORTED,
+            "opencode sets its window only through a full per-model limit override (context + output); not mapped yet",
+        )
+
     override val commands: List<com.superiorsoftllc.agenthq.harness.HarnessCommand> =
         com.superiorsoftllc.agenthq.opencode.OpenCodeCommands.catalog
 

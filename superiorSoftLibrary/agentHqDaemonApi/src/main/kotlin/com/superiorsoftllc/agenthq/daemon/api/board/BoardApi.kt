@@ -27,7 +27,8 @@ import kotlinx.serialization.Serializable
  *    for each operation: [GRANT_TICKETS_READ], [GRANT_TICKETS_WRITE], [GRANT_TICKETS_DELETE], [GRANT_TICKETS_START],
  *    [GRANT_EPICS_READ], [GRANT_EPICS_WRITE]. No grant = [BoardResult.Refused] ("missing grant ..."); the default is deny.
  */
-const val BOARD_API_VERSION = "1.1.0"
+/** 1.2.0 (CONTEXT-LIMIT-1, additive): [TicketInfo] carries the context limit and the effective one. */
+const val BOARD_API_VERSION = "1.2.0"
 
 const val GRANT_TICKETS_READ = "tickets.read"
 const val GRANT_TICKETS_WRITE = "tickets.write"
@@ -88,6 +89,11 @@ data class TicketInfo(
     val base: String? = null,
     val images: List<String> = emptyList(),
     val skillIds: List<String> = emptyList(),
+    /** CONTEXT-LIMIT-1 (1.2.0): the ticket's context limit in tokens (null = none) and the effective one, its source (`ticket` / `default`) and the harness's support. */
+    val contextLimit: Int? = null,
+    val effectiveContextLimit: Int? = null,
+    val effectiveContextLimitSource: String? = null,
+    val contextLimitSupport: String? = null,
 )
 
 /** A new ticket. [description] is kept verbatim. [clientKey] makes the create idempotent. */

@@ -844,6 +844,8 @@ class SessionManager(
         instance: RoleInstance? = null,
         /** Contract 1.115.0: create the installation-wide Assistant; set on the FIRST `session` frame, so no client ever sees it as an ordinary agent. */
         global: Boolean = false,
+        /** CONTEXT-LIMIT-1: the session's context limit in tokens ([ContextLimits]); null = the harness's own window. */
+        contextLimit: Int? = null,
     ): SessionRecord {
         // DAEMON-PLUGINS-1: a plugin's spawn gate binds every path (frame, mail, trigger, ticket) that creates a session.
         spawnGate(role, projectId)?.let { throw IllegalArgumentException(it) }
@@ -857,6 +859,8 @@ class SessionManager(
         val sessionEffort = effort?.trim()?.takeIf { it.isNotEmpty() }?.also {
             require(modelProblem(it) == null) { "effort '${it.take(40)}' is not a usable level" }
         }
+        ContextLimits.problem(contextLimit)?.let { throw IllegalArgumentException(it) }
+        val limitSupport = contextLimit?.let { chosen.contextLimit().support.wire }
         if (launchOrigin == LaunchOrigin.UNATTENDED) {
             val decision = launchGate?.invoke(chosen.id, LaunchOrigin.UNATTENDED, ticketId)
             if (decision is GateDecision.Refused) throw IllegalArgumentException("launch gate refused: ${decision.reason}")
@@ -923,6 +927,8 @@ class SessionManager(
             worktreeBaseRef = worktree?.baseRef,
             model = sessionModel,
             effort = sessionEffort,
+            contextLimit = contextLimit,
+            contextLimitSupport = limitSupport,
             agentId = agentId,
             role = role,
             ticketId = ticketId,
@@ -1101,6 +1107,8 @@ class SessionManager(
         return changeSetting(sessionId) {
             it.copy(
                 provider = target, model = wantedModel, effort = wantedEffort,
+                // CONTEXT-LIMIT-1: the limit follows the session; how it is honoured is the NEW harness's.
+                contextLimitSupport = it.contextLimit?.let { _ -> resolveProvider(target).provider.contextLimit().support.wire },
                 providerSessionId = null, runCount = 0, state = SessionState.IDLE,
                 killOutcome = null, lastError = null, lastExitCode = null, childPid = null, keptProcess = null,
                 isProcessAlive = false, lastHeartbeat = clock(),
@@ -1244,6 +1252,8 @@ class SessionManager(
             model = session.model,
             effort = session.effort,
             toolApproval = toolApprovalFor(sessionId).mode,
+            // CONTEXT-LIMIT-1: only to a harness that applies it; an unsupported one keeps its own window (recorded as such).
+            contextLimit = session.contextLimit?.takeIf { provider.contextLimit().applies },
         )
         // Contract AGENT-UX-13: every run carries the agent's OWN identity -- its session id is the
         // `from` of any handoff it initiates -- and the daemon's mail base (`childEnv`, set by the

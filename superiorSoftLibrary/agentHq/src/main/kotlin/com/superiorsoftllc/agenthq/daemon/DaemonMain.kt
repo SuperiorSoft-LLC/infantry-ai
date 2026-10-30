@@ -2923,6 +2923,7 @@ private suspend fun handleConnection(
                                         effort = resolved.effort,
                                         // BUG-PERM-1: the spawn's own Tool approval; an unknown value refuses the spawn.
                                         toolApproval = com.superiorsoftllc.agenthq.harness.ToolApproval.parseStrict(spawn?.toolApproval),
+                                        contextLimit = spawn?.contextLimit, // CONTEXT-LIMIT-1
                                     ).also {
                                         if (placement != null) spawnGuard.record(it.id, origin)
                                         manager.setSpawner(it.id, origin)
@@ -4161,7 +4162,10 @@ internal fun providerInfos(manager: SessionManager, harnesses: HarnessRegistry? 
     val known = configured.map { it.id }.toSet()
     val fromHarnesses = harnesses?.harnessIds().orEmpty()
         .filter { it !in known }
-        .map { ProviderInfo(id = it, default = false, defaultModel = null) }
+        .map { id ->
+            val limit = harnesses?.resolve(id)?.contextLimit
+            ProviderInfo(id = id, default = false, defaultModel = null, contextLimit = limit?.support?.wire, contextLimitHow = limit?.how)
+        }
     // CLIPATH-1 (1.73.0): a provider/harness whose CLI the resolver cannot find says so, with the paths it tried,
     // instead of looking usable and failing at spawn. A provider with no CLI (the stub) is always available.
     val tools = cliTools(harnesses).associateBy { it.id }
@@ -4264,6 +4268,8 @@ internal fun providerInfo(provider: AgentProvider, isDefault: Boolean): Provider
         default = isDefault,
         defaultModel = provider.defaultModel(),
         models = provider.knownModels() ?: offeredModels(provider),
+        contextLimit = provider.contextLimit().support.wire, // CONTEXT-LIMIT-1
+        contextLimitHow = provider.contextLimit().how,
     )
 
 /**

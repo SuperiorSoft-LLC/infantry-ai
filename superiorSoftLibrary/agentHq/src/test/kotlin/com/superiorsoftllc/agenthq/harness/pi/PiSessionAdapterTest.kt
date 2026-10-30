@@ -47,6 +47,8 @@ class PiSessionAdapterTest {
         @Volatile var failNext = false
         /** Non-null = the next run first asks this dialog method and waits for its answer. */
         @Volatile var dialogNext: String? = null
+        /** CONTEXT-LIMIT-1: what `get_session_stats` reports as the context in use; `compact` brings it down to 8000. */
+        @Volatile var contextTokens = 1_000L
         private val session = command.indexOf("--session").takeIf { it >= 0 }?.let { command[it + 1] } ?: "pi-ses-1"
         private var turns = 0
 
@@ -65,6 +67,12 @@ class PiSessionAdapterTest {
                         if (answerTurns) Thread { run(++turns) }.start()
                     }
                     "get_state" -> emit("""{"type":"response","command":"get_state","id":"$id","success":true,"data":{"sessionId":"$session","sessionFile":"x.jsonl"}}""")
+                    "get_session_stats" -> emit("""{"type":"response","command":"get_session_stats","id":"$id","success":true,"data":{"contextUsage":{"tokens":$contextTokens,"contextWindow":200000,"percent":1}}}""")
+                    "compact" -> {
+                        val before = contextTokens
+                        contextTokens = 8_000
+                        emit("""{"type":"response","command":"compact","id":"$id","success":true,"data":{"summary":"s","tokensBefore":$before,"estimatedTokensAfter":8000}}""")
+                    }
                     "abort" -> {
                         emit("""{"type":"agent_settled","aborted":true}""")
                         emit("""{"type":"response","command":"abort","id":"$id","success":true,"data":null}""")
@@ -103,8 +111,10 @@ class PiSessionAdapterTest {
     private class CountingLauncher : ProcessRunner {
         override val id = "counting"
         val processes = CopyOnWriteArrayList<FakePi>()
+        /** CONTEXT-LIMIT-1: the context a new pi starts with (set before the first prompt, so no race with its turn). */
+        @Volatile var contextTokens = 1_000L
         override fun start(spec: ProcessSpec, listener: ProcessListener): RunningProcess =
-            FakePi(spec.command, listener).also { processes += it }
+            FakePi(spec.command, listener).also { it.contextTokens = contextTokens; processes += it }
     }
 
     /** The one-shot path (the harness's own runner): one `pi --mode json` per reply, counted too. */
@@ -178,6 +188,39 @@ class PiSessionAdapterTest {
 
     @AfterTest
     fun tearDown() = rigs.forEach { it.manager.shutdown() }
+
+    @Test
+    fun contextLimit_aTurnOverTheLimitIsCompactedBeforeTheTurnEnds() {
+        val rig = rig()
+        assertEquals(com.superiorsoftllc.agenthq.harness.ContextLimitSupport.BEST_EFFORT, rig.provider.contextLimit().support, "persistent pi is best effort")
+        rig.launcher.contextTokens = 120_000
+        val session = rig.manager.startNew("first", model = "m", contextLimit = 50_000)
+        rig.awaitIdle(session.id)
+        val pi = rig.launcher.processes.single()
+        rig.await("the compaction") { rig.sent(pi, "compact").size == 1 }
+
+        assertEquals(1, rig.sent(pi, "get_session_stats").size, "the turn asked pi how full the context is")
+        assertEquals(8_000, pi.contextTokens, "and compacted it")
+        assertEquals("best_effort", rig.manager.get(session.id)?.contextLimitSupport)
+        rig.manager.resume(session.id, "second")
+        rig.awaitIdle(session.id)
+        assertEquals(2, rig.sent(pi, "get_session_stats").size)
+        assertEquals(1, rig.sent(pi, "compact").size, "a turn under the limit is not compacted")
+        assertEquals(listOf("first", "second"), rig.prompts(pi))
+    }
+
+    @Test
+    fun contextLimit_noLimitAsksNothing_andOneShotPiReportsUnsupported() {
+        val rig = rig()
+        val session = rig.manager.startNew("first", model = "m")
+        rig.awaitIdle(session.id)
+        val pi = rig.launcher.processes.single()
+        assertTrue(rig.sent(pi, "get_session_stats").isEmpty() && rig.sent(pi, "compact").isEmpty(), "default behaviour unchanged")
+        assertNull(rig.manager.get(session.id)?.contextLimit)
+
+        val oneShot = PiHarness(OneShotRunner(), { PiHarness.defaultSpec(it, launcher = { listOf("node", "pi.js") }) })
+        assertEquals(com.superiorsoftllc.agenthq.harness.ContextLimitSupport.UNSUPPORTED, oneShot.contextLimit.support)
+    }
 
     @Test
     fun twoPrompts_reuseOnePiProcess() {

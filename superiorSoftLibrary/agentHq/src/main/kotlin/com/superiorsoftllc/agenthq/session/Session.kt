@@ -102,6 +102,16 @@ data class SessionRecord(
      */
     val effort: String? = null,
     /**
+     * CONTEXT-LIMIT-1 (contract 1.146.0): the context limit in tokens this session was started with (a ticket's or the spawn's
+     * `contextLimit`), reused by every run. Null = none (the harness's own window, and what an older record decodes to).
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val contextLimit: Int? = null,
+    /**
+     * CONTEXT-LIMIT-1: how the session's harness honours [contextLimit] (`supported` / `best_effort` / `unsupported`), set
+     * with it; `unsupported` = recorded, not applied. Kept with the session so usage can compare runs with and without a limit.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val contextLimitSupport: String? = null,
+    /**
      * Contract 1.4.0: the agent profile this session was spawned from (`new` with an `agentId`), or
      * null for a plain spawn. Attribution only: the profile can later change or disappear, and this
      * session keeps the provider, model and role it was spawned with.

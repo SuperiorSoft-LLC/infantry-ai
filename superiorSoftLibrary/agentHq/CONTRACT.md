@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.145.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.146.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -9,6 +9,18 @@ a stub, or one that does not exist yet) is behind the daemon.
 > before you write your first test. It is short, it needs no tools beyond `read`, and a merge will be held
 > without it. It covers the RED-before-implementation rule, the mutation check, how to write a test that
 > cannot pass vacuously, and the durability rules (commit by explicit path, early).
+
+### CONTEXT-LIMIT-1 (contract 1.146.0, additive): a per-session context limit through the harness layer
+
+See `docs/CONTEXT-LIMIT.md`.
+
+- `new` (`SpawnOptions`) gains `contextLimit` (tokens, 10000..10000000; out of range refuses the spawn); null = the harness's own window.
+- `ticket_save` gains `contextLimit` (a token count sets it, `0` clears it, absent keeps it). A `ticket` gains `contextLimit` and `effectiveContextLimit` (`value`, `source` `ticket` | `default`, `support`, `how`). A start passes the ticket's limit to its worker; `start.detail` names the limit and how it is honoured.
+- `session` records gain `contextLimit` and `contextLimitSupport` (`supported` | `best_effort` | `unsupported`; `unsupported` = recorded, not applied). Both absent with no limit.
+- `providers` entries gain `contextLimit` (the same three values) and `contextLimitHow` (in words).
+- Harness contract 1.7.0 / harness API 2.1.0 (additive): `HarnessRequest.contextLimit` and `Harness.contextLimit` (default unsupported).
+
+A client below 1.146.0 ignores the new fields; on a daemon below 1.146.0 they are absent and a `new` / `ticket_save` naming `contextLimit` is refused as malformed (strict decode).
 
 ### HARNESS-PLUGIN-4 H5a (contract 1.145.0, additive): harness CLI install and status from the module manifest
 

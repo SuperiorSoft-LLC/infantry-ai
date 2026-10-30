@@ -29,6 +29,11 @@ data class RunRequest(
      * mechanism; one that has no mapping yet keeps denying.
      */
     val toolApproval: com.superiorsoftllc.agenthq.harness.ToolApproval = com.superiorsoftllc.agenthq.harness.ToolApproval.DENY,
+    /**
+     * CONTEXT-LIMIT-1: the session's context limit in tokens, or null for the CLI's own window. Set only when the provider's
+     * [AgentProvider.contextLimit] applies (the session manager drops it otherwise and reports it as not applied).
+     */
+    val contextLimit: Int? = null,
 )
 
 /**
@@ -137,4 +142,11 @@ interface AgentProvider {
      * A provider that is also registered as a harness plugin is served from the plugin's catalog instead.
      */
     val commands: List<com.superiorsoftllc.agenthq.harness.HarnessCommand> get() = emptyList()
+
+    /**
+     * CONTEXT-LIMIT-1 (docs/CONTEXT-LIMIT.md): how this provider honours [RunRequest.contextLimit]. Default unsupported: a
+     * limit set on its session is recorded and reported as not applied, never passed on.
+     */
+    fun contextLimit(): com.superiorsoftllc.agenthq.harness.ContextLimitCapability =
+        com.superiorsoftllc.agenthq.harness.ContextLimitCapability.UNSUPPORTED
 }

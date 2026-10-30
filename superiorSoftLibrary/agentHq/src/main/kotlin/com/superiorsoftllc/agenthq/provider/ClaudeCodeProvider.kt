@@ -44,7 +44,11 @@ class ClaudeCodeProvider(
         model = request.model,
         effort = request.effort,
         toolApproval = request.toolApproval,
+        contextLimit = request.contextLimit,
     )
+
+    override fun contextLimit(): com.superiorsoftllc.agenthq.harness.ContextLimitCapability =
+        com.superiorsoftllc.agenthq.claude.ClaudeContextLimit.CAPABILITY
 
     override fun sessionIdFromLine(line: String): String? = SessionId.fromLine(line)
 

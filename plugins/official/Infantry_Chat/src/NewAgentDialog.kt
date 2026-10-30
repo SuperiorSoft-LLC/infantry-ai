@@ -62,6 +62,10 @@ const val NEW_AGENT_MODEL_SEARCH_TAG = "new-agent-model-search"
 const val NEW_AGENT_MODEL_TAG_PREFIX = "new-agent-model-"
 const val NEW_AGENT_MODEL_FREETEXT_TAG = "new-agent-model-freetext"
 const val NEW_AGENT_TASK_TAG = "new-agent-task"
+/** CONTEXT-LIMIT-1: the context limit's off switch, its field (shown while on) and the chosen harness's support line. */
+const val NEW_AGENT_CONTEXT_LIMIT_SWITCH_TAG = "new-agent-context-limit-switch"
+const val NEW_AGENT_CONTEXT_LIMIT_TAG = "new-agent-context-limit"
+const val NEW_AGENT_CONTEXT_LIMIT_NOTE_TAG = "new-agent-context-limit-note"
 const val NEW_AGENT_ADD_TAG = "new-agent-add"
 const val NEW_AGENT_ADD_HINT_TAG = "new-agent-add-hint"
 const val NEW_AGENT_ERROR_TAG = "new-agent-error"
@@ -79,13 +83,14 @@ private const val ROLE_GRID_VISIBLE_ROWS = 3
 /**
  * UX slice 1: the New agent modal. 1) pick a role from a searchable grid; 2) pick harness, provider and model
  * (each searchable, seeded from the role's binding); 3) type the first task and press Add. [onAdd] receives the
- * role id, the picked harness+model (null = daemon defaults) and the task, and runs the existing spawn.
+ * role id, the picked harness+model (null = daemon defaults), the task and the context limit (null = the harness's own
+ * window), and runs the existing spawn.
  */
 @Composable
 fun NewAgentDialog(
     state: AppState,
     /** Runs the spawn; returns null on success (the modal closes) or the refusal text (shown inside the modal, nothing closes). */
-    onAdd: suspend (roleId: String, picked: PickedModel?, task: String) -> String?,
+    onAdd: suspend (roleId: String, picked: PickedModel?, task: String, contextLimit: Int?) -> String?,
     onDismiss: () -> Unit,
 ) {
     NewAgentDialogFrame(state, onAdd, onDismiss) { draft ->
@@ -120,7 +125,7 @@ class NewAgentTargets {
     suspend fun jumpTo(field: NewAgentField) {
         when (field) {
             NewAgentField.ROLE -> { role.bringIntoView(); runCatching { roleFocus.requestFocus() } }
-            NewAgentField.HARNESS, NewAgentField.MODEL -> executor.bringIntoView()
+            NewAgentField.HARNESS, NewAgentField.MODEL, NewAgentField.CONTEXT_LIMIT -> executor.bringIntoView()
             NewAgentField.TASK -> { task.bringIntoView(); runCatching { taskFocus.requestFocus() } }
         }
     }
@@ -133,7 +138,7 @@ class NewAgentTargets {
 @Composable
 fun NewAgentDialogFrame(
     state: AppState,
-    onAdd: suspend (roleId: String, picked: PickedModel?, task: String) -> String?,
+    onAdd: suspend (roleId: String, picked: PickedModel?, task: String, contextLimit: Int?) -> String?,
     onDismiss: () -> Unit,
     content: @Composable ColumnScope.(NewAgentDraft) -> Unit,
 ) {
@@ -180,7 +185,7 @@ fun NewAgentDialogFrame(
                     onClick = {
                         cur.roleId?.let { role ->
                             adding = true; error = null
-                            scope.launch { error = onAdd(role, cur.executor.picked, cur.task.trim()); adding = false }
+                            scope.launch { error = onAdd(role, cur.executor.picked, cur.task.trim(), cur.contextLimit); adding = false }
                         }
                     },
                     enabled = cur.canAdd && !adding, modifier = Modifier.testTag(NEW_AGENT_ADD_TAG),
@@ -322,5 +327,26 @@ private fun ExecutorStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> 
         }
         // The dialog surface is light: rows take its content color instead of the dark panels' Palette.Text.
         ExecutorPicker(m.executor, { update(m.withExecutor(it)) }, tags = NEW_AGENT_EXECUTOR_TAGS, textColor = AlertDialogDefaults.textContentColor)
+        ContextLimitField(m, update)
     }
+}
+
+/**
+ * CONTEXT-LIMIT-1: the optional context limit. Off (the default) = the harness's own window; on, a size such as 200k.
+ * The line under it says how the chosen harness treats a limit (applied, best effort, or recorded only).
+ */
+@Composable
+private fun ContextLimitField(m: NewAgentModalModel, update: (NewAgentModalModel) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Checkbox(m.contextLimitOn, { update(m.withContextLimitOn(it)) }, modifier = Modifier.testTag(NEW_AGENT_CONTEXT_LIMIT_SWITCH_TAG))
+        Text("Context limit (off = the harness default)", fontSize = 12.sp, color = AlertDialogDefaults.textContentColor)
+    }
+    if (m.contextLimitOn) {
+        OutlinedTextField(
+            m.contextLimitText, { update(m.withContextLimitText(it)) }, placeholder = { Text("200k, 1m or 150000") }, singleLine = true,
+            isError = m.missingField == NewAgentField.CONTEXT_LIMIT,
+            modifier = Modifier.fillMaxWidth().testTag(NEW_AGENT_CONTEXT_LIMIT_TAG), colors = visibleBorderFieldColors(),
+        )
+    }
+    Text(m.contextLimitNote, color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(NEW_AGENT_CONTEXT_LIMIT_NOTE_TAG))
 }

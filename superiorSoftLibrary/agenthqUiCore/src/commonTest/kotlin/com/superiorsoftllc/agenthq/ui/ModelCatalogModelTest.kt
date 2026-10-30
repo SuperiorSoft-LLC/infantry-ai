@@ -38,6 +38,7 @@ class ModelCatalogModelTest {
     fun `the new payload names the selected project, so the session is bound to it (BUG-M2-15)`() {
         assertEquals("""{"projectId":"P1"}""", spawnOptionsData(null, projectId = "P1"))
         assertEquals("""{"provider":"claude","role":"qa","projectId":"P1"}""", spawnOptionsData(PickedModel("claude", null), role = "qa", projectId = "P1"))
+        assertEquals("""{"contextLimit":200000}""", spawnOptionsData(null, contextLimit = 200_000))
     }
 
     @Test

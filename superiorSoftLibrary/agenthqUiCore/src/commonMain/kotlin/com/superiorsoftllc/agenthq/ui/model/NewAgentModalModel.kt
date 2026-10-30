@@ -19,6 +19,10 @@ data class NewAgentModalModel(
     val roleId: String? = null,
     val executor: ExecutorPickerModel = ExecutorPickerModel(harnesses, catalog),
     val task: String = "",
+    /** CONTEXT-LIMIT-1: the off switch; off (the default) = the harness's own window, nothing is sent. */
+    val contextLimitOn: Boolean = false,
+    /** CONTEXT-LIMIT-1: the limit as typed while the switch is on (`200k`, `1m`, `150000`). */
+    val contextLimitText: String = "",
 ) {
     /** The role grid, narrowed by what was typed (id and name), best match first. */
     val roleOptions: List<Role>
@@ -36,6 +40,7 @@ data class NewAgentModalModel(
             roleId == null -> NewAgentField.ROLE
             executor.harness == null -> NewAgentField.HARNESS
             executor.model == null -> NewAgentField.MODEL
+            contextLimitOn && contextLimitParsed.error != null -> NewAgentField.CONTEXT_LIMIT
             task.isBlank() -> NewAgentField.TASK
             else -> null
         }
@@ -46,6 +51,7 @@ data class NewAgentModalModel(
             NewAgentField.ROLE -> "Pick a role first"
             NewAgentField.HARNESS -> "Pick a harness"
             NewAgentField.MODEL -> "Pick a model"
+            NewAgentField.CONTEXT_LIMIT -> "Context limit: " + contextLimitParsed.error
             NewAgentField.TASK -> "Type the agent's first task"
             null -> null
         }
@@ -67,12 +73,65 @@ data class NewAgentModalModel(
 
     fun withTask(text: String): NewAgentModalModel = copy(task = text)
 
-    /** The `new` frame's data for Add: the picked harness+model (null = daemon defaults), the role, the role binding's effort. */
-    fun spawnData(): String = spawnOptionsData(executor.picked, roleId?.let { bindings[it]?.effort }, roleId)
+    fun withContextLimitOn(on: Boolean): NewAgentModalModel = copy(contextLimitOn = on)
+
+    fun withContextLimitText(text: String): NewAgentModalModel = copy(contextLimitText = text)
+
+    private val contextLimitParsed: ContextLimitInput.Parsed get() = ContextLimitInput.parse(contextLimitText)
+
+    /** The limit Add sends, in tokens: null while the switch is off (the harness default) or the text does not parse. */
+    val contextLimit: Int? get() = if (contextLimitOn) contextLimitParsed.value else null
+
+    /**
+     * How the chosen harness treats a limit, as the daemon reports it (`supported` / `best_effort` / `unsupported`, plus
+     * how), or null when no harness is chosen or the daemon is older and does not say.
+     */
+    val contextLimitSupport: ProviderInfo?
+        get() = executor.harness?.let { h -> harnesses.firstOrNull { it.id == h } }?.takeIf { it.contextLimit != null }
+
+    /** The line under the context limit field: the chosen harness's support in words. */
+    val contextLimitNote: String
+        get() {
+            val info = contextLimitSupport ?: return if (executor.harness == null) "Pick a harness to see whether it honours a limit." else "This harness does not report whether it honours a limit."
+            val how = info.contextLimitHow?.takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty()
+            return when (info.contextLimit) {
+                "supported" -> "${info.id} applies the limit$how"
+                "best_effort" -> "${info.id} applies it best effort$how"
+                else -> "${info.id} does not apply a limit (it is recorded, not applied)$how"
+            }
+        }
+
+    /** The `new` frame's data for Add: the picked harness+model (null = daemon defaults), the role, the role binding's effort, the context limit. */
+    fun spawnData(): String = spawnOptionsData(executor.picked, roleId?.let { bindings[it]?.effort }, roleId, contextLimit = contextLimit)
 }
 
-/** The New agent modal's required fields, in screen order. */
-enum class NewAgentField { ROLE, HARNESS, MODEL, TASK }
+/** The New agent modal's fields Add checks, in screen order. CONTEXT_LIMIT is optional: only a switched-on, unreadable value blocks. */
+enum class NewAgentField { ROLE, HARNESS, MODEL, CONTEXT_LIMIT, TASK }
+
+/**
+ * CONTEXT-LIMIT-1: reads a typed context limit the way the daemon's `ContextLimits.parse` does (the UI cannot import the
+ * daemon): `200000`, `200k`, `1m`, `1.5m`; 10k..10m tokens. Blank is no value and says what to type.
+ */
+object ContextLimitInput {
+    const val MIN = 10_000
+    const val MAX = 10_000_000
+
+    data class Parsed(val value: Int?, val error: String?)
+
+    fun parse(raw: String): Parsed {
+        val t = raw.trim().lowercase().replace("_", "").replace(",", "")
+        if (t.isEmpty()) return Parsed(null, "type a size such as 200k or 1m")
+        val (num, mult) = when {
+            t.endsWith("k") -> t.dropLast(1) to 1_000.0
+            t.endsWith("m") -> t.dropLast(1) to 1_000_000.0
+            else -> t to 1.0
+        }
+        val n = num.trim().toDoubleOrNull()?.takeIf { it.isFinite() && it > 0 }?.let { it * mult }
+            ?: return Parsed(null, "'$raw' is not a size (try 200k, 1m or 150000)")
+        if (n < MIN || n > MAX) return Parsed(null, "must be between 10k and 10m tokens")
+        return Parsed(n.toInt(), null)
+    }
+}
 
 /**
  * DEMO-RESTRICT (ticket f9e181af): the daemon's role allowlist (`limits.roles.allowed` in the `settings` frame). Empty =

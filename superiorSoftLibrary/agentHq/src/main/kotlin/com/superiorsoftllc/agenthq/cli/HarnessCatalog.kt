@@ -28,6 +28,9 @@ internal object HarnessCatalog {
         val unavailableReason: String?,
         /** What the daemon said about this harness's models (a last-known list, a listing that failed), if anything. */
         val note: String?,
+        /** CONTEXT-LIMIT-1: how a contextLimit is honoured here (`supported` / `best_effort` / `unsupported`) and how; null = older daemon. */
+        val contextLimit: String? = null,
+        val contextLimitHow: String? = null,
     )
 
     suspend fun read(stream: FrameStream): List<Harness> {
@@ -45,7 +48,7 @@ internal object HarnessCatalog {
             providers.map { json.decodeFromString(com.superiorsoftllc.agenthq.daemon.api.harness.ProviderInfo.serializer(), json.encodeToString(ProviderInfo.serializer(), it)) },
             catalog.map { json.decodeFromString(com.superiorsoftllc.agenthq.daemon.api.harness.ProviderModels.serializer(), json.encodeToString(ProviderModels.serializer(), it)) },
             catalogError,
-        ).map { Harness(it.id, it.default, it.defaultModel, it.models, it.available, it.unavailableReason, it.note) }
+        ).map { Harness(it.id, it.default, it.defaultModel, it.models, it.available, it.unavailableReason, it.note, it.contextLimit, it.contextLimitHow) }
     }
 
     /** How a listed harness is used, said the same way by the CLI and the MCP tool. */

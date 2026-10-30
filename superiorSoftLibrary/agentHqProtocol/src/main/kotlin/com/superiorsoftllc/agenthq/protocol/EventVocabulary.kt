@@ -382,7 +382,8 @@ object EventVocabulary {
     // **1.143.0 (POLICY-1, ticket-b6446a82) is ADDITIVE + BEHAVIOURAL**: `policy` (PolicyWire, after `ready` and on every switch), `policy_get`, `policy_set` (owner, refused while pinned); `processes_reap` (the killing half of `processes`; a legacy `processes` reap is gated as it); under a non-production policy every client frame is gated by its named action (ActionCatalog). See CONTRACT.md.
     // **1.144.0 (DAEMON-PLUGINS-1, ticket-fb588e94) is ADDITIVE + BEHAVIOURAL**: `plugin_tools` -> `plugin_tools` (the daemon plugins' tool descriptors), `plugin_tool_call` ({name, arguments}) -> `plugin_tool_result` ({name, text, isError}); plugin frames and routes; `GET /plugins` modules gain `daemon`, `tools`. The seated lockdown (1.136.0's allowlist included) is a daemon plugin's: a seated preset no plugin implements refuses every frame but the switch. See CONTRACT.md.
     // **1.145.0 (HARNESS-PLUGIN-4 H5a, ticket-24a2706c) is ADDITIVE**: `GET /plugins` modules gain `harness` (the harness block's state) and `harnessIds`; `harness_install_status` also lists the CLIs harness modules declare in `harness.cli.install`. See CONTRACT.md.
-    const val VERSION = "1.145.0"
+    // **1.146.0 (CONTEXT-LIMIT-1, ticket-1a983d71) is ADDITIVE**: a per-session context limit. `new` (SpawnOptions) and `ticket_save` take `contextLimit` (tokens; 0 clears on a ticket), tickets carry `contextLimit` + `effectiveContextLimit`, sessions `contextLimit` + `contextLimitSupport`, `providers` entries `contextLimit` (supported / best_effort / unsupported) + `contextLimitHow`. See CONTRACT.md and docs/CONTEXT-LIMIT.md.
+    const val VERSION = "1.146.0"
 
     /** Frame type carrying incremental assistant text (payload: a plain String, the delta). */
     const val TEXT_DELTA = Envelope.TEXT_DELTA

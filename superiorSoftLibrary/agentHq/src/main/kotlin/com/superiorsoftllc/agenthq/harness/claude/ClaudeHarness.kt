@@ -51,6 +51,9 @@ class ClaudeHarness(
 
     override val commands: List<HarnessCommand> = ClaudeCommands.catalog
 
+    override val contextLimit: com.superiorsoftllc.agenthq.harness.ContextLimitCapability =
+        com.superiorsoftllc.agenthq.claude.ClaudeContextLimit.CAPABILITY
+
     companion object {
         const val HARNESS_ID = "claude"
 
@@ -59,6 +62,6 @@ class ClaudeHarness(
             request: HarnessRequest,
             executable: () -> String = ClaudeCommand::resolveExecutable,
             workingDir: File? = null,
-        ): ProcessSpec = ClaudeCommand.spec(workingDir, request.sessionId, request.model, executable(), request.effort, toolApproval = request.toolApproval)
+        ): ProcessSpec = ClaudeCommand.spec(workingDir, request.sessionId, request.model, executable(), request.effort, toolApproval = request.toolApproval, contextLimit = request.contextLimit)
     }
 }

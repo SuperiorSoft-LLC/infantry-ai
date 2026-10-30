@@ -71,6 +71,13 @@ class TicketGetTool(private val api: DaemonApi) : DaemonTool {
             put("provider", ticket.provider)
             put("model", ticket.model)
             put("weight", ticket.weight)
+            // CONTEXT-LIMIT-1: the ticket's context limit and the effective one (source ticket / default, the harness's support).
+            put("contextLimit", ticket.contextLimit)
+            if (ticket.effectiveContextLimitSource != null) {
+                put("effectiveContextLimit", ticket.effectiveContextLimit)
+                put("effectiveContextLimitSource", ticket.effectiveContextLimitSource)
+                put("contextLimitSupport", ticket.contextLimitSupport)
+            }
             put("effectiveProvider", ticket.effectiveProvider)
             put("effectiveProviderSource", ticket.effectiveProviderSource)
             put("effectiveModel", ticket.effectiveModel)

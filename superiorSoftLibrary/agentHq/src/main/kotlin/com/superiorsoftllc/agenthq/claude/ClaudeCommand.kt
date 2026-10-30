@@ -118,6 +118,8 @@ object ClaudeCommand {
         toolApproval: com.superiorsoftllc.agenthq.harness.ToolApproval = com.superiorsoftllc.agenthq.harness.ToolApproval.DENY,
         /** MCP-1: the session env the `agenthq mcp serve` entry names (the child inherits it either way). */
         sessionEnv: Map<String, String> = emptyMap(),
+        /** CONTEXT-LIMIT-1: the session's context limit in tokens ([ClaudeContextLimit]); null = the CLI's own window. */
+        contextLimit: Int? = null,
     ): ProcessSpec =
         ProcessSpec(
             command = command(
@@ -131,6 +133,7 @@ object ClaudeCommand {
                 streamInput = streamInput,
             ),
             workingDir = workingDir,
+            env = ClaudeContextLimit.env(contextLimit),
         )
 
     /**

@@ -52,7 +52,7 @@ class NewAgentDialogUiTest {
     @Test
     fun `pick a role, then harness and a searched model, type the task, Add hands over role executor and task`() = runDesktopComposeUiTest(1200, 900) {
         var got: Triple<String, PickedModel?, String>? = null
-        setContent { NewAgentDialog(state, { r, p, t -> got = Triple(r, p, t); null }, {}) }
+        setContent { NewAgentDialog(state, { r, p, t, _ -> got = Triple(r, p, t); null }, {}) }
 
         // Nothing chosen: Add is disabled and says why; the executor step is closed.
         onNodeWithTag(NEW_AGENT_ADD_TAG).assertIsNotEnabled()
@@ -80,9 +80,43 @@ class NewAgentDialogUiTest {
     }
 
     @Test
+    fun `the context limit is off by default, names the harness support, and when on Add hands over the typed limit`() = runDesktopComposeUiTest(1200, 900) {
+        val limited = state.copy(providers = listOf(
+            ProviderInfo("opencode", default = true, contextLimit = "unsupported", contextLimitHow = "not mapped yet"),
+            ProviderInfo("claude", contextLimit = "supported", contextLimitHow = "auto-compacts at the limit"),
+        ))
+        var got: Int? = -1
+        setContent { NewAgentDialog(limited, { _, _, _, limit -> got = limit; null }, {}) }
+        onNodeWithTag(NEW_AGENT_ROLE_TAG_PREFIX + "qa").performClick()
+        onNodeWithTag(NEW_AGENT_HARNESS_TAG_PREFIX + "claude").performClick()
+        onNodeWithTag(NEW_AGENT_MODEL_TAG_PREFIX + "opus").performClick()
+        onNodeWithTag(NEW_AGENT_CONTEXT_LIMIT_NOTE_TAG).assertTextContains("claude applies the limit", substring = true)
+        onNodeWithTag(NEW_AGENT_CONTEXT_LIMIT_TAG).assertDoesNotExist()
+
+        // On with nothing typed: Add says what is missing; a size unblocks it.
+        onNodeWithTag(NEW_AGENT_CONTEXT_LIMIT_SWITCH_TAG).performClick()
+        onNodeWithTag(NEW_AGENT_TASK_TAG).performTextInput("go")
+        onNodeWithTag(NEW_AGENT_ADD_TAG).assertIsNotEnabled()
+        onNodeWithTag(NEW_AGENT_ADD_HINT_TAG).assertTextContains("Context limit", substring = true)
+        onNodeWithTag(NEW_AGENT_CONTEXT_LIMIT_TAG).performTextInput("200k")
+        onNodeWithTag(NEW_AGENT_ADD_TAG).performClick()
+        assertEquals(200_000, got)
+    }
+
+    @Test
+    fun `with the context limit off Add hands over no limit`() = runDesktopComposeUiTest(1200, 900) {
+        var got: Int? = -1
+        setContent { NewAgentDialog(state, { _, _, _, limit -> got = limit; null }, {}) }
+        onNodeWithTag(NEW_AGENT_ROLE_TAG_PREFIX + "backend").performClick()
+        onNodeWithTag(NEW_AGENT_TASK_TAG).performTextInput("go")
+        onNodeWithTag(NEW_AGENT_ADD_TAG).performClick()
+        assertEquals(null, got)
+    }
+
+    @Test
     fun `a role with a binding seeds the executor, and no catalog yet is said on screen, not left empty`() = runDesktopComposeUiTest(1200, 900) {
         var got: Triple<String, PickedModel?, String>? = null
-        setContent { NewAgentDialog(state, { r, p, t -> got = Triple(r, p, t); null }, {}) }
+        setContent { NewAgentDialog(state, { r, p, t, _ -> got = Triple(r, p, t); null }, {}) }
         onNodeWithTag(NEW_AGENT_ROLE_TAG_PREFIX + "backend").performClick()
         onNodeWithTag(NEW_AGENT_TASK_TAG).performTextInput("go")
         onNodeWithTag(NEW_AGENT_ADD_TAG).performClick()
@@ -90,7 +124,7 @@ class NewAgentDialogUiTest {
 
         // Empty role search result and the loading state.
         runDesktopComposeUiTest(1200, 900) {
-            setContent { NewAgentDialog(AppState(), { _, _, _ -> null }, {}) }
+            setContent { NewAgentDialog(AppState(), { _, _, _, _ -> null }, {}) }
             onNodeWithTag(NEW_AGENT_EMPTY_ROLES_TAG).assertExists()
             onNodeWithText("Loading roles...", substring = true).assertExists()
         }
@@ -107,7 +141,7 @@ class NewAgentDialogUiTest {
                 ProviderModels("pi", "anthropic", "anthropic", listOf("anthropic/claude-haiku-5-5")),
             ),
         )
-        setContent { NewAgentDialog(claude, { _, _, _ -> null }, {}) }
+        setContent { NewAgentDialog(claude, { _, _, _, _ -> null }, {}) }
         onNodeWithTag(NEW_AGENT_ROLE_TAG_PREFIX + "qa").performClick()
         onNodeWithTag(NEW_AGENT_HARNESS_TAG_PREFIX + "claude").performClick()
         onNodeWithTag(NEW_AGENT_MODEL_SEARCH_TAG).performTextInput("haiku")
@@ -132,7 +166,7 @@ class NewAgentDialogUiTest {
 
     @Test
     fun `at 1280x800 the clipped edge shows a scroll cue and the Add hint jumps to the missing task field`() = runDesktopComposeUiTest(1280, 800) {
-        setContent { NewAgentDialog(crowded, { _, _, _ -> null }, {}) }
+        setContent { NewAgentDialog(crowded, { _, _, _, _ -> null }, {}) }
         // Required steps say so in words, not by a symbol alone.
         onNodeWithTag(NEW_AGENT_REQUIRED_TAG_PREFIX + "ROLE").assertExists()
         onNodeWithTag(NEW_AGENT_REQUIRED_TAG_PREFIX + "TASK").assertExists()
@@ -155,7 +189,7 @@ class NewAgentDialogUiTest {
 
     @Test
     fun `on a phone-width window the hint still reaches the task field`() = runDesktopComposeUiTest(390, 740) {
-        setContent { NewAgentDialog(crowded, { _, _, _ -> null }, {}) }
+        setContent { NewAgentDialog(crowded, { _, _, _, _ -> null }, {}) }
         pickRoleAndModel()
         onNodeWithTag(SCROLL_CUE_END_TAG).assertExists()
         onNodeWithTag(NEW_AGENT_ADD_HINT_TAG).assertIsDisplayed().performClick()
@@ -166,7 +200,7 @@ class NewAgentDialogUiTest {
 
     @Test
     fun `the role grid shows whole rows only and says when more roles sit below`() = runDesktopComposeUiTest(1280, 800) {
-        setContent { NewAgentDialog(crowded, { _, _, _ -> null }, {}) }
+        setContent { NewAgentDialog(crowded, { _, _, _, _ -> null }, {}) }
         // Three whole 48dp rows and two 6dp gaps: no row cut in half.
         onNodeWithTag(NEW_AGENT_ROLE_GRID_TAG).assertHeightIsEqualTo(156.dp)
         onNodeWithTag(NEW_AGENT_MORE_ROLES_TAG).assertExists()
@@ -178,7 +212,7 @@ class NewAgentDialogUiTest {
 
     @Test
     fun `a refused spawn shows its reason inside the modal and the modal stays open`() = runDesktopComposeUiTest(1200, 900) {
-        setContent { NewAgentDialog(state, { _, _, _ -> "provider claude is not installed" }, {}) }
+        setContent { NewAgentDialog(state, { _, _, _, _ -> "provider claude is not installed" }, {}) }
         onNodeWithTag(NEW_AGENT_ROLE_TAG_PREFIX + "backend").performClick()
         onNodeWithTag(NEW_AGENT_ERROR_TAG).assertDoesNotExist()
         onNodeWithTag(NEW_AGENT_TASK_TAG).performTextInput("go")
