@@ -551,6 +551,23 @@ class SettingsService(
      * default. Defaults: priority `belownormal`, maxWorkers = logical cores - 2 (0 = unlimited), maxParallelForks unset
      * (0 = each build script's own default).
      */
+    /** STACK-NEUTRAL-1: `limits.watch.enabled`, read live. */
+    fun watchEnabled(): Boolean = limit(LimitRegistry.WATCH_ENABLED) != 0L
+
+    /**
+     * STACK-NEUTRAL-1: the one-time opt-in migration, run at daemon start. While `limits.watch.enabled` is unset (and no
+     * `AGENTHQ_LIMIT_*` env names it), an install that already has sessions or projects keeps today's behaviour (1); a fresh
+     * one starts with the watch off (0). The value is stored, so it runs once. Returns the value written, null = nothing done.
+     */
+    fun migrateWatchEnabled(existingInstall: () -> Boolean): Long? {
+        val def = LimitRegistry.WATCH_ENABLED
+        if (store.settings.get(def.key) != null) return null
+        if (def.envNames.any { !env(it).isNullOrBlank() }) return null
+        val v = if (runCatching(existingInstall).getOrDefault(true)) 1L else 0L
+        set(def.key, JsonPrimitive(v))
+        return v
+    }
+
     fun buildLimits(): com.superiorsoftllc.agenthq.runner.BuildLimits {
         val priority = store.settings.get(LIMITS_BUILD_PRIORITY)?.value
             ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.getOrNull() }

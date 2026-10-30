@@ -110,7 +110,7 @@ internal object ProgressCli {
     ): Int {
         val opts = parseStreamOptions(args, allowCommand = true)
         if (opts.bad != null || opts.command.isEmpty()) {
-            err.appendLine("error: run: ${opts.bad ?: "expects a command after --, e.g. agenthq run --label gate -- ./gradlew test"}")
+            err.appendLine("error: run: ${opts.bad ?: "expects a command after --, e.g. agenthq run --label tests -- <your build or test command>"}")
             return 2
         }
         val child = try {

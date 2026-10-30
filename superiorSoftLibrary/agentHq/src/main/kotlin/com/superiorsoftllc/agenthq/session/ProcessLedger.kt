@@ -47,6 +47,8 @@ class ProcessLedger(
     private val ownerId: String? = null,
     private val clock: () -> Long = System::currentTimeMillis,
     private val isProtected: (ProcInfo) -> Boolean = { false },
+    /** STACK-NEUTRAL-1: the tool profiles in force; their `heavyCommands` say what [adopt] may adopt by worktree path. */
+    private val profiles: () -> List<com.superiorsoftllc.agenthq.runner.ToolProfile> = { com.superiorsoftllc.agenthq.runner.ToolProfiles.active },
 ) {
     private val entries = LinkedHashMap<Long, LedgerEntry>()
 
@@ -65,8 +67,10 @@ class ProcessLedger(
 
     /**
      * Adopt heavy runtimes the tree walk missed (their parent died before a tick saw them). Ownership is inferred only
-     * from (i) a live parent chain reaching an entry already proven ours, or (ii) the command line naming a session's
-     * worktree path (the longest path wins). No start-time guessing. [sessionDirs] = session id to worktree path.
+     * from (i) a live parent chain reaching an entry already proven ours, or (ii) STACK-NEUTRAL-1: an ORPHAN (its parent
+     * is gone) whose command line names a session's worktree path at a path boundary (the longest path wins) and matches a
+     * profile's `heavyCommands`. A process with a live parent outside the ledger (one the owner started by hand, from a
+     * shell or an IDE in that worktree) is never adopted. No start-time guessing. [sessionDirs] = session id to worktree path.
      */
     @Synchronized
     fun adopt(sessionDirs: Map<String, String>) {
@@ -76,9 +80,10 @@ class ProcessLedger(
         val all = allProcesses()
         if (all.isEmpty()) return
         val byPid = all.associateBy { it.pid }
+        val heavy = com.superiorsoftllc.agenthq.runner.ToolProfiles.heavyCommandRegex(runCatching(profiles).getOrDefault(emptyList()))
         var changed = false
         for (p in all) {
-            if (!HEAVY_CMD.containsMatchIn(p.command)) continue
+            if (!heavy.containsMatchIn(p.command)) continue
             val started = p.startedAt ?: continue
             if (entries[p.pid]?.startedAt == started) continue
             var owner: String? = null
@@ -89,9 +94,9 @@ class ProcessLedger(
                 if (e != null && table.startInstant(up) == e.startedAt) owner = e.sessionId
                 up = byPid[up]?.parentPid
             }
-            if (owner == null) {
+            if (owner == null && (p.parentPid == null || p.parentPid !in byPid)) {
                 val cmd = norm(p.command)
-                owner = dirs.firstOrNull { cmd.contains(it.value) }?.key
+                owner = dirs.firstOrNull { atBoundary(cmd, it.value) }?.key
             }
             if (owner != null) changed = record(p, owner, root = false, inferred = true) || changed
         }
@@ -100,7 +105,18 @@ class ProcessLedger(
 
     private fun norm(s: String) = s.replace('\\', '/').trimEnd('/').lowercase()
 
-    /** Hand entry [pid] to [sessionId] (a shared Gradle daemon outliving the session that started it). */
+    /** [dir] occurs in [cmd] as a whole path: followed by the end, a separator, a quote or a space (`ticket-a` is not `ticket-ab`). */
+    private fun atBoundary(cmd: String, dir: String): Boolean {
+        var i = cmd.indexOf(dir)
+        while (i >= 0) {
+            val next = cmd.getOrNull(i + dir.length)
+            if (next == null || next in PATH_END) return true
+            i = cmd.indexOf(dir, i + 1)
+        }
+        return false
+    }
+
+    /** Hand entry [pid] to [sessionId] (a shared build daemon outliving the session that started it). */
     @Synchronized
     fun reassign(pid: Long, sessionId: String) {
         val e = entries[pid] ?: return
@@ -184,7 +200,6 @@ class ProcessLedger(
         const val FILE_NAME = "process-ledger.json"
         const val COMMAND_MAX = 80
         private const val MIN_DIR = 8
-        private val HEAVY_CMD = Regex("""(?i)java|node|gradle|kotlin|npx|playwright|modelcontextprotocol""")
         private val JSON = Json { ignoreUnknownKeys = true }
 
         /** An MCP server a harness starts per session (Playwright, the reference servers), matched on the FULL command line. */
@@ -192,8 +207,10 @@ class ProcessLedger(
         private val OPENCODE_SERVE = Regex("""(?i)opencode(\.exe)?"?\s+serve\b""")
         private val PORT = Regex("""--port\s+(\d+)""")
 
-        /** True for a process manual reap may kill although no session owns it: an MCP server or an `opencode serve`. */
-        fun isManualReapable(command: String) = MCP_CMD.containsMatchIn(command) || OPENCODE_SERVE.containsMatchIn(command)
+        private const val PATH_END = "/\"' ;,"
+
+        /** STACK-NEUTRAL-1: an MCP server or an `opencode serve`: a harness helper, listed and reaped only when the ledger proves it ours. */
+        fun isHarnessHelper(command: String) = MCP_CMD.containsMatchIn(command) || OPENCODE_SERVE.containsMatchIn(command)
 
         /**
          * What the list shows for [command]: an MCP server is named ("Playwright MCP | ..."; ProcessWatch adds the session),

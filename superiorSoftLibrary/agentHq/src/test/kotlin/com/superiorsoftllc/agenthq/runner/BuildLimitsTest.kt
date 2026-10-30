@@ -29,7 +29,7 @@ class BuildLimitsTest {
     }
 
     @Test fun `session env caps Gradle, keeps Kotlin in-process and appends to the inherited GRADLE_OPTS`() {
-        val env = BuildLimits(BuildPriority.BELOW_NORMAL, maxWorkers = 6, maxParallelForks = 2).sessionEnv("-Xmx512m")
+        val env = BuildLimits(BuildPriority.BELOW_NORMAL, maxWorkers = 6, maxParallelForks = 2).sessionEnv(mapOf("GRADLE_OPTS" to "-Xmx512m")::get)
         assertEquals("belownormal", env[BuildLimits.PRIORITY_ENV])
         assertEquals("6", env[BuildLimits.MAX_WORKERS_ENV])
         assertEquals("2", env[BuildLimits.MAX_FORKS_ENV])
@@ -41,7 +41,7 @@ class BuildLimitsTest {
     }
 
     @Test fun `zero means unlimited - no cap is passed`() {
-        val env = BuildLimits(BuildPriority.IDLE, maxWorkers = 0, maxParallelForks = 0).sessionEnv(null)
+        val env = BuildLimits(BuildPriority.IDLE, maxWorkers = 0, maxParallelForks = 0).sessionEnv()
         assertEquals("idle", env[BuildLimits.PRIORITY_ENV])
         assertFalse(BuildLimits.MAX_WORKERS_ENV in env)
         assertFalse(BuildLimits.MAX_FORKS_ENV in env)
@@ -49,6 +49,29 @@ class BuildLimitsTest {
         assertFalse("workers.max" in opts)
         assertFalse("testForks" in opts)
         assertTrue("execution.strategy=in-process" in opts)
+    }
+
+    @Test fun `STACK-NEUTRAL-1 - with no gradle profile no GRADLE_OPTS is set, only the generic caps`() {
+        val env = BuildLimits(BuildPriority.BELOW_NORMAL, maxWorkers = 6, maxParallelForks = 2).sessionEnv(profiles = emptyList())
+        assertEquals(
+            mapOf(BuildLimits.PRIORITY_ENV to "belownormal", BuildLimits.MAX_WORKERS_ENV to "6", BuildLimits.MAX_FORKS_ENV to "2"),
+            env,
+        )
+    }
+
+    @Test fun `STACK-NEUTRAL-1 - a non-gradle profile's env templates get the caps, joined and appended to the inherited value`() {
+        val p = ToolProfile(
+            name = "acme", env = listOf(
+                EnvTemplate("ACME_FLAGS", "--jobs=${'$'}{maxWorkers}", onlyIf = EnvTemplate.MAX_WORKERS),
+                EnvTemplate("ACME_FLAGS", "--test-procs=${'$'}{maxParallelForks}", onlyIf = EnvTemplate.MAX_PARALLEL_FORKS),
+                EnvTemplate("ACME_MODE", "low", inherit = false),
+            ),
+        )
+        val env = BuildLimits(BuildPriority.IDLE, maxWorkers = 4, maxParallelForks = 0)
+            .sessionEnv(mapOf("ACME_FLAGS" to "-v", "ACME_MODE" to "high")::get, listOf(p))
+        assertEquals("-v --jobs=4", env["ACME_FLAGS"], "forks=0 leaves its template out")
+        assertEquals("low", env["ACME_MODE"], "inherit=false replaces")
+        assertFalse("GRADLE_OPTS" in env)
     }
 
     @Test fun `the runner reads the priority from the spec env only, and normal means untouched`() {

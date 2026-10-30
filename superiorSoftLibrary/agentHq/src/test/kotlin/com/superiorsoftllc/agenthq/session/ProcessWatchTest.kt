@@ -71,9 +71,12 @@ class ProcessWatchTest {
         lockAlive: Boolean = false,
         lockHolder: Long? = null,
         gateLock: GateLock = GateLock(dir = { null }),
+        profiles: List<com.superiorsoftllc.agenthq.runner.ToolProfile> = com.superiorsoftllc.agenthq.runner.ToolProfiles.DEFAULTS,
+        enabled: () -> Boolean = { true },
     ) = ProcessWatch(
         ledger, { sessions.values.toList() }, os, os, { config }, { now }, onPressure = { pressure += it },
         lockHolderAlive = { lockAlive }, lockHolderPid = { lockHolder }, gateLock = gateLock,
+        profiles = { profiles }, enabled = enabled,
     )
 
     // Pids far above anything real, so the test JVM's own ancestry (protected) never collides.
@@ -209,30 +212,66 @@ class ProcessWatchTest {
         assertTrue(900_400L in os.killed && 900_401L in os.killed)
     }
 
-    @Test fun `an orphan playwright mcp is listed at any size, never rogue, never auto reaped, reaped only by hand`() {
-        os.start(900_500L, 777_777L, pwNpx, 3_000, memMb = 140)
-        os.start(900_501L, 900_500L, pwSrv, 3_100, memMb = 95)
+    @Test fun `STACK-NEUTRAL-1 - an mcp server no session started is the owner's - never listed, never reaped, not even by hand`() {
+        os.start(900_500L, 777_777L, pwNpx, 3_000, memMb = 400)
+        os.start(900_501L, 900_500L, pwSrv, 3_100, memMb = 300)
         val w = watch(config = ProcessWatchConfig(autoReap = true))
         w.tick()
-        val un = w.report().unattributed.single { it.pid == 900_501L }
-        assertTrue(un.command.startsWith("Playwright MCP | ") && !un.rogue && un.sessionId == null)
+        assertTrue(w.report().unattributed.none { it.pid == 900_500L || it.pid == 900_501L })
         assertTrue(w.reapRogue().isEmpty() && w.reapSession("none", now).isEmpty())
+        assertIs<ReapResult.Refused>(w.reap(900_500L))
         assertTrue(os.killed.isEmpty())
-        assertIs<ReapResult.Reaped>(w.reap(900_500L))
-        assertTrue(900_500L in os.killed && 900_501L in os.killed)
     }
 
-    @Test fun `opencode serve is shown with its port and reaped only by hand, other strangers are refused`() {
+    @Test fun `STACK-NEUTRAL-1 - an opencode serve no session started is never listed or reaped, nor is any stranger`() {
         val oc = 900_600L
         os.start(oc, null, "opencode.exe serve --port 47123 --hostname 127.0.0.1", 3_000, memMb = 1_700)
         os.start(900_601L, null, "node unrelated.js", 3_000, memMb = 1_700)
         val w = watch(config = ProcessWatchConfig(autoReap = true))
         w.tick()
-        assertEquals("opencode serve --port 47123", w.report().unattributed.single { it.pid == oc }.command)
-        assertTrue(w.reapRogue().isEmpty() && os.killed.isEmpty())
+        assertTrue(w.report().unattributed.none { it.pid == oc })
+        assertTrue(w.reapRogue().isEmpty())
         assertIs<ReapResult.Refused>(w.reap(900_601L))
-        assertIs<ReapResult.Reaped>(w.reap(oc))
-        assertEquals(listOf(oc), os.killed)
+        assertIs<ReapResult.Refused>(w.reap(oc))
+        assertTrue(os.killed.isEmpty())
+    }
+
+    @Test fun `STACK-NEUTRAL-1 - a process the owner started by hand in a worktree (live parent) is never adopted or killed`() {
+        os.start(harness, null, "claude --session", 1_000)
+        session("s1", harness)
+        sessions["s1"] = sessions.getValue("s1").copy(worktreePath = "C:/work/.worktrees/ticket-aaa-fix")
+        val ownerShell = 900_650L
+        os.start(ownerShell, null, "pwsh.exe", 500)
+        os.start(900_651L, ownerShell, "node C:/work/.worktrees/ticket-aaa-fix/node_modules/.bin/vite", 6_000, memMb = 600)
+        val ledger = ProcessLedger(os, os, clock = { now })
+        val w = watch(ledger)
+        w.tick()
+        assertNull(ledger.get(900_651L))
+        close()
+        w.reapSession("s1", now)
+        assertTrue(900_651L in os.procs && 900_651L !in os.killed)
+    }
+
+    @Test fun `STACK-NEUTRAL-1 - worktree adoption needs a path boundary`() {
+        os.start(harness, null, "claude --session", 1_000)
+        session("s1", harness)
+        sessions["s1"] = sessions.getValue("s1").copy(worktreePath = "C:/work/.worktrees/ticket-aaa")
+        os.start(gradleDaemon, 777_777L, "java GradleDaemon -Duser.dir=C:/work/.worktrees/ticket-aaa-fix", 6_000, memMb = 900)
+        os.start(kotlinDaemon, 777_778L, "java KotlinCompileDaemon C:\\work\\.worktrees\\ticket-aaa\\build", 6_000, memMb = 900)
+        val ledger = ProcessLedger(os, os, clock = { now })
+        watch(ledger).tick()
+        assertNull(ledger.get(gradleDaemon), "ticket-aaa is not ticket-aaa-fix")
+        assertEquals("s1", ledger.get(kotlinDaemon)?.sessionId)
+    }
+
+    @Test fun `STACK-NEUTRAL-1 - with no profile naming it, an orphan is never adopted by path`() {
+        os.start(harness, null, "claude --session", 1_000)
+        session("s1", harness)
+        sessions["s1"] = sessions.getValue("s1").copy(worktreePath = "C:/work/.worktrees/ticket-aaa-fix")
+        os.start(gradleDaemon, 777_777L, "java GradleDaemon -Duser.dir=C:/work/.worktrees/ticket-aaa-fix", 6_000, memMb = 900)
+        val ledger = ProcessLedger(os, os, clock = { now }, profiles = { emptyList() })
+        watch(ledger, profiles = emptyList()).tick()
+        assertNull(ledger.get(gradleDaemon))
     }
 
     @Test fun `unrelated and recycled pids are never touched`() {
@@ -519,6 +558,93 @@ class ProcessWatchTest {
         val t = OsMemorySource.parseTasklist("\"java.exe\",\"1234\",\"Console\",\"1\",\"1,234,567 K\"\r\n\"x.exe\",\"9\",\"S\",\"0\",\"2.048 K\"\r\n")
         assertEquals(listOf(ProcMem(1234, "java.exe", 1205), ProcMem(9, "x.exe", 2)), t)
         assertEquals(listOf(ProcMem(77, "node", 500)), OsMemorySource.parsePs("   77 512000 /usr/bin/node\n"))
+    }
+
+    // STACK-NEUTRAL-1: the watch reads what a build daemon is from the tool profiles, and has an off switch.
+
+    @Test fun `watch off - nothing is recorded, nothing is killed, the report carries free RAM only`() {
+        busyTree()
+        val ledger = ProcessLedger(os, os, clock = { now })
+        val w = watch(ledger, config = ProcessWatchConfig(autoReap = true), enabled = { false })
+        w.tick()
+        assertTrue(ledger.entries().isEmpty(), "off: the ledger records nothing")
+        close()
+        assertTrue(w.reapSession("s1", now).isEmpty())
+        assertTrue(w.reapEnded("daemon shutdown").isEmpty())
+        assertTrue(w.reapRogue().isEmpty())
+        assertIs<ReapResult.Refused>(w.reap(node))
+        assertTrue(os.killed.isEmpty(), "off: nothing killed")
+        val r = w.report()
+        assertEquals(16_000L, r.freeMb)
+        assertTrue(r.tracked.isEmpty() && r.unattributed.isEmpty())
+    }
+
+    @Test fun `watch switched on later picks the tree up from then on`() {
+        busyTree()
+        var on = false
+        val ledger = ProcessLedger(os, os, clock = { now })
+        val w = watch(ledger, enabled = { on })
+        w.tick()
+        assertTrue(ledger.entries().isEmpty())
+        on = true
+        w.tick()
+        assertTrue(ledger.get(node) != null && ledger.get(gradleDaemon) != null)
+    }
+
+    @Test fun `no profile names gradle - its daemon is a plain tree member, killed with its session even for a live gate holder`() {
+        gradleUnder("s1")
+        val holder = 900_720L
+        os.start(holder, null, "bash gate.sh", 500)
+        val w = watch(lockHolder = holder, profiles = emptyList())
+        w.tick()
+        os.exit(gradlew)
+        close()
+        w.reapSession("s1", now)
+        assertFalse(gradleDaemon in os.procs, "generic behaviour: no shared-daemon sparing without a profile")
+    }
+
+    @Test fun `a non-gradle shared daemon from a data profile is spared for a live gate holder and handed to its client`() {
+        val acme = com.superiorsoftllc.agenthq.runner.ToolProfile(
+            name = "acme", commands = listOf("acme"), daemons = listOf("acme-build-server"), sharedDaemon = true,
+            clients = listOf("""\bacme build\b"""), heavyImages = listOf("acme.*"),
+        )
+        val server = 900_730L
+        val client = 900_731L
+        os.start(harness, null, "claude --session", 1_000)
+        os.start(client, harness, "acme build all", 5_000)
+        os.start(server, client, "acme-build-server --port 9", 6_000, memMb = 700)
+        session("s1", harness)
+        val holder = 900_732L
+        os.start(holder, null, "bash gate.sh", 500)
+        val w = watch(lockHolder = holder, profiles = listOf(acme))
+        w.tick()
+        os.exit(client)
+        close()
+        w.reapSession("s1", now)
+        assertTrue(server in os.procs, "spared: the gate-lock holder may use the shared acme daemon")
+
+        // without the gate holder, handed to another live session that runs an acme client
+        val ledger = ProcessLedger(os, os, clock = { now })
+        val w2 = watch(ledger, profiles = listOf(acme))
+        val h2 = 900_740L
+        os.start(h2, null, "claude --s2", 1_000)
+        os.start(900_741L, h2, "acme build web", 9_000)
+        session("s2", h2)
+        os.start(harness, null, "claude --session", 1_000)
+        os.procs[server] = os.procs.getValue(server).copy(parentPid = harness)
+        sessions["s1"] = sessions.getValue("s1").copy(state = SessionState.IDLE, keptProcess = KeptProcess(harness, 1_000, "claude"))
+        w2.tick()
+        close()
+        w2.reapSession("s1", now)
+        assertTrue(server in os.procs)
+        assertEquals("s2", ledger.get(server)!!.sessionId)
+    }
+
+    @Test fun `an unattributed orphan daemon is named by its profile in the reason`() {
+        os.start(gradleDaemon, 777_777L, "java GradleDaemon 8.5", 6_000, memMb = 900)
+        val r = watch().report().unattributed.single { it.pid == gradleDaemon }
+        assertTrue(r.rogue)
+        assertEquals("orphan build daemon (gradle): no owning session, no live gate-lock holder", r.reason)
     }
 }
 

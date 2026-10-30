@@ -6,6 +6,16 @@
     "args": ["--console=plain"],
     "argsUnless": ["--console"],
     "daemons": ["GradleDaemon", "org\\.gradle\\.launcher\\.daemon"],
+    "sharedDaemon": true,
+    "clients": ["gradlew", "GradleWrapperMain", "GradleMain"],
+    "heavyImages": ["gradle.*"],
+    "heavyCommands": ["gradle"],
+    "env": [
+      { "name": "GRADLE_OPTS", "value": "-Dorg.gradle.workers.max=${maxWorkers}", "onlyIf": "maxWorkers" },
+      { "name": "GRADLE_OPTS", "value": "-Dorg.gradle.project.kotlin.compiler.execution.strategy=in-process" },
+      { "name": "GRADLE_OPTS", "value": "-Dorg.gradle.project.agenthq.testForks=${maxParallelForks}", "onlyIf": "maxParallelForks" },
+      { "name": "GRADLE_OPTS", "value": "-Dorg.gradle.project.agenthq.uiTestForks=${maxParallelForks}", "onlyIf": "maxParallelForks" }
+    ],
     "notifyOn": ["BUILD SUCCESSFUL", "BUILD FAILED"],
     "failureMarkers": ["BUILD FAILED", "^FAILURE: "]
   },
@@ -14,6 +24,9 @@
     "commands": [],
     "shim": [],
     "daemons": ["KotlinCompileDaemon", "kotlin-daemon"],
+    "sharedDaemon": true,
+    "heavyImages": ["kotlin.*"],
+    "heavyCommands": ["kotlin"],
     "notifyOn": ["^e: "]
   },
   { "name": "maven", "commands": ["mvnw", "mvn"], "shim": ["mvn"], "failureMarkers": ["\\[INFO\\] BUILD FAILURE", "^\\[ERROR\\] BUILD FAILURE"], "logFlags": ["--log-file", "-l"] },
@@ -21,6 +34,33 @@
   { "name": "yarn", "commands": ["yarn"] },
   { "name": "pnpm", "commands": ["pnpm"] },
   { "name": "java-jar", "commands": ["java"], "shim": [], "longIf": ["-jar"] },
+  { "name": "cargo", "commands": ["cargo"], "shim": [], "long": false, "failureMarkers": ["^error: could not compile"] },
+  { "name": "go", "commands": ["go"], "shim": [], "long": false, "failureMarkers": ["^FAIL\\s"] },
+  { "name": "pytest", "commands": ["pytest"], "shim": [], "long": false },
+  { "name": "make", "commands": ["make"], "shim": [], "long": false, "failureMarkers": ["^make(\\[\\d+\\])?: \\*\\*\\* "] },
+  {
+    "name": "dotnet",
+    "commands": ["dotnet"],
+    "shim": [],
+    "long": false,
+    "daemons": ["VBCSCompiler", "MSBuild(\\.exe|\\.dll)?\\S*\\s.*nodeReuse:true"],
+    "sharedDaemon": true,
+    "clients": ["dotnet(\\.exe)?\"?\\s+(build|test|run|publish)\\b"],
+    "failureMarkers": ["^Build FAILED\\."]
+  },
+  {
+    "name": "runtimes",
+    "commands": [],
+    "shim": [],
+    "heavyImages": ["java", "javaw", "node", "opencode", "docker.*", "com\\.docker.*", "vmmem.*", "wsl.*", "bun", "pi"],
+    "heavyCommands": ["java", "node"]
+  },
+  {
+    "name": "mcp",
+    "commands": [],
+    "shim": [],
+    "heavyCommands": ["npx", "playwright", "modelcontextprotocol"]
+  },
   {
     "name": "shell-redirects",
     "commands": [],

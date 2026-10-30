@@ -174,7 +174,7 @@ internal object BgCli {
                 }
                 when {
                     scriptB64 != null && command.isNotEmpty() -> Parsed.Bad("bg run: --script-b64 and a command after -- are exclusive")
-                    scriptB64 == null && command.isEmpty() -> Parsed.Bad("bg run expects a command after --, e.g. agenthq bg run --name gate -- gradlew test")
+                    scriptB64 == null && command.isEmpty() -> Parsed.Bad("bg run expects a command after --, e.g. agenthq bg run --name tests -- <your build or test command>")
                     else -> Parsed.Run(name, command, keep, notify, notifyOn, defaults, tail, timeout, jobId, attached, shim, hook, shell, scriptB64, follow)
                 }
             }
