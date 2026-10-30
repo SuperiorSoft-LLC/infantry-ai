@@ -146,6 +146,9 @@ data class ExecutorPickerModel(
     }
 
     companion object {
+        /** H2: shown while the picker has no harness (still loading, or a daemon with none installed): says what to do. */
+        const val NO_HARNESS_TEXT = "No harness installed, install one (Configuration > Harnesses > Install). The daemon's defaults apply once one is."
+
         /**
          * PICKER-ALL-2: the `models` frame, plus a row per vendor for any harness the frame does not list but whose
          * `providers` entry carries its own model list (`knownModels()`), grouped by the id's prefix. So a profile form

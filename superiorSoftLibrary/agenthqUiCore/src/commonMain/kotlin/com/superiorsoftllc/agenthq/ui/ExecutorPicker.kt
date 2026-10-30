@@ -58,7 +58,7 @@ data class ExecutorPickerTags(
  *  - Model: a [SearchableSelect] that is always searchable; picking one on All sets the provider (reverse arrow).
  *    Backspace on its empty search box goes back to All.
  *  - A harness that lists no models keeps a free-text field with its default, plus the daemon's note saying why.
- *  - No harnesses yet: one loading line, never an empty control.
+ *  - No harnesses (loading, or none installed): one line saying to install one, never an empty control.
  */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -79,7 +79,7 @@ fun ExecutorPicker(
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (ex.harnesses.isEmpty()) {
             Text(
-                "Loading harnesses... (the daemon's defaults apply if none load)", color = Palette.Muted, fontSize = 11.sp,
+                ExecutorPickerModel.NO_HARNESS_TEXT, color = Palette.Muted, fontSize = 11.sp,
                 modifier = Modifier.testTag(EXECUTOR_LOADING_TAG),
             )
             return@Column
