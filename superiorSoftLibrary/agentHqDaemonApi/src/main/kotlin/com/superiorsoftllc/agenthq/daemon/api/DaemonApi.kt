@@ -66,12 +66,20 @@ interface DaemonApi {
      */
     val sessionReads: com.superiorsoftllc.agenthq.daemon.api.sessions.SessionReads get() = com.superiorsoftllc.agenthq.daemon.api.sessions.NoSessionReads
 
+    /**
+     * RUNTIME-LOAD-6 (1.7.0, additive): the HOST spawn service (docs/RUNTIME-LOAD.md section 12): spawn, ticket start and kill
+     * guardrails keyed by the calling session, so every client and plugin is held to one state. A daemon without one answers
+     * Unavailable. Community plugins need the grant `sessions.spawn`.
+     */
+    val spawns: com.superiorsoftllc.agenthq.daemon.api.spawns.Spawns get() = com.superiorsoftllc.agenthq.daemon.api.spawns.NoSpawns
+
     companion object {
+        // 1.7.0 (RUNTIME-LOAD-6, additive): `spawns` (daemon.api.spawns): host spawn / ticket start / kill guardrails.
         // 1.6.0 (RUNTIME-LOAD-5, additive): `sessionReads` (daemon.api.sessions), SessionText, board.BoardLines.
         // 1.5.0 (AGENT-REGISTRY-1, additive): `agents` (daemon.api.agents.Agents) and module.json `agents`.
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
-        const val VERSION = "1.6.0"
+        const val VERSION = "1.7.0"
     }
 }
 
