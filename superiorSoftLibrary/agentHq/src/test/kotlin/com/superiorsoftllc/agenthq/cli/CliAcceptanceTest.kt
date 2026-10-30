@@ -454,7 +454,8 @@ class CliAcceptanceTest {
         fixture.send(Envelope(Envelope.TICKET_SAVE, """{"title":"Test Ticket 1","ticketType":"enhancement"}"""))
         fixture.client.await(Envelope.TICKET)
         fixture.send(Envelope(Envelope.TICKET_SAVE, """{"title":"Test Ticket 2","ticketType":"defect"}"""))
-        fixture.client.await(Envelope.TICKET)
+        // The second saved ticket's own answer (occurrence 1): awaiting occurrence 0 again returned the first answer at once and raced the listing.
+        fixture.client.await(Envelope.TICKET, occurrence = 1)
 
         val tickets = cli(fixture.port, "tickets")
         assertEquals(0, tickets.exit, "tickets failed: ${tickets.err}")

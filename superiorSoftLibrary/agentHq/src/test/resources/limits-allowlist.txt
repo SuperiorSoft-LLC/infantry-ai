@@ -219,3 +219,5 @@ com/superiorsoftllc/agenthq/runner/BuildPriority.kt:JOB_OBJECT_LIMIT_PRIORITY_CL
 com/superiorsoftllc/agenthq/usagemeter/UsageMeter.kt:DEFAULT_KEEP_WEEKS|pending S2-S4 (not yet routed through LimitRegistry; already overridable via AGENTHQ_USAGE_METER_KEEP_WEEKS)
 com/superiorsoftllc/agenthq/cli/BgCli.kt:EOF_GRACE_MS|STALL-1 pipe drain after the process wait returned (the end is already known); a protocol constant, not a limit
 com/superiorsoftllc/agenthq/cli/BgCli.kt:DEFAULT_TREE_WAIT_SECONDS|STALL-2 the runner's fallback outside a session; sessions get limits.watch.treeWaitMinutes as AGENTHQ_WATCH_TREE_WAIT_SECONDS
+com/superiorsoftllc/agenthq/backlog/TicketEventLog.kt:KEEP|BOARD-API-2 ring size of the event log (rows kept for replay); a storage bound, not a runtime limit
+com/superiorsoftllc/agenthq/backlog/TicketEventLog.kt:MAX_ATTEMPTS|BOARD-API-2 delivery attempts before a poison event is skipped; a delivery-contract constant (docs/DAEMON-BOARD-API.md section 8)

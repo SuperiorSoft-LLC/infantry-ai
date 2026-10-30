@@ -149,7 +149,7 @@ class McpTicketImagesE2eTest {
     fun ticketsCarryImagesThroughMcpAndTheWorkerBriefListsThem() {
         val gated = GatedRunner()
         val state = tempDir("agenthq-mcp-img-daemon")
-        val fixture = DaemonFixture.launch(stateDir = state, runner = gated, workingDir = File(state, "workdir").apply { mkdirs() })
+        val fixture = DaemonFixture.launch(stateDir = state, runner = gated, workingDir = File(state, "workdir").apply { mkdirs() }, pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot())
             .also { fixtures += it; it.client.await(Envelope.READY) }
         val board = fixture.daemon.board
         val root = tempDir("agenthq-mcp-img-project")
@@ -169,7 +169,7 @@ class McpTicketImagesE2eTest {
         ))
         val t1 = created.str("ticketId")
         assertEquals(listOf(relA), created.images(), "the create answer lists the stored image")
-        assertEquals(listOf(relA), payload(agent.callTool(McpTicketTools.GET, """{"ticketId":"$t1"}""")).images())
+        assertEquals(listOf(relA), payload(agent.callTool("agenthq_ticket_get", """{"ticketId":"$t1"}""")).images())
 
         // (3) a stored-image path that escapes uploads/ticket is refused, and the ticket is unchanged. IMG-AGENT-1: a
         // LOCAL image file anywhere else is uploaded and attached instead (TicketImageAttachE2eTest), so the only
@@ -190,12 +190,12 @@ class McpTicketImagesE2eTest {
         val t3 = payload(agent.callTool(McpTicketTools.CREATE, """{"title":"Shares b, owns c","images":${quoted(relB, relC)}}""")).str("ticketId")
         assertEquals(
             listOf(relB),
-            payload(agent.callTool(McpTicketTools.GET, """{"ticketId":"$t2"}""")).images(),
+            payload(agent.callTool("agenthq_ticket_get", """{"ticketId":"$t2"}""")).images(),
             "an absolute path under uploads/ticket is stored as its relPath",
         )
         payload(agent.callTool(McpTicketTools.DELETE, """{"ticketId":"$t2"}"""))
         assertTrue(b.isFile, "a file another ticket still references stays")
-        val got3 = payload(agent.callTool(McpTicketTools.GET, """{"ticketId":"$t3"}"""))
+        val got3 = payload(agent.callTool("agenthq_ticket_get", """{"ticketId":"$t3"}"""))
         assertEquals(listOf(relB, relC), got3.images(), "the other ticket still lists the shared image")
 
         // (5) deleting a ticket deletes its unshared images.

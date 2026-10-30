@@ -15,6 +15,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import java.io.BufferedReader
+import java.io.File
 import java.io.PipedReader
 import java.io.PipedWriter
 import java.io.PrintWriter
@@ -181,7 +182,7 @@ class McpServeTest {
             listOf(
                 "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_board",
                 "agenthq_spawn", "agenthq_prompt", "agenthq_message", "agenthq_kill", "agenthq_session_remove", "agenthq_session_restart",
-                "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_ticket_get", // MCP-1
+                "agenthq_ticket_create", "agenthq_ticket_update", // MCP-1 (agenthq_ticket_get is Infantry_Board's daemon tool: absent without the plugin)
                 "agenthq_ticket_start", // BUG-ASSIGN-1
                 "agenthq_epic_base", // BASE-1c
                 "agenthq_ticket_delete", // MCP-DEL-1
@@ -278,8 +279,10 @@ class McpServeTest {
             initialize(served)
 
             val tools = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject }
-            assertEquals(listOf("agenthq_ticket_files", "agenthq_ticket_related_files"), tools.takeLast(2).map { it["name"]!!.jsonPrimitive.content })
-            assertEquals(Json.parseToJsonElement(TICKET_FILES_GOLDEN), JsonArray(tools.takeLast(2)), "the descriptors changed in the move")
+            // The plugin's tools come after this server's own, sorted by name (agenthq_ticket_get is Infantry_Board's too).
+            val filesTools = tools.filter { it["name"]!!.jsonPrimitive.content in setOf("agenthq_ticket_files", "agenthq_ticket_related_files") }
+            assertEquals(listOf("agenthq_ticket_files", "agenthq_ticket_related_files"), filesTools.map { it["name"]!!.jsonPrimitive.content })
+            assertEquals(Json.parseToJsonElement(TICKET_FILES_GOLDEN), JsonArray(filesTools), "the descriptors changed in the move")
 
             // The argument errors, word for word.
             fun text(result: JsonObject) = result["content"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content
@@ -297,6 +300,59 @@ class McpServeTest {
             assertEquals(com.superiorsoftllc.agenthq.ticketfiles.TicketFilesReport.decode(direct.data).text, text(viaPlugin))
             val related = served.callTool("agenthq_ticket_related_files", """{"ticketId":"ticket-55476f3c","top":3}""")
             assertEquals(false, related["isError"]!!.jsonPrimitive.content.toBoolean(), "$related")
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    private val TICKET_GET_GOLDEN = """{"name":"agenthq_ticket_get","description":"Read ONE ticket back: title, verbatim description, status, project, role/agent, provider, model, branch, worker session, attached images.","inputSchema":{"type":"object","properties":{"ticketId":{"type":"string","description":"Full ticket id, or its 8-char suffix."}},"required":["ticketId"],"additionalProperties":false},"annotations":{"readOnlyHint":true,"destructiveHint":false,"openWorldHint":false}}"""
+
+    /**
+     * BOARD-API-2 (first F5 slice): `agenthq_ticket_get` moved from this MCP server into Infantry_Board's daemon half, over the
+     * Tickets API. Loaded from its built jar, the daemon lists it with the EXACT descriptor the deleted McpTicketTools served
+     * ([TICKET_GET_GOLDEN]), answers the same JSON and the same refusals, on the same policy action (`board.read`, the action of the
+     * `ticket_get` / `ticket_list` frames it replaced). A worker session still reads only its own project's tickets.
+     */
+    @Test
+    fun ticketGetComesFromTheBoardPluginUnchanged() {
+        val root = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Board")
+        try {
+            val fixture = DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-plugin").toFile(), pluginsRoot = root)
+                .also { fixtures += it }
+            fixture.client.await(Envelope.READY)
+            val served = serve("--port", fixture.port.toString())
+            initialize(served)
+            val tools = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject }
+            assertEquals(Json.parseToJsonElement(TICKET_GET_GOLDEN), tools.single { it["name"]!!.jsonPrimitive.content == "agenthq_ticket_get" }, "the descriptor changed in the move")
+            val manifest = Json.parseToJsonElement(File(root, "official/Infantry_Board/module.json").readText()).jsonObject["daemon"]!!.jsonObject["tools"]!!.jsonArray
+                .map { it.jsonObject }.single { it["name"]!!.jsonPrimitive.content == "agenthq_ticket_get" }
+            assertEquals("board.read", manifest["action"]!!.jsonPrimitive.content)
+            assertEquals("read", manifest["kind"]!!.jsonPrimitive.content)
+
+            fun text(result: JsonObject) = result["content"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content
+            fun isError(result: JsonObject) = result["isError"]!!.jsonPrimitive.content.toBoolean()
+            val noId = served.callTool("agenthq_ticket_get")
+            assertEquals(true, isError(noId))
+            assertEquals("agenthq_ticket_get needs a ticketId", text(noId))
+            val unknown = served.callTool("agenthq_ticket_get", """{"ticketId":"nope0000"}""")
+            assertEquals(true, isError(unknown))
+            assertEquals("no ticket 'nope0000' on this daemon", text(unknown))
+
+            fixture.client.send(Envelope(Envelope.TICKET_SAVE, """{"title":"read me back","description":"line one\nline two","projectId":"project-a"}""", requestId = "save"))
+            val saved = fixture.client.awaitWhere("the saved ticket") { it.requestId == "save" }
+            val id = Json.parseToJsonElement(saved.data).jsonObject["id"]!!.jsonPrimitive.content
+            val got = served.callTool("agenthq_ticket_get", """{"ticketId":"${id.takeLast(8)}"}""")
+            assertEquals(false, isError(got), "$got")
+            val ticket = Json.parseToJsonElement(text(got)).jsonObject
+            assertEquals(id, ticket["ticketId"]!!.jsonPrimitive.content)
+            assertEquals("read me back", ticket["title"]!!.jsonPrimitive.content)
+            assertEquals("line one\nline two", ticket["description"]!!.jsonPrimitive.content)
+            assertEquals("todo", ticket["status"]!!.jsonPrimitive.content)
+            assertEquals(
+                listOf("ticketId", "title", "description", "status", "projectId", "epicId", "agentId", "role", "provider", "model", "weight",
+                    "effectiveProvider", "effectiveProviderSource", "effectiveModel", "effectiveModelSource", "effectiveRule", "branch", "sessionId", "images"),
+                ticket.keys.toList(), "the answer's fields and their order",
+            )
         } finally {
             root.deleteRecursively()
         }

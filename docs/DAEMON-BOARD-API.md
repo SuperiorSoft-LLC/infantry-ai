@@ -112,7 +112,7 @@ after the move. Core code stops naming `TicketBoard`:
 | step | work | size |
 |---|---|---|
 | **DP-4a** (DONE, section 7) | Add `Tickets`/`Epics`/`Board` interfaces + data classes to `agentHqDaemonApi`; `CoreDaemonServices` implements them over `TicketBoard`/`EpicStore` (local binding). Move `ProjectScope` into the host (applies to every `Tickets` call). Golden tests per operation. | M |
-| **DP-4b** | `TicketBoard` events: replace `transitionSink` with typed ticket events on `api.events`; `triggers`, `DoneWorkerReaper`, ticket-files recorder subscribe through the API. | M |
+| **DP-4b** (DONE, section 8) | `TicketBoard` events: replace `transitionSink` with typed ticket events on `api.events`; `triggers`, `DoneWorkerReaper`, ticket-files recorder subscribe through the API. | M |
 | **DP-4c** | Route the `SessionManager`/mailbox seams (section 4.1) through `OrchestratorLink`; move `STARTER` into `mailbox`; core no longer imports `backlog`/`context` outside `DaemonMain`. Guard: only `DaemonMain` and the board packages name them. | M |
 | **DP-5** | Move `backlog`, `epics`, `stories`, `mvp`, `context`, `brief`, `ledger`, `ticketfiles` into `plugins/official/Infantry_Board/daemon` against the API only; frames registered by the plugin; `DaemonMain` loses its board switch. Parity: every existing board/ticket/story/epic daemon test passes unchanged against the plugin. | L (multi-day) |
 | **DP-6** | Pipeline plugin (`pipeline`, `agenthq_pipeline*` tools): needs only `Tickets` + `Sessions`; small once DP-4a lands. | S |
@@ -158,3 +158,22 @@ Tests: `LocalBoardServicesTest` (golden per operation, scope, policy, Unavailabl
   epic update or delete. Pagination limits are constants (default 200, max 500), not `limits.board.*` settings yet; the cursor is the last
   ticket id. `create` idempotency by `clientKey` is in-memory (lost on restart). Events (`TicketMoved`, ...) are DP-4b and not built.
 * **Not done here:** the one-tool migration (see RUNTIME-LOAD.md section 8 for why it was skipped).
+
+## 8. DP-4b built (BOARD-API-2, ticket b4a1b1c3): typed ticket events
+
+`TicketBoard.transitionSink` is gone. A commit writes one `ticket_events` row per change INSIDE its own transaction (`TicketEventLog.record`,
+migration 52), and delivers after the commit under the board monitor, as the sink did. `TicketEvents.subscribe(consumer, listener)` (in
+`agentHqDaemonApi`, `BOARD_API_VERSION` 1.1.0, `DaemonApi.VERSION` 1.3.0, plugin side `api.events.onTicket(consumer, listener)`) is the one
+way in: the three core consumers (`core.triggers`, `core.done-worker-reaper`, `core.ticket-files`) subscribe exactly as a plugin does.
+
+* **Events:** `TicketEvent(seq, ticketId, kind, from, to, at)`, kinds `created`, `moved`, `started` (into in_progress), `done` (into done),
+  `updated` (change that kept the column), `deleted`. `isTransition` = what the old sink announced (created/moved/started/done).
+* **Order and delivery:** `seq` is a global monotonic counter, so events of one ticket arrive in seq order. At-least-once: a consumer's
+  cursor (`ticket_event_cursors`) moves after its listener returned; unhandled events replay in order on the next subscribe after a
+  restart. A first-ever consumer starts at the head (no history). A listener that throws is retried on the next delivery and skipped
+  (logged) after 3 failures, so a poison event cannot wedge the stream. The last 10 000 events are kept.
+* **Grants:** a community plugin needs `tickets.read` to subscribe; without it the subscribe throws and the host disables the plugin.
+* **Deviations from section 3:** one global `seq` instead of a per-ticket one (stronger); no separate `TicketStarted(worker)` /
+  `TicketDone(files)` payloads (the event carries ids and columns; read the ticket or `ticket_files` for the rest); `EpicChanged` is not
+  built (the epics have no event source yet); the stream is fed by the local board, not routed through `OrchestratorLink` (a remote
+  orchestrator would feed the same log in a later step). Tests: `TicketEventLogTest`, `LocalBoardServicesTest` (grant).

@@ -31,6 +31,9 @@ interface DaemonServices {
     val epics: com.superiorsoftllc.agenthq.daemon.api.board.Epics get() = com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.epics
     val board: com.superiorsoftllc.agenthq.daemon.api.board.Board get() = com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.board
 
+    /** DP-4b: the typed ticket event stream (ordered, at-least-once, cursors kept across restarts). Default: none. */
+    val ticketEvents: com.superiorsoftllc.agenthq.daemon.api.board.TicketEvents get() = com.superiorsoftllc.agenthq.daemon.api.board.NoTicketEvents
+
     companion object {
         /** No daemon behind it: empty lists, no config, the open policy. */
         val NONE: DaemonServices = object : DaemonServices {

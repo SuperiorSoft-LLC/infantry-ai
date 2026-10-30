@@ -1,0 +1,19 @@
+-- BOARD-API-2 (DP-4b) -- migration v52 -> v53: the ticket event log and its consumers' cursors (docs in ticket_events.sq).
+--
+-- NEXT MIGRATION: 53.sqm
+
+CREATE TABLE IF NOT EXISTS ticket_events (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    from_status TEXT,
+    to_status TEXT,
+    at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS index_ticket_events_on_ticket ON ticket_events(ticket_id, seq);
+
+CREATE TABLE IF NOT EXISTS ticket_event_cursors (
+    consumer TEXT NOT NULL PRIMARY KEY,
+    last_seq INTEGER NOT NULL
+);

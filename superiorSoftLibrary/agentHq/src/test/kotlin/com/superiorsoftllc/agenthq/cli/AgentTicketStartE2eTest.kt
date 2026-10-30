@@ -108,7 +108,7 @@ class AgentTicketStartE2eTest {
         cleanups += { scratch.deleteRecursively(); repo.deleteRecursively() }
         val claude = GatedRunner()
         // RUNTIME-LOAD-2: agenthq_list_harnesses is Infantry_Agents' daemon half; a test that calls it loads the built plugin.
-        val plugins = if (agentsPlugin) com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Agents").also { cleanups += { it.deleteRecursively() } } else null
+        val plugins = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot(*(if (agentsPlugin) arrayOf("official/Infantry_Agents") else emptyArray()))
         val fixture = DaemonFixture.launch(
             repo = repo.takeIf { repoConfigured },
             context = FakeTicketContext("HANG"),
@@ -440,7 +440,7 @@ class AgentTicketStartE2eTest {
         assertTrue("PROVIDER: claude" in lines, "ticket show must print the provider: ${shown.out}")
         assertTrue("MODEL: sonnet" in lines, "ticket show must print the model: ${shown.out}")
 
-        val got = mcp(rig)(McpTicketTools.GET, args("ticketId" to shortId))
+        val got = mcp(rig)("agenthq_ticket_get", args("ticketId" to shortId))
         assertFalse(got.isError(), got.text())
         assertEquals("claude", got.payload().field("provider"), got.text())
         assertEquals("sonnet", got.payload().field("model"), got.text())

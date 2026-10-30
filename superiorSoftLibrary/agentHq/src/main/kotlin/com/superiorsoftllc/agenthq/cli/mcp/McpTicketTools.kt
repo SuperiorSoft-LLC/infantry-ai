@@ -104,11 +104,6 @@ internal class McpTicketTools(
         return saved(ticket, save, created = false)
     }
 
-    suspend fun get(stream: FrameStream, arguments: JsonObject): ToolResult {
-        val requested = arguments.string("ticketId") ?: return refused("$GET needs a ticketId")
-        return findTicket(stream, requested, getenv).fold({ ok(it) }, { refused(it.message ?: "no ticket '$requested'") })
-    }
-
     /**
      * MCP-MOVE-1: move ONE ticket to a status over `ticket_move` -- the frame `agenthq ticket move` sends -- so an agent
      * can finish its ticket (`done`) without the CLI. A move INTO in_progress is the board's start and goes through
@@ -323,7 +318,6 @@ internal class McpTicketTools(
     companion object {
         const val CREATE = "agenthq_ticket_create"
         const val UPDATE = "agenthq_ticket_update"
-        const val GET = "agenthq_ticket_get"
 
         /** BUG-ASSIGN-1: start ONE ticket through the board (served by [McpWriteTools.startTicket], under its guardrails). */
         const val START = "agenthq_ticket_start"
@@ -333,7 +327,7 @@ internal class McpTicketTools(
         const val DELETE = "agenthq_ticket_delete"
         /** MCP-MOVE-1: move ONE ticket to a status (done, todo, ...); a start goes through [START]. */
         const val MOVE = "agenthq_ticket_move"
-        val NAMES = listOf(CREATE, UPDATE, GET, START, EPIC_BASE, DELETE, MOVE)
+        val NAMES = listOf(CREATE, UPDATE, START, EPIC_BASE, DELETE, MOVE)
 
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = false; explicitNulls = false }
 
@@ -434,16 +428,7 @@ internal class McpTicketTools(
                 put("weight", JsonObject(mapOf("type" to JsonPrimitive("integer"), "description" to JsonPrimitive("Ticket weight 1-5 by how likely the ticket is to come back wrong, not its size: 4-5 wire/contract, daemon, auth or project scope, concurrency/SSR timing, Android build, or more than one module; 3 gate fixes, bisects, UI that depends on daemon behaviour; 1-2 copy, icons, renames, docs (mechanical, one owner file). 0 clears it on update. With no provider/model pin the ticket starts on the project's first matching routing rule (project_config routingRules), else the weight mapping (tickets.weightExecutors); an explicit pin always wins. Set a weight on every ticket before start."))))
                 put("images", pathsProp("The ticket's full image list, replacing the stored one ([] removes all): local image files (uploaded, as for $CREATE) or paths already under the project's .agenthq/uploads/ticket/. Not with addImages / removeImages. A removed image's file is deleted once no ticket references it."))
                 put("addImages", pathsProp("Images to ADD to the stored list: local image files (png, jpeg, gif or webp, at most 10 MB each) or stored paths."))
-                put("removeImages", pathsProp("Images to REMOVE from the stored list, each named by its stored path (as $GET answers it), its file name, or the original local file. Naming an image the ticket does not have refuses the call."))
-            })
-            add(tool(
-                GET,
-                "Read ONE ticket back: title, verbatim description, status, project, role/agent, provider, model, " +
-                    "branch, worker session, attached images.",
-                readOnly = true,
-                required = listOf("ticketId"),
-            ) {
-                put("ticketId", prop("Full ticket id, or its 8-char suffix."))
+                put("removeImages", pathsProp("Images to REMOVE from the stored list, each named by its stored path (as agenthq_ticket_get answers it), its file name, or the original local file. Naming an image the ticket does not have refuses the call."))
             })
             add(tool(
                 START,

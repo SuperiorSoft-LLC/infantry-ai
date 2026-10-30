@@ -7,6 +7,7 @@ import com.superiorsoftllc.agenthq.daemon.api.DaemonApi
 import com.superiorsoftllc.agenthq.daemon.api.DaemonPlugin
 import com.superiorsoftllc.agenthq.daemon.api.DaemonTool
 import com.superiorsoftllc.agenthq.daemon.api.Events
+import com.superiorsoftllc.agenthq.daemon.api.board.TicketEvent
 import com.superiorsoftllc.agenthq.daemon.api.Frame
 import com.superiorsoftllc.agenthq.daemon.api.FrameGateHook
 import com.superiorsoftllc.agenthq.daemon.api.Frames
@@ -438,6 +439,14 @@ class DaemonPluginHost private constructor(
                 val entry = Triple(p, type, listener)
                 eventListeners += entry
                 return AutoCloseable { eventListeners -= entry }.also { p.closeables += it }
+            }
+
+            // DP-4b: the typed ticket events. A community plugin needs tickets.read (a throw here disables the plugin, as a bad declaration does).
+            override fun onTicket(consumer: String, listener: (TicketEvent) -> Unit): AutoCloseable {
+                require(consumer.isNotBlank()) { "a ticket event consumer needs a name" }
+                return granted.ticketEvents { services.ticketEvents }.subscribe("plugin:${p.id}:$consumer") { e ->
+                    if (!p.guard.disabled) p.call("events.onTicket($consumer)") { listener(e) }.getOrThrow()
+                }.also { p.closeables += it }
             }
         }
         override val tools: Tools = object : Tools {

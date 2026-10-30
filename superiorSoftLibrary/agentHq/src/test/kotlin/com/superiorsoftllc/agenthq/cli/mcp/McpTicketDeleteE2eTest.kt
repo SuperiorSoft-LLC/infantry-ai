@@ -108,7 +108,7 @@ class McpTicketDeleteE2eTest {
 
     @Test
     fun anAgentDeletesTicketsThroughMcpServe() {
-        val fixture = DaemonFixture.launch(stateDir = tempDir("agenthq-mcp-del-daemon")).also { fixtures += it; it.client.await(Envelope.READY) }
+        val fixture = DaemonFixture.launch(stateDir = tempDir("agenthq-mcp-del-daemon"), pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot()).also { fixtures += it; it.client.await(Envelope.READY) }
         val board = fixture.daemon.board
         val project = tempDir("agenthq-mcp-del-project")
         McpServeConfig.fileIn(project).apply { parentFile.mkdirs() }.writeText("""{"projectId":"$PROJECT"}""")
@@ -126,7 +126,7 @@ class McpTicketDeleteE2eTest {
         assertEquals(first, deleted.str("ticketId"), "$deleted")
         assertEquals("delete me by full id", deleted.str("title"), "$deleted")
         assertEquals(setOf(keep), boardIds(), "only the named ticket was deleted")
-        assertRefused(agent.callTool(McpTicketTools.GET, """{"ticketId":"$first"}"""), "no ticket")
+        assertRefused(agent.callTool("agenthq_ticket_get", """{"ticketId":"$first"}"""), "no ticket")
 
         // 4) the 8-char suffix the board prints resolves like ticket_save's.
         val second = create("delete me by suffix")

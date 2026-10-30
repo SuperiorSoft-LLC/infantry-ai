@@ -16,7 +16,7 @@ class BuiltinToolsListGuardTest {
     /** tool -> why it is still in core. All are "migration pending" (family + blocker, docs/DAEMON-PLUGINS.md section 6). */
     private val inCore: Map<String, String> = buildMap {
         fun family(reason: String, vararg tools: String) = tools.forEach { put(it, reason) }
-        family("pending: Infantry_Board daemon half; the Tickets API + host ProjectScope exist (DP-4a), the CLI tests that call these tools on plugin-less daemons are what is left", "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_ticket_get", "agenthq_ticket_move", "agenthq_ticket_delete", "agenthq_ticket_start", "agenthq_epic_base", "agenthq_board", "agenthq_progress")
+        family("pending: Infantry_Board daemon half; the Tickets API + host ProjectScope exist (DP-4a), the CLI tests that call these tools on plugin-less daemons are what is left", "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_ticket_move", "agenthq_ticket_delete", "agenthq_ticket_start", "agenthq_epic_base", "agenthq_board", "agenthq_progress")
         family("pending: a Mail/Chat daemon half", "agenthq_inbox", "agenthq_read", "agenthq_message")
         family("pending: a Pipeline official plugin", "agenthq_pipeline", "agenthq_pipeline_record")
         family("pending: Infantry_Agents daemon half; McpGuardrails moves with it", "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_spawn", "agenthq_prompt", "agenthq_kill", "agenthq_session_restart", "agenthq_session_remove")
@@ -53,6 +53,8 @@ class BuiltinToolsListGuardTest {
             "Infantry_Roles" to listOf("agenthq_role_list", "agenthq_role_get", "agenthq_role_update", "agenthq_role_create", "agenthq_role_delete"),
             "Infantry_Attention" to listOf("agenthq_ask"),
             "Infantry_Settings" to listOf("agenthq_project_config_get", "agenthq_project_config_set"),
+            // BOARD-API-2: the ticket read tools (the files pair moved earlier, with TICKET-FILES).
+            "Infantry_Board" to listOf("agenthq_ticket_get", "agenthq_ticket_files", "agenthq_ticket_related_files"),
         )
         val sources = mcp.walkTopDown().filter { it.isFile && it.extension == "kt" }.map { it.readText() }.toList()
         moved.forEach { (module, tools) ->
@@ -74,5 +76,5 @@ class BuiltinToolsListGuardTest {
         assertTrue(inCore.values.all { it.length > 15 })
     }
 
-    private companion object { const val CEILING = 23 }
+    private companion object { const val CEILING = 22 }
 }
