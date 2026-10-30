@@ -23,7 +23,14 @@ class JarHarnessPluginSource(
     private val jars: () -> List<File>,
     private val parent: ClassLoader = HarnessPlugin::class.java.classLoader,
     private val bridge: ((com.superiorsoftllc.agenthq.harness.api.HarnessPlugin) -> HarnessPlugin)? = null,
-) : HarnessPluginSource {
+) : HarnessPluginSource, AutoCloseable {
+    private val loaders = java.util.concurrent.CopyOnWriteArrayList<URLClassLoader>()
+
+    /** HARNESS-PLUGIN-3 H4: close every class loader this source opened (releases the jar files; a module unload does this). */
+    override fun close() {
+        loaders.forEach { runCatching { it.close() } }
+        loaders.clear()
+    }
 
     override fun candidates(): List<PluginCandidate> = jars().flatMap(::candidatesOf)
 
@@ -31,7 +38,7 @@ class JarHarnessPluginSource(
         val label = "jar:${jar.name}"
         if (!jar.isFile) return listOf(failing(label, IllegalStateException("${jar.path} is not a file")))
         return try {
-            val loader = URLClassLoader("harness-${jar.name}", arrayOf(jar.toURI().toURL()), parent)
+            val loader = URLClassLoader("harness-${jar.name}", arrayOf(jar.toURI().toURL()), parent).also { loaders += it }
             val found = ServiceLoader.load(HarnessPlugin::class.java, loader).stream()
                 .filter { it.type().classLoader === loader }
                 .map { provider -> PluginCandidate("$label:${provider.type().name}") { provider.get() } }

@@ -44,16 +44,25 @@ class ApiHarnessPluginBridge(
     private val host: HarnessHost,
     private val runner: ProcessRunner = PipedProcessRunner(),
     private val onFailure: (PluginFailure) -> Unit = { System.err.println("[harness] ${it.message}") },
+    /** H4: module.json `harness.ids`; the plugin must register exactly these (null = not checked, a plugin outside a module). */
+    private val declaredIds: Set<String>? = null,
 ) : HarnessPlugin {
     override val pluginId: String get() = api.pluginId
     override val contractVersion: String get() = api.contractVersion
 
     override fun register(registrar: HarnessRegistrar) {
         val id = pluginId
+        val registered = LinkedHashSet<String>()
         api.register(object : ApiRegistrar {
             override val host: HarnessHost get() = this@ApiHarnessPluginBridge.host
-            override fun register(harness: ApiHarness) = registrar.register(ApiCliHarness(id, harness, runner, onFailure))
+            override fun register(harness: ApiHarness) {
+                val adapted = ApiCliHarness(id, harness, runner, onFailure)
+                check(declaredIds == null || adapted.id in declaredIds) { "registers harness '${adapted.id.take(40)}', which module.json harness.ids does not declare (${declaredIds.orEmpty().sorted()})" }
+                registered += adapted.id
+                registrar.register(adapted)
+            }
         })
+        check(declaredIds == null || registered == declaredIds) { "module.json harness.ids declares ${declaredIds.orEmpty().sorted()} but the plugin registered ${registered.sorted()}" }
     }
 
     override fun unload() = api.unload()
