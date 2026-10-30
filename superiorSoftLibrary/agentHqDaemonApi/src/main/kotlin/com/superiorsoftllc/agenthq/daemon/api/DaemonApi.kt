@@ -52,9 +52,14 @@ interface DaemonApi {
     val routes: Routes
     val hooks: Hooks
 
+    /** DP-4a (1.2.0, additive): tickets, epics and the board (docs/DAEMON-BOARD-API.md). A daemon without a board answers Unavailable. */
+    val tickets: com.superiorsoftllc.agenthq.daemon.api.board.Tickets get() = com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.tickets
+    val epics: com.superiorsoftllc.agenthq.daemon.api.board.Epics get() = com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.epics
+    val board: com.superiorsoftllc.agenthq.daemon.api.board.Board get() = com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.board
+
     companion object {
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
-        const val VERSION = "1.1.0"
+        const val VERSION = "1.2.0"
     }
 }
 

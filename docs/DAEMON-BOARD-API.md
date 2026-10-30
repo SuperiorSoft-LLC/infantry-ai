@@ -1,6 +1,6 @@
 # DAEMON-BOARD-API: the DaemonApi surface a board plugin needs (design only, DAEMON-PLUGINS-3, ticket 23d334b7)
 
-Status: **design, nothing built.** Owner priority is a clean licensing line and orchestration decoupling before launch; the board
+Status: **design; DP-4a built (BOARD-API-1, ticket 089a22a9, section 7), DP-4b/4c/5 not.** Owner priority is a clean licensing line and orchestration decoupling before launch; the board
 migration is built after launch. This note is what DP-4.. start from. It does not change behaviour or the wire contract.
 
 Why the board family is not a simple move (DAEMON-PLUGINS-2 finding, confirmed here): a plugin compiles against
@@ -111,7 +111,7 @@ after the move. Core code stops naming `TicketBoard`:
 
 | step | work | size |
 |---|---|---|
-| **DP-4a** | Add `Tickets`/`Epics`/`Board` interfaces + data classes to `agentHqDaemonApi`; `CoreDaemonServices` implements them over `TicketBoard`/`EpicStore` (local binding). Move `ProjectScope` into the host (applies to every `Tickets` call). Golden tests per operation. | M |
+| **DP-4a** (DONE, section 7) | Add `Tickets`/`Epics`/`Board` interfaces + data classes to `agentHqDaemonApi`; `CoreDaemonServices` implements them over `TicketBoard`/`EpicStore` (local binding). Move `ProjectScope` into the host (applies to every `Tickets` call). Golden tests per operation. | M |
 | **DP-4b** | `TicketBoard` events: replace `transitionSink` with typed ticket events on `api.events`; `triggers`, `DoneWorkerReaper`, ticket-files recorder subscribe through the API. | M |
 | **DP-4c** | Route the `SessionManager`/mailbox seams (section 4.1) through `OrchestratorLink`; move `STARTER` into `mailbox`; core no longer imports `backlog`/`context` outside `DaemonMain`. Guard: only `DaemonMain` and the board packages name them. | M |
 | **DP-5** | Move `backlog`, `epics`, `stories`, `mvp`, `context`, `brief`, `ledger`, `ticketfiles` into `plugins/official/Infantry_Board/daemon` against the API only; frames registered by the plugin; `DaemonMain` loses its board switch. Parity: every existing board/ticket/story/epic daemon test passes unchanged against the plugin. | L (multi-day) |
@@ -130,3 +130,31 @@ done) and **did not** move `ProjectScope` or `McpGuardrails` into the API: both 
 session record and `AccessPolicy`; `McpGuardrails` the session manager's limits and kill scope) and are CLI-process code in
 `cli/mcp` today. They are host-side services in this design (section 3 for scope; DP-11 for guardrails): the right home is the
 host applying them to every plugin tool call, not a helper a plugin may skip. The Agents and Board tool families wait for them.
+
+## 7. DP-4a built (BOARD-API-1, ticket 089a22a9): what is there and where it differs from section 3
+
+Built: `Tickets` / `Epics` / `Board` + plain `@Serializable` data (`TicketInfo`, `TicketDraft`, `TicketPatch`, `TicketQuery`, `Page`,
+`StartResult`, `TicketBinding`, `BoardColumn`, `EpicInfo`) in `agentHqDaemonApi/.../api/board/BoardApi.kt` (`BOARD_API_VERSION` 1.0.0,
+`DaemonApi.VERSION` 1.1.0 -> 1.2.0, members default to `NoBoard` = `Unavailable`); the local binding `LocalBoardServices` (over
+`TicketBoard`/`EpicStore`, wired into `CoreDaemonServices` by `DaemonMain`); the grant wrapper `GrantedBoard` (in `DaemonPluginHost.Api`).
+Tests: `LocalBoardServicesTest` (golden per operation, scope, policy, Unavailable through an `OrchestratorLink` fake, grants, get parity),
+`BoardApiImportGuardTest` (API imports nothing from the daemon).
+
+* **Results** are `BoardResult.Ok | Refused(text) | Unavailable(reason)`. A board refusal is `<frame> refused: <why>` (what the frame
+  answers); an unknown / ambiguous ticket or a scope refusal is the bare sentence the MCP tools word today.
+* **Scope** is the host's: `LocalBoardServices` calls the one `ProjectScope` (`cli/mcp`, pure logic, contract 1.106.0) with the daemon's
+  session record of `Caller.activeSession`. Deviation: it is *shared*, not moved, because the CLI's remaining MCP tools still use it; the
+  parity test is `ProjectScopeTest` plus the scope test here. Fail closed: an unknown session, or an agent connection with no session, is
+  refused (the CLI path would have widened it to every project). An owner connection with no active session is the owner path.
+* **Policy** is the active preset's, as the equivalent frame is gated (`ticket_get/list` = `board.read`, `ticket_save/link/unlink` =
+  `board.ticket.save`, `ticket_move/reorder` = `board.ticket.move`, `ticket_delete`, `epic_list/save/base`); `start` is gated by
+  `ticket_move` AND `ticket_start_next` (a start is a spawn), so it is stricter than a bare move.
+* **Grants** (community plugins; official / bundled are trusted; default deny; named in modules.json `allow`): `tickets.read`
+  (get, list, starterOf, ticketOf, workerOf, board columns/brief), `tickets.write` (create, update, move, link, unlink, reorder),
+  `tickets.delete`, `tickets.start`, `epics.read` (get, list), `epics.write` (create, setBase).
+* **Deviations from section 3:** `Tickets.get` also resolves short ids (what `tickets` prints); `move` refuses `in_progress` (use
+  `start`); `starterOf`/`workerOf` go through `OrchestratorLink` (Unavailable passes through), `ticketOf(session)` reads the session
+  record; `workerOf(ticket)` is new (the link's ticket-to-session direction). `Epics` has get / list / create / setBase only: core has no
+  epic update or delete. Pagination limits are constants (default 200, max 500), not `limits.board.*` settings yet; the cursor is the last
+  ticket id. `create` idempotency by `clientKey` is in-memory (lost on restart). Events (`TicketMoved`, ...) are DP-4b and not built.
+* **Not done here:** the one-tool migration (see RUNTIME-LOAD.md section 8 for why it was skipped).

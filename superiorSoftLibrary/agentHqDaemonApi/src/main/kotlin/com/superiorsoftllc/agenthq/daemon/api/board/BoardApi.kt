@@ -1,0 +1,239 @@
+package com.superiorsoftllc.agenthq.daemon.api.board
+
+import com.superiorsoftllc.agenthq.daemon.api.Caller
+import kotlinx.serialization.Serializable
+
+/**
+ * DP-4a (docs/DAEMON-BOARD-API.md section 3): the tickets, epics and board a daemon plugin may read and write. Plain data in and
+ * out; no daemon class crosses it (`TicketRow`, `SessionRecord`, `Ticket` stay in core). Core owns the LOCAL binding over its
+ * `TicketBoard` / `EpicStore`; after DP-5 the board plugin supplies the implementation and core binds to it.
+ *
+ * Contract (version [BOARD_API_VERSION], its own semver inside `DaemonApi.VERSION`; adding a field with a default is minor,
+ * changing the meaning of an operation is major):
+ *  - SCOPE: every operation takes the [Caller]. The HOST applies the project scope (a worker sees its own project, `all` is for
+ *    pm / owner / assistant callers, a non-owner explicit id must be its own); a plugin never resolves scope and cannot widen it.
+ *    Who the caller is comes from [Caller.activeSession] (the session record the daemon holds), never from an argument. No active
+ *    session = the owner / CLI path.
+ *  - POLICY: each operation maps to the core action of the frame that does the same (`board.read`, `board.ticket.save`,
+ *    `board.ticket.move`, `board.ticket.delete`, `board.ticket.start`, `epics.read`, `epics.save`); the host checks the active
+ *    preset first and answers [BoardResult.Refused] with the preset's neutral text, byte for byte what the frame answers.
+ *  - TEXTS: a refusal of the board is `<frame> refused: <why>` as the frame answers; an unknown / ambiguous ticket, epic or a scope refusal is the bare sentence the MCP tools word today.
+ *  - ERRORS: an expected failure is a VALUE ([BoardResult.Refused] = the board said no, with its own text; [BoardResult.Unavailable]
+ *    = no answer, e.g. no board in this daemon or the orchestrator is down). Only a bug throws.
+ *  - IDEMPOTENCY: reads are reads; [Tickets.create] with a [TicketDraft.clientKey] returns the ticket the first call made;
+ *    [Tickets.move] to the status the ticket already has, and [Tickets.start] of a ticket already in progress, are no-op answers.
+ *  - PAGINATION: [Tickets.list] returns [Page] with an opaque cursor; ordering is board order (stable) then id.
+ *  - GRANTS (the plugin trust model): bundled / official plugins are trusted. A community plugin needs the grant in modules.json
+ *    for each operation: [GRANT_TICKETS_READ], [GRANT_TICKETS_WRITE], [GRANT_TICKETS_DELETE], [GRANT_TICKETS_START],
+ *    [GRANT_EPICS_READ], [GRANT_EPICS_WRITE]. No grant = [BoardResult.Refused] ("missing grant ..."); the default is deny.
+ */
+const val BOARD_API_VERSION = "1.0.0"
+
+const val GRANT_TICKETS_READ = "tickets.read"
+const val GRANT_TICKETS_WRITE = "tickets.write"
+const val GRANT_TICKETS_DELETE = "tickets.delete"
+const val GRANT_TICKETS_START = "tickets.start"
+const val GRANT_EPICS_READ = "epics.read"
+const val GRANT_EPICS_WRITE = "epics.write"
+
+/** The error model, as [com.superiorsoftllc.agenthq.daemon.api.orchestrator.OrchestratorReply] plus the board's refusal. */
+sealed interface BoardResult<out T> {
+    data class Ok<T>(val value: T) : BoardResult<T>
+
+    /** The board (or the scope, policy or grants in front of it) said no. [text] is the one the frame answer carries. */
+    data class Refused(val text: String) : BoardResult<Nothing>
+
+    /** No answer: no board in this daemon, or the orchestrator could not be reached. */
+    data class Unavailable(val reason: String) : BoardResult<Nothing>
+}
+
+/** The value of an Ok result, else null. */
+fun <T> BoardResult<T>.okOrNull(): T? = (this as? BoardResult.Ok)?.value
+
+/** One page of a listing: [next] is the opaque cursor of the following page, null on the last. */
+@Serializable
+data class Page<T>(val items: List<T>, val next: String? = null)
+
+@Serializable
+data class TicketLinkInfo(val type: String, val ticketId: String)
+
+/** A ticket as plugins see it: the fields a board reads and an agent sets, flat and plain. */
+@Serializable
+data class TicketInfo(
+    val id: String,
+    val title: String,
+    val description: String = "",
+    val ticketType: String? = null,
+    val projectId: String? = null,
+    val epicId: String? = null,
+    val status: String,
+    val position: Int,
+    val wontFix: Boolean = false,
+    val links: List<TicketLinkInfo> = emptyList(),
+    val heldBy: List<String> = emptyList(),
+    val holdReason: String? = null,
+    val createdAt: Long,
+    val updatedAt: Long,
+    val agentId: String? = null,
+    val provider: String? = null,
+    val model: String? = null,
+    val weight: Int? = null,
+    val effectiveProvider: String? = null,
+    val effectiveProviderSource: String? = null,
+    val effectiveModel: String? = null,
+    val effectiveModelSource: String? = null,
+    val effectiveRule: String? = null,
+    val sessionId: String? = null,
+    val branch: String? = null,
+    val base: String? = null,
+    val images: List<String> = emptyList(),
+    val skillIds: List<String> = emptyList(),
+)
+
+/** A new ticket. [description] is kept verbatim. [clientKey] makes the create idempotent. */
+@Serializable
+data class TicketDraft(
+    val title: String,
+    val description: String? = null,
+    val projectId: String? = null,
+    val epicId: String? = null,
+    val ticketType: String? = null,
+    /** A profile id or `role:<role>`. */
+    val agentId: String? = null,
+    val provider: String? = null,
+    val model: String? = null,
+    val weight: Int? = null,
+    val images: List<String>? = null,
+    /** The column the ticket enters (`todo` default, or `backlog`). */
+    val status: String? = null,
+    val clientKey: String? = null,
+)
+
+/** An edit: a null field keeps the stored value. [description], when given, replaces the stored one verbatim. */
+@Serializable
+data class TicketPatch(
+    val title: String? = null,
+    val description: String? = null,
+    val ticketType: String? = null,
+    val epicId: String? = null,
+    val agentId: String? = null,
+    val provider: String? = null,
+    val model: String? = null,
+    /** 1..5, or 0 to clear. */
+    val weight: Int? = null,
+    val images: List<String>? = null,
+)
+
+@Serializable
+data class TicketQuery(
+    /** `null` = the caller's own project (owner: every project); `all` = no filter (pm / owner callers only). */
+    val projectId: String? = null,
+    val epicId: String? = null,
+    val status: Set<String> = emptySet(),
+    val limit: Int = DEFAULT_LIMIT,
+    val cursor: String? = null,
+) {
+    companion object {
+        const val DEFAULT_LIMIT = 200
+        const val MAX_LIMIT = 500
+    }
+}
+
+/** The answer to a start: the ticket, and what the board decided (`started`, `queued`, `held`, `start_refused`, `already_in_progress`). */
+@Serializable
+data class StartResult(val ticket: TicketInfo, val ok: Boolean, val reason: String, val detail: String? = null)
+
+/** The session a ticket is bound to. */
+@Serializable
+data class TicketBinding(val sessionId: String?, val projectId: String?)
+
+@Serializable
+data class BoardColumn(val status: String, val tickets: List<TicketInfo>)
+
+@Serializable
+data class EpicInfo(
+    val id: String,
+    val projectId: String,
+    val name: String,
+    val goal: String = "",
+    val storyIds: List<String> = emptyList(),
+    /** "" = none set. */
+    val baseBranch: String = "",
+)
+
+interface Tickets {
+    /** [id] is a full ticket id or a unique prefix / suffix (what `tickets` prints). Unknown or ambiguous: [BoardResult.Refused]. */
+    fun get(id: String, by: Caller): BoardResult<TicketInfo>
+    fun list(by: Caller, query: TicketQuery = TicketQuery()): BoardResult<Page<TicketInfo>>
+    fun create(draft: TicketDraft, by: Caller): BoardResult<TicketInfo>
+    fun update(id: String, patch: TicketPatch, by: Caller): BoardResult<TicketInfo>
+
+    /** Runs the status machine (it may refuse). [position] places the ticket in its column (0 = top). A move INTO in_progress is [start]. */
+    fun move(id: String, status: String?, position: Int?, by: Caller): BoardResult<TicketInfo>
+    fun delete(id: String, by: Caller): BoardResult<Unit>
+    fun link(from: String, to: String, kind: String, by: Caller): BoardResult<TicketInfo>
+    fun unlink(from: String, to: String, kind: String, by: Caller): BoardResult<TicketInfo>
+
+    /** Reorders the tickets of [status] (the order of [ids] is priority; unlisted tickets keep their relative place after them). */
+    fun reorder(status: String, ids: List<String>, by: Caller): BoardResult<Unit>
+
+    /** The board's own start (a card moving to In Progress): role, provider, model, branch, worker. The caller is recorded as starter. */
+    fun start(id: String, by: Caller): BoardResult<StartResult>
+
+    /** The agent that started the ticket worker session [sessionId] runs, null when none. Answered through the orchestrator link. */
+    fun starterOf(sessionId: String, by: Caller): BoardResult<String?>
+
+    /** The ticket id session [sessionId] works on, null for none. */
+    fun ticketOf(sessionId: String, by: Caller): BoardResult<String?>
+
+    /** The session and project ticket [ticketId] is bound to, null when unknown. Answered through the orchestrator link. */
+    fun workerOf(ticketId: String, by: Caller): BoardResult<TicketBinding?>
+}
+
+interface Epics {
+    fun get(id: String, by: Caller): BoardResult<EpicInfo>
+    fun list(projectId: String?, by: Caller): BoardResult<List<EpicInfo>>
+    fun create(projectId: String, name: String, goal: String, by: Caller): BoardResult<EpicInfo>
+
+    /** [branch] set: the epic's base branch (checked where tickets are cut); [clear]: remove it; neither: a read. */
+    fun setBase(id: String, branch: String?, clear: Boolean, by: Caller): BoardResult<EpicInfo>
+}
+
+interface Board {
+    /** The project's tickets by column in status order (`backlog`, `todo`, `in_progress`, `pending`, `done`). */
+    fun columns(projectId: String?, by: Caller): BoardResult<List<BoardColumn>>
+
+    /** The start brief of the ticket [ticketId]'s worker, null when it has none. */
+    fun brief(ticketId: String, by: Caller): BoardResult<String?>
+}
+
+/** What a daemon without a board answers: every operation is [BoardResult.Unavailable]. */
+object NoBoard {
+    private val none = BoardResult.Unavailable("this daemon has no board")
+
+    val tickets: Tickets = object : Tickets {
+        override fun get(id: String, by: Caller) = none
+        override fun list(by: Caller, query: TicketQuery) = none
+        override fun create(draft: TicketDraft, by: Caller) = none
+        override fun update(id: String, patch: TicketPatch, by: Caller) = none
+        override fun move(id: String, status: String?, position: Int?, by: Caller) = none
+        override fun delete(id: String, by: Caller) = none
+        override fun link(from: String, to: String, kind: String, by: Caller) = none
+        override fun unlink(from: String, to: String, kind: String, by: Caller) = none
+        override fun reorder(status: String, ids: List<String>, by: Caller) = none
+        override fun start(id: String, by: Caller) = none
+        override fun starterOf(sessionId: String, by: Caller) = none
+        override fun ticketOf(sessionId: String, by: Caller) = none
+        override fun workerOf(ticketId: String, by: Caller) = none
+    }
+    val epics: Epics = object : Epics {
+        override fun get(id: String, by: Caller) = none
+        override fun list(projectId: String?, by: Caller) = none
+        override fun create(projectId: String, name: String, goal: String, by: Caller) = none
+        override fun setBase(id: String, branch: String?, clear: Boolean, by: Caller) = none
+    }
+    val board: Board = object : Board {
+        override fun columns(projectId: String?, by: Caller) = none
+        override fun brief(ticketId: String, by: Caller) = none
+    }
+}

@@ -36,8 +36,13 @@ class CoreDaemonServices(
     /** A never-run session's first turn: persona, identity and notes around [prompt]. */
     private val firstTurn: (SessionRecord, String) -> String,
     private val limits: (com.superiorsoftllc.agenthq.settings.LimitDef) -> Long = { it.default },
+    /** DP-4a: the local binding of tickets / epics / board; null = a daemon without a board (every call Unavailable). */
+    private val boardServices: LocalBoardServices? = null,
 ) : DaemonServices {
     override fun limit(def: com.superiorsoftllc.agenthq.settings.LimitDef): Long = limits(def)
+    override val tickets get() = boardServices?.tickets ?: com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.tickets
+    override val epics get() = boardServices?.epics ?: com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.epics
+    override val board get() = boardServices?.boardView ?: com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.board
     override fun config(module: String, key: String): String? = daemonConfig.value(module, key)
     override fun env(name: String): String? = getenv(name)
     override fun secret(name: String): String? = keystore.get(name)

@@ -480,6 +480,11 @@ class DaemonPluginHost private constructor(
                 routeEntries[k] = RouteEntry(p, m, full, "$m $full" in d.publicRoutes, handler)
             }
         }
+        // DP-4a: the board API behind this plugin's grants (community: default deny; bundled / official: trusted).
+        private val granted = GrantedBoard({ services.tickets }, { services.epics }, { services.board }) { grant -> !p.community || grant in p.setting.allow }
+        override val tickets get() = granted.ticketsApi
+        override val epics get() = granted.epicsApi
+        override val board get() = granted.boardApi
         override val hooks: Hooks = object : Hooks {
             override fun frameGate(hook: FrameGateHook) { declare("frameGate"); frameGates += Registered(p, hook) }
             override fun httpGate(hook: HttpGateHook) { declare("httpGate"); httpGates += Registered(p, hook) }
