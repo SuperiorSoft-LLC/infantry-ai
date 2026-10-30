@@ -279,6 +279,7 @@ class DaemonPluginHost private constructor(
             override val clientSessionId = (client["sessionId"] as? JsonPrimitive)?.takeIf { it.isString }?.content
             override val clientRole = (client["role"] as? JsonPrimitive)?.takeIf { it.isString }?.content
             override val clientProjectId = (client["projectId"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { it.isNotEmpty() }
+            override val clientNarrowing = narrowingOf(client)
             override fun request(type: String, data: String, sessionId: String?, timeoutMs: Long): Frame =
                 request(Envelope(type, data, sessionId), timeoutMs).toFrame()
         }
@@ -564,6 +565,14 @@ class DaemonPluginHost private constructor(
     companion object {
         const val PLUGIN_TOOLS = "plugin_tools"
         const val PLUGIN_TOOL_CALL = "plugin_tool_call"
+
+        /** RUNTIME-LOAD-7: the client's `maxDepth` / `maxSpawns` / `depth` (whole numbers >= 0) and `clientKey`; null when it sent none. */
+        internal fun narrowingOf(client: JsonObject): com.superiorsoftllc.agenthq.daemon.api.spawns.SpawnNarrowing? {
+            fun count(key: String) = (client[key] as? JsonPrimitive)?.takeIf { !it.isString }?.content?.toIntOrNull()?.takeIf { it >= 0 }
+            val key = (client["clientKey"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.take(80)?.takeIf { it.isNotEmpty() }
+            val n = com.superiorsoftllc.agenthq.daemon.api.spawns.SpawnNarrowing(count("maxDepth"), count("maxSpawns"), count("depth"), key)
+            return n.takeIf { it != com.superiorsoftllc.agenthq.daemon.api.spawns.SpawnNarrowing.NONE }
+        }
         const val PLUGIN_TOOL_RESULT = "plugin_tool_result"
         const val PLUGIN_PREFIX = "/plugins/"
         val HOOK_KINDS = setOf("frameGate", "httpGate", "admission", "mailGate", "spawnGate", "ready", "turns", "sessions", "policyProvider", "orchestratorBinding", "seats")

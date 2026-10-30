@@ -25,6 +25,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlinx.serialization.json.put
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -204,9 +205,25 @@ class LocalBoardServicesTest {
     @Test fun `the API carries every field agenthq_ticket_get answers, byte for byte`() {
         val t = board.save(TicketSave(title = "parity", description = "a\nb", projectId = "A", weight = 3)).ticket
         val json = kotlinx.serialization.json.Json { encodeDefaults = false; explicitNulls = false }
-        val expected = json.encodeToString(kotlinx.serialization.json.JsonObject.serializer(), com.superiorsoftllc.agenthq.cli.mcp.McpTicketTools.summary(board.get(t.id)))
+        val expected = json.encodeToString(kotlinx.serialization.json.JsonObject.serializer(), legacySummary(board.get(t.id)))
         val viaApi = json.encodeToString(kotlinx.serialization.json.JsonObject.serializer(), renderedFromApi(svc.tickets.get(t.id.takeLast(8), owner).ok()))
         assertEquals(expected, viaApi)
+    }
+
+    /** The answer `agenthq_ticket_get` gave while the CLI's MCP server served it (the deleted `McpTicketTools.summary`), kept as the parity reference. */
+    private fun legacySummary(ticket: com.superiorsoftllc.agenthq.protocol.Ticket) = kotlinx.serialization.json.buildJsonObject {
+        put("ticketId", ticket.id); put("title", ticket.title); put("description", ticket.description); put("status", ticket.status)
+        put("projectId", ticket.projectId); put("epicId", ticket.epicId); put("agentId", ticket.agentId)
+        put("role", com.superiorsoftllc.agenthq.cli.TicketStarter.roleOf(ticket)); put("provider", ticket.provider); put("model", ticket.model)
+        put("weight", ticket.weight); put("contextLimit", ticket.contextLimit)
+        ticket.effectiveContextLimit?.let { e ->
+            put("effectiveContextLimit", e.value); put("effectiveContextLimitSource", e.source); put("contextLimitSupport", e.support)
+        }
+        put("effectiveProvider", ticket.effectiveExecutor?.provider?.value); put("effectiveProviderSource", ticket.effectiveExecutor?.provider?.source)
+        put("effectiveModel", ticket.effectiveExecutor?.model?.value); put("effectiveModelSource", ticket.effectiveExecutor?.model?.source)
+        put("effectiveRule", ticket.effectiveExecutor?.rule)
+        put("branch", ticket.branch); put("sessionId", ticket.sessionId)
+        put("images", kotlinx.serialization.json.JsonArray(ticket.images.map { kotlinx.serialization.json.JsonPrimitive(it) }))
     }
 
     // ---- scope: applied by the host, to every call -----------------------------------------------------------------

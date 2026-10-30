@@ -12,7 +12,7 @@
   "daemon": {
     "entry": "com.superiorsoftllc.agenthq.plugins.official.agents.daemon.AgentsDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Agents-daemon.jar",
-    "apiAtLeast": "1.6.0",
+    "apiAtLeast": "1.9.0",
     "tools": [
       { "name": "agenthq_agent_list", "action": "agents.registry.read", "kind": "read", "description": "Every agent in the agent registry, enabled or not." },
       { "name": "agenthq_agent_get", "action": "agents.registry.read", "kind": "read", "description": "One agent of the registry in full." },
@@ -24,7 +24,12 @@
       { "name": "agenthq_progress", "action": "agents.report", "kind": "write", "description": "Report how far along the calling session's long job is." },
       { "name": "agenthq_list_sessions", "action": "sessions.read", "kind": "read", "description": "The sessions the daemon knows, in the caller's scope." },
       { "name": "agenthq_get_session", "action": "sessions.replay", "kind": "read", "description": "One session's status and the tail of its transcript." },
-      { "name": "agenthq_pod_state", "action": "agents.read", "kind": "read", "description": "Profiles by role, sessions by status, a project's roster, a pod." }
+      { "name": "agenthq_pod_state", "action": "agents.read", "kind": "read", "description": "Profiles by role, sessions by status, a project's roster, a pod." },
+      { "name": "agenthq_spawn", "action": "agents.spawn", "kind": "spawn", "description": "Spawn a session outside the board, or start a ticket, under the caller's spawn limits." },
+      { "name": "agenthq_prompt", "action": "chat.prompt", "kind": "write", "description": "Send a prompt to an existing session." },
+      { "name": "agenthq_kill", "action": "agents.kill", "kind": "destructive", "description": "Kill a session within the caller's kill scope." },
+      { "name": "agenthq_session_restart", "action": "agents.restart", "kind": "destructive", "description": "Reboot a session in place." },
+      { "name": "agenthq_session_remove", "action": "agents.delete", "kind": "destructive", "description": "Remove an ended session (force: kill it first)." }
     ]
   },
   "panels": [

@@ -34,7 +34,7 @@ class McpWriteToolsTest {
 
     private val fixtures = mutableListOf<DaemonFixture>()
     private val servers = mutableListOf<Served>()
-    private val lineageDir: File = Files.createTempDirectory("agenthq-mcp-lineage").toFile()
+    private val pluginsRoot: File = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Board", "official/Infantry_Agents")
 
     @AfterTest
     fun stopAll() {
@@ -43,7 +43,7 @@ class McpWriteToolsTest {
             runCatching { it.stop() }
             runCatching { it.deleteState() }
         }
-        lineageDir.deleteRecursively()
+        pluginsRoot.deleteRecursively()
     }
 
     private class Served(private val stdin: PrintWriter, private val stdout: BufferedReader, val stderr: StringBuffer) {
@@ -76,7 +76,7 @@ class McpWriteToolsTest {
         val serverOut = PrintWriter(PipedWriter(fromServer))
         val stderr = StringBuffer()
         val served = Served(PrintWriter(toServer), BufferedReader(fromServer), stderr)
-        val args = arrayOf("mcp", "serve", "--port", fixture.port.toString(), "--lineage-dir", lineageDir.path, *flags)
+        val args = arrayOf("mcp", "serve", "--port", fixture.port.toString(), *flags)
         served.worker = thread(name = "mcp-serve", isDaemon = true) {
             Cli.run(args, serverOut, stderr, { env[it] }, { serverIn })
             serverOut.close()
@@ -87,7 +87,7 @@ class McpWriteToolsTest {
     }
 
     private fun launch(): DaemonFixture =
-        DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-write-test").toFile())
+        DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-write-test").toFile(), pluginsRoot = pluginsRoot)
             .also { fixtures += it; it.client.await(Envelope.READY) }
 
     private fun payload(result: JsonObject): JsonObject {
@@ -130,7 +130,6 @@ class McpWriteToolsTest {
         val id = spawned["sessionId"]!!.jsonPrimitive.content
         assertEquals("qa", manager.get(id)!!.role)
         assertEquals(1, spawned["depth"]!!.jsonPrimitive.int)
-        assertEquals("1", File(lineageDir, id).readText(), "the child's depth is recorded for its own MCP server")
         fixture.await(what = "the spawned task to run") { manager.get(id)!!.runCount >= 1 && !manager.get(id)!!.live }
 
         // agenthq_prompt: by unique prefix, a second turn on the same session.
@@ -159,15 +158,14 @@ class McpWriteToolsTest {
         assertRefused(atMax.callTool("agenthq_spawn", """{"role":"qa"}"""), "depth limit")
         assertTrue(manager.list().isEmpty(), "a refused spawn creates nothing: ${manager.list()}")
 
-        // Depth from the lineage: a server inside a session that an MCP server at depth 1 spawned is at depth 2.
-        File(lineageDir, "parent-session").writeText("2")
-        val nested = serve(fixture, env = mapOf("AGENTHQ_SESSION_ID" to "parent-session"))
-        assertRefused(nested.callTool("agenthq_spawn", """{"role":"qa"}"""), "depth limit")
+        // RUNTIME-LOAD-7: the client's values only NARROW the daemon's limits. A larger --max-depth does not lift the daemon's maximum...
+        val wider = serve(fixture, "--mcp-depth", "2", "--max-depth", "3")
+        assertRefused(wider.callTool("agenthq_spawn", """{"role":"qa"}"""), "depth limit")
 
-        // A higher --max-depth lets the same server spawn, and the child is one level deeper.
-        val raised = serve(fixture, "--max-depth", "3", env = mapOf("AGENTHQ_SESSION_ID" to "parent-session"))
-        val child = payload(raised.callTool("agenthq_spawn", """{"role":"qa"}"""))
-        assertEquals(3, child["depth"]!!.jsonPrimitive.int)
+        // ...a smaller one lowers it: a root server with --max-depth 0 may not spawn at all; with 1 its child sits at depth 1.
+        assertRefused(serve(fixture, "--max-depth", "0").callTool("agenthq_spawn", """{"role":"qa"}"""), "depth limit")
+        val child = payload(serve(fixture, "--max-depth", "1").callTool("agenthq_spawn", """{"role":"qa"}"""))
+        assertEquals(1, child["depth"]!!.jsonPrimitive.int)
     }
 
     @Test
@@ -213,7 +211,7 @@ class McpWriteToolsTest {
     }
 
     @Test
-    fun killIsLimitedToOwnSpawnsUnlessAllowKillAny() {
+    fun killIsLimitedToOwnSpawnsForASessionButNotForTheOwner() {
         val fixture = launch()
         fixture.send(Envelope(Envelope.NEW, """{"role":"qa"}"""))
         fixture.await(what = "a session not spawned through MCP") { fixture.daemon.manager.list().isNotEmpty() }
@@ -226,8 +224,10 @@ class McpWriteToolsTest {
         val scoped = serve(fixture, env = mapOf("AGENTHQ_SESSION_ID" to worker))
         assertRefused(scoped.callTool("agenthq_kill", """{"sessionId":"$foreign"}"""), "was not spawned by this session")
 
-        val anyKill = serve(fixture, "--allow-kill-any")
-        assertEquals(foreign, payload(anyKill.callTool("agenthq_kill", """{"sessionId":"$foreign"}"""))["sessionId"]!!.jsonPrimitive.content)
+        // --allow-kill-any is moot now: the connection of a session is held to the rule whatever the flag says; an owner connection (no session) kills any.
+        assertRefused(serve(fixture, "--allow-kill-any", env = mapOf("AGENTHQ_SESSION_ID" to worker)).callTool("agenthq_kill", """{"sessionId":"$foreign"}"""), "was not spawned by this session")
+        val owner = serve(fixture)
+        assertEquals(foreign, payload(owner.callTool("agenthq_kill", """{"sessionId":"$foreign"}"""))["sessionId"]!!.jsonPrimitive.content)
         assertFalse(fixture.daemon.manager.get(foreign)!!.live)
     }
 }

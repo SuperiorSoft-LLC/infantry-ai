@@ -87,13 +87,14 @@ interface DaemonApi {
     val settings: com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings get() = com.superiorsoftllc.agenthq.daemon.api.processes.NoPluginSettings
 
     companion object {
+        // 1.9.0 (RUNTIME-LOAD-7, additive): `ToolCall.clientNarrowing` (the MCP client's depth / spawn narrowing).
         // 1.8.0 (STACK-NEUTRAL-2, additive): `processes`, `launchEnv`, `settings` (daemon.api.processes).
         // 1.7.0 (RUNTIME-LOAD-6, additive): `spawns` (daemon.api.spawns): host spawn / ticket start / kill guardrails.
         // 1.6.0 (RUNTIME-LOAD-5, additive): `sessionReads` (daemon.api.sessions), SessionText, board.BoardLines.
         // 1.5.0 (AGENT-REGISTRY-1, additive): `agents` (daemon.api.agents.Agents) and module.json `agents`.
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
-        const val VERSION = "1.8.0"
+        const val VERSION = "1.9.0"
     }
 }
 
@@ -226,6 +227,11 @@ interface ToolCall {
      * scopes whatever a tool does with it.
      */
     val clientProjectId: String? get() = null
+    /**
+     * RUNTIME-LOAD-7 (1.9.0, additive): the calling MCP process's own guardrail values (`--max-depth`, `--max-spawns`, `--mcp-depth`,
+     * one `clientKey` per process); null = it sent none. A claim of the client: hand it to `api.spawns`, which only narrows with it.
+     */
+    val clientNarrowing: com.superiorsoftllc.agenthq.daemon.api.spawns.SpawnNarrowing? get() = null
     /**
      * Sends frame [type] on the CALLER's own connection, through every gate the caller's own frames pass, and returns the
      * answer to it (the frame carrying its request id). An error answer comes back as a frame of type `error`.

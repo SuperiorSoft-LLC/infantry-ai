@@ -21,5 +21,7 @@ class BoardDaemonPlugin : DaemonPlugin {
         api.tools.register(TicketUpdateTool(api))
         // RUNTIME-LOAD-5 (F5 remainder): the board summary, over the host's sessions read model.
         api.tools.register(BoardTool(api))
+        // RUNTIME-LOAD-7 (F5 last): the ticket start, over the host spawn service.
+        api.tools.register(TicketStartTool(api))
     }
 }

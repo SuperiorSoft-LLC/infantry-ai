@@ -1,7 +1,6 @@
 package com.superiorsoftllc.agenthq.cli
 
 import com.superiorsoftllc.agenthq.daemon.TestWait
-import com.superiorsoftllc.agenthq.cli.mcp.McpTicketTools
 import com.superiorsoftllc.agenthq.context.TicketContextComposer
 import com.superiorsoftllc.agenthq.daemon.AccessPolicy
 import com.superiorsoftllc.agenthq.daemon.AgentHqBin
@@ -132,12 +131,11 @@ class AgentTicketStartE2eTest {
 
     /**
      * What the daemon hands the calling agent's session: its session id and the daemon's address (AGENTHQ_URL), the
-     * subset AgentHqMcp passes on to `mcp serve`. Plus a TEMP lineage dir, so nothing is written under ~/.agenthq.
+     * subset AgentHqMcp passes on to `mcp serve`.
      */
     private fun sessionEnv(rig: Rig): Map<String, String> = mapOf(
         AccessPolicy.SESSION_ID_ENV to rig.caller,
         AgentHqBin.URL_ENV to "ws://127.0.0.1:${rig.fixture.port}/ws",
-        "AGENTHQ_MCP_LINEAGE_DIR" to File(rig.scratch, "mcp-lineage").path,
         ANSWER_TIMEOUT_ENV to TestWait.defaultMs.toString(),
     )
 
@@ -302,7 +300,7 @@ class AgentTicketStartE2eTest {
 
     @Test
     fun `MCP - agenthq_spawn given a ticketId starts that ticket through the board, a conflicting role is refused`() {
-        val rig = rig()
+        val rig = rig(agentsPlugin = true)
         val call = mcp(rig)
         val title = "Index the ledger"
         val ticketId = call("agenthq_ticket_create", args("title" to title, "role" to "backend", "provider" to "claude", "model" to "haiku"))
@@ -586,7 +584,7 @@ class AgentTicketStartE2eTest {
 
     @Test
     fun `the agent-facing guidance says to start ticket work with ticket start, never with spawn`() {
-        val rig = rig()
+        val rig = rig(agentsPlugin = true)
         val tools = mcpRpc(rig)("tools/list", JsonObject(emptyMap()))["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject }
         val spawn = tools.single { it.field("name") == SPAWN }.field("description")!!
         assertTrue(spawn.contains(TICKET_START), "agenthq_spawn's description must send ticket work to $TICKET_START: $spawn")

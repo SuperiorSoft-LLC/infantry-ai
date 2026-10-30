@@ -218,7 +218,7 @@ class McpTicketImagesE2eTest {
         // LAST, so no push from the run lands while a later ticket_save waits for its answer (see the PM note:
         // FrameStream.request matches a `ticket` answer by type only).
         // (2) start it: the composed brief lists the image's absolute path, and the file exists.
-        val started = agent.callTool(McpTicketTools.START, """{"ticketId":"$t1"}""")
+        val started = agent.callTool("agenthq_ticket_start", """{"ticketId":"$t1"}""")
         assertFalse(text(started).isBlank())
         assertEquals("false", started["isError"]!!.jsonPrimitive.content, "start must succeed: ${text(started)}")
         fixture.await(what = "the worker's first prompt") { gated.prompts.isNotEmpty() }

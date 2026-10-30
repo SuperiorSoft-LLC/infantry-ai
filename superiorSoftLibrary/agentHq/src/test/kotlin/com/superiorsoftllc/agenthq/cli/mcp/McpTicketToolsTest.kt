@@ -115,11 +115,9 @@ class McpTicketToolsTest {
     private val brief = "## Scope\n\n1. first line\n   - indented \"quoted\" `code`\n\n2. second; with \$(not-a-shell) & | chars\r\nend"
 
     @Test
-    fun `core lists only ticket start, create, update and get are Infantry_Board tools`() {
+    fun `core lists no ticket tool, start, create, update and get are Infantry_Board tools`() {
         val names = McpTools.descriptors().map { it.jsonObject["name"]!!.jsonPrimitive.content }
-        assertTrue(names.containsAll(McpTicketTools.NAMES), names.toString())
-        assertTrue(McpTicketTools.NAMES.all { it in McpTools.NAMES })
-        assertTrue(listOf("agenthq_ticket_create", "agenthq_ticket_update", "agenthq_ticket_get").none { it in names }, names.toString())
+        assertTrue(listOf("agenthq_ticket_start", "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_ticket_get").none { it in names }, names.toString())
     }
 
     @Test

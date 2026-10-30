@@ -25,6 +25,8 @@ internal class McpPluginTools(
     private val defaultProjectId: String? = null,
     /** Where a relative local-file argument is read from (this process's directory). */
     private val cwd: java.io.File = java.io.File(System.getProperty("user.dir") ?: "."),
+    /** RUNTIME-LOAD-7: this server's `--max-depth` / `--max-spawns` / `--mcp-depth` and its process key, sent in the call's client object. */
+    private val narrowing: McpNarrowing = McpNarrowing(),
 ) {
 
     /** Each listed tool's effective timeout (the daemon's `timeoutMs`), so a call waits as long as its own tool may run. */
@@ -57,7 +59,7 @@ internal class McpPluginTools(
             // RUNTIME-LOAD-4: the project a call that names none works in, as the CLI's own ticket tools defaulted it.
             (defaultProjectId?.trim()?.takeIf { it.isNotEmpty() } ?: getenv(AccessPolicy.PROJECT_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() })
                 ?.let { "projectId" to JsonPrimitive(it) },
-        ).toMap())
+        ).toMap() + narrowing.toClient())
         if (!timeouts.containsKey(name)) runCatching { descriptors(stream) }
         // RUNTIME-LOAD-4: the tool runs in the daemon, which cannot open this machine's paths: the declared ones travel as bytes.
         val sent = LocalFiles.encodeArguments(arguments, localFiles[name].orEmpty()) { path -> java.io.File(path.trim()).let { if (it.isAbsolute) it else java.io.File(cwd, path.trim()) } }
