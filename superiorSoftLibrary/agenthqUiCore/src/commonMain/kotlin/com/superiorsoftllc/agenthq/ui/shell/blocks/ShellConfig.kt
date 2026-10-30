@@ -101,6 +101,11 @@ class ConfigBlock(children: List<Block>, place: Place = Place()) : Block(CONFIG,
             onPromptTimer = if (contractAtLeast(state.connection.contract, com.superiorsoftllc.agenthq.ui.model.PromptTimerSetting.SINCE_MAJOR, com.superiorsoftllc.agenthq.ui.model.PromptTimerSetting.SINCE_MINOR)) {
                 { seconds, onTimeout -> actionScope.launch { controller.setPromptTimer(seconds, onTimeout) } }
             } else null,
+            // HARNESS-PLUGIN-4 H5a: the daemon's harness state per module (1.145.0); an older daemon has none to read.
+            harnessModules = if (contractAtLeast(state.connection.contract, com.superiorsoftllc.agenthq.ui.net.HttpPluginsApi.SINCE_MAJOR, com.superiorsoftllc.agenthq.ui.net.HttpPluginsApi.SINCE_MINOR)) {
+                val api = androidx.compose.runtime.remember(ui.url, ui.token) { com.superiorsoftllc.agenthq.ui.net.HttpPluginsApi(ui.url, ui.token.ifBlank { null }) }
+                api::harnessStatuses
+            } else null,
             onBrowse = s.pickFile,
             logs = s.logs,
             updates = s.updates,

@@ -22,7 +22,8 @@ class HarnessApiImportGuardTest {
             f.readLines().withIndex().filter { (_, l) -> foreign.containsMatchIn(l) }.map { (i, l) -> "${f.name}:${i + 1}: ${l.trim()}" }
         }
         assertTrue(hits.isEmpty(), "the harness api names daemon code:\n${hits.joinToString("\n")}")
-        files.forEach { f -> assertTrue(f.readText().contains("package com.superiorsoftllc.agenthq.harness.api\n"), "${f.name} is outside harness.api") }
+        // A CRLF checkout (core.autocrlf) ends the package line with \r\n.
+        files.forEach { f -> assertTrue(f.readText().replace("\r\n", "\n").contains("package com.superiorsoftllc.agenthq.harness.api\n"), "${f.name} is outside harness.api") }
     }
 
     @Test fun `the api module depends on nothing`() {

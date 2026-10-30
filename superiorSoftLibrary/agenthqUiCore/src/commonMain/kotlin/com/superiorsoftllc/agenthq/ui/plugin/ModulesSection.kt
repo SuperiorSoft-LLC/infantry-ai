@@ -63,6 +63,9 @@ fun interface ModuleChanges {
 const val MODULE_ROW_TAG_PREFIX = "plugin-module-"
 const val MODULE_TIER_TAG_PREFIX = "plugin-module-tier-"
 const val MODULE_STATE_TAG_PREFIX = "plugin-module-state-"
+
+/** HARNESS-PLUGIN-4 H5a: a module card's harness row (icon, ids, the daemon's state of it). */
+const val MODULE_HARNESS_TAG_PREFIX = "plugin-module-harness-"
 const val MODULE_BYLINE_TAG_PREFIX = "plugin-module-byline-"
 const val MODULE_REASON_TAG_PREFIX = "plugin-module-reason-"
 const val MODULE_NEEDS_TAG_PREFIX = "plugin-module-needs-"
@@ -85,7 +88,11 @@ private const val MaxColumns = 3
  * can be enabled or disabled; a refusal is shown on the card, in the rules' own words.
  */
 @Composable
-fun ModulesSection(factory: TabFactory) {
+fun ModulesSection(
+    factory: TabFactory,
+    /** HARNESS-PLUGIN-4 H5a: the daemon's harness state by module (`GET /plugins` `harness`); null = not read. */
+    harnessStatus: Map<String, String>? = null,
+) {
     val graph = remember(factory) { DependencyGraph.of(factory.statuses) }
     // What this session changed in modules.json (it applies at the next start), and the last answer per module.
     val enabledNow = remember(factory) { mutableStateMapOf<String, Boolean>() }
@@ -118,6 +125,7 @@ fun ModulesSection(factory: TabFactory) {
                                 enabled = enabledNow[s.name] ?: (s.state != ModuleState.DISABLED),
                                 message = messages[s.name],
                                 removeNote = removeNotes[s.name],
+                                harnessStatus = harnessStatus?.get(s.name),
                                 onRemove = dropIn?.takeIf { s.tier == Tier.COMMUNITY && s.name in it.installed() }?.let { d ->
                                     { val e = d.remove(s.name); if (e != null) removeNotes[s.name] = e; restart?.invoke() }
                                 },
@@ -150,13 +158,17 @@ private fun stateLabel(state: ModuleState): String = when (state) {
     ModuleState.REFUSED -> "Refused"
 }
 
+/** H5a: `Harness: echo · loaded` (the daemon's state), or just the ids when it was not read. */
+internal fun harnessLine(ids: List<String>, status: String?): String =
+    "Harness: " + ids.joinToString(", ") + (status?.let { " · daemon: $it" }.orEmpty())
+
 /** "By <author> · License <license>", from whichever of the two the manifest gives; null when it gives neither. */
 internal fun moduleByline(m: ModuleManifest): String? =
     listOfNotNull(m.author?.takeIf { it.isNotBlank() }?.let { "By $it" }, m.license?.takeIf { it.isNotBlank() }?.let { "License $it" })
         .takeIf { it.isNotEmpty() }?.joinToString(" · ")
 
 @Composable
-private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean, message: ModuleChange?, removeNote: String?, onRemove: (() -> Unit)?, onToggle: ((Boolean) -> Unit)?, modifier: Modifier) {
+private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean, message: ModuleChange?, removeNote: String?, onRemove: (() -> Unit)?, onToggle: ((Boolean) -> Unit)?, modifier: Modifier, harnessStatus: String? = null) {
     Column(
         modifier.clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp).testTag(MODULE_ROW_TAG_PREFIX + s.name),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -175,6 +187,17 @@ private fun ModuleCard(s: ModuleStatus, graph: DependencyGraph, enabled: Boolean
         }
         s.manifest?.let(::moduleByline)?.let { Text(it, Modifier.testTag(MODULE_BYLINE_TAG_PREFIX + s.name), color = Palette.Muted, fontSize = 11.sp) }
         s.manifest?.description?.takeIf { it.isNotBlank() }?.let { Text(it, color = Palette.Text, fontSize = 11.sp) }
+        // HARNESS-PLUGIN-4 H5a: the harness the module ships, from its manifest, and the daemon's state of it when read.
+        s.manifest?.harness?.takeIf { it.ids.isNotEmpty() }?.let { h ->
+            Row(
+                Modifier.testTag(MODULE_HARNESS_TAG_PREFIX + s.name),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                com.superiorsoftllc.agenthq.ui.HarnessIcon(h.ids.first(), size = 12)
+                Text(harnessLine(h.ids, harnessStatus), color = if (harnessStatus?.startsWith("loaded") == false) Palette.Danger else Palette.Muted, fontSize = 11.sp)
+            }
+        }
         val needs = graph.needs(s.name)
         if (needs.isNotEmpty()) {
             Text("Needs: " + needs.joinToString(", ") { DependencyGraph.label(it) }, Modifier.testTag(MODULE_NEEDS_TAG_PREFIX + s.name), color = Palette.Muted, fontSize = 11.sp)

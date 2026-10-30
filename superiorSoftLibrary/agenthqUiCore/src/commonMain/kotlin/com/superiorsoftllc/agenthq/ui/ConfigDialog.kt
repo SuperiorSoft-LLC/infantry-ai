@@ -105,6 +105,8 @@ fun ConfigDialog(
     promptTimer: com.superiorsoftllc.agenthq.ui.model.PromptTimerSetting.Value? = null,
     /** ASK-TIMER-2: store the timer (seconds, 0 = Indefinite) and/or the on-expiry fallback; null = no timer control. */
     onPromptTimer: ((seconds: Int?, onTimeout: String?) -> Unit)? = null,
+    /** HARNESS-PLUGIN-4 H5a: reads the daemon's harness state per module (`GET /plugins`); null = not shown. */
+    harnessModules: (suspend () -> Map<String, String>?)? = null,
     /** PKG-3: the installed app's log folder; null (dev, Android) hides the Logs section. */
     logs: LogsFolder? = null,
     /** UPDATE-1: the installed app's version and "Check for updates"; null (dev, Android) hides the Updates section. */
@@ -206,7 +208,7 @@ fun ConfigDialog(
         toolApproval, onToolApproval, logs, updates, secrets, secretActions, pair, limits, onLimit, onOpenRoles,
         onSendTestQuestion, testQuestionReady, serverUpdate, serverMismatch, theme, onTheme, about, modules,
         voicePlugins, present, tab, highlight, promptTimer = promptTimer, onPromptTimer = onPromptTimer,
-        plan = generated, tabLabel = tabLabel, highlightKey = highlightKey,
+        plan = generated, tabLabel = tabLabel, highlightKey = highlightKey, harnessModules = harnessModules,
     )
     // Ticket cb1ceb93: the scroll cue fades into the dialog's own surface.
     val surface = androidx.compose.material3.AlertDialogDefaults.containerColor
@@ -292,6 +294,8 @@ class ConfigDialogHost internal constructor(
     val plan: ConfigPlan? = null,
     val tabLabel: String? = tab?.label,
     val highlightKey: String? = null,
+    /** HARNESS-PLUGIN-4 H5a: reads the daemon's harness state per module for Plugins > Modules; null = not shown. */
+    val harnessModules: (suspend () -> Map<String, String>?)? = null,
 ) {
     /** A section shows when its tab is the selected one (the plan's, when a card moved it) and this host has it. */
     fun shows(entry: ConfigEntry): Boolean = entry in present && if (plan != null) plan.tabOf(entry) == tabLabel else entry.tab == tab
@@ -507,8 +511,11 @@ fun ConfigPluginsSection(config: ConfigDialogHost, modifier: Modifier = Modifier
 fun ConfigModulesSection(config: ConfigDialogHost, modifier: Modifier = Modifier) {
     val modules = config.modules ?: return
     if (!config.shows(ConfigEntry.MODULES)) return
+    // H5a: the daemon's harness state per module, read once each time the section is shown.
+    val read = config.harnessModules
+    val harness by androidx.compose.runtime.produceState<Map<String, String>?>(null, read) { value = read?.invoke() }
     FlagSection(ConfigEntry.MODULES, config.highlight, modifier) {
-        com.superiorsoftllc.agenthq.ui.plugin.ModulesSection(modules)
+        com.superiorsoftllc.agenthq.ui.plugin.ModulesSection(modules, harnessStatus = harness)
     }
 }
 
@@ -804,7 +811,8 @@ private fun CliLocationRow(
             fontSize = 11.sp,
             modifier = Modifier.testTag(CLI_STATUS_TAG_PREFIX + location.id),
         )
-        if (check != null && check.id in HarnessInstallSetting.INSTALLABLE) {
+        // H5a: [check] comes from the daemon's install report, so its presence is what makes the row installable.
+        if (check != null) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                 Text(HarnessInstallSetting.statusText(check), fontSize = 11.sp, modifier = Modifier.testTag(HARNESS_STATE_TAG_PREFIX + check.id))
                 val label = HarnessInstallSetting.action(check)

@@ -792,12 +792,16 @@ class AgentHqDaemon(
             val harnessToolsDir = File(daemonConfigDir(), "harness-tools")
             val executableResolver = com.superiorsoftllc.agenthq.executables.ExecutableResolver(executableEnvironment, executableOverrides, harnessToolsDir.path)
             val restoreExecutables = com.superiorsoftllc.agenthq.executables.CliExecutables.install(executableResolver)
+            // HARNESS-PLUGIN-3 H4: the harness modules, set once the first resolution and the daemon halves are loaded (below).
+            val harnessModulesRef = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.agenthq.daemon.plugins.HarnessModules?>(null)
             // HARNESS-INSTALL-1: npm installs of the harness CLIs go to <AGENTHQ_HOME>/harness-tools; launches resolve them from there.
+            // HARNESS-PLUGIN-4 H5a: plus each loaded harness module's `harness.cli.install` (read per call).
             val harnessInstaller = com.superiorsoftllc.agenthq.harness.install.HarnessInstaller(
                 harnessToolsDir, executableResolver, executableEnvironment, executableOverrides,
+                fromModules = { harnessModulesRef.get()?.installables().orEmpty() },
             )
             val cliLocations = com.superiorsoftllc.agenthq.executables.CliLocationService(
-                executableResolver, executableOverrides, tools = { cliTools(harnesses) },
+                executableResolver, executableOverrides, tools = { cliTools(harnesses, harnessModulesRef.get()?.cliTools().orEmpty()) },
             )
             // BUG-PERM-1: every run resolves its Tool approval through this store-backed global value.
             val toolApproval = com.superiorsoftllc.agenthq.session.ToolApprovalService(store)
@@ -1679,8 +1683,6 @@ class AgentHqDaemon(
                 val frame = Envelope(Envelope.CONFIG_CHANGED, json.encodeToString(com.superiorsoftllc.agenthq.plugin.api.ConfigChangedFrame.serializer(), changed))
                 for (client in clients) client.trySend(frame)
             }
-            // HARNESS-PLUGIN-3 H4: the harness modules, set once the first resolution and the daemon halves are loaded (below).
-            val harnessModulesRef = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.agenthq.daemon.plugins.HarnessModules?>(null)
             val harnessModulesRoot = java.util.concurrent.atomic.AtomicReference<java.io.File?>(null)
             fun harnessModulesConfig() = com.superiorsoftllc.agenthq.plugin.host.PluginFolders.config(harnessModulesRoot.get()!!)
             // POLICY-1: resolved under the ACTIVE preset's restriction, and again on every switch (GET /plugins reads the latest).
@@ -1735,7 +1737,11 @@ class AgentHqDaemon(
                     harnesses, trustNow,
                     com.superiorsoftllc.agenthq.harness.HarnessHostServices(
                         setting = { module, key -> daemonConfig.value(module, key) },
-                        resolveCli = { cliId, command -> executableResolver.resolve(com.superiorsoftllc.agenthq.executables.CliTools.forCommand(cliId, cliId, command)).path },
+                        resolveCli = { cliId, command ->
+                            // H5a: the module's own manifest tool (its place in the installer's prefix included), else PATH.
+                            val tool = harnessModulesRef.get()?.cliTool(cliId) ?: com.superiorsoftllc.agenthq.executables.CliTools.forCommand(cliId, cliId, command)
+                            executableResolver.resolve(tool).path
+                        },
                         mcpLaunch = { env -> AgentHqMcp.launch(env).let { com.superiorsoftllc.agenthq.harness.api.HarnessProcess(it.argv, env = it.env) } },
                         watchLauncher = { env -> if (WatchHooks.on(env)) WatchHooks.launcher(agentHqBin) ?: "agenthq" else null },
                         ask = { sessionId, q ->
@@ -1852,7 +1858,7 @@ class AgentHqDaemon(
                         )
                     }
                     get("/attention") { call.respond(attention.list()) }
-                    get("/plugins") { call.respond(pluginsNow.get().withDaemon(plugins)) }
+                    get("/plugins") { call.respond(pluginsNow.get().withDaemon(plugins).withHarness(harnessModulesRef.get())) }
                     // P1 step 2 (6s B): the per-node UI configuration the window seeds and edits.
                     val nodeConfigStore = NodeConfigStore((store as SqlAgentHqStore).database)
                     nodeConfigRoutes(nodeConfigStore)
@@ -4170,13 +4176,18 @@ internal fun providerInfos(manager: SessionManager, harnesses: HarnessRegistry? 
  * CLIPATH-1: every CLI this daemon can launch: the built-in table (claude, opencode, pi, git, node), then each registered
  * descriptor harness's own command. A third-party code plugin's executable is its own business and is not listed.
  */
-internal fun cliTools(harnesses: HarnessRegistry?): List<com.superiorsoftllc.agenthq.executables.CliTool> {
+internal fun cliTools(
+    harnesses: HarnessRegistry?,
+    /** HARNESS-PLUGIN-4 H5a: the loaded harness modules' `harness.cli` tools. */
+    modules: List<com.superiorsoftllc.agenthq.executables.CliTool> = emptyList(),
+): List<com.superiorsoftllc.agenthq.executables.CliTool> {
     val builtIn = com.superiorsoftllc.agenthq.executables.CliTools.KNOWN
-    val ids = builtIn.map { it.id }.toSet()
+    val ids = builtIn.map { it.id }.toMutableSet()
     val descriptors = harnesses?.harnessIds().orEmpty()
         .filter { it !in ids }
         .mapNotNull { (harnesses?.resolve(it) as? com.superiorsoftllc.agenthq.harness.descriptor.DescriptorHarness)?.cliTool }
-    return builtIn + descriptors
+    ids += descriptors.map { it.id }
+    return builtIn + descriptors + modules.filter { ids.add(it.id) }
 }
 
 private fun toolApprovalEnvelope(info: com.superiorsoftllc.agenthq.protocol.ToolApprovalInfo): Envelope = Envelope(

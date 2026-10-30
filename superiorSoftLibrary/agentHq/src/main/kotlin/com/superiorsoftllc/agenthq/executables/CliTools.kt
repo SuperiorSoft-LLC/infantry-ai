@@ -5,6 +5,9 @@ package com.superiorsoftllc.agenthq.executables
  * is stored under. [commandNames] are the bare names searched on PATH (Windows adds PATHEXT extensions).
  * [extraExtensions] are file types that are launchable through something else (Pi's `cli.js`, run with node).
  * [defaults] is the tool's known install locations for the environment's OS, most specific first.
+ * [prefixBin] (HARNESS-PLUGIN-4 H5a) is where the harness installer's npm install leaves the CLI inside its prefix on
+ * Windows (`node_modules/<package>/<bin>`), for a tool declared by a harness module's `harness.cli.install`; null = the
+ * built-in table in [HarnessPrefix].
  */
 class CliTool(
     val id: String,
@@ -13,6 +16,7 @@ class CliTool(
     val envVar: String? = null,
     val extraExtensions: Set<String> = emptySet(),
     val defaults: (ExecutableEnvironment) -> List<String> = { emptyList() },
+    val prefixBin: String? = null,
 ) {
     override fun toString(): String = "CliTool($id)"
 }

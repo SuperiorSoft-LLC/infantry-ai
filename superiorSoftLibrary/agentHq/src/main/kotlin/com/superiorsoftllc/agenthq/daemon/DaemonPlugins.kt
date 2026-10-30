@@ -19,6 +19,10 @@ data class PluginStatusWire(
     val daemon: String? = null,
     /** DAEMON-PLUGINS-1: the daemon tools its daemon half registered. */
     val tools: List<String> = emptyList(),
+    /** HARNESS-PLUGIN-4 H5a (1.145.0): its harness (module.json `harness`): `loaded`, `refused: why`, `failed: why`; null = it has none. */
+    val harness: String? = null,
+    /** H5a: the harness ids it registered (empty when its harness is not loaded). */
+    val harnessIds: List<String> = emptyList(),
 )
 
 /** PLUGINS-1: `GET /plugins`: the plugins root the daemon scanned, whether a restricted policy locks it, and every module found. */
@@ -27,6 +31,10 @@ data class PluginsWire(val root: String, val locked: Boolean, val modules: List<
     /** DAEMON-PLUGINS-1: the same with each module's daemon half as [host] holds it. */
     fun withDaemon(host: com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost): PluginsWire =
         copy(modules = modules.map { m -> host.status(m.name)?.let { m.copy(daemon = it, tools = host.toolsOf(m.name)) } ?: m })
+
+    /** HARNESS-PLUGIN-4 H5a: the same with each module's harness as [harnesses] holds it ([HarnessModules.status]). */
+    fun withHarness(harnesses: com.superiorsoftllc.agenthq.daemon.plugins.HarnessModules?): PluginsWire = if (harnesses == null) this else
+        copy(modules = modules.map { m -> harnesses.status(m.name)?.let { m.copy(harness = it, harnessIds = harnesses.idsOf(m.name)) } ?: m })
 }
 
 /**

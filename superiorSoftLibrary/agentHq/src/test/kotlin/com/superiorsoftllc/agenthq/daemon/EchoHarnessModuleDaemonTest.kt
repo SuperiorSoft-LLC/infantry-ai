@@ -8,6 +8,9 @@ import com.superiorsoftllc.agenthq.runner.PipedProcessRunner
 import com.superiorsoftllc.agenthq.session.SessionState
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -23,7 +26,7 @@ import kotlin.test.assertTrue
 class EchoHarnessModuleDaemonTest {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     private val module = "Acme_EchoHarness"
-    private val granted = """{"$module":{"enabled":true,"allow":["harness.code","harness.setting:echo.prefix"]}}"""
+    private val granted = """{"$module":{"enabled":true,"allow":["harness.code","harness.setting:echo.prefix","harness.cli","harness.cli.install"]}}"""
 
     private fun root(modulesJson: String) = TestDaemonPlugins.root("examples/$module", folder = "community", tier = "community", modulesJson = modulesJson)
 
@@ -45,6 +48,15 @@ class EchoHarnessModuleDaemonTest {
         ).map { it.id }
     }
 
+    /** HARNESS-PLUGIN-4 H5a: the module's `GET /plugins` entry. */
+    private fun pluginEntry(fixture: DaemonFixture): kotlinx.serialization.json.JsonObject {
+        val body = java.net.http.HttpClient.newHttpClient().send(
+            java.net.http.HttpRequest.newBuilder(java.net.URI.create("http://${fixture.connectHost}:${fixture.port}/plugins")).GET().build(),
+            java.net.http.HttpResponse.BodyHandlers.ofString(),
+        ).body()
+        return json.parseToJsonElement(body).jsonObject["modules"]!!.jsonArray.map { it.jsonObject }.single { it["name"]!!.jsonPrimitive.content == module }
+    }
+
     private fun assertNotInstalled(fixture: DaemonFixture) {
         val before = fixture.daemon.manager.list().map { it.id }.toSet()
         val from = fixture.client.mark()
@@ -63,6 +75,10 @@ class EchoHarnessModuleDaemonTest {
         try {
             first.client.await(Envelope.READY)
             assertEquals(listOf("echo"), providerIds(first), "only the module's harness is installed")
+            // H5a: GET /plugins shows the harness state and the ids it registered.
+            val entry = pluginEntry(first)
+            assertEquals("loaded", entry["harness"]!!.jsonPrimitive.content, "entry: $entry")
+            assertEquals(listOf("echo"), entry["harnessIds"]!!.jsonArray.map { it.jsonPrimitive.content })
 
             first.send(Envelope(Envelope.NEW, """{"provider":"echo"}"""))
             first.send(Envelope(Envelope.PROMPT, "ping from the daemon"))
@@ -101,6 +117,9 @@ class EchoHarnessModuleDaemonTest {
             fixture.client.await(Envelope.READY)
             assertEquals(emptyList(), providerIds(fixture))
             assertNotInstalled(fixture)
+            val entry = pluginEntry(fixture)
+            assertEquals("refused: community harness code needs the 'harness.code' grant in modules.json", entry["harness"]!!.jsonPrimitive.content, "entry: $entry")
+            assertTrue(entry["harnessIds"]!!.jsonArray.isEmpty())
         } finally {
             fixture.stop()
             fixture.deleteState()

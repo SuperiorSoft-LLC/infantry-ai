@@ -70,12 +70,24 @@ class HarnessInstaller(
     private val environment: ExecutableEnvironment,
     private val overrides: ExecutableOverrides = ExecutableOverrides.NONE,
     private val runner: HarnessProcessRunner = SystemProcessRunner,
-    private val harnesses: List<InstallableHarness> = DEFAULT_HARNESSES,
+    private val builtIn: List<InstallableHarness> = DEFAULT_HARNESSES,
+    /**
+     * HARNESS-PLUGIN-4 H5a: the CLIs the loaded harness modules declare in `harness.cli.install` (read on every call, so a
+     * module loaded or unloaded since is seen). A built-in id wins; the manifest side is checked by [ManifestHarnessCli].
+     */
+    private val fromModules: () -> List<InstallableHarness> = { emptyList() },
 ) {
     private val lock = Any()
 
+    /** Built-ins first (unchanged order), then each module's CLI whose id no earlier entry holds. */
+    private fun harnesses(): List<InstallableHarness> {
+        val ids = builtIn.map { it.id }.toMutableSet()
+        return builtIn + runCatching(fromModules).getOrDefault(emptyList()).filter { ids.add(it.id) }
+    }
+
     fun status(checkLatest: Boolean = false): HarnessInstallReport {
         val npm = resolver.resolve(NPM)
+        val harnesses = harnesses()
         return HarnessInstallReport(
             harnesses = harnesses.map { statusOf(it, checkLatest, npm.path) },
             prefixDir = prefixDir.path,
@@ -89,6 +101,7 @@ class HarnessInstaller(
      * second caller waits. An unknown id is an [IllegalArgumentException] and nothing runs.
      */
     fun install(ids: List<String>, update: Boolean, onLine: (String) -> Unit = {}): HarnessInstallResult = synchronized(lock) {
+        val harnesses = harnesses()
         val unknown = ids.filter { id -> harnesses.none { it.id == id } }
         require(unknown.isEmpty()) { "unknown harness ${unknown.joinToString()} (installable: ${harnesses.joinToString { it.id }})" }
 
@@ -121,6 +134,9 @@ class HarnessInstaller(
     }
 
     private fun runInstall(h: InstallableHarness, before: HarnessInstallStatus, npmPath: String, note: (String) -> Unit): HarnessInstallOutcome {
+        // Defence in depth: the package and the pinned version reach npm as argv elements, never as a flag.
+        if (!ManifestHarnessCli.NPM_PACKAGE.matches(h.npmPackage)) return HarnessInstallOutcome(h.id, "failed", null, "'${h.npmPackage.take(60)}' is not an npm package name")
+        before.wanted?.let { if (!VERSION_SPEC.matches(it)) return HarnessInstallOutcome(h.id, "failed", null, "the pinned version '${it.take(40)}' is not a version") }
         val spec = h.npmPackage + "@" + (before.wanted ?: "latest")
         if (!prefixDir.isDirectory && !prefixDir.mkdirs()) {
             return HarnessInstallOutcome(h.id, "failed", null, "cannot create the install directory ${prefixDir.path}")
@@ -143,7 +159,7 @@ class HarnessInstaller(
     private fun statusOf(h: InstallableHarness, checkLatest: Boolean, npmPath: String?): HarnessInstallStatus {
         val resolution = resolver.resolve(h.tool)
         val userPath = runCatching { overrides.get(h.id) }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
-        val wanted = environment.env("AGENTHQ_${h.id.uppercase()}_VERSION")?.trim()?.takeIf { it.isNotEmpty() }
+        val wanted = environment.env("AGENTHQ_${h.id.uppercase().replace('-', '_')}_VERSION")?.trim()?.takeIf { it.isNotEmpty() }
         val latest = if (checkLatest && npmPath != null) latestVersion(h, npmPath) else null
         val path = resolution.path
             ?: return if (userPath != null) {
@@ -217,6 +233,7 @@ class HarnessInstaller(
                 "then run the install again. Node is needed only for the harness CLIs, not for Infantry AI. " +
                 "If npm lives somewhere unusual, set its path in AGENTHQ_NPM_EXE."
 
+        private val VERSION_SPEC = Regex("[0-9A-Za-z][0-9A-Za-z.+-]{0,63}")
         private val VERSION = Regex("""\d+\.\d+\.\d+(?:-[0-9A-Za-z.\-]+)?""")
         private const val LOG_CAP = 400
         private const val INSTALL_TIMEOUT_MS = 600_000L
