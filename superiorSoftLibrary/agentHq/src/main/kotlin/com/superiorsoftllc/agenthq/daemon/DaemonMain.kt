@@ -3376,7 +3376,7 @@ private suspend fun handleConnection(
                 // answered off the request loop, and only to the client that asked.
                 Envelope.HARNESS_INSTALL_STATUS, Envelope.HARNESS_INSTALL -> {
                     session.launch(kotlinx.coroutines.Dispatchers.IO) {
-                        outgoing.trySend(
+                        val answer = (
                             try {
                                 val service = harnessInstaller ?: throw IllegalArgumentException("this daemon has no harness installer")
                                 if (envelope.type == Envelope.HARNESS_INSTALL_STATUS) {
@@ -3396,8 +3396,10 @@ private suspend fun handleConnection(
                                 Envelope(Envelope.ERROR, "${envelope.type} refused: ${e.message ?: "invalid request"}")
                             } catch (e: Exception) {
                                 Envelope(Envelope.ERROR, "${envelope.type} failed: ${e.message ?: e::class.simpleName}")
-                            },
+                            }
                         )
+                        // RUNTIME-LOAD-1: a daemon plugin tool (agenthq_harness_status) waits for its answer by request id.
+                        outgoing.trySend(if (envelope.requestId != null && answer.requestId == null) answer.copy(requestId = envelope.requestId) else answer)
                     }
                     null
                 }
