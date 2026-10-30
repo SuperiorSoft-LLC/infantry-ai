@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldTypes
+import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldValidator
 import com.superiorsoftllc.agenthq.plugin.api.ConfigSetBy
 import com.superiorsoftllc.agenthq.ui.Checkbox
 import com.superiorsoftllc.agenthq.ui.Chip
@@ -188,8 +189,9 @@ internal fun TextEditor(f: DeclaredField, tag: String, value: JsonElement?, enab
     val min = f.field.min
     val max = f.field.max
     val problem = when {
-        f.field.type == ConfigFieldTypes.COLOR -> if (parseConfigColor(draft.trim()) == null) "Use #RRGGBB or #AARRGGBB" else null
-        !number -> null
+        f.field.type == ConfigFieldTypes.COLOR && parseConfigColor(draft.trim()) == null -> "Use #RRGGBB or #AARRGGBB"
+        !number -> ConfigFieldValidator.checkRules(f.field, JsonPrimitive(draft))
+        draft.isBlank() -> if (f.field.required) "Required" else "Not a number"
         parsed == null -> "Not a number"
         min != null && parsed < min -> "At least $min"
         max != null && parsed > max -> "At most $max"

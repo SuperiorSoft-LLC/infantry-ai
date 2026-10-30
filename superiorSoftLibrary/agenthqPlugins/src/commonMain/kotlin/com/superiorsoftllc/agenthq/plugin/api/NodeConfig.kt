@@ -69,6 +69,13 @@ data class ConfigFieldDeclaration(
     val slots: Map<String, ConfigClassSlot> = emptyMap(),
     /** CONFIG-9: a `list` field's item: a field (`{type:"text"}`); its [key] is ignored. Null = text. */
     val item: ConfigFieldDeclaration? = null,
+    /** CONFIG-FIELDS-2: an empty value (unset, blank text, empty list) is refused. */
+    val required: Boolean = false,
+    /** CONFIG-FIELDS-2: a text value must match this regex in full; [patternMessage] is the error shown. */
+    val pattern: String? = null,
+    val patternMessage: String? = null,
+    val minLength: Int? = null,
+    val maxLength: Int? = null,
 )
 
 /** CONFIG-9: one slot of a `classes` field. An empty [tokens] means free text (stored, ignored unless the block knows it). */
@@ -162,8 +169,23 @@ data class ConfigChangedFrame(val node: String, val key: String, val value: Json
 object ConfigFieldValidator {
     private val COLOR = Regex("^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$")
 
+    /** CONFIG-FIELDS-2: the required / length / pattern rules of [field] over [value]; null when fine, else one line. Length and pattern apply to text only. */
+    fun checkRules(field: ConfigFieldDeclaration, value: JsonElement?): String? {
+        val prim = value as? kotlinx.serialization.json.JsonPrimitive
+        val empty = value == null || value is kotlinx.serialization.json.JsonNull || (prim != null && prim.isString && prim.content.isEmpty()) ||
+            (value is kotlinx.serialization.json.JsonArray && value.isEmpty())
+        if (empty) return if (field.required) "Required" else null
+        if (prim == null || !prim.isString) return null
+        val t = prim.content
+        field.minLength?.let { if (t.length < it) return "At least $it characters" }
+        field.maxLength?.let { if (t.length > it) return "At most $it characters" }
+        field.pattern?.let { p -> if (runCatching { !Regex(p).matches(t) }.getOrDefault(false)) return field.patternMessage ?: "Does not match the expected format" }
+        return null
+    }
+
     fun validate(field: ConfigFieldDeclaration, value: JsonElement): JsonElement {
         val name = field.key
+        checkRules(field, value)?.let { require(false) { "setting '$name': $it" } }
         val prim = value as? kotlinx.serialization.json.JsonPrimitive
         fun text(): String {
             require(prim != null && prim.isString) { "setting '$name' must be a string" }

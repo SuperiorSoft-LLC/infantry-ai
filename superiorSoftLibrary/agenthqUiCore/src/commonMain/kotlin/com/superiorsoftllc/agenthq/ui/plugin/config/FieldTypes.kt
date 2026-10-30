@@ -58,6 +58,7 @@ class FieldTypes(private val types: Map<String, RegisteredFieldType> = emptyMap(
 
         /** The rule of each built-in type; an unknown type and an `implementation` (checked against its registry) pass. */
         fun validateBuiltIn(field: ConfigFieldDeclaration, value: JsonElement?): String? {
+            ConfigFieldValidator.checkRules(field, value)?.let { return it }
             if (value == null || value is JsonNull) return null
             return when (field.type) {
                 ConfigFieldTypes.NUMBER -> {
