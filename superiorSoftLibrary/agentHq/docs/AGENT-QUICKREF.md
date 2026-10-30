@@ -318,6 +318,13 @@ One line, exit 0: the CLI's contract (`EventVocabulary.VERSION`), then the contr
 different numbers mean an old install on one side (e.g. a daemon at `1.76.0` under a `1.80.0` CLI). It honours the
 usual connection flags (`--port`, `--url`, `--endpoint`, `AGENTHQ_URL`).
 
+**Which daemon a command talks to (CLI-ENV-1).** Precedence: `--url` / `--endpoint` / `--host` / `--port`, then
+`AGENTHQ_URL`, then `AGENTHQ_PORT`, then `AGENTHQ_STATE_DIR` (the port in its `daemon.port`), then the installed
+app's (`AGENTHQ_INSTALL_*`), then the default `127.0.0.1:8787`. Token: `--token-file`, then `AGENTHQ_TOKEN_FILE` /
+`AGENTHQ_TOKEN`, then the stored remote-access token. If `AGENTHQ_PORT` or `AGENTHQ_STATE_DIR` is set but unusable
+(not a port, no `daemon.port` in the dir, nothing listening), the CLI fails with a message naming it and NEVER falls
+back to another daemon. The `mcp serve` bridge is the same CLI, so the same rule applies.
+
 ## 9. Start a ticket with its role, provider and model (BUG-ASSIGN-1)
 
 ```

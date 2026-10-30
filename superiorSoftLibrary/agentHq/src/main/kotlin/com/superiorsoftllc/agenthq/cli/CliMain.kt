@@ -4080,7 +4080,9 @@ internal object Cli {
      * The daemon this command goes to, and the credential it sends.
      *
      * Precedence for the address: `--url`, then `--endpoint NAME`, then an explicit `--host` / `--port`, then
-     * `AGENTHQ_URL`, then the default host and port (127.0.0.1:8787). For the token: `--token-file`, then the
+     * `AGENTHQ_URL`, then `AGENTHQ_PORT`, then `AGENTHQ_STATE_DIR`'s `daemon.port` (CLI-ENV-1: a set-but-unusable
+     * one fails, never falls to the default), then the installed app's, then the default host and port
+     * (127.0.0.1:8787). For the token: `--token-file`, then the
      * selected endpoint's own token file, and ONLY when no endpoint is selected the environment
      * (`AGENTHQ_TOKEN_FILE`, then `AGENTHQ_TOKEN`). An endpoint never inherits the environment token: that would
      * send one daemon's secret to whichever daemon the user named.
@@ -4100,6 +4102,7 @@ internal object Cli {
             ?: endpoint?.url
             ?: typed.takeIf { parsed.addressGiven }
             ?: getenv(AgentHqBin.URL_ENV)?.takeIf { it.isNotBlank() }
+            ?: envTargetUrl(getenv)
             ?: installedUrl(getenv)
             ?: typed
         val url = normaliseUrl(rawUrl)
@@ -4129,6 +4132,30 @@ internal object Cli {
         val base = getenv("LOCALAPPDATA")?.takeIf { it.isNotBlank() }
             ?: File(System.getProperty("user.home"), "AppData/Local").path
         return File(File(base, "SuperiorSoft"), "AgentHQ").absoluteFile
+    }
+
+    /**
+     * CLI-ENV-1: the daemon `AGENTHQ_PORT` / `AGENTHQ_STATE_DIR` name, or null when neither is set. A named target is
+     * never replaced by the default daemon: a bad port or a state dir with no recorded port FAILS ([UsageFailure]),
+     * so a test or worker pointed at a temp daemon can never write to the owner's. `AGENTHQ_PORT` wins over the
+     * state dir's `daemon.port` / `network.properties`, as it does for the daemon itself.
+     */
+    internal fun envTargetUrl(getenv: (String) -> String?): String? {
+        val rawPort = getenv(DaemonPort.PORT_ENV)?.trim()?.takeIf { it.isNotEmpty() }
+        val rawDir = getenv("AGENTHQ_STATE_DIR")?.trim()?.takeIf { it.isNotEmpty() }
+        if (rawPort != null) {
+            val port = rawPort.toIntOrNull()?.takeIf { it in 1..65535 }
+                ?: throw UsageFailure("AGENTHQ_PORT='$rawPort' is not a port (1-65535); not falling back to the default daemon")
+            return "ws://127.0.0.1:$port/ws"
+        }
+        val dir = File(rawDir ?: return null).absoluteFile
+        val port = File(dir, DaemonPort.FILE_NAME).takeIf { it.isFile }?.readText()?.trim()?.toIntOrNull()
+            ?: RemoteAccess.filePort(dir)
+            ?: throw UsageFailure(
+                "AGENTHQ_STATE_DIR=${dir.path} names no running daemon (no ${DaemonPort.FILE_NAME} in it); " +
+                    "start that daemon or set AGENTHQ_PORT. Not falling back to the default daemon.",
+            )
+        return "ws://127.0.0.1:$port/ws"
     }
 
     /** The installed daemon's address: `AGENTHQ_INSTALL_PORT` (default 8797, the installed app's own default). */
