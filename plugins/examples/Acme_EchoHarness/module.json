@@ -1,0 +1,16 @@
+{
+  "name": "Acme_EchoHarness",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Acme (example)",
+  "license": "NOASSERTION",
+  "description": "Reference harness plugin (HARNESS-PLUGIN-3): one harness, 'echo', whose agent process prints the prompt back. Harness half only; copy it as a community module and grant it in modules.json (harness.code, harness.setting:echo.prefix).",
+  "harness": {
+    "jar": "harness/build/libs/Acme_EchoHarness-harness.jar",
+    "contract": "2.0.0",
+    "ids": ["echo"],
+    "aliases": { "echo-agent": "echo" },
+    "settings": ["echo.prefix"],
+    "hooks": []
+  }
+}

@@ -46,16 +46,19 @@ object TestDaemonPlugins {
         return root
     }
 
-    /** Copies module [src] to [dst]: module.json, `policies/`, and the jar its `daemon.jar` names (which must be built). */
+    /** Copies module [src] to [dst]: module.json, `policies/`, and the jars its `daemon.jar` / `harness.jar` name (which must be built). */
     fun copy(src: File, dst: File) {
         dst.mkdirs()
         val manifest = File(src, "module.json")
         manifest.copyTo(File(dst, "module.json"), overwrite = true)
         File(src, "policies").takeIf { it.isDirectory }?.copyRecursively(File(dst, "policies"), overwrite = true)
-        val jar = (Json.parseToJsonElement(manifest.readText()) as JsonObject)["daemon"]?.let { it as? JsonObject }?.get("jar")?.jsonPrimitive?.content
-            ?: return
-        val built = File(src, jar)
-        check(built.isFile) { "${built.path} is not built (run :daemon-plugin-<folder>-${src.name}:jar)" }
-        built.copyTo(File(dst, jar), overwrite = true)
+        // HARNESS-PLUGIN-3: the harness half's jar too (`harness.jar`, built by :harness-plugin-<folder>-<Module>:jar).
+        for (half in listOf("daemon", "harness")) {
+            val jar = (Json.parseToJsonElement(manifest.readText()) as JsonObject)[half]?.let { it as? JsonObject }?.get("jar")?.jsonPrimitive?.content
+                ?: continue
+            val built = File(src, jar)
+            check(built.isFile) { "${built.path} is not built (run :$half-plugin-<folder>-${src.name}:jar)" }
+            built.copyTo(File(dst, jar), overwrite = true)
+        }
     }
 }

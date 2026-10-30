@@ -73,6 +73,13 @@ listOf("core", "official", "demo", "community", "examples").forEach { folder ->
         project(":daemon-plugin-$folder-${dir.name}").projectDir = java.io.File(dir, "daemon")
     }
 }
+// HARNESS-PLUGIN-3: a module's harness half (`<Module>/harness/build.gradle.kts`) is `:harness-plugin-<folder>-<Module>`.
+listOf("core", "official", "demo", "community", "examples").forEach { folder ->
+    file("plugins/$folder").listFiles { f -> f.isDirectory && !f.name.startsWith("_") && java.io.File(f, "harness/build.gradle.kts").isFile }.orEmpty().sortedBy { it.name }.forEach { dir ->
+        include(":harness-plugin-$folder-${dir.name}")
+        project(":harness-plugin-$folder-${dir.name}").projectDir = java.io.File(dir, "harness")
+    }
+}
 if (file("plugins/_template/daemon/build.gradle.kts").isFile) {
     include(":daemon-plugin-_template")
     project(":daemon-plugin-_template").projectDir = file("plugins/_template/daemon")

@@ -327,6 +327,8 @@ tasks.withType<Test>().configureEach {
     maxHeapSize = "2g"
     // DAEMON-PLUGINS-1: the daemon tests load the real daemon halves (TestDaemonPlugins), so their jars are built first.
     dependsOn(":daemon-plugin-demo-Demo_Lock:jar", ":daemon-plugin-official-Infantry_Board:jar", ":daemon-plugin-official-Infantry_Usage:jar", ":daemon-plugin-official-Infantry_Processes:jar", ":daemon-plugin-official-Infantry_Agents:jar", ":daemon-plugin-official-Infantry_Roles:jar", ":daemon-plugin-official-Infantry_Attention:jar", ":daemon-plugin-official-Infantry_Settings:jar", ":daemon-plugin-examples-Acme_DaemonHello:jar", ":daemon-plugin-examples-Acme_PolicyHook:jar")
+    // HARNESS-PLUGIN-3: the harness E2E loads the example harness module's built jar.
+    dependsOn(":harness-plugin-examples-Acme_EchoHarness:jar")
 }
 
 tasks.withType<Test>().configureEach {
@@ -382,17 +384,25 @@ tasks.register("perfProfile") {
 @Suppress("UNCHECKED_CAST")
 val ihqDaemonJar = rootProject.extra["ihqDaemonJar"] as (File) -> String?
 @Suppress("UNCHECKED_CAST")
+val ihqHarnessJar = rootProject.extra["ihqHarnessJar"] as (File) -> String?
+@Suppress("UNCHECKED_CAST")
 val ihqVerifyDaemonHalves = rootProject.extra["ihqVerifyDaemonHalves"] as (File, String, List<String>) -> Unit
+// HARNESS-PLUGIN-3: a module with a harness half (module.json `harness.jar`) ships the same way, its jar from `:harness-plugin-*`.
 fun daemonModuleDirs(folder: String): List<File> = rootProject.file("plugins/$folder")
-    .listFiles { f -> f.isDirectory && !f.name.startsWith("_") && ihqDaemonJar(f) != null }.orEmpty().sortedBy { it.name }
+    .listFiles { f -> f.isDirectory && !f.name.startsWith("_") && (ihqDaemonJar(f) != null || ihqHarnessJar(f) != null) }.orEmpty().sortedBy { it.name }
 fun Task.dependsOnDaemonJars(folder: String) = daemonModuleDirs(folder).forEach { dir ->
-    val producer = ":daemon-plugin-$folder-${dir.name}"
-    checkNotNull(rootProject.findProject(producer)) { "PACKAGE-1: plugins/$folder/${dir.name} declares a daemon half but $producer does not exist" }
-    dependsOn("$producer:jar")
+    val producers = listOfNotNull(
+        ihqDaemonJar(dir)?.let { ":daemon-plugin-$folder-${dir.name}" },
+        ihqHarnessJar(dir)?.let { ":harness-plugin-$folder-${dir.name}" },
+    )
+    for (producer in producers) {
+        checkNotNull(rootProject.findProject(producer)) { "PACKAGE-1: plugins/$folder/${dir.name} declares a daemon or harness half but $producer does not exist" }
+        dependsOn("$producer:jar")
+    }
 }
 fun CopySpec.daemonModules(folder: String, prefix: String) {
     for (dir in daemonModuleDirs(folder)) from(dir) {
-        include("module.json", "policies/**", ihqDaemonJar(dir)!!)
+        include(listOfNotNull("module.json", "policies/**", ihqDaemonJar(dir), ihqHarnessJar(dir)))
         into("$prefix/modules/official/${dir.name}")
     }
 }
