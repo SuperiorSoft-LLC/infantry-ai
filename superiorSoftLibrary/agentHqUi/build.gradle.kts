@@ -487,7 +487,17 @@ val javaLauncherName = if (System.getProperty("os.name").startsWith("Windows")) 
 //   -Pihq.keystore=<file> -Pihq.alias=<alias> + env IHQ_STOREPASS   the real Infantry key (keystore path relative to the repo root)
 //   -Pihq.devSign=true                                              a throwaway dev key (build/official-modules/dev-key), never for a release
 // With neither, stageOfficialModules (and so every package task) fails. `run` and the dev runs are untouched (devTrust).
-val officialProjects = rootProject.subprojects.filter { it.path.startsWith(":plugins:official:") }
+// BUILD-PLUGINS-1: -Pihq.excludePlugins=<ids> leaves optional plugins out of the staged modules (and so the module list, the daemon
+// halves and the signed set); scripts/package-dist.ps1 resolves --include/--exclude/presets from plugins/build-presets.json and
+// guards the class. -Pihq.optionalOut=true also stages the left-out ones (same signed layout) under official-modules/optional-plugins.
+val excludedPluginIds = providers.gradleProperty("ihq.excludePlugins").orNull.orEmpty().split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+val allOfficialProjects = rootProject.subprojects.filter { it.path.startsWith(":plugins:official:") }
+excludedPluginIds.filter { id -> allOfficialProjects.none { it.name == id } }.takeIf { it.isNotEmpty() }
+    ?.let { error("BUILD-PLUGINS-1: -Pihq.excludePlugins names no official plugin: $it") }
+val officialProjects = allOfficialProjects.filter { it.name !in excludedPluginIds }
+val optionalOut = providers.gradleProperty("ihq.optionalOut").orNull?.trim()?.lowercase() == "true"
+val optionalProjects = if (optionalOut) allOfficialProjects.filter { it.name in excludedPluginIds } else emptyList()
+val optionalStageDir = layout.buildDirectory.dir("official-modules/optional-plugins")
 val officialStageDir = layout.buildDirectory.dir("official-modules/modules")
 // PACKAGE-1 (gradle/daemon-halves.gradle.kts): module.json's daemon.jar (null: no daemon half) and the staged-output check.
 @Suppress("UNCHECKED_CAST")
@@ -496,18 +506,20 @@ val ihqDaemonJar = rootProject.extra["ihqDaemonJar"] as (File) -> String?
 val ihqVerifyDaemonHalves = rootProject.extra["ihqVerifyDaemonHalves"] as (File, String, List<String>) -> Unit
 // Official modules with a daemon half, and the jar task that builds it (:daemon-plugin-official-<Name>:jar).
 val officialDaemonHalves = officialProjects.mapNotNull { p -> ihqDaemonJar(p.projectDir)?.let { p.name to it } }.toMap()
+val optionalDaemonHalves = optionalProjects.mapNotNull { p -> ihqDaemonJar(p.projectDir)?.let { p.name to it } }.toMap()
 val stageOfficialModules = tasks.register("stageOfficialModules") {
     group = "distribution"
     description = "Builds every plugins/official jar, signs it (-Pihq.keystore/-Pihq.alias + IHQ_STOREPASS, or -Pihq.devSign=true) and lays out build/official-modules/modules."
-    officialProjects.forEach { dependsOn("${it.path}:jvmJar") }
-    officialDaemonHalves.keys.forEach { name ->
+    (officialProjects + optionalProjects).forEach { dependsOn("${it.path}:jvmJar") }
+    (officialDaemonHalves.keys + optionalDaemonHalves.keys).forEach { name ->
         val producer = ":daemon-plugin-official-$name"
         checkNotNull(rootProject.findProject(producer)) { "PACKAGE-1: plugins/official/$name declares a daemon half but $producer does not exist" }
         dependsOn("$producer:jar")
     }
     val daemonHalves = officialDaemonHalves
     val modules = officialProjects.map { p -> p.name to p.projectDir }
-    val jars = officialProjects.associate { p -> p.name to p.tasks.named<Jar>("jvmJar").flatMap { it.archiveFile } }
+    val optionalModules = optionalProjects.map { p -> p.name to p.projectDir }
+    val jars = (officialProjects + optionalProjects).associate { p -> p.name to p.tasks.named<Jar>("jvmJar").flatMap { it.archiveFile } }
     val keystoreProp = providers.gradleProperty("ihq.keystore").map { rootProject.file(it) }
     val aliasProp = providers.gradleProperty("ihq.alias")
     val storePassEnv = providers.environmentVariable("IHQ_STOREPASS")
@@ -516,12 +528,16 @@ val stageOfficialModules = tasks.register("stageOfficialModules") {
     inputs.files(modules.map { File(it.second, "module.json") }).withPropertyName("moduleJsons")
     inputs.files(modules.mapNotNull { (name, dir) -> daemonHalves[name]?.let { File(dir, it) } }).withPropertyName("daemonJars")
     inputs.files(modules.map { File(it.second, "policies") }).withPropertyName("policies")
+    inputs.property("excluded", excludedPluginIds.sorted().joinToString(","))
+    inputs.property("optionalOut", optionalOut)
     inputs.property("keystore", keystoreProp.map { it.absolutePath }.orElse(""))
     inputs.property("alias", aliasProp.orElse(""))
     inputs.property("devSign", devSign)
     val out = officialStageDir
     val devKeyDir = layout.buildDirectory.dir("official-modules/dev-key")
     outputs.dir(out)
+    val optionalOutDir = optionalStageDir
+    outputs.dir(optionalOutDir)
     doLast {
         val bin = File(System.getProperty("java.home"), "bin")
         val exe = if (System.getProperty("os.name").startsWith("Windows")) ".exe" else ""
@@ -556,7 +572,7 @@ val stageOfficialModules = tasks.register("stageOfficialModules") {
         }
         val root = out.get().asFile
         root.deleteRecursively()
-        for ((name, dir) in modules) {
+        fun stage(root: File, name: String, dir: File, halves: Map<String, String>) {
             val json = File(dir, "module.json")
             val manifest = groovy.json.JsonSlurper().parse(json) as Map<*, *>
             val jarPath = (manifest["jar"] as? String)?.takeIf { it.isNotBlank() } ?: error("PACKAGING: $json names no jar")
@@ -565,7 +581,7 @@ val stageOfficialModules = tasks.register("stageOfficialModules") {
             val jar = jars.getValue(name).get().asFile.copyTo(File(moduleDir, jarPath))
             tool("jarsigner", "-keystore", keystore.path, "-storepass", storePass, jar.path, alias)
             // PACKAGE-1: the daemon half (module.json daemon.jar, built by :daemon-plugin-official-<Name>:jar) and policies/.
-            daemonHalves[name]?.let { daemonJarPath ->
+            halves[name]?.let { daemonJarPath ->
                 val built = File(dir, daemonJarPath)
                 check(built.isFile) { "PACKAGE-1: $name's daemon half $built was not built" }
                 val daemonJar = built.copyTo(File(moduleDir, daemonJarPath))
@@ -573,9 +589,13 @@ val stageOfficialModules = tasks.register("stageOfficialModules") {
             }
             File(dir, "policies").takeIf { it.isDirectory }?.copyRecursively(File(moduleDir, "policies"))
         }
+        for ((name, dir) in modules) stage(root, name, dir, daemonHalves)
+        optionalOutDir.get().asFile.also { it.deleteRecursively() }.let { opt ->
+            for ((name, dir) in optionalModules) stage(opt, name, dir, optionalDaemonHalves)
+        }
         val keys = File(root, "trusted-keys").apply { mkdirs() }
         tool("keytool", "-exportcert", "-rfc", "-alias", alias, "-keystore", keystore.path, "-storepass", storePass, "-file", File(keys, "infantry.cer").path)
-        logger.lifecycle("PACKAGING: staged ${modules.size} official module(s) into $root")
+        logger.lifecycle("PACKAGING: staged ${modules.size} official module(s) into $root" + if (excludedPluginIds.isEmpty()) "" else " (left out: ${excludedPluginIds.sorted()}${if (optionalOut) ", packaged under optional-plugins" else ""})")
         ihqVerifyDaemonHalves(root, "stageOfficialModules", daemonHalves.keys.toList())
     }
 }
@@ -584,7 +604,9 @@ val prepareDistributableResources = tasks.register<Sync>("prepareDistributableRe
     group = "distribution"
     description = "prepareAppResources plus the staged official modules (modules/): the resources of the package tasks."
     from(tasks.named<Sync>("prepareAppResources"))
-    from(stageOfficialModules) { into("modules") }
+    // BUILD-PLUGINS-1: only the modules folder, not the task's optional-plugins output (left-out plugins must not ship)
+    dependsOn(stageOfficialModules)
+    from(officialStageDir) { into("modules") }
     into(layout.buildDirectory.dir("compose/tmp/distributableResources"))
     // PACKAGE-1: what every package task (createDistributable, packageMsi/Exe, release variants) puts in the app image.
     val expected = officialDaemonHalves.keys.toList()
