@@ -17,8 +17,8 @@ object StallFixture {
             // (i) prints nothing at all and exits 3.
             "silent" -> System.exit(3)
             // (ii) starts a child that INHERITS stdout and outlives it, prints one line, exits 0.
-            "childHolds" -> {
-                ProcessBuilder(javaCmd(), "-cp", System.getProperty("java.class.path"), StallFixture::class.java.name, "sleep", "8000")
+            "childHolds", "childHoldsLong" -> {
+                ProcessBuilder(javaCmd(), "-cp", System.getProperty("java.class.path"), StallFixture::class.java.name, "sleep", if (args.first() == "childHoldsLong") "40000" else "8000")
                     .redirectOutput(ProcessBuilder.Redirect.INHERIT).redirectError(ProcessBuilder.Redirect.INHERIT).start()
                 println("parent done")
                 System.out.flush()
@@ -112,11 +112,12 @@ class StallRunnerTest {
     @Test
     fun ii_withTheTreeWaitCapped_theChildKeepingStdoutOpen_hasNoEOF_butIsStillReportedDone() {
         val t0 = System.currentTimeMillis()
-        val code = run("childHolds", env = mapOf(BgCli.TREE_WAIT_ENV to "1"))
+        // STALL-5: a 40 s child, so the loose clock bound is not the child's own life (runner + JVM start-up + 1 s cap + 2 s EOF grace take ~8.5 s on a busy host).
+        val code = run("childHoldsLong", env = mapOf(BgCli.TREE_WAIT_ENV to "1"))
         val took = System.currentTimeMillis() - t0
         assertEquals(0, code)
         // The proof is that the child is still ALIVE at done (a named survivor below); the clock only bounds it loosely.
-        assertTrue(took < 8_000, "a capped tree wait must not wait for the child's 8 s (took $took ms)")
+        assertTrue(took < 30_000, "a capped tree wait must not wait for the child's 40 s (took $took ms)")
         assertTrue(logOf().contains("tree wait capped at 1s: 1 still running"), logOf())
         val d = done()
         assertEquals(0, d.exitCode)

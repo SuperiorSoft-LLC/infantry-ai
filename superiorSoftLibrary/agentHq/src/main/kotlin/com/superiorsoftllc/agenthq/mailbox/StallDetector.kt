@@ -74,6 +74,8 @@ class StallDetector(
     /** The key of the stall [s] is in now (told once per key), or null when it is not stalled. */
     private fun check(s: SessionRecord, now: Long, stall: Long): String? {
         val ticket = s.ticketId ?: return null
+        // STALL-5: a session the daemon no longer knows (removed, ghost) or that has ended is never nudged.
+        if (sessions.get(s.id) == null || s.state in ENDED_STATES) return null
         val exempt = exemptWhenDone()
         val active = runCatching { ticketInProgress(ticket) || (!exempt && ticketDone(ticket)) }.getOrDefault(false)
         if (!active) return null
@@ -158,5 +160,9 @@ class StallDetector(
     private fun fmt(ms: Long): String {
         val m = (ms / 60_000).coerceAtLeast(0)
         return if (m < 1) "${ms / 1000}s" else "${m}m"
+    }
+
+    private companion object {
+        val ENDED_STATES = setOf(SessionState.EXITED, SessionState.FAILED, SessionState.ORPHANED)
     }
 }
