@@ -184,3 +184,9 @@ way in: the three core consumers (`core.triggers`, `core.done-worker-reaper`, `c
 `effectiveContextLimitSource` (`ticket` / `default`) and `contextLimitSupport` (`supported` / `best_effort` / `unsupported`
 for the ticket's effective harness), all defaulted, so a plugin built on 1.1.0 is unaffected. Infantry_Board's
 `agenthq_ticket_get` renders them byte for byte as core's summary does (`LocalBoardServicesTest`). See docs/CONTEXT-LIMIT.md.
+
+## RUNTIME-LOAD-4: `BOARD_API_VERSION` 1.3.0 (additive)
+
+The pure shared rules `TicketRefs`, `TicketPlacement`, `TicketImages`, `ContextLimits`; `TicketDraft` / `TicketPatch.contextLimit`;
+`Tickets.mayFile(projectId, by)` (the scope's bare sentence, asked before a tool writes anything for a project). Infantry_Board's
+daemon half now serves `agenthq_ticket_create/update/move/delete` and `agenthq_epic_base`. See RUNTIME-LOAD.md section 10.

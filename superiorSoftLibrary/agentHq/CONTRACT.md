@@ -1,6 +1,6 @@
 # AgentHQ — the daemon ⇄ client contract
 
-**Version 1.146.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
+**Version 1.147.0.** This is the *public* boundary of AgentHQ. Everything below is stable and
 versioned: a client written against it remains wire-compatible across provider changes, daemon
 restarts and new AgentHQ phases, and you never need to know which agent CLI (OpenCode, Claude Code,
 a stub, or one that does not exist yet) is behind the daemon.
@@ -9,6 +9,23 @@ a stub, or one that does not exist yet) is behind the daemon.
 > before you write your first test. It is short, it needs no tools beyond `read`, and a merge will be held
 > without it. It covers the RED-before-implementation rule, the mutation check, how to write a test that
 > cannot pass vacuously, and the durability rules (commit by explicit path, early).
+
+### RUNTIME-LOAD-4 (contract 1.147.0, additive): local-file tool arguments and the caller's default project
+
+A daemon plugin tool runs in the daemon, which cannot open the agent's files. `agenthq_ticket_create` / `agenthq_ticket_update`
+(now Infantry_Board's daemon tools) take local image paths, so:
+
+- A `plugin_tools` descriptor may carry `localFiles`: the argument keys (arrays of paths) that name files on the CALLER's machine.
+  `agenthq mcp serve` strips it from its `tools/list` (like `module`, `action`, `timeoutMs`).
+- In a `plugin_tool_call`, each element of those arrays may then be a file object instead of a string: `{"path": <as given>,
+  "size": <bytes>, "base64": <the bytes>}` for a regular file of at most 10 MB, `{"path", "size"}` for a larger one (no bytes), or the
+  plain string when the caller has no regular file there. The tool judges them (`daemon.api.LocalFiles`, `daemon.api.board.TicketImages`)
+  and uploads with `image_upload`, as the CLI's tools did.
+- `plugin_tool_call.client` may carry `projectId`: the MCP server's own default project (`--project`, `.agenthq/mcp.json`, else
+  `AGENTHQ_PROJECT_ID`), used by a tool only when the call names none; the host still scopes it.
+
+A client below 1.147.0 sends plain strings and no `client.projectId`: such a tool sees no local files (a path it cannot read is refused as
+"does not exist") and no default project. A daemon below 1.147.0 never lists `localFiles`, and ignores `client.projectId`.
 
 ### CONTEXT-LIMIT-1 (contract 1.146.0, additive): a per-session context limit through the harness layer
 

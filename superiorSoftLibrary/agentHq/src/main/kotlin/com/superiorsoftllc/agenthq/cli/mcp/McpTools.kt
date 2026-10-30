@@ -48,17 +48,11 @@ internal class McpTools(
     /** P11-B: spawn / prompt / message / kill, with the server's depth, concurrency and kill-scope guardrails. */
     private val writes = McpWriteTools(guardrails, getenv, defaultProjectId)
 
-    /** MCP-1: ticket create / update / get, over the CLI's own `ticket_save` / `ticket_list` frames. */
-    private val tickets = McpTicketTools(getenv, defaultProjectId)
-
     /** MAIL-MCP-1: inbox / read, over the CLI's own `mail_inbox` / `mail_read` frames. */
     private val mail = McpMailTools(getenv)
     private val pipeline = McpPipelineTools(getenv)
 
     /** ASK-1: `agenthq_ask`, the non-blocking owner question, over the CLI's own `question_ask` frame. */
-
-    /** Contract 1.117.0: `agenthq_progress`, the caller's own progress report, over the CLI's `progress` frame. */
-    private val progress = McpProgressTools(getenv)
 
     /** STALL-4: `agenthq_watch_file`, the detached file watcher of `agenthq watch-file`. */
     private val watch = McpWatchTools(getenv, java.io.File(System.getProperty("user.dir") ?: "."))
@@ -66,7 +60,7 @@ internal class McpTools(
     /** ROLE-EDIT-1: the role catalog (`agenthq_role_*`); an agent caller may only edit persona and description. */
 
     /** DAEMON-PLUGINS-1: the daemon plugins' tools (TICKET-FILES' two tools are Infantry_Board's now). */
-    private val plugins = McpPluginTools(getenv)
+    private val plugins = McpPluginTools(getenv, defaultProjectId)
     @Volatile private var pluginNames: Set<String>? = null
 
     /** DAEMON-PLUGINS-1: the daemon plugins' tools for `tools/list`; none when the daemon has none or is unreachable. */
@@ -107,13 +101,7 @@ internal class McpTools(
                     McpMailTools.READ -> mail.read(stream, arguments)
                     McpPipelineTools.SHOW -> pipeline.show(stream, arguments)
                     McpPipelineTools.RECORD -> pipeline.record(stream, arguments)
-                    McpProgressTools.PROGRESS -> progress.progress(stream, arguments)
                     McpWatchTools.WATCH_FILE -> watch.watchFile(arguments)
-                    McpTicketTools.CREATE -> tickets.create(stream, arguments)
-                    McpTicketTools.UPDATE -> tickets.update(stream, arguments)
-                    McpTicketTools.EPIC_BASE -> tickets.epicBase(stream, arguments)
-                    McpTicketTools.DELETE -> tickets.delete(stream, arguments)
-                    McpTicketTools.MOVE -> tickets.move(stream, arguments)
                     McpTicketTools.START -> writes.startTicket(stream, arguments, McpTicketTools.START)
                     else -> plugins.call(stream, name, arguments)
                 }
@@ -370,7 +358,7 @@ internal class McpTools(
         const val POD_STATE = "agenthq_pod_state"
         const val BOARD = "agenthq_board"
 
-        val NAMES = setOf(LIST_SESSIONS, GET_SESSION, POD_STATE, BOARD) + McpWriteTools.NAMES + McpMailTools.NAMES + McpTicketTools.NAMES + McpProgressTools.NAMES + McpWatchTools.NAMES + McpPipelineTools.NAMES
+        val NAMES = setOf(LIST_SESSIONS, GET_SESSION, POD_STATE, BOARD) + McpWriteTools.NAMES + McpMailTools.NAMES + McpTicketTools.NAMES + McpWatchTools.NAMES + McpPipelineTools.NAMES
 
         /** The one, fixed message a tool answers with when nothing is listening at the daemon address. */
         const val DAEMON_UNREACHABLE =
@@ -460,7 +448,6 @@ internal class McpTools(
             McpTicketTools.descriptors().forEach { add(it) }
             McpMailTools.descriptors().forEach { add(it) }
             McpPipelineTools.descriptors().forEach { add(it) }
-            McpProgressTools.descriptors().forEach { add(it) }
             McpWatchTools.descriptors().forEach { add(it) }
         }
 

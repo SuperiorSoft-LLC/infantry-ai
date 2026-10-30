@@ -164,7 +164,7 @@ class McpTicketImagesE2eTest {
 
         // (1) create with an image via MCP; agenthq_ticket_get returns it.
         val created = payload(agent.callTool(
-            McpTicketTools.CREATE,
+            "agenthq_ticket_create",
             """{"title":"Fix the header","role":"backend","images":${quoted(relA)}}""",
         ))
         val t1 = created.str("ticketId")
@@ -177,7 +177,7 @@ class McpTicketImagesE2eTest {
         val before = board.get(t1)
         val chat = upload(fixture.port, projectId, "chat", purpose = "chat")
         for (bad in listOf(".agenthq/uploads/ticket/../chat/${chat.name}", "${root.absolutePath}/.agenthq/uploads/ticket/../chat/${chat.name}")) {
-            assertRefused(agent.callTool(McpTicketTools.UPDATE, """{"ticketId":"$t1","images":${quoted(bad)}}"""), "uploads/ticket")
+            assertRefused(agent.callTool("agenthq_ticket_update", """{"ticketId":"$t1","images":${quoted(bad)}}"""), "uploads/ticket")
             assertEquals(before, board.get(t1), "a refused path leaves the ticket unchanged ($bad)")
         }
 
@@ -186,27 +186,27 @@ class McpTicketImagesE2eTest {
         val c = upload(fixture.port, projectId, "c")
         val relB = rel(root, b)
         val relC = rel(root, c)
-        val t2 = payload(agent.callTool(McpTicketTools.CREATE, """{"title":"Shares b","images":${quoted(b.absolutePath)}}""")).str("ticketId")
-        val t3 = payload(agent.callTool(McpTicketTools.CREATE, """{"title":"Shares b, owns c","images":${quoted(relB, relC)}}""")).str("ticketId")
+        val t2 = payload(agent.callTool("agenthq_ticket_create", """{"title":"Shares b","images":${quoted(b.absolutePath)}}""")).str("ticketId")
+        val t3 = payload(agent.callTool("agenthq_ticket_create", """{"title":"Shares b, owns c","images":${quoted(relB, relC)}}""")).str("ticketId")
         assertEquals(
             listOf(relB),
             payload(agent.callTool("agenthq_ticket_get", """{"ticketId":"$t2"}""")).images(),
             "an absolute path under uploads/ticket is stored as its relPath",
         )
-        payload(agent.callTool(McpTicketTools.DELETE, """{"ticketId":"$t2"}"""))
+        payload(agent.callTool("agenthq_ticket_delete", """{"ticketId":"$t2"}"""))
         assertTrue(b.isFile, "a file another ticket still references stays")
         val got3 = payload(agent.callTool("agenthq_ticket_get", """{"ticketId":"$t3"}"""))
         assertEquals(listOf(relB, relC), got3.images(), "the other ticket still lists the shared image")
 
         // (5) deleting a ticket deletes its unshared images.
-        payload(agent.callTool(McpTicketTools.DELETE, """{"ticketId":"$t3"}"""))
+        payload(agent.callTool("agenthq_ticket_delete", """{"ticketId":"$t3"}"""))
         assertFalse(b.exists(), "b is no longer referenced by any ticket: deleted")
         assertFalse(c.exists(), "c was only t3's: deleted")
 
         // Removing an image by update follows the same rule.
         val d = upload(fixture.port, projectId, "d")
-        val t4 = payload(agent.callTool(McpTicketTools.CREATE, """{"title":"Owns d","images":${quoted(rel(root, d))}}""")).str("ticketId")
-        val cleared = payload(agent.callTool(McpTicketTools.UPDATE, """{"ticketId":"$t4","images":[]}"""))
+        val t4 = payload(agent.callTool("agenthq_ticket_create", """{"title":"Owns d","images":${quoted(rel(root, d))}}""")).str("ticketId")
+        val cleared = payload(agent.callTool("agenthq_ticket_update", """{"ticketId":"$t4","images":[]}"""))
         assertEquals(emptyList(), cleared.images())
         assertFalse(d.exists(), "an image removed by update and referenced by no ticket is deleted")
 

@@ -16,7 +16,8 @@ class BuiltinToolsListGuardTest {
     /** tool -> why it is still in core. All are "migration pending" (family + blocker, docs/DAEMON-PLUGINS.md section 6). */
     private val inCore: Map<String, String> = buildMap {
         fun family(reason: String, vararg tools: String) = tools.forEach { put(it, reason) }
-        family("pending: Infantry_Board daemon half; the Tickets API + host ProjectScope exist (DP-4a), the CLI tests that call these tools on plugin-less daemons are what is left", "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_ticket_move", "agenthq_ticket_delete", "agenthq_ticket_start", "agenthq_epic_base", "agenthq_board", "agenthq_progress")
+        family("pending: Infantry_Board daemon half; runs under this MCP process's own spawn guardrails (depth lineage, open-spawn set), which must become a host service first (DP-11), shared with agenthq_spawn ticketId", "agenthq_ticket_start")
+        family("pending: Infantry_Board daemon half; BoardSummary renders the daemon's session records (worker live state, git commit), needs a sessions read model in the API", "agenthq_board")
         family("pending: a Mail/Chat daemon half", "agenthq_inbox", "agenthq_read", "agenthq_message")
         family("pending: a Pipeline official plugin", "agenthq_pipeline", "agenthq_pipeline_record")
         family("pending: Infantry_Agents daemon half; McpGuardrails moves with it", "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state", "agenthq_spawn", "agenthq_prompt", "agenthq_kill", "agenthq_session_restart", "agenthq_session_remove")
@@ -52,9 +53,13 @@ class BuiltinToolsListGuardTest {
         val moved = mapOf(
             "Infantry_Roles" to listOf("agenthq_role_list", "agenthq_role_get", "agenthq_role_update", "agenthq_role_create", "agenthq_role_delete"),
             "Infantry_Attention" to listOf("agenthq_ask"),
+            // RUNTIME-LOAD-4: the session's own progress report moved with the Agents family.
+            "Infantry_Agents" to listOf("agenthq_progress"),
             "Infantry_Settings" to listOf("agenthq_project_config_get", "agenthq_project_config_set"),
             // BOARD-API-2: the ticket read tools (the files pair moved earlier, with TICKET-FILES).
-            "Infantry_Board" to listOf("agenthq_ticket_get", "agenthq_ticket_files", "agenthq_ticket_related_files"),
+            // RUNTIME-LOAD-4 (F5): the board's write tools.
+            "Infantry_Board" to listOf("agenthq_ticket_get", "agenthq_ticket_files", "agenthq_ticket_related_files", "agenthq_epic_base", "agenthq_ticket_move", "agenthq_ticket_delete",
+                "agenthq_ticket_create", "agenthq_ticket_update"),
         )
         val sources = mcp.walkTopDown().filter { it.isFile && it.extension == "kt" }.map { it.readText() }.toList()
         moved.forEach { (module, tools) ->
@@ -69,12 +74,12 @@ class BuiltinToolsListGuardTest {
     @Test fun `every built-in tool in core is on the list with a reason`() {
         val found = mcp.walkTopDown().filter { it.isFile && it.extension == "kt" }
             .flatMap { Regex("\"(agenthq_[a-z_]+)\"").findAll(it.readText()).map { m -> m.groupValues[1] } }.toSet()
-        assertTrue(found.size > 20, "the tool sources were not found under $mcp")
+        assertTrue(found.isNotEmpty(), "the tool sources were not found under $mcp")
         assertEquals(emptySet(), found - inCore.keys, "new built-in tools in core: write them as daemon plugins, or list them with a reason")
         assertEquals(emptySet(), inCore.keys - found, "listed tools that left core: delete them from the list (it only shrinks)")
         assertTrue(inCore.size <= CEILING, "the list grew past $CEILING")
         assertTrue(inCore.values.all { it.length > 15 })
     }
 
-    private companion object { const val CEILING = 22 }
+    private companion object { const val CEILING = 16 }
 }

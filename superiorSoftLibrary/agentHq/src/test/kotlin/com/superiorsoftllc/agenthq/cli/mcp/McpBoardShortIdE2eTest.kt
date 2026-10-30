@@ -121,7 +121,7 @@ class McpBoardShortIdE2eTest {
         // Seventeen tickets: sixteen hex heads, so two MUST share their first tail character (pigeonhole).
         val ids = (0..16).map { i ->
             val title = if (i == 0) longTitle else "Board ticket $i"
-            payload(agent.callTool(McpTicketTools.CREATE, """{"title":"$title"}""")).str("ticketId")
+            payload(agent.callTool("agenthq_ticket_create", """{"title":"$title"}""")).str("ticketId")
         }
 
         val lines = payload(agent.callTool(McpTools.BOARD)).getValue("board").jsonArray.map { it.jsonPrimitive.content }

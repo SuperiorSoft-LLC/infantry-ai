@@ -113,7 +113,7 @@ class BacklogLaneE2eTest {
 
     @Test
     fun backlogHasParityAcrossCliAndMcpAndRefusesEveryStart() {
-        val fixture = DaemonFixture.launch(stateDir = tempDir("agenthq-backlog-daemon")).also { fixtures += it; it.client.await(Envelope.READY) }
+        val fixture = DaemonFixture.launch(stateDir = tempDir("agenthq-backlog-daemon"), pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot()).also { fixtures += it; it.client.await(Envelope.READY) }
         // A role with a profile on the stub harness: a todo ticket of that role could start, so a refusal is the lane's.
         fixture.client.saveProfile("""{"id":"backend-1","name":"Backend","role":"backend","provider":"stub"}""")
         val project = tempDir("agenthq-backlog-project")
@@ -122,7 +122,7 @@ class BacklogLaneE2eTest {
         fun status(id: String) = fixture.daemon.board.list().single { it.id == id }.status
 
         // Create: MCP status backlog, CLI --status backlog, and a plain create still entering the sprint.
-        val viaMcp = payload(agent.callTool(McpTicketTools.CREATE, """{"title":"Parked by MCP","role":"backend","status":"backlog"}"""))
+        val viaMcp = payload(agent.callTool("agenthq_ticket_create", """{"title":"Parked by MCP","role":"backend","status":"backlog"}"""))
         assertEquals(TicketStatus.BACKLOG, viaMcp.str("status"))
         val mcpId = viaMcp.str("ticketId")
         val created = cli(fixture, "ticket", "create", "--title", "Parked by CLI", "--role", "backend", "--project", PROJECT, "--status", "backlog")
@@ -140,7 +140,7 @@ class BacklogLaneE2eTest {
         val badCli = cli(fixture, "ticket", "create", "--title", "x", "--project", PROJECT, "--status", "done")
         assertEquals(2, badCli.exit, "a create --status done is a usage error: ${badCli.out}${badCli.err}")
         assertTrue(badCli.err.contains("backlog"), badCli.err)
-        val badMcp = agent.callTool(McpTicketTools.CREATE, """{"title":"x","status":"in_progress"}""")
+        val badMcp = agent.callTool("agenthq_ticket_create", """{"title":"x","status":"in_progress"}""")
         assertEquals("true", badMcp["isError"]!!.jsonPrimitive.content, "an MCP create into in_progress is refused: $badMcp")
         assertEquals(3, fixture.daemon.board.list().size, "refused creates store nothing")
 
@@ -174,7 +174,7 @@ class BacklogLaneE2eTest {
         val promoted = cli(fixture, "ticket", "move", shortTicketId(cliId), "todo")
         assertEquals(0, promoted.exit, promoted.err)
         assertEquals(TicketStatus.TODO, status(cliId))
-        val parked = payload(agent.callTool(McpTicketTools.MOVE, """{"ticketId":"$cliId","status":"backlog"}"""))
+        val parked = payload(agent.callTool("agenthq_ticket_move", """{"ticketId":"$cliId","status":"backlog"}"""))
         assertEquals(TicketStatus.BACKLOG, parked.str("status"))
         assertEquals(TicketStatus.BACKLOG, status(cliId))
     }

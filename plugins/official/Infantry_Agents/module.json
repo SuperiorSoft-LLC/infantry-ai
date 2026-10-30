@@ -12,11 +12,12 @@
   "daemon": {
     "entry": "com.superiorsoftllc.agenthq.plugins.official.agents.daemon.AgentsDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Agents-daemon.jar",
-    "apiAtLeast": "1.0.0",
+    "apiAtLeast": "1.4.0",
     "tools": [
       { "name": "agenthq_harness_status", "action": "harness.install.read", "kind": "read", "description": "Which harness CLIs are installed on the daemon's machine." },
       { "name": "agenthq_harness_install", "action": "harness.install", "kind": "write", "description": "npm-install harness CLIs on the daemon's machine." },
-      { "name": "agenthq_list_harnesses", "action": "harness.read", "kind": "read", "description": "The harnesses a ticket can run on, with their models." }
+      { "name": "agenthq_list_harnesses", "action": "harness.read", "kind": "read", "description": "The harnesses a ticket can run on, with their models." },
+      { "name": "agenthq_progress", "action": "agents.report", "kind": "write", "description": "Report how far along the calling session's long job is." }
     ]
   },
   "panels": [

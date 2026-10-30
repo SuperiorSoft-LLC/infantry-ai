@@ -27,8 +27,12 @@ import kotlinx.serialization.Serializable
  *    for each operation: [GRANT_TICKETS_READ], [GRANT_TICKETS_WRITE], [GRANT_TICKETS_DELETE], [GRANT_TICKETS_START],
  *    [GRANT_EPICS_READ], [GRANT_EPICS_WRITE]. No grant = [BoardResult.Refused] ("missing grant ..."); the default is deny.
  */
-/** 1.2.0 (CONTEXT-LIMIT-1, additive): [TicketInfo] carries the context limit and the effective one. */
-const val BOARD_API_VERSION = "1.2.0"
+/**
+ * 1.2.0 (CONTEXT-LIMIT-1, additive): [TicketInfo] carries the context limit and the effective one.
+ * 1.3.0 (RUNTIME-LOAD-4, additive): the shared pure rules [TicketRefs] (short ids), [TicketPlacement] (where a move puts a ticket),
+ *   [TicketImages] and [ContextLimits]; [TicketDraft.contextLimit] / [TicketPatch.contextLimit]; [Tickets.mayFile].
+ */
+const val BOARD_API_VERSION = "1.3.0"
 
 const val GRANT_TICKETS_READ = "tickets.read"
 const val GRANT_TICKETS_WRITE = "tickets.write"
@@ -113,6 +117,8 @@ data class TicketDraft(
     /** The column the ticket enters (`todo` default, or `backlog`). */
     val status: String? = null,
     val clientKey: String? = null,
+    /** 1.3.0: the context limit in tokens ([ContextLimits]); null = none. */
+    val contextLimit: Int? = null,
 )
 
 /** An edit: a null field keeps the stored value. [description], when given, replaces the stored one verbatim. */
@@ -128,6 +134,8 @@ data class TicketPatch(
     /** 1..5, or 0 to clear. */
     val weight: Int? = null,
     val images: List<String>? = null,
+    /** 1.3.0: the context limit in tokens, or [ContextLimits.CLEAR] to remove it. */
+    val contextLimit: Int? = null,
 )
 
 @Serializable
@@ -194,6 +202,12 @@ interface Tickets {
 
     /** The session and project ticket [ticketId] is bound to, null when unknown. Answered through the orchestrator link. */
     fun workerOf(ticketId: String, by: Caller): BoardResult<TicketBinding?>
+
+    /**
+     * 1.3.0: may [by] file a ticket into project [projectId]? Ok, or [BoardResult.Refused] with the scope's bare sentence (a worker
+     * files into its own project; pm / owner reach any). A tool asks BEFORE it writes anything for that project (an upload).
+     */
+    fun mayFile(projectId: String, by: Caller): BoardResult<Unit> = BoardResult.Unavailable("this daemon has no board")
 }
 
 interface Epics {

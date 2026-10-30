@@ -58,8 +58,9 @@ interface DaemonApi {
     val board: com.superiorsoftllc.agenthq.daemon.api.board.Board get() = com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.board
 
     companion object {
+        // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
-        const val VERSION = "1.3.0"
+        const val VERSION = "1.4.0"
     }
 }
 
@@ -168,6 +169,11 @@ interface DaemonTool {
      * limits.plugins.toolMaxTimeoutMs, and the MCP client waits a quarter longer than the effective value.
      */
     val timeoutMs: Long? get() = null
+    /**
+     * RUNTIME-LOAD-4 (1.4.0, additive): the argument keys (arrays of paths) that name files on the CALLER's machine; the client that
+     * holds them sends their bytes inline ([LocalFiles]). Empty = none.
+     */
+    val localFiles: List<String> get() = emptyList()
     fun call(call: ToolCall): ToolResult
 }
 
@@ -181,6 +187,12 @@ interface ToolCall {
      */
     val clientSessionId: String? get() = null
     val clientRole: String? get() = null
+    /**
+     * RUNTIME-LOAD-4 (1.4.0, additive): the project the MCP process works in when a call names none (its `--project`, its
+     * `.agenthq/mcp.json`, else its `AGENTHQ_PROJECT_ID`); null = none. A client's own default, never a grant: the host still
+     * scopes whatever a tool does with it.
+     */
+    val clientProjectId: String? get() = null
     /**
      * Sends frame [type] on the CALLER's own connection, through every gate the caller's own frames pass, and returns the
      * answer to it (the frame carrying its request id). An error answer comes back as a frame of type `error`.

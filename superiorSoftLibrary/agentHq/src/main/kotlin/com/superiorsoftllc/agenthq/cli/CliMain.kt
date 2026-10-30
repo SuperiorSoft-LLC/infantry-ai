@@ -1274,7 +1274,7 @@ internal object Cli {
         return 0
     }
 
-    /** `ticket move`'s placement flags, as the one [TicketPlacement] the MCP `agenthq_ticket_move` also uses. */
+    /** `ticket move`'s placement flags, as the one [TicketPlacement] rule (daemon.api.board) Infantry_Board's `agenthq_ticket_move` also uses. */
     private fun ParsedArgs.placement() = TicketPlacement(top, bottom, before, after, position?.toIntOrNull())
 
     /**

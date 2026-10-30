@@ -260,6 +260,8 @@ class DaemonPluginHost private constructor(
                 put("module", JsonPrimitive(e.owner.id))
                 put("action", JsonPrimitive(e.action.id))
                 put("timeoutMs", JsonPrimitive(toolTimeoutMs(e.owner, e.tool)))
+                // RUNTIME-LOAD-4 (contract 1.147.0): the arguments the client sends file bytes for (daemon.api.LocalFiles).
+                if (e.tool.localFiles.isNotEmpty()) put(com.superiorsoftllc.agenthq.daemon.api.LocalFiles.DESCRIPTOR_KEY, JsonArray(e.tool.localFiles.map { JsonPrimitive(it) }))
             })
         },
     )
@@ -276,6 +278,7 @@ class DaemonPluginHost private constructor(
             override val caller = caller
             override val clientSessionId = (client["sessionId"] as? JsonPrimitive)?.takeIf { it.isString }?.content
             override val clientRole = (client["role"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+            override val clientProjectId = (client["projectId"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { it.isNotEmpty() }
             override fun request(type: String, data: String, sessionId: String?, timeoutMs: Long): Frame =
                 request(Envelope(type, data, sessionId), timeoutMs).toFrame()
         }
