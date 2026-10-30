@@ -268,6 +268,8 @@ internal object Cli {
     ): Int {
         // STALL-1 (ticket 802c64d5): `run-watched [opts] -- <cmd...>` is `bg run --notify [opts] -- <cmd...>` (detached, the
         // daemon tells the session when it ends); `unwatched --reason <why> -- <cmd...>` is the explicit, logged opt-out.
+        // PLUGIN-MANAGER-1: `plugin ...` works on this host's plugins root; no daemon, no global flags.
+        if (args.firstOrNull() == "plugin") return PluginCli.run(args.drop(1), out, err, getenv)
         if (args.firstOrNull() == "run-watched") return run(arrayOf("bg", "run", "--notify") + args.drop(1), out, err, getenv, input, cwd, rawInput)
         if (args.firstOrNull() == "unwatched") return run(arrayOf("bg") + args, out, err, getenv, input, cwd, rawInput)
         // STALL-4: `watch-file <path> [--until-pid N] [--idle-seconds S]` follows a file another process writes (detached).

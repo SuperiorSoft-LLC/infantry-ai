@@ -75,7 +75,11 @@ object IhqInstaller {
         settings: InstallSettings = InstallSettings.load(root),
         /** Test hook: runs after the package is unpacked and checked, just before the rename. */
         beforeCommit: () -> Unit = {},
-    ): IhqResult = unpack(ihq, root, config, settings, beforeCommit, commit = true, nested = false)
+        /** PLUGIN-MANAGER-1 (G3): the tier a package signed by a trusted key lands in. Default [Tier.CORE] keeps the drop-in's behaviour; the manager passes [Tier.OFFICIAL]. */
+        trustedTier: Tier = Tier.CORE,
+        /** PLUGIN-MANAGER-1: skip the ALREADY_INSTALLED check (the caller moved the old folder away first, for an update). */
+        replace: Boolean = false,
+    ): IhqResult = unpack(ihq, root, config, settings, beforeCommit, commit = true, nested = false, trustedTier = trustedTier, replace = replace)
 
     /**
      * S6: every check [install] makes (signature, limits, manifest, tier, not installed yet), then the staging folder is
@@ -87,7 +91,9 @@ object IhqInstaller {
         root: File,
         config: ModulesConfig = PluginFolders.config(root),
         settings: InstallSettings = InstallSettings.load(root),
-    ): IhqResult = unpack(ihq, root, config, settings, {}, commit = false, nested = false)
+        trustedTier: Tier = Tier.CORE,
+        replace: Boolean = false,
+    ): IhqResult = unpack(ihq, root, config, settings, {}, commit = false, nested = false, trustedTier = trustedTier, replace = replace)
 
     /**
      * S6: removes installed community module [name]: its folder and its modules.json entry. Run it with the module not
@@ -107,7 +113,7 @@ object IhqInstaller {
      * carry `layout/<name>.json` (the trees its `fills[].layout` name) and `deps/<name>.ihq` (the code packages it depends on, each
      * installed first by these same checks, with its own tier).
      */
-    private fun unpack(ihq: File, root: File, config: ModulesConfig, settings: InstallSettings, beforeCommit: () -> Unit, commit: Boolean, nested: Boolean): IhqResult {
+    private fun unpack(ihq: File, root: File, config: ModulesConfig, settings: InstallSettings, beforeCommit: () -> Unit, commit: Boolean, nested: Boolean, trustedTier: Tier = Tier.CORE, replace: Boolean = false): IhqResult {
         var staging: File? = null
         return try {
             if (!ihq.isFile) throw Refusal(IhqRefusal.NOT_A_ZIP, "${ihq.name} is not a file")
@@ -153,9 +159,9 @@ object IhqInstaller {
                 checkManifest(manifest, stage)
 
                 val signer = signerOf(payload, settings)
-                val tier = if (signer != null && trusted.any { it == signer }) Tier.CORE else Tier.COMMUNITY
+                val tier = if (signer != null && trusted.any { it == signer }) trustedTier else Tier.COMMUNITY
                 val folder = config.folders.firstOrNull { it.tier == tier } ?: throw Refusal(IhqRefusal.NO_TIER_FOLDER, "modules.json has no ${tier.name.lowercase()} folder")
-                if (config.folders.any { f -> File(File(root, f.path), manifest.name).exists() }) throw Refusal(IhqRefusal.ALREADY_INSTALLED, "${manifest.name} is already installed")
+                if (!replace && config.folders.any { f -> File(File(root, f.path), manifest.name).exists() }) throw Refusal(IhqRefusal.ALREADY_INSTALLED, "${manifest.name} is already installed")
                 val tierDir = File(root, folder.path).also { it.mkdirs() }
                 val target = File(tierDir, manifest.name)
                 val depFiles = File(stage, "deps").listFiles { f -> f.isFile && f.name.endsWith(".ihq") }.orEmpty().sortedBy { it.name }
