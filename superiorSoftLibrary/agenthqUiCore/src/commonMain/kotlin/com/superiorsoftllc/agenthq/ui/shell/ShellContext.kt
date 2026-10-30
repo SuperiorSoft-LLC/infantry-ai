@@ -981,3 +981,12 @@ object NoExecutor : ExecutorContext {
     override val providers: List<ProviderInfo> get() = emptyList()
     override val modelCatalog: List<ProviderModels> get() = emptyList()
 }
+
+/**
+ * CONFIG-FIELDS-3 (G8): [inner] as one module sees it. A node [allows] refuses answers [EmptyConfig] (every key unset), so a
+ * denied read looks like an unconfigured node, never an error. The host builds [allows] from `ConfigReadGate`.
+ */
+class GatedConfig(private val inner: ConfigContext, private val allows: (nodeId: String) -> Boolean) : ConfigContext {
+    override fun values(nodeId: String): ConfigValues = if (allows(nodeId)) inner.values(nodeId) else EmptyConfig
+    override fun <T : Any> implementation(type: KClass<T>, key: String): T? = inner.implementation(type, key)
+}

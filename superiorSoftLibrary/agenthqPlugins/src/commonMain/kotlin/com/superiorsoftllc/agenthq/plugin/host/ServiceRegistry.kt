@@ -56,6 +56,21 @@ object ServiceGate {
     }
 }
 
+/**
+ * CONFIG-FIELDS-3 (G8): who may read another node's config. A core or official module reads any node (no change today). A
+ * community module reads its own nodes (`<name>` and `<name>.*`, plus the ids it declares) freely and any other node only
+ * with the `config.read` service: declared in module.json `services` and allowed in modules.json (default deny).
+ */
+object ConfigReadGate {
+    const val SERVICE = "config.read"
+
+    fun allows(module: String, manifest: ModuleManifest?, tier: Tier, config: ModulesConfig, node: String): Boolean = when {
+        !config.configReadGate || tier != Tier.COMMUNITY -> true
+        node == module || node.startsWith("$module.") || manifest?.config?.any { it.node == node } == true -> true
+        else -> manifest != null && ServiceGate.refusal(SERVICE, manifest, tier, config) == null
+    }
+}
+
 /** The daemon rule: a route must be declared, and under the demo lock also allowed by the lock. Null = may call. */
 object RouteGate {
     fun refusal(route: String, declared: List<String>, demoLock: Boolean, config: ModulesConfig): String? = when {

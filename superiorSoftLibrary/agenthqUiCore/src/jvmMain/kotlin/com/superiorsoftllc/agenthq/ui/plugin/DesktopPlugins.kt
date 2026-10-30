@@ -210,7 +210,7 @@ object DesktopPlugins {
     }
 
     /**
-     * NS3: a composition (no code): its `fills[].layout` pages read from its folder. The trees are built later, through the
+     * NS3: a composition (no code; CONFIG-FIELDS-3: or a config-only module with neither fills nor code): its `fills[].layout` pages read from its folder. The trees are built later, through the
      * block-type registry, by [TabFactory].
      */
     fun composition(m: com.superiorsoftllc.agenthq.plugin.api.ModuleManifest, tier: Tier, dir: File): AgentHqModule {
@@ -233,7 +233,7 @@ object DesktopPlugins {
     private fun loadJar(s: ModuleStatus, services: com.superiorsoftllc.agenthq.plugin.api.PluginServices, loaders: MutableList<PluginClassLoader>): AgentHqModule {
         val m = s.manifest!!
         val dir = File(s.dir ?: error("no folder"))
-        if (m.entry.isNullOrBlank() && m.jar.isNullOrBlank() && m.fills.any { it.layout != null }) return composition(m, s.tier, dir)
+        if (m.entry.isNullOrBlank() && m.jar.isNullOrBlank() && (m.fills.any { it.layout != null } || m.config.isNotEmpty())) return composition(m, s.tier, dir)
         val entry = m.entry?.takeIf { it.isNotBlank() } ?: error("module.json has no entry class")
         val jar = File(dir, m.jar?.takeIf { it.isNotBlank() } ?: error("module.json has no jar"))
         if (!jar.isFile) error("jar ${m.jar} not found (build it first)")

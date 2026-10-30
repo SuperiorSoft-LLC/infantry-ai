@@ -119,9 +119,9 @@ all, never by a compile-time import between plugins. Today this works for tab so
 | G5 **done** (CONFIG-FIELDS-2; `select` is a dropdown only with `display:"dropdown"`, default stays option buttons) | `placeholder`, color swatch `palette`, real dropdown for `select` | S (0.5 d) | UI polish |
 | G6 | `since`, `renamedFrom` migration marker | S (1 d) | loader step after compile |
 | G7 | declaration-level `requires.contract` | S (0.5 d) | hide group when daemon contract is older |
-| G8 **audited: gate MISSING** (`ConfigContext.values(nodeId)` answers any node; only `config.read` exists as a daemon policy action, no UI-side gate or test) | verify `config.read` cross-node gate exists and has a test | S (0.5 d) | audit item, may already be built |
+| G8 **done** (CONFIG-FIELDS-3: `ConfigReadGate` + `GatedConfig`; community reads other nodes only with `config.read` declared in `services` and allowed in modules.json, core/official trusted, `configReadGate:false` dev switch; host wiring of `GatedConfig` per module is the remaining step) | gate + test | S (0.5 d) | `ConfigReadGateTest`, `GatedConfigTest` |
 | G9 **done** (CONFIG-FIELDS-2, `ConfigValues.configAs<T>()`) | `scope.configAs<T>()` typed bean | S (0.5 d) | kotlinx.serialization over the resolved map |
-| G10 | scripted blank-shell E2E (empty plugins tree, temp state dir, port 8812) | M (2 d) | asserts section 1 items (a)-(d); the pre-launch QA gate wants it |
+| G10 **done** (CONFIG-FIELDS-3: `BlankShellE2ETest`; command in section 9) | scripted blank-shell E2E (empty plugins tree, temp state dir, port 8812) | M (2 d) | asserts section 1 items (a)-(d); the pre-launch QA gate wants it |
 | G11 | generic block `dependsOn` registry ids for bean binding | M (1.5 d) | host injects the config-chosen provider; today only `implementation` fields |
 | G12 | daemon `settings` built-in keys onto declared validators | M (2 d) | would let the daemon shell stop hand-validating; contract bump |
 | G13 | desktop runtime loading of the official modules and daemon feature services | L (D5/D11) | tracked by RUNTIME tickets and owner question d0e4e3fb; out of scope here |
@@ -147,3 +147,17 @@ all, never by a compile-time import between plugins. Today this works for tab so
 `docs/{CONFIG-MANIFEST-DESIGN,RUNTIME-PLUGINS-AUDIT,SHELL-LEAKS}.md` (sections), `plugins/modules.json`,
 `superiorSoftLibrary/agenthqPlugins/.../plugin/api/NodeConfig.kt`, `agenthqUiCore/.../ui/plugin/config/{FieldTypes,NodeFields,CoreConfig}.kt`,
 `agenthqUiCore/.../ui/shell/ShellContext.kt` (ConfigValues), `.../block/layout/Contract.kt` (grep), `CompiledConfigTest.kt`.
+
+## 9. Blank-shell E2E (CONFIG-FIELDS-3, G10)
+
+One command: `gradlew.bat :superiorSoftLibrary:agenthqUiCore:jvmTest --tests "*BlankShellE2ETest"` (use `--no-parallel` and the Metaspace 2g flags).
+It runs the real `DesktopPlugins.load` on a temp state dir with an empty `plugins/` tree and no compiled modules, and asserts:
+(1) no module, every config declaration is core, no plugin card, manifest sources empty; (2) a config-only `plugins/community/Acme_Look/module.json`
+(no entry, no jar, no fills) adds its Appearance card and one manifest source; (3) deleting the dir removes both. It needs no daemon and
+no port (the daemon only stores `/config-manifest`; the UI compiles it), so 8812 is not used. Change needed to make (2) possible:
+a code-less module with `config` now loads as data-only (`DesktopPlugins.loadJar`); before, it was refused "module.json has no entry class".
+
+Still hard-wired in a blank install (section 1 items): (a) the UI modules of the shipped app still compile in via `CompiledModules`
+(`agenthqUiCore/.../plugin/CompiledModules.kt`; the test passes `compiled = emptyList()`); (b) daemon features live in the daemon jar
+(`agentHq/.../daemon/DaemonPlugins.kt` resolves modules, loads no code); (c) harnesses `claude`/`pi` on the daemon classpath; (d) the
+hand-written fallback `ConfigTab`/`ShellConfigSettings.kt` when no snapshot exists. Not scripted: a real daemon on 8812 and a rendered Settings dialog.
