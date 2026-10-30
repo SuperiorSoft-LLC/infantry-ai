@@ -140,6 +140,22 @@ object ModulesFile {
         save(root, tree, modules)
     }
 
+    /**
+     * PLUGIN-MANAGER-1: sets module [name]'s `enabled` and, when given, exactly its `allow`, `allowOverride` and `allowInject`
+     * lists (null = leave that key as it is, an empty list removes it). Every other key of the entry and of the file stays.
+     */
+    fun update(root: File, name: String, enabled: Boolean? = null, allow: List<String>? = null, allowOverride: List<String>? = null, allowInject: List<String>? = null) {
+        val (tree, modules) = read(root)
+        val entry = (modules[name] as? JsonObject)?.toMutableMap() ?: mutableMapOf()
+        enabled?.let { entry["enabled"] = JsonPrimitive(it) }
+        fun put(key: String, ids: List<String>?) { if (ids == null) return; if (ids.isEmpty()) entry.remove(key) else entry[key] = JsonArray(ids.distinct().map(::JsonPrimitive)) }
+        put("allow", allow)
+        put("allowOverride", allowOverride)
+        put("allowInject", allowInject)
+        modules[name] = JsonObject(entry)
+        save(root, tree, modules)
+    }
+
     /** S6: drops module [name]'s entry (it was uninstalled); nothing else changes. */
     fun forget(root: File, name: String) {
         val (tree, modules) = read(root)

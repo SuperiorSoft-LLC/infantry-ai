@@ -325,3 +325,60 @@ at a time, D7). PM-3 can run any time after PM-2. PM-5 needs PM-1, PM-2, PM-4.
 * The catalog schema field names and the `id` = module name rule (indexes in the wild will carry them; `schema` allows a v2).
 * The on-disk layout (`_versions`, `installed.json`, `_pending.json`): migrations later must read it.
 * `plugins.manage` being owner-only: loosening later is easy, tightening after agents rely on it is not.
+
+## 10. Implementation status (PLUGIN-MANAGER-1, ticket de8dd3c2)
+
+Built: the daemon-side manager core and the CLI (slices PM-1, PM-2 core, PM-4 sources, PM-5 minus wire frames). Code:
+`agentHq/.../daemon/plugins/manager/` (`PluginCatalog.kt` = schema-1 model, `RequestedGrants`, ledger; `PluginManager.kt` = sources,
+refresh/cache, search, inspect, install, enable/disable, grants, checkUpdates/update, rollback, remove, `validate`) and
+`cli/PluginCli.kt` (`agenthq plugin ...`, section 4.3 command set). Supporting edits in `agenthqPlugins`: `IhqInstaller` takes
+`trustedTier` (the manager passes OFFICIAL: **closes G3** for the manager path; the drop-in keeps CORE until PM-8) and `replace`
+(update); `ModulesFile.update` writes `enabled`/`allow`/`allowOverride`/`allowInject`.
+
+Decisions taken while building (all reversible, none owner-level):
+
+* **No wire frames, no new contract.** `agenthq plugin` works on this host's plugins root directly (like `agenthq remote`), because the
+  files are local to the daemon and the app. Frames (section 4.3) stay a follow-up for a remote client; `plugins.manage` owner-only is
+  therefore "whoever can run the CLI on the host".
+* **`RequestedGrants` lives in the manager package**, not agenthqPlugins commonMain: the UI consent dialog (PM-8) moves it when it needs it.
+* **Local paths never use the network fetcher.** Only `http(s)` goes through the injectable `Fetcher`; dir/file/`file:` sources work offline.
+* **Unsigned is accepted for community/custom** (the catalog sha256 pin, or the user's own say for custom, is the proof); a broken
+  signature is always refused; official needs a trusted-key signature (`NOT_SIGNED_OFFICIAL`). A user-trusted key lives in
+  `trusted-keys/custom/` (labelled, never official; the installer only reads the top level of `trusted-keys/`).
+* **Consent**: `--grant g` / `--grant-all-requested` / `--no-grants`; none given = CONSENT_REQUIRED and nothing installed. Install lands
+  enabled with exactly the consented grants. An update asking for a grant not yet consented is GRANTS_RAISED and changes nothing.
+* **Reuse of the app updater (5.1) is partial**: `ReleaseAssets.sha256` is reused; the fetch is a small `Fetcher` here, because
+  `Updater`'s download is GitHub-release specific. Extracting a shared `AssetFetch` (PM-4) is still open.
+
+Not built (gaps, listed not hacked):
+
+* **MCP tools.** Five `agenthq_plugin_*` tools were written and **backed out**: `BuiltinToolsListGuardTest` (a ratchet, "the list grew
+  past 6") says new MCP tools must be daemon-plugin tools, and a daemon plugin cannot reach the manager (no `DaemonApi` surface for the
+  plugins root). Seam needed: a `DaemonApi` plugin-manager read service (list/search/inspect) + an official `Infantry_Plugins` daemon half
+  with the read tools and an `agenthq_plugin_request` that calls the ask service. Until then agents use `agenthq plugin list|search|show`
+  through the CLI and `agenthq ask` to request an install.
+* **G7 staged apply.** A loaded module's locked files make update/rollback/remove answer IN_USE (nothing changed); `_pending.json` /
+  `applyPending` is not built. Daemon/harness halves load at start, so every change says "takes effect at the next daemon start".
+* **G5 packaging.** `.ihq` build (`gradle/ihq.gradle.kts`) still packs only the UI jar; a daemon half inside a package works if its
+  `daemon.jar` points at `lib/<x>.jar` (the manager and installer accept it), but the build does not produce that yet (PM-3).
+* **Catalog generation, UI screen (PM-8), VoicePluginStore fold-in (PM-9), update-check schedule, attestation.**
+
+### The process watcher as the first optional catalog entry (item 4)
+
+STACK-NEUTRAL-2 landed (`plugins/official/Infantry_Processes`, UI badge + daemon half). The entry the generated official index must carry,
+and that `agenthq plugin catalog validate` checks (sha256, size and grants are filled from the built `.ihq`):
+
+```json
+{ "id": "Infantry_Processes", "description": "Process watcher: rogue background processes, free RAM, reaping.",
+  "tags": ["processes", "watch"], "license": null,
+  "versions": [ { "version": "1.0.0", "api": { "plugin": ">=2 <3", "daemon": ">=1.8.0" },
+    "grants": ["daemon.code", "daemon.tool", "override:infantry.shell.footer.processesBadge"],
+    "url": "Infantry_Processes-1.0.0.ihq", "sha256": "<computed>", "size": 0 } ] }
+```
+
+Dependencies, recorded not worked around: (1) **G5** (the package must carry `Infantry_Processes-daemon.jar` under `lib/`);
+(2) **G12**: the host process service gives `kill` only to official/core, so a community-signed copy runs read-only and reaping stays
+refused; the real entry needs the Infantry key (**G9**, owner decision 8.2); (3) `daemon.processes` is a runtime grant the manifest does
+not declare, so `RequestedGrants` cannot list it: the module.json needs `"services": ["daemon.processes"]` (or a daemon `needs` entry) to
+be shown at consent; (4) `Infantry_Processes/module.json` has no `license`. Fresh install: not installed, off; existing installs keep it
+through the STACK-NEUTRAL-1 one-time migration (untouched by this ticket).
