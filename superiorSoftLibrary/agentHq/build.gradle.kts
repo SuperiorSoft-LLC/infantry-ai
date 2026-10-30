@@ -326,7 +326,7 @@ tasks.withType<Test>().configureEach {
     maxParallelForks = providers.gradleProperty("agenthq.testForks").map { it.toInt() }.getOrElse(4)
     maxHeapSize = "2g"
     // DAEMON-PLUGINS-1: the daemon tests load the real daemon halves (TestDaemonPlugins), so their jars are built first.
-    dependsOn(":daemon-plugin-demo-Demo_Lock:jar", ":daemon-plugin-official-Infantry_Board:jar", ":daemon-plugin-official-Infantry_Usage:jar", ":daemon-plugin-official-Infantry_Processes:jar", ":daemon-plugin-official-Infantry_Agents:jar", ":daemon-plugin-official-Infantry_Roles:jar", ":daemon-plugin-official-Infantry_Attention:jar", ":daemon-plugin-official-Infantry_Settings:jar", ":daemon-plugin-examples-Acme_DaemonHello:jar", ":daemon-plugin-examples-Acme_PolicyHook:jar")
+    dependsOn(":daemon-plugin-demo-Demo_Lock:jar", ":daemon-plugin-official-Infantry_Board:jar", ":daemon-plugin-official-Infantry_Usage:jar", ":daemon-plugin-official-Infantry_Processes:jar", ":daemon-plugin-official-Infantry_Agents:jar", ":daemon-plugin-official-Infantry_Roles:jar", ":daemon-plugin-official-Infantry_Attention:jar", ":daemon-plugin-official-Infantry_Settings:jar", ":daemon-plugin-examples-Acme_DaemonHello:jar", ":daemon-plugin-examples-Acme_PolicyHook:jar", ":daemon-plugin-examples-Acme_NewsAgent:jar")
     // HARNESS-PLUGIN-3: the harness E2E loads the example harness module's built jar.
     dependsOn(":harness-plugin-examples-Acme_EchoHarness:jar")
 }

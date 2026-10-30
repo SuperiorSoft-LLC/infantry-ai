@@ -34,6 +34,9 @@ interface DaemonServices {
     /** DP-4b: the typed ticket event stream (ordered, at-least-once, cursors kept across restarts). Default: none. */
     val ticketEvents: com.superiorsoftllc.agenthq.daemon.api.board.TicketEvents get() = com.superiorsoftllc.agenthq.daemon.api.board.NoTicketEvents
 
+    /** AGENT-REGISTRY-1: the daemon's agent registry; null = none (plugins see [com.superiorsoftllc.agenthq.daemon.api.agents.NoAgents]). */
+    val agentRegistry: com.superiorsoftllc.agenthq.agents.registry.AgentRegistry? get() = null
+
     companion object {
         /** No daemon behind it: empty lists, no config, the open policy. */
         val NONE: DaemonServices = object : DaemonServices {

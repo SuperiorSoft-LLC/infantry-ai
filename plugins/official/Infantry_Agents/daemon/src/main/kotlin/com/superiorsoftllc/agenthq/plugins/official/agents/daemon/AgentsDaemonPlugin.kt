@@ -37,6 +37,8 @@ class AgentsDaemonPlugin : DaemonPlugin {
         api.tools.register(ListHarnessesTool)
         // RUNTIME-LOAD-4 (F5): the session's own progress report.
         api.tools.register(ProgressTool)
+        // AGENT-REGISTRY-1: the agent registry's list / get / enable / disable.
+        AgentRegistryTools.all { api.agents }.forEach(api.tools::register)
     }
 }
 

@@ -12,8 +12,12 @@
   "daemon": {
     "entry": "com.superiorsoftllc.agenthq.plugins.official.agents.daemon.AgentsDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Agents-daemon.jar",
-    "apiAtLeast": "1.4.0",
+    "apiAtLeast": "1.5.0",
     "tools": [
+      { "name": "agenthq_agent_list", "action": "agents.registry.read", "kind": "read", "description": "Every agent in the agent registry, enabled or not." },
+      { "name": "agenthq_agent_get", "action": "agents.registry.read", "kind": "read", "description": "One agent of the registry in full." },
+      { "name": "agenthq_agent_enable", "action": "agents.registry.write", "kind": "write", "description": "Re-enable a disabled agent (non-agent caller only)." },
+      { "name": "agenthq_agent_disable", "action": "agents.registry.write", "kind": "write", "description": "Disable an agent: no new sessions of it (non-agent caller only)." },
       { "name": "agenthq_harness_status", "action": "harness.install.read", "kind": "read", "description": "Which harness CLIs are installed on the daemon's machine." },
       { "name": "agenthq_harness_install", "action": "harness.install", "kind": "write", "description": "npm-install harness CLIs on the daemon's machine." },
       { "name": "agenthq_list_harnesses", "action": "harness.read", "kind": "read", "description": "The harnesses a ticket can run on, with their models." },

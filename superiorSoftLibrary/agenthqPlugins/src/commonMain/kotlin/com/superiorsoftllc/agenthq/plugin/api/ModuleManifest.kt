@@ -106,6 +106,11 @@ data class ModuleManifest(
      * the daemon only; trust and grants as for a daemon half. Null = no harness.
      */
     val harness: HarnessDeclaration? = null,
+    /**
+     * AGENT-REGISTRY-1 (docs/AGENT-REGISTRY.md section 3.2): the agents the module contributes to the daemon's agent registry,
+     * as data (no jar needed). Read by the daemon only; a community module needs the `agents.contribute` grant.
+     */
+    val agents: List<AgentDefinition> = emptyList(),
     /** POLICY-1 (docs/POLICY.md section 1): the named actions the module's controls perform; a policy may turn each off. */
     val actions: List<ActionDeclaration> = emptyList(),
     /**

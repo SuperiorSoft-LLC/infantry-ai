@@ -497,6 +497,18 @@ class DaemonPluginHost private constructor(
         override val tickets get() = granted.ticketsApi
         override val epics get() = granted.epicsApi
         override val board get() = granted.boardApi
+        // AGENT-REGISTRY-1: the agent registry, scoped to this plugin (its own declared ids; enable/disable trusted tiers only).
+        override val agents: com.superiorsoftllc.agenthq.daemon.api.agents.Agents = object : com.superiorsoftllc.agenthq.daemon.api.agents.Agents {
+            private val registry get() = services.agentRegistry
+            override fun list() = registry?.list().orEmpty()
+            override fun get(id: String) = registry?.get(id)
+            override fun contribute(definition: com.superiorsoftllc.agenthq.plugin.api.AgentDefinition): AutoCloseable =
+                (registry ?: error("this daemon has no agent registry")).contribute(p.id, p.community, definition).also { p.closeables += it }
+            override fun setEnabled(id: String, enabled: Boolean): com.superiorsoftllc.agenthq.daemon.api.agents.AgentEntry? {
+                check(!p.community) { "a community plugin may not enable or disable agents" }
+                return (registry ?: error("this daemon has no agent registry")).setEnabled(id, enabled)
+            }
+        }
         override val hooks: Hooks = object : Hooks {
             override fun frameGate(hook: FrameGateHook) { declare("frameGate"); frameGates += Registered(p, hook) }
             override fun httpGate(hook: HttpGateHook) { declare("httpGate"); httpGates += Registered(p, hook) }

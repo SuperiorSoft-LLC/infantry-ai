@@ -885,13 +885,25 @@ class AgentHqDaemon(
             if (settings.allowedRoles().restricts) println("[agentHq] role allowlist in force: ${settings.allowedRoles().patterns.joinToString()}")
             manager.maxSessions = { settings.limitCap(LimitRegistry.MAX_SESSIONS) }
             if (settings.allowedModels().restricts) println("[agentHq] model allowlist in force: ${settings.allowedModels().patterns.joinToString()}")
+            // AGENT-REGISTRY-1 (docs/AGENT-REGISTRY.md): the ONE agent registry. The role catalog is its first contributor (each role
+            // one agent), modules' `agents` blocks are synced in below; with no user override every agent is enabled, as before.
+            val agentRegistry = com.superiorsoftllc.agenthq.agents.registry.AgentRegistry(
+                roleAgents = { com.superiorsoftllc.agenthq.role.RoleAgents.all(roles.all()) },
+                rolePersona = { id -> roles.role(id)?.persona },
+                // Owner O5: the interim override store; the unified config JSON replaces it here (AgentOverrides is the swap point).
+                overrides = com.superiorsoftllc.agenthq.agents.registry.FileAgentOverrides.inStateDir(stateDir()),
+                // Owner O4: an agent's `profile` names an agent profile, a behaviour preset (instructions, provider, model).
+                profile = { id -> store.agents.get(id)?.let { p -> com.superiorsoftllc.agenthq.plugin.api.AgentDefinition(id = p.role, instructions = p.instructions.orEmpty(), harness = p.provider, model = p.model) } },
+            )
+            val agentModules = com.superiorsoftllc.agenthq.daemon.plugins.AgentModules(agentRegistry)
             // Contract 1.4.0: profiles are validated against the providers [manager] was configured with.
             val agents = AgentProfiles(
-                store.agents, manager, roleBindings = store.roleBindings, roleExists = { roles.role(it) != null },
+                // AGENT-REGISTRY-1: a module's agent is a role id a session may start as (additive: catalog ids resolve as before).
+                store.agents, manager, roleBindings = store.roleBindings, roleExists = { roles.role(it) != null || agentRegistry.contains(it) },
                 traitExists = { store.traits.get(it) != null }, roleTraits = store.roleTraits::get, trait = store.traits::get,
                 requireKnownSkills = { ids -> com.superiorsoftllc.agenthq.settings.requireKnownSkills(store, ids, "skillIds") },
                 // ROLE-EDIT-1: a role's (possibly edited) instructions reach every session started for it after the save.
-                rolePersona = { id -> roles.role(id)?.persona.let { p -> if (id == AssistantService.ROLE) AssistantService.instructions(p) else p } },
+                rolePersona = { id -> (roles.role(id)?.persona ?: agentRegistry.instructionsOf(id)).let { p -> if (id == AssistantService.ROLE) AssistantService.instructions(p) else p } },
             )
             // TRAITS-T4: the chokepoint's fallback, so a spawn path that resolves no instance itself still freezes one.
             manager.instanceFor = agents::instanceFor
@@ -1718,6 +1730,8 @@ class AgentHqDaemon(
                     firstResolution.compareAndSet(null, r); daemonConfig.load(r).forEach { line -> System.err.println(line) }
                     // HARNESS-PLUGIN-3 H4: a re-resolution (a policy switch) loads / unloads harness modules to match.
                     harnessModulesRef.get()?.let { hm -> runCatching { hm.sync(r, harnessModulesConfig()) }.onFailure { System.err.println("[harness] module sync failed: ${it.message}") } }
+                    // AGENT-REGISTRY-1: the same for modules' `agents` blocks (the first resolution is synced below, once the root is known).
+                    harnessModulesRoot.get()?.let { runCatching { agentModules.sync(r, harnessModulesConfig()) }.onFailure { System.err.println("[agents] module sync failed: ${it.message}") } }
                 },
             )
             val pluginsNow = java.util.concurrent.atomic.AtomicReference(resolvePlugins())
@@ -1726,6 +1740,8 @@ class AgentHqDaemon(
             // rules, trust or start is logged and left out; the daemon starts either way.
             firstResolution.get()?.let { resolution ->
                 val root = java.io.File(pluginsNow.get().root)
+                // AGENT-REGISTRY-1: modules' `agents` blocks first, so a daemon half's agents.contribute finds its declared ids.
+                agentModules.sync(resolution, com.superiorsoftllc.agenthq.plugin.host.PluginFolders.config(root))
                 val bundled = if (pluginsRoot != null) null else com.superiorsoftllc.agenthq.plugin.host.PluginFolders.bundledRoot()
                 val trustNow = pluginTrust ?: com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost.Trust(
                     com.superiorsoftllc.agenthq.plugin.host.OfficialTrust.infantryKeys(root, bundled),
@@ -1749,6 +1765,7 @@ class AgentHqDaemon(
                             baseCheck = { epic, branch -> baseCheck.check(projectStore.get(epic.projectId), branch) },
                         ),
                         ticketEventStream = ticketEvents,
+                        agentRegistry = agentRegistry,
                     ),
                     stateDir(),
                 )
@@ -1788,7 +1805,8 @@ class AgentHqDaemon(
             orchestratorHub.select(pluginEnv("AGENTHQ_ORCHESTRATOR_PROVIDER")?.trim().orEmpty())?.let { System.err.println(it) }
             // A guest token present at start is checked now, so a bad one still stops the daemon starting.
             plugins.guestTokens().forEach { policy.guestDigestOf(it) }
-            manager.spawnGate = { role, projectId -> plugins.spawnRefusal(role, projectId) }
+            // AGENT-REGISTRY-1: a disabled agent starts no new session (no override = nothing refused), then the plugins' gates.
+            manager.spawnGate = { role, projectId -> agentRegistry.spawnRefusal(role) ?: plugins.spawnRefusal(role, projectId) }
             policies.attach(object : com.superiorsoftllc.agenthq.policy.PolicyRuntime.Extensions {
                 override fun presets() = plugins.presets()
                 override fun seatsClaimed() = plugins.seatsClaimed
