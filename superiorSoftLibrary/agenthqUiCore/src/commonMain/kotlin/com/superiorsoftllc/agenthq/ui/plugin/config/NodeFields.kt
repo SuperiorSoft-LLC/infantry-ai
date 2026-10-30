@@ -98,7 +98,7 @@ fun NodeFields(factory: TabFactory, node: String, fields: List<DeclaredField>, e
                         (value as? JsonPrimitive)?.booleanOrNull ?: false, if (can) { on -> write(JsonPrimitive(on)) } else null, enabled = can,
                         modifier = Modifier.testTag(NODE_FIELD_CHECK_TAG_PREFIX + tag).semantics { contentDescription = f.field.label },
                     )
-                    ConfigFieldTypes.TEXT, ConfigFieldTypes.NUMBER, ConfigFieldTypes.COLOR -> TextEditor(f, tag, value, can, ::write)
+                    ConfigFieldTypes.TEXT, ConfigFieldTypes.TEXTAREA, ConfigFieldTypes.NUMBER, ConfigFieldTypes.COLOR -> TextEditor(f, tag, value, can, ::write)
                     ConfigFieldTypes.SELECT, ConfigFieldTypes.RADIO -> for (o in f.field.options) Option(tag, o, f.field.optionLabels[o] ?: o, (value as? JsonPrimitive)?.content == o, can) { write(JsonPrimitive(o)) }
                     ConfigFieldTypes.MULTI_SELECT -> {
                         val picked = (value as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty()
@@ -183,6 +183,7 @@ internal fun TextEditor(f: DeclaredField, tag: String, value: JsonElement?, enab
     val shown = (value as? JsonPrimitive)?.content.orEmpty()
     var draft by remember(tag, shown) { mutableStateOf(shown) }
     val number = f.field.type == ConfigFieldTypes.NUMBER
+    val area = f.field.type == ConfigFieldTypes.TEXTAREA
     val parsed = if (number) draft.trim().toDoubleOrNull() else null
     val min = f.field.min
     val max = f.field.max
@@ -195,7 +196,7 @@ internal fun TextEditor(f: DeclaredField, tag: String, value: JsonElement?, enab
         else -> null
     }
     OutlinedTextField(
-        value = draft, onValueChange = { draft = it }, singleLine = true, enabled = enabled, isError = problem != null,
+        value = draft, onValueChange = { draft = it }, singleLine = !area, minLines = if (area) 3 else 1, enabled = enabled, isError = problem != null,
         modifier = Modifier.widthIn(min = 160.dp, max = 320.dp).testTag(NODE_FIELD_INPUT_TAG_PREFIX + tag).semantics { contentDescription = f.field.label },
     )
     if (problem != null) Chip(problem, Palette.Danger)
