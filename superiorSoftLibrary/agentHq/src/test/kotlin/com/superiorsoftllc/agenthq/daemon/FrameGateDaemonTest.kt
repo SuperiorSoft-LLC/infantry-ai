@@ -35,8 +35,8 @@ class FrameGateDaemonTest {
         DaemonFixture.launch(owner = owner, repo = repo).also { fixtures += it; it.client.await(Envelope.READY) }
 
     /** The demo preset pinned; [plugin] = the Demo_Lock daemon half loaded from its built jar. */
-    private fun launchDemo(plugin: Boolean): DaemonFixture = DaemonFixture.launch(
-        owner = true,
+    private fun launchDemo(plugin: Boolean, owner: Boolean = true): DaemonFixture = DaemonFixture.launch(
+        owner = owner,
         pluginsRoot = if (plugin) TestDaemonPlugins.root("demo/Demo_Lock").also { roots += it } else null,
         policies = { state -> PolicyRuntime(listOf(PolicyProvider { listOf(demo) }), { if (it == PolicyRuntime.POLICY_ENV) demo.id else null }, null, state) },
     ).also { fixtures += it; it.client.await(Envelope.READY) }
@@ -87,6 +87,28 @@ class FrameGateDaemonTest {
         assertTrue("sentinel" in refused, "an unknown frame type is refused by default")
         // Nothing the refused frames name ran: no session (prompt / new / assistant), no saved command.
         assertTrue(fixture.daemon.manager.list().isEmpty(), "a refused frame created a session")
+    }
+
+    @Test fun `DEMO-FIX-1 the demo lists the plugin tools, and still refuses a call to any tool`() {
+        val fixture = launchDemo(plugin = true, owner = false)
+        fixture.client.send(Envelope("plugin_tools", "{}", requestId = "list"))
+        val listed = fixture.client.awaitWhere("the tool listing") { it.requestId == "list" }
+        assertEquals("plugin_tools", listed.type, listed.data)
+        fixture.client.send(Envelope("plugin_tool_call", """{"name":"not_a_listed_tool","arguments":{}}""", requestId = "call"))
+        val refused = fixture.client.awaitWhere("the call's refusal") { it.requestId == "call" }
+        assertEquals(Envelope.ERROR, refused.type)
+        assertTrue("disabled in this demo" in refused.data, refused.data)
+    }
+
+    @Test fun `DEMO-FIX-1 under the demo lock a non-owner gets the neutral refusal, never the owner-credential text`() {
+        val fixture = launchDemo(plugin = true, owner = false)
+        for (type in listOf(Envelope.SECRET_SET, Envelope.RUN_START, Envelope.RUN_INPUT, Envelope.COMMAND_SAVE)) {
+            fixture.client.send(Envelope(type, "{}", requestId = "n:$type"))
+            val refused = fixture.client.awaitWhere("$type refusal") { it.requestId == "n:$type" }
+            assertEquals(Envelope.ERROR, refused.type)
+            assertTrue("disabled in this demo" in refused.data, refused.data)
+            assertFalse("owner" in refused.data.lowercase() || "X-AgentHQ" in refused.data, "$type names the owner header: ${refused.data}")
+        }
     }
 
     @Test fun `the demo preset with no plugin to seat it refuses every frame but the switch (fail closed)`() {
