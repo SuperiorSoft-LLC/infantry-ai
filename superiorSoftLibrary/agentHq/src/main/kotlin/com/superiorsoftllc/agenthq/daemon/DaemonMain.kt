@@ -1409,12 +1409,17 @@ class AgentHqDaemon(
             val ticketFilesExec = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
                 Thread(r, "agenthq-ticket-files").also { it.isDaemon = true }
             }
-            board.transitionSink = { ticketId, status ->
-                triggers.onTicketTransition(ticketId, status)
-                doneWorkerReaper.onTicketTransition(ticketId, status)
-                if (status == com.superiorsoftllc.agenthq.protocol.TicketStatus.DONE) ticketFilesExec.execute {
-                    runCatching { store.tickets.get(ticketId)?.let(ticketFiles::record) }
-                        .onFailure { System.err.println("[agentHq] ticket files of $ticketId not recorded: ${it.message}") }
+            // BOARD-API-2 (DP-4b): the typed, durable, ordered ticket events replaced the transition sink; the three core consumers
+            // subscribe like a plugin would. A cursor survives a restart, so a transition not yet handled when the daemon stopped
+            // (a ship trigger, a worker to reap, the files of a done ticket) is replayed on the next start.
+            val ticketEvents = com.superiorsoftllc.agenthq.backlog.TicketEventLog((store as SqlAgentHqStore).database)
+            board.events = ticketEvents
+            ticketEvents.subscribe("core.triggers") { e -> if (e.isTransition) triggers.onTicketTransition(e.ticketId, e.to!!) }
+            ticketEvents.subscribe("core.done-worker-reaper") { e -> if (e.isTransition) doneWorkerReaper.onTicketTransition(e.ticketId, e.to!!) }
+            ticketEvents.subscribe("core.ticket-files") { e ->
+                if (e.kind == com.superiorsoftllc.agenthq.daemon.api.board.TicketEvent.DONE) ticketFilesExec.execute {
+                    runCatching { store.tickets.get(e.ticketId)?.let(ticketFiles::record) }
+                        .onFailure { System.err.println("[agentHq] ticket files of ${e.ticketId} not recorded: ${it.message}") }
                 }
             }
             // E1-a: fold the story board into the ticket board, once; idempotent, resumes after a crash. A failure is
@@ -1708,6 +1713,7 @@ class AgentHqDaemon(
                             },
                             baseCheck = { epic, branch -> baseCheck.check(projectStore.get(epic.projectId), branch) },
                         ),
+                        ticketEventStream = ticketEvents,
                     ),
                     stateDir(),
                 )

@@ -27,7 +27,7 @@ import kotlinx.serialization.Serializable
  *    for each operation: [GRANT_TICKETS_READ], [GRANT_TICKETS_WRITE], [GRANT_TICKETS_DELETE], [GRANT_TICKETS_START],
  *    [GRANT_EPICS_READ], [GRANT_EPICS_WRITE]. No grant = [BoardResult.Refused] ("missing grant ..."); the default is deny.
  */
-const val BOARD_API_VERSION = "1.0.0"
+const val BOARD_API_VERSION = "1.1.0"
 
 const val GRANT_TICKETS_READ = "tickets.read"
 const val GRANT_TICKETS_WRITE = "tickets.write"
@@ -205,6 +205,49 @@ interface Board {
 
     /** The start brief of the ticket [ticketId]'s worker, null when it has none. */
     fun brief(ticketId: String, by: Caller): BoardResult<String?>
+}
+
+/**
+ * DP-4b (BOARD-API-2): one typed ticket event. [seq] is global, monotonic and gap-free per daemon store (so also per ticket:
+ * events of one ticket arrive in seq order); delivery is at-least-once, so a consumer dedupes on [seq]. [kind] is one of
+ * [TicketEvent.CREATED], [MOVED], [STARTED] (moved into in_progress), [DONE] (moved into done), [UPDATED] (a change that kept
+ * the column), [DELETED]. [to] is the ticket's column after the event (null for DELETED), [from] the one before (null for CREATED).
+ */
+@Serializable
+data class TicketEvent(
+    val seq: Long,
+    val ticketId: String,
+    val kind: String,
+    val from: String? = null,
+    val to: String? = null,
+    val at: Long = 0,
+) {
+    /** The ticket entered a column (created, moved, started or done): what `transitionSink` used to announce. */
+    val isTransition: Boolean get() = to != null && kind != UPDATED && kind != DELETED
+
+    companion object {
+        const val CREATED = "created"
+        const val MOVED = "moved"
+        const val STARTED = "started"
+        const val DONE = "done"
+        const val UPDATED = "updated"
+        const val DELETED = "deleted"
+    }
+}
+
+/**
+ * DP-4b: the ticket event stream. [subscribe] registers [consumer] (a stable name; its cursor is kept across daemon restarts, so
+ * events not yet handled when the daemon stopped are replayed on the next subscribe, in order, before any new one). A listener
+ * that throws is retried on the next delivery (at-least-once), and skipped after a few failures so one bad event cannot wedge it.
+ * A first-ever consumer starts at the head: it sees no history. Community plugins need the [GRANT_TICKETS_READ] grant.
+ */
+interface TicketEvents {
+    fun subscribe(consumer: String, listener: (TicketEvent) -> Unit): AutoCloseable
+}
+
+/** A daemon without a board has no events. */
+object NoTicketEvents : TicketEvents {
+    override fun subscribe(consumer: String, listener: (TicketEvent) -> Unit): AutoCloseable = AutoCloseable {}
 }
 
 /** What a daemon without a board answers: every operation is [BoardResult.Unavailable]. */

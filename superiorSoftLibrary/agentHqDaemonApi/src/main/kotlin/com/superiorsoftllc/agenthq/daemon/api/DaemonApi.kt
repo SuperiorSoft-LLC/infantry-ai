@@ -59,7 +59,7 @@ interface DaemonApi {
 
     companion object {
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
-        const val VERSION = "1.2.0"
+        const val VERSION = "1.3.0"
     }
 }
 
@@ -140,6 +140,13 @@ interface Policy {
 interface Events {
     /** Every frame of [type] the daemon broadcasts to its clients (`*` = all); runs under the plugin's limits. */
     fun on(type: String, listener: (Frame) -> Unit): AutoCloseable
+
+    /**
+     * DP-4b (1.3.0, additive): the typed ticket events, ordered and at-least-once (see
+     * [com.superiorsoftllc.agenthq.daemon.api.board.TicketEvents]). [consumer] names this subscription's cursor within the plugin.
+     * A community plugin needs the `tickets.read` grant (a missing grant throws, and the host disables the plugin).
+     */
+    fun onTicket(consumer: String, listener: (com.superiorsoftllc.agenthq.daemon.api.board.TicketEvent) -> Unit): AutoCloseable = AutoCloseable {}
 }
 
 // ---- tools ----------------------------------------------------------------------------------------------------------

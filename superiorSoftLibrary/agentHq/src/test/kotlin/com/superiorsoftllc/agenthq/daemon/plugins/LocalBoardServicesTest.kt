@@ -291,4 +291,13 @@ class LocalBoardServicesTest {
         val official = GrantedBoard({ svc.tickets }, { svc.epics }, { svc.boardView }) { true }
         assertNotNull(official.ticketsApi.create(TicketDraft(title = "n"), owner).ok())
     }
+
+    @Test fun `subscribing to ticket events needs tickets read for a community plugin`() {
+        val log = com.superiorsoftllc.agenthq.backlog.TicketEventLog(com.superiorsoftllc.agenthq.db.AgentHQDatabaseFactory.open(java.io.File.createTempFile("events-", ".db").absolutePath).database)
+        val none = GrantedBoard({ svc.tickets }, { svc.epics }, { svc.boardView }) { false }
+        val e = kotlin.test.assertFailsWith<IllegalStateException> { none.ticketEvents { log }.subscribe("c") { } }
+        assertEquals("missing grant 'tickets.read' in modules.json", e.message)
+        val read = GrantedBoard({ svc.tickets }, { svc.epics }, { svc.boardView }) { it == GRANT_TICKETS_READ }
+        read.ticketEvents { log }.subscribe("c") { }.close()
+    }
 }

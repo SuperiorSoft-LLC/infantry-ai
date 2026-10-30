@@ -38,7 +38,10 @@ class CoreDaemonServices(
     private val limits: (com.superiorsoftllc.agenthq.settings.LimitDef) -> Long = { it.default },
     /** DP-4a: the local binding of tickets / epics / board; null = a daemon without a board (every call Unavailable). */
     private val boardServices: LocalBoardServices? = null,
+    /** DP-4b: the ticket event stream; null = none. */
+    private val ticketEventStream: com.superiorsoftllc.agenthq.daemon.api.board.TicketEvents? = null,
 ) : DaemonServices {
+    override val ticketEvents: com.superiorsoftllc.agenthq.daemon.api.board.TicketEvents get() = ticketEventStream ?: com.superiorsoftllc.agenthq.daemon.api.board.NoTicketEvents
     override fun limit(def: com.superiorsoftllc.agenthq.settings.LimitDef): Long = limits(def)
     override val tickets get() = boardServices?.tickets ?: com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.tickets
     override val epics get() = boardServices?.epics ?: com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.epics

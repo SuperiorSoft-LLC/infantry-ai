@@ -1,7 +1,7 @@
 -- TICKET-FILES (ticket 55476f3c) -- migration v51 -> v52: the files each ticket changed (docs in ticket_files.sq).
 -- No foreign key to tickets: the rows outlive a deleted branch and are rebuilt by the backfill from merge commits.
 --
--- NEXT MIGRATION: 52.sqm
+-- NEXT MIGRATION: 53.sqm (52.sqm = ticket_events)
 
 CREATE TABLE IF NOT EXISTS ticket_files (
     ticket_id TEXT NOT NULL,

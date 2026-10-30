@@ -11,6 +11,8 @@ import com.superiorsoftllc.agenthq.daemon.api.board.GRANT_TICKETS_READ
 import com.superiorsoftllc.agenthq.daemon.api.board.GRANT_TICKETS_START
 import com.superiorsoftllc.agenthq.daemon.api.board.GRANT_TICKETS_WRITE
 import com.superiorsoftllc.agenthq.daemon.api.board.TicketDraft
+import com.superiorsoftllc.agenthq.daemon.api.board.TicketEvent
+import com.superiorsoftllc.agenthq.daemon.api.board.TicketEvents
 import com.superiorsoftllc.agenthq.daemon.api.board.TicketPatch
 import com.superiorsoftllc.agenthq.daemon.api.board.TicketQuery
 import com.superiorsoftllc.agenthq.daemon.api.board.Tickets
@@ -23,6 +25,14 @@ import com.superiorsoftllc.agenthq.daemon.api.board.Tickets
 internal class GrantedBoard(private val tickets: () -> Tickets, private val epics: () -> Epics, private val board: () -> Board, private val allowed: (String) -> Boolean) {
     private inline fun <T> need(grant: String, call: () -> BoardResult<T>): BoardResult<T> =
         if (allowed(grant)) call() else BoardResult.Refused("missing grant '$grant' in modules.json")
+
+    /** DP-4b: subscribing to the ticket events needs `tickets.read`; a missing grant throws (the host disables the plugin, as for a bad declaration). */
+    fun ticketEvents(source: () -> TicketEvents): TicketEvents = object : TicketEvents {
+        override fun subscribe(consumer: String, listener: (TicketEvent) -> Unit): AutoCloseable {
+            check(allowed(GRANT_TICKETS_READ)) { "missing grant '$GRANT_TICKETS_READ' in modules.json" }
+            return source().subscribe(consumer, listener)
+        }
+    }
 
     val ticketsApi: Tickets = object : Tickets {
         override fun get(id: String, by: Caller) = need(GRANT_TICKETS_READ) { tickets().get(id, by) }

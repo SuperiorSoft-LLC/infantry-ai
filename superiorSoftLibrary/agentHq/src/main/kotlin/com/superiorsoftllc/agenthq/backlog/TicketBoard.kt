@@ -185,17 +185,15 @@ class TicketBoard(
     var eventSink: (BoardEvent) -> Unit = {}
 
     /**
-     * Each ticket whose column changed in a commit, with its new column. [announce] runs after the commit's
-     * store transaction has returned, but still under the board monitor (every public board method is
-     * `@Synchronized`), so a sink that takes a lock does so in board -> sink order. The daemon's sink is
-     * `TriggerService.onTicketTransition`, which briefly takes the TriggerService monitor (its `fire`); the
-     * order board -> TriggerService cannot cycle because TriggerService never calls the board under its own
-     * lock -- a trigger's `start_next` runs on its own single-thread executor, off-lock, and only records the
-     * outcome once it returns. An unchanged re-commit is no transition, so it reaches nothing here: a ship
-     * trigger fires once per move into done.
+     * BOARD-API-2 (DP-4b): the typed event log (docs/DAEMON-BOARD-API.md). A commit records its events inside its own transaction,
+     * and [announce] delivers them after the commit, still under the board monitor (every public board method is `@Synchronized`),
+     * so a consumer that takes a lock does so in board -> consumer order. `TriggerService.onTicketTransition` briefly takes the
+     * TriggerService monitor (its `fire`); the order board -> TriggerService cannot cycle because TriggerService never calls the
+     * board under its own lock -- a trigger's `start_next` runs on its own single-thread executor, off-lock. An unchanged re-commit
+     * is no event, so a ship trigger fires once per move into done. Null = the board keeps no log (tests).
      */
     @Volatile
-    var transitionSink: (ticketId: String, status: String) -> Unit = { _, _ -> }
+    var events: TicketEventLog? = null
 
     /**
      * The board in board order: column by column ([TicketStatus.ALL]), each column top first. With a
@@ -1409,7 +1407,6 @@ class TicketBoard(
         val board: List<Ticket>,
         val changed: List<String>,
         val deleted: List<String>,
-        val transitions: List<Pair<String, String>>,
     )
 
     private fun load(): Snapshot = Snapshot(store.tickets.all(), store.tickets.links(), clock())
@@ -1433,8 +1430,12 @@ class TicketBoard(
         s.write(store.tickets)
         val after = views(s.rows, s.links)
         val board = boardOrder(s.rows.values).map { after.getValue(it.id) }
-        val transitions = board.filter { before[it.id]?.status != it.status }.map { it.id to it.status }
-        Outcome(board, board.filter { before[it.id] != it }.map { it.id }, s.deleted.toList(), transitions)
+        val changed = board.filter { before[it.id] != it }.map { it.id }
+        events?.record(
+            before = before.mapValues { it.value.status }, after = board.associate { it.id to it.status },
+            changedIds = changed, deleted = s.deleted,
+        )
+        Outcome(board, changed, s.deleted.toList())
     }
 
     private fun answer(primary: String, outcome: Outcome): TicketAnswer {
@@ -1460,10 +1461,7 @@ class TicketBoard(
     }
 
     private fun announce(outcome: Outcome) {
-        for ((ticketId, status) in outcome.transitions) {
-            runCatching { transitionSink(ticketId, status) }
-                .onFailure { System.err.println("[agentHq] ticket transition sink failed: $it") }
-        }
+        runCatching { events?.deliver() }.onFailure { System.err.println("[agentHq] ticket event delivery failed: $it") }
     }
 
     private fun newId(s: Snapshot): String {
