@@ -382,18 +382,33 @@ tasks.register("perfProfile") {
 // DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md): an install ships its daemon plugins in `<install>/modules/official/<Module>/`
 // (module.json, `policies/`, the built daemon jar): the bundled root the daemon defaults to (bundled = trusted). Every
 // official module with a daemon half is in installDist; the docker image adds the demo lock.
+// PACKAGE-1: a module has a daemon half when its module.json has a `daemon` block (gradle/daemon-halves.gradle.kts); its
+// module.json `daemon.jar` is what ships, and installDist / dockerContext fail when a declared jar is not staged.
+@Suppress("UNCHECKED_CAST")
+val ihqDaemonJar = rootProject.extra["ihqDaemonJar"] as (File) -> String?
+@Suppress("UNCHECKED_CAST")
+val ihqVerifyDaemonHalves = rootProject.extra["ihqVerifyDaemonHalves"] as (File, String, List<String>) -> Unit
 fun daemonModuleDirs(folder: String): List<File> = rootProject.file("plugins/$folder")
-    .listFiles { f -> f.isDirectory && !f.name.startsWith("_") && File(f, "daemon/build.gradle.kts").isFile }.orEmpty().sortedBy { it.name }
+    .listFiles { f -> f.isDirectory && !f.name.startsWith("_") && ihqDaemonJar(f) != null }.orEmpty().sortedBy { it.name }
+fun Task.dependsOnDaemonJars(folder: String) = daemonModuleDirs(folder).forEach { dir ->
+    val producer = ":daemon-plugin-$folder-${dir.name}"
+    checkNotNull(rootProject.findProject(producer)) { "PACKAGE-1: plugins/$folder/${dir.name} declares a daemon half but $producer does not exist" }
+    dependsOn("$producer:jar")
+}
 fun CopySpec.daemonModules(folder: String, prefix: String) {
     for (dir in daemonModuleDirs(folder)) from(dir) {
-        include("module.json", "policies/**", "daemon/build/libs/${dir.name}-daemon.jar")
+        include("module.json", "policies/**", ihqDaemonJar(dir)!!)
         into("$prefix/modules/official/${dir.name}")
     }
 }
 tasks.named<Sync>("installDist") {
-    daemonModuleDirs("official").forEach { dependsOn(":daemon-plugin-official-${it.name}:jar") }
+    dependsOnDaemonJars("official")
     daemonModules("official", ".")
+    val modules = destinationDir.resolve("modules")
+    val expected = daemonModuleDirs("official").map { it.name }
+    doLast { ihqVerifyDaemonHalves(modules, "installDist", expected) }
 }
+tasks.matching { it.name == "check" }.configureEach { dependsOn(":verifyDaemonHalvesGuard") }
 
 // DOCKER-1: the build context for the headless daemon image: `agenthq/` (installDist) + the Dockerfile. Nothing is pushed.
 //   ./gradlew :superiorSoftLibrary:agentHq:dockerContext
@@ -415,9 +430,12 @@ tasks.register<Sync>("dockerContext") {
     // points AGENTHQ_POLICY_DIRS at /opt/agenthq/policies. A preset is only active when selected (AGENTHQ_DEMO_LOCK=1 selects demo).
     from(rootProject.layout.projectDirectory.dir("plugins/demo/Demo_Lock/policies")) { into("agenthq/policies") }
     // DAEMON-PLUGINS-1: the demo lock's daemon half (bundled, so trusted); inert unless a seated preset is active.
-    daemonModuleDirs("demo").forEach { dependsOn(":daemon-plugin-demo-${it.name}:jar") }
+    dependsOnDaemonJars("demo")
     daemonModules("demo", "agenthq")
     into(layout.buildDirectory.dir("docker"))
+    val modules = layout.buildDirectory.dir("docker/agenthq/modules")
+    val expected = (daemonModuleDirs("official") + daemonModuleDirs("demo")).map { it.name }
+    doLast { ihqVerifyDaemonHalves(modules.get().asFile, "dockerContext", expected) }
 }
 
 // HEADLESS-DIST-1: the downloadable server, no Docker and no Java install needed. The archive is installDist (lib/ and the

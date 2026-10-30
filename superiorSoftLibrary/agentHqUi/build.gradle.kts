@@ -478,6 +478,9 @@ val javaLauncherName = if (System.getProperty("os.name").startsWith("Windows")) 
 // bundled modules root (PluginFolders.bundledRoot): <install>/app/resources/modules (jpackage's $APPDIR/resources), laid out
 //   modules/official/<Name>/module.json              (the module's own, byte for byte: OfficialTrust compares it with the signed copy)
 //   modules/official/<Name>/<module.json "jar">      (e.g. build/libs/Infantry_Cli.jar, signed with the Infantry key)
+//   modules/official/<Name>/<module.json "daemon.jar"> + policies/   (PACKAGE-1: the daemon half, when module.json has a
+//                                                    `daemon` block; signed the same way. The in-process daemon reads it from
+//                                                    the same bundled root, so ticket_files etc. exist in desktop builds)
 //   modules/trusted-keys/infantry.cer                (the signing certificate: OfficialTrust.infantryKeys reads it)
 // and the launcher sets -Dagenthq.plugins.bundled=$APPDIR/resources/modules. Signing key (until 9bc0c955 pins one):
 //   -Pihq.keystore=<file> -Pihq.alias=<alias> + env IHQ_STOREPASS   the real Infantry key (keystore path relative to the repo root)
@@ -485,10 +488,23 @@ val javaLauncherName = if (System.getProperty("os.name").startsWith("Windows")) 
 // With neither, stageOfficialModules (and so every package task) fails. `run` and the dev runs are untouched (devTrust).
 val officialProjects = rootProject.subprojects.filter { it.path.startsWith(":plugins:official:") }
 val officialStageDir = layout.buildDirectory.dir("official-modules/modules")
+// PACKAGE-1 (gradle/daemon-halves.gradle.kts): module.json's daemon.jar (null: no daemon half) and the staged-output check.
+@Suppress("UNCHECKED_CAST")
+val ihqDaemonJar = rootProject.extra["ihqDaemonJar"] as (File) -> String?
+@Suppress("UNCHECKED_CAST")
+val ihqVerifyDaemonHalves = rootProject.extra["ihqVerifyDaemonHalves"] as (File, String, List<String>) -> Unit
+// Official modules with a daemon half, and the jar task that builds it (:daemon-plugin-official-<Name>:jar).
+val officialDaemonHalves = officialProjects.mapNotNull { p -> ihqDaemonJar(p.projectDir)?.let { p.name to it } }.toMap()
 val stageOfficialModules = tasks.register("stageOfficialModules") {
     group = "distribution"
     description = "Builds every plugins/official jar, signs it (-Pihq.keystore/-Pihq.alias + IHQ_STOREPASS, or -Pihq.devSign=true) and lays out build/official-modules/modules."
     officialProjects.forEach { dependsOn("${it.path}:jvmJar") }
+    officialDaemonHalves.keys.forEach { name ->
+        val producer = ":daemon-plugin-official-$name"
+        checkNotNull(rootProject.findProject(producer)) { "PACKAGE-1: plugins/official/$name declares a daemon half but $producer does not exist" }
+        dependsOn("$producer:jar")
+    }
+    val daemonHalves = officialDaemonHalves
     val modules = officialProjects.map { p -> p.name to p.projectDir }
     val jars = officialProjects.associate { p -> p.name to p.tasks.named<Jar>("jvmJar").flatMap { it.archiveFile } }
     val keystoreProp = providers.gradleProperty("ihq.keystore").map { rootProject.file(it) }
@@ -497,6 +513,8 @@ val stageOfficialModules = tasks.register("stageOfficialModules") {
     val devSign = providers.gradleProperty("ihq.devSign").map { it.trim().lowercase() == "true" }.orElse(false)
     inputs.files(jars.values).withPropertyName("officialJars")
     inputs.files(modules.map { File(it.second, "module.json") }).withPropertyName("moduleJsons")
+    inputs.files(modules.mapNotNull { (name, dir) -> daemonHalves[name]?.let { File(dir, it) } }).withPropertyName("daemonJars")
+    inputs.files(modules.map { File(it.second, "policies") }).withPropertyName("policies")
     inputs.property("keystore", keystoreProp.map { it.absolutePath }.orElse(""))
     inputs.property("alias", aliasProp.orElse(""))
     inputs.property("devSign", devSign)
@@ -545,10 +563,19 @@ val stageOfficialModules = tasks.register("stageOfficialModules") {
             json.copyTo(File(moduleDir, "module.json"))
             val jar = jars.getValue(name).get().asFile.copyTo(File(moduleDir, jarPath))
             tool("jarsigner", "-keystore", keystore.path, "-storepass", storePass, jar.path, alias)
+            // PACKAGE-1: the daemon half (module.json daemon.jar, built by :daemon-plugin-official-<Name>:jar) and policies/.
+            daemonHalves[name]?.let { daemonJarPath ->
+                val built = File(dir, daemonJarPath)
+                check(built.isFile) { "PACKAGE-1: $name's daemon half $built was not built" }
+                val daemonJar = built.copyTo(File(moduleDir, daemonJarPath))
+                tool("jarsigner", "-keystore", keystore.path, "-storepass", storePass, daemonJar.path, alias)
+            }
+            File(dir, "policies").takeIf { it.isDirectory }?.copyRecursively(File(moduleDir, "policies"))
         }
         val keys = File(root, "trusted-keys").apply { mkdirs() }
         tool("keytool", "-exportcert", "-rfc", "-alias", alias, "-keystore", keystore.path, "-storepass", storePass, "-file", File(keys, "infantry.cer").path)
         logger.lifecycle("PACKAGING: staged ${modules.size} official module(s) into $root")
+        ihqVerifyDaemonHalves(root, "stageOfficialModules", daemonHalves.keys.toList())
     }
 }
 // The package tasks' resources: Compose's prepareAppResources (shared with `run`, left as it is) plus modules/.
@@ -558,6 +585,9 @@ val prepareDistributableResources = tasks.register<Sync>("prepareDistributableRe
     from(tasks.named<Sync>("prepareAppResources"))
     from(stageOfficialModules) { into("modules") }
     into(layout.buildDirectory.dir("compose/tmp/distributableResources"))
+    // PACKAGE-1: what every package task (createDistributable, packageMsi/Exe, release variants) puts in the app image.
+    val expected = officialDaemonHalves.keys.toList()
+    doLast { ihqVerifyDaemonHalves(destinationDir.resolve("modules"), "prepareDistributableResources (the desktop app image)", expected) }
 }
 val bundledLauncherArg = "-Dagenthq.plugins.bundled=\$APPDIR/resources/modules"
 // DEV-TRUST (ticket 98ef2f8f): a -Pihq.devSign=true build signs with the throwaway dev key, which the pinned Infantry key
@@ -618,6 +648,18 @@ tasks.register("verifyOfficialModulesPackaged") {
                 check(signed == json) { "PACKAGING: $dir/module.json differs from the signed copy in $jar" }
             }
             logger.lifecycle("PACKAGING: modules/official/$name/${manifest["jar"]} signed by ${(cert as X509Certificate).subjectX500Principal.name}")
+            // PACKAGE-1: the daemon half, signed by the same key.
+            ihqDaemonJar(dir)?.let { daemonJarPath ->
+                JarFile(File(dir, daemonJarPath), true).use { j ->
+                    val files = j.entries().toList().filter { !it.isDirectory && !it.name.startsWith("META-INF/") }
+                    check(files.isNotEmpty()) { "PACKAGE-1: $dir/$daemonJarPath is empty" }
+                    for (e in files) {
+                        j.getInputStream(e).use { it.readBytes() }
+                        check(e.codeSigners?.firstOrNull()?.signerCertPath?.certificates?.firstOrNull() == cert) { "PACKAGE-1: ${e.name} in $dir/$daemonJarPath is not signed by trusted-keys/infantry.cer" }
+                    }
+                }
+                logger.lifecycle("PACKAGE-1: modules/official/$name/$daemonJarPath (daemon half) signed")
+            }
         }
         logger.lifecycle("PACKAGING: launcher sets $bundledLauncherArg; resources $res")
     }

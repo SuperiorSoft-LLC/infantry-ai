@@ -132,6 +132,18 @@ class DaemonPluginMechanismTest {
     }
 
     @Test
+    fun `a declared daemon half whose jar is missing is refused as jar missing`() {
+        // PACKAGE-1: what a package that did not ship the half looks like: module.json declares daemon.jar, the jar is not there.
+        val root = root()
+        assertTrue(File(root, "community/$MODULE/daemon").deleteRecursively())
+        val (fixture, _) = launch(root)
+        val status = fixture.module()!!["daemon"]!!.jsonPrimitive.content
+        assertTrue(status.startsWith("refused: jar missing: daemon.jar daemon/build/libs/$MODULE-daemon.jar"), status)
+        assertEquals(emptyList(), fixture.tools())
+        assertEquals(200, fixture.get("/health").statusCode())
+    }
+
+    @Test
     fun `removing the folder removes everything`() {
         val root = root()
         val state = Files.createTempDirectory("agenthq-daemon-plugin-remove").toFile()
