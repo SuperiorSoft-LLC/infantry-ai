@@ -95,6 +95,7 @@ class ResolvedConfig(private val state: NodeConfigState, private val implementat
 /** Typed reads of one node's resolved JSON; a value of another type is null, never coerced. */
 internal class JsonValues(private val values: Map<String, JsonElement>, private val userSet: Set<String> = emptySet()) : ConfigValues {
     override fun overridden(key: String): Boolean = key in userSet
+    override fun json(key: String): JsonElement? = values[key]
     override val keys: Set<String> get() = values.keys
     private fun prim(key: String) = values[key] as? JsonPrimitive
     override fun string(key: String): String? = prim(key)?.takeIf { it.isString }?.content

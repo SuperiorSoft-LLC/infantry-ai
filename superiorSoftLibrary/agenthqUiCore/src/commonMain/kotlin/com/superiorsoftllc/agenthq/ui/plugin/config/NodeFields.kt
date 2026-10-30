@@ -1,6 +1,13 @@
 package com.superiorsoftllc.agenthq.ui.plugin.config
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import com.superiorsoftllc.agenthq.ui.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.ui.semantics.Role
+import com.superiorsoftllc.agenthq.ui.DropdownMenuItem
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -27,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldTypes
+import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldValidator
 import com.superiorsoftllc.agenthq.plugin.api.ConfigSetBy
 import com.superiorsoftllc.agenthq.ui.Checkbox
 import com.superiorsoftllc.agenthq.ui.Chip
@@ -75,6 +83,7 @@ fun NodeFields(factory: TabFactory, node: String, fields: List<DeclaredField>, e
     val resolved = factory.resolvedConfig
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         for (f in fields) {
+            if (!ConfigFieldValidator.isVisible(f.field) { resolved.json(node, it) }) continue
             val tag = "$node/${f.key}"
             val value = resolved.json(node, f.key)
             val own = config.own(node, f.key)
@@ -99,7 +108,7 @@ fun NodeFields(factory: TabFactory, node: String, fields: List<DeclaredField>, e
                         modifier = Modifier.testTag(NODE_FIELD_CHECK_TAG_PREFIX + tag).semantics { contentDescription = f.field.label },
                     )
                     ConfigFieldTypes.TEXT, ConfigFieldTypes.TEXTAREA, ConfigFieldTypes.NUMBER, ConfigFieldTypes.COLOR -> TextEditor(f, tag, value, can, ::write)
-                    ConfigFieldTypes.SELECT, ConfigFieldTypes.RADIO -> for (o in f.field.options) Option(tag, o, f.field.optionLabels[o] ?: o, (value as? JsonPrimitive)?.content == o, can) { write(JsonPrimitive(o)) }
+                    ConfigFieldTypes.SELECT, ConfigFieldTypes.RADIO -> if (f.field.type == ConfigFieldTypes.SELECT && f.field.display == "dropdown") SelectDropdown(f.field, tag, value, can, ::write) else for (o in f.field.options) Option(tag, o, f.field.optionLabels[o] ?: o, (value as? JsonPrimitive)?.content == o, can) { write(JsonPrimitive(o)) }
                     ConfigFieldTypes.MULTI_SELECT -> {
                         val picked = (value as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content }.orEmpty()
                         for (o in f.field.options) Option(tag, o, o, o in picked, can) {
@@ -168,6 +177,25 @@ fun NodeFieldGroups(factory: TabFactory, node: String, fields: List<DeclaredFiel
     NodeFields(factory, node, fields.filter { it.group == group }, editable, locked)
 }
 
+/** CONFIG-FIELDS-2: a `select` with `display: "dropdown"`: the current label on a button, the options in a menu (item tag `node-field-option-<node>/<key>/<option>`). */
+@Composable
+internal fun SelectDropdown(field: ConfigFieldDeclaration, tag: String, value: JsonElement?, enabled: Boolean, write: (JsonElement?) -> Unit) {
+    var open by remember(tag) { mutableStateOf(false) }
+    val current = (value as? JsonPrimitive)?.content
+    Box {
+        TextButton({ open = true }, Modifier.testTag(NODE_FIELD_INPUT_TAG_PREFIX + tag).semantics { contentDescription = field.label }, enabled = enabled) {
+            Text((current?.let { field.optionLabels[it] ?: it } ?: field.placeholder ?: "Choose") + " ▾")
+        }
+        DropdownMenu(open, { open = false }) {
+            for (o in field.options) DropdownMenuItem(
+                { Text(field.optionLabels[o] ?: o, fontSize = 12.sp) },
+                { open = false; write(JsonPrimitive(o)) },
+                Modifier.testTag("$NODE_FIELD_OPTION_TAG_PREFIX$tag/$o"),
+            )
+        }
+    }
+}
+
 @Composable
 internal fun Option(tag: String, option: String, label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     FilterChip(
@@ -188,8 +216,9 @@ internal fun TextEditor(f: DeclaredField, tag: String, value: JsonElement?, enab
     val min = f.field.min
     val max = f.field.max
     val problem = when {
-        f.field.type == ConfigFieldTypes.COLOR -> if (parseConfigColor(draft.trim()) == null) "Use #RRGGBB or #AARRGGBB" else null
-        !number -> null
+        f.field.type == ConfigFieldTypes.COLOR && parseConfigColor(draft.trim()) == null -> "Use #RRGGBB or #AARRGGBB"
+        !number -> ConfigFieldValidator.checkRules(f.field, JsonPrimitive(draft))
+        draft.isBlank() -> if (f.field.required) "Required" else "Not a number"
         parsed == null -> "Not a number"
         min != null && parsed < min -> "At least $min"
         max != null && parsed > max -> "At most $max"
@@ -197,9 +226,19 @@ internal fun TextEditor(f: DeclaredField, tag: String, value: JsonElement?, enab
     }
     OutlinedTextField(
         value = draft, onValueChange = { draft = it }, singleLine = !area, minLines = if (area) 3 else 1, enabled = enabled, isError = problem != null,
+        placeholder = f.field.placeholder?.let { { Text(it, fontSize = 12.sp) } },
         modifier = Modifier.widthIn(min = 160.dp, max = 320.dp).testTag(NODE_FIELD_INPUT_TAG_PREFIX + tag).semantics { contentDescription = f.field.label },
     )
     if (problem != null) Chip(problem, Palette.Danger)
+    for (hex in f.field.palette) {
+        val argb = parseConfigColor(hex) ?: continue
+        Box(
+            Modifier.size(20.dp).clip(RoundedCornerShape(4.dp)).background(androidx.compose.ui.graphics.Color(argb.toInt()))
+                .border(1.dp, if (hex.equals(draft.trim(), ignoreCase = true)) Palette.Accent else Palette.Muted, RoundedCornerShape(4.dp))
+                .clickable(enabled = enabled, role = Role.Button) { draft = hex; write(JsonPrimitive(hex)) }.handCursor(enabled)
+                .testTag("$NODE_FIELD_OPTION_TAG_PREFIX$tag/$hex").semantics { contentDescription = "${f.field.label} $hex" },
+        )
+    }
     TextButton(
         {
             write(

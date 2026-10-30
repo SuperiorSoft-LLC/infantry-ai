@@ -69,7 +69,26 @@ data class ConfigFieldDeclaration(
     val slots: Map<String, ConfigClassSlot> = emptyMap(),
     /** CONFIG-9: a `list` field's item: a field (`{type:"text"}`); its [key] is ignored. Null = text. */
     val item: ConfigFieldDeclaration? = null,
+    /** CONFIG-FIELDS-2: an empty value (unset, blank text, empty list) is refused. */
+    val required: Boolean = false,
+    /** CONFIG-FIELDS-2: a text value must match this regex in full; [patternMessage] is the error shown. */
+    val pattern: String? = null,
+    val patternMessage: String? = null,
+    val minLength: Int? = null,
+    val maxLength: Int? = null,
+    /** CONFIG-FIELDS-2: shown only while sibling [ConfigVisibleWhen.key] equals [ConfigVisibleWhen.eq]; a hidden field is not validated. */
+    val visibleWhen: ConfigVisibleWhen? = null,
+    /** CONFIG-FIELDS-2: hint shown in an empty text box. */
+    val placeholder: String? = null,
+    /** CONFIG-FIELDS-2: a `color` field offers these `#RRGGBB` swatches next to its box. */
+    val palette: List<String> = emptyList(),
+    /** CONFIG-FIELDS-2: `dropdown` draws a `select` as a menu; null keeps the option buttons. */
+    val display: String? = null,
 )
+
+/** CONFIG-FIELDS-2: show a field only while the sibling field [key] holds [eq] (compared as text; `true`/`false` for a checkbox). */
+@Serializable
+data class ConfigVisibleWhen(val key: String, val eq: String)
 
 /** CONFIG-9: one slot of a `classes` field. An empty [tokens] means free text (stored, ignored unless the block knows it). */
 @Serializable
@@ -162,8 +181,29 @@ data class ConfigChangedFrame(val node: String, val key: String, val value: Json
 object ConfigFieldValidator {
     private val COLOR = Regex("^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$")
 
+    /** CONFIG-FIELDS-2: the required / length / pattern rules of [field] over [value]; null when fine, else one line. Length and pattern apply to text only. */
+    fun checkRules(field: ConfigFieldDeclaration, value: JsonElement?): String? {
+        val prim = value as? kotlinx.serialization.json.JsonPrimitive
+        val empty = value == null || value is kotlinx.serialization.json.JsonNull || (prim != null && prim.isString && prim.content.isEmpty()) ||
+            (value is kotlinx.serialization.json.JsonArray && value.isEmpty())
+        if (empty) return if (field.required) "Required" else null
+        if (prim == null || !prim.isString) return null
+        val t = prim.content
+        field.minLength?.let { if (t.length < it) return "At least $it characters" }
+        field.maxLength?.let { if (t.length > it) return "At most $it characters" }
+        field.pattern?.let { p -> if (runCatching { !Regex(p).matches(t) }.getOrDefault(false)) return field.patternMessage ?: "Does not match the expected format" }
+        return null
+    }
+
+    /** CONFIG-FIELDS-2: whether [field] is shown, given [sibling] (a sibling key's current JSON). No `visibleWhen` = always. */
+    fun isVisible(field: ConfigFieldDeclaration, sibling: (String) -> JsonElement?): Boolean {
+        val w = field.visibleWhen ?: return true
+        return (sibling(w.key) as? kotlinx.serialization.json.JsonPrimitive)?.content == w.eq
+    }
+
     fun validate(field: ConfigFieldDeclaration, value: JsonElement): JsonElement {
         val name = field.key
+        checkRules(field, value)?.let { require(false) { "setting '$name': $it" } }
         val prim = value as? kotlinx.serialization.json.JsonPrimitive
         fun text(): String {
             require(prim != null && prim.isString) { "setting '$name' must be a string" }

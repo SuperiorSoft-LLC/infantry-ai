@@ -933,7 +933,20 @@ interface ConfigValues {
      * from a declared default. A block that already has its own persisted state applies a value only when this is true.
      */
     fun overridden(key: String): Boolean = false
+    /** CONFIG-FIELDS-2: the raw resolved JSON of [key]; null where unset (and for fakes that only type their values). */
+    fun json(key: String): kotlinx.serialization.json.JsonElement? = null
 }
+
+/**
+ * CONFIG-FIELDS-2 (G9): the resolved values decoded into [T] (a `@Serializable` class) by property name. A key [T] does
+ * not declare is ignored, a key the config does not set keeps [T]'s default; null when [T] cannot be built from them.
+ */
+inline fun <reified T : Any> ConfigValues.configAs(): T? = configAs(kotlinx.serialization.serializer<T>())
+
+fun <T : Any> ConfigValues.configAs(serializer: kotlinx.serialization.KSerializer<T>): T? = runCatching {
+    val obj = kotlinx.serialization.json.JsonObject(keys.mapNotNull { k -> json(k)?.let { k to it } }.toMap())
+    kotlinx.serialization.json.Json { ignoreUnknownKeys = true; isLenient = true }.decodeFromJsonElement(serializer, obj)
+}.getOrNull()
 
 /** CONFIG-3: `"#RRGGBB"` or `"#AARRGGBB"` as 0xAARRGGBB, else null. */
 fun parseConfigColor(text: String?): Long? {

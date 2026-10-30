@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.plugin.api.ConfigDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldTypes
+import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldValidator
 import com.superiorsoftllc.agenthq.plugin.api.ConfigSetBy
 import com.superiorsoftllc.agenthq.ui.CONFIG_HIGHLIGHT_STATE
 import com.superiorsoftllc.agenthq.ui.CONFIG_SECTION_TAG_PREFIX
@@ -133,7 +134,7 @@ private fun GeneratedCard(factory: TabFactory, card: ConfigCard, highlight: Conf
         val daemonCard = factory.config.isDaemonNode(card.node)
         val editable = (daemonCard || factory.config.load == NodeConfigLoad.LOADED) && !card.declaration.locked && !card.declaration.readOnly
         if (card.declaration.readOnly) Text("Read-only: this plugin is not signed.", color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(GENERATED_READONLY_TAG_PREFIX + card.node))
-        for (f in card.fields) GeneratedField(factory, card, f, editable)
+        for (f in card.fields) if (ConfigFieldValidator.isVisible(f) { factory.resolvedConfig.json(card.node, it) }) GeneratedField(factory, card, f, editable)
         if (daemonCard) factory.config.daemonError?.let { Text(it, color = Palette.Danger, fontSize = 11.sp, modifier = Modifier.testTag(GENERATED_DAEMON_ERROR_TAG)) }
     }
 }
@@ -167,7 +168,7 @@ private fun GeneratedField(factory: TabFactory, card: ConfigCard, f: ConfigField
                     )
                     Text(if (on) "On" else "Off", fontSize = 12.sp)
                 }
-                ConfigFieldTypes.SELECT -> for (o in f.options) Option(tag, o, f.optionLabels[o] ?: o, (value as? JsonPrimitive)?.content == o, editable) { write(JsonPrimitive(o)) }
+                ConfigFieldTypes.SELECT -> if (f.display == "dropdown") SelectDropdown(f, tag, value, editable, ::write) else for (o in f.options) Option(tag, o, f.optionLabels[o] ?: o, (value as? JsonPrimitive)?.content == o, editable) { write(JsonPrimitive(o)) }
                 ConfigFieldTypes.RADIO -> Column(Modifier.selectableGroup()) {
                     for (o in f.options) {
                         val picked = (value as? JsonPrimitive)?.content == o
