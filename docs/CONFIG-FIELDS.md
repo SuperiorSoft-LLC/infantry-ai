@@ -83,11 +83,11 @@ Every field is `{ key, type, label, ...properties }`. Stored values are plain JS
    (`string int double boolean strings classes color`), resolved default -> parent -> override, recomposing on change.
 2. Missing config is a value: `EMPTY` answers null for every key and the block uses its constants (blank shell and unit tests work).
 3. A block reads its own node and its ancestors only; another module's node needs the `config.read` service allowed in
-   `plugins/modules.json` (designed, see manifest design section 3; **not verified as built: G8**).
+   `plugins/modules.json` (designed, see manifest design section 3; **audited in CONFIG-FIELDS-2: not built, `ConfigContext.values` answers any node id, G8 open**).
 4. **Classes:** the block declares a `classes` field with `slots`, each with a token `allow-list`. The block maps tokens to
    Modifiers/TextStyles it owns; a token outside the list never reaches the block (validator). An empty allow-list means free text,
    stored but ignored unless the block understands it. No class names, no code, in config.
-5. Typed bean (`scope.configAs<T>()` via kotlinx.serialization) is designed, **not built** (G9, small).
+5. Typed bean (`scope.configAs<T>()` via kotlinx.serialization) is built (CONFIG-FIELDS-2): `ConfigValues.configAs<T>()` decodes the resolved map, ignores unknown keys, null on a wrong type. Example of the new field keys: `plugins/examples/Acme_FieldKeys`.
 
 ## 5. Bean-style binding rule
 
@@ -112,15 +112,15 @@ all, never by a compile-time import between plugins. Today this works for tab so
 
 | # | Gap | Size | Notes |
 |---|---|---|---|
-| G1 | `required`, `pattern`, `minLength`, `maxLength` in both validators + editor error | S (0.5 d) | add optional keys to `ConfigFieldDeclaration`; extend `ConfigFieldValidator` and `validateBuiltIn`; tests. Not trivial enough for this ticket because the dialog Save-button logic needs a pass |
-| G2 | `visibleWhen` (sibling key eq) | S (0.5 d) | hide the editor in `NodeFields` and skip validation of a hidden field |
+| G1 **done** (CONFIG-FIELDS-2) | `required`, `pattern`, `minLength`, `maxLength` in both validators + editor error | S (0.5 d) | add optional keys to `ConfigFieldDeclaration`; extend `ConfigFieldValidator` and `validateBuiltIn`; tests. Not trivial enough for this ticket because the dialog Save-button logic needs a pass |
+| G2 **done** (CONFIG-FIELDS-2) | `visibleWhen` (sibling key eq) | S (0.5 d) | hide the editor in `NodeFields` and skip validation of a hidden field |
 | G3 | `group` type and `list` with object items (`fields[]`) | M (2 d) | recursive editor and validator; stored as object / array of objects |
 | G4 | `secret` field | M (1.5 d) | must write to the Secrets store, never `node_config`; ties to the daemon secrets API; owner call on scope |
-| G5 | `placeholder`, color swatch `palette`, real dropdown for `select` | S (0.5 d) | UI polish |
+| G5 **done** (CONFIG-FIELDS-2; `select` is a dropdown only with `display:"dropdown"`, default stays option buttons) | `placeholder`, color swatch `palette`, real dropdown for `select` | S (0.5 d) | UI polish |
 | G6 | `since`, `renamedFrom` migration marker | S (1 d) | loader step after compile |
 | G7 | declaration-level `requires.contract` | S (0.5 d) | hide group when daemon contract is older |
-| G8 | verify `config.read` cross-node gate exists and has a test | S (0.5 d) | audit item, may already be built |
-| G9 | `scope.configAs<T>()` typed bean | S (0.5 d) | kotlinx.serialization over the resolved map |
+| G8 **audited: gate MISSING** (`ConfigContext.values(nodeId)` answers any node; only `config.read` exists as a daemon policy action, no UI-side gate or test) | verify `config.read` cross-node gate exists and has a test | S (0.5 d) | audit item, may already be built |
+| G9 **done** (CONFIG-FIELDS-2, `ConfigValues.configAs<T>()`) | `scope.configAs<T>()` typed bean | S (0.5 d) | kotlinx.serialization over the resolved map |
 | G10 | scripted blank-shell E2E (empty plugins tree, temp state dir, port 8812) | M (2 d) | asserts section 1 items (a)-(d); the pre-launch QA gate wants it |
 | G11 | generic block `dependsOn` registry ids for bean binding | M (1.5 d) | host injects the config-chosen provider; today only `implementation` fields |
 | G12 | daemon `settings` built-in keys onto declared validators | M (2 d) | would let the daemon shell stop hand-validating; contract bump |
