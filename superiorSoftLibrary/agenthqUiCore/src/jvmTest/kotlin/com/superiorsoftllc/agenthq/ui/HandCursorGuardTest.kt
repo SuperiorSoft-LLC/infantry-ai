@@ -71,9 +71,10 @@ class HandCursorGuardTest {
         // CONFIG-FIELDS-2: +3 Text (select dropdown label and items, placeholder), +1 DropdownMenu (select display: dropdown).
         // CONFIG-FIELDS-4: +4 Text in GroupEditor.kt (nested field label, row heading, Remove and Add button labels; the buttons are the wrapped TextButton).
         // HARNESS-PLUGIN-4 H5a: +1 Text (ModulesSection harness row) and +1 Icon (HarnessIcon's manifest painter), both display-only.
-        "Text" to 1166,
+        // CONTEXT-LIMIT-1: +3 display-only Text and +1 OutlinedTextField (the New agent dialog's context limit: label, placeholder, support note; the field).
+        "Text" to 1169,
         "DropdownMenu" to 10,
-        "OutlinedTextField" to 104,
+        "OutlinedTextField" to 105,
         "BasicTextField" to 2,
         "Icon" to 19,
         "HorizontalDivider" to 31,

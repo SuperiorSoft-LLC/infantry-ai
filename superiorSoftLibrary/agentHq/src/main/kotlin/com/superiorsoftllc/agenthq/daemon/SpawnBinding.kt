@@ -35,5 +35,6 @@ fun bindSessionOnSpawn(
         role = resolved.role,
         projectId = resolved.projectId,
         instance = agents.instanceFor(resolved.agentId, resolved.role),
+        contextLimit = options?.contextLimit, // CONTEXT-LIMIT-1
     )
 }

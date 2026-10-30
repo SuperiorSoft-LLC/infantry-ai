@@ -45,7 +45,7 @@ class ProviderInfoCatalogTest {
     @Test
     fun `a provider that cannot list models carries no models`() {
         val info = providerInfo(Fake("claude", model = "claude/sonnet"), isDefault = false)
-        assertEquals(ProviderInfo(id = "claude", default = false, defaultModel = "claude/sonnet"), info)
+        assertEquals(ProviderInfo(id = "claude", default = false, defaultModel = "claude/sonnet", contextLimit = "unsupported", contextLimitHow = "this harness declares no context limit mapping"), info)
         assertNull(info.models)
     }
 }

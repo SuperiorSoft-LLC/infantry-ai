@@ -204,6 +204,9 @@ object ListHarnessesTool : DaemonTool {
                                     put("available", harness.available)
                                     put("unavailableReason", harness.unavailableReason)
                                     put("note", harness.note)
+                                    // CONTEXT-LIMIT-1: how a ticket / spawn contextLimit is honoured on this harness.
+                                    harness.contextLimit?.let { put("contextLimit", it) }
+                                    harness.contextLimitHow?.let { put("contextLimitHow", it) }
                                 })
                             }
                         })

@@ -1,5 +1,7 @@
 package com.acme.echoharness
 
+import com.superiorsoftllc.agenthq.harness.api.ContextLimitCapability
+import com.superiorsoftllc.agenthq.harness.api.ContextLimitSupport
 import com.superiorsoftllc.agenthq.harness.api.HARNESS_API_VERSION
 import com.superiorsoftllc.agenthq.harness.api.Harness
 import com.superiorsoftllc.agenthq.harness.api.HarnessCapability
@@ -31,11 +33,15 @@ class EchoHarness(private val host: HarnessHost) : Harness {
     override val id = "echo"
     override val capabilities = setOf(HarnessCapability.SESSION_RESUME)
 
+    /** Harness API 2.1 (CONTEXT-LIMIT-1): the plugin path for a context limit. Echo "applies" it by printing it back. */
+    override val contextLimit = ContextLimitCapability(ContextLimitSupport.SUPPORTED, "echo prints the limit it was given (ECHO_CONTEXT_LIMIT)")
+
     private val jar: File by lazy { File(EchoHarness::class.java.protectionDomain.codeSource.location.toURI()) }
 
     override fun process(request: HarnessRequest): HarnessProcess {
         val java = File(System.getProperty("java.home"), "bin/java").path
-        val env = host.setting("echo.prefix")?.let { mapOf("ECHO_PREFIX" to it) }.orEmpty()
+        val env = host.setting("echo.prefix")?.let { mapOf("ECHO_PREFIX" to it) }.orEmpty() +
+            request.contextLimit?.let { mapOf("ECHO_CONTEXT_LIMIT" to it.toString()) }.orEmpty()
         return HarnessProcess(listOf(java, "-cp", jar.path, EchoCli::class.java.name), env = env)
     }
 

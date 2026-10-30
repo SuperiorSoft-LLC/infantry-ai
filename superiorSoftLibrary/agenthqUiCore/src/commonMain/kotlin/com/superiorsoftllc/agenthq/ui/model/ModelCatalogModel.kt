@@ -25,12 +25,14 @@ fun catalogSections(catalog: List<ProviderModels>): List<CatalogSection> =
     catalog.groupBy { it.provider }.map { (provider, groups) -> CatalogSection(provider, groups) }
 
 /** The `new` frame's data for the next spawn: the picked provider+model, or "" (daemon defaults) when none. */
-fun spawnOptionsData(picked: PickedModel?, effort: String? = null, role: String? = null, projectId: String? = null): String =
-    if (picked == null && effort == null && role == null && projectId == null) ""
+fun spawnOptionsData(picked: PickedModel?, effort: String? = null, role: String? = null, projectId: String? = null, contextLimit: Int? = null): String =
+    if (picked == null && effort == null && role == null && projectId == null && contextLimit == null) ""
     else buildJsonObject {
         if (picked != null) { put("provider", picked.provider); picked.model?.let { put("model", it) } }
         if (effort != null) put("effort", effort)
         if (role != null) put("role", role)
         // BUG-M2-15: the session is bound to the project it was spawned under (SpawnOptions.projectId), so scoping can hide it elsewhere.
         if (projectId != null) put("projectId", projectId)
+        // CONTEXT-LIMIT-1: the session's context limit in tokens; absent = the harness's own window.
+        if (contextLimit != null) put("contextLimit", contextLimit)
     }.toString()

@@ -207,10 +207,10 @@ class NewAgentBlock(children: List<Block>, place: Place = Place()) : Block("newA
         if (c.showNewAgent && com.superiorsoftllc.agenthq.ui.shell.rememberGate("agents.spawn", com.superiorsoftllc.agenthq.plugin.api.ActionKind.SPAWN).allowed) {
             NewAgentDialogFrame(
                 state,
-                onAdd = { role, picked, task ->
+                onAdd = { role, picked, task, contextLimit ->
                     controller.pickSpawnRole(role)
                     controller.pickModel(picked)
-                    val r = controller.spawn(task)
+                    val r = controller.spawn(task, contextLimit)
                     if (r is CommandResult.Refused) r.reason else { c.setShowNewAgent(false); null }
                 },
                 onDismiss = { c.setShowNewAgent(false) },

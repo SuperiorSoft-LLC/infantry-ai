@@ -124,6 +124,9 @@ internal class McpWriteTools(
         val projectId = arguments.string("projectId") ?: defaultProjectId
         val task = arguments.string("task")
         if (agentId == null && role == null) return refused("agenthq_spawn needs a role or an agentId (or both)")
+        // CONTEXT-LIMIT-1: `200000`, `200k`, `1m`; blank / off = none. Checked here so a typo never reaches the daemon.
+        val contextLimit = com.superiorsoftllc.agenthq.session.ContextLimits.parse(arguments.string("contextLimit"))
+        contextLimit.error?.let { return refused("agenthq_spawn: $it") }
 
         // The daemon pushes a `sessions` snapshot on every new connection: consumed FIRST, so the settings answer below
         // cannot skip past it.
@@ -147,7 +150,7 @@ internal class McpWriteTools(
             )
         }
 
-        val options = SpawnOptions(agentId = agentId, role = role, projectId = projectId)
+        val options = SpawnOptions(agentId = agentId, role = role, projectId = projectId, contextLimit = contextLimit.value)
         // BUG-G2d (contract 1.58.0): the `new` names the session this server runs inside, so the daemon charges the
         // spawn to that session's pod (cap and depth limit). Outside a session there is none, and nothing is charged.
         val origin = getenv(AccessPolicy.SESSION_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }
@@ -182,6 +185,7 @@ internal class McpWriteTools(
             put("role", current.role)
             put("provider", current.provider)
             put("model", current.model)
+            current.contextLimit?.let { put("contextLimit", it); put("contextLimitSupport", current.contextLimitSupport) }
             put("status", current.state.name)
             put("depth", childDepth)
             put("taskSent", task != null)
@@ -585,6 +589,12 @@ internal class McpWriteTools(
 
     companion object {
         const val SPAWN = "agenthq_spawn"
+
+        /** CONTEXT-LIMIT-1: the one description of a contextLimit argument, shared by spawn and the ticket tools. */
+        const val CONTEXT_LIMIT_HELP =
+            "Context limit for the session in tokens (200000, 200k, 1m; off = none, the default): a larger one for a hard, " +
+                "long task, a smaller one for a small job. How it is honoured depends on the harness: agenthq_list_harnesses " +
+                "shows contextLimit per harness (supported / best_effort / unsupported; unsupported = recorded, not applied)."
         const val PROMPT = "agenthq_prompt"
         const val MESSAGE = "agenthq_message"
         const val KILL = "agenthq_kill"
@@ -626,6 +636,7 @@ internal class McpWriteTools(
                     put("agentId", prop("string", "Agent profile id; with role, it must be that profile's role."))
                     put("projectId", prop("string", "Project the session belongs to (default: the server's --project / .agenthq/mcp.json projectId)."))
                     put("task", prop("string", "Optional first prompt for the new session."))
+                    put("contextLimit", prop("string", CONTEXT_LIMIT_HELP))
                     put(
                         "ticketId",
                         prop(

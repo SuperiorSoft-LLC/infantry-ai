@@ -323,6 +323,8 @@ class LocalBoardServices(
             effectiveModel = t.effectiveExecutor?.model?.value, effectiveModelSource = t.effectiveExecutor?.model?.source,
             effectiveRule = t.effectiveExecutor?.rule, sessionId = t.sessionId, branch = t.branch, base = t.base,
             images = t.images, skillIds = t.skillIds,
+            contextLimit = t.contextLimit, effectiveContextLimit = t.effectiveContextLimit?.value,
+            effectiveContextLimitSource = t.effectiveContextLimit?.source, contextLimitSupport = t.effectiveContextLimit?.support,
         )
 
         fun info(e: Epic) = EpicInfo(e.id, e.projectId, e.name, e.goal, e.storyIds, e.baseBranch)

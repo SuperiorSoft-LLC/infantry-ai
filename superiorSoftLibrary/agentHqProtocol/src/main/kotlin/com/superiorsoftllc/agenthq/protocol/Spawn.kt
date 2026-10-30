@@ -47,6 +47,11 @@ data class SpawnOptions(
     val promptTimeoutSec: Int? = null,
     /** ASK-TIMER (1.139.0, ADDITIVE): this session's `prompts.onTimeout` (`deny` | `approve`); null = global. Unknown refuses the spawn. */
     val promptOnTimeout: String? = null,
+    /**
+     * CONTEXT-LIMIT-1 (1.146.0, ADDITIVE): the session's context limit in tokens (10000..10000000); null = the harness's own
+     * window. How it is honoured is the harness's (`providers` lists `contextLimit` per harness); out of range refuses the spawn.
+     */
+    val contextLimit: Int? = null,
 ) {
     companion object {
         /** Decode a `new` frame's JSON data, or throw [IllegalArgumentException] saying what is wrong. */
@@ -80,6 +85,13 @@ data class ProviderInfo(
      */
     val available: Boolean = true,
     val unavailableReason: String? = null,
+    /**
+     * CONTEXT-LIMIT-1 (1.146.0, ADDITIVE): how this provider honours a session's `contextLimit`: `supported` (the CLI keeps
+     * the conversation under it), `best_effort` (approximated, e.g. compacted between turns) or `unsupported` (recorded, not
+     * applied); [contextLimitHow] says how in words. Null from an older daemon.
+     */
+    val contextLimit: String? = null,
+    val contextLimitHow: String? = null,
 )
 
 /**

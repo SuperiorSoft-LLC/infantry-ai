@@ -202,7 +202,13 @@ class McpOrchestrationE2eTest {
         assertEquals(before, manager.list().size, "the refused spawn created nothing")
 
         // 6b) the concurrency guardrail: the orchestrator holds the lead, one more fills maxSpawns=2, the next is refused.
-        val second = payload(orchestrator.callTool("agenthq_spawn", """{"role":"qa"}""")).str("sessionId")
+        // CONTEXT-LIMIT-1: a spawn carries a context limit (recorded on the session); a typo is refused with nothing created.
+        assertRefused(orchestrator.callTool("agenthq_spawn", """{"role":"qa","contextLimit":"200"}"""), "out of range")
+        assertEquals(before, manager.list().size, "the refused spawn created nothing")
+        val spawnedWithLimit = payload(orchestrator.callTool("agenthq_spawn", """{"role":"qa","contextLimit":"300k"}"""))
+        assertEquals(300_000, spawnedWithLimit["contextLimit"]!!.jsonPrimitive.int)
+        val second = spawnedWithLimit.str("sessionId")
+        assertEquals(300_000, manager.get(second)!!.contextLimit)
         assertEquals(before + 1, manager.list().size)
         assertRefused(orchestrator.callTool("agenthq_spawn", """{"role":"qa"}"""), "concurrency limit")
         assertEquals(before + 1, manager.list().size, "the refused spawn created nothing")

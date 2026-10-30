@@ -11,7 +11,9 @@ CREATE TABLE IF NOT EXISTS run_usage (
     reasoning INTEGER,
     cache_read INTEGER,
     cache_write INTEGER,
-    cost_usd REAL
+    cost_usd REAL,
+    -- CONTEXT-LIMIT-1 (53.sqm): the context limit (tokens) the run's session had; NULL = none.
+    context_limit INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS index_run_usage_on_provider_ended_at ON run_usage(provider, ended_at);
@@ -30,8 +32,8 @@ CREATE TABLE IF NOT EXISTS provider_state (
 );
 
 insertRunUsage:
-INSERT OR REPLACE INTO run_usage(run_id, session_id, provider, model, ended_at, input, output, reasoning, cache_read, cache_write, cost_usd)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO run_usage(run_id, session_id, provider, model, ended_at, input, output, reasoning, cache_read, cache_write, cost_usd, context_limit)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 getRunUsageBySession:
 SELECT * FROM run_usage WHERE session_id = ? ORDER BY ended_at ASC, run_id ASC;

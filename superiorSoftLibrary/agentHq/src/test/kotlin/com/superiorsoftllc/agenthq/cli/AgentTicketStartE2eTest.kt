@@ -400,6 +400,33 @@ class AgentTicketStartE2eTest {
     }
 
     @Test
+    fun `CONTEXT-LIMIT-1 ticket create and update carry a context limit, off clears it, a typo is refused, the CLI sets it too`() {
+        val rig = rig()
+        val call = mcp(rig)
+        val created = call(McpTicketTools.CREATE, args("title" to "Big refactor", "contextLimit" to "500k"))
+        assertFalse(created.isError(), created.text())
+        val ticketId = created.payload().field("ticketId")!!
+        assertEquals(500_000, board(rig.fixture).single { it.id == ticketId }.contextLimit)
+
+        val bad = call(McpTicketTools.UPDATE, args("ticketId" to ticketId.takeLast(8), "contextLimit" to "200"))
+        assertTrue(bad.isError(), bad.text())
+        assertEquals(500_000, board(rig.fixture).single { it.id == ticketId }.contextLimit, "a refused limit changes nothing")
+
+        val cleared = call(McpTicketTools.UPDATE, args("ticketId" to ticketId.takeLast(8), "contextLimit" to "off"))
+        assertFalse(cleared.isError(), cleared.text())
+        assertEquals(listOf("contextLimit"), cleared.payload()["saved"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(null, board(rig.fixture).single { it.id == ticketId }.contextLimit)
+
+        val viaCli = cli(rig, "ticket", "update", ticketId.takeLast(8), "--context-limit", "1m")
+        assertEquals(0, viaCli.exit, "out=${viaCli.out} err=${viaCli.err}")
+        val stored = board(rig.fixture).single { it.id == ticketId }
+        assertEquals(1_000_000, stored.contextLimit)
+        assertEquals("ticket", stored.effectiveContextLimit?.source)
+        val shown = cli(rig, "ticket", "show", ticketId.takeLast(8))
+        assertTrue(shown.out.contains("CONTEXT LIMIT: 1m (ticket)"), shown.out)
+    }
+
+    @Test
     fun `ticket update answers that it saved role, provider and model`() {
         val rig = rig()
         val call = mcp(rig)

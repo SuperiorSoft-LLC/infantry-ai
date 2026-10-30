@@ -350,6 +350,7 @@ class McpServeTest {
             assertEquals("todo", ticket["status"]!!.jsonPrimitive.content)
             assertEquals(
                 listOf("ticketId", "title", "description", "status", "projectId", "epicId", "agentId", "role", "provider", "model", "weight",
+                    "contextLimit", "effectiveContextLimit", "effectiveContextLimitSource", "contextLimitSupport",
                     "effectiveProvider", "effectiveProviderSource", "effectiveModel", "effectiveModelSource", "effectiveRule", "branch", "sessionId", "images"),
                 ticket.keys.toList(), "the answer's fields and their order",
             )
@@ -442,7 +443,7 @@ class McpServeTest {
             val payload = Json.parseToJsonElement(got["content"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content).jsonObject
             assertEquals(ids, payload["harnesses"]!!.jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.content })
             assertEquals(
-                setOf("id", "default", "defaultModel", "models", "available", "unavailableReason", "note"),
+                setOf("id", "default", "defaultModel", "models", "available", "unavailableReason", "note", "contextLimit", "contextLimitHow"),
                 payload["harnesses"]!!.jsonArray.first().jsonObject.keys,
             )
             assertEquals(com.superiorsoftllc.agenthq.daemon.api.harness.HarnessCatalogText.HOW_TO_PIN, payload["howToUse"]!!.jsonPrimitive.content)

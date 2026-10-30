@@ -32,6 +32,14 @@ class PiHarness(
 
     override fun sessionAdapter(): HarnessSessionAdapter? = sessionAdapter
 
+    /** CONTEXT-LIMIT-1: best effort through the persistent session; a one-shot pi run (`--mode json`) has no way to apply it. */
+    override val contextLimit: com.superiorsoftllc.agenthq.harness.ContextLimitCapability =
+        if (sessionAdapter is PiSessionAdapter) PiSessionAdapter.CAPABILITY
+        else com.superiorsoftllc.agenthq.harness.ContextLimitCapability(
+            com.superiorsoftllc.agenthq.harness.ContextLimitSupport.UNSUPPORTED,
+            "pi runs one-shot here (--mode json): no flag or env sets its compaction threshold",
+        )
+
     // Written out on purpose, as in the Claude harness: the interface's default getter is evaluated in the daemon's
     // copy of the interface; this inlines the const when THIS plugin is compiled.
     override val contractVersion: String = HARNESS_CONTRACT_VERSION

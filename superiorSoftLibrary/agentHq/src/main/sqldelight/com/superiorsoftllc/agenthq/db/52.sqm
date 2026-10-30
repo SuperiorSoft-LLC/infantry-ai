@@ -1,6 +1,6 @@
 -- BOARD-API-2 (DP-4b) -- migration v52 -> v53: the ticket event log and its consumers' cursors (docs in ticket_events.sq).
 --
--- NEXT MIGRATION: 53.sqm
+-- NEXT MIGRATION: 54.sqm (53.sqm = tickets.context_limit, run_usage.context_limit)
 
 CREATE TABLE IF NOT EXISTS ticket_events (
     seq INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -91,6 +91,8 @@ class TicketDaemonTest {
                 "images",
                 // TICKET-WEIGHT (contract 1.104.0): the weight, null when unweighted.
                 "weight",
+                // CONTEXT-LIMIT-1 (contract 1.146.0): the worker's context limit, and the effective one {value, source, support, how}.
+                "contextLimit", "effectiveContextLimit",
             ),
             json.parseToJsonElement(frame.data).jsonObject.keys,
         )

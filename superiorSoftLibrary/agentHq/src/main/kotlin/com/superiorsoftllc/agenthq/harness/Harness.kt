@@ -29,8 +29,11 @@ import kotlinx.coroutines.flow.Flow
  *
  * 1.6.0 (HARNESS-CARRY-1, additive): [CliHarness.conversationCarry], how the harness takes over a conversation begun on
  * another harness (a provider switch). Default [ConversationCarry.REPLAY]: the history as the first run's opening context.
+ *
+ * 1.7.0 (CONTEXT-LIMIT-1, additive): [HarnessRequest.contextLimit] and [Harness.contextLimit], the session's context limit
+ * in tokens and how this harness honours it (docs/CONTEXT-LIMIT.md). Default UNSUPPORTED: the limit is reported, not applied.
  */
-const val HARNESS_CONTRACT_VERSION: String = "1.6.0"
+const val HARNESS_CONTRACT_VERSION: String = "1.7.0"
 
 /** One run: prompt in. [model] / [sessionId] are optional and require the matching capability. */
 data class HarnessRequest(
@@ -43,7 +46,31 @@ data class HarnessRequest(
     val effort: String? = null,
     /** BUG-PERM-1 (1.5.0): how freely this run's tools may run without approval; resolved by the daemon, never null. */
     val toolApproval: ToolApproval = ToolApproval.DENY,
+    /** CONTEXT-LIMIT-1 (1.7.0): the session's context limit in tokens, null = none. Only passed to a harness whose [Harness.contextLimit] is not UNSUPPORTED. */
+    val contextLimit: Int? = null,
 )
+
+/**
+ * CONTEXT-LIMIT-1: how a harness honours a context limit (mirror of the harness API 2.1 type, docs/CONTEXT-LIMIT.md).
+ *  - [SUPPORTED]: the CLI itself keeps the conversation at or under the limit;
+ *  - [BEST_EFFORT]: approximated (e.g. compacted between turns, so one turn can pass it);
+ *  - [UNSUPPORTED]: not applied; a limit set on the session is recorded and reported as not applied.
+ */
+enum class ContextLimitSupport {
+    SUPPORTED, BEST_EFFORT, UNSUPPORTED;
+
+    /** The wire spelling (`supported` / `best_effort` / `unsupported`). */
+    val wire: String get() = name.lowercase()
+}
+
+/** [support] plus, in words, how the harness applies the limit or why it cannot. */
+data class ContextLimitCapability(val support: ContextLimitSupport, val how: String = "") {
+    val applies: Boolean get() = support != ContextLimitSupport.UNSUPPORTED
+
+    companion object {
+        val UNSUPPORTED = ContextLimitCapability(ContextLimitSupport.UNSUPPORTED, "this harness declares no context limit mapping")
+    }
+}
 
 /**
  * Typed events out. Order matters: a run ends with exactly one [Completion] or [Error].
@@ -85,6 +112,9 @@ interface Harness {
      * execute a command whose action needs a capability the harness lacks.
      */
     val commands: List<HarnessCommand> get() = emptyList()
+
+    /** CONTEXT-LIMIT-1 (1.7.0): how this harness honours [HarnessRequest.contextLimit]. Default: unsupported. */
+    val contextLimit: ContextLimitCapability get() = ContextLimitCapability.UNSUPPORTED
 
     /** Implementors produce the event stream here. Must emit incrementally, never only at completion. */
     fun events(request: HarnessRequest): Flow<HarnessEvent>

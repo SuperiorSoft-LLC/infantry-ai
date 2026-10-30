@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.ui.model.ContextLimitInput
+import com.superiorsoftllc.agenthq.ui.model.NewAgentField
 import com.superiorsoftllc.agenthq.ui.model.NewAgentModalModel
 import com.superiorsoftllc.agenthq.ui.model.PickedModel
 import com.superiorsoftllc.agenthq.ui.protocol.ProviderInfo
@@ -74,5 +76,57 @@ class NewAgentModalModelTest {
     @Test
     fun `a role with no binding and no executor sends just the role`() {
         assertEquals("""{"role":"qa"}""", fresh().withRole("qa").spawnData())
+    }
+
+    private fun ready() = fresh().withRole("qa").let { it.withExecutor(it.executor.withHarness("claude").withModel("opus")) }.withTask("go")
+
+    @Test
+    fun `CONTEXT-LIMIT-1 the limit is off by default and the add data carries none`() {
+        val m = ready()
+        assertFalse(m.contextLimitOn)
+        assertNull(m.contextLimit)
+        assertTrue(m.canAdd)
+        // Text typed while off is not sent: off is the harness's own window.
+        assertEquals("""{"provider":"claude","model":"opus","role":"qa"}""", m.withContextLimitText("200k").spawnData())
+    }
+
+    @Test
+    fun `CONTEXT-LIMIT-1 switched on, a typed size goes on the new frame and a bad one blocks Add with the reason`() {
+        val on = ready().withContextLimitOn(true)
+        assertEquals(NewAgentField.CONTEXT_LIMIT, on.missingField)
+        assertEquals("Context limit: type a size such as 200k or 1m", on.addBlockedReason)
+        assertEquals(NewAgentField.CONTEXT_LIMIT, on.withContextLimitText("200").missingField)
+        val set = on.withContextLimitText("200k")
+        assertTrue(set.canAdd)
+        assertEquals(200_000, set.contextLimit)
+        assertEquals("""{"provider":"claude","model":"opus","role":"qa","contextLimit":200000}""", set.spawnData())
+        assertNull(set.withContextLimitOn(false).contextLimit)
+    }
+
+    @Test
+    fun `CONTEXT-LIMIT-1 the note names the chosen harness support as the daemon reports it`() {
+        val reported = fresh().copy(harnesses = listOf(
+            ProviderInfo("opencode", default = true, contextLimit = "unsupported", contextLimitHow = "not mapped yet"),
+            ProviderInfo("claude", contextLimit = "supported", contextLimitHow = "auto-compacts"),
+            ProviderInfo("pi", contextLimit = "best_effort"),
+        ))
+        assertEquals("Pick a harness to see whether it honours a limit.", reported.withRole("qa").contextLimitNote)
+        fun on(h: String) = reported.withRole("qa").let { it.withExecutor(it.executor.withHarness(h)) }
+        assertEquals("claude applies the limit: auto-compacts", on("claude").contextLimitNote)
+        assertEquals("opencode does not apply a limit (it is recorded, not applied): not mapped yet", on("opencode").contextLimitNote)
+        assertEquals("pi applies it best effort", on("pi").contextLimitNote)
+        // An older daemon reports nothing: the note says so instead of guessing.
+        assertEquals("This harness does not report whether it honours a limit.", ready().contextLimitNote)
+    }
+
+    @Test
+    fun `CONTEXT-LIMIT-1 the input reads like the daemon parser`() {
+        assertEquals(200_000, ContextLimitInput.parse("200k").value)
+        assertEquals(1_000_000, ContextLimitInput.parse(" 1M ").value)
+        assertEquals(1_500_000, ContextLimitInput.parse("1.5m").value)
+        assertEquals(150_000, ContextLimitInput.parse("150,000").value)
+        assertNull(ContextLimitInput.parse("9k").value)
+        assertNull(ContextLimitInput.parse("lots").value)
+        assertNull(ContextLimitInput.parse("11m").value)
     }
 }

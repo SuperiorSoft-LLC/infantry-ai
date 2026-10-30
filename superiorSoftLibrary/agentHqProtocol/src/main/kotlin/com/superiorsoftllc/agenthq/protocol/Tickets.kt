@@ -211,7 +211,32 @@ data class Ticket(
      * source of the chosen provider / model is then `weight` in [effectiveExecutor].
      */
     val weight: Int? = null,
+    /**
+     * CONTEXT-LIMIT-1 (contract 1.146.0): the worker's context limit in tokens, or null = none (the harness's own window).
+     * Applied through the worker's harness; [effectiveContextLimit] says the value, its source and how that harness honours it.
+     */
+    val contextLimit: Int? = null,
+    /** CONTEXT-LIMIT-1: the context limit a start would use, like [effectiveExecutor]; null only from an older daemon. */
+    val effectiveContextLimit: EffectiveContextLimit? = null,
 )
+
+/**
+ * CONTEXT-LIMIT-1: a ticket's effective context limit. [value] null = none; [source] `ticket` (the ticket pins it) or `default`
+ * (no limit). [support] is how the ticket's effective harness honours a limit (`supported` / `best_effort` / `unsupported`,
+ * unsupported = recorded, not applied) and [how] says it in words; both null when the harness is not configured here.
+ */
+@Serializable
+data class EffectiveContextLimit(
+    val value: Int? = null,
+    val source: String,
+    val support: String? = null,
+    val how: String? = null,
+)
+
+/** CONTEXT-LIMIT-1: on `ticket_save`, [CLEAR] removes a ticket's context limit (absent or null keeps it). */
+object TicketContextLimit {
+    const val CLEAR = 0
+}
 
 /** TICKET-WEIGHT: the weight scale; 1 = lightest. On `ticket_save`, [CLEAR] removes a ticket's weight. */
 object TicketWeight {
@@ -373,6 +398,11 @@ data class TicketSave(
     val images: List<String>? = null,
     /** TICKET-WEIGHT (contract 1.103.0): 1..5 sets the weight, [TicketWeight.CLEAR] (0) removes it, absent or null keeps it. */
     val weight: Int? = null,
+    /**
+     * CONTEXT-LIMIT-1 (contract 1.146.0): a context limit in tokens (10000..10000000) sets it, [TicketContextLimit.CLEAR] (0)
+     * removes it, absent or null keeps it. Out of range refuses the save.
+     */
+    val contextLimit: Int? = null,
     /**
      * BACKLOG (contract 1.131.0): on a CREATE only, the column the new ticket enters: [TicketStatus.TODO] (absent or
      * null, the default) or [TicketStatus.BACKLOG]; any other column is refused. On an edit it must be absent: columns

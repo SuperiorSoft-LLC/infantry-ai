@@ -1,0 +1,10 @@
+-- CONTEXT-LIMIT-1 (ticket 1a983d71) -- migration v53 -> v54: a ticket may pin a context limit (tokens) for its worker, and each
+-- run's usage row records the limit its session ran with, so cost can be compared with and without a limit
+-- (docs/CONTEXT-LIMIT.md). Both nullable with no default: every existing ticket and run keeps "no limit" (current behaviour).
+-- The columns are exactly tickets.sq's and usage.sq's.
+--
+-- NEXT MIGRATION: 54.sqm
+
+ALTER TABLE tickets ADD COLUMN context_limit INTEGER CHECK (context_limit IS NULL OR context_limit > 0);
+
+ALTER TABLE run_usage ADD COLUMN context_limit INTEGER;

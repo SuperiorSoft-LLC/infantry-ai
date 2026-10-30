@@ -485,6 +485,12 @@ class TicketBoard(
             TicketWeight.CLEAR -> null
             else -> request.weight.also { require(it in TicketWeight.RANGE) { "weight must be ${TicketWeight.RANGE} (or ${TicketWeight.CLEAR} to clear), was $it" } }
         }
+        // CONTEXT-LIMIT-1: absent or null keeps the limit, 0 clears it, a token count sets it (ContextLimits' range).
+        val contextLimit = when (request.contextLimit) {
+            null -> existing?.contextLimit
+            com.superiorsoftllc.agenthq.protocol.TicketContextLimit.CLEAR -> null
+            else -> request.contextLimit.also { v -> com.superiorsoftllc.agenthq.session.ContextLimits.problem(v)?.let { throw IllegalArgumentException(it) } }
+        }
         validateExecutorPins(agentId, provider, model)
 
         var primary = editing ?: ""
@@ -514,6 +520,7 @@ class TicketBoard(
                         epicId = epicId,
                         images = imagePaths,
                         weight = weight,
+                        contextLimit = contextLimit,
                     ),
                 )
             } else {
@@ -535,6 +542,7 @@ class TicketBoard(
                     includeSkillsContext = includeSkillsContext,
                     images = imagePaths,
                     weight = weight,
+                    contextLimit = contextLimit,
                     queuedFor = if (agentId != row.agentId) null else row.queuedFor,
                     queuedAt = if (agentId != row.agentId) null else row.queuedAt,
                 )
@@ -856,6 +864,7 @@ class TicketBoard(
                 contextSources = composed.sources,
                 instance = instance,
                 projectId = row.projectId,
+                contextLimit = row.contextLimit, // CONTEXT-LIMIT-1
                 unattended = true,
                 launchOrigin = if (unattendedLaunch) LaunchOrigin.UNATTENDED else LaunchOrigin.HUMAN,
             )
@@ -877,7 +886,10 @@ class TicketBoard(
         // BUG-REGRESS-1: what the branch was cut from, then any launch warning (TicketStarter reads them apart).
         val weightNote = byWeight?.let { "weight ${row.weight}: ${providerId ?: "default provider"}/${model ?: "default model"} from ${WeightExecutors.SETTING}" }
         val ruleNote = rule?.let { "rule '${it.name}': $providerId/$model" }
-        val detail = listOfNotNull(cutNote, ruleNote, weightNote, launchWarning?.let { TicketStart.LAUNCH_WARNING + it }, pacingWarning).joinToString("; ").ifEmpty { null }
+        // CONTEXT-LIMIT-1: said on the start, so a limit the harness cannot apply is never silent.
+        val limitNote = started.contextLimit?.let { "context limit ${com.superiorsoftllc.agenthq.session.ContextLimits.label(it)}: ${started.contextLimitSupport}" +
+            (if (started.contextLimitSupport == com.superiorsoftllc.agenthq.harness.ContextLimitSupport.UNSUPPORTED.wire) " (recorded, not applied by ${started.provider})" else "") }
+        val detail = listOfNotNull(cutNote, ruleNote, weightNote, limitNote, launchWarning?.let { TicketStart.LAUNCH_WARNING + it }, pacingWarning).joinToString("; ").ifEmpty { null }
         return startAnswer(id, TicketStart(ok = true, reason = "started", detail = detail), outcome)
     }
 
@@ -1634,6 +1646,8 @@ class TicketBoard(
                 includeSkillsContext = row.includeSkillsContext,
                 images = row.images,
                 weight = row.weight,
+                contextLimit = row.contextLimit,
+                effectiveContextLimit = effectiveContextLimit(row),
                 queuedFor = row.queuedFor,
                 queuedAt = row.queuedAt,
                 sessionId = row.sessionId,
@@ -1651,6 +1665,19 @@ class TicketBoard(
                 },
             )
         }
+    }
+
+    /** CONTEXT-LIMIT-1: the ticket's limit (or none) and how its effective harness would honour one. */
+    private fun effectiveContextLimit(row: TicketRow): com.superiorsoftllc.agenthq.protocol.EffectiveContextLimit {
+        val manager = sessions
+        val harness = manager?.let { m -> runCatching { effectiveExecutor(row)?.provider?.value }.getOrNull() ?: m.providerId }
+        val capability = harness?.let { manager.providerFor(it) }?.contextLimit()
+        return com.superiorsoftllc.agenthq.protocol.EffectiveContextLimit(
+            value = row.contextLimit,
+            source = if (row.contextLimit != null) "ticket" else "default",
+            support = capability?.support?.wire,
+            how = capability?.how,
+        )
     }
 
     /** TICKET-WEIGHT: the mapping's choice for [row] when [WeightExecutors.applies] (nothing else pins an executor), else null. */

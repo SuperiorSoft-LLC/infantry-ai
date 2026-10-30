@@ -240,6 +240,8 @@ data class RunUsageRecord(
     val model: String,
     val endedAt: Long,
     val usage: RunUsage?,
+    /** CONTEXT-LIMIT-1: the context limit (tokens) the run's session had, null = none; for comparing cost with and without one. */
+    val contextLimit: Int? = null,
 )
 
 /**
@@ -292,7 +294,7 @@ class UsageRecorder(
                 val streamed = streams.remove(event.sessionId)?.totals()
                 val usage = RunUsageParser.parse(runId, record.provider, model, lines.asSequence())
                     ?: streamed?.let { RunUsage(runId, record.provider, model, it.input, it.output, 0, it.cacheRead, it.cacheWrite, it.cost) }
-                runCatching { persist(RunUsageRecord(runId, record.id, record.provider, model, clock(), usage)) }
+                runCatching { persist(RunUsageRecord(runId, record.id, record.provider, model, clock(), usage, record.contextLimit)) }
                     .onFailure { System.err.println("[agentHq] run usage not stored for $runId: ${it.message}") }
                 if (usage != null) {
                     budget.record(usage)

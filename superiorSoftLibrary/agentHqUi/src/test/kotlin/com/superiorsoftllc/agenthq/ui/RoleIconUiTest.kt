@@ -110,7 +110,7 @@ class RoleIconUiTest {
         // The New agent picker, fed the catalog exactly as the daemon pushed it after the save.
         val state = assertNotNull(saved)
         runDesktopComposeUiTest(1200, 900) {
-            setContent { NewAgentDialog(state, { _, _, _ -> null }, {}) }
+            setContent { NewAgentDialog(state, { _, _, _, _ -> null }, {}) }
             waitForIdle()
             onNodeWithTag(roleIconTag(RoleIconSite.PICKER, "qa"), useUnmergedTree = true).assert(paints("shield"))
             onNodeWithTag(roleIconTag(RoleIconSite.PICKER, "backend"), useUnmergedTree = true).assert(paints(RoleIcons.defaultFor("backend")))
