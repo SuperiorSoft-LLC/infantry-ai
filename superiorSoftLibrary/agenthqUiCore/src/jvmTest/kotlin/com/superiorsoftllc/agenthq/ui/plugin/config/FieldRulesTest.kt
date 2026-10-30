@@ -3,6 +3,7 @@ package com.superiorsoftllc.agenthq.ui.plugin.config
 import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldTypes
 import com.superiorsoftllc.agenthq.plugin.api.ConfigFieldValidator
+import com.superiorsoftllc.agenthq.plugin.api.ConfigVisibleWhen
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
@@ -36,5 +37,14 @@ class FieldRulesTest {
         val f = Json { ignoreUnknownKeys = true }.decodeFromString(ConfigFieldDeclaration.serializer(), """{"key":"k","type":"text","future":1}""")
         assertEquals(false, f.required)
         assertNull(FieldTypes.validateBuiltIn(f, JsonPrimitive("anything")))
+    }
+
+    @Test fun `visibleWhen shows a field only while the sibling equals, and no visibleWhen is always visible`() {
+        val f = ConfigFieldDeclaration("custom", ConfigFieldTypes.TEXT, visibleWhen = ConfigVisibleWhen("mode", "custom"))
+        assertEquals(true, ConfigFieldValidator.isVisible(f) { JsonPrimitive("custom") })
+        assertEquals(false, ConfigFieldValidator.isVisible(f) { JsonPrimitive("auto") })
+        assertEquals(false, ConfigFieldValidator.isVisible(f) { null })
+        assertEquals(true, ConfigFieldValidator.isVisible(f.copy(visibleWhen = null)) { null })
+        assertEquals(true, ConfigFieldValidator.isVisible(f.copy(visibleWhen = ConfigVisibleWhen("on", "true"))) { JsonPrimitive(true) })
     }
 }

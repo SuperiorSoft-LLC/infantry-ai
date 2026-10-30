@@ -76,6 +76,7 @@ fun NodeFields(factory: TabFactory, node: String, fields: List<DeclaredField>, e
     val resolved = factory.resolvedConfig
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         for (f in fields) {
+            if (!ConfigFieldValidator.isVisible(f.field) { resolved.json(node, it) }) continue
             val tag = "$node/${f.key}"
             val value = resolved.json(node, f.key)
             val own = config.own(node, f.key)

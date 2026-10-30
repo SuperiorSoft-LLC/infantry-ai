@@ -76,7 +76,13 @@ data class ConfigFieldDeclaration(
     val patternMessage: String? = null,
     val minLength: Int? = null,
     val maxLength: Int? = null,
+    /** CONFIG-FIELDS-2: shown only while sibling [ConfigVisibleWhen.key] equals [ConfigVisibleWhen.eq]; a hidden field is not validated. */
+    val visibleWhen: ConfigVisibleWhen? = null,
 )
+
+/** CONFIG-FIELDS-2: show a field only while the sibling field [key] holds [eq] (compared as text; `true`/`false` for a checkbox). */
+@Serializable
+data class ConfigVisibleWhen(val key: String, val eq: String)
 
 /** CONFIG-9: one slot of a `classes` field. An empty [tokens] means free text (stored, ignored unless the block knows it). */
 @Serializable
@@ -181,6 +187,12 @@ object ConfigFieldValidator {
         field.maxLength?.let { if (t.length > it) return "At most $it characters" }
         field.pattern?.let { p -> if (runCatching { !Regex(p).matches(t) }.getOrDefault(false)) return field.patternMessage ?: "Does not match the expected format" }
         return null
+    }
+
+    /** CONFIG-FIELDS-2: whether [field] is shown, given [sibling] (a sibling key's current JSON). No `visibleWhen` = always. */
+    fun isVisible(field: ConfigFieldDeclaration, sibling: (String) -> JsonElement?): Boolean {
+        val w = field.visibleWhen ?: return true
+        return (sibling(w.key) as? kotlinx.serialization.json.JsonPrimitive)?.content == w.eq
     }
 
     fun validate(field: ConfigFieldDeclaration, value: JsonElement): JsonElement {
