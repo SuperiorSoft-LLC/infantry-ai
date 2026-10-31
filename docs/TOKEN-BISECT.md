@@ -22,3 +22,34 @@ Top suspect: TOKEN-7's default effort for weights 3-5 (esp. `high` on 4-5), appl
 One-line fix: change `WeightContext.DEFAULT` so weights 3-5 carry `effort = null` (keep contextLimit); owners opt in via `tickets.weightContext`.
 
 TEST-TODO: with default settings start a w4 ticket and confirm the launch has no `--effort`; start a w1 and confirm `--effort low`.
+
+## TIMERS (TOKEN-12, 2026-10-31)
+
+Read-only, from code. NOT measured: per-turn gaps of pm/version-control (no CLI exposes turn timestamps; `trigger list` was not reachable from this worktree). Sessions live now: pm (sonnet), version-control (haiku), both at rest.
+
+| Timer | Interval | Does with NO ticket running | Model cost? | Evidence |
+|---|---|---|---|---|
+| **Trigger pump + `prompt` triggers (trg-3ecbb271, 30 min)** | pump 1 s; trigger fires every 30 min | delivers the prompt as MAIL to the PM; wakes an idle PM = a full turn (+ footer, + `agenthq read` call) | **YES, ~48 turns/day** | TriggerService.kt:68,117, TriggerNudge/PromptDelivery :21-32 |
+| FinishNoticeMonitor idle sweep | 1 min sweep; note after 60 min at rest (`idleNoticeMinutes`) | one `[AUTOMATIC]` mail to the starter per idle period | yes, once per period, only if a worker rests with ticket open | FinishNoticeMonitor.kt:59-63, LimitRegistry.kt IDLE_NOTICE_MINUTES=60 |
+| StallDetector | 30 s tick; stall 5 min, foreground 10 min | nudge mail to a worker + a line to the starter, once per stretch | yes, only for In Progress tickets | StallDetector.kt:54, :8-20 |
+| AgentWatchdog | pollMs 30 s; nudge ladder, then ONE batched mail to PM | nudges, then wakes PM | yes, only with unanswered mail | AgentWatch.kt:52, AgentWatchdog.kt:58,88-100 |
+| SessionManager watchdog / silent sweep / bg scan | 1 s / 60 s / 2 s | kill stalled unattended runs, flag silent, scan child pids | no (local, flag only) | SessionManager.kt:462-470, :1950-1961 |
+| Ticket worker sweep | 60 s | attention item for unbriefed workers | no | DaemonMain.kt:1321-1333 |
+| Question sweeper | 15 s | expire owner questions | no | DaemonMain.kt:517, :4384 |
+| HealthGate tick | intervalMs | health check | no | HealthGate.kt:102 |
+| UsageMeter prune | 6 h | SQLite prune | no | UsageMeter.kt:200-205 |
+| SessionHost idle sweep | idleSweepMs | stops idle warm harness processes | no (ends processes) | SessionHost.kt:200-227 |
+| Pace/usage reads (UI 60 s) | 60 s | reads cached daemon value | no | TOKEN-10 table |
+| MailStore retries | ms backoff, 2 s budget | file replace retry | no | MailStore.kt:168-173 |
+| Update check | ServerUpdateService (on demand) | GitHub release poll | no | ServerUpdateService.kt |
+
+No timer spawns a CLI or prompts a model by itself except the three mail paths above (trigger, idle note, stall/watchdog nudges). Plugin daemons (Pace, Processes) add no model-facing timer.
+
+### 1h prompt-cache TTL
+A session idle >60 min rewrites its whole context on its next turn (cache WRITE, ~12x the price of a read). The 30-min trigger keeps the PM's cache warm (each wake = a cache READ of the whole PM context, big but 10x cheaper), so the PM is NOT hit by TTL expiry while the trigger runs; it IS hit whenever a gap exceeds 60 min (trigger paused, daemon restarted). version-control (haiku) is woken only by mail: any gap >60 min is a full rewrite, but on haiku. The 60-min idle note of FinishNoticeMonitor lands exactly on the TTL edge: a worker at rest 60 min sends its starter a mail, and the worker's own next turn after it pays a rewrite.
+
+Jump period ~100 min: no timer has a 100 min period. 30 min x 3 = 90, 60 + 30 + 10 = 100: a plausible beat is the 30-min PM wake combined with the 60-min idle note and 5/10-min stall nudges, i.e. PM turns that each re-read a large (100k+) context. Not proven.
+
+Top suspect: the 30-min trigger waking the PM with no work to do (48 full-context turns/day, each a large cache read plus tool calls). One-line fix: make the `prompt` trigger skip delivery when the PM has no unread mail and no ticket is In Progress or To Do-ready (or lengthen to 60 min+ only if skipping is unwanted; avoid exactly 60, the TTL edge).
+
+TEST-TODO: with no ticket running and no mail, let a 30-min prompt trigger fire; confirm no mail is delivered and the event is recorded as skipped; with an In Progress ticket confirm it still delivers.
