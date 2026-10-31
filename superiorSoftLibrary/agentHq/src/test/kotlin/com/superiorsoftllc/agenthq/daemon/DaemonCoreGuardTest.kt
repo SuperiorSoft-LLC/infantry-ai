@@ -45,7 +45,8 @@ class DaemonCoreGuardTest {
     }
 
     @Test fun `every top-level package is classified with a reason, none stale`() {
-        val actual = (listOf(main) + leaves.values).flatMap { r -> r.listFiles { f -> f.isDirectory }!!.map { it.name } }.toSet()
+        val board = File(TestDaemonPlugins.repo, "superiorSoftLibrary/agentHqBoard/src/main/kotlin/com/superiorsoftllc/agenthq") // DP-5e: epics, brief, ledger, context, ticketfiles
+        val actual = (listOf(main, board) + leaves.values).flatMap { r -> r.listFiles { f -> f.isDirectory }!!.map { it.name } }.toSet()
         val lists = listOf(CORE, STAYS, PLUGIN_NOW, PLUGIN_LATER)
         val listed = lists.flatMap { it.keys }
         assertEquals(emptySet<String>(), actual - listed.toSet(), "unclassified package(s): add each to exactly one list with a reason")

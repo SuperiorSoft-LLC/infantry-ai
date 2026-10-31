@@ -142,7 +142,7 @@ class SkillsTest {
         val library = listOf(skill("s1", "tdd", body = "B"))
         val composer = TicketContextComposer(
             NoSettings,
-            knowledge = KnowledgeCounter { KnowledgeCounts(1, 0, 0) },
+            knowledge = KnowledgeCounter { KnowledgeCounts(1, 0, 0) }.let { c -> com.superiorsoftllc.agenthq.context.KnowledgeSection { c.section(it) } },
             skills = SkillsSource(library = { library }),
         )
         val input = ContextInput(

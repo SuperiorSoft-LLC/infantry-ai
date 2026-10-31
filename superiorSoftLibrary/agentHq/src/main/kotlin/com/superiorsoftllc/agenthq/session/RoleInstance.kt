@@ -6,24 +6,6 @@ import kotlinx.serialization.Serializable
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * TRAITS-T4 (docs/AGENTHQ-ROLE-TRAITS.md section 3): a frozen copy of one trait as it was when a session spawned. A copy,
- * not a reference: a later edit of the trait (its version moves) never changes what a started session runs under, and
- * [version] says which rule it ran.
- */
-@Serializable
-data class TraitSnapshot(
-    val id: String,
-    val version: Int,
-    val name: String,
-    val body: String,
-    val check: TraitCheck? = null,
-) {
-    companion object {
-        fun of(trait: TraitView): TraitSnapshot = TraitSnapshot(trait.id, trait.version, trait.name, trait.body, trait.check)
-    }
-}
-
-/**
  * TRAITS-T4: the clone a session is of its agent or role, written ONCE at spawn ([SessionManager.startNew]) and never
  * updated (D4). [instructions] is the persona frozen at spawn and [traits] the effective trait set
  * ([com.superiorsoftllc.agenthq.agents.TraitBindings.effective]) as snapshots, in order. The executor and the link to the

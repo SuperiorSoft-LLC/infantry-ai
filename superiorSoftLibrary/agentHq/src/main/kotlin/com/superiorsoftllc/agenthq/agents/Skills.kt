@@ -103,7 +103,7 @@ class SkillsSource(
     private val library: () -> List<SkillView>,
     private val includeSkillsContext: () -> Boolean? = { null },
     private val budgets: SkillBudgets = SkillBudgets(),
-) {
+) : com.superiorsoftllc.agenthq.context.SkillsSection {
     /**
      * The section for a session frozen as [instance]. No instance (an anonymous spawn) or a false switch ([include], the
      * ticket's resolved value when the caller has one, else the project's) gives null: no section at all.
@@ -111,7 +111,7 @@ class SkillsSource(
     fun section(instance: RoleInstance?, include: Boolean? = null): String? = section(instance?.skillIds, include)
 
     /** The same, from the frozen ids alone; null [skillIds] = no instance. */
-    fun section(skillIds: List<String>?, include: Boolean? = null): String? {
+    override fun section(skillIds: List<String>?, include: Boolean?): String? {
         if (skillIds == null) return null
         if (!(include ?: includeSkillsContext() ?: true)) return null
         return renderSkills(skillIds, library(), budgets)

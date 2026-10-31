@@ -179,8 +179,8 @@ class TicketContextComposerTest {
     private fun findQuickref(): String {
         var dir: java.io.File? = java.io.File("").absoluteFile
         while (dir != null) {
-            val candidate = java.io.File(dir, "docs/AGENT-QUICKREF.md")
-            if (candidate.isFile) return candidate.readText().replace("\r\n", "\n")
+            val candidate = listOf("docs/AGENT-QUICKREF.md", "agentHq/docs/AGENT-QUICKREF.md").map { java.io.File(dir, it) }.firstOrNull { it.isFile }
+            if (candidate != null) return candidate.readText().replace("\r\n", "\n")
             dir = dir.parentFile
         }
         error("docs/AGENT-QUICKREF.md not found above ${java.io.File("").absolutePath}")

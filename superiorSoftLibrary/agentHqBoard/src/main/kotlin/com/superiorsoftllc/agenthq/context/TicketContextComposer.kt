@@ -1,9 +1,6 @@
 package com.superiorsoftllc.agenthq.context
 
-import com.superiorsoftllc.agenthq.agents.KnowledgeCounter
-import com.superiorsoftllc.agenthq.agents.SkillsSource
 import com.superiorsoftllc.agenthq.agents.identityLine
-import com.superiorsoftllc.agenthq.agents.section
 import com.superiorsoftllc.agenthq.agents.renderTraits
 import com.superiorsoftllc.agenthq.protocol.ContextSwitch
 import com.superiorsoftllc.agenthq.protocol.EffectiveContext
@@ -15,9 +12,9 @@ import com.superiorsoftllc.agenthq.settings.ProjectSettings
 class TicketContextComposer(
     private val settings: ProjectSettings,
     /** P10-K9: the `knowledge` source, read for the ticket's project when the start composes. */
-    private val knowledge: KnowledgeCounter = KnowledgeCounter.NONE,
+    private val knowledge: KnowledgeSection = KnowledgeSection.NONE,
     /** P10-K15: the `skills` source, rendered after `knowledge` from the started session's frozen skill ids. */
-    private val skills: SkillsSource = SkillsSource.NONE,
+    private val skills: SkillsSection = SkillsSection.NONE,
     /** NOTES-1: the started role's own notes in the ticket's project, listed after `knowledge`. */
     private val roleNotes: RoleNotesSource = RoleNotesSource.NONE,
     /** DAEMON-CONTEXT-1: the related tickets and their files, assembled by the daemon into the first prompt. */
@@ -78,7 +75,7 @@ class TicketContextComposer(
             "Use `agenthq memory index|show|search|save --scope role|session`; the default scope is the shared project notes."
     }
 
-    internal companion object {
+    companion object {
         /** IMG-3: the heading of the attached-images section; each image follows as `[image: <absolute path>]`. */
         const val IMAGES_HEADING = "Attached images (read each file to see it):"
 
@@ -178,7 +175,7 @@ class TicketContextComposer(
             "what you tested and what you did not test, any problem, and a line 'Files read: <paths>' listing the files you read (a report without it is refused). Then stop. Do not keep working after you mail."
 
         /** BUG-MAIL-2: the recipient alias for the session that started the sender's ticket. */
-        const val STARTER = com.superiorsoftllc.agenthq.mailbox.MailAddresses.STARTER
+        const val STARTER = "starter" // = mailbox.MailAddresses.STARTER in the daemon
 
         /**
          * MAIL-5 team block. BUG-MAIL-MCP-2: mail is read with the MCP tools agenthq_inbox / agenthq_read (MAIL-MCP-1);
@@ -213,5 +210,26 @@ fun interface RoleNotesSource {
 
     companion object {
         val NONE = RoleNotesSource { _, _ -> emptyList() }
+    }
+}
+
+/** DP-5e: what the composer asks of the host for the `knowledge` source (core renders it from its knowledge stores). */
+fun interface KnowledgeSection {
+    fun section(projectId: String?): String?
+
+    companion object {
+        /** No knowledge base wired: no section. */
+        val NONE = KnowledgeSection { null }
+    }
+}
+
+/** DP-5e: what the composer asks of the host for the `skills` source (core renders it from the skill library and the frozen ids). */
+fun interface SkillsSection {
+    /** The section for a session frozen with [skillIds] (null = no instance); [include] is the ticket's resolved switch, null = the project's. */
+    fun section(skillIds: List<String>?, include: Boolean?): String?
+
+    companion object {
+        /** No library wired: no section. */
+        val NONE = SkillsSection { _, _ -> null }
     }
 }

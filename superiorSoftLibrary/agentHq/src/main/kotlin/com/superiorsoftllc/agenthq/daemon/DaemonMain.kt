@@ -1230,7 +1230,7 @@ class AgentHqDaemon(
             val relatedRef = java.util.concurrent.atomic.AtomicReference(com.superiorsoftllc.agenthq.ticketfiles.RelatedWorkSource.NONE)
             val relatedDescriptionRef = java.util.concurrent.atomic.AtomicReference(com.superiorsoftllc.agenthq.ticketfiles.RelatedDescription.NONE)
             val ticketContext = context ?: TicketContextComposer(
-                settings, knowledge, skillsSource,
+                settings, com.superiorsoftllc.agenthq.context.KnowledgeSection { knowledge.section(it) }, skillsSource,
                 roleNotes = com.superiorsoftllc.agenthq.context.RoleNotesSource { project, role ->
                     memoryNotes.index(project, com.superiorsoftllc.agenthq.memory.SCOPE_ROLE, role).map { it.name to it.description }
                 },
@@ -1948,7 +1948,7 @@ class AgentHqDaemon(
                             projectGit,
                             WorkspaceHandler(workspaces),
                             // BASE-1c: `epic_base` runs project_base's own check, against the epic's project.
-                            EpicHandler(epics, baseCheck = { epic, branch -> baseCheck.check(projectStore.get(epic.projectId), branch) }),
+                            EpicHandler(epics, baseCheck = { epic, branch -> baseCheck.check(projectStore.get(epic.projectId), branch) }, branchName = com.superiorsoftllc.agenthq.mvp.ProjectBaseCheck::checkName),
                             MemoryHandler(
                                 memoryNotes,
                                 caller = { id -> manager.get(id)?.let { MemoryCaller(it.id, it.role.orEmpty()) } },

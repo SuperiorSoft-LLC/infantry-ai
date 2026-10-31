@@ -36,4 +36,17 @@ class BoardImportGuardTest {
     @Test fun `other board importers are a closed list`() {
         assertEquals(remaining, importers().filter { it.substringBefore('/') !in strict }.toSet(), "new or removed board importer: update the list (it only shrinks)")
     }
+
+    /** DP-5e: :agentHqBoard names only the protocol, the daemon API and its own packages (the build also refuses an agentHq dependency). */
+    @Test fun `agentHqBoard imports nothing of agentHq`() {
+        val board = File(TestDaemonPlugins.repo, "superiorSoftLibrary/agentHqBoard/src/main/kotlin/com/superiorsoftllc/agenthq")
+        assertTrue(board.isDirectory, "sources not found: $board")
+        val own = setOf("protocol", "daemon.api", "epics", "brief", "ledger", "context", "ticketfiles", "session", "agents", "worktree", "settings")
+        val ref = Regex("""com\.superiorsoftllc\.agenthq\.([a-z]+(?:\.api)?)""")
+        val bad = board.walkTopDown().filter { it.isFile && it.extension == "kt" }.flatMap { f ->
+            f.readLines().filterNot { it.trim().startsWith("*") || it.trim().startsWith("//") || it.trim().startsWith("/*") }
+                .flatMap { ref.findAll(it).map { m -> m.groupValues[1] } }.filter { it !in own }.map { "${f.name}: $it" }
+        }.toList()
+        assertTrue(bad.isEmpty(), "agentHqBoard must not import core:\n${bad.joinToString("\n")}")
+    }
 }

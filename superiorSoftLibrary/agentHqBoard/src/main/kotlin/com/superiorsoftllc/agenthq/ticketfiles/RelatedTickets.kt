@@ -1,11 +1,10 @@
 package com.superiorsoftllc.agenthq.ticketfiles
 
-import com.superiorsoftllc.agenthq.settings.LimitRegistry
 
 /**
  * KNOWLEDGE-PTR-1 (ticket b8ca2bf7, absorbs RELATED-TICKETS c0732366): what the related set of a ticket shows, all of it
  * data. The switches and texts are daemon settings (`related.*`, [com.superiorsoftllc.agenthq.settings.SettingsService]);
- * the caps are `limits.ticketFiles.*` entries of [LimitRegistry]. Defaults: everything on.
+ * the caps are `limits.ticketFiles.*` entries of `LimitRegistry`. Defaults: everything on.
  */
 data class RelatedConfig(
     /** `related.brief`: the RELATED WORK block of a ticket's start message. */
@@ -18,12 +17,12 @@ data class RelatedConfig(
     val familyPattern: String = DEFAULT_FAMILY_PATTERN,
     /** `related.suggestNumber`: a title with a known label and no number gets the next number suggested. */
     val suggestNumber: Boolean = true,
-    val briefTickets: Int = LimitRegistry.RELATED_BRIEF_TICKETS.default.toInt(),
-    val briefFiles: Int = LimitRegistry.RELATED_BRIEF_FILES.default.toInt(),
-    val briefChars: Int = LimitRegistry.RELATED_BRIEF_CHARS.default.toInt(),
-    val blockTickets: Int = LimitRegistry.RELATED_BLOCK_TICKETS.default.toInt(),
-    val blockFiles: Int = LimitRegistry.RELATED_BLOCK_FILES.default.toInt(),
-    val blockChars: Int = LimitRegistry.RELATED_BLOCK_CHARS.default.toInt(),
+    val briefTickets: Int = 5,
+    val briefFiles: Int = 5,
+    val briefChars: Int = 1500,
+    val blockTickets: Int = 8,
+    val blockFiles: Int = 5,
+    val blockChars: Int = 2500,
 ) {
     val family: Regex? by lazy { familyPattern.takeIf { it.isNotBlank() }?.let { runCatching { Regex(it) }.getOrNull() } }
 
