@@ -13,20 +13,35 @@ class BoardImportGuardTest {
     private val main = File(TestDaemonPlugins.repo, "superiorSoftLibrary/agentHq/src/main/kotlin/com/superiorsoftllc/agenthq")
     private val boardPackages = setOf("backlog", "context", "brief")
     private val strict = setOf("session", "mailbox")
-    private val importRe = Regex("""^\s*import\s+com\.superiorsoftllc\.agenthq\.(backlog|context|brief)\b""")
+    private val importRe = Regex("""^\s*import\s+(com\.superiorsoftllc\.agenthq\.[\w.]+)""")
+    private val boardMain = File(TestDaemonPlugins.repo, "superiorSoftLibrary/agentHqBoard/src/main/kotlin/com/superiorsoftllc/agenthq")
 
-    /** package/file -> importers still to move in DP-5. */
+    /**
+     * DP-5f-5: keyed by MODULE, not package name. A board symbol is a top-level declaration in :agentHqBoard (`pkg.Name`); an
+     * importer is a file of :agentHq (any package) that imports one. Moving the importer to the board, or its use behind a port,
+     * removes it.
+     */
+    private val boardSymbols: Set<String> by lazy {
+        val decl = Regex("""^(?:(?:public|internal|data|sealed|enum|abstract|open|annotation|value|inline|const|fun)\s+)*(?:class|interface|object|fun|val|var|typealias)\s+(?:<[^>]*>\s*)?(?:[\w.<>?, ]+\.)?(\w+)""")
+        boardMain.walkTopDown().filter { it.isFile && it.extension == "kt" }.flatMap { f ->
+            val lines = f.readLines()
+            val pkg = lines.firstOrNull { it.startsWith("package ") }?.removePrefix("package ")?.trim() ?: return@flatMap emptySequence()
+            lines.mapNotNull { decl.find(it)?.groupValues?.get(1) }.map { "$pkg.$it" }.filter { pkg.substringAfterLast(".") in boardPackages }.asSequence()
+        }.toSet()
+    }
+
+    /** Core files that import a board class, still to move (DP-5h empties it); it only ever shrinks. */
     private val remaining = setOf(
-        "daemon/plugins/LocalBoardServices.kt", "daemon/plugins/LocalBoardHost.kt", "daemon/DaemonMain.kt",
+        "backlog/StoryAdapters.kt", "backlog/TicketBoardStores.kt", "daemon/plugins/LocalBoardServices.kt", "daemon/DaemonMain.kt",
     )
 
     private fun importers() = main.walkTopDown().filter { it.isFile && it.extension == "kt" }
-        .filter { f -> f.relativeTo(main).path.replace(File.separatorChar, '/').substringBefore('/') !in boardPackages }
-        .filter { f -> f.readLines().any { importRe.containsMatchIn(it) } }
+        .filter { f -> f.readLines().any { l -> importRe.find(l)?.groupValues?.get(1) in boardSymbols } }
         .map { it.relativeTo(main).path.replace(File.separatorChar, '/') }.toSet()
 
     @Test fun `session and mailbox import no board package`() {
         assertTrue(main.isDirectory, "sources not found: $main")
+        assertTrue(boardSymbols.size > 10, "agentHqBoard declarations not found")
         val bad = importers().filter { it.substringBefore('/') in strict }
         assertTrue(bad.isEmpty(), "route through OrchestratorLink/DaemonApi instead:\n${bad.joinToString("\n")}")
     }
