@@ -140,9 +140,11 @@ class FinishNoticeMonitor(
                     append("last commit: ${commit ?: "unknown"}\n")
                     append("exit code: ${event.code ?: "unknown"}\n")
                     if (killed) append("killed by: ${session.killedBy ?: "unknown"}${session.killReason?.let { " - $it" }.orEmpty()}\n")
-                    if (lines.isNotEmpty()) {
+                    // TOKEN-1: a clean finish carries no output dump, and a raw JSON event line (thinking_tokens and the like) never does.
+                    val readable = if (failed || killed) lines.filterNot { it.trimStart().startsWith("{") } else emptyList()
+                    if (readable.isNotEmpty()) {
                         append("last output:\n")
-                        lines.takeLast(OUTPUT_LINES).forEach { append("  ${it.take(240)}\n") }
+                        readable.takeLast(OUTPUT_LINES).forEach { append("  ${it.take(240)}\n") }
                     }
                 },
             ),

@@ -158,11 +158,15 @@ internal class McpServer(
 
 /** An MCP `tools/call` result: one text content block holding JSON (or a message, when [isError]). */
 internal data class ToolResult(val text: String, val isError: Boolean = false) {
+    /** TOKEN-1: [text] cut at limits.mcp.maxResultChars (0 = no cap), saying how much was cut and how to narrow. */
+    fun capped(max: Long = com.superiorsoftllc.agenthq.settings.LimitRegistry.fromEnv(com.superiorsoftllc.agenthq.settings.LimitRegistry.MCP_MAX_RESULT_CHARS, System::getenv)): String =
+        if (max <= 0 || text.length <= max) text else text.take(max.toInt()) + "\n...${text.length - max} chars cut, narrow with limit/columns/ticketId"
+
     fun toJson(): JsonObject = buildJsonObject {
         put("content", buildJsonArray {
             add(buildJsonObject {
                 put("type", "text")
-                put("text", text)
+                put("text", capped())
             })
         })
         put("isError", isError)

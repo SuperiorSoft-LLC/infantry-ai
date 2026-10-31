@@ -874,7 +874,14 @@ class AgentHqDaemon(
                     }
                     // STACK-NEUTRAL-2: core's base env (watch off, the profiles, the runner's space limits), then every plugin's
                     // contributions (the process-watch plugin adds the build limits, the shims and `AGENTHQ_WATCH=on`).
-                    launchEnvHost.collect(info)
+                    // TOKEN-1: the role's response-size fields reach the tool layer as the settings' env names; absent = the global limits.
+                    val role = info.role?.let { roles.role(it) }
+                    val detail = when (role?.responseDetail) { "ack" -> 1L; "summary" -> 2L; "full" -> 3L; else -> null }
+                    launchEnvHost.collect(info) + listOfNotNull(
+                        detail?.let { LimitRegistry.MCP_DEFAULT_DETAIL.env to it.toString() },
+                        role?.responseMaxChars?.let { LimitRegistry.MCP_MAX_RESULT_CHARS.env to it.toString() },
+                        role?.responseBodyChars?.let { LimitRegistry.MCP_BODY_CHARS.env to it.toString() },
+                    ).toMap()
                 },
                 // No-hard-coded-limits S2: the watchdog and silent sweeper read limits.watchdog.* live.
                 limitSource = settings::limit,

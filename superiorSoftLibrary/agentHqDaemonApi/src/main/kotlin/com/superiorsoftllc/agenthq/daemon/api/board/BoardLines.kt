@@ -31,7 +31,22 @@ object BoardLines {
 
     fun shortId(id: String): String = id.takeLast(SHORT_ID_LEN)
 
-    fun render(tickets: List<Row>, sessions: List<SessionView>, now: Long, commitOf: (Row) -> String?): List<String> {
+    /**
+     * TOKEN-1: what to print. [columns] limits the board to those columns (null = all); [limit] caps the lines of every column
+     * (null = the compact default: done shows its last [DONE_SHOWN], backlog and todo show [QUEUE_SHOWN] lines and a count of the
+     * rest, unless [columns] names them; an explicit [limit] applies to every listed column).
+     */
+    data class Options(val columns: Set<String>? = null, val limit: Int? = null, val compact: Boolean = false, val queueShown: Int = QUEUE_SHOWN, val doneShown: Int = DONE_SHOWN) {
+        companion object {
+            /** The full board, as it always printed (what the golden tests read). */
+            val FULL = Options()
+        }
+    }
+
+    /** Lines of backlog / todo the compact default prints before folding the rest into a count. */
+    const val QUEUE_SHOWN = 10
+
+    fun render(tickets: List<Row>, sessions: List<SessionView>, now: Long, commitOf: (Row) -> String?, options: Options = Options.FULL): List<String> {
         if (tickets.isEmpty()) return listOf("board is empty: no tickets")
         val bySession = sessions.associateBy { it.id }
         val lines = mutableListOf<String>()
@@ -39,10 +54,15 @@ object BoardLines {
         val groups = COLUMNS.associateWith { column -> tickets.filter { it.status == column }.sortedBy { it.position } } +
             tickets.filter { it.status !in known }.groupBy { it.status }
         for ((column, group) in groups) {
-            if (group.isEmpty()) continue
+            if (group.isEmpty() || (options.columns != null && column !in options.columns)) continue
             lines += "$column (${group.size})"
-            val shown = if (column == "done") group.takeLast(DONE_SHOWN) else group
-            if (shown.size < group.size) lines += "  ... ${group.size - shown.size} older done not shown"
+            val shown = when {
+                options.limit != null -> if (column == "done") group.takeLast(options.limit) else group.take(options.limit)
+                column == "done" -> group.takeLast(options.doneShown)
+                options.compact && options.columns == null && (column == "backlog" || column == "todo") -> group.take(options.queueShown)
+                else -> group
+            }
+            if (shown.size < group.size) lines += "  ... ${group.size - shown.size} " + (if (column == "done") "older done" else "more") + " not shown"
             for (t in shown) lines += "  " + ticketLine(t, t.sessionId?.let { bySession[it] }, now, commitOf)
         }
         return lines

@@ -461,7 +461,56 @@ object LimitRegistry {
         min = 1, zeroIsUnlimited = false,
     )
 
+    /** TOKEN-1: default sizes of the MCP/CLI tool answers (an explicit `limit` argument wins); 0 = no cap. */
+    val TOOLS_INBOX_LIMIT = LimitDef(
+        "limits.tools.inboxLimit", 20, "messages",
+        "How many inbox items agenthq_inbox / `agenthq inbox` list by default (newest unread first); the `limit` argument overrides it.",
+        max = 10_000,
+    )
+    val TOOLS_LIST_LIMIT = LimitDef(
+        "limits.tools.listLimit", 50, "rows",
+        "How many rows agenthq_list_sessions, agenthq_ticket_files and agenthq_usage list by default; the `limit` argument overrides it.",
+        max = 10_000,
+    )
+    val TOOLS_SESSION_TAIL_LINES = LimitDef(
+        "limits.tools.sessionTailLines", 5, "lines",
+        "How many transcript lines agenthq_get_session returns by default; the `tail` argument overrides it.",
+        max = 10_000,
+    )
+    val TOOLS_BOARD_QUEUE_SHOWN = LimitDef(
+        "limits.tools.boardQueueShown", 10, "lines",
+        "How many backlog and todo lines agenthq_board / `agenthq board` print before folding the rest into a count (columns / limit override it).",
+        max = 10_000,
+    )
+    val TOOLS_BOARD_DONE_SHOWN = LimitDef(
+        "limits.tools.boardDoneShown", 5, "lines",
+        "How many of the newest done tickets agenthq_board / `agenthq board` print; older ones fold into a count.",
+        max = 10_000,
+    )
+
+    val MCP_MAX_RESULT_CHARS = LimitDef(
+        "limits.mcp.maxResultChars", 8000, "chars",
+        "The most characters one MCP tool result may carry to an agent; a longer one is cut with a note saying how to narrow the call.",
+        max = 10_000_000, zeroMeans = "no cap",
+    )
+
+    val MCP_DEFAULT_DETAIL = LimitDef(
+        "limits.mcp.defaultDetail", 0, "level",
+        "How much an MCP tool sends back when the call gives no `detail`: 0 = each tool's own default (acks for writes, compact lists), 1 = ack, 2 = summary, 3 = full (adds verbose to tools that have it).",
+        max = 3, zeroMeans = "each tool's own default",
+    )
+
+    val MCP_BODY_CHARS = LimitDef(
+        "limits.mcp.bodyChars", 0, "chars",
+        "Cut a mail body read through agenthq_read to this many characters (a role's responseBodyChars sets it per session); the call's bodyChars wins.",
+        max = 10_000_000, zeroMeans = "the whole body",
+    )
+
     val ALL: List<LimitDef> = listOf(
+        MCP_BODY_CHARS,
+        MCP_DEFAULT_DETAIL,
+        MCP_MAX_RESULT_CHARS,
+        TOOLS_INBOX_LIMIT, TOOLS_LIST_LIMIT, TOOLS_SESSION_TAIL_LINES, TOOLS_BOARD_QUEUE_SHOWN, TOOLS_BOARD_DONE_SHOWN,
         MAX_PER_POD, MAX_SESSIONS, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
         TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NOTICE_MINUTES, UNBRIEFED_GRACE_MINUTES,

@@ -34,7 +34,10 @@ internal object SessionReadTools {
     const val LIST_SESSIONS = "agenthq_list_sessions"
     const val GET_SESSION = "agenthq_get_session"
     const val POD_STATE = "agenthq_pod_state"
-    const val DEFAULT_LINES = 50
+    const val DEFAULT_LINES = 5
+    const val DEFAULT_LIST = 50
+    /** A transcript line longer than this is cut (a raw JSON dump is not worth its tokens). */
+    const val LINE_CHARS = 300
     const val MAX_LINES = 200
 
     /** A session read is in-process and bounded; this only caps a stuck frame answer (roster, pod). */
@@ -108,6 +111,11 @@ internal object SessionReadTools {
                     put("type", "string")
                     put("description", "Only this project's sessions. Omitted: a session caller's own project (everyone else: all). \"all\" lists every project (pm / owner callers only).")
                 }
+                putJsonObject("limit") {
+                    put("type", "integer")
+                    put("minimum", 1)
+                    put("description", "At most this many sessions (live ones first, then the most recent). Default: setting limits.tools.listLimit.")
+                }
             }
             put("additionalProperties", false)
         }
@@ -140,7 +148,12 @@ internal object SessionReadTools {
                 else -> return failed(LIST_SESSIONS, r)
             }
             val now = System.currentTimeMillis()
-            return ok(buildJsonObject { put("sessions", JsonArray(sessions.map { summary(it, now) })) })
+            val cap = ((call.arguments["limit"] as? JsonPrimitive)?.intOrNull ?: api.settings.limit("limits.tools.listLimit")?.toInt() ?: DEFAULT_LIST).takeIf { it > 0 }
+            val shown = sessions.sortedWith(compareByDescending<SessionView> { it.live }.thenByDescending { it.lastEventAt ?: 0L }).let { if (cap != null) it.take(cap) else it }
+            return ok(buildJsonObject {
+                put("sessions", JsonArray(shown.map { summary(it, now) }))
+                if (shown.size < sessions.size) put("note", "showing ${shown.size} of ${sessions.size} sessions; pass limit for more")
+            })
         }
     }
 
@@ -167,7 +180,7 @@ internal object SessionReadTools {
                     put("minimum", 1)
                     put("maximum", MAX_LINES)
                     put("default", DEFAULT_LINES)
-                    put("description", "How many trailing transcript lines to return.")
+                    put("description", "How many trailing transcript lines to return (default: setting limits.tools.sessionTailLines, 5).")
                 }
             }
             put("required", buildJsonArray { add(JsonPrimitive("sessionId")) })
@@ -179,7 +192,7 @@ internal object SessionReadTools {
         override fun call(call: ToolCall): ToolResult {
             val requested = (call.arguments["sessionId"] as? JsonPrimitive)?.contentOrNull?.trim()
             if (requested.isNullOrEmpty()) return ToolResult("sessionId is required", isError = true)
-            val limit = ((call.arguments["lines"] as? JsonPrimitive)?.intOrNull ?: DEFAULT_LINES).coerceIn(1, MAX_LINES)
+            val limit = ((call.arguments["lines"] as? JsonPrimitive)?.intOrNull ?: api.settings.limit("limits.tools.sessionTailLines")?.toInt() ?: DEFAULT_LINES).coerceIn(1, MAX_LINES)
             val by = by(call)
             val session = when (val r = api.sessionReads.find(requested, by)) {
                 is SessionsResult.Ok -> r.value
@@ -207,7 +220,7 @@ internal object SessionReadTools {
                 session.lastError?.let { put("lastError", it) }
                 session.projectId?.let { put("projectId", it) }
                 session.ticketId?.let { put("ticketId", it) }
-                put("transcript", buildJsonArray { tail.forEach { add(JsonPrimitive(it)) } })
+                put("transcript", buildJsonArray { tail.forEach { add(JsonPrimitive(if (it.length > LINE_CHARS) it.take(LINE_CHARS) + "..." else it)) } })
                 put("transcriptLines", tail.size)
                 put("transcriptTruncated", lines.size > tail.size)
                 transcript.note?.let { put("transcriptNote", it) }

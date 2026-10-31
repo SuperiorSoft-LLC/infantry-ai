@@ -79,6 +79,9 @@ object CustomRoles {
             // ROLE-ICON-1: an optional `icon:` key; a value that is not an icon key reads as none (the client default).
             icon = fields["icon"]?.trim()?.lowercase()?.takeIf { RoleService.ICON.matches(it) }.orEmpty(),
             description = fields["description"]?.trim().orEmpty(),
+            responseDetail = fields["responseDetail"]?.trim()?.lowercase()?.takeIf { it in Role.DETAILS }.orEmpty(),
+            responseMaxChars = fields["responseMaxChars"]?.trim()?.toIntOrNull()?.takeIf { it >= 0 },
+            responseBodyChars = fields["responseBodyChars"]?.trim()?.toIntOrNull()?.takeIf { it >= 0 },
         )
     }
 

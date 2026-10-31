@@ -28,10 +28,10 @@ object SpawnText {
     fun refused(text: String) = ToolResult(text, isError = true)
 
     /** A ticket start's outcome as [tool] answers it. */
-    fun startAnswer(tool: String, o: TicketStartOutcome): ToolResult {
+    fun startAnswer(tool: String, o: TicketStartOutcome, verbose: Boolean = false): ToolResult {
         val short = shortTicketId(o.ticket.id)
         return when (o.outcome) {
-            TicketStartOutcome.STARTED -> ok(base(o.ticket, o.worker, TicketStartOutcome.STARTED) {
+            TicketStartOutcome.STARTED -> if (!verbose) ToolResult("ok $short ${o.ticket.status} ${o.worker?.id ?: o.ticket.sessionId ?: ""}".trim()) else ok(base(o.ticket, o.worker, TicketStartOutcome.STARTED) {
                 put("startedBy", o.startedBy)
                 put("depth", o.depth)
                 put("openSpawns", o.openSpawns)
