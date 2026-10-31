@@ -24,7 +24,8 @@ import kotlinx.serialization.json.Json
  * while `DaemonMain` still builds the board through `BoardWiring` (DP-5h-3b flips it), so a board plugin leaves construction to core.
  */
 class LocalBoardRuntime(
-    override val host: BoardHost,
+    /** DP-5h-3c: resolved at call time, so the runtime can be built before the board exists. */
+    private val hostSource: () -> BoardHost,
     private val store: AgentHqStore,
     private val settings: SettingsService,
     private val projectStore: ProjectStore,
@@ -40,6 +41,7 @@ class LocalBoardRuntime(
     private val related: (com.superiorsoftllc.agenthq.daemon.api.board.BoardRelatedDraft) -> String? = { null },
     private val skillKnown: (String) -> Boolean = { true },
 ) : BoardRuntime {
+    override val host: BoardHost get() = hostSource()
     override fun setting(key: String): String? = store.settings.get(key)?.value
     override fun limit(key: String): Long? = LimitRegistry.ALL.firstOrNull { it.key == key }?.let { settings.limit(it) }
     override fun laneCap(projectId: String?, role: String): Int = projectStore.laneCapOf(projectId, role)
