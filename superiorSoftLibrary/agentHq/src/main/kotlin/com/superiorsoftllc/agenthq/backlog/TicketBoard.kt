@@ -20,6 +20,7 @@ import com.superiorsoftllc.agenthq.orchestration.RunOutcomes
 import com.superiorsoftllc.agenthq.persistence.AgentHqStore
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardAgent
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardHost
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardSessionEvent
 import com.superiorsoftllc.agenthq.daemon.api.sessions.SessionView
 import com.superiorsoftllc.agenthq.daemon.api.board.BranchOutcome
 import com.superiorsoftllc.agenthq.daemon.api.board.BranchRequest
@@ -52,7 +53,6 @@ import com.superiorsoftllc.agenthq.protocol.TicketStart
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
 import com.superiorsoftllc.agenthq.protocol.TicketType
 import com.superiorsoftllc.agenthq.role.RoleIds
-import com.superiorsoftllc.agenthq.session.SessionEvent
 import com.superiorsoftllc.agenthq.session.SessionManager
 import com.superiorsoftllc.agenthq.worktree.BaseScope
 import com.superiorsoftllc.agenthq.worktree.TicketBaseRef
@@ -61,7 +61,6 @@ import com.superiorsoftllc.agenthq.worktree.TicketBranchRequest
 import com.superiorsoftllc.agenthq.worktree.TicketBranches
 import com.superiorsoftllc.agenthq.worktree.TicketWorktree
 import com.superiorsoftllc.agenthq.worktree.WorktreeRecord
-import com.superiorsoftllc.agenthq.session.SessionRecord
 import com.superiorsoftllc.agenthq.session.SessionState
 import com.superiorsoftllc.agenthq.session.TicketWorkerHealth
 import com.superiorsoftllc.agenthq.session.isBusy
@@ -267,6 +266,12 @@ class TicketBoard(
         Thread(r, "agenthq-ticket-session-events").also { it.isDaemon = true }
     }
 
+    /** DP-5f-3c: the board hears sessions only through the host's port; closed by [close]. */
+    private val sessionSubscription: AutoCloseable = host.sessions.subscribe(::onSessionEvent)
+
+    /** The in-process host this board runs on, when it is one: the daemon feeds its one session event sink to [LocalBoardHost.publish]. */
+    val localHost: LocalBoardHost? get() = host as? LocalBoardHost
+
     /** Where each committed change goes; the daemon pushes it to every connected client. */
     @Volatile
     var eventSink: (BoardEvent) -> Unit = {}
@@ -443,6 +448,7 @@ class TicketBoard(
      * shutdown -- and a wait that gives up is REPORTED, never silent.
      */
     fun close() {
+        sessionSubscription.close()
         sessionEvents.shutdown()
         if (!sessionEvents.awaitTermination(CLOSE_DRAIN_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
             System.err.println("[agentHq] board session events did not drain within ${CLOSE_DRAIN_TIMEOUT_MS}ms")
@@ -459,45 +465,56 @@ class TicketBoard(
      * applies inline, so its run row exists before the hand-out answers. Any other event (process output) holds no
      * lock, so it waits for the board as before. The exited record is read here, on the emitting thread.
      */
-    fun onSessionEvent(event: SessionEvent) {
-        val exited = (event as? SessionEvent.Exit)?.let { sessions?.get(it.sessionId) }
+    private fun onSessionEvent(event: BoardSessionEvent) {
+        val view = when (event) {
+            is BoardSessionEvent.Status -> event.session
+            is BoardSessionEvent.Exit -> event.session
+        }
+        // Read on the emitting thread: the session as it stood when the event arrived.
+        val facts = view?.let { v ->
+            val detail = host.sessions.detail(v.id)
+            RunFacts(v, detail?.lastHeartbeat ?: 0, detail?.spawnedAt ?: 0, detail?.providerSessionId)
+        }
         when {
-            Thread.holdsLock(this) -> applySessionEvent(event, exited)
-            sessions?.let { Thread.holdsLock(it) } == true -> try {
-                sessionEvents.execute { applySessionEvent(event, exited) }
+            Thread.holdsLock(this) -> applySessionEvent(event, facts)
+            host.sessions.holdsSessionsLock() -> try {
+                sessionEvents.execute { applySessionEvent(event, facts) }
             } catch (_: RejectedExecutionException) {
                 // The board is already closed ([close]). Only Status and Exit write anything -- they carry the
                 // ticket outcome -- and the session manager cannot emit one once [shutdown] has removed every
                 // run, so a late event here is process output, which applies nothing. Same shape as
                 // Orchestrator.onSessionEvent: a no-op after close(), never an exception on a session thread.
             }
-            else -> applySessionEvent(event, exited)
+            else -> applySessionEvent(event, facts)
         }
     }
 
+    /** The session as it stood when an event arrived, with the three fields only the host's detail carries. */
+    private class RunFacts(val view: SessionView, val lastHeartbeat: Long, val spawnedAt: Long, val providerSessionId: String?)
+
     @Synchronized
-    private fun applySessionEvent(event: SessionEvent, exited: SessionRecord?) {
+    private fun applySessionEvent(event: BoardSessionEvent, facts: RunFacts?) {
         when (event) {
-            is SessionEvent.Status -> {
-                val record = event.session
-                if (record.ticketId != null && record.runCount == 0) {
+            is BoardSessionEvent.Status -> {
+                val record = facts ?: return
+                val ticketId = record.view.ticketId
+                if (ticketId != null && record.view.runCount == 0) {
                     ensureRunRow(record)
-                    if (record.state == SessionState.FAILED) {
+                    if (record.view.state == SessionState.FAILED.name) {
                         finishTicketRun(record)
-                        publishRunUpdate(record.ticketId)
+                        publishRunUpdate(ticketId)
                         drainProfileLane(record)
                     }
                 }
             }
-            is SessionEvent.Exit -> {
-                val record = exited ?: return
-                val ticketId = record.ticketId ?: return
+            is BoardSessionEvent.Exit -> {
+                val record = facts ?: return
+                val ticketId = record.view.ticketId ?: return
                 ensureRunRow(record)
                 finishTicketRun(record)
                 publishRunUpdate(ticketId)
                 drainProfileLane(record)
             }
-            else -> Unit
         }
     }
 
@@ -1123,18 +1140,18 @@ class TicketBoard(
     )
 
     /**
-     * TICKET-HANDOVER: the start brief of the ticket [session] works on, composed as a fresh start of that ticket composes
+     * TICKET-HANDOVER: the start brief of the ticket session [sessionId] works on, composed as a fresh start of that ticket composes
      * it ([handOut]): the same composer, the session's own role, agent and frozen instance, and the ticket's starter as
      * who to report to. Re-read NOW, so an edit to the ticket since its start lands. Null when the session has no ticket
      * or the ticket is gone. Takes no board monitor (the handover calls it from its own thread).
      */
-    fun brief(session: com.superiorsoftllc.agenthq.session.SessionRecord): String? {
+    fun brief(sessionId: String): String? {
+        val session = host.sessions.get(sessionId) ?: return null
         val ticketId = session.ticketId?.takeIf { it.isNotBlank() } ?: return null
-        val sessionManager = sessions ?: return null
         val snapshot = store.transaction { load() }
         val row = snapshot.rows[ticketId] ?: return null
         val reportTo = row.startedBy?.let { starter -> agents?.let { reportTo(starter) } }
-        return context.compose(briefInput(row, snapshot, session.role, session.agentId, sessionManager.instance(session.id)?.toBoard(), reportTo)).prompt
+        return context.compose(briefInput(row, snapshot, session.role, session.agentId, host.sessions.instance(session.id), reportTo)).prompt
     }
 
     /**
@@ -1317,25 +1334,25 @@ class TicketBoard(
         }
     }
 
-    private fun ensureRunRow(record: SessionRecord) {
-        val ticketId = record.ticketId ?: return
+    private fun ensureRunRow(record: RunFacts) {
+        val ticketId = record.view.ticketId ?: return
         if (store.tickets.get(ticketId) == null) return
-        if (store.ticketRuns.byTicket(ticketId).none { it.sessionId == record.id }) {
+        if (store.ticketRuns.byTicket(ticketId).none { it.sessionId == record.view.id }) {
             store.ticketRuns.insert(
-                StoredRun(ticketId = ticketId, sessionId = record.id, startedAt = record.spawnedAt),
+                StoredRun(ticketId = ticketId, sessionId = record.view.id, startedAt = record.spawnedAt),
             )
         }
     }
 
-    private fun finishTicketRun(record: SessionRecord) {
-        val ticketId = record.ticketId ?: return
-        val outcome = RunOutcomes.of(record)
+    private fun finishTicketRun(record: RunFacts) {
+        val ticketId = record.view.ticketId ?: return
+        val outcome = RunOutcomes.of(record.view.state, record.view.killOutcome)
         // Owner decision 2026-10-22: a clean exit leaves the ticket where it is (`tickets.exitBehavior` = leave, the
         // default) so the PM or another agent decides; `done` restores the old BUG-E2E-2 auto-done. Only the ticket's
         // CURRENT run decides (an older session ending late does not), and only a SUCCEEDED one: a failed, killed or
         // orphaned run stays in_progress with lastRun showing why.
         val eligible = exitBehavior() == "done" && outcome == FinishedPayload.Outcome.SUCCEEDED &&
-            store.tickets.get(ticketId)?.let { it.status == TicketStatus.IN_PROGRESS && it.sessionId == record.id } == true
+            store.tickets.get(ticketId)?.let { it.status == TicketStatus.IN_PROGRESS && it.sessionId == record.view.id } == true
         // GAP 855db590: exit 0 is not proof of work. A run that never opened a provider session, or produced fewer
         // assistant outputs / tool calls than the setting asks, leaves the ticket in_progress; the worker sweep restarts
         // an unbriefed one and flags the rest.
@@ -1343,13 +1360,13 @@ class TicketBoard(
         val autoDone = eligible && noWork == null
         store.ticketRuns.finish(
             ticketId = ticketId,
-            sessionId = record.id,
+            sessionId = record.view.id,
             endedAt = record.lastHeartbeat,
             outcome = outcome.name,
             detail = when {
                 autoDone -> AUTO_DONE_DETAIL
                 noWork != null -> NO_WORK_DETAIL + noWork
-                else -> record.lastError ?: ""
+                else -> record.view.lastError ?: ""
             },
         )
         if (autoDone) {
@@ -1360,11 +1377,11 @@ class TicketBoard(
     }
 
     /** GAP 855db590: why [record]'s clean run does not count as work done on its ticket; null when it does. */
-    private fun noWork(record: SessionRecord): String? {
+    private fun noWork(record: RunFacts): String? {
         val min = autoDoneMinOutputs()
         if (min <= 0) return null
         if (record.providerSessionId == null) return "the worker never opened a provider session, so it never received its brief"
-        val outputs = if (sessions == null) return null else host.sessions.workEvents(record.id)
+        val outputs = if (sessions == null) return null else host.sessions.workEvents(record.view.id)
         if (outputs >= min) return null
         return "the worker produced $outputs assistant output(s) or tool call(s), fewer than the $min that " +
             "'${com.superiorsoftllc.agenthq.settings.LimitRegistry.AUTO_DONE_MIN_OUTPUTS.key}' requires"
@@ -1374,10 +1391,10 @@ class TicketBoard(
         if (store.tickets.get(ticketId) != null) push(BoardEvent.Changed(listOf(get(ticketId))))
     }
 
-    private fun drainProfileLane(record: SessionRecord) {
+    private fun drainProfileLane(record: RunFacts) {
         if (!queueDrainEnabled) return
-        val profileId = record.agentId ?: return
-        val role = record.role
+        val profileId = record.view.agentId ?: return
+        val role = record.view.role
         val candidates = store.transaction {
             val snapshot = load()
             boardOrder(snapshot.rows.values).filter { ticket ->

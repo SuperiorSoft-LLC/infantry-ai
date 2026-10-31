@@ -38,7 +38,7 @@ import kotlinx.serialization.Serializable
  * 1.7.0 (DP-5f-2, additive): [BoardHost] gains [BoardAgents], [BoardRunHealth], [BoardContextSources], [BoardImages] and
  *   [BoardSessions.subscribe] ([BoardSessionEvent]).
  */
-const val BOARD_API_VERSION = "1.10.0"
+const val BOARD_API_VERSION = "1.11.0"
 
 const val GRANT_TICKETS_READ = "tickets.read"
 const val GRANT_TICKETS_WRITE = "tickets.write"

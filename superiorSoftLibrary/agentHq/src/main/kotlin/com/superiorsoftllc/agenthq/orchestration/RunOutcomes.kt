@@ -12,6 +12,15 @@ object RunOutcomes {
     fun isAttemptOver(state: SessionState): Boolean = state in ATTEMPT_OVER
 
     /** Resolution order is the contract's: WHY it stopped first, then what state it reached. */
+    /** The same resolution over a session view's names ([SessionState] / [KillOutcome] `name`s). */
+    fun of(state: String, killOutcome: String?): FinishedPayload.Outcome = when {
+        killOutcome == KillOutcome.GRACEFUL.name -> FinishedPayload.Outcome.KILLED_GRACEFUL
+        killOutcome == KillOutcome.FORCED.name -> FinishedPayload.Outcome.KILLED_FORCED
+        state == SessionState.ORPHANED.name -> FinishedPayload.Outcome.ORPHANED
+        state == SessionState.IDLE.name -> FinishedPayload.Outcome.SUCCEEDED
+        else -> FinishedPayload.Outcome.FAILED
+    }
+
     fun of(record: SessionRecord): FinishedPayload.Outcome = when {
         record.killOutcome == KillOutcome.GRACEFUL -> FinishedPayload.Outcome.KILLED_GRACEFUL
         record.killOutcome == KillOutcome.FORCED -> FinishedPayload.Outcome.KILLED_FORCED

@@ -1312,9 +1312,9 @@ class AgentHqDaemon(
             board.eventSink = { event -> broadcastBoard(clients, event) }
             boardRef = board
             // TICKET-HANDOVER: a ticket worker switched to another harness hands off, then resumes with its ticket brief.
-            val handover = SessionHandover(manager, board::brief, handoffTimeoutMs)
+            val handover = SessionHandover(manager, { board.brief(it.id) }, handoffTimeoutMs)
             // GAP-006b: a first turn of a worker whose brief never landed carries it; the sweep enforces the in-progress invariant.
-            manager.briefFor = board::brief
+            manager.briefFor = { board.brief(it.id) }
             val workerSweepExec = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
                 Thread(r, "agenthq-ticket-worker-sweep").also { it.isDaemon = true }
             }
@@ -1625,7 +1625,7 @@ class AgentHqDaemon(
                 // USAGE-1: the usage meter (own package, own file); the seam is these three lines plus its frame below.
                 usageMeter?.onSessionEvent(event, manager::get)
                 // FOURTH ARM: ticket outcomes are durable, then a freed profile lane is drained.
-                board.onSessionEvent(event)
+                board.localHost?.publish(event)
                 // Story 9.5: a trigger's run ends with its session's run.
                 triggers.onSessionEvent(event)
                 // TRAITS-T6: LAST, so the board and the triggers have recorded the run's end before a re-prompt mail

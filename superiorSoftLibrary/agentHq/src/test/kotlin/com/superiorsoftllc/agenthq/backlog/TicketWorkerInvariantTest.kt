@@ -71,9 +71,9 @@ class TicketWorkerInvariantTest {
         val turns = CopyOnWriteArrayList<SessionEvent.Turn>()
         manager.eventSink = { event ->
             if (event is SessionEvent.Turn) turns += event
-            board.onSessionEvent(event)
+            board.localHost?.publish(event)
         }
-        manager.briefFor = board::brief
+        manager.briefFor = { board.brief(it.id) }
         val ticket = board.save(TicketSave(title = "Add login", agentId = worker.id)).ticket
         return Rig(board, manager, runner, turns, ticket.id)
     }
