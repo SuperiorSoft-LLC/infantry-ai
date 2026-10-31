@@ -87,7 +87,7 @@ class McpTicketImagesE2eTest {
         val stderr = StringBuffer()
         val served = Served(PrintWriter(toServer), BufferedReader(fromServer), stderr)
         val lineage = tempDir("agenthq-mcp-img-lineage")
-        val args = arrayOf("mcp", "serve", "--port", fixture.port.toString(), "--lineage-dir", lineage.path)
+        val args = arrayOf("mcp", "serve", "--port", fixture.port.toString())
         served.worker = thread(name = "mcp-serve-img-e2e", isDaemon = true) {
             Cli.run(args, serverOut, stderr, { null }, { serverIn }, cwd = cwd)
             serverOut.close()
