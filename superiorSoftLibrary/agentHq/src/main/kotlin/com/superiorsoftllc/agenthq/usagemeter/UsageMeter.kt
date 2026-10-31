@@ -97,7 +97,18 @@ class UsageMeter private constructor(
             is SessionEvent.Stdout -> {
                 val line = event.line
                 if (line.length < 4 || ("usage" !in line && "tokens" !in line && "compact" !in line)) return
-                pending[event.sessionId]?.acc?.accept(line)
+                // USAGE-GAP-1: a live harness also speaks with no Turn event before it (a background-task or mail wake of a
+                // kept process, a turn after the previous Exit dropped the accumulator). Those lines were dropped, so a long
+                // lived session was undercounted. Open an accumulator on the first usage line instead, whatever started it.
+                val p = pending[event.sessionId] ?: run {
+                    val rec = sessions(event.sessionId)
+                    Pending(sourceOf(rec, MessageOrigin.Owner), rec).also { np ->
+                        np.acc.onTurn = { t -> recordTurn(event.sessionId, np, t) }
+                        np.acc.onCompaction = { c -> recordCompaction(event.sessionId, np, c) }
+                        pending.putIfAbsent(event.sessionId, np)
+                    }.let { pending[event.sessionId] ?: it }
+                }
+                p.acc.accept(line)
             }
             is SessionEvent.Exit -> {
                 val p = pending.remove(event.sessionId) ?: return
