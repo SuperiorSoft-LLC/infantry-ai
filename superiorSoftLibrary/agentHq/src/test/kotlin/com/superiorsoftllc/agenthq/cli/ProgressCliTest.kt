@@ -127,4 +127,13 @@ class ProgressCliTest {
         assertEquals(listOf(ProgressReport("plan", count = 4, label = "unit"), ProgressReport("step")), r.read("== stage 2 of 4: unit", null))
         assertTrue(r.read("nothing here", null).isEmpty())
     }
+
+    @Test fun `shipped task reader reports the running task as a status, unchanged from the old code reader`() {
+        val specs = com.superiorsoftllc.agenthq.runner.ToolProfiles.DEFAULTS.flatMap { it.progress }.filter { it.reader == "gradle" }
+        val r = ProgressReaders.data(specs)
+        assertEquals(listOf(ProgressReport("status", label = "gradle :app:compileKotlin")), r.read("> Task :app:compileKotlin", null))
+        assertTrue(r.read("> Configure project :", null).isEmpty())
+        assertTrue(ProgressReaders.byName("nope") == null)
+        assertTrue("junit" in ProgressReaders.names())
+    }
 }

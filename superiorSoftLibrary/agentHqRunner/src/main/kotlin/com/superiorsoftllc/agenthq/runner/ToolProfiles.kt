@@ -60,6 +60,8 @@ data class ToolProfile(
     val heavyCommands: List<String> = emptyList(),
     /** STACK-NEUTRAL-1: the concurrency env every worker session gets for this tool, from the build limits. */
     val env: List<EnvTemplate> = emptyList(),
+    /** STACK-NEUTRAL-3: progress readers of this tool's output, selected with `agenthq run/progress --reader <name>`. */
+    val progress: List<ProgressSpec> = emptyList(),
     /** In an override: drop the default entry of this [name]. */
     val disabled: Boolean = false,
 )
@@ -83,6 +85,14 @@ data class EnvTemplate(
         val LIMITS = setOf(MAX_WORKERS, MAX_PARALLEL_FORKS)
     }
 }
+
+/**
+ * STACK-NEUTRAL-3: one output line a progress reader reports on. [reader] is the `--reader` name (specs of one name are
+ * tried in order); [match] a regex found in the line; [report] is `status`, `step`, `count` or `progress`; [label] a
+ * template where `$1`.. are the match groups (for `count` / `progress` it must come out as the number).
+ */
+@Serializable
+data class ProgressSpec(val reader: String, val match: String, val report: String = "status", val label: String? = null)
 
 object ToolProfiles {
     const val RESOURCE = "/watch/tool-profiles.json"
@@ -121,6 +131,11 @@ object ToolProfiles {
         require(p.name.isNotBlank()) { "a tool profile needs a name" }
         (p.daemons + p.notifyOn + p.failureMarkers + p.redirects + p.clients + p.heavyImages + p.heavyCommands).forEach { re ->
             runCatching { Regex(re) }.exceptionOrNull()?.let { throw IllegalArgumentException("tool profile '${p.name}': bad regex '$re' (${it.message})") }
+        }
+        p.progress.forEach { s ->
+            require(s.reader.matches(Regex("[A-Za-z0-9._-]{1,32}"))) { "tool profile '${p.name}': bad progress reader name '${s.reader}'" }
+            require(s.report in setOf("status", "step", "count", "progress")) { "tool profile '${p.name}': progress report must be status|step|count|progress, was '${s.report}'" }
+            runCatching { Regex(s.match) }.exceptionOrNull()?.let { throw IllegalArgumentException("tool profile '${p.name}': bad regex '${s.match}' (${it.message})") }
         }
         p.shim?.forEach { s -> require(s in p.commands) { "tool profile '${p.name}': shim '$s' is not one of its commands" } }
         (p.commands + p.shim.orEmpty()).forEach { c ->

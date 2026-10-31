@@ -4425,7 +4425,7 @@ internal object Cli {
               unwatched --reason "WHY" -- CMD  Opt out of the watch for one command (reason required; logged, counted, shown, escalated by watch.escalateTo)
               progress <0-100> ["label"] | plan "a" "b" .. | plan N | step [name] | bytes D T | count D T | status "label" | done | fail | clear | show
                                   Report your long job's progress, shown as a live bar on your card (progress --help: all forms)
-              progress --watch [--reader gradle|junit|gate]   Copy stdin to stdout unchanged, reporting ##infantry marker lines
+              progress --watch [--reader <name>]   Copy stdin to stdout unchanged, reporting ##infantry marker lines
               run [--label L] [--reader R] -- CMD   Run CMD with its output and exit code unchanged; progress done on exit 0, failed otherwise
                                   Harmless outside Infantry AI: no session or daemon = no report, exit 0 (run keeps CMD's code)
               harnesses           The harnesses (provider ids) a ticket can pin, and each one's models

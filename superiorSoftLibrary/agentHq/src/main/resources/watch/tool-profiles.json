@@ -15,7 +15,8 @@
       { "name": "GRADLE_OPTS", "value": "-Dorg.gradle.project.kotlin.compiler.execution.strategy=in-process" }
     ],
     "notifyOn": ["BUILD SUCCESSFUL", "BUILD FAILED"],
-    "failureMarkers": ["BUILD FAILED", "^FAILURE: "]
+    "failureMarkers": ["BUILD FAILED", "^FAILURE: "],
+    "progress": [{ "reader": "gradle", "match": "^> Task (:\\S+)", "report": "status", "label": "gradle $1" }]
   },
   {
     "name": "kotlin",
