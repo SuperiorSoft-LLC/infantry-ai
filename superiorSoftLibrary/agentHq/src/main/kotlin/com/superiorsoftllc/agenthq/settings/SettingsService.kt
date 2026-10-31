@@ -388,6 +388,8 @@ class SettingsService(
             MAIL_DELIVERY_MODE -> JsonPrimitive(requireDeliveryMode(key, value))
             else -> if (key.startsWith("$MAIL_DELIVERY_MODE.") && key.length > MAIL_DELIVERY_MODE.length + 1) {
                 JsonPrimitive(requireDeliveryMode(key, value))
+            } else if (key.startsWith("${LimitRegistry.SESSION_CONTEXT_CAP_TOKENS.key}.") && key.length > LimitRegistry.SESSION_CONTEXT_CAP_TOKENS.key.length + 1) {
+                JsonPrimitive(requireLimit(LimitRegistry.SESSION_CONTEXT_CAP_TOKENS, value))
             } else if (key.startsWith("$MAIL_WAKE_MODE.") && key.length > MAIL_WAKE_MODE.length + 1) {
                 JsonPrimitive(requireWakeMode(key, value))
             } else if (key.startsWith("$MAIL_AUTOMATION_FOOTER.") && key.length > MAIL_AUTOMATION_FOOTER.length + 1) {
@@ -447,6 +449,15 @@ class SettingsService(
             ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.getOrNull() }
             ?.takeIf { it in DELIVERY_MODES }
         return (sessionId?.let { stored("$MAIL_DELIVERY_MODE.$it") }) ?: (role?.let { stored("$MAIL_DELIVERY_MODE.$it") }) ?: stored(MAIL_DELIVERY_MODE) ?: "notify"
+    }
+
+    /** USAGE-OUT-2: the context cap (tokens, 0 = off) for a session: `<key>.<sessionId>`, `<key>.<role>`, then the global limit. */
+    fun contextCap(role: String?, sessionId: String?): Long {
+        val def = LimitRegistry.SESSION_CONTEXT_CAP_TOKENS
+        fun stored(key: String) = store.settings.get(key)?.value
+            ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> !p.isString }?.content?.toLongOrNull() }.getOrNull() }
+            ?.takeIf { def.accepts(it) }
+        return (sessionId?.let { stored("${def.key}.$it") }) ?: (role?.takeIf { it.isNotBlank() }?.let { stored("${def.key}.$it") }) ?: limit(def)
     }
 
     private fun requireWakeMode(key: String, value: JsonElement): String =

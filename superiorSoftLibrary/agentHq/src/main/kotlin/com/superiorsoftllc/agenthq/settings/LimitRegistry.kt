@@ -549,7 +549,15 @@ object LimitRegistry {
         max = 10_000_000,
     )
 
+    /** USAGE-OUT-2: context cap for long-lived woken sessions. */
+    val SESSION_CONTEXT_CAP_TOKENS = LimitDef(
+        "limits.session.contextCapTokens", 100_000, "tokens",
+        "Recommended 100000 (a fresh worker turn is about 47K; PM/VC wakes measured 145-152K each). When a resting session whose last request context passed this is woken by mail, it is restarted in place (same id, role, model, worktree) with a short handoff, and the mail rides in that fresh first turn. Per-role override: setting limits.session.contextCapTokens.<role> (or .<sessionId>). 0 = off.",
+        max = 10_000_000, zeroMeans = "off",
+    )
+
     val ALL: List<LimitDef> = listOf(
+        SESSION_CONTEXT_CAP_TOKENS,
         MAIL_INJECT_MAX_CHARS, MAIL_INJECT_TOTAL_CHARS,
         MCP_BODY_CHARS,
         MCP_DEFAULT_DETAIL,
