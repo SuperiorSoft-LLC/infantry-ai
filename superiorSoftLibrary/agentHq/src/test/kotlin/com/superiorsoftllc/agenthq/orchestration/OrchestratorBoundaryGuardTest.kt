@@ -45,12 +45,12 @@ class OrchestratorBoundaryGuardTest {
 
         /** Today's crossings, "from>to" -> import count (51 in 30 pairs). Lower an entry when you remove an import; never raise one. */
         val BASELINE = mapOf(
-            "agents>session" to 4, "backlog>images" to 1, "backlog>session" to 7, "backlog>worktree" to 7, "brief>session" to 1,
+            "agents>session" to 4, "backlog>images" to 1, "backlog>session" to 3, "backlog>worktree" to 0, "brief>session" to 0,
             "claude>prompts" to 2, "cli>agents" to 1, "cli>decisions" to 5, "cli>epics" to 2, "cli>issues" to 9, "cli>memory" to 14,
-            "cli>orchestration" to 4, "cli>pipeline" to 8, "cli>prompts" to 1, "cli>role" to 1, "cli>ticketfiles" to 3,
-            "context>session" to 2, "images>mvp" to 1, "memory>session" to 1, "mvp>worktree" to 1, "opencode>prompts" to 1,
+            "cli>orchestration" to 3, "cli>pipeline" to 5, "cli>prompts" to 1, "cli>role" to 1, "cli>ticketfiles" to 3,
+            "context>session" to 0, "images>mvp" to 1, "memory>session" to 1, "mvp>worktree" to 1, "opencode>prompts" to 1,
             "orchestration>session" to 7, "projectgit>mvp" to 1, "prompts>session" to 2, "role>session" to 3, "session>agents" to 1,
-            "session>prompts" to 1, "stories>session" to 1, "ticketfiles>worktree" to 2, "triggers>session" to 5,
+            "session>prompts" to 1, "stories>session" to 0, "ticketfiles>worktree" to 2, "triggers>session" to 5,
         )
     }
 }

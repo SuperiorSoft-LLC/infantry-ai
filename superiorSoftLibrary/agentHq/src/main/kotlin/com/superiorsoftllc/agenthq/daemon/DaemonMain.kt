@@ -1638,25 +1638,8 @@ class AgentHqDaemon(
                 pluginHost.set(host)
                 // HARNESS-PLUGIN-3 H4 (docs/HARNESS-PLUGINS.md 3.2): each loaded module's `harness` block, into the ONE registry,
                 // AFTER module resolution and with the daemon halves' trust. The built-ins (class path, 1.x) are already in it.
-                val harnessModules = com.superiorsoftllc.agenthq.daemon.plugins.HarnessModules(
-                    harnesses, trustNow,
-                    com.superiorsoftllc.agenthq.harness.HarnessHostServices(
-                        setting = { module, key -> daemonConfig.value(module, key) },
-                        resolveCli = { cliId, command ->
-                            // H5a: the module's own manifest tool (its place in the installer's prefix included), else PATH.
-                            val tool = harnessModulesRef.get()?.cliTool(cliId) ?: com.superiorsoftllc.agenthq.executables.CliTools.forCommand(cliId, cliId, command)
-                            executableResolver.resolve(tool).path
-                        },
-                        mcpLaunch = { env -> AgentHqMcp.launch(env).let { com.superiorsoftllc.agenthq.harness.api.HarnessProcess(it.argv, env = it.env) } },
-                        watchLauncher = { env -> if (WatchHooks.on(env)) WatchHooks.launcher(agentHqBin) ?: "agenthq" else null },
-                        ask = { sessionId, q ->
-                            val answer = pendingPrompts.askQuestion(sessionId, com.superiorsoftllc.agenthq.prompts.QuestionSpec(
-                                q.question, q.options.map { com.superiorsoftllc.agenthq.protocol.PromptOption(it) }, timeoutMillis = q.timeoutMillis, recommended = q.recommended,
-                            ))
-                            com.superiorsoftllc.agenthq.harness.api.HarnessAnswer(answer.answers, answer.otherText, answer.answered)
-                        },
-                    ),
-                    stateDir(),
+                val harnessModules = com.superiorsoftllc.agenthq.daemon.wiring.HarnessModulesWiring.build(
+                    harnesses, trustNow, daemonConfig, harnessModulesRef, executableResolver, agentHqBin, pendingPrompts, stateDir(),
                     reserved = { manager.providers.map { it.id }.toSet() },
                 )
                 harnessModulesRoot.set(root)
