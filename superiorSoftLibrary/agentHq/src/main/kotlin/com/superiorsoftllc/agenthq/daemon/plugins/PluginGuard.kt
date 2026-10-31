@@ -22,7 +22,10 @@ class PluginGuard(
     private val log: (String) -> Unit,
     /** Told once, when the plugin is disabled (the host unregisters what it can and stops it). */
     private val onDisabled: (String) -> Unit = {},
+    /** BOARD-DOWN-1: consecutive wall-clock timeouts tolerated before the plugin is disabled (1 = the old first-overrun rule). */
+    private val timeoutStrikes: Int = 3,
 ) {
+    private val consecutiveTimeouts = AtomicInteger()
     @Volatile var disabledReason: String? = null
         private set
     val disabled: Boolean get() = disabledReason != null
@@ -50,12 +53,16 @@ class PluginGuard(
             return Result.failure(e)
         }
         return try {
-            Result.success(future.get(timeoutMs, TimeUnit.MILLISECONDS))
+            Result.success(future.get(timeoutMs, TimeUnit.MILLISECONDS)).also { consecutiveTimeouts.set(0) }
         } catch (e: TimeoutException) {
             future.cancel(true)
-            disable("$what timed out after $timeoutMs ms")
+            // BOARD-DOWN-1: a slow call (a DB lock, a git call) fails only itself; a plugin that keeps timing out is disabled.
+            val n = consecutiveTimeouts.incrementAndGet()
+            if (n >= timeoutStrikes) disable("$what timed out after $timeoutMs ms ($n in a row)")
+            else log("[plugins] daemon plugin $moduleId: $what timed out after $timeoutMs ms (strike $n of $timeoutStrikes; plugin stays loaded)")
             Result.failure(e)
         } catch (e: ExecutionException) {
+            consecutiveTimeouts.set(0)
             val cause = e.cause ?: e
             disable("$what threw ${cause::class.java.simpleName}: ${cause.message?.lineSequence()?.firstOrNull().orEmpty()}")
             Result.failure(cause)
