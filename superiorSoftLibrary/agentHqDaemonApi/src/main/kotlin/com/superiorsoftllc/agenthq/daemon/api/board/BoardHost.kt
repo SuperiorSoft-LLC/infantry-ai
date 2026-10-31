@@ -169,6 +169,12 @@ interface BoardGit {
     /** Whether the host cuts a worktree per project folder (the `projectFolders` mode). */
     fun projectFolders(): Boolean = false
 
+    /** DP-5f-3b3 (1.10.0): the folder [projectId] (null = the default project) runs in under project-folders mode, or null when it has none (or the mode is off). */
+    fun projectFolderFind(projectId: String?): String? = null
+
+    /** DP-5f-3b3 (1.10.0): [projectFolderFind], or an [IllegalArgumentException] naming why the project has no directory; never the daemon's cwd. */
+    fun projectFolderRequire(projectId: String?): String = throw IllegalArgumentException(NO_GIT)
+
     companion object {
         const val NO_GIT = "this daemon has no git access"
     }
