@@ -26,6 +26,9 @@ internal object ToolArgs {
         put("description", description)
     }
 
+    /** TOKEN-1: the `verbose` property of a write tool: true restores the full ticket in the answer (default false = one line). */
+    fun verboseProp() = boolProp("true = answer with the full ticket (description and RELATED block included). Default false: a one-line confirmation.")
+
     fun annotations(readOnly: Boolean, destructive: Boolean = false) = buildJsonObject {
         put("readOnlyHint", readOnly)
         put("destructiveHint", destructive)

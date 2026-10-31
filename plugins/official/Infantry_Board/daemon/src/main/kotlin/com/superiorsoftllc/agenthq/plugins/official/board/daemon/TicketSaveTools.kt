@@ -140,7 +140,7 @@ internal object TicketSave {
      * BUG-ASSIGN-1: the answer SAYS what was saved, read from the daemon's answer (never echoed from the request): the fields this
      * call set that the stored ticket now holds, each with its stored value, and the next step.
      */
-    fun saved(ticket: TicketInfo, set: Fields, created: Boolean): ToolResult {
+    fun saved(ticket: TicketInfo, set: Fields, created: Boolean, verbose: Boolean = false): ToolResult {
         val role = ticket.agentId?.takeIf { it.startsWith("role:") }?.removePrefix("role:")
         val fields = buildList {
             if (set.title) add("title" to "title")
@@ -163,8 +163,10 @@ internal object TicketSave {
         }
         val note = relatedNote(ticket.description)
         val message = (if (created) "Created ticket $short (${ticket.status}); saved $what. " else "Saved on ticket $short: $what. ") + next +
-            note.related.orEmpty() + note.suggestion?.let { " $it" }.orEmpty()
-        return ToolResult(json.encodeToString(JsonObject.serializer(), JsonObject(TicketGetTool.summary(ticket) + buildJsonObject {
+            (if (verbose) note.related.orEmpty() else "") + note.suggestion?.let { " $it" }.orEmpty()
+        // TOKEN-1: the tiny ack; verbose restores the full object.
+        if (!verbose) return ToolResult("ok $short ${ticket.status}" + note.suggestion?.let { " | $it" }.orEmpty())
+        return ToolResult(json.encodeToString(JsonObject.serializer(), JsonObject(TicketGetTool.answer(ticket, verbose) + buildJsonObject {
             put("saved", buildJsonArray { fields.forEach { add(JsonPrimitive(it.first)) } })
             note.suggestion?.let { put("suggestion", it) }
             put("message", message)
@@ -275,6 +277,7 @@ class TicketCreateTool(private val api: DaemonApi) : DaemonTool {
             put("images", pathsProp("Images to attach: local image file paths (png, jpeg, gif or webp, at most 10 MB each; each is uploaded to the project's .agenthq/uploads/ticket/), or paths already stored there. A missing, oversized or non-image file refuses the call and nothing is saved. The board shows them as attachments and the started worker's brief lists them."))
             put("status", prop("Column the new ticket enters: todo (default, the current sprint) or backlog (parked, never started until moved to todo)."))
             relatedToProp()
+            put("verbose", ToolArgs.verboseProp())
         }
     }
     override val annotations = ToolArgs.annotations(readOnly = false)
@@ -309,7 +312,7 @@ class TicketCreateTool(private val api: DaemonApi) : DaemonTool {
             title = true, description = draft.description != null, agentId = draft.agentId != null, provider = draft.provider != null,
             model = draft.model != null, weight = draft.weight != null, contextLimit = draft.contextLimit != null, images = draft.images != null,
             related = relatedTo != null, effort = draft.effort != null,
-        ), created = true)
+        ), created = true, verbose = ToolArgs.flag(args, "verbose"))
     }
 }
 
@@ -333,6 +336,7 @@ class TicketUpdateTool(private val api: DaemonApi) : DaemonTool {
             put("images", pathsProp("The ticket's full image list, replacing the stored one ([] removes all): local image files (uploaded, as for ${TicketSave.CREATE}) or paths already under the project's .agenthq/uploads/ticket/. Not with addImages / removeImages. A removed image's file is deleted once no ticket references it."))
             put("addImages", pathsProp("Images to ADD to the stored list: local image files (png, jpeg, gif or webp, at most 10 MB each) or stored paths."))
             relatedToProp()
+            put("verbose", ToolArgs.verboseProp())
             put("removeImages", pathsProp("Images to REMOVE from the stored list, each named by its stored path (as agenthq_ticket_get answers it), its file name, or the original local file. Naming an image the ticket does not have refuses the call."))
         }
     }
@@ -381,6 +385,6 @@ class TicketUpdateTool(private val api: DaemonApi) : DaemonTool {
             title = ToolArgs.string(args, "title") != null, description = patch.description != null, agentId = patch.agentId != null, provider = patch.provider != null,
             model = patch.model != null, weight = patch.weight != null, contextLimit = patch.contextLimit != null, images = patch.images != null,
             related = relatedTo != null, effort = patch.effort != null,
-        ), created = false)
+        ), created = false, verbose = ToolArgs.flag(args, "verbose"))
     }
 }

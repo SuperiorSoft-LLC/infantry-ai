@@ -13,6 +13,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
@@ -27,6 +28,7 @@ import kotlinx.serialization.json.put
  */
 class ChatDaemonPlugin : DaemonPlugin {
     override fun start(api: DaemonApi) {
+        MailTools.InboxTool.settings = api.settings
         api.tools.register(MailTools.InboxTool)
         api.tools.register(MailTools.ReadTool)
         api.tools.register(MailTools.MessageTool)
@@ -40,6 +42,8 @@ object MailTools {
 
     private const val HUMAN = "user"
     private const val PREVIEW_CHARS = 120
+    private const val SUBJECT_CHARS = 80
+    private const val DEFAULT_ITEMS = 20
     private val json = Json { ignoreUnknownKeys = true }
 
     private fun prop(type: String, description: String) = buildJsonObject {
@@ -103,8 +107,9 @@ object MailTools {
     object InboxTool : DaemonTool {
         override val name = INBOX
         override val description =
-            "List the Infantry AI COMMS mail addressed to you (this session, or the human handle outside one): " +
-                "id, from, subject, state, read, and a one-line preview, oldest first. Read one in full with $READ."
+            "Your Infantry AI COMMS inbox (this session, or the human handle outside one): counts (unread, total) and one line per " +
+                "item (id, from, subject, state), newest unread first, 20 by default (setting limits.tools.inboxLimit). No bodies. " +
+                "Open one with $READ <id>. Params: limit, offset, unreadOnly, previews (true adds a one-line preview)."
         override val inputSchema = buildJsonObject {
             put("type", "object")
             put("properties", buildJsonObject {
@@ -113,18 +118,39 @@ object MailTools {
                     put("default", false)
                     put("description", "Only the messages not read yet.")
                 })
+                put("limit", prop("integer", "At most this many items (default: setting limits.tools.inboxLimit, 20)."))
+                put("offset", prop("integer", "Skip this many items (paging; 0 = the newest)."))
+                put("previews", prop("boolean", "Add a one-line preview of each body (default false)."))
             })
             put("additionalProperties", false)
         }
         override val annotations = buildJsonObject { put("readOnlyHint", true) }
 
+        /** The host's settings, handed over at start; null reads as the registry default. */
+        @Volatile var settings: com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings? = null
+
         override fun call(call: ToolCall): ToolResult = guarded(INBOX) {
             val unreadOnly = (call.arguments["unreadOnly"] as? JsonPrimitive)?.booleanOrNull == true
-            val messages = fetchInbox(call).let { all -> if (unreadOnly) all.filterNot { it.read } else all }
+            val previews = (call.arguments["previews"] as? JsonPrimitive)?.booleanOrNull == true
+            val all = fetchInbox(call)
+            val matching = if (unreadOnly) all.filterNot { it.read } else all
+            val limit = (call.arguments["limit"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 }
+                ?: settings?.limit("limits.tools.inboxLimit")?.toInt()?.takeIf { it > 0 } ?: DEFAULT_ITEMS
+            val offset = (call.arguments["offset"] as? JsonPrimitive)?.intOrNull?.coerceAtLeast(0) ?: 0
+            val page = matching.sortedWith(compareBy<Mail> { it.read }.thenByDescending { it.sentAt }).drop(offset).take(limit)
             ok(buildJsonObject {
-                put("messages", buildJsonArray { messages.forEach { add(it.row()) } })
-                put("count", messages.size)
-                put("unreadOnly", unreadOnly)
+                put("unread", all.count { !it.read })
+                put("total", all.size)
+                put("shown", page.size)
+                put("items", buildJsonArray {
+                    page.forEach { m ->
+                        add(JsonPrimitive(
+                            "${m.id} | ${m.from} | ${m.subject.take(SUBJECT_CHARS)} | ${m.state}" +
+                                if (previews) " | " + (m.body.lineSequence().firstOrNull { it.isNotBlank() }?.trim()?.take(PREVIEW_CHARS) ?: "") else "",
+                        ))
+                    }
+                })
+                put("hint", "read one with $READ <id>" + if (offset + page.size < matching.size) "; more: offset=${offset + page.size}" else "")
             })
         }
     }
@@ -134,7 +160,7 @@ object MailTools {
         override val description = "Read one message of your inbox in full (its body) and mark it read."
         override val inputSchema = buildJsonObject {
             put("type", "object")
-            put("properties", buildJsonObject { put("messageId", prop("string", "Message id from $INBOX, or a unique prefix of one.")) })
+            put("properties", buildJsonObject { put("messageId", prop("string", "Message id from $INBOX, or a unique prefix of one.")); put("bodyChars", prop("integer", "Cut the body to this many characters (default: the whole body).")) })
             put("required", buildJsonArray { add(JsonPrimitive("messageId")) })
             put("additionalProperties", false)
         }
@@ -165,7 +191,7 @@ object MailTools {
             val updated = Mail(json.parseToJsonElement(reply.data).jsonObject)
             ok(buildJsonObject {
                 updated.row().forEach { (key, value) -> put(key, value) }
-                put("body", updated.body)
+                put("body", (call.arguments["bodyChars"] as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 }?.let { n -> updated.body.take(n) + if (updated.body.length > n) "...${updated.body.length - n} chars cut" else "" } ?: updated.body)
                 updated.replyTo?.let { put("replyTo", it) }
             })
         }
@@ -214,13 +240,7 @@ object MailTools {
                 "mail" -> {
                     val message = Mail(json.parseToJsonElement(reply.data).jsonObject)
                     if (message.failed) refused("$MESSAGE: ${message.failureReason ?: "the message could not be delivered"}")
-                    else ok(buildJsonObject {
-                        put("messageId", message.id)
-                        put("threadId", message.threadId)
-                        put("from", message.from)
-                        put("to", message.to)
-                        put("state", message.state)
-                    })
+                    else ToolResult("ok ${message.id.take(8)} ${message.state}")
                 }
                 else -> refused("$MESSAGE: unexpected answer ${reply.type}")
             }

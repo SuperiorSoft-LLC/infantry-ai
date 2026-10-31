@@ -52,17 +52,12 @@ class MailSource(
         }
         automationFooter?.let { append('\n').append(MailFooter.render(it, message)); return@buildString }
         append("\n-- answer this message --\n")
-        append("mark it read:\n")
-        append("  agenthq read ").append(message.id.take(8)).append('\n')
-        append("reply (goes back to ").append(message.from).append(" in this same thread):\n")
-        append("  agenthq send ").append(message.from).append(" \"<your answer, one line>\" --reply-to ")
+        // TOKEN-1: one short block (it rides on every mail an agent receives); every command stays pasteable.
+        append("read: agenthq read ").append(message.id.take(8)).append('\n')
+        append("reply (same thread): agenthq send ").append(message.from).append(" \"<your answer, one line>\" --reply-to ")
         append(message.id).append('\n')
-        append("check the reply landed:\n")
-        append("  agenthq threads\n")
-        append("or with the MCP tools: agenthq_read {\"messageId\":\"").append(message.id).append("\"}, then ")
-        append("agenthq_message {\"to\":\"").append(message.from).append("\",\"replyTo\":\"").append(message.id)
-        append("\",\"body\":\"<your answer>\"}\n")
-        append("all mail commands: agenthq mail\n")
+        append("check: agenthq threads | MCP: agenthq_message {\"to\":\"").append(message.from).append("\",\"replyTo\":\"")
+        append(message.id).append("\",\"body\":\"...\"} | all: agenthq mail\n")
     }
 
     companion object {

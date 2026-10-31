@@ -125,7 +125,7 @@ class McpTicketToolsTest {
         val fixture = launch()
         val call = serve(fixture, mapOf(AccessPolicy.PROJECT_ID_ENV to "proj-mcp"))
         val created = call("agenthq_ticket_create", args(
-            "title" to "MCP ticket", "description" to brief, "role" to "Backend", "provider" to "claude", "model" to "haiku",
+            "title" to "MCP ticket", "description" to brief, "role" to "Backend", "provider" to "claude", "model" to "haiku", "verbose" to "true",
         ))
         assertFalse(created.isError(), created.text())
         val id = created.payload().field("ticketId")!!
@@ -148,8 +148,8 @@ class McpTicketToolsTest {
     fun `update changes only the fields given, description verbatim`() {
         val fixture = launch()
         val call = serve(fixture)
-        val id = call("agenthq_ticket_create", args("title" to "before", "provider" to "claude", "model" to "haiku")).payload().field("ticketId")!!
-        val updated = call("agenthq_ticket_update", args("ticketId" to id.takeLast(8), "description" to brief, "model" to "sonnet", "role" to "qa"))
+        val id = call("agenthq_ticket_create", args("title" to "before", "provider" to "claude", "model" to "haiku", "verbose" to "true")).payload().field("ticketId")!!
+        val updated = call("agenthq_ticket_update", args("ticketId" to id.takeLast(8), "description" to brief, "model" to "sonnet", "role" to "qa", "verbose" to "true"))
         assertFalse(updated.isError(), updated.text())
         val stored = board(fixture).single { it.id == id }
         assertEquals("before", stored.title, "an absent title keeps the stored one")

@@ -52,6 +52,7 @@ class TicketMoveTool(private val api: DaemonApi) : DaemonTool {
                 put("minimum", 0)
                 put("description", "Place the ticket at this index of the column, 0 = the top (past the end = the bottom).")
             })
+            put("verbose", ToolArgs.verboseProp())
         })
         put("required", buildJsonArray { add(JsonPrimitive("ticketId")) })
         put("additionalProperties", false)
@@ -87,7 +88,8 @@ class TicketMoveTool(private val api: DaemonApi) : DaemonTool {
             .getOrElse { return refused("$MOVE refused: ${it.message}") }
         val moved = runCatching { WireTickets.ticket(answer.data) }
             .getOrElse { return refused("$MOVE: malformed ticket answer from the daemon: ${it.message}") }
-        return ToolResult(json.encodeToString(JsonObject.serializer(), JsonObject(TicketGetTool.summary(moved) + buildJsonObject {
+        if (!ToolArgs.flag(args, "verbose")) return ToolResult("ok ${WireTickets.shortId(moved.id)} ${moved.status}" + if (target != null) " pos ${moved.position}" else "")
+        return ToolResult(json.encodeToString(JsonObject.serializer(), JsonObject(TicketGetTool.answer(moved, ToolArgs.flag(args, "verbose")) + buildJsonObject {
             put("position", moved.position)
             put("message", "Moved ticket ${WireTickets.shortId(moved.id)} -> ${moved.status}" + if (target != null) " at position ${moved.position}" else "")
         })))
@@ -139,12 +141,7 @@ class TicketDeleteTool(private val api: DaemonApi) : DaemonTool {
         val board = runCatching { WireTickets.tickets(answer.data) }
             .getOrElse { return refused("$DELETE: malformed board answer from the daemon: ${it.message}") }
         if (board.any { it.id == ticket.id }) return refused("$DELETE: the daemon answered but ticket $short is still on the board")
-        return ToolResult(json.encodeToString(JsonObject.serializer(), buildJsonObject {
-            put("ticketId", ticket.id)
-            put("title", ticket.title)
-            put("deleted", true)
-            put("message", "Deleted ticket $short: ${ticket.title}")
-        }))
+        return ToolResult("ok $short deleted")
     }
 
     companion object {

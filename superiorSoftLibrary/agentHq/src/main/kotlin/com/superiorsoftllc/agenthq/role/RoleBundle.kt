@@ -28,6 +28,9 @@ object RoleBundle {
         val persona: String? = null,
         /** ROLE-ICON-1: an optional icon key; absent = the client's default for the role. */
         val icon: String = "",
+        val responseDetail: String = "",
+        val responseMaxChars: Int? = null,
+        val responseBodyChars: Int? = null,
     )
 
     @Serializable
@@ -66,6 +69,9 @@ object RoleBundle {
                 persona = persona,
                 source = RoleSource.BUILT_IN,
                 icon = entry.icon.trim().lowercase().takeIf { RoleService.ICON.matches(it) }.orEmpty(),
+                responseDetail = entry.responseDetail.trim().lowercase().takeIf { it in Role.DETAILS }.orEmpty(),
+                responseMaxChars = entry.responseMaxChars?.takeIf { it >= 0 },
+                responseBodyChars = entry.responseBodyChars?.takeIf { it >= 0 },
             )
         }
     }

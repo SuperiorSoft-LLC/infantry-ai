@@ -17,6 +17,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
 import java.util.concurrent.TimeUnit
@@ -32,13 +33,23 @@ class BoardTool(private val api: DaemonApi) : DaemonTool {
     override val description =
         "The board in one call: tickets grouped by column (backlog, todo, in_progress, pending, done), one line each with its " +
             "worker (role, session id), the worker's live state (busy / idle / running background process), last action, " +
-            "last output age, branch and last commit. Use this instead of tickets + sessions + transcripts."
+            "last output age, branch and last commit. Compact by default (done: last 5; backlog and todo: first 10 lines and a count); " +
+            "pass columns / limit for more. Use this instead of tickets + sessions + transcripts."
     override val inputSchema = buildJsonObject {
         put("type", "object")
         putJsonObject("properties") {
             putJsonObject("projectId") {
                 put("type", "string")
                 put("description", "Project whose tickets to summarise. Default: the caller's own project; \"all\" (pm / owner callers only) covers every project, each line prefixed [projectId].")
+            }
+            putJsonObject("columns") {
+                put("type", "string")
+                put("description", "Comma-separated columns to show, e.g. in_progress,pending (backlog, todo, in_progress, pending, done). Default: all, compact.")
+            }
+            putJsonObject("limit") {
+                put("type", "integer")
+                put("minimum", 1)
+                put("description", "At most this many ticket lines per column (done: the newest). Default: compact (done 5, backlog/todo 10 and a count).")
             }
         }
         put("additionalProperties", false)
@@ -60,7 +71,14 @@ class BoardTool(private val api: DaemonApi) : DaemonTool {
         val workers = tickets.mapNotNull { it.sessionId }.distinct().mapNotNull { id ->
             (api.sessionReads.find(id, by) as? SessionsResult.Ok)?.value?.takeIf { it.id == id }
         }
-        val lines = BoardLines.render(tickets.map(BoardLines::row), workers, System.currentTimeMillis(), commits(workers))
+        val columns = ToolArgs.string(call.arguments, "columns")?.split(',')?.map { it.trim().lowercase() }?.filter { it.isNotEmpty() }?.toSet()
+        val limit = (call.arguments["limit"] as? JsonPrimitive)?.contentOrNull?.trim()?.toIntOrNull()?.takeIf { it > 0 }
+        val options = BoardLines.Options(
+            columns, limit, compact = true,
+            queueShown = api.settings.limit("limits.tools.boardQueueShown")?.toInt() ?: BoardLines.QUEUE_SHOWN,
+            doneShown = api.settings.limit("limits.tools.boardDoneShown")?.toInt() ?: BoardLines.DONE_SHOWN,
+        )
+        val lines = BoardLines.render(tickets.map(BoardLines::row), workers, System.currentTimeMillis(), commits(workers), options)
             .map { line -> if (scope.projectId == null) tickets.firstOrNull { line.startsWith("  " + BoardLines.shortId(it.id) + " ") }?.let { "  [${it.projectId}] ${line.trimStart()}" } ?: line else line }
         return ToolResult(Json.encodeToString(JsonObject.serializer(), buildJsonObject {
             scope.projectId?.let { put("projectId", it) }

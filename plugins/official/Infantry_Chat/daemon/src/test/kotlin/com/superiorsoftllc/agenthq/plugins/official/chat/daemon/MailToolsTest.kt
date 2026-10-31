@@ -46,12 +46,12 @@ class MailToolsTest {
     @Test fun inboxListsEveryMessageAsTheCoreToolDidAndFiltersUnread() {
         val call = FakeCall(args("{}"), answers = ::mailbox)
         val all = Json.parseToJsonElement(MailTools.InboxTool.call(call).text).jsonObject
-        assertEquals("4", all["count"]!!.jsonPrimitive.content)
-        assertEquals("first line", all["messages"]!!.let { (it as kotlinx.serialization.json.JsonArray)[0].jsonObject["preview"]!!.jsonPrimitive.content })
+        assertEquals("4", all["total"]!!.jsonPrimitive.content)
+        // TOKEN-1: counts + one line per item (no preview unless asked); the newest unread comes first.
+        assertTrue((all["items"] as kotlinx.serialization.json.JsonArray)[0].jsonPrimitive.content.startsWith("m-ccc4 | s-pm"))
         assertEquals(Triple("mail_inbox", "s-me", "s-me"), call.sent.single())
         val unread = Json.parseToJsonElement(MailTools.InboxTool.call(FakeCall(args("""{"unreadOnly":true}"""), answers = ::mailbox)).text).jsonObject
-        assertEquals("3", unread["count"]!!.jsonPrimitive.content)
-        assertEquals("true", unread["unreadOnly"]!!.jsonPrimitive.content)
+        assertEquals("3", unread["shown"]!!.jsonPrimitive.content)
     }
 
     @Test fun inboxOutsideASessionAsksForTheHumanHandle() {
@@ -78,9 +78,7 @@ class MailToolsTest {
 
     @Test fun messageSendsMailFromTheSessionAndReportsRefusals() {
         val call = FakeCall(args("""{"to":"s-pm","body":"hello","replyTo":"m1"}"""), answers = ::mailbox)
-        val sent = Json.parseToJsonElement(MailTools.MessageTool.call(call).text).jsonObject
-        assertEquals("m-new", sent["messageId"]!!.jsonPrimitive.content)
-        assertEquals("QUEUED", sent["state"]!!.jsonPrimitive.content)
+        assertEquals("ok m-new QUEUED", MailTools.MessageTool.call(call).text)
         val (type, data, session) = call.sent.single()
         assertEquals("mail_send", type)
         assertEquals("s-me", session)

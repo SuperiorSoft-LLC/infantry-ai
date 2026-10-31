@@ -10,6 +10,7 @@ import com.superiorsoftllc.agenthq.daemon.api.usage.UsageText
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 
 /**
@@ -34,10 +35,15 @@ object UsageTool : DaemonTool {
             "models; opencode-go; others): percent of the plan window used (the highest window), when it resets, " +
             "points ahead/under an even burn, and how many ticket workers the pacing rule allows versus how many " +
             "run. An agent's ticket start beyond the allowance is refused, with the reason. Unknown usage = no pacing (fail open). " +
-            "Text summary first, then the JSON report."
+            "Text summary; pass json=true to append the full JSON report."
     override val inputSchema = buildJsonObject {
         put("type", "object")
-        put("properties", buildJsonObject {})
+        put("properties", buildJsonObject {
+            put("json", buildJsonObject {
+                put("type", "boolean")
+                put("description", "Append the full JSON report after the text summary (default false: the summary says it all).")
+            })
+        })
         put("required", buildJsonArray {})
         put("additionalProperties", false)
     }

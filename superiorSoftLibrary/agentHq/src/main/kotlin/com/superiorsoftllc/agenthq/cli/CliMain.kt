@@ -88,6 +88,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardLines
+import com.superiorsoftllc.agenthq.settings.LimitDef
+import com.superiorsoftllc.agenthq.settings.LimitRegistry
 import com.superiorsoftllc.agenthq.cli.mcp.McpConfigException
 import com.superiorsoftllc.agenthq.cli.mcp.KillScope
 import com.superiorsoftllc.agenthq.cli.mcp.McpNarrowing
@@ -210,7 +218,7 @@ fun main(args: Array<String>) {
  * agenthq epics --project <id> list that project's epics
  * agenthq stories               the story board (--project / --status to narrow)
  * agenthq send <to> "message"   message an agent (by id or role); --reply-to answers one
- * agenthq inbox [--unread]    the messages addressed to me
+ * agenthq inbox [--unread] [--limit n] [--offset n] [--previews]   counts + one line per message (newest unread first); open one with `agenthq read <id>`
  * agenthq read <msgId>        one message, printed and marked read (8-char prefix is enough)
  * agenthq ticket show <id>    one ticket in full: title, status, agent, links and the whole description
  * agenthq ticket create --title "..." [--desc "..." | --desc-file <path> | --desc -] [--project <id>] [--role <id>] [--provider <id>] [--model <id>] [--image <file>]... [--status todo|backlog]   a new todo (or backlog) ticket; prints its id
@@ -1057,7 +1065,13 @@ internal object Cli {
             ListSerializer(SessionRecord.serializer()),
             stream.request(Envelope(Envelope.SESSIONS), answerType = Envelope.SESSIONS, what = "sessions", idempotent = true).data,
         )
-        BoardSummary.render(tickets, sessions, System.currentTimeMillis(), BoardSummary.gitCommitOf(sessions)).forEach { out.appendLine(it) }
+        val columns = parsed.columns?.split(',')?.map { it.trim().lowercase() }?.filter { it.isNotEmpty() }?.toSet()
+        val options = BoardLines.Options(
+            columns, parsed.limit?.trim()?.toIntOrNull()?.takeIf { it > 0 }, compact = true,
+            queueShown = cliLimit(stream, LimitRegistry.TOOLS_BOARD_QUEUE_SHOWN).toInt(),
+            doneShown = cliLimit(stream, LimitRegistry.TOOLS_BOARD_DONE_SHOWN).toInt(),
+        )
+        BoardSummary.render(tickets, sessions, System.currentTimeMillis(), options, BoardSummary.gitCommitOf(sessions)).forEach { out.appendLine(it) }
         0
     }
 
@@ -2151,7 +2165,9 @@ internal object Cli {
             }
         }
         out.appendLine("DESCRIPTION:")
-        out.appendLine(ticket.description.ifBlank { "(none)" })
+        // TOKEN-1: the RELATED (auto) block is its own call (`ticket related` / `ticket files --related`); `--related` shows it here.
+        val shown = if (parsed.related) ticket.description else com.superiorsoftllc.agenthq.ticketfiles.RelatedDescriptionBlock.strip(ticket.description)
+        out.appendLine(shown.ifBlank { "(none)" })
         return 0
     }
 
@@ -2400,16 +2416,23 @@ internal object Cli {
         checkContract(stream, err)
         val session = sessionOf(getenv)
         val messages = fetchInbox(stream, session ?: HUMAN_SENDER, session, err) ?: return@runBlocking 1
-        val listed = if (parsed.unread) messages.filterNot { it.read } else messages
-        if (listed.isEmpty()) {
+        val unreadCount = messages.count { !it.read }
+        val matching = if (parsed.unread) messages.filterNot { it.read } else messages
+        if (matching.isEmpty()) {
             out.appendLine(if (parsed.unread) "No unread messages." else "No messages.")
             return@runBlocking 0
         }
+        // TOKEN-1: counts, then the newest unread first, one line each, capped; the body is never printed here.
+        val ordered = matching.sortedWith(compareBy<Message> { it.read }.thenByDescending { it.sentAt })
+        val offset = parsed.offset?.trim()?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+        val limit = parsed.limit?.trim()?.toIntOrNull()?.takeIf { it > 0 } ?: cliLimit(stream, LimitRegistry.TOOLS_INBOX_LIMIT).toInt()
+        val page = ordered.drop(offset).take(limit)
+        out.appendLine("inbox: $unreadCount unread, ${messages.size} total; showing ${page.size} from $offset. Read one with: agenthq read <id>")
         out.appendLine(INBOX_HEADER)
-        for (message in listed) {
+        for (message in page) {
             out.appendLine(
                 "${message.id.take(8)} | ${message.from} | ${iso(message.sentAt)} | " +
-                    "${if (message.read) "yes" else "no"} | ${firstLineOf(message.body)}",
+                    "${if (message.read) "yes" else "no"} | ${firstLineOf(message.body).take(if (parsed.previews) FIRST_LINE_WIDTH else 60)}",
             )
         }
         0
@@ -4059,6 +4082,14 @@ internal object Cli {
         getenv(AccessPolicy.SESSION_ID_ENV)?.trim()?.takeIf { it.isNotEmpty() }
 
     /** A mailbox instant as an ISO-8601 UTC stamp to the second: millis are exact but unreadable. */
+    /** TOKEN-1: the effective value of a `limits.tools.*` setting from the daemon's catalog; the registry default when it cannot be read. */
+    private suspend fun cliLimit(stream: FrameStream, def: LimitDef): Long = runCatching {
+        val answer = stream.request(Envelope(Envelope.LIMIT_CATALOG, ""), Envelope.LIMIT_CATALOG, "limit_catalog", idempotent = true)
+        json.parseToJsonElement(answer.data).jsonObject["limits"]?.jsonArray
+            ?.firstOrNull { it.jsonObject["key"]?.jsonPrimitive?.contentOrNull == def.key }
+            ?.jsonObject?.get("value")?.jsonPrimitive?.longOrNull
+    }.getOrNull() ?: def.default
+
     private fun iso(epochMillis: Long): String = WHEN_FORMAT.format(Instant.ofEpochMilli(epochMillis))
 
     /** The first non-blank line of a body, clipped so one long line cannot break the `inbox` table. */
@@ -4585,6 +4616,10 @@ internal object Cli {
         val suggest: Boolean = false,
         val backfill: Boolean = false,
         val limit: String? = null,
+        /** TOKEN-1: `board --columns a,b`, `inbox --offset n` / `--previews`. */
+        val columns: String? = null,
+        val offset: String? = null,
+        val previews: Boolean = false,
         val bottom: Boolean = false,
         /** `ticket move --after <id|prefix>`: just below that one. `--position <n>`: index n of the column (0 = top). */
         val after: String? = null,
@@ -4706,6 +4741,9 @@ internal object Cli {
         var related = false
         var backfill = false
         var limit: String? = null
+        var columns: String? = null
+        var offset: String? = null
+        var previews = false
         var bottom = false
         var after: String? = null
         var position: String? = null
@@ -5053,6 +5091,18 @@ internal object Cli {
                     backfill = true
                     i++
                 }
+                "--columns" -> {
+                    columns = flagValue(args, ++i) ?: return fail(err, "--columns expects columns, e.g. in_progress,pending")
+                    i++
+                }
+                "--offset" -> {
+                    offset = flagValue(args, ++i) ?: return fail(err, "--offset expects a whole number")
+                    i++
+                }
+                "--previews" -> {
+                    previews = true
+                    i++
+                }
                 "--limit" -> {
                     limit = flagValue(args, ++i) ?: return fail(err, "--limit expects a whole number of lines")
                     i++
@@ -5162,6 +5212,9 @@ internal object Cli {
             related = related,
             backfill = backfill,
             limit = limit,
+            columns = columns,
+            offset = offset,
+            previews = previews,
             bottom = bottom,
             after = after,
             position = position,

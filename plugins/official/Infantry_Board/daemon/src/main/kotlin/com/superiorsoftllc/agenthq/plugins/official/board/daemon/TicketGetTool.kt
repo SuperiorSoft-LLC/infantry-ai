@@ -26,7 +26,8 @@ class TicketGetTool(private val api: DaemonApi) : DaemonTool {
     override val name = GET
     override val description =
         "Read ONE ticket back: title, verbatim description, status, project, role/agent, provider, model, " +
-            "branch, worker session, attached images."
+            "branch, worker session, attached images. The RELATED (auto) block is left out (related tickets and their files are a separate call: " +
+            "agenthq_ticket_related_files); pass related=true to include it."
     override val inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -34,6 +35,7 @@ class TicketGetTool(private val api: DaemonApi) : DaemonTool {
                 put("type", "string")
                 put("description", "Full ticket id, or its 8-char suffix.")
             })
+            put("related", ToolArgs.boolProp("true = keep the stored RELATED (auto) block in the description (default false; use agenthq_ticket_related_files)."))
         })
         put("required", buildJsonArray { add(JsonPrimitive("ticketId")) })
         put("additionalProperties", false)
@@ -49,7 +51,7 @@ class TicketGetTool(private val api: DaemonApi) : DaemonTool {
             ?: return ToolResult("$GET needs a ticketId", isError = true)
         val by = call.caller.copy(activeSession = call.clientSessionId ?: call.caller.activeSession)
         return when (val r = api.tickets.get(requested, by)) {
-            is BoardResult.Ok -> ToolResult(Json.encodeToString(JsonObject.serializer(), summary(r.value)))
+            is BoardResult.Ok -> ToolResult(Json.encodeToString(JsonObject.serializer(), summary(r.value, ToolArgs.flag(call.arguments, "related"))))
             is BoardResult.Refused -> ToolResult(r.text, isError = true)
             is BoardResult.Unavailable -> ToolResult("$GET is unavailable: ${r.reason}", isError = true)
         }
@@ -58,11 +60,34 @@ class TicketGetTool(private val api: DaemonApi) : DaemonTool {
     companion object {
         const val GET = "agenthq_ticket_get"
 
+        private const val RELATED_BEGIN = "<!-- RELATED (auto) -->"
+        private const val RELATED_END = "<!-- /RELATED -->"
+
+        /** TOKEN-1: [description] without its stored RELATED (auto) block (read layer only; storage is unchanged). */
+        internal fun stripRelated(description: String): String {
+            if (!description.startsWith(RELATED_BEGIN)) return description
+            val end = description.indexOf(RELATED_END)
+            if (end < 0) return description
+            return description.substring(end + RELATED_END.length).trimStart { it == '\r' || it == '\n' }
+        }
+
+        /** TOKEN-1: the one-line confirmation of a write: id, status, title, branch, worker session (no description, no RELATED block). */
+        internal fun brief(ticket: TicketInfo) = buildJsonObject {
+            put("ticketId", ticket.id)
+            put("status", ticket.status)
+            put("title", ticket.title)
+            ticket.branch?.let { put("branch", it) }
+            ticket.sessionId?.let { put("sessionId", it) }
+        }
+
+        /** TOKEN-1: a write's answer: the [brief] line, or the full [summary] when the call passed `verbose: true`. */
+        internal fun answer(ticket: TicketInfo, verbose: Boolean) = if (verbose) summary(ticket) else brief(ticket)
+
         /** The fields an agent reads back, the description verbatim; `role` is read off `agentId` (`role:<id>`). */
-        internal fun summary(ticket: TicketInfo) = buildJsonObject {
+        internal fun summary(ticket: TicketInfo, related: Boolean = true) = buildJsonObject {
             put("ticketId", ticket.id)
             put("title", ticket.title)
-            put("description", ticket.description)
+            put("description", if (related) ticket.description else stripRelated(ticket.description))
             put("status", ticket.status)
             put("projectId", ticket.projectId)
             put("epicId", ticket.epicId)

@@ -10,7 +10,7 @@ fails the build.
 
 ```
 agenthq tickets
-agenthq board     # one call: tickets by column + worker, live state, branch@commit (MCP agenthq_board; agenthq_get_session brief:true skips the transcript)
+agenthq board [--columns in_progress,pending] [--limit n]   # compact by default (done last 5; backlog/todo first 10 + count); one call: tickets by column + worker, live state, branch@commit (MCP agenthq_board; agenthq_get_session brief:true skips the transcript)
 agenthq tickets --status todo
 agenthq ticket show <ticket-id>
 ```
@@ -56,8 +56,8 @@ A *profile* is a saved template you can create a session from; an *agent* is a r
 **Mail** (`agenthq mail` prints these again)
 
 ```
-agenthq inbox
-agenthq inbox --unread
+agenthq inbox      # counts + one line per message, newest unread first (20); open one: agenthq read <id>
+agenthq inbox --unread [--limit n] [--offset n] [--previews]
 agenthq read <8-char-id>
 agenthq send pm "Your message, on one line."
 agenthq send pm "Your answer, on one line." --reply-to <8-char-id>
@@ -71,7 +71,7 @@ agenthq mail
 - `send` takes a role (`pm`, `qa`, `backend`...) or an agent id.
 - `read` says `has not reached a console yet (state QUEUED)` when the mail waits for your turn to end. Read it now
   with `agenthq thread "<thread-id>"` (the thread id is in `agenthq threads`).
-- MCP tools do the same: `agenthq_inbox`, `agenthq_read` (`messageId`), `agenthq_message` (`to`, `body`, `replyTo`).
+- MCP tools do the same: `agenthq_inbox` (counts + one line per item, no bodies; params `limit`, `offset`, `unreadOnly`, `previews`; open one with `agenthq_read <id>`), `agenthq_read` (`messageId`), `agenthq_message` (`to`, `body`, `replyTo`).
 - Never use `curl` against `/mail/...`: the CLI is the supported path.
 
 **Tickets**
@@ -389,3 +389,7 @@ Details: `docs/MCP.md`, "Ticket images".
 
 ---
 *Generated from code greps: SessionStore.kt, Protocol.kt, MailHttp.kt, DaemonMain.kt, CliMain.kt.*
+## Slim answers (TOKEN-1)
+`agenthq_ticket_create|update|move` answer ONE line (id, status, title, branch, session); pass `verbose: true` for the full ticket, or call `agenthq_ticket_get`. `agenthq_get_session` returns the last 5 transcript lines (`lines` for more, `brief:true` for none); `agenthq_list_sessions` takes `limit`; `agenthq_usage` takes `json:true` for the JSON report. Defaults live in settings `limits.tools.*`.
+
+Related changes: `agenthq_ticket_get` / `ticket show` omit the RELATED(auto) block; pass `related: true` (`--related`) to include it, or call `agenthq_ticket_related_files` (`ticket files <id> --related`) for related tickets + changed files.

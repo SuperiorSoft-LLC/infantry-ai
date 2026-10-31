@@ -28,7 +28,10 @@ class TicketStartTool(private val api: DaemonApi) : DaemonTool {
             "the reason. Starting a ticket already in progress returns its worker. Guarded like agenthq_spawn."
     override val inputSchema = buildJsonObject {
         put("type", "object")
-        put("properties", buildJsonObject { put("ticketId", ToolArgs.prop("Full ticket id, or its 8-char suffix.")) })
+        put("properties", buildJsonObject {
+            put("ticketId", ToolArgs.prop("Full ticket id, or its 8-char suffix."))
+            put("verbose", ToolArgs.verboseProp())
+        })
         put("required", buildJsonArray { add(JsonPrimitive("ticketId")) })
         put("additionalProperties", false)
     }
@@ -40,7 +43,7 @@ class TicketStartTool(private val api: DaemonApi) : DaemonTool {
     override fun call(call: ToolCall): ToolResult {
         val requested = ToolArgs.string(call.arguments, "ticketId") ?: return SpawnText.refused("$START needs a ticketId")
         return when (val r = api.spawns.startTicket(requested, WireTickets.by(call), call.clientNarrowing ?: SpawnNarrowing.NONE)) {
-            is SessionsResult.Ok -> SpawnText.startAnswer(START, r.value)
+            is SessionsResult.Ok -> SpawnText.startAnswer(START, r.value, ToolArgs.flag(call.arguments, "verbose"))
             is SessionsResult.Missing -> SpawnText.refused("$START refused: ${r.text}")
             is SessionsResult.Refused -> SpawnText.refused("$START refused: ${r.reason}")
             is SessionsResult.Unavailable -> SpawnText.refused("$START is unavailable: ${r.reason}")

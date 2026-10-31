@@ -25,7 +25,20 @@ data class Role(
     val icon: String = "",
     /** ROLE-EDIT-1 (contract 1.108.0): a one-line description for the role editor; blank = none. Never sent to a session. */
     val description: String = "",
-)
+    /**
+     * TOKEN-1 (additive): how much this role's MCP/CLI tools send back. [responseDetail] `ack` | `summary` | `full` (blank = the
+     * project/global `limits.mcp.defaultDetail`), [responseMaxChars] cuts one result (null = `limits.mcp.maxResultChars`),
+     * [responseBodyChars] cuts a mail body read (null = whole). Applied to the session's env at launch.
+     */
+    val responseDetail: String = "",
+    val responseMaxChars: Int? = null,
+    val responseBodyChars: Int? = null,
+) {
+    companion object {
+        /** The accepted `responseDetail` values. */
+        val DETAILS = setOf("ack", "summary", "full")
+    }
+}
 
 /** Where a [Role] came from, which is what decides whether it is replaceable. */
 @kotlinx.serialization.Serializable
