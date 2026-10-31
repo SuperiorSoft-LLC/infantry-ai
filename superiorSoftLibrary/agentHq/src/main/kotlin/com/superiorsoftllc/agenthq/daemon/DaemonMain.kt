@@ -1507,6 +1507,8 @@ class AgentHqDaemon(
                         pluginSettings = settings.forPlugins(),
                         // PACE-TREND-1: api.meters, the current reading of every provider window (the cached live read).
                         meters = com.superiorsoftllc.agenthq.usage.PacingMeters(usagePacing),
+                        // DP-7e: api.sessionNotifier, over the mail router.
+                        notifier = com.superiorsoftllc.agenthq.daemon.plugins.LocalSessionNotifier({ manager.list() }, { to, subject, body -> mail.send(MailSendRequest(from = "owner", to = to, subject = subject, body = body)) }),
                         // DAEMON-STORAGE-1: api.storage, over the store's own handle (null for a non-SQL store).
                         storageHandle = (store as? SqlAgentHqStore)?.handle,
                         // DP-4a: tickets / epics / board for plugins, over the board built above (host-applied policy and scope).
@@ -1790,13 +1792,13 @@ class AgentHqDaemon(
                                 caller = { id -> manager.get(id)?.let { MemoryCaller(it.id, it.role.orEmpty()) } },
                                 // ROLE-NOTES-1: a role note changed while sessions of that role run is announced to each by mail.
                                 onRoleNoteChanged = { project, role, name, deleted ->
-                                    for (s in manager.list().filter { it.role == role && it.projectId == project && it.isInSession() }) {
-                                        mail.send(MailSendRequest(
-                                            from = "owner", to = s.id, subject = "Role note ${if (deleted) "deleted" else "changed"}: $name",
-                                            body = "The role note '$name' of your role '$role' was ${if (deleted) "deleted" else "added or changed"}. " +
-                                                "Re-read it: `agenthq memory show $name --scope role` (index: `agenthq memory index --scope role`).",
-                                        ))
-                                    }
+                                    com.superiorsoftllc.agenthq.daemon.plugins.LocalSessionNotifier({ manager.list() }, { to, subject, body ->
+                                        mail.send(MailSendRequest(from = "owner", to = to, subject = subject, body = body))
+                                    }).notifyRole(
+                                        project, role, "Role note ${if (deleted) "deleted" else "changed"}: $name",
+                                        "The role note '$name' of your role '$role' was ${if (deleted) "deleted" else "added or changed"}. " +
+                                            "Re-read it: `agenthq memory show $name --scope role` (index: `agenthq memory index --scope role`).",
+                                    )
                                 },
                             ),
                             notifyFrames,
