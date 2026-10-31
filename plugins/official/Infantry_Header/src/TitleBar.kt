@@ -352,7 +352,7 @@ private fun PanelToggle(side: PanelSide, shown: Boolean, compact: Boolean, modif
     val left = side == PanelSide.LEFT
     val label = (if (shown) "Hide " else "Show ") + (if (left) "agent list" else "side panel")
     val tag = if (left) TITLE_BAR_TOGGLE_LEFT_TAG else TITLE_BAR_TOGGLE_RIGHT_TAG
-    IconActionTooltipBox(label, modifier = modifier.then(if (compact) Modifier.size(width = 40.dp, height = TITLE_BAR_HEIGHT) else Modifier.size(28.dp)).testTag(tag)) { m ->
+    val button: @Composable (Modifier) -> Unit = { m ->
         Box(
             m.clip(RoundedCornerShape(5.dp)).clickable(role = Role.Button, onClickLabel = label, onClick = onClick),
             contentAlignment = Alignment.Center,
@@ -362,6 +362,12 @@ private fun PanelToggle(side: PanelSide, shown: Boolean, compact: Boolean, modif
                 tint = if (shown) Palette.Text else Palette.Muted, modifier = Modifier.size(18.dp),
             )
         }
+    }
+    if (compact) {
+        // Compact (drawer) layout: a hover tooltip would sit over the drawer's stats row, so only the screen-reader name stays.
+        button(modifier.size(width = 40.dp, height = TITLE_BAR_HEIGHT).semantics { contentDescription = label }.testTag(tag))
+    } else {
+        IconActionTooltipBox(label, modifier = modifier.size(28.dp).testTag(tag), content = button)
     }
 }
 
