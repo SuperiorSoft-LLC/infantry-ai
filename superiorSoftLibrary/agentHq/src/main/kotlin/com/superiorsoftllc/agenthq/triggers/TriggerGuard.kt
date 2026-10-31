@@ -1,15 +1,15 @@
 package com.superiorsoftllc.agenthq.triggers
 
-import com.superiorsoftllc.agenthq.attention.AttentionKind
-import com.superiorsoftllc.agenthq.attention.AttentionStore
+import com.superiorsoftllc.agenthq.daemon.api.attention.AttentionKinds
+import com.superiorsoftllc.agenthq.daemon.api.attention.Attention
 
 enum class TriggerOutcome { SUCCEEDED, FAILED, CANCELLED, INTERRUPTED, KILLED, ORPHANED, DEADLINE, STALLED, START_REFUSED }
 enum class TriggerState { ARMED, RUNNING, TRIPPED, DISABLED }
 enum class TriggerFireResult { STARTED, FOLDED, FOLLOWUP_FOLDED, REFUSED_CEILING, SUPPRESSED_TRIPPED, SUPPRESSED_DISABLED }
 
-data class TriggerTrip(val triggerId: String, val attentionKind: AttentionKind, val outcome: String, val detail: String) {
+data class TriggerTrip(val triggerId: String, val attentionKind: String, val outcome: String, val detail: String) {
     /** Persists and publishes this trip through P9.4a attention. */
-    fun reportTo(attention: AttentionStore) {
+    fun reportTo(attention: Attention) {
         attention.raise(kind = attentionKind, triggerId = triggerId, outcome = outcome, detail = detail)
     }
 }
@@ -40,7 +40,7 @@ class TriggerGuard(
         if (state.status == TriggerState.TRIPPED || state.status == TriggerState.DISABLED) {
             run.events.eventIds().forEach { addRecord(it, run.triggerId, TriggerEventDisposition.SUPPRESSED_TRIPPED) }
         } else if (state.starts.size >= ceilingRuns) {
-            trip(run.triggerId, state, AttentionKind.CEILING, "REFUSED_CEILING", "Hourly trigger run ceiling of $ceilingRuns starts was reached.")
+            trip(run.triggerId, state, AttentionKinds.CEILING, "REFUSED_CEILING", "Hourly trigger run ceiling of $ceilingRuns starts was reached.")
             run.events.eventIds().forEach { addRecord(it, run.triggerId, TriggerEventDisposition.REFUSED_CEILING) }
         } else {
             state.starts.addLast(clock.nowMillis())
@@ -64,7 +64,7 @@ class TriggerGuard(
         }
         state.starts.removeExpired(now)
         if (state.starts.size >= ceilingRuns) {
-            trip(triggerId, state, AttentionKind.CEILING, "REFUSED_CEILING", "Hourly trigger run ceiling of $ceilingRuns starts was reached.")
+            trip(triggerId, state, AttentionKinds.CEILING, "REFUSED_CEILING", "Hourly trigger run ceiling of $ceilingRuns starts was reached.")
             addRecord(eventId, triggerId, TriggerEventDisposition.REFUSED_CEILING, now)
             return TriggerFireResult.REFUSED_CEILING
         }
@@ -90,7 +90,7 @@ class TriggerGuard(
             state.status = if (state.runs.isEmpty()) TriggerState.ARMED else TriggerState.RUNNING
         } else {
             eventRecords += coalescer.dispositions.filter { it.triggerId == triggerId && it.disposition == TriggerEventDisposition.DROPPED_AFTER_FAILURE }
-            trip(triggerId, state, AttentionKind.TRIGGER_TRIPPED, outcome.name, "Trigger run $runId ended with ${outcome.name}; automatic retries are disabled.")
+            trip(triggerId, state, AttentionKinds.TRIGGER_TRIPPED, outcome.name, "Trigger run $runId ended with ${outcome.name}; automatic retries are disabled.")
         }
         return true
     }
@@ -123,7 +123,7 @@ class TriggerGuard(
     @Synchronized fun stateOrNull(triggerId: String): TriggerState? = states[triggerId]?.status
     @Synchronized fun trips(): List<TriggerTrip> = tripRecords.toList()
 
-    private fun trip(triggerId: String, state: State, kind: AttentionKind, outcome: String, detail: String) {
+    private fun trip(triggerId: String, state: State, kind: String, outcome: String, detail: String) {
         if (state.status == TriggerState.TRIPPED) return
         state.status = TriggerState.TRIPPED
         val trip = TriggerTrip(triggerId, kind, outcome, detail)

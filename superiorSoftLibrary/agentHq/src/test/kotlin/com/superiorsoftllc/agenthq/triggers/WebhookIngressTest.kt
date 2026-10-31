@@ -59,7 +59,7 @@ class WebhookIngressTest {
 
     private fun service(over: MemoryTriggers = repo): TriggerService = TriggerService(
         repo = over,
-        attention = AttentionStore(MemoryAttention()),
+        attention = com.superiorsoftllc.agenthq.attention.LocalAttention(AttentionStore(MemoryAttention())),
         startNext = { null },
         sessions = { null },
         clock = { nowMs },

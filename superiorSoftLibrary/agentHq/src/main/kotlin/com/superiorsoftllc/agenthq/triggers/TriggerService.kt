@@ -1,7 +1,7 @@
 package com.superiorsoftllc.agenthq.triggers
 
-import com.superiorsoftllc.agenthq.attention.AttentionKind
-import com.superiorsoftllc.agenthq.attention.AttentionStore
+import com.superiorsoftllc.agenthq.daemon.api.attention.AttentionKinds
+import com.superiorsoftllc.agenthq.daemon.api.attention.Attention
 import com.superiorsoftllc.agenthq.daemon.api.board.PromptStart
 import com.superiorsoftllc.agenthq.daemon.api.board.StartResult
 import com.superiorsoftllc.agenthq.persistence.TriggerRepository
@@ -50,7 +50,7 @@ sealed interface PromptDelivery {
  */
 class TriggerService(
     private val repo: TriggerRepository,
-    private val attention: AttentionStore,
+    private val attention: Attention,
     private val startNext: (agentFilter: String?) -> StartResult?,
     private val sessions: (String) -> SessionRecord?,
     /** P9.5d: the `prompt` action's launch. The default refuses, so a service built without one cannot pretend to serve it. */
@@ -500,7 +500,7 @@ class TriggerService(
     private fun tripStored(t: TriggerView, reason: String) {
         store(t.copy(state = TRIPPED, trippedAt = clock(), trippedReason = reason))
         runCatching {
-            attention.raise(kind = AttentionKind.TRIGGER_TRIPPED, triggerId = t.id, outcome = "INTERRUPTED", detail = "Trigger '${t.name}' tripped: $reason; nothing was retried.")
+            attention.raise(kind = AttentionKinds.TRIGGER_TRIPPED, triggerId = t.id, outcome = "INTERRUPTED", detail = "Trigger '${t.name}' tripped: $reason; nothing was retried.")
         }
     }
 

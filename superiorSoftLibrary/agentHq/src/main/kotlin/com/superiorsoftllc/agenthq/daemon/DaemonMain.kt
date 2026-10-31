@@ -6,7 +6,7 @@ import com.superiorsoftllc.agenthq.session.isBusy
 import com.superiorsoftllc.agenthq.session.InfantryEnv
 
 import com.superiorsoftllc.agenthq.attention.AttentionItem
-import com.superiorsoftllc.agenthq.attention.AttentionKind
+import com.superiorsoftllc.agenthq.daemon.api.attention.AttentionKinds
 import com.superiorsoftllc.agenthq.attention.AttentionStore
 import com.superiorsoftllc.agenthq.agents.AgentProfiles
 import com.superiorsoftllc.agenthq.agents.KnowledgeCounter
@@ -922,10 +922,11 @@ class AgentHqDaemon(
                 settings = settings, locked = locked, keystore = keystore,
             )
             val attention = com.superiorsoftllc.agenthq.daemon.wiring.AttentionWiring.build(store) { item -> broadcastAttention(clients, item) }
+            val attentionSvc: com.superiorsoftllc.agenthq.daemon.api.attention.Attention = com.superiorsoftllc.agenthq.attention.FoundAttention { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.attention.Attention::class) }
             // Ticket 66153313 (via `api.processes.raiseAlert`): the process-watch plugin reports agent CPU held above the limit.
             alertSink.set { outcome, detail ->
                 println("[agentHq] $outcome: $detail")
-                runCatching { attention.raise(com.superiorsoftllc.agenthq.attention.AttentionKind.CEILING, outcome = outcome, detail = detail) }
+                runCatching { attentionSvc.raise(AttentionKinds.CEILING, outcome = outcome, detail = detail) }
                     .onFailure { System.err.println("[agentHq] $outcome attention not raised: ${it.message}") }
             }
             // Story 9.7b: observed limit state per provider -- persisted, pushed, and put back after a restart.
@@ -942,7 +943,7 @@ class AgentHqDaemon(
             store.usage.since(dayStart).groupBy { it.provider }.forEach { (providerId, runs) ->
                 budget.restore(providerId, runs.size, runs.sumOf { r -> r.usage?.let { it.input + it.output + it.reasoning } ?: 0L })
             }
-            val launchGate = LaunchGate(providerStates, budget, attention)
+            val launchGate = LaunchGate(providerStates, budget, attentionSvc)
             // ORCH-1: the runner reaches the orchestration side only through this hub's link (docs/DAEMON-CORE.md 6.5). The local
             // binding answers from the functions below; the board and the ticket files exist later, so they are filled in then.
             val boardPorts = BoardPortRef()
@@ -984,8 +985,8 @@ class AgentHqDaemon(
                 }
             }
             manager.silentSink = { session, minutes ->
-                attention.raise(
-                    kind = AttentionKind.STALLED,
+                attentionSvc.raise(
+                    kind = AttentionKinds.STALLED,
                     ticketId = session.ticketId,
                     podId = null,
                     sessionId = session.id,
@@ -999,11 +1000,11 @@ class AgentHqDaemon(
                 if (expiry == com.superiorsoftllc.agenthq.session.WatchdogExpiry.STALLED) providerStates.markStalled(session.provider)
                 val podId = store.runs.bySession(session.id).firstOrNull()?.podId
                 val kind = when (expiry) {
-                    com.superiorsoftllc.agenthq.session.WatchdogExpiry.DEADLINE -> AttentionKind.DEADLINE
-                    com.superiorsoftllc.agenthq.session.WatchdogExpiry.STALLED -> AttentionKind.STALLED
+                    com.superiorsoftllc.agenthq.session.WatchdogExpiry.DEADLINE -> AttentionKinds.DEADLINE
+                    com.superiorsoftllc.agenthq.session.WatchdogExpiry.STALLED -> AttentionKinds.STALLED
                 }
                 val label = expiry.name.lowercase()
-                attention.raise(
+                attentionSvc.raise(
                     kind = kind,
                     ticketId = session.ticketId,
                     podId = podId,
@@ -1152,7 +1153,7 @@ class AgentHqDaemon(
             manager.briefFor = { boardPorts.brief(it.id) }
             val workerSweepCloser = WorkerSweep(boardPorts, { LimitRegistry.minutesMs(settings.limit(LimitRegistry.UNBRIEFED_GRACE_MINUTES), LimitRegistry.UNBRIEFED_GRACE_MINUTES) }) { ticketId, sessionId, detail ->
                 println("[agentHq] ticket worker sweep: $ticketId: $detail")
-                attention.raise(kind = AttentionKind.STALLED, ticketId = ticketId, podId = null, sessionId = sessionId, outcome = "unbriefed", detail = detail)
+                attentionSvc.raise(kind = AttentionKinds.STALLED, ticketId = ticketId, podId = null, sessionId = sessionId, outcome = "unbriefed", detail = detail)
             }
             // Phase 6: the mailbox. Messages are persisted BEFORE any delivery attempt, so a message
             // to an offline agent is never lost, and the router hands queued messages to a session
@@ -1189,7 +1190,7 @@ class AgentHqDaemon(
             )
             val triggers = com.superiorsoftllc.agenthq.daemon.wiring.TriggersWiring.build(
                 repo = store.triggers,
-                attention = attention,
+                attention = attentionSvc,
                 startNext = { filter -> (triggerTickets?.startNext(filter, triggerCaller) as? com.superiorsoftllc.agenthq.daemon.api.board.BoardResult.Ok)?.value },
                 startPrompt = { agentId, prompt -> triggerPrompt(triggerTickets, agentId, prompt, null, triggerCaller) },
                 sessions = manager::get,
@@ -1273,8 +1274,8 @@ class AgentHqDaemon(
                 },
             )
             orchestrator.schedulerStallSink = { podId, detail ->
-                attention.raise(
-                    kind = AttentionKind.STALLED,
+                attentionSvc.raise(
+                    kind = AttentionKinds.STALLED,
                     podId = podId,
                     outcome = "scheduler_stalled",
                     detail = "$detail; pod remains stopped for operator review.",
@@ -1300,11 +1301,11 @@ class AgentHqDaemon(
             println("[agentHq] pod spawn cap=${podSpawnCap ?: settings.limit(LimitRegistry.MAX_PER_POD)} depth=${podSpawnDepth ?: settings.limit(LimitRegistry.MAX_DEPTH)} (cap 0 = unlimited; settings limits.concurrency.*; session-originated spawns only)")
 
             mailbox.load()
-            mailbox.eventSink = { event -> broadcastMail(clients, event, attention) }
+            mailbox.eventSink = { event -> broadcastMail(clients, event, attentionSvc) }
             // TRAITS-T6: REPORT BACK -- an unattended clone's run that ends by itself without its report mail is re-prompted
             // once by `system`, then raises one `unreported` attention item.
             val reportBack = com.superiorsoftllc.agenthq.mailbox.ReportBackMonitor(
-                sessions = manager, mailbox = mailbox, send = mail::send, attention = attention,
+                sessions = manager, mailbox = mailbox, send = mail::send, attention = attentionSvc,
                 agentRole = { id -> agents.get(id)?.role },
                 ticketOpen = { id -> store.transaction { store.tickets.get(id) }?.let { it.status != com.superiorsoftllc.agenthq.protocol.TicketStatus.DONE } == true },
             )
@@ -1333,8 +1334,8 @@ class AgentHqDaemon(
                 if (req.to == com.superiorsoftllc.agenthq.runner.WatchNotices.USER) {
                     val sid = req.threadId?.split(':')?.getOrNull(1)?.takeIf { manager.get(it) != null }
                     runCatching {
-                        attention.raise(
-                            kind = com.superiorsoftllc.agenthq.attention.AttentionKind.STALLED,
+                        attentionSvc.raise(
+                            kind = AttentionKinds.STALLED,
                             sessionId = sid, ticketId = sid?.let { manager.get(it)?.ticketId },
                             outcome = "watch_notice", detail = (req.subject.removePrefix("[AUTOMATIC] ") + "\n" + req.body).trim().take(2000),
                         )
@@ -1391,7 +1392,7 @@ class AgentHqDaemon(
             ).also { it.start() }
             // PIPELINE-WATCHDOG: derives per-agent pending/stalled/quiet state, nudges, then tells the PM and the owner.
             val agentWatchdog = com.superiorsoftllc.agenthq.mailbox.AgentWatchdog(
-                sessions = manager, mailbox = mailbox, send = mail::send, attention = attention,
+                sessions = manager, mailbox = mailbox, send = mail::send, attention = attentionSvc,
                 config = com.superiorsoftllc.agenthq.session.WatchdogConfig.fromEnv(),
                 isEnabledFor = { projectStore.experimentOn(it, "agentWatchdog") },
             ).also { it.start() }
@@ -1531,7 +1532,7 @@ class AgentHqDaemon(
                                     val pid = providerId ?: manager.providers.firstOrNull()?.id ?: com.superiorsoftllc.agenthq.daemon.api.usage.UsageMeters.CLAUDE
                                     usagePacing.check(com.superiorsoftllc.agenthq.daemon.api.usage.UsageMeters.meterFor(pid, model ?: manager.providerFor(pid)?.defaultModel()))
                                 },
-                                attention = attention,
+                                attention = attentionSvc,
                                 coreBuiltBoard = false,
                                 onAttachCore = { access -> boardPorts.attach(com.superiorsoftllc.agenthq.daemon.PluginBoardPorts(access) { ticketServices?.files }) },
                                 onDetachCore = { boardPorts.detach() },
@@ -1611,6 +1612,7 @@ class AgentHqDaemon(
                 )
                 pluginHost.set(host)
                 testKnowledge?.let { host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.knowledge.Knowledge::class, it) }
+                host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.attention.Attention::class, com.superiorsoftllc.agenthq.attention.LocalAttention(attention))
                 // HARNESS-PLUGIN-3 H4 (docs/HARNESS-PLUGINS.md 3.2): each loaded module's `harness` block, into the ONE registry,
                 // AFTER module resolution and with the daemon halves' trust. The built-ins (class path, 1.x) are already in it.
                 val harnessModules = com.superiorsoftllc.agenthq.daemon.wiring.HarnessModulesWiring.build(
@@ -2190,7 +2192,7 @@ private fun finishedEnvelope(sessionId: String, exitCode: Int?, kill: KillOutcom
  * the phase requires that a delivery failure is visible rather than silent, so [MailEvent.Changed]
  * with an UNDELIVERABLE message is broadcast and logged, never swallowed.
  */
-private fun broadcastMail(clients: List<Channel<Envelope>>, event: MailEvent, attention: AttentionStore) {
+private fun broadcastMail(clients: List<Channel<Envelope>>, event: MailEvent, attention: com.superiorsoftllc.agenthq.daemon.api.attention.Attention) {
     val envelope = when (event) {
         is MailEvent.Sent ->
             Envelope(Envelope.MAIL, json.encodeToString(Message.serializer(), event.message), event.message.to)
@@ -2213,7 +2215,7 @@ private fun broadcastMail(clients: List<Channel<Envelope>>, event: MailEvent, at
             // A conversation ceiling needs a durable operator signal, not only a stdout line.
             println("[agentHq] conversation ceiling reached on thread ${event.threadId} (limit ${event.limit})")
             attention.raise(
-                kind = AttentionKind.CEILING,
+                kind = AttentionKinds.CEILING,
                 outcome = "ceiling_reached",
                 detail = "conversation ${event.threadId} reached its ${event.limit}-message ceiling",
             )
