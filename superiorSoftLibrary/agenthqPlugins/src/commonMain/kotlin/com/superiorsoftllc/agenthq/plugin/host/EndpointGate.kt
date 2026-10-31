@@ -85,7 +85,7 @@ object EndpointGate {
             ?: return "endpoint '$endpoint': url is not valid"
         if (!matches(pattern, clean)) return "endpoint '$endpoint': path '$path' is outside $pattern"
         if (tier == Tier.COMMUNITY && "endpoints" !in config.setting(manifest.name).allow) return "a community module needs 'endpoints' allowed in modules.json"
-        if (demoLock && !(tier == Tier.CORE && endpoint in config.demoLock.allowEndpoints)) return "endpoint '$endpoint' is not allowed under the demo lock"
+        if (demoLock && !(tier == Tier.CORE && endpoint in config.demoLock.allowEndpoints)) return "endpoint '$endpoint' is not allowed under the lockdown"
         return null
     }
 

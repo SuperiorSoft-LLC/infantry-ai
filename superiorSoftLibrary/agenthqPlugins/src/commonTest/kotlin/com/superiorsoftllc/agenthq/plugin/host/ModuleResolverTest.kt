@@ -128,7 +128,7 @@ class ModuleResolverTest {
     }
 
     @Test
-    fun `the demo lock keeps every community module out and core in`() {
+    fun `the lockdown keeps every community module out and core in`() {
         val r = ModuleResolver.resolve(listOf(core("Infantry_A"), community("Acme_B")), enabled("Acme_B"), demoLock = true)
         assertEquals(ModuleState.LOADED, r.state("Infantry_A"))
         assertEquals(ModuleState.LOCKED, r.state("Acme_B"))

@@ -19,7 +19,8 @@ import java.io.File
 object PluginFolders {
     const val ROOT_ENV = "AGENTHQ_PLUGINS_ROOT"
     const val ROOT_PROPERTY = "agenthq.plugins.root"
-    const val DEMO_LOCK_ENV = "AGENTHQ_DEMO_LOCK"
+    const val LOCKDOWN_ENV = "AGENTHQ_LOCKDOWN"
+    private const val LEGACY_LOCKDOWN_ENV = "AGENTHQ_DEMO_LOCK" // deployments that still set the old switch; removed with DAEMON-PLUGINS-1 follow-up
 
     /**
      * The plugins root: AGENTHQ_PLUGINS_ROOT, else the `agenthq.plugins.root` system property (the dev run tasks set it
@@ -30,9 +31,9 @@ object PluginFolders {
             ?: property(ROOT_PROPERTY)?.takeIf { it.isNotBlank() }?.let(::File)
             ?: File(stateDir, "plugins")
 
-    /** AGENTHQ_DEMO_LOCK set to anything but empty, 0, false or off. */
-    fun demoLock(env: (String) -> String? = System::getenv): Boolean =
-        env(DEMO_LOCK_ENV)?.trim()?.lowercase()?.let { it.isNotEmpty() && it != "0" && it != "false" && it != "off" } ?: false
+    /** AGENTHQ_LOCKDOWN (or the legacy AGENTHQ_DEMO_LOCK) set to anything but empty, 0, false or off. */
+    fun lockdown(env: (String) -> String? = System::getenv): Boolean =
+        (env(LOCKDOWN_ENV) ?: env(LEGACY_LOCKDOWN_ENV))?.trim()?.lowercase()?.let { it.isNotEmpty() && it != "0" && it != "false" && it != "off" } ?: false
 
     /** S6: safe mode, no community module loads: AGENTHQ_SAFE_MODE, or the `agenthq.safeMode` property (`--safe-mode`). */
     const val SAFE_MODE_ENV = "AGENTHQ_SAFE_MODE"

@@ -41,7 +41,7 @@ object DesktopPlugins {
         val factory: TabFactory,
         val root: File,
         val config: ModulesConfig,
-        val demoLock: Boolean,
+        val lockdown: Boolean,
         val log: List<String>,
         /** S6: started with every community module off (`--safe-mode`). */
         val safeMode: Boolean = false,
@@ -73,7 +73,7 @@ object DesktopPlugins {
         val say: (String) -> Unit = { log += it; print(it) }
         val root = PluginFolders.root(stateDir, env, property)
         val config = PluginFolders.config(root, say)
-        val demoLock = PluginFolders.demoLock(env)
+        val lockdown = PluginFolders.lockdown(env)
         val safeMode = PluginFolders.safeMode(env, property)
         // S6: an app UI installed from a .ihq carries its modules in one jar; they take part as if compiled in.
         val loaders = mutableListOf<PluginClassLoader>()
@@ -81,8 +81,8 @@ object DesktopPlugins {
         val bundled = PluginFolders.bundledRoot(env, property)
         val devTrust = PluginFolders.devTrust(property)
         val candidates = OfficialTrust.check(candidates(root, config, withBundles, bundled), OfficialTrust.infantryKeys(root, bundled), devTrust, say, pinned)
-        say("[plugins] root ${root.absolutePath}${bundled?.let { " (bundled ${it.absolutePath})" } ?: ""}${if (demoLock) " (demo lock on)" else ""}${if (safeMode) " (safe mode: community modules off)" else ""}")
-        var resolution = ModuleResolver.resolve(candidates, config, demoLock, safeMode = safeMode, platform = "desktop")
+        say("[plugins] root ${root.absolutePath}${bundled?.let { " (bundled ${it.absolutePath})" } ?: ""}${if (lockdown) " (lockdown on)" else ""}${if (safeMode) " (safe mode: community modules off)" else ""}")
+        var resolution = ModuleResolver.resolve(candidates, config, lockdown, safeMode = safeMode, platform = "desktop")
 
         var built: TabFactory? = null
         val bus = SimpleEventBus(say)
@@ -97,8 +97,8 @@ object DesktopPlugins {
             }
             provide(Services.STORAGE) { s -> FilePluginStorage(dataDir(stateDir, s.name)) }
             provide(Services.SETTINGS) { s -> FilePluginSettings(FilePluginStorage(dataDir(stateDir, s.name))) }
-            provide(Services.DAEMON) { s -> RouteGate.gated(s.manifest!!, demoLock, config, DaemonLink.window::send) }
-            provide(Services.ENDPOINTS) { s -> JvmEndpointAccess(s.manifest!!, s.tier, config, demoLock, say) }
+            provide(Services.DAEMON) { s -> RouteGate.gated(s.manifest!!, lockdown, config, DaemonLink.window::send) }
+            provide(Services.ENDPOINTS) { s -> JvmEndpointAccess(s.manifest!!, s.tier, config, lockdown, say) }
         }
         val services = resolution.loaded.associate { it.name to registry.forModule(it) }
 
@@ -118,7 +118,7 @@ object DesktopPlugins {
         resolution.log.forEach(say)
         val preferences = resolution.preferences.filter { it.module !in refused }
         val shellOverrides = resolution.shellOverrides.filter { it.module !in refused }
-        val changes = ModuleChanges { request -> change(root, withBundles, demoLock, request, bundled).also { c -> (c as? ModuleChange.Applied)?.log?.forEach(say); say("[plugins] ${c.message}") } }
+        val changes = ModuleChanges { request -> change(root, withBundles, lockdown, request, bundled).also { c -> (c as? ModuleChange.Applied)?.log?.forEach(say); say("[plugins] ${c.message}") } }
         val factory = TabFactory(modules, preferences, services = { services[it] ?: NoPluginServices }, events = bus, statuses = statuses(resolution), changes = changes, shellOverrides = shellOverrides,
             allowInject = { config.setting(it).allowInject }, allowOverride = { config.setting(it).allowOverride }, modulesConfig = config)
         built = factory
@@ -148,7 +148,7 @@ object DesktopPlugins {
             }.getOrElse { "Fresh shell not started: ${it.message}" }
         }
         factory.problems.forEach { say("[plugins] $it") }
-        return Loaded(factory, root, config, demoLock, log, safeMode, unload = {
+        return Loaded(factory, root, config, lockdown, log, safeMode, unload = {
             modules.forEach { m -> runCatching { m.onStop() }.onFailure { say("[plugins] ${m.manifest.name} failed to stop: ${it.message}") } }
             bus.clear()
             loaders.forEach { runCatching { it.close() } }
@@ -200,8 +200,8 @@ object DesktopPlugins {
      * PLUGINS-2: Settings asks to enable or disable a module. modules.json is read afresh, the dependency rules decide,
      * and only an allowed change is written (it applies at the next start). Under the demo lock nothing is written.
      */
-    fun change(root: File, compiled: List<AgentHqModule>, demoLock: Boolean, request: ModuleRequest, bundled: File? = null): ModuleChange {
-        if (demoLock) return ModuleChange.Refused("The demo lock is on: modules.json is not changed.")
+    fun change(root: File, compiled: List<AgentHqModule>, lockdown: Boolean, request: ModuleRequest, bundled: File? = null): ModuleChange {
+        if (lockdown) return ModuleChange.Refused("The lockdown is on: modules.json is not changed.")
         val config = PluginFolders.config(root)
         val graph = DependencyGraph.of(candidates(root, config, compiled, bundled), config)
         val result = if (request.enable) graph.enable(request.module, config) else graph.disable(request.module, config, request.cascade)

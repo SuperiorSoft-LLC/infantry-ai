@@ -177,7 +177,7 @@ class JvmPlatformHost(
     override val dropIn: com.superiorsoftllc.agenthq.ui.shell.PluginDropIn by lazy {
         val root = com.superiorsoftllc.agenthq.plugin.host.PluginFolders.root(stateDir() ?: File(".agenthq"), env, property)
         com.superiorsoftllc.agenthq.ui.plugin.DesktopDropIn(
-            root, com.superiorsoftllc.agenthq.plugin.host.PluginFolders.demoLock(env),
+            root, com.superiorsoftllc.agenthq.plugin.host.PluginFolders.lockdown(env),
             com.superiorsoftllc.agenthq.plugin.host.PluginFolders.safeMode(env, property),
             picker = if (canPickFiles) ::pickFile else null,
             release = { synchronized(this) { loaded?.close() } },

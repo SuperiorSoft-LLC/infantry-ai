@@ -405,6 +405,8 @@ require(Regex("""(\d+)\.(\d+)\.(\d+)""").matchEntire(agentHqPackageVersion)?.gro
     (major.toIntOrNull() ?: 0) in 1..255 && (minor.toIntOrNull() ?: 256) <= 255 && (build.toIntOrNull() ?: 65536) <= 65535
 } == true) { "INSTALL-1: -PagenthqVersion=$agentHqPackageVersion is not an MSI version (MAJOR.MINOR.BUILD, 1..255 . 0..255 . 0..65535)" }
 
+// CORE-CLEAN-1: the exported section's own jars; handed to the running app as -Dagenthq.freshShell.exclude so core names none.
+val freshShellExcluded = listOf("agenthqAppUi", "Infantry_Board")
 compose.desktop {
     application {
         mainClass = "com.superiorsoftllc.agenthq.ui.AppMainKt"
@@ -415,6 +417,7 @@ compose.desktop {
         // PERF-2: heap caps (GC stays G1) for the packaged launcher (jpackage java-options) and `run`; the installed app runs
         // the daemon in this same JVM, so these cover both. Asserted by PackagedJvmCapsTest.
         jvmArgs += agentHqJvmCaps
+        jvmArgs += listOf("-Dagenthq.freshShell.exclude=${freshShellExcluded.joinToString(",")}")
         nativeDistributions {
             targetFormats(
                 org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi,
@@ -835,7 +838,7 @@ gradle.taskGraph.whenReady {
 //   ./gradlew :superiorSoftLibrary:agentHqUi:runShell                     (a generated app in build/shell-app)
 //   ./gradlew :superiorSoftLibrary:agentHqUi:runShell -PshellApp=<dir>    (an app dir of your own, relative to the repo root)
 //   ./gradlew :superiorSoftLibrary:agentHqUi:packageShellMsi [-PshellApp=<dir>]   (build/shell/msi; jpackage over the shell runtime image)
-fun isShellJar(f: File) = f.invariantSeparatorsPath.let { "agenthqAppUi" !in it && "Infantry_Board" !in it }
+fun isShellJar(f: File) = f.invariantSeparatorsPath.let { p -> freshShellExcluded.none { it in p } }
 val shellAppProp = project.findProperty("shellApp")?.toString()
 val defaultShellApp = layout.buildDirectory.dir("shell-app")
 val shellAppDir: Provider<File> = if (shellAppProp != null) provider { rootProject.file(shellAppProp) } else defaultShellApp.map { it.asFile }

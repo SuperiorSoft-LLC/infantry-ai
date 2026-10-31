@@ -907,7 +907,7 @@ object SecretForm {
     const val FIELD_HINT = "Becomes the environment variable's name: letters, digits and '_', e.g. storePassword"
     const val TITLE = "Your secrets"
     const val APPLIES_TO = "Each secret holds named fields. A saved command that names a secret gets every field as an environment variable, masked in its output"
-    const val LOCKED = "Locked: the daemon's demo lock is on, so secrets cannot be changed and no run gets one"
+    const val LOCKED = "Locked: the daemon's lockdown is on, so secrets cannot be changed and no run gets one"
 }
 
 /** The text a row shows: set (with its masked tail) or not set. Never a value. */

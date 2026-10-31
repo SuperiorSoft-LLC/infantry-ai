@@ -17,7 +17,13 @@ object FreshShell {
     const val MAIN_CLASS = "com.superiorsoftllc.agenthq.ui.AppMainKt"
 
     /** Same filter as build.gradle.kts `isShellJar`: the fresh shell must not have the exported section compiled in. */
-    fun isShellEntry(path: String): Boolean = path.replace('\\', '/').let { "agenthqAppUi" !in it && "Infantry_Board" !in it }
+    const val EXCLUDE_PROPERTY = "agenthq.freshShell.exclude"
+
+    /** Path fragments of the exported section's own jars, handed in by the app build (core names no concrete plugin). */
+    fun excluded(property: (String) -> String? = System::getProperty): List<String> =
+        property(EXCLUDE_PROPERTY)?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
+
+    fun isShellEntry(path: String, excluded: List<String> = excluded()): Boolean = path.replace('\\', '/').let { p -> excluded.none { it in p } }
 
     /** Writes the fresh app dir for [exported] (composition [name]) and returns it. */
     fun prepare(stateDir: File, exported: File, name: String, now: Long = System.currentTimeMillis()): File {
@@ -34,10 +40,10 @@ object FreshShell {
     }
 
     /** Pure: the child's command line. [jvmArgs] keeps only the heap caps (PERF-2) and the version/build stamps. */
-    fun command(javaHome: String, classPath: String, jvmArgs: List<String>, appDir: File, windows: Boolean): List<String> {
+    fun command(javaHome: String, classPath: String, jvmArgs: List<String>, appDir: File, windows: Boolean, exclude: List<String> = excluded()): List<String> {
         val bin = File(javaHome, "bin")
         val java = if (windows) File(bin, "javaw.exe").takeIf { it.isFile } ?: File(bin, "java.exe") else File(bin, "java")
-        val cp = classPath.split(File.pathSeparatorChar).filter { it.isNotBlank() && isShellEntry(it) }.joinToString(File.pathSeparator)
+        val cp = classPath.split(File.pathSeparatorChar).filter { it.isNotBlank() && isShellEntry(it, exclude) }.joinToString(File.pathSeparator)
         val kept = jvmArgs.filter { a -> a.startsWith("-Xm") || a.startsWith("-Xss") || a.startsWith("-XX:") || a.startsWith("-Dagenthq.version=") || a.startsWith("-Dagenthq.build=") }
         return listOf(java.path) + kept + listOf("-cp", cp, MAIN_CLASS, "--app", appDir.absolutePath)
     }

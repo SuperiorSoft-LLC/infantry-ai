@@ -22,7 +22,7 @@ import java.io.File
  */
 class DesktopDropIn(
     private val root: File,
-    override val demoLock: Boolean,
+    override val lockdown: Boolean,
     override val safeMode: Boolean,
     private val picker: ((String) -> String?)? = null,
     /** S7: unloads the running modules (stop, unsubscribe, close their jars) before a folder is deleted: Windows will not delete an open jar. */
@@ -31,7 +31,7 @@ class DesktopDropIn(
     override val canPick: Boolean get() = picker != null
 
     override fun inspect(path: String): DropCheck {
-        if (demoLock) return DropCheck.Refused(LOCKED)
+        if (lockdown) return DropCheck.Refused(LOCKED)
         val file = File(path)
         if (!file.name.endsWith(".ihq", ignoreCase = true)) return DropCheck.Refused("${file.name} is not a .ihq plugin package")
         return when (val r = IhqInstaller.inspect(file, root)) {
@@ -42,7 +42,7 @@ class DesktopDropIn(
     }
 
     override fun install(preview: DropPreview, granted: Set<String>): String? {
-        if (demoLock) return LOCKED
+        if (lockdown) return LOCKED
         val file = File(preview.path)
         // The file is checked again as it is installed; one that changed since the dialog opened is refused.
         val again = IhqInstaller.inspect(file, root)
@@ -66,7 +66,7 @@ class DesktopDropIn(
     }
 
     override fun remove(name: String): String? {
-        if (demoLock) return LOCKED
+        if (lockdown) return LOCKED
         if (!safeMode) release()
         return IhqInstaller.uninstall(root, name)
     }
@@ -81,7 +81,7 @@ class DesktopDropIn(
     }.getOrDefault(emptyList())
 
     companion object {
-        const val LOCKED = "The demo lock is on: plugins cannot be installed or removed."
+        const val LOCKED = "The lockdown is on: plugins cannot be installed or removed."
 
         /** What [file]'s checked manifest asks for, as the consent dialog lists it. */
         fun preview(file: File, r: IhqResult.Checked): DropPreview = DropPreview(

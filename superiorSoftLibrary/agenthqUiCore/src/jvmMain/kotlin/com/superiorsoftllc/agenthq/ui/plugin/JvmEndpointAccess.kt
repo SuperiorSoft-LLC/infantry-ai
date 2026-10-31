@@ -26,7 +26,7 @@ class JvmEndpointAccess(
     private val manifest: ModuleManifest,
     private val tier: Tier,
     private val config: ModulesConfig,
-    private val demoLock: Boolean,
+    private val lockdown: Boolean,
     private val log: (String) -> Unit = {},
     /** Field [field] of `plugin.<module>`: success(null) = not set, failure = refused (no owner connection, demo lock). */
     private val secret: suspend (module: String, field: String) -> Result<String?> = { m, f -> DaemonLink.window.pluginSecret?.invoke(m, f) ?: Result.failure(IllegalStateException("no window")) },
@@ -63,7 +63,7 @@ class JvmEndpointAccess(
     }
 
     override suspend fun call(endpoint: String, method: String, path: String, body: String?, headers: Map<String, String>): EndpointReply {
-        EndpointGate.refusal(endpoint, method, path, manifest, tier, config, demoLock)?.let {
+        EndpointGate.refusal(endpoint, method, path, manifest, tier, config, lockdown)?.let {
             log("[plugins] ${manifest.name}: $it")
             return EndpointReply.Refused(it)
         }

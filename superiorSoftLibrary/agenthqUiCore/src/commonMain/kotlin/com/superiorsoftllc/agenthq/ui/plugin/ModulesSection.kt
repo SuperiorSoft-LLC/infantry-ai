@@ -100,7 +100,7 @@ fun ModulesSection(
     var cascade by remember(factory) { mutableStateOf(false) }
     val changes = factory.changes
     // S7: a community module installed from a .ihq can be removed here, in a normal run: its jar is closed first.
-    val dropIn = com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost.current.dropIn?.takeIf { !it.demoLock }
+    val dropIn = com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost.current.dropIn?.takeIf { !it.lockdown }
     val restart = com.superiorsoftllc.agenthq.ui.shell.LocalSoftRestart.current
     val removeNotes = remember(factory) { mutableStateMapOf<String, String>() }
 

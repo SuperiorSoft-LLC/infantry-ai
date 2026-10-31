@@ -64,18 +64,18 @@ class DesktopPluginsTest {
     }
 
     @Test
-    fun `under the demo lock no community module loads and the core tabs are unchanged`() {
+    fun `under the lockdown no community module loads and the core tabs are unchanged`() {
         root.mkdirs()
         File(root, "modules.json").writeText("""{"modules":{"Acme_NoJar":{"enabled":true}}}""")
         community("Acme_NoJar", manifest("Acme_NoJar"))
-        val loaded = load(PluginFolders.DEMO_LOCK_ENV to "1", compiled = CoreModules.all)
-        assertTrue(loaded.demoLock)
+        val loaded = load(PluginFolders.LOCKDOWN_ENV to "1", compiled = CoreModules.all)
+        assertTrue(loaded.lockdown)
         assertEquals(ModuleState.LOCKED, loaded.factory.statuses.single { it.name == "Acme_NoJar" }.state)
         assertEquals(CoreModules.factory.tabs(TabContainers.CENTER).map { it.id }, loaded.factory.tabs(TabContainers.CENTER).map { it.id })
     }
 
     @Test
-    fun `under the demo lock a module's daemon access is its declared routes AND the lock's`() = runBlocking {
+    fun `under the lockdown a module's daemon access is its declared routes AND the lock's`() = runBlocking {
         root.mkdirs()
         File(root, "modules.json").writeText("""{"demoLock":{"allowRoutes":["GET /health"]}}""")
         val probe = AgentHqModule(ModuleManifest("Infantry_Probe", "1.0.0", services = listOf("daemon"), routes = listOf("GET /health", "POST /tickets")))
@@ -83,9 +83,9 @@ class DesktopPluginsTest {
             DesktopPlugins.load(state, env = env.toMap()::get, property = { null }, compiled = listOf(probe), print = {})
                 .services("Infantry_Probe").get(Services.DAEMON)!!
 
-        val locked = daemon(PluginFolders.DEMO_LOCK_ENV to "1")
+        val locked = daemon(PluginFolders.LOCKDOWN_ENV to "1")
         val refused = locked.call("POST /tickets", "{}")
-        assertTrue(refused is DaemonReply.Refused && "demo lock" in refused.reason, "$refused")
+        assertTrue(refused is DaemonReply.Refused && "lockdown" in refused.reason, "$refused")
         assertTrue(locked.call("GET /sessions", null) is DaemonReply.Refused, "never declared")
         assertTrue(locked.call("GET /health", null) !is DaemonReply.Refused, "declared and lock-allowed: sent (no daemon here, so it fails)")
         assertTrue(daemon().call("POST /tickets", "{}") !is DaemonReply.Refused, "without the lock a declared route is sent")
@@ -149,8 +149,8 @@ class DesktopPluginsTest {
         val again = changes.request(ModuleRequest("Acme_App", enable = true))
         assertTrue(again is ModuleChange.Refused && again.mustEnableFirst == listOf("Acme_Base"), again.message)
 
-        // Under the demo lock Settings changes nothing.
-        val locked = load(PluginFolders.DEMO_LOCK_ENV to "1").factory.changes!!.request(ModuleRequest("Acme_Base", enable = true))
-        assertTrue(locked is ModuleChange.Refused && "demo lock" in locked.message)
+        // Under the lockdown Settings changes nothing.
+        val locked = load(PluginFolders.LOCKDOWN_ENV to "1").factory.changes!!.request(ModuleRequest("Acme_Base", enable = true))
+        assertTrue(locked is ModuleChange.Refused && "lockdown" in locked.message)
     }
 }

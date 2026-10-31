@@ -51,7 +51,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * S6 (drop-in path): the empty shell's drop box, the consent dialog, the soft restart, safe mode and the demo lock, in
+ * S6 (drop-in path): the empty shell's drop box, the consent dialog, the soft restart, safe mode and the lockdown, in
  * the real window (App) with a fake [PluginDropIn]. The real install, grants and safe-mode loading are DesktopDropInTest's.
  */
 @OptIn(ExperimentalTestApi::class)
@@ -71,7 +71,7 @@ class DropInUiTest {
     )
 
     private class FakeDropIn(
-        override val demoLock: Boolean = false,
+        override val lockdown: Boolean = false,
         override val safeMode: Boolean = false,
         var check: DropCheck = DropCheck.Refused("nothing"),
         val onDisk: MutableList<String> = mutableListOf(),
@@ -180,8 +180,8 @@ class DropInUiTest {
         onNodeWithTag(DROP_BOX_TAG).assertDoesNotExist()
     }
 
-    @Test fun `under the demo lock the drop box is disabled and says why`() = runDesktopComposeUiTest(1200, 800) {
-        val drop = FakeDropIn(demoLock = true, check = DropCheck.Ready(community))
+    @Test fun `under the lockdown the drop box is disabled and says why`() = runDesktopComposeUiTest(1200, 800) {
+        val drop = FakeDropIn(lockdown = true, check = DropCheck.Ready(community))
         window(Host(drop), TabFactory(emptyList()))
         onNodeWithTag(DROP_BOX_LOCKED_TAG).assertExists()
         onNodeWithTag(DROP_BOX_CHOOSE_TAG).assertIsNotEnabled()

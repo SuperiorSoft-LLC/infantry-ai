@@ -25,7 +25,7 @@ class FreshShellTest {
         val sep = File.pathSeparator
         val cmd = FreshShell.command(
             "/jdk", listOf("/l/agentHqUi.jar", "/l/agenthqAppUi.jar", "/l/Infantry_Board.jar", "/l/agenthqUiCore-jvm.jar").joinToString(sep),
-            listOf("-Xmx1g", "-Djpackage.app-path=x", "-XX:MaxMetaspaceSize=256m"), dir, windows = false,
+            listOf("-Xmx1g", "-Djpackage.app-path=x", "-XX:MaxMetaspaceSize=256m"), dir, windows = false, exclude = listOf("agenthqAppUi", "Infantry_Board"),
         )
         assertEquals(
             listOf(File("/jdk/bin/java").path, "-Xmx1g", "-XX:MaxMetaspaceSize=256m", "-cp", "/l/agentHqUi.jar$sep/l/agenthqUiCore-jvm.jar", FreshShell.MAIN_CLASS, "--app", dir.absolutePath),

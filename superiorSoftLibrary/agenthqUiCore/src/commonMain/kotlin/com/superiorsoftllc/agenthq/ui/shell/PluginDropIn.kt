@@ -9,8 +9,8 @@ import androidx.compose.ui.draganddrop.DragAndDropEvent
  * checks the file again; nothing is installed before the owner said Install in the consent dialog.
  */
 interface PluginDropIn {
-    /** The demo lock is on: nothing may be installed or removed (the plugins folder is never written). */
-    val demoLock: Boolean
+    /** The lockdown is on: nothing may be installed or removed (the plugins folder is never written). */
+    val lockdown: Boolean
 
     /** The shell started in safe mode (`--safe-mode`): no community module is loaded. */
     val safeMode: Boolean

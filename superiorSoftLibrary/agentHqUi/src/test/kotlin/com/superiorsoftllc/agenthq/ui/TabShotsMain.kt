@@ -127,7 +127,7 @@ fun main(args: Array<String>) {
         ),
     )
     val lock = args.getOrNull(1) == "demo-lock"
-    val env = mapOf(PluginFolders.ROOT_ENV to root.absolutePath) + (if (lock) mapOf(PluginFolders.DEMO_LOCK_ENV to "1") else emptyMap())
+    val env = mapOf(PluginFolders.ROOT_ENV to root.absolutePath) + (if (lock) mapOf(PluginFolders.LOCKDOWN_ENV to "1") else emptyMap())
     var tabs = DesktopPlugins.load(dir, env = env::get, property = { if (it == PluginFolders.DEV_TRUST_PROPERTY) System.getProperty(it) else null }).factory
     // Own port per render (concurrent renders must not share a daemon): agenthq.tabshots.port pins one, else a free ephemeral one.
     val port = System.getProperty("agenthq.tabshots.port")?.toIntOrNull() ?: java.net.ServerSocket(0).use { it.localPort }

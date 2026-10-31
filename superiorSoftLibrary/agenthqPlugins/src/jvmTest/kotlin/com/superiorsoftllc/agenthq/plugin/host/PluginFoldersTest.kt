@@ -29,8 +29,8 @@ class PluginFoldersTest {
 
     @Test
     fun `the demo lock reads common truthy values`() {
-        for (v in listOf("1", "true", "on", "yes")) assertTrue(PluginFolders.demoLock { v }, v)
-        for (v in listOf(null, "", "0", "false", "OFF")) assertEquals(false, PluginFolders.demoLock { v }, "$v")
+        for (v in listOf("1", "true", "on", "yes")) assertTrue(PluginFolders.lockdown { v }, v)
+        for (v in listOf(null, "", "0", "false", "OFF")) assertEquals(false, PluginFolders.lockdown { v }, "$v")
     }
 
     @Test

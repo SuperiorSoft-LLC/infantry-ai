@@ -10,7 +10,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** PLUGIN-ENDPOINTS-1: D1 (declared id, method, path pattern; valid declaration) and D5 (demo lock closes endpoints). */
+/** PLUGIN-ENDPOINTS-1: D1 (declared id, method, path pattern; valid declaration) and D5 (lockdown closes endpoints). */
 class EndpointGateTest {
     private val manifest = ModuleManifest("Acme_Hello", "1.0.0", services = listOf("endpoints"),
         endpoints = listOf(EndpointDeclaration("api", "https://api.example.com/v1/**", listOf("GET", "POST"))))
@@ -28,9 +28,9 @@ class EndpointGateTest {
     }
 
     @Test
-    fun `D5 under the demo lock only a core module's listed endpoint passes`() {
+    fun `D5 under the lockdown only a core module's listed endpoint passes`() {
         val c = ModulesConfig(demoLock = DemoLockConfig(allowEndpoints = listOf("api")))
         assertNull(EndpointGate.refusal("api", "GET", "/v1/a", manifest, Tier.CORE, c, true))
-        assertTrue(EndpointGate.refusal("api", "GET", "/v1/a", manifest, Tier.CORE, ModulesConfig(), true)!!.contains("demo lock"))
+        assertTrue(EndpointGate.refusal("api", "GET", "/v1/a", manifest, Tier.CORE, ModulesConfig(), true)!!.contains("lockdown"))
     }
 }

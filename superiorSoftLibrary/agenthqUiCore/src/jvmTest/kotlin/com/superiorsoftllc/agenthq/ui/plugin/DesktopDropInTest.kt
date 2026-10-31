@@ -21,7 +21,7 @@ import kotlin.test.assertTrue
 
 /**
  * S6 (drop-in path): the desktop drop-in over a real plugins root: inspect installs nothing, Install writes the owner's
- * per-node grants, safe mode loads no community module and can remove one, the demo lock refuses, and a core bundle
+ * per-node grants, safe mode loads no community module and can remove one, the lockdown refuses, and a core bundle
  * (a ModuleSource entry, as the app UI's .ihq has) takes part as if compiled in.
  */
 class DesktopDropInTest {
@@ -44,7 +44,7 @@ class DesktopDropInTest {
         return f
     }
 
-    private fun dropIn(demoLock: Boolean = false, safeMode: Boolean = false) = DesktopDropIn(root, demoLock, safeMode)
+    private fun dropIn(lockdown: Boolean = false, safeMode: Boolean = false) = DesktopDropIn(root, lockdown, safeMode)
 
     @Test fun `inspect lists what the file asks for and installs nothing`() {
         val check = assertIs<DropCheck.Ready>(dropIn().inspect(communityPackage().path))
@@ -84,8 +84,8 @@ class DesktopDropInTest {
         assertTrue("not signed" in r.message, r.message)
     }
 
-    @Test fun `the demo lock refuses inspect, install and remove`() {
-        val d = dropIn(demoLock = true)
+    @Test fun `the lockdown refuses inspect, install and remove`() {
+        val d = dropIn(lockdown = true)
         assertIs<DropCheck.Refused>(d.inspect(communityPackage().path))
         assertEquals(DesktopDropIn.LOCKED, d.remove("Acme_Panel"))
         assertFalse(File(root, "community").exists())

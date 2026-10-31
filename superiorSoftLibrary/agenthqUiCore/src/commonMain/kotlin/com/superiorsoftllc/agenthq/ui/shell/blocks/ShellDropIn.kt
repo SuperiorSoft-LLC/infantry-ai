@@ -94,7 +94,7 @@ object ShellDropBox : Block("dropBox", "infantry.shell.dropBox") {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun DropBox(dropIn: PluginDropIn, modifier: Modifier, onReady: (DropPreview) -> Unit) {
-    val enabled = !dropIn.demoLock
+    val enabled = !dropIn.lockdown
     var error by remember { mutableStateOf<String?>(null) }
     var hovering by remember { mutableStateOf(false) }
     // S7: the signature check reads the whole package; it runs off the UI thread, and the box says it is checking.
@@ -149,7 +149,7 @@ private fun DropBox(dropIn: PluginDropIn, modifier: Modifier, onReady: (DropPrev
                 )
             } else {
                 Text(
-                    "The demo lock is on: plugins cannot be installed here.",
+                    "The lockdown is on: plugins cannot be installed here.",
                     color = Palette.Muted, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.testTag(DROP_BOX_LOCKED_TAG),
                 )
             }
@@ -281,7 +281,7 @@ private fun SafeModeBanner(dropIn: PluginDropIn, modifier: Modifier) {
                 Text(name, fontSize = 12.sp, modifier = Modifier.weight(1f))
                 TextButton(
                     onClick = { note = dropIn.remove(name) ?: "$name removed."; installed = dropIn.installed() },
-                    enabled = !dropIn.demoLock,
+                    enabled = !dropIn.lockdown,
                     modifier = Modifier.testTag(SAFE_MODE_REMOVE_TAG_PREFIX + name),
                 ) { Text("Remove") }
             }
