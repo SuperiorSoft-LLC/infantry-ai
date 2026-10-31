@@ -22,6 +22,12 @@ interface BoardHost {
     val sessions: BoardSessions get() = NoBoardHost.sessions
     val settings: BoardSettings get() = NoBoardHost.settings
 
+    /** DP-5f-2 (1.7.0): agent profiles, run outcomes and worker health, first-turn context sources, ticket images. */
+    val agents: BoardAgents get() = NoBoardHost.agents
+    val runs: BoardRunHealth get() = NoBoardHost.runs
+    val context: BoardContextSources get() = NoBoardHost.context
+    val images: BoardImages get() = NoBoardHost.images
+
     /** Epoch millis; the host's clock, so a test host can pin time. */
     fun now(): Long = System.currentTimeMillis()
 }
@@ -240,6 +246,9 @@ interface BoardSessions {
     /** Removes an ended session's record; a text when it cannot (still running, unknown), else null. */
     fun remove(sessionId: String): String? = NO_SESSIONS
 
+    /** DP-5f-2: events arrive in the order the host saw them, one listener call at a time; closing the handle stops delivery (idempotent). A throw in a listener never reaches the host. */
+    fun subscribe(listener: BoardSessionListener): AutoCloseable = AutoCloseable {}
+
     companion object {
         const val NO_SESSIONS = "this daemon has no session manager"
     }
@@ -256,6 +265,10 @@ object NoBoardHost : BoardHost {
     override val git: BoardGit = object : BoardGit {}
     override val sessions: BoardSessions = object : BoardSessions {}
     override val settings: BoardSettings = object : BoardSettings {}
+    override val agents: BoardAgents = object : BoardAgents {}
+    override val runs: BoardRunHealth = object : BoardRunHealth {}
+    override val context: BoardContextSources = object : BoardContextSources {}
+    override val images: BoardImages = object : BoardImages {}
 }
 
 private object EmptyBoardTables : BoardTables {
