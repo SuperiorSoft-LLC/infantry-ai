@@ -274,3 +274,11 @@ Additive. `BoardGit` gains two members next to the boolean `projectFolders()`:
 - `projectFolderRequire(projectId): String` - the same, but an `IllegalArgumentException` names why the project has no directory (a session never falls back to the daemon's cwd).
 
 `LocalBoardHost` delegates to `SessionManager.projectFolders`. The board now reads agent profiles (`BoardAgents`), provider checks and capabilities (`BoardSessions`) and project folders (`BoardGit`) only through the host.
+
+## 14. DP-5f-3d (BOARD_API_VERSION 1.12.0): session availability
+
+One additive member: `BoardSessions.available()` (default false; `LocalBoardHost` answers `sessionManager() != null`). It replaces the board's
+`sessions: SessionManager?` null checks (start, restart, sweep, worker problem). The board now starts, kills, reads and removes workers only through
+`start` / `kill` / `detail` / `remove`. Core-only helpers it used moved board-side (`BoardSessionFacts.kt`: state-name constants, `BoardRunOutcomes`,
+`BoardWorkerHealth`). The store-backed constructor became the function `TicketBoard(store, ...)` in `TicketBoardStores.kt` (core side), with the
+extension `TicketBoard.localHost`.
