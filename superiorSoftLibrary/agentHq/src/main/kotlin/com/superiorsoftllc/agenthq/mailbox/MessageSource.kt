@@ -32,6 +32,9 @@ class MailSource(
     private val automationFooter: String? = null,
 ) : MessageSource {
 
+    /** MAIL-TRUNC-1: the same source over a (body-cut) copy of the message. */
+    fun withMessage(m: Message) = MailSource(m, origin, automationFooter)
+
     override fun render(): String = buildString {
         append("[Infantry AI COMMS] message ").append(message.id)
         // The reply address, not the label: `agenthq send <from>` must reach the sender, so the header and footer keep

@@ -86,6 +86,12 @@ class MailRouter(
     private val wakeMode: (role: String, sessionId: String) -> String = { _, _ -> "all" },
     /** USAGE-REGRESS-1: ms a waking message waits for company before it wakes a resting session (0 = at once). */
     private val wakeDebounceMs: () -> Long = { 0L },
+    /** MAIL-TRUNC-1: `notify` | `truncate` | `full` for a recipient role / session (settings `mail.deliveryMode`). Default here `full`; the daemon wires the setting. */
+    private val deliveryMode: (role: String, sessionId: String) -> String = { _, _ -> "full" },
+    /** MAIL-TRUNC-1: per-body cap (chars) in `truncate` mode. */
+    private val injectMaxChars: () -> Int = { 2000 },
+    /** MAIL-TRUNC-1: cap (chars) of the whole folded turn in `truncate` mode; mail past it is listed as notify lines. */
+    private val injectTotalChars: () -> Int = { 6000 },
 ) : MailDelivery {
 
     private val debounceTimer by lazy {
@@ -307,8 +313,7 @@ class MailRouter(
             // USAGE-REGRESS-1: every wake re-reads the whole context; fold the other messages already queued for this
             // session (same recipient, up to [coalesceMax]) into the one turn instead of one wake each.
             val folded = if (session.neverRun) emptyList() else rest.take(coalesceMax())
-            val text = if (folded.isEmpty()) source.render() else
-                (listOf(source) + folded.map { MailSource.of(it, manager, automationFooter) }).joinToString(MAIL_FOLD_SEPARATOR) { it.render() }
+            val text = renderTurn(deliveryMode(session.role ?: "", session.id), listOf(message) + folded, source) { MailSource.of(it, manager, automationFooter) }
             val turn = if (session.neverRun) {
                 // TRAITS-T5: the persona and traits FROZEN at spawn, never the live profile (a later edit never reaches it).
                 // P10-K9: the knowledge counts are read NOW, at delivery, for the session's own project.
@@ -321,6 +326,41 @@ class MailRouter(
             DeliveryOutcome.Delivered("resumed ${session.id}", folded.map { it.id })
         } catch (e: Exception) {
             DeliveryOutcome.Failed("resume of '${session.id}' failed: ${e.message}")
+        }
+    }
+
+    /**
+     * MAIL-TRUNC-1: the text of one wake turn for [all] (first = the waking message, [first] its source). `notify`: a NEW MAIL (n)
+     * block (id, sender, subject per mail, the read command), no body; `truncate`: bodies capped, total capped; `full`: as before.
+     */
+    internal fun renderTurn(mode: String, all: List<Message>, first: MailSource, sourceOf: (Message) -> MailSource): String {
+        return when (mode) {
+            "notify" -> notifyBlock(all)
+            "truncate" -> {
+                val maxBody = injectMaxChars().coerceAtLeast(1)
+                var budget = injectTotalChars().coerceAtLeast(1)
+                val parts = ArrayList<String>()
+                val over = ArrayList<Message>()
+                for ((i, m) in all.withIndex()) {
+                    if (budget <= 0) { over += m; continue }
+                    val cut = if (m.body.length > maxBody)
+                        m.copy(body = m.body.take(maxBody) + "\n... [${m.body.length - maxBody} more chars: agenthq read ${m.id.take(8)}]") else m
+                    val rendered = (if (i == 0) first.withMessage(cut) else sourceOf(cut).withMessage(cut)).render()
+                    budget -= rendered.length
+                    parts += rendered
+                }
+                if (over.isNotEmpty()) parts += notifyBlock(over)
+                parts.joinToString(MAIL_FOLD_SEPARATOR)
+            }
+            else -> (listOf(first) + all.drop(1).map(sourceOf)).joinToString(MAIL_FOLD_SEPARATOR) { it.render() }
+        }
+    }
+
+    private fun notifyBlock(all: List<Message>): String = buildString {
+        append("NEW MAIL (").append(all.size).append("): read with `agenthq inbox` / `agenthq read <id>` (MCP: agenthq_read)")
+        for (m in all) {
+            append("\n- ").append(m.id.take(8)).append(" from ").append(m.from)
+            if (m.subject.isNotBlank()) append(": ").append(m.subject)
         }
     }
 
