@@ -177,7 +177,7 @@ class TicketContextComposer(
             "what you tested and what you did not test, any problem, and a line 'Files read: <paths>' listing the files you read (a report without it is refused). Then stop. Do not keep working after you mail."
 
         /** BUG-MAIL-2: the recipient alias for the session that started the sender's ticket. */
-        const val STARTER = "starter"
+        const val STARTER = com.superiorsoftllc.agenthq.mailbox.MailAddresses.STARTER
 
         /**
          * MAIL-5 team block. BUG-MAIL-MCP-2: mail is read with the MCP tools agenthq_inbox / agenthq_read (MAIL-MCP-1);

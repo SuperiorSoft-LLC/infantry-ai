@@ -7,7 +7,6 @@ import com.superiorsoftllc.agenthq.agents.KnowledgeCounter
 import com.superiorsoftllc.agenthq.agents.SkillsSource
 import com.superiorsoftllc.agenthq.agents.firstTurn
 import com.superiorsoftllc.agenthq.agents.section
-import com.superiorsoftllc.agenthq.context.TicketContextComposer
 import com.superiorsoftllc.agenthq.session.SessionEvent
 import com.superiorsoftllc.agenthq.session.SessionManager
 import com.superiorsoftllc.agenthq.session.SessionRecord
@@ -112,7 +111,7 @@ class MailRouter(
      * mailbox before this returns, so the pump can only ever be a bonus, never a precondition.
      */
     fun send(request: MailSendRequest): MailResult {
-        if (request.to == TicketContextComposer.STARTER) reportCheck?.invoke(request.from, request.body)?.let { return MailResult.Refused(it) }
+        if (request.to == MailAddresses.STARTER) reportCheck?.invoke(request.from, request.body)?.let { return MailResult.Refused(it) }
         crossProjectRefusal(request)?.let { return MailResult.Refused(it) }
         val result = mailbox.send(addressStarter(request))
         if (result is MailResult.Sent) {
@@ -136,7 +135,7 @@ class MailRouter(
      * without a session (owner, user, system) and role names are not affected (roles resolve in the sender's project).
      */
     private fun crossProjectRefusal(request: MailSendRequest): String? {
-        if (request.allowCrossProject || request.from.isBlank() || request.to == TicketContextComposer.STARTER) return null
+        if (request.allowCrossProject || request.from.isBlank() || request.to == MailAddresses.STARTER) return null
         val sender = manager.get(request.from) ?: return null
         val senderProject = sender.projectId?.takeIf { it.isNotBlank() } ?: return null
         val target = manager.get(request.to)
@@ -154,7 +153,7 @@ class MailRouter(
      * alias is kept, and delivery fails visibly with the reason ([resolveRecipient]).
      */
     private fun addressStarter(request: MailSendRequest): MailSendRequest {
-        if (request.to != TicketContextComposer.STARTER || request.from.isBlank()) return request
+        if (request.to != MailAddresses.STARTER || request.from.isBlank()) return request
         val starter = starterOf(request.from) ?: return request
         return request.copy(to = starter)
     }
@@ -304,7 +303,7 @@ class MailRouter(
 
         // BUG-MAIL-2: `starter` is the session that started the sender's ticket, wherever it is.
         val senderStarter = senderId?.let(starterOf)
-        if (recipient == TicketContextComposer.STARTER) {
+        if (recipient == MailAddresses.STARTER) {
             if (senderStarter == null || manager.get(senderStarter) == null) {
                 return RecipientResolution.Failed("no starter recorded for your ticket (it was not started from a session)")
             }
