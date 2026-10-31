@@ -295,3 +295,13 @@ extension `TicketBoard.localHost`.
 
 ## 17. DP-5h-3a2 (DaemonApi 1.13.0, additive): story, epic and tuning inputs on the one BoardRuntime
 Adds to the section-16 `BoardRuntime` (no second runtime): `ticketEvents` (typed ticket-event subscription, default `NoTicketEvents`), `stories: BoardStoryInputs` (old story id -> ticket id, epic-changed push), `epics: BoardEpicInputs` (epics as `Epic` JSON, project check, `epic_base` check, branch-name normaliser), `relatedDescription(BoardRelatedDraft)` (the RELATED block) and `unknownSkills(ids)`. `BoardFromRuntime.build` maps the last two into the board; `BoardDaemonPlugin` builds `StoryHandler` / `BoardHandler` / `EpicHandler` from the inputs (`BoardBuild.handlers`) and passes them to `registerBoardFrames`. `LocalBoardRuntime` and `DaemonMain` supply them from core.
+
+## 20. DP-5h-3e-b (DaemonApi 1.14.0, additive): `BoardCoreAccess`, how core reaches a plugin-built board
+
+When the board plugin builds the board (`BoardRuntime.coreBuiltBoard` false) core holds no `TicketBoard`. The plugin hands core a `BoardCoreAccess`
+(`BoardRuntime.attachCore`, undone by `detachCore`); core's `BoardPortRef` resolves it at call time (null = "no board"). Plain data only: ticket
+facts (`BoardCoreTicket`), session ids and titles, the first-turn brief, the cut repo path, epic base branch / ticket ids per epic / epic JSON (for the
+epic broadcast), lane-cap change, queue-mark clear, the worker sweep, ticket get / move as wire JSON, and the shutdown steps. The plugin owns the ONLY
+`EpicStore`; core reads epics through this access.
+
+Slice 2a/2b/3 (the flip, `coreBuiltBoard=false` in `DaemonMain`): `BoardCoreAccess.invoke(op, json)` carries ticket and epic ops as wire JSON (list, get, save, move, delete, link, unlink, reorder, startNext, startPrompt, epicGet, epicList, epicSave, epicSetBase); core's `BoardOps` is `CoreBoardOps` (over a local board) or `PluginBoardOps` (over `invoke`). `BoardStoryInputs` gains `migrationFile` / `recordMapping`. `BoardRuntime` gains defaulted first-turn inputs (`includeLinkedTasksContext`, `includeSkillsContext`, `skillIds`, `roleNotes`, `relatedBlock`) which `BoardFromRuntime.contextOf` composes into the plugin's `TicketContext`, and the test-only `fixedFirstTurn()` that replaces the composed context in daemon tests. The board plugin shades `agentHqProtocol` as well as `agentHqBoard`. The plugin declares its frames in `module.json` `daemon.frames` (`{type, action, kind}`); the host accepts an OFFICIAL plugin declaring a core frame type only under the same action and kind as core's `ActionCatalog` (community plugins still may not).

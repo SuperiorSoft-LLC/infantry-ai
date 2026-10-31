@@ -375,7 +375,7 @@ class DaemonFixture private constructor(
                 handoffTimeoutMs = handoffTimeoutMs,
                 webBundle = webBundle,
                 ownerToken = OwnerCredential.ensure(stateDir),
-                pluginsRoot = pluginsRoot ?: TestDaemonPlugins.none(stateDir),
+                pluginsRoot = pluginsRoot ?: if (withBoard) TestDaemonPlugins.boardRoot() else TestDaemonPlugins.none(stateDir),
                 pluginTrust = pluginTrust ?: TestDaemonPlugins.trustAll,
                 pluginEnv = pluginEnv,
                 orchestratorBindings = orchestratorBindings,

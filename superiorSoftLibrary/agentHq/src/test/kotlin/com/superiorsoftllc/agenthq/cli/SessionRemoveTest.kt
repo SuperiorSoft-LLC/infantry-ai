@@ -50,7 +50,7 @@ class SessionRemoveTest {
     }
 
     private fun launch(): DaemonFixture =
-        DaemonFixture.launch(runner = GatedRunner(holdMs = 50), stateDir = Files.createTempDirectory("agenthq-session-rm").toFile())
+        DaemonFixture.launch(runner = GatedRunner(holdMs = 50), pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot("official/Infantry_Agents"), stateDir = Files.createTempDirectory("agenthq-session-rm").toFile())
             .also { fixtures += it; it.client.await(Envelope.READY) }
 
     private data class Result(val exit: Int, val out: String, val err: String)

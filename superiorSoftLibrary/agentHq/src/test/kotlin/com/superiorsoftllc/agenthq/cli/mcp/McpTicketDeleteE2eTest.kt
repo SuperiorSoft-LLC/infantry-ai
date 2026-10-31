@@ -63,8 +63,11 @@ class McpTicketDeleteE2eTest {
             return answer
         }
 
+        /** The board tools answer terse text by default; these tests read the JSON payload (verbose). */
+        private fun verbose(a: String) = if (a.trim() == "{}") """{"verbose":true}""" else a.replaceFirst("{", """{"verbose":true,""")
+
         fun callTool(name: String, arguments: String = "{}"): JsonObject =
-            request("tools/call", """{"name":"$name","arguments":$arguments}""")["result"]!!.jsonObject
+            request("tools/call", """{"name":"$name","arguments":${verbose(arguments)}}""")["result"]!!.jsonObject
 
         fun close() {
             runCatching { stdin.close() }
@@ -96,6 +99,12 @@ class McpTicketDeleteE2eTest {
     private fun text(result: JsonObject): String =
         result["content"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content
 
+    /** The delete tool answers terse text (`ok <short> deleted`), never JSON. */
+    private fun deletedOk(result: JsonObject): String {
+        assertEquals("false", result["isError"]!!.jsonPrimitive.content, "tool reported an error: ${text(result)}")
+        return text(result).also { assertTrue(it.contains("deleted"), it) }
+    }
+
     private fun payload(result: JsonObject): JsonObject {
         assertEquals("false", result["isError"]!!.jsonPrimitive.content, "tool reported an error: ${text(result)}")
         return Json.parseToJsonElement(text(result)).jsonObject
@@ -124,16 +133,15 @@ class McpTicketDeleteE2eTest {
         val first = create("delete me by full id")
         val keep = create("stays on the board")
         assertTrue(first in boardIds() && keep in boardIds(), "both tickets were created: ${boardIds()}")
-        val deleted = payload(agent.callTool("agenthq_ticket_delete", """{"ticketId":"$first"}"""))
-        assertEquals(first, deleted.str("ticketId"), "$deleted")
-        assertEquals("delete me by full id", deleted.str("title"), "$deleted")
+        val deleted = deletedOk(agent.callTool("agenthq_ticket_delete", """{"ticketId":"$first"}"""))
+        assertTrue(deleted.contains(shortTicketId(first)), deleted)
         assertEquals(setOf(keep), boardIds(), "only the named ticket was deleted")
         assertRefused(agent.callTool("agenthq_ticket_get", """{"ticketId":"$first"}"""), "no ticket")
 
         // 4) the 8-char suffix the board prints resolves like ticket_save's.
         val second = create("delete me by suffix")
-        val bySuffix = payload(agent.callTool("agenthq_ticket_delete", """{"ticketId":"${shortTicketId(second)}"}"""))
-        assertEquals(second, bySuffix.str("ticketId"), "$bySuffix")
+        val bySuffix = deletedOk(agent.callTool("agenthq_ticket_delete", """{"ticketId":"${shortTicketId(second)}"}"""))
+        assertTrue(bySuffix.contains(shortTicketId(second)), bySuffix)
         assertEquals(setOf(keep), boardIds(), "the suffix deleted exactly that ticket")
 
         // 2) an unknown id is refused, and nothing is deleted.
@@ -142,7 +150,10 @@ class McpTicketDeleteE2eTest {
         assertEquals(before, board.list(), "an unknown id leaves the board unchanged")
 
         // 3) a ticket in progress (a worker holds it) is refused with the way out, and nothing is deleted.
-        board.move(TicketMove(keep, TicketStatus.IN_PROGRESS), startOnInProgress = false)
+        // the deprecated story_move shim files a ticket in progress with no worker (the board's own start is not under test here)
+        fixture.client.send(Envelope.STORY_MOVE, """{"id":"$keep","status":"doing"}""")
+        val until = System.currentTimeMillis() + 20_000
+        while (System.currentTimeMillis() < until && !(board.list().single { it.id == keep }.status == TicketStatus.IN_PROGRESS)) Thread.sleep(50)
         val held = board.list()
         assertEquals(TicketStatus.IN_PROGRESS, held.single { it.id == keep }.status)
         assertRefused(agent.callTool("agenthq_ticket_delete", """{"ticketId":"$keep"}"""), "stop its worker first")

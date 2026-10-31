@@ -106,7 +106,8 @@ interface DaemonApi {
         // 1.5.0 (AGENT-REGISTRY-1, additive): `agents` (daemon.api.agents.Agents) and module.json `agents`.
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
-        const val VERSION = "1.13.0"
+        // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
+        const val VERSION = "1.14.0"
     }
 }
 

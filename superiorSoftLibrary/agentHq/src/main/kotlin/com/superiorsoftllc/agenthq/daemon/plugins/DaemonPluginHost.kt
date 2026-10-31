@@ -469,7 +469,9 @@ class DaemonPluginHost private constructor(
         override val frames: Frames = object : Frames {
             override fun handle(type: String, handler: (Frame, Caller) -> Frame?) {
                 val decl = d.frames.firstOrNull { it.type == type } ?: error("frame '$type' is not declared in daemon.frames")
-                check(ActionCatalog.forFrame(type) == null && type !in CORE_FRAMES) { "frame '$type' is a core frame" }
+                // DP-5h-3e-b: the board plugin answers frames the core catalog still names for policy: an OFFICIAL plugin may register one only under that same action.
+                val core = ActionCatalog.forFrame(type)
+                check(type !in CORE_FRAMES && (core == null || (!p.community && core.id == decl.action && core.kind == decl.kind))) { "frame '$type' is a core frame" }
                 check(frameHandlers[type] == null) { "frame '$type' is already answered by ${frameHandlers[type]?.owner?.id}" }
                 frameHandlers[type] = FrameEntry(p, ActionCatalog.Action(decl.action, decl.kind, listOf(type)), decl.ownerOnly, handler)
             }
