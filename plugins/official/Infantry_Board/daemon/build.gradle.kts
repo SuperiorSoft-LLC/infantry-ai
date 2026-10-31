@@ -18,6 +18,7 @@ dependencies {
     compileOnly(project(":superiorSoftLibrary:agentHqBoard"))
     compileOnly(project(":superiorSoftLibrary:agentHqDaemonApi"))
     testImplementation(project(":superiorSoftLibrary:agentHqDaemonApi"))
+    testImplementation(project(":superiorSoftLibrary:agentHqBoard"))
     testImplementation(kotlin("test"))
 }
 

@@ -1674,6 +1674,30 @@ class AgentHqDaemon(
                                     usagePacing.check(com.superiorsoftllc.agenthq.daemon.api.usage.UsageMeters.meterFor(pid, model ?: manager.providerFor(pid)?.defaultModel()))
                                 },
                                 attention = attention,
+                                // DP-5h-3a2 (1.13.0): the typed events, story / epic inputs, RELATED block and skill check.
+                                ticketEvents = ticketEvents,
+                                stories = object : com.superiorsoftllc.agenthq.daemon.api.board.BoardStoryInputs {
+                                    override fun ticketFor(storyId: String) = (store as SqlAgentHqStore).database.story_migrationQueries.ticketFor(storyId).executeAsOneOrNull()
+                                    override fun epicChanged(epicId: String) { epics.get(epicId)?.let { broadcastEpic(clients, it) } }
+                                },
+                                epics = object : com.superiorsoftllc.agenthq.daemon.api.board.BoardEpicInputs {
+                                    private val persistence = SqlEpicPersistence((store as SqlAgentHqStore).database)
+                                    override fun loadAll() = persistence.loadAll().map { Json.encodeToString(Epic.serializer(), it) }
+                                    override fun upsert(epicJson: String) = persistence.upsert(Json.decodeFromString(Epic.serializer(), epicJson))
+                                    override fun projectKnown(projectId: String) = runCatching { projectStore.get(projectId) }.isSuccess
+                                    override fun checkBase(projectId: String, branch: String) { baseCheck.check(projectStore.get(projectId), branch) }
+                                    override fun branchName(name: String) = com.superiorsoftllc.agenthq.mvp.ProjectBaseCheck.checkName(name)
+                                },
+                                related = { d ->
+                                    relatedDescriptionRef.get().describe(
+                                        com.superiorsoftllc.agenthq.ticketfiles.RelatedDraft(
+                                            d.ticketId, d.title, d.description, d.projectId,
+                                            d.rows.map { com.superiorsoftllc.agenthq.ticketfiles.TicketInfo(it.id, it.title, it.description, it.status, it.projectId, it.branch, it.base) },
+                                            d.links.map { com.superiorsoftllc.agenthq.ticketfiles.TicketLinkInfo(it.ticketId, it.relatedId) },
+                                        ),
+                                    )
+                                },
+                                skillKnown = { id -> store.transaction { store.skills.get(id) != null } },
                                 pushToClients = { frames -> for (f in frames) { val e = Envelope(f.type, f.data, f.sessionId, requestId = f.requestId); for (c in clients.toList()) c.trySend(e) } },
                             )
                         },

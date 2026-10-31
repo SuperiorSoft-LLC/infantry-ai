@@ -41,6 +41,21 @@ interface BoardRuntime {
      */
     val coreBuiltBoard: Boolean get() = false
 
+    /** DP-5h-3a2 (1.13.0, additive): the typed ticket event stream (triggers, reaper, ticket-files consume it; so may the plugin). */
+    val ticketEvents: TicketEvents get() = NoTicketEvents
+
+    /** DP-5h-3a2 (1.13.0): the story-shim inputs. */
+    val stories: BoardStoryInputs get() = BoardStoryInputs.NONE
+
+    /** DP-5h-3a2 (1.13.0): the epic store's persistence and checks. */
+    val epics: BoardEpicInputs get() = BoardEpicInputs.NONE
+
+    /** DP-5h-3a2 (1.13.0): the RELATED (auto) block to store atop a description; null = keep as given. */
+    fun relatedDescription(draft: BoardRelatedDraft): String? = null
+
+    /** DP-5h-3a2 (1.13.0): of [ids], the skill ids no stored skill carries (a save naming one is refused). */
+    fun unknownSkills(ids: List<String>): List<String> = ids
+
     /** Contract 1.5.0: push these frames to every connected client, in order. */
     fun push(frames: List<Frame>) {}
 }

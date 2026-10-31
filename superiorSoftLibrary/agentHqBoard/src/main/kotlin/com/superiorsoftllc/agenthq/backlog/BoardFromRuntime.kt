@@ -2,7 +2,11 @@ package com.superiorsoftllc.agenthq.backlog
 
 import com.superiorsoftllc.agenthq.context.TicketContext
 import com.superiorsoftllc.agenthq.daemon.api.Frame
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardRelatedDraft
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardRuntime
+import com.superiorsoftllc.agenthq.daemon.api.board.StoredLink
+import com.superiorsoftllc.agenthq.daemon.api.board.StoredTicket
+import com.superiorsoftllc.agenthq.ticketfiles.RelatedDescription
 import com.superiorsoftllc.agenthq.protocol.RoutingRule
 import com.superiorsoftllc.agenthq.role.RoleIds
 import com.superiorsoftllc.agenthq.settings.WeightContext
@@ -48,6 +52,16 @@ object BoardFromRuntime {
                 runCatching { json.decodeFromString(ListSerializer(RoutingRule.serializer()), runtime.routingRules(projectId)) }.getOrDefault(emptyList())
             },
             routingRefused = runtime::routingRefused,
+            unknownSkills = runtime::unknownSkills,
+            relatedDescription = RelatedDescription { d ->
+                runtime.relatedDescription(
+                    BoardRelatedDraft(
+                        d.ticketId, d.title, d.description, d.projectId,
+                        d.rows.map { r -> StoredTicket(r.id, r.title, r.description, status = r.status, position = 0, createdAt = 0, updatedAt = 0, projectId = r.projectId, branch = r.branch, base = r.base) },
+                        d.links.map { l -> StoredLink(l.ticketId, l.relatedId, "relates_to") },
+                    ),
+                )
+            },
             pacing = { providerId, model ->
                 val p = runtime.pacing(providerId, model)
                 p.over?.let { PacingVerdict.Over(it) } ?: PacingVerdict.Allow(p.warning)

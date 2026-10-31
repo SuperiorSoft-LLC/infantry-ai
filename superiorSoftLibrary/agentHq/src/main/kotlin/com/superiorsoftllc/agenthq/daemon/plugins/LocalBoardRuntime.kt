@@ -33,6 +33,12 @@ class LocalBoardRuntime(
     private val attention: AttentionStore,
     private val pushToClients: (List<Frame>) -> Unit,
     override val coreBuiltBoard: Boolean = true,
+    /** DP-5h-3a2: the typed ticket events, the story / epic inputs, the RELATED block and the skill check; the defaults answer none. */
+    override val ticketEvents: com.superiorsoftllc.agenthq.daemon.api.board.TicketEvents = com.superiorsoftllc.agenthq.daemon.api.board.NoTicketEvents,
+    override val stories: com.superiorsoftllc.agenthq.daemon.api.board.BoardStoryInputs = com.superiorsoftllc.agenthq.daemon.api.board.BoardStoryInputs.NONE,
+    override val epics: com.superiorsoftllc.agenthq.daemon.api.board.BoardEpicInputs = com.superiorsoftllc.agenthq.daemon.api.board.BoardEpicInputs.NONE,
+    private val related: (com.superiorsoftllc.agenthq.daemon.api.board.BoardRelatedDraft) -> String? = { null },
+    private val skillKnown: (String) -> Boolean = { true },
 ) : BoardRuntime {
     override fun setting(key: String): String? = store.settings.get(key)?.value
     override fun limit(key: String): Long? = LimitRegistry.ALL.firstOrNull { it.key == key }?.let { settings.limit(it) }
@@ -47,5 +53,7 @@ class LocalBoardRuntime(
     override fun routingRefused(ticketId: String, projectId: String?, detail: String) {
         attention.raise(kind = AttentionKind.LAUNCH_BLOCKED, ticketId = ticketId, outcome = "routing_refused", detail = detail)
     }
+    override fun relatedDescription(draft: com.superiorsoftllc.agenthq.daemon.api.board.BoardRelatedDraft): String? = related(draft)
+    override fun unknownSkills(ids: List<String>): List<String> = ids.filter { !skillKnown(it) }
     override fun push(frames: List<Frame>) = pushToClients(frames)
 }
