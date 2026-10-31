@@ -38,3 +38,6 @@
 - DP-5h-4: in the built app (plugin present) create, move, start and finish a ticket and open the board/epic panes: identical to before; with the Infantry_Board plugin removed the app starts and every board frame answers the no-board refusal. Not run: the full suite and the E2E set (scoped tests only).
 ## DP-5h-3e-c (ticket-33c67672): plugin-present start charge
 - TEST-TODO: PluginBoardStartChargeDaemonTest -- session-originated ticket_move to in_progress through the plugin-built board: podSpawnDepth=0 -> 'spawn refused: depth limit', podSpawnCap=0 -> 'spawn refused: pod cap' (ticket stays todo); defaults -> started and the worker's spawnerSessionId is the starter; beforeStart sees boardPorts.ops() != null and the first ticket_list answers `tickets`.
+
+## CORE-SPLIT-4a1 (ticket 6dad821a)
+TEST-TODO: daemon wiring builders (`daemon/wiring/*Wiring.kt`) are a pure move of DaemonMain construction. Behaviour: a daemon started as before has the same stores, frames, trigger service (autoStart=false), owner-question sink, attention eventSink, run manager and chat-image retention. Check: start the daemon, save a memory note/decision/issue, fire a trigger, ask an owner question; all behave as before.
