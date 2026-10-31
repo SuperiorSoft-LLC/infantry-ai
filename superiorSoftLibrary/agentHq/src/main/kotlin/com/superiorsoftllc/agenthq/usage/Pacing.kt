@@ -7,11 +7,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
-sealed interface PacingVerdict {
-    data class Allow(val warning: String? = null) : PacingVerdict
-    data class Over(val reason: String) : PacingVerdict
-}
-
 /**
  * Builds the [UsageReport] and judges a start against it. Every input is a function read at call time, so a changed
  * setting or a fresh live read counts at once. [limits] must not block (the cached live read).

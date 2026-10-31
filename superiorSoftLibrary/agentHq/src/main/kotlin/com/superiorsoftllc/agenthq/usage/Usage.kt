@@ -197,14 +197,6 @@ class OperatorBudget(
     }
 }
 
-enum class LaunchOrigin { HUMAN, UNATTENDED }
-
-sealed interface GateDecision {
-    data object Allow : GateDecision
-    data class Warn(val reason: String) : GateDecision
-    data class Refused(val reason: String, val disposition: String = "refused_launch_gate") : GateDecision
-}
-
 /** Minimal launch gate: unattended starts are refused, human starts only warned. */
 class LaunchGate(
     private val tracker: ProviderStateTracker,

@@ -118,6 +118,10 @@ object EffortLevels {
     /** Lowest to highest. */
     val ids: List<String> = listOf("low", "medium", "high", "xhigh", "max")
 
+    /** Null when [effort] is unset or a known level, else why not. */
+    fun problem(effort: String?): String? =
+        if (effort == null || effort in ids) null else "unknown effort '${effort.take(40)}': one of $ids"
+
     /** A user-typed level: blank, `off`, `none`, `default` = unset ([Parsed.cleared]); a level in any case; else [Parsed.error]. */
     fun parse(raw: String?): Parsed {
         val text = raw?.trim()?.lowercase().orEmpty()

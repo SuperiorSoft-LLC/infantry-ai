@@ -803,9 +803,5 @@ class SettingsService(
  * P10-K11 (K-D9): every id in [ids] must name an existing skill and appear once, or [what] is refused. Shared by the
  * project baseline (`context.skillIds`) and `ticket_save`, so both refuse the same way.
  */
-fun requireKnownSkills(store: AgentHqStore, ids: List<String>, what: String) {
-    val duplicate = ids.groupingBy { it }.eachCount().entries.firstOrNull { it.value > 1 }?.key
-    require(duplicate == null) { "$what: skill '${duplicate!!.take(80)}' is listed twice" }
-    val unknown = store.transaction { ids.filter { store.skills.get(it) == null } }
-    require(unknown.isEmpty()) { "$what: unknown skill ${unknown.joinToString { "'${it.take(80)}'" }}" }
-}
+fun requireKnownSkills(store: AgentHqStore, ids: List<String>, what: String) =
+    requireKnownSkills(ids, what) { all -> store.transaction { all.filter { store.skills.get(it) == null } } }

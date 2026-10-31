@@ -1749,7 +1749,7 @@ class TicketBoard(
         if (WeightExecutors.applies(row.weight, row.provider, row.model, boundProvider, boundModel)) {
             // H2: a weight route naming a harness that is not installed is skipped (model with it, which only fits that
             // harness), so the ticket runs on the first installed one; with none installed the start says so.
-            weightExecutors().forWeight(row.weight)?.takeIf { e -> e.provider == null || sessions?.hasProvider(e.provider) != false }
+            weightExecutors().forWeight(row.weight)?.takeIf { e -> e.provider.let { p -> p == null || sessions?.hasProvider(p) != false } }
         } else null
 
     /**
