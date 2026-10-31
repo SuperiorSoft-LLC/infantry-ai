@@ -1022,8 +1022,7 @@ class AgentHqDaemon(
             val launchGate = LaunchGate(providerStates, budget, attention)
             // ORCH-1: the runner reaches the orchestration side only through this hub's link (docs/DAEMON-CORE.md 6.5). The local
             // binding answers from the functions below; the board and the ticket files exist later, so they are filled in then.
-            val orchBoard = java.util.concurrent.atomic.AtomicReference<TicketBoard?>(null)
-            val orchTicketFiles = java.util.concurrent.atomic.AtomicReference<com.superiorsoftllc.agenthq.ticketfiles.TicketFiles?>(null)
+            val boardPorts = BoardPortRef()
             val orchestratorHub = com.superiorsoftllc.agenthq.daemon.api.orchestrator.OrchestratorHub(
                 local = com.superiorsoftllc.agenthq.daemon.api.orchestrator.LocalOrchestratorLink(
                     runner = object : com.superiorsoftllc.agenthq.daemon.api.orchestrator.RunnerLink { override fun ticketIdOf(sessionId: String): String? = manager.get(sessionId)?.ticketId },
@@ -1033,12 +1032,12 @@ class AgentHqDaemon(
                                 val row = store.tickets.get(tid)
                                 val line = com.superiorsoftllc.agenthq.ticketfiles.FilesReadCheck.extract(body)
                                 val refusal = com.superiorsoftllc.agenthq.ticketfiles.FilesReadCheck.refusal(body, row?.status == com.superiorsoftllc.agenthq.protocol.TicketStatus.DONE)
-                                if (refusal == null && line != null) runCatching { orchTicketFiles.get()?.saveFilesRead(tid, line) }
+                                if (refusal == null && line != null) runCatching { boardPorts.saveFilesRead(tid, line) }
                                 refusal
                             }
                         },
-                        ticketOf = { ticketId -> runCatching { orchBoard.get()?.get(ticketId) }.getOrNull()?.let { com.superiorsoftllc.agenthq.daemon.api.orchestrator.TicketRef(it.sessionId, it.projectId) } },
-                        starterOf = { workerSessionId -> orchBoard.get()?.starterOf(workerSessionId) },
+                        ticketOf = { ticketId -> boardPorts.ticket(ticketId)?.let { com.superiorsoftllc.agenthq.daemon.api.orchestrator.TicketRef(it.sessionId, it.projectId) } },
+                        starterOf = { workerSessionId -> boardPorts.starterOf(workerSessionId) },
                         launchDecision = { providerId, unattended, ticketId ->
                             when (val d = launchGate.check(providerId, if (unattended) LaunchOrigin.UNATTENDED else LaunchOrigin.HUMAN, ticketId = ticketId)) {
                                 GateDecision.Allow -> com.superiorsoftllc.agenthq.daemon.api.orchestrator.LaunchVerdict.Allow
@@ -1288,20 +1287,24 @@ class AgentHqDaemon(
                 store = store, context = ticketContext, agents = agents, manager = manager, repo = repo,
                 epics = epics, projectStore = projectStore, baseRef = baseRef, knowledge = knowledge, skills = skillsSource,
                 settings = settings, usagePacing = usagePacing, attention = attention, roles = roles,
-                relatedDescriptionRef = relatedDescriptionRef, handoffTimeoutMs = handoffTimeoutMs,
+                relatedDescriptionRef = relatedDescriptionRef,
                 eventSink = { event -> broadcastBoard(clients, event) },
                 onEpicChanged = { epicId -> epics.get(epicId)?.let { broadcastEpic(clients, it) } },
             )
             val board: TicketBoard? = boardWiring?.board
             boardRef = board
-            val handover = boardWiring?.handover
-            val workerSweepCloser = boardWiring?.workerSweepCloser
+            boardWiring?.let { boardPorts.attach(it.ports) }
+            val handover = SessionHandover(manager, { boardPorts.brief(it.id) }, handoffTimeoutMs)
+            manager.briefFor = { boardPorts.brief(it.id) }
+            val workerSweepCloser = WorkerSweep(boardPorts, { LimitRegistry.minutesMs(settings.limit(LimitRegistry.UNBRIEFED_GRACE_MINUTES), LimitRegistry.UNBRIEFED_GRACE_MINUTES) }) { ticketId, sessionId, detail ->
+                println("[agentHq] ticket worker sweep: $ticketId: $detail")
+                attention.raise(kind = AttentionKind.STALLED, ticketId = ticketId, podId = null, sessionId = sessionId, outcome = "unbriefed", detail = detail)
+            }
             // Phase 6: the mailbox. Messages are persisted BEFORE any delivery attempt, so a message
             // to an offline agent is never lost, and the router hands queued messages to a session
             // whenever that session comes to rest (see MailRouter's delivery policy). Built before the
             // triggers (TRIGGER-NUDGE): a schedule's catch-up fire on boot mails through it.
             val mailbox = Mailbox(mailStore)
-            board?.let { orchBoard.set(it) }
             // BUG-S3: mail to an agent swapped onto another harness opens a fresh session there (4.2, lazily).
             val bindFreshSession = { agentId: String ->
                 bindSessionOnSpawn(manager, agents, SpawnOptions(agentId = agentId, projectId = agents.get(agentId)?.projectId), repo)
@@ -1350,7 +1353,6 @@ class AgentHqDaemon(
             val ticketFiles = boardWiring?.ticketFiles
             val ticketFilesText = boardWiring?.ticketFilesText
             val ticketEvents = boardWiring?.ticketEvents
-            ticketFiles?.let { orchTicketFiles.set(it) }
             mail.reportCheck = { from, body -> orchestratorLink.reviewReport(from, body).refusalOrNull() }
 
             // ASK-1 (contract 1.97.0): non-blocking owner questions, stored, pushed to every client, answered by mail.
@@ -1426,11 +1428,11 @@ class AgentHqDaemon(
                 // RUNTIME-LOAD-6: the persisted spawner chain, and a finished ticket's idle worker no longer holds a slot.
                 all = { manager.list() },
                 released = { r ->
-                    !r.live && r.ticketId != null && runCatching { board?.get(r.ticketId!!) }.getOrNull()
+                    !r.live && r.ticketId != null && boardPorts.ticket(r.ticketId!!)
                         .let { t -> t == null || t.status != com.superiorsoftllc.agenthq.protocol.TicketStatus.IN_PROGRESS || t.sessionId != r.id }
                 },
             )
-            val ticketStartCharge = TicketStartCharge(spawnGuard, { board?.asStartMoves() ?: error("this daemon has no board") }, manager::get, manager::setSpawner)
+            val ticketStartCharge = TicketStartCharge(spawnGuard, { boardPorts.startMoves() }, manager::get, manager::setSpawner)
             orchestrator.sessionStartedSink = { _, sessionId, parent -> spawnGuard.record(sessionId, parent); manager.setSpawner(sessionId, parent) }
             settings.limitEnvProblems().forEach { println("[agentHq] limit ignored: $it") }
             println("[agentHq] pod spawn cap=${podSpawnCap ?: settings.limit(LimitRegistry.MAX_PER_POD)} depth=${podSpawnDepth ?: settings.limit(LimitRegistry.MAX_DEPTH)} (cap 0 = unlimited; settings limits.concurrency.*; session-originated spawns only)")
@@ -1534,7 +1536,7 @@ class AgentHqDaemon(
             // First attach: no re-adopt (BoardWiring already cleared the marks; the sweep waits for session restore). A plugin RELOAD attaches with
             // [reAdopt] (clearQueueMarks + sweepWorkers) after detaching.
             board?.localHost?.let { host -> boardSeam.attach(host) }
-            val reAdopt: () -> Unit = { board?.clearQueueMarks(); board?.sweepWorkers(LimitRegistry.minutesMs(settings.limit(LimitRegistry.UNBRIEFED_GRACE_MINUTES), LimitRegistry.UNBRIEFED_GRACE_MINUTES)) { _, _, _ -> } }
+            val reAdopt: () -> Unit = { boardPorts.clearQueueMarks(); boardPorts.sweepWorkers(LimitRegistry.minutesMs(settings.limit(LimitRegistry.UNBRIEFED_GRACE_MINUTES), LimitRegistry.UNBRIEFED_GRACE_MINUTES)) }
             manager.eventSink = { event ->
                 broadcast(clients, event, streamSequencer, runActivity, { id, seconds ->
                     // A `sleep N` in a tool call becomes a "waiting" countdown; the call returning (or the agent moving on) ends it.
@@ -1645,7 +1647,7 @@ class AgentHqDaemon(
                                 policies.current.takeIf { !it.isEmpty }?.let { com.superiorsoftllc.agenthq.policy.PolicyRuntime.actionRefusal(it, envelope, policies.actionOf(envelope)) }
                             },
                             baseCheck = { epic, branch -> baseCheck.check(projectStore.get(epic.projectId), branch) },
-                            chargedMove = ticketStartCharge::move,
+                            chargedMove = { m, by -> ticketStartCharge.move(m, by) as com.superiorsoftllc.agenthq.backlog.TicketAnswer },
                         ).also { pluginBoardServices = it; triggerTickets = it.tickets },
                         ticketEventStream = ticketEvents,
                         // DP-5h-3a: the board runtime (core still builds the board through BoardWiring until DP-5h-3b).
@@ -1980,6 +1982,7 @@ class AgentHqDaemon(
                             imageUploads = com.superiorsoftllc.agenthq.images.ImageUploadHandler(projectStore, clock = clock),
                             ownerQuestions = ownerQuestions,
                             handover = handover,
+                            boardPorts = boardPorts,
                             processHost = localProcesses,
                             ownerCredential = ownerCredential,
                             plugins = plugins,
@@ -2036,7 +2039,7 @@ class AgentHqDaemon(
                 ownerQuestions = ownerQuestions,
                 handover = handover,
                 processHost = localProcesses,
-                background = listOf(AutoCloseable { usageRefresher.stop() }, *listOfNotNull(workerSweepCloser).toTypedArray(), AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate, plugins, AutoCloseable { harnessModulesRef.get()?.close() }),
+                background = listOf(AutoCloseable { usageRefresher.stop() }, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate, plugins, AutoCloseable { harnessModulesRef.get()?.close() }),
                 healthSettings = healthSettings,
             )
         }
@@ -2561,6 +2564,8 @@ private suspend fun handleConnection(
     ownerQuestions: com.superiorsoftllc.agenthq.questions.OwnerQuestions? = null,
     /** TICKET-HANDOVER: a ticket worker's harness switch goes through a handoff turn; null = switched at once. */
     handover: SessionHandover? = null,
+    /** DP-5h-3e-a: the roster titles come from the board through this port; no board = no titles. */
+    boardPorts: BoardPorts = BoardPortRef(),
     /** ROGUE-1 (contract 1.120.0): `processes`; null = this daemon serves none. */
     processHost: com.superiorsoftllc.agenthq.session.LocalProcesses? = null,
     /** SEC-FIX-1 (1.136.0): who is the owner ([FrameGate.OWNER_ONLY]); null = no connection is. */
@@ -3381,7 +3386,7 @@ private suspend fun handleConnection(
                             projectAgents(projectId, manager.list(), agents::get),
                             manager.list(),
                             mailbox,
-                            boardWiring?.let { ticketTitles(it.board) }.orEmpty(),
+                            boardPorts.titlesBySession(),
                         )
                         Envelope(Envelope.ROSTER, json.encodeToString(ListSerializer(RosterRow.serializer()), rows))
                     }
@@ -4113,12 +4118,6 @@ private fun splitResume(data: String): Pair<String?, String?> {
 /** Contract 1.4.0: the `agents` frame -- every profile, oldest first, every field present. */
 private fun agentsEnvelope(agents: AgentProfiles): Envelope =
     Envelope(Envelope.AGENTS, json.encodeToString(ListSerializer(AgentProfile.serializer()), agents.list()))
-
-/**
- * AGENT-ROSTER: session id -> the title of the work it is on (its ticket's title), for the rows.
- */
-private fun ticketTitles(board: TicketBoard): Map<String, String> =
-    board.list().mapNotNull { ticket -> ticket.sessionId?.let { it to ticket.title } }.toMap()
 
 /**
  * The `providers` answer (contract 1.3.0): every provider a spawn may name, the default first, each

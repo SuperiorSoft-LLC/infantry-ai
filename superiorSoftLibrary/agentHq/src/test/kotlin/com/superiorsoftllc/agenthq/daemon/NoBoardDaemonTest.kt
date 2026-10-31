@@ -31,4 +31,21 @@ class NoBoardDaemonTest {
             fixture.deleteState()
         }
     }
+
+    @Test
+    fun `core consumers of the board answer no board without failing`() {
+        val fixture = DaemonFixture.launch(withBoard = false)
+        try {
+            fixture.client.await(Envelope.READY)
+            // roster titles (ticket titles by session) come from the board port: none, and the frame still answers
+            fixture.send(Envelope.AGENT_ROSTER, """{"projectId":"p-none"}""")
+            val roster = fixture.client.await(Envelope.ROSTER, timeoutMs = 4_000)
+            assertTrue(roster.data.startsWith("["))
+            // the handover and the first-turn brief hold no board: the brief is null, the daemon stays up
+            assertNull(fixture.daemon.board)
+        } finally {
+            fixture.stop()
+            fixture.deleteState()
+        }
+    }
 }
