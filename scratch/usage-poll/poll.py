@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import sqlite3
+import sys
 import time
 
 STATE = os.path.join(os.environ["LOCALAPPDATA"], "SuperiorSoft", "AgentHQ")
@@ -12,7 +13,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SCRATCH = os.path.join(HERE, "copy")
 OUT = os.path.join(HERE, "poll.jsonl")
 PACE = os.path.join(STATE, "plugin-data", "Infantry_Pace", "samples.jsonl")
-DURATION = 90 * 60
+DURATION = 90 * 60  # overridden by --minutes
 INTERVAL = 30
 
 
@@ -142,4 +143,10 @@ def main():
 
 
 if __name__ == "__main__":
+    # Usage: poll.py [--minutes N] [--out FILE]   (defaults: 90 min, poll.jsonl)
+    args = sys.argv[1:]
+    if "--minutes" in args:
+        DURATION = int(args[args.index("--minutes") + 1]) * 60
+    if "--out" in args:
+        OUT = os.path.abspath(args[args.index("--out") + 1])
     main()
