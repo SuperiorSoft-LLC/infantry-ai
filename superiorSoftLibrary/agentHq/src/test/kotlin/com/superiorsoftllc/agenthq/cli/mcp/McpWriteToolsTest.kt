@@ -34,7 +34,7 @@ class McpWriteToolsTest {
 
     private val fixtures = mutableListOf<DaemonFixture>()
     private val servers = mutableListOf<Served>()
-    private val pluginsRoot: File = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Board", "official/Infantry_Agents")
+    private val pluginsRoot: File = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Board", "official/Infantry_Agents", "official/Infantry_Chat")
 
     @AfterTest
     fun stopAll() {

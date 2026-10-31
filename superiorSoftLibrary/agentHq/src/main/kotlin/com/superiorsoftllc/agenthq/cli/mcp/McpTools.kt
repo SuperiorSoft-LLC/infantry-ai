@@ -10,7 +10,7 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.contentOrNull
 
 /**
- * The tools `agenthq mcp serve` still serves itself (`agenthq_message` in [McpWriteTools], mail, pipeline, watch) plus the daemon
+ * The one tool `agenthq mcp serve` still serves itself (`agenthq_watch_file`, which must run where the files are) plus the daemon
  * plugins' tools ([McpPluginTools]); RUNTIME-LOAD-5 moved the session / board reads to plugins. Each call opens its own [FrameStream] through
  * [connect] and closes it afterwards, so the server starts and answers `initialize` / `tools/list` even
  * while no daemon is running, and a daemon started later is picked up by the next call.
@@ -26,19 +26,8 @@ internal class McpTools(
     private val defaultProjectId: String? = null,
 ) {
 
-    /** `agenthq_message`; spawn / prompt / kill / restart / remove / ticket start are plugin tools over the host spawn service. */
-    private val writes = McpWriteTools(getenv)
-
-    /** MAIL-MCP-1: inbox / read, over the CLI's own `mail_inbox` / `mail_read` frames. */
-    private val mail = McpMailTools(getenv)
-    private val pipeline = McpPipelineTools(getenv)
-
-    /** ASK-1: `agenthq_ask`, the non-blocking owner question, over the CLI's own `question_ask` frame. */
-
     /** STALL-4: `agenthq_watch_file`, the detached file watcher of `agenthq watch-file`. */
     private val watch = McpWatchTools(getenv, java.io.File(System.getProperty("user.dir") ?: "."))
-
-    /** ROLE-EDIT-1: the role catalog (`agenthq_role_*`); an agent caller may only edit persona and description. */
 
     /** DAEMON-PLUGINS-1: the daemon plugins' tools (TICKET-FILES' two tools are Infantry_Board's now). */
     private val plugins = McpPluginTools(getenv, defaultProjectId, narrowing = narrowing)
@@ -75,11 +64,6 @@ internal class McpTools(
         return try {
             runBlocking {
                 when (name) {
-                    McpWriteTools.MESSAGE -> writes.message(stream, arguments)
-                    McpMailTools.INBOX -> mail.inbox(stream, arguments)
-                    McpMailTools.READ -> mail.read(stream, arguments)
-                    McpPipelineTools.SHOW -> pipeline.show(stream, arguments)
-                    McpPipelineTools.RECORD -> pipeline.record(stream, arguments)
                     McpWatchTools.WATCH_FILE -> watch.watchFile(arguments)
                     else -> plugins.call(stream, name, arguments)
                 }
@@ -94,7 +78,7 @@ internal class McpTools(
     companion object {
         // RUNTIME-LOAD-5: agenthq_list_sessions / _get_session / _pod_state are Infantry_Agents' daemon tools, agenthq_board
         // Infantry_Board's (over the host's sessions read model, docs/RUNTIME-LOAD.md section 11).
-        val NAMES = McpWriteTools.NAMES + McpMailTools.NAMES + McpWatchTools.NAMES + McpPipelineTools.NAMES
+        val NAMES = McpWatchTools.NAMES
 
         /** The one, fixed message a tool answers with when nothing is listening at the daemon address. */
         const val DAEMON_UNREACHABLE =
@@ -102,9 +86,6 @@ internal class McpTools(
 
         /** `tools/list`: each tool's name, description and JSON Schema for its arguments. */
         fun descriptors(): JsonArray = buildJsonArray {
-            McpWriteTools.descriptors().forEach { add(it) }
-            McpMailTools.descriptors().forEach { add(it) }
-            McpPipelineTools.descriptors().forEach { add(it) }
             McpWatchTools.descriptors().forEach { add(it) }
         }
     }

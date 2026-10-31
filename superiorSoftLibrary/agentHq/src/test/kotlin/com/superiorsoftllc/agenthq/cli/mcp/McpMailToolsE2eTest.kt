@@ -76,7 +76,7 @@ class McpMailToolsE2eTest {
         val stderr = StringBuffer()
         val served = Served(PrintWriter(toServer), BufferedReader(fromServer), stderr)
         val env = mapOf("AGENTHQ_SESSION_ID" to sessionId)
-        val args = arrayOf("mcp", "serve", "--port", fixture.port.toString(), "--lineage-dir", tempDir("agenthq-mail-mcp-lineage").path)
+        val args = arrayOf("mcp", "serve", "--port", fixture.port.toString())
         served.worker = thread(name = "mcp-serve-mail", isDaemon = true) {
             Cli.run(args, serverOut, stderr, { env[it] }, { serverIn }, cwd = cwd)
             serverOut.close()
@@ -115,7 +115,7 @@ class McpMailToolsE2eTest {
                 """{"type":"step_finish"}""",
             ),
         )
-        val fixture = DaemonFixture.launch(script, ScriptedRunner(script), tempDir("agenthq-mail-mcp-daemon"))
+        val fixture = DaemonFixture.launch(script, ScriptedRunner(script), tempDir("agenthq-mail-mcp-daemon"), pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot("official/Infantry_Agents", "official/Infantry_Chat"))
             .also { fixtures += it; it.client.await(Envelope.READY) }
         val manager = fixture.daemon.manager
         val project = tempDir("agenthq-mail-mcp-project")

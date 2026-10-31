@@ -9,6 +9,16 @@
   "entry": "com.superiorsoftllc.agenthq.plugins.official.chat.ChatPlugin",
   "jar": "build/libs/Infantry_Chat.jar",
   "buildOrder": 200,
+  "daemon": {
+    "entry": "com.superiorsoftllc.agenthq.plugins.official.chat.daemon.ChatDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_Chat-daemon.jar",
+    "apiAtLeast": "1.1.0",
+    "tools": [
+      { "name": "agenthq_inbox", "action": "mail.read", "kind": "read", "description": "List the COMMS mail addressed to you." },
+      { "name": "agenthq_read", "action": "mail.read", "kind": "read", "description": "Read one message in full and mark it read." },
+      { "name": "agenthq_message", "action": "mail.send", "kind": "write", "description": "Send COMMS mail to an agent, a role or a session." }
+    ]
+  },
   "fills": [
     "infantry.shell.center"
   ],

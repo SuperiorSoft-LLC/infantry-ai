@@ -26,7 +26,7 @@ import java.io.Flushable
  * `tools/call` -- is a few dozen lines of JSON-RPC. kotlinx.serialization, already a dependency, does the
  * JSON. Adding the SDK would pull in a new coordinate (and its Ktor version) for no capability we use.
  *
- * TOOLS live in [McpTools] (read-only, P11-A) and [McpWriteTools] (spawn/prompt/message/kill, P11-B); they reach the daemon through the CLI's own
+ * TOOLS live in [McpTools] (read-only, P11-A) and the daemon plugins (spawn, mail, pipeline, ...); they reach the daemon through the CLI's own
  * [com.superiorsoftllc.agenthq.cli.FrameStream], over existing frames only (no contract bump).
  *
  * Requests are handled one at a time, in arrival order. A tool call blocks the loop until it answers (a

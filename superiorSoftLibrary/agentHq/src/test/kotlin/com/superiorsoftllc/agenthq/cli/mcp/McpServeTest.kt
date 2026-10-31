@@ -183,9 +183,6 @@ class McpServeTest {
             listOf(
                 // RUNTIME-LOAD-5: list_sessions, get_session, pod_state (Infantry_Agents) and board (Infantry_Board) are plugin tools now.
                 // RUNTIME-LOAD-7: spawn, prompt, kill, session_restart, session_remove (Infantry_Agents) and ticket_start (Infantry_Board) are plugin tools now.
-                "agenthq_message",
-                "agenthq_inbox", "agenthq_read", // MAIL-MCP-1
-                "agenthq_pipeline", "agenthq_pipeline_record", // PIPE-1
                 // ROLE-EDIT-1, LANE-CAPS, ASK-1: the role, project config and ask tools are daemon plugin tools now (RUNTIME-LOAD-3).
                 "agenthq_watch_file", // STALL-4
             ),
@@ -345,7 +342,62 @@ class McpServeTest {
         }
     }
 
-    private val TICKET_GET_GOLDEN = """{"name":"agenthq_ticket_get","description":"Read ONE ticket back: title, verbatim description, status, project, role/agent, provider, model, branch, worker session, attached images.","inputSchema":{"type":"object","properties":{"ticketId":{"type":"string","description":"Full ticket id, or its 8-char suffix."}},"required":["ticketId"],"additionalProperties":false},"annotations":{"readOnlyHint":true,"destructiveHint":false,"openWorldHint":false}}"""
+    /**
+     * RUNTIME-LOAD-8: the mail tools (Infantry_Chat) and the pipeline tools (Infantry_Git) keep their descriptors byte for byte
+     * (golden `core-mcp-tools-before-f5.json`), on the actions the frames they send already had.
+     */
+    @Test
+    fun movedMailAndPipelineToolsComeFromTheirPluginsUnchanged() {
+        val root = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Chat", "official/Infantry_Git")
+        try {
+            val fixture = DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-plugin").toFile(), pluginsRoot = root)
+                .also { fixtures += it }
+            fixture.client.await(Envelope.READY)
+            val served = serve("--port", fixture.port.toString())
+            initialize(served)
+            val tools = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject }
+            val golden = Json.parseToJsonElement(javaClass.getResource("/golden/core-mcp-tools-before-f5.json")!!.readText()).jsonArray
+                .map { it.jsonObject }.associateBy { it["name"]!!.jsonPrimitive.content }
+            val moved = mapOf(
+                "Infantry_Chat" to mapOf("agenthq_inbox" to "mail.read", "agenthq_read" to "mail.read", "agenthq_message" to "mail.send"),
+                "Infantry_Git" to mapOf("agenthq_pipeline" to "pipeline.read", "agenthq_pipeline_record" to "pipeline.save"),
+            )
+            moved.forEach { (module, expected) ->
+                val manifest = Json.parseToJsonElement(File(root, "official/$module/module.json").readText()).jsonObject["daemon"]!!.jsonObject["tools"]!!.jsonArray
+                    .map { it.jsonObject }.associateBy { it["name"]!!.jsonPrimitive.content }
+                expected.forEach { (name, action) ->
+                    assertEquals(golden.getValue(name), tools.single { it["name"]!!.jsonPrimitive.content == name }, "the descriptor of $name changed in the move")
+                    assertEquals(action, manifest.getValue(name)["action"]!!.jsonPrimitive.content, "the action of $name")
+                }
+            }
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    /** RUNTIME-LOAD-8: with the plugins absent the core boots and the tools are not listed (no error, no stand-in). */
+    @Test
+    fun mailAndPipelineToolsAreGoneWithoutTheirPlugins() {
+        val root = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Board")
+        try {
+            val fixture = DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-plugin").toFile(), pluginsRoot = root)
+                .also { fixtures += it }
+            fixture.client.await(Envelope.READY)
+            val served = serve("--port", fixture.port.toString())
+            initialize(served)
+            val names = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content }
+            listOf("agenthq_inbox", "agenthq_read", "agenthq_message", "agenthq_pipeline", "agenthq_pipeline_record").forEach {
+                assertTrue(it !in names, "$it must not be listed without its plugin: $names")
+            }
+            assertTrue("agenthq_ticket_get" in names, "the other plugins are unaffected: $names")
+            val call = served.request("tools/call", """{"name":"agenthq_inbox","arguments":{}}""")
+            assertTrue("error" in call || call["result"]!!.jsonObject["isError"]?.jsonPrimitive?.content == "true", "a call to an absent tool is an error, not a crash: $call")
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    private val TICKET_GET_GOLDEN ="""{"name":"agenthq_ticket_get","description":"Read ONE ticket back: title, verbatim description, status, project, role/agent, provider, model, branch, worker session, attached images.","inputSchema":{"type":"object","properties":{"ticketId":{"type":"string","description":"Full ticket id, or its 8-char suffix."}},"required":["ticketId"],"additionalProperties":false},"annotations":{"readOnlyHint":true,"destructiveHint":false,"openWorldHint":false}}"""
 
     /**
      * BOARD-API-2 (first F5 slice): `agenthq_ticket_get` moved from this MCP server into Infantry_Board's daemon half, over the

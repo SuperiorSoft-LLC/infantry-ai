@@ -84,7 +84,7 @@ that takes more than 75 s now errors where it used to wait 15 minutes. `npm view
 | F3 (done, RUNTIME-LOAD-3) | Roles tools (5) into an Infantry_Roles daemon half (agent-caller persona rule moves with it) | M | Next family with a ready owner module |
 | F4 (done, RUNTIME-LOAD-3) | `agenthq_ask` into Infantry_Attention; project config tools into Infantry_Settings | S each | One frame each |
 | F5 (all but one done, RUNTIME-LOAD-4/5: sections 10, 11) | Tickets/epic/board/progress/session-read tools into Infantry_Board / Infantry_Agents; left: `agenthq_ticket_start` (RUNTIME-LOAD-6, with spawn/kill and the host spawn service) | M | Biggest family, riskiest scope rules |
-| F6 | Mail, pipeline, `watch_file` (needs a DaemonApi surface for watch hooks) | M | Needs new API surface |
+| F6 (mail and pipeline done, RUNTIME-LOAD-8: section 14; `watch_file` left) | Mail, pipeline, `watch_file` | M | `watch_file` needs a client-run tool seam |
 | F7 | A folder source for `HarnessPluginSource` + a harness API module; move `pi`, then `claude`, then `opencode` | L | Contract design; `pi` first, fewest daemon internals |
 | F8 (stopped, RUNTIME-LOAD-3: section 7) | Core Config `ConfigEntry` fallback removed (G13) | S-M | Independent of the daemon |
 | F9 | The 20 UI modules, one per project (B1-B6 of the audit), kit exported to the filtered loader (contract bump) | L | UI-first per D11 once F1-F6 settle |
@@ -400,3 +400,44 @@ Tests run: `McpServeTest` (incl. `movedSpawnToolsComeFromTheAgentsPluginUnchange
 tests through the plugins: depth, narrowing never widens, concurrency, kill scope), `McpOrchestrationE2eTest`, `AgentTicketStartE2eTest`,
 `McpPluginToolTimeoutTest`, `BlankShellE2ETest`, `BuiltinToolsListGuardTest`, `LocalBoardServicesTest`, `LocalSpawnsTest`, `McpTicketToolsTest`,
 `McpServeConfigTest`. Not run: the full suite, wasm/Android, a live agent session against an installed daemon.
+
+## 14. RUNTIME-LOAD-8 (ticket ec7b9348): mail and pipeline move to plugins; `agenthq_watch_file` is the one tool left
+
+Split, as the ticket allows: mail and pipeline need no new API (each tool is a frame the CLI already sends, on the caller's own connection
+through `ToolCall.request`), so they move now. `agenthq_watch_file` needs a seam that does not exist yet and stays (below).
+
+| tool | plugin | frame | action (gate) |
+|---|---|---|---|
+| `agenthq_inbox` | Infantry_Chat (`MailTools.InboxTool`) | `mail_inbox` | `mail.read` |
+| `agenthq_read` | Infantry_Chat | `mail_inbox`, then `mail_read` | `mail.read` |
+| `agenthq_message` | Infantry_Chat | `mail_send` | `mail.send` |
+| `agenthq_pipeline` | Infantry_Git (`PipelineTools.ShowTool`) | `pipeline_show` | `pipeline.read` |
+| `agenthq_pipeline_record` | Infantry_Git | `pipeline_record` or (with `check`) `pipeline_check` | `pipeline.save` |
+
+Why these homes: Infantry_Chat owns the COMMS surface in the UI; Infantry_Git already owns the pipeline stage configuration (`pipeline.save`).
+Both got a `daemon/` project and a `daemon` block in `module.json` (`apiAtLeast` 1.1.0, for `ToolCall.clientSessionId`); packaging picks them up
+through `gradle/daemon-halves.gradle.kts` unchanged. No DaemonApi change, no wire change, no contract bump.
+
+**Behaviour:** descriptors byte-identical to `golden/core-mcp-tools-before-f5.json` (`McpServeTest.movedMailAndPipelineToolsComeFromTheirPluginsUnchanged`);
+the answers keep their keys and refusal texts. The plugin reads the wire `Message` as JSON (it cannot see core classes) and rebuilds `read` /
+`delivered` / `failed` from the stored fields, as `Message` computes them. Identity is the MCP process's session (`ToolCall.clientSessionId`), else the
+human handle `user`; the project of the pipeline tools is the argument, else `ToolCall.clientProjectId`. Core classes `McpMailTools`,
+`McpPipelineTools` and `McpWriteTools` (which only held `agenthq_message` since RUNTIME-LOAD-7) are deleted. Ratchet `CEILING` 6 -> 1.
+
+**Plugin absent:** the tools are not listed and a call to one is the usual error; the core, the CLI (`agenthq inbox|send|pipeline`) and every other plugin
+are unaffected (`McpServeTest.mailAndPipelineToolsAreGoneWithoutTheirPlugins`). Each behaviour keeps its own gate: a policy preset that turns off
+`mail.send` or `pipeline.save` refuses the tool as it refused the frame.
+
+**Deviations (deliberate):** (1) the mail send no longer uses the `mail_outbox` fence: the plugin waits for the direct reply to its own request id,
+which is the `mail` / `mail_refused` the daemon returns to `mail_send`. (2) A daemon wait that times out words itself `<frame> got no answer in N ms`
+(as for every plugin tool). (3) The pipeline's default project is the client's (`--project` / `mcp.json` / `AGENTHQ_PROJECT_ID`), as for the board tools.
+
+**Left: `agenthq_watch_file`.** The watcher must run where the watched file is: `agenthq watch-file` starts a detached wrapper process that follows
+the file and registers a bg job. A daemon plugin runs in the daemon, which for a remote daemon is another machine, so moving the tool as a daemon tool
+would silently watch the wrong file system (or none). The honest seam is a CLIENT-RUN tool: a plugin declares the tool and the MCP client executes
+it locally and reports events to the daemon (the `localFiles` idea of section 10 applied to an action, not to bytes). That is a DaemonApi + wire
+addition (a tool kind `client`, a way to report the job to the daemon) and its own ticket; no stopgap. Ratchet entry kept with that reason.
+
+Tests run: the plugin unit tests (`MailToolsTest`, `PipelineToolsTest`), `BuiltinToolsListGuardTest`, `McpServeTest`, `McpMailToolsE2eTest`,
+`McpWriteToolsTest`, `McpOrchestrationE2eTest`, `McpTicketToolsTest`, `TicketContextComposerTest`. Not run: the full suite, wasm/Android, a live
+agent session against an installed daemon, `BlankShellE2ETest`.

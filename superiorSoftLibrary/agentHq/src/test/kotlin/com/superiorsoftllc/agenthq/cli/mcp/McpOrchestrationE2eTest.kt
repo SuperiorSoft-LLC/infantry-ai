@@ -131,7 +131,7 @@ class McpOrchestrationE2eTest {
         // RUNTIME-LOAD-5: the session and board reads are Infantry_Agents' / Infantry_Board's daemon tools.
         val fixture = DaemonFixture.launch(
             script, ScriptedRunner(script, RUN_PACE_MS), tempDir("agenthq-mcp-e2e-daemon"),
-            pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot("official/Infantry_Agents"),
+            pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot("official/Infantry_Agents", "official/Infantry_Chat", "official/Infantry_Git"),
             podSpawnDepth = 2,
         )
             .also { fixtures += it; it.client.await(Envelope.READY) }
