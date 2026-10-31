@@ -130,12 +130,23 @@ object KnowledgeLines {
     fun decisions(decisions: List<Decision>): List<String> =
         decisions.filter { it.active }.sortedBy { it.number }.map { "${it.ref} ${it.summary}" }
 
+    /** TOKEN-5: a decision as a title only (first sentence, at most [TITLE_CHARS]); the full text is `agenthq decision show`. */
+    const val TITLE_CHARS = 90
+
+    fun decisionTitles(decisions: List<Decision>): List<String> =
+        decisions.filter { it.active }.sortedBy { it.number }.map { d ->
+            val one = d.summary.trim().lineSequence().first()
+            val first = Regex("^.*?[.!?](?=\\s|\$)").find(one)?.value ?: one
+            val title = if (first.length > TITLE_CHARS) first.take(TITLE_CHARS - 1).trimEnd() + "…" else first
+            "${d.ref} $title"
+        }
+
     fun issues(issues: List<Issue>): List<String> =
         issues.filter { it.status == Issue.STATUS_OPEN }.sortedBy { it.number }
             .map { "${it.ref} ${it.summary}" + if (it.location.isNotEmpty()) " (${it.location})" else "" }
 
     fun digest(notes: List<MemoryIndexEntry>, decisions: List<Decision>, issues: List<Issue>): KnowledgeDigest =
-        KnowledgeDigest(decisions = decisions(decisions), issues = issues(issues), notes = notes(notes))
+        KnowledgeDigest(decisions = decisionTitles(decisions), issues = issues(issues), notes = notes(notes))
 }
 
 /**
@@ -153,7 +164,7 @@ const val KNOWLEDGE_DIGEST_HEADING = "KNOWLEDGE DIGEST (what `agenthq knowledge`
 const val DIGEST_DECISIONS_CAP = 30
 const val DIGEST_ISSUES_CAP = 20
 const val DIGEST_NOTES_CAP = 40
-const val DIGEST_CHARS_CAP = 6000
+const val DIGEST_CHARS_CAP = 3500
 
 private const val MORE_HINT = "run `agenthq knowledge`"
 
@@ -176,7 +187,7 @@ internal fun digestLines(digest: KnowledgeDigest): List<String> {
         lines += rows.take(cap)
         if (rows.size > cap) lines += "${rows.size - cap} more: $MORE_HINT"
     }
-    section("ACTIVE DECISIONS", digest.decisions, DIGEST_DECISIONS_CAP)
+    section("ACTIVE DECISIONS (titles; full text: `agenthq decision show D<n>`)", digest.decisions, DIGEST_DECISIONS_CAP)
     section("OPEN ISSUES", digest.issues, DIGEST_ISSUES_CAP)
     section("NOTES (index)", digest.notes, DIGEST_NOTES_CAP)
     if (lines.sumOf { it.length + 1 } <= DIGEST_CHARS_CAP) return lines
@@ -193,7 +204,7 @@ internal fun digestLines(digest: KnowledgeDigest): List<String> {
     return kept + "$dropped more: $MORE_HINT"
 }
 
-private fun String.isHeading(): Boolean = this == "ACTIVE DECISIONS" || this == "OPEN ISSUES" || this == "NOTES (index)"
+private fun String.isHeading(): Boolean = startsWith("ACTIVE DECISIONS") || this == "OPEN ISSUES" || this == "NOTES (index)"
 
 private fun renderInjected(project: String, counts: KnowledgeCounts, digest: KnowledgeDigest): String = listOf(
     "PROJECT KNOWLEDGE (this applies to your whole session, including after a context compaction). " +

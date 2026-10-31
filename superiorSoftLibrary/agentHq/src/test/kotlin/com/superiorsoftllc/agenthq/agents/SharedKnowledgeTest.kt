@@ -39,10 +39,19 @@ class SharedKnowledgeTest {
             val profiles = AgentProfiles(store.agents, manager, rolePersona = { id -> if (id == "frontend") "OVERRIDE" else catalog.persona(id) })
             for (role in listOf("qa", "frontend")) {
                 val ins = profiles.instanceFor(null, role)!!.instructions!!
-                assertTrue(ins.contains(SharedKnowledge.text), "$role must carry the knowledge")
+                assertTrue(ins.contains(SharedKnowledge.textFor(role)), "$role must carry the knowledge")
             }
             assertTrue(profiles.instanceFor(null, "frontend")!!.instructions!!.startsWith("OVERRIDE"))
             assertEquals(1, Regex("## PROGRESS").findAll(profiles.instanceFor(null, "qa")!!.instructions!!).count())
         } finally { store.close(); dir.deleteRecursively() }
+    }
+
+    @Test
+    fun `a section marked skip for a role is dropped for that role only and markers never show`() {
+        assertTrue(SharedKnowledge.textFor("backend").contains("## PROGRESS"))
+        assertTrue(SharedKnowledge.textFor(null).contains("## PROGRESS"))
+        val pm = SharedKnowledge.textFor("pm")
+        assertTrue(!pm.contains("## PROGRESS") && !pm.contains("## TO-DO LIST") && pm.contains("## ASK"))
+        assertTrue(!SharedKnowledge.textFor("backend").contains("skip:"))
     }
 }
