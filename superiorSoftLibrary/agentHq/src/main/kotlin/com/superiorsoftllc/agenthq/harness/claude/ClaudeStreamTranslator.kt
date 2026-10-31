@@ -37,7 +37,7 @@ import kotlinx.serialization.json.longOrNull
  * has the same hole: a verdict is part of the protocol, and the interface had no way to say "there was none".)
  *
  * Usage: Claude reports the prompt in three buckets (`input_tokens`, `cache_creation_input_tokens`,
- * `cache_read_input_tokens`). [HarnessEvent.Usage.inputTokens] is their SUM, the tokens the model actually read.
+ * `cache_read_input_tokens`). [HarnessEvent.Usage] keeps them as separate fields (never summed).
  */
 internal class ClaudeStreamTranslator : HarnessTranslator {
     private val json = Json { ignoreUnknownKeys = true; isLenient = true }
@@ -139,10 +139,12 @@ internal class ClaudeStreamTranslator : HarnessTranslator {
             return emptyList()
         }
         val usage = obj["usage"] as? JsonObject ?: return emptyList()
-        val input = listOf("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
-            .sumOf { usage.long(it) ?: 0L }
-        val output = usage.long("output_tokens") ?: 0L
-        return listOf(HarnessEvent.Usage(input, output))
+        return listOf(HarnessEvent.Usage(
+            inputTokens = usage.long("input_tokens") ?: 0L,
+            outputTokens = usage.long("output_tokens") ?: 0L,
+            cacheReadTokens = usage.long("cache_read_input_tokens") ?: 0L,
+            cacheWriteTokens = usage.long("cache_creation_input_tokens") ?: 0L,
+        ))
     }
 
     /** The CLI's own reason first (`result`, then `errors[0]`, then `error`/`message`), else the subtype, so the cause is never lost. */

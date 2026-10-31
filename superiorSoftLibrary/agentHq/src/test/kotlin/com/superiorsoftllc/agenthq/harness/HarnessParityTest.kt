@@ -108,7 +108,7 @@ private val SCENARIOS: Map<String, Scenario> = listOf(
         claude = listOf(C_INIT, cText("Hello there"), C_RESULT_OK),
         // Pi streams real token deltas AND repeats the whole block in text_end: only the deltas may become text.
         pi = piRun(pTextDelta("Hello"), pTextDelta(" there"), pTextEnd("Hello there"), pAssistantEnd("stop", piUsage(12, 34, 1000, 100))),
-        expected = listOf(HarnessEvent.SessionStarted("s-1"), HarnessEvent.TextDelta("Hello there"), HarnessEvent.Usage(1112, 34), HarnessEvent.Completion()),
+        expected = listOf(HarnessEvent.SessionStarted("s-1"), HarnessEvent.TextDelta("Hello there"), HarnessEvent.Usage(12, 34, 1000, 100), HarnessEvent.Completion()),
     ),
     Scenario(
         name = "reasoning then text",
@@ -120,7 +120,7 @@ private val SCENARIOS: Map<String, Scenario> = listOf(
         ),
         expected = listOf(
             HarnessEvent.SessionStarted("s-1"), HarnessEvent.Reasoning("plan it"), HarnessEvent.TextDelta("Hello there"),
-            HarnessEvent.Usage(1112, 34), HarnessEvent.Completion(),
+            HarnessEvent.Usage(12, 34, 1000, 100), HarnessEvent.Completion(),
         ),
     ),
     Scenario(
@@ -139,7 +139,7 @@ private val SCENARIOS: Map<String, Scenario> = listOf(
             HarnessEvent.ToolCall("toolu_01", "Bash", """{"command":"ls -la"}"""),
             HarnessEvent.ToolResult("toolu_01", "file.txt", isError = false),
             HarnessEvent.TextDelta("done"),
-            HarnessEvent.Usage(1112, 34), // claude: one run total; pi: the SUM of its two assistant messages
+            HarnessEvent.Usage(12, 34, 1000, 100), // claude: one run total; pi: the SUM of its two assistant messages
             HarnessEvent.Completion(),
         ),
     ),
@@ -159,7 +159,7 @@ private val SCENARIOS: Map<String, Scenario> = listOf(
             HarnessEvent.ToolCall("toolu_01", "Bash", """{"command":"ls -la"}"""),
             HarnessEvent.ToolResult("toolu_01", "no such file", isError = true),
             HarnessEvent.TextDelta("done"),
-            HarnessEvent.Usage(1112, 34),
+            HarnessEvent.Usage(12, 34, 1000, 100),
             HarnessEvent.Completion(),
         ),
     ),

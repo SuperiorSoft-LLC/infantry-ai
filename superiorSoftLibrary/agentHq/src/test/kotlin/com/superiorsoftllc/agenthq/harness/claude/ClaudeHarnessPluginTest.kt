@@ -110,7 +110,7 @@ class ClaudeHarnessPluginTest {
                 HarnessEvent.SessionStarted("s-1"), // contract 1.1.0: the id the CLI reports now reaches the caller
                 HarnessEvent.Reasoning("plan it"),
                 HarnessEvent.TextDelta("Hello there"),
-                HarnessEvent.Usage(inputTokens = 12 + 100 + 1000, outputTokens = 34),
+                HarnessEvent.Usage(inputTokens = 12, outputTokens = 34, cacheReadTokens = 1000, cacheWriteTokens = 100),
                 HarnessEvent.Completion(),
             ),
             events,

@@ -58,6 +58,8 @@ internal class PiStreamTranslator : HarnessTranslator {
 
     private var assistantMessages = 0
     private var inputTokens = 0L
+    private var cacheReadTokens = 0L
+    private var cacheWriteTokens = 0L
     private var outputTokens = 0L
 
     /**
@@ -154,7 +156,9 @@ internal class PiStreamTranslator : HarnessTranslator {
         if (message.string("role") != "assistant") return
         assistantMessages++
         (message["usage"] as? JsonObject)?.let { usage ->
-            inputTokens += usage.number("input") + usage.number("cacheRead") + usage.number("cacheWrite")
+            inputTokens += usage.number("input")
+            cacheReadTokens += usage.number("cacheRead")
+            cacheWriteTokens += usage.number("cacheWrite")
             outputTokens += usage.number("output")
         }
         val stop = message.string("stopReason")
@@ -176,7 +180,7 @@ internal class PiStreamTranslator : HarnessTranslator {
         aborted = (obj["aborted"] as? JsonPrimitive)?.contentOrNull == "true"
         // A failed run reports no usage, as Claude's does not: the verdict is the event, not a token count.
         if (lastAssistantFailure != null || aborted || assistantMessages == 0) return emptyList()
-        return listOf(HarnessEvent.Usage(inputTokens, outputTokens))
+        return listOf(HarnessEvent.Usage(inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens))
     }
 
     private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content

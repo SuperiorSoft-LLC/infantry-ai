@@ -106,7 +106,8 @@ sealed interface HarnessEvent {
     /** What the tool named by [callId] returned. Always after the [ToolCall] with the same id. [output] is the text the tool produced. */
     data class ToolResult(val callId: String, val output: String, val isError: Boolean = false) : HarnessEvent
     data class Reasoning(val text: String) : HarnessEvent
-    data class Usage(val inputTokens: Long, val outputTokens: Long) : HarnessEvent
+    /** The four token buckets, kept apart (the plan meter charges them differently): [inputTokens] is fresh input only, cache reads and writes are separate. */
+    data class Usage(val inputTokens: Long, val outputTokens: Long, val cacheReadTokens: Long = 0, val cacheWriteTokens: Long = 0) : HarnessEvent
     data class Completion(val reason: String = "stop") : HarnessEvent
     data class Error(val message: String) : HarnessEvent
 }
