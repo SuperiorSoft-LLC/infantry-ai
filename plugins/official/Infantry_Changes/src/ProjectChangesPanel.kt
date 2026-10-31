@@ -326,6 +326,7 @@ fun ChangesTitleSection(changes: ChangesPaneHost, modifier: Modifier = Modifier)
             onClick = { changes.refresh() },
             enabled = changes.live && changes.supported,
             modifier = Modifier.testTag(PROJECT_CHANGES_REFRESH_TAG),
+            compact = true,
         )
     }
 }
