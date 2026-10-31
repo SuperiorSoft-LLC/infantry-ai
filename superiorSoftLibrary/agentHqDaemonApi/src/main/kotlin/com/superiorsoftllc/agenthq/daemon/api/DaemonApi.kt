@@ -97,7 +97,11 @@ interface DaemonApi {
     /** DAEMON-STORAGE-1 (1.15.0, additive): plugin-owned tables over the daemon's SQLite (daemon.api.storage). Community needs the grant `storage`. */
     val storage: com.superiorsoftllc.agenthq.daemon.api.storage.PluginStorage get() = com.superiorsoftllc.agenthq.daemon.api.storage.NoPluginStorage
 
+    /** AR-5 (1.16.0, additive): the typed optional service registry (provide / find by interface). Community needs the grant `services.provide` to publish. */
+    val services: ServicesApi get() = NoServices
+
     companion object {
+        // 1.16.0 (AR-5, additive): `services` (ServicesApi).
         // 1.15.0 (DAEMON-STORAGE-1, additive): `storage` (daemon.api.storage.PluginStorage).
         // 1.13.0 (DP-5h-3a2, additive): BoardRuntime.ticketEvents / stories / epics / relatedDescription / unknownSkills.
         // 1.12.0 (DP-5h-3a, additive): `boardRuntime` (BoardRuntime): what a board plugin builds its board from.
@@ -111,7 +115,7 @@ interface DaemonApi {
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
-        const val VERSION = "1.15.0"
+        const val VERSION = "1.16.0"
     }
 }
 
