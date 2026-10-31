@@ -152,6 +152,8 @@ class TicketBoard(
     private val autoDoneMinOutputs: () -> Long = { 1 },
     /** TICKET-WEIGHT: the weight -> executor mapping, read at every start and view. */
     private val weightExecutors: () -> WeightExecutors = { WeightExecutors.DEFAULT },
+    /** TOKEN-7: the weight -> {contextLimit, effort} defaults, read at every start; they fill only what the ticket leaves unset. */
+    private val weightContext: () -> com.superiorsoftllc.agenthq.settings.WeightContext = { com.superiorsoftllc.agenthq.settings.WeightContext.DEFAULT },
     /** LANE-CAPS: the most agents of a role that may run at once in a project (1 = one per role, today's behaviour). */
     private val laneCap: (projectId: String?, role: String) -> Int = { _, _ -> 1 },
     /** ROUTING-1 (contract 1.128.0): a project's routing rules, in order (empty = none), read at every start and view. */
@@ -792,6 +794,8 @@ class TicketBoard(
         }
         val providerId = executor.provider
         val model = executor.model
+        // TOKEN-7: the weight's compact window / effort fill what the ticket, its role and any rule left unset.
+        val byWeightContext = weightContext().forWeight(row.weight)
         if (rule != null) {
             // ROUTING-1: the rule's executor is checked again at start (the harness list may have changed since the save),
             // with the Opus line. A refusal PARKS the ticket: no other rule, no default row, no other harness is tried.
@@ -884,14 +888,14 @@ class TicketBoard(
                 preWorktree = ticketWorktree?.asRecord(clock()),
                 providerId = providerId,
                 model = model,
-                effort = executor.effort,
+                effort = executor.effort ?: byWeightContext?.effort,
                 agentId = profile.id,
                 role = profile.role,
                 ticketId = id,
                 contextSources = composed.sources,
                 instance = instance,
                 projectId = row.projectId,
-                contextLimit = row.contextLimit, // CONTEXT-LIMIT-1
+                contextLimit = row.contextLimit ?: byWeightContext?.contextLimit, // CONTEXT-LIMIT-1; TOKEN-7 weight default
                 unattended = true,
                 launchOrigin = if (unattendedLaunch) LaunchOrigin.UNATTENDED else LaunchOrigin.HUMAN,
             )
