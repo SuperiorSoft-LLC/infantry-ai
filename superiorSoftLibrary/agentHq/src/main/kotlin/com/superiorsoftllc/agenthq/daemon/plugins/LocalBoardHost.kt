@@ -1,0 +1,209 @@
+package com.superiorsoftllc.agenthq.daemon.plugins
+
+import com.superiorsoftllc.agenthq.backlog.TicketEventLog
+import com.superiorsoftllc.agenthq.daemon.api.board.BaseChoice
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardGit
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardHost
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardSessions
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardSettings
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardStorage
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardTables
+import com.superiorsoftllc.agenthq.daemon.api.board.BranchOutcome
+import com.superiorsoftllc.agenthq.daemon.api.board.BranchRequest
+import com.superiorsoftllc.agenthq.daemon.api.board.LaunchVerdict
+import com.superiorsoftllc.agenthq.daemon.api.board.SessionStart
+import com.superiorsoftllc.agenthq.daemon.api.board.SessionStartResult
+import com.superiorsoftllc.agenthq.daemon.api.board.StoredLink
+import com.superiorsoftllc.agenthq.daemon.api.board.StoredRun
+import com.superiorsoftllc.agenthq.daemon.api.board.StoredTicket
+import com.superiorsoftllc.agenthq.daemon.api.board.TicketEventAppender
+import com.superiorsoftllc.agenthq.daemon.api.board.TicketRunTable
+import com.superiorsoftllc.agenthq.daemon.api.board.TicketTable
+import com.superiorsoftllc.agenthq.daemon.api.sessions.SessionView
+import com.superiorsoftllc.agenthq.persistence.AgentHqStore
+import com.superiorsoftllc.agenthq.persistence.TicketLinkRow
+import com.superiorsoftllc.agenthq.persistence.TicketRow
+import com.superiorsoftllc.agenthq.persistence.TicketRunRow
+import com.superiorsoftllc.agenthq.session.ContextSource
+import com.superiorsoftllc.agenthq.session.SessionManager
+import com.superiorsoftllc.agenthq.usage.GateDecision
+import com.superiorsoftllc.agenthq.usage.LaunchOrigin
+import com.superiorsoftllc.agenthq.worktree.BaseScope
+import com.superiorsoftllc.agenthq.worktree.TicketBaseRef
+import com.superiorsoftllc.agenthq.worktree.TicketBranchOutcome
+import com.superiorsoftllc.agenthq.worktree.TicketBranchRequest
+import com.superiorsoftllc.agenthq.worktree.TicketBranches
+import com.superiorsoftllc.agenthq.worktree.WorktreeRecord
+import java.io.File
+
+/**
+ * DP-5c (docs/DAEMON-BOARD-API.md section 9): the LOCAL [BoardHost] over the daemon's own classes -- the store, the session manager,
+ * the ticket branches and the settings. Mapping only, no decision of its own; behaviour is whatever the wrapped class does. Nothing
+ * consumes it yet (DP-5 moves `TicketBoard` onto it).
+ */
+class LocalBoardHost(
+    private val store: AgentHqStore,
+    private val sessionManager: () -> SessionManager?,
+    private val branches: TicketBranches = TicketBranches(),
+    private val baseRef: TicketBaseRef = TicketBaseRef.fixed(TicketBaseRef.HEAD),
+    private val projectDirectory: (projectId: String?) -> String? = { null },
+    private val defaultRepo: File? = null,
+    private val eventLog: () -> TicketEventLog? = { null },
+    private val clock: () -> Long = System::currentTimeMillis,
+) : BoardHost {
+
+    override fun now(): Long = clock()
+
+    private val tablesView = object : BoardTables {
+        override val tickets: TicketTable = Tickets()
+        override val runs: TicketRunTable = Runs()
+        override val events: TicketEventAppender = object : TicketEventAppender {
+            override fun record(before: Map<String, String>, after: Map<String, String>, changedIds: Collection<String>, deleted: Collection<String>) {
+                eventLog()?.record(before, after, changedIds, deleted)
+            }
+
+            override fun deliver() {
+                eventLog()?.deliver()
+            }
+        }
+    }
+
+    override val storage: BoardStorage = object : BoardStorage {
+        override val tables: BoardTables get() = tablesView
+        override fun <T> transaction(block: BoardTables.() -> T): T = store.transaction { tablesView.block() }
+        override fun <T> writeTransaction(block: BoardTables.() -> T): T = store.writeTransaction { tablesView.block() }
+    }
+
+    private inner class Tickets : TicketTable {
+        override fun create(ticket: StoredTicket) = store.tickets.create(ticket.toRow())
+        override fun update(ticket: StoredTicket) = store.tickets.update(ticket.toRow())
+        override fun get(id: String) = store.tickets.get(id)?.toStored()
+        override fun all() = store.tickets.all().map { it.toStored() }
+        override fun delete(id: String) = store.tickets.delete(id)
+        override fun link(link: StoredLink) = store.tickets.link(link.toRow())
+        override fun unlink(link: StoredLink) = store.tickets.unlink(link.toRow())
+        override fun links() = store.tickets.links().map { StoredLink(it.ticketId, it.relatedId, it.type, it.createdAt) }
+    }
+
+    private inner class Runs : TicketRunTable {
+        override fun insert(run: StoredRun) = store.ticketRuns.insert(TicketRunRow(run.ticketId, run.sessionId, run.startedAt, run.endedAt, run.outcome, run.detail))
+        override fun finish(ticketId: String, sessionId: String, endedAt: Long, outcome: String, detail: String?) =
+            store.ticketRuns.finish(ticketId, sessionId, endedAt, outcome, detail)
+
+        override fun byTicket(ticketId: String) =
+            store.ticketRuns.byTicket(ticketId).map { StoredRun(it.ticketId, it.sessionId, it.startedAt, it.endedAt, it.outcome, it.detail) }
+    }
+
+    override val git: BoardGit = object : BoardGit {
+        override fun ensureBranch(request: BranchRequest): BranchOutcome =
+            when (val out = branches.ensure(TicketBranchRequest(request.ticketId, request.title, File(request.repo), request.baseBranch, request.recordedBranch, request.recordedBase))) {
+                is TicketBranchOutcome.Ready -> BranchOutcome.Ready(out.worktree.branch, out.worktree.base, out.worktree.path, out.worktree.repoRoot, out.note, out.warning)
+                is TicketBranchOutcome.Refused -> BranchOutcome.Refused(out.reason)
+            }
+
+        override fun baseRef(projectId: String?, epicId: String?): BaseChoice =
+            this@LocalBoardHost.baseRef.choose(BaseScope(projectId, epicId)).let { BaseChoice(it.ref, it.source) }
+
+        override fun resolveBase(repo: String, ref: String): String? = branches.resolveBase(File(repo), ref)
+        override fun projectDirectory(projectId: String?): String? = this@LocalBoardHost.projectDirectory(projectId)
+        override fun defaultRepo(): String? = this@LocalBoardHost.defaultRepo?.path
+        override fun projectFolders(): Boolean = sessionManager()?.projectFolders != null
+    }
+
+    override val sessions: BoardSessions = object : BoardSessions {
+        override fun start(request: SessionStart): SessionStartResult {
+            val manager = sessionManager() ?: return SessionStartResult.Refused(BoardSessions.NO_SESSIONS)
+            return try {
+                val record = manager.startNew(
+                    prompt = request.prompt,
+                    workingDir = request.workingDir?.let(::File),
+                    branchHint = request.branchHint,
+                    providerId = request.providerId,
+                    model = request.model,
+                    effort = request.effort,
+                    agentId = request.agentId,
+                    role = request.role,
+                    ticketId = request.ticketId,
+                    contextSources = request.contextSources.map { ContextSource(it.source, it.chars) },
+                    projectId = request.projectId,
+                    contextLimit = request.contextLimit,
+                    unattended = true,
+                    launchOrigin = origin(request.origin),
+                    preWorktree = request.worktree?.let {
+                        WorktreeRecord(sessionId = "", repoRoot = it.repoRoot, path = it.worktreePath, branch = it.branch, baseRef = it.base, createdAt = clock())
+                    },
+                )
+                SessionStartResult.Started(SessionViews.of(record))
+            } catch (e: IllegalArgumentException) {
+                SessionStartResult.Refused(e.message ?: "session start refused")
+            }
+        }
+
+        override fun checkSpawn(providerId: String?, model: String?): String? {
+            val manager = sessionManager() ?: return BoardSessions.NO_SESSIONS
+            return try {
+                manager.checkSpawn(providerId, model)
+                null
+            } catch (e: IllegalArgumentException) {
+                e.message ?: "spawn refused"
+            }
+        }
+
+        override fun launchGate(providerId: String?, origin: String, ticketId: String?): LaunchVerdict =
+            when (val d = sessionManager()?.launchCheck(providerId, origin(origin), ticketId)) {
+                is GateDecision.Refused -> LaunchVerdict(refusal = d.reason, disposition = d.disposition)
+                is GateDecision.Warn -> LaunchVerdict(warning = d.reason)
+                else -> LaunchVerdict()
+            }
+
+        override fun get(sessionId: String): SessionView? = sessionManager()?.get(sessionId)?.let(SessionViews::of)
+        override fun list(): List<SessionView> = sessionManager()?.list().orEmpty().map(SessionViews::of)
+
+        override fun kill(sessionId: String, force: Boolean, by: String, reason: String?): Boolean {
+            val manager = sessionManager() ?: return false
+            if (manager.get(sessionId) == null) return false
+            manager.kill(sessionId, force, by, reason)
+            return true
+        }
+
+        override fun remove(sessionId: String): String? {
+            val manager = sessionManager() ?: return BoardSessions.NO_SESSIONS
+            return try {
+                manager.delete(sessionId)
+                null
+            } catch (e: IllegalArgumentException) {
+                e.message ?: "session not removed"
+            }
+        }
+    }
+
+    override val settings: BoardSettings = object : BoardSettings {
+        override fun get(key: String): String? = store.settings.get(key)?.value
+    }
+
+    private fun origin(name: String) = if (name == ORIGIN_UNATTENDED) LaunchOrigin.UNATTENDED else LaunchOrigin.HUMAN
+
+    private fun StoredTicket.toRow() = TicketRow(
+        id = id, title = title, description = description, ticketType = ticketType, status = status, position = position,
+        wontFix = wontFix, createdAt = createdAt, updatedAt = updatedAt, agentId = agentId, provider = provider, model = model,
+        useWorktree = useWorktree, worktreeBranch = worktreeBranch, includeLinkedTasksContext = includeLinkedTasksContext,
+        queuedFor = queuedFor, queuedAt = queuedAt, sessionId = sessionId, projectId = projectId, epicId = epicId, branch = branch,
+        base = base, skillIds = skillIds, skillsMode = skillsMode, includeSkillsContext = includeSkillsContext, startedBy = startedBy,
+        images = images, weight = weight, contextLimit = contextLimit, effort = effort,
+    )
+
+    private fun TicketRow.toStored() = StoredTicket(
+        id = id, title = title, description = description, ticketType = ticketType, status = status, position = position,
+        wontFix = wontFix, createdAt = createdAt, updatedAt = updatedAt, agentId = agentId, provider = provider, model = model,
+        useWorktree = useWorktree, worktreeBranch = worktreeBranch, includeLinkedTasksContext = includeLinkedTasksContext,
+        queuedFor = queuedFor, queuedAt = queuedAt, sessionId = sessionId, projectId = projectId, epicId = epicId, branch = branch,
+        base = base, skillIds = skillIds, skillsMode = skillsMode, includeSkillsContext = includeSkillsContext, startedBy = startedBy,
+        images = images, weight = weight, contextLimit = contextLimit, effort = effort,
+    )
+
+    private fun StoredLink.toRow() = TicketLinkRow(ticketId, relatedId, type, createdAt)
+
+    private companion object {
+        const val ORIGIN_UNATTENDED = "unattended"
+    }
+}
