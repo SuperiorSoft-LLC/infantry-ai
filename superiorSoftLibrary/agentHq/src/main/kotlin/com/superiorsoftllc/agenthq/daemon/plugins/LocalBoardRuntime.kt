@@ -20,8 +20,8 @@ import kotlinx.serialization.json.Json
 
 /**
  * DP-5h-3a: the LOCAL [BoardRuntime] over the daemon's own classes (settings, project store, roles, usage pacing, attention, the
- * clients' push). Mapping only: each answer is what `DaemonMain` handed `TicketBoard` directly before. [coreBuiltBoard] is true
- * while `DaemonMain` still builds the board through `BoardWiring` (DP-5h-3b flips it), so a board plugin leaves construction to core.
+ * clients' push). Mapping only: each answer is what `DaemonMain` handed `TicketBoard` directly before. `DaemonMain` passes
+ * [coreBuiltBoard] = false: the board plugin builds the board (core builds none).
  */
 class LocalBoardRuntime(
     /** DP-5h-3c: resolved at call time, so the runtime can be built before the board exists. */

@@ -1,6 +1,5 @@
 package com.superiorsoftllc.agenthq.daemon.plugins
 
-import com.superiorsoftllc.agenthq.backlog.TicketBoard
 import com.superiorsoftllc.agenthq.cli.BoardSummary
 import com.superiorsoftllc.agenthq.cli.TicketPrefixMatch
 import com.superiorsoftllc.agenthq.cli.matchTicketPrefix
@@ -26,7 +25,6 @@ import com.superiorsoftllc.agenthq.daemon.api.board.Tickets
 import com.superiorsoftllc.agenthq.daemon.api.orchestrator.OrchestratorLink
 import com.superiorsoftllc.agenthq.daemon.api.orchestrator.OrchestratorReply
 import com.superiorsoftllc.agenthq.epics.Epic
-import com.superiorsoftllc.agenthq.epics.EpicStore
 import com.superiorsoftllc.agenthq.mvp.ProjectBaseCheck
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.Ticket
@@ -38,7 +36,6 @@ import com.superiorsoftllc.agenthq.protocol.TicketStart
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
 import com.superiorsoftllc.agenthq.session.SessionRecord
 import java.util.concurrent.ConcurrentHashMap
-import com.superiorsoftllc.agenthq.backlog.PromptLaunch
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardCoreAccess
 import com.superiorsoftllc.agenthq.protocol.TicketListQuery
 import kotlinx.serialization.builtins.ListSerializer
@@ -48,8 +45,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 
 /**
- * DP-4a (docs/DAEMON-BOARD-API.md): the LOCAL binding of [Tickets], [Epics] and [Board] over the daemon's own [TicketBoard] and
- * [EpicStore]. The HOST applies, before the board is touched and the same way for every plugin:
+ * DP-4a (docs/DAEMON-BOARD-API.md): the LOCAL binding of [Tickets], [Epics] and [Board] over the board plugin's [BoardOps]. The HOST applies, before the board is touched and the same way for every plugin:
  *  1. the active policy preset, as the equivalent frame is gated (the preset's neutral text, byte for byte): [gate];
  *  2. the project scope, with the very rules of the MCP tools' [ProjectScope] (one implementation: this class calls it), seeing
  *     the caller as the daemon's session record for [Caller.activeSession] (never a request argument). No active session on an
@@ -69,16 +65,6 @@ class LocalBoardServices(
      */
     private val chargedMove: ((TicketMove, String?) -> Ticket)? = null,
 ) {
-    /** The core-built board and epic store (as before DP-5h-3e-b; tests and the interim core board). */
-    constructor(
-        board: () -> TicketBoard?, epicStore: () -> EpicStore?, sessions: () -> List<SessionRecord>, link: () -> OrchestratorLink?,
-        gate: (type: String, data: String) -> String?, baseCheck: ((Epic, String) -> Unit)? = null,
-        chargedMove: ((TicketMove, String?) -> Ticket)? = null,
-    ) : this(
-        ops = { val b = board(); val e = epicStore(); if (b != null && e != null) CoreBoardOps(b, e, baseCheck) else null },
-        sessions = sessions, link = link, gate = gate, chargedMove = chargedMove,
-    )
-
     private val createKeys = ConcurrentHashMap<String, String>()
 
     // ---- the host's scope --------------------------------------------------------------------------------------------
@@ -238,10 +224,7 @@ class LocalBoardServices(
         override fun startPrompt(agentId: String, prompt: String, projectId: String?, by: Caller): BoardResult<PromptStart> {
             val b = ops() ?: return BoardResult.Unavailable("this daemon has no board")
             return BoardResult.Ok(
-                when (val l = b.startPrompt(agentId, prompt, projectId)) {
-                    is com.superiorsoftllc.agenthq.backlog.PromptLaunch.Started -> PromptStart.Started(l.sessionId)
-                    is com.superiorsoftllc.agenthq.backlog.PromptLaunch.Refused -> PromptStart.Refused(l.detail)
-                },
+                b.startPrompt(agentId, prompt, projectId),
             )
         }
 
@@ -377,9 +360,8 @@ class LocalBoardServices(
 }
 
 /**
- * DP-5h-3e-b: the board operations [LocalBoardServices] applies the host's policy and scope over, WITHOUT naming a board class: the core
- * board ([CoreBoardOps], over a [TicketBoard] and [EpicStore], until the board is the plugin's alone) or the plugin's ([PluginBoardOps],
- * over [BoardCoreAccess.invoke], wire JSON). A refusal is an [IllegalArgumentException] with the board's own text on both.
+ * DP-5h-3e-b: the board operations [LocalBoardServices] applies the host's policy and scope over, WITHOUT naming a board class: the plugin's
+ * board ([PluginBoardOps], over [BoardCoreAccess.invoke], wire JSON). A refusal is an [IllegalArgumentException] with the board's own text on both.
  */
 interface BoardOps {
     fun list(projectId: String?, epicId: String?): List<Ticket>
@@ -391,40 +373,13 @@ interface BoardOps {
     fun unlink(request: TicketLinkRequest): Ticket
     fun reorder(request: TicketReorder)
     fun startNext(agentFilter: String?): Ticket?
-    fun startPrompt(agentId: String, prompt: String, projectId: String?): PromptLaunch
+    fun startPrompt(agentId: String, prompt: String, projectId: String?): PromptStart
     fun brief(sessionId: String): String?
     fun epicGet(id: String): Epic?
     fun epicList(projectId: String): List<Epic>
     fun epicSave(projectId: String, name: String, goal: String): Epic
     /** [branch] null clears the base; a name is checked against the epic's project (a refusal is an [IllegalArgumentException]). */
     fun epicSetBase(id: String, branch: String?): Epic
-}
-
-/** The core-built board and epic store, as before DP-5h-3e-b. */
-class CoreBoardOps(
-    private val board: TicketBoard,
-    private val epics: EpicStore,
-    private val baseCheck: ((Epic, String) -> Unit)? = null,
-) : BoardOps {
-    override fun list(projectId: String?, epicId: String?) = board.list(projectId, epicId)
-    override fun get(id: String) = board.get(id)
-    override fun save(request: TicketSave) = board.save(request).ticket
-    override fun move(request: TicketMove, startedBy: String?) = board.move(request, startedBy = startedBy).ticket
-    override fun delete(id: String) { board.delete(id) }
-    override fun link(request: TicketLinkRequest) = board.link(request).ticket
-    override fun unlink(request: TicketLinkRequest) = board.unlink(request).ticket
-    override fun reorder(request: TicketReorder) { board.reorder(request) }
-    override fun startNext(agentFilter: String?) = board.startNextUnattended(agentFilter)?.ticket
-    override fun startPrompt(agentId: String, prompt: String, projectId: String?) = board.startPromptUnattended(agentId, prompt, projectId)
-    override fun brief(sessionId: String) = board.brief(sessionId)
-    override fun epicGet(id: String) = epics.get(id)
-    override fun epicList(projectId: String) = epics.list(projectId)
-    override fun epicSave(projectId: String, name: String, goal: String) = epics.save(projectId, name, goal)
-    override fun epicSetBase(id: String, branch: String?): Epic {
-        if (branch == null) return epics.setBaseBranch(id, null)
-        val check = baseCheck ?: throw IllegalArgumentException("this daemon has no repository to check a base branch against")
-        return epics.setBaseBranch(id, branch, check)
-    }
 }
 
 /** The plugin's board, reached through [BoardCoreAccess.invoke]; every value is the wire JSON. */
@@ -443,10 +398,10 @@ class PluginBoardOps(private val access: BoardCoreAccess) : BoardOps {
     override fun unlink(request: TicketLinkRequest) = ticket(access.invoke("unlink", json.encodeToString(TicketLinkRequest.serializer(), request), null))
     override fun reorder(request: TicketReorder) { access.invoke("reorder", json.encodeToString(TicketReorder.serializer(), request), null) }
     override fun startNext(agentFilter: String?): Ticket? = access.invoke("startNext", agentFilter.orEmpty(), null).takeIf { it.isNotEmpty() }?.let(::ticket)
-    override fun startPrompt(agentId: String, prompt: String, projectId: String?): PromptLaunch {
+    override fun startPrompt(agentId: String, prompt: String, projectId: String?): PromptStart {
         val payload = buildJsonArray { add(JsonPrimitive(agentId)); add(JsonPrimitive(prompt)); add(projectId?.let { JsonPrimitive(it) } ?: JsonNull) }.toString()
         val answer = access.invoke("startPrompt", payload, null)
-        return if (answer.startsWith("S:")) PromptLaunch.Started(answer.drop(2)) else PromptLaunch.Refused(answer.removePrefix("R:"))
+        return if (answer.startsWith("S:")) PromptStart.Started(answer.drop(2)) else PromptStart.Refused(answer.removePrefix("R:"))
     }
     override fun brief(sessionId: String) = access.brief(sessionId)
     override fun epicGet(id: String): Epic? = access.invoke("epicGet", id, null).takeIf { it.isNotEmpty() }?.let(::epic)

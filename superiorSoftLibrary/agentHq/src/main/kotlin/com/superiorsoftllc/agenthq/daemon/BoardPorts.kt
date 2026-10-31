@@ -7,8 +7,8 @@ data class BoardTicketRef(val sessionId: String?, val projectId: String?, val st
 
 /**
  * DP-5h-3e-a: the small core-owned port the daemon's own consumers (start charge, orchestrator link, session reaper, roster titles,
- * handover, first-turn brief, worker sweep) use to reach the ticket board. It names no board class; the adapter lives with the
- * board construction ([BoardWiring.ports]) and goes away with it (DP-5h-4), when a plugin-backed port takes its place.
+ * handover, first-turn brief, worker sweep) use to reach the ticket board. It names no board class; the adapter is [PluginBoardPorts],
+ * over the board plugin (core builds no board).
  */
 interface BoardPorts {
     /** The ticket [id] names, null when unknown. */
