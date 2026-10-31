@@ -59,12 +59,6 @@ import com.superiorsoftllc.agenthq.mailbox.MailResult
 import com.superiorsoftllc.agenthq.mailbox.MailRouter
 import com.superiorsoftllc.agenthq.mvp.BoardHandler
 import com.superiorsoftllc.agenthq.mvp.ProjectHandler
-import com.superiorsoftllc.agenthq.decisions.DecisionAuthor
-import com.superiorsoftllc.agenthq.decisions.DecisionHandler
-import com.superiorsoftllc.agenthq.decisions.DecisionStore
-import com.superiorsoftllc.agenthq.issues.IssueActor
-import com.superiorsoftllc.agenthq.issues.IssueHandler
-import com.superiorsoftllc.agenthq.issues.IssueStore
 import com.superiorsoftllc.agenthq.memory.MemoryCaller
 import com.superiorsoftllc.agenthq.memory.MemoryHandler
 import com.superiorsoftllc.agenthq.memory.MemoryStore
@@ -453,10 +447,6 @@ class AgentHqDaemon(
     val workspaces: WorkspaceStore,
     /** MEM-2: the project-memory notes, stored in [store] so a note outlives the daemon. */
     val memoryNotes: MemoryStore,
-    /** P10-K4: the per-project append-only decisions log, stored in [store] so a decision outlives the daemon. */
-    val decisions: DecisionStore,
-    /** P10-K6: the per-project append-only issues log (attempts and fixes), stored in [store] so it outlives the daemon. */
-    val issues: IssueStore,
     /** IN-APP BUILD T2 (contract 1.33.0) + RUN-CMD-1 (1.108.0): saved commands from commands.json, editable; empty when absent or refused. */
     val commands: com.superiorsoftllc.agenthq.commands.CommandStore? = null,
     /** PORT-1: where [start] records the bound port (`<stateDir>/daemon.port`); null = recorded nowhere. */
@@ -1113,10 +1103,7 @@ class AgentHqDaemon(
             // saved before a restart is read back (index and body) after one. Wired the way projects are:
             // constructed over the daemon's own handle, here and only here.
             val memoryNotes = com.superiorsoftllc.agenthq.daemon.wiring.KnowledgeWiring.buildMemoryNotes(store, manager)
-            // P10-K4: the decisions log, over the same file. A decision_add's author comes from the declared session.
-            val decisionsWired = com.superiorsoftllc.agenthq.daemon.wiring.KnowledgeWiring.buildDecisions(store, manager, clients)
-            val decisions = decisionsWired.decisions
-            val decisionFrames = decisionsWired.frames
+            // DP-7c: the decisions and issues logs (stores, frames) belong to the Infantry_Notes plugin.
             // VOICE-1: spoken attention alerts, pushed to every client; nothing is stored.
             val notifyFrames = com.superiorsoftllc.agenthq.notify.NotifyHandler(
                 projectName = { id -> projectStore.get(id).name },
@@ -1128,20 +1115,12 @@ class AgentHqDaemon(
                 restricted = locked,
                 push = { envelope -> for (client in clients) client.trySend(envelope) },
             )
-            // P10-K6: the issues log, over the same file. The declared session is the author AND the scope of the active
-            // issue an attempt or a fix without an issue ref goes to.
-            val issues = com.superiorsoftllc.agenthq.daemon.wiring.KnowledgeWiring.buildIssues(store)
             // P10-K9: the knowledge section's counts, read for a project whenever a first turn renders.
             // BUG-G2e: and the digest itself (what `agenthq knowledge` prints), built in-process from the same stores.
             // DP-7b: every first-turn path reads the knowledge through the registry's Knowledge port (registered below, with the plugin host).
             val knowledge: KnowledgeCounter = com.superiorsoftllc.agenthq.agents.ServiceKnowledgeCounter {
                 pluginHost.get().serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.knowledge.Knowledge::class)
             }
-            val issueFrames = IssueHandler(
-                store = issues,
-                actor = { sessionId -> manager.get(sessionId)?.let { IssueActor(sessionId = it.id, agentId = it.agentId) } },
-                push = { envelope -> for (client in clients) client.trySend(envelope) },
-            )
             // Contract 1.5.0: the backlog. It belongs to the daemon, not to a connection: a change one client
             // makes is pushed to every client, the one that asked included.
             // P10-K15: the skills section's library and project switch, read whenever a first turn renders.
@@ -1627,7 +1606,7 @@ class AgentHqDaemon(
                     stateDir(),
                 )
                 pluginHost.set(host)
-                host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.knowledge.Knowledge::class, com.superiorsoftllc.agenthq.agents.LocalKnowledge(memoryNotes, decisions, issues))
+                host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.knowledge.Knowledge::class, com.superiorsoftllc.agenthq.agents.LocalKnowledge(memoryNotes) { testKnowledgeRecords ?: host.serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.knowledge.KnowledgeRecords::class) })
                 // HARNESS-PLUGIN-3 H4 (docs/HARNESS-PLUGINS.md 3.2): each loaded module's `harness` block, into the ONE registry,
                 // AFTER module resolution and with the daemon halves' trust. The built-ins (class path, 1.x) are already in it.
                 val harnessModules = com.superiorsoftllc.agenthq.daemon.wiring.HarnessModulesWiring.build(
@@ -1820,10 +1799,8 @@ class AgentHqDaemon(
                                     }
                                 },
                             ),
-                            decisionFrames,
                             notifyFrames,
                             keystoreFrames,
-                            issueFrames,
                             settings,
                             identity,
                             roles,
@@ -1904,8 +1881,6 @@ class AgentHqDaemon(
                 triggers = triggers,
                 workspaces = workspaces,
                 memoryNotes = memoryNotes,
-                decisions = decisions,
-                issues = issues,
                 commands = commandStore,
                 portFile = portFile,
                 // BUG-PERM-1: the Tool approval reader is put back with the executable resolver (both read this store).
@@ -2382,10 +2357,8 @@ private suspend fun handleConnection(
     projectGit: ProjectGitHandler,
     workspaceFrames: WorkspaceHandler,
     memoryFrames: MemoryHandler,
-    decisionFrames: DecisionHandler,
     notifyFrames: com.superiorsoftllc.agenthq.notify.NotifyHandler,
     keystoreFrames: KeystoreHandler,
-    issueFrames: IssueHandler,
     settings: ProjectSettings,
     identity: DaemonIdentity,
     roles: RoleService,
@@ -3869,9 +3842,6 @@ private suspend fun handleConnection(
                 Envelope.MEMORY_SEARCH, Envelope.MEMORY_SAVE, Envelope.MEMORY_LIST, Envelope.MEMORY_GET,
                 Envelope.MEMORY_DELETE, Envelope.MEMORY_PURGE_ROLE -> memoryFrames.answer(envelope)
 
-                // P10-K4 (contract 1.53.0): the decisions log. An add is pushed to every client (no direct reply).
-                Envelope.DECISION_ADD, Envelope.DECISION_LIST, Envelope.DECISION_GET -> decisionFrames.answer(envelope)
-
                 Envelope.NOTIFY -> notifyFrames.answer(envelope)
 
                 // SECRETS-1 (contract 1.100.0): the keystore. Answered by `secret_state`; a value never travels back.
@@ -3879,10 +3849,6 @@ private suspend fun handleConnection(
                 Envelope.SECRET_SET, Envelope.SECRET_CLEAR, Envelope.SECRET_IMPORT, Envelope.SECRET_STATUS,
                 Envelope.SECRET_FIELD_SET, Envelope.SECRET_FIELD_DELETE, Envelope.SECRET_DELETE,
                 Envelope.PLUGIN_SECRET_GET -> keystoreFrames.answer(envelope)
-
-                // P10-K6 (contract 1.54.0): the issues log. An open / attempt / fix is pushed to every client (no direct reply).
-                Envelope.ISSUE_OPEN, Envelope.ISSUE_ATTEMPT, Envelope.ISSUE_FIX,
-                Envelope.ISSUE_LIST, Envelope.ISSUE_GET, Envelope.ISSUE_PRECHECK -> issueFrames.answer(envelope)
 
                 // POLICY-1 (docs/POLICY.md): read the active policy; the owner switches it (refused while an env pins it).
                 // A switch tells every connection (each its own `policy` frame), this one included, so no direct answer.
@@ -3932,6 +3898,8 @@ private suspend fun handleConnection(
                 else if (envelope.type in BoardFrames.TYPES) BoardFrames.noBoard(envelope.type)
                 // DP-6: the pipeline frames belong to the Infantry_Board plugin; without it the daemon says so.
                 else if (envelope.type in BoardFrames.PIPELINE_TYPES) BoardFrames.noPipeline(envelope.type)
+                // DP-7c: the decisions and issues frames belong to the Infantry_Notes plugin; without it the daemon says so.
+                else if (envelope.type in BoardFrames.KNOWLEDGE_RECORD_TYPES) BoardFrames.noKnowledgeRecords(envelope.type)
                 else Envelope(Envelope.ERROR, "unknown frame type '${envelope.type}'")
             }
             // BUG-MCP-RACE-1: the direct answer echoes the request's id; a push (sent elsewhere) never carries one.
@@ -4308,3 +4276,7 @@ private fun com.superiorsoftllc.agenthq.persistence.TicketRow.toTicketInfo() =
     com.superiorsoftllc.agenthq.ticketfiles.TicketInfo(id, title, description, status, projectId, branch, base)
 private fun com.superiorsoftllc.agenthq.persistence.TicketLinkRow.toTicketInfo() =
     com.superiorsoftllc.agenthq.ticketfiles.TicketLinkInfo(ticketId, relatedId)
+
+/** DP-7c: test seam only. A fake decisions/issues provider core tests install in place of the Infantry_Notes plugin. */
+@Volatile
+internal var testKnowledgeRecords: com.superiorsoftllc.agenthq.daemon.api.knowledge.KnowledgeRecords? = null

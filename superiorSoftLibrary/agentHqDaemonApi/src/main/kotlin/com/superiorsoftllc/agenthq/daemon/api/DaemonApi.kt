@@ -101,6 +101,7 @@ interface DaemonApi {
     val services: ServicesApi get() = NoServices
 
     companion object {
+        // 1.17.0 (DP-7c, additive): daemon.api.knowledge.KnowledgeRecords, the decisions / issues half of Knowledge (published by Infantry_Notes).
         // 1.16.0 (AR-5, additive): `services` (ServicesApi).
         // 1.15.0 (DAEMON-STORAGE-1, additive): `storage` (daemon.api.storage.PluginStorage).
         // 1.13.0 (DP-5h-3a2, additive): BoardRuntime.ticketEvents / stories / epics / relatedDescription / unknownSkills.
@@ -115,7 +116,7 @@ interface DaemonApi {
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
-        const val VERSION = "1.16.0"
+        const val VERSION = "1.17.0"
     }
 }
 

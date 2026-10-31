@@ -1,12 +1,15 @@
-package com.superiorsoftllc.agenthq.issues
+package com.superiorsoftllc.agenthq.plugins.official.notes.daemon
 
-import com.superiorsoftllc.agenthq.db.Issue_events
-import com.superiorsoftllc.agenthq.db.Issues
-import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
+import com.superiorsoftllc.agenthq.daemon.api.storage.PluginStorage
+import com.superiorsoftllc.agenthq.issues.Issue
+import com.superiorsoftllc.agenthq.issues.IssueEvent
+import com.superiorsoftllc.agenthq.issues.locationSegments
+import com.superiorsoftllc.agenthq.issues.locationUnder
+import com.superiorsoftllc.agenthq.issues.parseIssueRef
 
 /**
- * P10-K6 (docs/AGENTHQ-PHASE10-KNOWLEDGE.md K-D8): a project's append-only issues log, over the `issues` and
- * `issue_events` tables of the daemon's own SQLite file (so an issue and its attempts survive a restart).
+ * P10-K6 / DP-7c (docs/AGENTHQ-PHASE10-KNOWLEDGE.md K-D8): a project's append-only issues log, over the `issues` and
+ * `issue_events` tables of the daemon's own SQLite file, adopted through the plugin storage (module.json `daemon.storage.adopt`; core creates them) (so an issue and its attempts survive a restart).
  *
  * The store owns the rules; the tables back them (triggers abort UPDATE/DELETE, one fix per issue, nothing after it):
  *  - [open] numbers per project from 1 and needs a `location`; the issue becomes the session's active issue.
@@ -19,15 +22,14 @@ import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
  *  - [precheck] returns the issues whose location is a path or lies under it, by segment, open ones first.
  * A refusal writes nothing.
  *
- * Every write reads what it needs and inserts inside ONE write-first transaction ([SqlAgentHqStore.writeTransaction]),
+ * Every write reads what it needs and inserts inside ONE storage transaction,
  * so two writers can never take the same number or seq, nor both fix one issue. `created_at` is kept strictly
  * increasing (one millisecond past the last row at worst), so "most recent" is never a tie.
  */
 class IssueStore(
-    private val store: SqlAgentHqStore,
+    private val db: PluginStorage,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    private val q get() = store.database.issuesQueries
     private var lastAt: Long? = null
 
     @Synchronized
@@ -42,7 +44,7 @@ class IssueStore(
         val line = issueSummary(summary)
         val where = location(location) ?: throw IllegalArgumentException("location is required: the path the issue is about")
         val ticket = ticketId?.trim()?.takeIf { it.isNotEmpty() }
-        val number = store.writeTransaction { insertIssue(project, line, where, ticket, implicit = false, actor) }
+        val number = db.transaction { insertIssue(project, line, where, ticket, implicit = false, actor) }
         return get(project, number)!!
     }
 
@@ -62,7 +64,7 @@ class IssueStore(
         val where = location(location)
         val named = issue?.takeIf { it.isNotBlank() }?.let(::parseIssueRef)
 
-        val number = store.writeTransaction {
+        val number = db.transaction {
             val target = when {
                 named != null -> requireOpen(project, named)
                 else -> activeIn(project, actor.sessionId)
@@ -79,7 +81,7 @@ class IssueStore(
         val project = project(projectId)
         val text = eventSummary(summary)
         val named = issue?.takeIf { it.isNotBlank() }?.let(::parseIssueRef)
-        val number = store.writeTransaction {
+        val number = db.transaction {
             val target = if (named != null) {
                 requireOpen(project, named)
             } else {
@@ -120,13 +122,13 @@ class IssueStore(
     // ------------------------------------------------------------------------
 
     private fun get(project: String, number: Int): Issue? {
-        val row = q.getIssue(project, number.toLong()).executeAsOneOrNull() ?: return null
-        return row.toIssue(q.getIssueEvents(project, number.toLong()).executeAsList())
+        val row = db.query("SELECT * FROM issues WHERE project_id = ? AND number = ?", listOf(project, number.toLong())).firstOrNull() ?: return null
+        return row.toIssue(db.query("SELECT * FROM issue_events WHERE project_id = ? AND issue_number = ? ORDER BY seq ASC", listOf(project, number.toLong())))
     }
 
     private fun all(project: String): List<Issue> {
-        val events = q.getProjectIssueEvents(project).executeAsList().groupBy { it.issue_number }
-        return q.getProjectIssues(project).executeAsList().map { it.toIssue(events[it.number].orEmpty()) }
+        val events = db.query("SELECT * FROM issue_events WHERE project_id = ? ORDER BY issue_number ASC, seq ASC", listOf(project)).groupBy { it.long("issue_number") }
+        return db.query("SELECT * FROM issues WHERE project_id = ? ORDER BY number ASC", listOf(project)).map { it.toIssue(events[it.long("number")].orEmpty()) }
     }
 
     /**
@@ -136,13 +138,13 @@ class IssueStore(
     private fun activeIn(project: String, sessionId: String?): Int? {
         val session = sessionId?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         val touched = HashMap<Long, Long>()
-        for (row in q.sessionOpenedIssues(project, session).executeAsList()) {
-            touched.merge(row.number, row.created_at, ::maxOf)
+        for (row in db.query("SELECT number, created_at FROM issues WHERE project_id = ? AND opened_by_session = ?", listOf(project, session))) {
+            touched.merge(row.long("number"), row.long("created_at"), ::maxOf)
         }
-        for (row in q.sessionAttemptedIssues(project, session).executeAsList()) {
-            touched.merge(row.issue_number, row.created_at, ::maxOf)
+        for (row in db.query("SELECT issue_number, created_at FROM issue_events WHERE project_id = ? AND session_id = ? AND kind = 'attempt'", listOf(project, session))) {
+            touched.merge(row.long("issue_number"), row.long("created_at"), ::maxOf)
         }
-        val fixed = q.fixedIssueNumbers(project).executeAsList().toSet()
+        val fixed = fixedNumbers(project).toSet()
         return touched.entries
             .filter { it.key !in fixed }
             .maxWithOrNull(compareBy<Map.Entry<Long, Long>> { it.value }.thenBy { it.key })
@@ -150,9 +152,9 @@ class IssueStore(
     }
 
     private fun requireOpen(project: String, number: Int): Int {
-        q.getIssue(project, number.toLong()).executeAsOneOrNull()
+        db.query("SELECT number FROM issues WHERE project_id = ? AND number = ?", listOf(project, number.toLong())).firstOrNull()
             ?: throw IssueRefusal(IssueRefusal.ISSUE_NOT_FOUND, "no issue ${issueRef(number)} in project '$project'")
-        if (number.toLong() in q.fixedIssueNumbers(project).executeAsList()) {
+        if (number.toLong() in fixedNumbers(project)) {
             throw IssueRefusal(
                 IssueRefusal.ALREADY_FIXED,
                 "${issueRef(number)} is already fixed; a recurrence is a new issue (agenthq issue open)",
@@ -169,17 +171,11 @@ class IssueStore(
         implicit: Boolean,
         actor: IssueActor,
     ): Int {
-        val number = q.lastIssueNumber(project).executeAsOne() + 1
-        q.insertIssue(
-            project_id = project,
-            number = number,
-            summary = summary,
-            location = location,
-            ticket_id = ticket,
-            implicit = if (implicit) 1L else 0L,
-            opened_by_session = actor.sessionId,
-            opened_by_agent = actor.agentId,
-            created_at = now(),
+        val number = db.query("SELECT COALESCE(MAX(number), 0) AS n FROM issues WHERE project_id = ?", listOf(project)).first().long("n") + 1
+        db.execute(
+            "INSERT INTO issues(project_id, number, summary, location, ticket_id, implicit, opened_by_session, opened_by_agent, created_at) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            listOf(project, number, summary, location, ticket, if (implicit) 1L else 0L, actor.sessionId, actor.agentId, now()),
         )
         return number.toInt()
     }
@@ -193,24 +189,20 @@ class IssueStore(
         location: String?,
         actor: IssueActor,
     ) {
-        val seq = q.lastIssueEventSeq(project, issue.toLong()).executeAsOne() + 1
-        q.insertIssueEvent(
-            project_id = project,
-            issue_number = issue.toLong(),
-            seq = seq,
-            kind = kind,
-            summary = summary,
-            outcome = outcome,
-            location = location,
-            session_id = actor.sessionId,
-            agent_id = actor.agentId,
-            created_at = now(),
+        val seq = db.query("SELECT COALESCE(MAX(seq), 0) AS n FROM issue_events WHERE project_id = ? AND issue_number = ?", listOf(project, issue.toLong())).first().long("n") + 1
+        db.execute(
+            "INSERT INTO issue_events(project_id, issue_number, seq, kind, summary, outcome, location, session_id, agent_id, created_at) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            listOf(project, issue.toLong(), seq, kind, summary, outcome, location, actor.sessionId, actor.agentId, now()),
         )
     }
 
     /** The clock, but strictly past every row already written, so the active-issue order never ties. */
     private fun now(): Long {
-        val floor = lastAt ?: maxOf(q.lastIssueCreatedAt().executeAsOne(), q.lastIssueEventCreatedAt().executeAsOne())
+        val floor = lastAt ?: maxOf(
+            db.query("SELECT COALESCE(MAX(created_at), 0) AS n FROM issues").first().long("n"),
+            db.query("SELECT COALESCE(MAX(created_at), 0) AS n FROM issue_events").first().long("n"),
+        )
         return maxOf(clock(), floor + 1).also { lastAt = it }
     }
 
@@ -245,31 +237,37 @@ class IssueStore(
         return if (first.length <= SUMMARY_MAX) first else first.take(SUMMARY_MAX - 3).trimEnd() + "..."
     }
 
-    private fun Issues.toIssue(events: List<Issue_events>): Issue {
+    private fun fixedNumbers(project: String): List<Long> =
+        db.query("SELECT issue_number FROM issue_events WHERE project_id = ? AND kind = 'fix'", listOf(project)).map { it.long("issue_number") }
+
+    private fun Map<String, Any?>.long(key: String): Long = (this[key] as Number).toLong()
+
+    private fun Map<String, Any?>.toIssue(events: List<Map<String, Any?>>): Issue {
         val mapped = events.map {
             IssueEvent(
-                seq = it.seq.toInt(),
-                kind = it.kind,
-                summary = it.summary,
-                outcome = it.outcome,
-                location = it.location,
-                sessionId = it.session_id,
-                agentId = it.agent_id,
-                createdAt = it.created_at,
+                seq = it.long("seq").toInt(),
+                kind = it["kind"] as String,
+                summary = it["summary"] as String,
+                outcome = it["outcome"] as String?,
+                location = it["location"] as String?,
+                sessionId = it["session_id"] as String?,
+                agentId = it["agent_id"] as String?,
+                createdAt = it.long("created_at"),
             )
         }
+        val n = long("number").toInt()
         return Issue(
-            projectId = project_id,
-            number = number.toInt(),
-            ref = issueRef(number.toInt()),
-            summary = summary,
-            location = location,
-            ticketId = ticket_id,
-            implicit = implicit == 1L,
+            projectId = this["project_id"] as String,
+            number = n,
+            ref = issueRef(n),
+            summary = this["summary"] as String,
+            location = this["location"] as String,
+            ticketId = this["ticket_id"] as String?,
+            implicit = long("implicit") == 1L,
             status = if (mapped.any { it.kind == IssueEvent.KIND_FIX }) Issue.STATUS_FIXED else Issue.STATUS_OPEN,
-            openedBySession = opened_by_session,
-            openedByAgent = opened_by_agent,
-            createdAt = created_at,
+            openedBySession = this["opened_by_session"] as String?,
+            openedByAgent = this["opened_by_agent"] as String?,
+            createdAt = long("created_at"),
             events = mapped,
         )
     }

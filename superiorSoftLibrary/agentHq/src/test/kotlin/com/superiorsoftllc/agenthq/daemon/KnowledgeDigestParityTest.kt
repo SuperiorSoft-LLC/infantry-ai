@@ -29,6 +29,8 @@ import kotlin.test.assertTrue
  * the digest instead says it is authoritative over any recalled memory, before its first entry.
  */
 class KnowledgeDigestParityTest {
+    private var records = FakeKnowledgeRecords()
+
 
     @Test
     fun theDigestReachesEveryHarnessByteForByteThroughTheSharedFirstTurn() = withDaemon { fixture, runner ->
@@ -69,8 +71,8 @@ class KnowledgeDigestParityTest {
     /** QA-G2e's own knowledge: D1 (.zip) superseded by D2 (.tar.gz). */
     private fun seedDecisions(fixture: DaemonFixture) {
         fixture.client.await(Envelope.READY)
-        fixture.daemon.decisions.add(PROJECT, D1)
-        fixture.daemon.decisions.add(PROJECT, D2, supersedes = "D1")
+        records.addDecision(PROJECT, D1)
+        records.addDecision(PROJECT, D2, supersedes = "D1")
     }
 
     /**
@@ -100,12 +102,14 @@ class KnowledgeDigestParityTest {
         val runner = ScriptedRunner(StubScript.default(), delayMs = 0)
         val opencode = Scripted(OpenCodeProvider(modelLister = { emptyList() }), runner)
         val claude = Scripted(ClaudeCodeProvider { ClaudeCatalog(emptyList(), null, false, emptyList()) }, runner)
+        records = FakeKnowledgeRecords().install()
         val fixture = DaemonFixture.launch(StubScript.default(), runner = runner, additionalProviders = listOf(opencode, claude))
         try {
             block(fixture, runner)
         } finally {
             fixture.stop()
             fixture.deleteState()
+            FakeKnowledgeRecords.uninstall()
         }
     }
 

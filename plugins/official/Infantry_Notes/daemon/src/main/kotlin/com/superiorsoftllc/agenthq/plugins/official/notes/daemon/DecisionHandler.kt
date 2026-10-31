@@ -1,5 +1,10 @@
-package com.superiorsoftllc.agenthq.decisions
+package com.superiorsoftllc.agenthq.plugins.official.notes.daemon
 
+import com.superiorsoftllc.agenthq.daemon.api.Frame
+import com.superiorsoftllc.agenthq.decisions.Decision
+import com.superiorsoftllc.agenthq.decisions.DecisionAdd
+import com.superiorsoftllc.agenthq.decisions.DecisionGet
+import com.superiorsoftllc.agenthq.decisions.DecisionList
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -19,12 +24,12 @@ import kotlinx.serialization.json.Json
 class DecisionHandler(
     private val store: DecisionStore,
     private val author: (sessionId: String) -> DecisionAuthor?,
-    private val push: (Envelope) -> Unit,
+    private val push: (Frame) -> Unit,
     private val json: Json = Json { ignoreUnknownKeys = false; encodeDefaults = true },
 ) {
-    fun answer(envelope: Envelope): Envelope? = when (envelope.type) {
-        Envelope.DECISION_ADD -> request(envelope.type) {
-            val req = json.decodeFromString(DecisionAdd.serializer(), envelope.data)
+    fun answer(frame: Frame): Frame? = when (frame.type) {
+        Envelope.DECISION_ADD -> request(frame.type) {
+            val req = json.decodeFromString(DecisionAdd.serializer(), frame.data)
             val by = req.sessionId?.trim()?.takeIf { it.isNotEmpty() }?.let { id ->
                 author(id) ?: throw DecisionRefusal(DecisionRefusal.SESSION_NOT_FOUND, "no session '$id' on this daemon")
             } ?: DecisionAuthor.NONE
@@ -33,16 +38,16 @@ class DecisionHandler(
             null
         }
 
-        Envelope.DECISION_LIST -> request(envelope.type) {
-            val req = json.decodeFromString(DecisionList.serializer(), envelope.data)
-            Envelope(
+        Envelope.DECISION_LIST -> request(frame.type) {
+            val req = json.decodeFromString(DecisionList.serializer(), frame.data)
+            Frame(
                 Envelope.DECISIONS,
                 json.encodeToString(ListSerializer(Decision.serializer()), store.list(req.projectId, req.includeSuperseded)),
             )
         }
 
-        Envelope.DECISION_GET -> request(envelope.type) {
-            val req = json.decodeFromString(DecisionGet.serializer(), envelope.data)
+        Envelope.DECISION_GET -> request(frame.type) {
+            val req = json.decodeFromString(DecisionGet.serializer(), frame.data)
             val found = store.get(req.projectId, req.ref) ?: throw DecisionRefusal(
                 DecisionRefusal.DECISION_NOT_FOUND,
                 "no decision ${req.ref.trim()} in project '${req.projectId.trim()}'",
@@ -53,13 +58,13 @@ class DecisionHandler(
         else -> null
     }
 
-    private fun item(decision: Decision) = Envelope(Envelope.DECISION_ITEM, json.encodeToString(Decision.serializer(), decision))
+    private fun item(decision: Decision) = Frame(Envelope.DECISION_ITEM, json.encodeToString(Decision.serializer(), decision))
 
-    private inline fun request(frame: String, block: () -> Envelope?): Envelope? = try {
+    private inline fun request(frame: String, block: () -> Frame?): Frame? = try {
         block()
     } catch (e: IllegalArgumentException) {
-        Envelope(Envelope.ERROR, "$frame refused: ${e.message ?: "invalid request"}")
+        Frame(Envelope.ERROR, "$frame refused: ${e.message ?: "invalid request"}")
     } catch (e: Exception) {
-        Envelope(Envelope.ERROR, "$frame failed: ${e.message ?: e::class.simpleName}")
+        Frame(Envelope.ERROR, "$frame failed: ${e.message ?: e::class.simpleName}")
     }
 }

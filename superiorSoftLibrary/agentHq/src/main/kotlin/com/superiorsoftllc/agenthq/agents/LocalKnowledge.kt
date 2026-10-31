@@ -3,26 +3,31 @@ package com.superiorsoftllc.agenthq.agents
 import com.superiorsoftllc.agenthq.daemon.api.knowledge.Knowledge
 import com.superiorsoftllc.agenthq.daemon.api.knowledge.KnowledgeDigestView
 import com.superiorsoftllc.agenthq.daemon.api.knowledge.KnowledgeHit
-import com.superiorsoftllc.agenthq.decisions.DecisionStore
-import com.superiorsoftllc.agenthq.issues.IssueStore
+import com.superiorsoftllc.agenthq.daemon.api.knowledge.KnowledgeRecords
 import com.superiorsoftllc.agenthq.memory.MemoryIndexEntry
 import com.superiorsoftllc.agenthq.memory.MemoryStore
 import com.superiorsoftllc.agenthq.memory.SCOPE_ROLE
 
-/** DP-7b: core's [Knowledge] provider, over today's memory, decision and issue stores. */
+/**
+ * DP-7b: core's [Knowledge] provider, over the memory store. DP-7c: the decisions and issues half comes from [records], the
+ * [KnowledgeRecords] the Infantry_Notes plugin publishes; with none (plugin absent) the digest has no decisions and no issues.
+ */
 class LocalKnowledge(
     private val memory: MemoryStore,
-    private val decisions: DecisionStore,
-    private val issues: IssueStore,
+    private val records: () -> KnowledgeRecords?,
 ) : Knowledge {
     override fun noteCount(project: String): Int = memory.index(project).size
 
     override fun digest(project: String, role: String?, budget: Int?): KnowledgeDigestView? {
         val notes = memory.index(project).map { MemoryIndexEntry(it.name, it.description, it.folder) }
-        val active = decisions.list(project)
-        val open = issues.list(project)
-        val d = KnowledgeLines.digest(notes, active, open)
-        return KnowledgeDigestView(notes.size, active.size, open.size, d.decisions, d.issues, d.notes)
+        val active = records()?.activeDecisions(project).orEmpty()
+        val open = records()?.openIssues(project).orEmpty()
+        return KnowledgeDigestView(
+            notes.size, active.size, open.size,
+            KnowledgeLines.decisionTitleLines(active.map { it.ref to it.summary }),
+            KnowledgeLines.issueLines(open.map { Triple(it.ref, it.summary, it.location) }),
+            KnowledgeLines.notes(notes),
+        )
     }
 
     override fun section(project: String, name: String, scope: String, owner: String): String? =

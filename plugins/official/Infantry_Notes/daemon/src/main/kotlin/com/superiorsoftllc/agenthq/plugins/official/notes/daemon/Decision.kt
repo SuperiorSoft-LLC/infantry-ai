@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.decisions
+package com.superiorsoftllc.agenthq.plugins.official.notes.daemon
 
 /** Who wrote a decision, resolved from the declared session. */
 data class DecisionAuthor(

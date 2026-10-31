@@ -1,6 +1,7 @@
-package com.superiorsoftllc.agenthq.issues
+package com.superiorsoftllc.agenthq.plugins.official.notes.daemon
 
-import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
+import com.superiorsoftllc.agenthq.decisions.*
+import com.superiorsoftllc.agenthq.issues.*
 import java.nio.file.Files
 import java.sql.DriverManager
 import java.sql.SQLException
@@ -19,10 +20,10 @@ import kotlin.test.assertTrue
  */
 class IssueStoreTest {
     private val path = Files.createTempFile("agenthq-issues-", ".db").also { it.toFile().delete() }.toAbsolutePath().toString()
-    private val opened = mutableListOf<SqlAgentHqStore>()
+    private val opened = mutableListOf<java.sql.Connection>()
 
     /** A FIXED clock on purpose: the store must still order "most recent" without ties. */
-    private fun open(): IssueStore = IssueStore(SqlAgentHqStore.open(path).also { opened += it }, clock = { 1_000L })
+    private fun open(): IssueStore = IssueStore(NotesTestDb.open(path).also { opened += it.first }.second, clock = { 1_000L })
 
     private val s1 = IssueActor("s1", "agent-1")
     private val s2 = IssueActor("s2", "agent-2")

@@ -55,8 +55,9 @@ that is renamed or deleted must leave the table. Lines in PLUGIN_NOW/PLUGIN_LATE
 | `provider` | AgentProvider abstraction used by SessionManager; the concrete providers in it follow `claude` and `opencode` |
 | `orchestration` | the pod/node DAG scheduler (orchestrator side, section 6) and `OrchestratorLink`, the seam |
 
-**PLUGIN NOW** (mechanism exists, only the move is left): `issues`, `decisions`, `memory` (a Knowledge
+**PLUGIN NOW** (mechanism exists, only the move is left): `memory` (a Knowledge
 plugin); `prompts` (Infantry_Prompts); `images` (Infantry_Chat).
+DP-7c: `issues` and `decisions` (stores, handlers, frames) moved to plugins/official/Infantry_Notes/daemon; only the wire DTOs stay in core (agentHqProtocol).
 
 DAEMON-PLUGINS-3: `probe` (a one-off provider comparison `main()` and its `probeProvider` Gradle task) was dead and is deleted. `experiments` (the pi tool bridge) cannot move yet, see below.
 
@@ -317,3 +318,5 @@ No existing getter is changed or deprecated by AR-5 (additive). `tickets`, `epic
 **DP-7a (ticket 6df0d6c2):** the knowledge wire DTOs (`memory`: MemoryNote, MemorySave/Get/List/Search/Delete/PurgeRole, MemoryScoped, MemoryIndexEntry, MemorySearchResult, `memoryOccurrences`; `issues`: Issue, IssueEvent and the Issue* payloads, ref/location helpers; `decisions`: Decision, DecisionAdd/List/Get, `parseDecisionRef`) live in `agentHqProtocol` under the same package names (wire unchanged). Stores, handlers, refusals and SQL stay in `agentHq`. `OrchestratorBoundaryGuardTest` no longer counts an import of such a type as a runner<->orchestrator crossing: `cli>memory`, `cli>issues`, `cli>decisions` are 0.
 
 **DP-7b (Knowledge read port, DaemonApi 1.17.0, additive):** `daemon.api.knowledge.Knowledge` (read-only: `noteCount`, `digest(project, role, budget)`, `section`, `search`, `roleNotes`) is a service in the AR-5 registry. Core registers `LocalKnowledge` (over MemoryStore/DecisionStore/IssueStore, owner `core`) right after the plugin host is set. `agents/Knowledge.kt`'s `KnowledgeCounter` (first-turn digest, board brief, mail router) is now `ServiceKnowledgeCounter`, which calls `services.find(Knowledge)` on every read; no provider = no counts = the knowledge section is simply omitted (no error). Rendered text unchanged (`renderKnowledge` untouched). `budget` is reserved: the local provider applies the shipped caps.
+
+**DP-7c (issues and decisions moved out of core):** the `issues` and `decisions` packages are gone from `agentHq`. The Infantry_Notes daemon half owns the stores (over `api.storage`, tables adopted via `daemon.storage.adopt`: decisions, issues, issue_events; core migrations still create them) and the nine frames (module.json `daemon.frames`, same types, actions, kinds and refusal texts). DaemonApi 1.17.0 (additive minor) adds `KnowledgeRecords` (`activeDecisions`, `openIssues`) beside `Knowledge`; the plugin provides it and core's `LocalKnowledge` reads it lazily for the digest (memory stays in core until DP-7d). Without the plugin the frames refuse with `<type> refused: this daemon has no decisions|issues` and the digest omits both. No decision/issue MCP tools exist, so none were added.

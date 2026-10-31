@@ -31,6 +31,8 @@ import kotlin.test.assertFalse
  * Retries keep [RetryFeedback] over the ORIGINAL node prompt.
  */
 class PodFirstTurnTest {
+    private var records = FakeKnowledgeRecords()
+
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
@@ -38,7 +40,7 @@ class PodFirstTurnTest {
     fun aPodSubmittedForAProjectGetsThatProjectsKnowledgeFirstAndCarriesTheProject() = withDaemon(StubScript.default()) { fixture, runner ->
         fixture.client.await(Envelope.READY)
         val repoProject = fixture.createProject("the repo's project") // the daemon's default project: must NOT be used
-        fixture.daemon.decisions.add(PROJECT, "use sqlite")
+        records.addDecision(PROJECT, "use sqlite")
 
         submit(fixture, PodSubmitRequest(goal = NODE_PROMPT, nodes = listOf(NodeSpec("main", NODE_PROMPT)), projectId = PROJECT))
         val session = awaitRuns(fixture, runner, 1).let { fixture.daemon.manager.list().single() }
@@ -80,7 +82,7 @@ class PodFirstTurnTest {
     @Test
     fun aRetryKeepsRetryFeedbackOverTheOriginalPrompt() = withDaemon(StubScript.failing()) { fixture, runner ->
         fixture.client.await(Envelope.READY)
-        fixture.daemon.decisions.add(PROJECT, "use sqlite")
+        records.addDecision(PROJECT, "use sqlite")
 
         val pod = submit(
             fixture,
@@ -117,12 +119,14 @@ class PodFirstTurnTest {
 
     private fun withDaemon(script: StubScript, block: (DaemonFixture, ScriptedRunner) -> Unit) {
         val runner = ScriptedRunner(script, delayMs = 0)
+        records = FakeKnowledgeRecords().install()
         val fixture = DaemonFixture.launch(script, runner = runner)
         try {
             block(fixture, runner)
         } finally {
             fixture.stop()
             fixture.deleteState()
+            FakeKnowledgeRecords.uninstall()
         }
     }
 

@@ -1,5 +1,13 @@
-package com.superiorsoftllc.agenthq.issues
+package com.superiorsoftllc.agenthq.plugins.official.notes.daemon
 
+import com.superiorsoftllc.agenthq.daemon.api.Frame
+import com.superiorsoftllc.agenthq.issues.Issue
+import com.superiorsoftllc.agenthq.issues.IssueAttempt
+import com.superiorsoftllc.agenthq.issues.IssueFix
+import com.superiorsoftllc.agenthq.issues.IssueGet
+import com.superiorsoftllc.agenthq.issues.IssueList
+import com.superiorsoftllc.agenthq.issues.IssueOpen
+import com.superiorsoftllc.agenthq.issues.IssuePrecheck
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -21,32 +29,32 @@ import kotlinx.serialization.json.Json
 class IssueHandler(
     private val store: IssueStore,
     private val actor: (sessionId: String) -> IssueActor?,
-    private val push: (Envelope) -> Unit,
+    private val push: (Frame) -> Unit,
     private val json: Json = Json { ignoreUnknownKeys = false; encodeDefaults = true },
 ) {
-    fun answer(envelope: Envelope): Envelope? = when (envelope.type) {
-        Envelope.ISSUE_OPEN -> request(envelope.type) {
-            val req = json.decodeFromString(IssueOpen.serializer(), envelope.data)
+    fun answer(frame: Frame): Frame? = when (frame.type) {
+        Envelope.ISSUE_OPEN -> request(frame.type) {
+            val req = json.decodeFromString(IssueOpen.serializer(), frame.data)
             pushed(store.open(req.projectId, req.summary, req.location, req.ticketId, resolve(req.sessionId)))
         }
 
-        Envelope.ISSUE_ATTEMPT -> request(envelope.type) {
-            val req = json.decodeFromString(IssueAttempt.serializer(), envelope.data)
+        Envelope.ISSUE_ATTEMPT -> request(frame.type) {
+            val req = json.decodeFromString(IssueAttempt.serializer(), frame.data)
             pushed(store.attempt(req.projectId, req.summary, req.outcome, req.location, req.issue, resolve(req.sessionId)))
         }
 
-        Envelope.ISSUE_FIX -> request(envelope.type) {
-            val req = json.decodeFromString(IssueFix.serializer(), envelope.data)
+        Envelope.ISSUE_FIX -> request(frame.type) {
+            val req = json.decodeFromString(IssueFix.serializer(), frame.data)
             pushed(store.fix(req.projectId, req.summary, req.issue, resolve(req.sessionId)))
         }
 
-        Envelope.ISSUE_LIST -> request(envelope.type) {
-            val req = json.decodeFromString(IssueList.serializer(), envelope.data)
+        Envelope.ISSUE_LIST -> request(frame.type) {
+            val req = json.decodeFromString(IssueList.serializer(), frame.data)
             issues(store.list(req.projectId, req.includeFixed, req.location))
         }
 
-        Envelope.ISSUE_GET -> request(envelope.type) {
-            val req = json.decodeFromString(IssueGet.serializer(), envelope.data)
+        Envelope.ISSUE_GET -> request(frame.type) {
+            val req = json.decodeFromString(IssueGet.serializer(), frame.data)
             item(
                 store.get(req.projectId, req.ref) ?: throw IssueRefusal(
                     IssueRefusal.ISSUE_NOT_FOUND,
@@ -55,8 +63,8 @@ class IssueHandler(
             )
         }
 
-        Envelope.ISSUE_PRECHECK -> request(envelope.type) {
-            val req = json.decodeFromString(IssuePrecheck.serializer(), envelope.data)
+        Envelope.ISSUE_PRECHECK -> request(frame.type) {
+            val req = json.decodeFromString(IssuePrecheck.serializer(), frame.data)
             issues(store.precheck(req.projectId, req.path))
         }
 
@@ -68,20 +76,20 @@ class IssueHandler(
             actor(id) ?: throw IssueRefusal(IssueRefusal.SESSION_NOT_FOUND, "no session '$id' on this daemon")
         } ?: IssueActor.NONE
 
-    private fun pushed(issue: Issue): Envelope? {
+    private fun pushed(issue: Issue): Frame? {
         push(item(issue))
         return null
     }
 
-    private fun item(issue: Issue) = Envelope(Envelope.ISSUE_ITEM, json.encodeToString(Issue.serializer(), issue))
+    private fun item(issue: Issue) = Frame(Envelope.ISSUE_ITEM, json.encodeToString(Issue.serializer(), issue))
 
-    private fun issues(list: List<Issue>) = Envelope(Envelope.ISSUES, json.encodeToString(ListSerializer(Issue.serializer()), list))
+    private fun issues(list: List<Issue>) = Frame(Envelope.ISSUES, json.encodeToString(ListSerializer(Issue.serializer()), list))
 
-    private inline fun request(frame: String, block: () -> Envelope?): Envelope? = try {
+    private inline fun request(frame: String, block: () -> Frame?): Frame? = try {
         block()
     } catch (e: IllegalArgumentException) {
-        Envelope(Envelope.ERROR, "$frame refused: ${e.message ?: "invalid request"}")
+        Frame(Envelope.ERROR, "$frame refused: ${e.message ?: "invalid request"}")
     } catch (e: Exception) {
-        Envelope(Envelope.ERROR, "$frame failed: ${e.message ?: e::class.simpleName}")
+        Frame(Envelope.ERROR, "$frame failed: ${e.message ?: e::class.simpleName}")
     }
 }
