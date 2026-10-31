@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.cli.mcp
 
+import com.superiorsoftllc.agenthq.daemon.requireBoard
+
 import com.superiorsoftllc.agenthq.cli.Cli
 import com.superiorsoftllc.agenthq.cli.shortTicketId
 import com.superiorsoftllc.agenthq.daemon.DaemonFixture
@@ -117,7 +119,7 @@ class McpTicketMoveE2eTest {
         val titles = ids.entries.associate { (k, v) -> v to k }
         fun todo(board: List<com.superiorsoftllc.agenthq.protocol.Ticket>) =
             board.filter { it.status == TicketStatus.TODO }.sortedBy { it.position }.map { titles.getValue(it.id) }
-        fun todo() = todo(fixture.daemon.board.list())
+        fun todo() = todo(fixture.daemon.requireBoard().list())
         assertEquals(listOf("A", "B", "C", "D"), todo())
 
         // top, with no status: reordered in its own column, the answer reads back the stored place.
@@ -149,7 +151,7 @@ class McpTicketMoveE2eTest {
         assertEquals(listOf("A", "C", "B"), todo())
 
         // Refusals change nothing.
-        val before = fixture.daemon.board.list()
+        val before = fixture.daemon.requireBoard().list()
         assertRefused(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["A"]}"}"""), "needs a status")
         assertRefused(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["A"]}","top":true,"bottom":true}"""), "one of before, after, top, bottom, position")
         assertRefused(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["A"]}","before":"${ids["A"]}"}"""), "before itself")
@@ -157,13 +159,13 @@ class McpTicketMoveE2eTest {
         assertRefused(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["A"]}","before":"zzzzzzzz-no-such-ticket"}"""), "no ticket")
         assertRefused(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["A"]}","position":-1}"""), "position must be 0 or more")
         assertRefused(agent.callTool("agenthq_ticket_move", """{"ticketId":"${ids["A"]}","position":"x"}"""), "whole number")
-        assertEquals(before, fixture.daemon.board.list(), "a refused move leaves the board unchanged")
+        assertEquals(before, fixture.daemon.requireBoard().list(), "a refused move leaves the board unchanged")
 
         // The order is stored: a daemon booted again on the same state lists it.
         agent.close()
         fixture.stop()
         val again = DaemonFixture.launch(stateDir = stateDir, pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot()).also { fixtures += it; it.client.await(Envelope.READY) }
-        assertEquals(listOf("A", "C", "B"), todo(again.daemon.board.list()), "the order survives a restart")
+        assertEquals(listOf("A", "C", "B"), todo(again.daemon.requireBoard().list()), "the order survives a restart")
     }
 
     private companion object {

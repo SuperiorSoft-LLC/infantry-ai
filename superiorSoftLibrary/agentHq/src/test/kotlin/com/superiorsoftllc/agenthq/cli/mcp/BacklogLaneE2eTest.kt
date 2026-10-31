@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.cli.mcp
 
+import com.superiorsoftllc.agenthq.daemon.requireBoard
+
 import com.superiorsoftllc.agenthq.cli.Cli
 import com.superiorsoftllc.agenthq.cli.CliTestEnv
 import com.superiorsoftllc.agenthq.cli.shortTicketId
@@ -119,7 +121,7 @@ class BacklogLaneE2eTest {
         val project = tempDir("agenthq-backlog-project")
         McpServeConfig.fileIn(project).apply { parentFile.mkdirs() }.writeText("""{"projectId":"$PROJECT"}""")
         val agent = serve(fixture, project)
-        fun status(id: String) = fixture.daemon.board.list().single { it.id == id }.status
+        fun status(id: String) = fixture.daemon.requireBoard().list().single { it.id == id }.status
 
         // Create: MCP status backlog, CLI --status backlog, and a plain create still entering the sprint.
         val viaMcp = payload(agent.callTool("agenthq_ticket_create", """{"title":"Parked by MCP","role":"backend","status":"backlog"}"""))
@@ -129,7 +131,7 @@ class BacklogLaneE2eTest {
         assertEquals(0, created.exit, "ticket create --status backlog failed: ${created.err}")
         val sprint = cli(fixture, "ticket", "create", "--title", "Sprint work", "--role", "backend", "--project", PROJECT)
         assertEquals(0, sprint.exit, sprint.err)
-        val board = fixture.daemon.board.list()
+        val board = fixture.daemon.requireBoard().list()
         val cliId = board.single { it.title == "Parked by CLI" }.id
         assertEquals(TicketStatus.BACKLOG, status(mcpId))
         assertEquals(TicketStatus.BACKLOG, status(cliId))
@@ -142,7 +144,7 @@ class BacklogLaneE2eTest {
         assertTrue(badCli.err.contains("backlog"), badCli.err)
         val badMcp = agent.callTool("agenthq_ticket_create", """{"title":"x","status":"in_progress"}""")
         assertEquals("true", badMcp["isError"]!!.jsonPrimitive.content, "an MCP create into in_progress is refused: $badMcp")
-        assertEquals(3, fixture.daemon.board.list().size, "refused creates store nothing")
+        assertEquals(3, fixture.daemon.requireBoard().list().size, "refused creates store nothing")
 
         // Listing parity: tickets --status backlog, agenthq board and agenthq_board.
         val listed = cli(fixture, "tickets", "--status", "backlog")
@@ -166,7 +168,7 @@ class BacklogLaneE2eTest {
         assertTrue(cliMove.exit != 0 && cliMove.err.contains("Backlog lane"), "ticket move in_progress is a refused start: ${cliMove.err}")
         for (id in listOf(mcpId, cliId)) {
             assertEquals(TicketStatus.BACKLOG, status(id), "a refused start leaves it in backlog")
-            assertNull(fixture.daemon.board.list().single { it.id == id }.sessionId, "no worker was started")
+            assertNull(fixture.daemon.requireBoard().list().single { it.id == id }.sessionId, "no worker was started")
         }
         assertTrue(fixture.daemon.manager.list().isEmpty(), "no session was spawned by any refused start")
 

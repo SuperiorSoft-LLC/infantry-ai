@@ -65,7 +65,7 @@ fun WsTestClient.answerTo(type: String, data: String = ""): Envelope {
     val from = mark()
     send(type, data)
     return awaitAfter(from, "answer to $type") {
-        it.type == Envelope.ERROR || it.type == Envelope.TICKET || it.type == Envelope.TICKETS ||
+        (it.type == Envelope.ERROR && it.sessionId == null) || it.type == Envelope.TICKET || it.type == Envelope.TICKETS ||
             it.type == Envelope.SETTINGS || it.type == Envelope.AGENT || it.type == Envelope.AGENTS
     }
 }
@@ -123,7 +123,9 @@ fun WsTestClient.moveTicket(id: String, status: String): Ticket {
     val from = mark()
     send(Envelope.TICKET_MOVE, """{"id":"$id","status":"$status"}""")
     return awaitAfter(from, "the ticket_move answer for $id") {
-        it.type == Envelope.ERROR || (it.type == Envelope.TICKET && it.ticketOrNull()?.id == id)
+        // A run's failure line is an ERROR frame WITH a sessionId; a request's refusal has none. With a runner that fails at once the
+        // run error can reach this client before the move's answer (VC gate: 'error refused: gated failure #1'); it is not the answer.
+        (it.type == Envelope.ERROR && it.sessionId == null) || (it.type == Envelope.TICKET && it.ticketOrNull()?.id == id)
     }.requireTicket()
 }
 
@@ -173,3 +175,6 @@ fun ticketRuns(dbPath: String, ticketId: String): List<Map<String, String?>> =
 
 /** The daemon's database file for [fixture]. */
 fun DaemonFixture.dbPath(): String = java.io.File(stateDir, "agenthq.db").absolutePath
+
+/** DP-5h-3d: [AgentHqDaemon.board] is null on a daemon without a board; an E2E test that needs the board reads it through here. */
+fun AgentHqDaemon.requireBoard(): com.superiorsoftllc.agenthq.backlog.TicketBoard = board ?: error("this daemon has no board")
