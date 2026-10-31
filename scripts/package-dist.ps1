@@ -201,6 +201,9 @@ try {
   $info = @("sha=$full", "built=$stampUtc", "signing=$signing", "source=$($image.Name)")
   Set-Content -LiteralPath (Join-Path $dest 'BUILD-INFO.txt') -Value $info -Encoding ASCII
   Set-Content -LiteralPath (Join-Path $dest 'MANIFEST.txt') -Value "$full $stampUtc $signing" -Encoding ASCII
+  # README.txt is generated per build (never copied from an earlier build), so it names this sha and folder.
+  $readme = @("Infantry AI build $($full.Substring(0, 7))", "sha=$full", "folder=$(Split-Path -Leaf $dest)", "built=$stampUtc", "signing=$signing", "See BUILD-INFO.txt for the full record.")
+  Set-Content -LiteralPath (Join-Path $dest 'README.txt') -Value $readme -Encoding ASCII
 
   # Copy-integrity checks: all must pass before current\ is touched.
   $destExe = Join-Path $dest $srcExe.Name
@@ -210,12 +213,12 @@ try {
   $destCount = Get-Count $dest
   # The image may already carry its own BUILD-INFO.txt (the build writes one); our copy replaces it, so count only what is added.
   $addFiles = 0; $addBytes = 0
-  foreach ($n in 'BUILD-INFO.txt', 'MANIFEST.txt') {
+  foreach ($n in 'BUILD-INFO.txt', 'MANIFEST.txt', 'README.txt') {
     $s = Join-Path $image.FullName $n
     $d = (Get-Item -LiteralPath (Join-Path $dest $n)).Length
     if (Test-Path -LiteralPath $s) { $addBytes += $d - (Get-Item -LiteralPath $s).Length } else { $addFiles++; $addBytes += $d }
   }
-  if ($destCount.Files -ne ($srcCount.Files + $addFiles)) { Fail "integrity: file count $($destCount.Files) != $($srcCount.Files) + $addFiles (BUILD-INFO, MANIFEST)" }
+  if ($destCount.Files -ne ($srcCount.Files + $addFiles)) { Fail "integrity: file count $($destCount.Files) != $($srcCount.Files) + $addFiles (BUILD-INFO, MANIFEST, README)" }
   if ($destCount.Bytes -ne ($srcCount.Bytes + $addBytes)) {
     Fail "integrity: byte total differs from the build"
   }
@@ -235,7 +238,8 @@ try {
     $catalog | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $optionalDest 'catalog.json') -Encoding UTF8
   }
   $report = New-BuildManifest $inventory $selection $full $signing $Preset
-  $stagedOfficial = @(Get-ChildItem -LiteralPath (Join-Path $dest 'appesources\modules\official') -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+  $stagedOfficial = @(Get-ChildItem -LiteralPath (Join-Path $dest 'app
+esources\modules\official') -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
   foreach ($x in $selection.Excluded) { if ($stagedOfficial -contains $x) { Fail "integrity: excluded plugin $x is still in the build" } }
   $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
   Write-Output "PACKAGE-DIST plugins: included=$($selection.Included.Count) excluded=[$($selection.Excluded -join ', ')] report=$manifestPath$(if ($selection.Excluded.Count) { " optional=$optionalDest" })"
