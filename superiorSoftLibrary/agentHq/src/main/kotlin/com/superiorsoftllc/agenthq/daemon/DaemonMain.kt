@@ -1133,20 +1133,9 @@ class AgentHqDaemon(
             val issues = com.superiorsoftllc.agenthq.daemon.wiring.KnowledgeWiring.buildIssues(store)
             // P10-K9: the knowledge section's counts, read for a project whenever a first turn renders.
             // BUG-G2e: and the digest itself (what `agenthq knowledge` prints), built in-process from the same stores.
-            val knowledge = object : KnowledgeCounter {
-              override fun roleNotes(projectId: String, role: String) =
-                  memoryNotes.index(projectId, com.superiorsoftllc.agenthq.memory.SCOPE_ROLE, role).map { it.name to it.description }
-              override fun counts(projectId: String): KnowledgeCounts? {
-                val notes = memoryNotes.index(projectId).map { MemoryIndexEntry(it.name, it.description, it.folder) }
-                val active = decisions.list(projectId)
-                val open = issues.list(projectId)
-                return KnowledgeCounts(
-                    notes = notes.size,
-                    activeDecisions = active.size,
-                    openIssues = open.size,
-                    digest = KnowledgeLines.digest(notes, active, open),
-                )
-              }
+            // DP-7b: every first-turn path reads the knowledge through the registry's Knowledge port (registered below, with the plugin host).
+            val knowledge: KnowledgeCounter = com.superiorsoftllc.agenthq.agents.ServiceKnowledgeCounter {
+                pluginHost.get().serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.knowledge.Knowledge::class)
             }
             val issueFrames = IssueHandler(
                 store = issues,
@@ -1638,6 +1627,7 @@ class AgentHqDaemon(
                     stateDir(),
                 )
                 pluginHost.set(host)
+                host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.knowledge.Knowledge::class, com.superiorsoftllc.agenthq.agents.LocalKnowledge(memoryNotes, decisions, issues))
                 // HARNESS-PLUGIN-3 H4 (docs/HARNESS-PLUGINS.md 3.2): each loaded module's `harness` block, into the ONE registry,
                 // AFTER module resolution and with the daemon halves' trust. The built-ins (class path, 1.x) are already in it.
                 val harnessModules = com.superiorsoftllc.agenthq.daemon.wiring.HarnessModulesWiring.build(
