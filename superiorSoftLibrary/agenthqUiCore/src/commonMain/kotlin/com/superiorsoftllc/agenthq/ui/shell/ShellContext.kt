@@ -781,6 +781,10 @@ interface BoardContext {
     fun close()
     /** Closes the board on the chat of session [sessionId]. */
     fun openAgent(sessionId: String)
+    /** TICKET-COMMENTS-1: the ticket whose full-open modal is drawn over the window (the board or a session view), if any. */
+    val openTicketId: String? get() = null
+    fun openTicket(ticketId: String) {}
+    fun closeTicket() {}
 }
 
 /** The role catalog and the role manager dialog. */

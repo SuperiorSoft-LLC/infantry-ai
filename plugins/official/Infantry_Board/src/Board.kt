@@ -770,6 +770,9 @@ fun TicketCardActionsSection(card: BoardCardHost, modifier: Modifier = Modifier)
             TextButton(onClick = { card.openAgent(sid) }) { Text("Agent", fontSize = 11.sp) }
         }
         Spacer(Modifier.weight(1f))
+        // TICKET-COMMENTS-1: the full-open modal for this ticket (the inline editor stays).
+        val shellBoard = com.superiorsoftllc.agenthq.ui.shell.LocalShellContext.current?.board
+        if (shellBoard != null) TextButton(onClick = { shellBoard.openTicket(t.id) }, modifier = Modifier.testTag(TICKET_OPEN_TAG_PREFIX + t.id)) { Text("Open", fontSize = 11.sp) }
         if (card.open) TextButton(onClick = { card.delete() }, enabled = canDelete) { Text("Delete", color = Palette.Danger, fontSize = 11.sp) }
     }
 }
@@ -816,7 +819,7 @@ private data class TicketEdit(
  * `ticket_save refused: ...` answer in red instead of closing (the BUG-PROF-1 ProfileForm pattern).
  */
 @Composable
-private fun TicketEditForm(t: Ticket, deps: BoardDeps, onDone: () -> Unit) {
+internal fun TicketEditForm(t: Ticket, deps: BoardDeps, onDone: () -> Unit) {
     val actionScope = rememberCoroutineScope()
     val currentEpic = t.epicId?.takeIf { it.isNotBlank() }
     var title by remember(t.id) { mutableStateOf(t.title) }
@@ -1035,7 +1038,7 @@ internal fun ticketCountLabel(shown: Int, total: Int, all: Boolean): String {
 
 /** KNOWLEDGE-PTR-2: the related tickets of an open card (series, linked, same files) with status and files. */
 @Composable
-private fun RelatedList(t: Ticket) {
+internal fun RelatedList(t: Ticket) {
     val items = RelatedView.items(t.description)
     val linked = t.links.filter { it.type == "relates_to" }.map { it.ticketId }.filter { id -> items.none { it.ticketId == id } }
     if (items.isEmpty() && linked.isEmpty()) return

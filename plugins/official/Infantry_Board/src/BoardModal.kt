@@ -67,7 +67,12 @@ fun BoardModal(deps: BoardDeps, onOpenAgent: (String) -> Unit, onDismiss: () -> 
  * into the panel's column, top to bottom.
  */
 @Composable
-fun BoardModalFrame(onDismiss: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+fun BoardModalFrame(
+    onDismiss: () -> Unit,
+    panel: Modifier = Modifier.fillMaxSize(),
+    tag: String = BOARD_MODAL_TAG,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     val focus = remember { FocusRequester() }
     // MODAL-BLUR: the backdrop blurs the app behind (or dims it when blur is off).
     ModalBackdrop(
@@ -75,12 +80,12 @@ fun BoardModalFrame(onDismiss: () -> Unit, content: @Composable ColumnScope.() -
         // pointerInput, not clickable: a clickable parent would merge the whole board into one semantics node.
         Modifier.pointerInput(onDismiss) { detectTapGestures { onDismiss() } },
     ) {
-        Box(Modifier.fillMaxSize().padding(24.dp)) {
+        Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.TopCenter) {
             Column(
-                Modifier.fillMaxSize()
+                panel
                     .clip(RoundedCornerShape(10.dp)).background(Palette.Bg)
                     .border(1.dp, Palette.Border, RoundedCornerShape(10.dp))
-                    .testTag(BOARD_MODAL_TAG)
+                    .testTag(tag)
                     .focusRequester(focus)
                     .onPreviewKeyEvent { e ->
                         if (e.type == KeyEventType.KeyDown && e.key == Key.Escape) { onDismiss(); true } else false

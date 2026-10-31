@@ -44,6 +44,8 @@ class ShellState(homeTab: String, rightHomeTab: String, flags: UiFlags, url: Str
     var showRoles by mutableStateOf(false)
     var showNewAgent by mutableStateOf(false)
     var showBoard by mutableStateOf(false)
+    // TICKET-COMMENTS-1: the ticket open in the full-open modal.
+    var ticketModalId by mutableStateOf<String?>(null)
     // DIFF-MODAL: the changed file whose diff is open over the window; another project closes it.
     var diffTarget by mutableStateOf<DiffTarget?>(null)
     var flags by mutableStateOf(flags)

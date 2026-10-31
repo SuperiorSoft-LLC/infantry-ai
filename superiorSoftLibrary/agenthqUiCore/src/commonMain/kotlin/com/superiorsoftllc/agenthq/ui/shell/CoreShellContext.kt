@@ -149,6 +149,9 @@ class CoreShellContext(private val shell: Shell, console: RunConsoleHost?) : She
     override val board: BoardContext = object : BoardContext {
         override val open: Boolean get() = ui.showBoard
         override fun close() { ui.showBoard = false; shell.root.requestFocus() }
+        override val openTicketId: String? get() = ui.ticketModalId
+        override fun openTicket(ticketId: String) { ui.ticketModalId = ticketId }
+        override fun closeTicket() { ui.ticketModalId = null; shell.root.requestFocus() }
         override fun openAgent(sessionId: String) {
             shell.controller.select(sessionId); ui.centerTab = shell.homeTab; shell.chat.spawnMode = false; ui.showBoard = false
             // MOBILE-LAYOUT-2: a compact window opens the Board from the list; "Agent" lands on the output.

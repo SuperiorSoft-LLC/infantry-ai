@@ -23,14 +23,17 @@ class BoardBlock(children: List<Block>, place: Place = Place()) : Block("boardMo
     @Composable
     override fun Render(scope: BlockScope) {
         val board = LocalShellContext.current?.board ?: return
-        if (!board.open) return
-        val onDismiss: () -> Unit = board::close
-        val host = BoardOverlay(onOpenAgent = board::openAgent, onDismiss = onDismiss)
-        BoardModalFrame(onDismiss) {
-            CompositionLocalProvider(LocalBoardOverlay provides host) {
-                RenderPlaced(children)
+        if (board.open) {
+            val onDismiss: () -> Unit = board::close
+            val host = BoardOverlay(onOpenAgent = board::openAgent, onDismiss = onDismiss)
+            BoardModalFrame(onDismiss) {
+                CompositionLocalProvider(LocalBoardOverlay provides host) {
+                    RenderPlaced(children)
+                }
             }
         }
+        // TICKET-COMMENTS-1: drawn last, so it sits over the board or the session view.
+        board.openTicketId?.let { id -> TicketModal(id, board::closeTicket) }
     }
 
     override fun withChildren(children: List<Block>) = BoardBlock(children, place)

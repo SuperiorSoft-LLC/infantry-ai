@@ -92,11 +92,12 @@ class CenterChatBlock(children: List<Block>, place: Place = Place(weight = 1f)) 
     @Composable
     override fun Render(scope: BlockScope) {
         val c = chatCtx
+        val shellBoard = LocalShellContext.current?.board
         val controller = c.controller ?: return
         val chat = c.chat ?: return
         val host = chatPanelHost(
             c.selectedId, controller, chat, allowSpawn = true,
-            header = chatPanelHeader(chat, controller) { c.showBoard() },
+            header = chatPanelHeader(chat, controller) { id -> shellBoard?.openTicket(id) },
             content = { transcript -> c.TabContent(transcript) },
             transcriptTag = CENTER_TRANSCRIPT_TAG,
         )
