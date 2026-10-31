@@ -17,7 +17,7 @@ import com.superiorsoftllc.agenthq.protocol.TicketSave
 import kotlinx.serialization.json.Json
 
 /** DP-5h-3a2: the story shim, the board-summary handler and the epic handler over the board `BoardFromRuntime` built, from the runtime's inputs. */
-class BoardHandlers(val stories: StoryHandler, val storyBoard: BoardHandler, val epics: EpicHandler, val epicStore: EpicStore)
+class BoardHandlers(val stories: StoryHandler, val storyBoard: BoardHandler, val epics: EpicHandler, val epicStore: EpicStore, val epicInputs: com.superiorsoftllc.agenthq.daemon.api.board.BoardEpicInputs)
 
 object BoardBuild {
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
@@ -44,6 +44,6 @@ object BoardBuild {
             ticketIdsByEpic = { board.list().filter { it.epicId != null }.groupBy({ it.epicId!! }, { it.id }) },
         )
         val epics = EpicHandler(store, baseCheck = { epic, branch -> e.checkBase(epic.projectId, branch) }, branchName = e::branchName)
-        return BoardHandlers(stories, storyBoard, epics, store)
+        return BoardHandlers(stories, storyBoard, epics, store, e)
     }
 }

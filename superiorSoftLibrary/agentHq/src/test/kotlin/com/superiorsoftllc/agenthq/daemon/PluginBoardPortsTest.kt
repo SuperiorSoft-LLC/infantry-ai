@@ -26,6 +26,7 @@ class PluginBoardPortsTest {
         override fun getTicketJson(id: String) = error("unused")
         override fun moveTicketJson(moveJson: String, startedBy: String?) = error("unused")
         override fun stopQueueDrain() {}
+        override fun invoke(op: String, payload: String, startedBy: String?): String = ""
         override fun close() {}
     }
 

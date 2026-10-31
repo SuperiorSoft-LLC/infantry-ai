@@ -25,7 +25,7 @@ class BoardDaemonPlugin : DaemonPlugin {
             val board = BoardFromRuntime.build(runtime)
             val h = BoardBuild.handlers(runtime, board)
             registerBoardFrames(api.frames.table, board, api.spawns.charge, h.epics, h.stories, h.storyBoard)
-            runtime.attachCore(PluginCoreAccess(board, h.epicStore))
+            runtime.attachCore(PluginCoreAccess(board, h.epicStore, h.epicInputs))
             attached = runtime
         }
         api.tools.register(TicketGetTool(api))

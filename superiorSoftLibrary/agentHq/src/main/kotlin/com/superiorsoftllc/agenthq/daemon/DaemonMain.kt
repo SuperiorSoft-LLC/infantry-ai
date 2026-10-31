@@ -1647,7 +1647,7 @@ class AgentHqDaemon(
                                 policies.current.takeIf { !it.isEmpty }?.let { com.superiorsoftllc.agenthq.policy.PolicyRuntime.actionRefusal(it, envelope, policies.actionOf(envelope)) }
                             },
                             baseCheck = { epic, branch -> baseCheck.check(projectStore.get(epic.projectId), branch) },
-                            chargedMove = { m, by -> ticketStartCharge.move(m, by) as com.superiorsoftllc.agenthq.backlog.TicketAnswer },
+                            chargedMove = { m, by -> (ticketStartCharge.move(m, by) as com.superiorsoftllc.agenthq.backlog.TicketAnswer).ticket },
                         ).also { pluginBoardServices = it; triggerTickets = it.tickets },
                         ticketEventStream = ticketEvents,
                         // DP-5h-3a: the board runtime (core still builds the board through BoardWiring until DP-5h-3b).

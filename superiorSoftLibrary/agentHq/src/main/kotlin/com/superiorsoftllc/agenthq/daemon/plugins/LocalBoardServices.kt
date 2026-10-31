@@ -50,19 +50,27 @@ import java.util.concurrent.ConcurrentHashMap
  * Behaviour is the board's: the same calls the frame handlers make, the same texts (`<frame> refused: <why>`).
  */
 class LocalBoardServices(
-    private val board: () -> TicketBoard?,
-    private val epicStore: () -> EpicStore?,
+    private val ops: () -> BoardOps?,
     private val sessions: () -> List<SessionRecord>,
     private val link: () -> OrchestratorLink?,
     /** The active preset's refusal of a frame of this type and payload, or null. */
     private val gate: (type: String, data: String) -> String?,
-    private val baseCheck: ((Epic, String) -> Unit)? = null,
     /**
      * RUNTIME-LOAD-6: a start's move, charged to the starter's pod (`daemon.TicketStartCharge`); null = the board's move as is
      * (a test without a spawn guard).
      */
-    private val chargedMove: ((TicketMove, String?) -> com.superiorsoftllc.agenthq.backlog.TicketAnswer)? = null,
+    private val chargedMove: ((TicketMove, String?) -> Ticket)? = null,
 ) {
+    /** The core-built board and epic store (as before DP-5h-3e-b; tests and the interim core board). */
+    constructor(
+        board: () -> TicketBoard?, epicStore: () -> EpicStore?, sessions: () -> List<SessionRecord>, link: () -> OrchestratorLink?,
+        gate: (type: String, data: String) -> String?, baseCheck: ((Epic, String) -> Unit)? = null,
+        chargedMove: ((TicketMove, String?) -> Ticket)? = null,
+    ) : this(
+        ops = { val b = board(); val e = epicStore(); if (b != null && e != null) CoreBoardOps(b, e, baseCheck) else null },
+        sessions = sessions, link = link, gate = gate, chargedMove = chargedMove,
+    )
+
     private val createKeys = ConcurrentHashMap<String, String>()
 
     // ---- the host's scope --------------------------------------------------------------------------------------------
@@ -84,8 +92,8 @@ class LocalBoardServices(
 
     // ---- plumbing -----------------------------------------------------------------------------------------------------
 
-    private inline fun <T> op(frame: String, by: Caller, data: String = "", body: (TicketBoard, Who) -> BoardResult<T>): BoardResult<T> {
-        val b = board() ?: return BoardResult.Unavailable("this daemon has no board")
+    private inline fun <T> op(frame: String, by: Caller, data: String = "", body: (BoardOps, Who) -> BoardResult<T>): BoardResult<T> {
+        val b = ops() ?: return BoardResult.Unavailable("this daemon has no board")
         gate(frame, data)?.let { return BoardResult.Refused(it) }
         val (w, why) = who(by)
         if (w == null) return BoardResult.Refused("$frame refused: $why")
@@ -97,8 +105,8 @@ class LocalBoardServices(
     }
 
     /** The one ticket [ref] names (full id, head or tail), across the whole board, then the caller's scope. */
-    private fun resolve(b: TicketBoard, w: Who, ref: String): Pair<Ticket?, String?> =
-        when (val match = matchTicketPrefix(ref, b.list())) {
+    private fun resolve(b: BoardOps, w: Who, ref: String): Pair<Ticket?, String?> =
+        when (val match = matchTicketPrefix(ref, b.list(null, null))) {
             TicketPrefixMatch.None -> null to "no ticket '$ref' on this daemon"
             is TicketPrefixMatch.Ambiguous -> null to ("ticket id '$ref' is ambiguous; use a longer id or the full id: " +
                 match.tickets.joinToString("; ") { "${it.id} (${BoardSummary.cutTitle(it.title)})" })
@@ -108,7 +116,7 @@ class LocalBoardServices(
             }
         }
 
-    private inline fun <T> withTicket(frame: String, ref: String, by: Caller, data: String = "", body: (TicketBoard, Who, Ticket) -> BoardResult<T>): BoardResult<T> =
+    private inline fun <T> withTicket(frame: String, ref: String, by: Caller, data: String = "", body: (BoardOps, Who, Ticket) -> BoardResult<T>): BoardResult<T> =
         op(frame, by, data) { b, w ->
             val (ticket, why) = resolve(b, w, ref)
             if (ticket == null) BoardResult.Refused(why!!) else body(b, w, ticket)
@@ -147,7 +155,7 @@ class LocalBoardServices(
                 agentId = draft.agentId, provider = draft.provider, model = draft.model, weight = draft.weight, images = draft.images, status = draft.status,
                 contextLimit = draft.contextLimit, effort = draft.effort,
             )
-            val created = b.save(save).ticket
+            val created = b.save(save)
             key?.let { createKeys[it] = created.id }
             BoardResult.Ok(info(created))
         }
@@ -158,7 +166,7 @@ class LocalBoardServices(
                 agentId = patch.agentId, provider = patch.provider, model = patch.model, weight = patch.weight, images = patch.images,
                 contextLimit = patch.contextLimit, effort = patch.effort,
             )
-            BoardResult.Ok(info(b.save(save).ticket))
+            BoardResult.Ok(info(b.save(save)))
         }
 
         override fun move(id: String, status: String?, position: Int?, by: Caller): BoardResult<TicketInfo> =
@@ -168,7 +176,7 @@ class LocalBoardServices(
                     wanted == null && position == null -> BoardResult.Refused("ticket_move refused: give a status or a position")
                     wanted == TicketStatus.IN_PROGRESS -> BoardResult.Refused("ticket_move refused: to start a ticket use start")
                     wanted == t.status && position == null -> BoardResult.Ok(info(t))
-                    else -> BoardResult.Ok(info(b.move(TicketMove(id = t.id, status = wanted, position = position), startedBy = starterOf(w)).ticket))
+                    else -> BoardResult.Ok(info(b.move(TicketMove(id = t.id, status = wanted, position = position), starterOf(w))))
                 }
             }
 
@@ -180,14 +188,14 @@ class LocalBoardServices(
         override fun link(from: String, to: String, kind: String, by: Caller): BoardResult<TicketInfo> = linkOp(Envelope.TICKET_LINK, from, to, kind, by) { b, r -> b.link(r) }
         override fun unlink(from: String, to: String, kind: String, by: Caller): BoardResult<TicketInfo> = linkOp(Envelope.TICKET_UNLINK, from, to, kind, by) { b, r -> b.unlink(r) }
 
-        private fun linkOp(frame: String, from: String, to: String, kind: String, by: Caller, call: (TicketBoard, TicketLinkRequest) -> com.superiorsoftllc.agenthq.backlog.TicketAnswer): BoardResult<TicketInfo> =
+        private fun linkOp(frame: String, from: String, to: String, kind: String, by: Caller, call: (BoardOps, TicketLinkRequest) -> Ticket): BoardResult<TicketInfo> =
             op(frame, by) { b, w ->
                 val (a, whyA) = resolve(b, w, from)
                 val (z, whyZ) = resolve(b, w, to)
                 when {
                     a == null -> BoardResult.Refused(whyA!!)
                     z == null -> BoardResult.Refused(whyZ!!)
-                    else -> BoardResult.Ok(info(call(b, TicketLinkRequest(ticketId = a.id, relatedId = z.id, type = kind)).ticket))
+                    else -> BoardResult.Ok(info(call(b, TicketLinkRequest(ticketId = a.id, relatedId = z.id, type = kind))))
                 }
             }
 
@@ -205,7 +213,7 @@ class LocalBoardServices(
             gate(Envelope.TICKET_START_NEXT, "")?.let { return BoardResult.Refused(it) }
             return withTicket(Envelope.TICKET_MOVE, id, by) { b, w, t ->
                 val move = TicketMove(id = t.id, status = TicketStatus.IN_PROGRESS)
-                val answer = (chargedMove?.invoke(move, starterOf(w)) ?: b.move(move, startedBy = starterOf(w))).ticket
+                val answer = chargedMove?.invoke(move, starterOf(w)) ?: b.move(move, starterOf(w))
                 val start = answer.start ?: TicketStart(ok = false, reason = "start_refused", detail = "the board gave no start answer")
                 BoardResult.Ok(StartResult(info(answer), start.ok, start.reason, start.detail))
             }
@@ -213,16 +221,16 @@ class LocalBoardServices(
 
         // DP-5b: the hand-outs a trigger makes. Daemon-internal, so ungated and unscoped exactly as the direct board call was.
         override fun startNext(agentFilter: String?, by: Caller): BoardResult<StartResult?> {
-            val b = board() ?: return BoardResult.Unavailable("this daemon has no board")
-            val answer = b.startNextUnattended(agentFilter) ?: return BoardResult.Ok(null)
-            val start = answer.ticket.start
-            return BoardResult.Ok(StartResult(info(answer.ticket), start?.ok ?: false, start?.reason ?: "", start?.detail))
+            val b = ops() ?: return BoardResult.Unavailable("this daemon has no board")
+            val answer = b.startNext(agentFilter) ?: return BoardResult.Ok(null)
+            val start = answer.start
+            return BoardResult.Ok(StartResult(info(answer), start?.ok ?: false, start?.reason ?: "", start?.detail))
         }
 
         override fun startPrompt(agentId: String, prompt: String, projectId: String?, by: Caller): BoardResult<PromptStart> {
-            val b = board() ?: return BoardResult.Unavailable("this daemon has no board")
+            val b = ops() ?: return BoardResult.Unavailable("this daemon has no board")
             return BoardResult.Ok(
-                when (val l = b.startPromptUnattended(agentId, prompt, projectId)) {
+                when (val l = b.startPrompt(agentId, prompt, projectId)) {
                     is com.superiorsoftllc.agenthq.backlog.PromptLaunch.Started -> PromptStart.Started(l.sessionId)
                     is com.superiorsoftllc.agenthq.backlog.PromptLaunch.Refused -> PromptStart.Refused(l.detail)
                 },
@@ -276,8 +284,8 @@ class LocalBoardServices(
     // ---- epics --------------------------------------------------------------------------------------------------------
 
     val epics: Epics = object : Epics {
-        private inline fun <T> epicOp(frame: String, by: Caller, data: String = "", body: (EpicStore, Who) -> BoardResult<T>): BoardResult<T> {
-            val store = epicStore() ?: return BoardResult.Unavailable("this daemon has no board")
+        private inline fun <T> epicOp(frame: String, by: Caller, data: String = "", body: (BoardOps, Who) -> BoardResult<T>): BoardResult<T> {
+            val store = ops() ?: return BoardResult.Unavailable("this daemon has no board")
             gate(frame, data)?.let { return BoardResult.Refused(it) }
             val (w, why) = who(by)
             if (w == null) return BoardResult.Refused("$frame refused: $why")
@@ -288,8 +296,8 @@ class LocalBoardServices(
             }
         }
 
-        private fun epicOf(store: EpicStore, w: Who, id: String): Pair<Epic?, String?> {
-            val epic = store.get(id) ?: return null to "unknown epic '${id.trim().take(80)}'"
+        private fun epicOf(store: BoardOps, w: Who, id: String): Pair<Epic?, String?> {
+            val epic = store.epicGet(id) ?: return null to "unknown epic '${id.trim().take(80)}'"
             val refusal = foreign(w, "epic ${epic.id}", epic.projectId)
             return if (refusal == null) epic to null else null to refusal
         }
@@ -303,12 +311,12 @@ class LocalBoardServices(
             val scope = scopeOf(w, projectId)
             scope.refusal?.let { return@epicOp BoardResult.Refused("epic_list refused: $it") }
             val project = scope.projectId ?: return@epicOp BoardResult.Refused("epic_list refused: name a project")
-            BoardResult.Ok(s.list(project).map(::info))
+            BoardResult.Ok(s.epicList(project).map(::info))
         }
 
         override fun create(projectId: String, name: String, goal: String, by: Caller): BoardResult<EpicInfo> = epicOp(Envelope.EPIC_SAVE, by) { s, w ->
             foreign(w, "the target project", projectId)?.let { return@epicOp BoardResult.Refused("epic_save refused: $it") }
-            BoardResult.Ok(info(s.save(projectId, name, goal)))
+            BoardResult.Ok(info(s.epicSave(projectId, name, goal)))
         }
 
         override fun setBase(id: String, branch: String?, clear: Boolean, by: Caller): BoardResult<EpicInfo> = epicOp(Envelope.EPIC_BASE, by) { s, w ->
@@ -316,12 +324,8 @@ class LocalBoardServices(
             val (epic, why) = epicOf(s, w, id)
             if (epic == null) return@epicOp BoardResult.Refused(why!!)
             val result = when {
-                clear -> s.setBaseBranch(epic.id, null)
-                branch != null -> {
-                    val name = ProjectBaseCheck.checkName(branch)
-                    val check = baseCheck ?: throw IllegalArgumentException("this daemon has no repository to check a base branch against")
-                    s.setBaseBranch(epic.id, name, check)
-                }
+                clear -> s.epicSetBase(epic.id, null)
+                branch != null -> s.epicSetBase(epic.id, ProjectBaseCheck.checkName(branch))
                 else -> epic
             }
             BoardResult.Ok(info(result))
