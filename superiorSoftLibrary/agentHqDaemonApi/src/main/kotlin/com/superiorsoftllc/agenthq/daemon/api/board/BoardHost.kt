@@ -294,6 +294,9 @@ interface BoardSessions {
      */
     fun holdsSessionsLock(): Boolean = false
 
+    /** DP-5f-3d (1.12.0): whether the host has a session manager at all (false = every start and worker check is unavailable). */
+    fun available(): Boolean = false
+
     /** DP-5f-3c (1.11.0): the role instance [sessionId] froze at start; null = anonymous or unknown. */
     fun instance(sessionId: String): BoardRoleInstance? = null
 

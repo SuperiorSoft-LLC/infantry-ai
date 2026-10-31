@@ -38,3 +38,23 @@ Gradle, still one jar), 8 flips it to runtime plugin loading. Each of 5-7 is rev
 3. Whether users may remove the Infantry_Board plugin (D3 says officials can be removed) and what the daemon should show then.
 4. Licence headers / MPL vs Apache placement of the moved code (parked, D13).
 5. Whether the plugin may use a raw DB transaction handle (trusted-official only) or must wait for plugin-owned tables via `DaemonApi.storage`.
+
+## DP-5f-4 prerequisites (written by DP-5f-3d, ticket ce2a5b9b)
+
+`backlog/TicketBoard.kt` no longer imports `session.*`, `orchestration.*` or `daemon.plugins.LocalBoardHost`. The store-backed constructor is the function
+`TicketBoard(store, ...)` plus extension `TicketBoard.localHost` in `backlog/TicketBoardStores.kt`, which STAYS in agentHq (core). Worker-health, state names and
+run outcome moved board-side into `backlog/BoardSessionFacts.kt` (moves with the class). Every import of TicketBoard.kt that is neither API nor board module:
+
+| Import | Reason it stays (what DP-5f-4 does) |
+|---|---|
+| `persistence.AgentHqStore` | only the removed ctor? No: still used by `RowStore`/`TicketBoardStores` types; move RowStore to core or give the board `BoardTables` rows only |
+| `persistence.TicketRow`, `TicketLinkRow` | the rules are written against these row types; move the two data classes to the board module (pure data) |
+| `daemon.plugins.toRow` / `toStored` | StoredTicket<->TicketRow mappers used by `RowStore`; move with TicketRow into the board module |
+| `protocol.*` (Ticket, TicketStatus, TicketType, TicketStart, TicketMove, TicketSave, TicketLink*, TicketReorder, TicketRun, TicketWeight, Executor*, FinishedPayload, SkillsMode) | wire types from agentHqProtocol; board module needs a dependency on agentHqProtocol (already a leaf) |
+| `settings.RoutingRules`, `WeightExecutor(s)`, `requireKnownSkills`, `WeightContext` (fq) | pure setting readers; move to the board module or protocol |
+| `usage.GateDecision`? no: `usage.LaunchOrigin`, `usage.PacingVerdict`, `usage.GateDecision` | `PacingVerdict` is the ctor `pacing` hook type (move it to API); LaunchOrigin/GateDecision are only used by the factory side, check after move |
+| `agents.AgentProfiles`, `KnowledgeCounter`, `SkillsSource`, `firstTurn`, `section` | `AgentProfiles` is the `agents` ctor param; port exists (`host.agents`), move the interface types; `firstTurn`/`section` are pure prompt text: move to board module |
+| `context.*` (ContextInput, LinkLine, ReportTo, TicketContext) | already board-module packages (DP-5e) |
+| `ticketfiles.RelatedDescription`, `RelatedDraft` | board-module package (DP-5e) |
+| `role.RoleIds` | pure constant list: move or default via API |
+| `worktree.*` (BaseScope, TicketBaseRef, TicketBranches, TicketBranchRequest/Outcome, TicketWorktree, WorktreeRecord) | after 3a/3d only `TicketWorktree` is really used in the class; the rest are used by the factory (`TicketBoardStores.kt`) and `LocalBoardHost`; `TicketWorktree` is 4 strings: move it |

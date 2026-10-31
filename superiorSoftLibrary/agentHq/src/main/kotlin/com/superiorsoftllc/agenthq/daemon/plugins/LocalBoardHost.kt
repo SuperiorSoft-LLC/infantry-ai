@@ -245,6 +245,7 @@ class LocalBoardHost(
         override fun detail(sessionId: String) = sessionManager()?.get(sessionId)?.let(::detailOf)
         override fun details() = sessionManager()?.list().orEmpty().map(::detailOf)
         override fun holdsSessionsLock(): Boolean = sessionManager()?.let { Thread.holdsLock(it) } ?: false
+        override fun available(): Boolean = sessionManager() != null
         override fun instance(sessionId: String) = sessionManager()?.instance(sessionId)?.toBoard()
 
         override fun subscribe(listener: BoardSessionListener): AutoCloseable {
