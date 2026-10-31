@@ -9,7 +9,7 @@ import java.nio.file.StandardCopyOption
 data class ProjectFileEntry(val name: String, val size: Long, val modifiedMillis: Long)
 
 /**
- * DP-10a (DaemonApi 1.19.0, additive): a project-scoped file surface, rooted at `<project directory>/.agenthq/`. Every path is
+ * DP-10a (DaemonApi 1.21.0, additive): a project-scoped file surface, rooted at `<project directory>/.agenthq/`. Every path is
  * relative to that root and `/`-separated; an absolute path, a drive letter, an empty or `.` / `..` segment, or a path that
  * resolves (through a link) outside the root is refused with [IllegalArgumentException] BEFORE anything touches the disk. Official /
  * core tier, or a community module with the grant `files`. Nothing outside `.agenthq/` is reachable.

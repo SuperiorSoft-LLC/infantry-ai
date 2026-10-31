@@ -98,14 +98,14 @@ class DaemonCoreGuardTest {
     companion object {
         /** CORE-SPLIT-1/2: leaf Gradle modules and the top-level packages each owns (package names unchanged). */
         val LEAF_MODULES = mapOf(
-            "agentHqProtocol" to setOf("protocol", "session", "harness", "pipeline", "memory", "issues", "decisions"),
+            "agentHqProtocol" to setOf("protocol", "session", "harness", "pipeline", "memory", "issues", "decisions", "agents"),
             "agentHqRunner" to setOf("runner"),
             // HARNESS-PLUGIN-3 H3: the harness plugin API (package harness.api); HarnessApiImportGuardTest is stricter still.
             "agentHqHarnessApi" to setOf("harness"),
         )
 
         /** What a leaf module may import from the agenthq tree: packages that live in a leaf module (and the shared types of session/harness it carries). */
-        private val LEAF_PACKAGES = setOf("protocol", "runner", "session.SessionState", "session.SleepHint", "session.WaitHint", "session.RunPhaseOverlay", "harness.HarnessCommand", "harness.CommandAction", "harness.StandardCommands", "harness.CommandLine", "harness.CommandLines")
+        private val LEAF_PACKAGES = setOf("protocol", "memory", "issues", "decisions", "runner", "session.SessionState", "session.SleepHint", "session.WaitHint", "session.RunPhaseOverlay", "harness.HarnessCommand", "harness.CommandAction", "harness.StandardCommands", "harness.CommandLine", "harness.CommandLines")
 
         /** CORE: the abstraction layer. Stays by definition (docs/DAEMON-CORE.md section 2). */
         val CORE = mapOf(
@@ -142,7 +142,7 @@ class DaemonCoreGuardTest {
 
         /** PLUGIN NOW: a mechanism and an official plugin exist (or can be written today); only the move is left. */
         val PLUGIN_NOW = mapOf(
-            "memory" to "project knowledge: notes, a Knowledge plugin",
+            "memory" to "DP-7f: the memory wire DTOs only (the CLI speaks them); the store, handler and notes are in Infantry_Notes",
             "prompts" to "prompt templates: Infantry_Prompts daemon half",
         )
 

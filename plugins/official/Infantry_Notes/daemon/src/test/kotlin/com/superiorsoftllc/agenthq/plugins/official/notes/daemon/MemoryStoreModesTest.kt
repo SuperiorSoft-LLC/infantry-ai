@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.memory
+package com.superiorsoftllc.agenthq.plugins.official.notes.daemon
+
+import com.superiorsoftllc.agenthq.memory.*
 
 import kotlin.test.Test
 import kotlin.test.assertEquals

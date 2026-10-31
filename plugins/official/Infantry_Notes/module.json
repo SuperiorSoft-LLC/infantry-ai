@@ -12,8 +12,8 @@
   "daemon": {
     "entry": "com.superiorsoftllc.agenthq.plugins.official.notes.daemon.NotesDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Notes-daemon.jar",
-    "apiAtLeast": "1.17.0",
-    "storage": { "adopt": ["decisions", "issues", "issue_events"] },
+    "apiAtLeast": "1.19.0",
+    "storage": { "adopt": ["decisions", "issues", "issue_events", "memory_notes"] },
     "frames": [
       { "type": "decision_list", "action": "knowledge.read", "kind": "read" },
       { "type": "decision_get", "action": "knowledge.read", "kind": "read" },
@@ -23,7 +23,13 @@
       { "type": "issue_precheck", "action": "knowledge.read", "kind": "read" },
       { "type": "issue_open", "action": "knowledge.issue.save", "kind": "write" },
       { "type": "issue_attempt", "action": "knowledge.issue.save", "kind": "write" },
-      { "type": "issue_fix", "action": "knowledge.issue.save", "kind": "write" }
+      { "type": "issue_fix", "action": "knowledge.issue.save", "kind": "write" },
+      { "type": "memory_search", "action": "memory.read", "kind": "read" },
+      { "type": "memory_list", "action": "memory.read", "kind": "read" },
+      { "type": "memory_get", "action": "memory.read", "kind": "read" },
+      { "type": "memory_save", "action": "memory.save", "kind": "write" },
+      { "type": "memory_delete", "action": "memory.delete", "kind": "destructive" },
+      { "type": "memory_purge_role", "action": "memory.delete", "kind": "destructive" }
     ]
   },
   "tabs": [

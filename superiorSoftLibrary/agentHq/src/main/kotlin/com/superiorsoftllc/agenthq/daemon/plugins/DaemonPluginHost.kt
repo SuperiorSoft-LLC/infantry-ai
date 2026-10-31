@@ -547,6 +547,9 @@ class DaemonPluginHost private constructor(
         // PACE-TREND-1: the plan meters, read-only; a community plugin needs the grant `usage.read` (default deny: reads nothing).
         override val meters: com.superiorsoftllc.agenthq.daemon.api.usage.Meters =
             GrantedMeters({ hostServices.meters }) { grant -> !p.community || grant in p.setting.allow }
+        // DP-7e: the mail port; a community plugin needs the grant `sessions.notify`.
+        override val sessionNotifier: com.superiorsoftllc.agenthq.daemon.api.sessions.SessionNotifier =
+            GrantedSessionNotifier({ hostServices.sessionNotifier }) { grant -> !p.community || grant in p.setting.allow }
         // DAEMON-STORAGE-1: plugin-owned tables; adopt is honoured for official / bundled only (a community adopt is refused at load).
         override val storage: com.superiorsoftllc.agenthq.daemon.api.storage.PluginStorage by lazy {
             val h = hostServices.storageHandle

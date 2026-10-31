@@ -19,7 +19,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.superiorsoftllc.agenthq.plugin.api.DaemonAccess
+import com.superiorsoftllc.agenthq.plugin.api.InjectDeclaration
 import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
+import com.superiorsoftllc.agenthq.plugin.api.Services
+import com.superiorsoftllc.agenthq.ui.block.layout.BlockInjection
 import com.superiorsoftllc.agenthq.plugin.api.TabDeclaration
 import com.superiorsoftllc.agenthq.ui.Palette
 import com.superiorsoftllc.agenthq.ui.model.AppState
@@ -72,14 +76,18 @@ val InfantryPace = AgentHqModule(
         name = "Infantry_Pace", version = "1.0.0", author = "Infantry AI",
         description = "Pacing trend charts for every harness.",
         tabs = listOf(TabDeclaration(PACE_TAB_ID, TabContainers.CENTER)),
+        inject = listOf(InjectDeclaration(into = "infantry.shell.stats", name = "usagefit", at = "last", order = 100)),
     ),
     listOf(paceTab()),
+    inject = mapOf("usagefit" to usageFitInjection { null }),
 )
 
 /** The entry of Infantry_Pace (module.json `entry`): desktop loads it from its signed jar as a [UiPlugin]; web and Android compile it in as a [ModuleSource]. */
 class PacePlugin : UiPlugin, ModuleSource {
     override fun register(registrar: UiRegistrar) {
         registrar.tab(paceTab())
+        val daemon = registrar.services.get(Services.DAEMON)
+        registrar.inject("usagefit", usageFitInjection { daemon })
     }
 
     override fun modules(): List<AgentHqModule> = listOf(InfantryPace)
@@ -154,3 +162,6 @@ fun PaceTabContent(state: AppState, pace: PaceContext, meter: UsageMeterContext)
 private fun Note(text: String) = Box(Modifier.fillMaxSize().padding(24.dp).testTag(PACE_STATE_TAG), Alignment.Center) {
     Text(text, color = Palette.Muted, fontSize = 12.sp)
 }
+
+/** USAGE-FIT: the Stats-pane child; [daemon] is read when the pane draws, so the web/Android build (no daemon service) shows the honest "not connected" note. */
+fun usageFitInjection(daemon: () -> DaemonAccess?) = BlockInjection { UsageFitSection(daemon()) }

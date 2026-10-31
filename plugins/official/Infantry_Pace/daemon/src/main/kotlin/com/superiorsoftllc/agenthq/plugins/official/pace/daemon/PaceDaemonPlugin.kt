@@ -4,6 +4,7 @@ import com.superiorsoftllc.agenthq.daemon.api.DaemonApi
 import com.superiorsoftllc.agenthq.daemon.api.DaemonPlugin
 import com.superiorsoftllc.agenthq.daemon.api.DaemonTool
 import com.superiorsoftllc.agenthq.daemon.api.Frame
+import com.superiorsoftllc.agenthq.daemon.api.HttpReply
 import com.superiorsoftllc.agenthq.daemon.api.ToolCall
 import com.superiorsoftllc.agenthq.daemon.api.ToolResult
 import com.superiorsoftllc.agenthq.daemon.api.usage.Meters
@@ -45,6 +46,15 @@ class PaceDaemonPlugin : DaemonPlugin {
                 return@handle Frame("error", "pace_get failed: ${e.message ?: e::class.simpleName}", frame.sessionId, frame.requestId)
             }
             Frame("pace_report", answer, frame.sessionId, frame.requestId)
+        }
+        // USAGE-FIT: GET /plugins/<id>/usagefit[?provider=claude], the tokens-per-point analysis the Stats section draws. Read-only.
+        val fit = UsageFitService(store, api.meters) { api.config("pace.fitMinSteps")?.toIntOrNull()?.coerceIn(2, 200) ?: UsageFitService.DEFAULT_MIN_STEPS }
+        api.routes.handle("GET", "usagefit") { call ->
+            try {
+                HttpReply(200, fit.answer(call.query["provider"] ?: "claude", System.currentTimeMillis()).toString(), "application/json")
+            } catch (e: Exception) {
+                HttpReply(500, "usagefit failed: ${e.message ?: e::class.simpleName}")
+            }
         }
         api.tools.register(PaceTool(store, settings))
         rec.tick()

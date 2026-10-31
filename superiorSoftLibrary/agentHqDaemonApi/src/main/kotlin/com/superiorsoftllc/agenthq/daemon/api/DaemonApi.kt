@@ -100,20 +100,25 @@ interface DaemonApi {
     /** AR-5 (1.16.0, additive): the typed optional service registry (provide / find by interface). Community needs the grant `services.provide` to publish. */
     val services: ServicesApi get() = NoServices
 
+    /** DP-7e (1.19.0, additive): the mail port (notify one session or every live session of a role). Community needs the grant `sessions.notify`. */
+    val sessionNotifier: com.superiorsoftllc.agenthq.daemon.api.sessions.SessionNotifier get() = com.superiorsoftllc.agenthq.daemon.api.sessions.NoSessionNotifier
+
     /**
-     * DP-10a (1.19.0, additive): the project-scoped file surface `<project directory>/.agenthq/` (daemon.api.files.ProjectFiles).
+     * DP-10a (1.21.0, additive): the project-scoped file surface `<project directory>/.agenthq/` (daemon.api.files.ProjectFiles).
      * Official / core tier, or a community module with the grant `files`; an unknown project or one without a directory is refused
      * with [IllegalArgumentException]. A daemon without one refuses with [IllegalStateException].
      */
     fun files(projectId: String): com.superiorsoftllc.agenthq.daemon.api.files.ProjectFiles = com.superiorsoftllc.agenthq.daemon.api.files.NoProjectFiles
 
     companion object {
-        // 1.19.0 (DP-10a, additive): `files(projectId)` (daemon.api.files.ProjectFiles), scoped to `<project>/.agenthq/`.
+        // 1.21.0 (DP-10a, additive): `files(projectId)` (daemon.api.files.ProjectFiles), scoped to `<project>/.agenthq/`.
+        // 1.19.0 (DP-7e, additive): `sessionNotifier` (daemon.api.sessions.SessionNotifier).
         // 1.18.0 (DP-7d, additive): `events.onSessionRemoved`.
         // 1.17.0 (DP-7c, additive): daemon.api.knowledge.KnowledgeRecords, the decisions / issues half of Knowledge (published by Infantry_Notes).
         // 1.16.0 (AR-5, additive): `services` (ServicesApi).
         // 1.15.0 (DAEMON-STORAGE-1, additive): `storage` (daemon.api.storage.PluginStorage).
         // 1.13.0 (DP-5h-3a2, additive): BoardRuntime.ticketEvents / stories / epics / relatedDescription / unknownSkills.
+        // 1.20.0 (USAGE-FIT, additive): `Meters.requests(sinceMs)` and `MeterRequest`, the recorded model requests (read-only).
         // 1.12.0 (DP-5h-3a, additive): `boardRuntime` (BoardRuntime): what a board plugin builds its board from.
         // 1.11.0 (DP-5h-2, additive): `spawns.charge` (SpawnCharge) and `frames.table` (FrameBinding: typed frames with the direct flag).
         // 1.10.0 (PACE-TREND-1, additive): `meters` (daemon.api.usage.Meters), the current reading of every provider window.
@@ -125,7 +130,7 @@ interface DaemonApi {
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
-        const val VERSION = "1.19.0"
+        const val VERSION = "1.21.0"
     }
 }
 

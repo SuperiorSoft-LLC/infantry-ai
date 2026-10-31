@@ -1,5 +1,6 @@
-package com.superiorsoftllc.agenthq.memory
+package com.superiorsoftllc.agenthq.plugins.official.notes.daemon
 
+import com.superiorsoftllc.agenthq.memory.*
 import kotlinx.serialization.Serializable
 import java.io.File
 import java.time.Instant
