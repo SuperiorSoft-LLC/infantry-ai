@@ -52,7 +52,9 @@ CREATE TABLE IF NOT EXISTS tickets (
     -- TICKET-WEIGHT (44.sqm): 1..5, picks the executor when the ticket pins none; NULL = unweighted.
     weight INTEGER CHECK (weight IS NULL OR weight BETWEEN 1 AND 5),
     -- CONTEXT-LIMIT-1 (53.sqm): the worker's context limit in tokens; NULL = none (the harness's own window).
-    context_limit INTEGER CHECK (context_limit IS NULL OR context_limit > 0)
+    context_limit INTEGER CHECK (context_limit IS NULL OR context_limit > 0),
+    -- EFFORT-1 (55.sqm): the worker's reasoning effort level; NULL = the harness default.
+    effort TEXT
 );
 
 CREATE INDEX IF NOT EXISTS index_tickets_on_status ON tickets(status, position);
@@ -79,12 +81,12 @@ insertTicket:
 INSERT INTO tickets(
     id, title, description, ticket_type, status, position, wont_fix, agent_id, provider, model, use_worktree,
     worktree_branch, include_linked_tasks_context, queued_for, queued_at, session_id, created_at, updated_at, project_id, epic_id,
-    branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight, context_limit
+    branch_name, base_commit, skill_ids, skills_mode, include_skills_context, started_by, images, weight, context_limit, effort
 )
 VALUES (
     :id, :title, :description, :ticket_type, :status, :position, :wont_fix, :agent_id, :provider, :model,
     :use_worktree, :worktree_branch, :include_linked_tasks_context, :queued_for, :queued_at, :session_id,
-    :created_at, :updated_at, :project_id, :epic_id, :branch_name, :base_commit, :skill_ids, :skills_mode, :include_skills_context, :started_by, :images, :weight, :context_limit
+    :created_at, :updated_at, :project_id, :epic_id, :branch_name, :base_commit, :skill_ids, :skills_mode, :include_skills_context, :started_by, :images, :weight, :context_limit, :effort
 );
 
 -- Overwrites everything but id and created_at.
@@ -116,7 +118,8 @@ UPDATE tickets SET
     started_by = :started_by,
     images = :images,
     weight = :weight,
-    context_limit = :context_limit
+    context_limit = :context_limit,
+    effort = :effort
 WHERE id = :id;
 
 getTicketById:

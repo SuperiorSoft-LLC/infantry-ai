@@ -18,6 +18,9 @@ data class ProviderInfo(
     val unavailableReason: String? = null,
     val contextLimit: String? = null,
     val contextLimitHow: String? = null,
+    /** EFFORT-1: `supported` / `best_effort` / `unsupported`, and how; null from an older daemon. */
+    val effort: String? = null,
+    val effortHow: String? = null,
 )
 
 @Serializable
@@ -42,6 +45,9 @@ data class PinnableHarness(
     /** CONTEXT-LIMIT-1: `supported` / `best_effort` / `unsupported`, and how; null from an older daemon. */
     val contextLimit: String? = null,
     val contextLimitHow: String? = null,
+    /** EFFORT-1: `supported` / `best_effort` / `unsupported`, and how; null from an older daemon. */
+    val effort: String? = null,
+    val effortHow: String? = null,
 )
 
 object HarnessCatalogText {
@@ -62,6 +68,6 @@ object HarnessCatalogText {
                 rows.mapNotNullTo(this) { it.note }
                 if (models == null && catalogError != null) add("model catalog unavailable: $catalogError")
             }.distinct()
-            PinnableHarness(info.id, info.default, info.defaultModel, models, info.available, info.unavailableReason, notes.joinToString("; ").ifEmpty { null }, info.contextLimit, info.contextLimitHow)
+            PinnableHarness(info.id, info.default, info.defaultModel, models, info.available, info.unavailableReason, notes.joinToString("; ").ifEmpty { null }, info.contextLimit, info.contextLimitHow, info.effort, info.effortHow)
         }
 }

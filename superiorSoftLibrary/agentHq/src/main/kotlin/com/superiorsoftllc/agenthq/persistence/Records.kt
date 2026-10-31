@@ -207,6 +207,8 @@ data class TicketRow(
     val weight: Int? = null,
     /** CONTEXT-LIMIT-1: the worker's context limit in tokens; null = none (the harness's own window). */
     val contextLimit: Int? = null,
+    /** EFFORT-1: the worker's reasoning effort level; null = the harness default. */
+    val effort: String? = null,
 ) {
     init {
         require(position >= 0) { "position must be >= 0, was $position" }

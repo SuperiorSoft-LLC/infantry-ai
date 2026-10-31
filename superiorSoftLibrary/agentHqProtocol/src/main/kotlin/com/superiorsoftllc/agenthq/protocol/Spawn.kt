@@ -92,6 +92,9 @@ data class ProviderInfo(
      */
     val contextLimit: String? = null,
     val contextLimitHow: String? = null,
+    /** EFFORT-1 (1.148.0, ADDITIVE): how this provider honours a session's `effort` (`supported` / `best_effort` / `unsupported`) and how, in words. Null from an older daemon. */
+    val effort: String? = null,
+    val effortHow: String? = null,
 )
 
 /**

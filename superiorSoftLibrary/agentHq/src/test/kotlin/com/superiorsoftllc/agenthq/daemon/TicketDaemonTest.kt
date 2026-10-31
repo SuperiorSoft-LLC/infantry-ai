@@ -93,6 +93,8 @@ class TicketDaemonTest {
                 "weight",
                 // CONTEXT-LIMIT-1 (contract 1.146.0): the worker's context limit, and the effective one {value, source, support, how}.
                 "contextLimit", "effectiveContextLimit",
+                // EFFORT-1 (contract 1.148.0): the worker's reasoning effort, and the effective one {value, source, support, how}.
+                "effort", "effectiveEffort",
             ),
             json.parseToJsonElement(frame.data).jsonObject.keys,
         )

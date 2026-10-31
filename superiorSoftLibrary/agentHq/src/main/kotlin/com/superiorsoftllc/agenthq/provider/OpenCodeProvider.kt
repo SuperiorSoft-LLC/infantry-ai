@@ -41,6 +41,17 @@ class OpenCodeProvider(
             "opencode sets its window only through a full per-model limit override (context + output); not mapped yet",
         )
 
+    /**
+     * EFFORT-1: not mapped, reported honestly. `opencode run --help` (1.18.35) lists `--variant` ("provider-specific reasoning
+     * effort"), but a live `opencode run --variant high` did not finish within 60 s here, so the flag is not verified and the
+     * persistent (serve) mode has no variant input the daemon uses.
+     */
+    override fun effort(): com.superiorsoftllc.agenthq.harness.EffortCapability =
+        com.superiorsoftllc.agenthq.harness.EffortCapability(
+            com.superiorsoftllc.agenthq.harness.EffortSupport.UNSUPPORTED,
+            "opencode has only a provider-specific --variant flag, not verified end to end; not mapped yet",
+        )
+
     override val commands: List<com.superiorsoftllc.agenthq.harness.HarnessCommand> =
         com.superiorsoftllc.agenthq.opencode.OpenCodeCommands.catalog
 

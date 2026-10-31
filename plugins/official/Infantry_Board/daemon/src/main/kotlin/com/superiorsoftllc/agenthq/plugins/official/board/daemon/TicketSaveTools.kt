@@ -8,6 +8,7 @@ import com.superiorsoftllc.agenthq.daemon.api.ToolCall
 import com.superiorsoftllc.agenthq.daemon.api.ToolResult
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardResult
 import com.superiorsoftllc.agenthq.daemon.api.board.ContextLimits
+import com.superiorsoftllc.agenthq.daemon.api.board.EffortLevels
 import com.superiorsoftllc.agenthq.daemon.api.board.TicketDraft
 import com.superiorsoftllc.agenthq.daemon.api.board.TicketImages
 import com.superiorsoftllc.agenthq.daemon.api.board.TicketInfo
@@ -51,6 +52,12 @@ internal object TicketSave {
             "long task, a smaller one for a small job. How it is honoured depends on the harness: agenthq_list_harnesses " +
             "shows contextLimit per harness (supported / best_effort / unsupported; unsupported = recorded, not applied)."
 
+    /** EFFORT-1: the effort argument as the CLI's MCP server words it. */
+    const val EFFORT_HELP =
+        "Reasoning effort for the ticket's worker: low, medium, high, xhigh or max (off = the harness default, the default); " +
+            "a hard ticket gets a higher one. How it is honoured depends on the harness: agenthq_list_harnesses shows effort per " +
+            "harness (supported / best_effort / unsupported; unsupported = recorded, not applied)."
+
     const val WEIGHT_HELP =
         "Ticket weight 1-5 by how likely the ticket is to come back wrong, not its size: 4-5 wire/contract, daemon, auth or project scope, concurrency/SSR timing, Android build, or more than one module; 3 gate fixes, bisects, UI that depends on daemon behaviour; 1-2 copy, icons, renames, docs (mechanical, one owner file). 0 clears it on update. With no provider/model pin the ticket starts on the project's first matching routing rule (project_config routingRules), else the weight mapping (tickets.weightExecutors); an explicit pin always wins. Set a weight on every ticket before start."
 
@@ -76,6 +83,14 @@ internal object TicketSave {
         val parsed = ContextLimits.parse(raw)
         parsed.error?.let { fail("$tool refused: $it") }
         return parsed.value ?: ContextLimits.CLEAR
+    }
+
+    /** `effort` as [EffortLevels.parse] reads it; `off` / blank = clear (""); absent = keep (null). */
+    fun effort(args: JsonObject, tool: String): String? {
+        val raw = (args["effort"] as? JsonPrimitive)?.contentOrNull ?: return null
+        val parsed = EffortLevels.parse(raw)
+        parsed.error?.let { fail("$tool refused: $it") }
+        return parsed.value ?: ""
     }
 
     /**
@@ -118,7 +133,7 @@ internal object TicketSave {
     /** What a create / update set, as BUG-ASSIGN-1 reads it back from the stored ticket. */
     class Fields(
         val title: Boolean, val description: Boolean, val agentId: Boolean, val provider: Boolean, val model: Boolean,
-        val weight: Boolean, val contextLimit: Boolean, val images: Boolean, val related: Boolean = false,
+        val weight: Boolean, val contextLimit: Boolean, val images: Boolean, val related: Boolean = false, val effort: Boolean = false,
     )
 
     /**
@@ -135,6 +150,7 @@ internal object TicketSave {
             if (set.model && ticket.model != null) add("model" to "model ${ticket.model}")
             if (set.weight) add("weight" to "weight ${ticket.weight ?: "cleared"}")
             if (set.contextLimit) add("contextLimit" to "context limit ${ticket.contextLimit?.let(ContextLimits::label) ?: "cleared"}")
+            if (set.effort) add("effort" to "effort ${ticket.effort ?: "cleared"}")
             if (set.images) add("images" to "${ticket.images.size} image(s)")
             if (set.related) add("relatedTo" to "related ${ticket.links.count { it.type == RELATES_TO }} ticket(s)")
         }
@@ -228,6 +244,11 @@ internal object TicketSave {
         "description" to JsonPrimitive("$CONTEXT_LIMIT_HELP Shown on the ticket as effectiveContextLimit (source ticket / default); off clears it on update."),
     )))
 
+    fun JsonObjectBuilder.effortProp() = put("effort", JsonObject(mapOf(
+        "type" to JsonPrimitive("string"),
+        "description" to JsonPrimitive("$EFFORT_HELP Shown on the ticket as effectiveEffort (source ticket / rule / agent / role / default); off clears it on update."),
+    )))
+
     /** Runs [body]; a [Refusal] thrown anywhere in it is the tool's answer. */
     inline fun guarded(body: () -> ToolResult): ToolResult = try { body() } catch (r: Refusal) { r.result }
 }
@@ -250,6 +271,7 @@ class TicketCreateTool(private val api: DaemonApi) : DaemonTool {
             put("model", prop("Model pin, one of that harness's models: see agenthq_list_harnesses."))
             weightProp()
             contextLimitProp()
+            effortProp()
             put("images", pathsProp("Images to attach: local image file paths (png, jpeg, gif or webp, at most 10 MB each; each is uploaded to the project's .agenthq/uploads/ticket/), or paths already stored there. A missing, oversized or non-image file refuses the call and nothing is saved. The board shows them as attachments and the started worker's brief lists them."))
             put("status", prop("Column the new ticket enters: todo (default, the current sprint) or backlog (parked, never started until moved to todo)."))
             relatedToProp()
@@ -276,6 +298,7 @@ class TicketCreateTool(private val api: DaemonApi) : DaemonTool {
             model = ToolArgs.string(args, "model"),
             weight = TicketSave.weight(args),
             contextLimit = TicketSave.contextLimit(args, tool),
+            effort = TicketSave.effort(args, tool),
             images = images,
             status = ToolArgs.string(args, "status")?.lowercase(),
         )
@@ -285,7 +308,7 @@ class TicketCreateTool(private val api: DaemonApi) : DaemonTool {
         TicketSave.saved(ticket, TicketSave.Fields(
             title = true, description = draft.description != null, agentId = draft.agentId != null, provider = draft.provider != null,
             model = draft.model != null, weight = draft.weight != null, contextLimit = draft.contextLimit != null, images = draft.images != null,
-            related = relatedTo != null,
+            related = relatedTo != null, effort = draft.effort != null,
         ), created = true)
     }
 }
@@ -306,6 +329,7 @@ class TicketUpdateTool(private val api: DaemonApi) : DaemonTool {
             put("model", prop("Model pin, one of that harness's models: see agenthq_list_harnesses."))
             weightProp()
             contextLimitProp()
+            effortProp()
             put("images", pathsProp("The ticket's full image list, replacing the stored one ([] removes all): local image files (uploaded, as for ${TicketSave.CREATE}) or paths already under the project's .agenthq/uploads/ticket/. Not with addImages / removeImages. A removed image's file is deleted once no ticket references it."))
             put("addImages", pathsProp("Images to ADD to the stored list: local image files (png, jpeg, gif or webp, at most 10 MB each) or stored paths."))
             relatedToProp()
@@ -348,6 +372,7 @@ class TicketUpdateTool(private val api: DaemonApi) : DaemonTool {
             model = ToolArgs.string(args, "model"),
             weight = TicketSave.weight(args),
             contextLimit = TicketSave.contextLimit(args, tool),
+            effort = TicketSave.effort(args, tool),
             images = images,
         )
         val updated = TicketSave.result(api.tickets.update(existing.id, patch, WireTickets.by(call)), tool)
@@ -355,7 +380,7 @@ class TicketUpdateTool(private val api: DaemonApi) : DaemonTool {
         TicketSave.saved(ticket, TicketSave.Fields(
             title = ToolArgs.string(args, "title") != null, description = patch.description != null, agentId = patch.agentId != null, provider = patch.provider != null,
             model = patch.model != null, weight = patch.weight != null, contextLimit = patch.contextLimit != null, images = patch.images != null,
-            related = relatedTo != null,
+            related = relatedTo != null, effort = patch.effort != null,
         ), created = false)
     }
 }

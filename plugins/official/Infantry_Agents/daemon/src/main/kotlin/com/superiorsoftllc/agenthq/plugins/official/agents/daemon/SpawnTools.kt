@@ -7,6 +7,7 @@ import com.superiorsoftllc.agenthq.daemon.api.ToolCall
 import com.superiorsoftllc.agenthq.daemon.api.ToolResult
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardResult
 import com.superiorsoftllc.agenthq.daemon.api.board.ContextLimits
+import com.superiorsoftllc.agenthq.daemon.api.board.EffortLevels
 import com.superiorsoftllc.agenthq.daemon.api.board.TicketInfo
 import com.superiorsoftllc.agenthq.daemon.api.sessions.SessionView
 import com.superiorsoftllc.agenthq.daemon.api.sessions.SessionsResult
@@ -55,6 +56,12 @@ internal object SpawnTools {
         "Context limit for the session in tokens (200000, 200k, 1m; off = none, the default): a larger one for a hard, " +
             "long task, a smaller one for a small job. How it is honoured depends on the harness: agenthq_list_harnesses " +
             "shows contextLimit per harness (supported / best_effort / unsupported; unsupported = recorded, not applied)."
+
+    /** EFFORT-1: the one description of an effort argument. */
+    const val EFFORT_HELP =
+        "Reasoning effort for the session: low, medium, high, xhigh or max (off = the harness default, the default). " +
+            "How it is honoured depends on the harness: agenthq_list_harnesses shows effort per harness " +
+            "(supported / best_effort / unsupported; unsupported = recorded, not applied)."
 
     /** The caller as the host scopes it: the MCP process's own session (`AGENTHQ_SESSION_ID`), else the connection's. */
     fun by(call: ToolCall): Caller = call.caller.copy(activeSession = call.clientSessionId ?: call.caller.activeSession)
@@ -134,6 +141,7 @@ internal object SpawnTools {
             put("projectId", prop("string", "Project the session belongs to (default: the server's --project / .agenthq/mcp.json projectId)."))
             put("task", prop("string", "Optional first prompt for the new session."))
             put("contextLimit", prop("string", CONTEXT_LIMIT_HELP))
+            put("effort", prop("string", EFFORT_HELP))
             put(
                 "ticketId",
                 prop(
@@ -158,7 +166,9 @@ internal object SpawnTools {
             // CONTEXT-LIMIT-1: `200000`, `200k`, `1m`; blank / off = none. Checked here so a typo never reaches the daemon.
             val contextLimit = ContextLimits.parse(string(args, "contextLimit"))
             contextLimit.error?.let { return refused("$SPAWN: $it") }
-            val request = SpawnRequest(role, agentId, string(args, "projectId") ?: call.clientProjectId, contextLimit.value, task)
+            val effort = EffortLevels.parse(string(args, "effort"))
+            effort.error?.let { return refused("$SPAWN: $it") }
+            val request = SpawnRequest(role, agentId, string(args, "projectId") ?: call.clientProjectId, contextLimit.value, effort.value, task)
             val spawned = when (val r = api.spawns.spawn(request, by(call), narrowing(call))) {
                 is SessionsResult.Ok -> r.value
                 else -> return failed(SPAWN, r)
@@ -172,6 +182,7 @@ internal object SpawnTools {
                 put("provider", s.provider)
                 put("model", s.model)
                 s.contextLimit?.let { put("contextLimit", it); put("contextLimitSupport", s.contextLimitSupport) }
+                s.effort?.let { put("effort", it); put("effortSupport", s.effortSupport) }
                 put("status", s.state)
                 put("depth", spawned.depth)
                 put("taskSent", spawned.taskSent)

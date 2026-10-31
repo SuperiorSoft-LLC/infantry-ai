@@ -109,3 +109,21 @@ object ContextLimits {
         else -> limit.toString()
     }
 }
+
+/**
+ * EFFORT-1 (BOARD_API_VERSION 1.4.0): the shared rule for a reasoning-effort level (docs/EFFORT.md), the same list the daemon keeps
+ * (`session.EffortLevels`), so a board plugin's tools read a level the same way. Null = the harness's own default (the off switch).
+ */
+object EffortLevels {
+    /** Lowest to highest. */
+    val ids: List<String> = listOf("low", "medium", "high", "xhigh", "max")
+
+    /** A user-typed level: blank, `off`, `none`, `default` = unset ([Parsed.cleared]); a level in any case; else [Parsed.error]. */
+    fun parse(raw: String?): Parsed {
+        val text = raw?.trim()?.lowercase().orEmpty()
+        if (text.isEmpty() || text == "off" || text == "none" || text == "default") return Parsed(null, cleared = true)
+        return if (text in ids) Parsed(text) else Parsed(null, error = "unknown effort '${text.take(40)}': one of $ids (or off)")
+    }
+
+    data class Parsed(val value: String?, val cleared: Boolean = false, val error: String? = null)
+}

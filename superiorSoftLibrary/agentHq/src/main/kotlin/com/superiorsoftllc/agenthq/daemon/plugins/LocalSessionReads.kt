@@ -24,7 +24,7 @@ object SessionViews {
         lastEventAt = r.lastEventAt, backgroundWork = r.backgroundWork?.label, progress = r.progress, runCount = r.runCount,
         lastExitCode = r.lastExitCode, lastError = r.lastError, ticketId = r.ticketId, workingDir = r.workingDir,
         worktreePath = r.worktreePath, worktreeBranch = r.worktreeBranch, repoRoot = r.repoRoot, spawnerSessionId = r.spawnerSessionId,
-        contextLimit = r.contextLimit, contextLimitSupport = r.contextLimitSupport, killOutcome = r.killOutcome?.name,
+        contextLimit = r.contextLimit, contextLimitSupport = r.contextLimitSupport, effort = r.effort, effortSupport = r.effortSupport, killOutcome = r.killOutcome?.name,
     )
 }
 

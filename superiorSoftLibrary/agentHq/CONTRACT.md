@@ -27,6 +27,18 @@ A daemon plugin tool runs in the daemon, which cannot open the agent's files. `a
 A client below 1.147.0 sends plain strings and no `client.projectId`: such a tool sees no local files (a path it cannot read is refused as
 "does not exist") and no default project. A daemon below 1.147.0 never lists `localFiles`, and ignores `client.projectId`.
 
+### EFFORT-1 (contract 1.148.0, additive): a reasoning effort on tickets, with the harness capability
+
+See `docs/EFFORT.md`. `new` (`SpawnOptions.effort`), `AgentProfile.effort`, role bindings and routing rules already carried an effort (1.39.0 / 1.46.0); this adds:
+
+- `ticket_save` gains `effort` (`low` | `medium` | `high` | `xhigh` | `max` sets it, `""` / `off` clears it, absent keeps it; an unknown level refuses the save). A `ticket` gains `effort` and `effectiveEffort` (`value`, `source` `ticket` | `rule` | `agent` | `role` | `default`, `support`, `how`).
+- `session` records gain `effortSupport` (`supported` | `best_effort` | `unsupported`; `unsupported` = recorded, not applied). Absent with no effort.
+- `providers` entries gain `effort` (the same three values) and `effortHow` (in words).
+- Harness contract 1.8.0 / harness API 2.2.0 (additive): `Harness.effort` (`EffortCapability`); default = supported when the harness declares `EFFORT_SELECTION`, else unsupported. An effort is passed to a harness only when it applies it.
+- Schema v56 (`55.sqm`): `tickets.effort`, `run_usage.effort` (nullable; null = the harness default).
+
+A client below 1.148.0 ignores the new fields; on a daemon below 1.148.0 a `ticket_save` naming `effort` is refused as malformed (strict decode).
+
 ### CONTEXT-LIMIT-1 (contract 1.146.0, additive): a per-session context limit through the harness layer
 
 See `docs/CONTEXT-LIMIT.md`.

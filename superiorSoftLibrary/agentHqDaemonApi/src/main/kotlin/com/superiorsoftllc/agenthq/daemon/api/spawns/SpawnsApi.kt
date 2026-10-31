@@ -86,6 +86,8 @@ data class SpawnRequest(
     val projectId: String? = null,
     /** Tokens; null = none. */
     val contextLimit: Int? = null,
+    /** EFFORT-1: the session's reasoning effort level (low / medium / high / xhigh / max); null = the harness default. */
+    val effort: String? = null,
     /** A first prompt, run as the session's first turn (persona, identity and notes around it); null = none. */
     val task: String? = null,
 )

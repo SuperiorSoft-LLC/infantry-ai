@@ -93,6 +93,13 @@ class ApiCliHarness(
             ?.let { ContextLimitCapability(ContextLimitSupport.valueOf(it.support.name), it.how) }
             ?: ContextLimitCapability.UNSUPPORTED
 
+    /** EFFORT-1: API 2.2 [ApiHarness.effort]; a 2.0 / 2.1 plugin (or a throwing getter) keeps the contract default (EFFORT_SELECTION decides). */
+    override val effort: EffortCapability =
+        runCatching { api.effort }.getOrNull()
+            ?.let { EffortCapability(EffortSupport.valueOf(it.support.name), it.how) }
+            ?: if (HarnessCapability.EFFORT_SELECTION in capabilities) EffortCapability(EffortSupport.SUPPORTED, "the harness declares EFFORT_SELECTION")
+            else EffortCapability.UNSUPPORTED
+
     private class GuardedTranslator(
         private val pluginId: String,
         private val inner: com.superiorsoftllc.agenthq.harness.api.HarnessTranslator,

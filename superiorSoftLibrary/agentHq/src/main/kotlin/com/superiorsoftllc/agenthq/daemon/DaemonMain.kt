@@ -1749,7 +1749,7 @@ class AgentHqDaemon(
                             create = { request ->
                                 bindSessionOnSpawn(
                                     manager, agents,
-                                    SpawnOptions(agentId = request.agentId, role = request.role, projectId = request.projectId, contextLimit = request.contextLimit),
+                                    SpawnOptions(agentId = request.agentId, role = request.role, projectId = request.projectId, contextLimit = request.contextLimit, effort = request.effort),
                                     repo,
                                 ) ?: throw IllegalArgumentException("the daemon could not bind a session for this spawn")
                             },
@@ -4216,7 +4216,8 @@ internal fun providerInfos(manager: SessionManager, harnesses: HarnessRegistry? 
         .filter { it !in known }
         .map { id ->
             val limit = harnesses?.resolve(id)?.contextLimit
-            ProviderInfo(id = id, default = false, defaultModel = null, contextLimit = limit?.support?.wire, contextLimitHow = limit?.how)
+            val effort = harnesses?.resolve(id)?.effort // EFFORT-1
+            ProviderInfo(id = id, default = false, defaultModel = null, contextLimit = limit?.support?.wire, contextLimitHow = limit?.how, effort = effort?.support?.wire, effortHow = effort?.how)
         }
     // CLIPATH-1 (1.73.0): a provider/harness whose CLI the resolver cannot find says so, with the paths it tried,
     // instead of looking usable and failing at spawn. A provider with no CLI (the stub) is always available.
@@ -4322,6 +4323,8 @@ internal fun providerInfo(provider: AgentProvider, isDefault: Boolean): Provider
         models = provider.knownModels() ?: offeredModels(provider),
         contextLimit = provider.contextLimit().support.wire, // CONTEXT-LIMIT-1
         contextLimitHow = provider.contextLimit().how,
+        effort = provider.effort().support.wire, // EFFORT-1
+        effortHow = provider.effort().how,
     )
 
 /**
