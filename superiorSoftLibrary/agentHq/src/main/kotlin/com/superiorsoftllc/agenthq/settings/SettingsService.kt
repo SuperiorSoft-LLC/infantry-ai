@@ -89,6 +89,7 @@ class SettingsService(
             RELATED_FAMILY_PATTERN to JsonPrimitive(relatedConfig().familyPattern),
             RELATED_SUGGEST_NUMBER to JsonPrimitive(relatedConfig().suggestNumber),
             MAIL_AUTOMATION_FOOTER to JsonPrimitive(automationFooter("system") ?: ""),
+            MAIL_WAKE_MODE to JsonPrimitive(wakeMode(null, null)),
         ) + LimitRegistry.ALL.associate { it.key to JsonPrimitive(limit(it)) } + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
     )
 
@@ -382,7 +383,10 @@ class SettingsService(
             )
             RELATED_FAMILY_PATTERN -> JsonPrimitive(requireFamilyPattern(value))
             MAIL_AUTOMATION_FOOTER -> JsonPrimitive(requireFooterText(key, value))
-            else -> if (key.startsWith("$MAIL_AUTOMATION_FOOTER.") && key.length > MAIL_AUTOMATION_FOOTER.length + 1) {
+            MAIL_WAKE_MODE -> JsonPrimitive(requireWakeMode(key, value))
+            else -> if (key.startsWith("$MAIL_WAKE_MODE.") && key.length > MAIL_WAKE_MODE.length + 1) {
+                JsonPrimitive(requireWakeMode(key, value))
+            } else if (key.startsWith("$MAIL_AUTOMATION_FOOTER.") && key.length > MAIL_AUTOMATION_FOOTER.length + 1) {
                 JsonPrimitive(requireFooterText(key, value))
             } else LimitRegistry.get(key)?.let { JsonPrimitive(requireLimit(it, value)) }
                 ?: declaredField(key)?.let { com.superiorsoftllc.agenthq.plugin.api.ConfigFieldValidator.validate(it, value) }
@@ -422,6 +426,24 @@ class SettingsService(
             blockFiles = cap(LimitRegistry.RELATED_BLOCK_FILES),
             blockChars = cap(LimitRegistry.RELATED_BLOCK_CHARS),
         )
+    }
+
+    private fun requireWakeMode(key: String, value: JsonElement): String =
+        (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it in WAKE_MODES }
+            ?: throw IllegalArgumentException("setting '$key' must be one of $WAKE_MODES")
+
+    /**
+     * USAGE-REGRESS-1: when mail wakes a resting session. `real` (recommended default): real mail wakes it (after
+     * limits.mail.wakeDebounceSeconds), automation mail (system / trigger notices) waits in the inbox and rides in the
+     * session's next turn. `all`: every mail wakes it (the old behaviour, most tokens). `never`: no mail wakes it; mail
+     * is read only when the session takes a turn for another reason (cheapest, but a role that only works on mail,
+     * such as a PM waiting for worker reports, stalls). Resolution: `mail.wakeMode.<sessionId>`, `mail.wakeMode.<role>`, `mail.wakeMode`, `real`.
+     */
+    fun wakeMode(role: String?, sessionId: String?): String {
+        fun stored(key: String) = store.settings.get(key)?.value
+            ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.getOrNull() }
+            ?.takeIf { it in WAKE_MODES }
+        return (sessionId?.let { stored("$MAIL_WAKE_MODE.$it") }) ?: (role?.let { stored("$MAIL_WAKE_MODE.$it") }) ?: stored(MAIL_WAKE_MODE) ?: "real"
     }
 
     private fun requireFooterText(key: String, value: JsonElement): String =
@@ -759,6 +781,8 @@ class SettingsService(
         const val RELATED_SUGGEST_NUMBER = "related.suggestNumber"
         /** TRIGGER-FOOTER-1: footer text for trigger / system mail ("" = off); `.<triggerId>` suffix = per-trigger override. */
         const val MAIL_AUTOMATION_FOOTER = "mail.automationFooter"
+        const val MAIL_WAKE_MODE = "mail.wakeMode"
+        val WAKE_MODES = setOf("real", "never", "all")
         const val PROMPTS_TIMEOUT_SEC = "prompts.timeoutSec"
         const val DEFAULT_PROMPT_TIMEOUT_SEC = 600
         /** ASK-TIMER (1.139.0): `deny` (default) | `approve`: what an unanswered tool approval resolves as at its timeout. */

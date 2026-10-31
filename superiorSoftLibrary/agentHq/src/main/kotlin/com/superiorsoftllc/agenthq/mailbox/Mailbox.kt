@@ -341,14 +341,18 @@ class Mailbox(
      */
     fun deliverQueued(recipient: String, delivery: MailDelivery) {
         while (true) {
-            val next = synchronized(lock) {
+            val queued = synchronized(lock) {
                 messages.values
                     .filter { it.to == recipient && it.state == MessageState.QUEUED }
-                    .minWithOrNull(compareBy({ it.sentAt }, { it.seq }))
-            } ?: return
-            when (val outcome = delivery.deliver(next)) {
+                    .sortedWith(compareBy({ it.sentAt }, { it.seq }))
+            }
+            // USAGE-REGRESS-1: only a message that may wake the recipient starts a delivery; the others stay QUEUED
+            // and ride in the next turn (folded into a waking delivery's [rest]).
+            val next = queued.firstOrNull { delivery.wakes(it) } ?: return
+            when (val outcome = delivery.deliver(next, queued.filter { it.id != next.id })) {
                 is DeliveryOutcome.Delivered -> {
-                    val events = synchronized(lock) { markDeliveredLocked(next.id) }
+                    // USAGE-REGRESS-1: a delivery may fold later queued messages into the same wake turn.
+                    val events = synchronized(lock) { (listOf(next.id) + outcome.alsoDelivered).flatMap { markDeliveredLocked(it) } }
                     emit(events)
                 }
                 is DeliveryOutcome.Retry -> return
@@ -475,7 +479,7 @@ sealed interface MailEvent {
 /** What happened when the mailbox tried to hand one message to a recipient's console. */
 sealed interface DeliveryOutcome {
     /** Handed over; the message is recorded DELIVERED. */
-    data class Delivered(val note: String = "") : DeliveryOutcome
+    data class Delivered(val note: String = "", val alsoDelivered: List<String> = emptyList()) : DeliveryOutcome
 
     /** The recipient cannot take it yet (busy) -- keep it QUEUED and try again later. */
     data class Retry(val reason: String) : DeliveryOutcome
@@ -487,4 +491,13 @@ sealed interface DeliveryOutcome {
 /** The delivery seam [Mailbox] drives. The daemon implements it over `SessionManager`. */
 fun interface MailDelivery {
     fun deliver(message: Message): DeliveryOutcome
+
+    /**
+     * USAGE-REGRESS-1: [rest] = the other QUEUED messages for the same recipient, oldest first. A delivery that folds
+     * some into one wake turn reports their ids in [DeliveryOutcome.Delivered.alsoDelivered]; the default folds none.
+     */
+    fun deliver(message: Message, rest: List<Message>): DeliveryOutcome = deliver(message)
+
+    /** USAGE-REGRESS-1: false = this message must not start a wake (it waits for the next turn). */
+    fun wakes(message: Message): Boolean = true
 }
