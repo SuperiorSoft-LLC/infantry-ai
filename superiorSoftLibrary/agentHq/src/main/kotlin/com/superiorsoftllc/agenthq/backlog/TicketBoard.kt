@@ -19,6 +19,8 @@ import com.superiorsoftllc.agenthq.context.TicketContext
 import com.superiorsoftllc.agenthq.orchestration.RunOutcomes
 import com.superiorsoftllc.agenthq.persistence.AgentHqStore
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardHost
+import com.superiorsoftllc.agenthq.daemon.api.board.BranchOutcome
+import com.superiorsoftllc.agenthq.daemon.api.board.BranchRequest
 import com.superiorsoftllc.agenthq.daemon.api.board.StoredRun
 import com.superiorsoftllc.agenthq.daemon.api.board.TicketEventAppender
 import com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardHost
@@ -127,25 +129,11 @@ class TicketBoard(
     private val context: TicketContext = TicketContext.NONE,
     private val agents: AgentProfiles? = null,
     private val sessions: SessionManager? = null,
-    private val repo: File? = null,
-    /** BRANCH-PER-TASK 1/3: cuts each ticket's own branch and worktree, and reuses them on a later start. */
-    private val branches: TicketBranches = TicketBranches(),
-    /**
-     * BRANCH-PER-TASK 1/3 + BUG-REGRESS-1: the one resolver of the ref a start cuts from, asked once per start with
-     * the ticket's project (the daemon passes `AGENTHQ_BASE_BRANCH`, else `HEAD`; `HEAD` by default).
-     */
-    private val baseRef: TicketBaseRef = TicketBaseRef.fixed(TicketBaseRef.HEAD),
-    /** P10-K9: the knowledge section of an unattended prompt start, read for that session's project. */
-    private val knowledge: KnowledgeCounter = KnowledgeCounter.NONE,
-    /** P10-K15: the skills section of an unattended prompt start, from the skills its instance freezes. */
-    private val skills: SkillsSource = SkillsSource.NONE,
     /**
      * BUG-ASSIGN-1: the role ids a ticket may name (the daemon passes its live catalog), listed in the refusal of a
      * role that is not one, so the agent that sent a display name ("Backend Developer") can send the id instead.
      */
     private val roleIds: () -> List<String> = { RoleIds.CANONICAL },
-    /** IMG-3: resolves, validates and releases ticket images against each ticket's project directory. */
-    private val images: TicketImages = TicketImages.NONE,
     /** `tickets.exitBehavior`, read at every run end: `leave` (default) keeps a cleanly finished ticket in_progress; `done` moves it. */
     private val exitBehavior: () -> String = { "leave" },
     /**
@@ -173,12 +161,6 @@ class TicketBoard(
      * An agent's or the daemon's start beyond the allowance is refused with the reason; a human move only warns.
      */
     private val pacing: (providerId: String?, model: String?) -> PacingVerdict = { _, _ -> PacingVerdict.Allow() },
-    /**
-     * NOGIT-1: a project's own stored directory (blank / unknown = null). With no AGENTHQ_REPO and project folders
-     * off (a dev or headless daemon), a start still works in THAT folder: a folder that is not a git checkout gets
-     * no branch and no worktree, and the daemon's own checkout is never used for it.
-     */
-    private val projectDirectory: (projectId: String?) -> String? = { null },
     /** KNOWLEDGE-PTR-1 (C): the stored RELATED (auto) block a save or a `relates_to` link writes atop the description. */
     private val relatedDescription: RelatedDescription = RelatedDescription.NONE,
     /** Skill ids that no stored skill carries (part c moves this onto the host); the default knows none, so any named skill is refused. */
@@ -251,12 +233,15 @@ class TicketBoard(
     relatedDescription: RelatedDescription = RelatedDescription.NONE,
     ) : this(
         host = LocalBoardHost(store, { sessions }, branches, baseRef, projectDirectory, repo, { null }, clock, agents, knowledge, skills, images),
-        clock = clock, idFactory = idFactory, context = context, agents = agents, sessions = sessions, repo = repo, branches = branches, baseRef = baseRef, knowledge = knowledge, skills = skills, roleIds = roleIds, images = images, exitBehavior = exitBehavior, autoDoneMinOutputs = autoDoneMinOutputs, weightExecutors = weightExecutors, weightContext = weightContext, laneCap = laneCap, routingRules = routingRules, routingRefused = routingRefused, pacing = pacing, projectDirectory = projectDirectory, relatedDescription = relatedDescription,
+        clock = clock, idFactory = idFactory, context = context, agents = agents, sessions = sessions, roleIds = roleIds, exitBehavior = exitBehavior, autoDoneMinOutputs = autoDoneMinOutputs, weightExecutors = weightExecutors, weightContext = weightContext, laneCap = laneCap, routingRules = routingRules, routingRefused = routingRefused, pacing = pacing, relatedDescription = relatedDescription,
         unknownSkills = { ids -> store.transaction { ids.filter { store.skills.get(it) == null } } },
     )
 
     /** DP-5f-3a: the board's tables through the host, in the row types the rules below were written against. */
     private val store = RowStore(host)
+
+    /** DP-5f-3b: the daemon's own checkout (the configured repo) through the host's git port. */
+    private val repo: File? get() = host.git.defaultRepo()?.let(::File)
 
     /** The board's own [events] log when one is set (the legacy wiring), else the host's appender. Null log = no events, as before. */
     private fun eventAppender(): TicketEventAppender = events?.let { log ->
@@ -405,7 +390,7 @@ class TicketBoard(
             // P10-K15: with the skill ids the row will freeze, so the turn renders exactly those.
             val instance = profiles.instanceFor(profile.id, profile.role)?.let { sessionManager.withSkills(it, null) }
             // P10-K9: the session's own project (TRIGGER-NUDGE: the trigger's, when it names one).
-            val first = firstTurn(instance, profile.role, profile.id, prompt, knowledge.section(projectId, profile.role), skills.section(instance))
+            val first = firstTurn(instance, profile.role, profile.id, prompt, host.context.knowledgeSection(projectId, profile.role), host.context.skillsSection(instance?.skillIds))
             val started = sessionManager.startNew(
                 prompt = first,
                 instance = instance,
@@ -577,7 +562,7 @@ class TicketBoard(
         } ?: existing?.skillsMode ?: SkillsMode.MERGE
         val includeSkillsContext = request.includeSkillsContext ?: existing?.includeSkillsContext
         // IMG-3: absent or null keeps the stored images, `[]` clears them; every path must be the project's ticket upload.
-        val imagePaths = request.images?.let { images.normalize(projectId, it) } ?: existing?.images.orEmpty()
+        val imagePaths = request.images?.let { host.images.normalize(projectId, it) } ?: existing?.images.orEmpty()
         // TICKET-WEIGHT: absent or null keeps the weight, 0 clears it, 1..5 sets it.
         val weight = when (request.weight) {
             null -> existing?.weight
@@ -675,7 +660,7 @@ class TicketBoard(
     /** IMG-3: delete each of [dropped] that no ticket on the board still references. */
     private fun releaseImages(projectId: String?, dropped: List<String>) {
         if (dropped.isEmpty()) return
-        images.release(projectId, dropped, store.transaction { store.tickets.all() })
+        host.images.release(projectId, dropped, store.transaction { store.tickets.all().map { it.toStored() } })
     }
 
     /**
@@ -922,26 +907,26 @@ class TicketBoard(
         val ticketWorktree: TicketWorktree? = if (requestedWorktree) {
             val root = worktreeRepo ?: return refusedStart(initialTicket, "no repo configured")
             // BASE-1c: the ref AND the setting that chose it, so a fresh cut's note names an epic's base.
-            val baseChoice = baseRef.choose(BaseScope(row.projectId, row.epicId))
+            val baseChoice = host.git.baseRef(row.projectId, row.epicId)
             // BUG-BASE-087: nothing configured is refused, not cut from whatever the main checkout has checked out.
             // A ticket that already holds its branch reuses it and needs no base.
             if (row.branch == null && baseChoice.ref.isBlank()) {
-                if (branches.resolveBase(root, "HEAD") == null) {
+                if (host.git.resolveBase(root.path, "HEAD") == null) {
                     return refusedStart(initialTicket, "repository ${root.absolutePath} has no commits yet; make a first commit, then set a base branch")
                 }
                 return refusedStart(initialTicket, noBaseReason(row.projectId))
             }
-            val request = TicketBranchRequest(
+            val request = BranchRequest(
                 ticketId = id,
                 title = row.title,
-                repo = root,
+                repo = root.path,
                 baseBranch = baseChoice.ref,
                 recordedBranch = row.branch,
                 recordedBase = row.base,
             )
-            when (val outcome = branches.ensure(request)) {
-                is TicketBranchOutcome.Refused -> return refusedStart(initialTicket, outcome.reason)
-                is TicketBranchOutcome.Ready -> outcome.worktree.also {
+            when (val outcome = host.git.ensureBranch(request)) {
+                is BranchOutcome.Refused -> return refusedStart(initialTicket, outcome.reason)
+                is BranchOutcome.Ready -> TicketWorktree(outcome.branch, outcome.base, outcome.worktreePath, outcome.repoRoot).also {
                     // The setting that chose the base qualifies the cut, never the worktree's warning after it.
                     val cut = outcome.note?.let { note -> baseChoice.source?.let { "$note ($it)" } ?: note }
                     cutNote = listOfNotNull(cut, outcome.warning).joinToString("; ").ifEmpty { null }
@@ -1139,7 +1124,7 @@ class TicketBoard(
         includeSkillsOverride = row.includeSkillsContext,
         reportTo = reportTo,
         // IMG-3: each attached image's absolute path, listed in the brief so the worker can read it.
-        images = row.images.mapNotNull { images.absolute(row.projectId, it)?.path },
+        images = row.images.mapNotNull { host.images.absolute(row.projectId, it) },
     )
 
     /**
@@ -1214,7 +1199,7 @@ class TicketBoard(
     }
 
     private fun projectDir(projectId: String?): File? =
-        projectDirectory(projectId)?.takeIf { it.isNotBlank() }?.let { File(it).absoluteFile }?.takeIf { it.isDirectory }
+        host.git.projectDirectory(projectId)?.takeIf { it.isNotBlank() }?.let { File(it).absoluteFile }?.takeIf { it.isDirectory }
 
     private fun TicketWorktree.asRecord(at: Long) = WorktreeRecord(
         sessionId = "", // the session that runs in it names itself when it is created
@@ -1388,7 +1373,7 @@ class TicketBoard(
         val min = autoDoneMinOutputs()
         if (min <= 0) return null
         if (record.providerSessionId == null) return "the worker never opened a provider session, so it never received its brief"
-        val outputs = sessions?.workEvents(record.id) ?: return null
+        val outputs = if (sessions == null) return null else host.sessions.workEvents(record.id)
         if (outputs >= min) return null
         return "the worker produced $outputs assistant output(s) or tool call(s), fewer than the $min that " +
             "'${com.superiorsoftllc.agenthq.settings.LimitRegistry.AUTO_DONE_MIN_OUTPUTS.key}' requires"
@@ -1896,7 +1881,7 @@ class TicketBoard(
                 ExecutorField(null, "role")
             else -> {
                 val providerId = row.provider ?: profileProviderOrDefault
-                val defaultModel = sessions?.providers?.firstOrNull { it.id == providerId }?.defaultModel()
+                val defaultModel = host.sessions.providers().firstOrNull { it.id == providerId }?.defaultModel
                 ExecutorField(defaultModel, "default")
             }
         }
@@ -1926,7 +1911,7 @@ class TicketBoard(
     private fun validateAgentId(agentId: String?, checkCatalog: Boolean) {
         if (agentId == null) return
         // LIMITS: a ticket newly assigned to a role the role allowlist leaves out is refused (a stored one stays editable).
-        if (checkCatalog) sessions?.requireAllowedRole(if (agentId.startsWith("role:")) agentId.removePrefix("role:") else ticketProfile(agentId)?.role)
+        if (checkCatalog) host.sessions.requireAllowedRole(if (agentId.startsWith("role:")) agentId.removePrefix("role:") else ticketProfile(agentId)?.role)?.let { throw IllegalArgumentException(it) }
         if (agentId.startsWith("role:")) {
             val role = agentId.removePrefix("role:")
             require(RoleIds.PATTERN.matches(role) && (!checkCatalog || role in roleIds())) {
