@@ -20,6 +20,10 @@ import com.superiorsoftllc.agenthq.backlog.toInfo
 import com.superiorsoftllc.agenthq.backlog.BoardEvent
 import com.superiorsoftllc.agenthq.backlog.TicketAnswer
 import com.superiorsoftllc.agenthq.backlog.TicketBoard
+import com.superiorsoftllc.agenthq.backlog.registerBoardFrames
+import com.superiorsoftllc.agenthq.backlog.asStartMoves
+import com.superiorsoftllc.agenthq.backlog.ticketEnvelope
+import com.superiorsoftllc.agenthq.backlog.ticketsEnvelope
 import com.superiorsoftllc.agenthq.context.TicketContext
 import com.superiorsoftllc.agenthq.context.TicketContextComposer
 import com.superiorsoftllc.agenthq.harness.CommandLines
@@ -2600,6 +2604,8 @@ private suspend fun handleConnection(
     policies: com.superiorsoftllc.agenthq.policy.PolicyRuntime = com.superiorsoftllc.agenthq.policy.PolicyRuntime(emptyList(), { null }, null, java.io.File(".")),
 ) {
     println("[agentHq] ws connected (provider=${manager.providerId})")
+    // DP-5d: the board-family frames, registered by their owner; the loop below only looks them up.
+    val frames = FrameTable().also { registerBoardFrames(it, board, manager, spawnGuard, projects, workspaceFrames, epicFrames, stories, storyBoard) }
     // SEC-FIX-1: decided once, at the handshake, from what this connection presented.
     val owner = ownerCredential?.presentedBy(
         session.call.request.headers[OwnerCredential.HEADER],
@@ -3443,34 +3449,6 @@ private suspend fun handleConnection(
                 // Contract 1.5.0 -- the backlog. A change is pushed to EVERY client by the board's sink (see
                 // broadcastBoard), and for the requester that push is the answer; only a request that changed
                 // nothing is answered here. A refusal is an `error` frame naming the problem, and nothing is stored.
-                Envelope.TICKET_SAVE -> boardRequest(envelope.type) { board.save(TicketSave.decode(envelope.data)).reply(direct) }
-                Envelope.TICKET_GET -> boardRequest(envelope.type) { ticketEnvelope(board.get(envelope.data)) }
-                Envelope.TICKET_LIST -> boardRequest(envelope.type) {
-                    // UI-BOARD-PROJ: a payload naming a project lists only its tickets; empty data keeps
-                    // the whole-board answer a legacy client expects. E1-b (1.66.0): a JSON object
-                    // `{projectId?, epicId?}` also filters by epic; an unknown epic answers an empty board.
-                    val query = TicketListQuery.decode(envelope.data)
-                    ticketsEnvelope(board.list(query.projectId, query.epicId))
-                }
-                Envelope.TICKET_MOVE -> boardRequest(envelope.type) {
-                    // BUG-MAIL-2: a move run from inside a session (`agenthq ticket move`, which names its session on
-                    // the frame) records that session as the ticket's starter. A UI move names none: nothing recorded.
-                    val starter = envelope.sessionId?.takeIf { manager.get(it) != null }
-                    // RUNTIME-LOAD-6: a start from inside a session is charged to its pod like a spawn (depth, pod cap).
-                    TicketStartCharge(spawnGuard, { board.asStartMoves() }, manager::get, manager::setSpawner)
-                        .move(TicketMove.decode(envelope.data), starter).reply(direct)
-                }
-                Envelope.TICKET_LINK -> boardRequest(envelope.type) {
-                    board.link(TicketLinkRequest.decode(envelope.data, envelope.type)).reply(direct)
-                }
-                Envelope.TICKET_UNLINK -> boardRequest(envelope.type) {
-                    board.unlink(TicketLinkRequest.decode(envelope.data, envelope.type)).reply(direct)
-                }
-                Envelope.TICKET_REORDER -> boardRequest(envelope.type) {
-                    board.reorder(TicketReorder.decode(envelope.data)).reply(direct)
-                }
-                Envelope.TICKET_DELETE -> boardRequest(envelope.type) { board.delete(envelope.data).reply(direct) }
-                Envelope.TICKET_START_NEXT -> boardRequest(envelope.type) { board.startNext().reply(direct) }
 
                 // HARNESS-INSTALL-1 (1.100.0): detect / install the harness CLIs. Both run npm or `--version` children, so they are
                 // answered off the request loop, and only to the client that asked.
@@ -4029,11 +4007,6 @@ private suspend fun handleConnection(
                     }
                 }
 
-                Envelope.PROJECT_SAVE, Envelope.PROJECT_GET, Envelope.PROJECT_LIST,
-                // BASE-1a (contract 1.81.0): read, set or clear a project's base branch.
-                Envelope.PROJECT_BASE,
-                Envelope.PROJECT_CONFIG -> projects.answer(envelope)
-
                 // IMG-1 (contract 1.83.0): store an image under the project's `.agenthq/uploads/`, answer its path.
                 Envelope.IMAGE_UPLOAD -> imageUploads?.answer(envelope)
                     ?: Envelope(Envelope.ERROR, "image_upload refused: this daemon stores no uploads")
@@ -4051,12 +4024,6 @@ private suspend fun handleConnection(
                     projectGitRequests.trySend(envelope)
                     null
                 }
-
-                Envelope.WORKSPACE_SAVE, Envelope.WORKSPACE_LIST -> workspaceFrames.answer(envelope)
-
-                // EPIC-4: a project's epics, over the daemon's own epic store.
-                // BASE-1c (contract 1.82.0): `epic_base` reads, sets or clears an epic's base branch.
-                Envelope.EPIC_SAVE, Envelope.EPIC_LIST, Envelope.EPIC_BASE -> epicFrames.answer(envelope)
 
                 // MEM-5 / MEM-8 (contract 1.21.0): the project's memory notes -- search, save, list.
                 Envelope.MEMORY_SEARCH, Envelope.MEMORY_SAVE, Envelope.MEMORY_LIST, Envelope.MEMORY_GET,
@@ -4079,11 +4046,6 @@ private suspend fun handleConnection(
                 // P10-K6 (contract 1.54.0): the issues log. An open / attempt / fix is pushed to every client (no direct reply).
                 Envelope.ISSUE_OPEN, Envelope.ISSUE_ATTEMPT, Envelope.ISSUE_FIX,
                 Envelope.ISSUE_LIST, Envelope.ISSUE_GET, Envelope.ISSUE_PRECHECK -> issueFrames.answer(envelope)
-
-                // MVP Sprint-Zero, I0: slice B's story board, over the daemon's own story store.
-                Envelope.STORY_SAVE, Envelope.STORY_GET, Envelope.STORY_MOVE -> stories.answer(envelope)
-
-                Envelope.STORY_LIST -> storyBoard.answer(envelope)
 
                 // POLICY-1 (docs/POLICY.md): read the active policy; the owner switches it (refused while an env pins it).
                 // A switch tells every connection (each its own `policy` frame), this one included, so no direct answer.
@@ -4126,7 +4088,11 @@ private suspend fun handleConnection(
                 }
 
                 // DAEMON-PLUGINS-1: a frame a plugin declared and answers; anything else is unknown.
-                else -> if (plugins.handlesFrame(envelope.type)) plugins.answerFrame(envelope, caller)
+                // DP-5d: a board-family frame is answered by the table its owner registered into; with no handler the
+                // daemon has no board.
+                else -> if (frames.handles(envelope.type)) frames.answer(envelope, direct)
+                else if (plugins.handlesFrame(envelope.type)) plugins.answerFrame(envelope, caller)
+                else if (envelope.type in BoardFrames.TYPES) BoardFrames.noBoard(envelope.type)
                 else Envelope(Envelope.ERROR, "unknown frame type '${envelope.type}'")
             }
             // BUG-MCP-RACE-1: the direct answer echoes the request's id; a push (sent elsewhere) never carries one.
@@ -4179,32 +4145,6 @@ private fun agentsEnvelope(agents: AgentProfiles): Envelope =
  */
 private fun ticketTitles(board: TicketBoard): Map<String, String> =
     board.list().mapNotNull { ticket -> ticket.sessionId?.let { it to ticket.title } }.toMap()
-
-/** Contract 1.5.0: one ticket as a `ticket` frame, every field present. */
-private fun ticketEnvelope(ticket: Ticket): Envelope =
-    Envelope(Envelope.TICKET, json.encodeToString(Ticket.serializer(), ticket))
-
-/** Contract 1.5.0: the whole board as a `tickets` frame, in board order. */
-private fun ticketsEnvelope(tickets: List<Ticket>): Envelope =
-    Envelope(Envelope.TICKETS, json.encodeToString(ListSerializer(Ticket.serializer()), tickets))
-
-/** The requester's own answer, or null when the push to every client already carried it. */
-/** [direct] (BUG-MCP-RACE-1): the request carried a `requestId`, so it is answered here even after the push. */
-private fun TicketAnswer.reply(direct: Boolean = false): Envelope? = if (pushed && !direct) null else ticketEnvelope(ticket)
-
-private fun BoardAnswer.reply(direct: Boolean = false): Envelope? = if (pushed && !direct) null else ticketsEnvelope(tickets)
-
-/**
- * Run one backlog request for frame [frame]: a refusal ([IllegalArgumentException], a malformed payload
- * included) answers `<frame> refused: <why>`; anything else unexpected answers `<frame> failed: <what>`.
- */
-private inline fun boardRequest(frame: String, block: () -> Envelope?): Envelope? = try {
-    block()
-} catch (e: IllegalArgumentException) {
-    Envelope(Envelope.ERROR, "$frame refused: ${e.message ?: "invalid request"}")
-} catch (e: Exception) {
-    Envelope(Envelope.ERROR, "$frame failed: ${e.message ?: e::class.simpleName}")
-}
 
 /**
  * The `providers` answer (contract 1.3.0): every provider a spawn may name, the default first, each
@@ -4470,13 +4410,6 @@ internal fun installModules(
     val lib = code?.takeIf { it.isFile && it.parentFile?.name == "lib" }?.parentFile?.parentFile?.let { File(it, "modules") }
     val appImage = property("compose.application.resources.dir")?.takeIf { it.isNotBlank() }?.let { File(it, "modules") }
     return listOfNotNull(lib, appImage).firstOrNull { it.isDirectory }
-}
-
-/** Adapts the board to the plain moves [TicketStartCharge] takes (it names no board package). */
-private fun TicketBoard.asStartMoves(): StartMoves<TicketAnswer> = object : StartMoves<TicketAnswer> {
-    override fun get(id: String) = this@asStartMoves.get(id)
-    override fun move(move: TicketMove, startedBy: String?) = this@asStartMoves.move(move, startedBy = startedBy)
-    override fun ticketOf(answer: TicketAnswer) = answer.ticket
 }
 
 /** DP-5b: a trigger's `prompt` hand-out through the Tickets API; no board = the refusal the board itself gave for a missing manager. */
