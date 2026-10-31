@@ -154,6 +154,19 @@ object AhqIcons {
         }
     }
 
+    /** Material "Filled.KeyboardArrowDown", a drop-down's caret (drawn, so the web font cannot turn a text glyph into tofu). */
+    val ChevronDown: ImageVector by lazy {
+        icon("KeyboardArrowDown", autoMirror = false) {
+            moveTo(7.41f, 8.59f)
+            lineTo(12.0f, 13.17f)
+            lineToRelative(4.59f, -4.58f)
+            lineTo(18.0f, 10.0f)
+            lineToRelative(-6.0f, 6.0f)
+            lineToRelative(-6.0f, -6.0f)
+            close()
+        }
+    }
+
     /** MOBILE-LAYOUT-1: Material "AutoMirrored.Filled.ArrowBack", the compact window's back affordance. */
     val ArrowBack: ImageVector by lazy {
         icon("ArrowBack", autoMirror = true) {

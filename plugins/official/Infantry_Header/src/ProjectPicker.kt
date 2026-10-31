@@ -121,8 +121,8 @@ fun ProjectPicker(state: AppState, controller: Controller) {
                     fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
-                Spacer(Modifier.width(6.dp))
-                Text("▾", color = Palette.Muted, fontSize = 11.sp)
+                Spacer(Modifier.width(2.dp))
+                Icon(AhqIcons.ChevronDown, contentDescription = null, tint = Palette.Muted, modifier = Modifier.size(16.dp))
             }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.background(Palette.Raised)) {
                 state.projects.forEach { p ->
