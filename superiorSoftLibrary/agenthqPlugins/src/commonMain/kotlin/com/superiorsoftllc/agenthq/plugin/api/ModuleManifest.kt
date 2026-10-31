@@ -213,7 +213,13 @@ data class DaemonCapabilities(
     val secrets: List<String> = emptyList(),
     /** DAEMON-PLUGINS-1: per-plugin limits; unset fields take the host's defaults. */
     val limits: DaemonPluginLimits = DaemonPluginLimits(),
+    /** DAEMON-STORAGE-1: plugin-owned tables; `adopt` lists existing core tables an OFFICIAL module takes over. */
+    val storage: DaemonStorageDeclaration = DaemonStorageDeclaration(),
 )
+
+/** DAEMON-STORAGE-1: [adopt] = core tables an official module takes over (a community module declaring any is refused). */
+@Serializable
+data class DaemonStorageDeclaration(val adopt: List<String> = emptyList())
 
 /** DAEMON-PLUGINS-1: one daemon tool: its name, its policy action id and kind, and a one-line description. */
 @Serializable

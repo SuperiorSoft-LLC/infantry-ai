@@ -290,3 +290,12 @@ ticket row, not `TicketRef`), `ticketTransition` event, `sessionEvent` stream, `
 `MailRouter` routing from `MailDelivery`). (2) Shrink `OrchestratorBoundaryGuardTest.BASELINE` (51 imports in 30 pairs; biggest:
 `cli>memory` 14, `cli>issues` 9, `cli>pipeline` 8, `backlog>session` 7, `backlog>worktree` 7, `orchestration>session` 7). The `cli>*`
 entries are wire DTOs that belong in `agentHqProtocol`. (3) `orchestrator.provider` as a declared setting instead of the env var.
+
+## 7. Plugin storage (DAEMON-STORAGE-1, DaemonApi 1.15.0)
+
+`api.storage: PluginStorage` (default `NoPluginStorage`, every call refuses) gives a module its own tables in the daemon's one SQLite file; there is no raw core handle (DAEMON-PLUGIN-PLAN decision 5, conservative option).
+
+- Members: `migrate(version, sql)` (runs once per module, records the version in the host table `plugin_storage_versions`, all-or-nothing), `query(sql, args)`, `execute(sql, args)`, `transaction { }` (rolls back on exception).
+- Naming: every table / index / view / trigger a statement names (after FROM / INTO / UPDATE / JOIN / TABLE / INDEX / VIEW / TRIGGER, `ON` of CREATE INDEX) must start with the module prefix (module id lowercased, non-alphanumerics as `_`, plus `_`) or be on the adopt list. One statement per call; ATTACH / PRAGMA / VACUUM, schema-qualified names and table functions are refused. String literals and comments are ignored by the check.
+- ADOPT: an OFFICIAL / bundled module may declare `daemon.storage.adopt: [table...]` in module.json, existing core tables it takes over (DP-6 / DP-7 keep their rows, no migration). A community module declaring adopt is refused at load; it gets prefix only and needs the grant `storage`.
+- Implementation: `LocalPluginStorage` over the store's `AgentHQDatabaseHandle` (same driver, lock and write tracking). Values bind as null / Long / Int / Boolean / Double / String / ByteArray; rows come back as column-label maps.
