@@ -438,7 +438,7 @@ internal object Cli {
                 "harness-install" -> harnessInstall(stream, parsed, out, err)
                 "processes" -> processes(stream, parsed, out, err)
                 "agents" -> agents(stream, parsed, out, err, getenv)
-                "send" -> send(stream, parsed, out, err, getenv)
+                "send" -> send(stream, parsed, out, err, getenv, input)
                 "inbox" -> inbox(stream, parsed, out, err, getenv)
                 "read" -> read(stream, parsed, out, err, getenv)
                 "threads" -> threads(stream, parsed, out, err, getenv)
@@ -2299,11 +2299,27 @@ internal object Cli {
         out: Appendable,
         err: Appendable,
         getenv: (String) -> String?,
+        input: (() -> Reader)? = null,
     ): Int = runBlocking {
         checkContract(stream, err)
         // Non-empty here: [validateArgs] refuses a missing recipient or message before the socket opens.
         val to = parsed.args.first().trim()
-        val body = parsed.args.drop(1).joinToString(" ").trim()
+        // CLI-PATH-1: the body comes from stdin (`-`), `--file <path>` or the joined positional args; a multi-line
+        // body is delivered whole (the file/stdin text is verbatim, only trimmed at both ends).
+        val body = when {
+            parsed.stdin -> (input ?: { System.`in`.bufferedReader(Charsets.UTF_8) })().use { it.readText() }.trim()
+            parsed.file != null -> try {
+                File(parsed.file).readText().trim()
+            } catch (e: Exception) {
+                err.appendLine("error: cannot read --file ${parsed.file}: ${e.message}")
+                return@runBlocking 2
+            }
+            else -> parsed.args.drop(1).joinToString(" ").trim()
+        }
+        if (body.isBlank()) {
+            err.appendLine("error: the message is empty")
+            return@runBlocking 2
+        }
         // MAIL-FOOTER-1: cmd.exe does not treat '...' as quotes, so `send pm 'two words'` arrives as two
         // arguments that still carry the quotes. It is sent as typed; the warning says how to quote next time.
         if (body.length > 1 && body.startsWith('\'') && body.endsWith('\'')) {
@@ -5332,7 +5348,7 @@ internal object Cli {
             // to be refused as "two distinct, non-empty sessions".
             parsed.args.isEmpty() || parsed.args.first().isBlank() ->
                 "send requires a recipient: agenthq send <agentId|role> \"message\""
-            parsed.args.drop(1).all { it.isBlank() } ->
+            parsed.args.drop(1).all { it.isBlank() } && !parsed.stdin && parsed.file == null ->
                 "send requires a message: agenthq send <agentId|role> \"message\""
             else -> null
         }

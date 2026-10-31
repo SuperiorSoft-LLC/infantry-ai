@@ -61,6 +61,9 @@ agenthq inbox --unread [--limit n] [--offset n] [--previews]
 agenthq read <8-char-id>
 agenthq send pm "Your message, on one line."
 agenthq send pm "Your answer, on one line." --reply-to <8-char-id>
+# Multi-line body (kept whole): stdin, a file, or several args joined with spaces.
+agenthq send starter - < report.txt
+agenthq send starter --file report.txt
 agenthq threads
 agenthq thread "<thread-id>"
 agenthq mail
