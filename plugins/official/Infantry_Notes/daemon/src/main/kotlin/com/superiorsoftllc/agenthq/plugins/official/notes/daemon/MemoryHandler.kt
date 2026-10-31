@@ -1,5 +1,7 @@
-package com.superiorsoftllc.agenthq.memory
+package com.superiorsoftllc.agenthq.plugins.official.notes.daemon
 
+import com.superiorsoftllc.agenthq.daemon.api.Frame
+import com.superiorsoftllc.agenthq.memory.*
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -30,10 +32,10 @@ class MemoryHandler(
     /** ROLE-NOTES-1: told when a ROLE-scoped note is saved or deleted, so live sessions of that role can re-read it. */
     private val onRoleNoteChanged: (projectId: String, role: String, name: String, deleted: Boolean) -> Unit = { _, _, _, _ -> },
 ) {
-    fun answer(envelope: Envelope): Envelope? = when (envelope.type) {
+    fun answer(envelope: Frame): Frame? = when (envelope.type) {
         Envelope.MEMORY_SEARCH -> request(envelope.type) {
             val req = json.decodeFromString(MemorySearch.serializer(), envelope.data)
-            Envelope(
+            Frame(
                 Envelope.MEMORY_HITS,
                 json.encodeToString(
                     ListSerializer(MemorySearchResult.serializer()),
@@ -46,7 +48,7 @@ class MemoryHandler(
             val req = json.decodeFromString(MemorySave.serializer(), envelope.data)
             val saved = save(req)
             notifyRole(saved.scope, saved.ownerId, req.projectId, saved.name, deleted = false)
-            Envelope(Envelope.MEMORY_NOTE, json.encodeToString(MemoryNote.serializer(), saved))
+            Frame(Envelope.MEMORY_NOTE, json.encodeToString(MemoryNote.serializer(), saved))
         }
 
         Envelope.MEMORY_GET -> request(envelope.type) {
@@ -57,7 +59,7 @@ class MemoryHandler(
                     MemoryRefusal.NOTE_NOT_FOUND,
                     "no ${target.scope} note '${req.name.trim()}' in project '${req.projectId.trim()}'",
                 )
-            Envelope(Envelope.MEMORY_NOTE, json.encodeToString(MemoryNote.serializer(), note))
+            Frame(Envelope.MEMORY_NOTE, json.encodeToString(MemoryNote.serializer(), note))
         }
 
         Envelope.MEMORY_LIST -> request(envelope.type) {
@@ -66,7 +68,7 @@ class MemoryHandler(
             } else {
                 MemoryList(projectId = envelope.data)
             }
-            Envelope(Envelope.MEMORY_NOTES, indexOf(req))
+            Frame(Envelope.MEMORY_NOTES, indexOf(req))
         }
 
         Envelope.MEMORY_DELETE -> request(envelope.type) {
@@ -76,7 +78,7 @@ class MemoryHandler(
                 throw MemoryRefusal(MemoryRefusal.NOTE_NOT_FOUND, "no ${target.scope} note '${req.name.trim()}' to delete")
             }
             notifyRole(target.scope, target.ownerId, req.projectId, req.name.trim(), deleted = true)
-            Envelope(Envelope.MEMORY_NOTES, indexOf(MemoryList(req.projectId, req.scope, req.sessionId, req.role)))
+            Frame(Envelope.MEMORY_NOTES, indexOf(MemoryList(req.projectId, req.scope, req.sessionId, req.role)))
         }
 
         Envelope.MEMORY_PURGE_ROLE -> request(envelope.type) {
@@ -87,7 +89,7 @@ class MemoryHandler(
                 "deleting a role purges ALL its notes in every project; pass confirm equal to the role id '$role'"
             }
             store.purgeRole(role)
-            Envelope(Envelope.MEMORY_NOTES, json.encodeToString(ListSerializer(MemoryIndexEntry.serializer()), emptyList()))
+            Frame(Envelope.MEMORY_NOTES, json.encodeToString(ListSerializer(MemoryIndexEntry.serializer()), emptyList()))
         }
 
         else -> null
@@ -177,11 +179,11 @@ class MemoryHandler(
         const val PM_ROLE = "pm"
     }
 
-    private inline fun request(frame: String, block: () -> Envelope): Envelope = try {
+    private inline fun request(frame: String, block: () -> Frame): Frame = try {
         block()
     } catch (e: IllegalArgumentException) {
-        Envelope(Envelope.ERROR, "$frame refused: ${e.message ?: "invalid request"}")
+        Frame(Envelope.ERROR, "$frame refused: ${e.message ?: "invalid request"}")
     } catch (e: Exception) {
-        Envelope(Envelope.ERROR, "$frame failed: ${e.message ?: e::class.simpleName}")
+        Frame(Envelope.ERROR, "$frame failed: ${e.message ?: e::class.simpleName}")
     }
 }

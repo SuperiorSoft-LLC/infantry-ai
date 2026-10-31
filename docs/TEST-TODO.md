@@ -75,3 +75,8 @@ TEST-TODO: Knowledge port. LocalKnowledgeTest: digest/section/search/noteCount o
 
 ## DP-7d (ticket-092125b5)
 TEST-TODO: session-ended hook. MemoryScopeTest.sessionEndedListenersHearAKillAndARemovalAndCanBeClosed: SessionManager.addSessionEndedListener hears kill + delete, a closed handle hears nothing. Not tested (QA): a real plugin loaded in a daemon receiving events.onSessionRemoved (DaemonPluginHost wrapper, disabled-plugin skip).
+
+## DP-7e (ticket-0839e57f)
+TEST-TODO: mail port. SessionNotifierTest (unit): notifyRole reaches only live sessions of the role in the project, nothing for none, failing send not counted, grant refused for a community module, default port delivers nothing. Not tested (QA): a real community plugin with and without `sessions.notify` in modules.json receiving a real mail in a live daemon; the ROLE-NOTES-1 role-note announcement end to end after the DaemonMain rewire.
+
+- DP-7f: with the real Infantry_Notes plugin loaded in a daemon, run `agenthq memory save/show/index/search/append/edit/delete` (project, role and session scope) end to end; this replaces the deleted core CliMemoryTest, MemoryDaemonTest and MemoryModesWireTest (daemon-socket tests that needed the in-core store). Also check a role note change mails a live session of that role, a removed session's notes vanish, and notes survive a daemon restart.

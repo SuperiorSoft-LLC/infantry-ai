@@ -153,8 +153,8 @@ class KnowledgeFirstTurnTest {
     /** One note, one ACTIVE decision (D1 superseded by D2), one OPEN issue (I2 fixed): counts 1/1/1. */
     private fun seedKnowledge(fixture: DaemonFixture) {
         val daemon = fixture.daemon
-        daemon.memoryNotes.save(PROJECT, "architecture", "how it fits", "the body")
-        daemon.memoryNotes.save("another-project", "elsewhere", "not ours", "the body")
+        records.saveNote(PROJECT, "architecture", "how it fits", "the body")
+        records.saveNote("another-project", "elsewhere", "not ours", "the body")
         records.addDecision(PROJECT, "use sqlite")
         records.addDecision(PROJECT, "use sqlite with WAL", supersedes = "D1")
         records.openIssue(PROJECT, "flaky start", "src/a.kt")

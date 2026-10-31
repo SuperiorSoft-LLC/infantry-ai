@@ -1,6 +1,5 @@
-package com.superiorsoftllc.agenthq.memory
+package com.superiorsoftllc.agenthq.plugins.official.notes.daemon
 
-import com.superiorsoftllc.agenthq.session.stateDir
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -179,7 +178,7 @@ open class InMemoryLeadNoteStore(
  *
  * Same deal as [com.superiorsoftllc.agenthq.session.JsonSessionStore], which is why there is no SQL
  * migration here either -- a whole-file JSON store with a `.tmp` sibling moved into place, so a crash
- * mid-write cannot truncate the real file, and the state lives in [stateDir] so a `git clean` cannot
+ * mid-write cannot truncate the real file, and the state lives in the daemon state dir so a `git clean` cannot
  * erase a project's notes.
  *
  * A file that is absent opens as an empty store and is not created until the first save. A file that
@@ -238,7 +237,5 @@ class JsonLeadNoteStore(private val file: File) : InMemoryLeadNoteStore() {
     }
 
     companion object {
-        /** The daemon's default store: `lead-notes.json` inside [stateDir]. */
-        fun default(): JsonLeadNoteStore = JsonLeadNoteStore(File(stateDir(), "lead-notes.json"))
     }
 }

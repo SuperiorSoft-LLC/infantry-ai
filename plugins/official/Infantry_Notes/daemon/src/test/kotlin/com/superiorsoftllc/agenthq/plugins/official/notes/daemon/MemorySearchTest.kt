@@ -1,6 +1,7 @@
-package com.superiorsoftllc.agenthq.memory
+package com.superiorsoftllc.agenthq.plugins.official.notes.daemon
 
-import com.superiorsoftllc.agenthq.db.AgentHQDatabaseFactory
+import com.superiorsoftllc.agenthq.memory.*
+
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -13,7 +14,7 @@ import kotlin.test.assertTrue
  * The database is the source of truth precisely so this is cheap: a search runs as a query over the
  * `memory_notes` rows rather than loading and scanning every project's notes. This test runs at the
  * daemon level, over the same SQLite file the daemon keeps its state in (via
- * [SqlMemoryPersistence]), so it exercises the real query and not the in-memory default.
+ * [StorageMemoryPersistence]), so it exercises the real query and not the in-memory default.
  *
  * The one claim: given two notes in project P -- one whose body mentions "refresh token rotation" --
  * searching P for "rotation" returns exactly that note, as a result carrying its name, description
@@ -33,10 +34,10 @@ class MemorySearchTest {
         val state = stateDir()
         try {
             val dbPath = File(state, "agenthq.db").absolutePath
-            val handle = AgentHQDatabaseFactory.open(dbPath)
+            val handle = NotesTestDb.openHandle(dbPath)
             try {
                 val store = MemoryStore(
-                    persistence = SqlMemoryPersistence(handle.database),
+                    persistence = StorageMemoryPersistence(handle.database),
                     idFactory = { "note-" + System.nanoTime() },
                 )
 
@@ -75,10 +76,10 @@ class MemorySearchTest {
         val state = stateDir()
         try {
             val dbPath = File(state, "agenthq.db").absolutePath
-            val handle = AgentHQDatabaseFactory.open(dbPath)
+            val handle = NotesTestDb.openHandle(dbPath)
             try {
                 val store = MemoryStore(
-                    persistence = SqlMemoryPersistence(handle.database),
+                    persistence = StorageMemoryPersistence(handle.database),
                     idFactory = { "note-" + System.nanoTime() },
                 )
 

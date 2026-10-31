@@ -1,6 +1,7 @@
-package com.superiorsoftllc.agenthq.memory
+package com.superiorsoftllc.agenthq.plugins.official.notes.daemon
 
-import com.superiorsoftllc.agenthq.db.AgentHQDatabaseFactory
+import com.superiorsoftllc.agenthq.memory.*
+
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -15,7 +16,7 @@ import kotlin.test.assertTrue
  * Agents (Claude Code, OpenCode) read files for free, so the mirror is how the database's notes reach
  * a reader without a round-trip: the database stays the source of truth, the folder is a generated copy
  * it can rebuild at will. This test runs at the daemon level, over the same SQLite file the daemon
- * keeps its state in (via [SqlMemoryPersistence]), so it exercises the real store and not the in-memory
+ * keeps its state in (via [StorageMemoryPersistence]), so it exercises the real store and not the in-memory
  * default.
  *
  * The one claim: exporting project P writes the index and one file per note, a second export after an
@@ -37,10 +38,10 @@ class MemoryExportTest {
         val state = stateDir()
         try {
             val dbPath = File(state, "agenthq.db").absolutePath
-            val handle = AgentHQDatabaseFactory.open(dbPath)
+            val handle = NotesTestDb.openHandle(dbPath)
             try {
                 val store = MemoryStore(
-                    persistence = SqlMemoryPersistence(handle.database),
+                    persistence = StorageMemoryPersistence(handle.database),
                     idFactory = { "note-" + System.nanoTime() },
                 )
                 store.save(
@@ -144,10 +145,10 @@ class MemoryExportTest {
         val state = stateDir()
         try {
             val dbPath = File(state, "agenthq.db").absolutePath
-            val handle = AgentHQDatabaseFactory.open(dbPath)
+            val handle = NotesTestDb.openHandle(dbPath)
             try {
                 val store = MemoryStore(
-                    persistence = SqlMemoryPersistence(handle.database),
+                    persistence = StorageMemoryPersistence(handle.database),
                     idFactory = { "note-" + System.nanoTime() },
                 )
 
@@ -197,7 +198,7 @@ class MemoryExportTest {
                 // the durable store (written before MEM-7, or by another writer) is loaded by the
                 // store's init without passing checkName. Export must still refuse to let such a name
                 // escape the mirror folder -- the canonical-path guard is kept as defence in depth.
-                SqlMemoryPersistence(handle.database).upsert(
+                StorageMemoryPersistence(handle.database).upsert(
                     MemoryNote(
                         id = "note-legacy-escape",
                         projectId = "project-1",
@@ -208,7 +209,7 @@ class MemoryExportTest {
                         updatedAt = "2026-10-11T00:00:00Z",
                     ),
                 )
-                val reopened = MemoryStore(persistence = SqlMemoryPersistence(handle.database))
+                val reopened = MemoryStore(persistence = StorageMemoryPersistence(handle.database))
                 val guardDir = File(state, "guard-mirror")
                 guardDir.mkdirs()
                 reopened.export("project-1", guardDir)

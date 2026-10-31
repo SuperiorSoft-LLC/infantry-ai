@@ -59,6 +59,9 @@ interface DaemonServices {
     /** PACE-TREND-1: the plan meters (current readings); default: none. */
     val meters: com.superiorsoftllc.agenthq.daemon.api.usage.Meters get() = com.superiorsoftllc.agenthq.daemon.api.usage.NoMeters
 
+    /** DP-7e: the mail port behind `api.sessionNotifier` (ungated; the plugin host adds the grant); default: delivers nothing. */
+    val sessionNotifier: com.superiorsoftllc.agenthq.daemon.api.sessions.SessionNotifier get() = com.superiorsoftllc.agenthq.daemon.api.sessions.NoSessionNotifier
+
     /** DAEMON-STORAGE-1: the database handle behind `api.storage`; null = none (every call refuses). */
     val storageHandle: com.superiorsoftllc.agenthq.db.AgentHQDatabaseHandle? get() = null
 

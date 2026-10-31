@@ -3,6 +3,7 @@
 // module.json's `daemon.jar` names the jar this builds. `:daemon-plugin-official-Infantry_Notes:jar`.
 plugins {
     kotlin("jvm")
+    alias(libs.plugins.kotlinSerialization)
 }
 
 kotlin {
@@ -15,6 +16,8 @@ dependencies {
     shaded(project(":superiorSoftLibrary:agentHqProtocol"))
     compileOnly(project(":superiorSoftLibrary:agentHqProtocol"))
     compileOnly(project(":superiorSoftLibrary:agentHqDaemonApi"))
+    // DP-7f: LeadNote is @Serializable; the daemon provides the runtime.
+    compileOnly(libs.kotlinx.serialization.json)
     testImplementation(project(":superiorSoftLibrary:agentHqDaemonApi"))
     testImplementation(project(":superiorSoftLibrary:agentHqProtocol"))
     testImplementation(kotlin("test"))

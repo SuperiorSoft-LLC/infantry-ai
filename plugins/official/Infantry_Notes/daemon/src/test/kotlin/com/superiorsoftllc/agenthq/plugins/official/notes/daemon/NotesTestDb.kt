@@ -32,7 +32,17 @@ object NotesTestDb {
         return c to JdbcStorage(c).also { it.migrate(1, SCHEMA) }
     }
 
+    /** DP-7f: an open handle the way the memory tests used the database handle: [database] to build a store over, [close] to stop. */
+    class Handle(private val conn: Connection, val database: JdbcStorage) : AutoCloseable {
+        override fun close() = conn.close()
+    }
+
+    fun openHandle(path: String): Handle = open(path).let { (c, s) -> Handle(c, s) }
+
     val SCHEMA = listOf(
+        "CREATE TABLE IF NOT EXISTS memory_notes (id TEXT NOT NULL PRIMARY KEY, project_id TEXT NOT NULL, name TEXT NOT NULL, folder TEXT NOT NULL DEFAULT '', " +
+            "description TEXT NOT NULL DEFAULT '', body TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL, created_at INTEGER NOT NULL, " +
+            "scope TEXT NOT NULL DEFAULT 'project', owner_id TEXT NOT NULL DEFAULT '')",
         "CREATE TABLE IF NOT EXISTS decisions (project_id TEXT NOT NULL, number INTEGER NOT NULL CHECK (number >= 1), summary TEXT NOT NULL, " +
             "body TEXT NOT NULL DEFAULT '', supersedes INTEGER CHECK (supersedes IS NULL OR (supersedes >= 1 AND supersedes < number)), " +
             "author_session_id TEXT, author_agent_id TEXT, author_role TEXT, created_at INTEGER NOT NULL, PRIMARY KEY (project_id, number))",
