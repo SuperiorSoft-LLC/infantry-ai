@@ -18,6 +18,9 @@ Never `sleep` or poll to wait for a build, gate or test run. Start it with `agen
 Only if your harness is not woken by mail: `agenthq bg wait <id> [--timeout MIN]` blocks until the job ends and returns its exit code.
 
 
+## FEWER TOOL CALLS
+Every call re-reads your whole context, so fewer calls is cheaper. Your shell already starts in the worktree: never prefix `cd <worktree> &&`. Batch related commands into one call (`git status && git diff --stat`, several reads in one turn). Run ONE test/build per change set: after a green run, do not repeat the identical command unless code changed since. Keep output quiet: `--console=plain`, `tail -n 10` for builds, errors not warnings.
+
 ## ASK
 Ask the owner (`agenthq_ask`, or `agenthq ask`) only for a real decision that only the user can make: 2-4 real options where their preference matters (design, priority, destructive or irreversible choices). Never for trivia or anything already decided.
 Keep the question short, give clear options (label + one-line consequence), and always recommend one with a reason. Do not wait: carry on with other work; the answer arrives as mail.
