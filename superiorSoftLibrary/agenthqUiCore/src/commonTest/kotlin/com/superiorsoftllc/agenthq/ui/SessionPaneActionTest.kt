@@ -36,6 +36,14 @@ class SessionPaneActionTest {
         }
     }
 
+    @Test fun `header Resume is enabled only for an ended resumable session`() {
+        for (st in SessionState.values()) {
+            val ended = st in ENDED_STATES
+            assertEquals(ended, resumeEnabled(rec(st, psid = "p")), "state $st with a provider session id")
+            assertEquals(false, resumeEnabled(rec(st, psid = null)), "state $st without one")
+        }
+    }
+
     @Test fun `a session with a conversation resumes`() {
         assertEquals(SessionPaneAction.Resume("s1"), sessionPaneAction(rec(psid = "p"), emptyList()))
         assertEquals(SessionPaneAction.Resume("s1"), sessionPaneAction(rec(SessionState.EXITED, psid = "p"), emptyList()))

@@ -19,6 +19,14 @@ import com.superiorsoftllc.agenthq.ui.protocol.SessionState
 /** A session whose run is over for good: nothing left to kill, only to resume or remove. */
 val ENDED_STATES = setOf(SessionState.EXITED, SessionState.FAILED, SessionState.ORPHANED)
 
+/**
+ * Whether the header's Resume button is meaningful: the run is over for good ([ENDED_STATES]) and a provider session id
+ * exists. On an IDLE session (alive, at rest) Resume did exactly what Send does, so it is disabled there; a running one
+ * is not resumable either.
+ */
+fun resumeEnabled(session: com.superiorsoftllc.agenthq.ui.protocol.SessionRecord): Boolean =
+    session.resumable && session.state in ENDED_STATES
+
 /** The chat's inline spans as styled text (the markdown renderers and the chat table draw them). */
 fun spansText(spans: List<ChatSpan>): AnnotatedString = buildAnnotatedString {
     for (s in spans) when (s) {

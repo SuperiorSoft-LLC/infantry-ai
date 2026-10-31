@@ -925,7 +925,7 @@ internal fun PromptBox(
             }
             if (a != null && !spawnMode) {
                 val resume = com.superiorsoftllc.agenthq.ui.shell.rememberGate("chat.resume")
-                val canResume = live && resume.allowed && a.session.resumable
+                val canResume = live && resume.allowed && resumeEnabled(a.session)
                 IconAction(AhqIcons.PlayArrow, resume.label("Resume"), onClick = {
                     actionScope.launch {
                         if (controller.resume(a.id, wire(value).trim()) is CommandResult.Sent) onValue("")
