@@ -11,3 +11,9 @@
 - TEST-TODO: a real board plugin registering the DP-5d table through `api.frames.table` and starting a worker through `api.spawns.charge`: depth/pod-cap refusal text identical to the core path.
 - TEST-TODO: no-board daemon answers project_*/workspace_* frames from core (new behaviour) and ticket_* with the no-board refusal.
 - TEST-TODO: community plugin without `sessions.spawn` gets NoSpawnCharge.
+
+## DP-5h-3 (ticket-498dfe11): BoardDaemonPlugin shading + swap feed
+- TEST-TODO: plugin missing: remove Infantry_Board-daemon.jar from the plugins dir; daemon starts, every ticket_* frame answers '<type> refused: this daemon has no board', session events queue (SwapFeed.pending grows to its limit, then drops oldest).
+- TEST-TODO: reload mid-worker: start a ticket worker, reload Infantry_Board; worker keeps running in core, the new board re-adopts it (sweepWorkers) and clearQueueMarks runs; the status/exit events of the gap arrive in order.
+- TEST-TODO: startup order: with the plugin installed, the first client frame and the session restore both see a built board (needs DaemonMain to build the plugin host before restore; not done in this ticket).
+- TEST-TODO: the shaded Infantry_Board-daemon.jar contains com/superiorsoftllc/agenthq/backlog/TicketBoard.class and no daemon-api classes.
