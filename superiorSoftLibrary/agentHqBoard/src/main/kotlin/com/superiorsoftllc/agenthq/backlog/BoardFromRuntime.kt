@@ -27,6 +27,28 @@ object BoardFromRuntime {
     private val EXIT_BEHAVIORS = setOf("leave", "done")
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** The first-turn context composer over what the runtime and its host offer (knowledge, skills, role notes, the RELATED block, the project switches). */
+    fun contextOf(runtime: BoardRuntime): TicketContext {
+        val real = com.superiorsoftllc.agenthq.context.TicketContextComposer(
+        object : com.superiorsoftllc.agenthq.settings.ProjectSettings {
+            override fun all() = kotlinx.serialization.json.JsonObject(emptyMap())
+            override fun set(key: String, value: kotlinx.serialization.json.JsonElement) = all()
+            override fun includeLinkedTasksContext() = runtime.includeLinkedTasksContext()
+            override fun includeSkillsContext() = runtime.includeSkillsContext()
+            override fun skillIds() = runtime.skillIds()
+        },
+        com.superiorsoftllc.agenthq.context.KnowledgeSection { runtime.host.context.knowledgeSection(it, null) },
+        com.superiorsoftllc.agenthq.context.SkillsSection { ids, include -> runtime.host.context.skillsSection(ids, include) },
+        roleNotes = com.superiorsoftllc.agenthq.context.RoleNotesSource { project, role -> runtime.roleNotes(project, role) },
+        related = com.superiorsoftllc.agenthq.ticketfiles.RelatedWorkSource { id, desc -> runtime.relatedBlock(id, desc) },
+        )
+        return object : TicketContext {
+            override fun compose(input: com.superiorsoftllc.agenthq.context.ContextInput) =
+                runtime.fixedFirstTurn()?.let { (prompt, sources) -> com.superiorsoftllc.agenthq.context.ComposedContext(prompt, sources.map { com.superiorsoftllc.agenthq.session.ContextSource(it.first, it.second) }) } ?: real.compose(input)
+            override fun effective(override: Boolean?, skillsOverride: Boolean?) = real.effective(override, skillsOverride)
+        }
+    }
+
     /** [context] is the first-turn context composer (a later step moves its sources onto the runtime); [BoardRuntime.push] gets every board event as frames. */
     fun build(runtime: BoardRuntime, context: TicketContext = TicketContext.NONE): TicketBoard {
         val board = TicketBoard(

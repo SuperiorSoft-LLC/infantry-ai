@@ -74,8 +74,11 @@ class McpTicketAnswerRaceE2eTest {
             return answer
         }
 
+        /** The board tools answer terse text by default; these tests read the JSON payload (verbose). */
+        private fun verbose(a: String) = if (a.trim() == "{}") """{"verbose":true}""" else a.replaceFirst("{", """{"verbose":true,""")
+
         fun callTool(name: String, arguments: String = "{}"): JsonObject =
-            request("tools/call", """{"name":"$name","arguments":$arguments}""")["result"]!!.jsonObject
+            request("tools/call", """{"name":"$name","arguments":${verbose(arguments)}}""")["result"]!!.jsonObject
 
         fun close() {
             runCatching { stdin.close() }

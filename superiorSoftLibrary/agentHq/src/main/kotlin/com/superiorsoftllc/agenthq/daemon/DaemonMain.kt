@@ -34,8 +34,8 @@ import com.superiorsoftllc.agenthq.harness.ServiceLoaderPluginSource
 import com.superiorsoftllc.agenthq.harness.descriptor.DescriptorNote
 import com.superiorsoftllc.agenthq.harness.descriptor.HarnessDescriptorLoader
 import com.superiorsoftllc.agenthq.epics.Epic
-import com.superiorsoftllc.agenthq.epics.EpicHandler
-import com.superiorsoftllc.agenthq.epics.EpicStore
+
+
 import com.superiorsoftllc.agenthq.epics.SqlEpicPersistence
 import com.superiorsoftllc.agenthq.protocol.RUN_IN_FLIGHT
 import com.superiorsoftllc.agenthq.protocol.AgentListRequest
@@ -211,6 +211,13 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.system.exitProcess
+import com.superiorsoftllc.agenthq.backlog.TicketEventLog
+import com.superiorsoftllc.agenthq.daemon.api.board.TicketEvent
+import com.superiorsoftllc.agenthq.ticketfiles.RelatedDescription
+import com.superiorsoftllc.agenthq.ticketfiles.RelatedWorkSource
+import com.superiorsoftllc.agenthq.ticketfiles.TicketFiles
+import com.superiorsoftllc.agenthq.ticketfiles.TicketFilesText
+import java.util.concurrent.atomic.AtomicReference
 
 private const val DEFAULT_PORT = DaemonPort.DEFAULT
 private const val DEFAULT_DB_NAME = "agenthq.db"
@@ -445,8 +452,8 @@ class AgentHqDaemon(
     val webBundle: WebBundle,
     /** Contract 1.4.0: the agent profiles a spawn can name, stored in [store]. */
     val agents: AgentProfiles,
-    /** Contract 1.5.0: the backlog, stored in [store]; every change it commits is pushed to every client. */
-    val boardWiring: BoardWiring?,
+    /** DP-5h-3e-b: the port to the board plugin (null-safe: no board attached = no board). */
+    val boardPorts: BoardPorts,
     /** Contract 1.8.0: durable operator attention, with each change pushed to every client. */
     val attention: AttentionStore,
     /** Contract 1.12.0: the role catalog served by `role_list`, extended by `role_save`. */
@@ -465,8 +472,6 @@ class AgentHqDaemon(
     val decisions: DecisionStore,
     /** P10-K6: the per-project append-only issues log (attempts and fixes), stored in [store] so it outlives the daemon. */
     val issues: IssueStore,
-    /** EPIC-3: the epics, stored in [store] so an epic and its ordered storyIds outlive the daemon. */
-    val epics: EpicStore,
     /** IN-APP BUILD T2 (contract 1.33.0) + RUN-CMD-1 (1.108.0): saved commands from commands.json, editable; empty when absent or refused. */
     val commands: com.superiorsoftllc.agenthq.commands.CommandStore? = null,
     /** PORT-1: where [start] records the bound port (`<stateDir>/daemon.port`); null = recorded nowhere. */
@@ -570,7 +575,7 @@ class AgentHqDaemon(
         releasePortFile()
         // BUG-FLAKE-1: a daemon built but never started still holds its port.
         runCatching { portReservation?.close() }
-        boardWiring?.stopQueueDrain()
+        boardPorts.stopQueueDrain()
         runCatching { handover?.close() }
         runCatching { orchestrator.close() }
         runCatching { manager.shutdown() }
@@ -578,14 +583,12 @@ class AgentHqDaemon(
         // STACK-NEUTRAL-2: the process-watch plugin (if loaded) sweeps them from its own shutdown listener.
         runCatching { processHost?.fireShutdown() }
         // Everything the kills above queued is applied before the store is released; see the KDoc.
-        runCatching { boardWiring?.close() }
+        runCatching { boardPorts.close() }
         // CLIPATH-1: launches after this no longer read this daemon's (about to close) store for overrides.
         runCatching { restoreExecutables() }
         runCatching { store.close() }
     }
 
-    /** DP-5h-1: the board, when this daemon has one (it is wired by [BoardWiring]); a daemon without it refuses the board frames. */
-    val board: TicketBoard? get() = boardWiring?.board
 
     companion object {
         /**
@@ -1112,12 +1115,11 @@ class AgentHqDaemon(
                 .onFailure { System.err.println("[agentHq] opencode watch plugin not written: ${it.message}") }.getOrNull()
             // STALL-2: claude's watch hook settings go to a file here (inline JSON loses its quotes through the Windows .cmd shim).
             WatchHooks.settingsDir = File(stateDir(), "watch")
-            // BASE-1a: `project_base` checks a branch in the repo ticket starts cut in -- the board's, read at answer
-            // time through [boardRef] (built further down) -- with the same resolver a cut uses.
-            var boardRef: TicketBoard? = null
+            // BASE-1a: `project_base` checks a branch in the repo ticket starts cut in -- the board plugin's, asked through the board port at
+            // answer time -- with the same resolver a cut uses.
             val baseCheck = com.superiorsoftllc.agenthq.mvp.ProjectBaseCheck(
                 com.superiorsoftllc.agenthq.worktree.TicketBranches(),
-                cutRepo = { project -> boardRef?.cutRepo(project.id) },
+                cutRepo = { project -> boardPorts.cutRepo(project.id)?.let(::File) },
             )
             val projects = ProjectHandler(
                 projectStore,
@@ -1125,7 +1127,7 @@ class AgentHqDaemon(
                 onConfigChanged = { project ->
                     val frame = Envelope(Envelope.PROJECT, json.encodeToString(com.superiorsoftllc.agenthq.protocol.Project.serializer(), project))
                     for (client in clients) client.trySend(frame)
-                    boardRef?.laneCapsChanged(project.id)
+                    boardPorts.laneCapsChanged(project.id)
                 },
                 // ROUTING-1 (contract 1.128.0): a rule list is checked with the one executor check a profile save uses
                 // (provider resolves, model listed by its harness, effort known) and the role catalog.
@@ -1157,18 +1159,6 @@ class AgentHqDaemon(
                 push = { envelope -> for (client in clients) client.trySend(envelope) },
                 // UX-CHANGES-1: a session's checkout is the directory it runs in (its worktree, or the shared one).
                 sessionCheckout = { id -> manager.get(id)?.workingDir },
-            )
-            // EPIC-3: epics over the same database file as everything else, so an epic and its ordered
-            // storyIds are read back after a restart. Wired the way projects are (their durable surface
-            // over the daemon's own handle, here and only here).
-            // E1-c: an epic's storyIds are DERIVED from the ticket board (the tickets filed under it, in board
-            // order), read through [boardRef] at answer time -- the board is built further down.
-            val epics = EpicStore(
-                persistence = SqlEpicPersistence((store as SqlAgentHqStore).database),
-                projects = projectStore,
-                ticketIdsByEpic = {
-                    boardRef?.list().orEmpty().filter { it.epicId != null }.groupBy({ it.epicId!! }, { it.id })
-                },
             )
             // PW-3: workspaces live inside a project and are checked against the same project store, so a
             // workspace written before a restart is listed after one, under the project it was saved in.
@@ -1282,18 +1272,7 @@ class AgentHqDaemon(
                     for (c in clients.toList()) c.trySend(frame)
                 },
             ).also { it.start() }
-            // DP-5h-1: the board and everything wired around it live in [BoardWiring]; this is the one place the daemon builds it.
-            val boardWiring: BoardWiring? = if (!withBoard) null else BoardWiring.create(
-                store = store, context = ticketContext, agents = agents, manager = manager, repo = repo,
-                epics = epics, projectStore = projectStore, baseRef = baseRef, knowledge = knowledge, skills = skillsSource,
-                settings = settings, usagePacing = usagePacing, attention = attention, roles = roles,
-                relatedDescriptionRef = relatedDescriptionRef,
-                eventSink = { event -> broadcastBoard(clients, event) },
-                onEpicChanged = { epicId -> epics.get(epicId)?.let { broadcastEpic(clients, it) } },
-            )
-            val board: TicketBoard? = boardWiring?.board
-            boardRef = board
-            boardWiring?.let { boardPorts.attach(it.ports) }
+            // DP-5h-3e-b: the board is the plugin's; every consumer below reaches it through [boardPorts], resolved at call time.
             val handover = SessionHandover(manager, { boardPorts.brief(it.id) }, handoffTimeoutMs)
             manager.briefFor = { boardPorts.brief(it.id) }
             val workerSweepCloser = WorkerSweep(boardPorts, { LimitRegistry.minutesMs(settings.limit(LimitRegistry.UNBRIEFED_GRACE_MINUTES), LimitRegistry.UNBRIEFED_GRACE_MINUTES) }) { ticketId, sessionId, detail ->
@@ -1349,10 +1328,30 @@ class AgentHqDaemon(
                 },
             )
             // TICKET-FILES, the typed ticket events and their three core consumers, the story migration, the queue-mark clear (DP-5h-1: in [BoardWiring]).
-            boardWiring?.attachTicketServices(store, settings, triggers, doneWorkerReaper, relatedRef, relatedDescriptionRef, storyMigrationFile)
-            val ticketFiles = boardWiring?.ticketFiles
-            val ticketFilesText = boardWiring?.ticketFilesText
-            val ticketEvents = boardWiring?.ticketEvents
+            // DP-5h-3e-b: the board is the PLUGIN's alone. Core owns only what the board runs on and what consumes its events: the typed durable
+            // ticket-event log, the core-built [LocalBoardHost] over it (the plugin builds its TicketBoard on this host through the board runtime), the
+            // ticket files and the three core event consumers. The repo a ticket was cut in and an epic's base branch are asked of the board port.
+            val ticketEvents: com.superiorsoftllc.agenthq.backlog.TicketEventLog? = if (!withBoard) null else TicketServices.eventLog(store)
+            val ticketServices = ticketEvents?.let { events ->
+                TicketServices.create(store, events, settings, triggers, doneWorkerReaper, relatedRef, relatedDescriptionRef) { projectId -> boardPorts.cutRepo(projectId)?.let(::File) }
+            }
+            val ticketFilesText = ticketServices?.filesText
+            val coreHost = ticketEvents?.let { events ->
+                com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardHost(
+                    store = store, sessionManager = { manager },
+                    // BASE-1c: the ticket's epic's base branch, then its project's (BASE-1a), then the daemon's.
+                    baseRef = com.superiorsoftllc.agenthq.worktree.TicketBaseRef.epicFirst(
+                        boardPorts::epicBaseBranchOf, com.superiorsoftllc.agenthq.worktree.TicketBaseRef.projectFirst(projectStore::baseBranchOf, baseRef),
+                    ),
+                    // NOGIT-1: a project's own directory decides where its start runs / cuts.
+                    projectDirectory = { id -> id?.let { runCatching { projectStore.get(it).directory }.getOrNull() } },
+                    defaultRepo = repo, eventLog = { events }, agentProfiles = agents, knowledge = knowledge, skills = skillsSource,
+                    // IMG-3: a ticket's images live under its project's directory (.agenthq/uploads/ticket/).
+                    ticketImages = com.superiorsoftllc.agenthq.backlog.TicketImages { projectId ->
+                        runCatching { projectStore.get(projectId) }.getOrNull()?.directory?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory }
+                    },
+                )
+            }
             mail.reportCheck = { from, body -> orchestratorLink.reviewReport(from, body).refusalOrNull() }
 
             // ASK-1 (contract 1.97.0): non-blocking owner questions, stored, pushed to every client, answered by mail.
@@ -1535,7 +1534,7 @@ class AgentHqDaemon(
             val boardSeam = com.superiorsoftllc.agenthq.daemon.BoardSeam<com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardHost, com.superiorsoftllc.agenthq.session.SessionEvent>({ h, e -> h.publish(e) })
             // First attach: no re-adopt (BoardWiring already cleared the marks; the sweep waits for session restore). A plugin RELOAD attaches with
             // [reAdopt] (clearQueueMarks + sweepWorkers) after detaching.
-            board?.localHost?.let { host -> boardSeam.attach(host) }
+            coreHost?.let { host -> boardSeam.attach(host) }
             val reAdopt: () -> Unit = { boardPorts.clearQueueMarks(); boardPorts.sweepWorkers(LimitRegistry.minutesMs(settings.limit(LimitRegistry.UNBRIEFED_GRACE_MINUTES), LimitRegistry.UNBRIEFED_GRACE_MINUTES)) }
             manager.eventSink = { event ->
                 broadcast(clients, event, streamSequencer, runActivity, { id, seconds ->
@@ -1641,13 +1640,12 @@ class AgentHqDaemon(
                         meters = com.superiorsoftllc.agenthq.usage.PacingMeters(usagePacing),
                         // DP-4a: tickets / epics / board for plugins, over the board built above (host-applied policy and scope).
                         boardServices = com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardServices(
-                            board = { board }, epicStore = { epics }, sessions = { manager.list() }, link = { orchestratorHub.link },
+                            ops = { boardPorts.ops() }, sessions = { manager.list() }, link = { orchestratorHub.link },
                             gate = { type, data ->
                                 val envelope = Envelope(type, data)
                                 policies.current.takeIf { !it.isEmpty }?.let { com.superiorsoftllc.agenthq.policy.PolicyRuntime.actionRefusal(it, envelope, policies.actionOf(envelope)) }
                             },
-                            baseCheck = { epic, branch -> baseCheck.check(projectStore.get(epic.projectId), branch) },
-                            chargedMove = { m, by -> ticketStartCharge.move(m, by) as com.superiorsoftllc.agenthq.backlog.TicketAnswer },
+                            chargedMove = { m, by -> boardPorts.startMoves().let { moves -> moves.ticketOf(ticketStartCharge.move(m, by)) } },
                         ).also { pluginBoardServices = it; triggerTickets = it.tickets },
                         ticketEventStream = ticketEvents,
                         // DP-5h-3a: the board runtime (core still builds the board through BoardWiring until DP-5h-3b).
@@ -1659,11 +1657,19 @@ class AgentHqDaemon(
                                     usagePacing.check(com.superiorsoftllc.agenthq.daemon.api.usage.UsageMeters.meterFor(pid, model ?: manager.providerFor(pid)?.defaultModel()))
                                 },
                                 attention = attention,
+                                coreBuiltBoard = false,
+                                onAttachCore = { access -> boardPorts.attach(com.superiorsoftllc.agenthq.daemon.PluginBoardPorts(access) { ticketServices?.files }) },
+                                onDetachCore = { boardPorts.detach() },
+                                roleNotesOf = { project, role -> memoryNotes.index(project, com.superiorsoftllc.agenthq.memory.SCOPE_ROLE, role).map { it.name to it.description } },
+                                relatedBlockOf = { id, desc -> relatedRef.get().block(id, desc) },
+                                fixedFirstTurnOf = { context?.let { c -> c.compose(com.superiorsoftllc.agenthq.context.ContextInput(null, "", "", emptyList(), null)).let { r -> r.prompt to r.sources.map { it.source to it.chars } } } },
                                 // DP-5h-3a2 (1.13.0): the typed events, story / epic inputs, RELATED block and skill check.
                                 ticketEvents = ticketEvents ?: com.superiorsoftllc.agenthq.daemon.api.board.NoTicketEvents,
                                 stories = object : com.superiorsoftllc.agenthq.daemon.api.board.BoardStoryInputs {
                                     override fun ticketFor(storyId: String) = (store as SqlAgentHqStore).database.story_migrationQueries.ticketFor(storyId).executeAsOneOrNull()
-                                    override fun epicChanged(epicId: String) { epics.get(epicId)?.let { broadcastEpic(clients, it) } }
+                                    override fun epicChanged(epicId: String) { boardPorts.epicJson(epicId)?.let { broadcastEpic(clients, json.decodeFromString(Epic.serializer(), it)) } }
+                                    override fun migrationFile(): String? = storyMigrationFile?.path
+                                    override fun recordMapping(storyId: String, ticketId: String, at: Long) { (store as SqlAgentHqStore).database.story_migrationQueries.insertMapping(storyId, ticketId, at) }
                                 },
                                 epics = object : com.superiorsoftllc.agenthq.daemon.api.board.BoardEpicInputs {
                                     private val persistence = SqlEpicPersistence((store as SqlAgentHqStore).database)
@@ -1921,12 +1927,9 @@ class AgentHqDaemon(
                             streamSequencer,
                             orchestrator,
                             agents,
-                            boardWiring,
                             projects,
                             projectGit,
                             WorkspaceHandler(workspaces),
-                            // BASE-1c: `epic_base` runs project_base's own check, against the epic's project.
-                            EpicHandler(epics, baseCheck = { epic, branch -> baseCheck.check(projectStore.get(epic.projectId), branch) }, branchName = com.superiorsoftllc.agenthq.mvp.ProjectBaseCheck::checkName),
                             MemoryHandler(
                                 memoryNotes,
                                 caller = { id -> manager.get(id)?.let { MemoryCaller(it.id, it.role.orEmpty()) } },
@@ -2018,7 +2021,7 @@ class AgentHqDaemon(
                 policy = policy,
                 webBundle = webBundle,
                 agents = agents,
-                boardWiring = boardWiring,
+                boardPorts = boardPorts,
                 attention = attention,
                 roles = roles,
                 budget = budget,
@@ -2028,7 +2031,6 @@ class AgentHqDaemon(
                 memoryNotes = memoryNotes,
                 decisions = decisions,
                 issues = issues,
-                epics = epics,
                 commands = commandStore,
                 portFile = portFile,
                 // BUG-PERM-1: the Tool approval reader is put back with the executable resolver (both read this store).
@@ -2514,11 +2516,9 @@ private suspend fun handleConnection(
     streamSequencer: SessionFrameSequencer,
     orchestrator: Orchestrator,
     agents: AgentProfiles,
-    boardWiring: BoardWiring?,
     projects: ProjectHandler,
     projectGit: ProjectGitHandler,
     workspaceFrames: WorkspaceHandler,
-    epicFrames: EpicHandler,
     memoryFrames: MemoryHandler,
     decisionFrames: DecisionHandler,
     pipelineFrames: PipelineHandler,
@@ -2584,7 +2584,7 @@ private suspend fun handleConnection(
 ) {
     println("[agentHq] ws connected (provider=${manager.providerId})")
     // DP-5d: the board-family frames, registered by their owner; the loop below only looks them up.
-    val frames = FrameTable().also { com.superiorsoftllc.agenthq.backlog.registerCoreProjectFrames(it, projects, workspaceFrames) }.also { boardWiring?.let { w -> registerBoardFrames(it, w.board, manager, spawnGuard, epicFrames, w.stories, w.storyBoard) } }
+    val frames = FrameTable().also { com.superiorsoftllc.agenthq.backlog.registerCoreProjectFrames(it, projects, workspaceFrames) }
     // SEC-FIX-1: decided once, at the handshake, from what this connection presented.
     val owner = ownerCredential?.presentedBy(
         session.call.request.headers[OwnerCredential.HEADER],
@@ -4392,3 +4392,54 @@ private fun triggerPrompt(
 ): com.superiorsoftllc.agenthq.daemon.api.board.PromptStart =
     (tickets?.startPrompt(agentId, prompt, projectId, by) as? com.superiorsoftllc.agenthq.daemon.api.board.BoardResult.Ok)?.value
         ?: com.superiorsoftllc.agenthq.daemon.api.board.PromptStart.Refused("ticket session manager is unavailable")
+
+/**
+ * DP-5h-3e-b: the core's own ticket services, built without a board class: the ticket files (the repository a ticket was cut in is asked of
+ * [repoFor], the board port), the typed durable ticket events and their three core consumers. [BoardWiring] (the core-built board, until DP-5h-4)
+ * uses the same construction.
+ */
+class TicketServices private constructor(val files: TicketFiles, val filesText: TicketFilesText, val events: TicketEventLog) {
+    companion object {
+        /** The event log alone: the board host appends to it, so it exists before any consumer and before the board. */
+        fun eventLog(store: AgentHqStore): TicketEventLog = TicketEventLog((store as SqlAgentHqStore).database)
+
+        fun create(
+            store: AgentHqStore,
+            events: TicketEventLog,
+            settings: SettingsService,
+            triggers: TriggerService,
+            doneWorkerReaper: DoneWorkerReaper,
+            relatedRef: AtomicReference<RelatedWorkSource>,
+            relatedDescriptionRef: AtomicReference<RelatedDescription>,
+            repoFor: (String?) -> File?,
+        ): TicketServices {
+            val database = (store as SqlAgentHqStore).database
+            // TICKET-FILES (55476f3c): a ticket that goes done records the files it changed (one git diff, off the board's lock, on its own
+            // thread) and pins its tip under refs/agenthq/tickets/<id>.
+            val files = TicketFiles(db = database, tickets = { store.tickets.all().map { it.toInfo() } }, repoFor = repoFor)
+            relatedRef.set(
+                com.superiorsoftllc.agenthq.ticketfiles.LiveRelatedWork(
+                    files, ticket = { id -> store.tickets.get(id)?.toInfo() },
+                    rows = { store.tickets.all().map { it.toInfo() } }, links = { store.tickets.links().map { it.toInfo() } }, config = settings::relatedConfig,
+                ),
+            )
+            // KNOWLEDGE-PTR-1 (C): the stored RELATED (auto) block a ticket save writes at the top of its description.
+            relatedDescriptionRef.set(com.superiorsoftllc.agenthq.ticketfiles.RelatedDescriptionWriter(files, settings::relatedConfig))
+            val filesText = TicketFilesText(files) { id -> store.tickets.get(id)?.title }
+            val ticketFilesExec = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+                Thread(r, "agenthq-ticket-files").also { it.isDaemon = true }
+            }
+            // BOARD-API-2 (DP-4b): the three core consumers subscribe like a plugin would; a cursor survives a restart, so a transition not
+            // handled when the daemon stopped is replayed on the next start.
+            events.subscribe("core.triggers") { e -> if (e.isTransition) triggers.onTicketTransition(e.ticketId, e.to!!) }
+            events.subscribe("core.done-worker-reaper") { e -> if (e.isTransition) doneWorkerReaper.onTicketTransition(e.ticketId, e.to!!) }
+            events.subscribe("core.ticket-files") { e ->
+                if (e.kind == TicketEvent.DONE) ticketFilesExec.execute {
+                    runCatching { store.tickets.get(e.ticketId)?.let { files.record(it.toInfo()) } }
+                        .onFailure { System.err.println("[agentHq] ticket files of ${e.ticketId} not recorded: ${it.message}") }
+                }
+            }
+            return TicketServices(files, filesText, events)
+        }
+    }
+}

@@ -15,6 +15,7 @@ val shaded by configurations.creating { isTransitive = false }
 
 dependencies {
     shaded(project(":superiorSoftLibrary:agentHqBoard"))
+    shaded(project(":superiorSoftLibrary:agentHqProtocol"))
     compileOnly(project(":superiorSoftLibrary:agentHqBoard"))
     compileOnly(project(":superiorSoftLibrary:agentHqDaemonApi"))
     testImplementation(project(":superiorSoftLibrary:agentHqDaemonApi"))

@@ -70,8 +70,11 @@ class McpTicketImagesE2eTest {
             return answer
         }
 
+        /** The board tools answer terse text by default; these tests read the JSON payload (verbose). */
+        private fun verbose(a: String) = if (a.trim() == "{}") """{"verbose":true}""" else a.replaceFirst("{", """{"verbose":true,""")
+
         fun callTool(name: String, arguments: String = "{}"): JsonObject =
-            request("tools/call", """{"name":"$name","arguments":$arguments}""")["result"]!!.jsonObject
+            request("tools/call", """{"name":"$name","arguments":${verbose(arguments)}}""")["result"]!!.jsonObject
 
         fun close() {
             runCatching { stdin.close() }
@@ -102,6 +105,12 @@ class McpTicketImagesE2eTest {
 
     private fun text(result: JsonObject): String =
         result["content"]!!.jsonArray.single().jsonObject["text"]!!.jsonPrimitive.content
+
+    /** The delete tool answers terse text (`ok <short> deleted`), never JSON. */
+    private fun deletedOk(result: JsonObject): String {
+        assertEquals("false", result["isError"]!!.jsonPrimitive.content, "tool reported an error: ${text(result)}")
+        return text(result).also { assertTrue(it.contains("deleted"), it) }
+    }
 
     private fun payload(result: JsonObject): JsonObject {
         assertEquals("false", result["isError"]!!.jsonPrimitive.content, "tool reported an error: ${text(result)}")
@@ -195,13 +204,13 @@ class McpTicketImagesE2eTest {
             payload(agent.callTool("agenthq_ticket_get", """{"ticketId":"$t2"}""")).images(),
             "an absolute path under uploads/ticket is stored as its relPath",
         )
-        payload(agent.callTool("agenthq_ticket_delete", """{"ticketId":"$t2"}"""))
+        deletedOk(agent.callTool("agenthq_ticket_delete", """{"ticketId":"$t2"}"""))
         assertTrue(b.isFile, "a file another ticket still references stays")
         val got3 = payload(agent.callTool("agenthq_ticket_get", """{"ticketId":"$t3"}"""))
         assertEquals(listOf(relB, relC), got3.images(), "the other ticket still lists the shared image")
 
         // (5) deleting a ticket deletes its unshared images.
-        payload(agent.callTool("agenthq_ticket_delete", """{"ticketId":"$t3"}"""))
+        deletedOk(agent.callTool("agenthq_ticket_delete", """{"ticketId":"$t3"}"""))
         assertFalse(b.exists(), "b is no longer referenced by any ticket: deleted")
         assertFalse(c.exists(), "c was only t3's: deleted")
 

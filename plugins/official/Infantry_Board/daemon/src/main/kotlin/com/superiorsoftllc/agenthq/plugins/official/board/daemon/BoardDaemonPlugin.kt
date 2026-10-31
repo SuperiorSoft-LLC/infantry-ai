@@ -12,15 +12,22 @@ import com.superiorsoftllc.agenthq.daemon.api.DaemonPlugin
  * Same names, schemas, answers and gating: each is one `ticket_files` frame on the caller's own connection.
  */
 class BoardDaemonPlugin : DaemonPlugin {
+    @Volatile private var attached: com.superiorsoftllc.agenthq.daemon.api.board.BoardRuntime? = null
+
+    override fun stop() { attached?.detachCore(); attached = null }
+
     override fun start(api: DaemonApi) {
         // DP-5h-3a: with no core-built board, the plugin builds its own from the board runtime and registers the ticket frames through
         // the typed binding and the spawn-charge port (DP-5h-3a2: with the story and epic handlers built from the runtime inputs). While core still builds the
         // board (BoardWiring), only the tools below are registered.
         val runtime = api.boardRuntime
         if (!runtime.coreBuiltBoard && runtime.host !== NoBoardHost) {
-            val board = BoardFromRuntime.build(runtime)
+            val board = BoardFromRuntime.build(runtime, BoardFromRuntime.contextOf(runtime))
             val h = BoardBuild.handlers(runtime, board)
+            BoardBuild.startup(runtime, board)
             registerBoardFrames(api.frames.table, board, api.spawns.charge, h.epics, h.stories, h.storyBoard)
+            runtime.attachCore(PluginCoreAccess(board, h.epicStore, h.epicInputs))
+            attached = runtime
         }
         api.tools.register(TicketGetTool(api))
         api.tools.register(TicketFilesTools.Files)
