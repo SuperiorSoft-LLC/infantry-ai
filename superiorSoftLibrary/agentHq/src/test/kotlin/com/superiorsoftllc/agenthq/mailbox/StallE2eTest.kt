@@ -95,7 +95,7 @@ class StallE2eTest {
         assertEquals(startsBefore + 1, r.runner.processes.size, "the worker was resumed exactly once")
         val prompt = r.lastPrompt()
         assertTrue(prompt.contains("finished, $exit"), prompt)
-        assertTrue(prompt.contains(tail), prompt)
+        assertTrue(prompt.contains("task finished: "), prompt) // BG-NATIVE-1: one line (id, exit, log); the tail is no longer sent
     }
 
     private val harnesses = listOf("claude", "opencode", "pi")
@@ -177,7 +177,7 @@ class StallE2eTest {
         assertEquals(listOf("kept"), second.manager.bgJobs(s.id).map { it.id }, "only the live runner's job is still watched")
         val prompts = second.runner.processes.drop(before).joinToString("\n---\n") { it.input.toString() }
         assertTrue(prompts.contains("finished, exit 4"), "the exit file's code is reported: $prompts")
-        assertTrue(prompts.contains("runner lost, exit unknown"), "no exit file: an honest unknown: $prompts")
+        assertTrue(prompts.contains("exit unknown"), "no exit file: an honest unknown: $prompts")
 
         // The kept runner's own done reaches the new daemon and resumes the worker with the real exit code.
         val mid = second.runner.processes.size

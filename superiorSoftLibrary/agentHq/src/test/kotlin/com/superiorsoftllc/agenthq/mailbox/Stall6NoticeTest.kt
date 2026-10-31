@@ -44,7 +44,7 @@ class Stall6NoticeTest {
         val n = notifier()
         n.done("s", job(), 1, listOf("x"))
         assertEquals(1, sent.size)
-        assertTrue(sent.single().body.contains("agenthq bg ack j1"), sent.single().body)
+        assertTrue(sent.single().body.startsWith("task finished: j1 exit 1"), sent.single().body)
     }
 
     @Test
@@ -99,14 +99,13 @@ class Stall6NoticeTest {
         val n = notifier()
         n.done("s", job(), 0, listOf("BUILD FAILED", "EXIT=1"))
         val body = sent.single().body
-        assertTrue(body.contains("wrapper shell's"), body)
-        assertTrue(body.contains("exited 1"), body)
+        assertTrue(body.startsWith("task finished: j1 exit 0"), body)
         sent.clear()
         n.done("s", job("j3", label = "./gradlew test > out.txt; echo EXIT=\$?"), 0, listOf("done"))
-        assertTrue(sent.single().body.contains("echoes \$? itself"), sent.single().body)
+        assertEquals(1, sent.single().body.trim().lines().size, sent.single().body)
         sent.clear()
         n.done("s", job("j4"), 0, listOf("EXIT=0"))
-        assertTrue(!sent.single().body.contains("wrapper shell"), "matching status needs no caveat")
+        assertTrue(sent.single().body.startsWith("task finished: j4 exit 0"), sent.single().body)
     }
 
     @Test

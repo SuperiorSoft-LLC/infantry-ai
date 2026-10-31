@@ -273,6 +273,17 @@ object LimitRegistry {
         "1 = every worker session runs the tool profiles' shimmed programs (PATH shims) and, through its harness hook, their long commands and backgrounded shell commands through the watched runner; 0 = off for every session (owner only). Needs limits.watch.enabled = 1.",
         max = 1, zeroIsUnlimited = false,
     )
+    /** BG-NATIVE-1: background mode for harnesses with native background tasks. */
+    val WATCH_BG_NATIVE = LimitDef(
+        "limits.watch.bgNative", 1, "switch",
+        "BG-NATIVE-1: 1 = native (recommended): a harness with its own background tasks (Claude Code) runs `run_in_background` itself and adds its own one-line finished note; the daemon only observes the process, no mail. 0 = daemon: the hook rewrites backgrounded commands into the watched runner, which notes the end with one line.",
+        max = 1, zeroIsUnlimited = false,
+    )
+    val WATCH_HANG_GRACE_SECONDS = LimitDef(
+        "limits.watch.hangGraceSeconds", 30, "seconds",
+        "BG-NATIVE-1 hang-watch: a background job that printed a 'finished' pattern (tool profiles + project patterns) and has not exited after this long has its process tree ended, so its normal finished note fires. Silent: never mails.",
+        max = 86_400, zeroMeans = "hang-watch off",
+    )
     val WATCH_TREE_WAIT_MINUTES = LimitDef(
         "limits.watch.treeWaitMinutes", 30, "minutes",
         "After a watched command exits, how long the runner waits for the rest of its process tree (Job Object / subreaper; build daemons excluded) before it reports done anyway, naming the survivors.",
@@ -536,7 +547,7 @@ object LimitRegistry {
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,
-        WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_EXEMPT_WHEN_TICKET_DONE, WATCH_NOTICE_DEDUPE, WATCH_HANDLED_KEEP_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_ENABLED, WATCH_FORCED, WATCH_TREE_WAIT_MINUTES,
+        WATCH_QUIET_MINUTES, WATCH_HEARTBEAT_CAP_MINUTES, WATCH_STALL_MINUTES, WATCH_FOREGROUND_STALL_MINUTES, WATCH_EXEMPT_WHEN_TICKET_DONE, WATCH_NOTICE_DEDUPE, WATCH_HANDLED_KEEP_MINUTES, WATCH_TREE_JOB_SECONDS, WATCH_ENABLED, WATCH_FORCED, WATCH_BG_NATIVE, WATCH_HANG_GRACE_SECONDS, WATCH_TREE_WAIT_MINUTES,
         WATCH_NOTICE_LINE_CHARS, WATCH_LOG_MAX_MB, WATCH_LOG_TOTAL_MB, WATCH_LOG_KEEP_JOBS, WATCH_LOG_KEEP_DAYS, WATCH_MIN_FREE_MB, WATCH_FILE_IDLE_SECONDS,
         WATCH_READ_MAX_KB, WATCH_TAIL_READ_KB, WATCH_SPACE_CHECK_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,

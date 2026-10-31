@@ -71,6 +71,10 @@ class BgJobNotifier(
     private val dedupe: () -> Boolean = { true },
     /** STALL-6: how long ended / handled jobs are remembered (`limits.watch.handledKeepMinutes`). */
     private val keepMs: () -> Long = { 24 * 60 * 60_000L },
+    /** BG-NATIVE-1: a job that printed a finished pattern and still runs after this long is ended (0 / MAX = hang-watch off). */
+    private val hangGraceMs: () -> Long = { 30_000L },
+    /** BG-NATIVE-1: ends [job]'s process tree; its normal finished note then fires. */
+    private val endTree: (sessionId: String, job: BgJob) -> Unit = { _, _ -> },
 ) : BgJobListener {
     /** Where the watcher is in one watched file: only the bytes appended since are read. */
     private class Cursor {
@@ -92,6 +96,7 @@ class BgJobNotifier(
         var errorSent = false
         var optOutSeen = false
         var pausedSent = false
+        var hangEnded = false
     }
 
     private val watches = ConcurrentHashMap<String, Watch>()
@@ -186,13 +191,7 @@ class BgJobNotifier(
         }
         deliver(
             sessionId, job,
-            mail(
-                sessionId, job,
-                subject = t("job.done.subject", job, "verdict" to verdict + (if (marker != null) ", failure marker" else ""), "noOutput" to if (bytes == 0L) ", no output" else ""),
-                head = t("job.done.head", job, "verdict" to verdict) + facts.joinToString("") { "\n$it" },
-                matched = w?.matches.orEmpty(),
-                lines = lines,
-            ),
+            note(sessionId, job, t("job.done.subject", job, "verdict" to verdict + (if (marker != null) ", failure marker" else ""), "noOutput" to if (bytes == 0L) ", no output" else ""), verdict + (if (marker != null) " (failure marker: ${marker.take(lineChars())})" else "")),
             kind = KIND_END,
         )
     }
@@ -208,13 +207,7 @@ class BgJobNotifier(
             ?.let { runCatching { it.readText().trim().toInt() }.getOrNull() }
         deliver(
             sessionId, job,
-            mail(
-                sessionId, job,
-                subject = if (code != null) t("job.vanished.subjectExit", job, "exit" to code) else t("job.vanished.subjectUnknown", job),
-                head = if (code != null) t("job.vanished.headExit", job, "exit" to code) else t("job.vanished.headUnknown", job),
-                matched = w?.matches.orEmpty(),
-                lines = tailOf(job, null),
-            ),
+            note(sessionId, job, if (code != null) t("job.vanished.subjectExit", job, "exit" to code) else t("job.vanished.subjectUnknown", job), if (code != null) "exit $code" else "exit unknown"),
             kind = KIND_END,
         )
     }
@@ -292,19 +285,18 @@ class BgJobNotifier(
                     mail(sid, job, subject = t("job.logPaused.subject", job), head = t("job.logPaused.head", job, "reason" to job.logPaused), matched = emptyList(), lines = emptyList()),
                 )
             }
-            if (w.matches.isNotEmpty() && now - w.firstMatchAt >= patternGraceMs()) {
-                val matched = w.matches.toList()
-                w.matches.clear()
-                deliver(
-                    sid, job,
-                    mail(
-                        sid, job,
-                        subject = t("job.match.subject", job, "match" to matched.first().take(60)),
-                        head = t("job.match.head", job),
-                        matched = matched,
-                        lines = tailOf(job, null),
-                    ),
-                )
+            // BG-NATIVE-1: a finished pattern is never mailed. If the job still runs after the grace, its tree is ended.
+            if (w.matches.isNotEmpty()) {
+                val grace = hangGraceMs()
+                if (grace <= 0 || grace == Long.MAX_VALUE) w.matches.clear()
+                else if (now - w.firstMatchAt >= grace && !w.hangEnded) {
+                    w.hangEnded = true
+                    if (alive(job)) {
+                        println("[agentHq] hang-watch: ending job ${job.id} (session $sid): matched '${w.matches.first().take(80)}' and still running after ${fmt(now - w.firstMatchAt)}")
+                        runCatching { endTree(sid, job) }
+                    }
+                    w.matches.clear()
+                }
             }
             val beat = heartbeatDue(w, notify.timeoutMinutes, now)
             // The watcher itself failing is reported at once, through the heartbeat (which does not need the log).
@@ -480,6 +472,13 @@ class BgJobNotifier(
 
     /** STALL-4 item 4c: a notice carries a bounded tail, each line cut to [lineChars]. */
     private fun cut(line: String): String { val max = lineChars().coerceAtLeast(20); return if (line.length <= max) line else line.take(max) + "…" }
+
+    /** BG-NATIVE-1: the ONE-LINE finished note (id, exit, log path); no tail, no hints. The agent reads the log itself. */
+    private fun note(sessionId: String, job: BgJob, subject: String, verdict: String) =
+        MailSendRequest(
+            from = FinishNoticeMonitor.SYSTEM, to = sessionId, subject = subject, threadId = "bg:${job.id}",
+            body = "task finished: ${job.id} $verdict log ${job.logPath ?: "-"}\n",
+        )
 
     private fun mail(sessionId: String, job: BgJob, subject: String, head: String, matched: List<String>, lines: List<String>) =
         MailSendRequest(

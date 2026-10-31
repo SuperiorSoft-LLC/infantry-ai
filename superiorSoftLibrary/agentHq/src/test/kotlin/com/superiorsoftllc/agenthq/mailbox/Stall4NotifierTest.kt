@@ -94,9 +94,7 @@ class Stall4NotifierTest {
         n.scanned()
         out.appendText("x".repeat(3 * 1024 * 1024) + "\n" + "NEEDLE " + "y".repeat(5_000) + "\n")
         min(1); n.scanned()
-        val m = sent.single { it.subject.contains("matched") }
-        assertTrue(m.body.length < 4_000, "bounded mail: ${m.body.length}")
-        assertTrue(m.body.lines().all { it.length <= 210 }, "each line cut to ~200")
+        assertTrue(sent.isEmpty(), "BG-NATIVE-1: a pattern match is never mailed")
         assertTrue(BgJobNotifier.readTail(out, 6, 64 * 1024L).size <= 6)
     }
 
@@ -107,8 +105,8 @@ class Stall4NotifierTest {
         n.done("s1", job, 0, listOf("BUILD FAILED in 3s"), bytes = 10, eof = true, marker = "BUILD FAILED in 3s", pipeNoFail = true)
         val m = sent.single()
         assertTrue(m.subject.contains("exit 0, failure marker"), m.subject)
-        assertTrue(m.body.contains("The exit code is 0 but the output contains a failure marker: BUILD FAILED in 3s"), m.body)
-        assertTrue(m.body.contains("has a pipe and its shell has no pipefail"), m.body)
+        assertTrue(m.body.startsWith("task finished: j1 exit 0 (failure marker: BUILD FAILED in 3s)"), m.body)
+        assertEquals(1, m.body.trim().lines().size, "one line")
         assertNeutral()
     }
 

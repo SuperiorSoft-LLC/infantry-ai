@@ -85,7 +85,11 @@ class StallHookTest {
             """{"hook_event_name":"PreToolUse","tool_name":"Bash","permission_mode":"$mode","tool_input":{"command":"./gradlew test","description":"tests","run_in_background":$bg}}""",
             null, null, windows = false,
         )
-        val yes = Json.parseToJsonElement(claude("bypassPermissions", bg = true).body).jsonObject["hookSpecificOutput"]!!.jsonObject
+        // BG-NATIVE-1 (a): in native mode (default) claude's own run_in_background is left alone; daemon mode rewrites it.
+        assertEquals("{}", claude("bypassPermissions", bg = true).body, "native: no rewrite, the harness adds its own finished note")
+        WatchHooks.nativeBackground = { false }
+        val daemonBody = try { claude("bypassPermissions", bg = true).body } finally { WatchHooks.nativeBackground = { true } }
+        val yes = Json.parseToJsonElement(daemonBody).jsonObject["hookSpecificOutput"]!!.jsonObject
         assertEquals("PreToolUse", yes["hookEventName"]!!.jsonPrimitive.content)
         assertNull(yes["permissionDecision"], "never a decision: the harness's own permission check still runs")
         val input = yes["updatedInput"]!!.jsonObject

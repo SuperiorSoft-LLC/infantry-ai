@@ -45,6 +45,12 @@ object WatchHooks {
 
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** BG-NATIVE-1: harnesses with their own background tasks; their `run_in_background` is not rewritten in native mode. */
+    val NATIVE_BG_HARNESSES = setOf("claude")
+
+    /** BG-NATIVE-1: `limits.watch.bgNative`, set by the daemon (default native). */
+    @Volatile var nativeBackground: () -> Boolean = { true }
+
     internal fun on(env: Map<String, String>) = env["AGENTHQ_WATCH"] == "on" && !env[AccessPolicy.MAIL_BASE_ENV].isNullOrBlank()
 
     /**
@@ -165,6 +171,7 @@ object WatchHooks {
             val input = root["tool_input"] as? JsonObject ?: return Decision.none
             val command = input["command"]?.str() ?: return Decision.none
             val bg = (input["run_in_background"] as? JsonPrimitive)?.booleanOrNull == true
+            if (bg && harness in NATIVE_BG_HARNESSES && nativeBackground()) return Decision.none
             val r = WatchRewrite.rewrite(WatchRewrite.Request(command, shell, bg, "claude", launcher, windows)) ?: return Decision.none
             root["tool_use_id"]?.str()?.let { id -> synchronized(rewritten) { rewritten[id] = r.command } }
             val updated = JsonObject(input + ("command" to JsonPrimitive(r.command)) + (if (bg) mapOf("run_in_background" to JsonPrimitive(false)) else emptyMap()))
@@ -197,8 +204,8 @@ object WatchHooks {
 
     private fun context(r: WatchRewrite.Result) =
         if (r.detached) {
-            "Infantry AI ran this backgrounded command DETACHED under its watched runner: the daemon mails you its exit code and " +
-                "last lines when it ends. End your turn now; do not sleep or poll."
+            "Infantry AI ran this backgrounded command DETACHED under its watched runner: the daemon adds a one-line finished note (id, exit code, log path) to your next turn when it ends. " +
+                "Read the log yourself if you need more. End your turn now; do not sleep or poll."
         } else {
             "Infantry AI ran this command through its watched runner (same output and exit code, plus a log and an END line). " +
                 "Opt out only with: agenthq unwatched --reason \"<why>\" -- <cmd...>"
