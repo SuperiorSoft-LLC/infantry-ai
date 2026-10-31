@@ -46,4 +46,28 @@ object BoardBuild {
         val epics = EpicHandler(store, baseCheck = { epic, branch -> e.checkBase(epic.projectId, branch) }, branchName = e::branchName)
         return BoardHandlers(stories, storyBoard, epics, store, e)
     }
+
+    /**
+     * DP-5h-3e-b: what core's `BoardWiring.attachTicketServices` ran at start, now the plugin's: fold the legacy `stories.json` into the board once (a
+     * failure is logged and the next start retries), then clear the queue marks (nothing starts on boot).
+     */
+    fun startup(runtime: BoardRuntime, board: TicketBoard) {
+        val stories = runtime.stories
+        stories.migrationFile()?.let { path ->
+            runCatching {
+                com.superiorsoftllc.agenthq.stories.StoryMigration(
+                    file = java.io.File(path),
+                    board = com.superiorsoftllc.agenthq.stories.StoryMigration.StoryImport { title, status, projectId, epicId, description, inTx ->
+                        board.import(title, status, projectId, epicId, description, inTx)
+                    },
+                    mappings = object : com.superiorsoftllc.agenthq.stories.StoryMigration.StoryMappings {
+                        override fun ticketFor(storyId: String): String? = stories.ticketFor(storyId)
+                        override fun insert(storyId: String, ticketId: String, at: Long) = stories.recordMapping(storyId, ticketId, at)
+                    },
+                    epics = { runtime.epics.loadAll().map { json.decodeFromString(Epic.serializer(), it) } },
+                ).run()
+            }.onFailure { System.err.println("[agentHq] story migration failed, will retry next start: $it") }
+        }
+        println("[agentHq] backlog queue marks cleared=${board.clearQueueMarks()} (nothing starts on boot)")
+    }
 }

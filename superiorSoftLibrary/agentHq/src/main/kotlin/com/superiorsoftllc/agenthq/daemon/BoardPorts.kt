@@ -27,6 +27,22 @@ interface BoardPorts {
     fun clearQueueMarks()
     /** The in-progress worker sweep; the ids it flagged. */
     fun sweepWorkers(graceMs: Long, flag: (ticketId: String, sessionId: String?, detail: String) -> Unit = { _, _, _ -> }): List<String>
+    /** DP-5h-3e-b: the base branch of an epic (blank / unknown = null). */
+    fun epicBaseBranchOf(epicId: String): String? = null
+    /** DP-5h-3e-b: epic id to its ticket ids, in board order. */
+    fun ticketIdsByEpic(): Map<String, List<String>> = emptyMap()
+    /** DP-5h-3e-b: the wire `Epic` as JSON, null when unknown. */
+    fun epicJson(epicId: String): String? = null
+    /** DP-5h-3e-b: the repository tickets of [projectId] are cut in (path), null when none. */
+    fun cutRepo(projectId: String?): String? = null
+    /** DP-5h-3e-b: a project's lane caps changed; queued starts may run. */
+    fun laneCapsChanged(projectId: String) {}
+    /** DP-5h-3e-b: the board operations plugins' `Tickets` API applies host policy over; null = no board. */
+    fun ops(): com.superiorsoftllc.agenthq.daemon.plugins.BoardOps? = null
+    /** DP-5h-3e-b: daemon shutdown, first: stop draining the board's queue. */
+    fun stopQueueDrain() {}
+    /** DP-5h-3e-b: daemon shutdown, after the manager: apply what the kills queued. */
+    fun close() {}
 }
 
 /** The port consumers hold: resolves the attached [BoardPorts] at CALL time; with none attached it answers "no board". */
@@ -44,6 +60,14 @@ class BoardPortRef : BoardPorts {
     override fun saveFilesRead(ticketId: String, line: String) { ref.get()?.saveFilesRead(ticketId, line) }
     override fun clearQueueMarks() { ref.get()?.clearQueueMarks() }
     override fun sweepWorkers(graceMs: Long, flag: (String, String?, String) -> Unit) = ref.get()?.sweepWorkers(graceMs, flag).orEmpty()
+    override fun epicBaseBranchOf(epicId: String) = ref.get()?.epicBaseBranchOf(epicId)
+    override fun ticketIdsByEpic() = ref.get()?.ticketIdsByEpic().orEmpty()
+    override fun epicJson(epicId: String) = ref.get()?.epicJson(epicId)
+    override fun cutRepo(projectId: String?) = ref.get()?.cutRepo(projectId)
+    override fun laneCapsChanged(projectId: String) { ref.get()?.laneCapsChanged(projectId) }
+    override fun ops() = ref.get()?.ops()
+    override fun stopQueueDrain() { ref.get()?.stopQueueDrain() }
+    override fun close() { ref.get()?.close() }
 }
 
 /** The 60 s ticket-worker sweep (GAP-006b), over the port: with no board it does nothing. */

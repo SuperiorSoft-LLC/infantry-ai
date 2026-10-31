@@ -43,6 +43,9 @@ class LocalBoardRuntime(
     /** DP-5h-3e-b: the plugin that built the board hands core its access (null = ignored), and takes it back. */
     private val onAttachCore: (com.superiorsoftllc.agenthq.daemon.api.board.BoardCoreAccess) -> Unit = {},
     private val onDetachCore: () -> Unit = {},
+    private val roleNotesOf: (projectId: String, role: String) -> List<Pair<String, String>> = { _, _ -> emptyList() },
+    private val relatedBlockOf: (ticketId: String, description: String) -> String? = { _, _ -> null },
+    private val fixedFirstTurnOf: () -> Pair<String, List<Pair<String, Int>>>? = { null },
 ) : BoardRuntime {
     override val host: BoardHost get() = hostSource()
     override fun setting(key: String): String? = store.settings.get(key)?.value
@@ -59,6 +62,12 @@ class LocalBoardRuntime(
         attention.raise(kind = AttentionKind.LAUNCH_BLOCKED, ticketId = ticketId, outcome = "routing_refused", detail = detail)
     }
     override fun relatedDescription(draft: com.superiorsoftllc.agenthq.daemon.api.board.BoardRelatedDraft): String? = related(draft)
+    override fun includeLinkedTasksContext(): Boolean? = settings.includeLinkedTasksContext()
+    override fun includeSkillsContext(): Boolean? = settings.includeSkillsContext()
+    override fun skillIds(): List<String> = settings.skillIds()
+    override fun roleNotes(projectId: String, role: String) = roleNotesOf(projectId, role)
+    override fun relatedBlock(ticketId: String, description: String) = relatedBlockOf(ticketId, description)
+    override fun fixedFirstTurn() = fixedFirstTurnOf()
     override fun unknownSkills(ids: List<String>): List<String> = ids.filter { !skillKnown(it) }
     override fun push(frames: List<Frame>) = pushToClients(frames)
     override fun attachCore(access: com.superiorsoftllc.agenthq.daemon.api.board.BoardCoreAccess) = onAttachCore(access)

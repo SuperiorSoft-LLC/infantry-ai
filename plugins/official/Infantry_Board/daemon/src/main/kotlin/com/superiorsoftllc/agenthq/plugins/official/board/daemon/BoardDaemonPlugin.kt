@@ -22,8 +22,9 @@ class BoardDaemonPlugin : DaemonPlugin {
         // board (BoardWiring), only the tools below are registered.
         val runtime = api.boardRuntime
         if (!runtime.coreBuiltBoard && runtime.host !== NoBoardHost) {
-            val board = BoardFromRuntime.build(runtime)
+            val board = BoardFromRuntime.build(runtime, BoardFromRuntime.contextOf(runtime))
             val h = BoardBuild.handlers(runtime, board)
+            BoardBuild.startup(runtime, board)
             registerBoardFrames(api.frames.table, board, api.spawns.charge, h.epics, h.stories, h.storyBoard)
             runtime.attachCore(PluginCoreAccess(board, h.epicStore, h.epicInputs))
             attached = runtime

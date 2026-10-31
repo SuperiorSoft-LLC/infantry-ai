@@ -177,4 +177,18 @@ fun ticketRuns(dbPath: String, ticketId: String): List<Map<String, String?>> =
 fun DaemonFixture.dbPath(): String = java.io.File(stateDir, "agenthq.db").absolutePath
 
 /** DP-5h-3d: [AgentHqDaemon.board] is null on a daemon without a board; an E2E test that needs the board reads it through here. */
-fun AgentHqDaemon.requireBoard(): com.superiorsoftllc.agenthq.backlog.TicketBoard = board ?: error("this daemon has no board")
+/**
+ * DP-5h-3e-b: the board is the plugin's alone, so a test reads it through the daemon's board port (wire data), never a [TicketBoard].
+ * Throws when the daemon has no board attached.
+ */
+class PortBoard(private val ops: com.superiorsoftllc.agenthq.daemon.plugins.BoardOps) {
+    class Result(val ticket: com.superiorsoftllc.agenthq.protocol.Ticket)
+    fun list(projectId: String? = null, epicId: String? = null) = ops.list(projectId, epicId)
+    fun get(id: String) = ops.get(id)
+    fun save(request: com.superiorsoftllc.agenthq.protocol.TicketSave) = Result(ops.save(request))
+    fun move(request: com.superiorsoftllc.agenthq.protocol.TicketMove, @Suppress("UNUSED_PARAMETER") startOnInProgress: Boolean = true) =
+        Result(ops.move(request, null))
+    fun delete(id: String) = ops.delete(id)
+}
+
+fun AgentHqDaemon.requireBoard(): PortBoard = PortBoard(boardPorts.ops() ?: error("this daemon has no board"))

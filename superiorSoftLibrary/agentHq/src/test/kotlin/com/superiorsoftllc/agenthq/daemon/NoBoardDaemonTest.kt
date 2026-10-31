@@ -16,7 +16,7 @@ class NoBoardDaemonTest {
         val fixture = DaemonFixture.launch(withBoard = false)
         try {
             fixture.client.await(Envelope.READY)
-            assertNull(fixture.daemon.board, "no board is built")
+            assertNull(fixture.daemon.boardPorts.ops(), "no board is attached")
 
             fixture.send(Envelope.PROJECT_SAVE, """{"name":"NoBoardProject"}""")
             val project = fixture.client.awaitWhere("project saved") { it.type == Envelope.PROJECT && it.data.contains("NoBoardProject") }
@@ -42,7 +42,7 @@ class NoBoardDaemonTest {
             val roster = fixture.client.await(Envelope.ROSTER, timeoutMs = 4_000)
             assertTrue(roster.data.startsWith("["))
             // the handover and the first-turn brief hold no board: the brief is null, the daemon stays up
-            assertNull(fixture.daemon.board)
+            assertNull(fixture.daemon.boardPorts.ops())
         } finally {
             fixture.stop()
             fixture.deleteState()

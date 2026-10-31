@@ -18,6 +18,12 @@ interface BoardStoryInputs {
     /** A story create named [epicId]: push that epic's frame to every client. */
     fun epicChanged(epicId: String) {}
 
+    /** DP-5h-3e-b (1.14.0): the legacy `stories.json` to fold into the board once at start; null = none. */
+    fun migrationFile(): String? = null
+
+    /** DP-5h-3e-b (1.14.0): record that [storyId] became [ticketId] (the `story_migration` table; [ticketFor] reads it back). */
+    fun recordMapping(storyId: String, ticketId: String, at: Long) {}
+
     companion object { val NONE: BoardStoryInputs = object : BoardStoryInputs {} }
 }
 

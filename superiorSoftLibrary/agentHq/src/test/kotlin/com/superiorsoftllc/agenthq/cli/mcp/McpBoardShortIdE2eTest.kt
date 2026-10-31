@@ -65,8 +65,11 @@ class McpBoardShortIdE2eTest {
             return answer
         }
 
+        /** The board tools answer terse text by default; these tests read the JSON payload (verbose). */
+        private fun verbose(a: String) = if (a.trim() == "{}") """{"verbose":true}""" else a.replaceFirst("{", """{"verbose":true,""")
+
         fun callTool(name: String, arguments: String = "{}"): JsonObject =
-            request("tools/call", """{"name":"$name","arguments":$arguments}""")["result"]!!.jsonObject
+            request("tools/call", """{"name":"$name","arguments":${verbose(arguments)}}""")["result"]!!.jsonObject
 
         fun close() {
             runCatching { stdin.close() }
@@ -124,7 +127,7 @@ class McpBoardShortIdE2eTest {
             payload(agent.callTool("agenthq_ticket_create", """{"title":"$title"}""")).str("ticketId")
         }
 
-        val lines = payload(agent.callTool("agenthq_board")).getValue("board").jsonArray.map { it.jsonPrimitive.content }
+        val lines = payload(agent.callTool("agenthq_board", """{"limit":100}""")).getValue("board").jsonArray.map { it.jsonPrimitive.content }
         for (id in ids) {
             val short = shortTicketId(id)
             val line = assertNotNull(lines.singleOrNull { it.trimStart().startsWith("$short | ") }, "exactly one board line must start with $short: $lines")

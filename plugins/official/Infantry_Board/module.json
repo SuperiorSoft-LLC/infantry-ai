@@ -24,6 +24,24 @@
       { "name": "agenthq_ticket_update", "action": "board.ticket.save", "kind": "write", "description": "Edit ONE ticket (images from the caller's own files)." },
       { "name": "agenthq_board", "action": "board.read", "kind": "read", "description": "The board in one call: tickets by column with their workers." },
       { "name": "agenthq_ticket_start", "action": "board.ticket.move", "kind": "write", "description": "Start ONE ticket (the board's own start), under the caller's spawn limits." }
+    ],
+    "frames": [
+      { "type": "ticket_list", "action": "board.read", "kind": "read" },
+      { "type": "ticket_get", "action": "board.read", "kind": "read" },
+      { "type": "ticket_save", "action": "board.ticket.save", "kind": "write" },
+      { "type": "ticket_link", "action": "board.ticket.save", "kind": "write" },
+      { "type": "ticket_unlink", "action": "board.ticket.save", "kind": "write" },
+      { "type": "ticket_move", "action": "board.ticket.move", "kind": "write" },
+      { "type": "ticket_reorder", "action": "board.ticket.move", "kind": "write" },
+      { "type": "ticket_delete", "action": "board.ticket.delete", "kind": "destructive" },
+      { "type": "ticket_start_next", "action": "board.ticket.start", "kind": "spawn" },
+      { "type": "epic_list", "action": "epics.read", "kind": "read" },
+      { "type": "epic_save", "action": "epics.save", "kind": "write" },
+      { "type": "epic_base", "action": "epics.save", "kind": "write" },
+      { "type": "story_get", "action": "stories.read", "kind": "read" },
+      { "type": "story_list", "action": "stories.read", "kind": "read" },
+      { "type": "story_save", "action": "stories.save", "kind": "write" },
+      { "type": "story_move", "action": "stories.save", "kind": "write" }
     ]
   },
   "fills": [

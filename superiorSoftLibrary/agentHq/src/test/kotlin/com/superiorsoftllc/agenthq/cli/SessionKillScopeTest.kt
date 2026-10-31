@@ -44,7 +44,7 @@ class SessionKillScopeTest {
     }
 
     private fun launch(): DaemonFixture =
-        DaemonFixture.launch(runner = GatedRunner(holdMs = 50), stateDir = Files.createTempDirectory("agenthq-kill-scope").toFile())
+        DaemonFixture.launch(runner = GatedRunner(holdMs = 50), pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot("official/Infantry_Agents"), stateDir = Files.createTempDirectory("agenthq-kill-scope").toFile())
             .also { fixtures += it; it.client.await(Envelope.READY) }
 
     /** A session of [role] in [project]; BUSY (a held run) when [busy]. */

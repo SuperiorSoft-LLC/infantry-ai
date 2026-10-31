@@ -32,3 +32,5 @@
 - DP-5h-3d-1: 6 E2E tests (BacklogLane, McpTicketMove/Delete/Images/AnswerRace, TicketImageAttach) fail on dev too: they pass `mcp serve --lineage-dir`, a flag RUNTIME-LOAD-7 removed ('unknown flag'); fix the tests' args. TicketStartDaemonTest 'gated failure #1' flake fixed in TicketStartSupport (run ERROR frames carry a sessionId).
 
 - DP-5h-3e-a: in the built app, a ticket worker's first turn still carries its brief, the 60 s worker sweep still flags an unbriefed worker, a harness switch (handover) still resumes with the brief, the roster shows ticket titles, a review report's `Files read:` line is still saved, and a start by an agent is still charged to its pod.
+
+- DP-5h-3e-b (the flip): not run, no runnable Gradle project for the plugin's own tests (`BoardBuildTest`, `PluginCoreAccessTest`); no `invoke` case yet in `PluginCoreAccessTest`. Not covered: a real-daemon start-charge refusal test (none exists in the tree). The full suite was not run (staging only).
