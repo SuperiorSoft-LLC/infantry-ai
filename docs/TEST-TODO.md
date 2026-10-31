@@ -60,3 +60,6 @@ TEST-TODO: STACK-NEUTRAL-5 (ticket-18370e32)
 
 ## DAEMON-STORAGE-1
 - Plugin storage (PluginStorageTest): prefix refusal (core table, join, comma list, schema-qualified, ATTACH/PRAGMA, two statements), adopt list official-only, `migrate` idempotent + failed migrate rolls back, `transaction` rollback, `storage` grant. Not tested: a real plugin jar calling api.storage through DaemonPluginHost, community adopt refusal at load, concurrent writers.
+
+## AR-5 (ticket-d742b63c)
+TEST-TODO: typed service registry. Class ServiceRegistryTest (done, unit): provide/find, missing = null, duplicate provider refused, community without `services.provide` refused, unload closes handles, stale handle safe. Not tested: a real plugin jar calling api.services through DaemonPluginHost (QA: a plugin publishes an interface, a second plugin finds it, disable the first, find returns null); community grant path through module settings.
