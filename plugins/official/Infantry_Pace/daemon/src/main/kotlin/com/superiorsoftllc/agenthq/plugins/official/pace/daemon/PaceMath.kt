@@ -15,7 +15,15 @@ data class PaceSample(
     val resetsAt: Long?,
     /** The window's length, for the forecast (0 = unknown). */
     val windowMinutes: Int = 0,
+    /** TOKEN-9: percent of the previous sample of the series (null = first) and the raw step to this one. */
+    val prevPercent: Double? = null,
+    val deltaPercent: Double? = null,
+    /** TOKEN-9: tokens each session spent since the previous recorded sample (empty = none seen). */
+    val tokens: List<SessionTokens> = emptyList(),
 )
+
+/** TOKEN-9: one session's token counters over the requests since the previous sample (null = never reported). */
+data class SessionTokens(val sessionId: String, val role: String, val input: Long?, val output: Long?, val cacheRead: Long?, val cacheWrite: Long?)
 
 /** The tunables (module setting keys `pace.*`); every one has a default and the owner changes them in Settings. */
 data class PaceSettings(

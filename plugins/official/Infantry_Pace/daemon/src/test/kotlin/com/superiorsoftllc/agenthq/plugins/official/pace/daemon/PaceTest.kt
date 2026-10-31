@@ -253,6 +253,43 @@ class PaceTest {
         assertEquals(PaceSettings(), PaceSettings.from { null })
     }
 
+    // ---- TOKEN-9: raw samples ----------------------------------------------------------------------------------------
+
+    @Test fun `TOKEN-9 recorder stores prev, delta and per-session tokens and they survive a reload`() {
+        val f = tmp()
+        val store = PaceStore(f)
+        var pct = 10.0
+        var t = 1_000L
+        val meters = object : Meters {
+            override fun read() = listOf(reading(t, pct, 9 * h))
+            override fun requests(sinceMs: Long) = listOf(
+                com.superiorsoftllc.agenthq.daemon.api.usage.MeterRequest(System.currentTimeMillis() + 10, "s1", "backend", "claude", null, 5L, 7L, 100L, null),
+                com.superiorsoftllc.agenthq.daemon.api.usage.MeterRequest(System.currentTimeMillis() + 11, "s1", "backend", "claude", null, 1L, 2L, null, null),
+            ).filter { it.ts >= sinceMs }
+        }
+        val rec = PaceRecorder(store, meters) { PaceSettings() }
+        assertEquals(1, rec.tick())
+        pct = 11.0; t = 2_000L
+        assertEquals(1, rec.tick())
+        val last = PaceStore(f).samples("claude", "Weekly limit").last()
+        assertEquals(10.0, last.prevPercent)
+        assertEquals(1.0, last.deltaPercent)
+        val tok = PaceStore(f).samples("claude", "Weekly limit").first().tokens.single()
+        assertEquals("s1", tok.sessionId); assertEquals(6L, tok.input); assertEquals(9L, tok.output); assertEquals(100L, tok.cacheRead); assertNull(tok.cacheWrite)
+    }
+
+    @Test fun `TOKEN-9 rawSamples is off by default and capped at 200 when asked`() {
+        val store = PaceStore(tmp())
+        val now = 1_000L * h
+        for (i in 0 until 300) store.record(reading(now - (300 - i) * 60_000L, 1.0 + i * 0.1, now + 100 * h))
+        fun one(q: PaceQuery) = PaceReport.build(store, PaceSettings(), q, now)["series"]!!.jsonArray[0].jsonObject
+        assertNull(one(PaceQuery())["rawSamples"])
+        val raw = one(PaceQuery(includeSamples = true))["rawSamples"]!!.jsonArray
+        assertEquals(200, raw.size)
+        assertTrue(raw.last().jsonObject["delta"]!!.jsonPrimitive.content.toDouble() > 0.0)
+        assertTrue(PaceQueries.parse("""{"samples":"true"}""").includeSamples)
+    }
+
     // ---- report / frame ----------------------------------------------------------------------------------------------
 
     @Test fun `the report carries series, momentum, forecast and any provider`() {

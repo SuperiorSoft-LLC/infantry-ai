@@ -75,14 +75,25 @@ class PaceDaemonPlugin : DaemonPlugin {
 /** Reads the meters and records each reading; prunes by retention. */
 class PaceRecorder(private val store: PaceStore, private val meters: Meters, private val settings: () -> PaceSettings) {
     /** One pass: every readable window becomes a sample unless it is a repeat. Returns how many were kept. */
+    private var cursor = System.currentTimeMillis()
+
     fun tick(): Int = try {
-        meters.read().count { store.record(it) }
+        // TOKEN-9: tokens spent since the last KEPT sample, per session; the cursor moves only when a sample was kept.
+        val reqs = meters.requests(cursor + 1)
+        val tokens = reqs.groupBy { it.sessionId }.map { (sid, l) ->
+            SessionTokens(sid, l.first().role, l.sumOrNull { it.input }, l.sumOrNull { it.output }, l.sumOrNull { it.cacheRead }, l.sumOrNull { it.cacheWrite })
+        }
+        val kept = meters.read().count { store.record(it, tokens) }
+        if (kept > 0) reqs.maxOfOrNull { it.ts }?.let { cursor = maxOf(cursor, it) }
+        kept
     } catch (e: Exception) {
         0 // a missing grant or a meter read failing must never take the plugin down; the next tick tries again
     }
 
     fun pruneNow(): Int = store.prune(settings().retentionDays)
 }
+
+private fun <T> List<T>.sumOrNull(f: (T) -> Long?): Long? = mapNotNull(f).takeIf { it.isNotEmpty() }?.sum()
 
 object PaceQueries {
     private val json = Json { ignoreUnknownKeys = true }
@@ -98,6 +109,7 @@ object PaceQueries {
             provider = o["provider"]?.jsonPrimitive?.contentOrNull,
             window = o["window"]?.jsonPrimitive?.contentOrNull,
             sinceMs = since.coerceAtLeast(0),
+            includeSamples = o["samples"]?.jsonPrimitive?.contentOrNull == "true",
             maxPoints = o["maxPoints"]?.jsonPrimitive?.intOrNull?.coerceIn(2, 5000) ?: 400,
         )
     }
@@ -113,6 +125,7 @@ class PaceTool(private val store: PaceStore, private val settings: () -> PaceSet
         put("type", "object")
         put("properties", buildJsonObject {
             put("provider", buildJsonObject { put("type", "string"); put("description", "Only this meter (claude, codex, opencode-go, ...)") })
+            put("samples", buildJsonObject { put("type", "string"); put("description", "TOKEN-9: \"true\" adds the newest 200 raw samples per series (raw percent, previous, delta, tokens per session since the last sample); default off") })
             put("window", buildJsonObject { put("type", "string"); put("description", "Only this window label (e.g. '5h limit')") })
             put("sinceHours", buildJsonObject { put("type", "number"); put("description", "Only points from the last N hours (default: all)") })
         })
