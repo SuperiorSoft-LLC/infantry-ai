@@ -34,3 +34,6 @@
 - DP-5h-3e-a: in the built app, a ticket worker's first turn still carries its brief, the 60 s worker sweep still flags an unbriefed worker, a harness switch (handover) still resumes with the brief, the roster shows ticket titles, a review report's `Files read:` line is still saved, and a start by an agent is still charged to its pod.
 
 - DP-5h-3e-b (the flip): not run, no runnable Gradle project for the plugin's own tests (`BoardBuildTest`, `PluginCoreAccessTest`); no `invoke` case yet in `PluginCoreAccessTest`. Not covered: a real-daemon start-charge refusal test (none exists in the tree). The full suite was not run (staging only).
+
+## DP-5h-3e-c (ticket-33c67672): plugin-present start charge
+- TEST-TODO: PluginBoardStartChargeDaemonTest -- session-originated ticket_move to in_progress through the plugin-built board: podSpawnDepth=0 -> 'spawn refused: depth limit', podSpawnCap=0 -> 'spawn refused: pod cap' (ticket stays todo); defaults -> started and the worker's spawnerSessionId is the starter; beforeStart sees boardPorts.ops() != null and the first ticket_list answers `tickets`.
