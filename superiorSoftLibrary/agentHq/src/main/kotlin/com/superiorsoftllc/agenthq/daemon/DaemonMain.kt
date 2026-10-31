@@ -970,25 +970,12 @@ class AgentHqDaemon(
             // POLICY-1: "restricted" follows the ACTIVE preset (a Settings switch included), read per call. A seated preset is
             // always restricted (secrets and interactive runs locked), as the seated lockdown was before it became a plugin.
             val locked: () -> Boolean = { policies.current.let { it.restricted == true || it.seats != null } }
-            val runManager = com.superiorsoftllc.agenthq.commands.RunManager(
-                { commandStore.registry }, com.superiorsoftllc.agenthq.runner.PipedProcessRunner(),
+            val runManager = com.superiorsoftllc.agenthq.daemon.wiring.CommandsWiring.buildRunManager(
+                registry = { commandStore.registry },
                 emit = { env -> for (c in clients.toList()) c.trySend(env) },
-                terminal = com.superiorsoftllc.agenthq.runner.Pty4jTerminalRunner(),
-                limits = com.superiorsoftllc.agenthq.commands.RunManager.RunLimits(
-                    scrollbackBytes = { settings.limitCap(LimitRegistry.RUN_SCROLLBACK_BYTES) },
-                    history = { settings.limitCap(LimitRegistry.RUN_HISTORY) },
-                    inputBytesPerSecond = { settings.limitCap(LimitRegistry.RUN_INPUT_BYTES_PER_SECOND) },
-                    inputMaxFrameBytes = { settings.limitCap(LimitRegistry.RUN_INPUT_MAX_FRAME_BYTES) },
-                    inputQueueBytes = { settings.limitCap(LimitRegistry.RUN_INPUT_QUEUE_BYTES) },
-                    maxCols = { settings.limitCap(LimitRegistry.RUN_MAX_COLS) },
-                    maxRows = { settings.limitCap(LimitRegistry.RUN_MAX_ROWS) },
-                ),
-                restricted = locked,
-                // SEC-FIX-1 H1(b): user secrets only; a built-in (the update token) never reaches a run.
-                secrets = com.superiorsoftllc.agenthq.keystore.KeystoreHandler.runSecrets(keystore::fields),
+                settings = settings, locked = locked, keystore = keystore,
             )
-            val attention = AttentionStore(store.attention)
-            attention.eventSink = { item -> broadcastAttention(clients, item) }
+            val attention = com.superiorsoftllc.agenthq.daemon.wiring.AttentionWiring.build(store) { item -> broadcastAttention(clients, item) }
             // Ticket 66153313 (via `api.processes.raiseAlert`): the process-watch plugin reports agent CPU held above the limit.
             alertSink.set { outcome, detail ->
                 println("[agentHq] $outcome: $detail")
@@ -1156,26 +1143,13 @@ class AgentHqDaemon(
             // MEM-2: project-memory notes, over the same database file as everything else, so a note
             // saved before a restart is read back (index and body) after one. Wired the way projects are:
             // constructed over the daemon's own handle, here and only here.
-            val memoryNotes = MemoryStore(
-                persistence = SqlMemoryPersistence((store as SqlAgentHqStore).database),
-            )
-            // NOTES-1: a session's notes die with it -- killed or removed, its session-scope notes are purged.
-            manager.onSessionEnded = { sessionId -> memoryNotes.purgeSession(sessionId) }
+            val memoryNotes = com.superiorsoftllc.agenthq.daemon.wiring.KnowledgeWiring.buildMemoryNotes(store, manager)
             // P10-K4: the decisions log, over the same file. A decision_add's author comes from the declared session.
-            val decisions = DecisionStore(store as SqlAgentHqStore)
-            val decisionFrames = DecisionHandler(
-                store = decisions,
-                author = { sessionId ->
-                    manager.get(sessionId)?.let { DecisionAuthor(sessionId = it.id, agentId = it.agentId, role = it.role) }
-                },
-                push = { envelope -> for (client in clients) client.trySend(envelope) },
-            )
+            val decisionsWired = com.superiorsoftllc.agenthq.daemon.wiring.KnowledgeWiring.buildDecisions(store, manager, clients)
+            val decisions = decisionsWired.decisions
+            val decisionFrames = decisionsWired.frames
             // PIPE-1: the optional project pipeline, over the same file.
-            val pipelineFrames = PipelineHandler(
-                store = PipelineStore(store as SqlAgentHqStore),
-                author = { sessionId -> manager.get(sessionId)?.let { "${it.role ?: "agent"} (${it.agentId})" } },
-                push = { envelope -> for (client in clients) client.trySend(envelope) },
-            )
+            val pipelineFrames = com.superiorsoftllc.agenthq.daemon.wiring.PipelineWiring.buildFrames(store, manager, clients)
             // VOICE-1: spoken attention alerts, pushed to every client; nothing is stored.
             val notifyFrames = com.superiorsoftllc.agenthq.notify.NotifyHandler(
                 projectName = { id -> projectStore.get(id).name },
@@ -1189,7 +1163,7 @@ class AgentHqDaemon(
             )
             // P10-K6: the issues log, over the same file. The declared session is the author AND the scope of the active
             // issue an attempt or a fix without an issue ref goes to.
-            val issues = IssueStore(store as SqlAgentHqStore)
+            val issues = com.superiorsoftllc.agenthq.daemon.wiring.KnowledgeWiring.buildIssues(store)
             // P10-K9: the knowledge section's counts, read for a project whenever a first turn renders.
             // BUG-G2e: and the digest itself (what `agenthq knowledge` prints), built in-process from the same stores.
             val knowledge = object : KnowledgeCounter {
@@ -1284,7 +1258,7 @@ class AgentHqDaemon(
                 send = mail::send,
                 startSession = { agentId, prompt, projectId -> triggerPrompt(triggerTickets, agentId, prompt, projectId, triggerCaller) },
             )
-            val triggers = TriggerService(
+            val triggers = com.superiorsoftllc.agenthq.daemon.wiring.TriggersWiring.build(
                 repo = store.triggers,
                 attention = attention,
                 startNext = { filter -> (triggerTickets?.startNext(filter, triggerCaller) as? com.superiorsoftllc.agenthq.daemon.api.board.BoardResult.Ok)?.value },
@@ -1292,7 +1266,6 @@ class AgentHqDaemon(
                 sessions = manager::get,
                 deliverPrompt = triggerNudges::deliver,
                 mailPending = { mailId -> mailbox.message(mailId)?.state == MessageState.QUEUED },
-                autoStart = false, // started below, after the mailbox and the sessions are loaded
             )
             triggers.eventSink = { view -> broadcastTrigger(clients, view) }
             // H12b: a committed move into done reaches the ship triggers, after the board commit has released.
@@ -1335,25 +1308,7 @@ class AgentHqDaemon(
             mail.reportCheck = { from, body -> orchestratorLink.reviewReport(from, body).refusalOrNull() }
 
             // ASK-1 (contract 1.97.0): non-blocking owner questions, stored, pushed to every client, answered by mail.
-            val ownerQuestions = com.superiorsoftllc.agenthq.questions.OwnerQuestions(
-                repository = com.superiorsoftllc.agenthq.questions.OwnerQuestionRepository.forStore(store),
-                send = mail::send,
-                clock = clock,
-                maxOpen = settings::questionsMaxOpenPerAgent,
-                maxPerHour = settings::questionsMaxPerHour,
-                sessionExists = { manager.get(it) != null },
-                sessionBusy = { manager.get(it)?.live == true },
-                ttlMinutes = { settings.limit(com.superiorsoftllc.agenthq.settings.LimitRegistry.QUESTION_TTL_MINUTES) },
-                // ASK-TIMER: a question with no `--default-after` auto-picks its recommendation when the prompt timer runs out.
-                defaultAfterMinFor = { id ->
-                    manager.promptTimeoutFor(id, settings.promptTimeoutPolicy()).timeoutMillis.takeIf { it > 0 }
-                        ?.let { ((it + 59_999) / 60_000).toInt() }
-                },
-            )
-            ownerQuestions.sink = { question ->
-                val frame = Envelope(Envelope.QUESTION, json.encodeToString(com.superiorsoftllc.agenthq.protocol.OwnerQuestion.serializer(), question))
-                for (c in clients.toList()) c.trySend(frame)
-            }
+            val ownerQuestions = com.superiorsoftllc.agenthq.daemon.wiring.QuestionsWiring.build(store, mail::send, clock, settings, manager, clients, json)
             // A session that is killed, removed or restarted can no longer read the answer: its open questions are orphaned.
             val previousOnClosed = manager.onSessionClosed
             manager.onSessionClosed = { c ->
@@ -1981,7 +1936,7 @@ class AgentHqDaemon(
             // engine.start binds (after module setup), so the release-to-bind gap stays as small as it can be.
             // runCatching: it is raised with monitor.raise, so a throwing handler would abort the start.
             server.monitor.subscribe(ApplicationStarted) { runCatching { portReservation.close() } }
-            val chatImageRetention = com.superiorsoftllc.agenthq.images.ChatImageRetention(
+            val chatImageRetention = com.superiorsoftllc.agenthq.daemon.wiring.ImagesWiring.buildRetention(
                 projectRoots = { projectStore.list().mapNotNull { p -> p.directory.takeIf(String::isNotBlank)?.let(::File) } },
                 retentionDays = settings::chatImageRetentionDays,
                 clock = clock,
