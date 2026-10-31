@@ -120,6 +120,28 @@ class MailboxTest {
     }
 
     @Test
+    fun usage_regress_1_a_non_waking_message_waits_and_rides_with_the_next_waking_one() {
+        val (mb, _) = mailbox()
+        val note = (mb.send(MailSendRequest(from = "system", to = "B", body = "bg job finished")) as MailResult.Sent).message
+        val delivery = object : MailDelivery {
+            var rests = emptyList<String>()
+            override fun deliver(message: Message): DeliveryOutcome = DeliveryOutcome.Delivered()
+            override fun wakes(message: Message) = message.from != "system"
+            override fun deliver(message: Message, rest: List<Message>): DeliveryOutcome {
+                rests = rest.map { it.id }
+                return DeliveryOutcome.Delivered("", rests)
+            }
+        }
+        mb.deliverQueued("B", delivery)
+        assertEquals(MessageState.QUEUED, mb.message(note.id)!!.state)
+        val real = (mb.send(MailSendRequest(from = "A", to = "B", body = "report")) as MailResult.Sent).message
+        mb.deliverQueued("B", delivery)
+        assertEquals(listOf(note.id), delivery.rests)
+        assertEquals(MessageState.DELIVERED, mb.message(note.id)!!.state)
+        assertEquals(MessageState.DELIVERED, mb.message(real.id)!!.state)
+    }
+
+    @Test
     fun delivered_then_retry_pass_resumes_from_the_front() {
         val (mb, _) = mailbox()
         val first = (mb.send(MailSendRequest(from = "A", to = "B", body = "1")) as MailResult.Sent).message

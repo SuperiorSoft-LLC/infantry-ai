@@ -81,10 +81,40 @@ class MailRouter(
      */
     private val starterOf: (workerSessionId: String) -> String? = { null },
     /** USAGE-REGRESS-1: how many further queued messages ride in the same wake turn (0 = one wake per message). */
-    private val coalesceMax: Int = 10,
+    private val coalesceMax: () -> Int = { 10 },
+    /** USAGE-REGRESS-1: `real` | `all` | `never` for a recipient role / session (settings `mail.wakeMode`). */
+    private val wakeMode: (role: String, sessionId: String) -> String = { _, _ -> "all" },
+    /** USAGE-REGRESS-1: ms a waking message waits for company before it wakes a resting session (0 = at once). */
+    private val wakeDebounceMs: () -> Long = { 0L },
 ) : MailDelivery {
 
-    private companion object { const val MAIL_FOLD_SEPARATOR = "\n\n---\n\n" }
+    private val debounceTimer by lazy {
+        java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "mail-wake-debounce").apply { isDaemon = true } }
+    }
+    private val debouncing = ConcurrentHashMap.newKeySet<String>()
+
+    /** USAGE-REGRESS-1: may [message] start a wake? `never` no; `real` not automation mail; `all` yes. */
+    override fun wakes(message: Message): Boolean {
+        val session = (resolveRecipient(message.to, message.from, message.id in crossAllowed) as? RecipientResolution.Resolved)
+            ?.let { manager.get(it.sessionId) } ?: return true
+        return when (wakeMode(session.role ?: "", session.id)) {
+            "never" -> false
+            "real" -> !MailFooter.isAutomation(message.from) || isBgFinal(message)
+            else -> true
+        }
+    }
+
+    /**
+     * USAGE-REGRESS-1: a bg job's FINAL notice (exit / ended without an exit code / the timeout notice) still wakes the
+     * session that started it: an idle session waiting on `bg run --notify` has nothing else to start its next turn.
+     * In-between notices (pattern matches, quiet, heartbeat, closed output) are bundled into the next turn.
+     */
+    private fun isBgFinal(message: Message): Boolean =
+        message.from.equals("system", ignoreCase = true) && message.threadId.startsWith("bg:") &&
+            BG_FINAL.containsMatchIn(message.subject)
+
+    private companion object { val BG_FINAL = Regex("""bg job \S+ (finished|ended without an exit code|still running after)""")
+        const val MAIL_FOLD_SEPARATOR = "\n\n---\n\n" }
 
     /** DAEMON-CONTEXT-1: for mail a worker sends its `starter`: a refusal reason (a done report without Files read) or null. */
     @Volatile
@@ -122,7 +152,15 @@ class MailRouter(
             if (request.allowCrossProject) crossAllowed.add(result.message.id)
             // Pump by the ORIGINAL recipient address (session id, agent id, or role name), because
             // that is how the message is keyed in the mailbox. `deliver` resolves it to a session.
-            pump(result.message.to)
+            val delay = wakeDebounceMs()
+            if (delay > 0 && wakes(result.message)) {
+                if (debouncing.add(result.message.to)) {
+                    val to = result.message.to
+                    debounceTimer.schedule({ debouncing.remove(to); runCatching { pump(to) } }, delay, java.util.concurrent.TimeUnit.MILLISECONDS)
+                }
+            } else {
+                pump(result.message.to)
+            }
         }
         return result
     }
@@ -268,7 +306,7 @@ class MailRouter(
             val source = MailSource.of(message, manager, automationFooter)
             // USAGE-REGRESS-1: every wake re-reads the whole context; fold the other messages already queued for this
             // session (same recipient, up to [coalesceMax]) into the one turn instead of one wake each.
-            val folded = if (session.neverRun) emptyList() else rest.take(coalesceMax)
+            val folded = if (session.neverRun) emptyList() else rest.take(coalesceMax())
             val text = if (folded.isEmpty()) source.render() else
                 (listOf(source) + folded.map { MailSource.of(it, manager, automationFooter) }).joinToString(MAIL_FOLD_SEPARATOR) { it.render() }
             val turn = if (session.neverRun) {

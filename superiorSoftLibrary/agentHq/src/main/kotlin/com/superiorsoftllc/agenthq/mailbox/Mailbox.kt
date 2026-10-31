@@ -346,8 +346,10 @@ class Mailbox(
                     .filter { it.to == recipient && it.state == MessageState.QUEUED }
                     .sortedWith(compareBy({ it.sentAt }, { it.seq }))
             }
-            val next = queued.firstOrNull() ?: return
-            when (val outcome = delivery.deliver(next, queued.drop(1))) {
+            // USAGE-REGRESS-1: only a message that may wake the recipient starts a delivery; the others stay QUEUED
+            // and ride in the next turn (folded into a waking delivery's [rest]).
+            val next = queued.firstOrNull { delivery.wakes(it) } ?: return
+            when (val outcome = delivery.deliver(next, queued.filter { it.id != next.id })) {
                 is DeliveryOutcome.Delivered -> {
                     // USAGE-REGRESS-1: a delivery may fold later queued messages into the same wake turn.
                     val events = synchronized(lock) { (listOf(next.id) + outcome.alsoDelivered).flatMap { markDeliveredLocked(it) } }
@@ -495,4 +497,7 @@ fun interface MailDelivery {
      * some into one wake turn reports their ids in [DeliveryOutcome.Delivered.alsoDelivered]; the default folds none.
      */
     fun deliver(message: Message, rest: List<Message>): DeliveryOutcome = deliver(message)
+
+    /** USAGE-REGRESS-1: false = this message must not start a wake (it waits for the next turn). */
+    fun wakes(message: Message): Boolean = true
 }

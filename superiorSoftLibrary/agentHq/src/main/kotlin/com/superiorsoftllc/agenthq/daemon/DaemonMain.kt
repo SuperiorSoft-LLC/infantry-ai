@@ -1167,6 +1167,9 @@ class AgentHqDaemon(
                 manager, mailbox, agents, mailBase,
                 agentsSendToken = token != null, bindFreshSession = bindFreshSession,
                 automationFooter = settings::automationFooter,
+                coalesceMax = { settings.limit(LimitRegistry.MAIL_COALESCE_MAX).toInt() },
+                wakeMode = { role, sid -> settings.wakeMode(role, sid) },
+                wakeDebounceMs = { settings.limit(LimitRegistry.MAIL_WAKE_DEBOUNCE_SECONDS) * 1000 },
                 knowledge = knowledge, skills = skillsSource, starterOf = { sid -> orchestratorLink.starterOf(sid).valueOr(null) },
             )
             // Story 9.5: triggers -- stored, coalesced, tripped on any non-success, their starts unattended.
@@ -1363,9 +1366,9 @@ class AgentHqDaemon(
                 },
                 lastJobEndedAt = bgNotifier::lastEndedAt,
                 quietSeconds = bgNotifier::quietSeconds,
-                stallMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.WATCH_STALL_MINUTES), LimitRegistry.WATCH_STALL_MINUTES) },
+                stallMs = { if (settings.limit(LimitRegistry.WATCH_STALL_NUDGES) == 0L) Long.MAX_VALUE else LimitRegistry.minutesMs(settings.limit(LimitRegistry.WATCH_STALL_MINUTES), LimitRegistry.WATCH_STALL_MINUTES) },
                 recipientOf = ::watchRecipientOf,
-                foregroundStallMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.WATCH_FOREGROUND_STALL_MINUTES), LimitRegistry.WATCH_FOREGROUND_STALL_MINUTES) },
+                foregroundStallMs = { if (settings.limit(LimitRegistry.WATCH_STALL_NUDGES) == 0L) Long.MAX_VALUE else LimitRegistry.minutesMs(settings.limit(LimitRegistry.WATCH_FOREGROUND_STALL_MINUTES), LimitRegistry.WATCH_FOREGROUND_STALL_MINUTES) },
                 exemptWhenDone = { settings.limit(LimitRegistry.WATCH_EXEMPT_WHEN_TICKET_DONE) != 0L },
                 ticketDone = { id -> store.transaction { store.tickets.get(id) }?.status == com.superiorsoftllc.agenthq.protocol.TicketStatus.DONE },
                 reportDelivered = { s ->

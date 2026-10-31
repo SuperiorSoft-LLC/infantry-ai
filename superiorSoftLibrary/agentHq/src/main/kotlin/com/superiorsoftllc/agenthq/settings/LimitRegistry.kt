@@ -223,6 +223,12 @@ object LimitRegistry {
         "The largest interval between watch heartbeats (they start at limits.bg.notifyTimeoutMinutes and double); the first beat at it is also told to the watch's recipient rule (watch.escalateTo).",
         min = 1, max = 1440, zeroIsUnlimited = false,
     )
+    /** USAGE-REGRESS-1: every stall nudge is a wake that re-reads the whole context; off by default (the board's live state still shows the stall). */
+    val WATCH_STALL_NUDGES = LimitDef(
+        "limits.watch.stallNudges", 0, "switch",
+        "Recommended 0 (off): no stall nudge wakes a worker; the PM still sees the stall in the board's live state. 1 = nudge a stalled worker (limits.watch.stallMinutes / foregroundStallMinutes), which costs one full-context turn per nudge.",
+        max = 1, zeroIsUnlimited = false,
+    )
     val WATCH_STALL_MINUTES = LimitDef(
         "limits.watch.stallMinutes", 5, "minutes",
         "Stall detector: how long a ticket worker may sit idle with no job, or BUSY and silent after its job ended, before it is nudged and the watch's recipient rule (watch.escalateTo) is told.",
@@ -506,6 +512,19 @@ object LimitRegistry {
         max = 10_000_000, zeroMeans = "the whole body",
     )
 
+    /** USAGE-REGRESS-1: a mail wake re-reads the whole session context, so mail for a session is held this long to ride in ONE turn. */
+    val MAIL_WAKE_DEBOUNCE_SECONDS = LimitDef(
+        "limits.mail.wakeDebounceSeconds", 20, "seconds",
+        "Recommended 20. How long mail for a resting session waits before it wakes the session, so mail arriving within the window becomes ONE turn (every wake re-sends the whole context). 0 = wake at once.",
+        max = 3600, zeroMeans = "wake at once",
+    )
+    /** USAGE-REGRESS-1: how many further queued messages ride in the same wake turn. */
+    val MAIL_COALESCE_MAX = LimitDef(
+        "limits.mail.coalesceMax", 10, "messages",
+        "Recommended 10. How many further queued messages are folded into the one turn that wakes a session. 0 = one wake per message.",
+        max = 100, zeroMeans = "one wake per message",
+    )
+
     val ALL: List<LimitDef> = listOf(
         MCP_BODY_CHARS,
         MCP_DEFAULT_DETAIL,
@@ -526,6 +545,7 @@ object LimitRegistry {
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
+        MAIL_WAKE_DEBOUNCE_SECONDS, MAIL_COALESCE_MAX, WATCH_STALL_NUDGES,
     )
 
     /** A minutes limit as milliseconds; 0 on an unlimited-capable one = [Long.MAX_VALUE] (never reached). */
