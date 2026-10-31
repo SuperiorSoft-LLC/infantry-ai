@@ -1,7 +1,7 @@
 package com.superiorsoftllc.agenthq.triggers
 
 import com.superiorsoftllc.agenthq.attention.AttentionStore
-import com.superiorsoftllc.agenthq.backlog.PromptLaunch
+import com.superiorsoftllc.agenthq.daemon.api.board.PromptStart
 import com.superiorsoftllc.agenthq.mailbox.MailResult
 import com.superiorsoftllc.agenthq.mailbox.MailSendRequest
 import com.superiorsoftllc.agenthq.mailbox.Message
@@ -288,7 +288,7 @@ class TriggerNudgeTest {
             providerSessionId = "p-$id", runCount = 1, agentId = agentId, role = role, projectId = projectId,
         )
 
-    private fun nudges(sessions: List<SessionRecord>, sent: MutableList<MailSendRequest>, started: MutableList<String?> = mutableListOf(), launch: PromptLaunch = PromptLaunch.Started("s-new")) =
+    private fun nudges(sessions: List<SessionRecord>, sent: MutableList<MailSendRequest>, started: MutableList<String?> = mutableListOf(), launch: PromptStart = PromptStart.Started("s-new")) =
         TriggerNudges(
             sessions = { sessions },
             send = { request ->
@@ -352,9 +352,9 @@ class TriggerNudgeTest {
 
     @Test
     fun `a start refused for capacity is busy, any other refusal is a refusal`() {
-        val busy = nudges(emptyList(), mutableListOf(), launch = PromptLaunch.Refused("profile lane 'role:pm' is at capacity")).deliver(pmNudge)
+        val busy = nudges(emptyList(), mutableListOf(), launch = PromptStart.Refused("profile lane 'role:pm' is at capacity")).deliver(pmNudge)
         assertTrue(busy is PromptDelivery.Busy)
-        val refused = nudges(emptyList(), mutableListOf(), launch = PromptLaunch.Refused("no agent profile has role 'pm'")).deliver(pmNudge)
+        val refused = nudges(emptyList(), mutableListOf(), launch = PromptStart.Refused("no agent profile has role 'pm'")).deliver(pmNudge)
         assertEquals(PromptDelivery.Refused("no agent profile has role 'pm'"), refused)
     }
 }

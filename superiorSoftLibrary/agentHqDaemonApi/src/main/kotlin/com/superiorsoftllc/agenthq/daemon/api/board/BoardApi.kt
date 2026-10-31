@@ -33,8 +33,9 @@ import kotlinx.serialization.Serializable
  *   [TicketImages] and [ContextLimits]; [TicketDraft.contextLimit] / [TicketPatch.contextLimit]; [Tickets.mayFile].
  * 1.4.0 (EFFORT-1, additive): [TicketInfo.effort] / [TicketInfo.effectiveEffort] (+ source, support); [TicketDraft.effort] / [TicketPatch.effort];
  *   [EffortLevels] (the shared level list and parser). Blank / `off` clears a ticket's effort on a patch.
+ * 1.5.0 (DP-5b, additive): [Tickets.startNext] / [Tickets.startPrompt] (the unattended hand-outs a trigger makes) and [PromptStart].
  */
-const val BOARD_API_VERSION = "1.4.0"
+const val BOARD_API_VERSION = "1.5.0"
 
 const val GRANT_TICKETS_READ = "tickets.read"
 const val GRANT_TICKETS_WRITE = "tickets.write"
@@ -168,6 +169,12 @@ data class TicketQuery(
 @Serializable
 data class StartResult(val ticket: TicketInfo, val ok: Boolean, val reason: String, val detail: String? = null)
 
+/** What a `prompt` hand-out got: the session it started, or the reason it was refused. */
+sealed interface PromptStart {
+    data class Started(val sessionId: String) : PromptStart
+    data class Refused(val detail: String) : PromptStart
+}
+
 /** The session a ticket is bound to. */
 @Serializable
 data class TicketBinding(val sessionId: String?, val projectId: String?)
@@ -219,6 +226,16 @@ interface Tickets {
      * files into its own project; pm / owner reach any). A tool asks BEFORE it writes anything for that project (an upload).
      */
     fun mayFile(projectId: String, by: Caller): BoardResult<Unit> = BoardResult.Unavailable("this daemon has no board")
+
+    /**
+     * 1.5.0: the unattended hand-out of a trigger: starts the first startable To Do ticket whose agent matches [agentFilter]
+     * (null = any). Ok(null) = nothing to start; never queued. [StartResult.reason] is blank when the board gave no start answer.
+     */
+    fun startNext(agentFilter: String?, by: Caller): BoardResult<StartResult?> = BoardResult.Unavailable("this daemon has no board")
+
+    /** 1.5.0: the unattended `prompt` hand-out of a trigger: a worker session for [agentId] with [prompt] (no ticket). */
+    fun startPrompt(agentId: String, prompt: String, projectId: String?, by: Caller): BoardResult<PromptStart> =
+        BoardResult.Unavailable("this daemon has no board")
 }
 
 interface Epics {

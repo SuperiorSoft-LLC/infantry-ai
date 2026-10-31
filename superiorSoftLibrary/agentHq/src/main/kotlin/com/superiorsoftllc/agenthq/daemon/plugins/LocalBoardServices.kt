@@ -11,6 +11,7 @@ import com.superiorsoftllc.agenthq.daemon.api.Caller
 import com.superiorsoftllc.agenthq.daemon.api.board.Board
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardColumn
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardResult
+import com.superiorsoftllc.agenthq.daemon.api.board.PromptStart
 import com.superiorsoftllc.agenthq.daemon.api.board.EpicInfo
 import com.superiorsoftllc.agenthq.daemon.api.board.Epics
 import com.superiorsoftllc.agenthq.daemon.api.board.Page
@@ -208,6 +209,24 @@ class LocalBoardServices(
                 val start = answer.start ?: TicketStart(ok = false, reason = "start_refused", detail = "the board gave no start answer")
                 BoardResult.Ok(StartResult(info(answer), start.ok, start.reason, start.detail))
             }
+        }
+
+        // DP-5b: the hand-outs a trigger makes. Daemon-internal, so ungated and unscoped exactly as the direct board call was.
+        override fun startNext(agentFilter: String?, by: Caller): BoardResult<StartResult?> {
+            val b = board() ?: return BoardResult.Unavailable("this daemon has no board")
+            val answer = b.startNextUnattended(agentFilter) ?: return BoardResult.Ok(null)
+            val start = answer.ticket.start
+            return BoardResult.Ok(StartResult(info(answer.ticket), start?.ok ?: false, start?.reason ?: "", start?.detail))
+        }
+
+        override fun startPrompt(agentId: String, prompt: String, projectId: String?, by: Caller): BoardResult<PromptStart> {
+            val b = board() ?: return BoardResult.Unavailable("this daemon has no board")
+            return BoardResult.Ok(
+                when (val l = b.startPromptUnattended(agentId, prompt, projectId)) {
+                    is com.superiorsoftllc.agenthq.backlog.PromptLaunch.Started -> PromptStart.Started(l.sessionId)
+                    is com.superiorsoftllc.agenthq.backlog.PromptLaunch.Refused -> PromptStart.Refused(l.detail)
+                },
+            )
         }
 
         override fun starterOf(sessionId: String, by: Caller): BoardResult<String?> = readOp(sessionId, by) { l ->

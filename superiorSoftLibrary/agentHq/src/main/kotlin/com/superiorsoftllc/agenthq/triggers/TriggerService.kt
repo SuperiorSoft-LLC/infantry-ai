@@ -2,8 +2,8 @@ package com.superiorsoftllc.agenthq.triggers
 
 import com.superiorsoftllc.agenthq.attention.AttentionKind
 import com.superiorsoftllc.agenthq.attention.AttentionStore
-import com.superiorsoftllc.agenthq.backlog.PromptLaunch
-import com.superiorsoftllc.agenthq.backlog.TicketAnswer
+import com.superiorsoftllc.agenthq.daemon.api.board.PromptStart
+import com.superiorsoftllc.agenthq.daemon.api.board.StartResult
 import com.superiorsoftllc.agenthq.persistence.TriggerRepository
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
 import com.superiorsoftllc.agenthq.protocol.TriggerAction
@@ -51,10 +51,10 @@ sealed interface PromptDelivery {
 class TriggerService(
     private val repo: TriggerRepository,
     private val attention: AttentionStore,
-    private val startNext: (agentFilter: String?) -> TicketAnswer?,
+    private val startNext: (agentFilter: String?) -> StartResult?,
     private val sessions: (String) -> SessionRecord?,
     /** P9.5d: the `prompt` action's launch. The default refuses, so a service built without one cannot pretend to serve it. */
-    private val startPrompt: (agentId: String, prompt: String) -> PromptLaunch = { _, _ -> PromptLaunch.Refused("prompt actions are not wired") },
+    private val startPrompt: (agentId: String, prompt: String) -> PromptStart = { _, _ -> PromptStart.Refused("prompt actions are not wired") },
     /**
      * TRIGGER-NUDGE (contract 1.105.0): the `prompt` action's delivery as MAIL into the trigger's project. When set it
      * replaces [startPrompt]: a run is over once the mail is queued (or a session started), so a busy target can never
@@ -362,20 +362,20 @@ class TriggerService(
 
     /** On [launches]: run the `prompt` action with NO lock held, then record what happened under the lock. */
     private fun launchPrompt(trigger: TriggerView, run: TriggerRun) {
-        val launch: PromptLaunch = try {
+        val launch: PromptStart = try {
             startPrompt(trigger.action.agentId.orEmpty(), trigger.action.prompt.orEmpty())
         } catch (e: Exception) {
             System.err.println("[agentHq] trigger ${trigger.id} prompt start failed: ${e.message}")
-            PromptLaunch.Refused("prompt start failed: ${e.message}")
+            PromptStart.Refused("prompt start failed: ${e.message}")
         }
         synchronized(this) {
             if (closing) return // same rule as the start_next branch: an interrupted start stays RUNNING for the next boot to claim
             when (launch) {
-                is PromptLaunch.Started -> {
+                is PromptStart.Started -> {
                     val ended = exits.remove(launch.sessionId)
                     if (ended != null) complete(run.runId, ended) else runSessions[launch.sessionId] = run.runId
                 }
-                is PromptLaunch.Refused -> finishRefused(run, launch.detail)
+                is PromptStart.Refused -> finishRefused(run, launch.detail)
             }
         }
     }
@@ -428,7 +428,7 @@ class TriggerService(
             val deliver = deliverPrompt ?: return launchPrompt(trigger, run)
             return launchNudge(trigger, run, deliver)
         }
-        val answer: TicketAnswer? = try {
+        val answer: StartResult? = try {
             startNext(trigger.action.agentId)
         } catch (e: Exception) {
             System.err.println("[agentHq] trigger $triggerId start_next failed: ${e.message}")
@@ -457,12 +457,12 @@ class TriggerService(
                     complete(run.runId, TriggerOutcome.SUCCEEDED)
                     redispose(run, TriggerEventDisposition.NOTHING_TO_START)
                 }
-                answer.ticket.start?.reason == "started" && answer.ticket.sessionId != null -> {
+                answer.reason == "started" && answer.ticket.sessionId != null -> {
                     val sessionId = answer.ticket.sessionId!!
                     val ended = exits.remove(sessionId)
                     if (ended != null) complete(run.runId, ended) else runSessions[sessionId] = run.runId
                 }
-                else -> finishRefused(run, answer.ticket.start?.detail ?: answer.ticket.start?.reason ?: "start refused")
+                else -> finishRefused(run, answer.detail ?: answer.reason.ifBlank { "start refused" })
             }
         }
     }

@@ -1,6 +1,6 @@
 package com.superiorsoftllc.agenthq.triggers
 
-import com.superiorsoftllc.agenthq.backlog.PromptLaunch
+import com.superiorsoftllc.agenthq.daemon.api.board.PromptStart
 import com.superiorsoftllc.agenthq.mailbox.MailResult
 import com.superiorsoftllc.agenthq.mailbox.MailSendRequest
 import com.superiorsoftllc.agenthq.session.SessionRecord
@@ -25,15 +25,15 @@ import com.superiorsoftllc.agenthq.session.isInSession
 class TriggerNudges(
     private val sessions: () -> List<SessionRecord>,
     private val send: (MailSendRequest) -> MailResult,
-    private val startSession: (agentId: String, prompt: String, projectId: String?) -> PromptLaunch,
+    private val startSession: (agentId: String, prompt: String, projectId: String?) -> PromptStart,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     fun deliver(nudge: TriggerNudge): PromptDelivery {
         val target = target(nudge)
         if (target == null) {
             return when (val launch = startSession(nudge.agentId, nudge.prompt, nudge.projectId)) {
-                is PromptLaunch.Started -> PromptDelivery.Started(launch.sessionId)
-                is PromptLaunch.Refused ->
+                is PromptStart.Started -> PromptDelivery.Started(launch.sessionId)
+                is PromptStart.Refused ->
                     if (launch.detail.contains("at capacity")) PromptDelivery.Busy(launch.detail) else PromptDelivery.Refused(launch.detail)
             }
         }

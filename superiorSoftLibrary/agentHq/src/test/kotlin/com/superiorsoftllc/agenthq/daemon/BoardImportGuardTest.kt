@@ -20,7 +20,7 @@ class BoardImportGuardTest {
         "daemon/plugins/LocalBoardServices.kt", "daemon/DaemonMain.kt",
         "mvp/StoryHandler.kt",
         "stories/StoryMigration.kt", "ticketfiles/LiveRelatedWork.kt", "ticketfiles/RelatedDescriptionWriter.kt",
-        "ticketfiles/RelatedTickets.kt", "triggers/TriggerNudges.kt", "triggers/TriggerService.kt",
+        "ticketfiles/RelatedTickets.kt",
     )
 
     private fun importers() = main.walkTopDown().filter { it.isFile && it.extension == "kt" }
