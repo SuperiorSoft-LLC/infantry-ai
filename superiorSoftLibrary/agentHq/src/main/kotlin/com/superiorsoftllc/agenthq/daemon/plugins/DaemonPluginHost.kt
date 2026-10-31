@@ -379,6 +379,7 @@ class DaemonPluginHost private constructor(
         d.hooks.firstOrNull { it !in HOOK_KINDS }?.let { return "unknown hook kind '$it' (known: ${HOOK_KINDS.joinToString()})" }
         d.tools.firstOrNull { !TOOL_NAME.matches(it.name) }?.let { return "tool name '${it.name}' must match ${TOOL_NAME.pattern}" }
         if (tier != Tier.COMMUNITY) return null
+        if (d.storage.adopt.isNotEmpty()) return "a community module may not adopt core tables (daemon.storage.adopt)"
         val allow = setting.allow.toSet()
         if ("daemon.code" !in allow) return "community daemon code needs the 'daemon.code' grant in modules.json"
         if (d.routes.isNotEmpty() || d.publicRoutes.isNotEmpty()) return "a community module may not declare top-level or public routes"
@@ -539,6 +540,14 @@ class DaemonPluginHost private constructor(
         // PACE-TREND-1: the plan meters, read-only; a community plugin needs the grant `usage.read` (default deny: reads nothing).
         override val meters: com.superiorsoftllc.agenthq.daemon.api.usage.Meters =
             GrantedMeters({ services.meters }) { grant -> !p.community || grant in p.setting.allow }
+        // DAEMON-STORAGE-1: plugin-owned tables; adopt is honoured for official / bundled only (a community adopt is refused at load).
+        override val storage: com.superiorsoftllc.agenthq.daemon.api.storage.PluginStorage by lazy {
+            val h = services.storageHandle
+            if (h == null) com.superiorsoftllc.agenthq.daemon.api.storage.NoPluginStorage
+            else LocalPluginStorage(h, p.id, if (p.community) emptyList() else p.declared.storage.adopt) {
+                !p.community || LocalPluginStorage.GRANT in p.setting.allow
+            }
+        }
         // AGENT-REGISTRY-1: the agent registry, scoped to this plugin (its own declared ids; enable/disable trusted tiers only).
         override val agents: com.superiorsoftllc.agenthq.daemon.api.agents.Agents = object : com.superiorsoftllc.agenthq.daemon.api.agents.Agents {
             private val registry get() = services.agentRegistry
