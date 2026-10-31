@@ -1528,6 +1528,10 @@ class AgentHqDaemon(
                 val push = com.superiorsoftllc.agenthq.usagemeter.PushDebounce { val f = Envelope(Envelope.USAGE_METER, m.reportJson()); for (c in clients) c.trySend(f) }
                 m.onRecorded = push::poke
             }
+            // DP-5h-3b: session events reach the board through a SwapFeed, so events during a plugin attach / reload are
+            // queued (drop-oldest, bounded), not lost; attached to the board's host now, a reload re-attaches it.
+            val boardFeed = SwapFeed<com.superiorsoftllc.agenthq.session.SessionEvent>()
+            board.localHost?.let { host -> boardFeed.attach { e -> host.publish(e) } }
             manager.eventSink = { event ->
                 broadcast(clients, event, streamSequencer, runActivity, { id, seconds ->
                     // A `sleep N` in a tool call becomes a "waiting" countdown; the call returning (or the agent moving on) ends it.
@@ -1547,7 +1551,7 @@ class AgentHqDaemon(
                 // USAGE-1: the usage meter (own package, own file); the seam is these three lines plus its frame below.
                 usageMeter?.onSessionEvent(event, manager::get)
                 // FOURTH ARM: ticket outcomes are durable, then a freed profile lane is drained.
-                board.localHost?.publish(event)
+                boardFeed.emit(event)
                 // Story 9.5: a trigger's run ends with its session's run.
                 triggers.onSessionEvent(event)
                 // TRAITS-T6: LAST, so the board and the triggers have recorded the run's end before a re-prompt mail
