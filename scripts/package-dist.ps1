@@ -245,13 +245,17 @@ esources\modules\official') -Directory -ErrorAction SilentlyContinue | ForEach-O
   Write-Output "PACKAGE-DIST plugins: included=$($selection.Included.Count) excluded=[$($selection.Excluded -join ', ')] report=$manifestPath$(if ($selection.Excluded.Count) { " optional=$optionalDest" })"
 
   # Only now replace current\.
-  $partial = Join-Path $root.Path 'current.partial'
-  if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Recurse -Force }
-  Invoke-Robocopy $dest $partial
-  if (Test-Path -LiteralPath $current) { Remove-Item -LiteralPath $current -Recurse -Force }
-  Rename-Item -LiteralPath $partial -NewName 'current'
-
-  Write-Output "PACKAGE-DIST ok: sha=$full signing=$signing files=$($destCount.Files) output=$dest current=$current"
+  # BUILD-SWAP-1: never delete-then-copy. swap-current.ps1 copies, verifies, then renames; a running app only blocks the switch.
+  $swap = Join-Path $PSScriptRoot 'swap-current.ps1'
+  & powershell -NoProfile -ExecutionPolicy Bypass -File $swap -Sha $full -BuildRoot $root.Path
+  $swapExit = $LASTEXITCODE
+  if ($swapExit -eq 3) {
+    Write-Output "PACKAGE-DIST ok (NOT switched): sha=$full signing=$signing files=$($destCount.Files) output=$dest. current\ is untouched because the app is running; to switch run: powershell -File `"$swap`" -BuildRoot `"$($root.Path)`" (see $($root.Path)\READY-TO-SWITCH.txt)"
+  } elseif ($swapExit -ne 0) {
+    Fail "swap of current\ failed (exit $swapExit); the build is complete and verified in $dest"
+  } else {
+    Write-Output "PACKAGE-DIST ok: sha=$full signing=$signing files=$($destCount.Files) output=$dest current=$current"
+  }
 } finally {
   git -C $repo worktree remove --force $tmp 2>$null
   if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
