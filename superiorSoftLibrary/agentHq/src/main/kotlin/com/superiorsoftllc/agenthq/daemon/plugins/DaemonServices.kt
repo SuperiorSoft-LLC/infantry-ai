@@ -41,6 +41,8 @@ interface DaemonServices {
     val sessionReads: com.superiorsoftllc.agenthq.daemon.api.sessions.SessionReads get() = com.superiorsoftllc.agenthq.daemon.api.sessions.NoSessionReads
 
     /** RUNTIME-LOAD-6: the host spawn service ([LocalSpawns]). Default: none (every call Unavailable). */
+    /** DP-5h-3a: what a board plugin builds its board from; the no-board runtime when none. */
+    val boardRuntime: com.superiorsoftllc.agenthq.daemon.api.board.BoardRuntime get() = com.superiorsoftllc.agenthq.daemon.api.board.NoBoardRuntime
     val spawns: com.superiorsoftllc.agenthq.daemon.api.spawns.Spawns get() = com.superiorsoftllc.agenthq.daemon.api.spawns.NoSpawns
 
     /** STACK-NEUTRAL-2: the host process service ([com.superiorsoftllc.agenthq.session.LocalProcesses]); null = none. */

@@ -55,6 +55,8 @@ interface DaemonApi {
     /** DP-4a (1.2.0, additive): tickets, epics and the board (docs/DAEMON-BOARD-API.md). A daemon without a board answers Unavailable. */
     val tickets: com.superiorsoftllc.agenthq.daemon.api.board.Tickets get() = com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.tickets
     val epics: com.superiorsoftllc.agenthq.daemon.api.board.Epics get() = com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.epics
+    /** DP-5h-3a (1.12.0, additive): the host side of a board plugin's board (settings, project tables, pacing, push). A daemon without one answers [com.superiorsoftllc.agenthq.daemon.api.board.NoBoardRuntime]. */
+    val boardRuntime: com.superiorsoftllc.agenthq.daemon.api.board.BoardRuntime get() = com.superiorsoftllc.agenthq.daemon.api.board.NoBoardRuntime
     val board: com.superiorsoftllc.agenthq.daemon.api.board.Board get() = com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.board
 
     /** AGENT-REGISTRY-1 (1.5.0, additive): the agent registry (docs/AGENT-REGISTRY.md). A daemon without one lists nothing. */
@@ -93,6 +95,7 @@ interface DaemonApi {
     val meters: com.superiorsoftllc.agenthq.daemon.api.usage.Meters get() = com.superiorsoftllc.agenthq.daemon.api.usage.NoMeters
 
     companion object {
+        // 1.12.0 (DP-5h-3a, additive): `boardRuntime` (BoardRuntime): what a board plugin builds its board from.
         // 1.11.0 (DP-5h-2, additive): `spawns.charge` (SpawnCharge) and `frames.table` (FrameBinding: typed frames with the direct flag).
         // 1.10.0 (PACE-TREND-1, additive): `meters` (daemon.api.usage.Meters), the current reading of every provider window.
         // 1.9.0 (RUNTIME-LOAD-7, additive): `ToolCall.clientNarrowing` (the MCP client's depth / spawn narrowing).
@@ -102,7 +105,7 @@ interface DaemonApi {
         // 1.5.0 (AGENT-REGISTRY-1, additive): `agents` (daemon.api.agents.Agents) and module.json `agents`.
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
-        const val VERSION = "1.11.0"
+        const val VERSION = "1.12.0"
     }
 }
 
