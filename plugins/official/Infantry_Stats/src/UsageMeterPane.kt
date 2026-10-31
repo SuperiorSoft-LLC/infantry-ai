@@ -36,7 +36,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.superiorsoftllc.agenthq.ui.NumericText
 import com.superiorsoftllc.agenthq.ui.Palette
+import com.superiorsoftllc.agenthq.ui.SegmentedControl
+import com.superiorsoftllc.agenthq.ui.StatChip
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
 import com.superiorsoftllc.agenthq.ui.protocol.UsageMeterReport
@@ -67,68 +70,96 @@ fun UsageMeterPane(state: AppState, meter: UsageMeterContext) {
 @Composable
 private fun Note(text: String) = Box(Modifier.fillMaxSize(), Alignment.Center) { Text(text, color = Palette.Muted, fontSize = 12.sp) }
 
+const val USAGE_TOKENS_GROUP_TAG = "stats-tokens-group"
+const val USAGE_TOGGLE_TAG = "stats-tokens-toggle"
+
+/**
+ * USAGE-UI-1: the toggle bar is pinned above the scroll area (sticky); the first scrolled content is ONE group holding exactly
+ * what the toggles change (turns trend + one block per period). Static panels follow in an overview, outside the group.
+ */
 @Composable
 fun UsageMeterBody(report: UsageMeterReport, names: CostNames = CostNames()) {
     var weekly by remember { mutableStateOf(false) }
     var split by remember { mutableStateOf(MeterSplit.SOURCE) }
     val periods = remember(report, weekly) { UsageMeterView.periods(report.rows, weekly) }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("TOKENS", color = Palette.Muted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
-            Spacer(Modifier.width(8.dp))
-            Toggle("By day", !weekly) { weekly = false }
-            Toggle("By week", weekly) { weekly = true }
-            Spacer(Modifier.width(12.dp))
-            for (s in MeterSplit.entries) Toggle(s.label, split == s) { split = s }
+    val scroll = rememberScrollState()
+    LaunchedEffect(weekly, split) { scroll.scrollTo(0) }
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = 14.dp, vertical = 8.dp).testTag(USAGE_TOGGLE_TAG),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            SegmentedControl("Period", listOf(false, true), weekly, { if (it) "By week" else "By day" }) { weekly = it }
+            SegmentedControl("Group by", MeterSplit.entries.toList(), split, { it.label }) { split = it }
         }
-        Text(
-            "Provider-reported only. Per-run rows kept this and last week, then daily rollups for ${report.keepWeeks} weeks.",
-            color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
-        )
-        Text(
-            "A turn is one model request and its response (one provider usage report). A run is one agent process from prompt to exit; it holds many turns.",
-            color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(bottom = 8.dp).testTag("stats-turn-definition"),
-        )
-        UsageMeterExtras(report, names)
-        // STALL-2: the job watcher's counters, all daemon-side work with no model call behind it.
-        report.watch?.let { w ->
-            Text(
-                "Job watcher: ${w.events} events, ${w.heartbeats} heartbeats, ${w.hookRewrites} commands routed by hooks (${w.hookOverrides} overridden by another hook), ${w.optOuts} opt-outs, ${w.stallNudges} stall nudges" +
-                    (if (w.note.isNotBlank()) " (${w.note})" else ""),
-                color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(bottom = 8.dp).testTag("stats-watch-meter"),
-            )
-        }
-        if (periods.isEmpty()) Text("No runs recorded yet.", color = Palette.Muted, fontSize = 12.sp)
-        if (periods.isNotEmpty()) TurnsTrend(periods.map { (k, r) -> k to UsageMeterView.total(r).turns }, weekly)
-        periods.forEachIndexed { i, (key, rows) ->
-            val t = UsageMeterView.total(rows)
-            val prev = periods.getOrNull(i + 1)?.let { UsageMeterView.total(it.second).tokens }
-            val prevTurns = periods.getOrNull(i + 1)?.let { UsageMeterView.total(it.second).turns }
-            Column(Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text((if (weekly) "week of " else "") + key, color = Palette.Accent, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                    Text("${UsageMeterView.compact(t.tokens)} tokens  (${UsageMeterView.delta(t.tokens, prev)} vs previous)", color = Palette.Text, fontSize = 12.sp)
-                }
-                Text(
-                    "${t.runs} runs, ${t.turns} turns (${UsageMeterView.delta(t.turns, prevTurns)} vs previous) | in ${UsageMeterView.compact(t.input)} out ${UsageMeterView.compact(t.output)} " +
-                        "cache read ${UsageMeterView.compact(t.cacheRead)} write ${UsageMeterView.compact(t.cacheWrite)} | " +
-                        "cache hit ${UsageMeterView.cacheHit(t)} | avg context/turn ${UsageMeterView.avgContext(t)} | cost ${UsageMeterView.cost(t)}",
-                    color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
-                )
-                for ((name, a) in UsageMeterView.split(rows, split)) {
-                    Row(Modifier.fillMaxWidth().padding(start = 8.dp)) {
-                        Text(name, color = Palette.Text, fontSize = 11.sp, modifier = Modifier.weight(1f))
-                        Text(
-                            "${a.turns} turns  ${UsageMeterView.compact(a.tokens)}  hit ${UsageMeterView.cacheHit(a)}  ctx ${UsageMeterView.avgContext(a)}  ${UsageMeterView.cost(a)}",
-                            color = Palette.Muted, fontSize = 11.sp,
-                        )
-                    }
+        Column(Modifier.weight(1f).verticalScroll(scroll).padding(14.dp)) {
+            Column(Modifier.fillMaxWidth().padding(bottom = 12.dp).clip(RoundedCornerShape(8.dp)).background(Palette.Raised).padding(12.dp).testTag(USAGE_TOKENS_GROUP_TAG)) {
+                Text("TOKENS ${if (weekly) "BY WEEK" else "BY DAY"}", color = Palette.Text, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                Spacer(Modifier.height(8.dp))
+                if (periods.isEmpty()) Text("No runs recorded yet.", color = Palette.Muted, fontSize = 12.sp)
+                if (periods.isNotEmpty()) TurnsTrend(periods.map { (k, r) -> k to UsageMeterView.total(r).turns }, weekly)
+                periods.forEachIndexed { i, (key, rows) ->
+                    val t = UsageMeterView.total(rows)
+                    val prev = periods.getOrNull(i + 1)?.let { UsageMeterView.total(it.second).tokens }
+                    val prevTurns = periods.getOrNull(i + 1)?.let { UsageMeterView.total(it.second).turns }
+                    PeriodBlock((if (weekly) "week of " else "") + key, t, prev, prevTurns, UsageMeterView.split(rows, split))
                 }
             }
+            Text("OVERVIEW (does not change with the toggles)", color = Palette.Muted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp, modifier = Modifier.padding(bottom = 6.dp))
+            Text(
+                "Provider-reported only. Per-run rows kept this and last week, then daily rollups for ${report.keepWeeks} weeks.",
+                color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(bottom = 4.dp),
+            )
+            Text(
+                "A turn is one model request and its response (one provider usage report). A run is one agent process from prompt to exit; it holds many turns.",
+                color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(bottom = 8.dp).testTag("stats-turn-definition"),
+            )
+            UsageMeterExtras(report, names)
+            // STALL-2: the job watcher's counters, all daemon-side work with no model call behind it.
+            report.watch?.let { w ->
+                Text(
+                    "Job watcher: ${w.events} events, ${w.heartbeats} heartbeats, ${w.hookRewrites} commands routed by hooks (${w.hookOverrides} overridden by another hook), ${w.optOuts} opt-outs, ${w.stallNudges} stall nudges" +
+                        (if (w.note.isNotBlank()) " (${w.note})" else ""),
+                    color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(bottom = 8.dp).testTag("stats-watch-meter"),
+                )
+            }
+            Spacer(Modifier.height(8.dp))
         }
-        Spacer(Modifier.height(8.dp))
     }
 }
+
+/** One period: heading with total and delta, labelled stat chips, then the split rows with aligned numeric columns. */
+@Composable
+private fun PeriodBlock(title: String, t: MeterAgg, prev: Long?, prevTurns: Long?, rows: List<Pair<String, MeterAgg>>) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(6.dp)).background(Palette.Panel).padding(10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, color = Palette.Text, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            Text("${UsageMeterView.compact(t.tokens)} tokens", color = Palette.Text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            Text(deltaText(UsageMeterView.delta(t.tokens, prev)), color = Palette.Muted, fontSize = 10.sp, modifier = Modifier.padding(start = 6.dp))
+        }
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            StatChip("Runs", "${t.runs}")
+            StatChip("Turns", "${t.turns} (${deltaText(UsageMeterView.delta(t.turns, prevTurns))})")
+            StatChip("In / out", "${UsageMeterView.compact(t.input)} / ${UsageMeterView.compact(t.output)}")
+            StatChip("Cache r / w", "${UsageMeterView.compact(t.cacheRead)} / ${UsageMeterView.compact(t.cacheWrite)}")
+            StatChip("Cache hit", UsageMeterView.cacheHit(t))
+            StatChip("Avg ctx/turn", UsageMeterView.avgContext(t))
+            StatChip("Cost", UsageMeterView.cost(t))
+        }
+        for ((name, a) in rows) {
+            Row(Modifier.fillMaxWidth().padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(name, color = Palette.Text, fontSize = 11.sp, modifier = Modifier.weight(1f))
+                NumericText("${a.turns} turns", 72.dp, color = Palette.Muted)
+                NumericText(UsageMeterView.compact(a.tokens), 64.dp)
+                NumericText("hit ${UsageMeterView.cacheHit(a)}", 80.dp, color = Palette.Muted)
+                NumericText("ctx ${UsageMeterView.avgContext(a)}", 72.dp, color = Palette.Muted)
+                NumericText(UsageMeterView.cost(a), 64.dp)
+            }
+        }
+    }
+}
+
+private fun deltaText(d: String) = if (d == "-") "no previous" else "$d vs previous"
 
 @Composable
 private fun Card(title: String, tag: String, content: @Composable () -> Unit) {
@@ -182,7 +213,7 @@ fun UsageMeterExtras(report: UsageMeterReport, names: CostNames = CostNames()) {
 private fun TurnsTrend(periods: List<Pair<String, Long>>, weekly: Boolean) {
     val shown = periods.take(14).reversed()
     val max = (shown.maxOfOrNull { it.second } ?: 0L).coerceAtLeast(1L)
-    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp)) {
+    Column(Modifier.fillMaxWidth().padding(bottom = 8.dp).clip(RoundedCornerShape(6.dp)).background(Palette.Panel).padding(10.dp)) {
         Text("TURNS (MODEL REQUESTS) PER ${if (weekly) "WEEK" else "DAY"}", color = Palette.Muted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.sp)
         for ((key, turns) in shown) {
             Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -190,7 +221,7 @@ private fun TurnsTrend(periods: List<Pair<String, Long>>, weekly: Boolean) {
                 Box(Modifier.weight(1f)) {
                     Box(Modifier.fillMaxWidth(turns.toFloat() / max).height(8.dp).clip(RoundedCornerShape(2.dp)).background(Palette.Accent))
                 }
-                Text("$turns", color = Palette.Text, fontSize = 10.sp, modifier = Modifier.width(48.dp).padding(start = 6.dp))
+                NumericText("$turns", 54.dp, modifier = Modifier.padding(start = 6.dp), fontSize = 10)
             }
         }
     }

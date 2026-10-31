@@ -17,4 +17,7 @@ object Contrast {
         val lb = b.luminance().toDouble()
         return (maxOf(la, lb) + 0.05) / (minOf(la, lb) + 0.05)
     }
+
+    /** The more readable of white and near-black text on [bg] (used where the accent itself is the surface). */
+    fun onColor(bg: Color): Color = listOf(Color.White, Color(0xFF111214)).maxBy { ratio(it, bg) }
 }
