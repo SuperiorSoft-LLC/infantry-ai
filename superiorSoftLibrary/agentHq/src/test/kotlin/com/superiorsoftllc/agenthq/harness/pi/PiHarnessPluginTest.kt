@@ -223,9 +223,9 @@ class PiHarnessPluginTest {
     }
 
     @Test
-    fun cacheBucketsCountTowardTheInputSideLikeClaudesThreeBuckets() {
+    fun cacheBucketsStaySeparateFromInput() {
         val line = """{"type":"message_end","message":{"role":"assistant","content":[],"usage":{"input":1,"output":2,"cacheRead":30,"cacheWrite":400,"totalTokens":0},"stopReason":"stop"}}"""
-        assertEquals(HarnessEvent.Usage(431, 2), run(listOf(SESSION, line, SETTLED)).filterIsInstance<HarnessEvent.Usage>().single())
+        assertEquals(HarnessEvent.Usage(1, 2, 30, 400), run(listOf(SESSION, line, SETTLED)).filterIsInstance<HarnessEvent.Usage>().single())
     }
 
     // A thinking block streamed mid-word is ONE reasoning event: deltas verbatim, real newlines kept.
