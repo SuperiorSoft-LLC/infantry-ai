@@ -5,7 +5,7 @@ package com.superiorsoftllc.agenthq.ticketfiles
  * router applies it to mail a worker sends its starter, and the line is stored on the ticket.
  */
 object FilesReadCheck {
-    private val LINE = Regex("""(?im)^[\s>*_-]*files read\**\s*:\**\s*(\S.*)$""")
+    private val LINE = Regex("""(?im)^[\s>*_`#.\d)-]*files[ _-]read[\s*_`]*(?:\([^)\r\n]*\))?[\s*_`]*:[\s*_`]*(\S[^\r\n]*)$""")
     private val REPORTISH = Regex("""(?i)\b(sha|commit(ted)?)\b""")
 
     const val REFUSAL = "report refused: it has no 'Files read: <paths>' line. Add that line (the files you read, " +

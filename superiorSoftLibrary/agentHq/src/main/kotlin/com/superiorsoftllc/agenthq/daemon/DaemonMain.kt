@@ -754,6 +754,8 @@ class AgentHqDaemon(
             val childEnv = buildMap {
                 // BUG-G2: `agenthq knowledge` (P10-K9) must resolve inside every session, so the CLI's bin
                 // dir goes first on the child's PATH (and is exported as AGENTHQ_BIN).
+                // CLI-PATH-1: no launcher found = sessions get no `agenthq` on PATH; say so loudly instead of omitting it.
+                if (agentHqBin == null) System.err.println("[agentHq] WARNING: no agenthq CLI launcher found (set ${AgentHqBin.BIN_ENV}); spawned sessions will NOT have `agenthq` on PATH")
                 putAll(AgentHqBin.childEnv(agentHqBin))
                 // BUG-G2c: and the CLI must reach THIS daemon, not the default 8787 (AGENTHQ_URL; an inherited one wins).
                 putAll(AgentHqBin.urlEnv(host, boundPort))
