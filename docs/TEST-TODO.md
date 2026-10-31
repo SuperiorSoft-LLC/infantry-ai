@@ -57,3 +57,5 @@ TEST-TODO: WorktreeProvisionHook seam (worktree/WorktreeProvisionHook.kt). Behav
 TEST-TODO: STACK-NEUTRAL-5 (ticket-18370e32)
 - Start brief watch line: BoardRuntime.watchedPrograms() empty unless limits.watch.enabled=1 and limits.watch.forced=1; then the shimmed programs of the profiles in force. Check on a live project: watch on -> brief names the profile programs; watch off -> no WATCHED line.
 - BG_RUN_LINE no longer carries the Windows wrapper hint: put it in this project's knowledge/role notes (`agenthq memory save`): "On Windows run Gradle as gradlew.bat (./gradlew fails under agenthq bg run)".
+## DAEMON-STORAGE-1
+- Plugin storage (PluginStorageTest): prefix refusal (core table, join, comma list, schema-qualified, ATTACH/PRAGMA, two statements), adopt list official-only, `migrate` idempotent + failed migrate rolls back, `transaction` rollback, `storage` grant. Not tested: a real plugin jar calling api.storage through DaemonPluginHost, community adopt refusal at load, concurrent writers.

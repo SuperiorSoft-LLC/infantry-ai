@@ -57,6 +57,9 @@ interface DaemonServices {
     /** PACE-TREND-1: the plan meters (current readings); default: none. */
     val meters: com.superiorsoftllc.agenthq.daemon.api.usage.Meters get() = com.superiorsoftllc.agenthq.daemon.api.usage.NoMeters
 
+    /** DAEMON-STORAGE-1: the database handle behind `api.storage`; null = none (every call refuses). */
+    val storageHandle: com.superiorsoftllc.agenthq.db.AgentHQDatabaseHandle? get() = null
+
     companion object {
         /** No daemon behind it: empty lists, no config, the open policy. */
         val NONE: DaemonServices = object : DaemonServices {

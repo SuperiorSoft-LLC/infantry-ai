@@ -1543,6 +1543,8 @@ class AgentHqDaemon(
                         pluginSettings = settings.forPlugins(),
                         // PACE-TREND-1: api.meters, the current reading of every provider window (the cached live read).
                         meters = com.superiorsoftllc.agenthq.usage.PacingMeters(usagePacing),
+                        // DAEMON-STORAGE-1: api.storage, over the store's own handle (null for a non-SQL store).
+                        storageHandle = (store as? SqlAgentHqStore)?.handle,
                         // DP-4a: tickets / epics / board for plugins, over the board built above (host-applied policy and scope).
                         boardServices = com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardServices(
                             ops = { boardPorts.ops() }, sessions = { manager.list() }, link = { orchestratorHub.link },
