@@ -34,8 +34,9 @@ import kotlinx.serialization.Serializable
  * 1.4.0 (EFFORT-1, additive): [TicketInfo.effort] / [TicketInfo.effectiveEffort] (+ source, support); [TicketDraft.effort] / [TicketPatch.effort];
  *   [EffortLevels] (the shared level list and parser). Blank / `off` clears a ticket's effort on a patch.
  * 1.5.0 (DP-5b, additive): [Tickets.startNext] / [Tickets.startPrompt] (the unattended hand-outs a trigger makes) and [PromptStart].
+ * 1.6.0 (DP-5c, additive): [BoardHost], the port the board plugin asks of the host (storage, git, sessions, settings, clock).
  */
-const val BOARD_API_VERSION = "1.5.0"
+const val BOARD_API_VERSION = "1.6.0"
 
 const val GRANT_TICKETS_READ = "tickets.read"
 const val GRANT_TICKETS_WRITE = "tickets.write"

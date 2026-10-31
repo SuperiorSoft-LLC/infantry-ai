@@ -196,3 +196,34 @@ for the ticket's effective harness), all defaulted, so a plugin built on 1.1.0 i
 The pure shared rules `TicketRefs`, `TicketPlacement`, `TicketImages`, `ContextLimits`; `TicketDraft` / `TicketPatch.contextLimit`;
 `Tickets.mayFile(projectId, by)` (the scope's bare sentence, asked before a tool writes anything for a project). Infantry_Board's
 daemon half now serves `agenthq_ticket_create/update/move/delete` and `agenthq_epic_base`. See RUNTIME-LOAD.md section 10.
+
+## 9. DP-5c built (ticket 65094bfb): `BoardHost`, what the board plugin asks of the host (`BOARD_API_VERSION` 1.6.0, additive)
+
+`daemon.api.board.BoardHost` (file `BoardHost.kt`) is the reverse of `Tickets`/`Epics`/`Board`: those are what core offers a caller of the board, this is what the
+board needs from core once it moves (DP-5). Plain data in and out. Core binds it as `daemon/plugins/LocalBoardHost` over the existing classes; nothing consumes it yet.
+
+**Decision: one port, narrow members.** `BoardHost` carries `storage`, `git`, `sessions`, `settings` and `now()`; each member is its own small interface with
+no-board defaults (git and sessions refuse with a value, settings answer null; storage throws `UnsupportedOperationException`, a wiring bug). Several separate ports
+were rejected: the board needs the transaction, the clock and the event log TOGETHER (events are recorded inside the commit), a single handle is what the plugin
+receives from `DaemonPlugin`, and a test fakes one member by overriding it. A transaction handle (not a `DaemonApi.storage` generic SQL) keeps `TicketBoard`'s
+`store.transaction { ... }` shape: `storage.transaction { tickets.all(); links; events.record(...) }`, so the move changes imports and `store.tickets` -> `tickets`.
+
+| core class | what TicketBoard & co. call | port member |
+|---|---|---|
+| `AgentHqStore` | `transaction`, `writeTransaction` | `BoardStorage.transaction/writeTransaction { BoardTables }` |
+| `TicketRepository`/`TicketRow`/`TicketLinkRow` | create/update/get/all/delete/link/unlink/links | `TicketTable` over `StoredTicket`/`StoredLink` |
+| `TicketRunRepository`/`TicketRunRow` | insert/finish/byTicket | `TicketRunTable` over `StoredRun` |
+| `TicketEventLog` | `record(before, after, changed, deleted)` in the commit; `deliver()` after | `TicketEventAppender.record/deliver` |
+| `TicketBranches` | `ensure`, `resolveBase` | `BoardGit.ensureBranch/resolveBase` (`BranchRequest`/`BranchOutcome`) |
+| `TicketBaseRef` | `choose(BaseScope)` | `BoardGit.baseRef(projectId, epicId)` -> `BaseChoice` |
+| `projectDirectory` lambda, `repo: File`, `SessionManager.projectFolders` | NOGIT-1 folder lookup | `BoardGit.projectDirectory/defaultRepo/projectFolders` |
+| `SessionManager.startNew` | spawn for ticket / unattended prompt | `BoardSessions.start(SessionStart)` -> `SessionStartResult` |
+| `checkSpawn`, `launchCheck`/`GateDecision` | pre-start checks | `BoardSessions.checkSpawn`, `launchGate` -> `LaunchVerdict` |
+| `SessionManager.get/list/kill/delete` | worker health, reaping | `BoardSessions.get/list/kill/remove` (`SessionView`) |
+| `SettingsRepository` | exitBehavior etc. are lambdas the daemon feeds | `BoardSettings.get(key)` |
+| `clock: () -> Long` | stamps | `BoardHost.now()` |
+
+**Not in the port (left for DP-5, each noted):** `AgentProfiles` (`instanceFor`, `executorFor`, `resolveAssignment`) and `RoleInstance`/`withSkills` -- the board renders the first
+turn from the resolved instance; a plugin needs the agents port (`daemon.api.agents`) extended, or the host resolves the instance inside `BoardSessions.start` (the
+`instanceFor` chokepoint already exists). `KnowledgeCounter`/`SkillsSource`/`TicketImages`/`RelatedDescription`/`TicketContext` are lambdas/ports the daemon injects; they
+move with the board. `WeightExecutors`, `RoutingRules`, `PacingVerdict` come from settings/usage: read through `BoardSettings` + usage port later. No frame or refusal text changes.
