@@ -28,3 +28,4 @@
 ## DP-5h-3a2 (ticket-d760d11c): story / epic inputs
 - TEST-TODO: with DP-5h-3b flipping `coreBuiltBoard`, the plugin-built board answers story_* shims, epic_save/epic_list/epic_base, and the RELATED block on ticket_save like core (an unknown project's refusal text may differ from ProjectStore.get).
 - DP-5h-3b (partial): with the board present, a worker's turn end still records its ticket outcome (events now pass through SwapFeed -> LocalBoardHost.publish). Not yet: early plugin host / board-less daemon (see report).
+- DP-5h-3c: boot the real daemon with the board plugin; confirm the host loads before session restore (log order), events during a plugin reload are delivered in order after re-attach, and a reload re-adopts running workers (sweep + queue marks). Detach/attach on reload is only unit-tested (BoardSeamTest); no reload entry point exists in DaemonPluginHost yet.

@@ -1528,10 +1528,13 @@ class AgentHqDaemon(
                 val push = com.superiorsoftllc.agenthq.usagemeter.PushDebounce { val f = Envelope(Envelope.USAGE_METER, m.reportJson()); for (c in clients) c.trySend(f) }
                 m.onRecorded = push::poke
             }
-            // DP-5h-3b: session events reach the board through a SwapFeed, so events during a plugin attach / reload are
-            // queued (drop-oldest, bounded), not lost; attached to the board's host now, a reload re-attaches it.
-            val boardFeed = SwapFeed<com.superiorsoftllc.agenthq.session.SessionEvent>()
-            board.localHost?.let { host -> boardFeed.attach { e -> host.publish(e) } }
+            // DP-5h-3b/3c: session events reach the board through the BoardSeam (a SwapFeed): events during a plugin attach /
+            // reload are queued (drop-oldest, bounded), not lost. The board attaches to it below, once, before the host loads.
+            val boardSeam = com.superiorsoftllc.agenthq.daemon.BoardSeam<com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardHost, com.superiorsoftllc.agenthq.session.SessionEvent>({ h, e -> h.publish(e) })
+            // First attach: no re-adopt (BoardWiring already cleared the marks; the sweep waits for session restore). A plugin RELOAD attaches with
+            // [reAdopt] (clearQueueMarks + sweepWorkers) after detaching.
+            board.localHost?.let { host -> boardSeam.attach(host) }
+            val reAdopt: () -> Unit = { board.clearQueueMarks(); board.sweepWorkers(LimitRegistry.minutesMs(settings.limit(LimitRegistry.UNBRIEFED_GRACE_MINUTES), LimitRegistry.UNBRIEFED_GRACE_MINUTES)) { _, _, _ -> } }
             manager.eventSink = { event ->
                 broadcast(clients, event, streamSequencer, runActivity, { id, seconds ->
                     // A `sleep N` in a tool call becomes a "waiting" countdown; the call returning (or the agent moving on) ends it.
@@ -1551,7 +1554,7 @@ class AgentHqDaemon(
                 // USAGE-1: the usage meter (own package, own file); the seam is these three lines plus its frame below.
                 usageMeter?.onSessionEvent(event, manager::get)
                 // FOURTH ARM: ticket outcomes are durable, then a freed profile lane is drained.
-                boardFeed.emit(event)
+                boardSeam.emit(event)
                 // Story 9.5: a trigger's run ends with its session's run.
                 triggers.onSessionEvent(event)
                 // TRAITS-T6: LAST, so the board and the triggers have recorded the run's end before a re-prompt mail
@@ -1573,31 +1576,7 @@ class AgentHqDaemon(
             )
             println("[agentHq] harnesses: ${harnesses.harnessIds().ifEmpty { listOf("<none>") }.joinToString()}")
             println("[agentHq] contract=agenthq/${EventVocabulary.VERSION} (see CONTRACT.md)")
-            println("[agentHq] reconcile: ${manager.loadAndReconcile()}")
-            worktrees.reconcile(manager.list().mapNotNull { it.toWorktreeRef() })
-
-            // Phase 5b -- CRASH RECOVERY, in this order and explicitly, before the port opens.
-            //
-            // 1. `recoverAfterCrash` closes every RUN that was still in flight when the previous daemon
-            //    died, as ORPHANED with a terminal `finished(ORPHANED)` appended to its log.
-            // 2. `Orchestrator.recover` then reconciles the PODS those runs belonged to: a RUNNING
-            //    node FAILED, a PENDING one SKIPPED, and the pod itself INTERRUPTED.
-            //
-            // Crash recovery FIRST, deliberately. A pod interrupted mid-flight must have its runs
-            // reconciled before the orchestrator decides what to do with the pod that owns them,
-            // otherwise the pod would be judged against runs that still claim to be running.
-            //
-            // This is the reviewed change the earlier ruling asked for, so it is spelled out at the
-            // call site rather than hidden in a helper: opening a SQLite file during production
-            // startup is a real, deliberate act and its ordering is part of the contract.
-            val now = System.currentTimeMillis()
-            val recoveredRuns = store.recoverAfterCrash(now)
-            val recoveredPods = orchestrator.recover(now)
-            println(
-                "[agentHq] recovery: runs=${recoveredRuns.size} pods=${recoveredPods.size} " +
-                    "(runs closed ORPHANED, open pods INTERRUPTED)",
-            )
-
+            // DP-5h-3c: the plugin host loads here, BEFORE session restore (and before the first frame); the board services take lazy refs.
             // COPY-1: the session cap's refusal text is the active preset's (read per refusal, so a switch applies at once).
             manager.sessionCapText = { policies.current.sessionCapText }
             // DAEMON-PLUGINS-1: a plugin's first turn into a never-run session is composed like a client's first message.
@@ -1670,9 +1649,9 @@ class AgentHqDaemon(
                         ).also { pluginBoardServices = it; triggerTickets = it.tickets },
                         ticketEventStream = ticketEvents,
                         // DP-5h-3a: the board runtime (core still builds the board through BoardWiring until DP-5h-3b).
-                        boardRuntimeService = board.localHost?.let { localHost ->
+                        boardRuntimeService = boardSeam.host?.let { _ ->
                             com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardRuntime(
-                                host = localHost, store = store, settings = settings, projectStore = projectStore, roles = roles,
+                                hostSource = boardSeam::require, store = store, settings = settings, projectStore = projectStore, roles = roles,
                                 pacingCheck = { providerId, model ->
                                     val pid = providerId ?: manager.providers.firstOrNull()?.id ?: com.superiorsoftllc.agenthq.daemon.api.usage.UsageMeters.CLAUDE
                                     usagePacing.check(com.superiorsoftllc.agenthq.daemon.api.usage.UsageMeters.meterFor(pid, model ?: manager.providerFor(pid)?.defaultModel()))
@@ -1777,6 +1756,31 @@ class AgentHqDaemon(
                 harnessModulesRef.set(harnessModules)
             }
             val plugins = pluginHost.get()
+            println("[agentHq] reconcile: ${manager.loadAndReconcile()}")
+            worktrees.reconcile(manager.list().mapNotNull { it.toWorktreeRef() })
+
+            // Phase 5b -- CRASH RECOVERY, in this order and explicitly, before the port opens.
+            //
+            // 1. `recoverAfterCrash` closes every RUN that was still in flight when the previous daemon
+            //    died, as ORPHANED with a terminal `finished(ORPHANED)` appended to its log.
+            // 2. `Orchestrator.recover` then reconciles the PODS those runs belonged to: a RUNNING
+            //    node FAILED, a PENDING one SKIPPED, and the pod itself INTERRUPTED.
+            //
+            // Crash recovery FIRST, deliberately. A pod interrupted mid-flight must have its runs
+            // reconciled before the orchestrator decides what to do with the pod that owns them,
+            // otherwise the pod would be judged against runs that still claim to be running.
+            //
+            // This is the reviewed change the earlier ruling asked for, so it is spelled out at the
+            // call site rather than hidden in a helper: opening a SQLite file during production
+            // startup is a real, deliberate act and its ordering is part of the contract.
+            val now = System.currentTimeMillis()
+            val recoveredRuns = store.recoverAfterCrash(now)
+            val recoveredPods = orchestrator.recover(now)
+            println(
+                "[agentHq] recovery: runs=${recoveredRuns.size} pods=${recoveredPods.size} " +
+                    "(runs closed ORPHANED, open pods INTERRUPTED)",
+            )
+
             // ORCH-1: `AGENTHQ_ORCHESTRATOR_PROVIDER` (default local) picks the binding callers' link answers from; a plugin offers
             // bindings through hooks.orchestratorBinding. An unknown or failing provider keeps the local binding and is logged.
             (orchestratorBindings + plugins.orchestratorBindings()).forEach { (id, binding) -> runCatching { orchestratorHub.register(id, binding) } }
