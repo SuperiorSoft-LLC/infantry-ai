@@ -53,3 +53,40 @@ Jump period ~100 min: no timer has a 100 min period. 30 min x 3 = 90, 60 + 30 + 
 Top suspect: the 30-min trigger waking the PM with no work to do (48 full-context turns/day, each a large cache read plus tool calls). One-line fix: make the `prompt` trigger skip delivery when the PM has no unread mail and no ticket is In Progress or To Do-ready (or lengthen to 60 min+ only if skipping is unwanted; avoid exactly 60, the TTL edge).
 
 TEST-TODO: with no ticket running and no mail, let a 30-min prompt trigger fire; confirm no mail is delivered and the event is recorded as skipped; with an In Progress ticket confirm it still delivers.
+
+## PER-COMMIT (TOKEN-13, 2026-10-31)
+
+Method (static, deterministic, no model calls, no Gradle, no app launch): for each of the 49 first-parent merges on feature-agenthq-mvp from 2026-10-30 12:00 (54070dd3 .. 8cabc40b) read the tree with `git show <c>:<path>` and measured (script in /tmp, not committed):
+- **tools**: `agenthq_*` tools declared in `plugins/official/*/module.json` (core `McpWatchTools` is the rest).
+- **schema chars**: characters of the string literals on name/description/schema lines (`description`, `type`, `enum`, `putJsonObject`, tool names) in tool-defining Kotlin (`plugins/official/*/daemon/**`, `cli/mcp`). A proxy for the text the model receives each turn; it is not the serialised `tools/list`.
+- **brief chars**: NOT measured per commit (rendering needs the runtime knowledge store and a fake ticket, i.e. Gradle test per commit). Proxy: size of `TicketBoard.brief()` = 586 chars at every commit (constant); `TicketBoard.kt` grew 107.4k -> 112.5k chars (brief inputs such as KNOWLEDGE-PTR-2 related tickets).
+- **response chars**: NOT measured (needs a running board). Read from diffs instead: TOKEN-1 (91413e24) cut them (board compact: done 5, backlog/todo 10 lines; session tail 50 -> 5 lines, line cap 300).
+
+| commit | tools (module.json) | schema chars (proxy) | brief fn chars | note |
+|---|---|---|---|---|
+| 54070dd3 (first) | 23 | 8023 | 586 | |
+| 32ebaa3d | 23 | 8246 (+223) | 586 | |
+| 5e2715f2 | 27 | 8777 (+531) | 586 | tools moving core -> plugins (same total surface) |
+| dc9f39b6 | 31 | 8995 (+218) | 586 | |
+| 17adcd5f | 37 | 8352 (-643) | 586 | |
+| 30ed6fbf | 38 | 8625 (+273) | 586 | |
+| ba830e0e | 38 | 8761 (+136) | 586 | |
+| 5d13d537 (RUNTIME-LOAD-8) | 43 | 8548 (-213) | 586 | last tool move |
+| **b55952c3 (TOKEN-1)** | 43 | **9643 (+1095)** | 586 | new `limit`/`columns` params + longer descriptions on board and list_sessions |
+| 8cabc40b (tip) | 43 | 9643 | 586 | unchanged to the tip |
+
+All other merges: unchanged in every column.
+
+### Result
+- **Largest jump: b55952c3 (TOKEN-1), schema +1095 chars (+14%, ~270 tokens per turn, prompt-cached).** The diff lines: `putJsonObject("columns")`, `putJsonObject("limit")` (board) and `put("description", "At most this many sessions ...")` (list_sessions), plus longer `agenthq_board` description. It buys smaller responses, so the net is expected to be a saving; it is the only tool-surface growth in the window.
+- Tool count 23 -> 43 in module.json is migration, not growth: the same tools used to be declared in core Kotlin.
+- Nothing in the static surface explains a +0.6%/h burn (270 cached tokens per turn is negligible beside a 50k+ context).
+- No first-turn brief or system-prompt jump visible in code (brief function constant). Not proven: brief CONTENT (knowledge digest, related files, role persona) is data-dependent and was not rendered.
+
+### What is left (live behaviour, needs measurement not code reading)
+1. Turns per ticket and tokens per turn by role, 12-18h vs 18h-now (TOKEN-9 logging).
+2. Retries/loops: stall nudges, trigger wakes (TRIGGER-FOOTER-1 adds a `read` call per wake), bg-job notices.
+3. Rendered brief size per role with real knowledge store (one Gradle test, current tip only).
+4. Cache misses: anything that changes the prompt prefix each turn.
+
+TEST-TODO: render the start brief for pm / version-control / backend at the tip with a fixed fake ticket and record chars; compare `tools/list` serialised length at 54070dd3 vs tip.
