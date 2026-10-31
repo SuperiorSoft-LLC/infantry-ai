@@ -355,25 +355,3 @@ class LocalBoardHost(
         const val ORIGIN_UNATTENDED = "unattended"
     }
 }
-
-/** DP-5f-3a: the TicketRow <-> StoredTicket adapter, shared with `TicketBoard`. */
-internal fun StoredTicket.toRow() = TicketRow(
-    id = id, title = title, description = description, ticketType = ticketType, status = status, position = position,
-    wontFix = wontFix, createdAt = createdAt, updatedAt = updatedAt, agentId = agentId, provider = provider, model = model,
-    useWorktree = useWorktree, worktreeBranch = worktreeBranch, includeLinkedTasksContext = includeLinkedTasksContext,
-    queuedFor = queuedFor, queuedAt = queuedAt, sessionId = sessionId, projectId = projectId, epicId = epicId, branch = branch,
-    base = base, skillIds = skillIds, skillsMode = skillsMode, includeSkillsContext = includeSkillsContext, startedBy = startedBy,
-    images = images, weight = weight, contextLimit = contextLimit, effort = effort,
-)
-
-internal fun TicketRow.toStored() = StoredTicket(
-    id = id, title = title, description = description, ticketType = ticketType, status = status, position = position,
-    wontFix = wontFix, createdAt = createdAt, updatedAt = updatedAt, agentId = agentId, provider = provider, model = model,
-    useWorktree = useWorktree, worktreeBranch = worktreeBranch, includeLinkedTasksContext = includeLinkedTasksContext,
-    queuedFor = queuedFor, queuedAt = queuedAt, sessionId = sessionId, projectId = projectId, epicId = epicId, branch = branch,
-    base = base, skillIds = skillIds, skillsMode = skillsMode, includeSkillsContext = includeSkillsContext, startedBy = startedBy,
-    images = images, weight = weight, contextLimit = contextLimit, effort = effort,
-)
-
-internal fun StoredLink.toRow() = TicketLinkRow(ticketId, relatedId, type, createdAt)
-internal fun TicketLinkRow.toStored() = StoredLink(ticketId, relatedId, type, createdAt)

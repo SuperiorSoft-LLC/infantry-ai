@@ -138,7 +138,7 @@ fun TicketBoard(
     relatedDescription: RelatedDescription = RelatedDescription.NONE,
 ): TicketBoard = TicketBoard(
         host = LocalBoardHost(store, { sessions }, branches, baseRef, projectDirectory, repo, { null }, clock, agents, knowledge, skills, images),
-        clock = clock, idFactory = idFactory, context = context, agents = agents, roleIds = roleIds, exitBehavior = exitBehavior, autoDoneMinOutputs = autoDoneMinOutputs, weightExecutors = weightExecutors, weightContext = weightContext, laneCap = laneCap, routingRules = routingRules, routingRefused = routingRefused, pacing = pacing, relatedDescription = relatedDescription,
+        clock = clock, idFactory = idFactory, context = context, profilesAvailable = agents != null, roleIds = roleIds, exitBehavior = exitBehavior, autoDoneMinOutputs = autoDoneMinOutputs, weightExecutors = weightExecutors, weightContext = weightContext, laneCap = laneCap, routingRules = routingRules, routingRefused = routingRefused, pacing = pacing, relatedDescription = relatedDescription,
         unknownSkills = { ids -> store.transaction { ids.filter { store.skills.get(it) == null } } },
 )
 

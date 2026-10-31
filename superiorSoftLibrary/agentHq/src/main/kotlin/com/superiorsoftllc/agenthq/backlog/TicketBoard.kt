@@ -7,7 +7,6 @@ import com.superiorsoftllc.agenthq.settings.WeightExecutor
 import com.superiorsoftllc.agenthq.settings.WeightExecutors
 import com.superiorsoftllc.agenthq.usage.GateDecision
 import com.superiorsoftllc.agenthq.usage.LaunchOrigin
-import com.superiorsoftllc.agenthq.agents.AgentProfiles
 import com.superiorsoftllc.agenthq.agents.KnowledgeCounter
 import com.superiorsoftllc.agenthq.agents.SkillsSource
 import com.superiorsoftllc.agenthq.agents.firstTurn
@@ -16,7 +15,6 @@ import com.superiorsoftllc.agenthq.context.ContextInput
 import com.superiorsoftllc.agenthq.context.LinkLine
 import com.superiorsoftllc.agenthq.context.ReportTo
 import com.superiorsoftllc.agenthq.context.TicketContext
-import com.superiorsoftllc.agenthq.persistence.AgentHqStore
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardAgent
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardHost
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardSessionDetail
@@ -124,7 +122,7 @@ class TicketBoard(
     private val clock: () -> Long = System::currentTimeMillis,
     private val idFactory: () -> String = { "ticket-" + UUID.randomUUID().toString().take(8) },
     private val context: TicketContext = TicketContext.NONE,
-    private val agents: AgentProfiles? = null,
+    private val profilesAvailable: Boolean = false,
     /**
      * BUG-ASSIGN-1: the role ids a ticket may name (the daemon passes its live catalog), listed in the refusal of a
      * role that is not one, so the agent that sent a display name ("Backend Developer") can send the id instead.
@@ -310,7 +308,7 @@ class TicketBoard(
     @Synchronized
     fun startPromptUnattended(agentId: String, prompt: String, projectId: String? = null): PromptLaunch {
         if (!host.sessions.available()) return PromptLaunch.Refused("ticket session manager is unavailable")
-        val profiles = agents ?: return PromptLaunch.Refused("agent profiles are unavailable")
+        if (!profilesAvailable) return PromptLaunch.Refused("agent profiles are unavailable")
         val assignment = resolveAssignment(agentId)
         assignment.refusal?.let { return PromptLaunch.Refused(it) }
         if (assignment.busy) return PromptLaunch.Refused("profile lane '${assignment.queueLane}' is at capacity")
@@ -724,8 +722,7 @@ class TicketBoard(
         }
 
         if (!host.sessions.available()) return refusedStart(initialTicket, "ticket session manager is unavailable")
-        val profiles = agents
-            ?: return refusedStart(initialTicket, "agent profiles are unavailable")
+        if (!profilesAvailable) return refusedStart(initialTicket, "agent profiles are unavailable")
         // ROUTING-1: the project's first matching rule (none when the ticket pins its own provider / model or the project
         // has no rules). Its setRole is the role of a ticket that has none; it never replaces the ticket's own.
         val rule = routingChoice(row)
@@ -1075,7 +1072,7 @@ class TicketBoard(
         val ticketId = session.ticketId?.takeIf { it.isNotBlank() } ?: return null
         val snapshot = store.transaction { load() }
         val row = snapshot.rows[ticketId] ?: return null
-        val reportTo = row.startedBy?.let { starter -> agents?.let { reportTo(starter) } }
+        val reportTo = row.startedBy?.let { starter -> reportTo(starter).takeIf { profilesAvailable } }
         return context.compose(briefInput(row, snapshot, session.role, session.agentId, host.sessions.instance(session.id), reportTo)).prompt
     }
 
@@ -1362,7 +1359,7 @@ class TicketBoard(
      * project allows is removed. The role's first agent is never removed, and nothing running is touched.
      */
     private fun pruneIdleClones(role: String) {
-        if (agents == null || !sessionsOn) return
+        if (!profilesAvailable || !sessionsOn) return
         val matching = host.agents.list().filter { it.role == role }
         val original = matching.firstOrNull() ?: return
         val cap = maxOf(1, laneCap(original.projectId, role))
@@ -1475,7 +1472,7 @@ class TicketBoard(
      * One operation: load, apply [op], settle the derived column, renumber, stamp, write -- all in one
      * transaction, so a refusal thrown by [op] (or a failed write) leaves the database as it was.
      *
-     * A WRITE-FIRST transaction ([AgentHqStore.writeTransaction], BUG-BoardCommitImmediate): it reads the whole
+     * A WRITE-FIRST transaction (`AgentHqStore.writeTransaction`, BUG-BoardCommitImmediate): it reads the whole
      * board and then writes, so as a deferred transaction any other writer (a trigger, a usage row, the
      * orchestrator) committing between that read and the write aborted it with SQLITE_BUSY_SNAPSHOT, which
      * busy_timeout does not cover. Holding the lock from the start makes that writer wait instead.
