@@ -30,7 +30,6 @@ import com.superiorsoftllc.agenthq.ui.model.AgentView
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import com.superiorsoftllc.agenthq.ui.model.AppState
@@ -111,13 +110,13 @@ private fun PlanLimits(state: AppState, now: Long, onRefresh: (() -> Unit)?) {
         limits?.let { LimitsView.observedAt(it) }?.let { Text("updated ${ago(it, now)} ago", color = Palette.Muted, fontSize = 10.sp) }
         if (onRefresh != null) {
             Spacer(Modifier.width(6.dp))
-            Box(
-                Modifier.clip(RoundedCornerShape(4.dp))
-                    .clickable(enabled = state.connection.isLive, onClickLabel = "Refresh plan limits", role = Role.Button, onClick = onRefresh)
-                    .semantics { contentDescription = "Refresh plan limits" }
-                    .testTag("limits-refresh")
-                    .padding(horizontal = 4.dp),
-            ) { Text("Refresh", color = if (state.connection.isLive) Palette.Text else Palette.Muted, fontSize = 13.sp) }
+            IconAction(
+                AhqIcons.Refresh, "Refresh",
+                onClick = onRefresh,
+                enabled = state.connection.isLive,
+                modifier = Modifier.testTag("limits-refresh"),
+                compact = true,
+            )
         }
     }
     when {

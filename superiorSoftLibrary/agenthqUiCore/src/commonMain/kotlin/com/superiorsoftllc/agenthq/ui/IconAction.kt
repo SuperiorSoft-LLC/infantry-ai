@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
@@ -62,6 +63,7 @@ var SemanticsPropertyReceiver.iconActionTooltip by IconActionTooltip
 const val ICON_ACTION_TOOLTIP_TAG = "icon-action-tooltip"
 
 private val IconOnlyPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+private val CompactPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
 private val IconAndTextPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -78,16 +80,19 @@ fun IconAction(
     text: String? = null,
     textColor: Color = Color.Unspecified,
     fontSize: TextUnit = 12.sp,
+    /** Side-panel headers only: small padding, 14dp icon, no minimum button size. Default false = unchanged look. */
+    compact: Boolean = false,
 ) {
     IconActionTooltipBox(label, shortcut, modifier, describe = text == null) { buttonModifier ->
         val content: @Composable RowScope.() -> Unit = {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
+            Icon(icon, contentDescription = null, modifier = Modifier.size(if (compact) 14.dp else 18.dp))
             if (text != null) {
                 Spacer(Modifier.width(6.dp))
                 Text(text, color = textColor, fontSize = fontSize)
             }
         }
-        val padding = if (text == null) IconOnlyPadding else IconAndTextPadding
+        val padding = if (compact) CompactPadding else if (text == null) IconOnlyPadding else IconAndTextPadding
+        val buttonModifier = if (compact) buttonModifier.defaultMinSize(minWidth = 1.dp, minHeight = 1.dp) else buttonModifier
         when (style) {
             IconActionStyle.FILLED -> Button(onClick, buttonModifier, enabled, colors ?: ButtonDefaults.buttonColors(), padding, content)
             IconActionStyle.OUTLINED -> OutlinedButton(onClick, buttonModifier, enabled, colors ?: ButtonDefaults.outlinedButtonColors(), padding, content)
