@@ -2533,7 +2533,7 @@ private suspend fun handleConnection(
 ) {
     println("[agentHq] ws connected (provider=${manager.providerId})")
     // DP-5d: the board-family frames, registered by their owner; the loop below only looks them up.
-    val frames = FrameTable().also { boardWiring?.let { w -> registerBoardFrames(it, w.board, manager, spawnGuard, projects, workspaceFrames, epicFrames, w.stories, w.storyBoard) } }
+    val frames = FrameTable().also { com.superiorsoftllc.agenthq.backlog.registerCoreProjectFrames(it, projects, workspaceFrames) }.also { boardWiring?.let { w -> registerBoardFrames(it, w.board, manager, spawnGuard, epicFrames, w.stories, w.storyBoard) } }
     // SEC-FIX-1: decided once, at the handshake, from what this connection presented.
     val owner = ownerCredential?.presentedBy(
         session.call.request.headers[OwnerCredential.HEADER],

@@ -55,6 +55,15 @@ class LocalSpawns(
 ) : Spawns {
     private val lock = Any()
 
+    /** DP-5h-2: the guard's admit / charge behind the minimal port. */
+    override val charge: com.superiorsoftllc.agenthq.daemon.api.spawns.SpawnCharge = object : com.superiorsoftllc.agenthq.daemon.api.spawns.SpawnCharge {
+        override fun isSession(sessionId: String) = sessions().any { it.id == sessionId }
+        override fun <T> admitIf(origin: String?, charged: Boolean, create: (placed: Boolean) -> T): T =
+            guard.admitIf(origin, charged) { placement -> create(placement != null) }
+        override fun record(sessionId: String, origin: String?) = guard.record(sessionId, origin)
+        override fun setSpawner(sessionId: String, spawnerId: String?) = this@LocalSpawns.setSpawner(sessionId, spawnerId)
+    }
+
     /** The spawns of owner connections without a session, per client key (one `agenthq mcp serve` process each). */
     private val ownerSpawns = ConcurrentHashMap<String, MutableSet<String>>()
 
@@ -269,6 +278,7 @@ class LocalSpawns(
 
 /** RUNTIME-LOAD-6: [Spawns] behind a plugin's grants (bundled / official trusted; community needs `sessions.spawn`, default deny). */
 internal class GrantedSpawns(private val spawns: () -> Spawns, private val allowed: (String) -> Boolean) : Spawns {
+    override val charge get() = if (allowed(GRANT_SPAWNS)) spawns().charge else com.superiorsoftllc.agenthq.daemon.api.spawns.NoSpawnCharge
     private inline fun <T> need(call: () -> SessionsResult<T>): SessionsResult<T> =
         if (allowed(GRANT_SPAWNS)) call() else SessionsResult.Refused("missing grant '$GRANT_SPAWNS' in modules.json")
 

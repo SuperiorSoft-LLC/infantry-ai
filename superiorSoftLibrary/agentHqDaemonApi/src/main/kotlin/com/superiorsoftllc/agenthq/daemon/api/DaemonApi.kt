@@ -93,6 +93,7 @@ interface DaemonApi {
     val meters: com.superiorsoftllc.agenthq.daemon.api.usage.Meters get() = com.superiorsoftllc.agenthq.daemon.api.usage.NoMeters
 
     companion object {
+        // 1.11.0 (DP-5h-2, additive): `spawns.charge` (SpawnCharge) and `frames.table` (FrameBinding: typed frames with the direct flag).
         // 1.10.0 (PACE-TREND-1, additive): `meters` (daemon.api.usage.Meters), the current reading of every provider window.
         // 1.9.0 (RUNTIME-LOAD-7, additive): `ToolCall.clientNarrowing` (the MCP client's depth / spawn narrowing).
         // 1.8.0 (STACK-NEUTRAL-2, additive): `processes`, `launchEnv`, `settings` (daemon.api.processes).
@@ -101,7 +102,7 @@ interface DaemonApi {
         // 1.5.0 (AGENT-REGISTRY-1, additive): `agents` (daemon.api.agents.Agents) and module.json `agents`.
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
-        const val VERSION = "1.10.0"
+        const val VERSION = "1.11.0"
     }
 }
 
@@ -257,6 +258,20 @@ interface Tools {
 interface Frames {
     /** Answers client frames of [type] (declared in `daemon.frames`); return null for no direct answer. */
     fun handle(type: String, handler: (Frame, Caller) -> Frame?)
+
+    /**
+     * DP-5h-2 (1.11.0, additive): register the frame table of one owner (the DP-5d board frames) with typed envelopes: the same type
+     * strings, the same gates (policy, owner, plugin) in the same order, and the `direct` flag (the request carried a `requestId`,
+     * BUG-MCP-RACE-1) the table's handlers take. With no plugin registering a board family type the daemon answers
+     * `<type> refused: this daemon has no board`, as before.
+     */
+    val table: FrameBinding get() = FrameBinding { types, handler -> for (t in types) handle(t) { f, _ -> handler(f, f.requestId != null) } }
+}
+
+/** DP-5h-2: register a handler for every one of [types]; [handler] gets the frame and whether it is `direct`. */
+fun interface FrameBinding {
+    fun register(types: List<String>, handler: (frame: Frame, direct: Boolean) -> Frame?)
+    fun register(vararg types: String, handler: (frame: Frame, direct: Boolean) -> Frame?) = register(types.toList(), handler)
 }
 
 data class HttpCall(

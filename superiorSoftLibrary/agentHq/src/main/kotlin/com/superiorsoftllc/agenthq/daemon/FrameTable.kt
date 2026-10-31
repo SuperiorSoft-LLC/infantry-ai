@@ -19,13 +19,17 @@ class FrameTable {
     fun answer(envelope: Envelope, direct: Boolean): Envelope? = handlers.getValue(envelope.type)(envelope, direct)
 }
 
-/** The board-family frames a daemon answers only when a board registered them. */
+/** The board-owned frames a daemon answers only when a board registered them. */
 object BoardFrames {
     val TYPES: Set<String> = setOf(
         Envelope.TICKET_SAVE, Envelope.TICKET_GET, Envelope.TICKET_LIST, Envelope.TICKET_MOVE, Envelope.TICKET_LINK,
         Envelope.TICKET_UNLINK, Envelope.TICKET_REORDER, Envelope.TICKET_DELETE, Envelope.TICKET_START_NEXT,
         Envelope.STORY_SAVE, Envelope.STORY_GET, Envelope.STORY_MOVE, Envelope.STORY_LIST,
         Envelope.EPIC_SAVE, Envelope.EPIC_LIST, Envelope.EPIC_BASE,
+    )
+
+    /** DP-5h-2: project and workspace frames are core's, registered by core (see `registerCoreProjectFrames`), never board-owned. */
+    val CORE_PROJECT_TYPES: Set<String> = setOf(
         Envelope.PROJECT_SAVE, Envelope.PROJECT_GET, Envelope.PROJECT_LIST, Envelope.PROJECT_BASE, Envelope.PROJECT_CONFIG,
         Envelope.WORKSPACE_SAVE, Envelope.WORKSPACE_LIST,
     )
