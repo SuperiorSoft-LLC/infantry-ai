@@ -282,3 +282,8 @@ One additive member: `BoardSessions.available()` (default false; `LocalBoardHost
 `start` / `kill` / `detail` / `remove`. Core-only helpers it used moved board-side (`BoardSessionFacts.kt`: state-name constants, `BoardRunOutcomes`,
 `BoardWorkerHealth`). The store-backed constructor became the function `TicketBoard(store, ...)` in `TicketBoardStores.kt` (core side), with the
 extension `TicketBoard.localHost`.
+
+## 15. DP-5h-2 (DaemonApi 1.11.0, additive): board frames for a plugin
+- `api.spawns.charge` (`SpawnCharge`): the SpawnGuard / TicketStartCharge admit + charge semantics as a port. `isSession(id)`, `admitIf(origin, charged) { placed -> ... }` (checks depth and pod cap, throws a refusal, else runs the create under the guard's lock), `record(worker, origin)`, `setSpawner(worker, spawner)`. Default `NoSpawnCharge` (charges nothing, create just runs). A community plugin needs the `sessions.spawn` grant, else it gets `NoSpawnCharge`.
+- `api.frames.table` (`FrameBinding.register(types..., handler(frame, direct))`): registers the DP-5d table with the same type strings; `direct` = the frame carried a `requestId`. The gates (policy, owner, plugin) are unchanged; a board-owned type nobody registered answers `<type> refused: this daemon has no board`.
+- Project and workspace frames are core's: `BoardFrames.CORE_PROJECT_TYPES`, registered by `registerCoreProjectFrames` whether or not a board is wired; no longer in `BoardFrames.TYPES`. Board frames need no project facts beyond `api.projects`, so no extra read port was added. Behaviour change: a no-board daemon now answers project / workspace frames instead of the no-board refusal.

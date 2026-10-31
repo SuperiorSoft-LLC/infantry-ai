@@ -22,14 +22,12 @@ import kotlinx.serialization.json.Json
 
 private val boardJson = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
-/** Registers every board-family frame (tickets, stories, epics, projects, workspaces) into [frames]. */
+/** Registers every board-family frame (tickets, stories, epics) into [frames]. */
 fun registerBoardFrames(
     frames: FrameTable,
     board: TicketBoard,
     manager: SessionManager,
     spawnGuard: SpawnGuard,
-    projects: ProjectHandler,
-    workspaces: WorkspaceHandler,
     epics: EpicHandler,
     stories: StoryHandler,
     storyBoard: BoardHandler,
@@ -67,6 +65,14 @@ fun registerBoardFrames(
     frames.register(Envelope.TICKET_DELETE) { e, direct -> boardRequest(e.type) { board.delete(e.data).reply(direct) } }
     frames.register(Envelope.TICKET_START_NEXT) { e, direct -> boardRequest(e.type) { board.startNext().reply(direct) } }
 
+    // EPIC-4 / BASE-1c: a project's epics, and `epic_base` over the epic's project.
+    frames.register(Envelope.EPIC_SAVE, Envelope.EPIC_LIST, Envelope.EPIC_BASE) { e, _ -> epics.answer(e) }
+    frames.register(Envelope.STORY_SAVE, Envelope.STORY_GET, Envelope.STORY_MOVE) { e, _ -> stories.answer(e) }
+    frames.register(Envelope.STORY_LIST) { e, _ -> storyBoard.answer(e) }
+}
+
+/** DP-5h-2: project and workspace frames are core's: registered whether or not a board is wired. */
+fun registerCoreProjectFrames(frames: FrameTable, projects: ProjectHandler, workspaces: WorkspaceHandler) {
     frames.register(
         Envelope.PROJECT_SAVE, Envelope.PROJECT_GET, Envelope.PROJECT_LIST,
         // BASE-1a (contract 1.81.0): read, set or clear a project's base branch.
@@ -74,10 +80,6 @@ fun registerBoardFrames(
         Envelope.PROJECT_CONFIG,
     ) { e, _ -> projects.answer(e) }
     frames.register(Envelope.WORKSPACE_SAVE, Envelope.WORKSPACE_LIST) { e, _ -> workspaces.answer(e) }
-    // EPIC-4 / BASE-1c: a project's epics, and `epic_base` over the epic's project.
-    frames.register(Envelope.EPIC_SAVE, Envelope.EPIC_LIST, Envelope.EPIC_BASE) { e, _ -> epics.answer(e) }
-    frames.register(Envelope.STORY_SAVE, Envelope.STORY_GET, Envelope.STORY_MOVE) { e, _ -> stories.answer(e) }
-    frames.register(Envelope.STORY_LIST) { e, _ -> storyBoard.answer(e) }
 }
 
 /** Contract 1.5.0: one ticket as a `ticket` frame, every field present. */

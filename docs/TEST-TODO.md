@@ -6,3 +6,8 @@
 - TEST-TODO: plugin missing: a daemon with `boardWiring == null` starts and every board-family frame answers "this daemon has no board" (today the Daemon always builds one; the null path is untested).
 - TEST-TODO: plugin reload mid-worker: workers stay with core's SessionManager; the new board must re-adopt via sweepWorkers + clearQueueMarks; session events during the swap must be queued, not lost.
 - TEST-TODO: startup order: the board plugin loaded before the first frame and before session restore.
+
+## DP-5h-2 (ticket-ac0f234f): plugin API for board frames
+- TEST-TODO: a real board plugin registering the DP-5d table through `api.frames.table` and starting a worker through `api.spawns.charge`: depth/pod-cap refusal text identical to the core path.
+- TEST-TODO: no-board daemon answers project_*/workspace_* frames from core (new behaviour) and ticket_* with the no-board refusal.
+- TEST-TODO: community plugin without `sessions.spawn` gets NoSpawnCharge.

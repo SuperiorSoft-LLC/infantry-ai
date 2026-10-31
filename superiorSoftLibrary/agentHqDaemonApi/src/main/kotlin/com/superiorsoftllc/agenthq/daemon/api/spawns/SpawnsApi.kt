@@ -31,6 +31,12 @@ import com.superiorsoftllc.agenthq.daemon.api.sessions.SessionsResult
  * Ok with [Spawned.taskSent] false and the reason in [Spawned.taskRefused]. Bundled / official plugins are trusted; a community plugin needs [GRANT_SPAWNS] (default deny).
  */
 interface Spawns {
+    /**
+     * DP-5h-2 (1.11.0, additive): the charge a session-originated ticket start pays (the SpawnGuard behaviour behind a minimal
+     * port). A daemon without one charges nothing ([NoSpawnCharge]).
+     */
+    val charge: SpawnCharge get() = NoSpawnCharge
+
     /** The limits [by] would be checked against now, or Refused (depth / concurrency) for a spawn of [kind]. Reads only. */
     fun admit(by: Caller, narrowing: SpawnNarrowing = SpawnNarrowing.NONE, kind: SpawnKind = SpawnKind.SESSION): SessionsResult<Admission>
 
@@ -135,4 +141,34 @@ object NoSpawns : Spawns {
     override fun startTicket(ref: String, by: Caller, narrowing: SpawnNarrowing) = none
     override fun mayKill(ref: String, by: Caller) = none
     override fun target(ref: String, by: Caller) = none
+}
+
+/**
+ * DP-5h-2 (DaemonApi 1.11.0, additive): the spawn guard's admit / charge semantics for a plugin that starts workers itself (a board
+ * moving a ticket to In Progress). [admitIf] checks, then runs [create] under the guard's lock, so the slot checked is the slot
+ * taken; the guard's refusal (depth limit, pod cap) is thrown as [IllegalArgumentException] subtype and nothing is created.
+ */
+interface SpawnCharge {
+    /** Whether [sessionId] is a session this daemon holds (only such an origin is charged). */
+    fun isSession(sessionId: String): Boolean
+
+    /**
+     * When [charged] and [origin] is a held session: check depth and pod cap, else throw. Then run [create] under the lock with
+     * `placed` true when the start is charged to [origin]'s pod (the worker must then be [record]ed).
+     */
+    fun <T> admitIf(origin: String?, charged: Boolean, create: (placed: Boolean) -> T): T
+
+    /** [sessionId] was started from inside [origin]: it joins [origin]'s pod one level down. */
+    fun record(sessionId: String, origin: String?)
+
+    /** Record [spawnerId] as [sessionId]'s spawner (contract 1.114.0's kill rule follows). */
+    fun setSpawner(sessionId: String, spawnerId: String?)
+}
+
+/** A daemon without a spawn guard: nothing is charged, [create] simply runs. */
+object NoSpawnCharge : SpawnCharge {
+    override fun isSession(sessionId: String) = false
+    override fun <T> admitIf(origin: String?, charged: Boolean, create: (placed: Boolean) -> T): T = create(false)
+    override fun record(sessionId: String, origin: String?) {}
+    override fun setSpawner(sessionId: String, spawnerId: String?) {}
 }
