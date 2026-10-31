@@ -41,7 +41,7 @@ class BoardImportGuardTest {
     @Test fun `agentHqBoard imports nothing of agentHq`() {
         val board = File(TestDaemonPlugins.repo, "superiorSoftLibrary/agentHqBoard/src/main/kotlin/com/superiorsoftllc/agenthq")
         assertTrue(board.isDirectory, "sources not found: $board")
-        val own = setOf("protocol", "daemon.api", "epics", "brief", "ledger", "context", "ticketfiles", "session", "agents", "worktree", "settings", "usage")
+        val own = setOf("protocol", "daemon.api", "epics", "brief", "ledger", "context", "ticketfiles", "session", "agents", "worktree", "settings", "usage", "role", "persistence", "backlog")
         val ref = Regex("""com\.superiorsoftllc\.agenthq\.([a-z]+(?:\.api)?)""")
         val bad = board.walkTopDown().filter { it.isFile && it.extension == "kt" }.flatMap { f ->
             f.readLines().filterNot { it.trim().startsWith("*") || it.trim().startsWith("//") || it.trim().startsWith("/*") }
