@@ -895,26 +895,10 @@ class AgentHqDaemon(
             if (settings.allowedRoles().restricts) println("[agentHq] role allowlist in force: ${settings.allowedRoles().patterns.joinToString()}")
             manager.maxSessions = { settings.limitCap(LimitRegistry.MAX_SESSIONS) }
             if (settings.allowedModels().restricts) println("[agentHq] model allowlist in force: ${settings.allowedModels().patterns.joinToString()}")
-            // AGENT-REGISTRY-1 (docs/AGENT-REGISTRY.md): the ONE agent registry. The role catalog is its first contributor (each role
-            // one agent), modules' `agents` blocks are synced in below; with no user override every agent is enabled, as before.
-            val agentRegistry = com.superiorsoftllc.agenthq.agents.registry.AgentRegistry(
-                roleAgents = { com.superiorsoftllc.agenthq.role.RoleAgents.all(roles.all()) },
-                rolePersona = { id -> roles.role(id)?.persona },
-                // Owner O5: the interim override store; the unified config JSON replaces it here (AgentOverrides is the swap point).
-                overrides = com.superiorsoftllc.agenthq.agents.registry.FileAgentOverrides.inStateDir(stateDir()),
-                // Owner O4: an agent's `profile` names an agent profile, a behaviour preset (instructions, provider, model).
-                profile = { id -> store.agents.get(id)?.let { p -> com.superiorsoftllc.agenthq.plugin.api.AgentDefinition(id = p.role, instructions = p.instructions.orEmpty(), harness = p.provider, model = p.model) } },
-            )
-            val agentModules = com.superiorsoftllc.agenthq.daemon.plugins.AgentModules(agentRegistry)
-            // Contract 1.4.0: profiles are validated against the providers [manager] was configured with.
-            val agents = AgentProfiles(
-                // AGENT-REGISTRY-1: a module's agent is a role id a session may start as (additive: catalog ids resolve as before).
-                store.agents, manager, roleBindings = store.roleBindings, roleExists = { roles.role(it) != null || agentRegistry.contains(it) },
-                traitExists = { store.traits.get(it) != null }, roleTraits = store.roleTraits::get, trait = store.traits::get,
-                requireKnownSkills = { ids -> com.superiorsoftllc.agenthq.settings.requireKnownSkills(store, ids, "skillIds") },
-                // ROLE-EDIT-1: a role's (possibly edited) instructions reach every session started for it after the save.
-                rolePersona = { id -> (roles.role(id)?.persona ?: agentRegistry.instructionsOf(id)).let { p -> if (id == AssistantService.ROLE) AssistantService.instructions(p) else p } },
-            )
+            val agentsWired = com.superiorsoftllc.agenthq.daemon.wiring.AgentsWiring.build(store, manager, roles)
+            val agentRegistry = agentsWired.registry
+            val agentModules = agentsWired.modules
+            val agents = agentsWired.profiles
             // TRAITS-T4: the chokepoint's fallback, so a spawn path that resolves no instance itself still freezes one.
             manager.instanceFor = agents::instanceFor
             manager.assistantDir = assistantDir
@@ -942,24 +926,7 @@ class AgentHqDaemon(
             )
             // Ticket b785f383: a closing session's background processes die with it (the plugin's listener does it, after a grace).
             manager.onSessionClosed = { c -> localProcesses.fireSessionClosed(c) }
-            // PROMPT-1: `prompts.timeoutSec` is read at every open; every request / resolution goes to every client.
-            val pendingPrompts = com.superiorsoftllc.agenthq.prompts.PendingPrompts(
-                timeoutMillis = { settings.promptTimeoutSec() * 1000L },
-                // ASK-TIMER (1.139.0): global `prompts.timeoutSec` / `prompts.onTimeout`, the session's spawn override over it.
-                policyFor = { id -> manager.promptTimeoutFor(id, settings.promptTimeoutPolicy()) },
-                // PROMPT-6: "Always allow" rules live in the settings table (`toolApproval.rules`), scoped by project.
-                rules = com.superiorsoftllc.agenthq.prompts.ApprovalRules.forStore(store),
-                projectOf = { id -> manager.get(id)?.projectId },
-            )
-            pendingPrompts.sink = { envelope -> for (c in clients.toList()) c.trySend(envelope) }
-            // PROMPT-6: a rule-answered call is one `[agenthq]` stderr line in that session's transcript (UI-BOOT-1's
-            // convention), through the session stream so it reaches every client like any other session line.
-            pendingPrompts.notice = { sessionId, text ->
-                manager.eventSink?.invoke(com.superiorsoftllc.agenthq.session.SessionEvent.Stderr(sessionId, "[agenthq] $text"))
-            }
-            // PROMPT-3: a session adapter (Claude in `ask`) relays its CLI's approval / question requests here.
-            // PROMPT-4: harness adapters (opencode serve) relay their tool approvals here.
-            manager.promptAsker = pendingPrompts
+            val pendingPrompts = com.superiorsoftllc.agenthq.daemon.wiring.PromptsWiring.build(store, settings, manager, clients)
             // IN-APP BUILD T3: one saved command at a time; every frame it produces goes to every client.
             // BUG-RUN-STUB-1: a saved command is a real process whatever the provider; [runner] is the stub's
             // ScriptedRunner under AGENTHQ_PROVIDER=stub and would only replay the script.
@@ -1284,27 +1251,26 @@ class AgentHqDaemon(
             // DP-5h-3e-b: the board is the PLUGIN's alone. Core owns only what the board runs on and what consumes its events: the typed durable
             // ticket-event log, the core-built [LocalBoardHost] over it (the plugin builds its TicketBoard on this host through the board runtime), the
             // ticket files and the three core event consumers. The repo a ticket was cut in and an epic's base branch are asked of the board port.
-            val ticketEvents: com.superiorsoftllc.agenthq.backlog.TicketEventLog? = if (!withBoard) null else TicketServices.eventLog(store)
-            val ticketServices = ticketEvents?.let { events ->
-                TicketServices.create(store, events, settings, triggers, doneWorkerReaper, relatedRef, relatedDescriptionRef) { projectId -> boardPorts.cutRepo(projectId)?.let(::File) }
-            }
+            val ticketCore = com.superiorsoftllc.agenthq.daemon.wiring.BoardWiring.buildTicketServices(
+                withBoard, store, settings, triggers, doneWorkerReaper, relatedRef, relatedDescriptionRef, boardPorts,
+            )
+            val ticketEvents: com.superiorsoftllc.agenthq.backlog.TicketEventLog? = ticketCore?.events
+            val ticketServices = ticketCore?.services
             val ticketFilesText = ticketServices?.filesText
-            val coreHost = ticketEvents?.let { events ->
-                com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardHost(
-                    store = store, sessionManager = { manager },
-                    // BASE-1c: the ticket's epic's base branch, then its project's (BASE-1a), then the daemon's.
-                    baseRef = com.superiorsoftllc.agenthq.worktree.TicketBaseRef.epicFirst(
-                        boardPorts::epicBaseBranchOf, com.superiorsoftllc.agenthq.worktree.TicketBaseRef.projectFirst(projectStore::baseBranchOf, baseRef),
-                    ),
-                    // NOGIT-1: a project's own directory decides where its start runs / cuts.
-                    projectDirectory = { id -> id?.let { runCatching { projectStore.get(it).directory }.getOrNull() } },
-                    defaultRepo = repo, eventLog = { events }, agentProfiles = agents, knowledge = knowledge, skills = skillsSource,
-                    // IMG-3: a ticket's images live under its project's directory (.agenthq/uploads/ticket/).
-                    ticketImages = com.superiorsoftllc.agenthq.backlog.TicketImages { projectId ->
-                        runCatching { projectStore.get(projectId) }.getOrNull()?.directory?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory }
-                    },
-                )
-            }
+            val coreHost = com.superiorsoftllc.agenthq.daemon.wiring.BoardWiring.buildHost(
+                events = ticketEvents, store = store, manager = manager,
+                // BASE-1c: the ticket's epic's base branch, then its project's (BASE-1a), then the daemon's.
+                baseRef = com.superiorsoftllc.agenthq.worktree.TicketBaseRef.epicFirst(
+                    boardPorts::epicBaseBranchOf, com.superiorsoftllc.agenthq.worktree.TicketBaseRef.projectFirst(projectStore::baseBranchOf, baseRef),
+                ),
+                // NOGIT-1: a project's own directory decides where its start runs / cuts.
+                projectDirectory = { id -> id?.let { runCatching { projectStore.get(it).directory }.getOrNull() } },
+                repo = repo, agents = agents, knowledge = knowledge, skills = skillsSource,
+                // IMG-3: a ticket's images live under its project's directory (.agenthq/uploads/ticket/).
+                ticketImages = com.superiorsoftllc.agenthq.backlog.TicketImages { projectId ->
+                    runCatching { projectStore.get(projectId) }.getOrNull()?.directory?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory }
+                },
+            )
             mail.reportCheck = { from, body -> orchestratorLink.reviewReport(from, body).refusalOrNull() }
 
             // ASK-1 (contract 1.97.0): non-blocking owner questions, stored, pushed to every client, answered by mail.
