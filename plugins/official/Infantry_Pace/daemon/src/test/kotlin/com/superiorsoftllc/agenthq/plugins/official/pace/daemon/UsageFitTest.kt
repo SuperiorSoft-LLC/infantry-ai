@@ -93,4 +93,16 @@ class UsageFitTest {
         assertEquals("backend", w.groups[0].role); assertEquals(0.6, w.groups[0].share, 1e-9)
         assertEquals(1000.0, w.cacheReadPerPoint!!, 1e-9)
     }
+
+    @Test
+    fun `one model family is one group and the totals include requests outside the steps`() {
+        val w = UsageFit.analyse(
+            "weekly", "Weekly limit", listOf(sample(0, 1.0), sample(100, 2.0), sample(200, 2.0), sample(300, 2.0)),
+            listOf(req(10, 600, "pm", "opus"), req(20, 300, "pm", "claude-opus-5-5"), req(250, 50, "pm", "anthropic/claude-opus-5-5"), req(30, 100, "x", "weird")),
+        )
+        val pm = w.groups.single { it.role == "pm" }
+        assertEquals("opus", pm.model)
+        assertEquals(3, pm.totalRequests); assertEquals(2, pm.requests)
+        assertEquals("weird", w.groups.single { it.role == "x" }.model)
+    }
 }

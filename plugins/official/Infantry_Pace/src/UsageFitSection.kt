@@ -145,7 +145,7 @@ private fun UsageFitBody(view: UsageFitView, kind: String, onKind: (String) -> U
 private fun GroupTable(w: FitWindowView) {
     Column(Modifier.testTag("usagefit-table")) {
         Row(Modifier.fillMaxWidth()) {
-            for ((t, wt) in listOf("Role" to 1f, "Model" to 1f, "Requests" to 0.8f, "Cache-read" to 1f, "Share" to 0.7f)) {
+            for ((t, wt) in listOf("Role" to 1f, "Model" to 1f, "All requests" to 0.9f, "All cache-read" to 1f, "Requests in steps" to 1f, "Cache-read in steps" to 1.1f, "Share" to 0.7f)) {
                 Text(t, color = Palette.Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(wt))
             }
         }
@@ -153,12 +153,14 @@ private fun GroupTable(w: FitWindowView) {
             Row(Modifier.fillMaxWidth()) {
                 Text(g.role, color = Palette.Text, fontSize = 12.sp, modifier = Modifier.weight(1f))
                 Text(UsageFitText.modelName(g.model), color = Palette.Text, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                Text(g.requests.toString(), color = Palette.Text, fontSize = 12.sp, modifier = Modifier.weight(0.8f))
-                Text(UsageFitText.tokens(g.cacheRead), color = Palette.Text, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Text(g.totalRequests.toString(), color = Palette.Text, fontSize = 12.sp, modifier = Modifier.weight(0.9f))
+                Text(UsageFitText.tokens(g.totalCacheRead), color = Palette.Text, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Text(g.requests.toString(), color = Palette.Text, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Text(UsageFitText.tokens(g.cacheRead), color = Palette.Text, fontSize = 12.sp, modifier = Modifier.weight(1.1f))
                 Text(UsageFitText.percent(g.share), color = Palette.Text, fontSize = 12.sp, modifier = Modifier.weight(0.7f))
             }
         }
-        Note(UsageFitText.SHARE_HELP + ". Requests and cache-read are summed over the analysed steps.")
+        Note(UsageFitText.SHARE_HELP + ". \"All\" columns count every recorded request over the analysed window; \"in steps\" columns count only requests inside a rising meter step (the share and the fit use those), so a low in-steps number does not mean requests were not recorded.")
     }
 }
 

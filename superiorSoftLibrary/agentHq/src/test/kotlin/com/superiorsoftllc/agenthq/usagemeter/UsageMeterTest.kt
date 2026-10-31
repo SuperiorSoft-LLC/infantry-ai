@@ -113,6 +113,20 @@ class UsageMeterTest {
         m.close()
     }
 
+    @Test fun `usage lines with no Turn event before them are still recorded`() {
+        val m = UsageMeter.open(File.createTempFile("meter", ".db").also { it.deleteOnExit() })
+        val r = ticketRec("w1", "claude", "t-9")
+        val sessions: (String) -> SessionRecord? = { r }
+        m.onSessionEvent(SessionEvent.Turn("w1", "go"), sessions)
+        m.onSessionEvent(SessionEvent.Stdout("w1", claudeLines[0]), sessions)
+        m.onSessionEvent(SessionEvent.Exit("w1", 0), sessions)
+        // a woken kept process: no Turn, new message ids, a model id the table never saw
+        m.onSessionEvent(SessionEvent.Stdout("w1", claudeLines[2].replace("claude-sonnet-5-5", "claude-opus-5-5")), sessions)
+        m.onSessionEvent(SessionEvent.Stdout("w1", claudeLines[2].replace("m2", "m3")), sessions)
+        assertEquals(3, m.report().requests.size)
+        m.close()
+    }
+
     @Test fun `a field the harness does not report is stored as null`() {
         val m = UsageMeter.open(File.createTempFile("meter", ".db").also { it.deleteOnExit() })
         val r = ticketRec("o1", "opencode", null)

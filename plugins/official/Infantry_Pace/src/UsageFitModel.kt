@@ -21,7 +21,8 @@ import kotlinx.serialization.json.contentOrNull
 
 data class FitSpread(val mean: Double, val sd: Double, val median: Double)
 
-data class FitGroupView(val role: String, val model: String, val requests: Int, val input: Long, val cacheRead: Long, val cacheWrite: Long, val share: Double)
+data class FitGroupView(val role: String, val model: String, val requests: Int, val input: Long, val cacheRead: Long, val cacheWrite: Long, val share: Double,
+    val totalRequests: Int = requests, val totalCacheRead: Long = cacheRead)
 
 data class FitStepView(
     val t: Long, val points: Double, val requests: Int, val input: Long, val cacheRead: Long, val cacheWrite: Long,
@@ -74,7 +75,8 @@ object UsageFitParser {
         cacheReadPerPoint = o["cacheReadPerPoint"].d(), requestsPerPoint = o["requestsPerPoint"].d(),
         cacheReadSpread = spread(o["perPoint"].obj()?.get("cacheRead")),
         groups = o["groups"].arr().mapNotNull { it.obj() }.map {
-            FitGroupView(it["role"].s() ?: "?", it["model"].s() ?: "?", it["requests"].l()?.toInt() ?: 0, it["input"].l() ?: 0, it["cacheRead"].l() ?: 0, it["cacheWrite"].l() ?: 0, it["share"].d() ?: 0.0)
+            FitGroupView(it["role"].s() ?: "?", it["model"].s() ?: "?", it["requests"].l()?.toInt() ?: 0, it["input"].l() ?: 0, it["cacheRead"].l() ?: 0, it["cacheWrite"].l() ?: 0, it["share"].d() ?: 0.0,
+                it["totalRequests"].l()?.toInt() ?: (it["requests"].l()?.toInt() ?: 0), it["totalCacheRead"].l() ?: (it["cacheRead"].l() ?: 0))
         },
         series = o["series"].arr().mapNotNull { it.obj() }.map { s ->
             FitStepView(
