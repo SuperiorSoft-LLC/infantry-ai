@@ -449,6 +449,10 @@ class DaemonPluginHost private constructor(
                 return AutoCloseable { eventListeners -= entry }.also { p.closeables += it }
             }
 
+            // DP-7d (1.18.0): a session killed or removed; the plugin's session-scoped data goes with it.
+            override fun onSessionRemoved(listener: (String) -> Unit): AutoCloseable =
+                hostServices.onSessionRemoved { id -> if (!p.guard.disabled) p.call("events.onSessionRemoved") { listener(id) } }.also { p.closeables += it }
+
             // DP-4b: the typed ticket events. A community plugin needs tickets.read (a throw here disables the plugin, as a bad declaration does).
             override fun onTicket(consumer: String, listener: (TicketEvent) -> Unit): AutoCloseable {
                 require(consumer.isNotBlank()) { "a ticket event consumer needs a name" }
