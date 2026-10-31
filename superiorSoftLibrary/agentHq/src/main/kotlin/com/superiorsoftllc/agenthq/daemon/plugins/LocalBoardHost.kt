@@ -218,10 +218,10 @@ class LocalBoardHost(
             return true
         }
 
-        override fun providers() = sessionManager()?.providers.orEmpty().map { BoardProviderInfo(it.id, it.defaultModel()) }
+        override fun providers() = sessionManager()?.providers.orEmpty().map { it.toInfo() }
         override fun providerId() = sessionManager()?.providerId.orEmpty()
         override fun hasProvider(id: String) = sessionManager()?.hasProvider(id) ?: false
-        override fun providerFor(id: String) = sessionManager()?.providerFor(id)?.let { BoardProviderInfo(it.id, it.defaultModel()) }
+        override fun providerFor(id: String) = sessionManager()?.providerFor(id)?.toInfo()
         override fun defaultModel(providerId: String?): String? {
             val manager = sessionManager() ?: return null
             return (providerId?.takeIf { it.isNotBlank() }?.let(manager::providerFor) ?: manager.providers.firstOrNull())?.defaultModel()
@@ -320,7 +320,11 @@ class LocalBoardHost(
             ticketImages.release(projectId, dropped, remaining.map { it.toRow() })
     }
 
-    private fun detailOf(r: com.superiorsoftllc.agenthq.session.SessionRecord) = BoardSessionDetail(SessionViews.of(r), r.lastHeartbeat, r.isBusy())
+    private fun detailOf(r: com.superiorsoftllc.agenthq.session.SessionRecord) = BoardSessionDetail(SessionViews.of(r), r.lastHeartbeat, r.isBusy(), r.spawnedAt, r.providerSessionId)
+
+    private fun com.superiorsoftllc.agenthq.provider.AgentProvider.toInfo() = BoardProviderInfo(
+        id, defaultModel(), contextLimit().support.wire, contextLimit().how, effort().support.wire, effort().how, ::knownModels,
+    )
 
     private fun RoleInstance.toBoard() = BoardRoleInstance(
         agentId, role, instructions,
