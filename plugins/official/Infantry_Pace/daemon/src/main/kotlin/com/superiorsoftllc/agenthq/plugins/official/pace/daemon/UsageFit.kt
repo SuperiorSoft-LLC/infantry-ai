@@ -39,7 +39,11 @@ class FitStep(
 /** Mean, spread (sample standard deviation), median. */
 data class Spread(val mean: Double, val sd: Double, val median: Double)
 
-data class GroupRow(val role: String, val model: String, val requests: Int, val input: Long, val cacheRead: Long, val cacheWrite: Long, val share: Double)
+/** [requests]/[input]/[cacheRead]/[cacheWrite] count only requests inside a rising step; the total* fields count every recorded request over the whole analysed window. */
+data class GroupRow(
+    val role: String, val model: String, val requests: Int, val input: Long, val cacheRead: Long, val cacheWrite: Long, val share: Double,
+    val totalRequests: Int = requests, val totalInput: Long = input, val totalCacheRead: Long = cacheRead, val totalCacheWrite: Long = cacheWrite,
+)
 
 data class Candidate(val key: String, val label: String, val columns: Int, val r2: Double, val adjR2: Double)
 
@@ -202,14 +206,28 @@ object UsageFit {
         )
     }
 
+    /** The model family (opus / sonnet / haiku) found as a token in a model id or alias; an unknown model is kept as-is. */
+    fun modelFamily(model: String): String {
+        val tokens = model.lowercase().split(Regex("[^a-z0-9]+"))
+        return listOf("opus", "sonnet", "haiku").firstOrNull { it in tokens } ?: model
+    }
+
     /** The whole analysis of one window kind. */
     fun analyse(kind: String, label: String, samples: List<PaceSample>, requests: List<FitRequest>): WindowFit {
         val steps = steps(intervals(samples), requests.sortedBy { it.ts })
         val inWindow = requests.filter { r -> steps.any { r.ts > it.fromMs && r.ts <= it.toMs } }
         val totalCr = inWindow.sumOf { it.cacheRead }.toDouble()
-        val groups = inWindow.groupBy { it.role to it.model }.map { (k, v) ->
-            GroupRow(k.first, k.second, v.size, v.sumOf { it.input }, v.sumOf { it.cacheRead }, v.sumOf { it.cacheWrite }, if (totalCr > 0) v.sumOf { it.cacheRead } / totalCr else 0.0)
-        }.sortedByDescending { it.cacheRead }
+        // The whole analysed span (first step start .. last step end): every recorded request in it, in or out of a rising step.
+        val spanFrom = steps.minOfOrNull { it.fromMs }; val spanTo = steps.maxOfOrNull { it.toMs }?.let { maxOf(it, samples.maxOfOrNull { s -> s.observedAt } ?: it) }
+        val inSpan = if (spanFrom == null || spanTo == null) emptyList() else requests.filter { it.ts > spanFrom && it.ts <= spanTo }
+        val steppedBy = inWindow.groupBy { it.role to modelFamily(it.model) }
+        val groups = inSpan.groupBy { it.role to modelFamily(it.model) }.map { (k, all) ->
+            val v = steppedBy[k].orEmpty()
+            GroupRow(
+                k.first, k.second, v.size, v.sumOf { it.input }, v.sumOf { it.cacheRead }, v.sumOf { it.cacheWrite }, if (totalCr > 0) v.sumOf { it.cacheRead } / totalCr else 0.0,
+                all.size, all.sumOf { it.input }, all.sumOf { it.cacheRead }, all.sumOf { it.cacheWrite },
+            )
+        }.sortedWith(compareByDescending<GroupRow> { it.cacheRead }.thenByDescending { it.totalCacheRead })
         val points = steps.sumOf { it.points }
         return WindowFit(
             kind, label, steps, groups, fit(steps),
@@ -239,6 +257,7 @@ object UsageFit {
                 add(buildJsonObject {
                     put("role", g.role); put("model", g.model); put("requests", g.requests); put("input", g.input)
                     put("cacheRead", g.cacheRead); put("cacheWrite", g.cacheWrite); put("share", g.share)
+                    put("totalRequests", g.totalRequests); put("totalInput", g.totalInput); put("totalCacheRead", g.totalCacheRead); put("totalCacheWrite", g.totalCacheWrite)
                 })
             }
         })
