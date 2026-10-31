@@ -107,6 +107,11 @@ Physically core today (own Gradle module, depends on no other agentHq module and
   The leaf's `internal` members became public (tests and the daemon are now in another module).
 * `superiorSoftLibrary/agentHqRunner` (`:superiorSoftLibrary:agentHqRunner`): package `runner` (ProcessRunner, PtyProcessRunner, watch shims,
   ToolProfiles, ...). Its one back-import of `session.InfantryEnv` was inverted by letting `RunnerFactory` read `INFANTRY_RUNNER`/`AGENTHQ_RUNNER` itself.
+* `superiorSoftLibrary/agentHqBoard` (`:superiorSoftLibrary:agentHqBoard`, DP-5e): packages `epics`, `brief`, `ledger`, `context`, `ticketfiles` (package names unchanged).
+  Depends on `agentHqDaemonApi` and `agentHqProtocol`, never on `agentHq` (`BoardImportGuardTest`); `agentHq` depends on it, still one daemon jar. What the packages
+  need of the host comes in through ports declared there: `TicketFileRows` (SQL adapter `SqlTicketFileRows` in core), `ProjectDirectory`, `KnowledgeSection`,
+  `SkillsSection`, `GitCli`/`GitResult`, `ProjectSettings`, and the EpicHandler `branchName` hook. `SqlEpicPersistence` and the `TicketFiles(db, ...)` factory stay in core.
+  `backlog`, `mvp` and `stories` stay in `agentHq` and depend on it.
 * `superiorSoftLibrary/agentHqDaemonApi` and `superiorSoftLibrary/agenthqPlugins` were already separate modules.
 
 Still inside `superiorSoftLibrary/agentHq` (not yet physical): `session`, `harness` (apart from `HarnessCommand.kt`), `daemon`, `policy`,

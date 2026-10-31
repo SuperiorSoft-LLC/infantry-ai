@@ -31,6 +31,8 @@ include(":superiorSoftLibrary:agentHq")
 // CORE-SPLIT-1/2 (docs/DAEMON-CORE.md): leaf modules carved out of agentHq; package names unchanged.
 include(":superiorSoftLibrary:agentHqProtocol")
 include(":superiorSoftLibrary:agentHqRunner")
+// DP-5e: the board's lower-level packages (epics, brief, ledger, context, ticketfiles); depends on the daemon API, never on agentHq.
+include(":superiorSoftLibrary:agentHqBoard")
 include(":superiorSoftLibrary:agenthqUiCore")
 include(":superiorSoftLibrary:agenthqAppUi")
 // RUNTIME-3: an official module with sources (plugins/official/<Module>/build.gradle.kts) builds as its own project and

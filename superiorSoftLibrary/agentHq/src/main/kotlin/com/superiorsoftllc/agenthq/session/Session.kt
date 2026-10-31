@@ -283,16 +283,6 @@ object SessionRecordSerializer : KSerializer<SessionRecord> {
 val SessionListWire: KSerializer<List<SessionRecord>> = kotlinx.serialization.builtins.ListSerializer(SessionRecordSerializer)
 
 /**
- * Contract 1.6.0: one source the start composed into a session's prompt, and how many characters it
- * contributed. [source] is `instructions`, `ticket` or `linkedTickets`.
- */
-@Serializable
-data class ContextSource(
-    val source: String,
-    val chars: Int,
-)
-
-/**
  * A lifecycle event the daemon broadcasts. [SessionManager] emits these and never touches a socket;
  * the daemon turns them into [com.superiorsoftllc.agenthq.protocol.Envelope] frames.
  *

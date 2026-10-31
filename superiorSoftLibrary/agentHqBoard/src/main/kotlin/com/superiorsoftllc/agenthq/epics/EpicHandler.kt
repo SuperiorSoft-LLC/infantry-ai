@@ -47,6 +47,8 @@ class EpicHandler(
      * still answer).
      */
     private val baseCheck: ((Epic, String) -> Unit)? = null,
+    /** DP-5e: validates and normalises a base-branch name before it reaches [baseCheck] (the daemon passes `ProjectBaseCheck.checkName`). */
+    private val branchName: (String) -> String = { it.trim() },
 ) {
     fun answer(envelope: Envelope): Envelope? = when (envelope.type) {
         Envelope.EPIC_SAVE -> request(envelope.type) {
@@ -64,7 +66,7 @@ class EpicHandler(
             val epic = when {
                 req.clear -> store.setBaseBranch(req.epicId, null)
                 req.branch != null -> {
-                    val name = com.superiorsoftllc.agenthq.mvp.ProjectBaseCheck.checkName(req.branch)
+                    val name = branchName(req.branch)
                     val check = baseCheck ?: throw IllegalArgumentException("this daemon has no repository to check a base branch against")
                     store.setBaseBranch(req.epicId, name, check)
                 }

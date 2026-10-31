@@ -34,7 +34,7 @@ class ProjectStore(
      */
     private val persistence: ProjectPersistence = InMemoryProjectPersistence(),
     private val idFactory: () -> String = { "project-" + UUID.randomUUID().toString().take(8) },
-) {
+) : com.superiorsoftllc.agenthq.epics.ProjectDirectory {
     /** Insertion ordered, so `list` answers in the order projects were created. */
     private val projects = LinkedHashMap<String, Project>()
 
@@ -72,7 +72,7 @@ class ProjectStore(
 
     /** Project [id]; throws [IllegalArgumentException] when there is none. */
     @Synchronized
-    fun get(id: String): Project {
+    override fun get(id: String): Project {
         val wanted = id.trim()
         require(wanted.isNotEmpty()) { "expects a project id" }
         return projects[wanted] ?: throw IllegalArgumentException("no project '${wanted.take(80)}'")

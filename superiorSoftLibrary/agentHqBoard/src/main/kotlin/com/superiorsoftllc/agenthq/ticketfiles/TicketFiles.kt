@@ -1,9 +1,7 @@
 package com.superiorsoftllc.agenthq.ticketfiles
 
-import com.superiorsoftllc.agenthq.db.AgentHQDatabase
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
 import com.superiorsoftllc.agenthq.worktree.GitCli
-import com.superiorsoftllc.agenthq.worktree.SystemGitCli
 import java.io.File
 
 /** One changed file of one ticket, as `ticket_files` stores it. */
@@ -59,36 +57,30 @@ data class BackfillReport(
  * is the ticket's own `base` column (BRANCH-PER-TASK), so this adds only the one table, nothing parallel to ticket_runs.
  */
 class TicketFiles(
-    private val db: AgentHQDatabase,
+    private val q: TicketFileRows,
     private val tickets: () -> List<TicketInfo>,
     /** The git checkout a ticket of a project lives in (the board's cutRepo), null = none. */
     private val repoFor: (projectId: String?) -> File?,
-    private val git: GitCli = SystemGitCli(timeoutMs = 120_000),
+    private val git: GitCli,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    private val q get() = db.ticket_filesQueries
-
     // ---- read side -------------------------------------------------------------------------------------------------
 
-    fun forTicket(ticketId: String): List<TicketFile> = q.filesForTicket(ticketId).executeAsList().map {
-        TicketFile(it.ticket_id, it.path, it.status, it.old_path, it.added, it.removed, it.tip_sha, it.merge_sha, it.recorded_at)
-    }
+    fun forTicket(ticketId: String): List<TicketFile> = q.filesForTicket(ticketId)
 
     /** Rows whose path matches any of [globs] (see [sqlGlob]), newest recording first, one row per (ticket, path). */
     fun forPaths(globs: List<String>): List<TicketFile> = globs.map(::sqlGlob).distinct().flatMap { glob ->
-        q.filesForPathGlob(glob).executeAsList().map {
-            TicketFile(it.ticket_id, it.path, it.status, it.old_path, it.added, it.removed, it.tip_sha, it.merge_sha, it.recorded_at)
-        }
+        q.filesForPathGlob(glob)
     }.distinctBy { it.ticketId to it.path }
 
     /** Tickets that share changed files with [ticketId], best Jaccard overlap first (ties: more shared paths). */
     fun related(ticketId: String): List<RelatedTicket> {
         val own = forTicket(ticketId).size
         if (own == 0) return emptyList()
-        return q.relatedTickets(ticketId).executeAsList().map {
-            val shared = it.shared.toInt()
-            val total = it.total.toInt()
-            RelatedTicket(it.ticket_id, shared, total, shared.toDouble() / (own + total - shared).coerceAtLeast(1))
+        return q.relatedTickets(ticketId).map {
+            val shared = it.shared
+            val total = it.total
+            RelatedTicket(it.ticketId, shared, total, shared.toDouble() / (own + total - shared).coerceAtLeast(1))
         }.sortedWith(compareByDescending<RelatedTicket> { it.jaccard }.thenByDescending { it.shared }.thenBy { it.ticketId })
     }
 
@@ -99,10 +91,10 @@ class TicketFiles(
         return chosen to byPath
     }
 
-    fun recordedTicketIds(): Set<String> = q.recordedTickets().executeAsList().toSet()
+    fun recordedTicketIds(): Set<String> = q.recordedTickets()
 
     /** DAEMON-CONTEXT-1: how many recorded tickets changed [path]. */
-    fun pathFrequency(path: String): Int = q.pathFrequency(path).executeAsOne().toInt()
+    fun pathFrequency(path: String): Int = q.pathFrequency(path)
 
     /**
      * DAEMON-CONTEXT-1: the files of a ticket that may still be running: its recorded rows, else (no recording before
@@ -119,7 +111,7 @@ class TicketFiles(
     /** DAEMON-CONTEXT-1: stores the 'Files read' line of [ticketId]'s done report. */
     fun saveFilesRead(ticketId: String, line: String) = q.saveFilesRead(ticketId, line, clock())
 
-    fun filesRead(ticketId: String): String? = q.filesReadFor(ticketId).executeAsOneOrNull()
+    fun filesRead(ticketId: String): String? = q.filesReadFor(ticketId)
 
     // ---- write side ------------------------------------------------------------------------------------------------
 
@@ -175,10 +167,7 @@ class TicketFiles(
     private fun store(ticketId: String, repo: File, keepAlive: String, rows: List<TicketFile>, source: FileSource): Recorded {
         // Keeps the tip reachable after its branch is deleted; a failure only costs reproducibility, never the rows.
         git.run(repo, listOf("update-ref", refName(ticketId), keepAlive))
-        q.transaction {
-            q.deleteForTicket(ticketId)
-            for (r in rows) q.insertFile(r.ticketId, r.path, r.status, r.oldPath, r.added, r.removed, r.tipSha, r.mergeSha, r.recordedAt)
-        }
+        q.replaceFiles(ticketId, rows)
         return Recorded(ticketId, source, rows.size)
     }
 
@@ -290,4 +279,21 @@ class TicketFiles(
             return byPath.values.sortedBy { it.path }
         }
     }
+}
+
+/** One related-tickets row as the store counts it: [shared] changed paths out of the other ticket's [total]. */
+data class RelatedCount(val ticketId: String, val shared: Int, val total: Int)
+
+/** DP-5e: the `ticket_files` table as [TicketFiles] uses it (the host keeps the SQL; this module sees rows). */
+interface TicketFileRows {
+    fun filesForTicket(ticketId: String): List<TicketFile>
+    fun filesForPathGlob(glob: String): List<TicketFile>
+    fun relatedTickets(ticketId: String): List<RelatedCount>
+    fun recordedTickets(): Set<String>
+    fun pathFrequency(path: String): Int
+    fun saveFilesRead(ticketId: String, line: String, at: Long)
+    fun filesReadFor(ticketId: String): String?
+
+    /** Replaces every row of [ticketId] with [rows], atomically. */
+    fun replaceFiles(ticketId: String, rows: List<TicketFile>)
 }

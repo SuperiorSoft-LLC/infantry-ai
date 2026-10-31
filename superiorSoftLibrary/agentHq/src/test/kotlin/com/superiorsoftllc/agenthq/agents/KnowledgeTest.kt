@@ -54,7 +54,7 @@ class KnowledgeTest {
     @Test
     fun theComposerAddsTheKnowledgeSourceAfterTraitsAndBeforeTheTicket() {
         val counted = mutableListOf<String>()
-        val composer = TicketContextComposer(NoSettings, KnowledgeCounter { counted += it; KnowledgeCounts(4, 2, 1) })
+        val composer = TicketContextComposer(NoSettings, KnowledgeCounter { counted += it; KnowledgeCounts(4, 2, 1) }.let { c -> com.superiorsoftllc.agenthq.context.KnowledgeSection { c.section(it) } })
         val input = ContextInput(
             instructions = "PERSONA", title = "T", description = "D", links = emptyList(), includeLinkedOverride = false,
             ticketId = "T-1", projectId = "p1", role = "backend", agentId = "backend",
