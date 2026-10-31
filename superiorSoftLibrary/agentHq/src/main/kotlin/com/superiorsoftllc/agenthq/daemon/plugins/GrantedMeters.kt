@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.daemon.plugins
 
 import com.superiorsoftllc.agenthq.daemon.api.usage.MeterReading
+import com.superiorsoftllc.agenthq.daemon.api.usage.MeterRequest
 import com.superiorsoftllc.agenthq.daemon.api.usage.Meters
 
 /**
@@ -11,6 +12,11 @@ class GrantedMeters(private val source: () -> Meters, private val may: (String) 
     override fun read(): List<MeterReading> {
         check(may(GRANT)) { "missing grant '$GRANT' in modules.json" }
         return source().read()
+    }
+
+    override fun requests(sinceMs: Long): List<MeterRequest> {
+        check(may(GRANT)) { "missing grant '$GRANT' in modules.json" }
+        return source().requests(sinceMs)
     }
 
     companion object { const val GRANT = "usage.read" }

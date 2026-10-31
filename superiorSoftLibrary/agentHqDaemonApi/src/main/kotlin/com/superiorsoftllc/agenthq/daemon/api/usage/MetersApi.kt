@@ -31,9 +31,28 @@ data class MeterReading(
 interface Meters {
     /** Every live window of every meter, now; empty when nothing is readable. */
     fun read(): List<MeterReading>
+
+    /** USAGE-FIT (1.19.0): the recorded model requests with `ts >= sinceMs`, oldest first; empty when the daemon keeps none. Read-only. */
+    fun requests(sinceMs: Long): List<MeterRequest> = emptyList()
 }
 
 /** A daemon without meters: reads nothing. */
 object NoMeters : Meters {
     override fun read(): List<MeterReading> = emptyList()
 }
+
+/**
+ * USAGE-FIT (DaemonApi 1.19.0, additive): one recorded model request, read-only, from the daemon's usage meter. A field the
+ * harness did not report is null (a missing output is normal, never zero).
+ */
+data class MeterRequest(
+    val ts: Long,
+    val sessionId: String,
+    val role: String,
+    val harness: String,
+    val model: String?,
+    val input: Long?,
+    val output: Long?,
+    val cacheRead: Long?,
+    val cacheWrite: Long?,
+)

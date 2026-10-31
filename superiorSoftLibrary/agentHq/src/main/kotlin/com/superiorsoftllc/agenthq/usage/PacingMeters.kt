@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.usage
 
 import com.superiorsoftllc.agenthq.daemon.api.usage.MeterReading
+import com.superiorsoftllc.agenthq.daemon.api.usage.MeterRequest
 import com.superiorsoftllc.agenthq.daemon.api.usage.Meters
 
 /**
@@ -8,7 +9,14 @@ import com.superiorsoftllc.agenthq.daemon.api.usage.Meters
  * pacing rule's own projection at reset ([com.superiorsoftllc.agenthq.daemon.api.usage.PacingRule.judge]). Read-only; it reads
  * the cached live read, never the provider.
  */
-class PacingMeters(private val pacing: UsagePacing, private val clock: () -> Long = System::currentTimeMillis) : Meters {
+class PacingMeters(
+    private val pacing: UsagePacing,
+    /** USAGE-FIT: the recorded model requests since a time (the usage meter, read-only); none by default. */
+    private val requestSource: (Long) -> List<MeterRequest> = { emptyList() },
+    private val clock: () -> Long = System::currentTimeMillis,
+) : Meters {
+    override fun requests(sinceMs: Long): List<MeterRequest> = requestSource(sinceMs)
+
     override fun read(): List<MeterReading> {
         val report = pacing.report()
         val now = clock()
