@@ -36,3 +36,5 @@
 - DP-5h-3e-b (the flip): not run, no runnable Gradle project for the plugin's own tests (`BoardBuildTest`, `PluginCoreAccessTest`); no `invoke` case yet in `PluginCoreAccessTest`. Not covered: a real-daemon start-charge refusal test (none exists in the tree). The full suite was not run (staging only).
 
 - DP-5h-4: in the built app (plugin present) create, move, start and finish a ticket and open the board/epic panes: identical to before; with the Infantry_Board plugin removed the app starts and every board frame answers the no-board refusal. Not run: the full suite and the E2E set (scoped tests only).
+## DP-5h-3e-c (ticket-33c67672): plugin-present start charge
+- TEST-TODO: PluginBoardStartChargeDaemonTest -- session-originated ticket_move to in_progress through the plugin-built board: podSpawnDepth=0 -> 'spawn refused: depth limit', podSpawnCap=0 -> 'spawn refused: pod cap' (ticket stays todo); defaults -> started and the worker's spawnerSessionId is the starter; beforeStart sees boardPorts.ops() != null and the first ticket_list answers `tickets`.
