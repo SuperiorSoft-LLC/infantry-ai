@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.ticketfiles
 
 import com.superiorsoftllc.agenthq.db.AgentHQDatabaseFactory
+import com.superiorsoftllc.agenthq.backlog.toInfo
 import com.superiorsoftllc.agenthq.persistence.TicketRow
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
 import com.superiorsoftllc.agenthq.worktree.newGitRepo
@@ -37,7 +38,7 @@ class TicketFilesTest {
 
         val db = AgentHQDatabaseFactory.open(File(repo.parentFile, "${repo.name}.db").absolutePath).database
         val rows = listOf("aaaa1111", "bbbb2222", "cccc3333").map {
-            TicketRow(id = "ticket-$it", title = "T $it", status = TicketStatus.DONE, position = 0, createdAt = 0, updatedAt = 0)
+            TicketRow(id = "ticket-$it", title = "T $it", status = TicketStatus.DONE, position = 0, createdAt = 0, updatedAt = 0).toInfo()
         }
         val files = TicketFiles(db, { rows }, { repo }, git)
 

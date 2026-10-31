@@ -19,8 +19,7 @@ class BoardImportGuardTest {
     private val remaining = setOf(
         "daemon/plugins/LocalBoardServices.kt", "daemon/DaemonMain.kt",
         "mvp/StoryHandler.kt",
-        "stories/StoryMigration.kt", "ticketfiles/LiveRelatedWork.kt", "ticketfiles/RelatedDescriptionWriter.kt",
-        "ticketfiles/RelatedTickets.kt",
+        "stories/StoryMigration.kt",
     )
 
     private fun importers() = main.walkTopDown().filter { it.isFile && it.extension == "kt" }

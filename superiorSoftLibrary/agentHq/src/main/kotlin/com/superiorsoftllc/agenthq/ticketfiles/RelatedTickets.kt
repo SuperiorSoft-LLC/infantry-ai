@@ -1,8 +1,5 @@
 package com.superiorsoftllc.agenthq.ticketfiles
 
-import com.superiorsoftllc.agenthq.context.RelatedBlock
-import com.superiorsoftllc.agenthq.persistence.TicketLinkRow
-import com.superiorsoftllc.agenthq.persistence.TicketRow
 import com.superiorsoftllc.agenthq.settings.LimitRegistry
 
 /**
@@ -54,7 +51,7 @@ object TicketFamily {
      * The family of [title], or, when it has no number, the longest label OTHER tickets use that the title starts with
      * as a whole word (`USAGE: x`, `USAGE x`; never `USAGEX` or `USAGE-UI x` for USAGE).
      */
-    fun resolve(title: String, others: Collection<TicketRow>, pattern: Regex?): Family? {
+    fun resolve(title: String, others: Collection<TicketInfo>, pattern: Regex?): Family? {
         of(title, pattern)?.let { return it }
         val trimmed = title.trim()
         return others.mapNotNull { of(it.title, pattern)?.label }.distinct()
@@ -63,12 +60,12 @@ object TicketFamily {
     }
 
     /** The other tickets of [label], in number order. */
-    fun members(label: String, rows: Collection<TicketRow>, pattern: Regex?, excludeId: String?): List<Pair<TicketRow, Int>> =
+    fun members(label: String, rows: Collection<TicketInfo>, pattern: Regex?, excludeId: String?): List<Pair<TicketInfo, Int>> =
         rows.filter { it.id != excludeId }.mapNotNull { r -> of(r.title, pattern)?.takeIf { it.label == label }?.let { r to (it.number ?: 0) } }
             .sortedWith(compareBy({ it.second }, { it.first.id }))
 
     /** `USAGE-3` when USAGE-1 and USAGE-2 exist. */
-    fun nextNumber(label: String, rows: Collection<TicketRow>, pattern: Regex?, excludeId: String?): String =
+    fun nextNumber(label: String, rows: Collection<TicketInfo>, pattern: Regex?, excludeId: String?): String =
         "$label-${(members(label, rows, pattern, excludeId).maxOfOrNull { it.second } ?: 0) + 1}"
 }
 
@@ -109,7 +106,7 @@ object RelatedDescriptionBlock {
 /** Why a ticket is in the related set. */
 enum class RelatedReason(val label: String) { LINKED("linked"), NAMED("named"), FAMILY("series"), FILES("same files") }
 
-data class RelatedEntry(val row: TicketRow, val reason: RelatedReason, val files: List<TicketFile>) {
+data class RelatedEntry(val row: TicketInfo, val reason: RelatedReason, val files: List<TicketFile>) {
     /** The commit to `git show` for the diff: the merge, else the branch tip recorded when it went done. */
     val sha: String? get() = files.firstNotNullOfOrNull { it.mergeSha } ?: files.firstNotNullOfOrNull { it.tipSha }
 }
@@ -144,16 +141,16 @@ class RelatedTickets(
         title: String,
         description: String,
         projectId: String?,
-        rows: Collection<TicketRow>,
-        links: Collection<TicketLinkRow>,
+        rows: Collection<TicketInfo>,
+        links: Collection<TicketLinkInfo>,
         extraIds: Collection<String>,
         cfg: RelatedConfig,
         maxTickets: Int,
         linkedFirst: Boolean,
-        filesOf: (TicketRow) -> List<TicketFile> = { files.forTicket(it.id) },
-        self: TicketRow? = null,
+        filesOf: (TicketInfo) -> List<TicketFile> = { files.forTicket(it.id) },
+        self: TicketInfo? = null,
         /** A ticket the index or the text names that [rows] does not hold (null = not shown). */
-        lookup: (String) -> TicketRow? = { null },
+        lookup: (String) -> TicketInfo? = { null },
     ): RelatedSet {
         val human = RelatedDescriptionBlock.strip(description)
         val text = title + "\n" + human

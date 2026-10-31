@@ -16,6 +16,7 @@ import com.superiorsoftllc.agenthq.agents.KnowledgeCounts
 import com.superiorsoftllc.agenthq.agents.firstTurn
 import com.superiorsoftllc.agenthq.agents.section
 import com.superiorsoftllc.agenthq.backlog.BoardAnswer
+import com.superiorsoftllc.agenthq.backlog.toInfo
 import com.superiorsoftllc.agenthq.backlog.BoardEvent
 import com.superiorsoftllc.agenthq.backlog.TicketAnswer
 import com.superiorsoftllc.agenthq.backlog.TicketBoard
@@ -1222,14 +1223,14 @@ class AgentHqDaemon(
                 library = { com.superiorsoftllc.agenthq.persistence.SkillStore(store.skills).list(null) },
                 includeSkillsContext = { settings.includeSkillsContext() },
             )
-            val relatedRef = java.util.concurrent.atomic.AtomicReference(com.superiorsoftllc.agenthq.context.RelatedWorkSource.NONE)
-            val relatedDescriptionRef = java.util.concurrent.atomic.AtomicReference(com.superiorsoftllc.agenthq.backlog.RelatedDescription.NONE)
+            val relatedRef = java.util.concurrent.atomic.AtomicReference(com.superiorsoftllc.agenthq.ticketfiles.RelatedWorkSource.NONE)
+            val relatedDescriptionRef = java.util.concurrent.atomic.AtomicReference(com.superiorsoftllc.agenthq.ticketfiles.RelatedDescription.NONE)
             val ticketContext = context ?: TicketContextComposer(
                 settings, knowledge, skillsSource,
                 roleNotes = com.superiorsoftllc.agenthq.context.RoleNotesSource { project, role ->
                     memoryNotes.index(project, com.superiorsoftllc.agenthq.memory.SCOPE_ROLE, role).map { it.name to it.description }
                 },
-                related = com.superiorsoftllc.agenthq.context.RelatedWorkSource { id, desc -> relatedRef.get().block(id, desc) },
+                related = com.superiorsoftllc.agenthq.ticketfiles.RelatedWorkSource { id, desc -> relatedRef.get().block(id, desc) },
             )
             // P10-K13: the effective skill ids each bound spawn freezes on its instance (K-D9 / K-D11), read once, at spawn.
             manager.skillsFor = { agentId, ticketId ->
@@ -1292,7 +1293,7 @@ class AgentHqDaemon(
                         ?.directory?.takeIf { it.isNotBlank() }?.let(::File)?.takeIf { it.isDirectory }
                 },
                 // KNOWLEDGE-PTR-1 (C): set once the file index exists (it needs the board's cutRepo); NONE until then.
-                relatedDescription = com.superiorsoftllc.agenthq.backlog.RelatedDescription { draft -> relatedDescriptionRef.get().describe(draft) },
+                relatedDescription = com.superiorsoftllc.agenthq.ticketfiles.RelatedDescription { draft -> relatedDescriptionRef.get().describe(draft) },
             )
             board.eventSink = { event -> broadcastBoard(clients, event) }
             boardRef = board
@@ -1377,13 +1378,13 @@ class AgentHqDaemon(
             // lock, on its own thread) and pins its tip under refs/agenthq/tickets/<id>.
             val ticketFiles = com.superiorsoftllc.agenthq.ticketfiles.TicketFiles(
                 db = (store as SqlAgentHqStore).database,
-                tickets = store.tickets::all,
+                tickets = { store.tickets.all().map { it.toInfo() } },
                 repoFor = { projectId -> board.cutRepo(projectId) },
             )
             relatedRef.set(
                 com.superiorsoftllc.agenthq.ticketfiles.LiveRelatedWork(
-                    ticketFiles, ticket = { id -> store.tickets.get(id) },
-                    rows = { store.tickets.all() }, links = { store.tickets.links() }, config = settings::relatedConfig,
+                    ticketFiles, ticket = { id -> store.tickets.get(id)?.toInfo() },
+                    rows = { store.tickets.all().map { it.toInfo() } }, links = { store.tickets.links().map { it.toInfo() } }, config = settings::relatedConfig,
                 ),
             )
             // KNOWLEDGE-PTR-1 (C): the stored RELATED (auto) block a ticket save writes at the top of its description.
@@ -1403,7 +1404,7 @@ class AgentHqDaemon(
             ticketEvents.subscribe("core.done-worker-reaper") { e -> if (e.isTransition) doneWorkerReaper.onTicketTransition(e.ticketId, e.to!!) }
             ticketEvents.subscribe("core.ticket-files") { e ->
                 if (e.kind == com.superiorsoftllc.agenthq.daemon.api.board.TicketEvent.DONE) ticketFilesExec.execute {
-                    runCatching { store.tickets.get(e.ticketId)?.let(ticketFiles::record) }
+                    runCatching { store.tickets.get(e.ticketId)?.let { ticketFiles.record(it.toInfo()) } }
                         .onFailure { System.err.println("[agentHq] ticket files of ${e.ticketId} not recorded: ${it.message}") }
                 }
             }

@@ -1,11 +1,5 @@
 package com.superiorsoftllc.agenthq.ticketfiles
 
-import com.superiorsoftllc.agenthq.context.RelatedBlock
-import com.superiorsoftllc.agenthq.context.RelatedFile
-import com.superiorsoftllc.agenthq.context.RelatedTicketView
-import com.superiorsoftllc.agenthq.context.RelatedWorkSource
-import com.superiorsoftllc.agenthq.persistence.TicketLinkRow
-import com.superiorsoftllc.agenthq.persistence.TicketRow
 
 /**
  * DAEMON-CONTEXT-1: builds the related block from the file index, for a ticket that may still be running. Its own files
@@ -18,9 +12,9 @@ import com.superiorsoftllc.agenthq.persistence.TicketRow
  */
 class LiveRelatedWork(
     private val files: TicketFiles,
-    private val ticket: (String) -> TicketRow?,
-    private val rows: () -> Collection<TicketRow> = { emptyList() },
-    private val links: () -> Collection<TicketLinkRow> = { emptyList() },
+    private val ticket: (String) -> TicketInfo?,
+    private val rows: () -> Collection<TicketInfo> = { emptyList() },
+    private val links: () -> Collection<TicketLinkInfo> = { emptyList() },
     private val config: () -> RelatedConfig = { RelatedConfig.DEFAULT },
     hubShare: Double = HUB_SHARE,
     minTicketsForHubs: Int = MIN_TICKETS_FOR_HUBS,
