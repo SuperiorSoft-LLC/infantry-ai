@@ -1,8 +1,8 @@
 package com.superiorsoftllc.agenthq.settings
 
 import com.superiorsoftllc.agenthq.protocol.TicketWeight
-import com.superiorsoftllc.agenthq.session.ContextLimits
-import com.superiorsoftllc.agenthq.session.EffortLevels
+import com.superiorsoftllc.agenthq.daemon.api.board.ContextLimits
+import com.superiorsoftllc.agenthq.daemon.api.board.EffortLevels
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
