@@ -27,6 +27,10 @@ data class TurnUsage(
     val cacheRead: Long?,
     val cacheWrite: Long?,
     val cost: Double?,
+    /** USAGE-OUT-1: the part of [output] the provider reports as thinking/reasoning, when it reports it separately; null = not reported. */
+    val thinking: Long? = null,
+    /** The provider's message id, when the stream has one (later lines of the same message refine [output]). */
+    val messageId: String? = null,
 ) {
     /** Tokens the model re-read this request (input + cache read + cache write); null when none of the three was reported. */
     val context: Long? get() = if (input == null && cacheRead == null && cacheWrite == null) null else (input ?: 0) + (cacheRead ?: 0) + (cacheWrite ?: 0)
@@ -48,6 +52,9 @@ class StreamUsageAccumulator {
     /** STATS-ACC-1: called once per recorded turn, as the line arrives (the push path). */
     var onTurn: ((TurnUsage) -> Unit)? = null
     var onCompaction: ((CompactionUsage) -> Unit)? = null
+    /** USAGE-OUT-1: a later line of an already-recorded message carried a larger (final) output count: (messageId, output, thinking). */
+    var onOutputUpdate: ((String, Long, Long?) -> Unit)? = null
+    private val outById = HashMap<String, Long>()
 
     private val seen = HashSet<String>()
     private var turns = 0L
@@ -88,11 +95,20 @@ class StreamUsageAccumulator {
         val m = o["message"] as? JsonObject ?: return
         val u = m["usage"] as? JsonObject ?: return
         val id = m.str("id")
-        if (id != null && !seen.add(id)) return
+        if (id != null && !seen.add(id)) {
+            // Later lines of one message: the final usage replaces the streaming placeholder of the first line.
+            val out = u.ln("output_tokens")
+            val prev = outById[id]
+            if (out != null && prev != null && out > prev) {
+                outById[id] = out; output += out - prev
+                onOutputUpdate?.invoke(id, out, u.thinking())
+            }
+            return
+        }
+        if (id != null) u.ln("output_tokens")?.let { outById[id] = it }
         m.str("model")?.takeIf { it != "<synthetic>" }?.let { model = it }
-        // Assistant lines carry streaming placeholders for output_tokens, so a per-request output is n/a (null) for Claude.
         turn(u.l("input_tokens"), u.l("output_tokens"), u.l("cache_read_input_tokens"), u.l("cache_creation_input_tokens"), null,
-            TurnUsage(m.str("model")?.takeIf { it != "<synthetic>" }, u.ln("input_tokens"), null, u.ln("cache_read_input_tokens"), u.ln("cache_creation_input_tokens"), null))
+            TurnUsage(m.str("model")?.takeIf { it != "<synthetic>" }, u.ln("input_tokens"), u.ln("output_tokens"), u.ln("cache_read_input_tokens"), u.ln("cache_creation_input_tokens"), null, u.thinking(), id))
     }
 
     private fun claudeResult(o: JsonObject) {
@@ -113,7 +129,7 @@ class StreamUsageAccumulator {
         m.str("model")?.let { model = if (provider != null) "$provider/$it" else it }
         val cost = ((u["cost"] as? JsonObject)?.get("total") as? JsonPrimitive)?.doubleOrNull
         turn(u.l("input"), u.l("output"), u.l("cacheRead"), u.l("cacheWrite"), cost,
-            TurnUsage(model, u.ln("input"), u.ln("output"), u.ln("cacheRead"), u.ln("cacheWrite"), cost))
+            TurnUsage(model, u.ln("input"), u.ln("output"), u.ln("cacheRead"), u.ln("cacheWrite"), cost, u.ln("reasoning") ?: u.ln("thinking")))
     }
 
     private fun openCodeStep(p: JsonObject?) {
@@ -121,7 +137,7 @@ class StreamUsageAccumulator {
         val c = t["cache"] as? JsonObject
         val cost = (p["cost"] as? JsonPrimitive)?.doubleOrNull
         turn(t.l("input"), t.l("output"), c?.l("read") ?: 0, c?.l("write") ?: 0, cost,
-            TurnUsage(model, t.ln("input"), t.ln("output"), c?.ln("read"), c?.ln("write"), cost))
+            TurnUsage(model, t.ln("input"), t.ln("output"), c?.ln("read"), c?.ln("write"), cost, t.ln("reasoning")))
     }
 
     private fun turn(i: Long, out: Long, r: Long, w: Long, c: Double?, reported: TurnUsage) {
@@ -144,6 +160,10 @@ class StreamUsageAccumulator {
             RunTotals(t, ru[0], ru[1], ru[2], ru[3], if (turns > 0) context else ru[0] + ru[2] + ru[3], resultCost ?: cost, model)
         } else RunTotals(t, input, output, read, write, context, cost, model)
     }
+
+    /** Reasoning/thinking tokens a provider reports inside its usage object (generic key names, no model names). */
+    private fun JsonObject.thinking(): Long? = ln("thinking_tokens") ?: ln("reasoning_tokens")
+        ?: (this["output_tokens_details"] as? JsonObject)?.let { it.ln("reasoning_tokens") ?: it.ln("thinking_tokens") }
 
     private fun JsonObject.str(k: String): String? = (this[k] as? JsonPrimitive)?.takeIf { it.isString }?.content
     private fun JsonObject.ln(k: String): Long? = (this[k] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull

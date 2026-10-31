@@ -22,11 +22,12 @@ import kotlinx.serialization.json.contentOrNull
 data class FitSpread(val mean: Double, val sd: Double, val median: Double)
 
 data class FitGroupView(val role: String, val model: String, val requests: Int, val input: Long, val cacheRead: Long, val cacheWrite: Long, val share: Double,
-    val totalRequests: Int = requests, val totalCacheRead: Long = cacheRead)
+    val totalRequests: Int = requests, val totalCacheRead: Long = cacheRead, val output: Long = 0)
 
 data class FitStepView(
     val t: Long, val points: Double, val requests: Int, val input: Long, val cacheRead: Long, val cacheWrite: Long,
     val cacheReadPerPoint: Double, val byRole: Map<String, Long>, val fitted: Double?,
+    val output: Long = 0, val outputByRole: Map<String, Long> = emptyMap(),
 )
 
 data class FitCandidateView(val key: String, val label: String, val r2: Double)
@@ -76,12 +77,13 @@ object UsageFitParser {
         cacheReadSpread = spread(o["perPoint"].obj()?.get("cacheRead")),
         groups = o["groups"].arr().mapNotNull { it.obj() }.map {
             FitGroupView(it["role"].s() ?: "?", it["model"].s() ?: "?", it["requests"].l()?.toInt() ?: 0, it["input"].l() ?: 0, it["cacheRead"].l() ?: 0, it["cacheWrite"].l() ?: 0, it["share"].d() ?: 0.0,
-                it["totalRequests"].l()?.toInt() ?: (it["requests"].l()?.toInt() ?: 0), it["totalCacheRead"].l() ?: (it["cacheRead"].l() ?: 0))
+                it["totalRequests"].l()?.toInt() ?: (it["requests"].l()?.toInt() ?: 0), it["totalCacheRead"].l() ?: (it["cacheRead"].l() ?: 0), it["output"].l() ?: 0)
         },
         series = o["series"].arr().mapNotNull { it.obj() }.map { s ->
             FitStepView(
                 s["t"].l() ?: 0, s["points"].d() ?: 0.0, s["requests"].l()?.toInt() ?: 0, s["input"].l() ?: 0, s["cacheRead"].l() ?: 0, s["cacheWrite"].l() ?: 0,
                 s["cacheReadPerPoint"].d() ?: 0.0, s["byRole"].obj()?.mapValues { it.value.l() ?: 0L }.orEmpty(), s["fitted"].d(),
+                s["output"].l() ?: 0, s["outputByRole"].obj()?.mapValues { it.value.l() ?: 0L }.orEmpty(),
             )
         },
         fit = o["fit"].obj()?.let { f ->

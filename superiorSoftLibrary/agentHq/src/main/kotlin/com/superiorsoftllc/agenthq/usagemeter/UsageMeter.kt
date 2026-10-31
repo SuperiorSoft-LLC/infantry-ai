@@ -59,6 +59,8 @@ class UsageMeter private constructor(
                         ticket_id TEXT, role TEXT NOT NULL, harness TEXT NOT NULL, model TEXT, source TEXT NOT NULL,
                         input INTEGER, output INTEGER, cache_read INTEGER, cache_write INTEGER, context INTEGER, cost REAL)""",
                 )
+                // USAGE-OUT-1 (additive): thinking tokens (part of output) and the provider message id that later lines refine.
+                for (col in listOf("thinking INTEGER", "msg_id TEXT")) runCatching { it.execute("ALTER TABLE meter_request ADD COLUMN $col") }
                 it.execute("CREATE INDEX IF NOT EXISTS meter_request_ts ON meter_request(ts)")
                 it.execute(
                     """CREATE TABLE IF NOT EXISTS meter_event (
@@ -92,6 +94,7 @@ class UsageMeter private constructor(
                 val p = Pending(sourceOf(rec, event.origin), rec)
                 p.acc.onTurn = { t -> recordTurn(event.sessionId, p, t) }
                 p.acc.onCompaction = { c -> recordCompaction(event.sessionId, p, c) }
+                p.acc.onOutputUpdate = { id, out, th -> updateOutput(event.sessionId, id, out, th) }
                 pending[event.sessionId] = p
             }
             is SessionEvent.Stdout -> {
@@ -105,6 +108,7 @@ class UsageMeter private constructor(
                     Pending(sourceOf(rec, MessageOrigin.Owner), rec).also { np ->
                         np.acc.onTurn = { t -> recordTurn(event.sessionId, np, t) }
                         np.acc.onCompaction = { c -> recordCompaction(event.sessionId, np, c) }
+                        np.acc.onOutputUpdate = { id, out, th -> updateOutput(event.sessionId, id, out, th) }
                         pending.putIfAbsent(event.sessionId, np)
                     }.let { pending[event.sessionId] ?: it }
                 }
@@ -125,18 +129,31 @@ class UsageMeter private constructor(
         val rec = p.rec
         runCatching {
             synchronized(conn) {
-                conn.prepareStatement("INSERT INTO meter_request (ts, session_id, run_no, ticket_id, role, harness, model, source, input, output, cache_read, cache_write, context, cost) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)").use { s ->
+                conn.prepareStatement("INSERT INTO meter_request (ts, session_id, run_no, ticket_id, role, harness, model, source, input, output, cache_read, cache_write, context, cost, thinking, msg_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").use { s ->
                     s.setLong(1, clock()); s.setString(2, sessionId); s.setInt(3, rec?.runCount ?: 0)
                     s.setString(4, rec?.ticketId); s.setString(5, rec?.role ?: "none"); s.setString(6, rec?.provider ?: "unknown")
                     s.setString(7, rec?.model ?: t.model); s.setString(8, p.source)
                     s.setNullableLong(9, t.input); s.setNullableLong(10, t.output); s.setNullableLong(11, t.cacheRead)
                     s.setNullableLong(12, t.cacheWrite); s.setNullableLong(13, t.context)
                     if (t.cost == null) s.setNull(14, java.sql.Types.REAL) else s.setDouble(14, t.cost)
+                    s.setNullableLong(15, t.thinking); s.setString(16, t.messageId)
                     s.executeUpdate()
                 }
             }
         }.onFailure { System.err.println("[agentHq] usage meter did not store a request of $sessionId: ${it.message}") }
         onRecorded?.invoke()
+    }
+
+    /** USAGE-OUT-1: the final usage of a message arrived after its first line was stored; raise the stored output (never lower it). */
+    private fun updateOutput(sessionId: String, msgId: String, output: Long, thinking: Long?) {
+        runCatching {
+            synchronized(conn) {
+                conn.prepareStatement("UPDATE meter_request SET output=?, thinking=COALESCE(?, thinking) WHERE session_id=? AND msg_id=? AND (output IS NULL OR output<?)").use { s ->
+                    s.setLong(1, output); s.setNullableLong(2, thinking); s.setString(3, sessionId); s.setString(4, msgId); s.setLong(5, output)
+                    s.executeUpdate()
+                }
+            }
+        }.onFailure { System.err.println("[agentHq] usage meter did not update output of $sessionId: ${it.message}") }
     }
 
     private fun recordCompaction(sessionId: String, p: Pending, c: CompactionUsage) {
