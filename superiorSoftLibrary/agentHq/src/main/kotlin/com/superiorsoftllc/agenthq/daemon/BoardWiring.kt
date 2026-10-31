@@ -8,6 +8,7 @@ import com.superiorsoftllc.agenthq.attention.AttentionStore
 import com.superiorsoftllc.agenthq.backlog.BoardEvent
 import com.superiorsoftllc.agenthq.backlog.TicketBoard
 import com.superiorsoftllc.agenthq.backlog.TicketEventLog
+import com.superiorsoftllc.agenthq.backlog.asStartMoves
 import com.superiorsoftllc.agenthq.backlog.toInfo
 import com.superiorsoftllc.agenthq.context.TicketContext
 import com.superiorsoftllc.agenthq.daemon.api.board.TicketEvent
@@ -42,18 +43,16 @@ import java.util.concurrent.atomic.AtomicReference
  * is new behaviour: the construction order, the threads and the event subscriptions are exactly what `DaemonMain` did.
  *
  * Two phases, because the board's consumers (triggers, the done-worker reaper) are built after the board:
- *  1. [create]: the board, its push sink, the handover, the first-turn brief, the worker sweep, the story shims.
+ *  1. [create]: the board, its push sink, the story shims.
  *  2. [attachTicketServices]: the ticket files, the typed ticket-event consumers, the story migration, the queue-mark clear.
  */
 class BoardWiring private constructor(
     val board: TicketBoard,
-    val handover: SessionHandover,
     val stories: StoryHandler,
     val storyBoard: BoardHandler,
-    private val workerSweep: java.util.concurrent.ScheduledExecutorService,
 ) {
-    /** Closes the worker sweep thread with the daemon. */
-    val workerSweepCloser: AutoCloseable = AutoCloseable { workerSweep.shutdownNow() }
+    /** DP-5h-3e-a: the core ports over this core-built board; goes away with it (DP-5h-4). */
+    val ports: BoardPorts = CoreBoardPorts(this)
 
     /** Set by [attachTicketServices]. */
     lateinit var ticketFiles: TicketFiles
@@ -62,6 +61,7 @@ class BoardWiring private constructor(
         private set
     lateinit var ticketEvents: TicketEventLog
         private set
+    internal fun ticketFilesOrNull(): TicketFiles? = if (this::ticketFiles.isInitialized) ticketFiles else null
 
     /**
      * Phase 2, at the point `DaemonMain` built the ticket files: after the mailbox, the triggers and the reaper exist.
@@ -147,7 +147,6 @@ class BoardWiring private constructor(
             attention: AttentionStore,
             roles: RoleService,
             relatedDescriptionRef: AtomicReference<RelatedDescription>,
-            handoffTimeoutMs: Long,
             eventSink: (BoardEvent) -> Unit,
             onEpicChanged: (String) -> Unit,
         ): BoardWiring {
@@ -185,22 +184,6 @@ class BoardWiring private constructor(
                 relatedDescription = RelatedDescription { draft -> relatedDescriptionRef.get().describe(draft) },
             )
             board.eventSink = eventSink
-            // TICKET-HANDOVER: a ticket worker switched to another harness hands off, then resumes with its ticket brief.
-            val handover = SessionHandover(manager, { board.brief(it.id) }, handoffTimeoutMs)
-            // GAP-006b: a first turn of a worker whose brief never landed carries it; the sweep enforces the in-progress invariant.
-            manager.briefFor = { board.brief(it.id) }
-            val workerSweepExec = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r ->
-                Thread(r, "agenthq-ticket-worker-sweep").also { it.isDaemon = true }
-            }
-            workerSweepExec.scheduleWithFixedDelay({
-                runCatching {
-                    val graceMs = LimitRegistry.minutesMs(settings.limit(LimitRegistry.UNBRIEFED_GRACE_MINUTES), LimitRegistry.UNBRIEFED_GRACE_MINUTES)
-                    board.sweepWorkers(graceMs) { ticketId, sessionId, detail ->
-                        println("[agentHq] ticket worker sweep: $ticketId: $detail")
-                        attention.raise(kind = AttentionKind.STALLED, ticketId = ticketId, podId = null, sessionId = sessionId, outcome = "unbriefed", detail = detail)
-                    }
-                }.onFailure { System.err.println("[agentHq] ticket worker sweep failed: ${it.message}") }
-            }, 60L, 60L, java.util.concurrent.TimeUnit.SECONDS)
             // E1-c (contract 1.62.0): the story frames are deprecated shims over the ticket board. An old story id
             // resolves through E1-a's `story_migration`; a create that names an epic pushes that epic's frame (its
             // storyIds now list the new ticket) to every client, exactly the frame an `epic_save` answers with.
@@ -211,7 +194,21 @@ class BoardWiring private constructor(
                 onEpicChanged = onEpicChanged,
             )
             val storyBoard = BoardHandler(stories = { board.list().map { it.asStory() } })
-            return BoardWiring(board, handover, stories, storyBoard, workerSweepExec)
+            return BoardWiring(board, stories, storyBoard)
         }
     }
+}
+
+/** The adapter of the core-built [TicketBoard] to the core's [BoardPorts]; behaviour is the direct calls it replaces. */
+private class CoreBoardPorts(private val wiring: BoardWiring) : BoardPorts {
+    private val board get() = wiring.board
+    override fun ticket(id: String) = runCatching { board.get(id) }.getOrNull()?.let { BoardTicketRef(it.sessionId, it.projectId, it.status) }
+    override fun starterOf(workerSessionId: String) = board.starterOf(workerSessionId)
+    override fun titlesBySession() = board.list().mapNotNull { t -> t.sessionId?.let { it to t.title } }.toMap()
+    override fun brief(sessionId: String) = board.brief(sessionId)
+    @Suppress("UNCHECKED_CAST")
+    override fun startMoves() = board.asStartMoves() as StartMoves<Any>
+    override fun saveFilesRead(ticketId: String, line: String) { wiring.ticketFilesOrNull()?.saveFilesRead(ticketId, line) }
+    override fun clearQueueMarks() { board.clearQueueMarks() }
+    override fun sweepWorkers(graceMs: Long, flag: (String, String?, String) -> Unit) = board.sweepWorkers(graceMs, flag)
 }
