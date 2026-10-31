@@ -1,0 +1,1 @@
+- DP-5f-3b3: with projectFolders on, start a ticket in a project with no directory (expect refusal), and check agent lane queueing / clone creation (LANE-CAPS) end to end.
