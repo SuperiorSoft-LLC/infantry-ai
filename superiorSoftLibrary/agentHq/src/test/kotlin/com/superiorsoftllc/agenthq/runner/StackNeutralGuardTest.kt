@@ -17,6 +17,7 @@ class StackNeutralGuardTest {
         File("../agentHqProtocol/src/main/kotlin"),
         File("../agentHqRunner/src/main/kotlin"),
         File("../agentHqDaemonApi/src/main/kotlin"),
+        File("../agentHqBoard/src/main/kotlin"),
     )
 
     private val stack = Regex("""(?i)\bgradle|kotlincompile|kotlin-daemon|\bmvnw?\b|\bmaven\b|\bcargo\b|\bpytest\b|\bdotnet\b""")
@@ -24,7 +25,6 @@ class StackNeutralGuardTest {
 
     /** File (path suffix) -> lines it may still have, and why. */
     private val PENDING = mapOf(
-        "context/TicketContextComposer.kt" to 3, // the start brief's watch lines: role / project data, gated on limits.watch.enabled
         "daemon/WebBundle.kt" to 1, // a dev-only hint naming Infantry AI's own build (this repo's build files: allowed)
     )
 

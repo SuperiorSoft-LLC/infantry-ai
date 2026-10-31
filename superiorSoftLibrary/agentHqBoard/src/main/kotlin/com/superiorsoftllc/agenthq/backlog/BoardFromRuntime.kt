@@ -41,6 +41,7 @@ object BoardFromRuntime {
         com.superiorsoftllc.agenthq.context.SkillsSection { ids, include -> runtime.host.context.skillsSection(ids, include) },
         roleNotes = com.superiorsoftllc.agenthq.context.RoleNotesSource { project, role -> runtime.roleNotes(project, role) },
         related = com.superiorsoftllc.agenthq.ticketfiles.RelatedWorkSource { id, desc -> runtime.relatedBlock(id, desc) },
+        watchedPrograms = { runtime.watchedPrograms() },
         )
         return object : TicketContext {
             override fun compose(input: com.superiorsoftllc.agenthq.context.ContextInput) =

@@ -19,6 +19,8 @@ class TicketContextComposer(
     private val roleNotes: RoleNotesSource = RoleNotesSource.NONE,
     /** DAEMON-CONTEXT-1: the related tickets and their files, assembled by the daemon into the first prompt. */
     private val related: RelatedWorkSource = RelatedWorkSource.NONE,
+    /** STACK-NEUTRAL-5: the programs the watch shims, read at every start; empty = the watch is off (no watch line). */
+    private val watchedPrograms: () -> List<String> = { emptyList() },
 ) : TicketContext {
     override fun compose(input: ContextInput): ComposedContext {
         val relatedBlock = input.ticketId?.let { runCatching { related.block(it, input.description) }.getOrNull() }
@@ -87,29 +89,36 @@ class TicketContextComposer(
          * BUG-E2E-2: the agent closes its own ticket. Blocked work is NOT moved to pending: the board sets pending
          * itself from an open blocked_by prerequisite and refuses that move by hand, so the agent reports instead.
          */
-        fun ticketMoveLine(ticketId: String?): String {
+        fun ticketMoveLine(ticketId: String?, watchedPrograms: List<String> = emptyList()): String {
             val id = ticketId ?: "<ticket id>"
             return "When the work is done, run `agenthq ticket move $id done`. If you are blocked, leave the ticket " +
                 "in_progress and mail what blocks you (Team, below) " +
                 "(pending is set by the daemon from a blocked_by link; a move there by hand is refused).\n" +
-                DESC_FILE_LINE + BG_RUN_LINE + WATCH_LINE + RELATED_FILES_LINE
+                DESC_FILE_LINE + BG_RUN_LINE + watchLine(watchedPrograms) + RELATED_FILES_LINE
         }
 
         /** `agenthq bg run`: a long gate the agent starts is flagged to the daemon, so the session reads Running, not idle. */
-        const val BG_RUN_LINE = "\nRun long commands (Gradle builds, test gates) as `agenthq bg run --notify --name <label> -- <cmd...>`: " +
+        const val BG_RUN_LINE = "\nRun long commands (builds, test gates) as `agenthq bg run --notify --name <label> -- <cmd...>`: " +
             "it returns at once, your session shows Running, and the daemon mails you when the job ends (exit code + last lines), " +
             "matches a pattern or runs too long. Never sleep or poll: end your turn and continue when that mail arrives " +
             "(`agenthq bg wait <id>` only if mail does not wake your harness). `agenthq bg list|status|logs|stop <id>` manage them. " +
             "If `agenthq bg --help` does not list `run --notify` (an older CLI), run the command as a plain background job, end your turn " +
-            "and use `agenthq bg wait <id>` or read its log later; still never sleep or poll. " +
-            "On Windows run Gradle as `gradlew.bat` (`./gradlew` fails under `agenthq bg run`)."
+            "and use `agenthq bg wait <id>` or read its log later; still never sleep or poll."
 
-        /** STALL-1 (ticket 802c64d5): the daemon-side watch, told once at ticket start (no per-ticket text). */
-        const val WATCH_LINE = "\nYour commands are WATCHED by the daemon, at no token cost: `gradle`, `mvn`, `npm`, `yarn` and `pnpm` run through " +
-            "its runner automatically (START, `still running` every minute, END with exit code), and any long process under your " +
-            "session is seen when it ends. The result arrives as an `[AUTOMATIC]` mail that wakes you; a quiet job, a job still " +
-            "running after 15 min and an idle or stuck ticket get one too. Opt out only for a real need: " +
-            "`agenthq unwatched --reason \"<why>\" -- <cmd...>` (logged and reported to the PM). Never sleep, poll or block a turn only to wait: end it, the mail wakes you."
+        /**
+         * STALL-1 (ticket 802c64d5) / STACK-NEUTRAL-5: the daemon-side watch, told once at ticket start. Empty [programs] = the watch
+         * is off: no line. The tool list is the shimmed programs of the profiles in force, never a name written here.
+         */
+        fun watchLine(programs: List<String>): String {
+            if (programs.isEmpty()) return ""
+            val names = programs.map { "`$it`" }
+            val list = if (names.size == 1) names[0] else names.dropLast(1).joinToString(", ") + " and " + names.last()
+            return "\nYour commands are WATCHED by the daemon, at no token cost: $list run through " +
+                "its runner automatically (START, `still running` every minute, END with exit code), and any long process under your " +
+                "session is seen when it ends. The result arrives as an `[AUTOMATIC]` mail that wakes you; a quiet job, a job still " +
+                "running after 15 min and an idle or stuck ticket get one too. Opt out only for a real need: " +
+                "`agenthq unwatched --reason \"<why>\" -- <cmd...>` (logged and reported to the PM). Never sleep, poll or block a turn only to wait: end it, the mail wakes you."
+        }
 
         /** TICKET-FILES (55476f3c): the related tickets' files are one indexed read, far cheaper than grepping for them. */
         const val RELATED_FILES_LINE = "\nBefore you grep or read around, call agenthq_ticket_related_files with this ticket's id (CLI: " +

@@ -310,4 +310,13 @@ class TicketContextComposerTest {
 
         val teamSection = teamBlock + "\n" + TicketContextComposer.FINISH_LINE
     }
+
+    @Test
+    fun `the watch line appears only with shimmed programs and lists them`() {
+        assertFalse(TicketContextComposer.ticketMoveLine("T").contains("WATCHED"))
+        assertFalse(TicketContextComposer.BG_RUN_LINE.contains("gradle", ignoreCase = true))
+        val line = TicketContextComposer.ticketMoveLine("T", listOf("a", "b", "c"))
+        assertTrue(line.contains("WATCHED by the daemon, at no token cost: `a`, `b` and `c` run through"))
+        assertTrue(TicketContextComposer.ticketMoveLine("T", listOf("a")).contains("cost: `a` run through"))
+    }
 }

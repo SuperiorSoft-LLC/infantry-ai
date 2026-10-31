@@ -63,6 +63,9 @@ interface BoardRuntime {
     fun roleNotes(projectId: String, role: String): List<Pair<String, String>> = emptyList()
     fun relatedBlock(ticketId: String, description: String): String? = null
 
+    /** STACK-NEUTRAL-5 (additive): the programs the watch shims while the watch is on (`limits.watch.enabled` and `limits.watch.forced`), for the start brief's watch line; empty = the watch is off. */
+    fun watchedPrograms(): List<String> = emptyList()
+
     /** Daemon tests only: a FIXED first turn (prompt, then (source, chars) pairs) that replaces the composed context; null = compose. */
     fun fixedFirstTurn(): Pair<String, List<Pair<String, Int>>>? = null
 
