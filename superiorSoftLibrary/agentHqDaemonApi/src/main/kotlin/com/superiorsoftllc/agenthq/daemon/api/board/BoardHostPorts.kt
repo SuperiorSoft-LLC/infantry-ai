@@ -134,10 +134,27 @@ data class BoardRoleInstance(
 )
 
 /** DP-5f-2b: a provider a start may name. [defaultModel] null = the harness's own. */
-data class BoardProviderInfo(val id: String, val defaultModel: String? = null)
+data class BoardProviderInfo(
+    val id: String,
+    val defaultModel: String? = null,
+    /** DP-5f-3 (1.9.0): how this harness honours a context limit / an effort: the wire word (`supported`, `best_effort`, `unsupported`) and the how-text; null = not asked. */
+    val contextLimitSupport: String? = null,
+    val contextLimitHow: String? = null,
+    val effortSupport: String? = null,
+    val effortHow: String? = null,
+    /** The models the harness lists, or null when it cannot list them; read on demand (a harness may run a process to answer). */
+    val knownModels: () -> List<String>? = { null },
+)
 
 /** DP-5f-2b: a session plus what the stall and busy checks read: the last observed activity and whether a run is in flight. */
-data class BoardSessionDetail(val view: SessionView, val lastHeartbeat: Long, val busy: Boolean)
+data class BoardSessionDetail(
+    val view: SessionView,
+    val lastHeartbeat: Long,
+    val busy: Boolean,
+    /** DP-5f-3 (1.9.0): when the session was spawned, and the harness's own session id (null until it opened one). */
+    val spawnedAt: Long = 0,
+    val providerSessionId: String? = null,
+)
 
 /** DP-5f-2b: which thread a [BoardSessionListener] runs on. */
 enum class SessionDelivery {

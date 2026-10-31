@@ -261,3 +261,7 @@ Same rules as section 10. `LocalBoardHost` delegates; `NoBoardHost` answers empt
 | `TicketBoard.events` (`TicketEventLog`) | record / deliver | `BoardHost.events: TicketEventAppender` (same appender as `storage.tables.events`, usable outside a transaction) |
 
 TEST-TODO (DP-5f-2b): (1) lock hook parity: `holdsSessionsLock()` true exactly inside `synchronized(manager)` on the calling thread, false on another thread. (2) delivery thread: a listener runs on the emitting thread, under the manager monitor when the emitter holds it. (3) heartbeat/busy mapping: `detail().busy` equals `isBusy()` for STARTING/BUSY/WAITING_INPUT/IDLE/EXITED; `lastHeartbeat` equals the record's. (4) `instanceFor`/`withSkills` round-trip equals core's `RoleInstance` including a trait check; `start(instance=...)` freezes exactly that instance. (5) `requireAllowedRole` text equals core's refusal under an allowlist. (6) `host.events` records and delivers like `storage.tables.events`.
+
+## 12. DP-5f-3 built: third batch (`BOARD_API_VERSION` 1.9.0, additive)
+
+`BoardProviderInfo` gains `contextLimitSupport/How`, `effortSupport/How` and a lazy `knownModels`; `BoardSessionDetail` gains `spawnedAt` and `providerSessionId`. `LocalBoardHost` fills them from the provider and the session record.
