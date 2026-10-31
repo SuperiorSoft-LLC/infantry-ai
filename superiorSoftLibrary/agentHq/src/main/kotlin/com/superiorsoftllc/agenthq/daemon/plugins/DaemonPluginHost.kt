@@ -326,6 +326,17 @@ class DaemonPluginHost private constructor(
 
     private fun failClosed(owner: Loaded, what: String): String = "refused: plugin ${owner.id}'s $what failed (fail closed)"
 
+    /** BOARD-DOWN-1: a plugin marked failed is mailed to every live pm, so an outage is seen at once (generic, any plugin). */
+    private fun announceFailure(id: String, why: String) {
+        observerQueue.execute {
+            runCatching {
+                val subject = "Daemon plugin $id FAILED"
+                val body = "Daemon plugin $id was marked failed and unregistered: $why. Its tools and frames are gone until the daemon restarts."
+                services.projects.list().forEach { services.sessionNotifier.notifyRole(it.id, "pm", subject, body) }
+            }.onFailure { log("[plugins] could not announce failure of $id: ${it.message}") }
+        }
+    }
+
     private fun unregister(p: Loaded) {
         toolEntries.entries.removeIf { it.value.owner === p }
         frameHandlers.entries.removeIf { it.value.owner === p }
@@ -354,7 +365,7 @@ class DaemonPluginHost private constructor(
         val loader = URLClassLoader("plugin-$id", arrayOf(jar.toURI().toURL()), DaemonApiClassLoader(DaemonPluginHost::class.java.classLoader))
         val cpu = d.limits.cpuMsPerCall ?: maxOf(d.limits.callTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_CALL_TIMEOUT_MS), d.limits.toolTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_TOOL_TIMEOUT_MS))
         lateinit var p: Loaded
-        val guard = PluginGuard(id, loader, cpu, log, onDisabled = { unregister(p) })
+        val guard = PluginGuard(id, loader, cpu, log, onDisabled = { why -> unregister(p); announceFailure(id, why) })
         p = Loaded(id, status.tier, d, setting, guard, loader)
         loaded += p
         val api = Api(p)
