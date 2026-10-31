@@ -1173,6 +1173,8 @@ class AgentHqDaemon(
                 injectMaxChars = { settings.limit(LimitRegistry.MAIL_INJECT_MAX_CHARS).toInt() },
                 injectTotalChars = { settings.limit(LimitRegistry.MAIL_INJECT_TOTAL_CHARS).toInt() },
                 wakeDebounceMs = { settings.limit(LimitRegistry.MAIL_WAKE_DEBOUNCE_SECONDS) * 1000 },
+                contextCap = { role, sid -> settings.contextCap(role, sid) },
+                contextTokens = { r -> sessionStats.read(r.id, r.provider, r.providerSessionId, r.state.name.lowercase()).lastContextTokens },
                 knowledge = knowledge, skills = skillsSource, starterOf = { sid -> orchestratorLink.starterOf(sid).valueOr(null) },
             )
             // Story 9.5: triggers -- stored, coalesced, tripped on any non-success, their starts unattended.

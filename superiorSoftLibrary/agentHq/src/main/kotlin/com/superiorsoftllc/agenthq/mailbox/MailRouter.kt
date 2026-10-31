@@ -92,6 +92,10 @@ class MailRouter(
     private val injectMaxChars: () -> Int = { 2000 },
     /** MAIL-TRUNC-1: cap (chars) of the whole folded turn in `truncate` mode; mail past it is listed as notify lines. */
     private val injectTotalChars: () -> Int = { 6000 },
+    /** USAGE-OUT-2: context cap (tokens) for a recipient role / session; 0 = off. Past it a wake restarts the session fresh. */
+    private val contextCap: (role: String, sessionId: String) -> Long = { _, _ -> 0L },
+    /** USAGE-OUT-2: the session's last request context size (tokens), or null when unknown. */
+    private val contextTokens: (SessionRecord) -> Long? = { null },
 ) : MailDelivery {
 
     private val debounceTimer by lazy {
@@ -309,11 +313,24 @@ class MailRouter(
         return try {
             // A bound-but-never-run session takes its persona and identity with its first turn, exactly as
             // a `prompt` frame gives them (BUG-808ce596: one composer, [firstTurn]).
+            // USAGE-OUT-2: a long-lived session past its context cap restarts in place with a short handoff, and the
+            // pending mail rides in that fresh first turn (a wake re-reads the whole context, so this is the saving).
+            var handoff: String? = null
+            var session = session
+            if (!session.neverRun) {
+                val cap = contextCap(session.role ?: "", session.id)
+                val used = if (cap > 0) contextTokens(session) else null
+                if (used != null && used > cap) {
+                    handoff = composeHandoff(session, used, cap)
+                    session = manager.restart(session.id)
+                }
+            }
             val source = MailSource.of(message, manager, automationFooter)
             // USAGE-REGRESS-1: every wake re-reads the whole context; fold the other messages already queued for this
             // session (same recipient, up to [coalesceMax]) into the one turn instead of one wake each.
             val folded = if (session.neverRun) emptyList() else rest.take(coalesceMax())
-            val text = renderTurn(deliveryMode(session.role ?: "", session.id), listOf(message) + folded, source) { MailSource.of(it, manager, automationFooter) }
+            val mailText = renderTurn(deliveryMode(session.role ?: "", session.id), listOf(message) + folded, source) { MailSource.of(it, manager, automationFooter) }
+            val text = if (handoff != null) handoff + MAIL_FOLD_SEPARATOR + mailText else mailText
             val turn = if (session.neverRun) {
                 // TRAITS-T5: the persona and traits FROZEN at spawn, never the live profile (a later edit never reaches it).
                 // P10-K9: the knowledge counts are read NOW, at delivery, for the session's own project.
@@ -327,6 +344,26 @@ class MailRouter(
         } catch (e: Exception) {
             DeliveryOutcome.Failed("resume of '${session.id}' failed: ${e.message}")
         }
+    }
+
+    /**
+     * USAGE-OUT-2: the short handoff for a session restarted past its context cap, composed from the mailbox (no model
+     * turn): the last mail it sent (its reports) and the subjects of its last received mail. Bodies are cut.
+     */
+    internal fun composeHandoff(session: SessionRecord, used: Long, cap: Long): String = buildString {
+        append("CONTEXT HANDOFF: your session was restarted fresh because its context (").append(used).append(" tokens) passed the cap (")
+            .append(cap).append("). Role notes and project knowledge are reloaded below; the mail below is yours to act on.")
+        val sent = mailbox.outbox(session.id).takeLast(3)
+        if (sent.isNotEmpty()) {
+            append("\nYour last sent mail:")
+            for (m in sent) append("\n- to ").append(m.to).append(": ").append(m.subject).append(" | ").append(m.body.take(600).replace('\n', ' '))
+        }
+        val got = mailbox.inbox(session.id).takeLast(5)
+        if (got.isNotEmpty()) {
+            append("\nYour last received mail:")
+            for (m in got) append("\n- ").append(m.id.take(8)).append(" from ").append(m.from).append(": ").append(m.subject)
+        }
+        append("\nRead anything in full with `agenthq read <id>`; `agenthq inbox` lists the rest.")
     }
 
     /**
