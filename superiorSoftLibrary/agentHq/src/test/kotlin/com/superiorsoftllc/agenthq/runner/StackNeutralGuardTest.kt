@@ -25,7 +25,6 @@ class StackNeutralGuardTest {
     /** File (path suffix) -> lines it may still have, and why. */
     private val PENDING = mapOf(
         "context/TicketContextComposer.kt" to 3, // the start brief's watch lines: role / project data, gated on limits.watch.enabled
-        "worktree/AndroidSdkProvision.kt" to 2, // a stack feature: a worktree-provision profile hook
         "daemon/WebBundle.kt" to 1, // a dev-only hint naming Infantry AI's own build (this repo's build files: allowed)
     )
 

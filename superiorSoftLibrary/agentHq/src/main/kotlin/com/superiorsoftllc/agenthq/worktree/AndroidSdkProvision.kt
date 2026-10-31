@@ -18,11 +18,12 @@ import java.util.Properties
  * any other repository needs no SDK, so it gets neither a file nor a warning.
  */
 class AndroidSdkProvision(
+    private val detectFiles: List<String> = loadDetectFiles(),
     private val env: (String) -> String? = System::getenv,
-) {
+) : WorktreeProvisionHook {
 
     /** @return a warning for the start's answer, or null when the SDK location is in place. */
-    fun provision(mainRoot: File, worktree: File): String? {
+    override fun provision(mainRoot: File, worktree: File): String? {
         val target = File(worktree, LOCAL_PROPERTIES)
         if (target.exists() || !isGradleProject(mainRoot)) return null
         val sdk = locate(mainRoot)
@@ -36,7 +37,7 @@ class AndroidSdkProvision(
         }.getOrElse { "could not write ${target.path}: ${it.message}" }
     }
 
-    private fun isGradleProject(root: File): Boolean = GRADLE_FILES.any { File(root, it).isFile }
+    private fun isGradleProject(root: File): Boolean = detectFiles.any { File(root, it).isFile }
 
     private fun locate(mainRoot: File): File? {
         val fromMain = File(mainRoot, LOCAL_PROPERTIES).takeIf { it.isFile }?.let { file ->
@@ -51,6 +52,12 @@ class AndroidSdkProvision(
     companion object {
         const val SETTING = "AGENTHQ_ANDROID_SDK"
         private const val LOCAL_PROPERTIES = "local.properties"
-        private val GRADLE_FILES = listOf("settings.gradle.kts", "settings.gradle", "build.gradle.kts", "build.gradle")
+
+        /** The files whose presence marks a project that needs the SDK: data in `worktree/sdk-provision.json`. */
+        fun loadDetectFiles(): List<String> {
+            val text = AndroidSdkProvision::class.java.getResourceAsStream("/worktree/sdk-provision.json")?.use { it.readBytes().decodeToString() }
+                ?: return emptyList()
+            return Regex(""""([^"]+)"""").findAll(text.substringAfter('[').substringBefore(']')).map { it.groupValues[1] }.toList()
+        }
     }
 }
