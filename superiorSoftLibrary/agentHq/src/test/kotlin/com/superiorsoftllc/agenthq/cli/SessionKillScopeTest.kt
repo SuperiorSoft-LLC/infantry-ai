@@ -201,7 +201,7 @@ class SessionKillScopeTest {
         val serverOut = PrintWriter(PipedWriter(fromServer))
         val served = Served(PrintWriter(toServer), BufferedReader(fromServer), StringBuffer())
         val lineage = Files.createTempDirectory("agenthq-kill-scope-lineage").toFile()
-        val args = arrayOf("mcp", "serve", "--port", fixture.port.toString(), "--lineage-dir", lineage.path)
+        val args = arrayOf("mcp", "serve", "--port", fixture.port.toString())
         served.worker = thread(name = "mcp-serve", isDaemon = true) {
             Cli.run(args, serverOut, served.stderr, envOf(caller), { serverIn })
             serverOut.close()
