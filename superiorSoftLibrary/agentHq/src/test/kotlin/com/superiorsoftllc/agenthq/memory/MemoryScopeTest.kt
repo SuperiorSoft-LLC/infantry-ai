@@ -166,6 +166,22 @@ class MemoryScopeTest {
     }
 
     @Test
+    fun sessionEndedListenersHearAKillAndARemovalAndCanBeClosed() {
+        val manager = manager(MemoryStore())
+        val heard = mutableListOf<String>()
+        val handle = manager.addSessionEndedListener { heard += it }
+        val a = manager.startNew("")
+        manager.kill(a.id, force = true)
+        manager.delete(a.id)
+        assertTrue(a.id in heard, "a listener is told when a session ends")
+        val before = heard.size
+        handle.close()
+        val b = manager.startNew("")
+        manager.kill(b.id, force = true)
+        assertEquals(before, heard.size, "a closed listener hears nothing more")
+    }
+
+    @Test
     fun aSavedOrDeletedRoleNoteIsAnnouncedButProjectAndSessionNotesAreNot() {
         val seen = mutableListOf<String>()
         val h = MemoryHandler(

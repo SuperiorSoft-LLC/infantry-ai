@@ -1547,7 +1547,7 @@ class SessionManager(
             // Closing a session stops the process the host keeps alive for it.
             host.stop(sessionId, force)
             if (sessions.containsKey(sessionId)) {
-                onSessionEnded(sessionId)
+                endedNotice(sessionId)
                 closed(sessionId, "session killed")
             }
         }
@@ -1589,6 +1589,19 @@ class SessionManager(
         set(value) {
             field = { id -> runCatching { value(id) } }
         }
+
+    /** DP-7d (DaemonApi 1.18.0): extra listeners told after [onSessionEnded] when a session is killed or removed; one failing never stops the rest. */
+    private val endedListeners = java.util.concurrent.CopyOnWriteArrayList<(String) -> Unit>()
+
+    fun addSessionEndedListener(listener: (String) -> Unit): AutoCloseable {
+        endedListeners += listener
+        return AutoCloseable { endedListeners -= listener }
+    }
+
+    private fun endedNotice(sessionId: String) {
+        onSessionEnded(sessionId)
+        for (l in endedListeners) runCatching { l(sessionId) }
+    }
 
     private fun killRun(sessionId: String, force: Boolean): SessionRecord {
         val run = runs[sessionId]
@@ -1648,7 +1661,7 @@ class SessionManager(
         carryPending.remove(sessionId)
         lastPersisted.remove(sessionId)
         instances.delete(sessionId) // TRAITS-T4: the instance goes with its record
-        onSessionEnded(sessionId)
+        endedNotice(sessionId)
         closed(sessionId, "session removed", closing)
         writeAll()
     }

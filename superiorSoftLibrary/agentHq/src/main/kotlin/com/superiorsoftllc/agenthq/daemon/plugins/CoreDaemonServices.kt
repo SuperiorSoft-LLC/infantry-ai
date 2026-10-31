@@ -60,6 +60,7 @@ class CoreDaemonServices(
     override val boardRuntime get() = boardRuntimeService ?: com.superiorsoftllc.agenthq.daemon.api.board.NoBoardRuntime
     override val spawns get() = spawnService ?: com.superiorsoftllc.agenthq.daemon.api.spawns.NoSpawns
     override val sessionReads get() = sessionReadModel ?: com.superiorsoftllc.agenthq.daemon.api.sessions.NoSessionReads
+    override fun onSessionRemoved(listener: (String) -> Unit): AutoCloseable = manager.addSessionEndedListener(listener)
     override val ticketEvents: com.superiorsoftllc.agenthq.daemon.api.board.TicketEvents get() = ticketEventStream ?: com.superiorsoftllc.agenthq.daemon.api.board.NoTicketEvents
     override fun limit(def: com.superiorsoftllc.agenthq.settings.LimitDef): Long = limits(def)
     override val tickets get() = boardServices?.tickets ?: com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.tickets
