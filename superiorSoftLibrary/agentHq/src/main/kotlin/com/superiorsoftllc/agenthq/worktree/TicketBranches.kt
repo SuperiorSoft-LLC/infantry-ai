@@ -46,7 +46,7 @@ sealed interface TicketBranchOutcome {
 class TicketBranches(
     private val git: GitCli = SystemGitCli(),
     private val worktreesDir: (repoRoot: File) -> File = { File(it, ".worktrees") },
-    private val androidSdk: AndroidSdkProvision = AndroidSdkProvision(),
+    private val provisioners: WorktreeProvisions = WorktreeProvisions.default(),
 ) {
 
     fun ensure(request: TicketBranchRequest): TicketBranchOutcome {
@@ -77,7 +77,7 @@ class TicketBranches(
         return TicketBranchOutcome.Ready(
             TicketWorktree(branch = branch, base = base, path = path.absolutePath, repoRoot = root.absolutePath),
             note = "cut from ${request.baseBranch} ${base.take(SHORT_SHA)}",
-            warning = androidSdk.provision(root, path),
+            warning = provisioners.provision(root, path),
         )
     }
 
@@ -96,7 +96,7 @@ class TicketBranches(
         )
         if (File(path, ".git").exists()) return ready
 
-        val reattachedReady = { ready.copy(warning = androidSdk.provision(root, path)) }
+        val reattachedReady = { ready.copy(warning = provisioners.provision(root, path)) }
 
         val branchExists = git.run(root, listOf("rev-parse", "--verify", "--quiet", "refs/heads/$branch")).ok
         val args = if (branchExists) {

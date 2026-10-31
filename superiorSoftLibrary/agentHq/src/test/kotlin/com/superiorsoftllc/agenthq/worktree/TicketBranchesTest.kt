@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
 class TicketBranchesTest {
 
     private val git = testGit()
-    private val branches = TicketBranches(git, androidSdk = AndroidSdkProvision { if (it == AndroidSdkProvision.SETTING) System.getProperty("java.io.tmpdir") else null })
+    private val branches = TicketBranches(git, provisioners = WorktreeProvisions(listOf(AndroidSdkProvision { if (it == AndroidSdkProvision.SETTING) System.getProperty("java.io.tmpdir") else null })))
 
     private fun head(repo: File): String = git.run(repo, listOf("rev-parse", "HEAD")).out()
 

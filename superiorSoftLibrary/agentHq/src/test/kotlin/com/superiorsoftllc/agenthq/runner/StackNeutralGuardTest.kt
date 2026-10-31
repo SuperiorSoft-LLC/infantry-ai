@@ -27,7 +27,6 @@ class StackNeutralGuardTest {
         "cli/ProgressCli.kt" to 7, // the `--reader gradle` progress reader: becomes a data reader profile
         "cli/CliMain.kt" to 1, // help text naming that reader
         "context/TicketContextComposer.kt" to 3, // the start brief's watch lines: role / project data, gated on limits.watch.enabled
-        "worktree/AndroidSdkProvision.kt" to 2, // a stack feature: a worktree-provision profile hook
         "daemon/WebBundle.kt" to 1, // a dev-only hint naming Infantry AI's own build (this repo's build files: allowed)
     )
 

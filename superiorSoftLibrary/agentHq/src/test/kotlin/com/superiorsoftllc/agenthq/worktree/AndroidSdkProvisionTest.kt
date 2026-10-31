@@ -32,7 +32,7 @@ class AndroidSdkProvisionTest {
         File(repo, "local.properties").writeText("sdk.dir=${sdk.path.replace("\\", "\\\\")}\n")
 
         val cut = assertIs<TicketBranchOutcome.Ready>(
-            TicketBranches(git, androidSdk = AndroidSdkProvision { null })
+            TicketBranches(git, provisioners = WorktreeProvisions(listOf(AndroidSdkProvision { null })))
                 .ensure(TicketBranchRequest("ticket-aaaa1111", "Sdk", repo, "HEAD")),
         )
 
@@ -45,7 +45,7 @@ class AndroidSdkProvisionTest {
         val repo = gradleRepo()
         val sdk = fakeSdk()
         val cut = assertIs<TicketBranchOutcome.Ready>(
-            TicketBranches(git, androidSdk = AndroidSdkProvision { if (it == AndroidSdkProvision.SETTING) sdk.path else null })
+            TicketBranches(git, provisioners = WorktreeProvisions(listOf(AndroidSdkProvision { if (it == AndroidSdkProvision.SETTING) sdk.path else null })))
                 .ensure(TicketBranchRequest("ticket-bbbb2222", "Sdk", repo, "HEAD")),
         )
         assertEquals(sdk.path, sdkDir(cut.worktree.path))
@@ -55,7 +55,7 @@ class AndroidSdkProvisionTest {
     fun aMissingSdk_isOneClearMessageAndNoFile() {
         val repo = gradleRepo()
         val cut = assertIs<TicketBranchOutcome.Ready>(
-            TicketBranches(git, androidSdk = AndroidSdkProvision { null })
+            TicketBranches(git, provisioners = WorktreeProvisions(listOf(AndroidSdkProvision { null })))
                 .ensure(TicketBranchRequest("ticket-cccc3333", "Sdk", repo, "HEAD")),
         )
         assertNull(sdkDir(cut.worktree.path))
@@ -69,7 +69,7 @@ class AndroidSdkProvisionTest {
     fun aRepositoryThatIsNoGradleProject_getsNoFileAndNoWarning() {
         val repo = newGitRepo()
         val cut = assertIs<TicketBranchOutcome.Ready>(
-            TicketBranches(git, androidSdk = AndroidSdkProvision { fakeSdk().path })
+            TicketBranches(git, provisioners = WorktreeProvisions(listOf(AndroidSdkProvision { fakeSdk().path })))
                 .ensure(TicketBranchRequest("ticket-dddd4444", "Sdk", repo, "HEAD")),
         )
         assertNull(sdkDir(cut.worktree.path))

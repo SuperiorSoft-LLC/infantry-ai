@@ -49,3 +49,6 @@ TEST-TODO (CORE-SPLIT-4a2): behaviour: daemon start order unchanged after moving
 - CORE-SPLIT-4a3: at QA, start the daemon and confirm harness modules still load/sync and /plugins lists them (HarnessModulesWiring); BoardPortRef/OrchestratorHub and the PluginBoardPorts attach stay in DaemonMain.
 ## STACK-NEUTRAL-6 (ticket-89466254)
 TEST-TODO: SettingsService.migrateRepoProfileAdditions - existing install with no stored `gradle` override: stored watch.toolProfiles gains the gradle profile + the two fork templates (resource watch/repo-profile-additions.json), second call returns false; fresh install or existing gradle override: untouched. Expect owner's worker GRADLE_OPTS identical to before.
+
+## STACK-NEUTRAL-4 (ticket-bfe9e7d0)
+TEST-TODO: WorktreeProvisionHook seam (worktree/WorktreeProvisionHook.kt). Behaviour: WorktreeProvisions runs each hook on worktree creation, joins warnings with "; ", none -> null. Class AndroidSdkProvisionTest: gradle-file repo + no SDK -> same warning; SDK found -> same local.properties; non-matching repo -> no file, no warning. Detect files now come from resources worktree/sdk-provision.json. Not done: DaemonApi hooks.worktreeProvision (plugin registration) left for a follow-up.
