@@ -2,6 +2,8 @@ package com.superiorsoftllc.agenthq.cli
 
 import com.superiorsoftllc.agenthq.daemon.AccessPolicy
 import com.superiorsoftllc.agenthq.protocol.Envelope
+import com.superiorsoftllc.agenthq.runner.ProgressSpec
+import com.superiorsoftllc.agenthq.runner.ToolProfiles
 import com.superiorsoftllc.agenthq.session.ProgressReducer
 import com.superiorsoftllc.agenthq.session.ProgressReport
 import com.superiorsoftllc.agenthq.session.SessionProgress
@@ -46,7 +48,7 @@ internal object ProgressCli {
         |agenthq progress status "label"                indeterminate: a label and an elapsed timer, no number
         |agenthq progress estimate "label" (= status "label" --estimate)  indeterminate + "~N min left (estimated)" from this label's past runs (opt-in; prefer a measurement)
         |agenthq progress done ["label"] | fail ["reason"] | clear | show
-        |agenthq progress --watch [--label x [--estimate]] [--reader gradle|junit|gate]...   stdin -> stdout unchanged, reading ##infantry markers
+        |agenthq progress --watch [--label x [--estimate]] [--reader <name>]...   stdin -> stdout unchanged, reading ##infantry markers
         |agenthq run [--label x] [--estimate] [--reader r]... -- <command...>    run it, output and exit code unchanged; done on 0, failed otherwise
         |Markers (any language, one line): ##infantry progress 40 compile | ##infantry plan a|b|c | ##infantry plan 4
         |  ##infantry step [name] | ##infantry bytes <done> <total> [label] | ##infantry count <done> <total> [label]
@@ -160,7 +162,7 @@ internal object ProgressCli {
                 "--reader" -> {
                     val name = opts.getOrNull(++i)
                     readers += ProgressReaders.byName(name) ?: return StreamOptions(
-                        null, emptyList(), command, "--reader expects one of ${ProgressReaders.NAMES.joinToString(", ")}",
+                        null, emptyList(), command, "--reader expects one of ${ProgressReaders.names().joinToString(", ")}",
                     )
                 }
                 else -> return StreamOptions(null, emptyList(), command, "unknown option '${opts[i].take(40)}'" + if (allowCommand) " (put the command after --)" else "")
@@ -370,22 +372,36 @@ internal fun interface ProgressReader {
 }
 
 internal object ProgressReaders {
-    val NAMES = listOf("gradle", "junit", "gate")
+    private val BUILTIN = listOf("junit", "gate")
 
-    fun byName(name: String?): ProgressReader? = when (name) {
-        "gradle" -> gradle()
-        "junit" -> junit()
-        "gate" -> gate()
-        else -> null
+    /** The data readers in force: every `progress` entry of the tool profiles (env AGENTHQ_TOOL_PROFILES). */
+    private fun profiles(): List<ProgressSpec> {
+        val list = ToolProfiles.fromEnv(System::getenv) ?: ToolProfiles.active
+        return list.flatMap { it.progress }
     }
 
-    private val GRADLE_TASK = Regex("""^> Task (:\S+)""")
+    fun names(): List<String> = (BUILTIN + profiles().map { it.reader }).distinct()
 
-    /** Gradle (`--console=plain`): the task now running, as the label, while the job is not measured another way. */
-    fun gradle() = ProgressReader { line, current ->
-        val task = GRADLE_TASK.find(line)?.groupValues?.get(1) ?: return@ProgressReader emptyList()
-        if (current != null && current.mode != "indeterminate") emptyList()
-        else listOf(ProgressReport("status", label = "gradle $task"))
+    fun byName(name: String?): ProgressReader? = when (name) {
+        "junit" -> junit()
+        "gate" -> gate()
+        null -> null
+        else -> profiles().filter { it.reader == name }.takeIf { it.isNotEmpty() }?.let { data(it) }
+    }
+
+    /** A reader defined as data: the first spec whose match finds the line reports; a status yields to measured progress. */
+    fun data(specs: List<ProgressSpec>) = ProgressReader { line, current ->
+        for (spec in specs) {
+            val m = Regex(spec.match).find(line) ?: continue
+            val label = spec.label?.let { t -> Regex("""\$(\d+)""").replace(t) { g -> m.groupValues.getOrNull(g.groupValues[1].toInt()).orEmpty() } }
+            return@ProgressReader when (spec.report) {
+                "status" -> if (current != null && current.mode != "indeterminate") emptyList() else listOf(ProgressReport("status", label = label))
+                "step" -> listOf(ProgressReport("step", step = label))
+                "progress" -> label?.toDoubleOrNull()?.let { listOf(ProgressReport("percent", percent = it)) } ?: emptyList()
+                else -> label?.toLongOrNull()?.let { listOf(ProgressReport("count", done = it)) } ?: emptyList()
+            }
+        }
+        emptyList()
     }
 
     private val TEST_EVENT = Regex("""^\S.* > .+ (PASSED|FAILED|SKIPPED)\s*$""")
