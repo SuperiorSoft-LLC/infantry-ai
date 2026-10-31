@@ -98,7 +98,7 @@ class DaemonCoreGuardTest {
     companion object {
         /** CORE-SPLIT-1/2: leaf Gradle modules and the top-level packages each owns (package names unchanged). */
         val LEAF_MODULES = mapOf(
-            "agentHqProtocol" to setOf("protocol", "session", "harness", "pipeline"),
+            "agentHqProtocol" to setOf("protocol", "session", "harness", "pipeline", "memory", "issues", "decisions"),
             "agentHqRunner" to setOf("runner"),
             // HARNESS-PLUGIN-3 H3: the harness plugin API (package harness.api); HarnessApiImportGuardTest is stricter still.
             "agentHqHarnessApi" to setOf("harness"),

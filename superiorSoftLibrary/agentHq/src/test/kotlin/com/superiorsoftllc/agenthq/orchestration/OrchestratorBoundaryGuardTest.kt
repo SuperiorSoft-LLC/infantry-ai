@@ -17,10 +17,14 @@ class OrchestratorBoundaryGuardTest {
 
     @Test fun `runner and orchestrator packages only cross by the known baseline`() {
         val seen = HashMap<String, Int>()
+        // DP-7a: a name declared in agentHqProtocol is a wire type, not a crossing into the orchestrator's implementation.
+        val wire = wireNames()
         main.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { f ->
             val pkg = f.relativeTo(main).path.replace('\\', '/').substringBefore('/')
             f.forEachLine { l ->
-                val to = IMPORT.matchEntire(l.trim())?.groupValues?.get(1) ?: return@forEachLine
+                val m = IMPORT.matchEntire(l.trim()) ?: return@forEachLine
+                val to = m.groupValues[1]
+                if (to in KNOWLEDGE && l.trim().substringAfterLast('.') in wire) return@forEachLine
                 if ((pkg in RUNNER && to in ORCHESTRATOR) || (pkg in ORCHESTRATOR && to in RUNNER)) seen.merge("$pkg>$to", 1, Int::plus)
             }
         }
@@ -38,7 +42,15 @@ class OrchestratorBoundaryGuardTest {
         assertTrue(bad.isEmpty(), "the orchestrator interface depends only on itself: $bad")
     }
 
+    private fun wireNames(): Set<String> {
+        val dir = File(TestDaemonPlugins.repo, "superiorSoftLibrary/agentHqProtocol/src/main/kotlin/com/superiorsoftllc/agenthq")
+        val decl = Regex("""^(?:data |enum |sealed )?(?:class|object|interface|fun|val|const val)\s+(\w+)""")
+        return dir.walkTopDown().filter { it.isFile && it.extension == "kt" }
+            .flatMap { f -> f.readLines().mapNotNull { decl.find(it)?.groupValues?.get(1) } }.toSet()
+    }
+
     companion object {
+        private val KNOWLEDGE = setOf("memory", "issues", "decisions")
         private val IMPORT = Regex("""import com\.superiorsoftllc\.agenthq\.(\w+)\..*""")
         val RUNNER = setOf("session", "harness", "provider", "claude", "opencode", "executables", "runner", "worktree", "projectgit", "commands", "images", "update", "keystore", "cli", "client")
         val ORCHESTRATOR = setOf("backlog", "epics", "stories", "mvp", "pipeline", "ticketfiles", "context", "brief", "ledger", "orchestration", "role", "agents", "prompts", "triggers", "attention", "questions", "decisions", "issues", "memory")
@@ -46,7 +58,7 @@ class OrchestratorBoundaryGuardTest {
         /** Today's crossings, "from>to" -> import count (51 in 30 pairs). Lower an entry when you remove an import; never raise one. */
         val BASELINE = mapOf(
             "agents>session" to 4, "backlog>images" to 1, "backlog>session" to 3, "backlog>worktree" to 0, "brief>session" to 0,
-            "claude>prompts" to 2, "cli>agents" to 1, "cli>decisions" to 5, "cli>epics" to 2, "cli>issues" to 9, "cli>memory" to 14,
+            "claude>prompts" to 2, "cli>agents" to 1, "cli>decisions" to 0, "cli>epics" to 2, "cli>issues" to 0, "cli>memory" to 0,
             "cli>orchestration" to 3, "cli>pipeline" to 5, "cli>prompts" to 1, "cli>role" to 1, "cli>ticketfiles" to 3,
             "context>session" to 0, "images>mvp" to 1, "memory>session" to 1, "mvp>worktree" to 1, "opencode>prompts" to 1,
             "orchestration>session" to 7, "projectgit>mvp" to 1, "prompts>session" to 2, "role>session" to 3, "session>agents" to 1,
