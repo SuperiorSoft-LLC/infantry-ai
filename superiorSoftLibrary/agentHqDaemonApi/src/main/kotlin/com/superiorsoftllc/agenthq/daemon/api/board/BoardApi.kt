@@ -31,8 +31,10 @@ import kotlinx.serialization.Serializable
  * 1.2.0 (CONTEXT-LIMIT-1, additive): [TicketInfo] carries the context limit and the effective one.
  * 1.3.0 (RUNTIME-LOAD-4, additive): the shared pure rules [TicketRefs] (short ids), [TicketPlacement] (where a move puts a ticket),
  *   [TicketImages] and [ContextLimits]; [TicketDraft.contextLimit] / [TicketPatch.contextLimit]; [Tickets.mayFile].
+ * 1.4.0 (EFFORT-1, additive): [TicketInfo.effort] / [TicketInfo.effectiveEffort] (+ source, support); [TicketDraft.effort] / [TicketPatch.effort];
+ *   [EffortLevels] (the shared level list and parser). Blank / `off` clears a ticket's effort on a patch.
  */
-const val BOARD_API_VERSION = "1.3.0"
+const val BOARD_API_VERSION = "1.4.0"
 
 const val GRANT_TICKETS_READ = "tickets.read"
 const val GRANT_TICKETS_WRITE = "tickets.write"
@@ -98,6 +100,11 @@ data class TicketInfo(
     val effectiveContextLimit: Int? = null,
     val effectiveContextLimitSource: String? = null,
     val contextLimitSupport: String? = null,
+    /** EFFORT-1 (1.4.0): the ticket's reasoning effort level (null = harness default) and the effective one with its source (`ticket` / `rule` / `agent` / `role` / `default`) and the harness's support. */
+    val effort: String? = null,
+    val effectiveEffort: String? = null,
+    val effectiveEffortSource: String? = null,
+    val effortSupport: String? = null,
 )
 
 /** A new ticket. [description] is kept verbatim. [clientKey] makes the create idempotent. */
@@ -119,6 +126,8 @@ data class TicketDraft(
     val clientKey: String? = null,
     /** 1.3.0: the context limit in tokens ([ContextLimits]); null = none. */
     val contextLimit: Int? = null,
+    /** 1.4.0: the reasoning effort level ([EffortLevels]); null = the harness default. */
+    val effort: String? = null,
 )
 
 /** An edit: a null field keeps the stored value. [description], when given, replaces the stored one verbatim. */
@@ -136,6 +145,8 @@ data class TicketPatch(
     val images: List<String>? = null,
     /** 1.3.0: the context limit in tokens, or [ContextLimits.CLEAR] to remove it. */
     val contextLimit: Int? = null,
+    /** 1.4.0: the reasoning effort level, or blank / `off` to remove it; null keeps it. */
+    val effort: String? = null,
 )
 
 @Serializable

@@ -493,6 +493,12 @@ class TicketBoard(
             com.superiorsoftllc.agenthq.protocol.TicketContextLimit.CLEAR -> null
             else -> request.contextLimit.also { v -> com.superiorsoftllc.agenthq.session.ContextLimits.problem(v)?.let { throw IllegalArgumentException(it) } }
         }
+        // EFFORT-1: absent or null keeps the effort, "" / off / default clears it, a level sets it; an unknown level refuses the save.
+        val effort = if (request.effort == null) existing?.effort else {
+            val parsed = com.superiorsoftllc.agenthq.session.EffortLevels.parse(request.effort)
+            parsed.error?.let { throw IllegalArgumentException(it) }
+            parsed.value
+        }
         validateExecutorPins(agentId, provider, model)
         // KNOWLEDGE-PTR-1 (C): a save that sets the title or the description rewrites the stored RELATED (auto) block.
         val described = if (title != null || description != null) {
@@ -527,6 +533,7 @@ class TicketBoard(
                         images = imagePaths,
                         weight = weight,
                         contextLimit = contextLimit,
+                        effort = effort,
                     ),
                 )
             } else {
@@ -549,6 +556,7 @@ class TicketBoard(
                     images = imagePaths,
                     weight = weight,
                     contextLimit = contextLimit,
+                    effort = effort,
                     queuedFor = if (agentId != row.agentId) null else row.queuedFor,
                     queuedAt = if (agentId != row.agentId) null else row.queuedAt,
                 )
@@ -768,13 +776,13 @@ class TicketBoard(
         val profile = assignment.profile ?: return refusedStart(initialTicket, "no profile resolved for ticket")
 
         // ROLE-1b: ticket pins > profile > the role's binding > daemon default (one resolver, shared with spawn).
-        val bound = profiles.executorFor(profile, row.provider, row.model, null)
+        val bound = profiles.executorFor(profile, row.provider, row.model, row.effort)
         // TICKET-WEIGHT: a weighted ticket that pins nothing (and whose profile / role binding pins nothing) runs on the weight's executor.
         // ROUTING-1: in a project with rules the matched rule beats the profile / role binding and the weight mapping.
         val byWeight = if (rule == null && routingRules(row.projectId).isEmpty()) weightChoice(row, bound.provider, bound.model) else null
         val executor = when {
-            rule != null -> profiles.executorFor(profile, rule.provider, rule.model, rule.effort)
-            byWeight != null -> profiles.executorFor(profile, byWeight.provider, byWeight.model, null)
+            rule != null -> profiles.executorFor(profile, rule.provider, rule.model, row.effort ?: rule.effort) // EFFORT-1: the ticket's own pin beats the rule's
+            byWeight != null -> profiles.executorFor(profile, byWeight.provider, byWeight.model, row.effort)
             else -> bound
         }
         val providerId = executor.provider
@@ -903,7 +911,10 @@ class TicketBoard(
         // CONTEXT-LIMIT-1: said on the start, so a limit the harness cannot apply is never silent.
         val limitNote = started.contextLimit?.let { "context limit ${com.superiorsoftllc.agenthq.session.ContextLimits.label(it)}: ${started.contextLimitSupport}" +
             (if (started.contextLimitSupport == com.superiorsoftllc.agenthq.harness.ContextLimitSupport.UNSUPPORTED.wire) " (recorded, not applied by ${started.provider})" else "") }
-        val detail = listOfNotNull(cutNote, ruleNote, weightNote, limitNote, launchWarning?.let { TicketStart.LAUNCH_WARNING + it }, pacingWarning).joinToString("; ").ifEmpty { null }
+        // EFFORT-1: the same for a reasoning effort the harness cannot apply.
+        val effortNote = started.effort?.let { "effort $it: ${started.effortSupport}" +
+            (if (started.effortSupport == com.superiorsoftllc.agenthq.harness.EffortSupport.UNSUPPORTED.wire) " (recorded, not applied by ${started.provider})" else "") }
+        val detail = listOfNotNull(cutNote, ruleNote, weightNote, limitNote, effortNote, launchWarning?.let { TicketStart.LAUNCH_WARNING + it }, pacingWarning).joinToString("; ").ifEmpty { null }
         return startAnswer(id, TicketStart(ok = true, reason = "started", detail = detail), outcome)
     }
 
@@ -1669,6 +1680,8 @@ class TicketBoard(
                 weight = row.weight,
                 contextLimit = row.contextLimit,
                 effectiveContextLimit = effectiveContextLimit(row),
+                effort = row.effort,
+                effectiveEffort = effectiveEffort(row),
                 queuedFor = row.queuedFor,
                 queuedAt = row.queuedAt,
                 sessionId = row.sessionId,
@@ -1699,6 +1712,27 @@ class TicketBoard(
             support = capability?.support?.wire,
             how = capability?.how,
         )
+    }
+
+    /** EFFORT-1: the ticket's effort (ticket pin, else rule, agent profile, role binding, else none) with its source, and how its effective harness honours one. */
+    private fun effectiveEffort(row: TicketRow): com.superiorsoftllc.agenthq.protocol.EffectiveEffort {
+        val manager = sessions
+        val harness = manager?.let { m -> runCatching { effectiveExecutor(row)?.provider?.value }.getOrNull() ?: m.providerId }
+        val capability = harness?.let { manager.providerFor(it) }?.effort()
+        val rule = routingChoice(row)
+        val assigned = row.agentId ?: rule?.setRole?.let { "role:$it" }
+        val profile = assigned?.let { ticketProfile(it) }
+        val roleId = assigned?.takeIf { it.startsWith("role:") }?.removePrefix("role:")
+        val (value, source) = when {
+            row.effort != null -> row.effort to "ticket"
+            rule?.effort != null -> rule.effort to "rule"
+            profile?.effort != null -> profile.effort to "agent"
+            else -> {
+                val bound = (profile ?: roleId?.let { AgentProfile(name = it, role = it) })?.let { agents?.executorFor(it, null, null, null) }
+                if (bound?.effort != null) bound.effort to "role" else null to "default"
+            }
+        }
+        return com.superiorsoftllc.agenthq.protocol.EffectiveEffort(value = value, source = source, support = capability?.support?.wire, how = capability?.how)
     }
 
     /** TICKET-WEIGHT: the mapping's choice for [row] when [WeightExecutors.applies] (nothing else pins an executor), else null. */

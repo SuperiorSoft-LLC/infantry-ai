@@ -51,6 +51,8 @@ class ClaudeHarness(
 
     override val commands: List<HarnessCommand> = ClaudeCommands.catalog
 
+    override val effort: com.superiorsoftllc.agenthq.harness.EffortCapability = com.superiorsoftllc.agenthq.claude.ClaudeEffort.CAPABILITY
+
     override val contextLimit: com.superiorsoftllc.agenthq.harness.ContextLimitCapability =
         com.superiorsoftllc.agenthq.claude.ClaudeContextLimit.CAPABILITY
 

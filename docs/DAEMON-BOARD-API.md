@@ -185,6 +185,12 @@ way in: the three core consumers (`core.triggers`, `core.done-worker-reaper`, `c
 for the ticket's effective harness), all defaulted, so a plugin built on 1.1.0 is unaffected. Infantry_Board's
 `agenthq_ticket_get` renders them byte for byte as core's summary does (`LocalBoardServicesTest`). See docs/CONTEXT-LIMIT.md.
 
+## EFFORT-1: `BOARD_API_VERSION` 1.4.0 (additive)
+
+`TicketInfo` gains `effort`, `effectiveEffort`, `effectiveEffortSource` (`ticket` / `rule` / `agent` / `role` / `default`) and `effortSupport`;
+`TicketDraft` / `TicketPatch.effort` (blank / `off` clears on a patch); the shared parser `EffortLevels`. `SpawnRequest.effort`,
+`SessionInfo.effort` / `effortSupport` and the harness catalog's `effort` / `effortHow`. See docs/EFFORT.md.
+
 ## RUNTIME-LOAD-4: `BOARD_API_VERSION` 1.3.0 (additive)
 
 The pure shared rules `TicketRefs`, `TicketPlacement`, `TicketImages`, `ContextLimits`; `TicketDraft` / `TicketPatch.contextLimit`;

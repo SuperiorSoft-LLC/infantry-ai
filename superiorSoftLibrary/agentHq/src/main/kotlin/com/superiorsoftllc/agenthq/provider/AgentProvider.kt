@@ -149,4 +149,11 @@ interface AgentProvider {
      */
     fun contextLimit(): com.superiorsoftllc.agenthq.harness.ContextLimitCapability =
         com.superiorsoftllc.agenthq.harness.ContextLimitCapability.UNSUPPORTED
+
+    /**
+     * EFFORT-1 (docs/EFFORT.md): how this provider honours [RunRequest.effort]. Default unsupported: an effort set on its
+     * session is recorded and reported as not applied, never passed on.
+     */
+    fun effort(): com.superiorsoftllc.agenthq.harness.EffortCapability =
+        com.superiorsoftllc.agenthq.harness.EffortCapability.UNSUPPORTED
 }

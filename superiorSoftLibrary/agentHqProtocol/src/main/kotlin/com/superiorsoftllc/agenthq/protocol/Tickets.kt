@@ -218,6 +218,23 @@ data class Ticket(
     val contextLimit: Int? = null,
     /** CONTEXT-LIMIT-1: the context limit a start would use, like [effectiveExecutor]; null only from an older daemon. */
     val effectiveContextLimit: EffectiveContextLimit? = null,
+    /** EFFORT-1 (contract 1.148.0): the worker's reasoning effort (one of low / medium / high / xhigh / max), or null = the harness default. */
+    val effort: String? = null,
+    /** EFFORT-1: the effort a start would use with its source and how the effective harness honours it; null only from an older daemon. */
+    val effectiveEffort: EffectiveEffort? = null,
+)
+
+/**
+ * EFFORT-1: a ticket's effective reasoning effort. [value] null = the harness default; [source] `ticket` (the ticket pins it),
+ * `agent` (the agent profile's), `role` (the role binding's) or `default`. [support] / [how] say how the ticket's effective
+ * harness honours an effort (`supported` / `best_effort` / `unsupported` = recorded, not applied); null when not configured here.
+ */
+@Serializable
+data class EffectiveEffort(
+    val value: String? = null,
+    val source: String,
+    val support: String? = null,
+    val how: String? = null,
 )
 
 /**
@@ -403,6 +420,8 @@ data class TicketSave(
      * removes it, absent or null keeps it. Out of range refuses the save.
      */
     val contextLimit: Int? = null,
+    /** EFFORT-1 (contract 1.148.0): a level sets the worker's reasoning effort, "" / `off` / `default` removes it, absent or null keeps it. An unknown level refuses the save. */
+    val effort: String? = null,
     /**
      * BACKLOG (contract 1.131.0): on a CREATE only, the column the new ticket enters: [TicketStatus.TODO] (absent or
      * null, the default) or [TicketStatus.BACKLOG]; any other column is refused. On an edit it must be absent: columns

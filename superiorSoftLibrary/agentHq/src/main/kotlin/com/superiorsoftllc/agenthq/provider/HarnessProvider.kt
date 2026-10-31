@@ -17,6 +17,8 @@ class HarnessProvider(private val harness: CliHarness) : AgentProvider {
 
     override fun contextLimit(): com.superiorsoftllc.agenthq.harness.ContextLimitCapability = harness.contextLimit
 
+    override fun effort(): com.superiorsoftllc.agenthq.harness.EffortCapability = harness.effort
+
     override fun spec(request: RunRequest): ProcessSpec {
         val spec = harness.processSpec(
             HarnessRequest(
@@ -25,7 +27,7 @@ class HarnessProvider(private val harness: CliHarness) : AgentProvider {
                 project = request.workingDir?.path.orEmpty(),
                 model = request.model,
                 sessionId = request.resumeSessionId,
-                effort = request.effort,
+                effort = request.effort.takeIf { harness.effort.applies },
                 toolApproval = request.toolApproval,
                 contextLimit = request.contextLimit.takeIf { harness.contextLimit.applies },
             ),

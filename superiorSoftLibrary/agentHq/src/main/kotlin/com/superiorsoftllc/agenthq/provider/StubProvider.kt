@@ -31,6 +31,10 @@ class StubProvider(
 ) : AgentProvider {
     override val id: String = "stub"
 
+    /** The stub echoes `--effort <level>` into its output, so an effort is observable in tests. */
+    override fun effort(): com.superiorsoftllc.agenthq.harness.EffortCapability =
+        com.superiorsoftllc.agenthq.harness.EffortCapability(com.superiorsoftllc.agenthq.harness.EffortSupport.SUPPORTED, "the stub echoes the level")
+
     /** The stub honours the whole standard catalog, so a client can be exercised end to end with no CLI installed. */
     override val commands: List<com.superiorsoftllc.agenthq.harness.HarnessCommand> =
         if (modelIds.isEmpty()) com.superiorsoftllc.agenthq.harness.claude.ClaudeCommands.catalog

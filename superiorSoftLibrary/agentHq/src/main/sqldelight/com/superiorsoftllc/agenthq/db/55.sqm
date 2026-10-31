@@ -1,0 +1,10 @@
+-- EFFORT-1 (ticket b80b8582) -- migration v55 -> v56: a ticket may pin a reasoning effort for its worker, and each run's usage row
+-- records the effort its session ran with, next to context_limit, so effort can be compared with turns and tokens
+-- (docs/EFFORT.md). Both nullable with no default: every existing ticket and run keeps "harness default" (current behaviour).
+-- The columns are exactly tickets.sq's and usage.sq's.
+--
+-- NEXT MIGRATION: 56.sqm
+
+ALTER TABLE tickets ADD COLUMN effort TEXT;
+
+ALTER TABLE run_usage ADD COLUMN effort TEXT;

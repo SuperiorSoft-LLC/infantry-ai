@@ -31,6 +31,9 @@ internal object HarnessCatalog {
         /** CONTEXT-LIMIT-1: how a contextLimit is honoured here (`supported` / `best_effort` / `unsupported`) and how; null = older daemon. */
         val contextLimit: String? = null,
         val contextLimitHow: String? = null,
+        /** EFFORT-1: how a reasoning effort is honoured here (`supported` / `best_effort` / `unsupported`); null = older daemon. */
+        val effort: String? = null,
+        val effortHow: String? = null,
     )
 
     suspend fun read(stream: FrameStream): List<Harness> {
@@ -48,7 +51,7 @@ internal object HarnessCatalog {
             providers.map { json.decodeFromString(com.superiorsoftllc.agenthq.daemon.api.harness.ProviderInfo.serializer(), json.encodeToString(ProviderInfo.serializer(), it)) },
             catalog.map { json.decodeFromString(com.superiorsoftllc.agenthq.daemon.api.harness.ProviderModels.serializer(), json.encodeToString(ProviderModels.serializer(), it)) },
             catalogError,
-        ).map { Harness(it.id, it.default, it.defaultModel, it.models, it.available, it.unavailableReason, it.note, it.contextLimit, it.contextLimitHow) }
+        ).map { Harness(it.id, it.default, it.defaultModel, it.models, it.available, it.unavailableReason, it.note, it.contextLimit, it.contextLimitHow, it.effort, it.effortHow) }
     }
 
     /** How a listed harness is used, said the same way by the CLI and the MCP tool. */

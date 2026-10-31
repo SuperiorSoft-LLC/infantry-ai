@@ -110,6 +110,16 @@ class EchoHarnessModuleDaemonTest {
                 it.type == Envelope.STDOUT && it.data.contains("context limit: 200000")
             }
             assertEquals(200_000, first.daemon.manager.list().single { it.contextLimit != null }.contextLimit)
+
+            // EFFORT-1: the plugin's declared effort capability is listed (API 2.2), and a spawn's effort reaches it.
+            assertEquals("supported", echo.effort)
+            assertTrue(echo.effortHow.orEmpty().contains("ECHO_EFFORT"), "how: ${echo.effortHow}")
+            first.send(Envelope(Envelope.NEW, """{"provider":"echo","effort":"high"}"""))
+            first.send(Envelope(Envelope.PROMPT, "ping with an effort"))
+            first.client.awaitWhere("the effort echoed by the plugin", timeoutMs = 60_000) {
+                it.type == Envelope.STDOUT && it.data.contains("effort: high")
+            }
+            assertEquals("high", first.daemon.manager.list().single { it.effort == "high" }.effort)
         } finally {
             first.stop()
         }

@@ -861,6 +861,7 @@ class SessionManager(
         }
         ContextLimits.problem(contextLimit)?.let { throw IllegalArgumentException(it) }
         val limitSupport = contextLimit?.let { chosen.contextLimit().support.wire }
+        val effortSupport = sessionEffort?.let { chosen.effort().support.wire } // EFFORT-1
         if (launchOrigin == LaunchOrigin.UNATTENDED) {
             val decision = launchGate?.invoke(chosen.id, LaunchOrigin.UNATTENDED, ticketId)
             if (decision is GateDecision.Refused) throw IllegalArgumentException("launch gate refused: ${decision.reason}")
@@ -929,6 +930,7 @@ class SessionManager(
             effort = sessionEffort,
             contextLimit = contextLimit,
             contextLimitSupport = limitSupport,
+            effortSupport = effortSupport,
             agentId = agentId,
             role = role,
             ticketId = ticketId,
@@ -1049,7 +1051,7 @@ class SessionManager(
     fun setEffort(sessionId: String, effort: String): SessionRecord {
         val wanted = effort.trim()
         require(wanted.isNotEmpty() && modelProblem(wanted) == null) { "effort '${wanted.take(40)}' is not a usable level" }
-        return changeSetting(sessionId) { it.copy(effort = wanted) }
+        return changeSetting(sessionId) { it.copy(effort = wanted, effortSupport = resolveProvider(it.provider).provider.effort().support.wire) }
     }
 
     /**
@@ -1064,7 +1066,7 @@ class SessionManager(
         val wantedEffort = effort?.trim()?.takeIf { it.isNotEmpty() }?.also {
             require(modelProblem(it) == null) { "effort '${it.take(40)}' is not a usable level" }
         }
-        return changeSetting(sessionId) { it.copy(model = wantedModel, effort = wantedEffort) }
+        return changeSetting(sessionId) { it.copy(model = wantedModel, effort = wantedEffort, effortSupport = wantedEffort?.let { _ -> resolveProvider(it.provider).provider.effort().support.wire }) }
     }
 
     /**
@@ -1107,6 +1109,7 @@ class SessionManager(
         return changeSetting(sessionId) {
             it.copy(
                 provider = target, model = wantedModel, effort = wantedEffort,
+                effortSupport = wantedEffort?.let { _ -> resolveProvider(target).provider.effort().support.wire },
                 // CONTEXT-LIMIT-1: the limit follows the session; how it is honoured is the NEW harness's.
                 contextLimitSupport = it.contextLimit?.let { _ -> resolveProvider(target).provider.contextLimit().support.wire },
                 providerSessionId = null, runCount = 0, state = SessionState.IDLE,
@@ -1250,7 +1253,8 @@ class SessionManager(
             workingDir = File(session.workingDir),
             resumeSessionId = session.providerSessionId,
             model = session.model,
-            effort = session.effort,
+            // EFFORT-1: only to a harness that applies it; an unsupported one keeps its own default (recorded as such).
+            effort = session.effort?.takeIf { provider.effort().applies },
             toolApproval = toolApprovalFor(sessionId).mode,
             // CONTEXT-LIMIT-1: only to a harness that applies it; an unsupported one keeps its own window (recorded as such).
             contextLimit = session.contextLimit?.takeIf { provider.contextLimit().applies },

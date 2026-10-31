@@ -32,6 +32,16 @@ class PiHarness(
 
     override fun sessionAdapter(): HarnessSessionAdapter? = sessionAdapter
 
+    /**
+     * EFFORT-1: pi calls the reasoning effort "thinking" and takes `--thinking <level>` (off, minimal, low, medium, high, xhigh,
+     * max) in both modes ([PiCommand]). Verified on pi 1.3.0: `pi --help` lists the flag and `pi --thinking low -p "say ok"` ran.
+     * pi clamps a level the chosen model lacks, so the support is as the model allows.
+     */
+    override val effort: com.superiorsoftllc.agenthq.harness.EffortCapability = com.superiorsoftllc.agenthq.harness.EffortCapability(
+        com.superiorsoftllc.agenthq.harness.EffortSupport.SUPPORTED,
+        "pi --thinking <level> (the effort levels low..max map 1:1)",
+    )
+
     /** CONTEXT-LIMIT-1: best effort through the persistent session; a one-shot pi run (`--mode json`) has no way to apply it. */
     override val contextLimit: com.superiorsoftllc.agenthq.harness.ContextLimitCapability =
         if (sessionAdapter is PiSessionAdapter) PiSessionAdapter.CAPABILITY

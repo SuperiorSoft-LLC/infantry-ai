@@ -1411,6 +1411,7 @@ internal object Cli {
                     if (!harness.available) append(" | unavailable: ").append(harness.unavailableReason ?: "its CLI was not found")
                     harness.note?.let { append(" | note: ").append(it) }
                     harness.contextLimit?.let { append(" | context limit: ").append(it) }
+                    harness.effort?.let { append(" | effort: ").append(it) }
                 },
             )
         }
@@ -1482,6 +1483,7 @@ internal object Cli {
                 model = parsed.model?.trim(),
                 weight = parsed.weight,
                 contextLimit = parsed.contextLimit,
+                effort = parsed.effort,
                 images = images,
             ),
         )
@@ -1617,6 +1619,7 @@ internal object Cli {
                 model = parsed.model?.trim(),
                 weight = parsed.weight,
                 contextLimit = parsed.contextLimit,
+                effort = parsed.effort,
                 images = images,
             ),
         )
@@ -1642,6 +1645,7 @@ internal object Cli {
             if (parsed.model != null) add("model ${ticket.model ?: "-"}")
             if (parsed.weight != null) add("weight ${ticket.weight ?: "-"}")
             if (parsed.contextLimit != null) add("context limit ${ticket.contextLimit?.let(com.superiorsoftllc.agenthq.session.ContextLimits::label) ?: "-"}")
+            if (parsed.effort != null) add("effort ${ticket.effort ?: "-"}")
             if (images != null) add("${ticket.images.size} image(s)")
         }
         val linked = linkRelatedTo(stream, ticket, parsed.relatedTo, projectId.orEmpty(), err) ?: return 1
@@ -2114,6 +2118,10 @@ internal object Cli {
         ticket.effectiveContextLimit?.let { c ->
             out.appendLine("CONTEXT LIMIT: ${c.value?.let(com.superiorsoftllc.agenthq.session.ContextLimits::label) ?: "- (none)"} (${c.source})" +
                 (c.support?.let { " / harness: $it" } ?: ""))
+        }
+        // EFFORT-1: the effort a start would use, its source, and how the effective harness honours it.
+        ticket.effectiveEffort?.let { e ->
+            out.appendLine("EFFORT: ${e.value ?: "- (harness default)"} (${e.source})" + (e.support?.let { " / harness: $it" } ?: ""))
         }
         out.appendLine("PROJECT: ${ticket.projectId ?: "-"}")
         out.appendLine("EPIC: ${ticket.epicId ?: "-"}")
@@ -4332,8 +4340,8 @@ internal object Cli {
               tickets --status <column>      Only that column: backlog, todo, in_progress, pending, done
               tickets --epic <id|prefix> --project <id>   Only that epic's tickets, in board order
               ticket show <id|prefix>        One ticket in full: title, status, agent, links, description
-              ticket create --title <t> [--desc <d> | --desc-file <path> | --desc -] [--project <id>] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5] [--context-limit 200k|off] [--image <file>]... [--status todo|backlog]   Save a todo (or backlog) ticket; prints its id
-              ticket update <id|prefix> [--title <t>] [--desc <d> | --desc-file <path> | --desc -] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5|0] [--context-limit 200k|off] [--image <file>]... [--remove-image <path>]...   Edit a ticket; flags left out keep their value
+              ticket create --title <t> [--desc <d> | --desc-file <path> | --desc -] [--project <id>] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5] [--context-limit 200k|off] [--effort low|medium|high|xhigh|max|off] [--image <file>]... [--status todo|backlog]   Save a todo (or backlog) ticket; prints its id
+              ticket update <id|prefix> [--title <t>] [--desc <d> | --desc-file <path> | --desc -] [--epic <id|prefix>] [--role <id>] [--provider <id>] [--model <id>] [--weight 1-5|0] [--context-limit 200k|off] [--effort low|medium|high|xhigh|max|off] [--image <file>]... [--remove-image <path>]...   Edit a ticket; flags left out keep their value
                                   --weight: how likely the ticket is to come back wrong, not its size (ROUTING-1 rubric):
                         4-5 touches the wire / contract, the daemon, auth or project scope, concurrency or SSR timing,
                             an Android build, or more than one module
@@ -4622,6 +4630,8 @@ internal object Cli {
         val weight: Int? = null,
         /** CONTEXT-LIMIT-1: `--context-limit` (tokens; [com.superiorsoftllc.agenthq.protocol.TicketContextLimit.CLEAR] = off). */
         val contextLimit: Int? = null,
+        /** EFFORT-1: `--effort` (a level; "" = off, which clears it on an update). */
+        val effort: String? = null,
         // `ask` (PROMPT-5).
         val question: String? = null,
         val options: List<String> = emptyList(),
@@ -4731,6 +4741,7 @@ internal object Cli {
         var model: String? = null
         var weight: Int? = null
         var contextLimit: Int? = null
+        var effort: String? = null
         var question: String? = null
         val options = mutableListOf<String>()
         val images = mutableListOf<String>()
@@ -4957,6 +4968,15 @@ internal object Cli {
                         ?: return fail(err, "--weight expects ${TicketWeight.MIN}..${TicketWeight.MAX} (0 clears it)")
                     i++
                 }
+                // EFFORT-1: low..max sets, off clears.
+                "--effort" -> {
+                    val parsedEffort = com.superiorsoftllc.agenthq.session.EffortLevels.parse(
+                        flagValue(args, ++i) ?: return fail(err, "--effort expects a level (low, medium, high, xhigh, max) or off"),
+                    )
+                    parsedEffort.error?.let { return fail(err, "--effort: $it") }
+                    effort = parsedEffort.value ?: ""
+                    i++
+                }
                 // CONTEXT-LIMIT-1: 200000 / 200k / 1m sets, off (or 0) clears.
                 "--context-limit" -> {
                     val parsedLimit = com.superiorsoftllc.agenthq.session.ContextLimits.parse(
@@ -5178,6 +5198,7 @@ internal object Cli {
             model = model,
             weight = weight,
             contextLimit = contextLimit,
+            effort = effort,
             question = question,
             options = options.toList(),
             images = images.toList(),
@@ -5423,9 +5444,9 @@ internal object Cli {
             "update" -> when {
                 blank(1) -> "ticket update requires a ticket id: agenthq ticket update <id|prefix> [--title ...] [--desc ...] [--role <id>] [--provider <id>] [--model <id>] [--epic <id|prefix>]"
                 parsed.title == null && parsed.description == null && parsed.role == null &&
-                    parsed.provider == null && parsed.model == null && parsed.weight == null && parsed.contextLimit == null && parsed.epic == null &&
+                    parsed.provider == null && parsed.model == null && parsed.weight == null && parsed.contextLimit == null && parsed.effort == null && parsed.epic == null &&
                     parsed.images.isEmpty() && parsed.removeImages.isEmpty() && parsed.relatedTo.isEmpty() ->
-                    "ticket update needs something to change: --title, --desc, --role, --provider, --model, --weight, --context-limit, --epic, --image, --remove-image or --related-to"
+                    "ticket update needs something to change: --title, --desc, --role, --provider, --model, --weight, --context-limit, --effort, --epic, --image, --remove-image or --related-to"
                 parsed.title?.isBlank() == true -> "ticket update --title cannot be blank"
                 else -> roleUsageError(parsed.role)
             }

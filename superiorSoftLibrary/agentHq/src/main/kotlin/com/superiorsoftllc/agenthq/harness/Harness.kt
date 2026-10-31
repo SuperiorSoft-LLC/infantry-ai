@@ -32,8 +32,11 @@ import kotlinx.coroutines.flow.Flow
  *
  * 1.7.0 (CONTEXT-LIMIT-1, additive): [HarnessRequest.contextLimit] and [Harness.contextLimit], the session's context limit
  * in tokens and how this harness honours it (docs/CONTEXT-LIMIT.md). Default UNSUPPORTED: the limit is reported, not applied.
+ *
+ * 1.8.0 (EFFORT-1, additive): [Harness.effort], how this harness honours [HarnessRequest.effort] (docs/EFFORT.md). Default
+ * UNSUPPORTED: an effort set on the session is recorded and reported as not applied.
  */
-const val HARNESS_CONTRACT_VERSION: String = "1.7.0"
+const val HARNESS_CONTRACT_VERSION: String = "1.8.0"
 
 /** One run: prompt in. [model] / [sessionId] are optional and require the matching capability. */
 data class HarnessRequest(
@@ -69,6 +72,23 @@ data class ContextLimitCapability(val support: ContextLimitSupport, val how: Str
 
     companion object {
         val UNSUPPORTED = ContextLimitCapability(ContextLimitSupport.UNSUPPORTED, "this harness declares no context limit mapping")
+    }
+}
+
+/** EFFORT-1: how a harness honours a reasoning effort (mirror of the harness API 2.2 type, docs/EFFORT.md). Same three states as the context limit. */
+enum class EffortSupport {
+    SUPPORTED, BEST_EFFORT, UNSUPPORTED;
+
+    /** The wire spelling (`supported` / `best_effort` / `unsupported`). */
+    val wire: String get() = name.lowercase()
+}
+
+/** [support] plus, in words, how the harness applies an effort level or why it cannot. */
+data class EffortCapability(val support: EffortSupport, val how: String = "") {
+    val applies: Boolean get() = support != EffortSupport.UNSUPPORTED
+
+    companion object {
+        val UNSUPPORTED = EffortCapability(EffortSupport.UNSUPPORTED, "this harness declares no effort mapping")
     }
 }
 
@@ -115,6 +135,11 @@ interface Harness {
 
     /** CONTEXT-LIMIT-1 (1.7.0): how this harness honours [HarnessRequest.contextLimit]. Default: unsupported. */
     val contextLimit: ContextLimitCapability get() = ContextLimitCapability.UNSUPPORTED
+
+    /** EFFORT-1 (1.8.0): how this harness honours [HarnessRequest.effort]. Default: supported when the harness declares EFFORT_SELECTION, else unsupported. */
+    val effort: EffortCapability get() =
+        if (HarnessCapability.EFFORT_SELECTION in capabilities) EffortCapability(EffortSupport.SUPPORTED, "the harness declares EFFORT_SELECTION")
+        else EffortCapability.UNSUPPORTED
 
     /** Implementors produce the event stream here. Must emit incrementally, never only at completion. */
     fun events(request: HarnessRequest): Flow<HarnessEvent>

@@ -26,8 +26,13 @@ import java.io.File
  * 2.1.0 (CONTEXT-LIMIT-1, additive): [HarnessRequest.contextLimit] and [Harness.contextLimit], a per-session context limit
  * in tokens and how far this harness can honour it. A 2.0.0 plugin keeps [ContextLimitSupport.UNSUPPORTED] (the default),
  * so a limit set on its session is reported as not applied, never silently dropped (docs/CONTEXT-LIMIT.md).
+ *
+ * 2.2.0 (EFFORT-1, additive): [Harness.effort], how this harness honours [HarnessRequest.effort] (the reasoning effort level,
+ * one of low / medium / high / xhigh / max). Before 2.2.0 the request field existed but a harness could not say whether it
+ * applies it. A 2.0 / 2.1 plugin keeps [EffortSupport.UNSUPPORTED] (the default): an effort set on its session is reported as
+ * not applied and never passed (docs/EFFORT.md).
  */
-const val HARNESS_API_VERSION: String = "2.1.0"
+const val HARNESS_API_VERSION: String = "2.2.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
@@ -71,6 +76,28 @@ interface Harness {
      * when it is approximated (a soft threshold, a check between turns).
      */
     val contextLimit: ContextLimitCapability get() = ContextLimitCapability.UNSUPPORTED
+
+    /**
+     * 2.2.0: how this harness honours [HarnessRequest.effort]. Default [EffortCapability.UNSUPPORTED]: the daemon then never
+     * passes an effort and reports it as not applied. Declare SUPPORTED only when [process] maps the level to a mechanism
+     * the CLI applies (a flag, an env var).
+     */
+    val effort: EffortCapability get() = EffortCapability.UNSUPPORTED
+}
+
+/**
+ * 2.2.0 (EFFORT-1): how a harness honours a reasoning effort. Same states as [ContextLimitSupport].
+ *  - [SUPPORTED]: the CLI takes the level through a flag or env var and applies it;
+ *  - [BEST_EFFORT]: mapped, but the CLI may ignore or clamp it (e.g. model dependent);
+ *  - [UNSUPPORTED]: no way to apply it; an effort set on such a session is recorded and reported, not applied.
+ */
+enum class EffortSupport { SUPPORTED, BEST_EFFORT, UNSUPPORTED }
+
+/** [support] plus, in words, HOW the harness applies the level (or why it cannot), shown next to the option to the user. */
+data class EffortCapability(val support: EffortSupport, val how: String = "") {
+    companion object {
+        val UNSUPPORTED = EffortCapability(EffortSupport.UNSUPPORTED, "this harness declares no effort mapping")
+    }
 }
 
 /**

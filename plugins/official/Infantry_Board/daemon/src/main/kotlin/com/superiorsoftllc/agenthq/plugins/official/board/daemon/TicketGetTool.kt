@@ -78,6 +78,13 @@ class TicketGetTool(private val api: DaemonApi) : DaemonTool {
                 put("effectiveContextLimitSource", ticket.effectiveContextLimitSource)
                 put("contextLimitSupport", ticket.contextLimitSupport)
             }
+            // EFFORT-1: the ticket's reasoning effort and the effective one (source ticket / rule / agent / role / default, the harness's support).
+            put("effort", ticket.effort)
+            if (ticket.effectiveEffortSource != null) {
+                put("effectiveEffort", ticket.effectiveEffort)
+                put("effectiveEffortSource", ticket.effectiveEffortSource)
+                put("effortSupport", ticket.effortSupport)
+            }
             put("effectiveProvider", ticket.effectiveProvider)
             put("effectiveProviderSource", ticket.effectiveProviderSource)
             put("effectiveModel", ticket.effectiveModel)

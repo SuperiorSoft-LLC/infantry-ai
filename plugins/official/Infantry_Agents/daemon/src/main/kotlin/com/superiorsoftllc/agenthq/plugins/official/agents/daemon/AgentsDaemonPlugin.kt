@@ -221,6 +221,9 @@ object ListHarnessesTool : DaemonTool {
                                     // CONTEXT-LIMIT-1: how a ticket / spawn contextLimit is honoured on this harness.
                                     harness.contextLimit?.let { put("contextLimit", it) }
                                     harness.contextLimitHow?.let { put("contextLimitHow", it) }
+                                    // EFFORT-1: how a ticket / spawn effort is honoured on this harness.
+                                    harness.effort?.let { put("effort", it) }
+                                    harness.effortHow?.let { put("effortHow", it) }
                                 })
                             }
                         })

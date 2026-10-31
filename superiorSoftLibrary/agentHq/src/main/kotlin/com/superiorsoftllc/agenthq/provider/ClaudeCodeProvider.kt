@@ -50,6 +50,9 @@ class ClaudeCodeProvider(
     override fun contextLimit(): com.superiorsoftllc.agenthq.harness.ContextLimitCapability =
         com.superiorsoftllc.agenthq.claude.ClaudeContextLimit.CAPABILITY
 
+    override fun effort(): com.superiorsoftllc.agenthq.harness.EffortCapability =
+        com.superiorsoftllc.agenthq.claude.ClaudeEffort.CAPABILITY
+
     override fun sessionIdFromLine(line: String): String? = SessionId.fromLine(line)
 
     /** `AGENTHQ_CLAUDE_MODEL`, or null: no `--model` flag, so the CLI's own configured model applies. */

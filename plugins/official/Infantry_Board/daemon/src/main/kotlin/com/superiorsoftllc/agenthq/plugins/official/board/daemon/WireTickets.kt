@@ -61,6 +61,7 @@ internal object WireTickets {
         fun obj(parent: JsonObject?, key: String) = parent?.get(key) as? JsonObject
         val executor = obj(o, "effectiveExecutor")
         val limit = obj(o, "effectiveContextLimit")
+        val effort = obj(o, "effectiveEffort")
         return TicketInfo(
             id = str(o, "id") ?: error("a ticket without an id"),
             title = str(o, "title").orEmpty(),
@@ -89,6 +90,10 @@ internal object WireTickets {
             effectiveContextLimit = (limit?.get("value") as? JsonPrimitive)?.intOrNull,
             effectiveContextLimitSource = str(limit, "source"),
             contextLimitSupport = str(limit, "support"),
+            effort = str(o, "effort"),
+            effectiveEffort = str(effort, "value"),
+            effectiveEffortSource = str(effort, "source"),
+            effortSupport = str(effort, "support"),
         )
     }
 

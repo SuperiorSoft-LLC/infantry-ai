@@ -112,6 +112,11 @@ data class SessionRecord(
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val contextLimitSupport: String? = null,
     /**
+     * EFFORT-1 (contract 1.148.0): how the session's harness honours [effort] (`supported` / `best_effort` / `unsupported`),
+     * set when an effort is; `unsupported` = recorded, not applied. Null = no effort set (and what an older record decodes to).
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val effortSupport: String? = null,
+    /**
      * Contract 1.4.0: the agent profile this session was spawned from (`new` with an `agentId`), or
      * null for a plain spawn. Attribution only: the profile can later change or disappear, and this
      * session keeps the provider, model and role it was spawned with.
