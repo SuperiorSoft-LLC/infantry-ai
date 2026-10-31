@@ -42,7 +42,7 @@ class ProjectFilesTest {
     fun parentAbsoluteDriveAndEmptySegmentPathsAreRefusedAndNothingIsWritten() {
         val root = project()
         val files = DirectoryProjectFiles(root)
-        for (bad in listOf("../x", "a/../../x", "/etc/x", "\x", "C:/x", "C:x", "a//b", "./x", "a/./b", "", "  ", "a\..\..\x")) {
+        for (bad in listOf("../x", "a/../../x", "/etc/x", "\\x", "C:/x", "C:x", "a//b", "./x", "a/./b", "", "  ", "a\\..\\..\\x")) {
             assertFailsWith<IllegalArgumentException>("put '$bad'") { files.put(bad, byteArrayOf(1)) }
             assertFailsWith<IllegalArgumentException>("get '$bad'") { files.get(bad) }
             assertFailsWith<IllegalArgumentException>("delete '$bad'") { files.delete(bad) }
