@@ -503,7 +503,7 @@ class TicketBoardTest {
         }
         manager.eventSink = { event ->
             eventEmitted.countDown()
-            board.onSessionEvent(event) // the daemon's fourth arm
+            board.localHost?.publish(event) // the daemon's fourth arm
         }
 
         var answer: TicketAnswer? = null
@@ -618,7 +618,7 @@ class TicketBoardTest {
             }
             manager.eventSink = { event ->
                 if (event is SessionEvent.Exit) exitFired.countDown()
-                board.onSessionEvent(event) // the daemon's fourth arm
+                board.localHost?.publish(event) // the daemon's fourth arm
             }
 
             var answer: TicketAnswer? = null
@@ -761,7 +761,7 @@ class TicketBoardTest {
         val board = TicketBoard(store, idFactory = { ids.next() }, context = prompting, agents = profiles, sessions = manager,
             exitBehavior = { exitBehavior }, autoDoneMinOutputs = { minOutputs },
         )
-        manager.eventSink = { board.onSessionEvent(it) } // the daemon's fourth arm
+        manager.eventSink = { board.localHost?.publish(it) } // the daemon's fourth arm
         val ticket = board.save(TicketSave(title = "Add login", agentId = worker.id)).ticket
         assertEquals("started", board.move(ticket.id, IN_PROGRESS).ticket.start?.reason)
 

@@ -340,7 +340,7 @@ class LocalBoardServices(
 
         override fun brief(ticketId: String, by: Caller): BoardResult<String?> = withTicket(Envelope.TICKET_GET, ticketId, by) { b, _, t ->
             val worker = t.sessionId?.let { id -> sessions().firstOrNull { it.id == id } }
-            BoardResult.Ok(worker?.let { b.brief(it) })
+            BoardResult.Ok(worker?.let { b.brief(it.id) })
         }
     }
 

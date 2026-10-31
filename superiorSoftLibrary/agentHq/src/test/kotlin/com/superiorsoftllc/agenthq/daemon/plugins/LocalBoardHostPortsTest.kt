@@ -22,7 +22,7 @@ class LocalBoardHostPortsTest {
 
     private fun host() = LocalBoardHost(store = SqlAgentHqStore.open(kotlin.io.path.createTempDirectory("bh").resolve("a.db").toString()).also { opened += it as AutoCloseable }, sessionManager = { null as com.superiorsoftllc.agenthq.session.SessionManager? })
 
-    @Test fun `api version is 1_10_0`() = assertEquals("1.10.0", BOARD_API_VERSION)
+    @Test fun `api version is 1_11_0`() = assertEquals("1.11.0", BOARD_API_VERSION)
 
     @Test fun `unwired members answer like NoBoardHost`() {
         val h = host()

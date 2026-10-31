@@ -294,6 +294,9 @@ interface BoardSessions {
      */
     fun holdsSessionsLock(): Boolean = false
 
+    /** DP-5f-3c (1.11.0): the role instance [sessionId] froze at start; null = anonymous or unknown. */
+    fun instance(sessionId: String): BoardRoleInstance? = null
+
     /** DP-5f-2b: where [subscribe] delivers. */
     val delivery: SessionDelivery get() = SessionDelivery.EMITTING_THREAD
 
