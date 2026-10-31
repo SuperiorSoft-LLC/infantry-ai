@@ -63,7 +63,7 @@ import com.superiorsoftllc.agenthq.memory.MemoryNote
 import com.superiorsoftllc.agenthq.memory.MemorySave
 import com.superiorsoftllc.agenthq.memory.MemorySearch
 import com.superiorsoftllc.agenthq.memory.MemorySearchResult
-import com.superiorsoftllc.agenthq.memory.MemoryStore
+import com.superiorsoftllc.agenthq.memory.memoryOccurrences
 import com.superiorsoftllc.agenthq.protocol.RoleTraits
 import com.superiorsoftllc.agenthq.protocol.RoleTraitsSave
 import com.superiorsoftllc.agenthq.protocol.RosterRequest
@@ -3045,7 +3045,7 @@ internal object Cli {
         // the save; a missing note or a bad anchor is left for the save itself to refuse with its code.
         val editAt = if (mode == MemorySave.MODE_EDIT) {
             runCatching { fetchNote(stream, projectId, name, err, at) }.getOrNull()?.body?.let { body ->
-                body.indexOf(parsed.find!!).takeIf { MemoryStore.occurrences(body, parsed.find) == 1 }
+                body.indexOf(parsed.find!!).takeIf { memoryOccurrences(body, parsed.find) == 1 }
             }
         } else {
             null

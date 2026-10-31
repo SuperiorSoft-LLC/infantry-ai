@@ -5,114 +5,11 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
-/** `memory_search` payload: the owning project and the query text to match against note content. */
-@Serializable
-data class MemorySearch(
-    val projectId: String,
-    val query: String,
-    /** NOTES-1 (contract 1.98.0): `project` (default), `role` or `session`; see [MemoryScoped]. */
-    override val scope: String? = null,
-    override val sessionId: String? = null,
-    override val role: String? = null,
-) : MemoryScoped
-
-/**
- * MEM-8 `memory_save` payload: the owning project and the note to write.
- *
- * P10-K2 (contract 1.51.0) adds [mode] (`replace` default, `append`, `edit`), [find], [content] and [folder], all
- * optional, so a pre-1.51.0 four-field payload `{projectId, name, description, body}` still decodes and replaces.
- * Which fields a mode takes (K-D5): `replace` needs [description] and [body]; `append` needs [content]; `edit`
- * needs a non-empty [find] and [content] (may be ""). A field that belongs to another mode is refused. A null
- * [folder] keeps the note where it is (a new note goes to the root); a null [description] keeps the stored cue in
- * `append` / `edit`.
- */
-@Serializable
-data class MemorySave(
-    val projectId: String,
-    val name: String,
-    val description: String? = null,
-    val body: String? = null,
-    val mode: String? = null,
-    val find: String? = null,
-    val content: String? = null,
-    val folder: String? = null,
-    override val scope: String? = null,
-    override val sessionId: String? = null,
-    override val role: String? = null,
-) : MemoryScoped {
-    companion object {
-        const val MODE_REPLACE = "replace"
-        const val MODE_APPEND = "append"
-        const val MODE_EDIT = "edit"
-        val MODES = listOf(MODE_REPLACE, MODE_APPEND, MODE_EDIT)
-    }
-}
-
-/** P10-K2 (contract 1.51.0) `memory_get` payload: one note of a project, by name. */
-@Serializable
-data class MemoryGet(
-    val projectId: String,
-    val name: String,
-    override val scope: String? = null,
-    override val sessionId: String? = null,
-    override val role: String? = null,
-) : MemoryScoped
-
-/** NOTES-1 `memory_list` payload (a bare project id still works and means the project scope). */
-@Serializable
-data class MemoryList(
-    val projectId: String,
-    override val scope: String? = null,
-    override val sessionId: String? = null,
-    override val role: String? = null,
-) : MemoryScoped
-
-/** NOTES-1 `memory_delete` payload: one note by name inside a scope. */
-@Serializable
-data class MemoryDelete(
-    val projectId: String,
-    val name: String,
-    override val scope: String? = null,
-    override val sessionId: String? = null,
-    override val role: String? = null,
-) : MemoryScoped
-
-/**
- * NOTES-1 `memory_purge_role` payload: delete every role note of [role]. [confirm] must equal [role] exactly
- * (a typed confirmation), so a stray call cannot wipe a role's notes.
- */
-@Serializable
-data class MemoryPurgeRole(
-    val role: String,
-    val confirm: String,
-)
-
-/** NOTES-1: who is asking and which scope they address. A null scope is `project`. */
-interface MemoryScoped {
-    val scope: String?
-    /** The declared calling session (an agent); null = the owner at a terminal / the UI. */
-    val sessionId: String?
-    /** The role a `role` scope addresses; null = the calling session's own role. */
-    val role: String?
-}
-
 /** NOTES-1: the calling session as the handler needs it: its id and role. */
 data class MemoryCaller(val sessionId: String, val role: String)
 
 /** The resolved (scope, ownerId) pair a [MemoryScoped] request addresses. */
 private data class Target(val scope: String, val ownerId: String)
-
-/**
- * MEM-8: one row of the `memory_list` answer -- a project's note reduced to the pair an index lists,
- * its [name] and its one-line [description], with the body deliberately withheld.
- */
-@Serializable
-data class MemoryIndexEntry(
-    val name: String,
-    val description: String,
-    /** P10-K2 (contract 1.51.0): the folder the note is filed under ("" = the project root). */
-    val folder: String = "",
-)
 
 /**
  * MEM-5 / MEM-8: the `memory_*` wire surface over a [MemoryStore], shaped after
