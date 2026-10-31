@@ -26,9 +26,6 @@ interface DaemonServices {
     /** The policy, read at call time (the runtime is built after the host). */
     fun policy(): Policy
 
-    /** DP-5h-3a2: the runtime a board plugin builds the board from; null = the daemon hosts the board in core (or has none). */
-    val boardRuntime: com.superiorsoftllc.agenthq.daemon.api.board.BoardRuntime? get() = null
-
     /** DP-4a: the board, over the daemon's own TicketBoard / EpicStore (docs/DAEMON-BOARD-API.md). Default: no board. */
     val tickets: com.superiorsoftllc.agenthq.daemon.api.board.Tickets get() = com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.tickets
     val epics: com.superiorsoftllc.agenthq.daemon.api.board.Epics get() = com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.epics
@@ -44,6 +41,8 @@ interface DaemonServices {
     val sessionReads: com.superiorsoftllc.agenthq.daemon.api.sessions.SessionReads get() = com.superiorsoftllc.agenthq.daemon.api.sessions.NoSessionReads
 
     /** RUNTIME-LOAD-6: the host spawn service ([LocalSpawns]). Default: none (every call Unavailable). */
+    /** DP-5h-3a: what a board plugin builds its board from; the no-board runtime when none. */
+    val boardRuntime: com.superiorsoftllc.agenthq.daemon.api.board.BoardRuntime get() = com.superiorsoftllc.agenthq.daemon.api.board.NoBoardRuntime
     val spawns: com.superiorsoftllc.agenthq.daemon.api.spawns.Spawns get() = com.superiorsoftllc.agenthq.daemon.api.spawns.NoSpawns
 
     /** STACK-NEUTRAL-2: the host process service ([com.superiorsoftllc.agenthq.session.LocalProcesses]); null = none. */

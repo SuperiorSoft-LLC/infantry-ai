@@ -46,15 +46,16 @@ class CoreDaemonServices(
     private val sessionReadModel: com.superiorsoftllc.agenthq.daemon.api.sessions.SessionReads? = null,
     /** RUNTIME-LOAD-6: the host spawn service; null = none. */
     private val spawnService: com.superiorsoftllc.agenthq.daemon.api.spawns.Spawns? = null,
+    /** DP-5h-3a: the board runtime a board plugin builds from; null = none. */
+    private val boardRuntimeService: com.superiorsoftllc.agenthq.daemon.api.board.BoardRuntime? = null,
     /** STACK-NEUTRAL-2: the host process service, the per-launch env seam and the plugin settings reader; null = none. */
     override val processHost: com.superiorsoftllc.agenthq.session.LocalProcesses? = null,
     override val launchEnvHost: com.superiorsoftllc.agenthq.session.LaunchEnvHost? = null,
     override val pluginSettings: com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings = com.superiorsoftllc.agenthq.daemon.api.processes.NoPluginSettings,
     /** PACE-TREND-1: the plan meters' current readings; null = none. */
     override val meters: com.superiorsoftllc.agenthq.daemon.api.usage.Meters = com.superiorsoftllc.agenthq.daemon.api.usage.NoMeters,
-    /** DP-5h-3a2: the board runtime for a board plugin (see LocalBoardRuntime); null until the daemon hands the board over (DP-5h-3b). */
-    override val boardRuntime: com.superiorsoftllc.agenthq.daemon.api.board.BoardRuntime? = null,
 ) : DaemonServices {
+    override val boardRuntime get() = boardRuntimeService ?: com.superiorsoftllc.agenthq.daemon.api.board.NoBoardRuntime
     override val spawns get() = spawnService ?: com.superiorsoftllc.agenthq.daemon.api.spawns.NoSpawns
     override val sessionReads get() = sessionReadModel ?: com.superiorsoftllc.agenthq.daemon.api.sessions.NoSessionReads
     override val ticketEvents: com.superiorsoftllc.agenthq.daemon.api.board.TicketEvents get() = ticketEventStream ?: com.superiorsoftllc.agenthq.daemon.api.board.NoTicketEvents

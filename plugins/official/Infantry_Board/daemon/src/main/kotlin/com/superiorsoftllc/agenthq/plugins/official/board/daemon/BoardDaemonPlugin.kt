@@ -1,7 +1,9 @@
 package com.superiorsoftllc.agenthq.plugins.official.board.daemon
 
+import com.superiorsoftllc.agenthq.backlog.BoardFromRuntime
 import com.superiorsoftllc.agenthq.backlog.registerBoardFrames
 import com.superiorsoftllc.agenthq.daemon.api.DaemonApi
+import com.superiorsoftllc.agenthq.daemon.api.board.NoBoardHost
 import com.superiorsoftllc.agenthq.daemon.api.DaemonPlugin
 
 /**
@@ -10,19 +12,16 @@ import com.superiorsoftllc.agenthq.daemon.api.DaemonPlugin
  * Same names, schemas, answers and gating: each is one `ticket_files` frame on the caller's own connection.
  */
 class BoardDaemonPlugin : DaemonPlugin {
-    /** The board this plugin built from the host's runtime; null when the daemon hosts the board itself or has none. */
-    @Volatile
-    var built: BuiltBoard? = null
-        private set
-
     override fun start(api: DaemonApi) {
-        // DP-5h-3a2: with a BoardRuntime the plugin owns the board: it builds it and answers the board family frames. With none,
-        // nothing registers and the daemon answers `<type> refused: this daemon has no board`, as before.
-        api.boardRuntime?.let { runtime ->
-            val b = BoardBuild.build(runtime)
-            built = b
-            registerBoardFrames(api.frames.table, b.board, api.spawns.charge, b.epics, b.stories, b.storyBoard)
-        } ?: api.log("no board runtime: the daemon hosts the board itself or has none")
+        // DP-5h-3a: with no core-built board, the plugin builds its own from the board runtime and registers the ticket frames through
+        // the typed binding and the spawn-charge port (DP-5h-3a2: with the story and epic handlers built from the runtime inputs). While core still builds the
+        // board (BoardWiring), only the tools below are registered.
+        val runtime = api.boardRuntime
+        if (!runtime.coreBuiltBoard && runtime.host !== NoBoardHost) {
+            val board = BoardFromRuntime.build(runtime)
+            val h = BoardBuild.handlers(runtime, board)
+            registerBoardFrames(api.frames.table, board, api.spawns.charge, h.epics, h.stories, h.storyBoard)
+        }
         api.tools.register(TicketGetTool(api))
         api.tools.register(TicketFilesTools.Files)
         api.tools.register(TicketFilesTools.Related)

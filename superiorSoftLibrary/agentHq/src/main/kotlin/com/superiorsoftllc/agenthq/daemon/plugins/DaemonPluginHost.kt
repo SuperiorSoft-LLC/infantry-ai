@@ -498,11 +498,12 @@ class DaemonPluginHost private constructor(
         override val tickets get() = granted.ticketsApi
         override val epics get() = granted.epicsApi
         override val board get() = granted.boardApi
-        // DP-5h-3a2: the board runtime builds the plugin's own board; trusted tiers only (a community plugin gets null).
-        override val boardRuntime get() = if (p.community) null else services.boardRuntime
         // RUNTIME-LOAD-5: the sessions read model behind this plugin's grants (community: default deny).
         override val sessionReads: com.superiorsoftllc.agenthq.daemon.api.sessions.SessionReads =
             GrantedSessionReads({ services.sessionReads }) { grant -> !p.community || grant in p.setting.allow }
+        // DP-5h-3a: the board runtime for bundled / official plugins only (a community plugin builds no board).
+        override val boardRuntime: com.superiorsoftllc.agenthq.daemon.api.board.BoardRuntime
+            get() = if (p.community) com.superiorsoftllc.agenthq.daemon.api.board.NoBoardRuntime else services.boardRuntime
         // RUNTIME-LOAD-6: the host spawn service behind this plugin's grants (community: `sessions.spawn`, default deny).
         override val spawns: com.superiorsoftllc.agenthq.daemon.api.spawns.Spawns =
             GrantedSpawns({ services.spawns }) { grant -> !p.community || grant in p.setting.allow }
