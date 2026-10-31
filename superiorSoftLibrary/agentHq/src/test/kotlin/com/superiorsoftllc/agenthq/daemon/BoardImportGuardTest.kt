@@ -30,10 +30,8 @@ class BoardImportGuardTest {
         }.toSet()
     }
 
-    /** Core files that import a board class, still to move (DP-5h empties it); it only ever shrinks. */
-    private val remaining = setOf(
-        "backlog/StoryAdapters.kt", "backlog/TicketBoardStores.kt", "daemon/plugins/LocalBoardServices.kt", "daemon/DaemonMain.kt", "daemon/BoardWiring.kt",
-    )
+    /** DP-5h-4: no core file imports a board class. Never add an entry. */
+    private val remaining = emptySet<String>()
 
     private fun importers() = main.walkTopDown().filter { it.isFile && it.extension == "kt" }
         .filter { f -> f.readLines().any { l -> importRe.find(l)?.groupValues?.get(1) in boardSymbols } }

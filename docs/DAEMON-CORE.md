@@ -63,7 +63,7 @@ DAEMON-PLUGINS-3: `probe` (a one-off provider comparison `main()` and its `probe
 **PLUGIN LATER (blocker named)**
 | package | blocker |
 |---|---|
-| `backlog`, `epics`, `stories`, `mvp`, `ticketfiles`, `context`, `brief`, `ledger` (Infantry_Board's daemon half) | DaemonApi has no ticket/board/epic surface and `DaemonMain`, `TicketBoard`, the story handlers and the mailbox name each other directly; DaemonApi board surface first, see `docs/DAEMON-BOARD-API.md` (DAEMON-PLUGINS-3 design, built after launch) |
+| `backlog`, `epics`, `stories`, `mvp`, `ticketfiles`, `context`, `brief`, `ledger` (Infantry_Board's daemon half) | DONE (DP-5h-4): core builds no board. The Infantry_Board plugin builds the `TicketBoard` (epics, stories, handover, worker sweep, frames) over `BoardRuntime`; core reaches it only through `BoardPorts` / `BoardCoreAccess`. With the plugin absent the board frames refuse with the no-board text. `BoardImportGuardTest.remaining` is EMPTY (no core file imports a board class); see `docs/DAEMON-BOARD-API.md` section 21 |
 | `claude`, `opencode` | the adapters are already `HarnessPlugin`s, but ProviderFactory, HarnessModelCatalogs, Sandbox and DaemonMain name them, so built-ins are not registered through the SPI |
 | `role`, `agents` | roles and profiles are bound into SessionManager spawn and mail addressing; needs a DaemonApi role surface / spawn-binding hook |
 | `questions`, `attention` | usage, mailbox and triggers raise attention items directly (reverse dependency); needs attention in the API first |
@@ -111,7 +111,7 @@ Physically core today (own Gradle module, depends on no other agentHq module and
   Depends on `agentHqDaemonApi` and `agentHqProtocol`, never on `agentHq` (`BoardImportGuardTest`); `agentHq` depends on it, still one daemon jar. What the packages
   need of the host comes in through ports declared there: `TicketFileRows` (SQL adapter `SqlTicketFileRows` in core), `ProjectDirectory`, `KnowledgeSection`,
   `SkillsSection`, `GitCli`/`GitResult`, `ProjectSettings`, and the EpicHandler `branchName` hook. `SqlEpicPersistence` and the `TicketFiles(db, ...)` factory stay in core.
-  `backlog`, `mvp` and `stories` stay in `agentHq` and depend on it.
+  `backlog`, `mvp` and `stories` stay in `agentHq` and depend on it (DP-5h-4: no core main file imports them any more; the board constructors `TicketBoard(store, ...)`/`StoryMigration(...)` live in the test source set).
 * `superiorSoftLibrary/agentHqDaemonApi` and `superiorSoftLibrary/agenthqPlugins` were already separate modules.
 
 Still inside `superiorSoftLibrary/agentHq` (not yet physical): `session`, `harness` (apart from `HarnessCommand.kt`), `daemon`, `policy`,

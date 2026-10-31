@@ -349,7 +349,7 @@ class DaemonFixture private constructor(
                 token = token,
                 additionalProviders = additionalProviders,
                 repo = repo,
-                context = context,
+                fixedFirstTurn = context?.let { c -> { c.compose(com.superiorsoftllc.agenthq.context.ContextInput(null, "", "", emptyList(), null)).let { r -> r.prompt to r.sources.map { it.source to it.chars } } } },
                 // Contract 1.12.0: custom roles live in the fixture's OWN state dir, never in ~/.agenthq/roles.
                 roles = com.superiorsoftllc.agenthq.role.RoleService(File(stateDir, "roles")),
                 budget = budget ?: com.superiorsoftllc.agenthq.usage.OperatorBudget(maxRunsPerDay = null, maxTokensPerDay = null),
