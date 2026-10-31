@@ -90,6 +90,7 @@ class SettingsService(
             RELATED_SUGGEST_NUMBER to JsonPrimitive(relatedConfig().suggestNumber),
             MAIL_AUTOMATION_FOOTER to JsonPrimitive(automationFooter("system") ?: ""),
             MAIL_WAKE_MODE to JsonPrimitive(wakeMode(null, null)),
+            MAIL_DELIVERY_MODE to JsonPrimitive(deliveryMode(null, null)),
         ) + LimitRegistry.ALL.associate { it.key to JsonPrimitive(limit(it)) } + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
     )
 
@@ -384,7 +385,10 @@ class SettingsService(
             RELATED_FAMILY_PATTERN -> JsonPrimitive(requireFamilyPattern(value))
             MAIL_AUTOMATION_FOOTER -> JsonPrimitive(requireFooterText(key, value))
             MAIL_WAKE_MODE -> JsonPrimitive(requireWakeMode(key, value))
-            else -> if (key.startsWith("$MAIL_WAKE_MODE.") && key.length > MAIL_WAKE_MODE.length + 1) {
+            MAIL_DELIVERY_MODE -> JsonPrimitive(requireDeliveryMode(key, value))
+            else -> if (key.startsWith("$MAIL_DELIVERY_MODE.") && key.length > MAIL_DELIVERY_MODE.length + 1) {
+                JsonPrimitive(requireDeliveryMode(key, value))
+            } else if (key.startsWith("$MAIL_WAKE_MODE.") && key.length > MAIL_WAKE_MODE.length + 1) {
                 JsonPrimitive(requireWakeMode(key, value))
             } else if (key.startsWith("$MAIL_AUTOMATION_FOOTER.") && key.length > MAIL_AUTOMATION_FOOTER.length + 1) {
                 JsonPrimitive(requireFooterText(key, value))
@@ -426,6 +430,23 @@ class SettingsService(
             blockFiles = cap(LimitRegistry.RELATED_BLOCK_FILES),
             blockChars = cap(LimitRegistry.RELATED_BLOCK_CHARS),
         )
+    }
+
+    private fun requireDeliveryMode(key: String, value: JsonElement): String =
+        (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it in DELIVERY_MODES }
+            ?: throw IllegalArgumentException("setting '$key' must be one of $DELIVERY_MODES")
+
+    /**
+     * MAIL-TRUNC-1: what a mail wake injects. `notify` (recommended default): a NEW MAIL (n) block, one line per mail
+     * (id, sender, subject) and the read command, no body (bodies stay in the mailbox; every injected line is re-read on
+     * every later turn). `truncate`: bodies cut at limits.mail.injectMaxChars, the turn at limits.mail.injectTotalChars.
+     * `full`: every body, as before. Resolution: `mail.deliveryMode.<sessionId>`, `mail.deliveryMode.<role>`, `mail.deliveryMode`, `notify`.
+     */
+    fun deliveryMode(role: String?, sessionId: String?): String {
+        fun stored(key: String) = store.settings.get(key)?.value
+            ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.getOrNull() }
+            ?.takeIf { it in DELIVERY_MODES }
+        return (sessionId?.let { stored("$MAIL_DELIVERY_MODE.$it") }) ?: (role?.let { stored("$MAIL_DELIVERY_MODE.$it") }) ?: stored(MAIL_DELIVERY_MODE) ?: "notify"
     }
 
     private fun requireWakeMode(key: String, value: JsonElement): String =
@@ -782,6 +803,8 @@ class SettingsService(
         /** TRIGGER-FOOTER-1: footer text for trigger / system mail ("" = off); `.<triggerId>` suffix = per-trigger override. */
         const val MAIL_AUTOMATION_FOOTER = "mail.automationFooter"
         const val MAIL_WAKE_MODE = "mail.wakeMode"
+        const val MAIL_DELIVERY_MODE = "mail.deliveryMode"
+        val DELIVERY_MODES = setOf("notify", "truncate", "full")
         val WAKE_MODES = setOf("real", "never", "all")
         const val PROMPTS_TIMEOUT_SEC = "prompts.timeoutSec"
         const val DEFAULT_PROMPT_TIMEOUT_SEC = 600

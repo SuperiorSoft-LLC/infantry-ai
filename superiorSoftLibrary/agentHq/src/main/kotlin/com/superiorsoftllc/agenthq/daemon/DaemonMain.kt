@@ -1169,6 +1169,9 @@ class AgentHqDaemon(
                 automationFooter = settings::automationFooter,
                 coalesceMax = { settings.limit(LimitRegistry.MAIL_COALESCE_MAX).toInt() },
                 wakeMode = { role, sid -> settings.wakeMode(role, sid) },
+                deliveryMode = { role, sid -> settings.deliveryMode(role, sid) },
+                injectMaxChars = { settings.limit(LimitRegistry.MAIL_INJECT_MAX_CHARS).toInt() },
+                injectTotalChars = { settings.limit(LimitRegistry.MAIL_INJECT_TOTAL_CHARS).toInt() },
                 wakeDebounceMs = { settings.limit(LimitRegistry.MAIL_WAKE_DEBOUNCE_SECONDS) * 1000 },
                 knowledge = knowledge, skills = skillsSource, starterOf = { sid -> orchestratorLink.starterOf(sid).valueOr(null) },
             )

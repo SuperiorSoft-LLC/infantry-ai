@@ -536,7 +536,21 @@ object LimitRegistry {
         max = 100, zeroMeans = "one wake per message",
     )
 
+    /** MAIL-TRUNC-1: per-body cap in mail.deliveryMode=truncate. */
+    val MAIL_INJECT_MAX_CHARS = LimitDef(
+        "limits.mail.injectMaxChars", 2000, "chars",
+        "Used by mail.deliveryMode=truncate: each injected mail body is cut to this many characters, ending with '... [N more chars: agenthq read <id>]'. The full body stays in the mailbox.",
+        max = 1_000_000,
+    )
+    /** MAIL-TRUNC-1: whole-turn cap in mail.deliveryMode=truncate. */
+    val MAIL_INJECT_TOTAL_CHARS = LimitDef(
+        "limits.mail.injectTotalChars", 6000, "chars",
+        "Used by mail.deliveryMode=truncate: the whole folded mail turn is capped at this many characters; mail past it is listed as NEW MAIL lines (id, sender, subject).",
+        max = 10_000_000,
+    )
+
     val ALL: List<LimitDef> = listOf(
+        MAIL_INJECT_MAX_CHARS, MAIL_INJECT_TOTAL_CHARS,
         MCP_BODY_CHARS,
         MCP_DEFAULT_DETAIL,
         MCP_MAX_RESULT_CHARS,
