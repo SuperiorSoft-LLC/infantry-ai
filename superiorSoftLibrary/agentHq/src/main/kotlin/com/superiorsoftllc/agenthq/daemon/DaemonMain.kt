@@ -585,7 +585,7 @@ class AgentHqDaemon(
     }
 
     /** DP-5h-1: the board, when this daemon has one (it is wired by [BoardWiring]); a daemon without it refuses the board frames. */
-    val board: TicketBoard get() = boardWiring?.board ?: error("this daemon has no board")
+    val board: TicketBoard? get() = boardWiring?.board
 
     companion object {
         /**
@@ -679,6 +679,8 @@ class AgentHqDaemon(
              * Only [fromEnv] (the real daemon) passes the state dir's file, so a test never migrates the operator's state.
              */
             storyMigrationFile: File? = null,
+            /** DP-5h-3d-1: false = a daemon with no board (project/workspace frames work; ticket frames answer `<type> refused: this daemon has no board`). */
+            withBoard: Boolean = true,
             /** STALL-1: where the watch shims are written; null (tests) = no shims. Only [fromEnv] passes the state dir's. */
             shimDir: File? = null,
             /**
@@ -1282,7 +1284,7 @@ class AgentHqDaemon(
                 },
             ).also { it.start() }
             // DP-5h-1: the board and everything wired around it live in [BoardWiring]; this is the one place the daemon builds it.
-            val boardWiring = BoardWiring.create(
+            val boardWiring: BoardWiring? = if (!withBoard) null else BoardWiring.create(
                 store = store, context = ticketContext, agents = agents, manager = manager, repo = repo,
                 epics = epics, projectStore = projectStore, baseRef = baseRef, knowledge = knowledge, skills = skillsSource,
                 settings = settings, usagePacing = usagePacing, attention = attention, roles = roles,
@@ -1290,18 +1292,16 @@ class AgentHqDaemon(
                 eventSink = { event -> broadcastBoard(clients, event) },
                 onEpicChanged = { epicId -> epics.get(epicId)?.let { broadcastEpic(clients, it) } },
             )
-            val board = boardWiring.board
+            val board: TicketBoard? = boardWiring?.board
             boardRef = board
-            val handover = boardWiring.handover
-            val workerSweepCloser = boardWiring.workerSweepCloser
-            val stories = boardWiring.stories
-            val storyBoard = boardWiring.storyBoard
+            val handover = boardWiring?.handover
+            val workerSweepCloser = boardWiring?.workerSweepCloser
             // Phase 6: the mailbox. Messages are persisted BEFORE any delivery attempt, so a message
             // to an offline agent is never lost, and the router hands queued messages to a session
             // whenever that session comes to rest (see MailRouter's delivery policy). Built before the
             // triggers (TRIGGER-NUDGE): a schedule's catch-up fire on boot mails through it.
             val mailbox = Mailbox(mailStore)
-            orchBoard.set(board)
+            board?.let { orchBoard.set(it) }
             // BUG-S3: mail to an agent swapped onto another harness opens a fresh session there (4.2, lazily).
             val bindFreshSession = { agentId: String ->
                 bindSessionOnSpawn(manager, agents, SpawnOptions(agentId = agentId, projectId = agents.get(agentId)?.projectId), repo)
@@ -1346,11 +1346,11 @@ class AgentHqDaemon(
                 },
             )
             // TICKET-FILES, the typed ticket events and their three core consumers, the story migration, the queue-mark clear (DP-5h-1: in [BoardWiring]).
-            boardWiring.attachTicketServices(store, settings, triggers, doneWorkerReaper, relatedRef, relatedDescriptionRef, storyMigrationFile)
-            val ticketFiles = boardWiring.ticketFiles
-            val ticketFilesText = boardWiring.ticketFilesText
-            val ticketEvents = boardWiring.ticketEvents
-            orchTicketFiles.set(ticketFiles)
+            boardWiring?.attachTicketServices(store, settings, triggers, doneWorkerReaper, relatedRef, relatedDescriptionRef, storyMigrationFile)
+            val ticketFiles = boardWiring?.ticketFiles
+            val ticketFilesText = boardWiring?.ticketFilesText
+            val ticketEvents = boardWiring?.ticketEvents
+            ticketFiles?.let { orchTicketFiles.set(it) }
             mail.reportCheck = { from, body -> orchestratorLink.reviewReport(from, body).refusalOrNull() }
 
             // ASK-1 (contract 1.97.0): non-blocking owner questions, stored, pushed to every client, answered by mail.
@@ -1426,11 +1426,11 @@ class AgentHqDaemon(
                 // RUNTIME-LOAD-6: the persisted spawner chain, and a finished ticket's idle worker no longer holds a slot.
                 all = { manager.list() },
                 released = { r ->
-                    !r.live && r.ticketId != null && runCatching { board.get(r.ticketId!!) }.getOrNull()
+                    !r.live && r.ticketId != null && runCatching { board?.get(r.ticketId!!) }.getOrNull()
                         .let { t -> t == null || t.status != com.superiorsoftllc.agenthq.protocol.TicketStatus.IN_PROGRESS || t.sessionId != r.id }
                 },
             )
-            val ticketStartCharge = TicketStartCharge(spawnGuard, { board.asStartMoves() }, manager::get, manager::setSpawner)
+            val ticketStartCharge = TicketStartCharge(spawnGuard, { board?.asStartMoves() ?: error("this daemon has no board") }, manager::get, manager::setSpawner)
             orchestrator.sessionStartedSink = { _, sessionId, parent -> spawnGuard.record(sessionId, parent); manager.setSpawner(sessionId, parent) }
             settings.limitEnvProblems().forEach { println("[agentHq] limit ignored: $it") }
             println("[agentHq] pod spawn cap=${podSpawnCap ?: settings.limit(LimitRegistry.MAX_PER_POD)} depth=${podSpawnDepth ?: settings.limit(LimitRegistry.MAX_DEPTH)} (cap 0 = unlimited; settings limits.concurrency.*; session-originated spawns only)")
@@ -1533,8 +1533,8 @@ class AgentHqDaemon(
             val boardSeam = com.superiorsoftllc.agenthq.daemon.BoardSeam<com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardHost, com.superiorsoftllc.agenthq.session.SessionEvent>({ h, e -> h.publish(e) })
             // First attach: no re-adopt (BoardWiring already cleared the marks; the sweep waits for session restore). A plugin RELOAD attaches with
             // [reAdopt] (clearQueueMarks + sweepWorkers) after detaching.
-            board.localHost?.let { host -> boardSeam.attach(host) }
-            val reAdopt: () -> Unit = { board.clearQueueMarks(); board.sweepWorkers(LimitRegistry.minutesMs(settings.limit(LimitRegistry.UNBRIEFED_GRACE_MINUTES), LimitRegistry.UNBRIEFED_GRACE_MINUTES)) { _, _, _ -> } }
+            board?.localHost?.let { host -> boardSeam.attach(host) }
+            val reAdopt: () -> Unit = { board?.clearQueueMarks(); board?.sweepWorkers(LimitRegistry.minutesMs(settings.limit(LimitRegistry.UNBRIEFED_GRACE_MINUTES), LimitRegistry.UNBRIEFED_GRACE_MINUTES)) { _, _, _ -> } }
             manager.eventSink = { event ->
                 broadcast(clients, event, streamSequencer, runActivity, { id, seconds ->
                     // A `sleep N` in a tool call becomes a "waiting" countdown; the call returning (or the agent moving on) ends it.
@@ -1658,7 +1658,7 @@ class AgentHqDaemon(
                                 },
                                 attention = attention,
                                 // DP-5h-3a2 (1.13.0): the typed events, story / epic inputs, RELATED block and skill check.
-                                ticketEvents = ticketEvents,
+                                ticketEvents = ticketEvents ?: com.superiorsoftllc.agenthq.daemon.api.board.NoTicketEvents,
                                 stories = object : com.superiorsoftllc.agenthq.daemon.api.board.BoardStoryInputs {
                                     override fun ticketFor(storyId: String) = (store as SqlAgentHqStore).database.story_migrationQueries.ticketFor(storyId).executeAsOneOrNull()
                                     override fun epicChanged(epicId: String) { epics.get(epicId)?.let { broadcastEpic(clients, it) } }
@@ -1963,12 +1963,14 @@ class AgentHqDaemon(
                             spawnGuard,
                             limits = limits,
                             usagePacing = usagePacing,
-                            ticketFiles = { query ->
-                                ticketFilesText.answer(
-                                    query,
-                                    settings.limit(LimitRegistry.TICKET_FILES_MAX_LINES).toInt(),
-                                    settings.limit(LimitRegistry.TICKET_FILES_RELATED_TOP).toInt(),
-                                )
+                            ticketFiles = ticketFilesText?.let { text ->
+                                { query: com.superiorsoftllc.agenthq.ticketfiles.TicketFilesQuery ->
+                                    text.answer(
+                                        query,
+                                        settings.limit(LimitRegistry.TICKET_FILES_MAX_LINES).toInt(),
+                                        settings.limit(LimitRegistry.TICKET_FILES_RELATED_TOP).toInt(),
+                                    )
+                                }
                             },
                             cliLocations = cliLocations,
                             harnessInstaller = harnessInstaller,
@@ -2034,7 +2036,7 @@ class AgentHqDaemon(
                 ownerQuestions = ownerQuestions,
                 handover = handover,
                 processHost = localProcesses,
-                background = listOf(AutoCloseable { usageRefresher.stop() }, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate, plugins, AutoCloseable { harnessModulesRef.get()?.close() }),
+                background = listOf(AutoCloseable { usageRefresher.stop() }, *listOfNotNull(workerSweepCloser).toTypedArray(), AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate, plugins, AutoCloseable { harnessModulesRef.get()?.close() }),
                 healthSettings = healthSettings,
             )
         }

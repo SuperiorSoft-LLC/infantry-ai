@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.cli.mcp
 
+import com.superiorsoftllc.agenthq.daemon.requireBoard
+
 import com.superiorsoftllc.agenthq.cli.Cli
 import com.superiorsoftllc.agenthq.cli.shortTicketId
 import com.superiorsoftllc.agenthq.daemon.DaemonFixture
@@ -109,7 +111,7 @@ class McpTicketDeleteE2eTest {
     @Test
     fun anAgentDeletesTicketsThroughMcpServe() {
         val fixture = DaemonFixture.launch(stateDir = tempDir("agenthq-mcp-del-daemon"), pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot()).also { fixtures += it; it.client.await(Envelope.READY) }
-        val board = fixture.daemon.board
+        val board = fixture.daemon.requireBoard()
         val project = tempDir("agenthq-mcp-del-project")
         McpServeConfig.fileIn(project).apply { parentFile.mkdirs() }.writeText("""{"projectId":"$PROJECT"}""")
         val agent = serve(fixture, project)
