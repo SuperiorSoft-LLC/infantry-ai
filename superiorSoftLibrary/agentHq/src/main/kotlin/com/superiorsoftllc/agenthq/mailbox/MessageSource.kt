@@ -25,7 +25,12 @@ interface MessageSource {
  * The mail source: one [Message] from the mailbox. [origin] is derived from the sender handle once, here;
  * [render] is the one place the `[Infantry AI COMMS]` header and the answer-this-message footer are written.
  */
-class MailSource(private val message: Message, override val origin: MessageOrigin) : MessageSource {
+class MailSource(
+    private val message: Message,
+    override val origin: MessageOrigin,
+    /** TRIGGER-FOOTER-1: the footer template for automation mail (see [MailFooter]); null = the normal answer block. */
+    private val automationFooter: String? = null,
+) : MessageSource {
 
     override fun render(): String = buildString {
         append("[Infantry AI COMMS] message ").append(message.id)
@@ -45,6 +50,7 @@ class MailSource(private val message: Message, override val origin: MessageOrigi
             cp.blockers?.takeIf { it.isNotBlank() }?.let { append("blockers: ").append(it).append('\n') }
             cp.nextAction?.takeIf { it.isNotBlank() }?.let { append("next: ").append(it).append('\n') }
         }
+        automationFooter?.let { append('\n').append(MailFooter.render(it, message)); return@buildString }
         append("\n-- answer this message --\n")
         append("mark it read:\n")
         append("  agenthq read ").append(message.id.take(8)).append('\n')
@@ -64,7 +70,11 @@ class MailSource(private val message: Message, override val origin: MessageOrigi
         private val OWNER_HANDLES = setOf("human", "owner", "user")
 
         /** Mail from [message]'s sender: an agent session, the owner, AgentHQ itself, or an outside handle. */
-        fun of(message: Message, manager: SessionManager): MailSource {
+        fun of(
+            message: Message,
+            manager: SessionManager,
+            footerFor: (String) -> String? = { MailFooter.DEFAULT },
+        ): MailSource {
             val from = message.from
             val sender = manager.get(from)
             val origin = when {
@@ -73,7 +83,8 @@ class MailSource(private val message: Message, override val origin: MessageOrigi
                 from.equals("system", ignoreCase = true) -> MessageOrigin.System("mail")
                 else -> MessageOrigin.External(from, "mail")
             }
-            return MailSource(message, origin)
+            val footer = if (sender == null && MailFooter.isAutomation(from)) footerFor(from) else null
+            return MailSource(message, origin, footer)
         }
     }
 }

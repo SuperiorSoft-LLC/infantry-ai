@@ -88,6 +88,7 @@ class SettingsService(
             RELATED_DESCRIPTION_BLOCK to JsonPrimitive(relatedConfig().descriptionBlock),
             RELATED_FAMILY_PATTERN to JsonPrimitive(relatedConfig().familyPattern),
             RELATED_SUGGEST_NUMBER to JsonPrimitive(relatedConfig().suggestNumber),
+            MAIL_AUTOMATION_FOOTER to JsonPrimitive(automationFooter("system") ?: ""),
         ) + LimitRegistry.ALL.associate { it.key to JsonPrimitive(limit(it)) } + (userPortrait()?.let { mapOf(USER_PORTRAIT to JsonPrimitive(it)) } ?: emptyMap()),
     )
 
@@ -369,7 +370,10 @@ class SettingsService(
                     ?: throw IllegalArgumentException("setting '$key' must be one line of text, at most 1000 characters (\"\" = no instruction line)"),
             )
             RELATED_FAMILY_PATTERN -> JsonPrimitive(requireFamilyPattern(value))
-            else -> LimitRegistry.get(key)?.let { JsonPrimitive(requireLimit(it, value)) }
+            MAIL_AUTOMATION_FOOTER -> JsonPrimitive(requireFooterText(key, value))
+            else -> if (key.startsWith("$MAIL_AUTOMATION_FOOTER.") && key.length > MAIL_AUTOMATION_FOOTER.length + 1) {
+                JsonPrimitive(requireFooterText(key, value))
+            } else LimitRegistry.get(key)?.let { JsonPrimitive(requireLimit(it, value)) }
                 ?: declaredField(key)?.let { com.superiorsoftllc.agenthq.plugin.api.ConfigFieldValidator.validate(it, value) }
                 ?: throw IllegalArgumentException("unknown setting '$key'")
         }
@@ -407,6 +411,24 @@ class SettingsService(
             blockFiles = cap(LimitRegistry.RELATED_BLOCK_FILES),
             blockChars = cap(LimitRegistry.RELATED_BLOCK_CHARS),
         )
+    }
+
+    private fun requireFooterText(key: String, value: JsonElement): String =
+        (value as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.length <= 2000 }
+            ?: throw IllegalArgumentException("setting '$key' must be text, at most 2000 characters (\"\" = switched off: the normal answer-this-message footer)")
+
+    /**
+     * TRIGGER-FOOTER-1: the footer template for mail from an automatic sender ([sender] = `trigger:<id>` or `system`):
+     * the per-trigger `mail.automationFooter.<id>` if stored, else `mail.automationFooter`, else [MailFooter.DEFAULT].
+     * "" = off (null: the caller renders the normal block). Read at every delivery.
+     */
+    fun automationFooter(sender: String): String? {
+        fun stored(key: String) = store.settings.get(key)?.value
+            ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.getOrNull() }
+        val text = (if (sender.startsWith("trigger:")) stored("$MAIL_AUTOMATION_FOOTER.${sender.removePrefix("trigger:")}") else null)
+            ?: stored(MAIL_AUTOMATION_FOOTER)
+            ?: com.superiorsoftllc.agenthq.mailbox.MailFooter.DEFAULT
+        return text.takeIf { it.isNotBlank() }
     }
 
     private fun validFamilyPattern(text: String): Boolean = runCatching { Regex(text).toPattern().matcher("").groupCount() >= 2 }.getOrDefault(false)
@@ -702,6 +724,8 @@ class SettingsService(
         const val RELATED_DESCRIPTION_BLOCK = "related.descriptionBlock"
         const val RELATED_FAMILY_PATTERN = "related.familyPattern"
         const val RELATED_SUGGEST_NUMBER = "related.suggestNumber"
+        /** TRIGGER-FOOTER-1: footer text for trigger / system mail ("" = off); `.<triggerId>` suffix = per-trigger override. */
+        const val MAIL_AUTOMATION_FOOTER = "mail.automationFooter"
         const val PROMPTS_TIMEOUT_SEC = "prompts.timeoutSec"
         const val DEFAULT_PROMPT_TIMEOUT_SEC = 600
         /** ASK-TIMER (1.139.0): `deny` (default) | `approve`: what an unanswered tool approval resolves as at its timeout. */

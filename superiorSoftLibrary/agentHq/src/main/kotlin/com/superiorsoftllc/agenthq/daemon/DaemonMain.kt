@@ -1337,6 +1337,7 @@ class AgentHqDaemon(
             val mail = MailRouter(
                 manager, mailbox, agents, mailBase,
                 agentsSendToken = token != null, bindFreshSession = bindFreshSession,
+                automationFooter = settings::automationFooter,
                 knowledge = knowledge, skills = skillsSource, starterOf = { sid -> orchestratorLink.starterOf(sid).valueOr(null) },
             )
             // Story 9.5: triggers -- stored, coalesced, tripped on any non-success, their starts unattended.

@@ -70,6 +70,8 @@ class MailRouter(
      * otherwise resume a session on a harness the agent was swapped away from. Null = never cut one (resume as before).
      */
     private val bindFreshSession: ((agentId: String) -> SessionRecord?)? = null,
+    /** TRIGGER-FOOTER-1: the footer template for mail from a trigger / `system` sender (null = the normal answer block). */
+    private val automationFooter: (sender: String) -> String? = { MailFooter.DEFAULT },
     /** P10-K9: a never-run recipient's knowledge section, read AT DELIVERY for its own project. */
     private val knowledge: KnowledgeCounter = KnowledgeCounter.NONE,
     /** P10-K15: a never-run recipient's skills section, from its frozen skill ids, bodies read AT DELIVERY. */
@@ -258,7 +260,7 @@ class MailRouter(
         return try {
             // A bound-but-never-run session takes its persona and identity with its first turn, exactly as
             // a `prompt` frame gives them (BUG-808ce596: one composer, [firstTurn]).
-            val source = MailSource.of(message, manager)
+            val source = MailSource.of(message, manager, automationFooter)
             val text = source.render()
             val turn = if (session.neverRun) {
                 // TRAITS-T5: the persona and traits FROZEN at spawn, never the live profile (a later edit never reaches it).
