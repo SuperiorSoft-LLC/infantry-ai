@@ -1342,16 +1342,19 @@ class AgentHqDaemon(
             )
             // Story 9.5: triggers -- stored, coalesced, tripped on any non-success, their starts unattended.
             // TRIGGER-NUDGE (contract 1.105.0): a `prompt` action is mail to the target in the trigger's project.
+            // DP-5b: triggers hand out through the Tickets API, bound once the board services exist (below).
+            var triggerTickets: com.superiorsoftllc.agenthq.daemon.api.board.Tickets? = null
+            val triggerCaller = com.superiorsoftllc.agenthq.daemon.api.Caller(owner = true)
             val triggerNudges = TriggerNudges(
                 sessions = manager::list,
                 send = mail::send,
-                startSession = { agentId, prompt, projectId -> board.startPromptUnattended(agentId, prompt, projectId) },
+                startSession = { agentId, prompt, projectId -> triggerPrompt(triggerTickets, agentId, prompt, projectId, triggerCaller) },
             )
             val triggers = TriggerService(
                 repo = store.triggers,
                 attention = attention,
-                startNext = { filter -> board.startNextUnattended(filter) },
-                startPrompt = { agentId, prompt -> board.startPromptUnattended(agentId, prompt) },
+                startNext = { filter -> (triggerTickets?.startNext(filter, triggerCaller) as? com.superiorsoftllc.agenthq.daemon.api.board.BoardResult.Ok)?.value },
+                startPrompt = { agentId, prompt -> triggerPrompt(triggerTickets, agentId, prompt, null, triggerCaller) },
                 sessions = manager::get,
                 deliverPrompt = triggerNudges::deliver,
                 mailPending = { mailId -> mailbox.message(mailId)?.state == MessageState.QUEUED },
@@ -1723,7 +1726,7 @@ class AgentHqDaemon(
                             },
                             baseCheck = { epic, branch -> baseCheck.check(projectStore.get(epic.projectId), branch) },
                             chargedMove = ticketStartCharge::move,
-                        ).also { pluginBoardServices = it },
+                        ).also { pluginBoardServices = it; triggerTickets = it.tickets },
                         ticketEventStream = ticketEvents,
                         agentRegistry = agentRegistry,
                         // RUNTIME-LOAD-5: the sessions read model (host-scoped), with the replay buffer for transcripts.
@@ -4474,3 +4477,11 @@ private fun TicketBoard.asStartMoves(): StartMoves<TicketAnswer> = object : Star
     override fun move(move: TicketMove, startedBy: String?) = this@asStartMoves.move(move, startedBy = startedBy)
     override fun ticketOf(answer: TicketAnswer) = answer.ticket
 }
+
+/** DP-5b: a trigger's `prompt` hand-out through the Tickets API; no board = the refusal the board itself gave for a missing manager. */
+private fun triggerPrompt(
+    tickets: com.superiorsoftllc.agenthq.daemon.api.board.Tickets?, agentId: String, prompt: String, projectId: String?,
+    by: com.superiorsoftllc.agenthq.daemon.api.Caller,
+): com.superiorsoftllc.agenthq.daemon.api.board.PromptStart =
+    (tickets?.startPrompt(agentId, prompt, projectId, by) as? com.superiorsoftllc.agenthq.daemon.api.board.BoardResult.Ok)?.value
+        ?: com.superiorsoftllc.agenthq.daemon.api.board.PromptStart.Refused("ticket session manager is unavailable")

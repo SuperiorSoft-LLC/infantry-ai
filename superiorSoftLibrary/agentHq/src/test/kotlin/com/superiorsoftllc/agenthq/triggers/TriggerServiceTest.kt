@@ -2,8 +2,9 @@ package com.superiorsoftllc.agenthq.triggers
 
 import com.superiorsoftllc.agenthq.attention.AttentionItem
 import com.superiorsoftllc.agenthq.attention.AttentionStore
-import com.superiorsoftllc.agenthq.backlog.PromptLaunch
-import com.superiorsoftllc.agenthq.backlog.TicketAnswer
+import com.superiorsoftllc.agenthq.daemon.api.board.PromptStart
+import com.superiorsoftllc.agenthq.daemon.api.board.StartResult
+import com.superiorsoftllc.agenthq.daemon.api.board.TicketInfo
 import com.superiorsoftllc.agenthq.persistence.AttentionRepository
 import com.superiorsoftllc.agenthq.persistence.TriggerRepository
 import com.superiorsoftllc.agenthq.protocol.Ticket
@@ -23,6 +24,11 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TriggerServiceTest {
+    private fun startResult(t: Ticket) = StartResult(
+        TicketInfo(id = t.id, title = t.title, status = t.status, position = t.position, createdAt = t.createdAt, updatedAt = t.updatedAt, sessionId = t.sessionId),
+        t.start?.ok ?: false, t.start?.reason ?: "", t.start?.detail,
+    )
+
     /**
      * Thread-safe like the SQLite repository it stands in for: every method holds this object's monitor. The
      * service's launch thread REPLACES an event row (a run's relabel) while `events()` / `list()` read without
@@ -180,7 +186,7 @@ class TriggerServiceTest {
         val service = TriggerService(
             repo = MemoryTriggers(),
             attention = AttentionStore(MemoryAttention()),
-            startNext = { TicketAnswer(ticket = startedTicket, pushed = false) },
+            startNext = { startResult(startedTicket) },
             sessions = { null },
             clock = { now },
             pumpMs = 60_000, // the scheduler never ticks in this test: the pump is driven by hand
@@ -210,7 +216,7 @@ class TriggerServiceTest {
             attention = AttentionStore(MemoryAttention()),
             startNext = {
                 startCalls.incrementAndGet()
-                TicketAnswer(ticket = startedTicket, pushed = false)
+                startResult(startedTicket)
             },
             sessions = { null },
             clock = { now },
@@ -302,7 +308,7 @@ class TriggerServiceTest {
             attention = AttentionStore(MemoryAttention()),
             startNext = {
                 startCalls.incrementAndGet()
-                TicketAnswer(ticket = refusedTicket, pushed = false)
+                startResult(refusedTicket)
             },
             sessions = { null },
             clock = { now },
@@ -342,7 +348,7 @@ class TriggerServiceTest {
         val beforeRestart = TriggerService(
             repo = repo,
             attention = AttentionStore(MemoryAttention()),
-            startNext = { TicketAnswer(ticket = startedTicket, pushed = false) },
+            startNext = { startResult(startedTicket) },
             sessions = { null },
             clock = { now },
             pumpMs = 60_000,
@@ -354,7 +360,7 @@ class TriggerServiceTest {
         val afterRestart = TriggerService(
             repo = repo,
             attention = AttentionStore(MemoryAttention()),
-            startNext = { TicketAnswer(ticket = startedTicket, pushed = false) },
+            startNext = { startResult(startedTicket) },
             sessions = { null },
             clock = { now },
             pumpMs = 60_000, // the pump is driven by hand
@@ -403,7 +409,7 @@ class TriggerServiceTest {
                 } catch (e: InterruptedException) {
                     // the daemon's close() interrupts us; fall through to return the refusal
                 }
-                TicketAnswer(ticket = refusedTicket, pushed = false)
+                startResult(refusedTicket)
             },
             sessions = { null },
             clock = { 0L },
@@ -509,7 +515,7 @@ class TriggerServiceTest {
         val service = TriggerService(
             repo = repo,
             attention = AttentionStore(MemoryAttention()),
-            startNext = { TicketAnswer(ticket = refused, pushed = false) },
+            startNext = { startResult(refused) },
             sessions = { null },
             clock = { 0L },
             pumpMs = 60_000, // the pump never ticks: the launch is the only thing under test
@@ -619,7 +625,7 @@ class TriggerServiceTest {
                 val id = triggerId.get()
                 durableAtHandOut.set(repo.events(id).map { it.disposition } to repo.get(id)?.state)
                 entered.countDown()
-                TicketAnswer(ticket = startedTicket, pushed = false)
+                startResult(startedTicket)
             },
             sessions = { null },
             clock = { 0L },
@@ -657,7 +663,7 @@ class TriggerServiceTest {
             attention = AttentionStore(MemoryAttention()),
             startNext = { null },
             sessions = { null },
-            startPrompt = { agentId, _ -> PromptLaunch.Started("s-$agentId") },
+            startPrompt = { agentId, _ -> PromptStart.Started("s-$agentId") },
             clock = { 0L },
             pumpMs = 60_000,
         )
