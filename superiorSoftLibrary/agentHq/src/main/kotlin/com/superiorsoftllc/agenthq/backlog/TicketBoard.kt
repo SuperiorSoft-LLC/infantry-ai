@@ -18,7 +18,9 @@ import com.superiorsoftllc.agenthq.context.ReportTo
 import com.superiorsoftllc.agenthq.context.TicketContext
 import com.superiorsoftllc.agenthq.orchestration.RunOutcomes
 import com.superiorsoftllc.agenthq.persistence.AgentHqStore
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardAgent
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardHost
+import com.superiorsoftllc.agenthq.daemon.api.sessions.SessionView
 import com.superiorsoftllc.agenthq.daemon.api.board.BranchOutcome
 import com.superiorsoftllc.agenthq.daemon.api.board.BranchRequest
 import com.superiorsoftllc.agenthq.daemon.api.board.SessionStart
@@ -30,7 +32,6 @@ import com.superiorsoftllc.agenthq.daemon.plugins.toRow
 import com.superiorsoftllc.agenthq.daemon.plugins.toStored
 import com.superiorsoftllc.agenthq.persistence.TicketLinkRow
 import com.superiorsoftllc.agenthq.persistence.TicketRow
-import com.superiorsoftllc.agenthq.protocol.AgentProfile
 import com.superiorsoftllc.agenthq.protocol.EffectiveExecutor
 import com.superiorsoftllc.agenthq.protocol.ExecutorOverrides
 import com.superiorsoftllc.agenthq.protocol.ExecutorField
@@ -96,7 +97,7 @@ sealed interface PromptLaunch {
 }
 
 private data class AssignmentResolution(
-    val profile: AgentProfile? = null,
+    val profile: BoardAgent? = null,
     val queueLane: String? = null,
     val refusal: String? = null,
     val busy: Boolean = false,
@@ -381,11 +382,11 @@ class TicketBoard(
     fun startPromptUnattended(agentId: String, prompt: String, projectId: String? = null): PromptLaunch {
         val sessionManager = sessions ?: return PromptLaunch.Refused("ticket session manager is unavailable")
         val profiles = agents ?: return PromptLaunch.Refused("agent profiles are unavailable")
-        val assignment = resolveAssignment(agentId, profiles, sessionManager)
+        val assignment = resolveAssignment(agentId)
         assignment.refusal?.let { return PromptLaunch.Refused(it) }
         if (assignment.busy) return PromptLaunch.Refused("profile lane '${assignment.queueLane}' is at capacity")
         val profile = assignment.profile ?: return PromptLaunch.Refused("no profile resolved for prompt")
-        val executor = profiles.executorFor(profile, null, null, null)
+        val executor = host.agents.executorFor(profile, null, null, null, profile.role)
         host.sessions.checkSpawn(executor.provider, executor.model)?.let { return PromptLaunch.Refused(it) }
         // TRAITS-T4/T5: the instance is resolved first and passed in, so the stored row is what this turn rendered.
         // P10-K15: with the skill ids the row will freeze, so the turn renders exactly those.
@@ -789,17 +790,16 @@ class TicketBoard(
         // has no rules). Its setRole is the role of a ticket that has none; it never replaces the ticket's own.
         val rule = routingChoice(row)
         val assigned = row.agentId ?: rule?.setRole?.let { "role:$it" }
-        val assignment = resolveAssignment(assigned, profiles, sessionManager, row.projectId)
+        val assignment = resolveAssignment(assigned, row.projectId)
         if (assignment.refusal != null) return refusedStart(initialTicket, assignment.refusal)
         // BUG-WT-1: with no repo configured and no explicit pin, a project folder that is a git checkout IS the
         // repo: the ticket gets its own branch and worktree there, never the checkout itself.
         // INSTALL-CWD-1: with project folders on (the installed app), the project's own directory is the folder, and a
         // project with none is refused here: never the daemon's cwd.
         val projectFolder: File? = if (repo == null) {
-            val folders = sessionManager.projectFolders
-            if (folders != null) {
+            if (host.git.projectFolders()) {
                 try {
-                    folders.require(row.projectId)
+                    File(host.git.projectFolderRequire(row.projectId))
                 } catch (e: IllegalArgumentException) {
                     return refusedStart(initialTicket, e.message ?: "project has no directory")
                 }
@@ -827,7 +827,7 @@ class TicketBoard(
         // daemon's own directory). Over a git checkout it would commit straight onto whatever branch is checked
         // out, bypassing review, so the start is refused. A folder that is not a git checkout is unchanged.
         if (!requestedWorktree) {
-            val folder = repo ?: projectFolder ?: sessionManager.defaultWorkingDir
+            val folder = repo ?: projectFolder ?: File(host.sessions.defaultWorkingDir() ?: sessionManager.defaultWorkingDir.path)
             if (gitRootOf(folder) != null) {
                 return refusedStart(
                     initialTicket,
@@ -857,13 +857,13 @@ class TicketBoard(
         val profile = assignment.profile ?: return refusedStart(initialTicket, "no profile resolved for ticket")
 
         // ROLE-1b: ticket pins > profile > the role's binding > daemon default (one resolver, shared with spawn).
-        val bound = profiles.executorFor(profile, row.provider, row.model, row.effort)
+        val bound = host.agents.executorFor(profile, row.provider, row.model, row.effort, profile.role)
         // TICKET-WEIGHT: a weighted ticket that pins nothing (and whose profile / role binding pins nothing) runs on the weight's executor.
         // ROUTING-1: in a project with rules the matched rule beats the profile / role binding and the weight mapping.
         val byWeight = if (rule == null && routingRules(row.projectId).isEmpty()) weightChoice(row, bound.provider, bound.model) else null
         val executor = when {
-            rule != null -> profiles.executorFor(profile, rule.provider, rule.model, row.effort ?: rule.effort) // EFFORT-1: the ticket's own pin beats the rule's
-            byWeight != null -> profiles.executorFor(profile, byWeight.provider, byWeight.model, row.effort)
+            rule != null -> host.agents.executorFor(profile, rule.provider, rule.model, row.effort ?: rule.effort, profile.role) // EFFORT-1: the ticket's own pin beats the rule's
+            byWeight != null -> host.agents.executorFor(profile, byWeight.provider, byWeight.model, row.effort, profile.role)
             else -> bound
         }
         val providerId = executor.provider
@@ -875,7 +875,7 @@ class TicketBoard(
             // with the Opus line. A refusal PARKS the ticket: no other rule, no default row, no other harness is tried.
             try {
                 RoutingRules.requireOpusSafe(rule.name, providerId, model)
-                profiles.validateExecutor(providerId, model, executor.effort)
+                host.agents.validateExecutor(providerId, model, executor.effort)
             } catch (e: IllegalArgumentException) {
                 val detail = "rule '${rule.name}': $providerId/$model refused: ${e.message ?: "provider or model refused"}; " +
                     "the ticket stays in todo (no fallback): fix the rule or pin the ticket"
@@ -947,7 +947,7 @@ class TicketBoard(
         val instance = host.agents.instanceFor(profile.id, profile.role)?.let { host.agents.withSkills(it, id) }
         val input = briefInput(
             row, initial, profile.role, profile.id, instance,
-            startedBy?.let { starter -> reportTo(starter, sessionManager, profiles) },
+            startedBy?.let { starter -> reportTo(starter) },
         )
         val composed = context.compose(input)
         val started = try {
@@ -1133,7 +1133,7 @@ class TicketBoard(
         val sessionManager = sessions ?: return null
         val snapshot = store.transaction { load() }
         val row = snapshot.rows[ticketId] ?: return null
-        val reportTo = row.startedBy?.let { starter -> agents?.let { reportTo(starter, sessionManager, it) } }
+        val reportTo = row.startedBy?.let { starter -> agents?.let { reportTo(starter) } }
         return context.compose(briefInput(row, snapshot, session.role, session.agentId, sessionManager.instance(session.id)?.toBoard(), reportTo)).prompt
     }
 
@@ -1141,9 +1141,9 @@ class TicketBoard(
      * BUG-MAIL-2: who the worker reports to -- the session that started the ticket, named after its agent profile
      * (else its role, else its id). Null when [starter] names no session, so a stale id never reaches a preamble.
      */
-    private fun reportTo(starter: String, sessionManager: SessionManager, profiles: AgentProfiles): ReportTo? {
-        val session = sessionManager.get(starter) ?: return null
-        val name = session.agentId?.let { profiles.get(it)?.name }?.takeIf { it.isNotBlank() }
+    private fun reportTo(starter: String): ReportTo? {
+        val session = host.sessions.get(starter) ?: return null
+        val name = session.agentId?.let { host.agents.get(it)?.name }?.takeIf { it.isNotBlank() }
             ?: session.role?.takeIf { it.isNotBlank() }
             ?: session.id
         return ReportTo(name = name, sessionId = session.id)
@@ -1185,12 +1185,11 @@ class TicketBoard(
      */
     fun cutRepo(projectId: String? = null): File? {
         repo?.let { return it }
-        val folders = sessions?.projectFolders
-        if (folders != null) return folders.find(projectId)?.let(::gitRootOf)
+        if (host.git.projectFolders()) return host.git.projectFolderFind(projectId)?.let { gitRootOf(File(it)) }
         // NOGIT-1: the project's own directory decides; the daemon's checkout is only the fallback for a project with none.
         // TODO: gitRootOf walks UP, so a non-git folder nested under any parent repo still counts as that repo's checkout.
         projectDir(projectId)?.let { return gitRootOf(it) }
-        return sessions?.defaultWorkingDir?.let(::gitRootOf)
+        return host.sessions.defaultWorkingDir()?.let { gitRootOf(File(it)) }
     }
 
     private fun projectDir(projectId: String?): File? =
@@ -1231,27 +1230,25 @@ class TicketBoard(
 
     private fun resolveAssignment(
         assigned: String?,
-        profiles: AgentProfiles,
-        sessionManager: SessionManager,
         projectId: String? = null,
     ): AssignmentResolution {
         assigned ?: return AssignmentResolution(
             refusal = "ticket has no role; set one with `agenthq ticket update <id> --role <role id>` " +
                 "or agenthq_ticket_update's role",
         )
-        val active = sessionManager.list().filter { it.state in ACTIVE_STATES }
+        val active = host.sessions.list().filter { it.state in ACTIVE_STATE_NAMES }
         if (assigned.startsWith("role:")) {
             val role = assigned.removePrefix("role:")
-            val matching = profiles.list().filter { it.role == role }.ifEmpty {
-                firstRunProfile(role, profiles, projectId)?.let(::listOf).orEmpty()
+            val matching = host.agents.list().filter { it.role == role }.ifEmpty {
+                firstRunProfile(role, projectId)?.let(::listOf).orEmpty()
             }
             if (matching.isEmpty()) return AssignmentResolution(refusal = "no agent profile has role '$role'")
             val profile = matching.firstOrNull { candidate -> active.none { it.agentId == candidate.id } }
-                ?: extraAgent(matching, active, role, profiles, projectId)
+                ?: extraAgent(matching, active, role, projectId)
                 ?: return AssignmentResolution(queueLane = assigned, busy = true)
             return AssignmentResolution(profile = profile, queueLane = assigned)
         }
-        val profile = profiles.get(assigned)
+        val profile = host.agents.get(assigned)
             ?: return AssignmentResolution(refusal = "no agent profile '$assigned'")
         return if (active.any { it.agentId == profile.id }) {
             AssignmentResolution(queueLane = profile.id, busy = true)
@@ -1266,19 +1263,18 @@ class TicketBoard(
      * cap (the ticket queues) or when the save is refused. Lowering the cap never stops a running agent.
      */
     private fun extraAgent(
-        matching: List<AgentProfile>,
-        active: List<SessionRecord>,
+        matching: List<BoardAgent>,
+        active: List<SessionView>,
         role: String,
-        profiles: AgentProfiles,
         projectId: String?,
-    ): AgentProfile? {
+    ): BoardAgent? {
         val running = matching.count { candidate -> active.any { it.agentId == candidate.id } }
         if (running >= laneCap(projectId, role)) return null
         val template = matching.first()
-        val taken = profiles.list().map { it.name }.toSet()
+        val taken = host.agents.list().map { it.name }.toSet()
         val name = generateSequence(2) { it + 1 }.map { "${template.name} $it" }.first { it !in taken }
         return try {
-            profiles.save(template.copy(id = null, name = name))
+            host.agents.save(template.copy(id = null, name = name))
         } catch (_: IllegalArgumentException) {
             null
         }
@@ -1291,11 +1287,11 @@ class TicketBoard(
      * daemon's default provider and model, exactly as an empty pin does everywhere else. Null when the role is unknown
      * or the save is refused, which keeps the original refusal.
      */
-    private fun firstRunProfile(role: String, profiles: AgentProfiles, projectId: String?): AgentProfile? {
-        if (!profiles.roleKnown(role)) return null
+    private fun firstRunProfile(role: String, projectId: String?): BoardAgent? {
+        if (!host.agents.roleKnown(role)) return null
         val name = role.split('-').joinToString(" ") { part -> part.replaceFirstChar { it.uppercase() } }
         return try {
-            profiles.save(AgentProfile(name = name, role = role, projectId = projectId))
+            host.agents.save(BoardAgent(name = name, role = role, projectId = projectId))
         } catch (_: IllegalArgumentException) {
             null
         }
@@ -1415,7 +1411,7 @@ class TicketBoard(
                 if (answer?.ticket?.start?.ok != true) refusedRoles += lane
             }
         }
-        val roles = agents?.list().orEmpty().filter { it.projectId == projectId }.map { it.role }.distinct()
+        val roles = host.agents.list().filter { it.projectId == projectId }.map { it.role }.distinct()
         roles.forEach { pruneIdleClones(it) }
     }
 
@@ -1424,19 +1420,18 @@ class TicketBoard(
      * project allows is removed. The role's first agent is never removed, and nothing running is touched.
      */
     private fun pruneIdleClones(role: String) {
-        val profiles = agents ?: return
-        val sessionManager = sessions ?: return
-        val matching = profiles.list().filter { it.role == role }
+        if (agents == null || sessions == null) return
+        val matching = host.agents.list().filter { it.role == role }
         val original = matching.firstOrNull() ?: return
         val cap = maxOf(1, laneCap(original.projectId, role))
-        val active = sessionManager.list().filter { it.state in ACTIVE_STATES }
+        val active = host.sessions.list().filter { it.state in ACTIVE_STATE_NAMES }
         val clone = Regex("^" + Regex.escape(original.name) + " \\d+$")
         var excess = matching.size - cap
         for (candidate in matching.drop(1).reversed()) {
             if (excess <= 0) break
             val id = candidate.id ?: continue
             if (!clone.matches(candidate.name) || active.any { it.agentId == id }) continue
-            runCatching { profiles.delete(id) }.onSuccess { excess-- }
+            runCatching { host.agents.delete(id) }.onSuccess { excess-- }
         }
     }
 
@@ -1619,6 +1614,7 @@ class TicketBoard(
         internal fun gitRootOf(dir: File): File? =
             generateSequence(dir.absoluteFile) { it.parentFile }.firstOrNull { File(it, ".git").exists() }
         private val ACTIVE_STATES = setOf(SessionState.STARTING, SessionState.BUSY, SessionState.WAITING_INPUT)
+        private val ACTIVE_STATE_NAMES = ACTIVE_STATES.map { it.name }.toSet()
 
         private fun checkId(raw: String): String {
             val id = raw.trim()
@@ -1782,22 +1778,20 @@ class TicketBoard(
 
     /** CONTEXT-LIMIT-1: the ticket's limit (or none) and how its effective harness would honour one. */
     private fun effectiveContextLimit(row: TicketRow): com.superiorsoftllc.agenthq.protocol.EffectiveContextLimit {
-        val manager = sessions
-        val harness = manager?.let { m -> runCatching { effectiveExecutor(row)?.provider?.value }.getOrNull() ?: m.providerId }
-        val capability = harness?.let { manager.providerFor(it) }?.contextLimit()
+        val harness = sessions?.let { runCatching { effectiveExecutor(row)?.provider?.value }.getOrNull() ?: host.sessions.providerId() }
+        val capability = harness?.let { host.sessions.providerFor(it) }
         return com.superiorsoftllc.agenthq.protocol.EffectiveContextLimit(
             value = row.contextLimit,
             source = if (row.contextLimit != null) "ticket" else "default",
-            support = capability?.support?.wire,
-            how = capability?.how,
+            support = capability?.contextLimitSupport,
+            how = capability?.contextLimitHow,
         )
     }
 
     /** EFFORT-1: the ticket's effort (ticket pin, else rule, agent profile, role binding, else none) with its source, and how its effective harness honours one. */
     private fun effectiveEffort(row: TicketRow): com.superiorsoftllc.agenthq.protocol.EffectiveEffort {
-        val manager = sessions
-        val harness = manager?.let { m -> runCatching { effectiveExecutor(row)?.provider?.value }.getOrNull() ?: m.providerId }
-        val capability = harness?.let { manager.providerFor(it) }?.effort()
+        val harness = sessions?.let { runCatching { effectiveExecutor(row)?.provider?.value }.getOrNull() ?: host.sessions.providerId() }
+        val capability = harness?.let { host.sessions.providerFor(it) }
         val rule = routingChoice(row)
         val assigned = row.agentId ?: rule?.setRole?.let { "role:$it" }
         val profile = assigned?.let { ticketProfile(it) }
@@ -1807,11 +1801,11 @@ class TicketBoard(
             rule?.effort != null -> rule.effort to "rule"
             profile?.effort != null -> profile.effort to "agent"
             else -> {
-                val bound = (profile ?: roleId?.let { AgentProfile(name = it, role = it) })?.let { agents?.executorFor(it, null, null, null) }
+                val bound = (profile ?: roleId?.let { BoardAgent(name = it, role = it) })?.let { host.agents.executorFor(it, null, null, null, it.role) }
                 if (bound?.effort != null) bound.effort to "role" else null to "default"
             }
         }
-        return com.superiorsoftllc.agenthq.protocol.EffectiveEffort(value = value, source = source, support = capability?.support?.wire, how = capability?.how)
+        return com.superiorsoftllc.agenthq.protocol.EffectiveEffort(value = value, source = source, support = capability?.effortSupport, how = capability?.effortHow)
     }
 
     /** TICKET-WEIGHT: the mapping's choice for [row] when [WeightExecutors.applies] (nothing else pins an executor), else null. */
@@ -1819,7 +1813,7 @@ class TicketBoard(
         if (WeightExecutors.applies(row.weight, row.provider, row.model, boundProvider, boundModel)) {
             // H2: a weight route naming a harness that is not installed is skipped (model with it, which only fits that
             // harness), so the ticket runs on the first installed one; with none installed the start says so.
-            weightExecutors().forWeight(row.weight)?.takeIf { e -> e.provider.let { p -> p == null || sessions?.hasProvider(p) != false } }
+            weightExecutors().forWeight(row.weight)?.takeIf { e -> e.provider.let { p -> p == null || sessions == null || host.sessions.hasProvider(p) } }
         } else null
 
     /**
@@ -1843,8 +1837,8 @@ class TicketBoard(
         val role = profile?.role ?: roleId
         val profileProvider = profile?.provider
         // ROLE-1d: the role's binding comes from the one resolver (executorFor), never a second path.
-        val bound = (profile ?: roleId?.let { AgentProfile(name = it, role = it) })
-            ?.let { agents?.executorFor(it, row.provider, row.model, null) }
+        val bound = (profile ?: roleId?.let { BoardAgent(name = it, role = it) })
+            ?.let { host.agents.executorFor(it, row.provider, row.model, null, it.role) }
         if (rule != null) {
             return EffectiveExecutor(
                 agentId = profile?.id ?: assigned.takeUnless { isRole },
@@ -1861,10 +1855,10 @@ class TicketBoard(
             profileProvider != null -> ExecutorField(profileProvider, "profile")
             bound?.provider != null -> ExecutorField(bound.provider, "role")
             isRole -> ExecutorField(null, "role")
-            sessions != null -> ExecutorField(sessions.providerId, "default")
+            sessions != null -> ExecutorField(host.sessions.providerId(), "default")
             else -> ExecutorField(null, "default")
         }
-        val profileProviderOrDefault = profileProvider ?: sessions?.providerId
+        val profileProviderOrDefault = profileProvider ?: sessions?.let { host.sessions.providerId() }
         val profileModelApplies = profile?.model != null &&
             (row.provider == null || row.provider == profileProviderOrDefault)
         val model = when {
@@ -1892,15 +1886,15 @@ class TicketBoard(
     private fun matchesTriggerAgent(ticketAgentId: String?, filter: String?): Boolean {
         if (filter == null || ticketAgentId == filter) return true
         if (!filter.startsWith("role:") || ticketAgentId == null) return false
-        return agents?.get(ticketAgentId)?.role == filter.removePrefix("role:")
+        return host.agents.get(ticketAgentId)?.role == filter.removePrefix("role:")
     }
 
     private fun normalizeRoleAgentId(agentId: String): String =
         if (agentId.startsWith("role:")) "role:" + RoleIds.normalize(agentId.removePrefix("role:")) else agentId
 
-    private fun ticketProfile(agentId: String): AgentProfile? = when {
-        agentId.startsWith("role:") -> agents?.list()?.firstOrNull { it.role == agentId.removePrefix("role:") }
-        else -> agents?.get(agentId)
+    private fun ticketProfile(agentId: String): BoardAgent? = when {
+        agentId.startsWith("role:") -> host.agents.list().firstOrNull { it.role == agentId.removePrefix("role:") }
+        else -> host.agents.get(agentId)
     }
 
     private fun validateAgentId(agentId: String?, checkCatalog: Boolean) {
@@ -1915,7 +1909,7 @@ class TicketBoard(
             }
             return
         }
-        require(agents?.get(agentId) != null) {
+        require(host.agents.get(agentId) != null) {
             "no agent profile '${agentId.take(80)}' (agent_list shows the profiles)"
         }
     }
@@ -1923,16 +1917,16 @@ class TicketBoard(
     private fun validateExecutorPins(agentId: String?, provider: String?, model: String?) {
         val profile = agentId?.let(::ticketProfile)
         val profileProvider = profile?.provider
-        val profileModel = profile?.model?.takeIf { provider == null || provider == (profileProvider ?: sessions?.providerId) }
+        val profileModel = profile?.model?.takeIf { provider == null || provider == (profileProvider ?: sessions?.let { host.sessions.providerId() }) }
         val needsCheck = provider != null || model != null || profileProvider != null || profileModel != null
         if (!needsCheck) return
-        val manager = requireNotNull(sessions) { "ticket executor validation is unavailable" }
-        manager.checkSpawn(provider ?: profileProvider, model ?: profileModel)
+        requireNotNull(sessions) { "ticket executor validation is unavailable" }
+        host.sessions.checkSpawn(provider ?: profileProvider, model ?: profileModel)?.let { throw IllegalArgumentException(it) }
         // BUG-E2E-1: the ticket's OWN model must be one its provider lists, when that provider can list them (the same
         // rule an agent profile save applies). Never coerced: a typo is refused with the provider's list to pick from.
         if (model != null) {
-            val providerId = provider ?: profileProvider ?: manager.providerId
-            val known = manager.providerFor(providerId)?.knownModels()
+            val providerId = provider ?: profileProvider ?: host.sessions.providerId()
+            val known = host.sessions.providerFor(providerId)?.knownModels?.invoke()
             require(known == null || model in known) {
                 "unknown model '${model.take(80)}' for provider '$providerId' (it lists: ${known!!.take(20).joinToString()})"
             }

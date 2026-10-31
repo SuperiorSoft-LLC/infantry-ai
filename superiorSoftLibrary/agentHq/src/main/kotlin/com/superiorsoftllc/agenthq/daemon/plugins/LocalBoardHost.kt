@@ -159,6 +159,9 @@ class LocalBoardHost(
         override fun projectDirectory(projectId: String?): String? = this@LocalBoardHost.projectDirectory(projectId)
         override fun defaultRepo(): String? = this@LocalBoardHost.defaultRepo?.path
         override fun projectFolders(): Boolean = sessionManager()?.projectFolders != null
+        override fun projectFolderFind(projectId: String?): String? = sessionManager()?.projectFolders?.find(projectId)?.path
+        override fun projectFolderRequire(projectId: String?): String =
+            (sessionManager()?.projectFolders ?: throw IllegalArgumentException(BoardGit.NO_GIT)).require(projectId).path
     }
 
     override val sessions: BoardSessions = object : BoardSessions {

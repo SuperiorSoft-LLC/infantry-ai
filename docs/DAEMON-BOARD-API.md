@@ -265,3 +265,12 @@ TEST-TODO (DP-5f-2b): (1) lock hook parity: `holdsSessionsLock()` true exactly i
 ## 12. DP-5f-3 built: third batch (`BOARD_API_VERSION` 1.9.0, additive)
 
 `BoardProviderInfo` gains `contextLimitSupport/How`, `effortSupport/How` and a lazy `knownModels`; `BoardSessionDetail` gains `spawnedAt` and `providerSessionId`. `LocalBoardHost` fills them from the provider and the session record.
+
+## 13. DP-5f-3b3 (BOARD_API_VERSION 1.10.0): project folders
+
+Additive. `BoardGit` gains two members next to the boolean `projectFolders()`:
+
+- `projectFolderFind(projectId): String?` - the folder the project (null = the default project) runs in under project-folders mode; null when it has none or the mode is off.
+- `projectFolderRequire(projectId): String` - the same, but an `IllegalArgumentException` names why the project has no directory (a session never falls back to the daemon's cwd).
+
+`LocalBoardHost` delegates to `SessionManager.projectFolders`. The board now reads agent profiles (`BoardAgents`), provider checks and capabilities (`BoardSessions`) and project folders (`BoardGit`) only through the host.
