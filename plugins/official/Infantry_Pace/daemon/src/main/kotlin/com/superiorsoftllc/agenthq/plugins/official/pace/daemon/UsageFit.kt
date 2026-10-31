@@ -21,8 +21,8 @@ import kotlin.math.sqrt
  * the tokens per point of that step.
  */
 
-/** One recorded model request already narrowed to the meter being analysed. Null token fields are counted as 0 (output is not used). */
-data class FitRequest(val ts: Long, val role: String, val model: String, val input: Long, val cacheRead: Long, val cacheWrite: Long)
+/** One recorded model request already narrowed to the meter being analysed. Null token fields are counted as 0 (USAGE-OUT-1: output is null for rows recorded before the final usage was read). */
+data class FitRequest(val ts: Long, val role: String, val model: String, val input: Long, val cacheRead: Long, val cacheWrite: Long, val output: Long = 0)
 
 /** One between-step interval: [points] gained, and what was spent in (fromMs, toMs]. */
 class FitStep(
@@ -32,6 +32,9 @@ class FitStep(
     val cacheReadByRole: Map<String, Long>,
     /** Cache-read tokens by model in this interval. */
     val cacheReadByModel: Map<String, Long>,
+    /** Output tokens (thinking included) in this interval, total and by role. */
+    val output: Long = 0,
+    val outputByRole: Map<String, Long> = emptyMap(),
 ) {
     val hours: Double get() = (toMs - fromMs) / 3_600_000.0
 }
@@ -43,6 +46,7 @@ data class Spread(val mean: Double, val sd: Double, val median: Double)
 data class GroupRow(
     val role: String, val model: String, val requests: Int, val input: Long, val cacheRead: Long, val cacheWrite: Long, val share: Double,
     val totalRequests: Int = requests, val totalInput: Long = input, val totalCacheRead: Long = cacheRead, val totalCacheWrite: Long = cacheWrite,
+    val output: Long = 0, val totalOutput: Long = output,
 )
 
 data class Candidate(val key: String, val label: String, val columns: Int, val r2: Double, val adjR2: Double)
@@ -63,7 +67,7 @@ data class FitResult(
 
 data class WindowFit(
     val kind: String, val label: String, val steps: List<FitStep>, val groups: List<GroupRow>, val fit: FitResult?,
-    val perPointCacheRead: Spread?, val perPointRequests: Spread?, val perPointInput: Spread?, val perPointCacheWrite: Spread?,
+    val perPointCacheRead: Spread?, val perPointRequests: Spread?, val perPointInput: Spread?, val perPointCacheWrite: Spread?, val perPointOutput: Spread? = null,
     val pointsTotal: Double, val cacheReadPerPoint: Double?, val requestsPerPoint: Double?,
 )
 
@@ -106,6 +110,7 @@ object UsageFit {
             from, to, points, inside.size, inside.sumOf { it.input }, inside.sumOf { it.cacheRead }, inside.sumOf { it.cacheWrite },
             inside.groupBy { it.role }.mapValues { e -> e.value.sumOf { it.cacheRead } },
             inside.groupBy { it.model }.mapValues { e -> e.value.sumOf { it.cacheRead } },
+            inside.sumOf { it.output }, inside.groupBy { it.role }.mapValues { e -> e.value.sumOf { it.output } },
         )
     }
 
@@ -172,10 +177,15 @@ object UsageFit {
         fits += Fit("cacheRead", "cache-read tokens", listOf("cache-read"), listOf(col { it.cacheRead.toDouble() }))
         fits += Fit("input", "fresh input tokens", listOf("input"), listOf(col { it.input.toDouble() }))
         fits += Fit("cacheWrite", "cache-write tokens", listOf("cache-write"), listOf(col { it.cacheWrite.toDouble() }))
+        fits += Fit("output", "output tokens (thinking included)", listOf("output"), listOf(col { it.output.toDouble() }))
         fits += Fit("requests", "number of requests", listOf("requests"), listOf(col { it.requests.toDouble() }))
         fits += Fit(
             "allTokens", "all three token types", listOf("input", "cache-read", "cache-write"),
             listOf(col { it.input.toDouble() }, col { it.cacheRead.toDouble() }, col { it.cacheWrite.toDouble() }),
+        )
+        if (steps.any { it.output > 0 }) fits += Fit(
+            "allTokensOutput", "all four token types", listOf("input", "cache-read", "cache-write", "output"),
+            listOf(col { it.input.toDouble() }, col { it.cacheRead.toDouble() }, col { it.cacheWrite.toDouble() }, col { it.output.toDouble() }),
         )
         val models = steps.flatMap { it.cacheReadByModel.entries }.groupBy({ it.key }, { it.value }).mapValues { it.value.sum() }
             .entries.sortedByDescending { it.value }.filter { it.value > 0 }.take(4).map { it.key }
@@ -225,14 +235,14 @@ object UsageFit {
             val v = steppedBy[k].orEmpty()
             GroupRow(
                 k.first, k.second, v.size, v.sumOf { it.input }, v.sumOf { it.cacheRead }, v.sumOf { it.cacheWrite }, if (totalCr > 0) v.sumOf { it.cacheRead } / totalCr else 0.0,
-                all.size, all.sumOf { it.input }, all.sumOf { it.cacheRead }, all.sumOf { it.cacheWrite },
+                all.size, all.sumOf { it.input }, all.sumOf { it.cacheRead }, all.sumOf { it.cacheWrite }, v.sumOf { it.output }, all.sumOf { it.output },
             )
         }.sortedWith(compareByDescending<GroupRow> { it.cacheRead }.thenByDescending { it.totalCacheRead })
         val points = steps.sumOf { it.points }
         return WindowFit(
             kind, label, steps, groups, fit(steps),
             spread(steps.map { it.cacheRead / it.points }), spread(steps.map { it.requests / it.points }),
-            spread(steps.map { it.input / it.points }), spread(steps.map { it.cacheWrite / it.points }),
+            spread(steps.map { it.input / it.points }), spread(steps.map { it.cacheWrite / it.points }), spread(steps.map { it.output / it.points }),
             points, if (points > 0) steps.sumOf { it.cacheRead } / points else null, if (points > 0) steps.sumOf { it.requests } / points else null,
         )
     }
@@ -250,14 +260,14 @@ object UsageFit {
         put("cacheReadPerPoint", num(w.cacheReadPerPoint)); put("requestsPerPoint", num(w.requestsPerPoint))
         put("perPoint", buildJsonObject {
             put("cacheRead", spreadJson(w.perPointCacheRead)); put("requests", spreadJson(w.perPointRequests))
-            put("input", spreadJson(w.perPointInput)); put("cacheWrite", spreadJson(w.perPointCacheWrite))
+            put("input", spreadJson(w.perPointInput)); put("cacheWrite", spreadJson(w.perPointCacheWrite)); put("output", spreadJson(w.perPointOutput))
         })
         put("groups", buildJsonArray {
             w.groups.forEach { g ->
                 add(buildJsonObject {
                     put("role", g.role); put("model", g.model); put("requests", g.requests); put("input", g.input)
                     put("cacheRead", g.cacheRead); put("cacheWrite", g.cacheWrite); put("share", g.share)
-                    put("totalRequests", g.totalRequests); put("totalInput", g.totalInput); put("totalCacheRead", g.totalCacheRead); put("totalCacheWrite", g.totalCacheWrite)
+                    put("totalRequests", g.totalRequests); put("totalInput", g.totalInput); put("totalCacheRead", g.totalCacheRead); put("totalCacheWrite", g.totalCacheWrite); put("output", g.output); put("totalOutput", g.totalOutput)
                 })
             }
         })
@@ -267,9 +277,10 @@ object UsageFit {
             shown.forEachIndexed { i, s ->
                 add(buildJsonObject {
                     put("t", s.toMs); put("from", s.fromMs); put("points", s.points); put("requests", s.requests)
-                    put("input", s.input); put("cacheRead", s.cacheRead); put("cacheWrite", s.cacheWrite)
+                    put("input", s.input); put("cacheRead", s.cacheRead); put("cacheWrite", s.cacheWrite); put("output", s.output)
                     put("cacheReadPerPoint", s.cacheRead / s.points)
                     put("byRole", buildJsonObject { s.cacheReadByRole.forEach { (r, v) -> put(r, v) } })
+                    put("outputByRole", buildJsonObject { s.outputByRole.forEach { (r, v) -> put(r, v) } })
                     put("fitted", w.fit?.fitted?.getOrNull(offset + i)?.let { num(it) } ?: JsonNull)
                 })
             }
@@ -320,7 +331,7 @@ class UsageFitService(
         cached?.let { if (it.first == provider && it.second == stamp) return it.third }
         val since = now - LOOKBACK_DAYS * 86_400_000L
         val requests = meters.requests(since).filter { com.superiorsoftllc.agenthq.daemon.api.usage.UsageMeters.meterFor(it.harness, it.model) == provider }.map {
-            FitRequest(it.ts, it.role, it.model ?: "unknown", it.input ?: 0, it.cacheRead ?: 0, it.cacheWrite ?: 0)
+            FitRequest(it.ts, it.role, it.model ?: "unknown", it.input ?: 0, it.cacheRead ?: 0, it.cacheWrite ?: 0, it.output ?: 0)
         }
         val out = UsageFit.report(provider, store, requests, minSteps(), now)
         cached = Triple(provider, stamp, out)

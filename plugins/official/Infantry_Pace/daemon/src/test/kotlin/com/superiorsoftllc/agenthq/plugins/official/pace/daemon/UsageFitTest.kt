@@ -105,4 +105,17 @@ class UsageFitTest {
         assertEquals(3, pm.totalRequests); assertEquals(2, pm.requests)
         assertEquals("weird", w.groups.single { it.role == "x" }.model)
     }
+
+    @Test
+    fun `output is a fit candidate and is summed per step and role`() {
+        val samples = (0..9).map { sample(it * 100L, (it * (it + 1) / 2).toDouble()) }
+        val reqs = (1..9).map { FitRequest(it * 100L - 50, if (it % 2 == 0) "pm" else "backend", "opus", 10L + (it * 37) % 11, 1000L + it * 7, 5L + (it * 13) % 7 + it, output = it * 1000L) }
+        val w = UsageFit.analyse("weekly", "Weekly limit", samples, reqs)
+        assertEquals(45000L, w.steps.sumOf { it.output })
+        assertEquals(1000L, w.steps[0].outputByRole["backend"])
+        assertTrue(w.fit!!.candidates.any { it.key == "output" })
+        assertTrue(w.fit!!.candidates.any { it.key == "allTokensOutput" })
+        val j = UsageFit.toJson(w, 5).toString()
+        assertTrue("\"outputByRole\"" in j && "\"output\"" in j)
+    }
 }

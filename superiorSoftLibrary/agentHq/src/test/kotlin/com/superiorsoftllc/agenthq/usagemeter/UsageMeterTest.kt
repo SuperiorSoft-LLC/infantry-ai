@@ -103,7 +103,7 @@ class UsageMeterTest {
         val q = rep.requests.single()
         assertEquals("claude", q.harness); assertEquals("t-1", q.ticketId); assertEquals("s1", q.sessionId); assertEquals("backend", q.role)
         assertEquals(10L, q.input); assertEquals(1000L, q.cacheRead); assertEquals(200L, q.cacheWrite); assertEquals(1210L, q.context)
-        assertNull(q.output, "claude assistant lines carry streaming placeholders: output is n/a per request")
+        assertEquals(1L, q.output, "the first line of a message carries the placeholder; a later line refines it")
         assertNull(q.cost)
         assertEquals(1L, rep.rows.sumOf { it.turns })
         m.onSessionEvent(SessionEvent.Stdout("s1", claudeLines[2]), sessions)
@@ -162,5 +162,24 @@ class UsageMeterTest {
         repeat(20) { d.poke() }
         Thread.sleep(600)
         assertEquals(2, fired.get(), "one leading push, one trailing push")
+    }
+
+    @Test
+    fun `final usage line of a message raises the stored output and records thinking`() {
+        val m = UsageMeter.open(File.createTempFile("meter", ".db").also { it.deleteOnExit() })
+        val r = ticketRec("s9", "claude", "t-9")
+        val sessions: (String) -> SessionRecord? = { r }
+        m.onSessionEvent(SessionEvent.Turn("s9", "go"), sessions)
+        m.onSessionEvent(SessionEvent.Stdout("s9", """{"type":"assistant","message":{"id":"mx","model":"claude-sonnet-5-5","usage":{"input_tokens":10,"output_tokens":1,"cache_read_input_tokens":5}}}"""), sessions)
+        m.onSessionEvent(SessionEvent.Stdout("s9", """{"type":"assistant","message":{"id":"mx","model":"claude-sonnet-5-5","usage":{"input_tokens":10,"output_tokens":850,"output_tokens_details":{"reasoning_tokens":600},"cache_read_input_tokens":5}}}"""), sessions)
+        assertEquals(850L, m.report().requests.single().output)
+        assertEquals(1, m.report().requests.size)
+        val a = StreamUsageAccumulator()
+        var upd: Triple<String, Long, Long?>? = null
+        a.onOutputUpdate = { id, o, t -> upd = Triple(id, o, t) }
+        a.accept("""{"type":"assistant","message":{"id":"q","usage":{"input_tokens":1,"output_tokens":2}}}""")
+        a.accept("""{"type":"assistant","message":{"id":"q","usage":{"input_tokens":1,"output_tokens":40,"output_tokens_details":{"reasoning_tokens":30}}}}""")
+        assertEquals(Triple("q", 40L, 30L as Long?), upd)
+        assertEquals(40L, a.totals()!!.output)
     }
 }
