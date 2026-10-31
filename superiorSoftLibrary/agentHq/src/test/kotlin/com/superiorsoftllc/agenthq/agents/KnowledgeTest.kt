@@ -79,7 +79,7 @@ class KnowledgeTest {
         )!!
         assertEquals(
             // BUG-G2e-1: the authority label is read before the first entry.
-            "$DIGEST_AUTHORITY\n$KNOWLEDGE_DIGEST_HEADING\nACTIVE DECISIONS\nD2 use wal\nOPEN ISSUES\nI1 flaky (a.kt)\nNOTES (index)\narch: how\n",
+            "$DIGEST_AUTHORITY\n$KNOWLEDGE_DIGEST_HEADING\nACTIVE DECISIONS (titles; full text: `agenthq decision show D<n>`)\nD2 use wal\nOPEN ISSUES\nI1 flaky (a.kt)\nNOTES (index)\narch: how\n",
             text.substringAfter("start.\n").substringBefore("Before you decide"),
         )
         assertEquals(false, text.contains("run `agenthq knowledge`: it lists"))
@@ -100,6 +100,8 @@ class KnowledgeTest {
         )
         assertEquals(listOf("D2 use wal"), KnowledgeLines.decisions(decisions))
         assertEquals(listOf("I1 flaky (a.kt)"), KnowledgeLines.issues(issues))
+        val long = com.superiorsoftllc.agenthq.decisions.Decision("p1", 3, "D3", "Short title. " + "x".repeat(300), createdAt = 3)
+        assertEquals(listOf("D2 use wal", "D3 Short title."), KnowledgeLines.decisionTitles(decisions + long))
         val notes = listOf(
             com.superiorsoftllc.agenthq.memory.MemoryIndexEntry("b", "two", "arch"),
             com.superiorsoftllc.agenthq.memory.MemoryIndexEntry("a", "one"),
