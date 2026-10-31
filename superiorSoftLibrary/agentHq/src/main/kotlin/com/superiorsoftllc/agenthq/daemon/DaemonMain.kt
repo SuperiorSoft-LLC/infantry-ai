@@ -59,10 +59,6 @@ import com.superiorsoftllc.agenthq.mailbox.MailResult
 import com.superiorsoftllc.agenthq.mailbox.MailRouter
 import com.superiorsoftllc.agenthq.mvp.BoardHandler
 import com.superiorsoftllc.agenthq.mvp.ProjectHandler
-import com.superiorsoftllc.agenthq.memory.MemoryCaller
-import com.superiorsoftllc.agenthq.memory.MemoryHandler
-import com.superiorsoftllc.agenthq.memory.MemoryStore
-import com.superiorsoftllc.agenthq.memory.SqlMemoryPersistence
 import com.superiorsoftllc.agenthq.mvp.ProjectStore
 import com.superiorsoftllc.agenthq.mvp.SqlProjectPersistence
 import com.superiorsoftllc.agenthq.mvp.SqlWorkspacePersistence
@@ -445,8 +441,6 @@ class AgentHqDaemon(
     val triggers: TriggerService,
     /** PW-3: the workspaces, stored in [store] and checked against the project store. */
     val workspaces: WorkspaceStore,
-    /** MEM-2: the project-memory notes, stored in [store] so a note outlives the daemon. */
-    val memoryNotes: MemoryStore,
     /** IN-APP BUILD T2 (contract 1.33.0) + RUN-CMD-1 (1.108.0): saved commands from commands.json, editable; empty when absent or refused. */
     val commands: com.superiorsoftllc.agenthq.commands.CommandStore? = null,
     /** PORT-1: where [start] records the bound port (`<stateDir>/daemon.port`); null = recorded nowhere. */
@@ -1102,7 +1096,6 @@ class AgentHqDaemon(
             // MEM-2: project-memory notes, over the same database file as everything else, so a note
             // saved before a restart is read back (index and body) after one. Wired the way projects are:
             // constructed over the daemon's own handle, here and only here.
-            val memoryNotes = com.superiorsoftllc.agenthq.daemon.wiring.KnowledgeWiring.buildMemoryNotes(store, manager)
             // DP-7c: the decisions and issues logs (stores, frames) belong to the Infantry_Notes plugin.
             // VOICE-1: spoken attention alerts, pushed to every client; nothing is stored.
             val notifyFrames = com.superiorsoftllc.agenthq.notify.NotifyHandler(
@@ -1533,7 +1526,7 @@ class AgentHqDaemon(
                                 coreBuiltBoard = false,
                                 onAttachCore = { access -> boardPorts.attach(com.superiorsoftllc.agenthq.daemon.PluginBoardPorts(access) { ticketServices?.files }) },
                                 onDetachCore = { boardPorts.detach() },
-                                roleNotesOf = { project, role -> memoryNotes.index(project, com.superiorsoftllc.agenthq.memory.SCOPE_ROLE, role).map { it.name to it.description } },
+                                roleNotesOf = { project, role -> pluginHost.get().serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.knowledge.Knowledge::class)?.roleNotes(project, role).orEmpty() },
                                 relatedBlockOf = { id, desc -> relatedRef.get().block(id, desc) },
                                 fixedFirstTurnOf = { fixedFirstTurn?.invoke() },
                                 // DP-5h-3a2 (1.13.0): the typed events, story / epic inputs, RELATED block and skill check.
@@ -1608,7 +1601,7 @@ class AgentHqDaemon(
                     stateDir(),
                 )
                 pluginHost.set(host)
-                host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.knowledge.Knowledge::class, com.superiorsoftllc.agenthq.agents.LocalKnowledge(memoryNotes) { testKnowledgeRecords ?: host.serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.knowledge.KnowledgeRecords::class) })
+                testKnowledge?.let { host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.knowledge.Knowledge::class, it) }
                 // HARNESS-PLUGIN-3 H4 (docs/HARNESS-PLUGINS.md 3.2): each loaded module's `harness` block, into the ONE registry,
                 // AFTER module resolution and with the daemon halves' trust. The built-ins (class path, 1.x) are already in it.
                 val harnessModules = com.superiorsoftllc.agenthq.daemon.wiring.HarnessModulesWiring.build(
@@ -1787,20 +1780,6 @@ class AgentHqDaemon(
                             projects,
                             projectGit,
                             WorkspaceHandler(workspaces),
-                            MemoryHandler(
-                                memoryNotes,
-                                caller = { id -> manager.get(id)?.let { MemoryCaller(it.id, it.role.orEmpty()) } },
-                                // ROLE-NOTES-1: a role note changed while sessions of that role run is announced to each by mail.
-                                onRoleNoteChanged = { project, role, name, deleted ->
-                                    com.superiorsoftllc.agenthq.daemon.plugins.LocalSessionNotifier({ manager.list() }, { to, subject, body ->
-                                        mail.send(MailSendRequest(from = "owner", to = to, subject = subject, body = body))
-                                    }).notifyRole(
-                                        project, role, "Role note ${if (deleted) "deleted" else "changed"}: $name",
-                                        "The role note '$name' of your role '$role' was ${if (deleted) "deleted" else "added or changed"}. " +
-                                            "Re-read it: `agenthq memory show $name --scope role` (index: `agenthq memory index --scope role`).",
-                                    )
-                                },
-                            ),
                             notifyFrames,
                             keystoreFrames,
                             settings,
@@ -1882,7 +1861,6 @@ class AgentHqDaemon(
                 providerStates = providerStates,
                 triggers = triggers,
                 workspaces = workspaces,
-                memoryNotes = memoryNotes,
                 commands = commandStore,
                 portFile = portFile,
                 // BUG-PERM-1: the Tool approval reader is put back with the executable resolver (both read this store).
@@ -2358,7 +2336,6 @@ private suspend fun handleConnection(
     projects: ProjectHandler,
     projectGit: ProjectGitHandler,
     workspaceFrames: WorkspaceHandler,
-    memoryFrames: MemoryHandler,
     notifyFrames: com.superiorsoftllc.agenthq.notify.NotifyHandler,
     keystoreFrames: KeystoreHandler,
     settings: ProjectSettings,
@@ -3840,10 +3817,6 @@ private suspend fun handleConnection(
                     null
                 }
 
-                // MEM-5 / MEM-8 (contract 1.21.0): the project's memory notes -- search, save, list.
-                Envelope.MEMORY_SEARCH, Envelope.MEMORY_SAVE, Envelope.MEMORY_LIST, Envelope.MEMORY_GET,
-                Envelope.MEMORY_DELETE, Envelope.MEMORY_PURGE_ROLE -> memoryFrames.answer(envelope)
-
                 Envelope.NOTIFY -> notifyFrames.answer(envelope)
 
                 // SECRETS-1 (contract 1.100.0): the keystore. Answered by `secret_state`; a value never travels back.
@@ -3902,6 +3875,8 @@ private suspend fun handleConnection(
                 else if (envelope.type in BoardFrames.PIPELINE_TYPES) BoardFrames.noPipeline(envelope.type)
                 // DP-7c: the decisions and issues frames belong to the Infantry_Notes plugin; without it the daemon says so.
                 else if (envelope.type in BoardFrames.KNOWLEDGE_RECORD_TYPES) BoardFrames.noKnowledgeRecords(envelope.type)
+                // DP-7f: the memory frames belong to the Infantry_Notes plugin too.
+                else if (envelope.type in BoardFrames.MEMORY_TYPES) BoardFrames.noMemory(envelope.type)
                 else Envelope(Envelope.ERROR, "unknown frame type '${envelope.type}'")
             }
             // BUG-MCP-RACE-1: the direct answer echoes the request's id; a push (sent elsewhere) never carries one.
@@ -4279,6 +4254,6 @@ private fun com.superiorsoftllc.agenthq.persistence.TicketRow.toTicketInfo() =
 private fun com.superiorsoftllc.agenthq.persistence.TicketLinkRow.toTicketInfo() =
     com.superiorsoftllc.agenthq.ticketfiles.TicketLinkInfo(ticketId, relatedId)
 
-/** DP-7c: test seam only. A fake decisions/issues provider core tests install in place of the Infantry_Notes plugin. */
+/** DP-7f: test seam only. A fake Knowledge provider core tests install in place of the Infantry_Notes plugin. */
 @Volatile
-internal var testKnowledgeRecords: com.superiorsoftllc.agenthq.daemon.api.knowledge.KnowledgeRecords? = null
+internal var testKnowledge: com.superiorsoftllc.agenthq.daemon.api.knowledge.Knowledge? = null

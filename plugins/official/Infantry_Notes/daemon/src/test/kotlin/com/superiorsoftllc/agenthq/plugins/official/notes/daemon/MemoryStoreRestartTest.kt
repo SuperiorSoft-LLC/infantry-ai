@@ -1,6 +1,7 @@
-package com.superiorsoftllc.agenthq.memory
+package com.superiorsoftllc.agenthq.plugins.official.notes.daemon
 
-import com.superiorsoftllc.agenthq.db.AgentHQDatabaseFactory
+import com.superiorsoftllc.agenthq.memory.*
+
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
@@ -30,9 +31,9 @@ class MemoryStoreRestartTest {
         try {
             val dbPath = File(state, "agenthq.db").absolutePath
 
-            val first = AgentHQDatabaseFactory.open(dbPath)
+            val first = NotesTestDb.openHandle(dbPath)
             val saved = MemoryStore(
-                persistence = SqlMemoryPersistence(first.database),
+                persistence = StorageMemoryPersistence(first.database),
                 idFactory = { "note-1" },
             ).save(
                 projectId = "project-1",
@@ -43,9 +44,9 @@ class MemoryStoreRestartTest {
             first.close()
 
             // The restart: a new handle on the same file, a new memory store over it.
-            val second = AgentHQDatabaseFactory.open(dbPath)
+            val second = NotesTestDb.openHandle(dbPath)
             try {
-                val reopened = MemoryStore(persistence = SqlMemoryPersistence(second.database))
+                val reopened = MemoryStore(persistence = StorageMemoryPersistence(second.database))
 
                 assertEquals(
                     listOf(saved.copy(body = "")),

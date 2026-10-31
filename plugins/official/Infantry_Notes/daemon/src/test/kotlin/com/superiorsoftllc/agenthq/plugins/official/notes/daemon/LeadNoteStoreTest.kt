@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.memory
+package com.superiorsoftllc.agenthq.plugins.official.notes.daemon
 
 import java.io.File
 import java.nio.file.Files

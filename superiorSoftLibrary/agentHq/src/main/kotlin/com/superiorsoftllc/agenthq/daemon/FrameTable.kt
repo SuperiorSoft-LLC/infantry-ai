@@ -41,6 +41,14 @@ object BoardFrames {
     fun noKnowledgeRecords(type: String): Envelope =
         Envelope(Envelope.ERROR, "$type refused: this daemon has no ${if (type.startsWith("decision")) "decisions" else "issues"}")
 
+    /** DP-7f: the memory frames, owned by the notes plugin (module.json `daemon.frames`). */
+    val MEMORY_TYPES: Set<String> = setOf(
+        Envelope.MEMORY_SEARCH, Envelope.MEMORY_SAVE, Envelope.MEMORY_LIST, Envelope.MEMORY_GET, Envelope.MEMORY_DELETE, Envelope.MEMORY_PURGE_ROLE,
+    )
+
+    /** DP-7f: a memory frame with no plugin answering: a refusal, never a hang. */
+    fun noMemory(type: String): Envelope = Envelope(Envelope.ERROR, "$type refused: this daemon has no memory")
+
     /** DP-6: a pipeline frame with no plugin answering: a refusal, never a hang. */
     fun noPipeline(type: String): Envelope = Envelope(Envelope.ERROR, "$type refused: this daemon has no pipeline")
 
