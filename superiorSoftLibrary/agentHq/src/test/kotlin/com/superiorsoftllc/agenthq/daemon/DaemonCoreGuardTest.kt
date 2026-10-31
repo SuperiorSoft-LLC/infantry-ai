@@ -109,6 +109,7 @@ class DaemonCoreGuardTest {
 
         /** CORE: the abstraction layer. Stays by definition (docs/DAEMON-CORE.md section 2). */
         val CORE = mapOf(
+            "prompts" to "DP-10b: PROMPT-1 tool-approval prompts (PendingPrompts, PromptTimeouts, SpawnPromptTimeout) are the harness approval round-trip, used by session, harness and the adapters; the stored allow-always rules left for Infantry_Approvals behind hooks.approvalRules (the Infantry_Prompts template library is another thing)",
             "protocol" to "the wire contract and frames: the abstract data contract between UI and daemon",
             "pipeline" to "DP-6: the pipeline wire DTOs only (the CLI speaks them); the store, handler and tools are in Infantry_Board",
             "issues" to "DP-7c: the issue wire DTOs only (the CLI speaks them); the store and handler are in Infantry_Notes",
@@ -143,7 +144,6 @@ class DaemonCoreGuardTest {
         /** PLUGIN NOW: a mechanism and an official plugin exist (or can be written today); only the move is left. */
         val PLUGIN_NOW = mapOf(
             "memory" to "DP-7f: the memory wire DTOs only (the CLI speaks them); the store, handler and notes are in Infantry_Notes",
-            "prompts" to "prompt templates: Infantry_Prompts daemon half",
         )
 
         /** PLUGIN LATER: needs a missing mechanism first; the blocker is named. */

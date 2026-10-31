@@ -111,6 +111,7 @@ interface DaemonApi {
     fun files(projectId: String): com.superiorsoftllc.agenthq.daemon.api.files.ProjectFiles = com.superiorsoftllc.agenthq.daemon.api.files.NoProjectFiles
 
     companion object {
+        // 1.22.0 (DP-10b, additive): `hooks.approvalRules` (ApprovalRulesHook): the stored "allow always" rules of tool approval.
         // 1.21.0 (DP-10a, additive): `files(projectId)` (daemon.api.files.ProjectFiles), scoped to `<project>/.agenthq/`.
         // 1.19.0 (DP-7e, additive): `sessionNotifier` (daemon.api.sessions.SessionNotifier).
         // 1.18.0 (DP-7d, additive): `events.onSessionRemoved`.
@@ -130,7 +131,7 @@ interface DaemonApi {
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
-        const val VERSION = "1.21.0"
+        const val VERSION = "1.22.0"
     }
 }
 
@@ -377,7 +378,26 @@ fun interface PresetProviderHook {
     fun presets(): List<PolicyPreset>
 }
 
+/**
+ * DP-10b (1.22.0, additive): the stored "allow always" rules of tool approval (policy data a plugin owns). Core asks [match] before it
+ * opens an approval prompt and calls [remember] when the owner answers allow_always. No hook registered = no stored rules: every
+ * prompt asks and allow_always lasts the session. Fail open: a throwing hook reads as no rule.
+ */
+interface ApprovalRulesHook {
+    /** The rule of [projectId] that allows [tool] called with [input], or null. */
+    fun match(projectId: String?, tool: String, input: String): ApprovalRuleMatch?
+
+    /** Store the rule allow_always makes for [tool] / [input] in [projectId]; false when no rule can be made or kept (core then grants the tool for the session). */
+    fun remember(projectId: String?, tool: String, input: String): Boolean
+}
+
+/** The rule that matched: its [tool] and, for a shell tool, the command [prefix]. */
+data class ApprovalRuleMatch(val tool: String, val prefix: String? = null)
+
 interface Hooks {
+    /** DP-10b (1.22.0): offer the approval-rule store; official/core only. Default: ignored. */
+    fun approvalRules(hook: ApprovalRulesHook) {}
+
     fun frameGate(hook: FrameGateHook)
     fun httpGate(hook: HttpGateHook)
     fun admission(hook: AdmissionHook)

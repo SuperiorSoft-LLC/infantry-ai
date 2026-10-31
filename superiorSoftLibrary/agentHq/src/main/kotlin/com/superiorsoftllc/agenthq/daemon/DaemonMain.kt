@@ -905,7 +905,7 @@ class AgentHqDaemon(
             )
             // Ticket b785f383: a closing session's background processes die with it (the plugin's listener does it, after a grace).
             manager.onSessionClosed = { c -> localProcesses.fireSessionClosed(c) }
-            val pendingPrompts = com.superiorsoftllc.agenthq.daemon.wiring.PromptsWiring.build(store, settings, manager, clients)
+            val pendingPrompts = com.superiorsoftllc.agenthq.daemon.wiring.PromptsWiring.build(object : com.superiorsoftllc.agenthq.daemon.api.ApprovalRulesHook { override fun match(projectId: String?, tool: String, input: String) = pluginHost.get().approvalRules.match(projectId, tool, input); override fun remember(projectId: String?, tool: String, input: String) = pluginHost.get().approvalRules.remember(projectId, tool, input) }, settings, manager, clients)
             // IN-APP BUILD T3: one saved command at a time; every frame it produces goes to every client.
             // BUG-RUN-STUB-1: a saved command is a real process whatever the provider; [runner] is the stub's
             // ScriptedRunner under AGENTHQ_PROVIDER=stub and would only replay the script.
@@ -3305,27 +3305,6 @@ private suspend fun handleConnection(
                     Envelope(Envelope.ERROR, "prompt_response failed: ${e.message ?: e::class.simpleName}")
                 }
 
-                // PROMPT-6 (1.78.0): list the "Always allow" rules (one project, or all), or delete one.
-                Envelope.APPROVAL_RULES -> try {
-                    val service = pendingPrompts ?: throw IllegalArgumentException("this daemon has no prompts")
-                    val project = com.superiorsoftllc.agenthq.protocol.ApprovalRulesQuery.decode(envelope.data).projectId?.trim()?.takeIf { it.isNotEmpty() }
-                    approvalRulesEnvelope(project, service.rules.list(project))
-                } catch (e: IllegalArgumentException) {
-                    Envelope(Envelope.ERROR, "approval_rules refused: ${e.message ?: "invalid request"}")
-                } catch (e: Exception) {
-                    Envelope(Envelope.ERROR, "approval_rules failed: ${e.message ?: e::class.simpleName}")
-                }
-
-                Envelope.APPROVAL_RULE_DELETE -> try {
-                    val service = pendingPrompts ?: throw IllegalArgumentException("this daemon has no prompts")
-                    val deleted = service.rules.delete(com.superiorsoftllc.agenthq.protocol.ApprovalRuleDelete.decode(envelope.data).ruleId)
-                    approvalRulesEnvelope(deleted.projectId, service.rules.list(deleted.projectId))
-                } catch (e: IllegalArgumentException) {
-                    Envelope(Envelope.ERROR, "approval_rule_delete refused: ${e.message ?: "invalid request"}")
-                } catch (e: Exception) {
-                    Envelope(Envelope.ERROR, "approval_rule_delete failed: ${e.message ?: e::class.simpleName}")
-                }
-                // PROMPT-5 (1.79.0): `agenthq ask`. A question for the envelope's session; this connection alone gets
                 // the `prompt_answer` once the owner answers, the prompt times out or the session ends.
                 Envelope.PROMPT_ASK -> try {
                     val service = pendingPrompts ?: throw IllegalArgumentException("this daemon has no prompts")
@@ -3969,15 +3948,6 @@ internal fun cliTools(
 private fun toolApprovalEnvelope(info: com.superiorsoftllc.agenthq.protocol.ToolApprovalInfo): Envelope = Envelope(
     Envelope.TOOL_APPROVAL,
     json.encodeToString(com.superiorsoftllc.agenthq.protocol.ToolApprovalInfo.serializer(), info),
-)
-
-/** PROMPT-6 (1.78.0): the `approval_rules` answer, [projectId] null = every project. */
-private fun approvalRulesEnvelope(projectId: String?, rules: List<com.superiorsoftllc.agenthq.protocol.ApprovalRule>): Envelope = Envelope(
-    Envelope.APPROVAL_RULES,
-    json.encodeToString(
-        com.superiorsoftllc.agenthq.protocol.ApprovalRulesList.serializer(),
-        com.superiorsoftllc.agenthq.protocol.ApprovalRulesList(projectId, rules),
-    ),
 )
 
 /** ASK-1: `questions`, every owner question oldest first (open ones and the history). */

@@ -56,7 +56,8 @@ that is renamed or deleted must leave the table. Lines in PLUGIN_NOW/PLUGIN_LATE
 | `orchestration` | the pod/node DAG scheduler (orchestrator side, section 6) and `OrchestratorLink`, the seam |
 
 **PLUGIN NOW** (mechanism exists, only the move is left): `memory` (a Knowledge
-plugin); `prompts` (Infantry_Prompts); `images` (Infantry_Chat).
+plugin); `images` (Infantry_Chat).
+DP-10b: `prompts` is reclassified CORE, not PLUGIN NOW: it is the PROMPT-1 tool-approval round-trip (PendingPrompts, PromptTimeouts, SpawnPromptTimeout; used by session, harness, claude, opencode), not the Infantry_Prompts template library. Only its policy data left: the stored "allow always" rules and the `approval_rules` / `approval_rule_delete` frames are Infantry_Approvals' daemon half (table `infantry_approvals_rules` via `api.storage`), reached by core through the `hooks.approvalRules` port (DaemonApi 1.22.0, additive; `ApprovalRulesHook.match` / `remember`). With the plugin absent there are no stored rules: every prompt asks and ALLOW_ALWAYS degrades to ALLOW_SESSION with no error. Rules stored before this change (settings row `toolApproval.rules`) are not migrated.
 DP-7c: `issues` and `decisions` (stores, handlers, frames) moved to plugins/official/Infantry_Notes/daemon; only the wire DTOs stay in core (agentHqProtocol).
 
 DAEMON-PLUGINS-3: `probe` (a one-off provider comparison `main()` and its `probeProvider` Gradle task) was dead and is deleted. `experiments` (the pi tool bridge) cannot move yet, see below.

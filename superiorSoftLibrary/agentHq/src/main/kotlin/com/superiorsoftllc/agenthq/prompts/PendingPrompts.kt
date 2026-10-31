@@ -139,8 +139,8 @@ class PendingPrompts(
     private val timeoutMillis: () -> Long = { DEFAULT_TIMEOUT_MS },
     private val clock: () -> Long = System::currentTimeMillis,
     private val newId: () -> String = { UUID.randomUUID().toString() },
-    /** PROMPT-6: the remembered "Always allow" rules; the daemon backs them with the settings table. */
-    val rules: ApprovalRules = ApprovalRules.inMemory(),
+    /** PROMPT-6 / DP-10b: the remembered "Always allow" rules, a port Infantry_Approvals fills; the default stores none. */
+    val rules: com.superiorsoftllc.agenthq.daemon.api.ApprovalRulesHook = NoApprovalRules,
     /** PROMPT-6: the project a session belongs to; null = none, so no rule is matched or stored for it. */
     private val projectOf: (String) -> String? = { null },
     /**
@@ -325,8 +325,10 @@ class PendingPrompts(
         if (resolution is Resolution.Approval && resolution.decision == Decision.ALLOW_ALWAYS) {
             val tool = entry.request.tool
             if (tool != null) {
-                runCatching { rules.add(projectOf(entry.request.sessionId), tool, entry.fullInput ?: entry.request.input.orEmpty()) }
-                    .onFailure { System.err.println("[agentHq] allow_always rule not stored: ${it.message}") }
+                val stored = runCatching { rules.remember(projectOf(entry.request.sessionId), tool, entry.fullInput ?: entry.request.input.orEmpty()) }
+                    .onFailure { System.err.println("[agentHq] allow_always rule not stored: ${it.message}") }.getOrDefault(false)
+                // DP-10b: no rule store (plugin absent) or nothing to store: allow_always lasts the session, no error.
+                if (!stored) synchronized(lock) { sessionAllowed.getOrPut(entry.request.sessionId) { HashSet() }.add(tool) }
             }
         }
         entry.resolvedBy = resolvedBy
@@ -386,7 +388,7 @@ class PendingPrompts(
         private val json = Json { encodeDefaults = true }
 
         /** PROMPT-6: the transcript line for a call a rule answered: "auto-allowed by rule <tool> [<prefix>]". */
-        fun ruleNotice(rule: com.superiorsoftllc.agenthq.protocol.ApprovalRule): String =
+        fun ruleNotice(rule: com.superiorsoftllc.agenthq.daemon.api.ApprovalRuleMatch): String =
             "auto-allowed by rule ${rule.tool}" + (rule.prefix?.let { " $it" } ?: "")
 
         /** ASK-TIMER: the deadline of a prompt opened at [now] with [timeoutMillis]; null = no timer. */
@@ -420,4 +422,10 @@ class PendingPrompts(
             return if (oneLine.length <= INPUT_SUMMARY_MAX) oneLine else oneLine.take(INPUT_SUMMARY_MAX - 1) + "…"
         }
     }
+}
+
+/** DP-10b: the approval-rule port with no store behind it (Infantry_Approvals absent): no rule matches, none is kept. */
+object NoApprovalRules : com.superiorsoftllc.agenthq.daemon.api.ApprovalRulesHook {
+    override fun match(projectId: String?, tool: String, input: String): com.superiorsoftllc.agenthq.daemon.api.ApprovalRuleMatch? = null
+    override fun remember(projectId: String?, tool: String, input: String): Boolean = false
 }
