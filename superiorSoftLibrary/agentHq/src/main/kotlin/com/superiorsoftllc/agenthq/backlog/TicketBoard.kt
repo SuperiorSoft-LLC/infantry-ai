@@ -18,10 +18,14 @@ import com.superiorsoftllc.agenthq.context.ReportTo
 import com.superiorsoftllc.agenthq.context.TicketContext
 import com.superiorsoftllc.agenthq.orchestration.RunOutcomes
 import com.superiorsoftllc.agenthq.persistence.AgentHqStore
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardHost
+import com.superiorsoftllc.agenthq.daemon.api.board.StoredRun
+import com.superiorsoftllc.agenthq.daemon.api.board.TicketEventAppender
+import com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardHost
+import com.superiorsoftllc.agenthq.daemon.plugins.toRow
+import com.superiorsoftllc.agenthq.daemon.plugins.toStored
 import com.superiorsoftllc.agenthq.persistence.TicketLinkRow
-import com.superiorsoftllc.agenthq.persistence.TicketRepository
 import com.superiorsoftllc.agenthq.persistence.TicketRow
-import com.superiorsoftllc.agenthq.persistence.TicketRunRow
 import com.superiorsoftllc.agenthq.protocol.AgentProfile
 import com.superiorsoftllc.agenthq.protocol.EffectiveExecutor
 import com.superiorsoftllc.agenthq.protocol.ExecutorOverrides
@@ -117,7 +121,7 @@ private data class AssignmentResolution(
  * [IllegalArgumentException] naming the problem, and nothing is written.
  */
 class TicketBoard(
-    private val store: AgentHqStore,
+    private val host: BoardHost,
     private val clock: () -> Long = System::currentTimeMillis,
     private val idFactory: () -> String = { "ticket-" + UUID.randomUUID().toString().take(8) },
     private val context: TicketContext = TicketContext.NONE,
@@ -177,7 +181,93 @@ class TicketBoard(
     private val projectDirectory: (projectId: String?) -> String? = { null },
     /** KNOWLEDGE-PTR-1 (C): the stored RELATED (auto) block a save or a `relates_to` link writes atop the description. */
     private val relatedDescription: RelatedDescription = RelatedDescription.NONE,
+    /** Skill ids that no stored skill carries (part c moves this onto the host); the default knows none, so any named skill is refused. */
+    private val unknownSkills: (List<String>) -> List<String> = { it },
 ) {
+    /**
+     * DP-5f-3a: the legacy constructor over the real stores (what every caller used before the host): builds a [LocalBoardHost]
+     * over them and delegates, so behaviour is whatever the stores did.
+     */
+    constructor(
+    store: AgentHqStore,
+    clock: () -> Long = System::currentTimeMillis,
+    idFactory: () -> String = { "ticket-" + UUID.randomUUID().toString().take(8) },
+    context: TicketContext = TicketContext.NONE,
+    agents: AgentProfiles? = null,
+    sessions: SessionManager? = null,
+    repo: File? = null,
+    /** BRANCH-PER-TASK 1/3: cuts each ticket's own branch and worktree, and reuses them on a later start. */
+    branches: TicketBranches = TicketBranches(),
+    /**
+     * BRANCH-PER-TASK 1/3 + BUG-REGRESS-1: the one resolver of the ref a start cuts from, asked once per start with
+     * the ticket's project (the daemon passes `AGENTHQ_BASE_BRANCH`, else `HEAD`; `HEAD` by default).
+     */
+    baseRef: TicketBaseRef = TicketBaseRef.fixed(TicketBaseRef.HEAD),
+    /** P10-K9: the knowledge section of an unattended prompt start, read for that session's project. */
+    knowledge: KnowledgeCounter = KnowledgeCounter.NONE,
+    /** P10-K15: the skills section of an unattended prompt start, from the skills its instance freezes. */
+    skills: SkillsSource = SkillsSource.NONE,
+    /**
+     * BUG-ASSIGN-1: the role ids a ticket may name (the daemon passes its live catalog), listed in the refusal of a
+     * role that is not one, so the agent that sent a display name ("Backend Developer") can send the id instead.
+     */
+    roleIds: () -> List<String> = { RoleIds.CANONICAL },
+    /** IMG-3: resolves, validates and releases ticket images against each ticket's project directory. */
+    images: TicketImages = TicketImages.NONE,
+    /** `tickets.exitBehavior`, read at every run end: `leave` (default) keeps a cleanly finished ticket in_progress; `done` moves it. */
+    exitBehavior: () -> String = { "leave" },
+    /**
+     * GAP 855db590 (setting `limits.tickets.autoDoneMinOutputs`, read at every run end): the assistant outputs / tool calls a
+     * clean run must have produced, with a provider session opened, before [exitBehavior] `done` moves its ticket; 0 = any
+     * clean exit counts (the pre-855db590 rule).
+     */
+    autoDoneMinOutputs: () -> Long = { 1 },
+    /** TICKET-WEIGHT: the weight -> executor mapping, read at every start and view. */
+    weightExecutors: () -> WeightExecutors = { WeightExecutors.DEFAULT },
+    /** TOKEN-7: the weight -> {contextLimit, effort} defaults, read at every start; they fill only what the ticket leaves unset. */
+    weightContext: () -> com.superiorsoftllc.agenthq.settings.WeightContext = { com.superiorsoftllc.agenthq.settings.WeightContext.DEFAULT },
+    /** LANE-CAPS: the most agents of a role that may run at once in a project (1 = one per role, today's behaviour). */
+    laneCap: (projectId: String?, role: String) -> Int = { _, _ -> 1 },
+    /** ROUTING-1 (contract 1.128.0): a project's routing rules, in order (empty = none), read at every start and view. */
+    routingRules: (projectId: String?) -> List<com.superiorsoftllc.agenthq.protocol.RoutingRule> = { emptyList() },
+    /**
+     * ROUTING-1: told when a rule-driven start was refused (the ticket is parked in todo, never retried on another rule or
+     * harness), with the ticket, its project and the reason. The daemon raises an attention item. Called once per distinct
+     * (ticket, reason) so a lane drain or a trigger retrying the same ticket does not repeat it.
+     */
+    routingRefused: (ticketId: String, projectId: String?, detail: String) -> Unit = { _, _, _ -> },
+    /**
+     * USAGE-PACE (contract 1.121.0): whether one more ticket worker may start on the plan meter (provider, model) spends.
+     * An agent's or the daemon's start beyond the allowance is refused with the reason; a human move only warns.
+     */
+    pacing: (providerId: String?, model: String?) -> PacingVerdict = { _, _ -> PacingVerdict.Allow() },
+    /**
+     * NOGIT-1: a project's own stored directory (blank / unknown = null). With no AGENTHQ_REPO and project folders
+     * off (a dev or headless daemon), a start still works in THAT folder: a folder that is not a git checkout gets
+     * no branch and no worktree, and the daemon's own checkout is never used for it.
+     */
+    projectDirectory: (projectId: String?) -> String? = { null },
+    /** KNOWLEDGE-PTR-1 (C): the stored RELATED (auto) block a save or a `relates_to` link writes atop the description. */
+    relatedDescription: RelatedDescription = RelatedDescription.NONE,
+    ) : this(
+        host = LocalBoardHost(store, { sessions }, branches, baseRef, projectDirectory, repo, { null }, clock, agents, knowledge, skills, images),
+        clock = clock, idFactory = idFactory, context = context, agents = agents, sessions = sessions, repo = repo, branches = branches, baseRef = baseRef, knowledge = knowledge, skills = skills, roleIds = roleIds, images = images, exitBehavior = exitBehavior, autoDoneMinOutputs = autoDoneMinOutputs, weightExecutors = weightExecutors, weightContext = weightContext, laneCap = laneCap, routingRules = routingRules, routingRefused = routingRefused, pacing = pacing, projectDirectory = projectDirectory, relatedDescription = relatedDescription,
+        unknownSkills = { ids -> store.transaction { ids.filter { store.skills.get(it) == null } } },
+    )
+
+    /** DP-5f-3a: the board's tables through the host, in the row types the rules below were written against. */
+    private val store = RowStore(host)
+
+    /** The board's own [events] log when one is set (the legacy wiring), else the host's appender. Null log = no events, as before. */
+    private fun eventAppender(): TicketEventAppender = events?.let { log ->
+        object : TicketEventAppender {
+            override fun record(before: Map<String, String>, after: Map<String, String>, changedIds: Collection<String>, deleted: Collection<String>) =
+                log.record(before, after, changedIds, deleted)
+
+            override fun deliver() = log.deliver()
+        }
+    } ?: host.events
+
     /** ROUTING-1: the (ticket, reason) pairs already reported through [routingRefused]. */
     private val reportedRoutingRefusals = java.util.Collections.synchronizedSet(HashSet<String>())
 
@@ -481,7 +571,7 @@ class TicketBoard(
         val includeLinkedTasksContext = request.includeLinkedTasksContext ?: existing?.includeLinkedTasksContext
         // P10-K11 (K-D9): absent or null keeps the stored list and `[]` clears it; the mode and the switch keep the same way.
         val skillIds = request.skillIds?.map { it.trim() } ?: existing?.skillIds.orEmpty()
-        if (request.skillIds != null) requireKnownSkills(store, skillIds, "skillIds")
+        if (request.skillIds != null) requireKnownSkills(skillIds, "skillIds") { all -> unknownSkills(all) }
         val skillsMode = request.skillsMode?.let { mode ->
             mode.trim().lowercase().also { require(it in SkillsMode.ALL) { "skillsMode must be merge or replace, was '${mode.take(40)}'" } }
         } ?: existing?.skillsMode ?: SkillsMode.MERGE
@@ -1256,7 +1346,7 @@ class TicketBoard(
         if (store.tickets.get(ticketId) == null) return
         if (store.ticketRuns.byTicket(ticketId).none { it.sessionId == record.id }) {
             store.ticketRuns.insert(
-                TicketRunRow(ticketId = ticketId, sessionId = record.id, startedAt = record.spawnedAt),
+                StoredRun(ticketId = ticketId, sessionId = record.id, startedAt = record.spawnedAt),
             )
         }
     }
@@ -1484,7 +1574,7 @@ class TicketBoard(
         val after = views(s.rows, s.links)
         val board = boardOrder(s.rows.values).map { after.getValue(it.id) }
         val changed = board.filter { before[it.id] != it }.map { it.id }
-        events?.record(
+        eventAppender().record(
             before = before.mapValues { it.value.status }, after = board.associate { it.id to it.status },
             changedIds = changed, deleted = s.deleted,
         )
@@ -1514,7 +1604,7 @@ class TicketBoard(
     }
 
     private fun announce(outcome: Outcome) {
-        runCatching { events?.deliver() }.onFailure { System.err.println("[agentHq] ticket event delivery failed: $it") }
+        runCatching { eventAppender().deliver() }.onFailure { System.err.println("[agentHq] ticket event delivery failed: $it") }
     }
 
     private fun newId(s: Snapshot): String {
@@ -1992,7 +2082,7 @@ class TicketBoard(
         }
 
         /** Store the difference from what was loaded: deletions first, so links never name a missing ticket. */
-        fun write(repository: TicketRepository) {
+        fun write(repository: RowTickets) {
             deleted.forEach { repository.delete(it) }
             removedLinks.forEach { repository.unlink(it) }
             for ((id, row) in rows) {
@@ -2005,4 +2095,26 @@ class TicketBoard(
         private fun TicketLinkRow.sameAs(other: TicketLinkRow) =
             ticketId == other.ticketId && relatedId == other.relatedId && type == other.type
     }
+}
+
+/** DP-5f-3a: the board's store as the rules see it (TicketRow / TicketLinkRow), every call going through [BoardHost.storage]. */
+private class RowStore(private val host: BoardHost) {
+    val tickets = RowTickets(host)
+    val ticketRuns get() = host.storage.tables.runs
+
+    fun <T> transaction(block: () -> T): T = host.storage.transaction { block() }
+    fun <T> writeTransaction(block: () -> T): T = host.storage.writeTransaction { block() }
+}
+
+private class RowTickets(private val host: BoardHost) {
+    private val table get() = host.storage.tables.tickets
+
+    fun create(row: TicketRow) = table.create(row.toStored())
+    fun update(row: TicketRow) = table.update(row.toStored())
+    fun get(id: String): TicketRow? = table.get(id)?.toRow()
+    fun all(): List<TicketRow> = table.all().map { it.toRow() }
+    fun delete(id: String): Boolean = table.delete(id)
+    fun link(link: TicketLinkRow): Boolean = table.link(link.toStored())
+    fun unlink(link: TicketLinkRow): Boolean = table.unlink(link.toStored())
+    fun links(): List<TicketLinkRow> = table.links().map { it.toRow() }
 }
