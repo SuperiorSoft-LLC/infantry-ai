@@ -103,7 +103,15 @@ interface DaemonApi {
     /** DP-7e (1.19.0, additive): the mail port (notify one session or every live session of a role). Community needs the grant `sessions.notify`. */
     val sessionNotifier: com.superiorsoftllc.agenthq.daemon.api.sessions.SessionNotifier get() = com.superiorsoftllc.agenthq.daemon.api.sessions.NoSessionNotifier
 
+    /**
+     * DP-10a (1.21.0, additive): the project-scoped file surface `<project directory>/.agenthq/` (daemon.api.files.ProjectFiles).
+     * Official / core tier, or a community module with the grant `files`; an unknown project or one without a directory is refused
+     * with [IllegalArgumentException]. A daemon without one refuses with [IllegalStateException].
+     */
+    fun files(projectId: String): com.superiorsoftllc.agenthq.daemon.api.files.ProjectFiles = com.superiorsoftllc.agenthq.daemon.api.files.NoProjectFiles
+
     companion object {
+        // 1.21.0 (DP-10a, additive): `files(projectId)` (daemon.api.files.ProjectFiles), scoped to `<project>/.agenthq/`.
         // 1.19.0 (DP-7e, additive): `sessionNotifier` (daemon.api.sessions.SessionNotifier).
         // 1.18.0 (DP-7d, additive): `events.onSessionRemoved`.
         // 1.17.0 (DP-7c, additive): daemon.api.knowledge.KnowledgeRecords, the decisions / issues half of Knowledge (published by Infantry_Notes).
@@ -122,7 +130,7 @@ interface DaemonApi {
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
-        const val VERSION = "1.20.0"
+        const val VERSION = "1.21.0"
     }
 }
 

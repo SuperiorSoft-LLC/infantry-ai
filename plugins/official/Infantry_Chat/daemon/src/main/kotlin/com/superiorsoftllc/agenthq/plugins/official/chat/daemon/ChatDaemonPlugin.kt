@@ -32,6 +32,48 @@ class ChatDaemonPlugin : DaemonPlugin {
         api.tools.register(MailTools.InboxTool)
         api.tools.register(MailTools.ReadTool)
         api.tools.register(MailTools.MessageTool)
+        ImageFrames.install(api)
+    }
+
+    override fun stop() = ImageFrames.stop()
+}
+
+/**
+ * DP-10a: the `image_upload` frame and the chat image retention sweep, over `api.files(projectId)`. The frame's wire and its refusal
+ * texts are the ones core answered before: `image` on success, `error` = `image_upload refused: <why>` / `image_upload failed: <why>`.
+ */
+object ImageFrames {
+    const val IMAGE_UPLOAD = "image_upload"
+    const val IMAGE = "image"
+    const val ERROR = "error"
+    @Volatile private var sweeping: AutoCloseable? = null
+
+    fun install(api: DaemonApi, clock: () -> Long = System::currentTimeMillis) {
+        api.frames.handle(IMAGE_UPLOAD) { frame, _ -> answer(api, frame, clock) }
+        val retention = ChatImageRetention(
+            projectIds = { api.projects.list().map { it.id } },
+            filesOf = api::files,
+            retentionDays = { ChatImageRetention.daysOf(api.settings.stored(ChatImageRetention.SETTING)) },
+            clock = clock,
+        )
+        // IMG-5: one sweep at start, then every 6 hours.
+        runCatching { retention.sweep() }
+        sweeping = api.schedule("chat-image-retention", ChatImageRetention.DEFAULT_INTERVAL_MILLIS) { runCatching { retention.sweep() } }
+    }
+
+    fun stop() {
+        sweeping?.let { runCatching { it.close() } }
+        sweeping = null
+    }
+
+    internal fun answer(api: DaemonApi, frame: com.superiorsoftllc.agenthq.daemon.api.Frame, clock: () -> Long): com.superiorsoftllc.agenthq.daemon.api.Frame = try {
+        val upload = ImageUpload.decode(frame.data)
+        val stored = ImageUploads.store(api.files(upload.projectId), upload, clock())
+        com.superiorsoftllc.agenthq.daemon.api.Frame(IMAGE, stored.toJson())
+    } catch (e: IllegalArgumentException) {
+        com.superiorsoftllc.agenthq.daemon.api.Frame(ERROR, "$IMAGE_UPLOAD refused: ${e.message ?: "invalid request"}")
+    } catch (e: Exception) {
+        com.superiorsoftllc.agenthq.daemon.api.Frame(ERROR, "$IMAGE_UPLOAD failed: ${e.message ?: e::class.simpleName}")
     }
 }
 

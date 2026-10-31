@@ -1,14 +1,12 @@
-package com.superiorsoftllc.agenthq.images
+package com.superiorsoftllc.agenthq.plugins.official.chat.daemon
 
-import com.superiorsoftllc.agenthq.mvp.ProjectStore
-import com.superiorsoftllc.agenthq.protocol.Envelope
-import com.superiorsoftllc.agenthq.protocol.ImageStored
-import com.superiorsoftllc.agenthq.protocol.ImageUpload
+import com.superiorsoftllc.agenthq.daemon.api.files.ProjectFiles
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
-import java.io.File
-import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import java.security.MessageDigest
 import java.util.Base64
 
@@ -46,20 +44,78 @@ enum class ImageType(val mimeType: String, val extension: String) {
     }
 }
 
+/** The `image_upload` payload (the wire's `ImageUpload`), as the plugin reads it. */
+data class ImageUpload(
+    val projectId: String,
+    val purpose: String,
+    val fileName: String = "",
+    val mimeType: String = "",
+    val base64: String,
+) {
+    companion object {
+        /** 10 MB, decoded. */
+        const val MAX_BYTES: Int = 10 * 1024 * 1024
+        const val PURPOSE_CHAT = "chat"
+        const val PURPOSE_TICKET = "ticket"
+        /** A chat attachment of any type. */
+        const val PURPOSE_FILE = "file"
+        /** 20 MB, decoded: the limit for purpose `file`. */
+        const val MAX_FILE_BYTES: Int = 20 * 1024 * 1024
+        val PURPOSES: Set<String> = setOf(PURPOSE_CHAT, PURPOSE_TICKET, PURPOSE_FILE)
+        private val KEYS = setOf("projectId", "purpose", "fileName", "mimeType", "base64")
+
+        fun maxBytes(purpose: String): Int = if (purpose == PURPOSE_FILE) MAX_FILE_BYTES else MAX_BYTES
+
+        /** Strict, like the wire: a malformed payload, an unknown key or a missing required key is refused (IllegalArgumentException). */
+        fun decode(text: String): ImageUpload {
+            val obj = try {
+                Json.parseToJsonElement(text) as? JsonObject ?: throw IllegalArgumentException("image_upload payload must be a JSON object")
+            } catch (e: SerializationException) {
+                throw IllegalArgumentException("image_upload payload is malformed: ${e.message?.take(200)}")
+            }
+            obj.keys.firstOrNull { it !in KEYS }?.let { throw IllegalArgumentException("image_upload payload has an unknown field '${it.take(40)}'") }
+            fun str(key: String, required: Boolean): String {
+                val e = obj[key]
+                if (e == null || e is JsonNull) {
+                    require(!required) { "image_upload payload is missing '$key'" }
+                    return ""
+                }
+                val p = e as? JsonPrimitive
+                require(p != null && p.isString) { "image_upload payload field '$key' must be a string" }
+                return p.content
+            }
+            return ImageUpload(str("projectId", true), str("purpose", true), str("fileName", false), str("mimeType", false), str("base64", true))
+        }
+    }
+}
+
+/** Where an upload was stored (the wire's `ImageStored`). */
+data class ImageStored(val path: String, val relPath: String, val sha256: String, val bytes: Long, val mimeType: String) {
+    fun toJson(): String = buildJsonObject {
+        put("path", JsonPrimitive(path))
+        put("relPath", JsonPrimitive(relPath))
+        put("sha256", JsonPrimitive(sha256))
+        put("bytes", JsonPrimitive(bytes))
+        put("mimeType", JsonPrimitive(mimeType))
+    }.toString()
+}
+
 /**
- * IMG-1: project-local image storage. Every refusal throws [IllegalArgumentException] BEFORE anything touches the
- * disk -- the uploads folder included -- so a refused upload leaves no trace.
+ * IMG-1: project-local image storage, over the project's [ProjectFiles] (DP-10a). Every refusal throws
+ * [IllegalArgumentException] BEFORE anything touches the disk -- the uploads folder included -- so a refused upload leaves no trace.
  */
 object ImageUploads {
-    const val UPLOADS_REL = ".agenthq/uploads"
+    /** Relative to the project directory (the answer's `relPath`). */
+    const val UPLOADS_REL = ProjectFiles.UPLOADS_REL
+    /** Relative to the [ProjectFiles] root (`.agenthq/`). */
+    const val UPLOADS = "uploads"
     private const val ACCEPTED = "png, jpeg, gif or webp"
 
     /**
-     * Validate [upload] and store it under [projectRoot]; answers where it is. IMG-5: the file's mtime is set to
-     * [nowMillis] on every accepted upload, a dedupe hit included, so an image still being sent outlives the
-     * [ChatImageRetention] sweep.
+     * Validate [upload] and store it through [files]; answers where it is. IMG-5: the file's mtime is set to [nowMillis] on every
+     * accepted upload, a dedupe hit included, so an image still being sent outlives the [ChatImageRetention] sweep.
      */
-    fun store(projectRoot: File, upload: ImageUpload, nowMillis: Long = System.currentTimeMillis()): ImageStored {
+    fun store(files: ProjectFiles, upload: ImageUpload, nowMillis: Long = System.currentTimeMillis()): ImageStored {
         require(upload.purpose in ImageUpload.PURPOSES) {
             "purpose '${upload.purpose.take(40)}' is not accepted; only ${ImageUpload.PURPOSES.joinToString(" or ")}"
         }
@@ -93,31 +149,16 @@ object ImageUploads {
 
         val sha = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
         // One .gitignore at uploads/ covers every purpose folder below it.
-        val uploads = File(projectRoot, UPLOADS_REL)
-        val dir = File(uploads, upload.purpose)
-        Files.createDirectories(dir.toPath())
-        val ignore = File(uploads, ".gitignore")
-        if (!ignore.isFile) ignore.writeText("*\n")
+        val ignore = "$UPLOADS/.gitignore"
+        if (files.stat(ignore) == null) files.put(ignore, "*\n".toByteArray())
         val name = "$sha.$extension"
-        val target = File(dir, name)
+        val rel = "$UPLOADS/${upload.purpose}/$name"
         // Dedupe by content: the name IS the hash, so an existing file of the right size is these bytes.
-        if (!(target.isFile && target.length() == bytes.size.toLong())) {
-            val temp = Files.createTempFile(dir.toPath(), ".upload-", ".part")
-            try {
-                Files.write(temp, bytes)
-                try {
-                    Files.move(temp, target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-                } catch (_: AtomicMoveNotSupportedException) {
-                    Files.move(temp, target.toPath(), StandardCopyOption.REPLACE_EXISTING)
-                }
-            } finally {
-                Files.deleteIfExists(temp)
-            }
-        }
+        if (files.stat(rel)?.size != bytes.size.toLong()) files.put(rel, bytes)
         // IMG-5: "last used", the clock the retention sweep reads; a dedupe hit refreshes it.
-        target.setLastModified(nowMillis)
+        files.touch(rel, nowMillis)
         return ImageStored(
-            path = target.absoluteFile.normalize().path,
+            path = files.absolutePath(rel),
             relPath = "$UPLOADS_REL/${upload.purpose}/$name",
             sha256 = sha,
             bytes = bytes.size.toLong(),
@@ -131,30 +172,5 @@ object ImageUploads {
     internal fun fileExtension(fileName: String): String {
         val ext = fileName.substringAfterLast('/').substringAfterLast('\\').substringAfterLast('.', "").lowercase()
         return ext.takeIf { it.length in 1..10 && it.all { c -> c in 'a'..'z' || c in '0'..'9' } } ?: "bin"
-    }
-}
-
-/** IMG-1: the `image_upload` wire surface. Which project, and its directory, is the [ProjectStore]'s answer. */
-class ImageUploadHandler(
-    private val projects: ProjectStore,
-    private val json: Json = Json { encodeDefaults = true },
-    /** IMG-5: the clock an upload's mtime is stamped from; the same one [ChatImageRetention] sweeps against. */
-    private val clock: () -> Long = System::currentTimeMillis,
-) {
-    /** Answer one frame, or null when it is not an `image_upload`. */
-    fun answer(envelope: Envelope): Envelope? {
-        if (envelope.type != Envelope.IMAGE_UPLOAD) return null
-        return try {
-            val upload = ImageUpload.decode(envelope.data)
-            val project = projects.get(upload.projectId)
-            require(project.directory.isNotBlank()) { "project '${project.id}' has no directory to store uploads in" }
-            val root = File(project.directory)
-            require(root.isDirectory) { "project '${project.id}' directory does not exist: ${project.directory}" }
-            Envelope(Envelope.IMAGE, json.encodeToString(ImageStored.serializer(), ImageUploads.store(root, upload, clock())))
-        } catch (e: IllegalArgumentException) {
-            Envelope(Envelope.ERROR, "${Envelope.IMAGE_UPLOAD} refused: ${e.message ?: "invalid request"}")
-        } catch (e: Exception) {
-            Envelope(Envelope.ERROR, "${Envelope.IMAGE_UPLOAD} failed: ${e.message ?: e::class.simpleName}")
-        }
     }
 }

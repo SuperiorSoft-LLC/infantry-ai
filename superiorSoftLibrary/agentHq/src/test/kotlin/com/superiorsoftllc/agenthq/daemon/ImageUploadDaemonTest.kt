@@ -43,6 +43,8 @@ class ImageUploadDaemonTest {
         val state = tempDir("agenthq-img-state")
         val fixture = DaemonFixture.launch(
             stateDir = state, runner = GatedRunner(), workingDir = File(state, "workdir").apply { mkdirs() },
+            // DP-10a: image_upload is answered by the Infantry_Chat daemon plugin.
+            pluginsRoot = TestDaemonPlugins.root("official/Infantry_Chat").also { r -> cleanups += { r.deleteRecursively() } },
         )
         cleanups += { fixture.stop() }
         fixture.client.await(Envelope.READY)

@@ -1,6 +1,6 @@
 package com.superiorsoftllc.agenthq.backlog
 
-import com.superiorsoftllc.agenthq.images.ImageUploads
+import com.superiorsoftllc.agenthq.daemon.api.files.ProjectFiles
 import com.superiorsoftllc.agenthq.persistence.TicketRow
 import java.io.File
 import java.io.IOException
@@ -76,7 +76,7 @@ class TicketImages(
 
     companion object {
         const val TICKET_PURPOSE = "ticket"
-        const val TICKET_UPLOADS = "${ImageUploads.UPLOADS_REL}/$TICKET_PURPOSE"
+        const val TICKET_UPLOADS = "${ProjectFiles.UPLOADS_REL}/$TICKET_PURPOSE"
         val NONE = TicketImages()
     }
 }

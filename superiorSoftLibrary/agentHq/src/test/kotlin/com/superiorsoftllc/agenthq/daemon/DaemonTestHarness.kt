@@ -312,8 +312,6 @@ class DaemonFixture private constructor(
             startServer: (AgentHqDaemon) -> Int = AgentHqDaemon::start,
             /** IMG-5: the daemon's "now" (upload mtimes, the chat image retention sweep). */
             clock: () -> Long = System::currentTimeMillis,
-            /** IMG-5: the retention sweep's 6-hour ticker; a test passes one it fires by hand. */
-            chatImageTicker: (Long, () -> Unit) -> AutoCloseable = com.superiorsoftllc.agenthq.images.ChatImageRetention::scheduledTicker,
             /** TICKET-HANDOVER: how long a switched ticket worker's handoff turn may run. */
             handoffTimeoutMs: Long = SessionHandover.DEFAULT_TIMEOUT_MS,
             /** WEB-1: the browser bundle served at `/`; none by default, so the operator's AGENTHQ_WEB_DIR never leaks in. */
@@ -371,7 +369,6 @@ class DaemonFixture private constructor(
                 assistantDir = assistantDir,
                 baseRef = baseRef,
                 clock = clock,
-                chatImageTicker = chatImageTicker,
                 handoffTimeoutMs = handoffTimeoutMs,
                 webBundle = webBundle,
                 ownerToken = OwnerCredential.ensure(stateDir),

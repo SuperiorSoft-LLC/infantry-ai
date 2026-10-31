@@ -144,7 +144,6 @@ class DaemonCoreGuardTest {
         val PLUGIN_NOW = mapOf(
             "memory" to "DP-7f: the memory wire DTOs only (the CLI speaks them); the store, handler and notes are in Infantry_Notes",
             "prompts" to "prompt templates: Infantry_Prompts daemon half",
-            "images" to "chat uploads: Infantry_Chat daemon half",
         )
 
         /** PLUGIN LATER: needs a missing mechanism first; the blocker is named. */

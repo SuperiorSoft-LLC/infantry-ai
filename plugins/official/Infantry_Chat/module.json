@@ -12,7 +12,10 @@
   "daemon": {
     "entry": "com.superiorsoftllc.agenthq.plugins.official.chat.daemon.ChatDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Chat-daemon.jar",
-    "apiAtLeast": "1.1.0",
+    "apiAtLeast": "1.21.0",
+    "frames": [
+      { "type": "image_upload", "action": "images.upload", "kind": "write" }
+    ],
     "tools": [
       { "name": "agenthq_inbox", "action": "mail.read", "kind": "read", "description": "List the COMMS mail addressed to you." },
       { "name": "agenthq_read", "action": "mail.read", "kind": "read", "description": "Read one message in full and mark it read." },
