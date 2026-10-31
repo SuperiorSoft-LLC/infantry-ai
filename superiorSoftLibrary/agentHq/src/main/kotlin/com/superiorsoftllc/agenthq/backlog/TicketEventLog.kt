@@ -21,7 +21,7 @@ class TicketEventLog(
     private val db: AgentHQDatabase,
     private val clock: () -> Long = System::currentTimeMillis,
     private val log: (String) -> Unit = { System.err.println(it) },
-) : TicketEvents {
+) : TicketEvents, com.superiorsoftllc.agenthq.daemon.api.board.TicketEventAppender {
     private val q get() = db.ticket_eventsQueries
 
     private class Consumer(val name: String, val listener: (TicketEvent) -> Unit) {
@@ -33,7 +33,7 @@ class TicketEventLog(
     private val lock = Any()
 
     /** Stores the events of one commit; call inside the commit's transaction. [before]/[after] map ticket id to column. */
-    fun record(before: Map<String, String>, after: Map<String, String>, changedIds: Collection<String>, deleted: Collection<String>) {
+    override fun record(before: Map<String, String>, after: Map<String, String>, changedIds: Collection<String>, deleted: Collection<String>) {
         val now = clock()
         for ((id, status) in after) {
             val was = before[id]
@@ -67,7 +67,7 @@ class TicketEventLog(
     fun head(): Long = q.headSeq().executeAsOne()
 
     /** Hands every consumer the events it has not seen, in order. Safe to call any time; calls are serialised. */
-    fun deliver() = synchronized(lock) {
+    override fun deliver() = synchronized(lock) {
         for (c in consumers.toList()) deliverTo(c)
         val head = q.headSeq().executeAsOne()
         if (head > KEEP) q.trimBefore(head - KEEP)

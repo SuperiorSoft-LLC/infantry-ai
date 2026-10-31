@@ -29,8 +29,8 @@ import com.superiorsoftllc.agenthq.daemon.api.board.SessionStartResult
 import com.superiorsoftllc.agenthq.daemon.api.board.StoredRun
 import com.superiorsoftllc.agenthq.daemon.api.board.TicketEventAppender
 import com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardHost
-import com.superiorsoftllc.agenthq.daemon.plugins.toRow
-import com.superiorsoftllc.agenthq.daemon.plugins.toStored
+import com.superiorsoftllc.agenthq.persistence.toRow
+import com.superiorsoftllc.agenthq.persistence.toStored
 import com.superiorsoftllc.agenthq.persistence.TicketLinkRow
 import com.superiorsoftllc.agenthq.persistence.TicketRow
 import com.superiorsoftllc.agenthq.protocol.EffectiveExecutor

@@ -52,6 +52,8 @@ import com.superiorsoftllc.agenthq.daemon.api.sessions.SessionView
 import com.superiorsoftllc.agenthq.persistence.AgentHqStore
 import com.superiorsoftllc.agenthq.persistence.TicketLinkRow
 import com.superiorsoftllc.agenthq.persistence.TicketRow
+import com.superiorsoftllc.agenthq.persistence.toRow
+import com.superiorsoftllc.agenthq.persistence.toStored
 import com.superiorsoftllc.agenthq.persistence.TicketRunRow
 import com.superiorsoftllc.agenthq.session.ContextSource
 import com.superiorsoftllc.agenthq.session.SessionManager

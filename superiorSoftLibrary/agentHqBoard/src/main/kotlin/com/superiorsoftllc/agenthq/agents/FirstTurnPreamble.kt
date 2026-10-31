@@ -26,3 +26,19 @@ fun identityLine(role: String?, agentId: String?): String? {
     return "You are running inside Infantry AI as ${facts.joinToString(", ") { it.first }}. " +
         "Your environment carries the same identity (${variables.joinToString(", ")})."
 }
+
+/**
+ * P10-K9 / K15: persona -> identity -> traits -> knowledge ([renderKnowledge]) -> skills ([renderSkills]) -> task, on
+ * every first-turn path; a null section is absent.
+ */
+fun composeFirstTurn(
+    persona: String?,
+    traits: List<TraitSnapshot>,
+    role: String?,
+    agentId: String?,
+    prompt: String,
+    knowledge: String? = null,
+    skills: String? = null,
+): String =
+    listOfNotNull(persona?.takeIf { it.isNotBlank() }, identityLine(role, agentId), renderTraits(traits), knowledge, skills, prompt)
+        .joinToString("\n\n")

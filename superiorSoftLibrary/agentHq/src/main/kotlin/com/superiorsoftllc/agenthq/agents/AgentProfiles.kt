@@ -372,19 +372,3 @@ fun firstTurn(
     knowledge: String? = null,
     skills: String? = null,
 ): String = composeFirstTurn(instance?.instructions, instance?.traits.orEmpty(), role, agentId, prompt, knowledge, skills)
-
-/**
- * P10-K9 / K15: persona -> identity -> traits -> knowledge ([renderKnowledge]) -> skills ([renderSkills]) -> task, on
- * every first-turn path; a null section is absent.
- */
-private fun composeFirstTurn(
-    persona: String?,
-    traits: List<TraitSnapshot>,
-    role: String?,
-    agentId: String?,
-    prompt: String,
-    knowledge: String? = null,
-    skills: String? = null,
-): String =
-    listOfNotNull(persona?.takeIf { it.isNotBlank() }, identityLine(role, agentId), renderTraits(traits), knowledge, skills, prompt)
-        .joinToString("\n\n")

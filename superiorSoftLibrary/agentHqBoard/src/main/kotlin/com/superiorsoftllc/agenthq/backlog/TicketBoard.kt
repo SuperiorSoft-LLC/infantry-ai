@@ -7,10 +7,7 @@ import com.superiorsoftllc.agenthq.settings.WeightExecutor
 import com.superiorsoftllc.agenthq.settings.WeightExecutors
 import com.superiorsoftllc.agenthq.usage.GateDecision
 import com.superiorsoftllc.agenthq.usage.LaunchOrigin
-import com.superiorsoftllc.agenthq.agents.KnowledgeCounter
-import com.superiorsoftllc.agenthq.agents.SkillsSource
-import com.superiorsoftllc.agenthq.agents.firstTurn
-import com.superiorsoftllc.agenthq.agents.section
+import com.superiorsoftllc.agenthq.agents.composeFirstTurn
 import com.superiorsoftllc.agenthq.context.ContextInput
 import com.superiorsoftllc.agenthq.context.LinkLine
 import com.superiorsoftllc.agenthq.context.ReportTo
@@ -27,8 +24,8 @@ import com.superiorsoftllc.agenthq.daemon.api.board.SessionStart
 import com.superiorsoftllc.agenthq.daemon.api.board.SessionStartResult
 import com.superiorsoftllc.agenthq.daemon.api.board.StoredRun
 import com.superiorsoftllc.agenthq.daemon.api.board.TicketEventAppender
-import com.superiorsoftllc.agenthq.daemon.plugins.toRow
-import com.superiorsoftllc.agenthq.daemon.plugins.toStored
+import com.superiorsoftllc.agenthq.persistence.toRow
+import com.superiorsoftllc.agenthq.persistence.toStored
 import com.superiorsoftllc.agenthq.persistence.TicketLinkRow
 import com.superiorsoftllc.agenthq.persistence.TicketRow
 import com.superiorsoftllc.agenthq.protocol.EffectiveExecutor
@@ -51,11 +48,7 @@ import com.superiorsoftllc.agenthq.protocol.TicketStart
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
 import com.superiorsoftllc.agenthq.protocol.TicketType
 import com.superiorsoftllc.agenthq.role.RoleIds
-import com.superiorsoftllc.agenthq.worktree.BaseScope
 import com.superiorsoftllc.agenthq.worktree.TicketBaseRef
-import com.superiorsoftllc.agenthq.worktree.TicketBranchOutcome
-import com.superiorsoftllc.agenthq.worktree.TicketBranchRequest
-import com.superiorsoftllc.agenthq.worktree.TicketBranches
 import com.superiorsoftllc.agenthq.worktree.TicketWorktree
 import com.superiorsoftllc.agenthq.worktree.WorktreeRecord
 import java.io.File
@@ -171,14 +164,7 @@ class TicketBoard(
     private val repo: File? get() = host.git.defaultRepo()?.let(::File)
 
     /** The board's own [events] log when one is set (the legacy wiring), else the host's appender. Null log = no events, as before. */
-    private fun eventAppender(): TicketEventAppender = events?.let { log ->
-        object : TicketEventAppender {
-            override fun record(before: Map<String, String>, after: Map<String, String>, changedIds: Collection<String>, deleted: Collection<String>) =
-                log.record(before, after, changedIds, deleted)
-
-            override fun deliver() = log.deliver()
-        }
-    } ?: host.events
+    private fun eventAppender(): TicketEventAppender = events ?: host.events
 
     /** ROUTING-1: the (ticket, reason) pairs already reported through [routingRefused]. */
     private val reportedRoutingRefusals = java.util.Collections.synchronizedSet(HashSet<String>())
@@ -207,7 +193,7 @@ class TicketBoard(
      * is no event, so a ship trigger fires once per move into done. Null = the board keeps no log (tests).
      */
     @Volatile
-    var events: TicketEventLog? = null
+    var events: TicketEventAppender? = null
 
     /**
      * The board in board order: column by column ([TicketStatus.ALL]), each column top first. With a
@@ -319,7 +305,7 @@ class TicketBoard(
         // P10-K15: with the skill ids the row will freeze, so the turn renders exactly those.
         val instance = host.agents.instanceFor(profile.id, profile.role)?.let { host.agents.withSkills(it, null) }
         // P10-K9: the session's own project (TRIGGER-NUDGE: the trigger's, when it names one).
-        val first = firstTurn(instance?.toCore(), profile.role, profile.id, prompt, host.context.knowledgeSection(projectId, profile.role), host.context.skillsSection(instance?.skillIds))
+        val first = composeFirstTurn(instance?.instructions, instance?.toSnapshots().orEmpty(), profile.role, profile.id, prompt, host.context.knowledgeSection(projectId, profile.role), host.context.skillsSection(instance?.skillIds))
         return when (val started = host.sessions.start(
             SessionStart(
                 prompt = first,
@@ -512,7 +498,7 @@ class TicketBoard(
         val contextLimit = when (request.contextLimit) {
             null -> existing?.contextLimit
             com.superiorsoftllc.agenthq.protocol.TicketContextLimit.CLEAR -> null
-            else -> request.contextLimit.also { v -> com.superiorsoftllc.agenthq.session.ContextLimits.problem(v)?.let { throw IllegalArgumentException(it) } }
+            else -> request.contextLimit.also { v -> com.superiorsoftllc.agenthq.daemon.api.board.ContextLimits.problem(v)?.let { throw IllegalArgumentException(it) } }
         }
         // EFFORT-1: absent or null keeps the effort, "" / off / default clears it, a level sets it; an unknown level refuses the save.
         val effort = if (request.effort == null) existing?.effort else {
@@ -612,7 +598,7 @@ class TicketBoard(
      * daemon startup, before any client or trigger listens, and a migrated `done` story must not fire a ship trigger.
      */
     @Synchronized
-    internal fun import(
+    fun import(
         title: String,
         status: String,
         projectId: String?,
@@ -927,11 +913,11 @@ class TicketBoard(
         val weightNote = byWeight?.let { "weight ${row.weight}: ${providerId ?: "default provider"}/${model ?: "default model"} from ${WeightExecutors.SETTING}" }
         val ruleNote = rule?.let { "rule '${it.name}': $providerId/$model" }
         // CONTEXT-LIMIT-1: said on the start, so a limit the harness cannot apply is never silent.
-        val limitNote = started.contextLimit?.let { "context limit ${com.superiorsoftllc.agenthq.session.ContextLimits.label(it)}: ${started.contextLimitSupport}" +
-            (if (started.contextLimitSupport == com.superiorsoftllc.agenthq.harness.ContextLimitSupport.UNSUPPORTED.wire) " (recorded, not applied by ${started.provider})" else "") }
+        val limitNote = started.contextLimit?.let { "context limit ${com.superiorsoftllc.agenthq.daemon.api.board.ContextLimits.label(it)}: ${started.contextLimitSupport}" +
+            (if (started.contextLimitSupport == "unsupported") " (recorded, not applied by ${started.provider})" else "") }
         // EFFORT-1: the same for a reasoning effort the harness cannot apply.
         val effortNote = started.effort?.let { "effort $it: ${started.effortSupport}" +
-            (if (started.effortSupport == com.superiorsoftllc.agenthq.harness.EffortSupport.UNSUPPORTED.wire) " (recorded, not applied by ${started.provider})" else "") }
+            (if (started.effortSupport == "unsupported") " (recorded, not applied by ${started.provider})" else "") }
         val detail = listOfNotNull(cutNote, ruleNote, weightNote, limitNote, effortNote, launchWarning?.let { TicketStart.LAUNCH_WARNING + it }, pacingWarning).joinToString("; ").ifEmpty { null }
         return startAnswer(id, TicketStart(ok = true, reason = "started", detail = detail), outcome)
     }
@@ -1053,7 +1039,7 @@ class TicketBoard(
         projectId = row.projectId,
         role = role,
         agentId = agentId,
-        traits = instance?.toCore()?.traits.orEmpty(),
+        traits = instance?.toSnapshots().orEmpty(),
         skillIds = instance?.skillIds,
         includeSkillsOverride = row.includeSkillsContext,
         reportTo = reportTo,
@@ -1306,7 +1292,7 @@ class TicketBoard(
         val outputs = if (!sessionsOn) return null else host.sessions.workEvents(record.view.id)
         if (outputs >= min) return null
         return "the worker produced $outputs assistant output(s) or tool call(s), fewer than the $min that " +
-            "'${com.superiorsoftllc.agenthq.settings.LimitRegistry.AUTO_DONE_MIN_OUTPUTS.key}' requires"
+            "'limits.tickets.autoDoneMinOutputs' requires"
     }
 
     private fun publishRunUpdate(ticketId: String) {
@@ -1550,7 +1536,7 @@ class TicketBoard(
          * directory or the file a linked worktree has), or null when [dir] is not in a git checkout. Also what the
          * daemon's boot line reads (BUG-REGRESS-1), so the line names the checkout a start really cuts from.
          */
-        internal fun gitRootOf(dir: File): File? =
+        fun gitRootOf(dir: File): File? =
             generateSequence(dir.absoluteFile) { it.parentFile }.firstOrNull { File(it, ".git").exists() }
         private val ACTIVE_STATE_NAMES = BoardSessionStates.ACTIVE
 

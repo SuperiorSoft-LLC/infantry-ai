@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.daemon.plugins
+package com.superiorsoftllc.agenthq.persistence
 
 import com.superiorsoftllc.agenthq.daemon.api.board.StoredLink
 import com.superiorsoftllc.agenthq.daemon.api.board.StoredTicket
