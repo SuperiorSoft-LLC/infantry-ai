@@ -43,9 +43,9 @@ class WeightContext(private val byWeight: Map<Int, WeightContextEntry>) {
             mapOf(
                 1 to WeightContextEntry(100_000, "low"),
                 2 to WeightContextEntry(100_000, "low"),
-                3 to WeightContextEntry(150_000, "medium"),
-                4 to WeightContextEntry(200_000, "high"),
-                5 to WeightContextEntry(200_000, "high"),
+                3 to WeightContextEntry(150_000, null),
+                4 to WeightContextEntry(200_000, null),
+                5 to WeightContextEntry(200_000, null),
             ),
         )
 
