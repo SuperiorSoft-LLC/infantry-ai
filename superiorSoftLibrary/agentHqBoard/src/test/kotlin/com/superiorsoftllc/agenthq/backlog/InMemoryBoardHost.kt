@@ -2,6 +2,7 @@ package com.superiorsoftllc.agenthq.backlog
 
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardAgent
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardAgents
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardExecutor
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardHost
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardProviderInfo
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardSessions
@@ -104,7 +105,8 @@ class InMemoryBoardHost(private val clock: () -> Long = System::currentTimeMilli
             sessionViews[view.id] = view
             return SessionStartResult.Started(view)
         }
-        override fun checkSpawn(providerId: String?, model: String?): String? = null
+        override fun checkSpawn(providerId: String?, model: String?): String? =
+            if (providerId != null && providerId != "fake") "unknown provider '$providerId'" else null
         override fun get(sessionId: String) = sessionViews[sessionId]
         override fun list() = sessionViews.values.toList()
         override fun kill(sessionId: String, force: Boolean, by: String, reason: String?): Boolean {
@@ -133,6 +135,10 @@ class InMemoryBoardHost(private val clock: () -> Long = System::currentTimeMilli
         }
         override fun delete(id: String) { profiles.remove(id) }
         override fun roleKnown(role: String) = true
+        override fun validateExecutor(provider: String?, model: String?, effort: String?): BoardExecutor {
+            if (provider != null && provider != "fake") throw IllegalArgumentException("unknown provider '$provider'")
+            return BoardExecutor(provider, model, effort)
+        }
     }
 
     override val events: TicketEventAppender = appender
