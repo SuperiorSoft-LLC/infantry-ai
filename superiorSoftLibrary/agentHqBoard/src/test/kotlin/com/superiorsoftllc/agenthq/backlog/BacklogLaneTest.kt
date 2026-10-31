@@ -1,11 +1,6 @@
 package com.superiorsoftllc.agenthq.backlog
 
-import com.superiorsoftllc.agenthq.agents.AgentProfiles
-import com.superiorsoftllc.agenthq.mailbox.FakeAgentProvider
-import com.superiorsoftllc.agenthq.mailbox.ScriptedRunner
-import com.superiorsoftllc.agenthq.mailbox.tempSessionStore
-import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
-import com.superiorsoftllc.agenthq.protocol.AgentProfile
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardAgent
 import com.superiorsoftllc.agenthq.protocol.TicketLinkRequest
 import com.superiorsoftllc.agenthq.protocol.TicketMove
 import com.superiorsoftllc.agenthq.protocol.TicketSave
@@ -15,10 +10,6 @@ import com.superiorsoftllc.agenthq.protocol.TicketStatus.DONE
 import com.superiorsoftllc.agenthq.protocol.TicketStatus.IN_PROGRESS
 import com.superiorsoftllc.agenthq.protocol.TicketStatus.PENDING
 import com.superiorsoftllc.agenthq.protocol.TicketStatus.TODO
-import com.superiorsoftllc.agenthq.session.SessionManager
-import java.io.File
-import java.nio.file.Files
-import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -27,30 +18,19 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * BACKLOG (contract 1.131.0, ticket-39eab724): `backlog` is limbo before `todo` (the sprint). Over the real SQLite store
+ * BACKLOG (contract 1.131.0, ticket-39eab724): `backlog` is limbo before `todo` (the sprint). Over the board-side fake host (DP-5f-6)
  * and a board that CAN start tickets (a profile with a role and a session manager), so every "not started" below is
  * the lane's doing: the same ticket starts once it is promoted to todo.
  */
 class BacklogLaneTest {
 
-    private val dir: File = Files.createTempDirectory("agenthq-backlog-lane").toFile()
-    private val opened = mutableListOf<AutoCloseable>()
-
-    @AfterTest
-    fun cleanUp() {
-        opened.asReversed().forEach { runCatching { it.close() } }
-        dir.deleteRecursively()
-    }
-
     private class Rig(val board: TicketBoard, val workerId: String)
 
     private fun rig(): Rig {
-        val store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath).also { opened += it }
-        val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = false), tempSessionStore(), killGraceMs = 50, defaultWorkingDir = dir)
-        val profiles = AgentProfiles(store.agents, manager)
-        val worker = profiles.save(AgentProfile(name = "Backend", role = "backend"))
+        val host = InMemoryBoardHost()
+        val worker = host.agents.save(BoardAgent(name = "Backend", role = "backend"))
         val ids = ('a'..'z').map { it.toString() }.iterator()
-        val board = TicketBoard(store, idFactory = { ids.next() }, agents = profiles, sessions = manager).also { b -> opened += AutoCloseable { b.close() } }
+        val board = TicketBoard(host, idFactory = { ids.next() }, profilesAvailable = true)
         return Rig(board, worker.id!!)
     }
 

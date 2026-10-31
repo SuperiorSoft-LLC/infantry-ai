@@ -1,29 +1,17 @@
 package com.superiorsoftllc.agenthq.backlog
 
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardAgent
 import com.superiorsoftllc.agenthq.settings.RoutingRules
 import com.superiorsoftllc.agenthq.settings.WeightExecutors
-import com.superiorsoftllc.agenthq.agents.AgentProfiles
 import com.superiorsoftllc.agenthq.context.ComposedContext
 import com.superiorsoftllc.agenthq.context.ContextInput
 import com.superiorsoftllc.agenthq.context.TicketContext
-import com.superiorsoftllc.agenthq.mailbox.FakeAgentProvider
-import com.superiorsoftllc.agenthq.mailbox.ScriptedRunner
-import com.superiorsoftllc.agenthq.mailbox.tempSessionStore
-import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
-import com.superiorsoftllc.agenthq.protocol.AgentProfile
 import com.superiorsoftllc.agenthq.protocol.EffectiveContext
 import com.superiorsoftllc.agenthq.protocol.RoutingRule
 import com.superiorsoftllc.agenthq.protocol.TicketMove
 import com.superiorsoftllc.agenthq.protocol.TicketSave
 import com.superiorsoftllc.agenthq.protocol.TicketStatus.IN_PROGRESS
 import com.superiorsoftllc.agenthq.protocol.TicketStatus.TODO
-import com.superiorsoftllc.agenthq.provider.AgentProvider
-import com.superiorsoftllc.agenthq.provider.RunRequest
-import com.superiorsoftllc.agenthq.runner.ProcessSpec
-import com.superiorsoftllc.agenthq.session.SessionManager
-import java.io.File
-import java.nio.file.Files
-import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -110,51 +98,37 @@ class RoutingRulesTest {
         }
     }
 
-    // --- precedence at start, and the park --------------------------------------------------------------
+    // --- precedence at start, and the park (DP-5f-6: over the board-side fake host) ---------------------
 
-    private val dir: File = Files.createTempDirectory("agenthq-routing").toFile()
-    private val opened = mutableListOf<SqlAgentHqStore>()
-    private val seen = mutableListOf<RunRequest>()
     private val reported = mutableListOf<String>()
-    private val recording = object : AgentProvider {
-        override val id = "fake"
-        override fun spec(request: RunRequest): ProcessSpec = FakeAgentProvider().spec(request).also { seen += request }
-    }
+    private lateinit var host: InMemoryBoardHost
 
-    @AfterTest
-    fun cleanUp() {
-        opened.forEach { runCatching { it.close() } }
-        dir.deleteRecursively()
-    }
-
-    private fun board(projectRules: List<RoutingRule>, profile: AgentProfile = AgentProfile(name = "Backend", role = "backend")): Pair<TicketBoard, String?> {
-        val store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath).also { opened += it }
-        val manager = SessionManager(recording, ScriptedRunner(autoExit = false), tempSessionStore(), killGraceMs = 50, defaultWorkingDir = dir)
-        val profiles = AgentProfiles(store.agents, manager)
-        val worker = profiles.save(profile)
+    private fun board(projectRules: List<RoutingRule>, profile: BoardAgent = BoardAgent(name = "Backend", role = "backend")): Pair<TicketBoard, String?> {
+        host = InMemoryBoardHost()
+        val worker = host.agents.save(profile)
         val prompting = object : TicketContext {
             override fun compose(input: ContextInput) = ComposedContext("Ship ${input.title}.", emptyList())
             override fun effective(override: Boolean?, skillsOverride: Boolean?): EffectiveContext? = null
         }
         val ids = ('a'..'z').map { it.toString() }.iterator()
         return TicketBoard(
-            store, idFactory = { ids.next() }, context = prompting, agents = profiles, sessions = manager,
+            host, idFactory = { ids.next() }, context = prompting, profilesAvailable = true,
             routingRules = { projectRules }, routingRefused = { id, _, detail -> reported += "$id|$detail" },
         ) to worker.id
     }
 
     @Test
     fun aRuleBeatsTheRoleBinding_andTheTicketSaysWhichRule() {
-        val (b, worker) = board(rules, AgentProfile(name = "Pinned", role = "backend", provider = "fake", model = "profile-model"))
+        val (b, worker) = board(rules, BoardAgent(name = "Pinned", role = "backend", provider = "fake", model = "profile-model"))
         val t = b.save(TicketSave(title = "Big", weight = 5, agentId = worker)).ticket
         val view = b.get(t.id).effectiveExecutor!!
         assertEquals("heavy", view.rule)
         assertEquals("rule", view.model!!.source)
         val answer = b.move(TicketMove(t.id, IN_PROGRESS)).ticket
         assertEquals("started", answer.start?.reason, answer.start?.detail)
-        assertEquals("heavy-model", seen.single().model)
+        assertEquals("heavy-model", host.starts.single().model)
         assertTrue(answer.start!!.detail.orEmpty().contains("rule 'heavy'"), answer.start?.detail)
-        b.close()
+
     }
 
     @Test
@@ -165,8 +139,8 @@ class RoutingRulesTest {
         assertNull(view.rule)
         assertEquals("ticket", view.model!!.source)
         b.move(TicketMove(t.id, IN_PROGRESS))
-        assertEquals("pinned-model", seen.single().model)
-        b.close()
+        assertEquals("pinned-model", host.starts.single().model)
+
     }
 
     @Test
@@ -178,20 +152,20 @@ class RoutingRulesTest {
         assertEquals("start_refused", answer.start?.reason)
         assertTrue(answer.start!!.detail.orEmpty().contains("rule 'heavy'"), answer.start?.detail)
         assertEquals(TODO, b.get(t.id).status, "the ticket is parked in todo")
-        assertTrue(seen.isEmpty(), "nothing ran: not on the default row, not on another harness")
+        assertTrue(host.starts.isEmpty(), "nothing ran: not on the default row, not on another harness")
         assertEquals(1, reported.size, "the refusal was reported")
         b.move(TicketMove(t.id, IN_PROGRESS))
         assertEquals(1, reported.size, "the same refusal is not reported twice")
-        b.close()
+
     }
 
     @Test
     fun aProjectWithNoRulesKeepsTodaysBehaviour() {
-        val (b, worker) = board(emptyList(), AgentProfile(name = "Pinned", role = "backend", provider = "fake", model = "profile-model"))
+        val (b, worker) = board(emptyList(), BoardAgent(name = "Pinned", role = "backend", provider = "fake", model = "profile-model"))
         val t = b.save(TicketSave(title = "Plain", weight = 5, agentId = worker)).ticket
         assertNull(b.get(t.id).effectiveExecutor!!.rule)
         b.move(TicketMove(t.id, IN_PROGRESS))
-        assertEquals("profile-model", seen.single().model)
-        b.close()
+        assertEquals("profile-model", host.starts.single().model)
+
     }
 }
