@@ -1,54 +1,35 @@
 package com.superiorsoftllc.agenthq.backlog
 
-import com.superiorsoftllc.agenthq.agents.AgentProfiles
 import com.superiorsoftllc.agenthq.context.ComposedContext
 import com.superiorsoftllc.agenthq.context.ContextInput
 import com.superiorsoftllc.agenthq.context.TicketContext
-import com.superiorsoftllc.agenthq.mailbox.FakeAgentProvider
-import com.superiorsoftllc.agenthq.mailbox.ScriptedRunner
-import com.superiorsoftllc.agenthq.mailbox.tempSessionStore
-import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
-import com.superiorsoftllc.agenthq.protocol.AgentProfile
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardAgent
 import com.superiorsoftllc.agenthq.protocol.EffectiveContext
 import com.superiorsoftllc.agenthq.protocol.TicketMove
 import com.superiorsoftllc.agenthq.protocol.TicketSave
 import com.superiorsoftllc.agenthq.protocol.TicketStatus.IN_PROGRESS
-import com.superiorsoftllc.agenthq.session.SessionManager
 import com.superiorsoftllc.agenthq.usage.PacingVerdict
-import java.io.File
-import java.nio.file.Files
-import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
-/** USAGE-PACE (contract 1.121.0): a start past the plan allowance is refused for the daemon / an agent, warned for the owner. */
+/** USAGE-PACE (contract 1.121.0): a start past the plan allowance is refused for the daemon / an agent, warned for the owner. (DP-5f-6: over the board-side fake host.) */
 class TicketPacingGateTest {
-    private val dir: File = Files.createTempDirectory("agenthq-pacing").toFile()
-    private val store = SqlAgentHqStore.open(File(dir, "agenthq.db").absolutePath)
+    private val host = InMemoryBoardHost()
     private val asked = mutableListOf<String?>()
     private var verdict: PacingVerdict = PacingVerdict.Allow()
     private lateinit var board: TicketBoard
 
-    @AfterTest
-    fun cleanUp() {
-        runCatching { board.close() }
-        runCatching { store.close() }
-        dir.deleteRecursively()
-    }
-
     private fun ticket(): String {
-        val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = false), tempSessionStore(), killGraceMs = 50, defaultWorkingDir = dir)
-        val profiles = AgentProfiles(store.agents, manager)
-        val worker = profiles.save(AgentProfile(name = "Backend", role = "backend"))
+        val worker = host.agents.save(BoardAgent(name = "Backend", role = "backend"))
         val prompting = object : TicketContext {
             override fun compose(input: ContextInput) = ComposedContext("Ship ${input.title}.", emptyList())
             override fun effective(override: Boolean?, skillsOverride: Boolean?): EffectiveContext? = null
         }
         val ids = ('a'..'z').map { it.toString() }.iterator()
         board = TicketBoard(
-            store, idFactory = { ids.next() }, context = prompting, agents = profiles, sessions = manager,
+            host, idFactory = { ids.next() }, context = prompting, profilesAvailable = true,
             pacing = { provider, _ -> asked += provider; verdict },
         )
         return board.save(TicketSave(title = "Work", agentId = worker.id)).ticket.id
