@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.backlog
 
+import com.superiorsoftllc.agenthq.ticketfiles.RelatedDescription
+import com.superiorsoftllc.agenthq.ticketfiles.RelatedDraft
 import com.superiorsoftllc.agenthq.settings.RoutingRules
 import com.superiorsoftllc.agenthq.settings.WeightExecutor
 import com.superiorsoftllc.agenthq.settings.WeightExecutors
@@ -574,7 +576,7 @@ class TicketBoard(
     private fun describeRelated(id: String?, title: String, description: String, projectId: String?, extraLink: TicketLinkRow?): String? {
         if (relatedDescription === RelatedDescription.NONE) return null
         val (rows, links) = store.transaction { store.tickets.all() to store.tickets.links() }
-        return runCatching { relatedDescription.describe(RelatedDraft(id, title, description, projectId, rows, links + listOfNotNull(extraLink))) }
+        return runCatching { relatedDescription.describe(RelatedDraft(id, title, description, projectId, rows.map { it.toInfo() }, (links + listOfNotNull(extraLink)).map { it.toInfo() })) }
             .getOrNull()?.takeIf { it.length <= MAX_DESCRIPTION_LENGTH }
     }
 

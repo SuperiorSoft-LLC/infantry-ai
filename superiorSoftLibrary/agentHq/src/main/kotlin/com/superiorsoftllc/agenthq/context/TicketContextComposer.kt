@@ -8,6 +8,7 @@ import com.superiorsoftllc.agenthq.agents.renderTraits
 import com.superiorsoftllc.agenthq.protocol.ContextSwitch
 import com.superiorsoftllc.agenthq.protocol.EffectiveContext
 import com.superiorsoftllc.agenthq.session.ContextSource
+import com.superiorsoftllc.agenthq.ticketfiles.RelatedWorkSource
 import com.superiorsoftllc.agenthq.settings.ProjectSettings
 
 /** Composes the bounded profile, ticket and linked-ticket context for a ticket start. */

@@ -1,7 +1,6 @@
 package com.superiorsoftllc.agenthq.ticketfiles
 
 import com.superiorsoftllc.agenthq.db.AgentHQDatabase
-import com.superiorsoftllc.agenthq.persistence.TicketRow
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
 import com.superiorsoftllc.agenthq.worktree.GitCli
 import com.superiorsoftllc.agenthq.worktree.SystemGitCli
@@ -61,7 +60,7 @@ data class BackfillReport(
  */
 class TicketFiles(
     private val db: AgentHQDatabase,
-    private val tickets: () -> List<TicketRow>,
+    private val tickets: () -> List<TicketInfo>,
     /** The git checkout a ticket of a project lives in (the board's cutRepo), null = none. */
     private val repoFor: (projectId: String?) -> File?,
     private val git: GitCli = SystemGitCli(timeoutMs = 120_000),
@@ -109,7 +108,7 @@ class TicketFiles(
      * DAEMON-CONTEXT-1: the files of a ticket that may still be running: its recorded rows, else (no recording before
      * done) the diff of its branch against its base, live from git. Empty when it has neither.
      */
-    fun liveFiles(ticket: TicketRow): List<TicketFile> {
+    fun liveFiles(ticket: TicketInfo): List<TicketFile> {
         forTicket(ticket.id).takeIf { it.isNotEmpty() }?.let { return it }
         val repo = repoFor(ticket.projectId)?.takeIf { it.isDirectory } ?: return emptyList()
         val tip = ticket.branch?.let { revParse(repo, it) } ?: return emptyList()
@@ -125,7 +124,7 @@ class TicketFiles(
     // ---- write side ------------------------------------------------------------------------------------------------
 
     /** Records [ticket]'s files from git (see the class note), replacing its rows. Never throws on a git failure. */
-    fun record(ticket: TicketRow, history: History? = null): Recorded {
+    fun record(ticket: TicketInfo, history: History? = null): Recorded {
         val repo = repoFor(ticket.projectId)?.takeIf { it.isDirectory } ?: return Recorded(ticket.id, null, 0)
         val log = history ?: History.read(git, repo)
         val short = shortId(ticket.id)

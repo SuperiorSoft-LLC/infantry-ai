@@ -1,7 +1,5 @@
 package com.superiorsoftllc.agenthq.ticketfiles
 
-import com.superiorsoftllc.agenthq.backlog.RelatedDescription
-import com.superiorsoftllc.agenthq.backlog.RelatedDraft
 
 /**
  * KNOWLEDGE-PTR-1 (C): the stored RELATED (auto) block, over the file index only (no git, so a save never waits on it).

@@ -1,9 +1,7 @@
 package com.superiorsoftllc.agenthq.ticketfiles
 
-import com.superiorsoftllc.agenthq.context.RelatedBlock
-import com.superiorsoftllc.agenthq.context.RelatedFile
-import com.superiorsoftllc.agenthq.context.RelatedTicketView
 import com.superiorsoftllc.agenthq.db.AgentHQDatabaseFactory
+import com.superiorsoftllc.agenthq.backlog.toInfo
 import com.superiorsoftllc.agenthq.persistence.TicketRow
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
 import java.io.File
@@ -66,7 +64,7 @@ class RelatedWorkTest {
         AgentHQDatabaseFactory.open(File(Files.createTempDirectory("related-work").toFile(), "t.db").absolutePath).database
 
     private fun row(id: String, desc: String = "", status: String = TicketStatus.DONE) =
-        TicketRow(id = id, title = "T $id", description = desc, status = status, position = 0, createdAt = 0, updatedAt = 0)
+        TicketRow(id = id, title = "T $id", description = desc, status = status, position = 0, createdAt = 0, updatedAt = 0).toInfo()
 
     private fun put(db: com.superiorsoftllc.agenthq.db.AgentHQDatabase, ticket: String, vararg paths: String) =
         paths.forEach { db.ticket_filesQueries.insertFile(ticket, it, "M", null, null, null, null, null, 1) }
@@ -74,7 +72,7 @@ class RelatedWorkTest {
     @Test
     fun liveSourceSeedsFromTextRanksByOverlapAndCutsHubs() {
         val db = db()
-        val rows = mutableMapOf<String, TicketRow>()
+        val rows = mutableMapOf<String, TicketInfo>()
         val tf = TicketFiles(db, { rows.values.toList() }, { null })
         // 10 done tickets all touch CONTRACT.md (a hub); two also touch Board.kt, one touches Other.kt.
         for (i in 1..10) rows["ticket-aaaaaaa$i"] = row("ticket-aaaaaaa$i")

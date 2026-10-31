@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.context
+package com.superiorsoftllc.agenthq.ticketfiles
 
 /** One file of a related ticket: git's letter, the repo path and its +/- line count (0 = unknown or binary). */
 data class RelatedFile(val path: String, val status: String, val churn: Long = 0)

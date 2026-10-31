@@ -1,7 +1,5 @@
-package com.superiorsoftllc.agenthq.backlog
+package com.superiorsoftllc.agenthq.ticketfiles
 
-import com.superiorsoftllc.agenthq.persistence.TicketLinkRow
-import com.superiorsoftllc.agenthq.persistence.TicketRow
 
 /** KNOWLEDGE-PTR-1 (C): a ticket as a save or a link is about to store it, with the board it is stored into. */
 data class RelatedDraft(
@@ -11,9 +9,9 @@ data class RelatedDraft(
     /** The description about to be stored, its old RELATED (auto) block included. */
     val description: String,
     val projectId: String?,
-    val rows: List<TicketRow>,
+    val rows: List<TicketInfo>,
     /** The board's links, the one this operation adds included. */
-    val links: List<TicketLinkRow>,
+    val links: List<TicketLinkInfo>,
 )
 
 /**

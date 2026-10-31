@@ -2,9 +2,9 @@ package com.superiorsoftllc.agenthq.ticketfiles
 
 import com.superiorsoftllc.agenthq.backlog.TicketBoard
 import com.superiorsoftllc.agenthq.context.ContextInput
-import com.superiorsoftllc.agenthq.context.RelatedBlock
 import com.superiorsoftllc.agenthq.context.TicketContextComposer
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
+import com.superiorsoftllc.agenthq.backlog.toInfo
 import com.superiorsoftllc.agenthq.persistence.TicketRow
 import com.superiorsoftllc.agenthq.protocol.TicketLinkRequest
 import com.superiorsoftllc.agenthq.protocol.TicketLinkType
@@ -33,7 +33,7 @@ class KnowledgePtrTest {
     fun close() = opened.forEach { runCatching { it.close() } }
 
     private fun row(id: String, title: String, status: String = TicketStatus.DONE, desc: String = "") =
-        TicketRow(id = id, title = title, description = desc, status = status, position = 0, createdAt = 0, updatedAt = 0)
+        TicketRow(id = id, title = title, description = desc, status = status, position = 0, createdAt = 0, updatedAt = 0).toInfo()
 
     private fun store(): SqlAgentHqStore =
         SqlAgentHqStore.open(File(Files.createTempDirectory("kptr").toFile(), "t.db").absolutePath).also { opened += it }
@@ -94,7 +94,7 @@ class KnowledgePtrTest {
 
     private fun boardWithFiles(cfg: () -> RelatedConfig = { RelatedConfig.DEFAULT }): Triple<TicketBoard, SqlAgentHqStore, TicketFiles> {
         val s = store()
-        val files = TicketFiles(s.database, { s.tickets.all() }, { null })
+        val files = TicketFiles(s.database, { s.tickets.all().map { it.toInfo() } }, { null })
         var n = 0
         val board = TicketBoard(s, idFactory = { "ticket-%08x".format(++n) }, relatedDescription = RelatedDescriptionWriter(files, cfg))
         return Triple(board, s, files)
@@ -182,8 +182,8 @@ class KnowledgePtrTest {
     @Test
     fun theStartMessageCarriesTheBlockAndInstructionByDefaultAndNotWhenOff() {
         val s = store()
-        val files = TicketFiles(s.database, { s.tickets.all() }, { null })
-        val rows = mutableMapOf<String, TicketRow>()
+        val files = TicketFiles(s.database, { s.tickets.all().map { it.toInfo() } }, { null })
+        val rows = mutableMapOf<String, TicketInfo>()
         rows["ticket-00000001"] = row("ticket-00000001", "USAGE-1 meters")
         rows["ticket-00000002"] = row("ticket-00000002", "USAGE-2 pacing")
         rows["ticket-00000009"] = row("ticket-00000009", "USAGE-3 next", TicketStatus.IN_PROGRESS,
