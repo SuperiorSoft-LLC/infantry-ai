@@ -28,6 +28,12 @@ object BoardFrames {
         Envelope.EPIC_SAVE, Envelope.EPIC_LIST, Envelope.EPIC_BASE,
     )
 
+    /** DP-6: the pipeline frames, owned by the board plugin (module.json `daemon.frames`). */
+    val PIPELINE_TYPES: Set<String> = setOf(Envelope.PIPELINE_CONFIG, Envelope.PIPELINE_SHOW, Envelope.PIPELINE_RECORD, Envelope.PIPELINE_CHECK)
+
+    /** DP-6: a pipeline frame with no plugin answering: a refusal, never a hang. */
+    fun noPipeline(type: String): Envelope = Envelope(Envelope.ERROR, "$type refused: this daemon has no pipeline")
+
     /** DP-5h-2: project and workspace frames are core's, registered by core (see `registerCoreProjectFrames`), never board-owned. */
     val CORE_PROJECT_TYPES: Set<String> = setOf(
         Envelope.PROJECT_SAVE, Envelope.PROJECT_GET, Envelope.PROJECT_LIST, Envelope.PROJECT_BASE, Envelope.PROJECT_CONFIG,

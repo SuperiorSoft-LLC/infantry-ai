@@ -29,6 +29,9 @@ class BoardDaemonPlugin : DaemonPlugin {
             runtime.attachCore(PluginCoreAccess(board, h.epicStore, h.epicInputs))
             attached = runtime
         }
+        registerPipeline(api)
+        api.tools.register(PipelineTools.ShowTool)
+        api.tools.register(PipelineTools.RecordTool)
         api.tools.register(TicketGetTool(api))
         api.tools.register(TicketFilesTools.Files)
         api.tools.register(TicketFilesTools.Related)
@@ -42,5 +45,27 @@ class BoardDaemonPlugin : DaemonPlugin {
         api.tools.register(BoardTool(api))
         // RUNTIME-LOAD-7 (F5 last): the ticket start, over the host spawn service.
         api.tools.register(TicketStartTool(api))
+    }
+
+    /**
+     * DP-6: the project pipeline (PIPE-1) frames over the adopted pipeline tables. The author of a move is the declared session's
+     * "role (agent)" label; every change is pushed as `pipeline_state` to every client through the board runtime.
+     */
+    private fun registerPipeline(api: DaemonApi) {
+        val runtime = api.boardRuntime
+        val store = PipelineStore(api.storage)
+        val handler = { caller: com.superiorsoftllc.agenthq.daemon.api.Caller ->
+            PipelineHandler(
+                store = store,
+                author = { id ->
+                    (api.sessionReads.find(id, caller) as? com.superiorsoftllc.agenthq.daemon.api.sessions.SessionsResult.Ok)
+                        ?.value?.takeIf { it.id == id }?.let { "${it.role ?: "agent"} (${it.agentId})" }
+                },
+                push = { runtime.push(listOf(it)) },
+            )
+        }
+        for (type in listOf("pipeline_config", "pipeline_show", "pipeline_record", "pipeline_check")) {
+            api.frames.handle(type) { frame, caller -> handler(caller).answer(frame) }
+        }
     }
 }

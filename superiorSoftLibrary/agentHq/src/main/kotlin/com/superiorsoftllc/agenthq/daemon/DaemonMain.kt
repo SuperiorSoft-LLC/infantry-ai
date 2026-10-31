@@ -62,8 +62,6 @@ import com.superiorsoftllc.agenthq.mvp.ProjectHandler
 import com.superiorsoftllc.agenthq.decisions.DecisionAuthor
 import com.superiorsoftllc.agenthq.decisions.DecisionHandler
 import com.superiorsoftllc.agenthq.decisions.DecisionStore
-import com.superiorsoftllc.agenthq.pipeline.PipelineHandler
-import com.superiorsoftllc.agenthq.pipeline.PipelineStore
 import com.superiorsoftllc.agenthq.issues.IssueActor
 import com.superiorsoftllc.agenthq.issues.IssueHandler
 import com.superiorsoftllc.agenthq.issues.IssueStore
@@ -1119,8 +1117,6 @@ class AgentHqDaemon(
             val decisionsWired = com.superiorsoftllc.agenthq.daemon.wiring.KnowledgeWiring.buildDecisions(store, manager, clients)
             val decisions = decisionsWired.decisions
             val decisionFrames = decisionsWired.frames
-            // PIPE-1: the optional project pipeline, over the same file.
-            val pipelineFrames = com.superiorsoftllc.agenthq.daemon.wiring.PipelineWiring.buildFrames(store, manager, clients)
             // VOICE-1: spoken attention alerts, pushed to every client; nothing is stored.
             val notifyFrames = com.superiorsoftllc.agenthq.notify.NotifyHandler(
                 projectName = { id -> projectStore.get(id).name },
@@ -1835,7 +1831,6 @@ class AgentHqDaemon(
                                 },
                             ),
                             decisionFrames,
-                            pipelineFrames,
                             notifyFrames,
                             keystoreFrames,
                             issueFrames,
@@ -2398,7 +2393,6 @@ private suspend fun handleConnection(
     workspaceFrames: WorkspaceHandler,
     memoryFrames: MemoryHandler,
     decisionFrames: DecisionHandler,
-    pipelineFrames: PipelineHandler,
     notifyFrames: com.superiorsoftllc.agenthq.notify.NotifyHandler,
     keystoreFrames: KeystoreHandler,
     issueFrames: IssueHandler,
@@ -3888,9 +3882,6 @@ private suspend fun handleConnection(
                 // P10-K4 (contract 1.53.0): the decisions log. An add is pushed to every client (no direct reply).
                 Envelope.DECISION_ADD, Envelope.DECISION_LIST, Envelope.DECISION_GET -> decisionFrames.answer(envelope)
 
-                // PIPE-1 (additive; contract version not bumped): the optional project pipeline.
-                Envelope.PIPELINE_CONFIG, Envelope.PIPELINE_SHOW, Envelope.PIPELINE_RECORD,
-                Envelope.PIPELINE_CHECK -> pipelineFrames.answer(envelope)
                 Envelope.NOTIFY -> notifyFrames.answer(envelope)
 
                 // SECRETS-1 (contract 1.100.0): the keystore. Answered by `secret_state`; a value never travels back.
@@ -3949,6 +3940,8 @@ private suspend fun handleConnection(
                 else -> if (frames.handles(envelope.type)) frames.answer(envelope, direct)
                 else if (plugins.handlesFrame(envelope.type)) plugins.answerFrame(envelope, caller)
                 else if (envelope.type in BoardFrames.TYPES) BoardFrames.noBoard(envelope.type)
+                // DP-6: the pipeline frames belong to the Infantry_Board plugin; without it the daemon says so.
+                else if (envelope.type in BoardFrames.PIPELINE_TYPES) BoardFrames.noPipeline(envelope.type)
                 else Envelope(Envelope.ERROR, "unknown frame type '${envelope.type}'")
             }
             // BUG-MCP-RACE-1: the direct answer echoes the request's id; a push (sent elsewhere) never carries one.

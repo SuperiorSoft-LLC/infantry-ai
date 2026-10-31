@@ -21,6 +21,9 @@ dependencies {
     testImplementation(project(":superiorSoftLibrary:agentHqDaemonApi"))
     testImplementation(project(":superiorSoftLibrary:agentHqBoard"))
     testImplementation(kotlin("test"))
+    // DP-6: PipelineStoreTest runs the adopted pipeline tables on a real SQLite file.
+    testImplementation(libs.sqlite.jdbc)
+    testImplementation(libs.kotlinx.serialization.json)
 }
 
 tasks.jar {

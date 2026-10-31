@@ -98,7 +98,7 @@ class DaemonCoreGuardTest {
     companion object {
         /** CORE-SPLIT-1/2: leaf Gradle modules and the top-level packages each owns (package names unchanged). */
         val LEAF_MODULES = mapOf(
-            "agentHqProtocol" to setOf("protocol", "session", "harness"),
+            "agentHqProtocol" to setOf("protocol", "session", "harness", "pipeline"),
             "agentHqRunner" to setOf("runner"),
             // HARNESS-PLUGIN-3 H3: the harness plugin API (package harness.api); HarnessApiImportGuardTest is stricter still.
             "agentHqHarnessApi" to setOf("harness"),
@@ -110,6 +110,7 @@ class DaemonCoreGuardTest {
         /** CORE: the abstraction layer. Stays by definition (docs/DAEMON-CORE.md section 2). */
         val CORE = mapOf(
             "protocol" to "the wire contract and frames: the abstract data contract between UI and daemon",
+            "pipeline" to "DP-6: the pipeline wire DTOs only (the CLI speaks them); the store, handler and tools are in Infantry_Board",
             "daemon" to "bootstrap, FrameGate, AccessPolicy and the plugin host (daemon/plugins); concrete handlers inside it are listed in the doc",
             "policy" to "ActionCatalog, PolicyProvider, PolicyRuntime: the policy layer mechanism",
             "settings" to "SettingsService and LimitRegistry: configuration and the tools to modify it",
@@ -139,7 +140,6 @@ class DaemonCoreGuardTest {
 
         /** PLUGIN NOW: a mechanism and an official plugin exist (or can be written today); only the move is left. */
         val PLUGIN_NOW = mapOf(
-            "pipeline" to "Pipeline official plugin (agenthq_pipeline tools)",
             "issues" to "project knowledge: issues, a Knowledge plugin",
             "decisions" to "project knowledge: decisions, a Knowledge plugin",
             "memory" to "project knowledge: notes, a Knowledge plugin",

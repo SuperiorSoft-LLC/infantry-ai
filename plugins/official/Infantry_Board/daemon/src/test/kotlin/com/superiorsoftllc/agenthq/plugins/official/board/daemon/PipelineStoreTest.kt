@@ -1,8 +1,12 @@
-package com.superiorsoftllc.agenthq.pipeline
+package com.superiorsoftllc.agenthq.plugins.official.board.daemon
 
-import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
+import com.superiorsoftllc.agenthq.daemon.api.Frame
+import com.superiorsoftllc.agenthq.daemon.api.storage.PluginStorage
+import com.superiorsoftllc.agenthq.pipeline.PipelineRefusal
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import java.nio.file.Files
+import java.sql.Connection
+import java.sql.DriverManager
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -12,16 +16,42 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * PIPE-1: the optional project pipeline over a REAL SQLite file. No pipeline is the default, stage names are data,
- * a commit's current stage is its newest entry, an exclusive project refuses a second check in one scope, and the
- * rows survive the store being closed and reopened (a daemon restart).
+ * PIPE-1 / DP-6: the optional project pipeline over a REAL SQLite file (the three core tables, as the daemon creates them).
+ * No pipeline is the default, stage names are data, a commit's current stage is its newest entry, an exclusive project refuses
+ * a second check in one scope, and the rows survive the store being closed and reopened (a daemon restart).
  */
 class PipelineStoreTest {
+    /** A [PluginStorage] over a plain JDBC connection; the real one (LocalPluginStorage) is covered by PluginStorageTest. */
+    private class JdbcStorage(private val c: Connection) : PluginStorage {
+        override fun migrate(version: Int, sql: List<String>) = sql.forEach { c.createStatement().use { s -> s.execute(it) } }
+        override fun query(sql: String, args: List<Any?>): List<Map<String, Any?>> = c.prepareStatement(sql).use { ps ->
+            args.forEachIndexed { i, a -> ps.setObject(i + 1, a) }
+            ps.executeQuery().use { rs ->
+                val cols = (1..rs.metaData.columnCount).map { rs.metaData.getColumnLabel(it) }
+                generateSequence { if (rs.next()) cols.associateWith { c -> rs.getObject(c) } else null }.toList()
+            }
+        }
+        override fun execute(sql: String, args: List<Any?>): Int = c.prepareStatement(sql).use { ps ->
+            args.forEachIndexed { i, a -> ps.setObject(i + 1, a) }
+            ps.executeUpdate()
+        }
+        override fun <T> transaction(block: () -> T): T = block()
+    }
+
     private val path = Files.createTempFile("agenthq-pipeline-", ".db").also { it.toFile().delete() }.toAbsolutePath().toString()
-    private val opened = mutableListOf<SqlAgentHqStore>()
+    private val opened = mutableListOf<Connection>()
     private var now = 1_000L
 
-    private fun open(): PipelineStore = PipelineStore(SqlAgentHqStore.open(path).also { opened += it }, clock = { now })
+    private fun open(): PipelineStore {
+        val c = DriverManager.getConnection("jdbc:sqlite:$path").also { opened += it }
+        val db = JdbcStorage(c)
+        db.migrate(1, listOf(
+            "CREATE TABLE IF NOT EXISTS pipeline_config (project_id TEXT NOT NULL PRIMARY KEY, stages TEXT NOT NULL, exclusive_check INTEGER NOT NULL DEFAULT 0)",
+            "CREATE TABLE IF NOT EXISTS pipeline_entries (id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL, commit_sha TEXT NOT NULL, stage TEXT NOT NULL, moved_by TEXT, evidence TEXT, moved_at INTEGER NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS pipeline_checks (project_id TEXT NOT NULL, scope TEXT NOT NULL, commit_sha TEXT NOT NULL, what TEXT NOT NULL, started_by TEXT, started_at INTEGER NOT NULL, last_output_at INTEGER NOT NULL, PRIMARY KEY (project_id, scope))",
+        ))
+        return PipelineStore(db, clock = { now })
+    }
 
     @AfterTest
     fun cleanup() {
@@ -144,7 +174,7 @@ class PipelineStoreTest {
     @Test
     fun `the handler answers pipeline_state and a refusal with its code first`() {
         val handler = PipelineHandler(open(), author = { id -> if (id == "s1") "qa (agent-1)" else null })
-        fun send(type: String, data: String) = handler.answer(Envelope(type, data))!!
+        fun send(type: String, data: String) = handler.answer(Frame(type, data))!!
         assertEquals(Envelope.PIPELINE_STATE, send(Envelope.PIPELINE_SHOW, """{"projectId":"P"}""").type)
         val refused = send(Envelope.PIPELINE_RECORD, """{"projectId":"P","commit":"a","stage":"x"}""")
         assertEquals(Envelope.ERROR, refused.type)
@@ -157,13 +187,13 @@ class PipelineStoreTest {
 
     @Test
     fun `a change is pushed to every client and a show or a refusal is not`() {
-        val pushed = mutableListOf<Envelope>()
+        val pushed = mutableListOf<Frame>()
         val handler = PipelineHandler(open(), author = { null }, push = { pushed += it })
-        handler.answer(Envelope(Envelope.PIPELINE_SHOW, """{"projectId":"P"}"""))
-        handler.answer(Envelope(Envelope.PIPELINE_RECORD, """{"projectId":"P","commit":"a","stage":"x"}"""))
+        handler.answer(Frame(Envelope.PIPELINE_SHOW, """{"projectId":"P"}"""))
+        handler.answer(Frame(Envelope.PIPELINE_RECORD, """{"projectId":"P","commit":"a","stage":"x"}"""))
         assertTrue(pushed.isEmpty(), "a show and a refusal push nothing")
-        handler.answer(Envelope(Envelope.PIPELINE_CONFIG, """{"projectId":"P","stages":["merged"]}"""))
-        handler.answer(Envelope(Envelope.PIPELINE_RECORD, """{"projectId":"P","commit":"a","stage":"merged"}"""))
+        handler.answer(Frame(Envelope.PIPELINE_CONFIG, """{"projectId":"P","stages":["merged"]}"""))
+        handler.answer(Frame(Envelope.PIPELINE_RECORD, """{"projectId":"P","commit":"a","stage":"merged"}"""))
         assertEquals(listOf(Envelope.PIPELINE_STATE, Envelope.PIPELINE_STATE), pushed.map { it.type })
         assertTrue("\"commit\":\"a\"" in pushed.last().data, pushed.last().data)
     }

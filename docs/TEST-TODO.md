@@ -63,3 +63,6 @@ TEST-TODO: STACK-NEUTRAL-5 (ticket-18370e32)
 
 ## AR-5 (ticket-d742b63c)
 TEST-TODO: typed service registry. Class ServiceRegistryTest (done, unit): provide/find, missing = null, duplicate provider refused, community without `services.provide` refused, unload closes handles, stale handle safe. Not tested: a real plugin jar calling api.services through DaemonPluginHost (QA: a plugin publishes an interface, a second plugin finds it, disable the first, find returns null); community grant path through module settings.
+
+## DP-6 (ticket-9d0a581b)
+TEST-TODO: pipeline in Infantry_Board. Done (PipelineStoreTest, real SQLite, 11 tests): store rules, handler answers/refusals/push. Not tested (QA): (1) a real daemon with Infantry_Board loaded answering `pipeline_show`/`pipeline_record` through DaemonPluginHost, author label "role (agent)" from `sessionReads.find`, `pipeline_state` push reaching a second WebSocket client via `boardRuntime.push`; (2) with Infantry_Board absent, `pipeline_show` answers `pipeline_show refused: this daemon has no pipeline`; (3) `agenthq pipeline record` + MCP `agenthq_pipeline_record` end to end; (4) existing McpServeTest has 15 golden-drift failures and BuiltinToolsListGuardTest 2 (`agenthq_read` in McpPluginTools) that predate DP-6.
