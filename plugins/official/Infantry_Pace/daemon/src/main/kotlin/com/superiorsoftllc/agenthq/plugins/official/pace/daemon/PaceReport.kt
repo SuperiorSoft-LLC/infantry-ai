@@ -16,7 +16,11 @@ data class PaceQuery(
     val sinceMs: Long = 0,
     /** Most points per series in the answer (the newest kept, evenly thinned). */
     val maxPoints: Int = 400,
+    /** TOKEN-9: include the raw rows (newest RAW_CAP); default off. */
+    val includeSamples: Boolean = false,
 )
+
+const val RAW_CAP = 200
 
 /**
  * PACE-TREND-1: turns the stored samples into the `pace_report` answer (the JSON the chart draws and `agenthq_pace` prints):
@@ -75,6 +79,22 @@ object PaceReport {
                     put("j", p.projectedPercent?.let { JsonPrimitive(it) } ?: JsonNull)
                     put("s", segmentOf[p] ?: 0)
                     put("b", burnOf[p]?.let { JsonPrimitive(it) } ?: JsonNull)
+                })
+            })
+            if (q.includeSamples) put("rawSamples", buildJsonArray {
+                for (p in shown.takeLast(RAW_CAP)) add(buildJsonObject {
+                    put("t", p.observedAt); put("percent", p.percent)
+                    put("prev", p.prevPercent?.let { JsonPrimitive(it) } ?: JsonNull)
+                    put("delta", p.deltaPercent?.let { JsonPrimitive(it) } ?: JsonNull)
+                    put("tokens", buildJsonArray {
+                        p.tokens.forEach { t ->
+                            add(buildJsonObject {
+                                put("session", t.sessionId); put("role", t.role)
+                                put("input", t.input?.let { JsonPrimitive(it) } ?: JsonNull); put("output", t.output?.let { JsonPrimitive(it) } ?: JsonNull)
+                                put("cacheRead", t.cacheRead?.let { JsonPrimitive(it) } ?: JsonNull); put("cacheWrite", t.cacheWrite?.let { JsonPrimitive(it) } ?: JsonNull)
+                            })
+                        }
+                    })
                 })
             })
             put("momentum", headline.name)

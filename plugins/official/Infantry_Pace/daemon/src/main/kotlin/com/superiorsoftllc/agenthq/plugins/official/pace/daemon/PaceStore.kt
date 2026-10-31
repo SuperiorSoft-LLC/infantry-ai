@@ -38,11 +38,12 @@ class PaceStore(private val file: File, private val clock: () -> Long = System::
      * Appends [r] unless it is unreadable (no percent) or the same reading as the newest sample of its series (same
      * observedAt, percent and reset time: the daemon's cached live read has not refreshed). Returns whether it was kept.
      */
-    fun record(r: MeterReading): Boolean = synchronized(lock) {
+    fun record(r: MeterReading, tokens: List<SessionTokens> = emptyList()): Boolean = synchronized(lock) {
         val percent = r.percent ?: return false
-        val s = PaceSample(r.provider, r.window, r.observedAt, percent, r.paceDelta, r.projectedPercent, r.resetsAt, r.windowMinutes)
-        val list = series.getOrPut(s.provider to s.window) { mutableListOf() }
+        val list = series.getOrPut(r.provider to r.window) { mutableListOf() }
         val last = list.lastOrNull()
+        val s = PaceSample(r.provider, r.window, r.observedAt, percent, r.paceDelta, r.projectedPercent, r.resetsAt, r.windowMinutes,
+            last?.percent, last?.let { percent - it.percent }, tokens)
         if (last != null && last.observedAt == s.observedAt && last.percent == s.percent && last.resetsAt == s.resetsAt) return false
         if (last != null && s.observedAt < last.observedAt) return false
         list += s
@@ -91,6 +92,13 @@ class PaceStore(private val file: File, private val clock: () -> Long = System::
             put("j", s.projectedPercent?.let { JsonPrimitive(it) } ?: JsonNull)
             put("r", s.resetsAt?.let { JsonPrimitive(it) } ?: JsonNull)
             put("m", s.windowMinutes)
+            s.prevPercent?.let { put("pp", it) }; s.deltaPercent?.let { put("dp", it) }
+            if (s.tokens.isNotEmpty()) put("k", kotlinx.serialization.json.JsonArray(s.tokens.map { t ->
+                buildJsonObject {
+                    put("s", t.sessionId); put("r", t.role)
+                    t.input?.let { put("i", it) }; t.output?.let { put("o", it) }; t.cacheRead?.let { put("cr", it) }; t.cacheWrite?.let { put("cw", it) }
+                }
+            }))
         }.toString()
 
         fun decode(line: String): PaceSample? = try {
@@ -100,6 +108,12 @@ class PaceStore(private val file: File, private val clock: () -> Long = System::
                 observedAt = o["t"]!!.jsonPrimitive.longOrNull!!, percent = o["u"]!!.jsonPrimitive.doubleOrNull!!,
                 paceDelta = o["d"]?.jsonPrimitive?.doubleOrNull, projectedPercent = o["j"]?.jsonPrimitive?.doubleOrNull,
                 resetsAt = o["r"]?.jsonPrimitive?.longOrNull, windowMinutes = o["m"]?.jsonPrimitive?.intOrNull ?: 0,
+                prevPercent = o["pp"]?.jsonPrimitive?.doubleOrNull, deltaPercent = o["dp"]?.jsonPrimitive?.doubleOrNull,
+                tokens = (o["k"] as? kotlinx.serialization.json.JsonArray).orEmpty().map { e ->
+                    val t = e.jsonObject
+                    SessionTokens(t["s"]!!.jsonPrimitive.content, t["r"]?.jsonPrimitive?.content.orEmpty(), t["i"]?.jsonPrimitive?.longOrNull,
+                        t["o"]?.jsonPrimitive?.longOrNull, t["cr"]?.jsonPrimitive?.longOrNull, t["cw"]?.jsonPrimitive?.longOrNull)
+                },
             )
         } catch (e: Exception) {
             null // a torn or foreign line is skipped, never fatal
