@@ -66,6 +66,7 @@ class SettingsService(
             QUESTIONS_MAX_PER_HOUR to JsonPrimitive(questionsMaxPerHour()),
             TICKET_EXIT_BEHAVIOR to JsonPrimitive(ticketExitBehavior()),
             TICKET_WEIGHT_EXECUTORS to weightExecutors().toJson(),
+            TICKET_WEIGHT_CONTEXT to weightContext().toJson(),
             USAGE_PACING to UsagePacing.ruleJson(usagePacing()),
             USAGE_MANUAL to UsagePacing.manualJson(usageManual()),
             USAGE_OVERRIDES to UsagePacing.overridesJson(usageOverrides()),
@@ -117,6 +118,12 @@ class SettingsService(
     fun weightExecutors(): WeightExecutors {
         val stored = store.settings.get(TICKET_WEIGHT_EXECUTORS)?.value ?: return WeightExecutors.DEFAULT
         return runCatching { WeightExecutors.parse(Json.parseToJsonElement(stored)) }.getOrDefault(WeightExecutors.DEFAULT)
+    }
+
+    /** TOKEN-7: the weight -> {contextLimit, effort} defaults; an unreadable stored value falls back to the default. */
+    fun weightContext(): WeightContext {
+        val stored = store.settings.get(TICKET_WEIGHT_CONTEXT)?.value ?: return WeightContext.DEFAULT
+        return runCatching { WeightContext.parse(Json.parseToJsonElement(stored)) }.getOrDefault(WeightContext.DEFAULT)
     }
 
     /**
@@ -343,6 +350,11 @@ class SettingsService(
                 WeightExecutors.parse(value).toJson()
             } catch (e: IllegalArgumentException) {
                 throw IllegalArgumentException("setting '$TICKET_WEIGHT_EXECUTORS' ${e.message}")
+            }
+            TICKET_WEIGHT_CONTEXT -> try {
+                WeightContext.parse(value).toJson()
+            } catch (e: IllegalArgumentException) {
+                throw IllegalArgumentException("setting '$TICKET_WEIGHT_CONTEXT' ${e.message}")
             }
             USER_PORTRAIT -> JsonPrimitive(requireUserPortrait(value))
             USAGE_PACING -> UsagePacing.ruleJson(usageSetting(key) { PacingRule.parse(value, pacingCeiling()) })
@@ -741,6 +753,9 @@ class SettingsService(
         const val TICKET_EXIT_BEHAVIOR = "tickets.exitBehavior"
         /** TICKET-WEIGHT: JSON object weight ("1".."5") -> {provider, model}; see [WeightExecutors]. */
         const val TICKET_WEIGHT_EXECUTORS = WeightExecutors.SETTING
+
+        /** TOKEN-7: JSON object weight ("1".."5") -> {contextLimit, effort}; see [WeightContext]. */
+        const val TICKET_WEIGHT_CONTEXT = WeightContext.SETTING
         /** USAGE-PACE (1.121.0): see [PacingRule], [ManualUsage], [UsageOverride]. */
         const val USAGE_PACING = UsagePacing.RULE_SETTING
         const val USAGE_MANUAL = UsagePacing.MANUAL_SETTING
