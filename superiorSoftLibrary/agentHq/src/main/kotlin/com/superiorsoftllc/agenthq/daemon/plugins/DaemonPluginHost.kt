@@ -94,6 +94,8 @@ class DaemonPluginHost private constructor(
     private class RouteEntry(val owner: Loaded, val method: String, val path: String, val public: Boolean, val handler: (HttpCall) -> HttpReply)
 
     private val loaded = CopyOnWriteArrayList<Loaded>()
+    /** AR-5: the typed service registry; core callers query it here, plugins through [DaemonApi.services]. */
+    val serviceRegistry = ServiceRegistry()
     private val statuses = ConcurrentHashMap<String, String>()
     private val toolEntries = ConcurrentHashMap<String, ToolEntry>()
     private val frameHandlers = ConcurrentHashMap<String, FrameEntry>()
@@ -407,6 +409,7 @@ class DaemonPluginHost private constructor(
     // ---- the API one plugin sees ------------------------------------------------------------------------------------
 
     private inner class Api(private val p: Loaded) : DaemonApi {
+        private val hostServices = this@DaemonPluginHost.services
         private val d = p.declared
         override val moduleId = p.id
         override val tier = p.tier.name.lowercase()
@@ -414,9 +417,9 @@ class DaemonPluginHost private constructor(
         override val stateDir: File by lazy { File(this@DaemonPluginHost.stateDir, "plugin-data/${p.id}").apply { mkdirs() } }
 
         override fun log(line: String) = this@DaemonPluginHost.log("[plugin ${p.id}] $line")
-        override fun config(key: String): String? = services.config(p.id, key)
-        override fun env(name: String): String? = if (name in d.env) services.env(name) else { log("env $name is not declared in daemon.env: refused"); null }
-        override fun secret(name: String): String? = if (name in d.secrets) services.secret(name) else { log("secret $name is not declared in daemon.secrets: refused"); null }
+        override fun config(key: String): String? = hostServices.config(p.id, key)
+        override fun env(name: String): String? = if (name in d.env) hostServices.env(name) else { log("env $name is not declared in daemon.env: refused"); null }
+        override fun secret(name: String): String? = if (name in d.secrets) hostServices.secret(name) else { log("secret $name is not declared in daemon.secrets: refused"); null }
 
         override fun schedule(name: String, periodMs: Long, job: () -> Unit): AutoCloseable {
             val period = periodMs.coerceAtLeast(1_000)
@@ -427,16 +430,16 @@ class DaemonPluginHost private constructor(
             return AutoCloseable { timer.cancel() }.also { p.closeables += it }
         }
 
-        override val projects: Projects get() = services.projects
-        override val sessions: Sessions get() = services.sessions
+        override val projects: Projects get() = hostServices.projects
+        override val sessions: Sessions get() = hostServices.sessions
         override val policy: Policy = object : Policy {
-            override fun active() = services.policy().active()
+            override fun active() = hostServices.policy().active()
             override fun onChange(listener: (PolicyPreset) -> Unit): AutoCloseable =
-                services.policy().onChange { preset -> if (!p.guard.disabled) p.call("policy.onChange", services.limit(LimitRegistry.PLUGIN_START_TIMEOUT_MS)) { listener(preset) } }.also { p.closeables += it }
-            override fun actionOf(frame: Frame) = services.policy().actionOf(frame)
-            override fun refusal(frame: Frame) = services.policy().refusal(frame)
-            override fun refusalText(type: String) = services.policy().refusalText(type)
-            override fun reportSeating(error: String?) = services.policy().reportSeating(error)
+                hostServices.policy().onChange { preset -> if (!p.guard.disabled) p.call("policy.onChange", hostServices.limit(LimitRegistry.PLUGIN_START_TIMEOUT_MS)) { listener(preset) } }.also { p.closeables += it }
+            override fun actionOf(frame: Frame) = hostServices.policy().actionOf(frame)
+            override fun refusal(frame: Frame) = hostServices.policy().refusal(frame)
+            override fun refusalText(type: String) = hostServices.policy().refusalText(type)
+            override fun reportSeating(error: String?) = hostServices.policy().reportSeating(error)
             override fun claimSeats() { declare("seats"); if (p !in seatClaimants) seatClaimants += p }
         }
         override val events: Events = object : Events {
@@ -449,7 +452,7 @@ class DaemonPluginHost private constructor(
             // DP-4b: the typed ticket events. A community plugin needs tickets.read (a throw here disables the plugin, as a bad declaration does).
             override fun onTicket(consumer: String, listener: (TicketEvent) -> Unit): AutoCloseable {
                 require(consumer.isNotBlank()) { "a ticket event consumer needs a name" }
-                return granted.ticketEvents { services.ticketEvents }.subscribe("plugin:${p.id}:$consumer") { e ->
+                return granted.ticketEvents { hostServices.ticketEvents }.subscribe("plugin:${p.id}:$consumer") { e ->
                     if (!p.guard.disabled) p.call("events.onTicket($consumer)") { listener(e) }.getOrThrow()
                 }.also { p.closeables += it }
             }
@@ -497,23 +500,23 @@ class DaemonPluginHost private constructor(
             }
         }
         // DP-4a: the board API behind this plugin's grants (community: default deny; bundled / official: trusted).
-        private val granted = GrantedBoard({ services.tickets }, { services.epics }, { services.board }) { grant -> !p.community || grant in p.setting.allow }
+        private val granted = GrantedBoard({ hostServices.tickets }, { hostServices.epics }, { hostServices.board }) { grant -> !p.community || grant in p.setting.allow }
         override val tickets get() = granted.ticketsApi
         override val epics get() = granted.epicsApi
         override val board get() = granted.boardApi
         // RUNTIME-LOAD-5: the sessions read model behind this plugin's grants (community: default deny).
         override val sessionReads: com.superiorsoftllc.agenthq.daemon.api.sessions.SessionReads =
-            GrantedSessionReads({ services.sessionReads }) { grant -> !p.community || grant in p.setting.allow }
+            GrantedSessionReads({ hostServices.sessionReads }) { grant -> !p.community || grant in p.setting.allow }
         // DP-5h-3a: the board runtime for bundled / official plugins only (a community plugin builds no board).
         override val boardRuntime: com.superiorsoftllc.agenthq.daemon.api.board.BoardRuntime
-            get() = if (p.community) com.superiorsoftllc.agenthq.daemon.api.board.NoBoardRuntime else services.boardRuntime
+            get() = if (p.community) com.superiorsoftllc.agenthq.daemon.api.board.NoBoardRuntime else hostServices.boardRuntime
         // RUNTIME-LOAD-6: the host spawn service behind this plugin's grants (community: `sessions.spawn`, default deny).
         override val spawns: com.superiorsoftllc.agenthq.daemon.api.spawns.Spawns =
-            GrantedSpawns({ services.spawns }) { grant -> !p.community || grant in p.setting.allow }
+            GrantedSpawns({ hostServices.spawns }) { grant -> !p.community || grant in p.setting.allow }
         // STACK-NEUTRAL-2: the host process service (official / core; community needs `daemon.processes` and never kills), the
         // per-launch env seam and the settings reader. A listener / contributor ends with the plugin (closeables).
         override val processes: com.superiorsoftllc.agenthq.daemon.api.processes.Processes by lazy {
-            val host = services.processHost
+            val host = hostServices.processHost
             if (host == null || (p.community && "daemon.processes" !in p.setting.allow)) com.superiorsoftllc.agenthq.daemon.api.processes.NoProcesses
             else {
                 val view = host.view(p.id, mayKill = !p.community)
@@ -532,25 +535,28 @@ class DaemonPluginHost private constructor(
         override val launchEnv: com.superiorsoftllc.agenthq.daemon.api.processes.LaunchEnv = object : com.superiorsoftllc.agenthq.daemon.api.processes.LaunchEnv {
             override fun contribute(name: String, contributor: (com.superiorsoftllc.agenthq.daemon.api.processes.LaunchInfo) -> Map<String, String>): AutoCloseable {
                 check(!p.community || "daemon.processes" in p.setting.allow) { "missing grant 'daemon.processes' in modules.json" }
-                val host = services.launchEnvHost ?: return AutoCloseable {}
+                val host = hostServices.launchEnvHost ?: return AutoCloseable {}
                 return host.contribute(p.id, name) { info -> if (p.guard.disabled) emptyMap() else contributor(info) }.also { p.closeables += it }
             }
         }
-        override val settings: com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings get() = services.pluginSettings
+        override val settings: com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings get() = hostServices.pluginSettings
         // PACE-TREND-1: the plan meters, read-only; a community plugin needs the grant `usage.read` (default deny: reads nothing).
         override val meters: com.superiorsoftllc.agenthq.daemon.api.usage.Meters =
-            GrantedMeters({ services.meters }) { grant -> !p.community || grant in p.setting.allow }
+            GrantedMeters({ hostServices.meters }) { grant -> !p.community || grant in p.setting.allow }
         // DAEMON-STORAGE-1: plugin-owned tables; adopt is honoured for official / bundled only (a community adopt is refused at load).
         override val storage: com.superiorsoftllc.agenthq.daemon.api.storage.PluginStorage by lazy {
-            val h = services.storageHandle
+            val h = hostServices.storageHandle
             if (h == null) com.superiorsoftllc.agenthq.daemon.api.storage.NoPluginStorage
             else LocalPluginStorage(h, p.id, if (p.community) emptyList() else p.declared.storage.adopt) {
                 !p.community || LocalPluginStorage.GRANT in p.setting.allow
             }
         }
+        // AR-5: typed optional hostServices. Publishing: official / core, or the grant `hostServices.provide`; lookup is open. Unload closes the handle.
+        override val services: com.superiorsoftllc.agenthq.daemon.api.ServicesApi =
+            ScopedServices(serviceRegistry, p.id, { !p.community || ScopedServices.GRANT in p.setting.allow }) { p.closeables += it }
         // AGENT-REGISTRY-1: the agent registry, scoped to this plugin (its own declared ids; enable/disable trusted tiers only).
         override val agents: com.superiorsoftllc.agenthq.daemon.api.agents.Agents = object : com.superiorsoftllc.agenthq.daemon.api.agents.Agents {
-            private val registry get() = services.agentRegistry
+            private val registry get() = hostServices.agentRegistry
             override fun list() = registry?.list().orEmpty()
             override fun get(id: String) = registry?.get(id)
             override fun contribute(definition: com.superiorsoftllc.agenthq.plugin.api.AgentDefinition): AutoCloseable =

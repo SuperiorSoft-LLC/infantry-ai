@@ -299,3 +299,16 @@ entries are wire DTOs that belong in `agentHqProtocol`. (3) `orchestrator.provid
 - Naming: every table / index / view / trigger a statement names (after FROM / INTO / UPDATE / JOIN / TABLE / INDEX / VIEW / TRIGGER, `ON` of CREATE INDEX) must start with the module prefix (module id lowercased, non-alphanumerics as `_`, plus `_`) or be on the adopt list. One statement per call; ATTACH / PRAGMA / VACUUM, schema-qualified names and table functions are refused. String literals and comments are ignored by the check.
 - ADOPT: an OFFICIAL / bundled module may declare `daemon.storage.adopt: [table...]` in module.json, existing core tables it takes over (DP-6 / DP-7 keep their rows, no migration). A community module declaring adopt is refused at load; it gets prefix only and needs the grant `storage`.
 - Implementation: `LocalPluginStorage` over the store's `AgentHQDatabaseHandle` (same driver, lock and write tracking). Values bind as null / Long / Int / Boolean / Double / String / ByteArray; rows come back as column-label maps.
+
+## 8. Typed service registry (AR-5, DaemonApi 1.16.0)
+
+`api.services: ServicesApi` (default `NoServices`) is a typed, optional registry keyed by an interface declared in an API module.
+
+- `provide(type: KClass<T>, impl: T): AutoCloseable`: a plugin publishes. Official / core tier, or a community module holding the grant `services.provide`; otherwise `IllegalStateException`. One provider per type (a second throws). Closing the handle, or unloading / disabling the plugin (its closeables run), removes the provider; a stale handle never removes a newer provider.
+- `find(type: KClass<T>): T?`: any module. No provider = null; the caller owns its fail mode (refuse, degrade, or skip).
+- Core keeps the one `ServiceRegistry` (`DaemonPluginHost.serviceRegistry`) and queries it directly; DP-7b (Knowledge) and ATTN-1 (Attention) will look their providers up there. Plugins get a `ScopedServices` view (tier check, handles tracked per module).
+- Registry is in memory only: providers vanish with the daemon and are re-published by each plugin's `start`.
+
+### Deprecation plan
+
+No existing getter is changed or deprecated by AR-5 (additive). `tickets`, `epics`, `boardRuntime`, `board` and `hooks.orchestratorBinding` are marked `@Deprecated("use services.find", level = WARNING)` only once a provider for their interface is published through `services.provide` (board plugin: DP-5 follow-ups; orchestration: the OrchestratorBinding provider), and removed or moved with CORE-SPLIT-4b (the `daemon.api.board` types stay in the API jar until then).
