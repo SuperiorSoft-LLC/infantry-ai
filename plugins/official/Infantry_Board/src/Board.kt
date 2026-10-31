@@ -88,6 +88,9 @@ import com.superiorsoftllc.agenthq.ui.model.TicketPins
 import com.superiorsoftllc.agenthq.ui.model.ContextLimitInput
 import com.superiorsoftllc.agenthq.ui.model.contextLimitLine
 import com.superiorsoftllc.agenthq.ui.model.contextLimitNoteFor
+import com.superiorsoftllc.agenthq.ui.model.effortLine
+import com.superiorsoftllc.agenthq.ui.model.effortNoteFor
+import com.superiorsoftllc.agenthq.ui.model.ticketEffortEdit
 import com.superiorsoftllc.agenthq.ui.model.executorLine
 import com.superiorsoftllc.agenthq.ui.model.formatContextLimit
 import com.superiorsoftllc.agenthq.ui.model.ticketContextLimitEdit
@@ -692,6 +695,10 @@ fun TicketCardDetailsSection(card: BoardCardHost, modifier: Modifier = Modifier)
         contextLimitLine(t.effectiveContextLimit)?.let {
             Text(it, color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp, maxLines = 2, modifier = Modifier.testTag(TICKET_CONTEXT_LIMIT_LINE_TAG_PREFIX + t.id))
         }
+        // EFFORT-1: the effective reasoning effort and its source (ticket / rule / agent / role / default), flagged when the harness does not apply it.
+        effortLine(t.effectiveEffort)?.let {
+            Text(it, color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp, maxLines = 2, modifier = Modifier.testTag(TICKET_EFFORT_LINE_TAG_PREFIX + t.id))
+        }
         // BRANCH-PER-TASK 2/3: read-only; a ticket that never started has no branch line at all.
         t.branchLine()?.let { Text(it, color = Palette.Info, fontFamily = Mono, fontSize = 10.sp, maxLines = 1, modifier = Modifier.testTag("ticket-branch-${t.id}")) }
         // Contract 1.117.0: the running ticket's worker reports how far along its job is.
@@ -793,11 +800,11 @@ private fun CardButton(label: String, enabled: Boolean, description: String? = n
 /** M2-17: what an edit sent, trimmed as the daemon stores it; it has landed once the ticket reads back the same. */
 private data class TicketEdit(
     val title: String, val description: String, val epicId: String?, val pins: TicketPins, val images: List<String>,
-    val contextLimit: Int?,
+    val contextLimit: Int?, val effort: String?,
 ) {
     fun landedIn(t: Ticket): Boolean = t.title == title && t.description == description &&
         t.epicId?.takeIf { it.isNotBlank() } == epicId && TicketPins.of(t) == pins && t.images == images &&
-        t.contextLimit?.takeIf { it > 0 } == contextLimit
+        t.contextLimit?.takeIf { it > 0 } == contextLimit && t.effort?.takeIf { it.isNotBlank() } == effort
 }
 
 /**
@@ -823,6 +830,11 @@ private fun TicketEditForm(t: Ticket, deps: BoardDeps, onDone: () -> Unit) {
     var limitText by remember(t.id) { mutableStateOf(currentLimit?.let { formatContextLimit(it) }.orEmpty()) }
     val limitParsed = ContextLimitInput.parse(limitText)
     val limit = if (limitOn) limitParsed.value else null
+    // EFFORT-1: off = the harness default.
+    val currentEffort = t.effort?.takeIf { it.isNotBlank() }
+    var effortOn by remember(t.id) { mutableStateOf(currentEffort != null) }
+    var effortLevel by remember(t.id) { mutableStateOf(currentEffort ?: "medium") }
+    val effort = if (effortOn) effortLevel else null
     // IMG-4: the ticket's images as the form holds them; Save sends the whole list when it changed.
     var images by remember(t.id) { mutableStateOf(t.images) }
     var uploaded by remember(t.id) { mutableStateOf<Map<String, ByteArray>>(emptyMap()) }
@@ -896,6 +908,10 @@ private fun TicketEditForm(t: Ticket, deps: BoardDeps, onDone: () -> Unit) {
             limitOn && limitParsed.error != null, TICKET_CONTEXT_LIMIT_TAGS,
             onOn = { limitOn = it }, onText = { limitText = it }, textColor = Palette.Text,
         )
+        EffortField(
+            effortOn, effortLevel, effortNoteFor(deps.executor.providers, provider ?: t.effectiveExecutor?.provider?.value),
+            TICKET_EFFORT_TAGS, onOn = { effortOn = it }, onLevel = { effortLevel = it }, textColor = Palette.Text,
+        )
         if (limitOn) limitParsed.error?.let { Text("Context limit: $it", color = Palette.Danger, fontSize = 11.sp) }
         TicketImagesSection(
             images = images,
@@ -914,7 +930,7 @@ private fun TicketEditForm(t: Ticket, deps: BoardDeps, onDone: () -> Unit) {
                 onClick = {
                     actionScope.launch {
                         val pins = TicketPins(assignee.ifEmpty { null }, provider, model)
-                        val edit = TicketEdit(title.trim(), description.trim(), epicId, pins, images, limit)
+                        val edit = TicketEdit(title.trim(), description.trim(), epicId, pins, images, limit, effort)
                         if (edit.landedIn(t)) return@launch onDone() // nothing changed: nothing to send
                         refusal = null
                         // TICKET-EXEC-UI: only the pins that changed; "" clears one (unassigned / inherit).
@@ -930,6 +946,7 @@ private fun TicketEditForm(t: Ticket, deps: BoardDeps, onDone: () -> Unit) {
                             model = pinEdit.model,
                             images = images.takeIf { it != t.images },
                             contextLimit = ticketContextLimitEdit(currentLimit, limit),
+                            effort = ticketEffortEdit(currentEffort, effort),
                         )
                         when (r) {
                             is CommandResult.Sent -> pending = edit
@@ -965,6 +982,8 @@ private fun TicketForm(deps: BoardDeps, initialEpicId: String?, onDone: () -> Un
     var limitOn by remember { mutableStateOf(false) }
     var limitText by remember { mutableStateOf("") }
     val limitParsed = ContextLimitInput.parse(limitText)
+    var effortOn by remember { mutableStateOf(false) }
+    var effortLevel by remember { mutableStateOf("medium") }
     val epics = deps.boardEpics
     Column(
         Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp).clip(RoundedCornerShape(6.dp)).background(Palette.Raised).padding(10.dp),
@@ -979,6 +998,10 @@ private fun TicketForm(deps: BoardDeps, initialEpicId: String?, onDone: () -> Un
             limitOn && limitParsed.error != null, TICKET_CONTEXT_LIMIT_TAGS,
             onOn = { limitOn = it }, onText = { limitText = it }, textColor = Palette.Text,
         )
+        EffortField(
+            effortOn, effortLevel, effortNoteFor(deps.executor.providers, provider),
+            TICKET_EFFORT_TAGS, onOn = { effortOn = it }, onLevel = { effortLevel = it }, textColor = Palette.Text,
+        )
         LabelledDropdown(
             label = "Epic",
             selected = epics.firstOrNull { it.id == epicId }?.name ?: "None",
@@ -992,7 +1015,7 @@ private fun TicketForm(deps: BoardDeps, initialEpicId: String?, onDone: () -> Un
                 enabled = deps.can("board.ticket.save") && title.isNotBlank() && !(limitOn && limitParsed.error != null),
                 onClick = {
                     actionScope.launch {
-                        if (deps.tickets.create(title, description, assignee, epicId?.takeIf { id -> epics.any { it.id == id } }, provider, model, if (limitOn) limitParsed.value else null) is CommandResult.Sent) onDone()
+                        if (deps.tickets.create(title, description, assignee, epicId?.takeIf { id -> epics.any { it.id == id } }, provider, model, if (limitOn) limitParsed.value else null, if (effortOn) effortLevel else null) is CommandResult.Sent) onDone()
                     }
                 },
             ) { Text("Create ticket") }

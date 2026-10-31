@@ -56,8 +56,11 @@ A 2.0 / 2.1 harness plugin keeps working unchanged: it is `unsupported` unless i
 Each run's `run_usage` row records the session's `effort` (null = harness default) next to `context_limit`, tokens and cost, so
 the stats product can compare turns and tokens by effort (the owner's pi vs claude measurement). Data only for now; no screen.
 
-## Not in this slice (UI follow-up)
+## UI (second slice)
 
-The shared `EffortField` (New agent dialog, ticket create/edit), the chip on the agent card and session header, and the board
-card are the second slice: the daemon already serves everything they need (`providers[].effort`, `ticket.effectiveEffort`,
-`session.effort` / `effortSupport`). They should reuse `ContextLimitModel` / `ContextLimitViews` rather than copy them.
+`ui/model/EffortModel.kt` and `ui/EffortViews.kt` (agenthqUiCore) mirror ContextLimitModel / ContextLimitViews: the shared
+`EffortField` (checkbox = off/harness default, one button per level of `EffortLevels.ALL`, picked one ticked, a per-harness
+support line) in the New agent dialog and ticket create/edit; the `effort high` / `(best effort)` / `(not applied)` chip on
+the session header (`CenterHeader`) and the agent card (`RolesAttention`); and the board card line `effort high (ticket)`.
+Theme tokens only (Danger for "not applied", Info otherwise), always with the words. The UI's level list mirrors the
+daemon's; add a level in both.

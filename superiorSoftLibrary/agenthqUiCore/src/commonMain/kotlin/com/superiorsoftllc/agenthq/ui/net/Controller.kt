@@ -421,12 +421,12 @@ class Controller(
      * The session it creates is selected when it appears, so the reply streams where the human is looking.
      * CONTEXT-LIMIT-1: [contextLimit] (tokens) goes on the `new` frame; null = the harness's own window.
      */
-    suspend fun spawn(prompt: String, contextLimit: Int? = null): CommandResult {
+    suspend fun spawn(prompt: String, contextLimit: Int? = null, effort: String? = null): CommandResult {
         if (prompt.isBlank()) return report(CommandResult.Refused("a new agent needs a task"))
         // A leading "/" is a command, never a task prompt (CP-4(e)): it is resolved here and never spawns.
         if (isSlashCommand(prompt)) return spawnBoxCommand(prompt)
         _state.update { it.withPendingSpawn() }
-        val r = send(Envelope(Envelope.NEW, spawnOptionsData(_state.value.pickedModel, _state.value.pickedEffort, _state.value.spawnRole, _state.value.activeProjectId, contextLimit))).let { if (it is CommandResult.Sent) send(Envelope(Envelope.PROMPT, prompt)) else it }
+        val r = send(Envelope(Envelope.NEW, spawnOptionsData(_state.value.pickedModel, effort ?: _state.value.pickedEffort, _state.value.spawnRole, _state.value.activeProjectId, contextLimit))).let { if (it is CommandResult.Sent) send(Envelope(Envelope.PROMPT, prompt)) else it }
         if (r is CommandResult.Refused) _state.update { it.copy(pendingSpawn = null) }
         return report(r)
     }
@@ -1125,7 +1125,7 @@ class Controller(
      */
     suspend fun createTicket(
         title: String, description: String, ticketType: String?, agentId: String?, epicId: String? = null,
-        provider: String? = null, model: String? = null, contextLimit: Int? = null,
+        provider: String? = null, model: String? = null, contextLimit: Int? = null, effort: String? = null,
     ): CommandResult {
         if (title.isBlank()) return report(CommandResult.Refused("a ticket needs a title"))
         val body = buildJsonObject {
@@ -1138,6 +1138,8 @@ class Controller(
             if (!model.isNullOrBlank()) put("model", model.trim())
             // CONTEXT-LIMIT-2: only a set limit is sent; none = the harness's own window.
             if (contextLimit != null && contextLimit > 0) put("contextLimit", contextLimit)
+            // EFFORT-1: only a set level is sent; none = the harness default.
+            if (!effort.isNullOrBlank()) put("effort", effort.trim())
             // UI-BOARD-PROJ: a ticket created from the Board joins the project the shell is scoped to.
             activeProjectId?.let { put("projectId", it) }
         }
@@ -1155,7 +1157,7 @@ class Controller(
     suspend fun editTicket(
         id: String, title: String? = null, description: String? = null, epicId: String? = null,
         agentId: String? = null, provider: String? = null, model: String? = null,
-        images: List<String>? = null, contextLimit: Int? = null,
+        images: List<String>? = null, contextLimit: Int? = null, effort: String? = null,
     ): CommandResult {
         if (title != null && title.isBlank()) return report(CommandResult.Refused("a ticket needs a title"))
         if (images != null && !contractAtLeast(_state.value.connection.contract, 1, 84)) {
@@ -1174,6 +1176,8 @@ class Controller(
             if (model != null) put("model", model.trim())
             // CONTEXT-LIMIT-2: null = unchanged, 0 = clear, else the new size in tokens.
             if (contextLimit != null) put("contextLimit", contextLimit)
+            // EFFORT-1: null = unchanged, "" = clear (off), else the new level id.
+            if (effort != null) put("effort", effort.trim())
             // IMG-4: the full list replaces the stored one; [] removes every image.
             if (images != null) put("images", kotlinx.serialization.json.JsonArray(images.map { JsonPrimitive(it) }))
         }

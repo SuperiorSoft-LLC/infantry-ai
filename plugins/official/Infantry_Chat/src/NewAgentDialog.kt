@@ -66,6 +66,8 @@ const val NEW_AGENT_TASK_TAG = "new-agent-task"
 const val NEW_AGENT_CONTEXT_LIMIT_SWITCH_TAG = "new-agent-context-limit-switch"
 const val NEW_AGENT_CONTEXT_LIMIT_TAG = "new-agent-context-limit"
 const val NEW_AGENT_CONTEXT_LIMIT_NOTE_TAG = "new-agent-context-limit-note"
+const val NEW_AGENT_EFFORT_SWITCH_TAG = "new-agent-effort-switch"
+const val NEW_AGENT_EFFORT_NOTE_TAG = "new-agent-effort-note"
 const val NEW_AGENT_ADD_TAG = "new-agent-add"
 const val NEW_AGENT_ADD_HINT_TAG = "new-agent-add-hint"
 const val NEW_AGENT_ERROR_TAG = "new-agent-error"
@@ -90,7 +92,7 @@ private const val ROLE_GRID_VISIBLE_ROWS = 3
 fun NewAgentDialog(
     state: AppState,
     /** Runs the spawn; returns null on success (the modal closes) or the refusal text (shown inside the modal, nothing closes). */
-    onAdd: suspend (roleId: String, picked: PickedModel?, task: String, contextLimit: Int?) -> String?,
+    onAdd: suspend (roleId: String, picked: PickedModel?, task: String, contextLimit: Int?, effort: String?) -> String?,
     onDismiss: () -> Unit,
 ) {
     NewAgentDialogFrame(state, onAdd, onDismiss) { draft ->
@@ -138,7 +140,7 @@ class NewAgentTargets {
 @Composable
 fun NewAgentDialogFrame(
     state: AppState,
-    onAdd: suspend (roleId: String, picked: PickedModel?, task: String, contextLimit: Int?) -> String?,
+    onAdd: suspend (roleId: String, picked: PickedModel?, task: String, contextLimit: Int?, effort: String?) -> String?,
     onDismiss: () -> Unit,
     content: @Composable ColumnScope.(NewAgentDraft) -> Unit,
 ) {
@@ -185,7 +187,7 @@ fun NewAgentDialogFrame(
                     onClick = {
                         cur.roleId?.let { role ->
                             adding = true; error = null
-                            scope.launch { error = onAdd(role, cur.executor.picked, cur.task.trim(), cur.contextLimit); adding = false }
+                            scope.launch { error = onAdd(role, cur.executor.picked, cur.task.trim(), cur.contextLimit, cur.effort); adding = false }
                         }
                     },
                     enabled = cur.canAdd && !adding, modifier = Modifier.testTag(NEW_AGENT_ADD_TAG),
@@ -328,7 +330,20 @@ private fun ExecutorStep(m: NewAgentModalModel, update: (NewAgentModalModel) -> 
         // The dialog surface is light: rows take its content color instead of the dark panels' Palette.Text.
         ExecutorPicker(m.executor, { update(m.withExecutor(it)) }, tags = NEW_AGENT_EXECUTOR_TAGS, textColor = AlertDialogDefaults.textContentColor)
         NewAgentContextLimit(m, update)
+        NewAgentEffort(m, update)
     }
+}
+
+/**
+ * EFFORT-1: the optional reasoning effort. Off (the default) = the role binding's effort, else the harness default; on, one
+ * of the levels. The line under it says how the chosen harness treats an effort (applied, best effort, or recorded only).
+ */
+@Composable
+private fun NewAgentEffort(m: NewAgentModalModel, update: (NewAgentModalModel) -> Unit) {
+    EffortField(
+        m.effortOn, m.effortLevel, m.effortNote, EffortTags(NEW_AGENT_EFFORT_SWITCH_TAG, NEW_AGENT_EFFORT_NOTE_TAG),
+        onOn = { update(m.withEffortOn(it)) }, onLevel = { update(m.withEffortLevel(it)) },
+    )
 }
 
 /**

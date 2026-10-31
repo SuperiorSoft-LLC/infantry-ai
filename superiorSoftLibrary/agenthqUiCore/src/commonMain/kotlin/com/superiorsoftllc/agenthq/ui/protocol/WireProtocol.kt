@@ -415,6 +415,10 @@ object TicketColumns {
 @Serializable
 data class ExecutorField(val value: String? = null, val source: String = "default")
 
+/** EFFORT-1 (1.148.0): a ticket's effective reasoning effort: [source] `ticket` / `rule` / `agent` / `role` / `default`, [support] and [how] of its harness. */
+@Serializable
+data class EffectiveEffort(val value: String? = null, val source: String, val support: String? = null, val how: String? = null)
+
 /** CONTEXT-LIMIT-1: a ticket's effective limit: [source] `ticket` / `default`, [support] and [how] of its harness. */
 @Serializable
 data class EffectiveContextLimit(val value: Int? = null, val source: String, val support: String? = null, val how: String? = null)
@@ -479,6 +483,9 @@ data class Ticket(
     /** CONTEXT-LIMIT-1 (1.146.0): the ticket's own context limit in tokens; null = none. */
     val contextLimit: Int? = null,
     val effectiveContextLimit: EffectiveContextLimit? = null,
+    /** EFFORT-1 (1.148.0): the ticket's own reasoning effort (a level id); null = none. */
+    val effort: String? = null,
+    val effectiveEffort: EffectiveEffort? = null,
     /**
      * IMG-3 (contract 1.84.0): the ticket's images, in attach order, each a relPath under its project directory
      * (`.agenthq/uploads/ticket/<sha256>.<ext>`). Empty from an older daemon.
@@ -959,6 +966,9 @@ data class ProviderInfo(
     /** CONTEXT-LIMIT-1 (1.146.0): `supported` / `best_effort` / `unsupported` for a session context limit, and how; null = older daemon. */
     val contextLimit: String? = null,
     val contextLimitHow: String? = null,
+    /** EFFORT-1 (1.148.0): `supported` / `best_effort` / `unsupported` for a reasoning effort, and how; null = older daemon. */
+    val effort: String? = null,
+    val effortHow: String? = null,
 )
 
 /**
@@ -1092,6 +1102,8 @@ data class SessionRecord(
     /** CONTEXT-LIMIT-1 (1.146.0): the limit the session started with (tokens) and how its harness honours it; null = none. */
     val contextLimit: Int? = null,
     val contextLimitSupport: String? = null,
+    /** EFFORT-1 (1.148.0): how the session's harness honours [effort] (`supported` / `best_effort` / `unsupported`); null = no effort or an older daemon. */
+    val effortSupport: String? = null,
     /** The project the session is bound to (the daemon's `SessionRecord.projectId`); null = no project. */
     val projectId: String? = null,
     /**

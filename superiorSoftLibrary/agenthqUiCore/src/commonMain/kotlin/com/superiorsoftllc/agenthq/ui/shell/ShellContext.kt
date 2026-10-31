@@ -844,12 +844,12 @@ interface TicketsContext {
     fun ticket(id: String?): Ticket? = id?.let { wanted -> all.firstOrNull { it.id == wanted } }
     /** One column of [visible], top first. */
     fun column(status: String): List<Ticket> = visible.filter { it.status == status }.sortedBy { it.position }
-    suspend fun create(title: String, description: String, agentId: String?, epicId: String?, provider: String?, model: String?, contextLimit: Int? = null): CommandResult
+    suspend fun create(title: String, description: String, agentId: String?, epicId: String?, provider: String?, model: String?, contextLimit: Int? = null, effort: String? = null): CommandResult
     /** Each null leaves its field as it is; "" clears it. */
     suspend fun edit(
         id: String, title: String? = null, description: String? = null, epicId: String? = null,
         agentId: String? = null, provider: String? = null, model: String? = null, images: List<String>? = null,
-        contextLimit: Int? = null,
+        contextLimit: Int? = null, effort: String? = null,
     ): CommandResult
     suspend fun delete(id: String): CommandResult
     /** [position] null keeps the daemon's placement in [status]. */
@@ -869,9 +869,9 @@ object NoTickets : TicketsContext {
     override val updates: Flow<List<Ticket>> get() = emptyFlow()
     override val epics: Map<String, List<EpicView>> get() = emptyMap()
     override val error: String? get() = null
-    override suspend fun create(title: String, description: String, agentId: String?, epicId: String?, provider: String?, model: String?, contextLimit: Int?) =
+    override suspend fun create(title: String, description: String, agentId: String?, epicId: String?, provider: String?, model: String?, contextLimit: Int?, effort: String?) =
         CommandResult.Refused(SHELL_DOMAIN_MISSING)
-    override suspend fun edit(id: String, title: String?, description: String?, epicId: String?, agentId: String?, provider: String?, model: String?, images: List<String>?, contextLimit: Int?) =
+    override suspend fun edit(id: String, title: String?, description: String?, epicId: String?, agentId: String?, provider: String?, model: String?, images: List<String>?, contextLimit: Int?, effort: String?) =
         CommandResult.Refused(SHELL_DOMAIN_MISSING)
     override suspend fun delete(id: String) = CommandResult.Refused(SHELL_DOMAIN_MISSING)
     override suspend fun move(id: String, status: String, position: Int?) = CommandResult.Refused(SHELL_DOMAIN_MISSING)

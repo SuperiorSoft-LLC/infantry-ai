@@ -40,6 +40,12 @@ const val TICKET_EXECUTOR_LINE_TAG_PREFIX = "ticket-executor-"
 /** CONTEXT-LIMIT-2: a card's effective context limit line, + ticket id. */
 const val TICKET_CONTEXT_LIMIT_LINE_TAG_PREFIX = "ticket-context-limit-line-"
 
+/** EFFORT-1: a card's effective effort line, + ticket id. */
+const val TICKET_EFFORT_LINE_TAG_PREFIX = "ticket-effort-line-"
+
+/** EFFORT-1: the ticket forms' effort switch and support line. */
+val TICKET_EFFORT_TAGS = EffortTags("ticket-effort-switch", "ticket-effort-note")
+
 /** CONTEXT-LIMIT-2: the ticket forms' context limit switch, size field and support line. */
 val TICKET_CONTEXT_LIMIT_TAGS = ContextLimitTags("ticket-context-limit-switch", "ticket-context-limit", "ticket-context-limit-note")
 

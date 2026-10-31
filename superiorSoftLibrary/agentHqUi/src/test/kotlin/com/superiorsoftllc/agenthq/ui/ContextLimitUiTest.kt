@@ -98,7 +98,7 @@ class ContextLimitUiTest {
         try {
             val port = bootDaemon(closers)
             val controller = Controller(scope)
-            runDesktopComposeUiTest(1700, 1000) {
+            runDesktopComposeUiTest(1700, 1300) {
                 setContent { App(controller, "ws://127.0.0.1:$port/ws", null) }
                 waitUntil(timeoutMillis = daemonWaitMs) { controller.state.value.connection.isLive }
                 onNodeWithTag(NEW_PROJECT_BUTTON_TAG).performClick()

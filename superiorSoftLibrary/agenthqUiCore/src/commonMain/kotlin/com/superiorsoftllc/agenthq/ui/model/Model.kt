@@ -898,6 +898,8 @@ data class AppState(
      * CONTEXT-LIMIT-2: the session's context limit chip; null when it has none. The support rides on the session; the how
      * text is the harness's, from the `providers` frame.
      */
+    fun effortChip(a: AgentView): EffortChip? = sessionEffortChip(a.session, providers)
+
     fun contextLimitChip(a: AgentView): ContextLimitChip? =
         sessionContextLimitChip(a.session, providers)
 

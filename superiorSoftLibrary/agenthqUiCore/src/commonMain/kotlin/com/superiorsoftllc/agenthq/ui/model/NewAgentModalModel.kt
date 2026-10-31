@@ -23,6 +23,10 @@ data class NewAgentModalModel(
     val contextLimitOn: Boolean = false,
     /** CONTEXT-LIMIT-1: the limit as typed while the switch is on (`200k`, `1m`, `150000`). */
     val contextLimitText: String = "",
+    /** EFFORT-1: the off switch; off (the default) = the role binding's effort, else the harness's own default. */
+    val effortOn: Boolean = false,
+    /** EFFORT-1: the chosen level id while the switch is on. */
+    val effortLevel: String = EffortLevels.ALL.first { it.id == "medium" }.id,
 ) {
     /** The role grid, narrowed by what was typed (id and name), best match first. */
     val roleOptions: List<Role>
@@ -77,6 +81,19 @@ data class NewAgentModalModel(
 
     fun withContextLimitText(text: String): NewAgentModalModel = copy(contextLimitText = text)
 
+    fun withEffortOn(on: Boolean): NewAgentModalModel = copy(effortOn = on)
+
+    fun withEffortLevel(id: String): NewAgentModalModel = copy(effortLevel = id)
+
+    /** The level Add sends: the picked one while the switch is on, else null (the role binding's effort / the harness default apply). */
+    val effort: String? get() = if (effortOn) effortLevel else null
+
+    /** How the chosen harness treats an effort, or null when no harness is chosen or the daemon is older and does not say. */
+    val effortSupport: ProviderInfo? get() = effortProvider(harnesses, executor.harness)
+
+    /** The line under the effort field: the chosen harness's support in words. */
+    val effortNote: String get() = effortNoteFor(harnesses, executor.harness)
+
     private val contextLimitParsed: ContextLimitInput.Parsed get() = ContextLimitInput.parse(contextLimitText)
 
     /** The limit Add sends, in tokens: null while the switch is off (the harness default) or the text does not parse. */
@@ -92,7 +109,7 @@ data class NewAgentModalModel(
     val contextLimitNote: String get() = contextLimitNoteFor(harnesses, executor.harness)
 
     /** The `new` frame's data for Add: the picked harness+model (null = daemon defaults), the role, the role binding's effort, the context limit. */
-    fun spawnData(): String = spawnOptionsData(executor.picked, roleId?.let { bindings[it]?.effort }, roleId, contextLimit = contextLimit)
+    fun spawnData(): String = spawnOptionsData(executor.picked, effort ?: roleId?.let { bindings[it]?.effort }, roleId, contextLimit = contextLimit)
 }
 
 /** The New agent modal's fields Add checks, in screen order. CONTEXT_LIMIT is optional: only a switched-on, unreadable value blocks. */
