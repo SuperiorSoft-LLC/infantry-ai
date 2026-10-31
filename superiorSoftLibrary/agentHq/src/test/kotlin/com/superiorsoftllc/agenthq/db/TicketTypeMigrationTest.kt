@@ -1,5 +1,6 @@
-package com.superiorsoftllc.agenthq.backlog
+package com.superiorsoftllc.agenthq.db
 
+import com.superiorsoftllc.agenthq.backlog.TicketBoard
 import app.cash.sqldelight.db.SqlDriver
 import com.superiorsoftllc.agenthq.db.AgentHQDatabaseFactory
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore

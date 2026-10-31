@@ -1,6 +1,5 @@
 package com.superiorsoftllc.agenthq.settings
 
-import com.superiorsoftllc.agenthq.backlog.WeightExecutors
 import com.superiorsoftllc.agenthq.persistence.AgentHqStore
 import com.superiorsoftllc.agenthq.persistence.SettingRow
 import kotlinx.serialization.json.Json

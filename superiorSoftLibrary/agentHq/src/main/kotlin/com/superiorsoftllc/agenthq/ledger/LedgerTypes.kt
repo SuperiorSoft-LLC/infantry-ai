@@ -1,7 +1,5 @@
 package com.superiorsoftllc.agenthq.ledger
 
-import com.superiorsoftllc.agenthq.brief.WorkerBrief
-
 data class Asked(
     val taskId: String,
     val projectId: String,
@@ -9,15 +7,7 @@ data class Asked(
     val instruction: String,
     val promptChars: Int,
 ) {
-    companion object {
-        fun from(brief: WorkerBrief): Asked = Asked(
-            taskId = brief.taskId,
-            projectId = brief.projectId,
-            title = brief.title,
-            instruction = brief.instruction,
-            promptChars = brief.prompt.length,
-        )
-    }
+    companion object
 }
 
 enum class Outcome { COMPLETED, FAILED, STOPPED }

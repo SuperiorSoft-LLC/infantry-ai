@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.backlog
+package com.superiorsoftllc.agenthq.db
 
 import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlDriver

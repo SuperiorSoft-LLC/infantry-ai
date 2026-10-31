@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.ledger
 
 import com.superiorsoftllc.agenthq.brief.WorkerRunResult
+import com.superiorsoftllc.agenthq.brief.toDone
 import java.util.concurrent.CancellationException
 import kotlin.test.Test
 import kotlin.test.assertEquals

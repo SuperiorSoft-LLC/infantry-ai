@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.backlog
 
+import com.superiorsoftllc.agenthq.settings.RoutingRules
+import com.superiorsoftllc.agenthq.settings.WeightExecutors
 import com.superiorsoftllc.agenthq.agents.AgentProfiles
 import com.superiorsoftllc.agenthq.context.ComposedContext
 import com.superiorsoftllc.agenthq.context.ContextInput

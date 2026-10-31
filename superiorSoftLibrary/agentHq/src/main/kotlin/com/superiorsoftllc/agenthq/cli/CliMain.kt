@@ -1827,8 +1827,8 @@ internal object Cli {
             return@buildString
         }
         project.routingRules.forEachIndexed { i, r ->
-            val match = if (com.superiorsoftllc.agenthq.backlog.RoutingRules.isDefault(r)) "default" else listOfNotNull(
-                "weight ${com.superiorsoftllc.agenthq.backlog.RoutingRules.weightLabel(r.weights)}".takeIf { r.weights.isNotEmpty() },
+            val match = if (com.superiorsoftllc.agenthq.settings.RoutingRules.isDefault(r)) "default" else listOfNotNull(
+                "weight ${com.superiorsoftllc.agenthq.settings.RoutingRules.weightLabel(r.weights)}".takeIf { r.weights.isNotEmpty() },
                 "type ${r.ticketTypes.joinToString(",")}".takeIf { r.ticketTypes.isNotEmpty() },
                 r.role?.let { "role $it" },
             ).joinToString(" + ")
