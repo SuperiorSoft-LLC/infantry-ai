@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.plugins.official.git.daemon
+package com.superiorsoftllc.agenthq.plugins.official.board.daemon
 
 import com.superiorsoftllc.agenthq.daemon.api.Caller
 import com.superiorsoftllc.agenthq.daemon.api.Frame

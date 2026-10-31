@@ -13,10 +13,7 @@
     "entry": "com.superiorsoftllc.agenthq.plugins.official.git.daemon.GitDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Git-daemon.jar",
     "apiAtLeast": "1.1.0",
-    "tools": [
-      { "name": "agenthq_pipeline", "action": "pipeline.read", "kind": "read", "description": "Read the project's verification pipeline." },
-      { "name": "agenthq_pipeline_record", "action": "pipeline.save", "kind": "write", "description": "Move a commit to a pipeline stage, or start, ping or finish a check." }
-    ]
+    "tools": []
   },
   "tabs": [
     {

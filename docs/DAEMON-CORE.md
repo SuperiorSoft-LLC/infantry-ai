@@ -55,7 +55,7 @@ that is renamed or deleted must leave the table. Lines in PLUGIN_NOW/PLUGIN_LATE
 | `provider` | AgentProvider abstraction used by SessionManager; the concrete providers in it follow `claude` and `opencode` |
 | `orchestration` | the pod/node DAG scheduler (orchestrator side, section 6) and `OrchestratorLink`, the seam |
 
-**PLUGIN NOW** (mechanism exists, only the move is left): `pipeline` (Pipeline plugin); `issues`, `decisions`, `memory` (a Knowledge
+**PLUGIN NOW** (mechanism exists, only the move is left): `issues`, `decisions`, `memory` (a Knowledge
 plugin); `prompts` (Infantry_Prompts); `images` (Infantry_Chat).
 
 DAEMON-PLUGINS-3: `probe` (a one-off provider comparison `main()` and its `probeProvider` Gradle task) was dead and is deleted. `experiments` (the pi tool bridge) cannot move yet, see below.
@@ -94,7 +94,7 @@ that are the real work. Exact plan, one ticket per step, each keeps the build gr
 2. **CORE-SPLIT-2 (DONE, ticket e7fb5a60)** `runner` becomes a leaf (1 back-import of `session`); module `agentHqRunner`. Small.
 3. **CORE-SPLIT-3** invert the `session`->`provider`->`harness`->`session` cycle: `Harness`/`AgentProvider` interfaces and `SessionEvent` types into `agentHqCore`; `ClaudeCodeProvider`, `OpenCodeProvider`, `harness/claude|pi|descriptor|install` into `agentHqHarnesses`. Medium; depends on DAEMON-PLUGINS-2 registering built-ins via the SPI.
 4. **CORE-SPLIT-4** cut `DaemonMain.kt` into core bootstrap plus `feature wiring` (what DAEMON-PLUGINS-2 moves out); then `agentHqCore` holds `protocol, session, harness (api), mailbox, policy, settings, db, keystore, runner, daemon/plugins` and the dependency rule (core imports no feature module) becomes a Gradle fact instead of a test.
-   **CORE-SPLIT-4a1/4a2 status:** feature wiring moved out of `daemon/DaemonMain.kt` into `daemon/wiring/*.kt`: AttentionWiring, CommandsWiring, ImagesWiring, KnowledgeWiring, PipelineWiring, QuestionsWiring, TriggersWiring (4a1), AgentsWiring (roles registry, agent modules, profiles), PromptsWiring (pending prompts, approval rules), BoardWiring (core ticket services, core-built LocalBoardHost) (4a2). `DaemonMain.kt` is now 4338 lines (was 4417); the rest is bootstrap plus the plugin-host, orchestrator-hub and harness-module construction, still to cut.
+   **CORE-SPLIT-4a1/4a2 status:** feature wiring moved out of `daemon/DaemonMain.kt` into `daemon/wiring/*.kt`: AttentionWiring, CommandsWiring, ImagesWiring, KnowledgeWiring, QuestionsWiring, TriggersWiring (4a1), AgentsWiring (roles registry, agent modules, profiles), PromptsWiring (pending prompts, approval rules), BoardWiring (core ticket services, core-built LocalBoardHost) (4a2). `DaemonMain.kt` is now 4338 lines (was 4417); the rest is bootstrap plus the plugin-host, orchestrator-hub and harness-module construction, still to cut.
 5. License split follows: `agentHqCore` + `agentHqDaemonApi` MPL-2.0, features Apache-2.0.
 
 ### License readiness (CORE-SPLIT-A, ticket e7fb5a60)
@@ -312,3 +312,5 @@ entries are wire DTOs that belong in `agentHqProtocol`. (3) `orchestrator.provid
 ### Deprecation plan
 
 No existing getter is changed or deprecated by AR-5 (additive). `tickets`, `epics`, `boardRuntime`, `board` and `hooks.orchestratorBinding` are marked `@Deprecated("use services.find", level = WARNING)` only once a provider for their interface is published through `services.provide` (board plugin: DP-5 follow-ups; orchestration: the OrchestratorBinding provider), and removed or moved with CORE-SPLIT-4b (the `daemon.api.board` types stay in the API jar until then).
+
+**DP-6 (pipeline moved out of core):** the `pipeline` package is gone from `agentHq`. Its wire DTOs (`PipelineConfig/Entry/Check/State/Configure/Show/Record/CheckRequest/Refusal`, package name unchanged) live in `agentHqProtocol`; `PipelineStore` / `PipelineHandler` and the tools `agenthq_pipeline` / `agenthq_pipeline_record` live in `plugins/official/Infantry_Board/daemon` (the tools moved there from Infantry_Git). Storage goes through `api.storage` adopting `pipeline_config`, `pipeline_entries`, `pipeline_checks` (module.json `daemon.storage.adopt`; core's migrations still create them). The four `pipeline_*` frames are declared in `daemon.frames` and registered with `api.frames.handle`; the new `pipeline_state` push goes out through `api.boardRuntime.push`. Plugin absent: `<type> refused: this daemon has no pipeline` (`BoardFrames.noPipeline`). No DaemonApi change.

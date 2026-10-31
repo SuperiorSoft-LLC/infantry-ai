@@ -343,12 +343,12 @@ class McpServeTest {
     }
 
     /**
-     * RUNTIME-LOAD-8: the mail tools (Infantry_Chat) and the pipeline tools (Infantry_Git) keep their descriptors byte for byte
+     * RUNTIME-LOAD-8: the mail tools (Infantry_Chat) and the pipeline tools (Infantry_Board since DP-6) keep their descriptors byte for byte
      * (golden `core-mcp-tools-before-f5.json`), on the actions the frames they send already had.
      */
     @Test
     fun movedMailAndPipelineToolsComeFromTheirPluginsUnchanged() {
-        val root = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Chat", "official/Infantry_Git")
+        val root = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.root("official/Infantry_Chat", "official/Infantry_Board")
         try {
             val fixture = DaemonFixture.launch(StubScript.default(), null, Files.createTempDirectory("agenthq-mcp-plugin").toFile(), pluginsRoot = root)
                 .also { fixtures += it }
@@ -360,7 +360,7 @@ class McpServeTest {
                 .map { it.jsonObject }.associateBy { it["name"]!!.jsonPrimitive.content }
             val moved = mapOf(
                 "Infantry_Chat" to mapOf("agenthq_inbox" to "mail.read", "agenthq_read" to "mail.read", "agenthq_message" to "mail.send"),
-                "Infantry_Git" to mapOf("agenthq_pipeline" to "pipeline.read", "agenthq_pipeline_record" to "pipeline.save"),
+                "Infantry_Board" to mapOf("agenthq_pipeline" to "pipeline.read", "agenthq_pipeline_record" to "pipeline.save"),
             )
             moved.forEach { (module, expected) ->
                 val manifest = Json.parseToJsonElement(File(root, "official/$module/module.json").readText()).jsonObject["daemon"]!!.jsonObject["tools"]!!.jsonArray
@@ -386,10 +386,11 @@ class McpServeTest {
             val served = serve("--port", fixture.port.toString())
             initialize(served)
             val names = served.request("tools/list")["result"]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content }
-            listOf("agenthq_inbox", "agenthq_read", "agenthq_message", "agenthq_pipeline", "agenthq_pipeline_record").forEach {
+            listOf("agenthq_inbox", "agenthq_read", "agenthq_message").forEach {
                 assertTrue(it !in names, "$it must not be listed without its plugin: $names")
             }
             assertTrue("agenthq_ticket_get" in names, "the other plugins are unaffected: $names")
+            assertTrue("agenthq_pipeline" in names && "agenthq_pipeline_record" in names, "DP-6: the pipeline tools come with Infantry_Board: $names")
             val call = served.request("tools/call", """{"name":"agenthq_inbox","arguments":{}}""")
             assertTrue("error" in call || call["result"]!!.jsonObject["isError"]?.jsonPrimitive?.content == "true", "a call to an absent tool is an error, not a crash: $call")
         } finally {

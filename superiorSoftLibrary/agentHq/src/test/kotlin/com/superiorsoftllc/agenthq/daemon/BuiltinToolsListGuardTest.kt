@@ -56,11 +56,12 @@ class BuiltinToolsListGuardTest {
             "Infantry_Settings" to listOf("agenthq_project_config_get", "agenthq_project_config_set"),
             // RUNTIME-LOAD-8: the COMMS mail tools and the project pipeline tools.
             "Infantry_Chat" to listOf("agenthq_inbox", "agenthq_read", "agenthq_message"),
-            "Infantry_Git" to listOf("agenthq_pipeline", "agenthq_pipeline_record"),
             // BOARD-API-2: the ticket read tools (the files pair moved earlier, with TICKET-FILES).
             // RUNTIME-LOAD-4 (F5): the board's write tools.
             "Infantry_Board" to listOf("agenthq_ticket_get", "agenthq_ticket_files", "agenthq_ticket_related_files", "agenthq_epic_base", "agenthq_ticket_move", "agenthq_ticket_delete",
-                "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_board", "agenthq_ticket_start"),
+                "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_board", "agenthq_ticket_start",
+                // DP-6: the pipeline tools moved here from Infantry_Git with the pipeline frames.
+                "agenthq_pipeline", "agenthq_pipeline_record"),
         )
         val sources = mcp.walkTopDown().filter { it.isFile && it.extension == "kt" }.map { it.readText() }.toList()
         moved.forEach { (module, tools) ->
