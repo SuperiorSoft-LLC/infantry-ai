@@ -13,6 +13,14 @@ import com.superiorsoftllc.agenthq.daemon.api.board.BoardExecutor
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardImages
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardRunHealth
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardRunOutcome
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardProviderInfo
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardRoleInstance
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardSessionDetail
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardTrait
+import com.superiorsoftllc.agenthq.protocol.TraitCheck
+import com.superiorsoftllc.agenthq.session.RoleInstance
+import com.superiorsoftllc.agenthq.session.TraitSnapshot
+import com.superiorsoftllc.agenthq.session.isBusy
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardSessionEvent
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardSessionListener
 import com.superiorsoftllc.agenthq.orchestration.RunOutcomes
@@ -170,6 +178,7 @@ class LocalBoardHost(
                     contextSources = request.contextSources.map { ContextSource(it.source, it.chars) },
                     projectId = request.projectId,
                     contextLimit = request.contextLimit,
+                    instance = request.instance?.toCore(),
                     unattended = true,
                     launchOrigin = origin(request.origin),
                     preWorktree = request.worktree?.let {
@@ -209,6 +218,31 @@ class LocalBoardHost(
             return true
         }
 
+        override fun providers() = sessionManager()?.providers.orEmpty().map { BoardProviderInfo(it.id, it.defaultModel()) }
+        override fun providerId() = sessionManager()?.providerId.orEmpty()
+        override fun hasProvider(id: String) = sessionManager()?.hasProvider(id) ?: false
+        override fun providerFor(id: String) = sessionManager()?.providerFor(id)?.let { BoardProviderInfo(it.id, it.defaultModel()) }
+        override fun defaultModel(providerId: String?): String? {
+            val manager = sessionManager() ?: return null
+            return (providerId?.takeIf { it.isNotBlank() }?.let(manager::providerFor) ?: manager.providers.firstOrNull())?.defaultModel()
+        }
+
+        override fun defaultWorkingDir(): String? = sessionManager()?.defaultWorkingDir?.path
+        override fun workEvents(sessionId: String) = sessionManager()?.workEvents(sessionId) ?: 0
+        override fun requireAllowedRole(role: String?): String? {
+            val manager = sessionManager() ?: return null
+            return try {
+                manager.requireAllowedRole(role)
+                null
+            } catch (e: IllegalArgumentException) {
+                e.message ?: "role not allowed"
+            }
+        }
+
+        override fun detail(sessionId: String) = sessionManager()?.get(sessionId)?.let(::detailOf)
+        override fun details() = sessionManager()?.list().orEmpty().map(::detailOf)
+        override fun holdsSessionsLock(): Boolean = sessionManager()?.let { Thread.holdsLock(it) } ?: false
+
         override fun subscribe(listener: BoardSessionListener): AutoCloseable {
             listeners.add(listener)
             return AutoCloseable { listeners.remove(listener) }
@@ -225,6 +259,8 @@ class LocalBoardHost(
         }
     }
 
+    override val events: TicketEventAppender get() = tablesView.events
+
     override val settings: BoardSettings = object : BoardSettings {
         override fun get(key: String): String? = store.settings.get(key)?.value
     }
@@ -237,6 +273,12 @@ class LocalBoardHost(
 
         override fun delete(id: String) {
             (agentProfiles ?: throw UnsupportedOperationException(BoardAgents.UNAVAILABLE)).delete(id)
+        }
+
+        override fun instanceFor(profileId: String?, role: String?) = agentProfiles?.instanceFor(profileId, role)?.toBoard()
+        override fun withSkills(instance: BoardRoleInstance, ticketId: String?): BoardRoleInstance {
+            val manager = sessionManager() ?: return instance
+            return manager.withSkills(instance.toCore(), ticketId).toBoard()
         }
 
         override fun roleKnown(role: String) = agentProfiles?.roleKnown(role) ?: false
@@ -277,6 +319,20 @@ class LocalBoardHost(
         override fun release(projectId: String?, dropped: Collection<String>, remaining: Collection<StoredTicket>) =
             ticketImages.release(projectId, dropped, remaining.map { it.toRow() })
     }
+
+    private fun detailOf(r: com.superiorsoftllc.agenthq.session.SessionRecord) = BoardSessionDetail(SessionViews.of(r), r.lastHeartbeat, r.isBusy())
+
+    private fun RoleInstance.toBoard() = BoardRoleInstance(
+        agentId, role, instructions,
+        traits.map { BoardTrait(it.id, it.version, it.name, it.body, it.check?.kind, it.check?.reportTo, it.check?.fields.orEmpty(), it.check?.reprompt ?: true) },
+        skillIds,
+    )
+
+    private fun BoardRoleInstance.toCore() = RoleInstance(
+        agentId, role, instructions,
+        traits.map { t -> TraitSnapshot(t.id, t.version, t.name, t.body, t.checkKind?.let { TraitCheck(it, t.checkReportTo ?: TraitCheck.DEFAULT_REPORT_TO, t.checkFields, t.checkReprompt) }) },
+        skillIds,
+    )
 
     private fun AgentProfile.toAgent() = BoardAgent(id, name, role, provider, model, effort, instructions, projectId, traitIds, skillIds)
     private fun BoardAgent.toProfile() = AgentProfile(

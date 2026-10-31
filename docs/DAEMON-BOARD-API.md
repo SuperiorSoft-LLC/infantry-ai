@@ -245,3 +245,19 @@ Still not in the port: `AgentProfiles.instanceFor` / `RoleInstance` / `withSkill
 `LocalBoardHost.publish(SessionEvent)` is the fan-in: the daemon's one event sink calls it (not wired yet, DP-5 does it); listeners run in arrival order, a throw in one is swallowed.
 
 TEST-TODO (DP-5f-2): (1) event delivery order: publish Status, Exit, Status for one session; one listener sees them in that order, two listeners each see all three in that order. (2) subscription lifecycle: after `close()` a listener gets nothing, `close()` twice is safe, a listener subscribing inside a callback does not break the delivery in flight, a throwing listener does not stop the next one. (3) Exit carries the `SessionView` as it stood on arrival even after the session record is deleted. (4) `executorFor` on `LocalBoardHost.agents` equals `AgentProfiles.executorFor` for the same inputs (role binding and pins).
+
+## 11. DP-5f-2b built (ticket 05622d24): second batch (`BOARD_API_VERSION` 1.8.0, additive)
+
+Same rules as section 10. `LocalBoardHost` delegates; `NoBoardHost` answers empty. `TicketBoard` untouched.
+
+| core | TicketBoard use | port member |
+|---|---|---|
+| `SessionManager.providers/providerId/hasProvider/providerFor`, `AgentProvider.defaultModel` | provider lookups | `BoardSessions.providers() / providerId() / hasProvider / providerFor / defaultModel(providerId)` over `BoardProviderInfo` |
+| `defaultWorkingDir`, `workEvents`, `requireAllowedRole` | start checks, stall checks | `BoardSessions.defaultWorkingDir() / workEvents(id) / requireAllowedRole(role)` (problem text or null) |
+| `AgentProfiles.instanceFor`, `SessionManager.withSkills`, `startNew(instance=)` | first-turn render + freeze | `BoardAgents.instanceFor(profileId, role)`, `BoardAgents.withSkills(instance, ticketId)` over `BoardRoleInstance`/`BoardTrait` (check flattened); `SessionStart.instance` goes to `startNew(instance=)` (null = host resolves) |
+| `SessionRecord.lastHeartbeat`, `isBusy()` | stall / worker checks | `BoardSessions.detail(id)` / `details()` -> `BoardSessionDetail(view, lastHeartbeat, busy)` |
+| `Thread.holdsLock(sessions)` | `onSessionEvent` inline vs queued | `BoardSessions.holdsSessionsLock()` (default false). Monitor order is board -> sessions: an event delivered while this is true must be queued to the board's executor, not applied inline. Event ordering is unchanged. |
+| subscribe thread | | `BoardSessions.delivery` = `EMITTING_THREAD`: listeners run on the emitting thread, possibly under the sessions lock |
+| `TicketBoard.events` (`TicketEventLog`) | record / deliver | `BoardHost.events: TicketEventAppender` (same appender as `storage.tables.events`, usable outside a transaction) |
+
+TEST-TODO (DP-5f-2b): (1) lock hook parity: `holdsSessionsLock()` true exactly inside `synchronized(manager)` on the calling thread, false on another thread. (2) delivery thread: a listener runs on the emitting thread, under the manager monitor when the emitter holds it. (3) heartbeat/busy mapping: `detail().busy` equals `isBusy()` for STARTING/BUSY/WAITING_INPUT/IDLE/EXITED; `lastHeartbeat` equals the record's. (4) `instanceFor`/`withSkills` round-trip equals core's `RoleInstance` including a trait check; `start(instance=...)` freezes exactly that instance. (5) `requireAllowedRole` text equals core's refusal under an allowlist. (6) `host.events` records and delivers like `storage.tables.events`.

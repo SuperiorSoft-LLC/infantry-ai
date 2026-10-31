@@ -46,6 +46,12 @@ interface BoardAgents {
     /** Checks a provider / model / effort choice and returns it as resolved; a problem throws [IllegalArgumentException]. */
     fun validateExecutor(provider: String?, model: String?, effort: String?): BoardExecutor = BoardExecutor(provider, model, effort)
 
+    /** DP-5f-2b: the instance (persona + effective traits) a spawn for [profileId] and/or [role] would freeze now; null = anonymous. */
+    fun instanceFor(profileId: String?, role: String?): BoardRoleInstance? = null
+
+    /** DP-5f-2b: [instance] with the skill ids a spawn for its agent on [ticketId] would freeze now; unchanged when the host has no resolver. */
+    fun withSkills(instance: BoardRoleInstance, ticketId: String?): BoardRoleInstance = instance
+
     companion object {
         const val UNAVAILABLE = "this daemon has no agent profiles"
     }
@@ -104,4 +110,37 @@ interface BoardImages {
 
     /** Deletes each of [dropped] that no ticket in [remaining] still references. Best effort, after the commit. */
     fun release(projectId: String?, dropped: Collection<String>, remaining: Collection<StoredTicket>) {}
+}
+
+/** DP-5f-2b: one trait frozen into an instance; the check is flattened (null [checkKind] = no check). */
+data class BoardTrait(
+    val id: String,
+    val version: Int,
+    val name: String,
+    val body: String,
+    val checkKind: String? = null,
+    val checkReportTo: String? = null,
+    val checkFields: List<String> = emptyList(),
+    val checkReprompt: Boolean = true,
+)
+
+/** DP-5f-2b: the role instance a session is a clone of, frozen once at start (what `RoleInstance` is in core). */
+data class BoardRoleInstance(
+    val agentId: String?,
+    val role: String?,
+    val instructions: String?,
+    val traits: List<BoardTrait> = emptyList(),
+    val skillIds: List<String> = emptyList(),
+)
+
+/** DP-5f-2b: a provider a start may name. [defaultModel] null = the harness's own. */
+data class BoardProviderInfo(val id: String, val defaultModel: String? = null)
+
+/** DP-5f-2b: a session plus what the stall and busy checks read: the last observed activity and whether a run is in flight. */
+data class BoardSessionDetail(val view: SessionView, val lastHeartbeat: Long, val busy: Boolean)
+
+/** DP-5f-2b: which thread a [BoardSessionListener] runs on. */
+enum class SessionDelivery {
+    /** The thread that emitted the event, possibly while the host holds its sessions lock (see [BoardSessions.holdsSessionsLock]). */
+    EMITTING_THREAD,
 }

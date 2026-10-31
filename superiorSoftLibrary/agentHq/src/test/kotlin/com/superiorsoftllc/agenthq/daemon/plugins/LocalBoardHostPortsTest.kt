@@ -2,6 +2,9 @@ package com.superiorsoftllc.agenthq.daemon.plugins
 
 import com.superiorsoftllc.agenthq.daemon.api.board.BOARD_API_VERSION
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardAgent
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardRoleInstance
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardTrait
+import com.superiorsoftllc.agenthq.daemon.api.board.SessionDelivery
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardSessionEvent
 import com.superiorsoftllc.agenthq.daemon.api.board.NoBoardHost
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
@@ -19,7 +22,7 @@ class LocalBoardHostPortsTest {
 
     private fun host() = LocalBoardHost(store = SqlAgentHqStore.open(kotlin.io.path.createTempDirectory("bh").resolve("a.db").toString()).also { opened += it as AutoCloseable }, sessionManager = { null as com.superiorsoftllc.agenthq.session.SessionManager? })
 
-    @Test fun `api version is 1_7_0`() = assertEquals("1.7.0", BOARD_API_VERSION)
+    @Test fun `api version is 1_8_0`() = assertEquals("1.8.0", BOARD_API_VERSION)
 
     @Test fun `unwired members answer like NoBoardHost`() {
         val h = host()
@@ -48,5 +51,25 @@ class LocalBoardHostPortsTest {
         h.publish(SessionEvent.Exit("s3", 0))
         assertEquals(listOf("s1", "s2"), a)
         assertEquals(listOf("s1", "s2", "s3"), b)
+    }
+
+    @Test fun `unwired 2b members answer like NoBoardHost`() {
+        val h = host()
+        assertTrue(h.sessions.providers().isEmpty())
+        assertEquals("", h.sessions.providerId())
+        assertEquals(false, h.sessions.hasProvider("x"))
+        assertNull(h.sessions.providerFor("x"))
+        assertNull(h.sessions.defaultModel())
+        assertNull(h.sessions.defaultWorkingDir())
+        assertEquals(0, h.sessions.workEvents("s"))
+        assertNull(h.sessions.requireAllowedRole("dev"))
+        assertNull(h.sessions.detail("s"))
+        assertTrue(h.sessions.details().isEmpty())
+        assertEquals(false, h.sessions.holdsSessionsLock())
+        assertEquals(SessionDelivery.EMITTING_THREAD, h.sessions.delivery)
+        assertNull(h.agents.instanceFor("a", "r"))
+        val i = BoardRoleInstance("a", "r", "p", listOf(BoardTrait("t", 1, "n", "b", "report", "pm", listOf("f"), false)), listOf("s"))
+        assertEquals(i, h.agents.withSkills(i, "t1"))
+        assertTrue(h.events === h.events)
     }
 }

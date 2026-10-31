@@ -28,6 +28,12 @@ interface BoardHost {
     val context: BoardContextSources get() = NoBoardHost.context
     val images: BoardImages get() = NoBoardHost.images
 
+    /**
+     * DP-5f-2b: the event log the board records into and delivers from, outside a transaction (what `TicketBoard.events` is today).
+     * Same appender as `storage.tables.events`, available without opening a transaction.
+     */
+    val events: TicketEventAppender get() = NoBoardHost.events
+
     /** Epoch millis; the host's clock, so a test host can pin time. */
     fun now(): Long = System.currentTimeMillis()
 }
@@ -209,6 +215,8 @@ data class SessionStart(
     val ticketId: String? = null,
     val projectId: String? = null,
     val contextLimit: Int? = null,
+    /** DP-5f-2b: the instance the board rendered the first turn from, frozen as the session's own; null = the host resolves it. */
+    val instance: BoardRoleInstance? = null,
     /** `human` or `unattended`: which launch gate applies. */
     val origin: String = "human",
 )
@@ -249,6 +257,40 @@ interface BoardSessions {
     /** DP-5f-2: events arrive in the order the host saw them, one listener call at a time; closing the handle stops delivery (idempotent). A throw in a listener never reaches the host. */
     fun subscribe(listener: BoardSessionListener): AutoCloseable = AutoCloseable {}
 
+    /** DP-5f-2b: the providers a start may name, the default first. */
+    fun providers(): List<BoardProviderInfo> = emptyList()
+
+    /** The default provider's id; blank when the host has none. */
+    fun providerId(): String = ""
+    fun hasProvider(id: String): Boolean = false
+    fun providerFor(id: String): BoardProviderInfo? = null
+
+    /** The model [providerId] (null = the default provider) runs when none is picked; null = the harness's own. */
+    fun defaultModel(providerId: String? = null): String? = null
+
+    /** The directory a start without one runs in; null = the host decides. */
+    fun defaultWorkingDir(): String? = null
+
+    /** Count of work events (tool uses etc.) the session has produced; 0 for an unknown one. */
+    fun workEvents(sessionId: String): Int = 0
+
+    /** A problem text when a role allowlist is in force and refuses [role], else null (a null role passes). */
+    fun requireAllowedRole(role: String?): String? = null
+
+    /** The session with its last heartbeat and busy flag; null when unknown. */
+    fun detail(sessionId: String): BoardSessionDetail? = null
+    fun details(): List<BoardSessionDetail> = emptyList()
+
+    /**
+     * DP-5f-2b: whether the CALLING thread holds the host's sessions monitor (`Thread.holdsLock(sessionManager)` in core). The board
+     * takes its own monitor before the sessions one, so an event delivered under the sessions lock must be queued, not applied
+     * inline (`TicketBoard.onSessionEvent`). Default false (a host with no such lock never needs to queue). Ordering is unchanged.
+     */
+    fun holdsSessionsLock(): Boolean = false
+
+    /** DP-5f-2b: where [subscribe] delivers. */
+    val delivery: SessionDelivery get() = SessionDelivery.EMITTING_THREAD
+
     companion object {
         const val NO_SESSIONS = "this daemon has no session manager"
     }
@@ -269,6 +311,9 @@ object NoBoardHost : BoardHost {
     override val runs: BoardRunHealth = object : BoardRunHealth {}
     override val context: BoardContextSources = object : BoardContextSources {}
     override val images: BoardImages = object : BoardImages {}
+    override val events: TicketEventAppender = object : TicketEventAppender {
+        override fun record(before: Map<String, String>, after: Map<String, String>, changedIds: Collection<String>, deleted: Collection<String>) {}
+    }
 }
 
 private object EmptyBoardTables : BoardTables {
