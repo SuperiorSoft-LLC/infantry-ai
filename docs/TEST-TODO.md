@@ -41,3 +41,6 @@
 ## DP-5f-6 (ticket-8b50393b): TicketBoard tests over the fake host (partial)
 - TEST-TODO: RoutingRulesTest, BacklogLaneTest, TicketPacingGateTest (agentHqBoard, over InMemoryBoardHost) -- start precedence (rule beats role binding, ticket pin beats rule), a rule naming an unknown provider parks the ticket in todo with "rule 'heavy'" in the detail and reports once, per-lane cap and pacing gate refusals. Inputs: weighted tickets with rules/pins/lane caps; expected: same assertions as before the move, started model read from host.starts.
 - TEST-TODO: still in agentHq, not yet moved: RoleBindingSpawnTest, ContextLimitTest, EffortTest, TicketWorkerInvariantTest, TicketSkillAttachmentTest, TicketWeightTest, TicketBoardTest, KnowledgePtrTest; TicketEventLogTest/TicketTypeMigrationTest/LocalBoardServicesTest/StoryMigrationTest not yet rewired to BoardOps.
+
+## CORE-SPLIT-4a1 (ticket 6dad821a)
+TEST-TODO: daemon wiring builders (`daemon/wiring/*Wiring.kt`) are a pure move of DaemonMain construction. Behaviour: a daemon started as before has the same stores, frames, trigger service (autoStart=false), owner-question sink, attention eventSink, run manager and chat-image retention. Check: start the daemon, save a memory note/decision/issue, fire a trigger, ask an owner question; all behave as before.
