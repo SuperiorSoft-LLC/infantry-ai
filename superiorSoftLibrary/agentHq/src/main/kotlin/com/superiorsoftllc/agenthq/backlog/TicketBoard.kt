@@ -21,6 +21,8 @@ import com.superiorsoftllc.agenthq.persistence.AgentHqStore
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardHost
 import com.superiorsoftllc.agenthq.daemon.api.board.BranchOutcome
 import com.superiorsoftllc.agenthq.daemon.api.board.BranchRequest
+import com.superiorsoftllc.agenthq.daemon.api.board.SessionStart
+import com.superiorsoftllc.agenthq.daemon.api.board.SessionStartResult
 import com.superiorsoftllc.agenthq.daemon.api.board.StoredRun
 import com.superiorsoftllc.agenthq.daemon.api.board.TicketEventAppender
 import com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardHost
@@ -384,31 +386,28 @@ class TicketBoard(
         if (assignment.busy) return PromptLaunch.Refused("profile lane '${assignment.queueLane}' is at capacity")
         val profile = assignment.profile ?: return PromptLaunch.Refused("no profile resolved for prompt")
         val executor = profiles.executorFor(profile, null, null, null)
-        return try {
-            sessionManager.checkSpawn(executor.provider, executor.model)
-            // TRAITS-T4/T5: the instance is resolved first and passed in, so the stored row is what this turn rendered.
-            // P10-K15: with the skill ids the row will freeze, so the turn renders exactly those.
-            val instance = profiles.instanceFor(profile.id, profile.role)?.let { sessionManager.withSkills(it, null) }
-            // P10-K9: the session's own project (TRIGGER-NUDGE: the trigger's, when it names one).
-            val first = firstTurn(instance, profile.role, profile.id, prompt, host.context.knowledgeSection(projectId, profile.role), host.context.skillsSection(instance?.skillIds))
-            val started = sessionManager.startNew(
+        host.sessions.checkSpawn(executor.provider, executor.model)?.let { return PromptLaunch.Refused(it) }
+        // TRAITS-T4/T5: the instance is resolved first and passed in, so the stored row is what this turn rendered.
+        // P10-K15: with the skill ids the row will freeze, so the turn renders exactly those.
+        val instance = host.agents.instanceFor(profile.id, profile.role)?.let { host.agents.withSkills(it, null) }
+        // P10-K9: the session's own project (TRIGGER-NUDGE: the trigger's, when it names one).
+        val first = firstTurn(instance?.toCore(), profile.role, profile.id, prompt, host.context.knowledgeSection(projectId, profile.role), host.context.skillsSection(instance?.skillIds))
+        return when (val started = host.sessions.start(
+            SessionStart(
                 prompt = first,
-                instance = instance,
-                workingDir = repo,
-                branchHint = null,
+                workingDir = repo?.path,
                 providerId = executor.provider,
                 model = executor.model,
                 effort = executor.effort,
                 agentId = profile.id,
                 role = profile.role,
-                ticketId = null,
                 projectId = projectId,
-                unattended = true,
-                launchOrigin = LaunchOrigin.UNATTENDED,
-            )
-            PromptLaunch.Started(started.id)
-        } catch (e: IllegalArgumentException) {
-            PromptLaunch.Refused(e.message ?: "session start refused")
+                instance = instance,
+                origin = "unattended",
+            ),
+        )) {
+            is SessionStartResult.Started -> PromptLaunch.Started(started.session.id)
+            is SessionStartResult.Refused -> PromptLaunch.Refused(started.reason)
         }
     }
 
@@ -884,16 +883,12 @@ class TicketBoard(
                 return refusedStart(initialTicket, detail)
             }
         }
-        try {
-            sessionManager.checkSpawn(providerId, model)
-        } catch (e: IllegalArgumentException) {
-            return refusedStart(initialTicket, e.message ?: "provider or model refused")
-        }
+        host.sessions.checkSpawn(providerId, model)?.let { return refusedStart(initialTicket, it) }
         // Story 9.7b: a drained queue is an UNATTENDED launch (startNew refuses it over a spent budget or an
         // exhausted provider); a human move or start-next is only warned, and still starts.
         val unattendedLaunch = origin == HandOutOrigin.QUEUE_DRAIN || origin == HandOutOrigin.TRIGGER || origin == HandOutOrigin.REPAIR
         val launchWarning = if (unattendedLaunch) null else
-            (sessionManager.launchCheck(providerId, LaunchOrigin.HUMAN, id) as? GateDecision.Warn)?.reason
+            host.sessions.launchGate(providerId, "human", id).warning
         // USAGE-PACE: only the owner's own move (no starter session) may go past the plan allowance, with a warning.
         val humanMove = origin == HandOutOrigin.MOVE && startedBy == null
         val pacingWarning = when (val verdict = pacing(providerId, model)) {
@@ -949,7 +944,7 @@ class TicketBoard(
 
         // TRAITS-T4/T5: resolved BEFORE composing, then passed to startNew, so the frozen row is what this start rendered.
         // P10-K15: with the skill ids the row will freeze for this ticket, so the `skills` source renders exactly those.
-        val instance = profiles.instanceFor(profile.id, profile.role)?.let { sessionManager.withSkills(it, id) }
+        val instance = host.agents.instanceFor(profile.id, profile.role)?.let { host.agents.withSkills(it, id) }
         val input = briefInput(
             row, initial, profile.role, profile.id, instance,
             startedBy?.let { starter -> reportTo(starter, sessionManager, profiles) },
@@ -968,7 +963,7 @@ class TicketBoard(
                 role = profile.role,
                 ticketId = id,
                 contextSources = composed.sources,
-                instance = instance,
+                instance = instance?.toCore(),
                 projectId = row.projectId,
                 contextLimit = row.contextLimit ?: byWeightContext?.contextLimit, // CONTEXT-LIMIT-1; TOKEN-7 weight default
                 unattended = true,
@@ -1107,7 +1102,7 @@ class TicketBoard(
         snapshot: Snapshot,
         role: String?,
         agentId: String?,
-        instance: com.superiorsoftllc.agenthq.session.RoleInstance?,
+        instance: com.superiorsoftllc.agenthq.daemon.api.board.BoardRoleInstance?,
         reportTo: ReportTo?,
     ) = ContextInput(
         instructions = instance?.instructions,
@@ -1119,7 +1114,7 @@ class TicketBoard(
         projectId = row.projectId,
         role = role,
         agentId = agentId,
-        traits = instance?.traits.orEmpty(),
+        traits = instance?.toCore()?.traits.orEmpty(),
         skillIds = instance?.skillIds,
         includeSkillsOverride = row.includeSkillsContext,
         reportTo = reportTo,
@@ -1139,7 +1134,7 @@ class TicketBoard(
         val snapshot = store.transaction { load() }
         val row = snapshot.rows[ticketId] ?: return null
         val reportTo = row.startedBy?.let { starter -> agents?.let { reportTo(starter, sessionManager, it) } }
-        return context.compose(briefInput(row, snapshot, session.role, session.agentId, sessionManager.instance(session.id), reportTo)).prompt
+        return context.compose(briefInput(row, snapshot, session.role, session.agentId, sessionManager.instance(session.id)?.toBoard(), reportTo)).prompt
     }
 
     /**
