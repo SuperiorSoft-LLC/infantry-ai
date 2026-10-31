@@ -34,10 +34,23 @@ class BuildLimitsTest {
         assertEquals("6", env[BuildLimits.MAX_WORKERS_ENV])
         assertEquals("2", env[BuildLimits.MAX_FORKS_ENV])
         assertEquals(
+            "-Xmx512m -Dorg.gradle.workers.max=6 -Dorg.gradle.project.kotlin.compiler.execution.strategy=in-process",
+            env["GRADLE_OPTS"],
+        )
+    }
+
+    @Test fun `STACK-NEUTRAL-6 - this repo's fork properties come from the project additions merged over the bundled profile`() {
+        val text = BuildLimitsTest::class.java.getResourceAsStream("/watch/repo-profile-additions.json")!!.readBytes().toString(Charsets.UTF_8)
+        val add = ToolProfiles.parse(text).single()
+        val base = ToolProfiles.DEFAULTS.first { it.name == add.name }
+        val merged = ToolProfiles.merge(ToolProfiles.DEFAULTS, listOf(base.copy(env = base.env + add.env)))
+        val env = BuildLimits(BuildPriority.BELOW_NORMAL, maxWorkers = 6, maxParallelForks = 2).sessionEnv(mapOf("GRADLE_OPTS" to "-Xmx512m")::get, merged)
+        assertEquals(
             "-Xmx512m -Dorg.gradle.workers.max=6 -Dorg.gradle.project.kotlin.compiler.execution.strategy=in-process " +
                 "-Dorg.gradle.project.agenthq.testForks=2 -Dorg.gradle.project.agenthq.uiTestForks=2",
             env["GRADLE_OPTS"],
         )
+        assertFalse(base.env.any { "testForks" in it.value }, "the bundled profile stays generic")
     }
 
     @Test fun `zero means unlimited - no cap is passed`() {
@@ -47,7 +60,6 @@ class BuildLimitsTest {
         assertFalse(BuildLimits.MAX_FORKS_ENV in env)
         val opts = env.getValue("GRADLE_OPTS")
         assertFalse("workers.max" in opts)
-        assertFalse("testForks" in opts)
         assertTrue("execution.strategy=in-process" in opts)
     }
 

@@ -782,6 +782,10 @@ class AgentHqDaemon(
                     File(com.superiorsoftllc.agenthq.session.stateDir(), "process-ledger.json").isFile
             }
                 ?.let { println("[agentHq] limits.watch.enabled set to $it (${if (it == 1L) "existing install: watch tooling kept on" else "fresh install: watch tooling off until enabled"})") }
+            // STACK-NEUTRAL-6: this repo's test-fork properties live in the install's tool-profile override, not the bundled profile.
+            if (settings.migrateRepoProfileAdditions { sessionStore.load().isNotEmpty() || File(com.superiorsoftllc.agenthq.session.stateDir(), "process-ledger.json").isFile }) {
+                com.superiorsoftllc.agenthq.runner.ToolProfiles.active = settings.toolProfiles()
+            }
             // Ticket 55d60a5e: resolved now, while the database answers; /health and its watchdog never read it later.
             val healthSettings = HealthSettings(
                 dbTimeoutMs = settings.limit(LimitRegistry.HEALTH_DB_TIMEOUT_SECONDS) * 1000L,

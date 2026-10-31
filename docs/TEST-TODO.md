@@ -47,3 +47,5 @@ TEST-TODO: daemon wiring builders (`daemon/wiring/*Wiring.kt`) are a pure move o
 TEST-TODO (CORE-SPLIT-4a2): behaviour: daemon start order unchanged after moving agents/prompts/board-host construction to daemon/wiring. Class: a daemon boot smoke over AgentsWiring/PromptsWiring/BoardWiring. Inputs: start with and without a board (withBoard=false). Expected: pending prompts reach clients, role-bound agents resolve, no board => no ticket services and no core host.
 
 - CORE-SPLIT-4a3: at QA, start the daemon and confirm harness modules still load/sync and /plugins lists them (HarnessModulesWiring); BoardPortRef/OrchestratorHub and the PluginBoardPorts attach stay in DaemonMain.
+## STACK-NEUTRAL-6 (ticket-89466254)
+TEST-TODO: SettingsService.migrateRepoProfileAdditions - existing install with no stored `gradle` override: stored watch.toolProfiles gains the gradle profile + the two fork templates (resource watch/repo-profile-additions.json), second call returns false; fresh install or existing gradle override: untouched. Expect owner's worker GRADLE_OPTS identical to before.

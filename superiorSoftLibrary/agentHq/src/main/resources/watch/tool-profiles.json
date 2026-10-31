@@ -12,9 +12,7 @@
     "heavyCommands": ["gradle"],
     "env": [
       { "name": "GRADLE_OPTS", "value": "-Dorg.gradle.workers.max=${maxWorkers}", "onlyIf": "maxWorkers" },
-      { "name": "GRADLE_OPTS", "value": "-Dorg.gradle.project.kotlin.compiler.execution.strategy=in-process" },
-      { "name": "GRADLE_OPTS", "value": "-Dorg.gradle.project.agenthq.testForks=${maxParallelForks}", "onlyIf": "maxParallelForks" },
-      { "name": "GRADLE_OPTS", "value": "-Dorg.gradle.project.agenthq.uiTestForks=${maxParallelForks}", "onlyIf": "maxParallelForks" }
+      { "name": "GRADLE_OPTS", "value": "-Dorg.gradle.project.kotlin.compiler.execution.strategy=in-process" }
     ],
     "notifyOn": ["BUILD SUCCESSFUL", "BUILD FAILED"],
     "failureMarkers": ["BUILD FAILED", "^FAILURE: "]
