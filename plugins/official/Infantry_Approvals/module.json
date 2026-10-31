@@ -9,6 +9,16 @@
   "entry": "com.superiorsoftllc.agenthq.plugins.official.approvals.ApprovalsPlugin",
   "jar": "build/libs/Infantry_Approvals.jar",
   "buildOrder": 200,
+  "daemon": {
+    "entry": "com.superiorsoftllc.agenthq.plugins.official.approvals.daemon.ApprovalsDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_Approvals-daemon.jar",
+    "apiAtLeast": "1.22.0",
+    "hooks": ["approvalRules"],
+    "frames": [
+      { "type": "approval_rules", "action": "settings.read", "kind": "read" },
+      { "type": "approval_rule_delete", "action": "settings.save", "kind": "write" }
+    ]
+  },
   "fills": [
     "infantry.shell.questions"
   ],
