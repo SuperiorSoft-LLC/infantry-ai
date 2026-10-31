@@ -555,6 +555,17 @@ class DaemonPluginHost private constructor(
                 !p.community || LocalPluginStorage.GRANT in p.setting.allow
             }
         }
+        // DP-10a: the project file surface; official / core, or a community module with the grant `files`.
+        override fun files(projectId: String): com.superiorsoftllc.agenthq.daemon.api.files.ProjectFiles {
+            check(!p.community || "files" in p.setting.allow) { "missing grant 'files' in modules.json" }
+            val id = projectId.trim()
+            require(id.isNotEmpty()) { "expects a project id" }
+            val project = hostServices.projects.list().firstOrNull { it.id == id } ?: throw IllegalArgumentException("no project '${id.take(80)}'")
+            val dir = project.directory.orEmpty()
+            require(dir.isNotBlank()) { "project '${project.id}' has no directory to store uploads in" }
+            require(java.io.File(dir).isDirectory) { "project '${project.id}' directory does not exist: $dir" }
+            return com.superiorsoftllc.agenthq.daemon.api.files.DirectoryProjectFiles(java.io.File(dir))
+        }
         // AR-5: typed optional hostServices. Publishing: official / core, or the grant `hostServices.provide`; lookup is open. Unload closes the handle.
         override val services: com.superiorsoftllc.agenthq.daemon.api.ServicesApi =
             ScopedServices(serviceRegistry, p.id, { !p.community || ScopedServices.GRANT in p.setting.allow }) { p.closeables += it }

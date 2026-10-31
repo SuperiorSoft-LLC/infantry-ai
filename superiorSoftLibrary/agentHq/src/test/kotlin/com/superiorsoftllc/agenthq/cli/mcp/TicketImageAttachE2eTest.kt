@@ -151,7 +151,7 @@ class TicketImageAttachE2eTest {
 
     private fun setUp(name: String): Triple<DaemonFixture, File, String> {
         val state = tempDir("agenthq-img-attach-daemon")
-        val fixture = DaemonFixture.launch(stateDir = state, runner = GatedRunner(), workingDir = File(state, "workdir").apply { mkdirs() }, pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot())
+        val fixture = DaemonFixture.launch(stateDir = state, runner = GatedRunner(), workingDir = File(state, "workdir").apply { mkdirs() }, pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot("official/Infantry_Chat"))
             .also { fixtures += it; it.client.await(Envelope.READY) }
         val root = tempDir("agenthq-img-attach-project")
         return Triple(fixture, root, fixture.createProject(name, root))

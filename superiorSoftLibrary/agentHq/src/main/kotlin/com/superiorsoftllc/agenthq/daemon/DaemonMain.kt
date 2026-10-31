@@ -457,8 +457,6 @@ class AgentHqDaemon(
     val pendingPrompts: com.superiorsoftllc.agenthq.prompts.PendingPrompts = com.superiorsoftllc.agenthq.prompts.PendingPrompts(),
     /** BUG-FLAKE-1: the port [build] chose, held bound until [server] starts (BUG-PORT-0b); null = nothing held. */
     private val portReservation: DaemonPort.Reservation? = null,
-    /** IMG-5: deletes chat uploads unused for `images.chatImageRetentionDays`; swept at [start], then every 6 h. */
-    val chatImageRetention: com.superiorsoftllc.agenthq.images.ChatImageRetention? = null,
     /** ASK-1 (contract 1.97.0): non-blocking owner questions; [start] sweeps their `defaultAfterMin` auto-picks. */
     val ownerQuestions: com.superiorsoftllc.agenthq.questions.OwnerQuestions? = null,
     /** TICKET-HANDOVER: switches ticket workers across harnesses with a handoff turn; stopped first by [close]. */
@@ -491,12 +489,10 @@ class AgentHqDaemon(
      */
     fun start(): Int {
         server.start(wait = false)
-        // IMG-5: one sweep at start, then the 6-hour tick.
-        chatImageRetention?.start()
         // ASK-1: auto-picks are minute-grained; a 15 s sweep (and one at once, for questions due across a restart).
         ownerQuestions?.let { questions ->
             runCatching { questions.sweep() }
-            questionSweeper = com.superiorsoftllc.agenthq.images.ChatImageRetention.scheduledTicker(QUESTION_SWEEP_MS) {
+            questionSweeper = scheduledTicker(QUESTION_SWEEP_MS) {
                 runCatching { questions.sweep() }.onFailure { System.err.println("[agentHq] question sweep failed: ${it.message}") }
             }
         }
@@ -542,7 +538,6 @@ class AgentHqDaemon(
         // Triggers stop observing FIRST: the kills below must not read as trigger-run failures; a trigger
         // still running is tripped at the next boot instead ("daemon restarted mid-run").
         runCatching { triggers.close() }
-        runCatching { chatImageRetention?.close() }
         runCatching { questionSweeper?.close() }
         background.forEach { runCatching { it.close() } }
         // PROMPT-1: nobody can answer after this; every suspended asker gets deny / no answer.
@@ -685,8 +680,6 @@ class AgentHqDaemon(
             projectDirs: Boolean = com.superiorsoftllc.agenthq.session.ProjectFolders.enabledFromSettings(),
             /** IMG-5: "now" for upload mtimes and the chat image retention sweep; a test passes a fake clock. */
             clock: () -> Long = System::currentTimeMillis,
-            /** IMG-5: runs the retention sweep every interval; a test passes one it fires by hand. */
-            chatImageTicker: (Long, () -> Unit) -> AutoCloseable = com.superiorsoftllc.agenthq.images.ChatImageRetention::scheduledTicker,
             /**
              * INSTALL-REFOCUS-1: routes the embedding app adds to this server, behind the same [AccessPolicy] as every
              * other route. The daemon knows nothing about them (the installed desktop app adds its window activation).
@@ -1833,8 +1826,6 @@ class AgentHqDaemon(
                             harnessInstaller = harnessInstaller,
                             toolApproval = toolApproval,
                             pendingPrompts = pendingPrompts,
-                            // IMG-1 (contract 1.83.0): uploads land in the project's own directory.
-                            imageUploads = com.superiorsoftllc.agenthq.images.ImageUploadHandler(projectStore, clock = clock),
                             ownerQuestions = ownerQuestions,
                             handover = handover,
                             boardPorts = boardPorts,
@@ -1853,12 +1844,6 @@ class AgentHqDaemon(
             // engine.start binds (after module setup), so the release-to-bind gap stays as small as it can be.
             // runCatching: it is raised with monitor.raise, so a throwing handler would abort the start.
             server.monitor.subscribe(ApplicationStarted) { runCatching { portReservation.close() } }
-            val chatImageRetention = com.superiorsoftllc.agenthq.daemon.wiring.ImagesWiring.buildRetention(
-                projectRoots = { projectStore.list().mapNotNull { p -> p.directory.takeIf(String::isNotBlank)?.let(::File) } },
-                retentionDays = settings::chatImageRetentionDays,
-                clock = clock,
-                ticker = chatImageTicker,
-            )
 
             return AgentHqDaemon(
                 host = host,
@@ -1887,7 +1872,6 @@ class AgentHqDaemon(
                 restoreExecutables = { restoreToolApproval(); restoreExecutables() },
                 pendingPrompts = pendingPrompts,
                 portReservation = portReservation,
-                chatImageRetention = chatImageRetention,
                 ownerQuestions = ownerQuestions,
                 handover = handover,
                 processHost = localProcesses,
@@ -2392,8 +2376,6 @@ private suspend fun handleConnection(
     toolApproval: com.superiorsoftllc.agenthq.session.ToolApprovalService? = null,
     /** PROMPT-1 (contract 1.77.0): open prompts replayed on connect, answered by `prompt_response`; null = none. */
     pendingPrompts: com.superiorsoftllc.agenthq.prompts.PendingPrompts? = null,
-    /** IMG-1 (contract 1.83.0): `image_upload`; null = this daemon serves none. */
-    imageUploads: com.superiorsoftllc.agenthq.images.ImageUploadHandler? = null,
     /** ASK-1 (contract 1.97.0): `question_*`; replayed on connect as `questions`; null = this daemon serves none. */
     ownerQuestions: com.superiorsoftllc.agenthq.questions.OwnerQuestions? = null,
     /** TICKET-HANDOVER: a ticket worker's harness switch goes through a handoff turn; null = switched at once. */
@@ -3820,10 +3802,6 @@ private suspend fun handleConnection(
                     }
                 }
 
-                // IMG-1 (contract 1.83.0): store an image under the project's `.agenthq/uploads/`, answer its path.
-                Envelope.IMAGE_UPLOAD -> imageUploads?.answer(envelope)
-                    ?: Envelope(Envelope.ERROR, "image_upload refused: this daemon stores no uploads")
-
                 // CP-2 (contract 1.36.0): the git working tree, one file's diff and the history of a
                 // project's own directory.
                 Envelope.PROJECT_GIT_STATUS, Envelope.PROJECT_GIT_DIFF, Envelope.PROJECT_GIT_LOG,
@@ -3900,6 +3878,8 @@ private suspend fun handleConnection(
                 else if (envelope.type in BoardFrames.PIPELINE_TYPES) BoardFrames.noPipeline(envelope.type)
                 // DP-7c: the decisions and issues frames belong to the Infantry_Notes plugin; without it the daemon says so.
                 else if (envelope.type in BoardFrames.KNOWLEDGE_RECORD_TYPES) BoardFrames.noKnowledgeRecords(envelope.type)
+                // DP-10a: image_upload belongs to the Infantry_Chat plugin (project-scoped files); without it the daemon says so.
+                else if (envelope.type == Envelope.IMAGE_UPLOAD) Envelope(Envelope.ERROR, "image_upload refused: this daemon stores no uploads")
                 else Envelope(Envelope.ERROR, "unknown frame type '${envelope.type}'")
             }
             // BUG-MCP-RACE-1: the direct answer echoes the request's id; a push (sent elsewhere) never carries one.
@@ -4173,6 +4153,13 @@ private fun podAnswer(orchestrator: Orchestrator, podId: String): Envelope {
 
 /** ASK-1: how often the daemon sweeps owner questions for a `defaultAfterMin` auto-pick. */
 private const val QUESTION_SWEEP_MS = 15_000L
+
+/** A daemon thread running [task] every [intervalMillis] (first run one interval in) until the handle is closed (the owner-question sweeper). */
+private fun scheduledTicker(intervalMillis: Long, task: () -> Unit): AutoCloseable {
+    val executor = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "agenthq-question-sweep").apply { isDaemon = true } }
+    executor.scheduleWithFixedDelay(task, intervalMillis, intervalMillis, java.util.concurrent.TimeUnit.MILLISECONDS)
+    return AutoCloseable { executor.shutdownNow() }
+}
 /** The [SessionClosed.reason]s after which the session cannot read an answer any more (a failed turn is resumable and keeps its questions). */
 private val ORPHANING_CLOSE_REASONS = setOf("session killed", "session removed", "session restarted")
 

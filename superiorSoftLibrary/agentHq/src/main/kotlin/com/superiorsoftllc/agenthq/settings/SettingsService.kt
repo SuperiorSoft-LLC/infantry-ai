@@ -790,7 +790,7 @@ class SettingsService(
         const val EXIT_DONE = "done"
         private val EXIT_BEHAVIORS = listOf(EXIT_LEAVE, EXIT_DONE)
         /** ROGUE-1 (1.120.0): the rogue process detector (auto-reap is opt-in, default false). */
-        private val PLUGIN_READABLE = listOf("limits.", "watch.", "processes.")
+        private val PLUGIN_READABLE = listOf("limits.", "watch.", "processes.", "images.")
         const val PROCESSES_AUTO_REAP = "processes.autoReap"
         const val PROCESSES_IDLE_MINUTES = "processes.idleMinutes"
         const val PROCESSES_HEAVY_MB = "processes.heavyMb"

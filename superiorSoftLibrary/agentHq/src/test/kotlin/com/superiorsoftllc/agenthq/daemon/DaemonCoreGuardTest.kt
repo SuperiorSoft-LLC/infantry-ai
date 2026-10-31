@@ -144,7 +144,6 @@ class DaemonCoreGuardTest {
         val PLUGIN_NOW = mapOf(
             "memory" to "project knowledge: notes, a Knowledge plugin",
             "prompts" to "prompt templates: Infantry_Prompts daemon half",
-            "images" to "chat uploads: Infantry_Chat daemon half",
         )
 
         /** PLUGIN LATER: needs a missing mechanism first; the blocker is named. */
