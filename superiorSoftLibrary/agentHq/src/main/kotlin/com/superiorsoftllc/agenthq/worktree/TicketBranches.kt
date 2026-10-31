@@ -3,17 +3,6 @@ package com.superiorsoftllc.agenthq.worktree
 import java.io.File
 
 /**
- * What a ticket start needs to run in its own branch: the branch, the commit it was cut from, and
- * where its worktree lives. [base] is an immutable COMMIT, the same rule as [WorktreeRecord.baseRef].
- */
-data class TicketWorktree(
-    val branch: String,
-    val base: String,
-    val path: String,
-    val repoRoot: String,
-)
-
-/**
  * One ticket's request. [recordedBranch] and [recordedBase] are what the ticket already holds from an
  * earlier start (both null for a ticket never started); the worktree path is never stored, it is
  * recomputed from the branch, the same convention as [GitWorktreeManager].
