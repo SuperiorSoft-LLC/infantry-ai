@@ -110,6 +110,7 @@ interface DaemonApi {
         // 1.16.0 (AR-5, additive): `services` (ServicesApi).
         // 1.15.0 (DAEMON-STORAGE-1, additive): `storage` (daemon.api.storage.PluginStorage).
         // 1.13.0 (DP-5h-3a2, additive): BoardRuntime.ticketEvents / stories / epics / relatedDescription / unknownSkills.
+        // 1.20.0 (USAGE-FIT, additive): `Meters.requests(sinceMs)` and `MeterRequest`, the recorded model requests (read-only).
         // 1.12.0 (DP-5h-3a, additive): `boardRuntime` (BoardRuntime): what a board plugin builds its board from.
         // 1.11.0 (DP-5h-2, additive): `spawns.charge` (SpawnCharge) and `frames.table` (FrameBinding: typed frames with the direct flag).
         // 1.10.0 (PACE-TREND-1, additive): `meters` (daemon.api.usage.Meters), the current reading of every provider window.
@@ -121,7 +122,7 @@ interface DaemonApi {
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
-        const val VERSION = "1.19.0"
+        const val VERSION = "1.20.0"
     }
 }
 

@@ -268,6 +268,19 @@ class UsageMeter private constructor(
         return Report(rows, keepWeeks(), clock(), requests(), events(), prices())
     }
 
+    /** USAGE-FIT: every recorded request with `ts >= since`, oldest first, capped at [limit] (newest kept). Read-only: a SELECT, nothing is written. */
+    fun requestsSince(since: Long, limit: Int = 500_000): List<com.superiorsoftllc.agenthq.daemon.api.usage.MeterRequest> = synchronized(conn) {
+        val out = ArrayList<com.superiorsoftllc.agenthq.daemon.api.usage.MeterRequest>()
+        conn.prepareStatement("SELECT ts, session_id, role, harness, model, input, output, cache_read, cache_write FROM meter_request WHERE ts >= ? ORDER BY ts DESC, id DESC LIMIT ?").use { st ->
+            st.setLong(1, since); st.setInt(2, limit)
+            st.executeQuery().use { rs ->
+                fun l(i: Int) = rs.getLong(i).takeUnless { rs.wasNull() }
+                while (rs.next()) out += com.superiorsoftllc.agenthq.daemon.api.usage.MeterRequest(rs.getLong(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5), l(6), l(7), l(8), l(9))
+            }
+        }
+        out.reverse(); out
+    }
+
     private fun requests(limit: Int = 600): List<RequestRow> = synchronized(conn) {
         val out = ArrayList<RequestRow>()
         conn.createStatement().use { st ->

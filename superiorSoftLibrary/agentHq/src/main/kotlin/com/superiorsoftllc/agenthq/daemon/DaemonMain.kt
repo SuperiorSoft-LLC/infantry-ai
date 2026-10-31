@@ -1499,7 +1499,7 @@ class AgentHqDaemon(
                         processHost = localProcesses, launchEnvHost = launchEnvHost,
                         pluginSettings = settings.forPlugins(),
                         // PACE-TREND-1: api.meters, the current reading of every provider window (the cached live read).
-                        meters = com.superiorsoftllc.agenthq.usage.PacingMeters(usagePacing),
+                        meters = com.superiorsoftllc.agenthq.usage.PacingMeters(usagePacing, requestSource = { since -> usageMeter?.requestsSince(since).orEmpty() }),
                         // DP-7e: api.sessionNotifier, over the mail router.
                         notifier = com.superiorsoftllc.agenthq.daemon.plugins.LocalSessionNotifier({ manager.list() }, { to, subject, body -> mail.send(MailSendRequest(from = "owner", to = to, subject = subject, body = body)) }),
                         // DAEMON-STORAGE-1: api.storage, over the store's own handle (null for a non-SQL store).

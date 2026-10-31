@@ -18,6 +18,19 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.Modifier
+import com.superiorsoftllc.agenthq.ui.block.layout.Block
+import com.superiorsoftllc.agenthq.ui.block.layout.BlockScope
+import com.superiorsoftllc.agenthq.ui.block.layout.Place
+import com.superiorsoftllc.agenthq.ui.block.layout.RenderPlaced
+import com.superiorsoftllc.agenthq.ui.model.AppState
+import com.superiorsoftllc.agenthq.ui.shell.UsageContext
+import com.superiorsoftllc.agenthq.ui.shell.UsageMeterContext
 import com.superiorsoftllc.agenthq.ui.shell.NoUsage
 import com.superiorsoftllc.agenthq.ui.shell.NoUsageMeter
 
@@ -39,8 +52,11 @@ private fun statsTab() = TabProvider(
     routes = listOf("requestSessionStats", "requestUsageMeter"),
 ) {
     val ctx = LocalShellContext.current
-    StatsTabContent(it.state, ctx?.usage ?: NoUsage, ctx?.meter ?: NoUsageMeter)
+    StatsTab(it.state, ctx?.usage ?: NoUsage, ctx?.meter ?: NoUsageMeter)
 }
+
+/** The Stats pane as a parent node (declared first: the module value below reads it at class load). */
+val ShellStats = StatsPaneBlock(listOf(StatsBodyBlock))
 
 /** PLUGINS-1: Infantry_Stats (official since RUNTIME-10), the selected session's statistics, compiled in on web and Android (D9). */
 val InfantryStats = AgentHqModule(
@@ -49,6 +65,7 @@ val InfantryStats = AgentHqModule(
         tabs = listOf(TabDeclaration(STATS_TAB_ID, TabContainers.CENTER)),
     ),
     listOf(statsTab()),
+    tabTrees = mapOf(STATS_TAB_ID to ShellStats),
 )
 
 /**
@@ -59,9 +76,49 @@ val InfantryStats = AgentHqModule(
 class StatsPlugin : UiPlugin, ModuleSource {
     override fun register(registrar: UiRegistrar) {
         registrar.tab(statsTab())
+        registrar.tabTree(STATS_TAB_ID, ShellStats)
     }
 
     override fun modules(): List<AgentHqModule> = listOf(InfantryStats)
+}
+
+/** Node id of the Stats tab's tree: a plugin injects a section into it (`"inject": [{"into": "infantry.shell.stats"}]`). */
+const val STATS_NODE = "infantry.shell.stats"
+
+private class StatsHost(val state: AppState, val usage: UsageContext, val meter: UsageMeterContext)
+
+private val LocalStatsHost = compositionLocalOf<StatsHost?> { null }
+
+/**
+ * USAGE-FIT (parent/child rule): the Stats tab is a PARENT. Its content is the child `infantry.shell.stats.body` (weight 1,
+ * takes the room) followed by whatever other plugins inject into [STATS_NODE], each drawn below it with its own placement.
+ * With nothing injected the tree is the body alone: the tab draws what it drew before.
+ */
+class StatsPaneBlock(children: List<Block>, place: Place = Place()) : Block("statsPane", STATS_NODE, place, children) {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        Column(scope.modifier.fillMaxSize()) { RenderPlaced(children) }
+    }
+
+    override fun withChildren(children: List<Block>) = StatsPaneBlock(children, place)
+}
+
+/** The Stats tab's existing content (Session | Tokens by day/week), unchanged, as the first child. */
+object StatsBodyBlock : Block("statsBody", "$STATS_NODE.body", Place(weight = 1f)) {
+    @Composable
+    override fun Render(scope: BlockScope) {
+        val h = LocalStatsHost.current ?: return
+        Box(scope.modifier) { StatsTabContent(h.state, h.usage, h.meter) }
+    }
+}
+
+
+/** The tab: [ShellStats] as the window resolved it (injections in), over the tab's state. */
+@Composable
+private fun StatsTab(state: AppState, usage: UsageContext, meter: UsageMeterContext) {
+    CompositionLocalProvider(LocalStatsHost provides StatsHost(state, usage, meter)) {
+        (LocalShellContext.current?.layout?.tabTree(STATS_NODE) ?: ShellStats).Render(BlockScope(Modifier, null))
+    }
 }
 
 /** The Stats tab: the selected session's statistics, or (USAGE-1) the daemon's token meter by day / week. */
