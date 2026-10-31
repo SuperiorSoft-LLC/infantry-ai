@@ -80,7 +80,11 @@ class MailRouter(
      * `starter` an address, and lets a worker and its starter mail each other across projects (CP-3's one exception).
      */
     private val starterOf: (workerSessionId: String) -> String? = { null },
+    /** USAGE-REGRESS-1: how many further queued messages ride in the same wake turn (0 = one wake per message). */
+    private val coalesceMax: Int = 10,
 ) : MailDelivery {
+
+    private companion object { const val MAIL_FOLD_SEPARATOR = "\n\n---\n\n" }
 
     /** DAEMON-CONTEXT-1: for mail a worker sends its `starter`: a refusal reason (a done report without Files read) or null. */
     @Volatile
@@ -208,7 +212,9 @@ class MailRouter(
         }
     }
 
-    override fun deliver(message: Message): DeliveryOutcome {
+    override fun deliver(message: Message): DeliveryOutcome = deliver(message, emptyList())
+
+    override fun deliver(message: Message, rest: List<Message>): DeliveryOutcome {
         // Resolve agent profile ID to live session ID
         val resolution = resolveRecipient(message.to, message.from, message.id in crossAllowed)
         if (resolution == null) {
@@ -260,7 +266,11 @@ class MailRouter(
             // A bound-but-never-run session takes its persona and identity with its first turn, exactly as
             // a `prompt` frame gives them (BUG-808ce596: one composer, [firstTurn]).
             val source = MailSource.of(message, manager, automationFooter)
-            val text = source.render()
+            // USAGE-REGRESS-1: every wake re-reads the whole context; fold the other messages already queued for this
+            // session (same recipient, up to [coalesceMax]) into the one turn instead of one wake each.
+            val folded = if (session.neverRun) emptyList() else rest.take(coalesceMax)
+            val text = if (folded.isEmpty()) source.render() else
+                (listOf(source) + folded.map { MailSource.of(it, manager, automationFooter) }).joinToString(MAIL_FOLD_SEPARATOR) { it.render() }
             val turn = if (session.neverRun) {
                 // TRAITS-T5: the persona and traits FROZEN at spawn, never the live profile (a later edit never reaches it).
                 // P10-K9: the knowledge counts are read NOW, at delivery, for the session's own project.
@@ -270,7 +280,7 @@ class MailRouter(
                 text
             }
             manager.resume(session.id, turn, source.origin)
-            DeliveryOutcome.Delivered("resumed ${session.id}")
+            DeliveryOutcome.Delivered("resumed ${session.id}", folded.map { it.id })
         } catch (e: Exception) {
             DeliveryOutcome.Failed("resume of '${session.id}' failed: ${e.message}")
         }

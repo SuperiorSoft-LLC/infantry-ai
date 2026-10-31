@@ -103,6 +103,23 @@ class MailboxTest {
     }
 
     @Test
+    fun usage_regress_1_a_delivery_may_fold_the_rest_of_the_queue_into_one_wake() {
+        val (mb, _) = mailbox()
+        val ids = (1..3).map { (mb.send(MailSendRequest(from = "A", to = "B", body = "m$it")) as MailResult.Sent).message.id }
+        var wakes = 0
+        val delivery = object : MailDelivery {
+            override fun deliver(message: Message): DeliveryOutcome = DeliveryOutcome.Delivered()
+            override fun deliver(message: Message, rest: List<Message>): DeliveryOutcome {
+                wakes++
+                return DeliveryOutcome.Delivered("", rest.map { it.id })
+            }
+        }
+        mb.deliverQueued("B", delivery)
+        assertEquals(1, wakes)
+        ids.forEach { assertEquals(MessageState.DELIVERED, mb.message(it)!!.state) }
+    }
+
+    @Test
     fun delivered_then_retry_pass_resumes_from_the_front() {
         val (mb, _) = mailbox()
         val first = (mb.send(MailSendRequest(from = "A", to = "B", body = "1")) as MailResult.Sent).message
