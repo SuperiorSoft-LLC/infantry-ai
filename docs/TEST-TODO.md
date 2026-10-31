@@ -27,3 +27,4 @@
 
 ## DP-5h-3a2 (ticket-d760d11c): story / epic inputs
 - TEST-TODO: with DP-5h-3b flipping `coreBuiltBoard`, the plugin-built board answers story_* shims, epic_save/epic_list/epic_base, and the RELATED block on ticket_save like core (an unknown project's refusal text may differ from ProjectStore.get).
+- DP-5h-3b (partial): with the board present, a worker's turn end still records its ticket outcome (events now pass through SwapFeed -> LocalBoardHost.publish). Not yet: early plugin host / board-less daemon (see report).
