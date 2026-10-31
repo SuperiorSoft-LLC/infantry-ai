@@ -67,3 +67,6 @@ TEST-TODO: pipeline in Infantry_Board. Done (PipelineStoreTest, real SQLite, 11 
 
 ## DP-7a (ticket-6df0d6c2)
 TEST-TODO: knowledge wire DTOs moved to agentHqProtocol (same packages). Covered: OrchestratorBoundaryGuardTest (cli>memory/issues/decisions 0), DaemonCoreGuardTest (protocol leaf holds memory/issues/decisions), existing Memory/Issue/Decision tests. QA: `agenthq memory save/get/list/search`, `agenthq issue open/attempt/fix/list`, `agenthq decision add/list/show` against a running daemon return the same output as before the move.
+
+## DP-7b (ticket-1580ce99)
+TEST-TODO: Knowledge port. LocalKnowledgeTest: digest/section/search/noteCount over real stores; ServiceKnowledgeCounter renders identical to renderKnowledge and gives null section with no provider. Not tested (QA): a real daemon first turn after the plugin host unloads/never provides (expect no KNOWLEDGE section, no error); KnowledgeFirstTurnTest known-failing case compared to base.
