@@ -20,3 +20,7 @@
 
 ## DP-5h-3a (ticket-498dfe11): board frame registration on the ports
 - TEST-TODO: a session-originated ticket_move through the board-side `registerBoardFrames` (FrameBinding + SpawnCharge) hits the depth / pod-cap refusal with the same text as the old core TicketStartCharge path; the worker joins the starter's pod and records its spawner.
+
+## DP-5h-3a2 (ticket-d760d11c): BoardRuntime port
+- TEST-TODO: with DP-5h-3b wiring a `LocalBoardRuntime` in, the plugin-built board behaves like the core one: ticket_save/move/list, a worker start, routing refusal attention item, pacing refusal, RELATED block on save, story_* shims, epic_save/epic_base (an unknown project's refusal text may differ from core's ProjectStore.get error).
+- TEST-TODO: a community-tier plugin sees `api.boardRuntime == null`.

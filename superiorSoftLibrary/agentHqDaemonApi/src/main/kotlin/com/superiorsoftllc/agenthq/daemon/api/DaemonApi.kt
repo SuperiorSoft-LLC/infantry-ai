@@ -92,7 +92,14 @@ interface DaemonApi {
      */
     val meters: com.superiorsoftllc.agenthq.daemon.api.usage.Meters get() = com.superiorsoftllc.agenthq.daemon.api.usage.NoMeters
 
+    /**
+     * DP-5h-3a2 (1.12.0, additive): the runtime a board plugin builds the ticket board from (docs/DAEMON-BOARD-API.md). Null when
+     * the daemon hosts the board itself, has none, or the plugin is community tier.
+     */
+    val boardRuntime: com.superiorsoftllc.agenthq.daemon.api.board.BoardRuntime? get() = null
+
     companion object {
+        // 1.12.0 (DP-5h-3a2, additive): `boardRuntime` (daemon.api.board.BoardRuntime).
         // 1.11.0 (DP-5h-2, additive): `spawns.charge` (SpawnCharge) and `frames.table` (FrameBinding: typed frames with the direct flag).
         // 1.10.0 (PACE-TREND-1, additive): `meters` (daemon.api.usage.Meters), the current reading of every provider window.
         // 1.9.0 (RUNTIME-LOAD-7, additive): `ToolCall.clientNarrowing` (the MCP client's depth / spawn narrowing).
@@ -102,7 +109,7 @@ interface DaemonApi {
         // 1.5.0 (AGENT-REGISTRY-1, additive): `agents` (daemon.api.agents.Agents) and module.json `agents`.
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
-        const val VERSION = "1.11.0"
+        const val VERSION = "1.12.0"
     }
 }
 

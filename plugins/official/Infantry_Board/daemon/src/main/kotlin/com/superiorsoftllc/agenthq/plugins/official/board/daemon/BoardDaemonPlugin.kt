@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.board.daemon
 
+import com.superiorsoftllc.agenthq.backlog.registerBoardFrames
 import com.superiorsoftllc.agenthq.daemon.api.DaemonApi
 import com.superiorsoftllc.agenthq.daemon.api.DaemonPlugin
 
@@ -9,7 +10,19 @@ import com.superiorsoftllc.agenthq.daemon.api.DaemonPlugin
  * Same names, schemas, answers and gating: each is one `ticket_files` frame on the caller's own connection.
  */
 class BoardDaemonPlugin : DaemonPlugin {
+    /** The board this plugin built from the host's runtime; null when the daemon hosts the board itself or has none. */
+    @Volatile
+    var built: BuiltBoard? = null
+        private set
+
     override fun start(api: DaemonApi) {
+        // DP-5h-3a2: with a BoardRuntime the plugin owns the board: it builds it and answers the board family frames. With none,
+        // nothing registers and the daemon answers `<type> refused: this daemon has no board`, as before.
+        api.boardRuntime?.let { runtime ->
+            val b = BoardBuild.build(runtime)
+            built = b
+            registerBoardFrames(api.frames.table, b.board, api.spawns.charge, b.epics, b.stories, b.storyBoard)
+        } ?: api.log("no board runtime: the daemon hosts the board itself or has none")
         api.tools.register(TicketGetTool(api))
         api.tools.register(TicketFilesTools.Files)
         api.tools.register(TicketFilesTools.Related)

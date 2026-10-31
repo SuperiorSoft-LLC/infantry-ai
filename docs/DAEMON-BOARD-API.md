@@ -287,3 +287,14 @@ extension `TicketBoard.localHost`.
 - `api.spawns.charge` (`SpawnCharge`): the SpawnGuard / TicketStartCharge admit + charge semantics as a port. `isSession(id)`, `admitIf(origin, charged) { placed -> ... }` (checks depth and pod cap, throws a refusal, else runs the create under the guard's lock), `record(worker, origin)`, `setSpawner(worker, spawner)`. Default `NoSpawnCharge` (charges nothing, create just runs). A community plugin needs the `sessions.spawn` grant, else it gets `NoSpawnCharge`.
 - `api.frames.table` (`FrameBinding.register(types..., handler(frame, direct))`): registers the DP-5d table with the same type strings; `direct` = the frame carried a `requestId`. The gates (policy, owner, plugin) are unchanged; a board-owned type nobody registered answers `<type> refused: this daemon has no board`.
 - Project and workspace frames are core's: `BoardFrames.CORE_PROJECT_TYPES`, registered by `registerCoreProjectFrames` whether or not a board is wired; no longer in `BoardFrames.TYPES`. Board frames need no project facts beyond `api.projects`, so no extra read port was added. Behaviour change: a no-board daemon now answers project / workspace frames instead of the no-board refusal.
+
+## 16. DP-5h-3a2 (DaemonApi 1.12.0, additive): the board runtime port
+
+`DaemonApi.boardRuntime: BoardRuntime?` (default null; official / core tier only, a community plugin gets null) gives a board plugin what it needs to BUILD the ticket board itself, in daemon-API types only (the plugin carries the board classes; its class loader hides the daemon's):
+
+- `host: BoardHost` (store, branches, sessions, agents, runs, context, images, event appender): core's `LocalBoardHost` delegation.
+- `tuning: BoardTuning`: settings and registries as functions read per use (exit behaviour, auto-done outputs, role ids, weight executors / context as stored JSON, lane caps, routing rules as JSON, routing-refused raise, plan-meter pacing as `BoardPacing`, the RELATED block, profiles available, unknown skill ids). Core: `LocalBoardRuntime.tuning(...)`.
+- `ticketEvents: TicketEvents`: the typed ticket-event subscription (core's triggers, done-worker reaper and ticket-files consumers subscribe to the same log; the plugin may too).
+- `stories: BoardStoryInputs` (old story id -> ticket id, epic-changed push) and `epics: BoardEpicInputs` (epics as `Epic` JSON, project check, `epic_base` check, branch-name normaliser).
+
+`BoardDaemonPlugin.start` builds `TicketBoard`, `StoryHandler`, `BoardHandler` and `EpicHandler` from it (`BoardBuild.build`) and calls `registerBoardFrames(api.frames.table, ..., api.spawns.charge, ...)`. With no runtime (null) it registers no frame and the daemon answers `<type> refused: this daemon has no board`, as before. The read/write tools register either way. `DaemonMain` does not hand a runtime over yet (DP-5h-3b), so today the core `BoardWiring` still builds the board.

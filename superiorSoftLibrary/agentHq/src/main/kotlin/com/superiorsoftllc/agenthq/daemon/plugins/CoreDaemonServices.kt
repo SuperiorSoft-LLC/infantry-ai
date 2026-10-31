@@ -52,6 +52,8 @@ class CoreDaemonServices(
     override val pluginSettings: com.superiorsoftllc.agenthq.daemon.api.processes.PluginSettings = com.superiorsoftllc.agenthq.daemon.api.processes.NoPluginSettings,
     /** PACE-TREND-1: the plan meters' current readings; null = none. */
     override val meters: com.superiorsoftllc.agenthq.daemon.api.usage.Meters = com.superiorsoftllc.agenthq.daemon.api.usage.NoMeters,
+    /** DP-5h-3a2: the board runtime for a board plugin (see LocalBoardRuntime); null until the daemon hands the board over (DP-5h-3b). */
+    override val boardRuntime: com.superiorsoftllc.agenthq.daemon.api.board.BoardRuntime? = null,
 ) : DaemonServices {
     override val spawns get() = spawnService ?: com.superiorsoftllc.agenthq.daemon.api.spawns.NoSpawns
     override val sessionReads get() = sessionReadModel ?: com.superiorsoftllc.agenthq.daemon.api.sessions.NoSessionReads
