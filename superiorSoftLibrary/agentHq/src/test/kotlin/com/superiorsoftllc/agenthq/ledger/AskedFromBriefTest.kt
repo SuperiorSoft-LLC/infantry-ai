@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.ledger
 
 import com.superiorsoftllc.agenthq.brief.BriefInput
+import com.superiorsoftllc.agenthq.brief.from
 import com.superiorsoftllc.agenthq.brief.LeadBriefComposer
 import com.superiorsoftllc.agenthq.brief.WorkerBrief
 import com.superiorsoftllc.agenthq.protocol.Project

@@ -1,6 +1,17 @@
-package com.superiorsoftllc.agenthq.ledger
+package com.superiorsoftllc.agenthq.brief
 
-import com.superiorsoftllc.agenthq.brief.WorkerRunResult
+import com.superiorsoftllc.agenthq.ledger.Asked
+import com.superiorsoftllc.agenthq.ledger.Done
+import com.superiorsoftllc.agenthq.ledger.Outcome
+
+/** The brief is the single source of truth for what was asked; the ledger holds plain fields and imports no board package. */
+fun Asked.Companion.from(brief: WorkerBrief): Asked = Asked(
+    taskId = brief.taskId,
+    projectId = brief.projectId,
+    title = brief.title,
+    instruction = brief.instruction,
+    promptChars = brief.prompt.length,
+)
 
 /**
  * Maps a [WorkerRunResult] to a [Done] entry for the ledger.

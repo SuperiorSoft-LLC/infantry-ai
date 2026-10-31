@@ -1,11 +1,17 @@
 package com.superiorsoftllc.agenthq.daemon
 
-import com.superiorsoftllc.agenthq.backlog.TicketAnswer
-import com.superiorsoftllc.agenthq.backlog.TicketBoard
+import com.superiorsoftllc.agenthq.protocol.Ticket
 import com.superiorsoftllc.agenthq.protocol.TicketMove
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
 import com.superiorsoftllc.agenthq.session.SessionRecord
 import com.superiorsoftllc.agenthq.session.TicketWorkerHealth
+
+/** What [TicketStartCharge] needs of the board: read a ticket, run a move, read the ticket out of the move's answer [A]. DaemonMain adapts the board. */
+interface StartMoves<A> {
+    fun get(id: String): Ticket
+    fun move(move: TicketMove, startedBy: String?): A
+    fun ticketOf(answer: A): Ticket
+}
 
 /**
  * RUNTIME-LOAD-6: a ticket move charged to the [SpawnGuard] like any session-originated spawn. The ONE path of a
@@ -17,19 +23,19 @@ import com.superiorsoftllc.agenthq.session.TicketWorkerHealth
  * by nobody (the UI, a person), or one that runs no worker, is not charged. The board has the last word on whether a
  * worker runs: a start it queues or holds records nothing.
  */
-class TicketStartCharge(
+class TicketStartCharge<A>(
     private val guard: SpawnGuard,
-    private val board: () -> TicketBoard?,
+    private val board: () -> StartMoves<A>?,
     private val sessions: (String) -> SessionRecord?,
     private val setSpawner: (sessionId: String, spawnerId: String?) -> Unit,
 ) {
-    fun move(move: TicketMove, startedBy: String?): TicketAnswer {
+    fun move(move: TicketMove, startedBy: String?): A {
         val b = board() ?: throw IllegalArgumentException("this daemon has no board")
         val starter = startedBy?.trim()?.takeIf { it.isNotEmpty() && sessions(it) != null }
         val charged = starter != null && runsWorker(b, move)
         return guard.admitIf(starter, charged) { placement ->
-            b.move(move, startedBy = starter).also { answer ->
-                val worker = answer.ticket.takeIf { it.start?.ok == true }?.sessionId
+            b.move(move, starter).also { answer ->
+                val worker = b.ticketOf(answer).takeIf { it.start?.ok == true }?.sessionId
                 if (worker != null && starter != null) {
                     if (placement != null) guard.record(worker, starter)
                     setSpawner(worker, starter)
@@ -39,7 +45,7 @@ class TicketStartCharge(
     }
 
     /** Whether [move] would hand the ticket to a worker: as `TicketBoard.move` decides it (GAP-006b restart included). */
-    fun runsWorker(b: TicketBoard, move: TicketMove): Boolean {
+    fun runsWorker(b: StartMoves<A>, move: TicketMove): Boolean {
         if (move.status != TicketStatus.IN_PROGRESS) return false
         val current = runCatching { b.get(move.id) }.getOrNull() ?: return false
         if (current.status != TicketStatus.IN_PROGRESS) return true

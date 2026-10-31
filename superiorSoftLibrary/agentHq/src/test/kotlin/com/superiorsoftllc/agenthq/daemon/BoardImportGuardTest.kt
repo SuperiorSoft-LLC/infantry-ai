@@ -17,8 +17,8 @@ class BoardImportGuardTest {
 
     /** package/file -> importers still to move in DP-5. */
     private val remaining = setOf(
-        "daemon/plugins/LocalBoardServices.kt", "daemon/TicketStartCharge.kt", "daemon/DaemonMain.kt", "db/AgentHQDatabase.kt",
-        "ledger/LedgerTypes.kt", "ledger/WorkerRunDone.kt", "mvp/StoryHandler.kt", "settings/SettingsService.kt",
+        "daemon/plugins/LocalBoardServices.kt", "daemon/DaemonMain.kt",
+        "mvp/StoryHandler.kt",
         "stories/StoryMigration.kt", "ticketfiles/LiveRelatedWork.kt", "ticketfiles/RelatedDescriptionWriter.kt",
         "ticketfiles/RelatedTickets.kt", "triggers/TriggerNudges.kt", "triggers/TriggerService.kt",
     )

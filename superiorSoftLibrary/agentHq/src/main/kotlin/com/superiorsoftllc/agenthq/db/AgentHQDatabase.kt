@@ -4,7 +4,6 @@ import app.cash.sqldelight.adapter.primitive.IntColumnAdapter
 import app.cash.sqldelight.db.QueryResult
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.jdbc.sqlite.JdbcSqliteDriver
-import com.superiorsoftllc.agenthq.backlog.TicketTypeMigration
 import com.superiorsoftllc.agenthq.role.RoleIdMigration
 import java.io.Closeable
 

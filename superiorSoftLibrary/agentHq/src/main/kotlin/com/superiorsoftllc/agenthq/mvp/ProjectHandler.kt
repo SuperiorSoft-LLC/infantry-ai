@@ -40,11 +40,11 @@ class ProjectHandler(
     private val onConfigChanged: (Project) -> Unit = {},
     /**
      * ROUTING-1 (contract 1.128.0): normalises and checks a submitted rule list (throws IllegalArgumentException with the
-     * reason). The daemon passes [com.superiorsoftllc.agenthq.backlog.RoutingRules.validate] over the harness check
+     * reason). The daemon passes [com.superiorsoftllc.agenthq.settings.RoutingRules.validate] over the harness check
      * ticket create uses; the default has no harness to check against and refuses every non-empty list.
      */
     private val routingValidator: (List<com.superiorsoftllc.agenthq.protocol.RoutingRule>) -> List<com.superiorsoftllc.agenthq.protocol.RoutingRule> = { rules ->
-        com.superiorsoftllc.agenthq.backlog.RoutingRules.validate(
+        com.superiorsoftllc.agenthq.settings.RoutingRules.validate(
             rules,
             checkExecutor = { _, _, _ -> throw IllegalArgumentException("this daemon has no harness list to check a provider / model against") },
             roleKnown = { true },

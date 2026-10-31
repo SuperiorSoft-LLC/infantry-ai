@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.backlog
+package com.superiorsoftllc.agenthq.settings
 
 import com.superiorsoftllc.agenthq.protocol.RoutingRule
 import com.superiorsoftllc.agenthq.protocol.TicketType

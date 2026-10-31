@@ -1110,7 +1110,7 @@ class AgentHqDaemon(
                 // ROUTING-1 (contract 1.128.0): a rule list is checked with the one executor check a profile save uses
                 // (provider resolves, model listed by its harness, effort known) and the role catalog.
                 routingValidator = { rules ->
-                    com.superiorsoftllc.agenthq.backlog.RoutingRules.validate(
+                    com.superiorsoftllc.agenthq.settings.RoutingRules.validate(
                         rules,
                         checkExecutor = { provider, model, effort -> agents.validateExecutor(provider, model, effort) },
                         roleKnown = { roles.role(it) != null },
@@ -1490,7 +1490,7 @@ class AgentHqDaemon(
                         .let { t -> t == null || t.status != com.superiorsoftllc.agenthq.protocol.TicketStatus.IN_PROGRESS || t.sessionId != r.id }
                 },
             )
-            val ticketStartCharge = TicketStartCharge(spawnGuard, { board }, manager::get, manager::setSpawner)
+            val ticketStartCharge = TicketStartCharge(spawnGuard, { board.asStartMoves() }, manager::get, manager::setSpawner)
             orchestrator.sessionStartedSink = { _, sessionId, parent -> spawnGuard.record(sessionId, parent); manager.setSpawner(sessionId, parent) }
             settings.limitEnvProblems().forEach { println("[agentHq] limit ignored: $it") }
             println("[agentHq] pod spawn cap=${podSpawnCap ?: settings.limit(LimitRegistry.MAX_PER_POD)} depth=${podSpawnDepth ?: settings.limit(LimitRegistry.MAX_DEPTH)} (cap 0 = unlimited; settings limits.concurrency.*; session-originated spawns only)")
@@ -3453,7 +3453,7 @@ private suspend fun handleConnection(
                     // the frame) records that session as the ticket's starter. A UI move names none: nothing recorded.
                     val starter = envelope.sessionId?.takeIf { manager.get(it) != null }
                     // RUNTIME-LOAD-6: a start from inside a session is charged to its pod like a spawn (depth, pod cap).
-                    TicketStartCharge(spawnGuard, { board }, manager::get, manager::setSpawner)
+                    TicketStartCharge(spawnGuard, { board.asStartMoves() }, manager::get, manager::setSpawner)
                         .move(TicketMove.decode(envelope.data), starter).reply(direct)
                 }
                 Envelope.TICKET_LINK -> boardRequest(envelope.type) {
@@ -4466,4 +4466,11 @@ internal fun installModules(
     val lib = code?.takeIf { it.isFile && it.parentFile?.name == "lib" }?.parentFile?.parentFile?.let { File(it, "modules") }
     val appImage = property("compose.application.resources.dir")?.takeIf { it.isNotBlank() }?.let { File(it, "modules") }
     return listOfNotNull(lib, appImage).firstOrNull { it.isDirectory }
+}
+
+/** Adapts the board to the plain moves [TicketStartCharge] takes (it names no board package). */
+private fun TicketBoard.asStartMoves(): StartMoves<TicketAnswer> = object : StartMoves<TicketAnswer> {
+    override fun get(id: String) = this@asStartMoves.get(id)
+    override fun move(move: TicketMove, startedBy: String?) = this@asStartMoves.move(move, startedBy = startedBy)
+    override fun ticketOf(answer: TicketAnswer) = answer.ticket
 }
