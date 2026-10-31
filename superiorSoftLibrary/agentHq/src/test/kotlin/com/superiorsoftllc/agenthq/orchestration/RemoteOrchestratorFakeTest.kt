@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.orchestration
 
+import com.superiorsoftllc.agenthq.daemon.requireBoard
+
 import com.superiorsoftllc.agenthq.daemon.DaemonFixture
 import com.superiorsoftllc.agenthq.daemon.api.orchestrator.LaunchVerdict
 import com.superiorsoftllc.agenthq.daemon.api.orchestrator.OrchestratorBinding
@@ -62,8 +64,8 @@ class RemoteOrchestratorFakeTest {
     private fun runFlows(f: DaemonFixture, remote: FakeRemote) {
         f.client.await(Envelope.READY)
         // create ticket
-        val ticket = f.daemon.board.save(TicketSave(title = "via any orchestrator")).ticket
-        assertTrue(ticket != null && f.daemon.board.get(ticket.id).title == "via any orchestrator", "the ticket exists")
+        val ticket = f.daemon.requireBoard().save(TicketSave(title = "via any orchestrator")).ticket
+        assertTrue(ticket != null && f.daemon.requireBoard().get(ticket.id).title == "via any orchestrator", "the ticket exists")
         // spawn + finish a session (goes through the launch decision)
         val id = spawnFinished(f, "work")
         // send mail to it (persisted before delivery, so it is stored even while the orchestrator is down)

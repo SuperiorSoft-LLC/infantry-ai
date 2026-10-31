@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.cli.mcp
 
+import com.superiorsoftllc.agenthq.daemon.requireBoard
+
 import com.superiorsoftllc.agenthq.cli.Cli
 import com.superiorsoftllc.agenthq.cli.CliTestEnv
 import com.superiorsoftllc.agenthq.daemon.DaemonFixture
@@ -151,7 +153,7 @@ class McpTicketImagesE2eTest {
         val state = tempDir("agenthq-mcp-img-daemon")
         val fixture = DaemonFixture.launch(stateDir = state, runner = gated, workingDir = File(state, "workdir").apply { mkdirs() }, pluginsRoot = com.superiorsoftllc.agenthq.daemon.TestDaemonPlugins.boardRoot())
             .also { fixtures += it; it.client.await(Envelope.READY) }
-        val board = fixture.daemon.board
+        val board = fixture.daemon.requireBoard()
         val root = tempDir("agenthq-mcp-img-project")
         val projectId = fixture.createProject("img3", root)
         fixture.client.saveProfile("""{"id":"backend-1","name":"Backend","role":"backend"}""")

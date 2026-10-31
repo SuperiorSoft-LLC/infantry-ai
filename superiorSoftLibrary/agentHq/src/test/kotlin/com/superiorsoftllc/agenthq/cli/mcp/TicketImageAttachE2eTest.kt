@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.cli.mcp
 
+import com.superiorsoftllc.agenthq.daemon.requireBoard
+
 import com.superiorsoftllc.agenthq.cli.Cli
 import com.superiorsoftllc.agenthq.cli.CliTestEnv
 import com.superiorsoftllc.agenthq.daemon.DaemonFixture
@@ -164,7 +166,7 @@ class TicketImageAttachE2eTest {
     @Test
     fun mcpCreateAndUpdateAttachLocalFilesAndRefuseBadOnesSavingNothing() {
         val (fixture, root, projectId) = setUp("img-attach-mcp")
-        val board = fixture.daemon.board
+        val board = fixture.daemon.requireBoard()
         McpServeConfig.fileIn(root).apply { parentFile.mkdirs() }.writeText("""{"projectId":"$projectId"}""")
         val agent = serve(fixture, root)
 
@@ -225,7 +227,7 @@ class TicketImageAttachE2eTest {
     @Test
     fun cliImageFlagsAttachShowAndRemoveAndRefuseBadFilesSavingNothing() {
         val (fixture, root, projectId) = setUp("img-attach-cli")
-        val board = fixture.daemon.board
+        val board = fixture.daemon.requireBoard()
         val port = fixture.port
 
         val a = pngFile("cli-a")

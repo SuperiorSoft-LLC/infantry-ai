@@ -283,6 +283,8 @@ class DaemonFixture private constructor(
             limits: com.superiorsoftllc.agenthq.usage.LimitService = com.superiorsoftllc.agenthq.usage.LimitService.NONE,
             /** E1-c: a `stories.json` folded into the board at startup (E1-a); null (the default) migrates nothing. */
             storyMigrationFile: File? = null,
+            /** DP-5h-3d: false = a daemon with no board. */
+            withBoard: Boolean = true,
             /** PORT-1: refuse a taken [port] instead of falling back; pinned off so an operator's env never changes a test. */
             strictPort: Boolean = false,
             /** PORT-1: where the daemon records the port it bound; null (the default) records it nowhere. */
@@ -361,6 +363,7 @@ class DaemonFixture private constructor(
                 podSpawnDepth = podSpawnDepth,
                 limits = limits,
                 storyMigrationFile = storyMigrationFile,
+                withBoard = withBoard,
                 strictPort = strictPort,
                 portFile = portFile,
                 workingDir = workingDir,
