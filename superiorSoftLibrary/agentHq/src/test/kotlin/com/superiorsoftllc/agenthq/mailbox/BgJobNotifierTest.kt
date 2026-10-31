@@ -21,7 +21,11 @@ class BgJobNotifierTest {
         defaultTimeoutMs = { 30 * 60_000L },
         patternGraceMs = { 20_000L },
         clock = { now },
+        hangGraceMs = { 30_000L },
+        endTree = { sid, j -> ended += sid to j.id },
+        pidAlive = { true },
     )
+    private val ended = ArrayList<Pair<String, String>>()
 
     private fun job(log: File, notify: BgNotify? = BgNotify(patterns = BgCli.DEFAULT_PATTERNS)) =
         BgJob("j1", "gradle test", pid = 1, startedAt = now, logPath = log.absolutePath, notify = notify)
@@ -43,29 +47,44 @@ class BgJobNotifierTest {
         assertEquals("sess-1", m.to)
         assertEquals("system", m.from)
         assertTrue(m.subject.contains("exit 1"), m.subject)
-        assertTrue(m.body.contains("matched:\n  BUILD FAILED"), m.body)
-        assertTrue(m.body.contains("last 3 lines:\n  b\n  c\n  BUILD FAILED in 3s"), m.body)
+        // BG-NATIVE-1 (c): the fallback note is ONE line: id, exit, log path; no tail, no match list.
+        assertEquals("task finished: j1 exit 1 log ${log.absolutePath}\n", m.body)
     }
 
     @Test
-    fun patternOnAStillRunningJob_andTimeout_eachMailOnce() {
+    fun finishedPatternThenHang_endsTheTreeSilently_neverMails() {
         val log = File.createTempFile("bgn", ".log").apply { deleteOnExit() }
         val n = notifier()
         val j = job(log, BgNotify(patterns = listOf("READY"), timeoutMinutes = 10))
         live += "s" to j
         log.writeText("boot\nREADY on 8080\n")
         n.scanned()
-        now += 21_000
+        now += 29_000
         n.scanned()
+        assertTrue(ended.isEmpty(), "inside the grace the job may still exit")
+        now += 2_000
+        n.scanned()
+        n.scanned()
+        assertEquals(listOf("s" to "j1"), ended, "ended once after the grace")
+        assertTrue(sent.isEmpty(), "the hang-watch never mails")
+        // the normal finished note follows from the wrapper's done
+        live.clear()
+        n.done("s", j, 143, emptyList())
         assertEquals(1, sent.size)
-        assertTrue(sent[0].subject.contains("still running"), sent[0].subject)
+        assertTrue(sent.single().body.startsWith("task finished: j1 exit 143"), sent.single().body)
+    }
+
+    @Test
+    fun timeoutStillNotices() {
+        val log = File.createTempFile("bgn", ".log").apply { deleteOnExit() }
+        val n = notifier()
+        val j = job(log, BgNotify(patterns = listOf("READY"), timeoutMinutes = 10))
+        live += "s" to j
         n.scanned()
-        assertEquals(1, sent.size, "an old line is not matched again")
         now = j.startedAt + 10 * 60_000L + 1
         n.scanned()
-        n.scanned()
-        assertEquals(2, sent.size)
-        assertTrue(sent[1].subject.contains("still running after 10m"), sent[1].subject)
+        assertEquals(1, sent.size)
+        assertTrue(sent[0].subject.contains("still running after 10m"), sent[0].subject)
     }
 
     @Test

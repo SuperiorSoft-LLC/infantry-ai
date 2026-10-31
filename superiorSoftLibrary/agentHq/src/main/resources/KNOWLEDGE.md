@@ -14,7 +14,7 @@ Browser pass (no log): plan `open app|login|create ticket|move ticket|verify boa
 
 
 ## WAITING ON LONG JOBS
-Never `sleep` or poll to wait for a build, gate or test run. Start it with `agenthq bg run --notify --name <label> -- <cmd>`: it returns at once, the daemon watches the job and MAILS your session when it exits (exit code + last lines), when its output matches a pattern (the success/failure patterns of the tool profiles by default; add `--notify-on <regex>`), or when it is still running after `limits.bg.notifyTimeoutMinutes`. Then END YOUR TURN; the mail wakes you and you go on from it. Zero tokens while you wait. Progress still works inside it: `agenthq bg run --notify -- agenthq run --label tests -- <your build command>`.
+Never `sleep` or poll to wait for a build, gate or test run. In Claude Code run it as a normal background command (`run_in_background`): Claude Code runs it and adds its own one-line "task finished" note to your output; the daemon sends no mail. Elsewhere (and for an explicit job) use `agenthq bg run --notify --name <label> -- <cmd>`: it returns at once and, when the job ends, the daemon adds ONE line to your next turn: `task finished: <id> exit <code> log <path>` (no log tail, no pattern notices; read the log yourself if you need more; a job with nothing else to do wakes you with only that line). If a tool prints its result and then hangs, the daemon ends it after a grace period and the same note arrives. Then END YOUR TURN. Zero tokens while you wait. Progress still works inside it: `agenthq bg run --notify -- agenthq run --label tests -- <your build command>`.
 Only if your harness is not woken by mail: `agenthq bg wait <id> [--timeout MIN]` blocks until the job ends and returns its exit code.
 
 

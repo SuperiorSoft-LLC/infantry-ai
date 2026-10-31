@@ -1354,7 +1354,15 @@ class AgentHqDaemon(
                 drop = { thread, to, reason, subject -> mailbox.dropQueued(thread, to, reason) { m -> subject == null || m.subject == subject } },
                 dedupe = { settings.limit(LimitRegistry.WATCH_NOTICE_DEDUPE) != 0L },
                 keepMs = { settings.limit(LimitRegistry.WATCH_HANDLED_KEEP_MINUTES) * 60_000L },
+                hangGraceMs = { settings.limit(LimitRegistry.WATCH_HANG_GRACE_SECONDS) * 1000L },
+                endTree = { _, job ->
+                    ProcessHandle.of(job.cmdPid ?: job.pid).ifPresent { h ->
+                        h.descendants().forEach { runCatching { it.destroyForcibly() } }
+                        runCatching { h.destroyForcibly() }
+                    }
+                },
             )
+            com.superiorsoftllc.agenthq.daemon.WatchHooks.nativeBackground = { settings.limit(LimitRegistry.WATCH_BG_NATIVE) != 0L }
             manager.bgJobListener = bgNotifier
             // STALL-1 item 5: idle or BUSY-but-silent ticket workers are nudged and their PM told; no model call, no kill.
             val stallDetector = com.superiorsoftllc.agenthq.mailbox.StallDetector(

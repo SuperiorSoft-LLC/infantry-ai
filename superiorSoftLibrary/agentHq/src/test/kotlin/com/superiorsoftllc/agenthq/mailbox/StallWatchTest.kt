@@ -110,7 +110,7 @@ class StallWatchTest {
         f.writeText("BUILD\n") // shorter than before: a new file
         n.scanned()
         now += 21_000; n.scanned()
-        assertTrue(sent.any { it.subject.contains("matched 'BUILD'") }, sent.map { it.subject }.toString())
+        assertTrue(sent.none { it.subject.contains("matched") }, "BG-NATIVE-1: a match is never mailed (the hang-watch ends the tree silently)")
     }
 
     @Test
@@ -131,9 +131,9 @@ class StallWatchTest {
         val n = notifier()
         n.done("s", job(log()), 0, emptyList(), bytes = 0, eof = true)
         assertTrue(sent[0].subject.contains("exit 0, no output"), sent[0].subject)
-        assertTrue(sent[0].body.contains("NO output (EOF, 0 bytes)"), sent[0].body)
+        assertTrue(sent[0].body.startsWith("task finished: j1 exit 0"), sent[0].body)
         n.done("s", job(log(), id = "j2"), 0, listOf("x"), bytes = 2, eof = false, survivors = listOf("4242 java -jar server.jar"))
-        assertTrue(sent[1].body.contains("output pipe is still open") && sent[1].body.contains("4242"), sent[1].body)
+        assertTrue(sent[1].body.startsWith("task finished: j2 exit 0"), sent[1].body)
     }
 
     @Test
@@ -152,7 +152,7 @@ class StallWatchTest {
         n.expired("s", job(f))
         assertTrue(sent[0].subject.contains("finished, exit 7"), sent[0].subject)
         n.expired("s", job(log("b\n"), id = "j2"))
-        assertTrue(sent[1].body.contains("runner lost, exit unknown"), sent[1].body)
+        assertTrue(sent[1].body.startsWith("task finished: j2 exit unknown"), sent[1].body)
     }
 
     @Test
