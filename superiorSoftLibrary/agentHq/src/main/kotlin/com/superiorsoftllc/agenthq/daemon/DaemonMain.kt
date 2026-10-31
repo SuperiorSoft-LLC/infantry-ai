@@ -129,6 +129,7 @@ import com.superiorsoftllc.agenthq.session.stateDir
 import com.superiorsoftllc.agenthq.session.agentHqSetting
 import com.superiorsoftllc.agenthq.session.toWorktreeRef
 import com.superiorsoftllc.agenthq.stories.StoryMigration
+import com.superiorsoftllc.agenthq.stories.asStoryTickets
 import com.superiorsoftllc.agenthq.projectgit.ProjectGitHandler
 import com.superiorsoftllc.agenthq.projectgit.ProjectGitService
 import com.superiorsoftllc.agenthq.worktree.CleanupResult
@@ -1335,7 +1336,7 @@ class AgentHqDaemon(
             // storyIds now list the new ticket) to every client, exactly the frame an `epic_save` answers with.
             val migrated = (store as SqlAgentHqStore).database.story_migrationQueries
             val stories = StoryHandler(
-                board = board,
+                board = board.asStoryTickets(),
                 resolve = { storyId -> migrated.ticketFor(storyId).executeAsOneOrNull() },
                 onEpicChanged = { epicId -> epics.get(epicId)?.let { broadcastEpic(clients, it) } },
             )

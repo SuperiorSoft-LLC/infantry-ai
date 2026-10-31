@@ -1,6 +1,5 @@
 package com.superiorsoftllc.agenthq.mvp
 
-import com.superiorsoftllc.agenthq.backlog.TicketBoard
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.Story
 import com.superiorsoftllc.agenthq.protocol.StoryMove
@@ -12,6 +11,16 @@ import com.superiorsoftllc.agenthq.protocol.TicketSave
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
 import com.superiorsoftllc.agenthq.stories.StoryMigration
 import kotlinx.serialization.json.Json
+
+/**
+ * DP-5g: the ticket operations the story shims need. The core's TicketBoard adapts to it (it is not in this module yet);
+ * every answer is the ticket itself, and [moveWithoutStart] is a plain column change (no hand-out, no run).
+ */
+interface StoryTickets {
+    fun get(id: String): Ticket
+    fun save(request: TicketSave): Ticket
+    fun moveWithoutStart(request: TicketMove): Ticket
+}
 
 /**
  * E1-c (contract 1.62.0): `story_save` / `story_get` / `story_move` are DEPRECATED SHIMS over the ticket board.
@@ -33,7 +42,7 @@ import kotlinx.serialization.json.Json
  * [onEpicChanged], for the daemon to push.
  */
 class StoryHandler(
-    private val board: TicketBoard,
+    private val board: StoryTickets,
     /** Pre-migration story id -> ticket id, or null when the id is not an old story's. */
     private val resolve: (String) -> String? = { null },
     private val json: Json = Json { ignoreUnknownKeys = true; encodeDefaults = true },
@@ -53,9 +62,9 @@ class StoryHandler(
                 val epicId = request.epicId?.trim()?.takeIf { it.isNotEmpty() }
                 board.save(
                     TicketSave(title = request.title, projectId = request.projectId, epicId = epicId, agentId = ""),
-                ).ticket.also { if (epicId != null) onEpicChanged(epicId) }
+                ).also { if (epicId != null) onEpicChanged(epicId) }
             } else {
-                board.save(TicketSave(id = ticketId(editing), title = request.title, projectId = request.projectId)).ticket
+                board.save(TicketSave(id = ticketId(editing), title = request.title, projectId = request.projectId))
             }
             storyEnvelope(saved.asStory())
         }
@@ -72,7 +81,7 @@ class StoryHandler(
                 require(status in StoryStatus.ALL) {
                     "status '${status.take(40)}' is not one of ${StoryStatus.ALL.joinToString(", ")}"
                 }
-                board.move(TicketMove(id = id, status = StoryMigration.ticketStatus(status)), startOnInProgress = false).ticket
+                board.moveWithoutStart(TicketMove(id = id, status = StoryMigration.ticketStatus(status)))
             } ?: board.get(id)
             storyEnvelope(ticket.asStory())
         }

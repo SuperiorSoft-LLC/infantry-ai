@@ -4,7 +4,6 @@ import com.superiorsoftllc.agenthq.protocol.Story
 import com.superiorsoftllc.agenthq.protocol.StoryMove
 import com.superiorsoftllc.agenthq.protocol.StorySave
 import com.superiorsoftllc.agenthq.protocol.StoryStatus
-import com.superiorsoftllc.agenthq.session.stateDir
 import java.io.File
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -123,7 +122,7 @@ class JsonStoryStore(
     )
 
     companion object {
-        /** The daemon's default store: `stories.json` inside [stateDir]. */
-        fun default(): JsonStoryStore = JsonStoryStore(File(stateDir(), "stories.json"))
+        /** The default store: `stories.json` inside [stateDir] (the caller passes the daemon's state dir). */
+        fun default(stateDir: File): JsonStoryStore = JsonStoryStore(File(stateDir, "stories.json"))
     }
 }
