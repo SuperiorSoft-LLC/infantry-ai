@@ -62,3 +62,6 @@ TEST-TODO: STACK-NEUTRAL-5 (ticket-18370e32)
 
 ## AR-5 (ticket-d742b63c)
 TEST-TODO: typed service registry. Class ServiceRegistryTest (done, unit): provide/find, missing = null, duplicate provider refused, community without `services.provide` refused, unload closes handles, stale handle safe. Not tested: a real plugin jar calling api.services through DaemonPluginHost (QA: a plugin publishes an interface, a second plugin finds it, disable the first, find returns null); community grant path through module settings.
+
+## DP-7a (ticket-6df0d6c2)
+TEST-TODO: knowledge wire DTOs moved to agentHqProtocol (same packages). Covered: OrchestratorBoundaryGuardTest (cli>memory/issues/decisions 0), DaemonCoreGuardTest (protocol leaf holds memory/issues/decisions), existing Memory/Issue/Decision tests. QA: `agenthq memory save/get/list/search`, `agenthq issue open/attempt/fix/list`, `agenthq decision add/list/show` against a running daemon return the same output as before the move.

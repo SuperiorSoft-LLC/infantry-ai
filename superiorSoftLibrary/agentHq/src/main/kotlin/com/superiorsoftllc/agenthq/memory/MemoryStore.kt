@@ -6,39 +6,6 @@ import java.time.Instant
 import java.util.UUID
 
 /**
- * MEM-1: one project-memory note -- a durable observation scoped to exactly one project.
- *
- * The user's 2026-10-11 decision fixes the shape: the DATABASE is the source of truth, each agent
- * reads a generated markdown mirror, and the daemon puts the project's note INDEX into every agent's
- * brief. A note therefore carries its own [id], the [projectId] it belongs to, a [name] that is its
- * identity inside that project, the [folder] it is filed under, a one-line [description] and the
- * [body]. The [name] + [description] pair is what an index lists; the [body] is what a reader fetches
- * afterwards, which is why [MemoryStore.index] never carries it.
- *
- * Serializable since MEM-8: the `memory_save` answer (`memory_note`) carries the whole stored note,
- * the mirror of the `epic` frame carrying an [com.superiorsoftllc.agenthq.epics.Epic].
- */
-@Serializable
-data class MemoryNote(
-    val id: String,
-    val projectId: String,
-    val name: String,
-    val folder: String,
-    val description: String,
-    val body: String,
-    val updatedAt: String,
-    /** NOTES-1 (contract 1.98.0): [SCOPE_PROJECT] (shared), [SCOPE_ROLE] (one role) or [SCOPE_SESSION] (one session, temporary). */
-    val scope: String = SCOPE_PROJECT,
-    /** NOTES-1: "" for a project note, the role id for a role note, the session id for a session note. */
-    val ownerId: String = "",
-)
-
-const val SCOPE_PROJECT = "project"
-const val SCOPE_ROLE = "role"
-const val SCOPE_SESSION = "session"
-val NOTE_SCOPES = listOf(SCOPE_PROJECT, SCOPE_ROLE, SCOPE_SESSION)
-
-/**
  * P10-K1 (K-D5): a `memory_save` refusal with a stable [code]. The message STARTS with the code
  * (`anchor_ambiguous: 'find' occurs 3 times ...`) so a test, the CLI and an agent can match on it; the wire
  * prefixes it with the frame name (`memory_save refused: anchor_ambiguous: ...`). It is an
@@ -56,22 +23,6 @@ class MemoryRefusal(val code: String, detail: String) : IllegalArgumentException
         const val ANCHOR_AMBIGUOUS = "anchor_ambiguous"
     }
 }
-
-/**
- * MEM-3: one hit of a project-memory search -- the shape a ranked result list carries.
- *
- * A search result is deliberately NOT the whole [MemoryNote]: the point of searching is to find a
- * note by its content without paying for every body up front, so a hit carries what a reader needs
- * to decide whether to open the note -- its [name], its one-line [description] and a [snippet]: the
- * fragment of the body around the match. The full body is then fetched by ([projectId], [name]), the
- * same way the index feeds [MemoryStore.get].
- */
-@Serializable
-data class MemorySearchResult(
-    val name: String,
-    val description: String,
-    val snippet: String,
-)
 
 /**
  * Where memory notes outlive the store. The in-memory default mirrors
@@ -428,20 +379,7 @@ class MemoryStore(
         /** P10-K1: what `append` puts between the stored body and the new content -- exactly one blank line. */
         const val APPEND_SEPARATOR = "\n\n"
 
-        /**
-         * P10-K1: how many times [needle] occurs in [haystack], overlaps included (`aa` occurs twice in `aaa`),
-         * matched byte for byte. The search restarts one character after each hit, never after the whole hit.
-         */
-        fun occurrences(haystack: String, needle: String): Int {
-            if (needle.isEmpty()) return 0
-            var count = 0
-            var from = haystack.indexOf(needle)
-            while (from >= 0) {
-                count++
-                from = haystack.indexOf(needle, from + 1)
-            }
-            return count
-        }
+        fun occurrences(haystack: String, needle: String): Int = memoryOccurrences(haystack, needle)
 
         /** MEM-7: the mirror's index file name; a note may not be named after it (any case) or it would shadow the index. */
         const val INDEX_FILE_NAME = "INDEX.md"
