@@ -227,3 +227,21 @@ receives from `DaemonPlugin`, and a test fakes one member by overriding it. A tr
 turn from the resolved instance; a plugin needs the agents port (`daemon.api.agents`) extended, or the host resolves the instance inside `BoardSessions.start` (the
 `instanceFor` chokepoint already exists). `KnowledgeCounter`/`SkillsSource`/`TicketImages`/`RelatedDescription`/`TicketContext` are lambdas/ports the daemon injects; they
 move with the board. `WeightExecutors`, `RoutingRules`, `PacingVerdict` come from settings/usage: read through `BoardSettings` + usage port later. No frame or refusal text changes.
+
+## 10. DP-5f-2 built (ticket 6e940497): the rest of the `BoardHost` members (`BOARD_API_VERSION` 1.7.0, additive)
+
+`BoardHostPorts.kt` adds what section 9 left out, so `TicketBoard` can move without a core import. Same rules: plain data, no-board defaults, `LocalBoardHost` delegates to the core class, nothing consumes it yet, no behaviour change.
+
+| core class | what TicketBoard calls | port member |
+|---|---|---|
+| `AgentProfiles` | `get/list/save/delete/roleKnown/executorFor/validateExecutor` | `BoardHost.agents: BoardAgents` over `BoardAgent` / `BoardExecutor` |
+| `RunOutcomes` | `isAttemptOver`, `of(record)`, `isRetryable` | `BoardHost.runs: BoardRunHealth` (`isAttemptOver(state name)`, `outcomeOf(sessionId)` -> `BoardRunOutcome`) |
+| `TicketWorkerHealth` | `problem`, `slowToBrief` | `BoardRunHealth.workerProblem(sessionId)`, `slowToBrief(sessionId, now, graceMs)` |
+| `SessionEvent` (`Status`, `Exit`) | `onSessionEvent` | `BoardSessions.subscribe(BoardSessionListener)` -> `AutoCloseable`; `BoardSessionEvent.Status/Exit` |
+| `KnowledgeCounter`, `SkillsSource` | `knowledge.section(projectId, role)`, `skills.section(instance)` | `BoardHost.context: BoardContextSources` (`knowledgeSection`, `skillsSection(skillIds, include)`) |
+| `TicketImages` (daemon class) | `normalize`, `absolute`, `release` | `BoardHost.images: BoardImages` (paths as strings, `release` over `StoredTicket`) |
+
+Still not in the port: `AgentProfiles.instanceFor` / `RoleInstance` / `withSkills` (the host resolves the instance inside `BoardSessions.start`, as section 9 noted) and the DP-5f-1 pure classes (already in `agentHqBoard`).
+`LocalBoardHost.publish(SessionEvent)` is the fan-in: the daemon's one event sink calls it (not wired yet, DP-5 does it); listeners run in arrival order, a throw in one is swallowed.
+
+TEST-TODO (DP-5f-2): (1) event delivery order: publish Status, Exit, Status for one session; one listener sees them in that order, two listeners each see all three in that order. (2) subscription lifecycle: after `close()` a listener gets nothing, `close()` twice is safe, a listener subscribing inside a callback does not break the delivery in flight, a throwing listener does not stop the next one. (3) Exit carries the `SessionView` as it stood on arrival even after the session record is deleted. (4) `executorFor` on `LocalBoardHost.agents` equals `AgentProfiles.executorFor` for the same inputs (role binding and pins).

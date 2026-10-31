@@ -1,6 +1,27 @@
 package com.superiorsoftllc.agenthq.daemon.plugins
 
+import com.superiorsoftllc.agenthq.agents.AgentProfiles
+import com.superiorsoftllc.agenthq.agents.KnowledgeCounter
+import com.superiorsoftllc.agenthq.agents.SkillsSource
+import com.superiorsoftllc.agenthq.agents.section
 import com.superiorsoftllc.agenthq.backlog.TicketEventLog
+import com.superiorsoftllc.agenthq.backlog.TicketImages
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardAgent
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardAgents
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardContextSources
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardExecutor
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardImages
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardRunHealth
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardRunOutcome
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardSessionEvent
+import com.superiorsoftllc.agenthq.daemon.api.board.BoardSessionListener
+import com.superiorsoftllc.agenthq.orchestration.RunOutcomes
+import com.superiorsoftllc.agenthq.protocol.AgentProfile
+import com.superiorsoftllc.agenthq.protocol.FinishedPayload
+import com.superiorsoftllc.agenthq.session.SessionEvent
+import com.superiorsoftllc.agenthq.session.SessionState
+import com.superiorsoftllc.agenthq.session.TicketWorkerHealth
+import java.util.concurrent.CopyOnWriteArrayList
 import com.superiorsoftllc.agenthq.daemon.api.board.BaseChoice
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardGit
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardHost
@@ -50,7 +71,29 @@ class LocalBoardHost(
     private val defaultRepo: File? = null,
     private val eventLog: () -> TicketEventLog? = { null },
     private val clock: () -> Long = System::currentTimeMillis,
+    private val agentProfiles: AgentProfiles? = null,
+    private val knowledge: KnowledgeCounter = KnowledgeCounter.NONE,
+    private val skills: SkillsSource = SkillsSource.NONE,
+    private val ticketImages: TicketImages = TicketImages.NONE,
 ) : BoardHost {
+
+    private val listeners = CopyOnWriteArrayList<BoardSessionListener>()
+
+    /**
+     * DP-5f-2: the fan-in for the daemon's one session event sink. Maps a [SessionEvent] the board cares about (status, exit) and
+     * hands it to every subscriber in subscription order; the call order is the arrival order. A throwing listener is skipped.
+     */
+    fun publish(event: SessionEvent) {
+        if (listeners.isEmpty()) return
+        val mapped: BoardSessionEvent = when (event) {
+            is SessionEvent.Status -> BoardSessionEvent.Status(SessionViews.of(event.session))
+            is SessionEvent.Exit -> BoardSessionEvent.Exit(
+                event.sessionId, event.code, event.processExited, sessionManager()?.get(event.sessionId)?.let(SessionViews::of),
+            )
+            else -> return
+        }
+        for (l in listeners) runCatching { l.onEvent(mapped) }
+    }
 
     override fun now(): Long = clock()
 
@@ -166,6 +209,11 @@ class LocalBoardHost(
             return true
         }
 
+        override fun subscribe(listener: BoardSessionListener): AutoCloseable {
+            listeners.add(listener)
+            return AutoCloseable { listeners.remove(listener) }
+        }
+
         override fun remove(sessionId: String): String? {
             val manager = sessionManager() ?: return BoardSessions.NO_SESSIONS
             return try {
@@ -180,6 +228,61 @@ class LocalBoardHost(
     override val settings: BoardSettings = object : BoardSettings {
         override fun get(key: String): String? = store.settings.get(key)?.value
     }
+
+    override val agents: BoardAgents = object : BoardAgents {
+        override fun get(id: String) = agentProfiles?.get(id)?.toAgent()
+        override fun list() = agentProfiles?.list().orEmpty().map { it.toAgent() }
+        override fun save(agent: BoardAgent): BoardAgent =
+            (agentProfiles ?: throw UnsupportedOperationException(BoardAgents.UNAVAILABLE)).save(agent.toProfile()).toAgent()
+
+        override fun delete(id: String) {
+            (agentProfiles ?: throw UnsupportedOperationException(BoardAgents.UNAVAILABLE)).delete(id)
+        }
+
+        override fun roleKnown(role: String) = agentProfiles?.roleKnown(role) ?: false
+        override fun executorFor(agent: BoardAgent?, provider: String?, model: String?, effort: String?, role: String?): BoardExecutor {
+            val profiles = agentProfiles ?: return super.executorFor(agent, provider, model, effort, role)
+            return profiles.executorFor(agent?.toProfile(), provider, model, effort, role).let { BoardExecutor(it.provider, it.model, it.effort) }
+        }
+
+        override fun validateExecutor(provider: String?, model: String?, effort: String?): BoardExecutor {
+            val profiles = agentProfiles ?: return super.validateExecutor(provider, model, effort)
+            return profiles.validateExecutor(provider, model, effort).let { BoardExecutor(it.provider, it.model, it.effort) }
+        }
+    }
+
+    override val runs: BoardRunHealth = object : BoardRunHealth {
+        override fun isAttemptOver(state: String) =
+            runCatching { RunOutcomes.isAttemptOver(SessionState.valueOf(state)) }.getOrDefault(false)
+
+        override fun outcomeOf(sessionId: String): BoardRunOutcome? =
+            sessionManager()?.get(sessionId)?.let { RunOutcomes.of(it) }?.let { BoardRunOutcome.valueOf(it.name) }
+
+        override fun isRetryable(outcome: BoardRunOutcome) = RunOutcomes.isRetryable(FinishedPayload.Outcome.valueOf(outcome.name))
+        override fun workerProblem(sessionId: String?): String? =
+            TicketWorkerHealth.problem(sessionId?.let { sessionManager()?.get(it) }, sessionId)
+
+        override fun slowToBrief(sessionId: String, now: Long, graceMs: Long) =
+            sessionManager()?.get(sessionId)?.let { TicketWorkerHealth.slowToBrief(it, now, graceMs) } ?: false
+    }
+
+    override val context: BoardContextSources = object : BoardContextSources {
+        override fun knowledgeSection(projectId: String?, role: String?) = knowledge.section(projectId, role)
+        override fun skillsSection(skillIds: List<String>?, include: Boolean?) = skills.section(skillIds, include)
+    }
+
+    override val images: BoardImages = object : BoardImages {
+        override fun normalize(projectId: String?, requested: List<String>) = ticketImages.normalize(projectId, requested)
+        override fun absolute(projectId: String?, relPath: String) = ticketImages.absolute(projectId, relPath)?.path
+        override fun release(projectId: String?, dropped: Collection<String>, remaining: Collection<StoredTicket>) =
+            ticketImages.release(projectId, dropped, remaining.map { it.toRow() })
+    }
+
+    private fun AgentProfile.toAgent() = BoardAgent(id, name, role, provider, model, effort, instructions, projectId, traitIds, skillIds)
+    private fun BoardAgent.toProfile() = AgentProfile(
+        id = id, name = name, role = role, provider = provider, model = model, instructions = instructions, projectId = projectId,
+        effort = effort, traitIds = traitIds, skillIds = skillIds,
+    )
 
     private fun origin(name: String) = if (name == ORIGIN_UNATTENDED) LaunchOrigin.UNATTENDED else LaunchOrigin.HUMAN
 
