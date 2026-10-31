@@ -72,3 +72,6 @@ TEST-TODO: knowledge wire DTOs moved to agentHqProtocol (same packages). Covered
 TEST-TODO: Knowledge port. LocalKnowledgeTest: digest/section/search/noteCount over real stores; ServiceKnowledgeCounter renders identical to renderKnowledge and gives null section with no provider. Not tested (QA): a real daemon first turn after the plugin host unloads/never provides (expect no KNOWLEDGE section, no error); KnowledgeFirstTurnTest known-failing case compared to base.
 
 - DP-7c TEST-TODO: CliKnowledgeTest (capped lists with decisions/issues; under-caps output) needs the real Infantry_Notes plugin loaded in a daemon; core now refuses decision_list/issue_list. Re-add as a cross-module test at the QA checkpoint (the CLI knowledge command is unchanged).
+
+## DP-7d (ticket-092125b5)
+TEST-TODO: session-ended hook. MemoryScopeTest.sessionEndedListenersHearAKillAndARemovalAndCanBeClosed: SessionManager.addSessionEndedListener hears kill + delete, a closed handle hears nothing. Not tested (QA): a real plugin loaded in a daemon receiving events.onSessionRemoved (DaemonPluginHost wrapper, disabled-plugin skip).
