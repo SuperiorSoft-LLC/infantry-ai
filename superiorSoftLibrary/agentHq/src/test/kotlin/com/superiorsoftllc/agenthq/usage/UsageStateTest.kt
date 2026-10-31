@@ -108,7 +108,7 @@ class UsageStateTest {
         if (exhausted) tracker.observeStreamLine("p", """{"type":"rate_limit_event","rate_limit_info":{}}""")
         val budget = OperatorBudget(maxRunsPerDay = 1, maxTokensPerDay = null, clock = { 1L })
         if (spent) budget.record(RunUsage("x", "p", "m", 1, 1, 0, 0, 0, null))
-        return LaunchGate(tracker, budget, AttentionStore(repo, clock = { 9L }, idFactory = { "a1" }))
+        return LaunchGate(tracker, budget, com.superiorsoftllc.agenthq.attention.LocalAttention(AttentionStore(repo, clock = { 9L }, idFactory = { "a1" })))
     }
 
     @Test

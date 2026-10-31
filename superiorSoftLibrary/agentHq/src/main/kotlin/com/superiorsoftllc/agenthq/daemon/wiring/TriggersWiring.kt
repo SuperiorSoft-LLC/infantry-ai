@@ -1,6 +1,5 @@
 package com.superiorsoftllc.agenthq.daemon.wiring
 
-import com.superiorsoftllc.agenthq.attention.AttentionStore
 import com.superiorsoftllc.agenthq.daemon.api.board.PromptStart
 import com.superiorsoftllc.agenthq.daemon.api.board.StartResult
 import com.superiorsoftllc.agenthq.persistence.TriggerRepository
@@ -14,7 +13,7 @@ object TriggersWiring {
     /** The trigger service over the store's trigger repo. Not auto-started: the daemon starts it after the mailbox and the sessions are loaded. */
     fun build(
         repo: TriggerRepository,
-        attention: AttentionStore,
+        attention: com.superiorsoftllc.agenthq.daemon.api.attention.Attention,
         startNext: (String?) -> StartResult?,
         startPrompt: (String, String) -> PromptStart,
         sessions: (String) -> SessionRecord?,

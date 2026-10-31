@@ -37,7 +37,7 @@ class TriggerGuardTest {
         assertEquals(6, starts.size)
         assertEquals(TriggerState.TRIPPED, guard.state())
         assertEquals(1, trips.size)
-        assertEquals(AttentionKind.CEILING, trips.single().attentionKind)
+        assertEquals("ceiling", trips.single().attentionKind)
         assertEquals(TriggerEventDisposition.REFUSED_CEILING, guard.dispositions.last().disposition)
     }
 
@@ -130,9 +130,9 @@ class TriggerGuardTest {
         val attention = AttentionStore(repository, clock = { 42L }, idFactory = { "attention-1" }).also {
             it.eventSink = { pushed = it }
         }
-        val trip = TriggerTrip("trigger-x", AttentionKind.TRIGGER_TRIPPED, "FAILED", "run failed")
+        val trip = TriggerTrip("trigger-x", "trigger_tripped", "FAILED", "run failed")
 
-        trip.reportTo(attention)
+        trip.reportTo(com.superiorsoftllc.agenthq.attention.LocalAttention(attention))
 
         assertEquals(persisted, pushed)
         assertNotNull(persisted)

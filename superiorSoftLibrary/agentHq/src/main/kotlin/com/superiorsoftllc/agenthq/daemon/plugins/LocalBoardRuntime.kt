@@ -1,7 +1,7 @@
 package com.superiorsoftllc.agenthq.daemon.plugins
 
-import com.superiorsoftllc.agenthq.attention.AttentionKind
-import com.superiorsoftllc.agenthq.attention.AttentionStore
+import com.superiorsoftllc.agenthq.daemon.api.attention.AttentionKinds
+import com.superiorsoftllc.agenthq.daemon.api.attention.Attention
 import com.superiorsoftllc.agenthq.daemon.api.Frame
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardHost
 import com.superiorsoftllc.agenthq.daemon.api.board.BoardPacing
@@ -31,7 +31,7 @@ class LocalBoardRuntime(
     private val projectStore: ProjectStore,
     private val roles: RoleService,
     private val pacingCheck: (providerId: String?, model: String?) -> PacingVerdict,
-    private val attention: AttentionStore,
+    private val attention: Attention,
     private val pushToClients: (List<Frame>) -> Unit,
     override val coreBuiltBoard: Boolean = true,
     /** DP-5h-3a2: the typed ticket events, the story / epic inputs, the RELATED block and the skill check; the defaults answer none. */
@@ -59,7 +59,7 @@ class LocalBoardRuntime(
         is PacingVerdict.Allow -> BoardPacing(warning = v.warning)
     }
     override fun routingRefused(ticketId: String, projectId: String?, detail: String) {
-        attention.raise(kind = AttentionKind.LAUNCH_BLOCKED, ticketId = ticketId, outcome = "routing_refused", detail = detail)
+        attention.raise(kind = AttentionKinds.LAUNCH_BLOCKED, ticketId = ticketId, outcome = "routing_refused", detail = detail)
     }
     override fun relatedDescription(draft: com.superiorsoftllc.agenthq.daemon.api.board.BoardRelatedDraft): String? = related(draft)
     override fun includeLinkedTasksContext(): Boolean? = settings.includeLinkedTasksContext()

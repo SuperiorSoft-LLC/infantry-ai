@@ -1,7 +1,7 @@
 package com.superiorsoftllc.agenthq.mailbox
 
-import com.superiorsoftllc.agenthq.attention.AttentionKind
-import com.superiorsoftllc.agenthq.attention.AttentionStore
+import com.superiorsoftllc.agenthq.daemon.api.attention.AttentionKinds
+import com.superiorsoftllc.agenthq.daemon.api.attention.Attention
 import com.superiorsoftllc.agenthq.session.AgentWatch
 import com.superiorsoftllc.agenthq.session.ReportStatus
 import com.superiorsoftllc.agenthq.session.SessionManager
@@ -32,7 +32,7 @@ class AgentWatchdog(
     private val sessions: SessionManager,
     private val mailbox: Mailbox,
     private val send: (MailSendRequest) -> MailResult,
-    private val attention: AttentionStore,
+    private val attention: Attention,
     private val config: WatchdogConfig = WatchdogConfig(),
     private val clock: () -> Long = System::currentTimeMillis,
     /** The role that is told first. */
@@ -100,7 +100,7 @@ class AgentWatchdog(
                 if (ep.pmNotifiedAt > 0L && !ep.ownerRaised && now - ep.pmNotifiedAt >= config.nudgeIntervalMs) {
                     ep.ownerRaised = true
                     attention.raise(
-                        kind = AttentionKind.STALLED,
+                        kind = AttentionKinds.STALLED,
                         ticketId = v.session.ticketId,
                         sessionId = v.session.id,
                         outcome = "watchdog_" + state.name.lowercase(),

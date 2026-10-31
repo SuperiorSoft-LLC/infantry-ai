@@ -2,8 +2,8 @@ package com.superiorsoftllc.agenthq.usage
 
 import com.superiorsoftllc.agenthq.session.InfantryEnv
 
-import com.superiorsoftllc.agenthq.attention.AttentionKind
-import com.superiorsoftllc.agenthq.attention.AttentionStore
+import com.superiorsoftllc.agenthq.daemon.api.attention.AttentionKinds
+import com.superiorsoftllc.agenthq.daemon.api.attention.Attention
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
@@ -201,7 +201,7 @@ class OperatorBudget(
 class LaunchGate(
     private val tracker: ProviderStateTracker,
     private val budget: OperatorBudget,
-    private val attention: AttentionStore,
+    private val attention: Attention,
 ) {
     fun check(provider: String, origin: LaunchOrigin, ticketId: String? = null, triggerId: String? = null): GateDecision {
         val reason = when {
@@ -211,7 +211,7 @@ class LaunchGate(
         }
         if (origin == LaunchOrigin.HUMAN) return GateDecision.Warn(reason)
         attention.raise(
-            kind = AttentionKind.LAUNCH_BLOCKED,
+            kind = AttentionKinds.LAUNCH_BLOCKED,
             ticketId = ticketId,
             triggerId = triggerId,
             outcome = "refused_launch_gate",

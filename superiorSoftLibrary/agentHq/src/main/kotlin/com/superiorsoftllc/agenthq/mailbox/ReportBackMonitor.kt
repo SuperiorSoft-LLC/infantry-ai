@@ -1,7 +1,7 @@
 package com.superiorsoftllc.agenthq.mailbox
 
-import com.superiorsoftllc.agenthq.attention.AttentionKind
-import com.superiorsoftllc.agenthq.attention.AttentionStore
+import com.superiorsoftllc.agenthq.daemon.api.attention.AttentionKinds
+import com.superiorsoftllc.agenthq.daemon.api.attention.Attention
 import com.superiorsoftllc.agenthq.protocol.TraitCheck
 import com.superiorsoftllc.agenthq.session.ReportBack
 import com.superiorsoftllc.agenthq.session.ReportStatus
@@ -32,7 +32,7 @@ class ReportBackMonitor(
     private val mailbox: Mailbox,
     /** Sends AND pumps the re-prompt ([MailRouter.send]), so a session at rest gets it at once. */
     private val send: (MailSendRequest) -> MailResult,
-    private val attention: AttentionStore,
+    private val attention: Attention,
     /** The role of an agent profile id, null when no such profile exists. */
     private val agentRole: (String) -> String?,
     /** True while the ticket of that id is not `done`: its worker's clean end of turn is a wait, and its report is not due yet. */
@@ -54,7 +54,7 @@ class ReportBackMonitor(
     private fun raiseFailure(event: SessionEvent.Exit) {
         val session = sessions.get(event.sessionId) ?: return
         attention.raise(
-            kind = AttentionKind.SESSION_FAILED,
+            kind = AttentionKinds.SESSION_FAILED,
             ticketId = session.ticketId,
             sessionId = session.id,
             outcome = "exit_${event.code}",
@@ -99,13 +99,13 @@ class ReportBackMonitor(
             return
         }
         val item = attention.raise(
-            kind = AttentionKind.UNREPORTED,
+            kind = AttentionKinds.UNREPORTED,
             ticketId = session.ticketId,
             sessionId = session.id,
             outcome = "unreported",
             detail = detailFor(session, trait, check, endedRun, report, event.code, candidates),
         )
-        sessions.setReport(session.id, missed.copy(attentionId = item.id))
+        sessions.setReport(session.id, if (item == null) missed else missed.copy(attentionId = item))
     }
 
     /** The recipient check (D8): the role name itself, an agent id whose profile has that role, or a session of it. */

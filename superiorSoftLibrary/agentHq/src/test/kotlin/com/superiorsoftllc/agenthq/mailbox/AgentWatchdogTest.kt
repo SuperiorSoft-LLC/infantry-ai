@@ -26,7 +26,7 @@ class AgentWatchdogTest {
         val dog = AgentWatchdog(
             manager, mailbox,
             send = { r -> sent += r; mailbox.send(r) },
-            attention = attention,
+            attention = com.superiorsoftllc.agenthq.attention.LocalAttention(attention),
             config = WatchdogConfig(),
             clock = { System.currentTimeMillis() + offset * 60_000 },
             isEnabledFor = { enabled },

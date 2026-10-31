@@ -45,7 +45,7 @@ class TriggerNudgeTest {
         val store = SqlAgentHqStore.open(path).also { stores += it }
         return TriggerService(
             repo = store.triggers,
-            attention = AttentionStore(store.attention),
+            attention = com.superiorsoftllc.agenthq.attention.LocalAttention(AttentionStore(store.attention)),
             startNext = { null },
             sessions = { null },
             deliverPrompt = { nudge -> nudges += nudge; answer(nudge).also { if (it is PromptDelivery.Mailed) pendingMail += it.mailId } },
