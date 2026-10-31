@@ -678,6 +678,8 @@ fun TicketCardBadgesSection(card: BoardCardHost, modifier: Modifier = Modifier) 
         if (t.wontFix) Chip("won't fix", Palette.Danger)
         if (t.queuedFor != null) Chip("queued", Palette.Accent)
         ReportFlagChip(deps.reportFlag(t), Modifier.testTag("ticket-report-${t.id}"))
+        // KNOWLEDGE-PTR-2: how many tickets this one relates to (relates_to links + series members).
+        RelatedView.count(t).takeIf { it > 0 }?.let { Chip("$it related", Palette.Muted, Modifier.testTag("ticket-related-count-${t.id}")) }
     }
 }
 
@@ -736,6 +738,7 @@ fun TicketCardEditSection(card: BoardCardHost, modifier: Modifier = Modifier) {
     if (!card.open) return
     Placed(modifier) {
         TicketEditForm(t, card.deps, onDone = { card.close() })
+        RelatedList(t)
         if (t.links.isNotEmpty()) Text(t.links.joinToString(", ") { "${it.type.replace('_', ' ')} ${it.ticketId.takeLast(8)}" }, color = Palette.Muted, fontSize = 10.sp)
     }
 }
@@ -802,7 +805,7 @@ private data class TicketEdit(
     val title: String, val description: String, val epicId: String?, val pins: TicketPins, val images: List<String>,
     val contextLimit: Int?, val effort: String?,
 ) {
-    fun landedIn(t: Ticket): Boolean = t.title == title && t.description == description &&
+    fun landedIn(t: Ticket): Boolean = t.title == title && RelatedView.human(t.description) == description &&
         t.epicId?.takeIf { it.isNotBlank() } == epicId && TicketPins.of(t) == pins && t.images == images &&
         t.contextLimit?.takeIf { it > 0 } == contextLimit && t.effort?.takeIf { it.isNotBlank() } == effort
 }
@@ -817,7 +820,7 @@ private fun TicketEditForm(t: Ticket, deps: BoardDeps, onDone: () -> Unit) {
     val actionScope = rememberCoroutineScope()
     val currentEpic = t.epicId?.takeIf { it.isNotBlank() }
     var title by remember(t.id) { mutableStateOf(t.title) }
-    var description by remember(t.id) { mutableStateOf(t.description) }
+    var description by remember(t.id) { mutableStateOf(RelatedView.human(t.description)) }
     var epicId by remember(t.id) { mutableStateOf(currentEpic) }
     // TICKET-EXEC-UI: the assignee ("" = unassigned) and the provider / model pins (null = inherit).
     val currentPins = TicketPins.of(t)
@@ -938,7 +941,7 @@ private fun TicketEditForm(t: Ticket, deps: BoardDeps, onDone: () -> Unit) {
                         val r = deps.tickets.edit(
                             t.id,
                             title = edit.title.takeIf { it != t.title },
-                            description = edit.description.takeIf { it != t.description },
+                            description = edit.description.takeIf { it != RelatedView.human(t.description) },
                             // "" files the ticket under no epic (contract 1.60.0).
                             epicId = if (edit.epicId != currentEpic) edit.epicId ?: "" else null,
                             agentId = pinEdit.agentId,
@@ -1028,4 +1031,17 @@ private fun TicketForm(deps: BoardDeps, initialEpicId: String?, onDone: () -> Un
 internal fun ticketCountLabel(shown: Int, total: Int, all: Boolean): String {
     val noun = if (total == 1) "ticket" else "tickets"
     return if (all) "$total $noun" else "$shown of $total $noun"
+}
+
+/** KNOWLEDGE-PTR-2: the related tickets of an open card (series, linked, same files) with status and files. */
+@Composable
+private fun RelatedList(t: Ticket) {
+    val items = RelatedView.items(t.description)
+    val linked = t.links.filter { it.type == "relates_to" }.map { it.ticketId }.filter { id -> items.none { it.ticketId == id } }
+    if (items.isEmpty() && linked.isEmpty()) return
+    Column(Modifier.testTag("ticket-related-${t.id}"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text("Related", color = Palette.Muted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+        items.forEach { Text("${it.reason}: ${it.ticketId.takeLast(8)} ${it.title} [${it.status}]" + (it.files?.let { f -> " -> $f" } ?: ""), color = Palette.Muted, fontSize = 10.sp) }
+        linked.forEach { Text("linked: ${it.takeLast(8)}", color = Palette.Muted, fontSize = 10.sp) }
+    }
 }
