@@ -1665,6 +1665,18 @@ class AgentHqDaemon(
                             chargedMove = ticketStartCharge::move,
                         ).also { pluginBoardServices = it; triggerTickets = it.tickets },
                         ticketEventStream = ticketEvents,
+                        // DP-5h-3a: the board runtime (core still builds the board through BoardWiring until DP-5h-3b).
+                        boardRuntimeService = board.localHost?.let { localHost ->
+                            com.superiorsoftllc.agenthq.daemon.plugins.LocalBoardRuntime(
+                                host = localHost, store = store, settings = settings, projectStore = projectStore, roles = roles,
+                                pacingCheck = { providerId, model ->
+                                    val pid = providerId ?: manager.providers.firstOrNull()?.id ?: com.superiorsoftllc.agenthq.daemon.api.usage.UsageMeters.CLAUDE
+                                    usagePacing.check(com.superiorsoftllc.agenthq.daemon.api.usage.UsageMeters.meterFor(pid, model ?: manager.providerFor(pid)?.defaultModel()))
+                                },
+                                attention = attention,
+                                pushToClients = { frames -> for (f in frames) { val e = Envelope(f.type, f.data, f.sessionId, requestId = f.requestId); for (c in clients.toList()) c.trySend(e) } },
+                            )
+                        },
                         agentRegistry = agentRegistry,
                         // RUNTIME-LOAD-5: the sessions read model (host-scoped), with the replay buffer for transcripts.
                         sessionReadModel = com.superiorsoftllc.agenthq.daemon.plugins.LocalSessionReads(

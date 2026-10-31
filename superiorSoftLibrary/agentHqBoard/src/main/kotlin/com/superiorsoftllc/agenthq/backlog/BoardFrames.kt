@@ -45,9 +45,9 @@ fun registerBoardFrames(
     frames: FrameBinding,
     board: TicketBoard,
     charge: SpawnCharge,
-    epics: EpicHandler,
-    stories: StoryHandler,
-    storyBoard: BoardHandler,
+    epics: EpicHandler?,
+    stories: StoryHandler?,
+    storyBoard: BoardHandler?,
 ) {
     fun reg(vararg types: String, h: (Envelope, Boolean) -> Envelope?) =
         frames.register(*types) { f, direct ->
@@ -74,9 +74,10 @@ fun registerBoardFrames(
     reg(Envelope.TICKET_REORDER) { e, direct -> boardRequest(e.type) { board.reorder(TicketReorder.decode(e.data)).reply(direct) } }
     reg(Envelope.TICKET_DELETE) { e, direct -> boardRequest(e.type) { board.delete(e.data).reply(direct) } }
     reg(Envelope.TICKET_START_NEXT) { e, direct -> boardRequest(e.type) { board.startNext().reply(direct) } }
-    reg(Envelope.EPIC_SAVE, Envelope.EPIC_LIST, Envelope.EPIC_BASE) { e, _ -> epics.answer(e) }
-    reg(Envelope.STORY_SAVE, Envelope.STORY_GET, Envelope.STORY_MOVE) { e, _ -> stories.answer(e) }
-    reg(Envelope.STORY_LIST) { e, _ -> storyBoard.answer(e) }
+    // Epics and the story shims need the epic store and the story migration table (DP-5h-3b): a null handler leaves those frames unregistered.
+    if (epics != null) reg(Envelope.EPIC_SAVE, Envelope.EPIC_LIST, Envelope.EPIC_BASE) { e, _ -> epics.answer(e) }
+    if (stories != null) reg(Envelope.STORY_SAVE, Envelope.STORY_GET, Envelope.STORY_MOVE) { e, _ -> stories.answer(e) }
+    if (storyBoard != null) reg(Envelope.STORY_LIST) { e, _ -> storyBoard.answer(e) }
 }
 
 /** Contract 1.5.0: one ticket as a `ticket` frame, every field present. */
