@@ -1,8 +1,6 @@
 package com.superiorsoftllc.agenthq.stories
 
-import com.superiorsoftllc.agenthq.backlog.TicketBoard
-import com.superiorsoftllc.agenthq.db.AgentHQDatabase
-import com.superiorsoftllc.agenthq.epics.SqlEpicPersistence
+import com.superiorsoftllc.agenthq.epics.Epic
 import com.superiorsoftllc.agenthq.protocol.Story
 import com.superiorsoftllc.agenthq.protocol.StoryStatus
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
@@ -32,11 +30,31 @@ import kotlinx.serialization.json.Json
  */
 class StoryMigration(
     private val file: File,
-    private val board: TicketBoard,
-    private val database: AgentHQDatabase,
+    private val board: StoryImport,
+    private val mappings: StoryMappings,
+    /** Every epic, in creation order (the core's epics table). */
+    private val epics: () -> List<Epic>,
     private val clock: () -> Long = System::currentTimeMillis,
     private val afterStory: (storyId: String) -> Unit = {},
 ) {
+    /** DP-5g: the board's internal ticket import (the core's TicketBoard adapts to it). */
+    fun interface StoryImport {
+        fun import(
+            title: String,
+            status: String,
+            projectId: String?,
+            epicId: String?,
+            description: String,
+            inSameTransaction: (ticketId: String) -> Unit,
+        ): String
+    }
+
+    /** DP-5g: the `story_migration` table (story id -> ticket id). */
+    interface StoryMappings {
+        fun ticketFor(storyId: String): String?
+        fun insert(storyId: String, ticketId: String, at: Long)
+    }
+
     /** What one [run] did. */
     data class Result(val migrated: Int, val skipped: Int, val renamed: Boolean, val corrupt: Boolean = false)
 
@@ -48,16 +66,15 @@ class StoryMigration(
             System.err.println("[agentHq] story migration: ${file.path} is unreadable, left untouched: ${e.message}")
             return Result(migrated = 0, skipped = 0, renamed = false, corrupt = true)
         }
-        val epics = SqlEpicPersistence(database).loadAll()
-        val queries = database.story_migrationQueries
+        val allEpics = epics()
         var migrated = 0
         var skipped = 0
         for (story in stories) {
-            if (queries.ticketFor(story.id).executeAsOneOrNull() != null) {
+            if (mappings.ticketFor(story.id) != null) {
                 skipped++
                 continue
             }
-            val holders = epics.filter { story.id in it.storyIds }.map { it.id }
+            val holders = allEpics.filter { story.id in it.storyIds }.map { it.id }
             val description = buildString {
                 append("Migrated from story ").append(story.id)
                 if (holders.size > 1) append("\nAlso listed under epic ").append(holders.drop(1).joinToString(", "))
@@ -68,7 +85,7 @@ class StoryMigration(
                 projectId = story.projectId,
                 epicId = holders.firstOrNull(),
                 description = description,
-            ) { ticketId -> queries.insertMapping(story.id, ticketId, clock()) }
+            ) { ticketId -> mappings.insert(story.id, ticketId, clock()) }
             migrated++
             afterStory(story.id)
         }
