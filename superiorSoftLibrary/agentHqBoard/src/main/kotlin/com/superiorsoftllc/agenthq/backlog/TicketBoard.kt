@@ -922,6 +922,18 @@ class TicketBoard(
         return startAnswer(id, TicketStart(ok = true, reason = "started", detail = detail), outcome)
     }
 
+    /**
+     * DP-5h-3a: whether [move] would hand the ticket to a worker, as [move] decides it (GAP-006b restart included); what a
+     * session-originated start is charged on. A ticket that does not exist answers false.
+     */
+    fun runsWorker(move: TicketMove): Boolean {
+        if (move.status != TicketStatus.IN_PROGRESS) return false
+        val current = runCatching { get(move.id) }.getOrNull() ?: return false
+        if (current.status != TicketStatus.IN_PROGRESS) return true
+        return move.position == null && host.sessions.available() &&
+            BoardWorkerHealth.problem(current.sessionId?.let(host.sessions::detail), current.sessionId) != null
+    }
+
     /** GAP-006b: why in-progress [row]'s worker cannot carry it ([BoardWorkerHealth]); null when it can, or with no session manager. */
     private fun workerProblem(row: TicketRow): String? {
         if (!host.sessions.available()) return null

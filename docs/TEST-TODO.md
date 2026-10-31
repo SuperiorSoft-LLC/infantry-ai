@@ -17,3 +17,6 @@
 - TEST-TODO: reload mid-worker: start a ticket worker, reload Infantry_Board; worker keeps running in core, the new board re-adopts it (sweepWorkers) and clearQueueMarks runs; the status/exit events of the gap arrive in order.
 - TEST-TODO: startup order: with the plugin installed, the first client frame and the session restore both see a built board (needs DaemonMain to build the plugin host before restore; not done in this ticket).
 - TEST-TODO: the shaded Infantry_Board-daemon.jar contains com/superiorsoftllc/agenthq/backlog/TicketBoard.class and no daemon-api classes.
+
+## DP-5h-3a (ticket-498dfe11): board frame registration on the ports
+- TEST-TODO: a session-originated ticket_move through the board-side `registerBoardFrames` (FrameBinding + SpawnCharge) hits the depth / pod-cap refusal with the same text as the old core TicketStartCharge path; the worker joins the starter's pod and records its spawner.
