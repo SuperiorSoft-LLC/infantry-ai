@@ -36,7 +36,7 @@ Classes: **M** = generic mechanism (stays in core), **K** = stack knowledge (dat
 | session/ProcessLedger.kt:187 `HEAVY_CMD` | java, node, gradle, kotlin, npx, playwright, modelcontextprotocol command lines are adoptable | K | profiles `heavyCommands` (gradle, kotlin, runtimes, mcp) | DONE |
 | session/ProcessLedger.kt `MCP_CMD`, `OPENCODE_SERVE` | harness helper processes (MCP servers, opencode serve) | harness knowledge, not stack | stays (harness plugins later) | kept |
 | agentHqRunner/BuildPriority.kt:57-79 `sessionEnv` | GRADLE_OPTS with `org.gradle.workers.max`, Kotlin in-process strategy, `org.gradle.project.agenthq.*Forks` | K | gradle profile `env` templates (`${maxWorkers}`, `${maxParallelForks}`) | DONE |
-| agentHqRunner/BuildPriority.kt:82 `FORK_PROPERTIES` | this repo's own test-fork property names | project data | still in the bundled gradle profile (golden); move to this project's `watch.toolProfiles` | F1 |
+| agentHqRunner/BuildPriority.kt:82 `FORK_PROPERTIES` | this repo's own test-fork property names | project data | moved (STACK-NEUTRAL-6): resource watch/repo-profile-additions.json, migrated once into the install's `watch.toolProfiles` | F1 |
 | daemon/DaemonMain.kt:847 | daemon's GRADLE_OPTS inherited | K | any template variable is appended to the daemon's own value (`inherit`) | DONE |
 | settings/LimitRegistry.kt:82, 258 descriptions | "Gradle workers", "gradle/mvn/npm/yarn/pnpm" | K | generic wording; keys `limits.build.maxWorkers` / `maxParallelForks` were already stack-neutral (no alias needed) | DONE |
 | daemon/WatchHooks.kt, runner/WatchRewrite.kt, runner/WatchShims.kt | which programs are long / shimmed | K | already profiles (STALL-3) | was done |

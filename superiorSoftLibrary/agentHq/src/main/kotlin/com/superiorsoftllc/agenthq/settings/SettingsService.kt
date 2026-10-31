@@ -611,6 +611,28 @@ class SettingsService(
         return v
     }
 
+    /**
+     * STACK-NEUTRAL-6: the one-time migration of this repo's own test-fork properties (read only by this repo's build scripts)
+     * out of the bundled profile into the install's `watch.toolProfiles` override. On an existing install with no stored
+     * override of that profile, it stores a copy of the bundled [profileName] profile plus the [extra] env templates, so the
+     * worker env stays what it was. A fresh install, or one that already overrides the profile, is left alone.
+     * Returns true when it wrote the override.
+     */
+    fun migrateRepoProfileAdditions(existingInstall: () -> Boolean): Boolean {
+        val tp = com.superiorsoftllc.agenthq.runner.ToolProfiles
+        val text = SettingsService::class.java.getResourceAsStream("/watch/repo-profile-additions.json")?.use { it.readBytes().toString(Charsets.UTF_8) } ?: return false
+        val additions = runCatching { tp.parse(text) }.getOrNull() ?: return false
+        val stored = toolProfileOverrides()
+        val storedNames = stored.mapNotNull { (it as? JsonObject)?.get("name")?.let { n -> (n as? JsonPrimitive)?.content } }.toSet()
+        val todo = additions.filter { it.name !in storedNames }
+        if (todo.isEmpty() || !runCatching(existingInstall).getOrDefault(false)) return false
+        val current = runCatching { tp.parse(stored.toString()) }.getOrDefault(emptyList())
+        val merged = todo.mapNotNull { a -> tp.DEFAULTS.firstOrNull { it.name == a.name }?.let { b -> b.copy(env = b.env + a.env) } }
+        if (merged.isEmpty()) return false
+        set(TOOL_PROFILES, Json.parseToJsonElement(tp.encode(current + merged)))
+        return true
+    }
+
     fun buildLimits(): com.superiorsoftllc.agenthq.runner.BuildLimits {
         val priority = store.settings.get(LIMITS_BUILD_PRIORITY)?.value
             ?.let { runCatching { (Json.parseToJsonElement(it) as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }.getOrNull() }
