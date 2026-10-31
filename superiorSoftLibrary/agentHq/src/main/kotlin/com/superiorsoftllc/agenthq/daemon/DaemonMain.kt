@@ -1659,6 +1659,8 @@ class AgentHqDaemon(
                                     usagePacing.check(com.superiorsoftllc.agenthq.daemon.api.usage.UsageMeters.meterFor(pid, model ?: manager.providerFor(pid)?.defaultModel()))
                                 },
                                 attention = attention,
+                                onAttachCore = { access -> boardPorts.attach(com.superiorsoftllc.agenthq.daemon.PluginBoardPorts(access)) },
+                                onDetachCore = { boardPorts.detach() },
                                 // DP-5h-3a2 (1.13.0): the typed events, story / epic inputs, RELATED block and skill check.
                                 ticketEvents = ticketEvents ?: com.superiorsoftllc.agenthq.daemon.api.board.NoTicketEvents,
                                 stories = object : com.superiorsoftllc.agenthq.daemon.api.board.BoardStoryInputs {

@@ -56,6 +56,12 @@ interface BoardRuntime {
     /** DP-5h-3a2 (1.13.0): of [ids], the skill ids no stored skill carries (a save naming one is refused). */
     fun unknownSkills(ids: List<String>): List<String> = ids
 
+    /** DP-5h-3e-b (1.14.0, additive): the plugin that built the board hands core its [BoardCoreAccess]; core's consumers resolve it at call time. */
+    fun attachCore(access: BoardCoreAccess) {}
+
+    /** DP-5h-3e-b (1.14.0): the plugin is stopping or reloading; core's consumers answer "no board" until the next [attachCore]. */
+    fun detachCore() {}
+
     /** Contract 1.5.0: push these frames to every connected client, in order. */
     fun push(frames: List<Frame>) {}
 }

@@ -40,6 +40,9 @@ class LocalBoardRuntime(
     override val epics: com.superiorsoftllc.agenthq.daemon.api.board.BoardEpicInputs = com.superiorsoftllc.agenthq.daemon.api.board.BoardEpicInputs.NONE,
     private val related: (com.superiorsoftllc.agenthq.daemon.api.board.BoardRelatedDraft) -> String? = { null },
     private val skillKnown: (String) -> Boolean = { true },
+    /** DP-5h-3e-b: the plugin that built the board hands core its access (null = ignored), and takes it back. */
+    private val onAttachCore: (com.superiorsoftllc.agenthq.daemon.api.board.BoardCoreAccess) -> Unit = {},
+    private val onDetachCore: () -> Unit = {},
 ) : BoardRuntime {
     override val host: BoardHost get() = hostSource()
     override fun setting(key: String): String? = store.settings.get(key)?.value
@@ -58,4 +61,6 @@ class LocalBoardRuntime(
     override fun relatedDescription(draft: com.superiorsoftllc.agenthq.daemon.api.board.BoardRelatedDraft): String? = related(draft)
     override fun unknownSkills(ids: List<String>): List<String> = ids.filter { !skillKnown(it) }
     override fun push(frames: List<Frame>) = pushToClients(frames)
+    override fun attachCore(access: com.superiorsoftllc.agenthq.daemon.api.board.BoardCoreAccess) = onAttachCore(access)
+    override fun detachCore() = onDetachCore()
 }
