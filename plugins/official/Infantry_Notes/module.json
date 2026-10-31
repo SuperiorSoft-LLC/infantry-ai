@@ -9,6 +9,23 @@
   "entry": "com.superiorsoftllc.agenthq.plugins.official.notes.NotesPlugin",
   "jar": "build/libs/Infantry_Notes.jar",
   "buildOrder": 80,
+  "daemon": {
+    "entry": "com.superiorsoftllc.agenthq.plugins.official.notes.daemon.NotesDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_Notes-daemon.jar",
+    "apiAtLeast": "1.17.0",
+    "storage": { "adopt": ["decisions", "issues", "issue_events"] },
+    "frames": [
+      { "type": "decision_list", "action": "knowledge.read", "kind": "read" },
+      { "type": "decision_get", "action": "knowledge.read", "kind": "read" },
+      { "type": "decision_add", "action": "knowledge.decision.add", "kind": "write" },
+      { "type": "issue_list", "action": "knowledge.read", "kind": "read" },
+      { "type": "issue_get", "action": "knowledge.read", "kind": "read" },
+      { "type": "issue_precheck", "action": "knowledge.read", "kind": "read" },
+      { "type": "issue_open", "action": "knowledge.issue.save", "kind": "write" },
+      { "type": "issue_attempt", "action": "knowledge.issue.save", "kind": "write" },
+      { "type": "issue_fix", "action": "knowledge.issue.save", "kind": "write" }
+    ]
+  },
   "tabs": [
     {
       "id": "infantry.notes",

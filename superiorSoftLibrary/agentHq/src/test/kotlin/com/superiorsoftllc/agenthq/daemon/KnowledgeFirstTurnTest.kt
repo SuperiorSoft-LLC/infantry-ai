@@ -25,6 +25,8 @@ import kotlin.test.assertTrue
  * own memory, decisions and issues stores when the turn renders (so a never-run session renders them at delivery).
  */
 class KnowledgeFirstTurnTest {
+    private var records = FakeKnowledgeRecords()
+
 
     @Test
     fun aTicketStartCarriesTheKnowledgeSourceAfterTraitsAndBeforeTheTicket() = withDaemon { fixture, runner ->
@@ -153,11 +155,11 @@ class KnowledgeFirstTurnTest {
         val daemon = fixture.daemon
         daemon.memoryNotes.save(PROJECT, "architecture", "how it fits", "the body")
         daemon.memoryNotes.save("another-project", "elsewhere", "not ours", "the body")
-        daemon.decisions.add(PROJECT, "use sqlite")
-        daemon.decisions.add(PROJECT, "use sqlite with WAL", supersedes = "D1")
-        daemon.issues.open(PROJECT, "flaky start", "src/a.kt")
-        daemon.issues.open(PROJECT, "slow start", "src/b.kt")
-        daemon.issues.fix(PROJECT, "made it fast", issue = "I2")
+        records.addDecision(PROJECT, "use sqlite")
+        records.addDecision(PROJECT, "use sqlite with WAL", supersedes = "D1")
+        records.openIssue(PROJECT, "flaky start", "src/a.kt")
+        records.openIssue(PROJECT, "slow start", "src/b.kt")
+        records.fixIssue(PROJECT, "I2")
     }
 
     private fun bind(fixture: DaemonFixture) = run {
@@ -175,12 +177,14 @@ class KnowledgeFirstTurnTest {
     private fun withDaemon(block: (DaemonFixture, ScriptedRunner) -> Unit) {
         val script = StubScript.default()
         val runner = ScriptedRunner(script, delayMs = 0)
+        records = FakeKnowledgeRecords().install()
         val fixture = DaemonFixture.launch(script, runner = runner)
         try {
             block(fixture, runner)
         } finally {
             fixture.stop()
             fixture.deleteState()
+            FakeKnowledgeRecords.uninstall()
         }
     }
 

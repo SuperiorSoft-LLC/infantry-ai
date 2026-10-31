@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.issues
+package com.superiorsoftllc.agenthq.plugins.official.notes.daemon
 
 /** Who wrote an issue or an event, resolved from the declared session. */
 data class IssueActor(

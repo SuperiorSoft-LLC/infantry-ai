@@ -111,6 +111,8 @@ class DaemonCoreGuardTest {
         val CORE = mapOf(
             "protocol" to "the wire contract and frames: the abstract data contract between UI and daemon",
             "pipeline" to "DP-6: the pipeline wire DTOs only (the CLI speaks them); the store, handler and tools are in Infantry_Board",
+            "issues" to "DP-7c: the issue wire DTOs only (the CLI speaks them); the store and handler are in Infantry_Notes",
+            "decisions" to "DP-7c: the decision wire DTOs only (the CLI speaks them); the store and handler are in Infantry_Notes",
             "daemon" to "bootstrap, FrameGate, AccessPolicy and the plugin host (daemon/plugins); concrete handlers inside it are listed in the doc",
             "policy" to "ActionCatalog, PolicyProvider, PolicyRuntime: the policy layer mechanism",
             "settings" to "SettingsService and LimitRegistry: configuration and the tools to modify it",
@@ -140,8 +142,6 @@ class DaemonCoreGuardTest {
 
         /** PLUGIN NOW: a mechanism and an official plugin exist (or can be written today); only the move is left. */
         val PLUGIN_NOW = mapOf(
-            "issues" to "project knowledge: issues, a Knowledge plugin",
-            "decisions" to "project knowledge: decisions, a Knowledge plugin",
             "memory" to "project knowledge: notes, a Knowledge plugin",
             "prompts" to "prompt templates: Infantry_Prompts daemon half",
             "images" to "chat uploads: Infantry_Chat daemon half",

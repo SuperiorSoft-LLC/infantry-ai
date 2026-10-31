@@ -42,3 +42,22 @@ data class KnowledgeDigestView(
 
 /** One [Knowledge.search] hit. */
 data class KnowledgeHit(val name: String, val description: String, val snippet: String)
+
+/**
+ * DP-7c (DaemonApi 1.17.0, additive): the decisions / issues half of [Knowledge], a service published in the AR-5 registry by
+ * the plugin that owns those logs (Infantry_Notes). Core's local [Knowledge] provider reads it for the digest: with no
+ * provider the digest simply has no decisions and no issues. Read-only; the lines are ordered by number.
+ */
+interface KnowledgeRecords {
+    /** The ACTIVE (not superseded) decisions of [project], in number order. */
+    fun activeDecisions(project: String): List<KnowledgeDecision>
+
+    /** The OPEN (not fixed) issues of [project], in number order. */
+    fun openIssues(project: String): List<KnowledgeIssue>
+}
+
+/** An active decision: [ref] is `D<n>`, [summary] its one line. */
+data class KnowledgeDecision(val ref: String, val summary: String)
+
+/** An open issue: [ref] is `I<n>`, [location] the path it is about ("" for none). */
+data class KnowledgeIssue(val ref: String, val summary: String, val location: String)

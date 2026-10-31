@@ -31,6 +31,16 @@ object BoardFrames {
     /** DP-6: the pipeline frames, owned by the board plugin (module.json `daemon.frames`). */
     val PIPELINE_TYPES: Set<String> = setOf(Envelope.PIPELINE_CONFIG, Envelope.PIPELINE_SHOW, Envelope.PIPELINE_RECORD, Envelope.PIPELINE_CHECK)
 
+    /** DP-7c: the decisions and issues frames, owned by the notes plugin (module.json `daemon.frames`). */
+    val KNOWLEDGE_RECORD_TYPES: Set<String> = setOf(
+        Envelope.DECISION_ADD, Envelope.DECISION_LIST, Envelope.DECISION_GET,
+        Envelope.ISSUE_OPEN, Envelope.ISSUE_ATTEMPT, Envelope.ISSUE_FIX, Envelope.ISSUE_LIST, Envelope.ISSUE_GET, Envelope.ISSUE_PRECHECK,
+    )
+
+    /** DP-7c: a decision or issue frame with no plugin answering: a refusal, never a hang. */
+    fun noKnowledgeRecords(type: String): Envelope =
+        Envelope(Envelope.ERROR, "$type refused: this daemon has no ${if (type.startsWith("decision")) "decisions" else "issues"}")
+
     /** DP-6: a pipeline frame with no plugin answering: a refusal, never a hang. */
     fun noPipeline(type: String): Envelope = Envelope(Envelope.ERROR, "$type refused: this daemon has no pipeline")
 

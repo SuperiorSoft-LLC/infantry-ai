@@ -134,11 +134,19 @@ object KnowledgeLines {
     const val TITLE_CHARS = 90
 
     fun decisionTitles(decisions: List<Decision>): List<String> =
-        decisions.filter { it.active }.sortedBy { it.number }.map { d ->
-            val one = d.summary.trim().lineSequence().first()
+        decisionTitleLines(decisions.filter { it.active }.sortedBy { it.number }.map { it.ref to it.summary })
+
+    /** DP-7c: the open-issue lines over (ref, summary, location) triples already filtered and ordered. */
+    fun issueLines(issues: List<Triple<String, String, String>>): List<String> =
+        issues.map { (ref, summary, location) -> "$ref $summary" + if (location.isNotEmpty()) " ($location)" else "" }
+
+    /** DP-7c: [decisionTitles] over (ref, summary) pairs already filtered and ordered (what the Knowledge records port returns). */
+    fun decisionTitleLines(decisions: List<Pair<String, String>>): List<String> =
+        decisions.map { (ref, summary) ->
+            val one = summary.trim().lineSequence().first()
             val first = Regex("^.*?[.!?](?=\\s|\$)").find(one)?.value ?: one
             val title = if (first.length > TITLE_CHARS) first.take(TITLE_CHARS - 1).trimEnd() + "…" else first
-            "${d.ref} $title"
+            "$ref $title"
         }
 
     fun issues(issues: List<Issue>): List<String> =

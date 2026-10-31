@@ -696,11 +696,7 @@ class SchemaMigrationTest {
         assertFailsWith<java.sql.SQLException>("events UPDATE aborts") { exec(path, "UPDATE issue_events SET summary = 'x';") }
         assertFailsWith<java.sql.SQLException>("events DELETE aborts") { exec(path, "DELETE FROM issue_events;") }
         assertEquals("1", rows(path, "SELECT COUNT(*) FROM issue_events;").single().single())
-        SqlAgentHqStore.open(path).use { store ->
-            val issues = com.superiorsoftllc.agenthq.issues.IssueStore(store)
-            assertEquals(2, issues.open("P", "two", "src/b").number)
-            assertEquals(1, issues.open("Q", "q one", "src/q").number)
-        }
+        // DP-7c: the store (numbering per project) moved to the Infantry_Notes plugin and is tested there.
     }
 
     /**
@@ -736,11 +732,7 @@ class SchemaMigrationTest {
         assertFailsWith<java.sql.SQLException>("UPDATE aborts") { exec(path, "UPDATE decisions SET summary = 'x';") }
         assertFailsWith<java.sql.SQLException>("DELETE aborts") { exec(path, "DELETE FROM decisions;") }
         assertEquals("2", rows(path, "SELECT COUNT(*) FROM decisions;").single().single())
-        SqlAgentHqStore.open(path).use { store ->
-            val decisions = com.superiorsoftllc.agenthq.decisions.DecisionStore(store)
-            assertEquals(3, decisions.add("P", "three", supersedes = "D2").number)
-            assertEquals(1, decisions.add("Q", "q one").number)
-        }
+        // DP-7c: the store (numbering per project) moved to the Infantry_Notes plugin and is tested there.
     }
 
     /**
