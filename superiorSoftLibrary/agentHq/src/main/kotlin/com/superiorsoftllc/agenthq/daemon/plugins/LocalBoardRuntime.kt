@@ -67,6 +67,10 @@ class LocalBoardRuntime(
     override fun skillIds(): List<String> = settings.skillIds()
     override fun roleNotes(projectId: String, role: String) = roleNotesOf(projectId, role)
     override fun relatedBlock(ticketId: String, description: String) = relatedBlockOf(ticketId, description)
+    override fun watchedPrograms(): List<String> =
+        if (settings.limit(com.superiorsoftllc.agenthq.settings.LimitRegistry.WATCH_ENABLED) == 1L &&
+            settings.limit(com.superiorsoftllc.agenthq.settings.LimitRegistry.WATCH_FORCED) == 1L
+        ) com.superiorsoftllc.agenthq.runner.ToolProfiles.shimPrograms(settings.toolProfiles()) else emptyList()
     override fun fixedFirstTurn() = fixedFirstTurnOf()
     override fun unknownSkills(ids: List<String>): List<String> = ids.filter { !skillKnown(it) }
     override fun push(frames: List<Frame>) = pushToClients(frames)
