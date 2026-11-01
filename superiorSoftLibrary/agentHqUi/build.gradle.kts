@@ -500,6 +500,10 @@ val allOfficialProjects = rootProject.subprojects.filter { it.path.startsWith(":
 excludedPluginIds.filter { id -> allOfficialProjects.none { it.name == id } }.takeIf { it.isNotEmpty() }
     ?.let { error("BUILD-PLUGINS-1: -Pihq.excludePlugins names no official plugin: $it") }
 val officialProjects = allOfficialProjects.filter { it.name !in excludedPluginIds }
+// SCRIPT-HOOK-1: daemon-only official plugins (a `daemon` block, no UI project: Infantry_Lua, Infantry_Scripting) have no jvmJar, so the
+// desktop package used to leave them out (the installed app had no script tools). They are staged with their daemon half only.
+val daemonOnlyOfficial = rootProject.file("plugins/official").listFiles { f -> f.isDirectory && !f.name.startsWith("_") && File(f, "module.json").isFile && !File(f, "build.gradle.kts").isFile }
+    .orEmpty().filter { d -> d.name !in excludedPluginIds && (groovy.json.JsonSlurper().parse(File(d, "module.json")) as Map<*, *>)["daemon"] != null }.sortedBy { it.name }
 val optionalOut = providers.gradleProperty("ihq.optionalOut").orNull?.trim()?.lowercase() == "true"
 val optionalProjects = if (optionalOut) allOfficialProjects.filter { it.name in excludedPluginIds } else emptyList()
 val optionalStageDir = layout.buildDirectory.dir("official-modules/optional-plugins")
@@ -510,7 +514,7 @@ val ihqDaemonJar = rootProject.extra["ihqDaemonJar"] as (File) -> String?
 @Suppress("UNCHECKED_CAST")
 val ihqVerifyDaemonHalves = rootProject.extra["ihqVerifyDaemonHalves"] as (File, String, List<String>) -> Unit
 // Official modules with a daemon half, and the jar task that builds it (:daemon-plugin-official-<Name>:jar).
-val officialDaemonHalves = officialProjects.mapNotNull { p -> ihqDaemonJar(p.projectDir)?.let { p.name to it } }.toMap()
+val officialDaemonHalves = (officialProjects.map { it.projectDir } + daemonOnlyOfficial).mapNotNull { d -> ihqDaemonJar(d)?.let { d.name to it } }.toMap()
 val optionalDaemonHalves = optionalProjects.mapNotNull { p -> ihqDaemonJar(p.projectDir)?.let { p.name to it } }.toMap()
 val stageOfficialModules = tasks.register("stageOfficialModules") {
     group = "distribution"
@@ -522,7 +526,7 @@ val stageOfficialModules = tasks.register("stageOfficialModules") {
         dependsOn("$producer:jar")
     }
     val daemonHalves = officialDaemonHalves
-    val modules = officialProjects.map { p -> p.name to p.projectDir }
+    val modules = officialProjects.map { p -> p.name to p.projectDir } + daemonOnlyOfficial.map { it.name to it }
     val optionalModules = optionalProjects.map { p -> p.name to p.projectDir }
     val jars = (officialProjects + optionalProjects).associate { p -> p.name to p.tasks.named<Jar>("jvmJar").flatMap { it.archiveFile } }
     val keystoreProp = providers.gradleProperty("ihq.keystore").map { rootProject.file(it) }
@@ -580,11 +584,13 @@ val stageOfficialModules = tasks.register("stageOfficialModules") {
         fun stage(root: File, name: String, dir: File, halves: Map<String, String>) {
             val json = File(dir, "module.json")
             val manifest = groovy.json.JsonSlurper().parse(json) as Map<*, *>
-            val jarPath = (manifest["jar"] as? String)?.takeIf { it.isNotBlank() } ?: error("PACKAGING: $json names no jar")
             val moduleDir = File(root, "official/$name")
             json.copyTo(File(moduleDir, "module.json"))
-            val jar = jars.getValue(name).get().asFile.copyTo(File(moduleDir, jarPath))
-            tool("jarsigner", "-keystore", keystore.path, "-storepass", storePass, jar.path, alias)
+            if (jars.containsKey(name)) {
+                val jarPath = (manifest["jar"] as? String)?.takeIf { it.isNotBlank() } ?: error("PACKAGING: $json names no jar")
+                val jar = jars.getValue(name).get().asFile.copyTo(File(moduleDir, jarPath))
+                tool("jarsigner", "-keystore", keystore.path, "-storepass", storePass, jar.path, alias)
+            }
             // PACKAGE-1: the daemon half (module.json daemon.jar, built by :daemon-plugin-official-<Name>:jar) and policies/.
             halves[name]?.let { daemonJarPath ->
                 val built = File(dir, daemonJarPath)
