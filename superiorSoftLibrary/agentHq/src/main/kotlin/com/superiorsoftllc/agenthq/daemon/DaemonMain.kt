@@ -1316,6 +1316,8 @@ class AgentHqDaemon(
                 ticketOf = { id -> store.transaction { store.tickets.get(id) } },
                 idleNoticeMs = { LimitRegistry.minutesMs(settings.limit(LimitRegistry.IDLE_NOTICE_MINUTES), LimitRegistry.IDLE_NOTICE_MINUTES) },
                 exemptWhenDone = { settings.limit(LimitRegistry.WATCH_EXEMPT_WHEN_TICKET_DONE) != 0L },
+                reports = { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.tickets.TicketReports::class) },
+                idleComment = { settings.limit(LimitRegistry.IDLE_COMMENT) != 0L },
             ).also { it.start() }
             // STALL-4: the watch's recipient rule (`watch.escalateTo`): `starter` = the ticket's starter session, else the
             // user through the UI; `user` = always the user; `none` = nobody. No role is assumed to exist.

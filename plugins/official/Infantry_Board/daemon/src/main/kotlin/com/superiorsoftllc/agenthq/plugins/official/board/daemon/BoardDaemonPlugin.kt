@@ -38,6 +38,9 @@ class BoardDaemonPlugin : DaemonPlugin {
         if (comments != null) {
             api.tools.register(TicketCommentTool(api, comments))
             api.tools.register(TicketCommentsTool(api, comments))
+            // TICKET-COMMENTS-4: the idle watch in core posts its safety-net comment through this port.
+            runCatching { api.services.provide(com.superiorsoftllc.agenthq.daemon.api.tickets.TicketReports::class, TicketReportsService(api, comments)) }
+                .onFailure { api.log("ticket reports unavailable: ${it.message}") }
         }
         api.tools.register(TicketFilesTools.Files)
         api.tools.register(TicketFilesTools.Related)
