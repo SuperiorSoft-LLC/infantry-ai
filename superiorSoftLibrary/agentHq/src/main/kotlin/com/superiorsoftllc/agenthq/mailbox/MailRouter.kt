@@ -86,6 +86,12 @@ class MailRouter(
     private val wakeMode: (role: String, sessionId: String) -> String = { _, _ -> "all" },
     /** USAGE-REGRESS-1: ms a waking message waits for company before it wakes a resting session (0 = at once). */
     private val wakeDebounceMs: () -> Long = { 0L },
+    /**
+     * OVERNIGHT-1: HARD upper bound (ms) on how long any queued mail waits to wake a resting session, whatever [wakeMode] and the
+     * debounce say: past it the message wakes the session, and a timer pumps it at that moment. No setting can switch this off.
+     */
+    private val wakeMaxMs: () -> Long = { 120_000L },
+    private val clock: () -> Long = System::currentTimeMillis,
     /** MAIL-TRUNC-1: `notify` | `truncate` | `full` for a recipient role / session (settings `mail.deliveryMode`). Default here `full`; the daemon wires the setting. */
     private val deliveryMode: (role: String, sessionId: String) -> String = { _, _ -> "full" },
     /** MAIL-TRUNC-1: per-body cap (chars) in `truncate` mode. */
@@ -105,6 +111,8 @@ class MailRouter(
 
     /** USAGE-REGRESS-1: may [message] start a wake? `never` no; `real` not automation mail; `all` yes. */
     override fun wakes(message: Message): Boolean {
+        // OVERNIGHT-1: a message that has waited the hard bound ALWAYS wakes, whatever the mode says.
+        if (clock() - message.sentAt >= maxWait()) return true
         val session = (resolveRecipient(message.to, message.from, message.id in crossAllowed) as? RecipientResolution.Resolved)
             ?.let { manager.get(it.sessionId) } ?: return true
         return when (wakeMode(session.role ?: "", session.id)) {
@@ -112,6 +120,14 @@ class MailRouter(
             "real" -> !MailFooter.isAutomation(message.from) || isBgFinal(message)
             else -> true
         }
+    }
+
+    private fun maxWait(): Long = wakeMaxMs().coerceAtLeast(1L)
+
+    /** OVERNIGHT-1: pump [to] when its oldest message reaches the hard bound (idempotent; one timer per recipient and bound). */
+    private fun scheduleBound(to: String, sentAt: Long) {
+        val due = (sentAt + maxWait() - clock()).coerceAtLeast(0L)
+        debounceTimer.schedule({ runCatching { pump(to) } }, due + 50, java.util.concurrent.TimeUnit.MILLISECONDS)
     }
 
     /**
@@ -148,6 +164,10 @@ class MailRouter(
     /** At startup, deliver anything already queued for a session that is at rest. */
     fun onStartup() {
         for (session in manager.list()) if (session.isAvailable()) pump(session.id)
+        // OVERNIGHT-1: whatever is still queued (young, or held by the mode) wakes at the hard bound.
+        for (session in manager.list()) if (session.isAvailable()) {
+            mailbox.inbox(session.id).filter { it.state == MessageState.QUEUED }.minOfOrNull { it.sentAt }?.let { scheduleBound(session.id, it) }
+        }
     }
 
     /**
@@ -162,7 +182,8 @@ class MailRouter(
             if (request.allowCrossProject) crossAllowed.add(result.message.id)
             // Pump by the ORIGINAL recipient address (session id, agent id, or role name), because
             // that is how the message is keyed in the mailbox. `deliver` resolves it to a session.
-            val delay = wakeDebounceMs()
+            // OVERNIGHT-1: the debounce never exceeds the hard bound.
+            val delay = wakeDebounceMs().coerceAtMost(maxWait())
             if (delay > 0 && wakes(result.message)) {
                 if (debouncing.add(result.message.to)) {
                     val to = result.message.to
@@ -170,6 +191,8 @@ class MailRouter(
                 }
             } else {
                 pump(result.message.to)
+                // A message the mode would not wake for (automation mail under `real`/`never`) still wakes at the bound.
+                if (mailbox.message(result.message.id)?.state == MessageState.QUEUED) scheduleBound(result.message.to, result.message.sentAt)
             }
         }
         return result
@@ -328,8 +351,11 @@ class MailRouter(
             val source = MailSource.of(message, manager, automationFooter)
             // USAGE-REGRESS-1: every wake re-reads the whole context; fold the other messages already queued for this
             // session (same recipient, up to [coalesceMax]) into the one turn instead of one wake each.
-            val folded = if (session.neverRun) emptyList() else rest.take(coalesceMax())
-            val mailText = renderTurn(deliveryMode(session.role ?: "", session.id), listOf(message) + folded, source) { MailSource.of(it, manager, automationFooter) }
+            // OVERNIGHT-1: EVERYTHING queued for the session goes into this ONE turn (a backlog is never replayed as one turn per item).
+            val folded = if (session.neverRun) emptyList() else rest
+            val group = listOf(message) + folded
+            val mailText = if (group.size > 1) compactTurn(group)
+            else renderTurn(deliveryMode(session.role ?: "", session.id), group, source) { MailSource.of(it, manager, automationFooter) }
             val text = if (handoff != null) handoff + MAIL_FOLD_SEPARATOR + mailText else mailText
             val turn = if (session.neverRun) {
                 // TRAITS-T5: the persona and traits FROZEN at spawn, never the live profile (a later edit never reaches it).
@@ -390,6 +416,26 @@ class MailRouter(
                 parts.joinToString(MAIL_FOLD_SEPARATOR)
             }
             else -> (listOf(first) + all.drop(1).map(sourceOf)).joinToString(MAIL_FOLD_SEPARATOR) { it.render() }
+        }
+    }
+
+    /**
+     * OVERNIGHT-1: the wake text for several queued messages: ONE line per distinct (from, subject) with the newest id, a count
+     * ("x3") when it repeated, and a 1-line preview. Never a full body; `agenthq read <id>` has it.
+     */
+    internal fun compactTurn(all: List<Message>): String {
+        val groups = all.sortedWith(compareBy({ it.sentAt }, { it.seq })).groupBy { it.from to it.subject }.values
+            .sortedBy { it.last().sentAt }
+        return buildString {
+            append("NEW MAIL (").append(all.size).append("): read with `agenthq read <id>` (MCP: agenthq_read)")
+            for (g in groups) {
+                val m = g.last()
+                append("\n- ").append(m.id.take(8)).append(" from ").append(m.from)
+                if (m.subject.isNotBlank()) append(": ").append(m.subject.take(120))
+                if (g.size > 1) append(" (x").append(g.size).append(")")
+                val preview = m.body.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }.orEmpty()
+                if (preview.isNotEmpty() && preview != m.subject) append(" | ").append(preview.take(100))
+            }
         }
     }
 
