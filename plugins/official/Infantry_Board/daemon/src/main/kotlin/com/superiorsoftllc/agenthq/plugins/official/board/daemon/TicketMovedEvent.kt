@@ -23,8 +23,14 @@ object TicketMovedEvent {
     }.toString()
 
     /** Subscribes to the ticket events; the returned handle ends the subscription. */
-    fun attach(api: DaemonApi): AutoCloseable =
-        api.events.onTicket("script-ticket-moved") { e ->
-            if (e.isTransition) runCatching { api.events.publish(NAME, payload(e)) }
+    fun attach(api: DaemonApi): AutoCloseable {
+        // HOOK-DUP-1: the log redelivers an event whose listener call failed or timed out after the publish went out; one seq publishes once.
+        var lastSeq = 0L
+        return api.events.onTicket("script-ticket-moved") { e ->
+            if (e.isTransition && e.seq > lastSeq) {
+                lastSeq = e.seq
+                runCatching { api.events.publish(NAME, payload(e)) }
+            }
         }
+    }
 }
