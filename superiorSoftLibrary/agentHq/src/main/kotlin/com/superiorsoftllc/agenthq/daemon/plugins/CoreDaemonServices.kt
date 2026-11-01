@@ -72,6 +72,7 @@ class CoreDaemonServices(
     override val tickets get() = boardServices?.tickets ?: com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.tickets
     override val epics get() = boardServices?.epics ?: com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.epics
     override val board get() = boardServices?.boardView ?: com.superiorsoftllc.agenthq.daemon.api.board.NoBoard.board
+    override fun projectData(projectId: String): Map<String, String> = runCatching { projectStore.get(projectId).data }.getOrDefault(emptyMap())
     override fun config(module: String, key: String): String? = daemonConfig.value(module, key)
     override fun env(name: String): String? = getenv(name)
     override fun secret(name: String): String? = keystore.get(name)

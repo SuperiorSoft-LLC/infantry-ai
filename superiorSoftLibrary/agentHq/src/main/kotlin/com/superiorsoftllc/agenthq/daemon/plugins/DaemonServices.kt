@@ -67,6 +67,9 @@ interface DaemonServices {
     /** DAEMON-STORAGE-1: the database handle behind `api.storage`; null = none (every call refuses). */
     val storageHandle: com.superiorsoftllc.agenthq.db.AgentHQDatabaseHandle? get() = null
 
+    /** FULLSUITE-2: a project's data entries (`tests.*` live here); empty when unknown. */
+    fun projectData(projectId: String): Map<String, String> = emptyMap()
+
     companion object {
         /** No daemon behind it: empty lists, no config, the open policy. */
         val NONE: DaemonServices = object : DaemonServices {

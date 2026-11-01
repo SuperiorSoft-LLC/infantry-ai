@@ -247,7 +247,7 @@ class DaemonPluginHost private constructor(
 
     /** The action of a plugin-defined frame, or of `plugin_tool_call` naming a plugin tool; null = not a plugin's. */
     fun actionFor(envelope: Envelope): ActionCatalog.Action? = when (envelope.type) {
-        PLUGIN_TOOL_CALL -> toolName(envelope.data)?.let { if (it == EVENT_EMIT_TOOL) EVENT_EMIT_ACTION else toolEntries[it]?.action }
+        PLUGIN_TOOL_CALL -> toolName(envelope.data)?.let { if (it == EVENT_EMIT_TOOL) EVENT_EMIT_ACTION else if (it == TESTS_TOOL) TESTS_ACTION else toolEntries[it]?.action }
         else -> frameHandlers[envelope.type]?.action
     }
 
@@ -297,6 +297,73 @@ class DaemonPluginHost private constructor(
     fun publishEvent(name: String, payload: String = "{}", source: String = "daemon", causeId: String? = null, depth: Int = 0): NamedEvent =
         namedEvents.publish(name, payload, source, causeId, depth)
 
+    // ---- FULLSUITE-2: the background full-suite runner ------------------------------------------------------------
+
+    private val testRun: com.superiorsoftllc.agenthq.testrun.TestRunService by lazy { buildTestRun() }
+    private var testSchedule: java.util.concurrent.ScheduledExecutorService? = null
+
+    private fun buildTestRun(): com.superiorsoftllc.agenthq.testrun.TestRunService {
+        val handle = services.storageHandle
+        val ledgers = if (handle != null) com.superiorsoftllc.agenthq.testrun.SqlLedgerStore(LocalPluginStorage(handle, "testrun"))
+        else com.superiorsoftllc.agenthq.testrun.MemoryLedgerStore()
+        val owner = Caller(owner = true)
+        fun sink(projectId: String) = com.superiorsoftllc.agenthq.testrun.ServiceFailureSink(
+            createTicket = { title, desc ->
+                when (val r = services.tickets.create(com.superiorsoftllc.agenthq.daemon.api.board.TicketDraft(title = title, description = desc, projectId = projectId, status = "todo"), owner)) {
+                    is com.superiorsoftllc.agenthq.daemon.api.board.BoardResult.Ok -> r.value.id
+                    is com.superiorsoftllc.agenthq.daemon.api.board.BoardResult.Refused -> error(r.text)
+                    is com.superiorsoftllc.agenthq.daemon.api.board.BoardResult.Unavailable -> error(r.reason)
+                }
+            },
+            commentTicket = { id, text ->
+                val args = JsonObject(mapOf("ticketId" to JsonPrimitive(id), "kind" to JsonPrimitive("note"), "body" to JsonPrimitive(text)))
+                callTool("agenthq_ticket_comment", args, owner) { _, _ -> error("no connection") }
+            },
+            notifyPm = { text -> services.sessionNotifier.notifyRole(projectId, "pm", "New failing test", text) },
+        )
+        return com.superiorsoftllc.agenthq.testrun.TestRunService(
+            ledgers = ledgers,
+            data = { services.projectData(it) },
+            envFor = { pid ->
+                services.projects.list().firstOrNull { it.id == pid }?.directory?.takeIf { it.isNotBlank() }
+                    ?.let { com.superiorsoftllc.agenthq.testrun.GitSuiteEnv(File(it), File(stateDir, "testrun/$pid")) }
+            },
+            exec = com.superiorsoftllc.agenthq.testrun.ProcessSuiteExec(),
+            sinkFor = ::sink,
+            onStatus = { pid, line -> services.broadcast("tests_status", "$pid	$line") },
+        )
+    }
+
+    /** The optional schedule (`tests.scheduleMinutes` project data, off by default): checked every few minutes. */
+    fun startTestSchedule(everyMinutes: Long = 5) {
+        if (testSchedule != null) return
+        testSchedule = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "full-suite-schedule").apply { isDaemon = true } }.also { ex ->
+            ex.scheduleWithFixedDelay({ runCatching { testRun.tick(services.projects.list().map { it.id }) } }, everyMinutes, everyMinutes, java.util.concurrent.TimeUnit.MINUTES)
+        }
+    }
+
+    /** `agenthq_tests`: `run` starts the background full suite of the caller's project, `status` reads the last result. Open to every role. */
+    private fun testsTool(arguments: JsonObject, client: JsonObject): ToolResult {
+        val action = (arguments["action"] as? JsonPrimitive)?.contentOrNull?.trim().orEmpty()
+        val pid = (arguments["projectId"] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+            ?: (client["projectId"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()?.takeIf { it.isNotEmpty() }
+            ?: return ToolResult("$TESTS_TOOL needs a project (pass projectId)", isError = true)
+        return when (action) {
+            "run" -> ToolResult(runCatching { testRun.run(pid) }.getOrElse { return ToolResult("$TESTS_TOOL refused: ${it.message}", isError = true) })
+            "status" -> ToolResult(testRun.status(pid))
+            else -> ToolResult("usage: agenthq tests run|status [--project <id>]", isError = true)
+        }
+    }
+
+    private val testsDescriptor = JsonObject(mapOf(
+        "name" to JsonPrimitive(TESTS_TOOL),
+        "description" to JsonPrimitive("Background full-suite runner: action run starts the project's configured suite (tests.* project data) without blocking; status shows the last result. New failures become tickets."),
+        "inputSchema" to Json.parseToJsonElement("""{"type":"object","properties":{"action":{"type":"string","enum":["run","status"]},"projectId":{"type":"string","description":"Default: the caller's project"}},"required":["action"]}"""),
+        "module" to JsonPrimitive("core"),
+        "action" to JsonPrimitive(TESTS_ACTION.id),
+        "timeoutMs" to JsonPrimitive(30_000),
+    ))
+
     private val emitDescriptor = JsonObject(mapOf(
         "name" to JsonPrimitive(EVENT_EMIT_TOOL),
         "description" to JsonPrimitive("Publish a named event (dotted lower-case name, e.g. merge.done) with an optional JSON object payload; plugins subscribed to the name or its prefix react. Open to every role."),
@@ -307,7 +374,7 @@ class DaemonPluginHost private constructor(
     ))
 
     /** `plugin_tools`: every healthy plugin tool, as MCP `tools/list` entries. */
-    fun toolDescriptors(): JsonArray = JsonArray(listOf(emitDescriptor) +
+    fun toolDescriptors(): JsonArray = JsonArray(listOf(emitDescriptor, testsDescriptor) +
         toolEntries.values.filter { !it.owner.guard.disabled }.sortedBy { it.tool.name }.map { e ->
             JsonObject(buildMap {
                 put("name", JsonPrimitive(e.tool.name))
@@ -329,6 +396,7 @@ class DaemonPluginHost private constructor(
      */
     fun callTool(name: String, arguments: JsonObject, caller: Caller, client: JsonObject = JsonObject(emptyMap()), request: (Envelope, Long) -> Envelope): ToolResult {
         if (name == EVENT_EMIT_TOOL) return emitTool(arguments, client)
+        if (name == TESTS_TOOL) return testsTool(arguments, client)
         val entry = toolEntries[name] ?: return ToolResult("Unknown tool: $name", isError = true)
         if (entry.owner.guard.disabled) return ToolResult("$name is unavailable: plugin ${entry.owner.id} is disabled", isError = true)
         val call = object : ToolCall {
@@ -392,6 +460,7 @@ class DaemonPluginHost private constructor(
             runCatching { p.loader.close() }
         }
         observerQueue.shutdownNow()
+        testSchedule?.shutdownNow()
     }
 
     // ---- loading ----------------------------------------------------------------------------------------------------
@@ -718,6 +787,9 @@ class DaemonPluginHost private constructor(
         /** SCRIPT-3: the built-in emit tool and its policy action (kind write; open to every role). */
         const val EVENT_EMIT_TOOL = "agenthq_event_emit"
         val EVENT_EMIT_ACTION = ActionCatalog.Action("events.emit", "write", listOf("plugin_tool_call"))
+        /** FULLSUITE-2: the built-in full-suite runner tool and its policy action. */
+        const val TESTS_TOOL = "agenthq_tests"
+        val TESTS_ACTION = ActionCatalog.Action("tests.run", "write", listOf("plugin_tool_call"))
 
         const val PLUGIN_TOOL_CALL = "plugin_tool_call"
 
@@ -763,6 +835,7 @@ class DaemonPluginHost private constructor(
             val host = DaemonPluginHost(services, stateDir, log)
             for (s in resolution.loaded) runCatching { host.load(s, config, trust) }
                 .onFailure { host.statuses[s.name] = "refused: ${it.message}"; log("[plugins] daemon half of ${s.name} refused: ${it.message}") }
+            host.startTestSchedule()
             return host
         }
 
