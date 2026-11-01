@@ -1,6 +1,10 @@
 package com.superiorsoftllc.agenthq.plugins.official.attention.daemon
 
 import com.superiorsoftllc.agenthq.daemon.api.DaemonApi
+import com.superiorsoftllc.agenthq.daemon.api.Frame
+import com.superiorsoftllc.agenthq.daemon.api.HttpReply
+import com.superiorsoftllc.agenthq.daemon.api.attention.Attention
+import com.superiorsoftllc.agenthq.daemon.api.attention.AttentionEntry
 import com.superiorsoftllc.agenthq.daemon.api.DaemonPlugin
 import com.superiorsoftllc.agenthq.daemon.api.DaemonTool
 import com.superiorsoftllc.agenthq.daemon.api.ToolCall
@@ -26,6 +30,26 @@ import kotlinx.serialization.json.put
 class AttentionDaemonPlugin : DaemonPlugin {
     override fun start(api: DaemonApi) {
         api.tools.register(AskTool)
+        // ATTN-2b: the attention store, service, frames and `GET /attention` live here; core only looks the service up.
+        val store = AttentionStore(api.storage)
+        store.eventSink = { api.events.broadcast("attention", AttentionJson.itemText(it)) }
+        api.services.provide(Attention::class, object : Attention {
+            override fun raise(kind: String, triggerId: String?, ticketId: String?, podId: String?, sessionId: String?, outcome: String, detail: String): String? =
+                store.raise(kind, triggerId, ticketId, podId, sessionId, outcome, detail).id
+
+            override fun resolve(id: String): Boolean = store.acknowledge(id) != null
+            override fun list(project: String?): List<AttentionEntry> = store.list()
+        })
+        api.frames.handle("attention_list") { _, _ -> Frame("attention_items", AttentionJson.listText(store.list())) }
+        api.frames.handle("attention_ack") { frame, _ ->
+            val id = frame.data.trim()
+            when {
+                id.isEmpty() -> Frame("error", "attention_ack expects an attention id")
+                store.acknowledge(id) == null -> Frame("error", "unknown attention item '$id'")
+                else -> null
+            }
+        }
+        api.routes.handle("GET", "/attention") { HttpReply(200, AttentionJson.listText(store.list()), "application/json") }
     }
 }
 

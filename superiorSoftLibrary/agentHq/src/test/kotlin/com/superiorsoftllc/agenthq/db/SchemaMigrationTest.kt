@@ -769,9 +769,9 @@ class SchemaMigrationTest {
             exec(path, "INSERT INTO attention(id, created_at, kind, outcome, detail) VALUES ('y', 1, 'bogus', 'o', 'd');")
         }
         SqlAgentHqStore.open(path).use { store ->
-            val kinds = store.attention.all().map { it.id to it.kind.wireName }
+            val kinds = rows(path, "SELECT id, kind FROM attention ORDER BY created_at, id").map { it[0]!! to it[1]!! }
             assertEquals(listOf("a1" to "stalled", "a2" to "queue_cleared", "a3" to "unreported"), kinds)
-            assertEquals(25L, store.attention.get("a2")!!.ackedAt)
+            assertEquals("25", rows(path, "SELECT acked_at FROM attention WHERE id = 'a2'").single()[0])
         }
     }
 

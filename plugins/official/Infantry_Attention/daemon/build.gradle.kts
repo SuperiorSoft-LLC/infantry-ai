@@ -13,6 +13,9 @@ dependencies {
     compileOnly(project(":superiorSoftLibrary:agentHqDaemonApi"))
     testImplementation(project(":superiorSoftLibrary:agentHqDaemonApi"))
     testImplementation(kotlin("test"))
+    // ATTN-2b: AttentionStoreTest runs the store on a real SQLite file.
+    testImplementation(libs.sqlite.jdbc)
+    testImplementation(libs.kotlinx.serialization.json)
 }
 
 tasks.jar {

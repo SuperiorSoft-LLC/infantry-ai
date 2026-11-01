@@ -1,7 +1,5 @@
 package com.superiorsoftllc.agenthq.daemon
 
-import com.superiorsoftllc.agenthq.attention.AttentionItem
-import com.superiorsoftllc.agenthq.attention.AttentionKind
 import com.superiorsoftllc.agenthq.mailbox.MailSendRequest
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
@@ -237,8 +235,8 @@ class ReportBackDaemonTest {
     private fun awaitReport(fixture: DaemonFixture, sessionId: String, what: (SessionReport) -> Boolean) =
         fixture.await(what = "session $sessionId's report state (now ${report(fixture, sessionId)})") { report(fixture, sessionId)?.let(what) == true }
 
-    private fun unreported(fixture: DaemonFixture): List<AttentionItem> =
-        fixture.daemon.attention.list().filter { it.kind == AttentionKind.UNREPORTED }
+    private fun unreported(fixture: DaemonFixture): List<com.superiorsoftllc.agenthq.daemon.api.attention.AttentionEntry> =
+        fixture.daemon.attention.list().filter { it.kind == "unreported" }
 
     /** Every run waits for [release]; run N exits with [exitCodes]`[N]` (0 when absent). */
     private class HeldRunner(private val exitCodes: List<Int>) : ProcessRunner {

@@ -1,6 +1,5 @@
 package com.superiorsoftllc.agenthq.triggers
 
-import com.superiorsoftllc.agenthq.attention.AttentionStore
 import com.superiorsoftllc.agenthq.daemon.api.board.PromptStart
 import com.superiorsoftllc.agenthq.mailbox.MailResult
 import com.superiorsoftllc.agenthq.mailbox.MailSendRequest
@@ -45,7 +44,7 @@ class TriggerNudgeTest {
         val store = SqlAgentHqStore.open(path).also { stores += it }
         return TriggerService(
             repo = store.triggers,
-            attention = com.superiorsoftllc.agenthq.attention.LocalAttention(AttentionStore(store.attention)),
+            attention = com.superiorsoftllc.agenthq.attention.MemAttention(),
             startNext = { null },
             sessions = { null },
             deliverPrompt = { nudge -> nudges += nudge; answer(nudge).also { if (it is PromptDelivery.Mailed) pendingMail += it.mailId } },

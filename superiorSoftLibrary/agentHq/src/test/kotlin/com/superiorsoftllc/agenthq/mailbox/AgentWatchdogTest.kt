@@ -1,6 +1,5 @@
 package com.superiorsoftllc.agenthq.mailbox
 
-import com.superiorsoftllc.agenthq.attention.AttentionStore
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
 import com.superiorsoftllc.agenthq.session.SessionManager
 import com.superiorsoftllc.agenthq.session.WatchState
@@ -18,15 +17,13 @@ class AgentWatchdogTest {
         val manager = SessionManager(FakeAgentProvider(), runner, tempSessionStore(), killGraceMs = 50)
         val mailbox = Mailbox(MemMailStore(), MailLimits())
         val sent = mutableListOf<MailSendRequest>()
-        val attention = AttentionStore(
-            SqlAgentHqStore.open(Files.createTempFile("agenthq-wd-", ".db").also { it.toFile().delete() }.toAbsolutePath().toString()).attention,
-        )
+        val attention = com.superiorsoftllc.agenthq.attention.MemAttention()
         var offset = 0L
         var enabled = true
         val dog = AgentWatchdog(
             manager, mailbox,
             send = { r -> sent += r; mailbox.send(r) },
-            attention = com.superiorsoftllc.agenthq.attention.LocalAttention(attention),
+            attention = attention,
             config = WatchdogConfig(),
             clock = { System.currentTimeMillis() + offset * 60_000 },
             isEnabledFor = { enabled },
