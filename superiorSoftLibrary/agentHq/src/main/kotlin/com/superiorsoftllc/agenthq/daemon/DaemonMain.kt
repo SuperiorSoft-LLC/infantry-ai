@@ -1376,7 +1376,9 @@ class AgentHqDaemon(
                 ticketInProgress = { id -> store.transaction { store.tickets.get(id) }?.status == com.superiorsoftllc.agenthq.protocol.TicketStatus.IN_PROGRESS },
                 deliberateWait = { s ->
                     mailbox.waiting().any { it.session == s.id } ||
-                        ownerQuestions.list().any { it.sessionId == s.id && it.state == com.superiorsoftllc.agenthq.protocol.QuestionStates.OPEN }
+                        ownerQuestions.list().any { it.sessionId == s.id && it.state == com.superiorsoftllc.agenthq.protocol.QuestionStates.OPEN } ||
+                        // ATTN-2a: the plugin that owns the questions, once it provides them.
+                        (runCatching { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.attention.QuestionsOpen::class)?.hasOpen(s.id) }.getOrNull() ?: false)
                 },
                 lastJobEndedAt = bgNotifier::lastEndedAt,
                 quietSeconds = bgNotifier::quietSeconds,
@@ -1505,6 +1507,8 @@ class AgentHqDaemon(
                     com.superiorsoftllc.agenthq.daemon.plugins.CoreDaemonServices(
                         manager, agents, projectStore, daemonConfig, keystore, policies,
                         getenv = pluginEnv, firstTurn = pluginFirstTurn, limits = settings::limit,
+                        // ATTN-2a: api.events.broadcast reaches every connected client.
+                        clientBroadcast = { type, data -> val frame = Envelope(type, data); for (c in clients.toList()) c.trySend(frame) },
                         // STACK-NEUTRAL-2: api.processes / api.launchEnv / api.settings.
                         processHost = localProcesses, launchEnvHost = launchEnvHost,
                         pluginSettings = settings.forPlugins(),
@@ -2601,6 +2605,10 @@ private suspend fun handleConnection(
             .onSuccess { outgoing.trySend(it) }
             .onFailure { System.err.println("[agentHq] questions replay failed: ${it.message}") }
     }
+    // ATTN-2a: frames the plugins replay to a newly connected client (fail open).
+    runCatching { plugins.connectedFrames(null) }
+        .onSuccess { frames -> for (f in frames) outgoing.trySend(Envelope(f.type, f.data, f.sessionId)) }
+        .onFailure { System.err.println("[agentHq] connect replay failed: ${it.message}") }
     // PROMPT-1: who answered a prompt from this connection, for `prompt_resolved.resolvedBy`.
     val promptClientLabel = "client:" + promptClientCounter.incrementAndGet()
     // PROMPT-5: the `prompt_ask` questions this connection is waiting on. They run off the request loop (an ask waits
