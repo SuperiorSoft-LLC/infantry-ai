@@ -109,7 +109,6 @@ class DaemonCoreGuardTest {
 
         /** CORE: the abstraction layer. Stays by definition (docs/DAEMON-CORE.md section 2). */
         val CORE = mapOf(
-            "attention" to "ATTN-2b: FoundAttention, the consumer side of the Attention service; the store, provider, frames and /attention are Infantry_Attention's",
             "prompts" to "DP-10b: PROMPT-1 tool-approval prompts (PendingPrompts, PromptTimeouts, SpawnPromptTimeout) are the harness approval round-trip, used by session, harness and the adapters; the stored allow-always rules left for Infantry_Approvals behind hooks.approvalRules (the Infantry_Prompts template library is another thing)",
             "protocol" to "the wire contract and frames: the abstract data contract between UI and daemon",
             "pipeline" to "DP-6: the pipeline wire DTOs only (the CLI speaks them); the store, handler and tools are in Infantry_Board",
@@ -161,7 +160,6 @@ class DaemonCoreGuardTest {
             "opencode" to "blocker: same as claude (ProviderFactory and DaemonMain name OpenCodeServeAdapter)",
             "role" to "blocker: roles are bound into SessionManager spawn and mail addressing; needs a DaemonApi role surface",
             "agents" to "blocker: AgentProfiles is wired into MailRouter and SessionManager spawn binding; needs a spawn-binding hook",
-            "questions" to "blocker: questions are delivered through the mailbox and attention store; needs attention in the API first",
             "triggers" to "blocker: DaemonApi has schedule() but no spawn-with-binding or ticket-transition events",
             "commands" to "blocker: RunManager needs a pty/runner surface in DaemonApi",
             "cli" to "blocker: the agenthq CLI and MCP server import protocol, session and daemon types; needs the agentHqCore module split first",

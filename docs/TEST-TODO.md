@@ -92,3 +92,7 @@ TEST-TODO (ATTN-1): AttentionServiceTest: local provider raise/list/resolve keep
 
 ## ATTN-2a (33c4894f)
 TEST-TODO: `events.broadcast` / `hooks.connected` / `QuestionsOpen` (DaemonPluginHost, DaemonMain). Inputs: an official plugin calls `api.events.broadcast("x","{}")`, registers `hooks.connected { listOf(Frame("x","{}")) }`; a community plugin does the same. Expected: a connected client gets the frame in both cases for official; community throws IllegalStateException (plugin disabled). Stall detector: a session with an open question published via `QuestionsOpen` is not nudged.
+
+## ATTN-2c (77434467)
+- [ ] ask E2E on a real daemon: `agenthq ask --recommend ...` from a session -> `question` push and `questions` replay on connect reach a client -> `question_answer` mails the pick to the asking session (body carries `(thread question:<id>)`) -> an unanswered question with `--default-after` auto-picks via the 15 s `api.schedule` sweep -> killing the session orphans it. No daemon-level test covers the plugin path (only OwnerQuestionsTest on the service and the store).
+- [ ] per-session prompt-timer override no longer feeds the default auto-pick of a question (core state); only global `prompts.timeoutSec` does. Decide if a seam is wanted.

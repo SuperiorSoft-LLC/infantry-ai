@@ -49,6 +49,8 @@ class AttentionDaemonPlugin : DaemonPlugin {
                 else -> null
             }
         }
+        // ATTN-2c: the owner questions (store, sweep, frames, mail, connect replay) live here too.
+        QuestionsWiring.install(api)
         api.routes.handle("GET", "/attention") { HttpReply(200, AttentionJson.listText(store.list()), "application/json") }
     }
 }

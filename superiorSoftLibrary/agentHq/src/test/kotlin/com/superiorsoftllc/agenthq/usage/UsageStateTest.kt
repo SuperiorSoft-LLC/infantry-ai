@@ -91,7 +91,7 @@ class UsageStateTest {
     }
 
 
-    private fun gate(exhausted: Boolean, spent: Boolean, repo: com.superiorsoftllc.agenthq.attention.MemAttention): LaunchGate {
+    private fun gate(exhausted: Boolean, spent: Boolean, repo: com.superiorsoftllc.agenthq.daemon.MemAttention): LaunchGate {
         val tracker = ProviderStateTracker(clock = { 1L }, exhaustion = { true })
         if (exhausted) tracker.observeStreamLine("p", """{"type":"rate_limit_event","rate_limit_info":{}}""")
         val budget = OperatorBudget(maxRunsPerDay = 1, maxTokensPerDay = null, clock = { 1L })
@@ -102,7 +102,7 @@ class UsageStateTest {
     @Test
     fun `unattended start is refused when exhausted or budget spent and raises attention`() {
         for ((e, s) in listOf(true to false, false to true)) {
-            val repo = com.superiorsoftllc.agenthq.attention.MemAttention()
+            val repo = com.superiorsoftllc.agenthq.daemon.MemAttention()
             val d = gate(e, s, repo).check("p", LaunchOrigin.UNATTENDED, ticketId = "t1")
             assertTrue(d is GateDecision.Refused)
             assertEquals("refused_launch_gate", (d as GateDecision.Refused).disposition)
@@ -113,7 +113,7 @@ class UsageStateTest {
 
     @Test
     fun `human start warns and still runs, no attention`() {
-        val repo = com.superiorsoftllc.agenthq.attention.MemAttention()
+        val repo = com.superiorsoftllc.agenthq.daemon.MemAttention()
         val d = gate(true, true, repo).check("p", LaunchOrigin.HUMAN)
         assertTrue(d is GateDecision.Warn)
         assertTrue(repo.rows.isEmpty())
@@ -121,7 +121,7 @@ class UsageStateTest {
 
     @Test
     fun `unknown state and unspent budget allow both origins`() {
-        val repo = com.superiorsoftllc.agenthq.attention.MemAttention()
+        val repo = com.superiorsoftllc.agenthq.daemon.MemAttention()
         val g = gate(false, false, repo)
         assertEquals(GateDecision.Allow, g.check("p", LaunchOrigin.UNATTENDED))
         assertEquals(GateDecision.Allow, g.check("p", LaunchOrigin.HUMAN))

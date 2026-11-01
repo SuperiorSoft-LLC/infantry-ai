@@ -1,16 +1,10 @@
-package com.superiorsoftllc.agenthq.questions
+package com.superiorsoftllc.agenthq.plugins.official.attention.daemon
 
-import com.superiorsoftllc.agenthq.db.AgentHQDatabaseFactory
-import com.superiorsoftllc.agenthq.mailbox.MailResult
-import com.superiorsoftllc.agenthq.mailbox.MailSendRequest
-import com.superiorsoftllc.agenthq.protocol.OwnerQuestion
-import com.superiorsoftllc.agenthq.protocol.PromptOption
-import com.superiorsoftllc.agenthq.protocol.QuestionAnswer
-import com.superiorsoftllc.agenthq.protocol.QuestionAsk
-import com.superiorsoftllc.agenthq.protocol.QuestionResolvedBy
-import com.superiorsoftllc.agenthq.protocol.QuestionStates
+import com.superiorsoftllc.agenthq.daemon.api.storage.PluginStorage
 import java.io.File
 import java.nio.file.Files
+import java.sql.Connection
+import java.sql.DriverManager
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -19,7 +13,8 @@ import kotlin.test.assertTrue
 /** ASK-1: the non-blocking owner questions, over a fake clock and a recording mail sender. */
 class OwnerQuestionsTest {
     private var now = 1_000_000L
-    private val sent = mutableListOf<MailSendRequest>()
+    private class Mail(val to: String, val subject: String, val body: String)
+    private val sent = mutableListOf<Mail>()
     private val pushed = mutableListOf<OwnerQuestion>()
     private var ids = 0
 
@@ -32,7 +27,7 @@ class OwnerQuestionsTest {
         ttlMinutes: Long = 0,
     ) = OwnerQuestions(
         repository = repository,
-        send = { sent += it; MailResult.Refused("not delivered in this test") },
+        notify = { to, subject, body -> sent += Mail(to, subject, body); true },
         clock = { now },
         newId = { "q${++ids}" },
         maxOpen = { maxOpen },
@@ -46,7 +41,7 @@ class OwnerQuestionsTest {
 
     private fun ask(defaultAfterMin: Int? = null, allowOther: Boolean = false, recommended: String = "SQLite") = QuestionAsk(
         question = "Which database?",
-        options = listOf(PromptOption("Postgres", "a server to run"), PromptOption("SQLite", "one file")),
+        options = listOf(QuestionOption("Postgres", "a server to run"), QuestionOption("SQLite", "one file")),
         recommended = recommended,
         reason = "no server to operate",
         allowOther = allowOther,
@@ -75,16 +70,15 @@ class OwnerQuestionsTest {
         assertEquals(QuestionStates.ANSWERED, answered.state)
         assertEquals(QuestionResolvedBy.OWNER, answered.resolvedBy)
         val mail = sent.single()
-        assertEquals(OwnerQuestions.OWNER, mail.from)
-        assertEquals("agent-1", mail.to, "the agent id: it outlives the session that asked")
-        assertEquals("question:${q.id}", mail.threadId)
+        assertEquals("s-1", mail.to, "the asking session: the notifier addresses sessions")
+        assertTrue("(thread question:${q.id})" in mail.body, "the notifier has no thread id: it rides in the body")
         assertTrue(q.id in mail.subject && "Postgres" in mail.subject, mail.subject)
         assertTrue("Chosen option: Postgres (a server to run)" in mail.body, mail.body)
         assertEquals(answered, pushed.last())
     }
 
     @Test
-    fun aSessionWithNoAgentIsMailedByItsSessionId() {
+    fun aSessionWithNoAgentIsMailedToo() {
         val questions = service()
         val q = questions.ask(Asker("s-9"), ask())
         questions.answer(QuestionAnswer(q.id, answer = "SQLite"))
@@ -98,7 +92,7 @@ class OwnerQuestionsTest {
         assertTrue("not one of the options" in noSuch.message!!, noSuch.message)
         assertFailsWith<IllegalArgumentException> { questions.ask(worker, ask(recommended = " ")) }
         assertFailsWith<IllegalArgumentException> { questions.ask(worker, ask().copy(reason = "")) }
-        assertFailsWith<IllegalArgumentException> { questions.ask(worker, ask().copy(options = listOf(PromptOption("SQLite")))) }
+        assertFailsWith<IllegalArgumentException> { questions.ask(worker, ask().copy(options = listOf(QuestionOption("SQLite")))) }
         assertFailsWith<IllegalArgumentException> { questions.ask(worker, ask(defaultAfterMin = 0)) }
         assertTrue(questions.list().isEmpty())
     }
@@ -146,7 +140,7 @@ class OwnerQuestionsTest {
 
     @Test
     fun otherIsOnByDefaultAndAnOldFrameWithoutItStillDecodes() {
-        assertTrue(QuestionAsk("q", listOf(PromptOption("a")), "a", "r").allowOther)
+        assertTrue(QuestionAsk("q", listOf(QuestionOption("a")), "a", "r").allowOther)
         assertTrue(QuestionAsk.decode("""{"question":"q","options":[{"label":"a"}],"recommended":"a","reason":"r"}""").allowOther)
         assertEquals(false, QuestionAsk.decode("""{"question":"q","options":[{"label":"a"}],"recommended":"a","reason":"r","allowOther":false}""").allowOther)
     }
@@ -182,7 +176,7 @@ class OwnerQuestionsTest {
         assertTrue(overridden.overridden)
         assertEquals(2, sent.size)
         assertTrue("OVERRIDE" in sent.last().body && "'SQLite'" in sent.last().body, sent.last().body)
-        assertEquals("question:${q.id}", sent.last().threadId, "the override lands in the same thread")
+        assertTrue("(thread question:${q.id})" in sent.last().body, "the override lands in the same thread")
     }
 
     @Test
@@ -228,17 +222,17 @@ class OwnerQuestionsTest {
     @Test
     fun questionsSurviveARestartAndAnOverdueOneIsPickedByTheNextSweep() {
         val path = File(Files.createTempDirectory("agenthq-questions").toFile(), "agenthq.db").absolutePath
-        val firstHandle = AgentHQDatabaseFactory.open(path)
+        val first = Jdbc(path)
         val asked = try {
-            service(SqlOwnerQuestionRepository(firstHandle.database)).ask(worker, ask(defaultAfterMin = 1, allowOther = true))
+            service(StorageOwnerQuestionRepository(first)).ask(worker, ask(defaultAfterMin = 1, allowOther = true))
         } finally {
-            firstHandle.close()
+            first.close()
         }
 
         now += 2 * 60_000L
-        val secondHandle = AgentHQDatabaseFactory.open(path)
+        val second = Jdbc(path)
         try {
-            val questions = service(SqlOwnerQuestionRepository(secondHandle.database))
+            val questions = service(StorageOwnerQuestionRepository(second))
             assertEquals(listOf(asked), questions.list(), "every column reads back as stored")
             val auto = questions.sweep().single()
             assertEquals(asked.id, auto.id)
@@ -249,8 +243,20 @@ class OwnerQuestionsTest {
             assertEquals("and back it up", stored.otherText)
             assertTrue(stored.overridden)
         } finally {
-            secondHandle.close()
+            second.close()
         }
+    }
+
+    @Test
+    fun theWireJsonCarriesEveryKeyAndDecodesStrictly() {
+        val q = service().ask(worker, ask(defaultAfterMin = 3))
+        val text = QuestionJson.questionText(q)
+        assertTrue("\"resolvedAt\":null" in text && "\"defaultAfterMin\":3" in text && "\"state\":\"open\"" in text, text)
+        assertEquals(listOf(QuestionOption("Postgres", "a server to run"), QuestionOption("SQLite", "one file")), QuestionJson.parseOptions(QuestionJson.options(q.options).toString()))
+        assertEquals(QuestionAsk("q", listOf(QuestionOption("a"), QuestionOption("b")), "a", "r", defaultAfterMin = 2),
+            QuestionJson.decodeAsk("""{"question":"q","options":[{"label":"a"},{"label":"b","description":""}],"recommended":"a","reason":"r","defaultAfterMin":2}"""))
+        assertFailsWith<IllegalArgumentException> { QuestionJson.decodeAsk("""{"question":"q","options":[],"recommended":"a","reason":"r","bogus":1}""") }
+        assertEquals(QuestionAnswer("q1", "a", null), QuestionJson.decodeAnswer("""{"questionId":"q1","answer":"a"}"""))
     }
 
     @Test
@@ -305,5 +311,33 @@ class OwnerQuestionsTest {
         val questions = service()
         val q = questions.ask(worker, ask())
         assertEquals(QuestionStates.CANCELLED, questions.cancel(q.id, null).state)
+    }
+
+    /** A real SQLite file with `owner_questions` as core creates it. */
+    private class Jdbc(path: String) : PluginStorage, AutoCloseable {
+        private val c: Connection = DriverManager.getConnection("jdbc:sqlite:$path").also {
+            it.createStatement().use { s ->
+                s.execute(
+                    "CREATE TABLE IF NOT EXISTS owner_questions (id TEXT NOT NULL PRIMARY KEY, project_id TEXT, session_id TEXT NOT NULL, agent_id TEXT, role TEXT, " +
+                        "question TEXT NOT NULL, options TEXT NOT NULL, recommended TEXT NOT NULL, reason TEXT NOT NULL, allow_other INTEGER NOT NULL DEFAULT 0, " +
+                        "default_after_min INTEGER, state TEXT NOT NULL CHECK (state IN ('open', 'answered', 'auto', 'cancelled')), answer TEXT, other_text TEXT, " +
+                        "resolved_by TEXT, created_at INTEGER NOT NULL, resolved_at INTEGER, overridden INTEGER NOT NULL DEFAULT 0)",
+                )
+            }
+        }
+        override fun migrate(version: Int, sql: List<String>) = sql.forEach { c.createStatement().use { s -> s.execute(it) } }
+        override fun query(sql: String, args: List<Any?>): List<Map<String, Any?>> = c.prepareStatement(sql).use { ps ->
+            args.forEachIndexed { i, a -> ps.setObject(i + 1, a) }
+            ps.executeQuery().use { rs ->
+                val cols = (1..rs.metaData.columnCount).map { rs.metaData.getColumnLabel(it) }
+                generateSequence { if (rs.next()) cols.associateWith { k -> rs.getObject(k) } else null }.toList()
+            }
+        }
+        override fun execute(sql: String, args: List<Any?>): Int = c.prepareStatement(sql).use { ps ->
+            args.forEachIndexed { i, a -> ps.setObject(i + 1, a) }
+            ps.executeUpdate()
+        }
+        override fun <T> transaction(block: () -> T): T = block()
+        override fun close() = c.close()
     }
 }
