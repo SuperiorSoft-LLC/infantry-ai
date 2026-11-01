@@ -5,9 +5,7 @@ import com.superiorsoftllc.agenthq.protocol.MessageOrigin
 import com.superiorsoftllc.agenthq.session.isBusy
 import com.superiorsoftllc.agenthq.session.InfantryEnv
 
-import com.superiorsoftllc.agenthq.attention.AttentionItem
 import com.superiorsoftllc.agenthq.daemon.api.attention.AttentionKinds
-import com.superiorsoftllc.agenthq.attention.AttentionStore
 import com.superiorsoftllc.agenthq.agents.AgentProfiles
 import com.superiorsoftllc.agenthq.agents.KnowledgeCounter
 import com.superiorsoftllc.agenthq.agents.KnowledgeLines
@@ -429,8 +427,8 @@ class AgentHqDaemon(
     val agents: AgentProfiles,
     /** DP-5h-3e-b: the port to the board plugin (null-safe: no board attached = no board). */
     val boardPorts: BoardPorts,
-    /** Contract 1.8.0: durable operator attention, with each change pushed to every client. */
-    val attention: AttentionStore,
+    /** ATTN-2b: the attention service as consumers hold it (the provider is Infantry_Attention's plugin). */
+    val attention: com.superiorsoftllc.agenthq.daemon.api.attention.Attention,
     /** Contract 1.12.0: the role catalog served by `role_list`, extended by `role_save`. */
     val roles: RoleService,
     /** Story 9.7b: the operator budget the launch gate reads. */
@@ -921,8 +919,8 @@ class AgentHqDaemon(
                 emit = { env -> for (c in clients.toList()) c.trySend(env) },
                 settings = settings, locked = locked, keystore = keystore,
             )
-            val attention = com.superiorsoftllc.agenthq.daemon.wiring.AttentionWiring.build(store) { item -> broadcastAttention(clients, item) }
-            val attentionSvc: com.superiorsoftllc.agenthq.daemon.api.attention.Attention = com.superiorsoftllc.agenthq.attention.FoundAttention { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.attention.Attention::class) }
+            val foundAttention = com.superiorsoftllc.agenthq.attention.FoundAttention { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.attention.Attention::class) }
+            val attentionSvc: com.superiorsoftllc.agenthq.daemon.api.attention.Attention = foundAttention
             // Ticket 66153313 (via `api.processes.raiseAlert`): the process-watch plugin reports agent CPU held above the limit.
             alertSink.set { outcome, detail ->
                 println("[agentHq] $outcome: $detail")
@@ -1617,8 +1615,8 @@ class AgentHqDaemon(
                     stateDir(),
                 )
                 pluginHost.set(host)
+                foundAttention.flush()
                 testKnowledge?.let { host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.knowledge.Knowledge::class, it) }
-                host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.attention.Attention::class, com.superiorsoftllc.agenthq.attention.LocalAttention(attention))
                 // HARNESS-PLUGIN-3 H4 (docs/HARNESS-PLUGINS.md 3.2): each loaded module's `harness` block, into the ONE registry,
                 // AFTER module resolution and with the daemon halves' trust. The built-ins (class path, 1.x) are already in it.
                 val harnessModules = com.superiorsoftllc.agenthq.daemon.wiring.HarnessModulesWiring.build(
@@ -1725,7 +1723,7 @@ class AgentHqDaemon(
                                 worktrees = worktrees.list().count { !it.removed },
                                 pods = store.pods.open().size,
                                 runsInFlight = store.runs.unfinished().size,
-                                attentionOpen = attention.openCount().toInt(),
+                                attentionOpen = attentionSvc.list().count { it.ackedAt == null },
                                 triggersTripped = triggers.trippedCount(),
                             )
                         }
@@ -1754,7 +1752,6 @@ class AgentHqDaemon(
                             ),
                         )
                     }
-                    get("/attention") { call.respond(attention.list()) }
                     get("/plugins") { call.respond(pluginsNow.get().withDaemon(plugins).withHarness(harnessModulesRef.get())) }
                     // P1 step 2 (6s B): the per-node UI configuration the window seeds and edits.
                     val nodeConfigStore = NodeConfigStore((store as SqlAgentHqStore).database)
@@ -1788,7 +1785,6 @@ class AgentHqDaemon(
                             worktrees,
                             mail,
                             mailbox,
-                            attention,
                             repo,
                             clients,
                             streamSequencer,
@@ -1864,7 +1860,7 @@ class AgentHqDaemon(
                 webBundle = webBundle,
                 agents = agents,
                 boardPorts = boardPorts,
-                attention = attention,
+                attention = attentionSvc,
                 roles = roles,
                 budget = budget,
                 providerStates = providerStates,
@@ -2323,19 +2319,12 @@ private fun broadcastEpic(clients: List<Channel<Envelope>>, epic: Epic) {
     for (client in clients) client.trySend(envelope)
 }
 
-/** Push a committed attention record/update to every currently connected client. */
-private fun broadcastAttention(clients: List<Channel<Envelope>>, item: AttentionItem) {
-    val envelope = Envelope(Envelope.ATTENTION, json.encodeToString(AttentionItem.serializer(), item))
-    for (client in clients) client.trySend(envelope)
-}
-
 private suspend fun handleConnection(
     session: DefaultWebSocketServerSession,
     manager: SessionManager,
     worktrees: GitWorktreeManager,
     mail: MailRouter,
     mailbox: Mailbox,
-    attention: AttentionStore,
     defaultRepo: File?,
     clients: MutableList<Channel<Envelope>>,
     streamSequencer: SessionFrameSequencer,
@@ -3710,22 +3699,7 @@ private suspend fun handleConnection(
                     json.encodeToString(ListSerializer(WaitingOn.serializer()), mail.waiting()),
                 )
 
-                // Contract 1.8.0: replay history explicitly; acknowledgements are pushed back to all
-                // clients by AttentionStore.eventSink, including the requesting connection.
-                Envelope.ATTENTION_LIST -> Envelope(
-                    Envelope.ATTENTION_ITEMS,
-                    json.encodeToString(ListSerializer(AttentionItem.serializer()), attention.list()),
-                )
-
-                Envelope.ATTENTION_ACK -> {
-                    val id = envelope.data.trim()
-                    when {
-                        id.isEmpty() -> Envelope(Envelope.ERROR, "attention_ack expects an attention id")
-                        attention.acknowledge(id) == null -> Envelope(Envelope.ERROR, "unknown attention item '$id'")
-                        else -> null
-                    }
-                }
-
+                // ATTN-2b: attention_list / attention_ack are answered by Infantry_Attention (api.frames).
                 // --- Phase 5b: the pod command surface (contract 1.1.0) -----------------------
                 // Every failure below answers with the FROZEN `error` frame (a plain string),
                 // exactly as `kill` / `resume` / `worktree_remove` already do. A refusal is never a

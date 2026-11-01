@@ -1,9 +1,5 @@
 package com.superiorsoftllc.agenthq.usage
 
-import com.superiorsoftllc.agenthq.attention.AttentionItem
-import com.superiorsoftllc.agenthq.attention.AttentionKind
-import com.superiorsoftllc.agenthq.attention.AttentionStore
-import com.superiorsoftllc.agenthq.persistence.AttentionRepository
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -94,38 +90,30 @@ class UsageStateTest {
         assertTrue(budget.isSpent("p"))
     }
 
-    private class MemRepo : AttentionRepository {
-        val rows = mutableListOf<AttentionItem>()
-        override fun insert(item: AttentionItem) { rows += item }
-        override fun get(id: String) = rows.firstOrNull { it.id == id }
-        override fun all() = rows.toList()
-        override fun acknowledge(id: String, at: Long) = get(id)
-        override fun openCount() = rows.size.toLong()
-    }
 
-    private fun gate(exhausted: Boolean, spent: Boolean, repo: MemRepo): LaunchGate {
+    private fun gate(exhausted: Boolean, spent: Boolean, repo: com.superiorsoftllc.agenthq.attention.MemAttention): LaunchGate {
         val tracker = ProviderStateTracker(clock = { 1L }, exhaustion = { true })
         if (exhausted) tracker.observeStreamLine("p", """{"type":"rate_limit_event","rate_limit_info":{}}""")
         val budget = OperatorBudget(maxRunsPerDay = 1, maxTokensPerDay = null, clock = { 1L })
         if (spent) budget.record(RunUsage("x", "p", "m", 1, 1, 0, 0, 0, null))
-        return LaunchGate(tracker, budget, com.superiorsoftllc.agenthq.attention.LocalAttention(AttentionStore(repo, clock = { 9L }, idFactory = { "a1" })))
+        return LaunchGate(tracker, budget, repo)
     }
 
     @Test
     fun `unattended start is refused when exhausted or budget spent and raises attention`() {
         for ((e, s) in listOf(true to false, false to true)) {
-            val repo = MemRepo()
+            val repo = com.superiorsoftllc.agenthq.attention.MemAttention()
             val d = gate(e, s, repo).check("p", LaunchOrigin.UNATTENDED, ticketId = "t1")
             assertTrue(d is GateDecision.Refused)
             assertEquals("refused_launch_gate", (d as GateDecision.Refused).disposition)
-            assertEquals(AttentionKind.LAUNCH_BLOCKED, repo.rows.single().kind)
+            assertEquals("launch_blocked", repo.rows.single().kind)
             assertEquals("t1", repo.rows.single().ticketId)
         }
     }
 
     @Test
     fun `human start warns and still runs, no attention`() {
-        val repo = MemRepo()
+        val repo = com.superiorsoftllc.agenthq.attention.MemAttention()
         val d = gate(true, true, repo).check("p", LaunchOrigin.HUMAN)
         assertTrue(d is GateDecision.Warn)
         assertTrue(repo.rows.isEmpty())
@@ -133,7 +121,7 @@ class UsageStateTest {
 
     @Test
     fun `unknown state and unspent budget allow both origins`() {
-        val repo = MemRepo()
+        val repo = com.superiorsoftllc.agenthq.attention.MemAttention()
         val g = gate(false, false, repo)
         assertEquals(GateDecision.Allow, g.check("p", LaunchOrigin.UNATTENDED))
         assertEquals(GateDecision.Allow, g.check("p", LaunchOrigin.HUMAN))

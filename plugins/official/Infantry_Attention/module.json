@@ -12,7 +12,13 @@
   "daemon": {
     "entry": "com.superiorsoftllc.agenthq.plugins.official.attention.daemon.AttentionDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Attention-daemon.jar",
-    "apiAtLeast": "1.1.0",
+    "apiAtLeast": "1.24.0",
+    "storage": { "adopt": ["attention"] },
+    "frames": [
+      { "type": "attention_list", "action": "attention.read", "kind": "read" },
+      { "type": "attention_ack", "action": "attention.ack", "kind": "write" }
+    ],
+    "routes": ["GET /attention"],
     "tools": [
       { "name": "agenthq_ask", "action": "questions.ask", "kind": "write", "description": "Ask the owner to choose between options, without waiting." }
     ]

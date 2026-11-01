@@ -1,8 +1,5 @@
 package com.superiorsoftllc.agenthq.triggers
 
-import com.superiorsoftllc.agenthq.attention.AttentionItem
-import com.superiorsoftllc.agenthq.attention.AttentionStore
-import com.superiorsoftllc.agenthq.persistence.AttentionRepository
 import com.superiorsoftllc.agenthq.persistence.TriggerRepository
 import com.superiorsoftllc.agenthq.protocol.TriggerEventView
 import com.superiorsoftllc.agenthq.protocol.TriggerSave
@@ -44,13 +41,6 @@ class WebhookIngressTest {
         override fun setPendingMail(triggerId: String, mailId: String?) {}
     }
 
-    private class MemoryAttention : AttentionRepository {
-        override fun insert(item: AttentionItem) {}
-        override fun get(id: String): AttentionItem? = null
-        override fun all(): List<AttentionItem> = emptyList()
-        override fun acknowledge(id: String, at: Long): AttentionItem? = null
-        override fun openCount(): Long = 0
-    }
 
     private val secret = "whsec-0123456789abcdef0123456789abcdef"
     private var nowMs = 1_800_000_000_000L
@@ -59,7 +49,7 @@ class WebhookIngressTest {
 
     private fun service(over: MemoryTriggers = repo): TriggerService = TriggerService(
         repo = over,
-        attention = com.superiorsoftllc.agenthq.attention.LocalAttention(AttentionStore(MemoryAttention())),
+        attention = com.superiorsoftllc.agenthq.attention.MemAttention(),
         startNext = { null },
         sessions = { null },
         clock = { nowMs },
