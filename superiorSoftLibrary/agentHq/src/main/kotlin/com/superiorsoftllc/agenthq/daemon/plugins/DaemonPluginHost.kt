@@ -44,6 +44,10 @@ import com.superiorsoftllc.agenthq.protocol.Envelope
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import com.superiorsoftllc.agenthq.daemon.api.NamedEvent
 import java.io.File
 import java.net.URLClassLoader
 import java.security.cert.X509Certificate
@@ -114,6 +118,8 @@ class DaemonPluginHost private constructor(
     private val presetHooks = CopyOnWriteArrayList<Registered<PresetProviderHook>>()
     private val eventListeners = CopyOnWriteArrayList<Triple<Loaded, String, (Frame) -> Unit>>()
     private val seatClaimants = CopyOnWriteArrayList<Loaded>()
+    /** SCRIPT-3: the generic named-event bus (plugins publish / subscribe through `api.events`; core and agents publish through [publishEvent]). */
+    val namedEvents = NamedEventBus(executor = { r -> observerQueue.execute(r) })
     /** Observers run off the caller's thread, in order, so a slow observer never holds a frame or a session event. */
     private val observerQueue = Executors.newSingleThreadExecutor { r -> Thread(r, "daemon-plugin-observers").apply { isDaemon = true } }
 
@@ -238,7 +244,7 @@ class DaemonPluginHost private constructor(
 
     /** The action of a plugin-defined frame, or of `plugin_tool_call` naming a plugin tool; null = not a plugin's. */
     fun actionFor(envelope: Envelope): ActionCatalog.Action? = when (envelope.type) {
-        PLUGIN_TOOL_CALL -> toolName(envelope.data)?.let { toolEntries[it]?.action }
+        PLUGIN_TOOL_CALL -> toolName(envelope.data)?.let { if (it == EVENT_EMIT_TOOL) EVENT_EMIT_ACTION else toolEntries[it]?.action }
         else -> frameHandlers[envelope.type]?.action
     }
 
@@ -266,8 +272,39 @@ class DaemonPluginHost private constructor(
     private fun toolTimeoutMs(owner: Loaded, tool: DaemonTool): Long =
         tool.timeoutMs?.takeIf { it > 0 }?.coerceAtMost(services.limit(LimitRegistry.PLUGIN_TOOL_MAX_TIMEOUT_MS)) ?: owner.toolTimeoutMs
 
+    /**
+     * SCRIPT-3: `agenthq_event_emit`, the one built-in tool: any role publishes a named event (name, optional JSON payload, optional
+     * causeId / depth). The source is `session:<id>` of the calling MCP process, else `cli`.
+     */
+    private fun emitTool(arguments: JsonObject, client: JsonObject): ToolResult {
+        val name = (arguments["name"] as? JsonPrimitive)?.contentOrNull?.trim().orEmpty()
+        val payload = arguments["payload"]?.let { if (it is JsonPrimitive && it.isString) it.content else it.toString() } ?: "{}"
+        val causeId = (arguments["causeId"] as? JsonPrimitive)?.contentOrNull
+        val depth = (arguments["depth"] as? JsonPrimitive)?.intOrNull ?: 0
+        val sid = (client["sessionId"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() }
+        return try {
+            val e = publishEvent(name, payload, sid?.let { "session:$it" } ?: "cli", causeId, depth)
+            ToolResult("emitted ${e.name} id=${e.id} cause=${e.causeId} depth=${e.depth}")
+        } catch (ex: IllegalArgumentException) {
+            ToolResult("$EVENT_EMIT_TOOL refused: ${ex.message}", isError = true)
+        }
+    }
+
+    /** Core's way to publish a named event (the daemon's own happenings, the emit tool). */
+    fun publishEvent(name: String, payload: String = "{}", source: String = "daemon", causeId: String? = null, depth: Int = 0): NamedEvent =
+        namedEvents.publish(name, payload, source, causeId, depth)
+
+    private val emitDescriptor = JsonObject(mapOf(
+        "name" to JsonPrimitive(EVENT_EMIT_TOOL),
+        "description" to JsonPrimitive("Publish a named event (dotted lower-case name, e.g. merge.done) with an optional JSON object payload; plugins subscribed to the name or its prefix react. Open to every role."),
+        "inputSchema" to Json.parseToJsonElement("""{"type":"object","properties":{"name":{"type":"string","description":"Dotted event name, e.g. merge.done"},"payload":{"type":"string","description":"A JSON object as text (default {})"},"causeId":{"type":"string","description":"Id of the event that caused this one (default: itself)"},"depth":{"type":"integer","description":"Hops from the root event (default 0)"}},"required":["name"]}"""),
+        "module" to JsonPrimitive("core"),
+        "action" to JsonPrimitive(EVENT_EMIT_ACTION.id),
+        "timeoutMs" to JsonPrimitive(10_000),
+    ))
+
     /** `plugin_tools`: every healthy plugin tool, as MCP `tools/list` entries. */
-    fun toolDescriptors(): JsonArray = JsonArray(
+    fun toolDescriptors(): JsonArray = JsonArray(listOf(emitDescriptor) +
         toolEntries.values.filter { !it.owner.guard.disabled }.sortedBy { it.tool.name }.map { e ->
             JsonObject(buildMap {
                 put("name", JsonPrimitive(e.tool.name))
@@ -288,6 +325,7 @@ class DaemonPluginHost private constructor(
      * connection and waits for its answer. The policy has already gated the call by the tool's action.
      */
     fun callTool(name: String, arguments: JsonObject, caller: Caller, client: JsonObject = JsonObject(emptyMap()), request: (Envelope, Long) -> Envelope): ToolResult {
+        if (name == EVENT_EMIT_TOOL) return emitTool(arguments, client)
         val entry = toolEntries[name] ?: return ToolResult("Unknown tool: $name", isError = true)
         if (entry.owner.guard.disabled) return ToolResult("$name is unavailable: plugin ${entry.owner.id} is disabled", isError = true)
         val call = object : ToolCall {
@@ -479,6 +517,12 @@ class DaemonPluginHost private constructor(
             override fun onSessionRemoved(listener: (String) -> Unit): AutoCloseable =
                 hostServices.onSessionRemoved { id -> if (!p.guard.disabled) p.call("events.onSessionRemoved") { listener(id) } }.also { p.closeables += it }
 
+            // SCRIPT-3 (1.26.0): generic named events. A listener runs under the plugin's limits; a disabled plugin hears nothing.
+            override fun publish(name: String, payload: String, causeId: String?, depth: Int): NamedEvent =
+                namedEvents.publish(name, payload, p.id, causeId, depth)
+            override fun subscribe(pattern: String, listener: (NamedEvent) -> Unit): AutoCloseable =
+                namedEvents.subscribe(pattern) { e -> if (!p.guard.disabled) p.call("events.subscribe($pattern)") { listener(e) } }.also { p.closeables += it }
+
             // ATTN-2a (1.24.0): a frame to every connected client; official / core only.
             override fun broadcast(type: String, data: String) {
                 check(!p.community) { "community modules may not broadcast to clients" }
@@ -639,6 +683,10 @@ class DaemonPluginHost private constructor(
 
     companion object {
         const val PLUGIN_TOOLS = "plugin_tools"
+        /** SCRIPT-3: the built-in emit tool and its policy action (kind write; open to every role). */
+        const val EVENT_EMIT_TOOL = "agenthq_event_emit"
+        val EVENT_EMIT_ACTION = ActionCatalog.Action("events.emit", "write", listOf("plugin_tool_call"))
+
         const val PLUGIN_TOOL_CALL = "plugin_tool_call"
 
         /** RUNTIME-LOAD-7: the client's `maxDepth` / `maxSpawns` / `depth` (whole numbers >= 0) and `clientKey`; null when it sent none. */

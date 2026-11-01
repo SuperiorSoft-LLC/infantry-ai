@@ -456,6 +456,7 @@ internal object Cli {
                 "decision" -> decision(stream, parsed, out, err, getenv, input)
                 "pipeline" -> pipeline(stream, parsed, out, err, getenv)
                 "notify" -> notify(stream, parsed, out, err, getenv)
+                "event" -> EventCli.run(stream, parsed.args, parsed.body?.let { if (it == "-") input().use { r -> r.readText() } else it }, out, err, getenv)
                 "issue" -> issue(stream, parsed, out, err, getenv)
                 "trait" -> trait(stream, parsed, out, err, input)
                 "skill" -> skill(stream, parsed, out, err)
@@ -4915,8 +4916,8 @@ internal object Cli {
                     i++
                 }
                 // Free text, taken RAW like --content; `--body -` reads it from stdin.
-                "--body" -> {
-                    body = args.getOrNull(++i) ?: return fail(err, "--body expects a value (or - for stdin)")
+                "--body", "--payload" -> {
+                    body = args.getOrNull(++i) ?: return fail(err, "$arg expects a value (or - for stdin)")
                     i++
                 }
                 "--name" -> {
@@ -5384,6 +5385,7 @@ internal object Cli {
         "decision" -> decisionUsageError(parsed, getenv)
         "pipeline" -> pipelineUsageError(parsed, getenv)
         "notify" -> notifyUsageError(parsed)
+        "event" -> EventCli.usageError(parsed.args)
         "issue" -> issueUsageError(parsed, getenv)
         "trait" -> traitUsageError(parsed)
         "skill" -> skillUsageError(parsed)

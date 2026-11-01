@@ -174,11 +174,15 @@ class MailRouter(
      * Send and, if it was accepted, immediately try to deliver. The send itself is persisted by the
      * mailbox before this returns, so the pump can only ever be a bonus, never a precondition.
      */
+    /** SCRIPT-3: told after every accepted send (the daemon publishes `mail.sent`); a failing listener never fails the send. */
+    @Volatile var onSent: ((Message) -> Unit)? = null
+
     fun send(request: MailSendRequest): MailResult {
         if (request.to == MailAddresses.STARTER) reportCheck?.invoke(request.from, request.body)?.let { return MailResult.Refused(it) }
         crossProjectRefusal(request)?.let { return MailResult.Refused(it) }
         val result = mailbox.send(addressStarter(request))
         if (result is MailResult.Sent) {
+            runCatching { onSent?.invoke(result.message) }
             if (request.allowCrossProject) crossAllowed.add(result.message.id)
             // Pump by the ORIGINAL recipient address (session id, agent id, or role name), because
             // that is how the message is keyed in the mailbox. `deliver` resolves it to a session.
