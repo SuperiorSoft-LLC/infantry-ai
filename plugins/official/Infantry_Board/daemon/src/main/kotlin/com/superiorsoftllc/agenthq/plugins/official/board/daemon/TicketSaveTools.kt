@@ -255,7 +255,7 @@ internal object TicketSave {
     inline fun guarded(body: () -> ToolResult): ToolResult = try { body() } catch (r: Refusal) { r.result }
 }
 
-class TicketCreateTool(private val api: DaemonApi) : DaemonTool {
+class TicketCreateTool(private val api: DaemonApi, private val comments: TicketComments? = null) : DaemonTool {
     override val name = TicketSave.CREATE
     override val description =
         "Create a ticket on the Infantry AI board (it lands in todo, the current sprint, or in backlog with " +
@@ -277,6 +277,7 @@ class TicketCreateTool(private val api: DaemonApi) : DaemonTool {
             put("images", pathsProp("Images to attach: local image file paths (png, jpeg, gif or webp, at most 10 MB each; each is uploaded to the project's .agenthq/uploads/ticket/), or paths already stored there. A missing, oversized or non-image file refuses the call and nothing is saved. The board shows them as attachments and the started worker's brief lists them."))
             put("status", prop("Column the new ticket enters: todo (default, the current sprint) or backlog (parked, never started until moved to todo)."))
             relatedToProp()
+            CommentsWiring.notifyProps(this, update = false)
             put("verbose", ToolArgs.verboseProp())
         }
     }
@@ -291,6 +292,8 @@ class TicketCreateTool(private val api: DaemonApi) : DaemonTool {
         val projectId = explicit ?: call.clientProjectId
         val by = WireTickets.by(call)
         if (explicit != null) TicketSave.result(api.tickets.mayFile(explicit, by), tool)
+        // TICKET-COMMENTS-2: the notify list is checked before anything is created.
+        val notify = comments?.let { c -> try { CommentsWiring.list(args, "notify")?.let(c::validateTargets) } catch (e: IllegalArgumentException) { return TicketSave.refused("$tool refused: ${e.message}") } }
         val images = TicketSave.images(args, tool)?.let { TicketSave.attach(call, projectId, it, tool) }
         val draft = TicketDraft(
             title = title,
@@ -307,6 +310,7 @@ class TicketCreateTool(private val api: DaemonApi) : DaemonTool {
         )
         val relatedTo = TicketSave.relatedTo(args, tool)
         val created = TicketSave.result(api.tickets.create(draft, by), tool)
+        comments?.onCreated(created.id, created.projectId, CommentsWiring.author(api, call), notify)
         val ticket = relatedTo?.let { TicketSave.linkRelated(api, call, created, it, tool) } ?: created
         TicketSave.saved(ticket, TicketSave.Fields(
             title = true, description = draft.description != null, agentId = draft.agentId != null, provider = draft.provider != null,
@@ -316,7 +320,7 @@ class TicketCreateTool(private val api: DaemonApi) : DaemonTool {
     }
 }
 
-class TicketUpdateTool(private val api: DaemonApi) : DaemonTool {
+class TicketUpdateTool(private val api: DaemonApi, private val comments: TicketComments? = null) : DaemonTool {
     override val name = TicketSave.UPDATE
     override val description =
         "Edit ONE ticket (full id or the 8-char id `tickets` prints). A field left out keeps its stored " +
@@ -336,6 +340,7 @@ class TicketUpdateTool(private val api: DaemonApi) : DaemonTool {
             put("images", pathsProp("The ticket's full image list, replacing the stored one ([] removes all): local image files (uploaded, as for ${TicketSave.CREATE}) or paths already under the project's .agenthq/uploads/ticket/. Not with addImages / removeImages. A removed image's file is deleted once no ticket references it."))
             put("addImages", pathsProp("Images to ADD to the stored list: local image files (png, jpeg, gif or webp, at most 10 MB each) or stored paths."))
             relatedToProp()
+            CommentsWiring.notifyProps(this, update = true)
             put("verbose", ToolArgs.verboseProp())
             put("removeImages", pathsProp("Images to REMOVE from the stored list, each named by its stored path (as agenthq_ticket_get answers it), its file name, or the original local file. Naming an image the ticket does not have refuses the call."))
         }
@@ -379,7 +384,17 @@ class TicketUpdateTool(private val api: DaemonApi) : DaemonTool {
             effort = TicketSave.effort(args, tool),
             images = images,
         )
-        val updated = TicketSave.result(api.tickets.update(existing.id, patch, WireTickets.by(call)), tool)
+        // TICKET-COMMENTS-2: notify set / add / remove (validated before the ticket is touched); a notify-only call changes nothing else.
+        val notifyEdit = comments?.let { c ->
+            try {
+                val set = CommentsWiring.list(args, "notify"); val add = CommentsWiring.list(args, "addNotify").orEmpty(); val rem = CommentsWiring.list(args, "removeNotify").orEmpty()
+                if (set == null && add.isEmpty() && rem.isEmpty()) null else { c.validateTargets(set.orEmpty() + add); Triple(set, add, rem) }
+            } catch (e: IllegalArgumentException) { return TicketSave.refused("$tool refused: ${e.message}") }
+        }
+        val noFields = patch.title == null && patch.description == null && patch.agentId == null && patch.provider == null && patch.model == null &&
+            patch.weight == null && patch.contextLimit == null && patch.effort == null && patch.images == null
+        val updated = if (notifyEdit != null && noFields) existing else TicketSave.result(api.tickets.update(existing.id, patch, WireTickets.by(call)), tool)
+        notifyEdit?.let { (set, add, rem) -> comments?.editNotify(existing.id, set, add, rem) }
         val ticket = relatedTo?.let { TicketSave.linkRelated(api, call, updated, it, tool) } ?: updated
         TicketSave.saved(ticket, TicketSave.Fields(
             title = ToolArgs.string(args, "title") != null, description = patch.description != null, agentId = patch.agentId != null, provider = patch.provider != null,

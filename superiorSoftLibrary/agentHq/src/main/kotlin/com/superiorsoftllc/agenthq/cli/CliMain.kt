@@ -1191,6 +1191,7 @@ internal object Cli {
             "start" -> startTicket(stream, parsed, out, err, getenv)
             "link" -> linkTicket(stream, parsed, out, err, getenv)
             "files" -> ticketFiles(stream, parsed, out, err, getenv)
+            "comment" -> TicketCommentCli.run(stream, parsed.args.drop(1), out, err, getenv)
             "related" -> relatedTicket(stream, parsed, out, err, getenv)
             else -> showTicket(stream, parsed, out, err, getenv)
         }
@@ -5504,6 +5505,7 @@ internal object Cli {
             } else {
                 null
             }
+            "comment" -> TicketCommentCli.usageError(args.drop(1))
             "files" -> TicketFilesCli.usageError(args.getOrNull(1)?.takeIf { it.isNotBlank() }, parsed.filePaths, parsed.backfill, parsed.limit)
             "show" -> if (blank(1)) {
                 "ticket show requires a ticket id: agenthq ticket show <id|prefix> (see: agenthq tickets)"
