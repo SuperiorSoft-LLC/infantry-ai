@@ -155,6 +155,7 @@ import com.superiorsoftllc.agenthq.ui.model.ChatBlock
 import com.superiorsoftllc.agenthq.ui.model.ChatItem
 import com.superiorsoftllc.agenthq.ui.model.TimelineItem
 import com.superiorsoftllc.agenthq.ui.model.withContributions
+import com.superiorsoftllc.agenthq.ui.model.wakeReasons
 import com.superiorsoftllc.agenthq.ui.model.ChatSpan
 import com.superiorsoftllc.agenthq.ui.model.ChatStatus
 import com.superiorsoftllc.agenthq.ui.model.OutputLine
@@ -335,7 +336,7 @@ fun OutputPane(
         }
         return
     }
-    if (a.output.isEmpty() && contributions.isEmpty() && a.chatStatus(Clock.System.now().toEpochMilliseconds()) == null) {
+    if (a.output.isEmpty() && contributions.none { !it.isStats } && a.chatStatus(Clock.System.now().toEpochMilliseconds()) == null) {
       Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -399,6 +400,7 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
     }
     val name = agent.session.worktreeBranch ?: agent.id.take(8)
     Column(Modifier.fillMaxSize()) {
+        contributions.lastOrNull { it.isStats }?.let { AutomationStatsPanel(it) }
         SelectionContainer(Modifier.weight(1f)) {
             LazyColumn(Modifier.fillMaxSize().padding(horizontal = 14.dp), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 10.dp)) {
                 items(rows.size) { i ->
@@ -1081,4 +1083,19 @@ fun ContributionRow(item: TimelineItem) {
             item.details.forEach { Text(it, color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp) }
         }
     }
+}
+
+/** SCRIPT-VIS-1c: test tag on the automation stats panel at the top of a session's chat. */
+const val AUTOMATION_STATS_TAG = "automation-stats"
+
+/** SCRIPT-VIS-1c: turns saved and wakes by reason for this session (and the project's totals); shown only once the plugin reported stats. */
+@Composable
+fun AutomationStatsPanel(item: TimelineItem) {
+    val reasons = item.wakeReasons()
+    val project = item.meta["projectTurnsSaved"]?.let { " · project: $it saved, ${item.meta["projectWakes"] ?: "0"} wakes" }.orEmpty()
+    Text(
+        "AUTOMATION · turns saved ${item.meta["turnsSaved"] ?: "0"} · wakes ${item.meta["wakes"] ?: "0"}${if (reasons.isNotBlank()) " ($reasons)" else ""}$project",
+        color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp, maxLines = 2,
+        modifier = Modifier.fillMaxWidth().background(Palette.Panel).padding(horizontal = 14.dp, vertical = 4.dp).testTag(AUTOMATION_STATS_TAG),
+    )
 }

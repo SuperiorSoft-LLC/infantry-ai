@@ -128,3 +128,9 @@ TEST-TODO (SCRIPT-VIS-1): in a live daemon with a mail.incoming hook that handle
 - Disable/uninstall Infantry_Scripting: chat shows no automation lines and works as before.
 - Lost verdict: make a mail hook exceed its time limit; the run record reads "verdict-lost", FAILED, and the mail is delivered.
 - NOT DONE in 1b: automation badge in the Sidebar group, wake reasons on the activity line, turns-saved/wakes panel and project summary, UI sending `timeline_list` on connect.
+
+## TEST-TODO: SCRIPT-VIS-1c (7d548a77)
+- Ping-pong on a TEST daemon (own state dir + port, kill by PID): PM <-> VC mail hooks live, send a ping. Both chats show their AUTOMATION row, nobody woke, the session panel line reads "turns saved N" (N total 2 across both), the project part of the line adds the project totals.
+- While a hook runs, the session's sidebar row shows the "AUTO" chip and sits under Running; the chip goes when the run ends. The row's activity text ends with "woken by <reason>" after a real wake (owner / agent / mail).
+- Restart the UI against a running daemon (reconnect): the AUTOMATION rows and the stats line from before are back (UI sends `timeline_list` on every connect).
+- Disable Infantry_Scripting: no rows, no chip, no stats line; chat works as before. NOT run by hand: the throwing-plugin case is covered by unit tests only.

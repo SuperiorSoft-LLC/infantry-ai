@@ -79,12 +79,12 @@ class ScriptHooksTest {
     private fun hooksJson(vararg hooks: String) = """{"version":1,"hooks":[${hooks.joinToString(",")}]}"""
     private val doneHook = """{"id":"done-hook","on":"lane enter done","script":"on-done","args":{"mode":"merge"},"ownerSession":"pm-1","ownerRole":"pm"}"""
 
-    private fun build(engine: FakeEngine, guard: HookGuardConfig = HookGuardConfig(), tip: (String, String) -> String? = { _, _ -> "abc123tip" }, runLog: ScriptRunLog = ScriptRunLog()): ScriptHooks {
+    private fun build(engine: FakeEngine, guard: HookGuardConfig = HookGuardConfig(), tip: (String, String) -> String? = { _, _ -> "abc123tip" }, runLog: ScriptRunLog = ScriptRunLog(), automation: (String, com.superiorsoftllc.agenthq.daemon.api.AutomationMark?) -> Unit = { _, _ -> }): ScriptHooks {
         val engines = ScriptEngines({ mapOf(ScriptEngineWire.PREFIX + "fake" to ScriptEngineWire.asEndpoint(engine)) })
         val store = ScriptStore({ files }, { engines.extensions() })
         return ScriptHooks(
             HookStore { files }, store, engines, tools, ScriptDispatcher(tools, { mapOf("move" to "t_move") }),
-            projects = { listOf("p1") }, limits = { ScriptLimits() }, guard = { guard }, tip = tip, clock = { now }, executor = { it() }, runLog = runLog,
+            projects = { listOf("p1") }, limits = { ScriptLimits() }, guard = { guard }, tip = tip, clock = { now }, executor = { it() }, runLog = runLog, automation = automation,
         )
     }
 
@@ -502,5 +502,22 @@ class ScriptHooksTest {
         assertEquals(setOf("mail-1", "mail-2"), read.toSet(), "both mails read")
         assertTrue(woken.isEmpty(), "nobody woken: $woken")
         assertEquals(listOf("seen PONG 42"), logs.filter { it.startsWith("seen") }, "A's hook saw the PONG with the same nonce")
+    }
+
+    @Test fun `SCRIPT-VIS-1c a mail hook marks the recipient while it runs and clears the mark after, even when the script fails`() {
+        putHooks(mailHook)
+        val marks = ArrayList<Pair<String, com.superiorsoftllc.agenthq.daemon.api.AutomationMark?>>()
+        assertTrue(build(FakeEngine { listOf(QueuedAction("handled", emptyMap())) }, automation = { s, m -> marks += s to m }).incoming(mail())!!.handled)
+        assertEquals("pm-1", marks.first().first)
+        assertEquals("on-done", marks.first().second!!.script); assertEquals("m", marks.first().second!!.hookId)
+        assertNull(marks.last().second, "cleared after the run")
+        marks.clear()
+        assertNull(build(FakeEngine { error("boom") }, automation = { s, m -> marks += s to m }).incoming(mail()))
+        assertNull(marks.last().second, "cleared after a crash too")
+    }
+
+    @Test fun `SCRIPT-VIS-1c a throwing mark callback never fails the hook`() {
+        putHooks(mailHook)
+        assertTrue(build(FakeEngine { listOf(QueuedAction("handled", emptyMap())) }, automation = { _, _ -> error("display only") }).incoming(mail())!!.handled)
     }
 }

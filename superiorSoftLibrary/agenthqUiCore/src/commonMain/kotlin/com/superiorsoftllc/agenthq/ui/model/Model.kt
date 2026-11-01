@@ -505,6 +505,7 @@ sealed interface ChatItem {
 
 /** SCRIPT-VIS-1b: [rows] with the plugin-contributed [items] placed by time (before the first row that is later; trailing ones last). */
 fun withContributions(rows: List<ChatItem>, items: List<TimelineItem>): List<ChatItem> {
+    @Suppress("NAME_SHADOWING") val items = items.filterNot { it.isStats }
     if (items.isEmpty()) return rows
     fun ChatItem.at(): Long = when (this) { is ChatItem.Line -> line.at; is ChatItem.Reasoning -> lines.firstOrNull()?.at ?: 0L; is ChatItem.Contribution -> item.at }
     val out = ArrayList<ChatItem>(rows.size + items.size)
@@ -2220,9 +2221,25 @@ internal fun declaredNotice(c: ConnectionInfo, data: String): Pair<String, Strin
 data class TimelineItem(
     val id: String, val sessionId: String, val at: Long, val source: String = "", val label: String = "", val text: String = "",
     val details: List<String> = emptyList(), val ok: Boolean = true,
-)
+    /** SCRIPT-VIS-1c: structured values of a non-row item (the stats item: turnsSaved, wakes, wakesByReason, lastWake, project*). */
+    val meta: Map<String, String> = emptyMap(),
+) {
+    /** True for an item that is data for a badge / panel, not a chat row. */
+    val isStats: Boolean get() = source == AUTOMATION_STATS_SOURCE
+}
+
+const val AUTOMATION_STATS_SOURCE = "automation-stats"
 
 const val TIMELINE_MAX_PER_SESSION = 200
+
+/** SCRIPT-VIS-1c: the session's automation stats item (turns saved, wakes by reason), or null. */
+fun AppState.automationStats(sessionId: String): TimelineItem? = timeline[sessionId].orEmpty().lastOrNull { it.isStats }
+
+/** SCRIPT-VIS-1c: "owner 1, mail 2" from the stats item's wakesByReason, or "". */
+fun TimelineItem.wakeReasons(): String = meta["wakesByReason"].orEmpty().split(',').filter { ':' in it }.joinToString(", ") { it.substringBefore(':') + " " + it.substringAfter(':') }
+
+/** SCRIPT-VIS-1c: the line on a session's activity row: the last wake reason ("woken by owner"), or null. */
+fun AppState.wakeLine(sessionId: String): String? = automationStats(sessionId)?.meta?.get("lastWake")?.takeIf { it.isNotBlank() }?.let { "woken by $it" }
 
 /** Merges [items] into the per-session timeline: same id replaces, order by time, at most [TIMELINE_MAX_PER_SESSION] newest kept. */
 fun AppState.withTimeline(items: List<TimelineItem>): AppState {
