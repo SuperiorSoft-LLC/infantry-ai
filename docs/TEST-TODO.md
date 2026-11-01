@@ -107,3 +107,8 @@ TEST-TODO: `events.broadcast` / `hooks.connected` / `QuestionsOpen` (DaemonPlugi
 - TEST-TODO: a plugin `hooks.status` field appears under `pluginStatus` in GET /health.
 
 - TEST-TODO (TRIG-2b): run TriggerStoreContractTest (Infantry_Triggers/daemon) at the QA checkpoint; once TRIG-2c switches core over, check triggers survive a daemon restart through the plugin store (create, fire, restart, list, event pruning to 500).
+
+## SCRIPT-CMD-1
+- TEST-TODO: set scripting.exec.enabled=true, run a script with `ih.exec{command={...}}` from a real agent session: exit code and stdoutTail arrive in phase 2; with the setting off the tool refuses and names the setting.
+- TEST-TODO: background=true run + a hook on `exec.done` continues the protocol; the Infantry_Scripting settings page shows the six scripting.exec.* fields.
+- TEST-TODO: the CLI parity command `agenthq exec` was NOT added (see report); call the tool via `agenthq_exec` MCP / `script_run`.

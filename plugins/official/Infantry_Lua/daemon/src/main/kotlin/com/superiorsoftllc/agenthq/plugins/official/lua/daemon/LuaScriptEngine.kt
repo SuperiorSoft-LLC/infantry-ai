@@ -37,6 +37,7 @@ class LuaScriptEngine : ScriptEngine {
         Lua 5.2 (LuaJ), sandboxed: no io/require/load; os.time, os.clock, string, table, math only.
         ih.call("agenthq_ticket_move", {ticket="t1", status="done"})   queue any tool by registry name
         ih.move{ticket="t1", status="done"}                            same, by an alias (ih.<alias>{...} or ih.<toolname>{...}); args are ONE table of the tool's named arguments
+        ih.exec{command={"prog","arg"}, cwd=".", timeoutSec=60}         run a process (needs scripting.exec.enabled); phase 2 input.results[i].json = {exitCode, durationMs, stdoutTail, stderrTail, timedOut}
         ih.log("text")                                                 add to the run log
         ih.again()                                                     after this run's actions execute, re-run the script with the results
         Nothing runs inside the script: actions are queued and executed in order after it ends; the first failure stops the run.

@@ -346,3 +346,6 @@ No existing getter is changed or deprecated by AR-5 (additive). `tickets`, `epic
 
 ### TRIG-2a (DaemonApi 1.29.0, additive): template routes and a status hook
 `Routes.handle` accepts an absolute path with `{name}` segments (declared as-is in `daemon.routes`, and in `daemon.publicRoutes` to answer without the bearer token; the route then does its own auth, e.g. HMAC). Segments match one-to-one, an exact route wins, the bound values arrive in `HttpCall.pathParams` (empty on an exact route). `hooks.status(StatusHook)` (hook kind `status`, official/core only) adds `fields()` to `/health` as `pluginStatus`; core still fills `triggersTripped` itself until TRIG-2c.
+
+## Script process bridge (SCRIPT-CMD-1)
+The Scripting plugin (not core) registers `agenthq_exec` and `agenthq_exec_status` (plugin tools, no DaemonApi change) so a sandboxed script can run a command line through the daemon and read `{exitCode, durationMs, stdoutTail, stderrTail, timedOut}` in `input.results`; `exec.done` is published on the named-event bus for background runs. Off by default (`scripting.exec.enabled`), with allow-list and role settings. Details and a worked example: `plugins/official/Infantry_Scripting/project-scripts/README.md`.

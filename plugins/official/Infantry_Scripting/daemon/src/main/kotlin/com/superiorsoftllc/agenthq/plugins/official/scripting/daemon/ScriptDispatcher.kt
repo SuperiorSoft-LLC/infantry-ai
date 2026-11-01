@@ -80,7 +80,7 @@ class ScriptDispatcher(
             val planned = ArrayList<ActionRecord>()
             for (a in r.actions) {
                 if (a.name == AGAIN) { again = true; continue }
-                val tool = if (a.name in known) a.name else table[a.name]?.takeIf { it in known }
+                val tool = if (a.name in known) a.name else (table[a.name] ?: BUILTIN_ALIASES[a.name])?.takeIf { it in known }
                     ?: return RunReport("ERROR", records + planned, logs, phase, dryRun, "unknown tool or alias '${a.name}' (see script_api)", records.size + planned.size + 1)
                 planned += ActionRecord(a.name, tool, a.args, phase)
             }
@@ -113,6 +113,8 @@ class ScriptDispatcher(
     companion object {
         /** The reserved action name: re-run the script with the results so far. */
         const val AGAIN = "again"
+        /** Names every project has without configuring: the process bridge (SCRIPT-CMD-1). */
+        val BUILTIN_ALIASES = mapOf("exec" to "agenthq_exec", "exec_status" to "agenthq_exec_status")
         const val OPTIONAL = "_optional"
         const val HARD_MAX_PHASES = 10
     }
