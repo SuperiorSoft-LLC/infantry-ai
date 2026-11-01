@@ -459,7 +459,7 @@ internal object Cli {
                 "event" -> EventCli.run(stream, parsed.args, parsed.body?.let { if (it == "-") input().use { r -> r.readText() } else it }, out, err, getenv)
                 "tests" -> TestsCli.run(stream, parsed.args, out, err, getenv)
                 "tool" -> ToolCli.run(stream, parsed.args, parsed.body?.let { if (it == "-") input().use { r -> r.readText() } else it }, out, err, getenv)
-                "script" -> ScriptCli.run(stream, parsed.args, parsed.body?.let { if (it == "-") input().use { r -> r.readText() } else it }, out, err, getenv)
+                "script" -> ScriptCli.run(stream, parsed.args, parsed.body?.let { if (it == "-") input().use { r -> r.readText() } else it } ?: parsed.file?.let { f -> runCatching { File(f).readText() }.getOrNull() }, out, err, getenv)
                 "issue" -> issue(stream, parsed, out, err, getenv)
                 "trait" -> trait(stream, parsed, out, err, input)
                 "skill" -> skill(stream, parsed, out, err)

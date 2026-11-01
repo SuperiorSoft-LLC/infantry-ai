@@ -34,6 +34,7 @@ object ScriptEngineWire {
         when (op) {
             "describe" -> buildJsonObject { put("id", engine.id); put("extensions", JsonArray(engine.extensions.map(::JsonPrimitive))) }.toString()
             "binding" -> engine.binding
+            "check" -> engine.check(request).orEmpty()
             "run" -> {
                 val r = Json.parseToJsonElement(request).jsonObject
                 val l = r["limits"]?.jsonObject
@@ -62,6 +63,7 @@ object ScriptEngineWire {
             override val id = engineId
             override val extensions = ext
             override val binding: String get() = runCatching { endpoint.call("binding", "") }.getOrDefault("")
+            override fun check(source: String): String? = runCatching { endpoint.call("check", source).takeIf { it.isNotEmpty() } }.getOrNull()
             override fun run(source: String, input: Map<String, Any?>, limits: ScriptLimits, caller: ScriptCaller): ScriptResult = try {
                 val req = buildJsonObject {
                     put("source", source)

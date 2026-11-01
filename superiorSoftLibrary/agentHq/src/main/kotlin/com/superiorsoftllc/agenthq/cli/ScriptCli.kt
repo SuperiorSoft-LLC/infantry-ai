@@ -11,9 +11,12 @@ import kotlinx.serialization.json.JsonPrimitive
  * does: `<on>` is `"lane enter <lane>"`, `"lane exit <lane>"` or a named event. Open to every role.
  */
 internal object ScriptCli {
-    const val USAGE = "usage: agenthq script hook list | add <on> <script> [--payload <args json>|-] | remove <id>   (<on>: \"lane enter done\", \"lane exit in_progress\" or an event name like ticket.commented)"
+    const val USAGE = "usage: agenthq script hook list | add <on> <script> [--payload <args json>|-] | remove <id> | save <name> [--file <path> | --body -] | list | delete <name>   (<on>: \"lane enter done\", \"lane exit in_progress\" or an event name like ticket.commented)"
 
     fun usageError(args: List<String>): String? = when {
+        args.size == 2 && args[0] == "save" -> null
+        args.size == 1 && args[0] == "list" -> null
+        args.size == 2 && args[0] == "delete" -> null
         args.size >= 2 && args[0] == "hook" && args[1] == "list" && args.size == 2 -> null
         args.size == 4 && args[0] == "hook" && args[1] == "add" -> null
         args.size == 3 && args[0] == "hook" && args[1] == "remove" -> null
@@ -21,6 +24,18 @@ internal object ScriptCli {
     }
 
     fun run(stream: FrameStream, args: List<String>, payload: String?, out: Appendable, err: Appendable, getenv: (String) -> String?): Int = runBlocking {
+        // SCRIPT-SAVE-1: save / list / delete are one call each of agenthq_script_save | _list | _delete.
+        if (args[0] != "hook") {
+            if (args[0] == "save" && payload == null) { err.appendLine("agenthq script save <name> needs the source: --file <path> or --body -"); return@runBlocking 2 }
+            val tool = "agenthq_script_${args[0]}"
+            val a = buildMap<String, JsonPrimitive> {
+                if (args.size > 1) put("name", JsonPrimitive(args[1]))
+                if (args[0] == "save") put("source", JsonPrimitive(payload!!))
+            }
+            val res = McpPluginTools(getenv).call(stream, tool, JsonObject(a))
+            (if (res.isError) err else out).appendLine(res.text)
+            return@runBlocking if (res.isError) 1 else 0
+        }
         val arguments = buildMap<String, JsonPrimitive> {
             put("action", JsonPrimitive(args[1]))
             when (args[1]) {
