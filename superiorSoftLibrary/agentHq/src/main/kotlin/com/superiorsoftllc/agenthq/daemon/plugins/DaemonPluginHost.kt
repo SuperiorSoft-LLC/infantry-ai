@@ -513,7 +513,7 @@ class DaemonPluginHost private constructor(
         val loader = URLClassLoader("plugin-$id", arrayOf(jar.toURI().toURL()), DaemonApiClassLoader(DaemonPluginHost::class.java.classLoader))
         val cpu = d.limits.cpuMsPerCall ?: maxOf(d.limits.callTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_CALL_TIMEOUT_MS), d.limits.toolTimeoutMs ?: services.limit(LimitRegistry.PLUGIN_TOOL_TIMEOUT_MS))
         lateinit var p: Loaded
-        val guard = PluginGuard(id, loader, cpu, log, onDisabled = { why -> unregister(p); announceFailure(id, why) })
+        val guard = PluginGuard(id, loader, cpu, log, hangCeilingMs = services.limit(LimitRegistry.PLUGIN_HANG_CEILING_MS), onDisabled = { why -> unregister(p); announceFailure(id, why) })
         p = Loaded(id, status.tier, d, setting, guard, loader)
         loaded += p
         val api = Api(p)

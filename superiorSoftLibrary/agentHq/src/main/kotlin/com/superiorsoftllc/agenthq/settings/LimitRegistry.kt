@@ -467,7 +467,12 @@ object LimitRegistry {
     /** DAEMON-PLUGINS-1 (docs/DAEMON-PLUGINS.md section 5): a daemon plugin's defaults; its module.json `daemon.limits` override them. */
     val PLUGIN_CALL_TIMEOUT_MS = LimitDef(
         "limits.plugins.callTimeoutMs", 2_000, "ms",
-        "How long one daemon plugin hook, frame or route call may run before the plugin is disabled (a module's daemon.limits.callTimeoutMs overrides it).",
+        "GUARD-1: how long one daemon plugin hook, frame or route call may take before it is logged as SLOW (never a strike: a busy host stretches calls). A strike needs a call with no result by limits.plugins.hangCeilingMs; a call burning CPU past its budget is disabled at once (a module's daemon.limits.callTimeoutMs overrides it).",
+        min = 1, zeroIsUnlimited = false,
+    )
+    val PLUGIN_HANG_CEILING_MS = LimitDef(
+        "limits.plugins.hangCeilingMs", 30_000, "ms",
+        "GUARD-1: the hard wall-clock ceiling for one daemon plugin call (never lower than the call's own timeout); a call with no result by then is a true hang and counts one strike. Read at plugin load.",
         min = 1, zeroIsUnlimited = false,
     )
     val PLUGIN_TOOL_TIMEOUT_MS = LimitDef(
@@ -591,7 +596,7 @@ object LimitRegistry {
         WATCH_READ_MAX_KB, WATCH_TAIL_READ_KB, WATCH_SPACE_CHECK_SECONDS,
         TICKET_FILES_MAX_LINES, TICKET_FILES_RELATED_TOP,
         RELATED_BRIEF_TICKETS, RELATED_BRIEF_FILES, RELATED_BRIEF_CHARS, RELATED_BLOCK_TICKETS, RELATED_BLOCK_FILES, RELATED_BLOCK_CHARS,
-        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS,
+        PLUGIN_CALL_TIMEOUT_MS, PLUGIN_HANG_CEILING_MS, PLUGIN_TOOL_TIMEOUT_MS, PLUGIN_TOOL_MAX_TIMEOUT_MS, PLUGIN_ROUTE_RATE, PLUGIN_START_TIMEOUT_MS, PLUGIN_STOP_TIMEOUT_MS,
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
