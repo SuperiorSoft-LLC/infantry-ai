@@ -9,6 +9,12 @@
   "entry": "com.superiorsoftllc.agenthq.plugins.official.triggers.TriggersPlugin",
   "jar": "build/libs/Infantry_Triggers.jar",
   "buildOrder": 60,
+  "daemon": {
+    "entry": "com.superiorsoftllc.agenthq.plugins.official.triggers.daemon.TriggersDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_Triggers-daemon.jar",
+    "apiAtLeast": "1.28.0",
+    "storage": { "adopt": ["triggers", "trigger_events", "trigger_webhooks"] }
+  },
   "tabs": [
     {
       "id": "infantry.triggers",
