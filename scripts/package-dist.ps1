@@ -50,8 +50,11 @@ param(
 $repo = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot 'plugin-selection.ps1')
 
+$script:Step = 'start'
+$script:BuildOk = $false
+$script:DestCreated = $null
 function Fail([string]$Message) {
-  [Console]::Error.WriteLine("PACKAGE-DIST refused: $Message")
+  [Console]::Error.WriteLine("PACKAGE-DIST refused at step '$($script:Step)': $Message")
   exit 2
 }
 
@@ -157,7 +160,7 @@ if ($Keystore) {
   $signArgs = @('-Pihq.devSign=true')
 }
 $gradleArgs = @(':superiorSoftLibrary:agentHqUi:createDistributable', '--no-parallel', '--no-daemon',
-  '-Dorg.gradle.jvmargs=-XX:MaxMetaspaceSize=2g -Xmx3g',
+  '-Dorg.gradle.jvmargs=-XX:MaxMetaspaceSize=2g -Xmx3g',  # quoted per argument when run (Invoke-Gradle)
   # the worktree is detached, so the packaging guard sees HEAD; the sha was checked to be on $ReleaseBranch above
   '-PallowAnyBranch=true') + $signArgs
 if ($selection.Excluded.Count -gt 0) { $gradleArgs += @("-Pihq.excludePlugins=$($selection.Excluded -join ',')", '-Pihq.optionalOut=true') }
@@ -185,26 +188,38 @@ if ($LASTEXITCODE -ne 0) { Fail "could not create the worktree for $full" }
 try {
   Write-Output "PACKAGE-DIST building $full ($signing) in $tmp"
   Push-Location $tmp
-  try { & .\gradlew.bat @gradleArgs; $gradleExit = $LASTEXITCODE } finally { Pop-Location }
+  $script:Step = 'gradle createDistributable'
+  # Every argument is double-quoted into one cmd.exe line: gradlew.bat splits unquoted -Pname=value on '=' and a jvmargs value on spaces.
+  $quoted = ($gradleArgs | ForEach-Object { '"' + ($_ -replace '"', '\"') + '"' }) -join ' '
+  # Start-Process passes the command line verbatim (a direct call re-escapes the inner quotes).
+  $cmdLine = '/d /s /c ""' + $tmp + '\gradlew.bat" ' + $quoted + '"'
+  try { $gp = Start-Process -FilePath cmd.exe -ArgumentList $cmdLine -NoNewWindow -Wait -PassThru; $gradleExit = $gp.ExitCode } finally { Pop-Location }
   if ($gradleExit -ne 0) { Fail "gradle createDistributable failed (exit $gradleExit). Nothing was copied." }
 
+  $script:Step = 'locate app image'
   $imageRoot = Join-Path $tmp 'superiorSoftLibrary\agentHqUi\build\compose\binaries\main\app'
   $image = Get-ChildItem -LiteralPath $imageRoot -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
   if (-not $image) { Fail "no app image under $imageRoot" }
   $srcExe = Get-ChildItem -LiteralPath $image.FullName -Filter '*.exe' -File | Select-Object -First 1
   if (-not $srcExe) { Fail "no .exe at the top of $($image.FullName)" }
 
+  $script:Step = 'copy image'
   # Copy into builds\<sha>\ (a re-run replaces that sha's folder only).
   if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
+  $script:DestCreated = $dest
   Invoke-Robocopy $image.FullName $dest
+  $script:Step = 'write BUILD-INFO/MANIFEST/README'
   $stampUtc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")
   $info = @("sha=$full", "built=$stampUtc", "signing=$signing", "source=$($image.Name)")
-  Set-Content -LiteralPath (Join-Path $dest 'BUILD-INFO.txt') -Value $info -Encoding ASCII
+  $infoPath = Join-Path $dest 'BUILD-INFO.txt'
+  if (Test-Path -LiteralPath $infoPath) { Add-Content -LiteralPath $infoPath -Value (@('', '# package-dist') + $info) -Encoding ASCII }  # keep the image's own record
+  else { Set-Content -LiteralPath $infoPath -Value $info -Encoding ASCII }
   Set-Content -LiteralPath (Join-Path $dest 'MANIFEST.txt') -Value "$full $stampUtc $signing" -Encoding ASCII
   # README.txt is generated per build (never copied from an earlier build), so it names this sha and folder.
   $readme = @("Infantry AI build $($full.Substring(0, 7))", "sha=$full", "folder=$(Split-Path -Leaf $dest)", "built=$stampUtc", "signing=$signing", "See BUILD-INFO.txt for the full record.")
   Set-Content -LiteralPath (Join-Path $dest 'README.txt') -Value $readme -Encoding ASCII
 
+  $script:Step = 'copy-integrity checks'
   # Copy-integrity checks: all must pass before current\ is touched.
   $destExe = Join-Path $dest $srcExe.Name
   if (-not (Test-Path -LiteralPath $destExe)) { Fail "integrity: $($srcExe.Name) missing in $dest" }
@@ -224,13 +239,14 @@ try {
   }
   if (-not ((Get-Content -LiteralPath (Join-Path $dest 'BUILD-INFO.txt')) -contains "sha=$full")) { Fail "integrity: BUILD-INFO sha does not match $full" }
 
+  $script:Step = 'plugin report'
   # BUILD-PLUGINS-1: the included/excluded report and the left-out plugins' packages, next to the build.
   $inventory = @(Get-PluginInventory (Join-Path $tmp 'plugins'))
   $manifestPath = Join-Path $buildsDir "$full.build-manifest.json"
   $optionalDest = Join-Path $buildsDir "$full.optional-plugins"
   if (Test-Path -LiteralPath $optionalDest) { Remove-Item -LiteralPath $optionalDest -Recurse -Force }
   if ($selection.Excluded.Count -gt 0) {
-    $optionalSrc = Join-Path $tmp 'superiorSoftLibrarygentHqUiuild\official-modules\optional-plugins'
+    $optionalSrc = Join-Path $tmp 'superiorSoftLibrary\agentHqUi\build\official-modules\optional-plugins'
     if (-not (Test-Path -LiteralPath $optionalSrc)) { Fail "no optional-plugins output at $optionalSrc" }
     Invoke-Robocopy (Join-Path $optionalSrc 'official') $optionalDest
     $catalog = New-OptionalCatalog $optionalDest $inventory
@@ -238,12 +254,12 @@ try {
     $catalog | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $optionalDest 'catalog.json') -Encoding UTF8
   }
   $report = New-BuildManifest $inventory $selection $full $signing $Preset
-  $stagedOfficial = @(Get-ChildItem -LiteralPath (Join-Path $dest 'app
-esources\modules\official') -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
+  $stagedOfficial = @(Get-ChildItem -LiteralPath (Join-Path $dest 'app\resources\modules\official') -Directory -ErrorAction SilentlyContinue | ForEach-Object { $_.Name })
   foreach ($x in $selection.Excluded) { if ($stagedOfficial -contains $x) { Fail "integrity: excluded plugin $x is still in the build" } }
   $report | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $manifestPath -Encoding UTF8
   Write-Output "PACKAGE-DIST plugins: included=$($selection.Included.Count) excluded=[$($selection.Excluded -join ', ')] report=$manifestPath$(if ($selection.Excluded.Count) { " optional=$optionalDest" })"
 
+  $script:Step = 'swap current'
   # Only now replace current\.
   # BUILD-SWAP-1: never delete-then-copy. swap-current.ps1 copies, verifies, then renames; a running app only blocks the switch.
   $swap = Join-Path $PSScriptRoot 'swap-current.ps1'
@@ -256,7 +272,12 @@ esources\modules\official') -Directory -ErrorAction SilentlyContinue | ForEach-O
   } else {
     Write-Output "PACKAGE-DIST ok: sha=$full signing=$signing files=$($destCount.Files) output=$dest current=$current"
   }
+  $script:BuildOk = $true
 } finally {
+  if (-not $script:BuildOk -and $script:DestCreated -and (Test-Path -LiteralPath $script:DestCreated)) {
+    Remove-Item -LiteralPath $script:DestCreated -Recurse -Force -ErrorAction SilentlyContinue  # never leave a half build
+    Remove-Item -LiteralPath $manifestPath -Force -ErrorAction SilentlyContinue
+  }
   git -C $repo worktree remove --force $tmp 2>$null
   if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue }
 }
