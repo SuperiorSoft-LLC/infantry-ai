@@ -483,8 +483,13 @@ class AgentHqDaemon(
         val bound = boundPort()
         portFile?.let { DaemonPort.write(it, bound) }
         recordedPort = bound
+        // DAEMON-DROP-1: the embedded (desktop) daemon had no watchdog; this one only logs, with the busy threads.
+        stallProbe?.close()
+        stallProbe = StallProbe(HealthWatchdog.selfUrl(host, bound)).start()
         return bound
     }
+
+    @Volatile private var stallProbe: StallProbe? = null
 
     /** The port the started [server] actually listens on (resolves an ephemeral 0). */
     fun boundPort(): Int = kotlinx.coroutines.runBlocking {
