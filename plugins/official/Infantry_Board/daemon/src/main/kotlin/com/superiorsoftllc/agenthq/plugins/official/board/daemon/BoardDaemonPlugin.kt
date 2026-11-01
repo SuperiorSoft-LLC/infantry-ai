@@ -14,7 +14,9 @@ import com.superiorsoftllc.agenthq.daemon.api.DaemonPlugin
 class BoardDaemonPlugin : DaemonPlugin {
     @Volatile private var attached: com.superiorsoftllc.agenthq.daemon.api.board.BoardRuntime? = null
 
-    override fun stop() { attached?.detachCore(); attached = null }
+    @Volatile private var moved: AutoCloseable? = null
+
+    override fun stop() { runCatching { moved?.close() }; moved = null; attached?.detachCore(); attached = null }
 
     override fun start(api: DaemonApi) {
         // DP-5h-3a: with no core-built board, the plugin builds its own from the board runtime and registers the ticket frames through
@@ -29,6 +31,8 @@ class BoardDaemonPlugin : DaemonPlugin {
             runtime.attachCore(PluginCoreAccess(board, h.epicStore, h.epicInputs))
             attached = runtime
         }
+        // SCRIPT-5: a ticket entering a lane is the named event `ticket.moved` (lane-enter hooks of Infantry_Scripting ride it).
+        moved = runCatching { TicketMovedEvent.attach(api) }.onFailure { api.log("ticket.moved event unavailable: ${it.message}") }.getOrNull()
         registerPipeline(api)
         api.tools.register(PipelineTools.ShowTool)
         api.tools.register(PipelineTools.RecordTool)
