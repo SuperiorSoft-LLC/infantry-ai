@@ -44,6 +44,7 @@ object ActionCatalog {
         a("mail.read", READ, E.MAIL_INBOX, E.MAIL_OUTBOX, E.MAIL_THREAD, E.MAIL_THREADS, E.MAIL_WAITING, E.MAIL_READ),
         a("agents.read", READ, E.AGENT_LIST, E.AGENT_ROSTER),
         a("attention.read", READ, E.ATTENTION_LIST),
+        a("timeline.read", READ, E.TIMELINE_LIST),
         a("prompts.read", READ, E.PROMPT_LIST, E.PROMPT_GET),
         a("skills.read", READ, E.SKILL_LIST, E.SKILL_GET),
         a("pods.read", READ, E.POD_QUERY),

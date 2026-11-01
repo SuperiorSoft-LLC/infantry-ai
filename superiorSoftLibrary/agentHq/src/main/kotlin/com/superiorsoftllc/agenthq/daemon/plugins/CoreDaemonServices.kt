@@ -3,6 +3,7 @@ package com.superiorsoftllc.agenthq.daemon.plugins
 import com.superiorsoftllc.agenthq.agents.AgentProfiles
 import com.superiorsoftllc.agenthq.daemon.DaemonConfig
 import com.superiorsoftllc.agenthq.daemon.api.ActionInfo
+import com.superiorsoftllc.agenthq.daemon.api.AutomationMark
 import com.superiorsoftllc.agenthq.daemon.api.Frame
 import com.superiorsoftllc.agenthq.daemon.api.Policy
 import com.superiorsoftllc.agenthq.daemon.api.ProjectInfo
@@ -17,6 +18,7 @@ import com.superiorsoftllc.agenthq.policy.PolicyRuntime
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.ProjectSave
 import com.superiorsoftllc.agenthq.protocol.SpawnOptions
+import com.superiorsoftllc.agenthq.session.SessionAutomation
 import com.superiorsoftllc.agenthq.session.SessionManager
 import com.superiorsoftllc.agenthq.session.SessionRecord
 
@@ -99,6 +101,7 @@ class CoreDaemonServices(
             return info(manager.resume(id, turn))
         }
         override fun restart(id: String) { manager.restart(id) }
+        override fun setAutomation(id: String, mark: AutomationMark?) { manager.setAutomation(id, mark?.let { SessionAutomation(it.script, it.hookId, it.since) }) }
     }
 
     override fun policy(): Policy = object : Policy {

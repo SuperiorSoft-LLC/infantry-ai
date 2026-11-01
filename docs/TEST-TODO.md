@@ -120,3 +120,11 @@ TEST-TODO: with a long-running agenthq_session_remove / agenthq_prompt in flight
 TEST-TODO: on a test daemon, close a session whose tree holds a `java.exe --add-opens ...` process from the app's own runtime: expect it untouched (TreeKillRule). Not exercised end to end: the owner's original trigger was never reproduced.
 
 TEST-TODO (SCRIPT-VIS-1): in a live daemon with a mail.incoming hook that handles a mail: agenthq_script_stats shows the run (AUTOMATION line, handled) and turnsSaved +1 for the recipient; an ordinary mail shows wakesByReason.mail +1; an owner message shows owner +1. UI (automation line in the session transcript, session panel counts, project summary) is NOT built yet.
+
+## TEST-TODO: SCRIPT-VIS-1b (e65bfcf2)
+- Live ping-pong on a TEST daemon (own state dir + port, kill by PID): PM <-> VC mail hooks live; send a ping. Expect: both chats show an "AUTOMATION · pong · handled ..." line (gear mark, expandable to actions and ih.log lines), no session woke, `agenthq_script_stats` shows 2 turns saved.
+- While a hook runs, the session list carries `automation {script, hookId, since}`; the session sits under Running with BUSY/IDLE unchanged; it moves back when the run ends.
+- Restart the daemon: the run log (newest `limits.scripting.runLogMax`) is still there and the chat lines come back via `timeline_list`.
+- Disable/uninstall Infantry_Scripting: chat shows no automation lines and works as before.
+- Lost verdict: make a mail hook exceed its time limit; the run record reads "verdict-lost", FAILED, and the mail is delivered.
+- NOT DONE in 1b: automation badge in the Sidebar group, wake reasons on the activity line, turns-saved/wakes panel and project summary, UI sending `timeline_list` on connect.

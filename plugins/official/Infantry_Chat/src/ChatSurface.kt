@@ -153,6 +153,8 @@ import com.superiorsoftllc.agenthq.ui.model.watchFlagOf
 import com.superiorsoftllc.agenthq.ui.model.UiFlags
 import com.superiorsoftllc.agenthq.ui.model.ChatBlock
 import com.superiorsoftllc.agenthq.ui.model.ChatItem
+import com.superiorsoftllc.agenthq.ui.model.TimelineItem
+import com.superiorsoftllc.agenthq.ui.model.withContributions
 import com.superiorsoftllc.agenthq.ui.model.ChatSpan
 import com.superiorsoftllc.agenthq.ui.model.ChatStatus
 import com.superiorsoftllc.agenthq.ui.model.OutputLine
@@ -316,6 +318,8 @@ fun OutputPane(
     paneAction: com.superiorsoftllc.agenthq.ui.model.SessionPaneAction? = null,
     onApplyStart: (com.superiorsoftllc.agenthq.ui.model.StartPlan) -> Unit = {},
     onResume: (String) -> Unit = {},
+    /** SCRIPT-VIS-1b: lines plugins contributed to this session's chat (automation runs); empty = none. */
+    contributions: List<TimelineItem> = emptyList(),
     questionSlot: @Composable () -> Unit = {},
 ) {
     if (a == null) {
@@ -331,7 +335,7 @@ fun OutputPane(
         }
         return
     }
-    if (a.output.isEmpty() && a.chatStatus(Clock.System.now().toEpochMilliseconds()) == null) {
+    if (a.output.isEmpty() && contributions.isEmpty() && a.chatStatus(Clock.System.now().toEpochMilliseconds()) == null) {
       Column(Modifier.fillMaxSize()) {
         Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -352,7 +356,7 @@ fun OutputPane(
       }
         return
     }
-    AgentChat(a, roleColor = roleColor, questionSlot = questionSlot)
+    AgentChat(a, roleColor = roleColor, questionSlot = questionSlot, contributions = contributions)
 }
 
 /** Test tag on the transient status row under the transcript (or in place of the empty state). */
@@ -378,14 +382,14 @@ const val ACTIVITY_LINE_TAG = "activity-line"
  * The status row sits under the last line and is absent once [AgentView.chatStatus] is null.
  */
 @Composable
-fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().toEpochMilliseconds() }, roleColor: String? = null, questionSlot: @Composable () -> Unit = {}) {
+fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().toEpochMilliseconds() }, roleColor: String? = null, questionSlot: @Composable () -> Unit = {}, contributions: List<TimelineItem> = emptyList()) {
     val list = rememberLazyListState()
     // The elapsed label must age on its own: no status frame may arrive for seconds while the agent
     // works, so a one-second ticker keeps "Thinking... 3s" counting with the transcript otherwise still.
     // [nowProvider] is the clock (injectable so a UI test can drive it with the Compose frame clock).
     var now by remember { mutableStateOf(nowProvider()) }
     LaunchedEffect(agent.id) { while (true) { delay(1_000); now = nowProvider() } }
-    val rows = LocalReasoningPlacement.current.chatRows(chatItems(agent.output))
+    val rows = withContributions(LocalReasoningPlacement.current.chatRows(chatItems(agent.output)), contributions)
     val status = agent.chatStatus(now)
     // Keyed on the status PRESENCE, not its value: the ticker changes it every second, and that must
     // not restart the scroll effect.
@@ -403,6 +407,7 @@ fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().t
                     when (val row = rows[i]) {
                         is ChatItem.Line -> ChatLine(row.line, agent.id, name, agent.role, roleColor, showAvatar)
                         is ChatItem.Reasoning -> AgentSideRow(showAvatar, agent.role, agent.id, roleColor) { ReasoningBlock(row.lines) }
+                        is ChatItem.Contribution -> ContributionRow(row.item)
                     }
                 }
                 // The live status row is agent-side too: it opens a run only when no agent line precedes it.
@@ -543,7 +548,7 @@ private fun SpeakerRow(avatar: @Composable () -> Unit, content: @Composable () -
 private const val CHAT_AVATAR_SIZE = 36
 
 /** True for every line kind the agent produces; only the human's own [LineKind.USER] echo is not. */
-private fun ChatItem.isAgentSide(): Boolean = this !is ChatItem.Line || line.kind != LineKind.USER
+private fun ChatItem.isAgentSide(): Boolean = when (this) { is ChatItem.Line -> line.kind != LineKind.USER; is ChatItem.Reasoning -> true; is ChatItem.Contribution -> false }
 
 /**
  * M2-2: whether the agent-side item at [index] opens a run and so carries the agent's portrait. A run
@@ -1046,6 +1051,34 @@ internal fun SpawnRoleRow(state: AppState, controller: Controller) {
                 "Default for $role: ${bindingSummary(bound)}" + if (overridden) "  (overridden for this spawn: ${chosen?.let { it.provider + " / " + (it.model ?: "default") } ?: "daemon default"})" else "",
                 color = Palette.Muted, fontSize = 11.sp, modifier = Modifier.testTag(SPAWN_ROLE_DEFAULT_TAG),
             )
+        }
+    }
+}
+
+/** SCRIPT-VIS-1b: test tag on a plugin-contributed (automation) chat row. */
+const val CONTRIBUTION_ROW_TAG = "contribution-row"
+
+/** SCRIPT-VIS-1b: test tag on the expanded details of a contributed row. */
+const val CONTRIBUTION_DETAILS_TAG = "contribution-details"
+
+/**
+ * SCRIPT-VIS-1b: a line a plugin put in the chat without a turn. Drawn as automation (a gear mark, its label, a muted panel), never as the
+ * agent's speech; click to expand its [TimelineItem.details] (the run's actions and log lines). A failure is drawn in the error colour.
+ */
+@Composable
+fun ContributionRow(item: TimelineItem) {
+    var open by remember(item.id) { mutableStateOf(false) }
+    val tint = if (item.ok) Palette.Muted else Palette.Danger
+    Column(Modifier.fillMaxWidth().padding(vertical = 3.dp).background(Palette.Panel).testTag(CONTRIBUTION_ROW_TAG)
+        .clickable(enabled = item.details.isNotEmpty()) { open = !open }.padding(horizontal = 10.dp, vertical = 5.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("⚙", color = tint, fontSize = 13.sp)
+            Spacer(Modifier.width(8.dp))
+            Text(item.text.ifBlank { item.label }, color = tint, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            if (item.details.isNotEmpty()) Text(if (open) "▴" else "▾", color = Palette.Muted, fontSize = 12.sp)
+        }
+        if (open) Column(Modifier.padding(start = 21.dp, top = 3.dp).testTag(CONTRIBUTION_DETAILS_TAG)) {
+            item.details.forEach { Text(it, color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp) }
         }
     }
 }

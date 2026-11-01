@@ -493,6 +493,9 @@ class SessionManager(
         }
     }
 
+    /** SCRIPT-VIS-1b: display-only mark that a script hook works for session [id]; the state is untouched. */
+    fun setAutomation(id: String, mark: SessionAutomation?) { update(id) { it.copy(automation = mark) } }
+
     private val autoSeen = java.util.concurrent.ConcurrentHashMap<String, Pair<Boolean?, Int?>>()
 
     /**
@@ -699,7 +702,7 @@ class SessionManager(
             // STALL-1: a watched (`--notify`) job is KEPT across the restart: its runner re-registers by its next beat, or the pid
             // probe drops it and the watcher reports it ("exit N" from its exit file, else "runner lost, exit unknown").
             val persisted = loadedRecord.copy(
-                keptProcess = null, backgroundWork = null, watch = null, progress = null, watchLabel = null,
+                keptProcess = null, backgroundWork = null, automation = null, watch = null, progress = null, watchLabel = null,
                 bgJobs = loadedRecord.bgJobs.filter { it.notify != null }.map { it.copy(lastBeat = clock()) },
             ).let {
                 if ((loadedRecord.backgroundWork != null || loadedRecord.bgJobs.isNotEmpty()) && it.state == SessionState.BUSY && it.childPid == null) it.copy(state = SessionState.IDLE) else it

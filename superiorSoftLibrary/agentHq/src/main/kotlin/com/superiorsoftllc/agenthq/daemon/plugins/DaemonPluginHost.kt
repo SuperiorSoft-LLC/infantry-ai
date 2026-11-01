@@ -200,7 +200,9 @@ class DaemonPluginHost private constructor(
     fun incomingMail(mail: IncomingMail): MailVerdict? {
         for (h in incomingMailHooks) {
             if (h.owner.guard.disabled) continue
-            val v = h.owner.call("incomingMail") { h.value.incoming(mail) }.getOrNull()
+            val r = h.owner.call("incomingMail") { h.value.incoming(mail) }
+            r.exceptionOrNull()?.let { ex -> runCatching { h.value.lost(mail.id, "${ex.javaClass.simpleName}: ${ex.message?.take(160)}") } }
+            val v = r.getOrNull()
             if (v != null && (v.handled || v.text != null)) return v
         }
         return null

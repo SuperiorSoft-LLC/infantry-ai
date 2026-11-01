@@ -197,7 +197,16 @@ interface Sessions {
     fun resume(id: String, prompt: String): SessionInfo
     /** Back to never-run (the next turn is a first turn again). */
     fun restart(id: String)
+
+    /**
+     * SCRIPT-VIS-1b (additive): marks session [id] as being worked on by automation (a script hook) until cleared with null. Display only:
+     * the session shows [AutomationMark] on its record and the UI groups it under Running; its state (BUSY/IDLE) is not touched. Memory only.
+     */
+    fun setAutomation(id: String, mark: AutomationMark?) {}
 }
+
+/** SCRIPT-VIS-1b: which script is running for a session ([hookId] names the hook, [since] is epoch millis). */
+data class AutomationMark(val script: String, val hookId: String, val since: Long)
 
 /** The daemon's catalog entry of a frame: its action id, kind (`read|write|destructive|spawn`) and scope (`GLOBAL|PROJECT|SESSION`). */
 data class ActionInfo(val id: String, val kind: String, val scope: String)
@@ -435,6 +444,12 @@ data class MailVerdict(val handled: Boolean = false, val text: String? = null)
 /** 1.30.0 (MAIL-HOOK-1): runs before delivery; null = deliver as today. Fail open (a throwing or slow hook reads as null: a mail is never dropped); official / core only. */
 fun interface IncomingMailHook {
     fun incoming(mail: IncomingMail): MailVerdict?
+
+    /**
+     * SCRIPT-VIS-1b (additive): the host dropped this hook's answer for mail [mailId] (the call timed out, ran over its CPU limit or threw), so the
+     * mail was delivered as if the hook had passed. Lets the hook correct what it recorded about its own verdict. Never throws into the host.
+     */
+    fun lost(mailId: String, reason: String) {}
 }
 
 /** Every new session, whatever path creates it. Null = pass. Fail closed. */

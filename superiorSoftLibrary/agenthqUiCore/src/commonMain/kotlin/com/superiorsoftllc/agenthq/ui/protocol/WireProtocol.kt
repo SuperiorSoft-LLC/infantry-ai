@@ -133,6 +133,11 @@ data class Envelope(
         const val ATTENTION_ITEMS = "attention_items"
         const val ATTENTION_ACK = "attention_ack"
 
+        // SCRIPT-VIS-1b: chat contributions from plugins (see the daemon's Protocol.kt).
+        const val TIMELINE_ITEM = "timeline_item"
+        const val TIMELINE_LIST = "timeline_list"
+        const val TIMELINE_ITEMS = "timeline_items"
+
         // Contract 1.13.0: observed usage per run (sequenced on the session stream) and limit state per provider.
         const val USAGE = "usage"
         const val PROVIDER_STATE = "provider_state"
@@ -1115,6 +1120,8 @@ data class SessionRecord(
     val backgroundWork: BackgroundWorkView? = null,
     /** Jobs the agent registered through `agenthq bg run`; the wire state reads BUSY while any is present. */
     val bgJobs: List<BgJobView> = emptyList(),
+    /** SCRIPT-VIS-1b: set while a script hook works for the session; display only (the state is untouched). Null = none or an older daemon. */
+    val automation: AutomationView? = null,
     /** Contract 1.112.0: a turn is in flight (state BUSY alone may be background work only); null from an older daemon. */
     val turnActive: Boolean? = null,
     /** PIPELINE-WATCHDOG: what the daemon derived about this agent's pending work; null from an older daemon. */
@@ -1180,6 +1187,10 @@ data class ProgressView(
 
 @Serializable
 data class BgJobView(val id: String, val label: String, val pid: Long = 0, val startedAt: Long = 0)
+
+/** SCRIPT-VIS-1b: the script running for a session ([hookId] is the hook, [since] epoch millis). */
+@Serializable
+data class AutomationView(val script: String, val hookId: String = "", val since: Long = 0)
 
 @Serializable
 data class BackgroundWorkView(val pid: Long, val label: String, val startedAt: Long, val count: Int = 1)
