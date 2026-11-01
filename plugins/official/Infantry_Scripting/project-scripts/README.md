@@ -9,3 +9,7 @@ Install on a project:
     agenthq script hook add "lane enter done" on-ticket-done --payload '{"devBranch":"<dev branch>","vcRole":"<vc role id>","skipMarkers":["[HOLD]","[PARKED]"]}'
 
 Try it first: `agenthq_script_run` name `on-ticket-done`, dryRun true, args `{"ticketId":"<id>","branch":"<b>","tipSha":"<sha>","devBranch":"..","vcRole":".."}`.
+
+
+Hooks fire on a lane change: `"lane enter <lane>"` (ticket.moved `to`) or `"lane exit <lane>"` (ticket.moved `from`), any lane name (todo, in_progress, pending, done, custom), case-insensitive. Script args carry `from` and `to` for both, plus `lane` (the lane entered / left), ticketId, title, branch, tipSha, workerSession.
+    agenthq script hook add "lane exit in_progress" <script>

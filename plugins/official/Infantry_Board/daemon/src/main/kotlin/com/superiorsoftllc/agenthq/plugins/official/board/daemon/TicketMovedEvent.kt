@@ -8,7 +8,7 @@ import kotlinx.serialization.json.put
 /**
  * SCRIPT-5: the board's typed ticket events (a ticket entering a column) published as the named event `ticket.moved` on the SCRIPT-3 bus,
  * like `ticket.commented` (SCRIPT-3b). Payload: `ticketId`, `from` (null when created), `to` (the lane entered), `kind` (created, moved,
- * started, done) and `seq`. Scripts hang `on lane enter <lane>` hooks on it; the hook runner adds branch, tip and worker session itself.
+ * started, done) and `seq`. Scripts hang `on lane enter <lane>` / `lane exit <lane>` hooks (every committed move emits, the daemon's own included) on it; the hook runner adds branch, tip and worker session itself.
  * A failed publish never disturbs the board.
  */
 object TicketMovedEvent {

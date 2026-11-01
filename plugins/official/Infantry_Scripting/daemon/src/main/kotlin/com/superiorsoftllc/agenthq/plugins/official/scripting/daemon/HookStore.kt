@@ -12,12 +12,12 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.put
 
 /**
- * SCRIPT-5: what a hook listens to. Two forms, both data: `lane enter <lane>` (a ticket entered that board column; todo, in_progress,
+ * SCRIPT-5: what a hook listens to. Two forms, both data: `lane enter <lane>` / `lane exit <lane>` (a ticket entered / left that board column; todo, in_progress,
  * pending, done or any user lane) and a named event (`ticket.commented`, `merge.done`, a prefix `ticket.*`, or `*`), any event on the
  * SCRIPT-3 bus. A lane hook is the named event [LANE_EVENT] filtered on its `to` field.
  */
 sealed interface HookOn {
-    data class Lane(val lane: String) : HookOn { override fun toString() = "lane enter $lane" }
+    data class Lane(val lane: String, val exit: Boolean = false) : HookOn { override fun toString() = "lane ${if (exit) "exit" else "enter"} $lane" }
     data class Named(val pattern: String) : HookOn { override fun toString() = pattern }
 
     companion object {
@@ -32,11 +32,12 @@ sealed interface HookOn {
             require(t.isNotEmpty()) { "a hook needs 'on' (e.g. 'lane enter done' or 'ticket.commented')" }
             if (t.startsWith("lane ", ignoreCase = true)) {
                 val parts = t.split(' ')
-                require(parts.size == 3 && parts[1].equals("enter", ignoreCase = true) && LANE.matches(parts[2])) { "bad lane hook '$t' (expected: lane enter <lane>)" }
-                return Lane(parts[2].lowercase())
+                val dir = parts.getOrNull(1)?.lowercase()
+                require(parts.size == 3 && (dir == "enter" || dir == "exit") && LANE.matches(parts[2])) { "bad lane hook '$t' (expected: lane enter <lane> or lane exit <lane>)" }
+                return Lane(parts[2].lowercase(), dir == "exit")
             }
             val core = if (t == "*") "x" else t.removeSuffix(".*").removeSuffix(".")
-            require(NAME.matches(core)) { "bad event '$t' (a dotted lower-case name like ticket.commented, a prefix 'ticket.*', or 'lane enter <lane>')" }
+            require(NAME.matches(core)) { "bad event '$t' (a dotted lower-case name like ticket.commented, a prefix 'ticket.*', or 'lane enter <lane>', 'lane exit <lane>')" }
             return Named(t)
         }
     }

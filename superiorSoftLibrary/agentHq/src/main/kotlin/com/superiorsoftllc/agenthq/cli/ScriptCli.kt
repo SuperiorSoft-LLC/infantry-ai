@@ -8,10 +8,10 @@ import kotlinx.serialization.json.JsonPrimitive
 /**
  * SCRIPT-5: `agenthq script hook list | add <on> <script> [--payload <args json>|-] | remove <id>`: one call of the Scripting plugin's
  * `agenthq_script_hook` tool (`plugin_tool_call`), so the CLI and MCP share one answer and one gate. Name-neutral about what a hook
- * does: `<on>` is `"lane enter <lane>"` or a named event. Open to every role.
+ * does: `<on>` is `"lane enter <lane>"`, `"lane exit <lane>"` or a named event. Open to every role.
  */
 internal object ScriptCli {
-    const val USAGE = "usage: agenthq script hook list | add <on> <script> [--payload <args json>|-] | remove <id>   (<on>: \"lane enter done\" or an event name like ticket.commented)"
+    const val USAGE = "usage: agenthq script hook list | add <on> <script> [--payload <args json>|-] | remove <id>   (<on>: \"lane enter done\", \"lane exit in_progress\" or an event name like ticket.commented)"
 
     fun usageError(args: List<String>): String? = when {
         args.size >= 2 && args[0] == "hook" && args[1] == "list" && args.size == 2 -> null

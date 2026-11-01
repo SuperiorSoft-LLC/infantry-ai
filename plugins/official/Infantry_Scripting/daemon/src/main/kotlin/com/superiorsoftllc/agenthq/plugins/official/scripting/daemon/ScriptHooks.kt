@@ -28,8 +28,8 @@ data class HookGuardConfig(
 /**
  * SCRIPT-5: runs project hooks (see [HookStore]) when events happen, daemon-side: no model, no tokens.
  *
- * One subscription to the SCRIPT-3 bus. A hook fires when its `on` matches: a named event, or `lane enter <lane>` (the daemon's
- * lane-change event `ticket.moved` whose `to` is that lane). The script gets the hook's own `args` overlaid with the event payload,
+ * One subscription to the SCRIPT-3 bus. A hook fires when its `on` matches: a named event, or `lane enter <lane>` / `lane exit <lane>` (the daemon's
+ * lane-change event `ticket.moved` whose `to` / `from` is that lane). The script gets the hook's own `args` overlaid with the event payload,
  * a ticket event enriched with the ticket's project, branch, tip sha and worker session, as `input.args` (plus `args.event`).
  * It runs as caller `script:<hook script>` with the identity of whoever added the hook, the SCRIPT-4 rules.
  *
@@ -181,7 +181,7 @@ class ScriptHooks(
             put("branch", str(ticket, "branch")); put("base", str(ticket, "base")); put("workerSession", str(ticket, "sessionId"))
             str(ticket, "branch")?.let { b -> put("tipSha", runCatching { tip(project, b) }.getOrNull()) }
         }
-        if (hook.on is HookOn.Lane) put("lane", str(payload, "to"))
+        if (hook.on is HookOn.Lane) { put("lane", str(payload, if (hook.on.exit) "from" else "to")); put("from", str(payload, "from")); put("to", str(payload, "to")) }
         m["event"] = mapOf("name" to e.name, "id" to e.id, "causeId" to e.causeId, "depth" to depth.toLong(), "source" to e.source)
         m["hook"] = hook.id
         return m
@@ -202,7 +202,7 @@ class ScriptHooks(
         val DEFAULT_EXECUTOR: (() -> Unit) -> Unit = { job -> pool.execute { runCatching { job() } } }
 
         fun matches(on: HookOn, eventName: String, payload: JsonObject): Boolean = when (on) {
-            is HookOn.Lane -> eventName == HookOn.LANE_EVENT && (payload["to"] as? JsonPrimitive)?.contentOrNull.equals(on.lane, ignoreCase = true)
+            is HookOn.Lane -> eventName == HookOn.LANE_EVENT && (payload[if (on.exit) "from" else "to"] as? JsonPrimitive)?.contentOrNull.equals(on.lane, ignoreCase = true)
             is HookOn.Named -> when {
                 on.pattern == "*" -> true
                 on.pattern.endsWith(".*") -> eventName.startsWith(on.pattern.dropLast(1))
