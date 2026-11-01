@@ -177,6 +177,30 @@ class MailRouter(
     /** SCRIPT-3: told after every accepted send (the daemon publishes `mail.sent`); a failing listener never fails the send. */
     @Volatile var onSent: ((Message) -> Unit)? = null
 
+    /**
+     * MAIL-HOOK-1: asked after [onSent], BEFORE any wake / injection, with the mail and its resolved recipient. A verdict with
+     * `handled` marks the mail read and wakes nobody; one with `text` replaces the delivered text of that one mail. Null, a
+     * throw or no hook = delivery as today: a failing hook never drops a mail.
+     */
+    @Volatile var onIncoming: ((IncomingMailInfo) -> MailVerdictInfo?)? = null
+
+    /** What [onIncoming] sees: the stored [message] and the live session it resolves to (null when it does not resolve). */
+    data class IncomingMailInfo(val message: Message, val recipientSessionId: String?, val recipientRole: String?, val projectId: String? = null)
+
+    /** [handled]: read, nobody woken. [text]: replaces the delivered text of this mail. */
+    data class MailVerdictInfo(val handled: Boolean, val text: String? = null)
+
+    /** Replacement texts a hook gave, by message id; consumed at delivery. */
+    private val replacementText = ConcurrentHashMap<String, String>()
+
+    private fun incomingVerdict(message: Message): MailVerdictInfo? {
+        val hook = onIncoming ?: return null
+        return runCatching {
+            val resolved = (resolveRecipient(message.to, message.from, message.id in crossAllowed) as? RecipientResolution.Resolved)?.let { manager.get(it.sessionId) }
+            hook(IncomingMailInfo(message, resolved?.id, resolved?.role, resolved?.projectId))
+        }.getOrNull()
+    }
+
     fun send(request: MailSendRequest): MailResult {
         if (request.to == MailAddresses.STARTER) reportCheck?.invoke(request.from, request.body)?.let { return MailResult.Refused(it) }
         crossProjectRefusal(request)?.let { return MailResult.Refused(it) }
@@ -184,6 +208,10 @@ class MailRouter(
         if (result is MailResult.Sent) {
             runCatching { onSent?.invoke(result.message) }
             if (request.allowCrossProject) crossAllowed.add(result.message.id)
+            val verdict = incomingVerdict(result.message)
+            if (verdict != null && verdict.handled) {
+                if (mailbox.markHandled(result.message.id) != null) return result
+            } else if (verdict?.text != null) replacementText[result.message.id] = verdict.text
             // Pump by the ORIGINAL recipient address (session id, agent id, or role name), because
             // that is how the message is keyed in the mailbox. `deliver` resolves it to a session.
             // OVERNIGHT-1: the debounce never exceeds the hard bound.
@@ -358,7 +386,8 @@ class MailRouter(
             // OVERNIGHT-1: EVERYTHING queued for the session goes into this ONE turn (a backlog is never replayed as one turn per item).
             val folded = if (session.neverRun) emptyList() else rest
             val group = listOf(message) + folded
-            val mailText = if (group.size > 1) compactTurn(group)
+            val replaced = if (group.size == 1) replacementText.remove(message.id) else null
+            val mailText = if (replaced != null) replaced else if (group.size > 1) compactTurn(group)
             else renderTurn(deliveryMode(session.role ?: "", session.id), group, source) { MailSource.of(it, manager, automationFooter) }
             val text = if (handoff != null) handoff + MAIL_FOLD_SEPARATOR + mailText else mailText
             val turn = if (session.neverRun) {
