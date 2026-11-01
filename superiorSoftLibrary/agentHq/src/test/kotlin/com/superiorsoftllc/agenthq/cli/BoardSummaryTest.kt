@@ -38,7 +38,7 @@ class BoardSummaryTest {
         ) { "abc1234" }
         assertEquals(listOf("todo (1)", "in_progress (1)", "done (1)"), lines.filter { !it.startsWith("  ") })
         val line = lines.single { it.contains("bbbbbbb2") }
-        assertTrue("qa s1234567" in line && "running background process (gradlew test)" in line && "ticket/b@abc1234" in line, line)
+        assertTrue("qa s1234567" in line && "working (background: gradlew test)" in line && "ticket/b@abc1234" in line, line)
     }
 
     @Test

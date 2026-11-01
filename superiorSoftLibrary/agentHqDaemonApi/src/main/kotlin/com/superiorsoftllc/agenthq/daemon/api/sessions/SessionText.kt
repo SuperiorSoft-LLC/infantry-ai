@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
 object SessionText {
     /** The live-state words, shared with the background-work card: busy / idle / running background process. */
     fun liveState(session: SessionView): String = when {
-        session.backgroundWork != null -> "running background process (${session.backgroundWork.take(40)})"
+        session.backgroundWork != null -> "working (background: ${session.backgroundWork.take(40)})"
         session.state == "BUSY" || session.state == "STARTING" -> "busy"
         session.state == "WAITING_INPUT" -> "waiting for input"
         session.state == "IDLE" -> "idle"
