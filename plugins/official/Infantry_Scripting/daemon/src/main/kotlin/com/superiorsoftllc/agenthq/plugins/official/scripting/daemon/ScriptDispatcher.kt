@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.plugins.official.scripting.daemon
 
 import com.superiorsoftllc.agenthq.daemon.api.ToolInvoker
+import com.superiorsoftllc.agenthq.daemon.api.ToolResult
 import com.superiorsoftllc.agenthq.daemon.api.Tools
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -56,10 +57,14 @@ class ScriptDispatcher(
     /** short name -> registry tool name, read at each run (data: the `scripting.aliases` setting). */
     private val aliases: () -> Map<String, String>,
     private val maxPhases: () -> Int = { 3 },
+    /** SCRIPT-TICK-1: the project a session belongs to (null = unknown); lets a script's progress call target another session of the same project. */
+    private val sessionProject: (String) -> String? = { null },
 ) {
     fun run(
         engine: ScriptEngine, source: String, args: Map<String, Any?>, limits: ScriptLimits, caller: ScriptCaller,
         invoker: ToolInvoker, dryRun: Boolean,
+        /** SCRIPT-TICK-1: the session a hook acts for (its `to`); `agenthq_progress` from the script lands on its card unless the call names a `sessionId`. */
+        progressTo: String? = null,
         /** SCRIPT-5: told the resolved actions of each phase BEFORE any of them runs (the hook loop guard attributes the events they cause). */
         onPlanned: (List<ActionRecord>) -> Unit = {},
     ): RunReport {
@@ -100,7 +105,7 @@ class ScriptDispatcher(
             for (p in planned) {
                 // An action may say `_optional = true`: its failure is recorded (ok=false in input.results) but does not stop the run.
                 val optional = p.args[OPTIONAL] == true
-                val res = tools.invoke(p.tool, toObject(if (optional) p.args - OPTIONAL else p.args), invoker)
+                val res = if (p.tool == PROGRESS) progress(p, optional, invoker, progressTo) else tools.invoke(p.tool, toObject(if (optional) p.args - OPTIONAL else p.args), invoker)
                 records += p.copy(ok = !res.isError, text = res.text)
                 results += mapOf("name" to p.requested, "tool" to p.tool, "ok" to !res.isError, "text" to res.text, "json" to jsonOf(res.text))
                 if (res.isError && !optional) return RunReport("ACTION_FAILED", records, logs, phase, false, "action ${records.size} (${p.tool}) failed: ${res.text.take(300)}", records.size)
@@ -108,6 +113,18 @@ class ScriptDispatcher(
             if (!again) return RunReport("OK", records, logs, phase, false, handled = handled, deliverText = deliverText)
         }
         return RunReport("PHASES_EXHAUSTED", records, logs, phase, dryRun, "ih.again() ignored: maxPhases ($phases) reached")
+    }
+
+    /** SCRIPT-TICK-1: runs `agenthq_progress` for the session the script acts for: `sessionId` arg, else [progressTo], else the invoker's own. Same project only. */
+    private fun progress(p: ActionRecord, optional: Boolean, invoker: ToolInvoker, progressTo: String?): ToolResult {
+        val named = (p.args[SESSION_ID] as? String)?.trim()?.takeIf { it.isNotEmpty() }
+        val args = p.args - SESSION_ID - (if (optional) setOf(OPTIONAL) else emptySet())
+        val target = named ?: progressTo
+        if (target == null || target == invoker.sessionId) return tools.invoke(p.tool, toObject(args), invoker)
+        val project = sessionProject(target)
+        if (project == null || project != invoker.projectId) return ToolResult("$PROGRESS refused: session '$target' is not a session of this project", true)
+        val as2 = invoker.copy(sessionId = target, caller = if (invoker.caller.owner) invoker.caller else invoker.caller.copy(activeSession = target))
+        return tools.invoke(p.tool, toObject(args), as2)
     }
 
     private fun toObject(m: Map<String, Any?>): JsonObject = ScriptEngineWire.toJson(m) as JsonObject
@@ -124,8 +141,10 @@ class ScriptDispatcher(
         const val HANDLED = "handled"
         const val DELIVER_TEXT = "deliver_text"
         /** Names every project has without configuring: the process bridge (SCRIPT-CMD-1). */
-        val BUILTIN_ALIASES = mapOf("exec" to "agenthq_exec", "cli" to "agenthq_exec", "exec_status" to "agenthq_exec_status")
+        val BUILTIN_ALIASES = mapOf("exec" to "agenthq_exec", "cli" to "agenthq_exec", "exec_status" to "agenthq_exec_status", "progress" to "agenthq_progress")
         const val OPTIONAL = "_optional"
+        const val PROGRESS = "agenthq_progress"
+        const val SESSION_ID = "sessionId"
         const val HARD_MAX_PHASES = 10
     }
 }

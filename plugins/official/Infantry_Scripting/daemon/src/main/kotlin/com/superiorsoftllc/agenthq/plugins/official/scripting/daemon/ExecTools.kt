@@ -76,7 +76,11 @@ class ExecTools(
     private val publish: (name: String, payload: String) -> Unit,
     private val log: (String) -> Unit,
 ) {
-    private class Run(val id: String, val command: String, val script: String, val session: String) {
+    private class Run(val id: String, val command: String, val script: String, val session: String, val project: String? = null) {
+        val started = System.currentTimeMillis()
+        @Volatile var lastTickBytes = 0L
+        @Volatile var out: Tail? = null
+        @Volatile var err: Tail? = null
         @Volatile var state = "running"
         @Volatile var result: JsonObject? = null
     }
@@ -143,7 +147,7 @@ class ExecTools(
         val stdin = (a["stdin"] as? JsonPrimitive)?.contentOrNull
         val script = (a["script"] as? JsonPrimitive)?.contentOrNull.orEmpty()
         val background = (a["background"] as? JsonPrimitive)?.booleanOrNull == true
-        val run = Run(UUID.randomUUID().toString().take(8), line, script, call.clientSessionId.orEmpty())
+        val run = Run(UUID.randomUUID().toString().take(8), line, script, call.clientSessionId.orEmpty(), project)
         val work = { execute(run, argv, cwd, env, timeout, stdin, s.tailChars, role, background) }
         if (!background) return ToolResult(work().toString())
         pruneRuns()
@@ -156,6 +160,7 @@ class ExecTools(
         val started = System.nanoTime()
         val out = Tail(tail)
         val err = Tail(tail)
+        run.out = out; run.err = err
         var exit = -1
         var timedOut = false
         var failure: String? = null
@@ -191,9 +196,31 @@ class ExecTools(
         if (background) {
             run.result = result
             run.state = if (timedOut) "timeout" else "done"
-            publish("exec.done", buildJsonObject { put("id", run.id); put("exitCode", exit); put("script", run.script); put("session", run.session); put("timedOut", timedOut) }.toString())
+            publish("exec.done", buildJsonObject { put("id", run.id); put("exitCode", exit); put("script", run.script); put("session", run.session); put("timedOut", timedOut); run.project?.let { put("projectId", it) } }.toString())
         }
         return result
+    }
+
+    /**
+     * SCRIPT-TICK-1: publishes the named event `exec.tick` for each live background run: {id, script, session, projectId, elapsedMs,
+     * stdoutTail, stderrTail, bytesSinceLast}. Called about every `scripting.exec.tickSec` (default 10) by the plugin; a run that
+     * ended is not ticked (exec.done announced it).
+     */
+    fun tick() {
+        val now = System.currentTimeMillis()
+        for (r in runs.values) {
+            if (r.state != "running") continue
+            val o = r.out; val e = r.err
+            val total = (o?.total() ?: 0L) + (e?.total() ?: 0L)
+            val since = total - r.lastTickBytes
+            r.lastTickBytes = total
+            runCatching {
+                publish("exec.tick", buildJsonObject {
+                    put("id", r.id); put("script", r.script); put("session", r.session); r.project?.let { put("projectId", it) }
+                    put("elapsedMs", now - r.started); put("stdoutTail", o?.text().orEmpty()); put("stderrTail", e?.text().orEmpty()); put("bytesSinceLast", since)
+                }.toString())
+            }
+        }
     }
 
     private fun pruneRuns() {
@@ -203,12 +230,14 @@ class ExecTools(
 
     private class Tail(private val cap: Int) {
         private val sb = StringBuilder()
+        @Volatile private var count = 0L
+        fun total(): Long = count
         fun pump(r: java.io.Reader) {
             val buf = CharArray(4096)
             while (true) {
                 val n = r.read(buf)
                 if (n < 0) break
-                synchronized(sb) { sb.append(buf, 0, n); if (sb.length > cap * 2) sb.delete(0, sb.length - cap) }
+                synchronized(sb) { count += n; sb.append(buf, 0, n); if (sb.length > cap * 2) sb.delete(0, sb.length - cap) }
             }
         }
         fun text(): String = synchronized(sb) { if (sb.length > cap) sb.substring(sb.length - cap) else sb.toString() }
@@ -218,6 +247,9 @@ class ExecTools(
         const val EXEC = "agenthq_exec"
         const val STATUS = "agenthq_exec_status"
         private const val MAX_RUNS = 100
+
+        /** Seconds between exec.tick events: setting scripting.exec.tickSec, default 10, 1..3600. */
+        fun tickSec(config: (String) -> String?): Long = config("scripting.exec.tickSec")?.trim()?.toLongOrNull()?.takeIf { it in 1L..3600L } ?: 10L
 
         /** `re:<regex>` must match the whole command line; anything else is a prefix. */
         fun matches(pattern: String, line: String): Boolean =

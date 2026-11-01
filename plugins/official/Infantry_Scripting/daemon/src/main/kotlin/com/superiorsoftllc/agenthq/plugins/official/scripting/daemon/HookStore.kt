@@ -19,10 +19,14 @@ import kotlinx.serialization.json.put
 sealed interface HookOn {
     data class Lane(val lane: String, val exit: Boolean = false) : HookOn { override fun toString() = "lane ${if (exit) "exit" else "enter"} $lane" }
     data class Named(val pattern: String) : HookOn { override fun toString() = pattern }
+    /** SCRIPT-TICK-1: a timer, `every <N>s` (the plugin setting scripting.hooks.minEverySec is the floor). */
+    data class Every(val seconds: Long) : HookOn { override fun toString() = "every ${seconds}s" }
 
     companion object {
         /** The named event a ticket lane change is published as (by the daemon's ticket stream); lane hooks subscribe to it. */
         const val LANE_EVENT = "ticket.moved"
+        /** SCRIPT-TICK-1: the named event fired for each live background exec run. */
+        const val EXEC_TICK = "exec.tick"
         private val LANE = Regex("[A-Za-z0-9][A-Za-z0-9_.-]{0,63}")
         private val NAME = Regex("[a-z][a-z0-9_-]*([.][a-z0-9][a-z0-9_-]*)*")
 
@@ -30,6 +34,11 @@ sealed interface HookOn {
         fun parse(text: String): HookOn {
             val t = text.trim().replace(Regex("\\s+"), " ")
             require(t.isNotEmpty()) { "a hook needs 'on' (e.g. 'lane enter done' or 'ticket.commented')" }
+            if (t.startsWith("every ", ignoreCase = true)) {
+                val n = Regex("""every (\d{1,7})s""", RegexOption.IGNORE_CASE).matchEntire(t)?.groupValues?.get(1)?.toLongOrNull()
+                require(n != null && n > 0) { "bad timer hook '$t' (expected: every <N>s, e.g. every 30s)" }
+                return Every(n)
+            }
             if (t.startsWith("lane ", ignoreCase = true)) {
                 val parts = t.split(' ')
                 val dir = parts.getOrNull(1)?.lowercase()
