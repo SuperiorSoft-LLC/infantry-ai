@@ -101,3 +101,7 @@ TEST-TODO: `events.broadcast` / `hooks.connected` / `QuestionsOpen` (DaemonPlugi
 - TriggerPortsGuardTest `triggers imports nothing outside protocol and daemon api`: scans triggers/*.kt imports; expected only protocol, daemon.api, kotlin/java.
 - TriggerServiceTest `startNext is not called under the trigger lock`: startNext blocks; events() from another thread returns within 2 s.
 - Pre-existing (also on base): TriggerDaemonTest aPromptTriggerForAnUnknownAgentTripsAndStartsNothing, aFailedRunTripsTheTriggerRaisesAttentionAndSuppressesUntilArmed, aTriggerRunningWhenTheDaemonStopsComesBackTripped fail; unrelated to this change.
+
+## TRIG-2a
+- TEST-TODO: POST a template public route (`/hooks/{id}`) from a real plugin without a bearer token: expect the handler to see pathParams; with the plugin disabled expect 503.
+- TEST-TODO: a plugin `hooks.status` field appears under `pluginStatus` in GET /health.
