@@ -216,26 +216,7 @@ interface ProviderStateRepository {
 }
 
 /** Story 9.5: triggers and the durable disposition row of every event they received. */
-interface TriggerRepository {
-    /** Stores [trigger] with its schedule period [intervalMs] (null = not a timed trigger, or never due). */
-    fun upsert(trigger: TriggerView, intervalMs: Long?)
-    fun get(id: String): TriggerView?
-    fun all(): List<TriggerView>
-    /** Every stored schedule period, keyed by trigger id. Read once at daemon start to restore due times. */
-    fun intervals(): Map<String, Long>
-    /** Removes the trigger and its event rows; false when there was no such trigger. */
-    fun delete(id: String): Boolean
-    /** Stores [event] (replacing a row with its id) and keeps only the newest [keep] rows of its trigger. */
-    fun insertEvent(event: TriggerEventView, keep: Long = 500)
-    fun events(triggerId: String): List<TriggerEventView>
-    /** P9.6: stores (replacing) the per-hook HMAC secret of a webhook trigger. Never part of [TriggerView]. */
-    fun setWebhookSecret(triggerId: String, secret: String)
-    fun webhookSecret(triggerId: String): String?
-    fun deleteWebhookSecret(triggerId: String)
-    /** TRIGGER-NUDGE: the id of the trigger's prompt mail still waiting for its target, or null. Kept across [upsert]. */
-    fun pendingMail(triggerId: String): String?
-    fun setPendingMail(triggerId: String, mailId: String?)
-}
+interface TriggerRepository : com.superiorsoftllc.agenthq.daemon.api.triggers.TriggerStore // TRIG-1: the members (and their docs) live on the port
 
 /** The repositories plus the cross-table operations that must be atomic. */
 interface AgentHqStore : Closeable {

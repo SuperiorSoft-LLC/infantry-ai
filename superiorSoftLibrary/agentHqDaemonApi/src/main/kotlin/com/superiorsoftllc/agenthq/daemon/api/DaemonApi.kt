@@ -110,7 +110,11 @@ interface DaemonApi {
      */
     fun files(projectId: String): com.superiorsoftllc.agenthq.daemon.api.files.ProjectFiles = com.superiorsoftllc.agenthq.daemon.api.files.NoProjectFiles
 
+    /** TRIG-1 (1.28.0, additive): the ports the triggers service runs on (daemon.api.triggers). A daemon without them answers nothing. */
+    val triggerHost: com.superiorsoftllc.agenthq.daemon.api.triggers.TriggerHost? get() = null
+
     companion object {
+        // 1.28.0 (TRIG-1, additive): `triggerHost` (daemon.api.triggers.TriggerHost): trigger store, sessions, mail, spawn-with-binding, run events.
         // 1.27.0 (SCRIPT-4, additive): `tools.catalog` / `tools.invoke` (ToolInfo, ToolInvoker): the live tool registry, reachable by an official plugin.
         // 1.26.0 (SCRIPT-3, additive): `events.publish` / `events.subscribe` (NamedEvent): generic named events any plugin / agent publishes.
         // 1.24.0 (TICKET-COMMENTS-4, additive): daemon.api.tickets.TicketReports (published by Infantry_Board); a new ticket carries the report line (setting board.ticket.reportLine).
@@ -138,7 +142,7 @@ interface DaemonApi {
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
-        const val VERSION = "1.27.0"
+        const val VERSION = "1.28.0"
     }
 }
 

@@ -1,10 +1,9 @@
 package com.superiorsoftllc.agenthq.triggers
 
 import com.superiorsoftllc.agenthq.daemon.api.board.PromptStart
-import com.superiorsoftllc.agenthq.mailbox.MailResult
-import com.superiorsoftllc.agenthq.mailbox.MailSendRequest
-import com.superiorsoftllc.agenthq.session.SessionRecord
-import com.superiorsoftllc.agenthq.session.isInSession
+import com.superiorsoftllc.agenthq.daemon.api.triggers.TriggerMailRequest
+import com.superiorsoftllc.agenthq.daemon.api.triggers.TriggerMailResult
+import com.superiorsoftllc.agenthq.daemon.api.triggers.TriggerSession
 
 /**
  * TRIGGER-NUDGE (contract 1.105.0): a `prompt` action delivered the way a colleague would deliver it -- as MAIL to the
@@ -23,8 +22,8 @@ import com.superiorsoftllc.agenthq.session.isInSession
  * per-thread ceiling.
  */
 class TriggerNudges(
-    private val sessions: () -> List<SessionRecord>,
-    private val send: (MailSendRequest) -> MailResult,
+    private val sessions: () -> List<TriggerSession>,
+    private val send: (TriggerMailRequest) -> TriggerMailResult,
     private val startSession: (agentId: String, prompt: String, projectId: String?) -> PromptStart,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
@@ -38,7 +37,7 @@ class TriggerNudges(
             }
         }
         // Addressed to the agent when the session has one, so the mail follows the agent (and drains when it rests).
-        val request = MailSendRequest(
+        val request = TriggerMailRequest(
             from = "$SENDER_PREFIX${nudge.triggerId}",
             to = target.agentId?.takeIf { it.isNotBlank() } ?: target.id,
             subject = "Trigger: ${nudge.triggerName}",
@@ -46,13 +45,13 @@ class TriggerNudges(
             threadId = "$SENDER_PREFIX${nudge.triggerId}:${clock()}",
         )
         return when (val sent = send(request)) {
-            is MailResult.Sent -> PromptDelivery.Mailed(sent.message.id)
-            is MailResult.Refused -> PromptDelivery.Refused("prompt mail refused: ${sent.reason}")
+            is TriggerMailResult.Sent -> PromptDelivery.Mailed(sent.mailId)
+            is TriggerMailResult.Refused -> PromptDelivery.Refused("prompt mail refused: ${sent.reason}")
         }
     }
 
-    internal fun target(nudge: TriggerNudge): SessionRecord? {
-        val reachable = sessions().filter { it.isInSession() }
+    internal fun target(nudge: TriggerNudge): TriggerSession? {
+        val reachable = sessions().filter { it.reachable }
         val candidates = if (nudge.agentId.startsWith(ROLE_PREFIX)) {
             val role = nudge.agentId.removePrefix(ROLE_PREFIX)
             val project = nudge.projectId?.takeIf { it.isNotBlank() }

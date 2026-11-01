@@ -1,14 +1,14 @@
 package com.superiorsoftllc.agenthq.triggers
 
 import com.superiorsoftllc.agenthq.daemon.api.board.PromptStart
-import com.superiorsoftllc.agenthq.mailbox.MailResult
-import com.superiorsoftllc.agenthq.mailbox.MailSendRequest
+import com.superiorsoftllc.agenthq.daemon.api.triggers.TriggerMailRequest
+import com.superiorsoftllc.agenthq.daemon.api.triggers.TriggerMailResult
+import com.superiorsoftllc.agenthq.daemon.api.triggers.TriggerSession
 import com.superiorsoftllc.agenthq.mailbox.Message
 import com.superiorsoftllc.agenthq.mailbox.MessageState
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
 import com.superiorsoftllc.agenthq.protocol.TriggerAction
 import com.superiorsoftllc.agenthq.protocol.TriggerSave
-import com.superiorsoftllc.agenthq.session.SessionRecord
 import com.superiorsoftllc.agenthq.session.SessionState
 import java.nio.file.Files
 import kotlin.test.AfterTest
@@ -282,17 +282,17 @@ class TriggerNudgeTest {
     // --- TriggerNudges: which session a nudge is mailed to ------------------------------------------------------
 
     private fun session(id: String, role: String?, projectId: String?, agentId: String? = "agent-$id", state: SessionState = SessionState.IDLE, spawnedAt: Long = 0) =
-        SessionRecord(
-            id = id, provider = "claude", workingDir = ".", spawnedAt = spawnedAt, lastHeartbeat = 0, state = state,
-            providerSessionId = "p-$id", runCount = 1, agentId = agentId, role = role, projectId = projectId,
+        TriggerSession(
+            id = id, agentId = agentId, role = role, projectId = projectId, spawnedAt = spawnedAt,
+            live = state == SessionState.BUSY, reachable = true, state = state.name, runCount = 1,
         )
 
-    private fun nudges(sessions: List<SessionRecord>, sent: MutableList<MailSendRequest>, started: MutableList<String?> = mutableListOf(), launch: PromptStart = PromptStart.Started("s-new")) =
+    private fun nudges(sessions: List<TriggerSession>, sent: MutableList<TriggerMailRequest>, started: MutableList<String?> = mutableListOf(), launch: PromptStart = PromptStart.Started("s-new")) =
         TriggerNudges(
             sessions = { sessions },
             send = { request ->
                 sent += request
-                MailResult.Sent(Message(id = "m-1", threadId = request.threadId!!, seq = 1, from = request.from, to = request.to, subject = request.subject, body = request.body, sentAt = 0, state = MessageState.QUEUED))
+                TriggerMailResult.Sent("m-1")
             },
             startSession = { _, _, projectId -> started += projectId; launch },
             clock = { 42 },
@@ -302,7 +302,7 @@ class TriggerNudgeTest {
 
     @Test
     fun `a nudge is mailed to the pm of the trigger's project, the busy one first`() {
-        val sent = mutableListOf<MailSendRequest>()
+        val sent = mutableListOf<TriggerMailRequest>()
         val delivery = nudges(
             listOf(
                 session("other", "pm", "project-2", state = SessionState.BUSY, spawnedAt = 9),
@@ -322,7 +322,7 @@ class TriggerNudgeTest {
 
     @Test
     fun `any role resolves in the trigger's project - a qa nudge never reaches the pm`() {
-        val sent = mutableListOf<MailSendRequest>()
+        val sent = mutableListOf<TriggerMailRequest>()
         val qaNudge = TriggerNudge("trg-2", "qa sweep", "project-1", "role:qa", "re-run")
         nudges(listOf(session("pm", "pm", "project-1", state = SessionState.BUSY), session("qa", "qa", "project-1")), sent).deliver(qaNudge)
         assertEquals("agent-qa", sent.single().to)
@@ -333,7 +333,7 @@ class TriggerNudgeTest {
 
     @Test
     fun `a profile target is mailed through that agent's session`() {
-        val sent = mutableListOf<MailSendRequest>()
+        val sent = mutableListOf<TriggerMailRequest>()
         nudges(listOf(session("a", "fullstack", "project-1", agentId = "agent-1234")), sent)
             .deliver(TriggerNudge("trg-3", "x", null, "agent-1234", "go"))
         assertEquals("agent-1234", sent.single().to)
@@ -341,7 +341,7 @@ class TriggerNudgeTest {
 
     @Test
     fun `with no pm session in the project one is started there`() {
-        val sent = mutableListOf<MailSendRequest>()
+        val sent = mutableListOf<TriggerMailRequest>()
         val started = mutableListOf<String?>()
         val delivery = nudges(listOf(session("other", "pm", "project-2")), sent, started).deliver(pmNudge)
         assertEquals(PromptDelivery.Started("s-new"), delivery)
