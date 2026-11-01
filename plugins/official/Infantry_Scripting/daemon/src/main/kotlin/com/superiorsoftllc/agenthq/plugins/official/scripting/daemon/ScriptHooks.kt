@@ -69,7 +69,28 @@ class ScriptHooks(
      */
     fun onEvent(e: NamedEvent) {
         if (!enabled()) return
+        if (!firstDelivery(e)) { log("hooks: event ${e.name} ${e.id} already handled, not re-run"); return }
         executor { runCatching { dispatch(e) }.onFailure { log("hooks: event ${e.name} failed: ${it.javaClass.simpleName}: ${it.message?.take(200)}") } }
+    }
+
+    /** HOOK-DUP-1: idempotency. An event id, or the same ticket transition (ticket, seq, from, to) re-published under a new id by a retried delivery, runs hooks once. */
+    private val seenKeys = object : LinkedHashMap<String, Boolean>() {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Boolean>?) = size > 2048
+    }
+
+    private fun firstDelivery(e: NamedEvent): Boolean {
+        val keys = ArrayList<String>()
+        if (e.id.isNotBlank()) keys += "id:${e.id}"
+        if (e.name == "ticket.moved") {
+            val o = parse(e.payload)
+            val seq = str(o, "seq")
+            if (seq != null) keys += "moved:${str(o, "ticketId")}:$seq:${str(o, "from")}:${str(o, "to")}"
+        }
+        synchronized(seenKeys) {
+            if (keys.any { it in seenKeys }) return false
+            keys.forEach { seenKeys[it] = true }
+        }
+        return true
     }
 
     private fun dispatch(e: NamedEvent) {

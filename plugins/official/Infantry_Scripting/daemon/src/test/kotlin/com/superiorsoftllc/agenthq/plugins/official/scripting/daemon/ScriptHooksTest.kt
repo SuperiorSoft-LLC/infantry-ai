@@ -86,10 +86,28 @@ class ScriptHooksTest {
         )
     }
 
-    private fun moved(ticket: String = "ticket-aaaa1111", to: String = "done", depth: Int = 0) =
-        NamedEvent("ticket.moved", """{"ticketId":"$ticket","from":"in_progress","to":"$to","kind":"moved","seq":5}""", "daemon", "ev-$ticket-$to", "ev-$ticket-$to", depth, 1)
+    private var evSeq = 100
+    /** Each call is a new event (fresh id and seq); [fixedSeq] makes a literal redelivery. */
+    private fun moved(ticket: String = "ticket-aaaa1111", to: String = "done", depth: Int = 0, fixedSeq: Int? = null): NamedEvent {
+        val seq = fixedSeq ?: ++evSeq
+        return NamedEvent("ticket.moved", """{"ticketId":"$ticket","from":"in_progress","to":"$to","kind":"moved","seq":$seq}""", "daemon", "ev-$seq", "ev-$seq", depth, 1)
+    }
 
     private fun putHooks(vararg hooks: String) = files.put(HookStore.PATH, hooksJson(*hooks).toByteArray())
+
+    @Test fun `a redelivered event id, or the same transition re-published under a new id, runs the hook once`() {
+        putHooks(doneHook)
+        val engine = FakeEngine { emptyList() }
+        val hooks = build(engine)
+        val first = moved(fixedSeq = 7)
+        hooks.onEvent(first); hooks.onEvent(first)
+        assertEquals(1, engine.inputs.size)
+        val e = moved(fixedSeq = 7)
+        hooks.onEvent(NamedEvent(e.name, e.payload, e.source, "other-id", "other-id", 0, 2))
+        assertEquals(1, engine.inputs.size)
+        hooks.onEvent(moved("ticket-bbbb2222"))
+        assertEquals(2, engine.inputs.size)
+    }
 
     @Test fun `a project with no directory is skipped with one warning and the good project's hook still fires`() {
         putHooks(doneHook)
@@ -116,7 +134,7 @@ class ScriptHooksTest {
                 val engine = FakeEngine { emptyList() }
                 val hooks = build(engine)
                 val other = "zzz"
-                val ev = { from: String, to: String -> NamedEvent("ticket.moved", """{"ticketId":"ticket-aaaa1111","from":"$from","to":"$to","kind":"moved","seq":5}""", "daemon", "e-$from-$to", "e-$from-$to", 0, 1) }
+                val ev = { from: String, to: String -> NamedEvent("ticket.moved", """{"ticketId":"ticket-aaaa1111","from":"$from","to":"$to","kind":"moved","seq":${++evSeq}}""", "daemon", "e-$from-$to-${++evSeq}", "e-$from-$to-$evSeq", 0, 1) }
                 if (dir == "enter") { hooks.onEvent(ev(other, lane)); hooks.onEvent(ev(lane, other)) } else { hooks.onEvent(ev(lane, other)); hooks.onEvent(ev(other, lane)) }
                 assertEquals(1, engine.inputs.size, "$dir $lane")
                 val a = engine.inputs.single()["args"] as Map<*, *>
