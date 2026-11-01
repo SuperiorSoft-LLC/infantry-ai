@@ -153,3 +153,5 @@ TEST-TODO (SCRIPT-VIS-1): in a live daemon with a mail.incoming hook that handle
 TEST-TODO: HOOK-DEPTH-1 (e5271b5d): a done-hook starts a worker; its finish minutes later must run the done hook (no loop guard refusal); a hook that re-triggers itself within attributionMs is still stopped at maxDepth.
 
 TEST-TODO: ROLE-NOTE-1 (bcdfcce6): set `context.includeFinishInstructions` false for a project, start a ticket worker: its brief has no 'WHEN YOU ARE FINISHED' / 'Report to' line and shows the role notes; default (unset) is unchanged. Role notes appear as name: description only; the worker must `memory show` the body.
+
+TEST-TODO: KILL-TIMEOUT-1 (1e4f25f0): finish a ticket so the done hook runs agenthq_session_remove force=true; it must answer at once (no "kill got no answer in 30000 ms" mail). Not run against a live daemon.

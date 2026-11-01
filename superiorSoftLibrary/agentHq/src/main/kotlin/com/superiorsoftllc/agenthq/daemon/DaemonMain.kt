@@ -3006,7 +3006,7 @@ private suspend fun handleConnection(
                     val saved = roles.save(RoleSave.decode(envelope.data))
                     broadcastRole(clients, saved)
                     // RUNTIME-LOAD-3: a plugin tool waits for its own request id; the broadcast above carries none.
-                    if (envelope.requestId?.startsWith("plugin:") == true) Envelope(Envelope.ROLE, json.encodeToString(Role.serializer(), saved)) else null
+                    if (wantsDirectAck(envelope)) Envelope(Envelope.ROLE, json.encodeToString(Role.serializer(), saved)) else null
                 } catch (e: IllegalArgumentException) {
                     Envelope(Envelope.ERROR, "role_save refused: ${e.message ?: "invalid role"}")
                 } catch (e: Exception) {
@@ -3023,7 +3023,7 @@ private suspend fun handleConnection(
                     val push = if (remaining != null) Envelope(Envelope.ROLE, json.encodeToString(Role.serializer(), remaining))
                     else Envelope(Envelope.ROLE_REMOVED, id)
                     for (client in clients) client.trySend(push)
-                    if (envelope.requestId?.startsWith("plugin:") == true) push else null
+                    if (wantsDirectAck(envelope)) push else null
                 } catch (e: IllegalArgumentException) {
                     Envelope(Envelope.ERROR, "role_delete refused: ${e.message ?: "invalid role"}")
                 } catch (e: Exception) {
@@ -3539,7 +3539,7 @@ private suspend fun handleConnection(
                             val sessionsElements = manager.list().map { json.encodeToJsonElement(SessionRecordSerializer, it) }
                             val pushed = Envelope(Envelope.SESSIONS, json.encodeToString(JsonArray(sessionsElements)))
                             for (client in clients) client.trySend(pushed)
-                            if (envelope.requestId?.startsWith("plugin:") == true) pushed else null
+                            if (wantsDirectAck(envelope)) pushed else null
                         } catch (e: IllegalArgumentException) {
                             Envelope(Envelope.ERROR, "session_delete refused: ${e.message}")
                         }
@@ -3838,7 +3838,7 @@ private suspend fun handleConnection(
  * write: the connection handles frames in order, so it is the fence the CLI's MCP server drew with a trailing `sessions` request.
  */
 private fun pluginSessionsAck(envelope: Envelope, manager: SessionManager): Envelope? =
-    if (envelope.requestId?.startsWith("plugin:") == true) {
+    if (wantsDirectAck(envelope)) {
         Envelope(Envelope.SESSIONS, json.encodeToString(JsonArray(manager.list().map { json.encodeToJsonElement(SessionRecordSerializer, it) })))
     } else null
 
@@ -4176,3 +4176,11 @@ private fun com.superiorsoftllc.agenthq.persistence.TicketLinkRow.toTicketInfo()
 /** DP-7f: test seam only. A fake Knowledge provider core tests install in place of the Infantry_Notes plugin. */
 @Volatile
 internal var testKnowledge: com.superiorsoftllc.agenthq.daemon.api.knowledge.Knowledge? = null
+
+/**
+ * KILL-TIMEOUT-1: frames whose normal answer is a pushed event (no direct reply) still answer a caller that waits on its requestId:
+ * a plugin call ("plugin:") or the daemon's own script loopback ("loopback:", [com.superiorsoftllc.agenthq.daemon.plugins.LoopbackFrames]).
+ * Before, only "plugin:" got the ack, so a hook's session_remove/kill waited its whole timeout ("kill got no answer in 30000 ms").
+ */
+internal fun wantsDirectAck(envelope: Envelope): Boolean =
+    envelope.requestId?.let { it.startsWith("plugin:") || it.startsWith("loopback:") } == true
