@@ -252,6 +252,16 @@ class ScriptHooksTest {
         assertEquals("ticket-aaaa1111", c.second["ticketId"]!!.jsonPrimitive().content)
         val body = c.second["body"]!!.jsonPrimitive().content
         assertTrue("done-hook" in body && "failed" in body && "t_fail" in body, body)
+        assertTrue(body.lineSequence().first().contains("t_fail"), "the reason is on the first line: $body")
+    }
+
+    @Test fun `an optional action that fails does not stop the run`() {
+        putHooks(doneHook)
+        tools.failTool = "t_fail"
+        val engine = FakeEngine { listOf(QueuedAction("t_fail", mapOf("_optional" to true)), QueuedAction("t_move", mapOf("ticket" to "zzzz"))) }
+        build(engine).onEvent(moved())
+        assertTrue(tools.named("agenthq_ticket_comment").isEmpty())
+        assertEquals(1, tools.named("t_move").size)
     }
 
     @Test fun `when the comment cannot be posted, or a script is missing, the hook owner is mailed`() {

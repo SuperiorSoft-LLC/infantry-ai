@@ -90,10 +90,12 @@ class ScriptDispatcher(
                 return RunReport("OK", records, logs, phase, true)
             }
             for (p in planned) {
-                val res = tools.invoke(p.tool, toObject(p.args), invoker)
+                // An action may say `_optional = true`: its failure is recorded (ok=false in input.results) but does not stop the run.
+                val optional = p.args[OPTIONAL] == true
+                val res = tools.invoke(p.tool, toObject(if (optional) p.args - OPTIONAL else p.args), invoker)
                 records += p.copy(ok = !res.isError, text = res.text)
                 results += mapOf("name" to p.requested, "tool" to p.tool, "ok" to !res.isError, "text" to res.text, "json" to jsonOf(res.text))
-                if (res.isError) return RunReport("ACTION_FAILED", records, logs, phase, false, "action ${records.size} (${p.tool}) failed: ${res.text.take(300)}", records.size)
+                if (res.isError && !optional) return RunReport("ACTION_FAILED", records, logs, phase, false, "action ${records.size} (${p.tool}) failed: ${res.text.take(300)}", records.size)
             }
             if (!again) return RunReport("OK", records, logs, phase, false)
         }
@@ -111,6 +113,7 @@ class ScriptDispatcher(
     companion object {
         /** The reserved action name: re-run the script with the results so far. */
         const val AGAIN = "again"
+        const val OPTIONAL = "_optional"
         const val HARD_MAX_PHASES = 10
     }
 }
