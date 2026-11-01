@@ -20,7 +20,8 @@
       { "name": "agenthq_script_api", "action": "script.api", "kind": "read", "description": "Every tool a script can call (live registry), the alias table and the engine bindings." },
       { "name": "agenthq_script_hook", "action": "script.hook", "kind": "write", "description": "List, add or remove the project's script hooks (lane enter / named event -> stored script)." },
       { "name": "agenthq_exec", "action": "script.exec", "kind": "write", "description": "Run a command line as the caller (no shell); exit code and output tails back. Off until scripting.exec.enabled." },
-      { "name": "agenthq_exec_status", "action": "script.exec.status", "kind": "read", "description": "State and result of a background agenthq_exec run." }
+      { "name": "agenthq_exec_status", "action": "script.exec.status", "kind": "read", "description": "State and result of a background agenthq_exec run." },
+      { "name": "agenthq_script_stats", "action": "script.stats", "kind": "read", "description": "Script automation, read-only: turns saved, wakes by reason and the latest script runs." }
     ],
     "config": [
       {
