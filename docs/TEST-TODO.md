@@ -105,3 +105,5 @@ TEST-TODO: `events.broadcast` / `hooks.connected` / `QuestionsOpen` (DaemonPlugi
 ## TRIG-2a
 - TEST-TODO: POST a template public route (`/hooks/{id}`) from a real plugin without a bearer token: expect the handler to see pathParams; with the plugin disabled expect 503.
 - TEST-TODO: a plugin `hooks.status` field appears under `pluginStatus` in GET /health.
+
+- TEST-TODO (TRIG-2b): run TriggerStoreContractTest (Infantry_Triggers/daemon) at the QA checkpoint; once TRIG-2c switches core over, check triggers survive a daemon restart through the plugin store (create, fire, restart, list, event pruning to 500).
