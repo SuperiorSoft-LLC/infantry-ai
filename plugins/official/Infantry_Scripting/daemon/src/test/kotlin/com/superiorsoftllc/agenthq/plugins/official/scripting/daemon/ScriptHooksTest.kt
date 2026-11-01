@@ -91,6 +91,27 @@ class ScriptHooksTest {
 
     private fun putHooks(vararg hooks: String) = files.put(HookStore.PATH, hooksJson(*hooks).toByteArray())
 
+    @Test fun `lane exit hooks fire on from, enter on to, on every lane, case-insensitively, with from and to in args`() {
+        for (lane in listOf("backlog", "todo", "in_progress", "pending", "done", "Custom-Lane")) {
+            for (dir in listOf("enter", "exit")) {
+                files.files.remove(HookStore.PATH)
+                putHooks("""{"id":"h","on":"LANE ${dir.uppercase()} ${lane.uppercase()}","script":"on-done"}""")
+                val engine = FakeEngine { emptyList() }
+                val hooks = build(engine)
+                val other = "zzz"
+                val ev = { from: String, to: String -> NamedEvent("ticket.moved", """{"ticketId":"ticket-aaaa1111","from":"$from","to":"$to","kind":"moved","seq":5}""", "daemon", "e-$from-$to", "e-$from-$to", 0, 1) }
+                if (dir == "enter") { hooks.onEvent(ev(other, lane)); hooks.onEvent(ev(lane, other)) } else { hooks.onEvent(ev(lane, other)); hooks.onEvent(ev(other, lane)) }
+                assertEquals(1, engine.inputs.size, "$dir $lane")
+                val a = engine.inputs.single()["args"] as Map<*, *>
+                assertEquals(lane.lowercase(), a["lane"].toString().lowercase())
+                assertNotNull(a["from"]); assertNotNull(a["to"])
+                assertEquals(if (dir == "enter") other else lane.lowercase(), a["from"].toString().lowercase().let { if (dir == "enter") other else it })
+            }
+        }
+        assertEquals("lane exit in_progress", HookOn.parse("Lane  EXIT In_Progress").toString())
+        assertTrue(runCatching { HookOn.parse("lane leave done") }.isFailure)
+    }
+
     @Test fun `a lane enter done hook fires once with the ticket id, branch, tip sha and worker session as input`() {
         putHooks(doneHook)
         val engine = FakeEngine { listOf(QueuedAction("move", mapOf("ticket" to "other-1", "status" to "todo"))) }
