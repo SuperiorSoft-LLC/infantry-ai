@@ -194,6 +194,7 @@ class Controller(
                 sendQueuedAtRest(before, _state.value)
                 answerImageUpload(env)
                 answerPluginSecret(env)
+                answerPluginTool(env)
                 answerSpawnCatalog(env)
                 if (env.type == Envelope.SPOKEN) {
                     runCatching { json.decodeFromString(com.superiorsoftllc.agenthq.ui.voice.SpokenNotice.serializer(), env.data) }
@@ -769,6 +770,39 @@ class Controller(
                 pendingPluginSecret = null
             }
         }
+    }
+
+    /**
+     * TICKET-COMMENTS-3: one call of a daemon plugin's tool (`plugin_tool_call`, contract 1.144.0), answered by `plugin_tool_result`
+     * matched by request id. Success = the tool's text; failure = its refusal / error text or why nothing was sent.
+     */
+    suspend fun pluginTool(name: String, arguments: kotlinx.serialization.json.JsonObject): Result<String> {
+        val requestId = "plugin-tool-${++pluginToolRequests}"
+        val answer = CompletableDeferred<Envelope>()
+        pendingPluginTools[requestId] = answer
+        try {
+            val body = kotlinx.serialization.json.buildJsonObject { put("name", name); put("arguments", arguments) }
+            if (!client.send(Envelope("plugin_tool_call", body.toString(), requestId = requestId))) return Result.failure(IllegalStateException("not connected to the daemon"))
+            val env = withTimeoutOrNull(PLUGIN_TOOL_TIMEOUT_MS) { answer.await() } ?: return Result.failure(IllegalStateException("the daemon did not answer $name"))
+            if (env.type != "plugin_tool_result") return Result.failure(IllegalStateException(env.data.take(300)))
+            val result = json.parseToJsonElement(env.data).jsonObject
+            val text = result["text"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            return if (result["isError"]?.jsonPrimitive?.contentOrNull == "true") Result.failure(IllegalStateException(text)) else Result.success(text)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return Result.failure(e)
+        } finally {
+            pendingPluginTools.remove(requestId)
+        }
+    }
+
+    private var pluginToolRequests = 0
+    private val pendingPluginTools = mutableMapOf<String, CompletableDeferred<Envelope>>()
+
+    private fun answerPluginTool(env: Envelope) {
+        val id = env.requestId ?: return
+        pendingPluginTools[id]?.complete(env)
     }
 
     private val pluginSecretLock = Mutex()
@@ -1888,6 +1922,7 @@ class Controller(
         /** IMG-4: how long an upload waits for the daemon's `image` answer. */
         const val IMAGE_UPLOAD_TIMEOUT_MS = 30_000L
         const val PLUGIN_SECRET_TIMEOUT_MS = 10_000L
+        const val PLUGIN_TOOL_TIMEOUT_MS = 20_000L
         /** CP-4(e): how long a `/` line in the New agent box waits for the daemon's full command list. */
         const val SPAWN_CATALOG_TIMEOUT_MS = 5_000L
 
