@@ -75,6 +75,9 @@ class SettingsService(
             PROCESSES_IDLE_MINUTES to JsonPrimitive(processWatchConfig().idleMinutes),
             PROCESSES_HEAVY_MB to JsonPrimitive(processWatchConfig().heavyMb),
             PROCESSES_FLOOR_MB to JsonPrimitive(processWatchConfig().floorMb),
+            SCRIPT_MAX_STEPS to JsonPrimitive(scriptLimits().maxSteps),
+            SCRIPT_TIMEOUT_MS to JsonPrimitive(scriptLimits().timeoutMs),
+            SCRIPT_MAX_ALLOC_BYTES to JsonPrimitive(scriptLimits().maxAllocBytes),
             LIMITS_BUILD_PRIORITY to JsonPrimitive(buildLimits().priority.key),
             SANDBOX_ALLOWED_DIRS to JsonArray(sandboxAllowedDirs().map(::JsonPrimitive)),
             ALLOWED_MODELS to JsonArray(allowedModels().patterns.map(::JsonPrimitive)),
@@ -366,6 +369,9 @@ class SettingsService(
             PROCESSES_AUTO_REAP -> JsonPrimitive(requireBoolean(key, value))
             PROCESSES_IDLE_MINUTES -> JsonPrimitive(requireIntIn(key, value, PROCESSES_IDLE_RANGE))
             PROCESSES_HEAVY_MB, PROCESSES_FLOOR_MB -> JsonPrimitive(requireIntIn(key, value, PROCESSES_MB_RANGE))
+            SCRIPT_MAX_STEPS -> JsonPrimitive(requireIntIn(key, value, 1_000..1_000_000_000))
+            SCRIPT_TIMEOUT_MS -> JsonPrimitive(requireIntIn(key, value, 10..600_000))
+            SCRIPT_MAX_ALLOC_BYTES -> JsonPrimitive(requireIntIn(key, value, 65_536..1_073_741_824))
             LIMITS_BUILD_PRIORITY -> JsonPrimitive(requireBuildPriority(value).key)
             SANDBOX_ALLOWED_DIRS -> JsonArray(requireAllowedDirs(value).map(::JsonPrimitive))
             ALLOWED_MODELS -> JsonArray(requireAllowedModels(value).map(::JsonPrimitive))
@@ -573,6 +579,16 @@ class SettingsService(
             heavyMb = int(PROCESSES_HEAVY_MB, PROCESSES_MB_RANGE, d.heavyMb.toInt()).toLong(),
             floorMb = int(PROCESSES_FLOOR_MB, PROCESSES_MB_RANGE, d.floorMb.toInt()).toLong(),
             autoReap = autoReap,
+        )
+    }
+
+    /** SCRIPT-2: script sandbox budgets, read at every run; a bad stored value falls back to the default. */
+    fun scriptLimits(): com.superiorsoftllc.agenthq.script.ScriptLimits {
+        val d = com.superiorsoftllc.agenthq.script.ScriptLimits()
+        return com.superiorsoftllc.agenthq.script.ScriptLimits(
+            maxSteps = storedInt(SCRIPT_MAX_STEPS, 1_000..1_000_000_000, d.maxSteps.toInt()).toLong(),
+            timeoutMs = storedInt(SCRIPT_TIMEOUT_MS, 10..600_000, d.timeoutMs.toInt()).toLong(),
+            maxAllocBytes = storedInt(SCRIPT_MAX_ALLOC_BYTES, 65_536..1_073_741_824, d.maxAllocBytes.toInt()).toLong(),
         )
     }
 
@@ -853,6 +869,9 @@ class SettingsService(
         const val PROCESSES_IDLE_MINUTES = "processes.idleMinutes"
         const val PROCESSES_HEAVY_MB = "processes.heavyMb"
         const val PROCESSES_FLOOR_MB = "processes.floorMb"
+        const val SCRIPT_MAX_STEPS = "script.maxSteps"
+        const val SCRIPT_TIMEOUT_MS = "script.timeoutMs"
+        const val SCRIPT_MAX_ALLOC_BYTES = "script.maxAllocBytes"
         /**
          * Ticket 66153313 (contract 1.132.0): worker build limits. `limits.build.priority` = normal | belownormal | idle
          * (default belownormal); `limits.build.maxWorkers` = Gradle worker cap (default logical cores - 2, 0 = unlimited);
