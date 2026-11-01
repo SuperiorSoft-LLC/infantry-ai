@@ -34,11 +34,14 @@ val demoModuleProjects = if (!demoBuild) emptyList() else rootProject.file("plug
 /** Writes the module list and the compile-time config from the core / official / demo manifests into [base]. */
 fun writeModuleList(base: File, core: Set<File>, official: Set<File>, demo: Set<File>, demoOn: Boolean) {
     // name, entry, buildOrder, official
-    fun read(files: Set<File>, official: Boolean) = files.map { f ->
+    fun read(files: Set<File>, official: Boolean) = files.mapNotNull { f ->
         @Suppress("UNCHECKED_CAST")
         val m = groovy.json.JsonSlurper().parse(f) as Map<String, Any?>
         val name = m["name"] as String
         check(name == f.parentFile.name) { "${f.path}: name $name is not its folder's" }
+        // A daemon-only plugin (a `daemon` block, no UI part such as Infantry_Lua or Infantry_Scripting) has no
+        // ModuleSource to compile into the UI, so it is left out of the list; a UI manifest still needs its entry.
+        if (m["entry"] == null && m["daemon"] != null) return@mapNotNull null
         val entry = (m["entry"] as? String)?.takeIf { it.isNotBlank() } ?: error("${f.path}: no entry (its ModuleSource)")
         listOf(name, entry, (m["buildOrder"] as? Number)?.toInt() ?: Int.MAX_VALUE, official, m["config"] ?: emptyList<Any>())
     }
