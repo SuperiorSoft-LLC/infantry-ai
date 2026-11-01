@@ -27,6 +27,8 @@ class TicketComments(
     /** A daemon setting by key (project data), or null. */
     private val setting: (String) -> String?,
     private val clock: () -> Long = System::currentTimeMillis,
+    /** Called once a comment is stored (the wiring publishes `ticket.commented` from it). */
+    private val onAdded: (Comment) -> Unit = {},
 ) {
     /** Who wrote a comment: the owner, a session (with its agent), or the daemon. */
     data class Author(val kind: String, val sessionId: String? = null, val agentId: String? = null) {
@@ -133,7 +135,9 @@ class TicketComments(
         )
         val undelivered = notifyAll(ticketId, projectId, title, id, author, kind, state, body)
         if (undelivered.isNotEmpty()) db.execute("UPDATE infantry_board_comments SET undelivered = ? WHERE id = ?", listOf(undelivered.joinToString("\n"), id))
-        return get(id)!!
+        val saved = get(id)!!
+        onAdded(saved)
+        return saved
     }
 
     /** ONE short waking mail per live session of every notified agent, the author's own session skipped. An agent with no live session is undelivered. */

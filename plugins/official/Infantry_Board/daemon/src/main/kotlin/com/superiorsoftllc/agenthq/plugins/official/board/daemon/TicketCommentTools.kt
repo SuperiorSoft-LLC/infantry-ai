@@ -26,7 +26,19 @@ internal object CommentsWiring {
         },
         notifier = api.sessionNotifier,
         setting = { api.boardRuntime.setting(it) },
+        onAdded = { publishAdded(api, it) },
     ).also { it.migrate() }
+
+    /** SCRIPT-3b: an added comment publishes the named event `ticket.commented`. A failed publish never fails the comment. */
+    fun publishAdded(api: DaemonApi, c: TicketComments.Comment) {
+        val payload = buildJsonObject {
+            put("ticketId", c.ticketId)
+            put("commentId", c.id)
+            put("author", c.author.label)
+            put("bodyPreview", c.body.lineSequence().firstOrNull().orEmpty().take(200))
+        }.toString()
+        runCatching { api.events.publish("ticket.commented", payload) }
+    }
 
     /** The owner (CLI / UI without a session), or the calling session with its agent. */
     fun author(api: DaemonApi, call: ToolCall): TicketComments.Author {

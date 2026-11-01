@@ -34,6 +34,7 @@ class TicketCommentsTest {
     private val mails = mutableListOf<Pair<String, String>>()
     private val settings = mutableMapOf<String, String>()
     private var tick = 0L
+    private val published = mutableListOf<TicketComments.Comment>()
 
     /** Registry agents: role:pm, role:vc, role:qa, role:backend. Live: pm-1, vc-1, backend-1 (no qa session). */
     private val live = mapOf("role:pm" to listOf("pm-1"), "role:vc" to listOf("vc-1"), "role:backend" to listOf("backend-1"))
@@ -48,6 +49,7 @@ class TicketCommentsTest {
         },
         setting = { settings[it] },
         clock = { ++tick },
+        onAdded = { published += it },
     ).also { it.migrate() }
 
     private val worker = Author(Author.SESSION, "backend-1", "role:backend")
@@ -70,6 +72,14 @@ class TicketCommentsTest {
         assertEquals(listOf(b.id), comments.read(ticket, "all", "issue", null).map { it.id })
         assertTrue(comments.read("other", "latestOpen", null, null).isEmpty())
         assertFailsWith<IllegalArgumentException> { comments.read(ticket, "newest", null, null) }
+    }
+
+    @Test fun addPublishesTicketCommentedWithItsIdsAndFirstLine() {
+        created()
+        val c = comments.add(ticket, "p1", "T", worker, "note", "open", "first line\nsecond line")
+        assertEquals(listOf(c.id), published.map { it.id })
+        assertEquals(ticket, published.single().ticketId)
+        assertEquals("first line", published.single().body.lineSequence().first())
     }
 
     @Test fun resolveClosesTheCommentAndSendsNoMail() {
