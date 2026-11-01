@@ -296,6 +296,21 @@ class ScriptHooksTest {
         assertEquals("ticket-aaaa1111", report.second["ticketId"]!!.jsonPrimitive().content)
     }
 
+    @Test fun `an event long after the hook's last action is a new chain at depth 0`() {
+        putHooks(doneHook)
+        lateinit var hooks: ScriptHooks
+        val engine = FakeEngine { listOf(QueuedAction("move", mapOf("ticket" to "aaaa1111", "status" to "done"))) }
+        hooks = build(engine, HookGuardConfig(maxDepth = 1, maxRuns = 100, attributionMs = 5_000))
+        var fired = 0
+        // The hook's action starts a worker; the worker finishes minutes later (the hook run is still open or just ended).
+        tools.onInvoke = { name, _ -> if (name == "t_move" && fired++ < 3) { now += 120_000; hooks.onEvent(moved()) } }
+        hooks.onEvent(moved())
+        assertEquals(4, engine.inputs.size, "every later finish runs; none is refused")
+        val depths = engine.inputs.map { ((it["args"] as Map<*, *>)["event"] as Map<*, *>)["depth"] }
+        assertEquals(listOf(0L, 0L, 0L, 0L), depths)
+        assertTrue(tools.named("agenthq_ticket_comment").isEmpty())
+    }
+
     @Test fun `the per hook rate limit trips, is reported once, and clears after the window`() {
         putHooks(doneHook)
         val engine = FakeEngine { emptyList() }
