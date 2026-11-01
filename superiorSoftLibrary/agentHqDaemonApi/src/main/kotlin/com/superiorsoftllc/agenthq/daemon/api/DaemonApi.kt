@@ -111,6 +111,7 @@ interface DaemonApi {
     fun files(projectId: String): com.superiorsoftllc.agenthq.daemon.api.files.ProjectFiles = com.superiorsoftllc.agenthq.daemon.api.files.NoProjectFiles
 
     companion object {
+        // 1.27.0 (SCRIPT-4, additive): `tools.catalog` / `tools.invoke` (ToolInfo, ToolInvoker): the live tool registry, reachable by an official plugin.
         // 1.26.0 (SCRIPT-3, additive): `events.publish` / `events.subscribe` (NamedEvent): generic named events any plugin / agent publishes.
         // 1.24.0 (TICKET-COMMENTS-4, additive): daemon.api.tickets.TicketReports (published by Infantry_Board); a new ticket carries the report line (setting board.ticket.reportLine).
         // 1.25.0 (SCRIPT-2, additive): `services.publishEndpoint` / `services.endpoints(prefix)` (ServiceEndpoint): name-keyed string contracts between plugins.
@@ -137,7 +138,7 @@ interface DaemonApi {
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
-        const val VERSION = "1.26.0"
+        const val VERSION = "1.27.0"
     }
 }
 
@@ -325,7 +326,26 @@ data class ToolResult(val text: String, val isError: Boolean = false)
 
 interface Tools {
     fun register(tool: DaemonTool)
+
+    /**
+     * SCRIPT-4 (1.27.0, additive): every tool the daemon serves to agents right now (the live registry, built-ins included), by name.
+     * Generated from the registry, never listed by hand: a tool registered later shows up here at once.
+     */
+    fun catalog(): List<ToolInfo> = emptyList()
+
+    /**
+     * SCRIPT-4 (1.27.0, additive): runs tool [name] exactly as an agent's `plugin_tool_call` would, for [as]: the same policy action
+     * gate and plugin frame gates, the tool's own timeout and the same result. No role check here (D18). A tool that needs a frame
+     * on the caller's own connection answers an error. Official / core only.
+     */
+    fun invoke(name: String, arguments: JsonObject, `as`: ToolInvoker): ToolResult = ToolResult("this daemon has no tool registry", isError = true)
 }
+
+/** One entry of [Tools.catalog]. */
+data class ToolInfo(val name: String, val description: String, val inputSchema: JsonObject, val readOnly: Boolean = false)
+
+/** Who a [Tools.invoke] call runs as: the identity of the agent on whose behalf it runs, and a free label for logs (`script:<name>`). */
+data class ToolInvoker(val caller: Caller, val sessionId: String? = null, val role: String? = null, val projectId: String? = null, val label: String = "")
 
 // ---- frames and routes ----------------------------------------------------------------------------------------------
 

@@ -33,6 +33,18 @@ import java.lang.management.ManagementFactory
 class LuaScriptEngine : ScriptEngine {
     override val id = "lua"
     override val extensions = listOf("lua")
+    override val binding = """
+        Lua 5.2 (LuaJ), sandboxed: no io/require/load; os.time, os.clock, string, table, math only.
+        ih.call("agenthq_ticket_move", {ticket="t1", status="done"})   queue any tool by registry name
+        ih.move{ticket="t1", status="done"}                            same, by an alias (ih.<alias>{...} or ih.<toolname>{...}); args are ONE table of the tool's named arguments
+        ih.log("text")                                                 add to the run log
+        ih.again()                                                     after this run's actions execute, re-run the script with the results
+        Nothing runs inside the script: actions are queued and executed in order after it ends; the first failure stops the run.
+        input.args   the --args object;  input.phase  1, then 2.. after ih.again();  input.caller  {id, role}
+        input.results (phase 2+)  list, one per executed action in order: {name, tool, ok, text, json}  (json = the tool's answer when it is JSON)
+        Example: if not input.results then ih.move{ticket=input.args.ticket, status="done"}; ih.again()
+                 else ih.comment{ticket=input.args.ticket, text="moved: "..input.results[1].text} end
+    """.trimIndent()
 
     override fun run(source: String, input: Map<String, Any?>, limits: ScriptLimits, caller: ScriptCaller): ScriptResult {
         val actions = ArrayList<QueuedAction>()
@@ -72,16 +84,31 @@ class LuaScriptEngine : ScriptEngine {
             g.set("os", os)
 
             val ih = LuaTable()
+            fun queue(name: String, args: LuaValue) {
+                if (actions.size >= MAX_ACTIONS) throw LuaError("ih.call: too many actions")
+                val a: Map<String, Any?> = if (args.isnil()) emptyMap()
+                else (fromLua(args, 0) as? Map<*, *>)?.mapKeys { it.key.toString() } ?: throw LuaError("ih.call: args must be a table of named values")
+                actions += QueuedAction(name, a)
+            }
             ih.set("call", object : TwoArgFunction() {
                 override fun call(name: LuaValue, args: LuaValue): LuaValue {
                     if (!name.isstring()) throw LuaError("ih.call: name must be a string")
-                    if (actions.size >= MAX_ACTIONS) throw LuaError("ih.call: too many actions")
-                    val a: Map<String, Any?> = if (args.isnil()) emptyMap()
-                    else (fromLua(args, 0) as? Map<*, *>)?.mapKeys { it.key.toString() } ?: throw LuaError("ih.call: args must be a table of named values")
-                    actions += QueuedAction(name.tojstring(), a)
+                    queue(name.tojstring(), args)
                     return LuaValue.NIL
                 }
             })
+            // SCRIPT-4: any other name is an alias or tool name the dispatcher resolves from data: ih.move{...} == ih.call("move", {...}).
+            val meta = LuaTable()
+            meta.set(LuaValue.INDEX, object : TwoArgFunction() {
+                override fun call(self: LuaValue, key: LuaValue): LuaValue {
+                    if (!key.isstring()) return LuaValue.NIL
+                    val name = key.tojstring()
+                    return object : OneArgFunction() {
+                        override fun call(args: LuaValue): LuaValue { queue(name, args); return LuaValue.NIL }
+                    }
+                }
+            })
+            ih.setmetatable(meta)
             ih.set("log", object : OneArgFunction() {
                 override fun call(msg: LuaValue): LuaValue {
                     if (logs.size < MAX_LOGS) logs += msg.tojstring().take(MAX_LOG_LEN)

@@ -29,5 +29,7 @@ interface ScriptEngine {
     val id: String
     /** File extensions (no dot, lower case) this engine runs, e.g. `lua`. */
     val extensions: List<String>
+    /** SCRIPT-4: how this language binds `ih` (call, aliases, results), shown to agents by script_api. */
+    val binding: String get() = ""
     fun run(source: String, input: Map<String, Any?> = emptyMap(), limits: ScriptLimits = ScriptLimits(), caller: ScriptCaller = ScriptCaller()): ScriptResult
 }
