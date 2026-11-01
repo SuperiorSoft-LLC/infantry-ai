@@ -106,10 +106,17 @@ class ScriptHooks(
                 if (admit(p, hook, 0) != null) continue
                 val run = Run("$p/${hook.id}", 0, ConcurrentHashMap.newKeySet())
                 val v = runCatching { executeIncoming(p, hook, e, payload, run) }.getOrNull()
-                if (v != null) return v
+                if (v != null) { summarize(mail, if (v.handled) "handled" else "rewritten"); return v }
             }
         }
+        summarize(mail, "delivered")
         return null
+    }
+
+    /** HOOK-LINE-1: one final-outcome chat line for the mail (no-op when no hook ran for it). */
+    private fun summarize(mail: IncomingMail, verdict: String) {
+        val sid = mail.recipientSessionId ?: return
+        runCatching { runLog.mailSummary(mail.id, mail.subject.ifBlank { "mail" }, sid, verdict) }
     }
 
     private fun executeIncoming(project: String, hook: Hook, e: NamedEvent, payload: JsonObject, run: Run): MailVerdict? {
@@ -141,14 +148,14 @@ class ScriptHooks(
             val subj = (payload["subject"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() } ?: "mail"
             val trig = "${hook.id} ${e.name}"
             val mailId = (payload["id"] as? JsonPrimitive)?.contentOrNull
-            if (!report.ok) { runLog.record(project, hook.script, trig, hook.to, report, "failed", "failed on $subj from $from", report.error, ref = mailId); failQuiet(project, hook, report.render(hook.script)); return null }
-            if (report.handled) { runLog.record(project, hook.script, trig, hook.to, report, "handled", "handled $subj from $from", ref = mailId); return MailVerdict(handled = true) }
+            if (!report.ok) { runLog.record(project, hook.script, trig, hook.to, report, "failed", "failed on $subj from $from", report.error, ref = mailId, quiet = true); failQuiet(project, hook, report.render(hook.script)); return null }
+            if (report.handled) { runLog.record(project, hook.script, trig, hook.to, report, "handled", "handled $subj from $from", ref = mailId, quiet = true); return MailVerdict(handled = true) }
             val text = report.deliverText
-            if (text != null) { runLog.record(project, hook.script, trig, hook.to, report, "delivered", "delivered rewritten $subj from $from", ref = mailId); return MailVerdict(text = text) }
-            runLog.record(project, hook.script, trig, hook.to, report, "passed", "passed $subj from $from through", ref = mailId)
+            if (text != null) { runLog.record(project, hook.script, trig, hook.to, report, "delivered", "delivered rewritten $subj from $from", ref = mailId, quiet = true); return MailVerdict(text = text) }
+            runLog.record(project, hook.script, trig, hook.to, report, "passed", "passed $subj from $from through", ref = mailId, quiet = true)
             return null
         } catch (t: Throwable) {
-            runLog.record(project, hook.script, "${hook.id} ${e.name}", hook.to, null, "failed", "crashed", "${t.javaClass.simpleName}: ${t.message?.take(300)}", ref = (payload["id"] as? JsonPrimitive)?.contentOrNull)
+            runLog.record(project, hook.script, "${hook.id} ${e.name}", hook.to, null, "failed", "crashed", "${t.javaClass.simpleName}: ${t.message?.take(300)}", ref = (payload["id"] as? JsonPrimitive)?.contentOrNull, quiet = true)
             failQuiet(project, hook, "script crashed: ${t.javaClass.simpleName}: ${t.message?.take(300)}"); return null
         } finally { hook.to?.let { unmark(it) }; run.endedAt = clock() }
     }
