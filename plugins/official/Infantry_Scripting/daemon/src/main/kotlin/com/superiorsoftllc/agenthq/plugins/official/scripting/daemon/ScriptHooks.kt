@@ -62,8 +62,17 @@ class ScriptHooks(
     private val reported = ConcurrentHashMap<String, Long>()
     private val unreadable = ConcurrentHashMap<String, Boolean>()
 
+    /**
+     * CONN-1: returns at once. The bus delivers on the daemon's ONE shared observer thread (session hooks, every other subscriber), so
+     * nothing here may block on a tool call (the ticket read goes to the Board plugin, whose guard allows 2 s), a file read or a script:
+     * all of it runs on [executor]. The executor is one thread, so events still run in publish order.
+     */
     fun onEvent(e: NamedEvent) {
         if (!enabled()) return
+        executor { runCatching { dispatch(e) }.onFailure { log("hooks: event ${e.name} failed: ${it.javaClass.simpleName}: ${it.message?.take(200)}") } }
+    }
+
+    private fun dispatch(e: NamedEvent) {
         val payload = parse(e.payload)
         val candidates = projects().flatMap { p ->
             // A project whose hooks cannot be read (no directory, bad file) is skipped with one warning; it never fails the plugin.
@@ -91,7 +100,7 @@ class ScriptHooks(
             val args = scriptArgs(p, hook, e, payload, ticket, depth)
             val run = Run("$p/${hook.id}", depth, ConcurrentHashMap.newKeySet<String>().also { it.addAll(ids) })
             runs += run
-            executor { execute(p, hook, e, ticketId, args, run) }
+            execute(p, hook, e, ticketId, args, run)
         }
     }
 

@@ -284,6 +284,34 @@ class ScriptHooksTest {
         assertEquals("{ not json", files.get(HookStore.PATH)!!.toString(Charsets.UTF_8))
     }
 
+    @Test fun `onEvent never blocks the bus thread on a slow ticket read, the run happens on the hook executor`() {
+        putHooks(doneHook)
+        val engine = FakeEngine { emptyList() }
+        val engines = ScriptEngines({ mapOf(ScriptEngineWire.PREFIX + "fake" to ScriptEngineWire.asEndpoint(engine)) })
+        val gate = java.util.concurrent.CountDownLatch(1)
+        val slow = object : Tools by tools {
+            override fun invoke(name: String, arguments: JsonObject, `as`: ToolInvoker): ToolResult {
+                if (name == "agenthq_ticket_get") gate.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                return tools.invoke(name, arguments, `as`)
+            }
+        }
+        val pool = java.util.concurrent.Executors.newSingleThreadExecutor()
+        try {
+            val hooks = ScriptHooks(
+                HookStore { files }, ScriptStore({ files }, { engines.extensions() }), engines, slow, ScriptDispatcher(slow, { mapOf("move" to "t_move") }),
+                projects = { listOf("p1") }, limits = { ScriptLimits() }, clock = { now }, executor = { job -> pool.execute(job) },
+            )
+            val t0 = System.nanoTime()
+            hooks.onEvent(moved())
+            val ms = (System.nanoTime() - t0) / 1_000_000
+            assertTrue(ms < 1_000, "onEvent blocked the caller for $ms ms on a slow Board read")
+            assertEquals(0, engine.inputs.size, "the script must not have run yet")
+            gate.countDown()
+            pool.shutdown(); assertTrue(pool.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS))
+            assertEquals(1, engine.inputs.size)
+        } finally { gate.countDown(); pool.shutdownNow() }
+    }
+
     @Test fun `git tip reads a loose ref or packed refs without a process`() {
         val dir = kotlin.io.path.createTempDirectory("hooktip").toFile()
         try {
