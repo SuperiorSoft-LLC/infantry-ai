@@ -18,3 +18,23 @@ Hooks fire on a lane change: `"lane enter <lane>"` (ticket.moved `to`) or `"lane
 - `agenthq_script_hook add on="mail.incoming" script="on-mail-sent" args={"routeRoles":["pm"],"rules":[...]}` — runs BEFORE the recipient is woken (synchronously, bounded by limits.plugins.callTimeoutMs). A script that queues `ih.handled()` marks the mail read and wakes nobody; `ih.deliver_text{text="..."}` delivers that text instead of the notify line for that one mail; any other result, a script failure or a timeout delivers as usual (a mail is never dropped).
 - Rules are hook args (data): vc-merged, vc-duplicate, stale-auto-failure, worker-done (see the PM's draft rules).
 - Copy on-mail-sent.lua to <project>/.agenthq/scripts/ and replace the old `mail.sent` hook (a handled mail no longer needs agenthq_read or agenthq_prompt).
+
+## Process bridge (SCRIPT-CMD-1)
+A script is sandboxed and runs nothing itself; it queues `ih.exec{...}` (same as `ih.agenthq_exec{...}` or the CLI/MCP tool `agenthq_exec`) and the daemon runs the process as the script's caller. Result, in phase 2 `input.results[i].json`: `{exitCode, durationMs, stdoutTail, stderrTail, timedOut}`. A non-zero exit is a result, not a tool failure, so the script can branch.
+
+Args: `command` (argv list: runs directly; or one string: split on spaces/quotes, no shell, no expansion), `cwd` (default the project root; a relative path is under it, an absolute one such as a ticket worktree is allowed), `env`, `stdin`, `timeoutSec` (default `scripting.exec.defaultTimeoutSec`, capped by `maxTimeoutSec`; a timeout kills the whole process tree), `script` (label echoed in `exec.done`), `background`.
+`background=true` answers `{id, state:"running"}` at once; read it with `agenthq_exec_status {id}` or let a hook on the named event `exec.done` (`{id, exitCode, script, session, timedOut}`) continue the protocol.
+
+Guard (plugin settings, data): `scripting.exec.enabled` (default **false**: the tool refuses and says how to enable it), `scripting.exec.allow` (JSON array or one per line; an entry is a command-line prefix, or `re:<regex>` that must match the whole line; empty = all), `scripting.exec.roles` (comma list; empty = any), `defaultTimeoutSec`, `maxTimeoutSec`, `tailChars`. Each run is logged once: session, role, script, command, exit code, duration.
+
+Worked example (run a command, branch on the exit code, prompt the caller's session on failure; args `{"cmd":["prog","arg"]}`):
+
+    if not input.results then
+      ih.exec{command=input.args.cmd, timeoutSec=300, script="check"}
+      ih.again()
+    else
+      local r = input.results[1].json
+      if r.exitCode ~= 0 then
+        ih.prompt{session=input.caller.id, text="command failed ("..r.exitCode.."): "..r.stderrTail}
+      end
+    end

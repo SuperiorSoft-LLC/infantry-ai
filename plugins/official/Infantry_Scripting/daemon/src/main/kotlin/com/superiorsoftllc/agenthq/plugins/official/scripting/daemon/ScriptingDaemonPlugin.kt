@@ -72,6 +72,13 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         })
         // MAIL-HOOK-1b: a session's mail hooks go with the session.
         sessionWatch = api.events.onSessionRemoved { id -> runCatching { hookStore.removeForSession(api.projects.list().map { it.id }, id).takeIf { it > 0 }?.let { api.log("hooks: removed $it mail hook(s) of ended session $id") } } }
+        // SCRIPT-CMD-1: the process bridge (off until scripting.exec.enabled).
+        val exec = ExecTools(
+            { api.config(it) }, { project -> runCatching { File(api.files(project).absolutePath("x")).parentFile.parentFile }.getOrNull() },
+            { name, payload -> api.events.publish(name, payload) }, { api.log(it) },
+        )
+        api.tools.register(exec.exec)
+        api.tools.register(exec.status)
         subscription = api.events.subscribe("*") { hooks.onEvent(it) }
         api.log("scripting ready: engines=${engines.ids()} limits=${limits.current()}")
     }

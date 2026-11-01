@@ -134,3 +134,8 @@ TEST-TODO (SCRIPT-VIS-1): in a live daemon with a mail.incoming hook that handle
 - While a hook runs, the session's sidebar row shows the "AUTO" chip and sits under Running; the chip goes when the run ends. The row's activity text ends with "woken by <reason>" after a real wake (owner / agent / mail).
 - Restart the UI against a running daemon (reconnect): the AUTOMATION rows and the stats line from before are back (UI sends `timeline_list` on every connect).
 - Disable Infantry_Scripting: no rows, no chip, no stats line; chat works as before. NOT run by hand: the throwing-plugin case is covered by unit tests only.
+
+## SCRIPT-CMD-1
+- TEST-TODO: set scripting.exec.enabled=true, run a script with `ih.exec{command={...}}` from a real agent session: exit code and stdoutTail arrive in phase 2; with the setting off the tool refuses and names the setting.
+- TEST-TODO: background=true run + a hook on `exec.done` continues the protocol; the Infantry_Scripting settings page shows the six scripting.exec.* fields.
+- TEST-TODO: the CLI parity command `agenthq exec` was NOT added (see report); call the tool via `agenthq_exec` MCP / `script_run`.

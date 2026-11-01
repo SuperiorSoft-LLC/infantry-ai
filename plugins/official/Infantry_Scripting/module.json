@@ -18,7 +18,9 @@
     "tools": [
       { "name": "agenthq_script_run", "action": "script.run", "kind": "write", "description": "Run a named project script as the caller (the daemon runs its queued tool calls), or plan it with dryRun." },
       { "name": "agenthq_script_api", "action": "script.api", "kind": "read", "description": "Every tool a script can call (live registry), the alias table and the engine bindings." },
-      { "name": "agenthq_script_hook", "action": "script.hook", "kind": "write", "description": "List, add or remove the project's script hooks (lane enter / named event -> stored script)." }
+      { "name": "agenthq_script_hook", "action": "script.hook", "kind": "write", "description": "List, add or remove the project's script hooks (lane enter / named event -> stored script)." },
+      { "name": "agenthq_exec", "action": "script.exec", "kind": "write", "description": "Run a command line as the caller (no shell); exit code and output tails back. Off until scripting.exec.enabled." },
+      { "name": "agenthq_exec_status", "action": "script.exec.status", "kind": "read", "description": "State and result of a background agenthq_exec run." }
     ],
     "config": [
       {
@@ -35,7 +37,13 @@
           { "key": "scripting.hooks.maxDepth", "type": "number", "label": "Hook loop guard: max chain depth", "default": 3, "min": 0, "max": 20, "step": 1, "scope": "daemon", "order": 8 },
           { "key": "scripting.hooks.maxRuns", "type": "number", "label": "Hook loop guard: max runs per hook per window", "default": 10, "min": 1, "max": 10000, "step": 1, "scope": "daemon", "order": 9 },
           { "key": "scripting.hooks.windowMs", "type": "number", "label": "Hook loop guard: rate window (ms)", "default": 60000, "min": 1000, "max": 3600000, "step": 1000, "scope": "daemon", "order": 10 },
-          { "key": "scripting.hooks.attributionMs", "type": "number", "label": "Hook loop guard: attribute follow-up events within (ms)", "default": 5000, "min": 0, "max": 600000, "step": 500, "scope": "daemon", "order": 11 }
+          { "key": "scripting.hooks.attributionMs", "type": "number", "label": "Hook loop guard: attribute follow-up events within (ms)", "default": 5000, "min": 0, "max": 600000, "step": 500, "scope": "daemon", "order": 11 },
+          { "key": "scripting.exec.enabled", "type": "toggle", "label": "Process bridge: let scripts and agents run command lines (agenthq_exec)", "default": false, "scope": "daemon", "order": 12 },
+          { "key": "scripting.exec.allow", "type": "text", "label": "Process bridge allow-list (JSON array or one per line; prefix, or re:<regex> for the whole line; empty = all)", "default": "", "scope": "daemon", "order": 13 },
+          { "key": "scripting.exec.roles", "type": "text", "label": "Process bridge roles (comma-separated; empty = any role)", "default": "", "scope": "daemon", "order": 14 },
+          { "key": "scripting.exec.defaultTimeoutSec", "type": "number", "label": "Process bridge default timeout (s)", "default": 60, "min": 1, "max": 3600, "step": 1, "scope": "daemon", "order": 15 },
+          { "key": "scripting.exec.maxTimeoutSec", "type": "number", "label": "Process bridge max timeout (s)", "default": 600, "min": 1, "max": 3600, "step": 1, "scope": "daemon", "order": 16 },
+          { "key": "scripting.exec.tailChars", "type": "number", "label": "Process bridge output tail (chars)", "default": 8000, "min": 100, "max": 1000000, "step": 100, "scope": "daemon", "order": 17 }
         ]
       }
     ]

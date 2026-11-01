@@ -88,7 +88,7 @@ class ScriptDispatcher(
                 if (a.name == AGAIN) { again = true; continue }
                 if (a.name == HANDLED) { handled = true; continue }
                 if (a.name == DELIVER_TEXT) { deliverText = (a.args["text"] as? String)?.takeIf { it.isNotEmpty() }; continue }
-                val tool = if (a.name in known) a.name else table[a.name]?.takeIf { it in known }
+                val tool = if (a.name in known) a.name else (table[a.name] ?: BUILTIN_ALIASES[a.name])?.takeIf { it in known }
                     ?: return RunReport("ERROR", records + planned, logs, phase, dryRun, "unknown tool or alias '${a.name}' (see script_api)", records.size + planned.size + 1)
                 planned += ActionRecord(a.name, tool, a.args, phase)
             }
@@ -123,6 +123,8 @@ class ScriptDispatcher(
         const val AGAIN = "again"
         const val HANDLED = "handled"
         const val DELIVER_TEXT = "deliver_text"
+        /** Names every project has without configuring: the process bridge (SCRIPT-CMD-1). */
+        val BUILTIN_ALIASES = mapOf("exec" to "agenthq_exec", "cli" to "agenthq_exec", "exec_status" to "agenthq_exec_status")
         const val OPTIONAL = "_optional"
         const val HARD_MAX_PHASES = 10
     }
