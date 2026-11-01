@@ -92,6 +92,7 @@ class BgJobNotifier(
         var escalated = false
         var lastOutputAt = startedAt
         var quietSent = false
+        var lastHangAt = 0L
         var readError: String? = null
         var errorSent = false
         var optOutSeen = false
@@ -304,25 +305,13 @@ class BgJobNotifier(
                 if (w.readError != null) w.errorSent = true
                 heartbeat(sid, job, w, now)
                 w.quietSent = true
-            } else if (watched(job) && job.logPaused == null && !w.quietSent &&
-                quietMs().let { it != Long.MAX_VALUE && it > 0 && now - w.lastOutputAt >= it }
+            } else if (watched(job) && job.logPaused == null && !finished.containsKey(job.id) && alive(job) &&
+                quietMs().let { it != Long.MAX_VALUE && it > 0 && now - w.lastOutputAt >= it && now - w.lastHangAt >= it }
             ) {
+                // BG-WAKE-1: ONE line, repeated at most once per interval while the job stays silent.
                 w.quietSent = true
-                // STALL-4 item 2c: output redirected to a file the watch does not follow gets one neutral hint.
-                val hint = job.redirects.filter { it !in job.follow }.firstOrNull()?.let { "\n" + t("job.quiet.redirectHint", job, "path" to it) } ?: ""
-                deliver(
-                    sid, job,
-                    mail(
-                        sid, job,
-                        subject = t("job.quiet.subject", job, "quiet" to fmt(now - w.lastOutputAt)),
-                        head = t(
-                            "job.quiet.head", job, "quiet" to fmt(now - w.lastOutputAt),
-                            "state" to WatchNotices.text(if (alive(job)) "job.quiet.running" else "job.quiet.gone"),
-                        ) + hint,
-                        matched = emptyList(),
-                        lines = tailOf(job, null),
-                    ),
-                )
+                w.lastHangAt = now
+                deliver(sid, job, hangingNote(sid, job, now - w.lastOutputAt))
             }
         }
     }
@@ -478,6 +467,13 @@ class BgJobNotifier(
         MailSendRequest(
             from = FinishNoticeMonitor.SYSTEM, to = sessionId, subject = subject, threadId = "bg:${job.id}",
             body = "task finished: ${job.id} $verdict log ${job.logPath ?: "-"}\n",
+        )
+
+    /** BG-WAKE-1: the ONE-LINE hang note: `task hanging: <id> no output <n>m, check log <path>`. */
+    private fun hangingNote(sessionId: String, job: BgJob, quietForMs: Long) =
+        MailSendRequest(
+            from = FinishNoticeMonitor.SYSTEM, to = sessionId, subject = t("job.quiet.subject", job, "quiet" to fmt(quietForMs)), threadId = "bg:${job.id}",
+            body = "task hanging: ${job.id} no output ${fmt(quietForMs)}, check log ${job.follow.firstOrNull() ?: job.logPath ?: "-"}\n",
         )
 
     private fun mail(sessionId: String, job: BgJob, subject: String, head: String, matched: List<String>, lines: List<String>) =

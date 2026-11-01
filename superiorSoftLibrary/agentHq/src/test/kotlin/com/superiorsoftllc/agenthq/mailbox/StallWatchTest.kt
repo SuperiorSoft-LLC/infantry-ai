@@ -54,15 +54,42 @@ class StallWatchTest {
         assertTrue(sent.isEmpty())
         min(3); n.scanned(); n.scanned()
         assertEquals(1, sent.size, sent.map { it.subject }.toString())
-        assertTrue(sent[0].subject.contains("quiet for 6m"), sent[0].subject)
+        // BG-WAKE-1: exactly one line, in the owner's wording.
+        assertEquals("task hanging: j1 no output 6m0s, check log ${f.absolutePath}\n", sent[0].body)
         // The runner's own still-running lines are not output.
         f.appendText("[agenthq:running elapsed=7m]\n")
         min(1); n.scanned()
-        assertEquals(1, sent.size)
+        assertEquals(1, sent.size, "at most once per interval")
+        min(5); n.scanned()
+        assertEquals(2, sent.size, "repeats once per interval while silent")
         f.appendText("b\n")
         n.scanned()
-        min(6); n.scanned()
+        min(1); n.scanned()
         assertEquals(2, sent.size)
+    }
+
+    @Test
+    fun anEndedJobGetsOneFinishLine_andNeverAHangLine() {
+        val f = log("a\n")
+        val n = notifier()
+        val j = job(f)
+        live += "s" to j
+        n.scanned()
+        n.done("s", j, 0, listOf("a"), bytes = 2, eof = true)
+        live.clear()
+        min(20); n.scanned()
+        assertEquals(1, sent.size, sent.map { it.body }.toString())
+        assertEquals("task finished: j1 exit 0 log ${f.absolutePath}\n", sent[0].body)
+    }
+
+    @Test
+    fun aGoneProcessGetsNoHangLine() {
+        val n = notifier()
+        live += "s" to job(log("a\n"))
+        n.scanned()
+        alive = false
+        min(10); n.scanned()
+        assertTrue(sent.none { it.body.startsWith("task hanging") }, sent.map { it.body }.toString())
     }
 
     @Test

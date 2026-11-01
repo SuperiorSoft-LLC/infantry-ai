@@ -6,6 +6,7 @@ import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /** BUG-G2: where the daemon finds the `agenthq` launchers, and the env it hands each session. */
@@ -44,7 +45,12 @@ class AgentHqBinTest {
     fun aDirWithoutALauncherIsNotUsed() {
         val classes = File(root, "agentHq/build/classes/kotlin/main").also { it.mkdirs() }
         File(root, "agentHq/build/install/agenthq/bin").mkdirs()
-        assertNull(AgentHqBin.resolve(env = { null }, codeSource = classes))
+        // BG-WAKE-1: never empty: falls back to the daemon's own launcher directory.
+        val r = AgentHqBin.resolve(env = { null }, codeSource = classes)
+        assertEquals(AgentHqBin.ownBinDir(), r)
+        assertNotEquals(File(root, "agentHq/build/install/agenthq/bin").absoluteFile, r)
+        val exe = File(root, "own/agenthq.exe").also { it.parentFile.mkdirs(); it.writeText("x") }
+        assertEquals(exe.parentFile.absoluteFile, AgentHqBin.ownBinDir(exe.path))
     }
 
     @Test

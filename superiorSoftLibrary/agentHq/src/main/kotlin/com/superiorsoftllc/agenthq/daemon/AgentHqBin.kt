@@ -45,8 +45,15 @@ object AgentHqBin {
             val f = File(configured)
             return (if (f.isFile) f.parentFile else f)?.absoluteFile
         }
-        return candidatesFrom(codeSource).firstOrNull(::holdsLauncher)?.absoluteFile
+        return candidatesFrom(codeSource).firstOrNull(::holdsLauncher)?.absoluteFile ?: ownBinDir()
     }
+
+    /**
+     * BG-WAKE-1: no launcher found by the layouts above: the daemon's own launcher directory (the folder of the
+     * executable this daemon runs from), so a session's PATH is never left without the CLI's directory.
+     */
+    internal fun ownBinDir(command: String? = ProcessHandle.current().info().command().orElse(null)): File? =
+        command?.let { File(it).absoluteFile.parentFile }?.takeIf { it.isDirectory }
 
     /**
      * The env every spawned session gets: [binDir] first on PATH, [BIN_ENV], and JAVA_HOME when the

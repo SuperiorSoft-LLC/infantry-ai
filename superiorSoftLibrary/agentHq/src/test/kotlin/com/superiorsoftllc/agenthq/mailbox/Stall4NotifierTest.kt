@@ -50,8 +50,8 @@ class Stall4NotifierTest {
         n.scanned()
         assertEquals(1, sent.size)
         val body = sent[0].body
-        assertTrue(body.contains("has printed nothing for"), body)
-        assertTrue(body.contains("Output sent to a file is not visible to the watcher; to follow it use: agenthq watch-file C:\\tmp\\x.log"), body)
+        assertTrue(body.startsWith("task hanging: j1 no output "), body)
+        assertEquals(1, body.trim().lines().size, body)
         assertNeutral()
     }
 
@@ -67,8 +67,8 @@ class Stall4NotifierTest {
         min(6)
         n.scanned()
         assertEquals(1, sent.size)
-        assertTrue(sent[0].body.contains("following: ${out.absolutePath}"), sent[0].body)
-        assertTrue(sent[0].body.contains("> Task :test 3"), "the tail comes from the followed file: ${sent[0].body}")
+        assertTrue(sent[0].body.startsWith("task hanging: j1 no output 6m"), sent[0].body)
+        assertTrue(sent[0].body.trimEnd().endsWith("check log ${out.absolutePath}"), "the line names the followed file: ${sent[0].body}")
     }
 
     @Test
