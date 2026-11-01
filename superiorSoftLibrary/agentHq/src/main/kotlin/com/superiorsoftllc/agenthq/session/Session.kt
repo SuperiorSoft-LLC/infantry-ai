@@ -45,6 +45,10 @@ enum class KillOutcome {
  * on the stream -- not at exit -- and it is what lets a session come back with its context intact
  * after a kill or a daemon crash.
  */
+/** SCRIPT-VIS-1b: which script hook currently works for a session (display only). */
+@Serializable
+data class SessionAutomation(val script: String, val hookId: String, val since: Long)
+
 @Serializable
 data class SessionRecord(
     val id: String,
@@ -170,6 +174,12 @@ data class SessionRecord(
      * next heartbeat). Present = the session reads as running; omitted when empty.
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val bgJobs: List<BgJob> = emptyList(),
+    /**
+     * SCRIPT-VIS-1b: set while a script hook works for this session (set by the scripting plugin through `Sessions.setAutomation`). Display
+     * only: it never changes [state] or [isBusy]; clients group the session under Running with an automation badge. Memory only (cleared on a
+     * daemon start); omitted when null.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val automation: SessionAutomation? = null,
     /** A short text for what the session last did ("Bash: gradlew test", "replying"); stamped from [SessionActivityLog] when served. Omitted when none yet. */
     @EncodeDefault(EncodeDefault.Mode.NEVER) val lastAction: String? = null,
     /** Epoch millis of the session's last stdout line, stamped from [SessionActivityLog]; omitted until it has produced output. */

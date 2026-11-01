@@ -525,6 +525,13 @@ data class Envelope(
         const val ATTENTION_ITEMS = "attention_items"
         const val ATTENTION_ACK = "attention_ack"
 
+        // SCRIPT-VIS-1b: a generic chat contribution seam. Any official plugin pushes `timeline_item` (a [TimelineItem] JSON: session, time,
+        // source, label, text, optional details) to add a line to a session's chat without a turn; `timeline_list` (data = session id, or empty
+        // for all) is answered by `timeline_items` with the plugin-held history. Additive; a daemon without a contributing plugin answers nothing.
+        const val TIMELINE_ITEM = "timeline_item"
+        const val TIMELINE_LIST = "timeline_list"
+        const val TIMELINE_ITEMS = "timeline_items"
+
         // MVP Sprint-Zero (slice 0 freeze). FROZEN NAMES, NO DAEMON BEHAVIOUR YET: the daemon answers
         // these with `error` until the implementing slices land. Project -- slice A
         // (branch feature-agenthq-mvp-scope): `project_save` / `project_get` / `project_list` are

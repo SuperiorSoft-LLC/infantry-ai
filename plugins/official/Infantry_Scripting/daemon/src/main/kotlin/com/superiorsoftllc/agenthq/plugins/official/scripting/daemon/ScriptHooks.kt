@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.plugins.official.scripting.daemon
 
 import com.superiorsoftllc.agenthq.daemon.api.Caller
+import com.superiorsoftllc.agenthq.daemon.api.AutomationMark
 import com.superiorsoftllc.agenthq.daemon.api.IncomingMail
 import com.superiorsoftllc.agenthq.daemon.api.MailVerdict
 import com.superiorsoftllc.agenthq.daemon.api.NamedEvent
@@ -55,6 +56,8 @@ class ScriptHooks(
     private val log: (String) -> Unit = {},
     /** SCRIPT-VIS-1: every run is recorded here. */
     private val runLog: ScriptRunLog = ScriptRunLog(),
+    /** SCRIPT-VIS-1b: marks a session as worked on by automation while one of its hooks runs (null clears). Display only; a throw is ignored. */
+    private val automation: (String, AutomationMark?) -> Unit = { _, _ -> },
     private val clock: () -> Long = System::currentTimeMillis,
     /** Where runs execute. Production: one daemon thread (events run in order); tests run inline. */
     private val executor: (() -> Unit) -> Unit = DEFAULT_EXECUTOR,
@@ -113,20 +116,22 @@ class ScriptHooks(
             val script = scripts.read(project, hook.script) ?: return failQuiet(project, hook, "no script '${hook.script}' in .agenthq/scripts/").let { null }
             val engine = engines.byExtension(script.extension) ?: return failQuiet(project, hook, "no engine loaded for .${script.extension}").let { null }
             val who = ScriptCaller(hook.ownerSession.orEmpty(), hook.ownerRole.orEmpty())
+            hook.to?.let { mark(it, hook) }
             val report = dispatcher.run(engine, script.source, scriptArgs(project, hook, e, payload, null, 0), limits(), who, invokerOf(project, hook), false)
             val from = (payload["from"] as? JsonPrimitive)?.contentOrNull.orEmpty()
             val subj = (payload["subject"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() } ?: "mail"
             val trig = "${hook.id} ${e.name}"
-            if (!report.ok) { runLog.record(project, hook.script, trig, hook.to, report, "failed", "failed on $subj from $from", report.error); failQuiet(project, hook, report.render(hook.script)); return null }
-            if (report.handled) { runLog.record(project, hook.script, trig, hook.to, report, "handled", "handled $subj from $from"); return MailVerdict(handled = true) }
+            val mailId = (payload["id"] as? JsonPrimitive)?.contentOrNull
+            if (!report.ok) { runLog.record(project, hook.script, trig, hook.to, report, "failed", "failed on $subj from $from", report.error, ref = mailId); failQuiet(project, hook, report.render(hook.script)); return null }
+            if (report.handled) { runLog.record(project, hook.script, trig, hook.to, report, "handled", "handled $subj from $from", ref = mailId); return MailVerdict(handled = true) }
             val text = report.deliverText
-            if (text != null) { runLog.record(project, hook.script, trig, hook.to, report, "delivered", "delivered rewritten $subj from $from"); return MailVerdict(text = text) }
-            runLog.record(project, hook.script, trig, hook.to, report, "passed", "passed $subj from $from through")
+            if (text != null) { runLog.record(project, hook.script, trig, hook.to, report, "delivered", "delivered rewritten $subj from $from", ref = mailId); return MailVerdict(text = text) }
+            runLog.record(project, hook.script, trig, hook.to, report, "passed", "passed $subj from $from through", ref = mailId)
             return null
         } catch (t: Throwable) {
-            runLog.record(project, hook.script, "${hook.id} ${e.name}", hook.to, null, "failed", "crashed", "${t.javaClass.simpleName}: ${t.message?.take(300)}")
+            runLog.record(project, hook.script, "${hook.id} ${e.name}", hook.to, null, "failed", "crashed", "${t.javaClass.simpleName}: ${t.message?.take(300)}", ref = (payload["id"] as? JsonPrimitive)?.contentOrNull)
             failQuiet(project, hook, "script crashed: ${t.javaClass.simpleName}: ${t.message?.take(300)}"); return null
-        } finally { run.endedAt = clock() }
+        } finally { hook.to?.let { unmark(it) }; run.endedAt = clock() }
     }
 
     /** HOOK-DUP-1: idempotency. An event id, or the same ticket transition (ticket, seq, from, to) re-published under a new id by a retried delivery, runs hooks once. */
@@ -207,13 +212,19 @@ class ScriptHooks(
         return best
     }
 
+    private fun mark(session: String, hook: Hook) { runCatching { automation(session, AutomationMark(hook.script, hook.id, clock())) } }
+    private fun unmark(session: String) { runCatching { automation(session, null) } }
+
     private fun execute(project: String, hook: Hook, e: NamedEvent, ticketId: String?, args: Map<String, Any?>, run: Run) {
+        var markedSession: String? = null
         try {
             val script = try { scripts.read(project, hook.script) } catch (ex: IllegalArgumentException) { return fail(project, hook, ticketId, "script name refused: ${ex.message}") }
                 ?: return fail(project, hook, ticketId, "no script '${hook.script}' in .agenthq/scripts/")
             val engine = engines.byExtension(script.extension) ?: return fail(project, hook, ticketId, "no engine loaded for .${script.extension}")
             val invoker = invokerOf(project, hook)
             val who = ScriptCaller(hook.ownerSession.orEmpty(), hook.ownerRole.orEmpty())
+            markedSession = (args["workerSession"] ?: args["sessionId"]) as? String
+            markedSession?.let { mark(it, hook) }
             val report = dispatcher.run(engine, script.source, args, limits(), who, invoker, false) { planned ->
                 planned.forEach { a -> flatten(a.args).forEach { run.touched += it } }
             }
@@ -225,6 +236,7 @@ class ScriptHooks(
             runLog.record(project, hook.script, "${hook.id} ${hook.on}", null, null, "failed", "crashed", "${t.javaClass.simpleName}: ${t.message?.take(300)}")
             fail(project, hook, ticketId, "script crashed: ${t.javaClass.simpleName}: ${t.message?.take(300)}")
         } finally {
+            markedSession?.let { unmark(it) }
             run.endedAt = clock()
         }
     }

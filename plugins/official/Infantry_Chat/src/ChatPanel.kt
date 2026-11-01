@@ -300,6 +300,7 @@ internal fun ChatPanelHost.Transcript(modifier: Modifier) {
             androidx.compose.runtime.CompositionLocalProvider(LocalUserPortrait provides state.userPortrait) {
                 OutputPane(
                     agent, chat.spawnMode, roleColor = state.role(agent?.role)?.color,
+                    contributions = agent?.let { state.timeline[it.id] }.orEmpty(),
                     onStartSession = if (allowSpawn) ({ chat.spawnMode = true; chat.focus.requestFocus() }) else null,
                     // GAP-006b: Start session (its own settings, Apply / Cancel) or Resume, for the session on screen.
                     paneAction = agent?.takeIf { !it.session.global }?.let { com.superiorsoftllc.agenthq.ui.model.sessionPaneAction(it.session, state.tickets) },
