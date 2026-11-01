@@ -2412,7 +2412,17 @@ private suspend fun handleConnection(
     val sender = session.launch {
         for (envelope in outgoing) {
             envelope.requestId?.let { pluginWaiters.remove(it) }?.let { waiter -> waiter.complete(envelope); continue }
-            session.send(Frame.Text(json.encodeToString(Envelope.serializer(), envelope)))
+            // DISCONNECT-1: a frame that cannot be encoded is dropped and logged; it must not end the sender and leave an open
+            // connection that never delivers anything again.
+            val text = try {
+                json.encodeToString(Envelope.serializer(), envelope)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                System.err.println("[agentHq] ws frame '${envelope.type}' not encodable, dropped: $e")
+                continue
+            }
+            session.send(Frame.Text(text))
         }
     }
     // DAEMON-PLUGINS-1: every frame the loop below reads: the client's, then a plugin tool's requests on its behalf.
@@ -2621,6 +2631,9 @@ private suspend fun handleConnection(
     var spawnOrigin: String? = null
     try {
         for (text in inbound) {
+            // DISCONNECT-1: one frame that throws answers that frame with an `error` and leaves the connection (and every
+            // other session of this client) alone; it used to reach the outer catch and close the websocket.
+            try {
             val envelope = runCatching { json.decodeFromString(Envelope.serializer(), text) }.getOrNull()
                 ?: Envelope(Envelope.PROMPT, text)
             // DAEMON-PLUGINS-1: who sent this frame, as the plugins' gates and tools see it.
@@ -3788,6 +3801,13 @@ private suspend fun handleConnection(
             }
             // BUG-MCP-RACE-1: the direct answer echoes the request's id; a push (sent elsewhere) never carries one.
             reply?.let { outgoing.trySend(if (direct && it.requestId == null) it.copy(requestId = envelope.requestId) else it) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                System.err.println("[agentHq] ws frame failed, connection kept: $e")
+                val requestId = runCatching { json.decodeFromString(Envelope.serializer(), text).requestId }.getOrNull()
+                outgoing.trySend(Envelope(Envelope.ERROR, "the daemon failed handling that frame: ${e.message ?: e::class.simpleName}", requestId = requestId))
+            }
         }
     } catch (e: Throwable) {
         System.err.println("[agentHq] ws handler error: $e")

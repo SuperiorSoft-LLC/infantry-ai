@@ -403,6 +403,20 @@ class ProcessWatchTest {
         assertFalse(os.killed.contains(stranger) || os.killed.contains(gradleDaemon))
     }
 
+    @Test fun `DISCONNECT-1 - a java --add-opens lookalike that no session started is never killed by a close, a reap, or reap-all`() {
+        val lookalike = 900_998L
+        os.start(lookalike, null, "\"C:/Program Files/Infantry AI/runtime/bin/java.exe\" --add-opens java.base/java.lang=ALL-UNNAMED -jar app.jar", 2_000, memMb = 4_000)
+        gradleUnder("s1")
+        val w = watch()
+        w.tick()
+        sessions.remove("s1")
+        w.reapSession("s1", now)
+        assertIs<ReapResult.Refused>(w.reap(lookalike))
+        w.reapRogue()
+        assertTrue(lookalike in os.procs)
+        assertFalse(lookalike in os.killed)
+    }
+
     @Test fun `protected processes are never recorded`() {
         gradleUnder("s1")
         val ledger = ProcessLedger(os, clock = { now }, isProtected = { it.pid == gradleDaemon })
