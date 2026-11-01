@@ -98,7 +98,10 @@ class DaemonPluginHost private constructor(
     private class Registered<T>(val owner: Loaded, val value: T)
     private class ToolEntry(val owner: Loaded, val tool: DaemonTool, val action: ActionCatalog.Action)
     private class FrameEntry(val owner: Loaded, val action: ActionCatalog.Action, val ownerOnly: Boolean, val handler: (Frame, Caller) -> Frame?)
-    private class RouteEntry(val owner: Loaded, val method: String, val path: String, val public: Boolean, val handler: (HttpCall) -> HttpReply)
+    private class RouteEntry(val owner: Loaded, val method: String, val path: String, val public: Boolean, val handler: (HttpCall) -> HttpReply) {
+        /** Non-null for a template path: its segments, a `{name}` one binds a path param. */
+        val template: List<String>? = if ('{' in path) path.trim('/').split('/') else null
+    }
 
     private val loaded = CopyOnWriteArrayList<Loaded>()
     /** AR-5: the typed service registry; core callers query it here, plugins through [DaemonApi.services]. */
@@ -115,6 +118,7 @@ class DaemonPluginHost private constructor(
     private val mailGates = CopyOnWriteArrayList<Registered<MailGateHook>>()
     private val spawnGates = CopyOnWriteArrayList<Registered<SpawnGateHook>>()
     private val connectedHooks = CopyOnWriteArrayList<Registered<com.superiorsoftllc.agenthq.daemon.api.ConnectedHook>>()
+    private val statusHooks = CopyOnWriteArrayList<Registered<com.superiorsoftllc.agenthq.daemon.api.StatusHook>>()
     private val readyHooks = CopyOnWriteArrayList<Registered<ReadyHook>>()
     private val turnHooks = CopyOnWriteArrayList<Registered<TurnHook>>()
     private val sessionHooks = CopyOnWriteArrayList<Registered<SessionHook>>()
@@ -202,6 +206,13 @@ class DaemonPluginHost private constructor(
     fun readyFields(): Map<String, String> = buildMap {
         for (h in readyHooks) if (!h.owner.guard.disabled) h.owner.call("ready") { h.value.fields() }.getOrNull()?.forEach { (k, v) ->
             if (READY_KEY.matches(k) && v.none { it.isWhitespace() }) putIfAbsent(k, v)
+        }
+    }
+
+    /** TRIG-2a: the fields plugins add to health/status (fail open); keys follow the ready-key rule, a repeated key keeps the first. */
+    fun statusFields(): Map<String, String> = buildMap {
+        for (h in statusHooks) if (!h.owner.guard.disabled) h.owner.call("status") { h.value.fields() }.getOrNull()?.forEach { (k, v) ->
+            if (READY_KEY.matches(k)) putIfAbsent(k, v)
         }
     }
 
@@ -443,11 +454,24 @@ class DaemonPluginHost private constructor(
         .map { it.method to it.path }.distinct()
 
     /** True when `[method] [path]` is a plugin's declared public route (answered without the bearer token). */
-    fun isPublicRoute(method: String, path: String): Boolean = routeEntries[key(method, path)]?.let { it.public && !it.owner.guard.disabled } == true
+    fun isPublicRoute(method: String, path: String): Boolean = findRoute(method, path)?.first?.let { it.public && !it.owner.guard.disabled } == true
+
+    /** TRIG-2a: the exact route, else the first template route whose segments match; with the bound path params. */
+    private fun findRoute(method: String, path: String): Pair<RouteEntry, Map<String, String>>? {
+        routeEntries[key(method, path)]?.let { return it to emptyMap() }
+        val m = method.uppercase()
+        val parts = path.trim('/').split('/')
+        for (e in routeEntries.values) {
+            val t = e.template ?: continue
+            if (e.method != m) continue
+            matchTemplate(t, parts)?.let { return e to it }
+        }
+        return null
+    }
 
     /** The answer of a plugin route, or null when no plugin answers it (a 404 for the caller). */
     fun answerRoute(call: HttpCall): HttpReply? {
-        val entry = routeEntries[key(call.method, call.path)] ?: return null
+        val (entry, pathParams) = findRoute(call.method, call.path) ?: return null
         if (entry.owner.guard.disabled) return HttpReply(503, "plugin ${entry.owner.id} is disabled")
         val owner = entry.owner
         synchronized(owner) {
@@ -455,7 +479,7 @@ class DaemonPluginHost private constructor(
             if (now - owner.routeWindowStart > 60_000) { owner.routeWindowStart = now; owner.routeCount = 0 }
             if (++owner.routeCount > owner.routeRate && owner.routeRate > 0) return HttpReply(429, "plugin ${owner.id}: more than ${owner.routeRate} requests a minute")
         }
-        return owner.call("route(${call.method} ${call.path})") { entry.handler(call) }
+        return owner.call("route(${call.method} ${call.path})") { entry.handler(if (pathParams.isEmpty()) call else call.copy(pathParams = pathParams)) }
             .getOrElse { HttpReply(500, "plugin ${owner.id} failed: ${it.message ?: it::class.simpleName}") }
     }
 
@@ -776,6 +800,7 @@ class DaemonPluginHost private constructor(
             override fun mailGate(hook: MailGateHook) { declare("mailGate"); mailGates += Registered(p, hook) }
             override fun spawnGate(hook: SpawnGateHook) { declare("spawnGate"); spawnGates += Registered(p, hook) }
             override fun connected(hook: com.superiorsoftllc.agenthq.daemon.api.ConnectedHook) { declare("connected"); check(!p.community) { "community modules may not replay frames to clients" }; connectedHooks += Registered(p, hook) }
+            override fun status(hook: com.superiorsoftllc.agenthq.daemon.api.StatusHook) { check(!p.community) { "status hooks are official / core only" }; declare("status"); statusHooks += Registered(p, hook) }
             override fun ready(hook: ReadyHook) { declare("ready"); readyHooks += Registered(p, hook) }
             override fun turns(hook: TurnHook) { declare("turns"); turnHooks += Registered(p, hook) }
             override fun sessions(hook: SessionHook) { declare("sessions"); sessionHooks += Registered(p, hook) }
@@ -809,7 +834,18 @@ class DaemonPluginHost private constructor(
         }
         const val PLUGIN_TOOL_RESULT = "plugin_tool_result"
         const val PLUGIN_PREFIX = "/plugins/"
-        val HOOK_KINDS = setOf("frameGate", "connected", "httpGate", "admission", "mailGate", "spawnGate", "ready", "turns", "sessions", "policyProvider", "orchestratorBinding", "seats", "approvalRules")
+        /** TRIG-2a: binds a template's `{name}` segments against a path's segments; null when it does not match. */
+        internal fun matchTemplate(template: List<String>, parts: List<String>): Map<String, String>? {
+            if (template.size != parts.size) return null
+            val params = HashMap<String, String>()
+            for (i in template.indices) {
+                val s = template[i]
+                if (s.length > 2 && s.startsWith("{") && s.endsWith("}")) { if (parts[i].isEmpty()) return null; params[s.substring(1, s.length - 1)] = parts[i] }
+                else if (s != parts[i]) return null
+            }
+            return params
+        }
+        val HOOK_KINDS = setOf("frameGate", "connected", "httpGate", "admission", "mailGate", "spawnGate", "ready", "turns", "sessions", "policyProvider", "orchestratorBinding", "seats", "approvalRules", "status")
         private val METHODS = setOf("GET", "POST", "PUT", "DELETE", "PATCH")
         private val TOOL_NAME = Regex("^[a-z][a-z0-9_]{2,63}$")
         private val READY_KEY = Regex("^[a-zA-Z][a-zA-Z0-9_]{0,31}$")

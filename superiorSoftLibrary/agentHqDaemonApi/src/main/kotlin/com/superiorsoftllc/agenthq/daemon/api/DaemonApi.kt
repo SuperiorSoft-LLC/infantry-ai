@@ -114,6 +114,7 @@ interface DaemonApi {
     val triggerHost: com.superiorsoftllc.agenthq.daemon.api.triggers.TriggerHost? get() = null
 
     companion object {
+        // 1.29.0 (TRIG-2a, additive): template routes (`{name}` segments, HttpCall.pathParams) and `hooks.status` (StatusHook).
         // 1.28.0 (TRIG-1, additive): `triggerHost` (daemon.api.triggers.TriggerHost): trigger store, sessions, mail, spawn-with-binding, run events.
         // 1.27.0 (SCRIPT-4, additive): `tools.catalog` / `tools.invoke` (ToolInfo, ToolInvoker): the live tool registry, reachable by an official plugin.
         // 1.26.0 (SCRIPT-3, additive): `events.publish` / `events.subscribe` (NamedEvent): generic named events any plugin / agent publishes.
@@ -142,7 +143,7 @@ interface DaemonApi {
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
-        const val VERSION = "1.28.0"
+        const val VERSION = "1.29.0"
     }
 }
 
@@ -379,6 +380,8 @@ data class HttpCall(
     val headers: Map<String, String> = emptyMap(),
     val body: String = "",
     val remoteAddress: String? = null,
+    /** 1.29.0 (TRIG-2a): the values of a template route's `{name}` segments (`POST /hooks/{id}` -> `id`); empty on an exact route. */
+    val pathParams: Map<String, String> = emptyMap(),
 )
 
 data class HttpReply(
@@ -391,7 +394,8 @@ data class HttpReply(
 interface Routes {
     /**
      * Answers `[method] [path]`. A relative [path] (`hello`) answers at `/plugins/<moduleId>/hello`; an absolute one must be
-     * declared in `daemon.routes` (official/core only). Behind the access policy unless declared in `daemon.publicRoutes`.
+     * declared in `daemon.routes` (official/core only); an absolute path may hold `{name}` segments (a template, matched per segment,
+     * values in [HttpCall.pathParams]; an exact route wins). Behind the access policy unless declared in `daemon.publicRoutes`.
      */
     fun handle(method: String, path: String, handler: (HttpCall) -> HttpReply)
 }
@@ -427,6 +431,11 @@ fun interface SpawnGateHook {
 interface ReadyHook {
     fun fields(): Map<String, String> = emptyMap()
     fun notice(): String? = null
+}
+
+/** 1.29.0 (TRIG-2a): extra fields a plugin adds to the daemon health/status answer (`pluginStatus`). Fail open; official / core only. */
+fun interface StatusHook {
+    fun fields(): Map<String, String>
 }
 
 /** A client turn that reached an agent (`prompt`, `resume`, `mail_send`). Fail open. */
@@ -471,6 +480,8 @@ fun interface ConnectedHook {
 interface Hooks {
     /** ATTN-2a (1.24.0): offer the connect-replay hook; official / core only. Default: ignored. */
     fun connected(hook: ConnectedHook) {}
+    /** TRIG-2a (1.29.0): contribute fields to health/status; official / core only. Default: ignored. */
+    fun status(hook: StatusHook) {}
     /** DP-10b (1.22.0): offer the approval-rule store; official/core only. Default: ignored. */
     fun approvalRules(hook: ApprovalRulesHook) {}
 

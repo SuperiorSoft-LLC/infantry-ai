@@ -288,6 +288,8 @@ private data class Health(
     val database: String = "ok",
     /** Ticket 55d60a5e: how long the database has not answered (`stuck`), or its error message (`error`). */
     val databaseDetail: String? = null,
+    /** DaemonApi 1.29.0: fields plugins add through `hooks.status`. */
+    val pluginStatus: Map<String, String> = emptyMap(),
 )
 
 /** Ticket 55d60a5e: the database-backed part of `/health`, read through the [HealthGate]. */
@@ -1751,6 +1753,7 @@ class AgentHqDaemon(
                                 triggersTripped = counts?.triggersTripped ?: 0,
                                 database = database,
                                 databaseDetail = detail,
+                                pluginStatus = plugins.statusFields(),
                             ),
                         )
                     }
