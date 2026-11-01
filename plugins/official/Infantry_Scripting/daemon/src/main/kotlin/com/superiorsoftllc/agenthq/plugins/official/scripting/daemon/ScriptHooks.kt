@@ -68,6 +68,7 @@ class ScriptHooks(
     private val fires = ConcurrentHashMap<String, ArrayDeque<Long>>()
     private val reported = ConcurrentHashMap<String, Long>()
     private val ignoredMail = ConcurrentHashMap<String, Boolean>()
+    private val mailPool = java.util.concurrent.Executors.newCachedThreadPool { r -> Thread(r, "mail-hook").also { it.isDaemon = true } }
     private val unreadable = ConcurrentHashMap<String, Boolean>()
 
     /**
@@ -117,7 +118,25 @@ class ScriptHooks(
             val engine = engines.byExtension(script.extension) ?: return failQuiet(project, hook, "no engine loaded for .${script.extension}").let { null }
             val who = ScriptCaller(hook.ownerSession.orEmpty(), hook.ownerRole.orEmpty())
             hook.to?.let { mark(it, hook) }
-            val report = dispatcher.run(engine, script.source, scriptArgs(project, hook, e, payload, null, 0), limits(), who, invokerOf(project, hook), false, progressTo = hook.to)
+            val lim = limits()
+            val args = scriptArgs(project, hook, e, payload, null, 0)
+            val inv = invokerOf(project, hook)
+            // MAIL-HOOK-INT-1: run on a thread of its own so an interrupt of the sender (its session ending) cannot cancel the hook;
+            // wait for it ignoring interrupts, bounded by the script budget.
+            val fut = java.util.concurrent.CompletableFuture.supplyAsync({ dispatcher.run(engine, script.source, args, lim, who, inv, false, progressTo = hook.to) }, mailPool)
+            var interrupted = false
+            val deadline = System.nanoTime() + (lim.timeoutMs + 5_000L) * 1_000_000L
+            var got: Any? = null
+            while (got == null) {
+                val left = deadline - System.nanoTime()
+                if (left <= 0) { fut.cancel(true); throw IllegalStateException("timeout after ${lim.timeoutMs} ms") }
+                try { got = fut.get(left, java.util.concurrent.TimeUnit.NANOSECONDS) }
+                catch (_: InterruptedException) { interrupted = true }
+                catch (_: java.util.concurrent.TimeoutException) { }
+                catch (ex: java.util.concurrent.ExecutionException) { throw ex.cause ?: ex }
+            }
+            if (interrupted) Thread.currentThread().interrupt()
+            val report = got as RunReport
             val from = (payload["from"] as? JsonPrimitive)?.contentOrNull.orEmpty()
             val subj = (payload["subject"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() } ?: "mail"
             val trig = "${hook.id} ${e.name}"
