@@ -14,14 +14,14 @@ import kotlinx.serialization.json.jsonObject
  * SCRIPT-5: `agenthq_script_hook`, the one tool behind `agenthq script hook list|add|remove`. Hooks are data in the project's
  * `.agenthq/scripts/hooks.json` ([HookStore]). Open to every role (D18): the caller's identity is recorded as the hook's owner, never tested.
  */
-class HookTools(private val store: HookStore, private val scripts: ScriptStore) {
+class HookTools(private val store: HookStore, private val scripts: ScriptStore, private val minEverySec: () -> Long = { 10L }) {
     val tool: DaemonTool = object : DaemonTool {
         override val name = NAME
         override val description = "List, add or remove the project's script hooks (data in .agenthq/scripts/hooks.json). A hook runs a stored script, daemon-side, with no model: " +
             "on a named event (on='ticket.commented', 'merge.done', 'ticket.*') or when a ticket enters or leaves a lane (on='lane enter done', 'lane exit in_progress'). The script gets the hook's args " +
             "plus the event payload (ticketId, from, to, branch, tipSha, workerSession, projectId...) as input.args, and runs as you. A loop guard (depth + rate, plugin settings) stops runaway chains; failures are commented on the ticket or mailed to you. Open to every role."
         override val inputSchema: JsonObject = Json.parseToJsonElement(
-            """{"type":"object","properties":{"action":{"type":"string","description":"list | add | remove"},"on":{"type":"string","description":"add: 'lane enter <lane>' or 'lane exit <lane>' (todo, in_progress, pending, done, a user lane) or a named event like ticket.commented"},"script":{"type":"string","description":"add: stored script name (see agenthq_script_run)"},"args":{"type":"string","description":"add: JSON object of fixed args merged under the event payload (default {})"},"id":{"type":"string","description":"add: hook id (default from script + on); remove: the id"},"to":{"type":"string","description":"add, on=mail.incoming only: the ONE session id whose incoming mail the hook handles (default: your own session)"},"disabled":{"type":"boolean","description":"add: store it switched off"},"project":{"type":"string","description":"Project id (default: yours)"}},"required":["action"]}""",
+            """{"type":"object","properties":{"action":{"type":"string","description":"list | add | remove"},"on":{"type":"string","description":"add: 'every <N>s' (timer, floor from setting scripting.hooks.minEverySec; input.args gets tick, at, hookId), 'exec.tick' (each live background exec run: id, script, session, elapsedMs, stdoutTail, stderrTail, bytesSinceLast), 'lane enter <lane>' or 'lane exit <lane>' (todo, in_progress, pending, done, a user lane) or a named event like ticket.commented"},"script":{"type":"string","description":"add: stored script name (see agenthq_script_run)"},"args":{"type":"string","description":"add: JSON object of fixed args merged under the event payload (default {})"},"id":{"type":"string","description":"add: hook id (default from script + on); remove: the id"},"to":{"type":"string","description":"add: on=mail.incoming: the ONE session id whose incoming mail the hook handles (default: your own session). on='every <N>s' or 'exec.tick': optional session the script acts for (agenthq_progress from the script lands on its card); the hook goes with that session"},"disabled":{"type":"boolean","description":"add: store it switched off"},"project":{"type":"string","description":"Project id (default: yours)"}},"required":["action"]}""",
         ).jsonObject
         override fun call(call: ToolCall): ToolResult = handle(call)
     }
@@ -65,9 +65,11 @@ class HookTools(private val store: HookStore, private val scripts: ScriptStore) 
             else -> return refuse("args must be a JSON object")
         }
         val isMail = parsedOn is HookOn.Named && parsedOn.pattern == ScriptHooks.INCOMING_EVENT
-        if (!isMail && to != null) return refuse("'to' only applies to on=mail.incoming")
-        val target = if (isMail) (to ?: call.clientSessionId ?: return refuse("a mail.incoming hook attaches to ONE session: pass to=<session id> (no role-wide or project-wide mail hooks)")) else null
-        if (target != null) store.list(project).firstOrNull { it.on == parsedOn && it.to == target && it.script == name }
+        val isTimer = parsedOn is HookOn.Every || (parsedOn is HookOn.Named && parsedOn.pattern == HookOn.EXEC_TICK)
+        if (parsedOn is HookOn.Every && parsedOn.seconds < minEverySec()) return refuse("every ${parsedOn.seconds}s is below the minimum ${minEverySec()}s (setting scripting.hooks.minEverySec)")
+        if (!isMail && !isTimer && to != null) return refuse("'to' only applies to on=mail.incoming, every <N>s and exec.tick")
+        val target = if (isMail) (to ?: call.clientSessionId ?: return refuse("a mail.incoming hook attaches to ONE session: pass to=<session id> (no role-wide or project-wide mail hooks)")) else if (isTimer) to else null
+        if (target != null && isMail) store.list(project).firstOrNull { it.on == parsedOn && it.to == target && it.script == name }
             ?.let { return refuse("session $target already has script '$name' on mail.incoming (hook ${it.id}); one hook per (session, script)") }
         val hookId = id ?: defaultId(name, parsedOn).let { if (target != null) "$it-${target.take(12)}".take(64).trim('-', '.', '_') else it }
         require(HookStore.validId(hookId)) { "bad hook id '$hookId' (letters, digits, '_', '-', '.'; at most 64)" }

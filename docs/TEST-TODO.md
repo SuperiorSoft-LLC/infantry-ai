@@ -139,3 +139,9 @@ TEST-TODO (SCRIPT-VIS-1): in a live daemon with a mail.incoming hook that handle
 - TEST-TODO: set scripting.exec.enabled=true, run a script with `ih.exec{command={...}}` from a real agent session: exit code and stdoutTail arrive in phase 2; with the setting off the tool refuses and names the setting.
 - TEST-TODO: background=true run + a hook on `exec.done` continues the protocol; the Infantry_Scripting settings page shows the six scripting.exec.* fields.
 - TEST-TODO: the CLI parity command `agenthq exec` was NOT added (see report); call the tool via `agenthq_exec` MCP / `script_run`.
+
+## SCRIPT-TICK-1
+- TEST-TODO: add a hook `on="every 30s" to=<your session>` for a script that calls `ih.progress{mode="status", label="..."}`: the card of that session shows the label and updates every 30 s; end the session and confirm the hook is gone from `agenthq script hook list`.
+- TEST-TODO: start `ih.exec{command=..., background=true}`, add an `exec.tick` hook (see docs/SCRIPT-TIMERS.md): the card shows steps parsed from the output and `fail` on a failing line; the hook stops being called after exec.done.
+- TEST-TODO: a deliberately slow tick script (longer than the period): one "skipped (never stacked)" log line, no pile-up. Not run by hand; unit-tested with a nested tick only.
+- TEST-TODO: progress with a `sessionId` of another project is refused (unit-tested; try it from a real second project).

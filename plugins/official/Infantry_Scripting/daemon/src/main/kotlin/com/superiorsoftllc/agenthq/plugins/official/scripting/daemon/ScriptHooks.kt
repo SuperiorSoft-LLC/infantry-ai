@@ -117,7 +117,7 @@ class ScriptHooks(
             val engine = engines.byExtension(script.extension) ?: return failQuiet(project, hook, "no engine loaded for .${script.extension}").let { null }
             val who = ScriptCaller(hook.ownerSession.orEmpty(), hook.ownerRole.orEmpty())
             hook.to?.let { mark(it, hook) }
-            val report = dispatcher.run(engine, script.source, scriptArgs(project, hook, e, payload, null, 0), limits(), who, invokerOf(project, hook), false)
+            val report = dispatcher.run(engine, script.source, scriptArgs(project, hook, e, payload, null, 0), limits(), who, invokerOf(project, hook), false, progressTo = hook.to)
             val from = (payload["from"] as? JsonPrimitive)?.contentOrNull.orEmpty()
             val subj = (payload["subject"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() } ?: "mail"
             val trig = "${hook.id} ${e.name}"
@@ -173,8 +173,11 @@ class ScriptHooks(
         val ids = listOfNotNull(ticketId, str(payload, "sessionId"))
         val depth = maxOf(e.depth, attributedDepth(ids))
         for ((p, hook) in mine) {
+            val tickKey = if (e.name == HookOn.EXEC_TICK || e.name == TIMER_EVENT) "$p/${hook.id}" else null
+            if (tickKey != null && inflight.putIfAbsent(tickKey, true) != null) { slowOnce(tickKey, hook); continue }
             val refusal = admit(p, hook, depth)
             if (refusal != null) {
+                tickKey?.let { inflight.remove(it) }
                 log("hook ${hook.id} ($p) refused on ${e.name}: $refusal")
                 reportOnce(p, hook, ticketId, "refused", "Hook '${hook.id}' (on ${hook.on}) did not run for ${e.name}: $refusal. Script '${hook.script}' was NOT run.")
                 continue
@@ -182,8 +185,60 @@ class ScriptHooks(
             val args = scriptArgs(p, hook, e, payload, ticket, depth)
             val run = Run("$p/${hook.id}", depth, ConcurrentHashMap.newKeySet<String>().also { it.addAll(ids) })
             runs += run
-            execute(p, hook, e, ticketId, args, run)
+            try { execute(p, hook, e, ticketId, args, run) } finally { tickKey?.let { inflight.remove(it) } }
         }
+    }
+
+    private val inflight = ConcurrentHashMap<String, Boolean>()
+    private val slowSeen = ConcurrentHashMap<String, Boolean>()
+    private fun slowOnce(key: String, hook: Hook) { if (slowSeen.putIfAbsent(key, true) == null) log("hook ${hook.id} ($key): a tick arrived while its previous run was still going; skipped (never stacked)") }
+
+    private val lastTimer = ConcurrentHashMap<String, Long>()
+    private val tickCount = ConcurrentHashMap<String, Long>()
+
+    /**
+     * SCRIPT-TICK-1: call about once a second. Fires every enabled `every <N>s` hook whose period (never below [minEverySec]) has passed,
+     * as the event [TIMER_EVENT] {tick, at, hookId}, through the same guard, run log and failure reporting as any hook. A hook whose
+     * previous run is still going is skipped, not stacked. A hook with `to` for a session that no longer exists is not run here
+     * (it is removed with its session).
+     */
+    fun timerTick(minEverySec: Long) {
+        if (!enabled()) return
+        val now = clock()
+        for (p in projects()) {
+            val hooks = try { store.list(p) } catch (x: Exception) { continue }
+            for (h in hooks) {
+                val on = h.on as? HookOn.Every ?: continue
+                if (!h.enabled) continue
+                val key = "$p/${h.id}"
+                val period = maxOf(on.seconds, minEverySec) * 1000
+                val last = lastTimer.putIfAbsent(key, now) ?: continue
+                if (now - last < period) continue
+                lastTimer[key] = now
+                val n = tickCount.merge(key, 1L) { a, b -> a + b }!!
+                val payload = buildJsonObject { put("tick", n); put("at", now); put("hookId", h.id); put("projectId", p) }
+                onEventNoDedup(NamedEvent(TIMER_EVENT, payload.toString(), "timer", "timer:$key:$n"))
+            }
+        }
+    }
+
+    private fun onEventNoDedup(e: NamedEvent) {
+        executor { runCatching { dispatchTimer(e) }.onFailure { log("hooks: timer ${e.id} failed: ${it.javaClass.simpleName}: ${it.message?.take(200)}") } }
+    }
+
+    private fun dispatchTimer(e: NamedEvent) {
+        val payload = parse(e.payload)
+        val p = str(payload, "projectId") ?: return
+        val hook = runCatching { store.list(p) }.getOrDefault(emptyList()).firstOrNull { it.id == str(payload, "hookId") && it.enabled && it.on is HookOn.Every } ?: return
+        val key = "$p/${hook.id}"
+        if (inflight.putIfAbsent(key, true) != null) { slowOnce(key, hook); return }
+        try {
+            val refusal = admit(p, hook, 0)
+            if (refusal != null) { log("hook ${hook.id} ($p) refused on timer: $refusal"); reportOnce(p, hook, null, "refused", "Hook '${hook.id}' (on ${hook.on}) did not run: $refusal. Script '${hook.script}' was NOT run."); return }
+            val run = Run(key, 0, ConcurrentHashMap.newKeySet())
+            runs += run
+            execute(p, hook, e, null, scriptArgs(p, hook, e, payload, null, 0), run)
+        } finally { inflight.remove(key) }
     }
 
     /** Null to run; else why the guard refused. Counts the run against the hook's rate window when admitted. */
@@ -225,7 +280,7 @@ class ScriptHooks(
             val who = ScriptCaller(hook.ownerSession.orEmpty(), hook.ownerRole.orEmpty())
             markedSession = (args["workerSession"] ?: args["sessionId"]) as? String
             markedSession?.let { mark(it, hook) }
-            val report = dispatcher.run(engine, script.source, args, limits(), who, invoker, false) { planned ->
+            val report = dispatcher.run(engine, script.source, args, limits(), who, invoker, false, progressTo = hook.to) { planned ->
                 planned.forEach { a -> flatten(a.args).forEach { run.touched += it } }
             }
             val sess = (args["workerSession"] ?: args["sessionId"]) as? String
@@ -319,11 +374,14 @@ class ScriptHooks(
 
     companion object {
         const val INCOMING_EVENT = "mail.incoming"
+        /** SCRIPT-TICK-1: the internal event an `every <N>s` hook runs for (not published on the bus). */
+        const val TIMER_EVENT = "timer.tick"
         private val pool by lazy { Executors.newSingleThreadExecutor { r -> Thread(r, "script-hooks").apply { isDaemon = true } } }
         val DEFAULT_EXECUTOR: (() -> Unit) -> Unit = { job -> pool.execute { runCatching { job() } } }
 
         fun matches(on: HookOn, eventName: String, payload: JsonObject): Boolean = when (on) {
             is HookOn.Lane -> eventName == HookOn.LANE_EVENT && (payload[if (on.exit) "from" else "to"] as? JsonPrimitive)?.contentOrNull.equals(on.lane, ignoreCase = true)
+            is HookOn.Every -> false
             is HookOn.Named -> when {
                 on.pattern == "*" -> true
                 on.pattern.endsWith(".*") -> eventName.startsWith(on.pattern.dropLast(1))

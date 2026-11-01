@@ -22,8 +22,9 @@ class ScriptingDaemonPlugin : DaemonPlugin {
     private var subscription: AutoCloseable? = null
     private var sessionWatch: AutoCloseable? = null
     private var wakeWatch: AutoCloseable? = null
+    private var timer: java.util.concurrent.ScheduledExecutorService? = null
 
-    override fun stop() { runCatching { subscription?.close() }; subscription = null; runCatching { sessionWatch?.close() }; sessionWatch = null; runCatching { wakeWatch?.close() }; wakeWatch = null }
+    override fun stop() { runCatching { timer?.shutdownNow() }; timer = null; runCatching { subscription?.close() }; subscription = null; runCatching { sessionWatch?.close() }; sessionWatch = null; runCatching { wakeWatch?.close() }; wakeWatch = null }
 
     override fun start(api: DaemonApi) {
         val engines = ScriptEngines({ api.services.endpoints(ScriptEngineWire.PREFIX) }, { api.config("scripting.defaultEngine")?.takeIf { it.isNotBlank() } ?: "lua" })
@@ -48,9 +49,9 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         api.tools.register(tools.api)
         // SCRIPT-5: hooks are data (hooks.json); one subscription on the named-event bus runs them.
         val hookStore = HookStore { api.files(it) }
-        api.tools.register(HookTools(hookStore, store).tool)
+        api.tools.register(HookTools(hookStore, store, { HookSettings.minEverySec { api.config(it) } }).tool)
         val hooks = ScriptHooks(
-            hookStore, store, engines, api.tools, ScriptDispatcher(api.tools, aliases, maxPhases),
+            hookStore, store, engines, api.tools, ScriptDispatcher(api.tools, aliases, maxPhases, sessionProject = { api.sessions.get(it)?.projectId }),
             projects = { api.projects.list().map { it.id } }, limits = { limits.current() },
             guard = { HookSettings.guard { api.config(it) } }, enabled = { HookSettings.enabled { api.config(it) } },
             tip = { project, branch -> ScriptHooks.gitTip(File(api.files(project).absolutePath("x")).parentFile.parentFile, branch) },
@@ -79,6 +80,17 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         )
         api.tools.register(exec.exec)
         api.tools.register(exec.status)
+        // SCRIPT-TICK-1: one 1 s clock drives `every <N>s` hooks and exec.tick (each at its own period). A throw never stops it.
+        val clock = java.util.concurrent.Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "script-timer").apply { isDaemon = true } }
+        var lastExecTick = System.currentTimeMillis()
+        clock.scheduleWithFixedDelay({
+            runCatching { hooks.timerTick(HookSettings.minEverySec { api.config(it) }) }
+            runCatching {
+                val now = System.currentTimeMillis()
+                if (now - lastExecTick >= ExecTools.tickSec { api.config(it) } * 1000) { lastExecTick = now; exec.tick() }
+            }
+        }, 1, 1, java.util.concurrent.TimeUnit.SECONDS)
+        timer = clock
         subscription = api.events.subscribe("*") { hooks.onEvent(it) }
         api.log("scripting ready: engines=${engines.ids()} limits=${limits.current()}")
     }
@@ -123,6 +135,9 @@ object ScriptAliases {
 
 /** SCRIPT-5: the hook loop guard and master switch are plugin settings (`scripting.hooks.*`); a bad value falls back to the default. */
 object HookSettings {
+    /** SCRIPT-TICK-1: the floor for `every <N>s` hooks, seconds (setting scripting.hooks.minEverySec, default 10, 1..86400). */
+    fun minEverySec(config: (String) -> String?): Long = config("scripting.hooks.minEverySec")?.trim()?.toLongOrNull()?.takeIf { it in 1L..86_400L } ?: 10L
+
     fun enabled(config: (String) -> String?): Boolean = config("scripting.hooks.enabled")?.trim()?.lowercase() != "false"
 
     fun guard(config: (String) -> String?): HookGuardConfig {
