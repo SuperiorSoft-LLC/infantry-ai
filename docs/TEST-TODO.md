@@ -110,3 +110,6 @@ TEST-TODO: `events.broadcast` / `hooks.connected` / `QuestionsOpen` (DaemonPlugi
 
 ## MAIL-HOOK-1 (pre-delivery mail hook)
 TEST-TODO: install `on-mail-sent.lua` (plugins/official/Infantry_Scripting/project-scripts) with hook `on="mail.incoming"`, routeRoles ["pm"] and the vc-merged / vc-duplicate / stale-auto-failure / worker-done rules; send a routine VC mail to an idle PM: expect it READ, no PM turn, ticket comment written; send an unmatched mail: PM woken once (no second delivery). Break the script (syntax error): mail still delivered. Check why agenthq_prompt to an idle session waits 30 s (see report).
+
+## MAIL-HOOK-1b (860c0da2)
+TEST-TODO: on a real daemon (port 8812, temp state dir): session A `agenthq script hook add --on mail.incoming --to <B> --script pong`, A mails B "PING n"; confirm B's reply and no wake. The in-process ping-pong (ScriptHooksTest) fakes the mailbox, not MailRouter. Also confirm a hook disappears from `script hook list` after its session is removed.

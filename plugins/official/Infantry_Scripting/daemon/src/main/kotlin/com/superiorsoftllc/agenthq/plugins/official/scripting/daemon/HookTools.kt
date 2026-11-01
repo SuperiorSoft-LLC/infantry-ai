@@ -21,7 +21,7 @@ class HookTools(private val store: HookStore, private val scripts: ScriptStore) 
             "on a named event (on='ticket.commented', 'merge.done', 'ticket.*') or when a ticket enters or leaves a lane (on='lane enter done', 'lane exit in_progress'). The script gets the hook's args " +
             "plus the event payload (ticketId, from, to, branch, tipSha, workerSession, projectId...) as input.args, and runs as you. A loop guard (depth + rate, plugin settings) stops runaway chains; failures are commented on the ticket or mailed to you. Open to every role."
         override val inputSchema: JsonObject = Json.parseToJsonElement(
-            """{"type":"object","properties":{"action":{"type":"string","description":"list | add | remove"},"on":{"type":"string","description":"add: 'lane enter <lane>' or 'lane exit <lane>' (todo, in_progress, pending, done, a user lane) or a named event like ticket.commented"},"script":{"type":"string","description":"add: stored script name (see agenthq_script_run)"},"args":{"type":"string","description":"add: JSON object of fixed args merged under the event payload (default {})"},"id":{"type":"string","description":"add: hook id (default from script + on); remove: the id"},"disabled":{"type":"boolean","description":"add: store it switched off"},"project":{"type":"string","description":"Project id (default: yours)"}},"required":["action"]}""",
+            """{"type":"object","properties":{"action":{"type":"string","description":"list | add | remove"},"on":{"type":"string","description":"add: 'lane enter <lane>' or 'lane exit <lane>' (todo, in_progress, pending, done, a user lane) or a named event like ticket.commented"},"script":{"type":"string","description":"add: stored script name (see agenthq_script_run)"},"args":{"type":"string","description":"add: JSON object of fixed args merged under the event payload (default {})"},"id":{"type":"string","description":"add: hook id (default from script + on); remove: the id"},"to":{"type":"string","description":"add, on=mail.incoming only: the ONE session id whose incoming mail the hook handles (default: your own session)"},"disabled":{"type":"boolean","description":"add: store it switched off"},"project":{"type":"string","description":"Project id (default: yours)"}},"required":["action"]}""",
         ).jsonObject
         override fun call(call: ToolCall): ToolResult = handle(call)
     }
@@ -33,7 +33,7 @@ class HookTools(private val store: HookStore, private val scripts: ScriptStore) 
         return try {
             when (val action = s("action")?.lowercase()) {
                 "list" -> list(project)
-                "add" -> add(call, project, s("on"), s("script"), s("id"), a["args"], (a["disabled"] as? JsonPrimitive)?.booleanOrNull == true)
+                "add" -> add(call, project, s("on"), s("script"), s("id"), s("to"), a["args"], (a["disabled"] as? JsonPrimitive)?.booleanOrNull == true)
                 "remove" -> remove(project, s("id") ?: return refuse("remove needs id"))
                 else -> refuse("action must be list, add or remove (got '${action.orEmpty()}')")
             }
@@ -54,7 +54,7 @@ class HookTools(private val store: HookStore, private val scripts: ScriptStore) 
         return ToolResult(text)
     }
 
-    private fun add(call: ToolCall, project: String, on: String?, script: String?, id: String?, rawArgs: Any?, disabled: Boolean): ToolResult {
+    private fun add(call: ToolCall, project: String, on: String?, script: String?, id: String?, to: String?, rawArgs: Any?, disabled: Boolean): ToolResult {
         val parsedOn = HookOn.parse(on ?: return refuse("add needs on (e.g. 'lane enter done' or 'ticket.commented')"))
         val name = script ?: return refuse("add needs script")
         scripts.read(project, name) ?: return refuse("no script '$name' in project $project (looked in .agenthq/scripts/); have: ${runCatching { scripts.names(project) }.getOrDefault(emptyList()).joinToString().ifBlank { "none" }}")
@@ -64,10 +64,15 @@ class HookTools(private val store: HookStore, private val scripts: ScriptStore) 
             is JsonPrimitive -> if (rawArgs.contentOrNull.isNullOrBlank()) JsonObject(emptyMap()) else runCatching { Json.parseToJsonElement(rawArgs.content) as? JsonObject }.getOrNull() ?: return refuse("args must be a JSON object")
             else -> return refuse("args must be a JSON object")
         }
-        val hookId = id ?: defaultId(name, parsedOn)
+        val isMail = parsedOn is HookOn.Named && parsedOn.pattern == ScriptHooks.INCOMING_EVENT
+        if (!isMail && to != null) return refuse("'to' only applies to on=mail.incoming")
+        val target = if (isMail) (to ?: call.clientSessionId ?: return refuse("a mail.incoming hook attaches to ONE session: pass to=<session id> (no role-wide or project-wide mail hooks)")) else null
+        if (target != null) store.list(project).firstOrNull { it.on == parsedOn && it.to == target && it.script == name }
+            ?.let { return refuse("session $target already has script '$name' on mail.incoming (hook ${it.id}); one hook per (session, script)") }
+        val hookId = id ?: defaultId(name, parsedOn).let { if (target != null) "$it-${target.take(12)}".take(64).trim('-', '.', '_') else it }
         require(HookStore.validId(hookId)) { "bad hook id '$hookId' (letters, digits, '_', '-', '.'; at most 64)" }
         val byOwner = call.caller.owner && call.clientSessionId == null
-        store.add(project, Hook(hookId, parsedOn, name, args, !disabled, call.clientSessionId, call.clientRole, byOwner))
+        store.add(project, Hook(hookId, parsedOn, name, args, !disabled, call.clientSessionId, call.clientRole, byOwner, target))
         return ToolResult("added hook $hookId: on $parsedOn -> $name${if (disabled) " [disabled]" else ""}")
     }
 

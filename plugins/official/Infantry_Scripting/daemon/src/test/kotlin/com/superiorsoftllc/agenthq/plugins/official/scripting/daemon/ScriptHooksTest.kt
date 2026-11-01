@@ -14,6 +14,8 @@ import com.superiorsoftllc.agenthq.daemon.api.files.ProjectFiles
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
@@ -95,7 +97,7 @@ class ScriptHooksTest {
 
     private fun putHooks(vararg hooks: String) = files.put(HookStore.PATH, hooksJson(*hooks).toByteArray())
 
-    private val mailHook = """{"id":"m","on":"mail.incoming","script":"on-done","args":{"k":"v"},"ownerSession":"pm-1","ownerRole":"pm"}"""
+    private val mailHook = """{"id":"m","on":"mail.incoming","script":"on-done","to":"pm-1","args":{"k":"v"},"ownerSession":"pm-1","ownerRole":"pm"}"""
     private fun mail(body: String = "merged ok") = com.superiorsoftllc.agenthq.daemon.api.IncomingMail("mail-1", "vc-1", "pm", "pm-1", "pm", "subj", body, "t1", "p1")
 
     @Test fun `MAIL-HOOK-1 a script that queues handled handles the mail, deliver_text replaces it, args carry the mail`() {
@@ -379,4 +381,86 @@ class ScriptHooksTest {
     }
 
     private fun kotlinx.serialization.json.JsonElement.jsonPrimitive(): JsonPrimitive = this as JsonPrimitive
+
+    @Test fun `MAIL-HOOK-1b a mail hook runs only for its own session, a hook without to is ignored, failures are not reported`() {
+        putHooks(mailHook)
+        val engine = FakeEngine { listOf(QueuedAction("handled", emptyMap())) }
+        val h = build(engine)
+        assertEquals(null, h.incoming(com.superiorsoftllc.agenthq.daemon.api.IncomingMail("m2", "vc-1", "pm", "other-9", "pm", "s", "b", "t1", "p1")), "other session: no run")
+        assertEquals(0, engine.inputs.size)
+        assertTrue(h.incoming(mail())!!.handled)
+        putHooks("""{"id":"wide","on":"mail.incoming","script":"on-done"}""")
+        assertEquals(null, build(engine).incoming(mail()), "a project-wide stored hook is ignored")
+        putHooks(mailHook)
+        assertEquals(null, build(FakeEngine { error("boom") }).incoming(mail()))
+        assertTrue(tools.calls.none { it.first == "agenthq_message" || it.first == "agenthq_ticket_comment" }, "no failure mail or comment")
+    }
+
+    private fun hookCall(vararg kv: Pair<String, String>, session: String? = "a-1") =
+        object : ToolCall {
+            override val arguments = JsonObject(kv.associate { it.first to JsonPrimitive(it.second) })
+            override val caller = Caller(owner = false, agent = true)
+            override val clientSessionId = session; override val clientRole: String? = "backend"; override val clientProjectId: String? = "p1"
+            override fun request(type: String, data: String, sessionId: String?, timeoutMs: Long): Frame = error("unused")
+        }
+
+    @Test fun `MAIL-HOOK-1b adding a mail hook defaults to your own session, refuses a second (session, script), and ended sessions lose theirs`() {
+        val ht = HookTools(HookStore { files }, ScriptStore({ files }, { listOf("fk") }))
+        val ok = ht.handle(hookCall("action" to "add", "on" to "mail.incoming", "script" to "on-done", "to" to "b-2"))
+        assertFalse(ok.isError, ok.text)
+        val dup = ht.handle(hookCall("action" to "add", "on" to "mail.incoming", "script" to "on-done", "to" to "b-2", "id" to "other"))
+        assertTrue(dup.isError && "already has script" in dup.text, dup.text)
+        assertFalse(ht.handle(hookCall("action" to "add", "on" to "mail.incoming", "script" to "on-done")).isError, "default = own session a-1")
+        assertTrue(ht.handle(hookCall("action" to "add", "on" to "mail.incoming", "script" to "on-done", session = null)).isError, "no session, no to: refused")
+        assertTrue(ht.handle(hookCall("action" to "add", "on" to "ticket.commented", "script" to "on-done", "to" to "b-2")).isError)
+        val store = HookStore { files }
+        val stored = store.list("p1")
+        assertEquals(listOf("b-2", "a-1"), stored.map { it.to }); assertEquals("a-1", stored[0].ownerSession); assertEquals("backend", stored[0].ownerRole)
+        assertEquals(1, store.removeForSession(listOf("p1"), "b-2"))
+        assertEquals(listOf("a-1"), store.list("p1").map { it.to })
+    }
+
+    @Test fun `MAIL-HOOK-1b ping-pong - A attaches pong to B, A mails PING, B replies PONG, A's pong-seen logs it, both mails read, nobody woken`() {
+        files.put("scripts/pong.fk", "pong".toByteArray()); files.put("scripts/pong-seen.fk", "seen".toByteArray())
+        val logs = ArrayList<String>()
+        val woken = ArrayList<String>(); val read = ArrayList<String>()
+        lateinit var hooks: ScriptHooks
+        var n = 0
+        val engine = object : ScriptEngine {
+            override val id = "fake"; override val extensions = listOf("fk")
+            override fun run(source: String, input: Map<String, Any?>, limits: ScriptLimits, caller: ScriptCaller): ScriptResult {
+                @Suppress("UNCHECKED_CAST") val a = input["args"] as Map<String, Any?>
+                val body = a["body"] as String
+                return when (source) {
+                    "pong" -> ScriptResult(ScriptOutcome.OK, listOf(QueuedAction("send", mapOf("to" to a["from"], "body" to "PONG " + body.removePrefix("PING "))), QueuedAction("handled", emptyMap())))
+                    else -> { logs += "seen $body"; ScriptResult(ScriptOutcome.OK, listOf(QueuedAction("handled", emptyMap()))) }
+                }
+            }
+        }
+        val engines = ScriptEngines({ mapOf(ScriptEngineWire.PREFIX + "fake" to ScriptEngineWire.asEndpoint(engine)) })
+        val store = HookStore { files }
+        val deliver = object : Tools by tools {
+            override fun invoke(name: String, arguments: JsonObject, `as`: ToolInvoker): ToolResult {
+                if (name != "agenthq_message") return tools.invoke(name, arguments, `as`)
+                val to = (arguments["to"] as JsonPrimitive).content; val body = (arguments["body"] as JsonPrimitive).content
+                val from = `as`.sessionId ?: "?"
+                val id = "mail-${++n}"
+                val verdict = hooks.incoming(com.superiorsoftllc.agenthq.daemon.api.IncomingMail(id, from, to, to, "x", "s", body, "t", "p1"))
+                if (verdict?.handled == true) read += id else woken += to
+                return ToolResult("sent $id")
+            }
+        }
+        hooks = ScriptHooks(store, ScriptStore({ files }, { engines.extensions() }), engines, deliver, ScriptDispatcher(deliver, { mapOf("send" to "agenthq_message") }),
+            projects = { listOf("p1") }, limits = { ScriptLimits() }, log = { logs += it }, executor = { it() })
+        val ht = HookTools(store, ScriptStore({ files }, { engines.extensions() }))
+        // A attaches pong to B and pong-seen to itself.
+        assertFalse(ht.handle(hookCall("action" to "add", "on" to "mail.incoming", "script" to "pong", "to" to "B", session = "A")).isError)
+        assertFalse(ht.handle(hookCall("action" to "add", "on" to "mail.incoming", "script" to "pong-seen", session = "A")).isError)
+        // A mails B PING 42 (as session A).
+        deliver.invoke("agenthq_message", buildJsonObject { put("to", "B"); put("body", "PING 42") }, ToolInvoker(Caller(owner = false, agent = true), "A", "backend", "p1", "script:ping"))
+        assertEquals(2, n, "PING and PONG")
+        assertEquals(setOf("mail-1", "mail-2"), read.toSet(), "both mails read")
+        assertTrue(woken.isEmpty(), "nobody woken: $woken")
+        assertEquals(listOf("seen PONG 42"), logs.filter { it.startsWith("seen") }, "A's hook saw the PONG with the same nonce")
+    }
 }
