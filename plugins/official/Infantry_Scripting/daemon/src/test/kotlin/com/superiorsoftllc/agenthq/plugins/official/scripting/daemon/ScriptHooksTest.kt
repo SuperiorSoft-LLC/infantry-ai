@@ -91,6 +91,23 @@ class ScriptHooksTest {
 
     private fun putHooks(vararg hooks: String) = files.put(HookStore.PATH, hooksJson(*hooks).toByteArray())
 
+    @Test fun `a project with no directory is skipped with one warning and the good project's hook still fires`() {
+        putHooks(doneHook)
+        val engine = FakeEngine { emptyList() }
+        val engines = ScriptEngines({ mapOf(ScriptEngineWire.PREFIX + "fake" to ScriptEngineWire.asEndpoint(engine)) })
+        val logs = mutableListOf<String>()
+        val lookup: (String) -> com.superiorsoftllc.agenthq.daemon.api.files.ProjectFiles = {
+            if (it == "bad") throw IllegalArgumentException("project 'bad' has no directory to store uploads in") else files
+        }
+        val hooks = ScriptHooks(
+            HookStore(lookup), ScriptStore(lookup, { engines.extensions() }), engines, tools, ScriptDispatcher(tools, { mapOf("move" to "t_move") }),
+            projects = { listOf("bad", "p1") }, limits = { ScriptLimits() }, log = { logs += it }, clock = { now }, executor = { it() },
+        )
+        hooks.onEvent(moved()); hooks.onEvent(moved("ticket-bbbb2222"))
+        assertEquals(2, engine.inputs.size)
+        assertEquals(1, logs.count { "bad" in it && "skipped" in it })
+    }
+
     @Test fun `lane exit hooks fire on from, enter on to, on every lane, case-insensitively, with from and to in args`() {
         for (lane in listOf("backlog", "todo", "in_progress", "pending", "done", "Custom-Lane")) {
             for (dir in listOf("enter", "exit")) {
