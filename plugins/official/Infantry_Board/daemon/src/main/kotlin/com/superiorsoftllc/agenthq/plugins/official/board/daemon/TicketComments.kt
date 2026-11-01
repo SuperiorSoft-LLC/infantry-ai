@@ -182,6 +182,10 @@ class TicketComments(
         }
     }
 
+    /** TICKET-COMMENTS-4: did session [sessionId] comment on [ticketId] at or after [sinceMs]? */
+    fun commentedSince(ticketId: String, sessionId: String, sinceMs: Long): Boolean =
+        db.query("SELECT 1 AS x FROM infantry_board_comments WHERE ticket_id = ? AND author_session = ? AND created_at >= ? LIMIT 1", listOf(ticketId, sessionId, sinceMs)).isNotEmpty()
+
     fun summary(ticketId: String): Summary {
         val all = read(ticketId, "all", null, null)
         val open = all.filter { it.state == OPEN }

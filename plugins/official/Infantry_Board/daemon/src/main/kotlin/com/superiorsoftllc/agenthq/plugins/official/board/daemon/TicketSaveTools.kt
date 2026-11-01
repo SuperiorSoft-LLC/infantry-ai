@@ -297,7 +297,7 @@ class TicketCreateTool(private val api: DaemonApi, private val comments: TicketC
         val images = TicketSave.images(args, tool)?.let { TicketSave.attach(call, projectId, it, tool) }
         val draft = TicketDraft(
             title = title,
-            description = TicketSave.verbatim(args, "description"),
+            description = TicketReportLine.apply(TicketSave.verbatim(args, "description"), api.boardRuntime.setting(TicketReportLine.KEY)),
             projectId = projectId,
             agentId = TicketSave.roleAgentId(ToolArgs.string(args, "role")),
             provider = ToolArgs.string(args, "provider"),

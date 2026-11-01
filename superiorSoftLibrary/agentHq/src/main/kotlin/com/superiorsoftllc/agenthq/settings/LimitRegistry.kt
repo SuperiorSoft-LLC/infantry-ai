@@ -244,6 +244,11 @@ object LimitRegistry {
         "1 = a session whose ticket is done, or that already mailed its final report, gets no idle nudge and no failure notice for a non-zero exit; 0 = watch it like any other.",
         max = 1, zeroIsUnlimited = false,
     )
+    val IDLE_COMMENT = LimitDef(
+        "limits.watch.idleComment", 1, "switch",
+        "1 = a ticket worker that ends its turn cleanly with the ticket still in progress, and neither commented on the ticket nor mailed its starter, gets one open daemon comment on the ticket (branch, tip, dirty flag, last output); 0 = off.",
+        max = 1, zeroIsUnlimited = false,
+    )
     val WATCH_NOTICE_DEDUPE = LimitDef(
         "limits.watch.noticeDedupe", 1, "switch",
         "STALL-6: 1 = a bg job's queued and future notices are dropped once its owner read its log/status after it ended or ran `agenthq bg ack <id>`, a newer job with the same label superseded it, or its end made the 'closed output' notice stale; one 'closed output' and one 'finished' notice per job at most. 0 = every notice is sent.",
@@ -565,7 +570,7 @@ object LimitRegistry {
         TOOLS_INBOX_LIMIT, TOOLS_LIST_LIMIT, TOOLS_SESSION_TAIL_LINES, TOOLS_BOARD_QUEUE_SHOWN, TOOLS_BOARD_DONE_SHOWN,
         MAX_PER_POD, MAX_SESSIONS, MAX_DEPTH, MCP_MAX_SPAWNS, LANE_DEFAULT, PACING_CEILING,
         BUILD_MAX_WORKERS, BUILD_MAX_PARALLEL_FORKS, CPU_ALERT_PERCENT, CPU_ALERT_MINUTES,
-        TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NOTICE_MINUTES, UNBRIEFED_GRACE_MINUTES,
+        TICKET_DEADLINE_MINUTES, UNATTENDED_DEADLINE_MINUTES, STALL_MINUTES, KILL_RETRY_MINUTES, SILENT_MINUTES, PROGRESS_STALE_MINUTES, IDLE_NOTICE_MINUTES, IDLE_COMMENT, UNBRIEFED_GRACE_MINUTES,
         AUTO_DONE_MIN_OUTPUTS, PROCESS_WATCH_INTERVAL_SECONDS, RUN_SCROLLBACK_BYTES, RUN_HISTORY,
         RUN_INPUT_BYTES_PER_SECOND, RUN_INPUT_MAX_FRAME_BYTES, RUN_INPUT_QUEUE_BYTES, RUN_MAX_COLS, RUN_MAX_ROWS,
         QUESTION_TTL_MINUTES, BG_NOTIFY_TAIL_LINES, BG_NOTIFY_TIMEOUT_MINUTES, BG_NOTIFY_PATTERN_GRACE_SECONDS,

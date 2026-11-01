@@ -7,6 +7,7 @@ import com.superiorsoftllc.agenthq.session.SessionManager
 import com.superiorsoftllc.agenthq.session.SessionRecord
 import com.superiorsoftllc.agenthq.session.SessionState
 import com.superiorsoftllc.agenthq.settings.LimitRegistry
+import com.superiorsoftllc.agenthq.daemon.api.tickets.TicketReports
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -41,7 +42,14 @@ class FinishNoticeMonitor(
     private val idleNoticeMs: () -> Long = { LimitRegistry.minutesMs(LimitRegistry.IDLE_NOTICE_MINUTES.default, LimitRegistry.IDLE_NOTICE_MINUTES) },
     /** STALL-5: `limits.watch.exemptWhenTicketDone`; off = a non-zero exit after done is a failure notice as before. */
     private val exemptWhenDone: () -> Boolean = { true },
+    /** TICKET-COMMENTS-4: the board's comment port (null = no board loaded); `limits.watch.idleComment` off = no safety-net comment. */
+    private val reports: () -> TicketReports? = { null },
+    private val idleComment: () -> Boolean = { true },
+    private val gitState: (File?, String?) -> GitState? = { d, b -> d?.let { gitStateOf(it, b) } },
 ) {
+    /** Tip (8 chars), commits since the start ref (null = unknown) and whether the worktree has uncommitted changes. */
+    data class GitState(val tip: String, val newCommits: Int?, val dirty: Boolean)
+
     /** One stretch of a worker at rest with its ticket open: [since] is when it began (or its last sign of work). */
     private class IdlePeriod(@Volatile var since: Long) {
         @Volatile var noticed = false
@@ -52,6 +60,9 @@ class FinishNoticeMonitor(
     private val lastNoticeAt = ConcurrentHashMap<String, Long>()
     private val lastFailureNoticeAt = ConcurrentHashMap<String, Long>()
     private val idle = ConcurrentHashMap<String, IdlePeriod>()
+    /** TICKET-COMMENTS-4: when each session was last prompted, and the run whose idle comment was already posted. */
+    private val promptedAt = ConcurrentHashMap<String, Long>()
+    private val commentedRun = ConcurrentHashMap<String, Long>()
     private val executor = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "agenthq-idle-notice").also { it.isDaemon = true } }
 
     /** The idle sweep; the setting is whole minutes, so a pass a minute is exact to its unit. */
@@ -72,6 +83,7 @@ class FinishNoticeMonitor(
                     while (q.size > TAIL_LINES) q.removeFirst()
                 }
             }
+            is SessionEvent.Turn -> promptedAt[event.sessionId] = clock()
             is SessionEvent.Exit -> {
                 // Ticket 7e9bed2a: a kill is noticed too (the ticket left open by it), saying who did it.
                 runCatching { notice(event) }
@@ -102,6 +114,8 @@ class FinishNoticeMonitor(
         if (!failed && !done) {
             // A clean end of turn with the ticket open: the worker is waiting, not failing. Same period while no mail moved.
             val now = clock()
+            runCatching { idleComment(session, ticket, starter) }
+                .onFailure { System.err.println("[agentHq] idle comment failed for ${session.id}: ${it.message}") }
             idle.compute(session.id) { _, p -> if (p != null && lastMailAt(session) < p.since) p else IdlePeriod(now) }
             return
         }
@@ -149,6 +163,26 @@ class FinishNoticeMonitor(
                 },
             ),
         )
+    }
+
+    /**
+     * TICKET-COMMENTS-4: a clean end of turn with the ticket open and no report (no comment by the worker, no mail to the starter
+     * since its last prompt) posts ONE open daemon comment; a second end of turn without a new prompt posts nothing.
+     */
+    private fun idleComment(session: SessionRecord, ticket: TicketRow, starter: String) {
+        if (!idleComment()) return
+        val port = reports() ?: return
+        val since = promptedAt[session.id] ?: session.spawnedAt
+        if (commentedRun[session.id] == since) return
+        if (mailbox.outbox(session.id).any { it.sentAt >= since && it.to == starter }) return
+        if (port.commentedSince(ticket.id, session.id, since)) return
+        val dir = (session.worktreePath ?: session.repoRoot)?.let(::File)
+        val git = gitState(dir, session.worktreeBaseRef)
+        val last = tail[session.id]?.let { q -> synchronized(q) { q.toList() } }.orEmpty().lastOrNull { !it.startsWith("{") }.orEmpty()
+        val body = "Worker ${session.id.take(8)} went idle without a report. Branch ${ticket.branch ?: session.worktreeBranch ?: "none"} " +
+            (git?.let { "tip ${it.tip} (${it.newCommits?.let { n -> "$n new commits since start" } ?: "commits since start unknown"}; worktree ${if (it.dirty) "dirty" else "clean"})" } ?: "tip unknown") +
+            ". Last output: ${last.replace(Regex("[ \t\r\n]+"), " ").take(300)}"
+        if (port.postDaemonIssue(ticket.id, body)) commentedRun[session.id] = since
     }
 
     /**
@@ -218,6 +252,17 @@ class FinishNoticeMonitor(
         private const val OUTPUT_LINES = 6
         const val REPEAT_WINDOW_MS = 15 * 60_000L
         private val ENDED_STATES = setOf(SessionState.EXITED, SessionState.FAILED, SessionState.ORPHANED)
+
+        /** TICKET-COMMENTS-4: HEAD (8), commits since [base] and the dirty flag of the checkout at [dir]; null when git does not answer. */
+        fun gitStateOf(dir: File, base: String?): GitState? = runCatching {
+            fun git(vararg a: String): String? {
+                val p = ProcessBuilder(listOf("git", "-C", dir.path) + a).redirectErrorStream(true).start()
+                if (!p.waitFor(5, TimeUnit.SECONDS)) { p.destroyForcibly(); return null }
+                return p.inputStream.bufferedReader().readText().trim().takeIf { p.exitValue() == 0 }
+            }
+            val tip = git("rev-parse", "--short=8", "HEAD")?.takeIf { it.isNotEmpty() } ?: return null
+            GitState(tip, base?.let { git("rev-list", "--count", "$it..HEAD")?.toIntOrNull() }, git("status", "--porcelain").orEmpty().isNotEmpty())
+        }.getOrNull()
 
         /** The short sha of HEAD in [dir], or null when it is not a git checkout or git does not answer in 5 s. */
         fun gitHead(dir: File): String? = runCatching {
