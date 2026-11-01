@@ -151,3 +151,5 @@ TEST-TODO (SCRIPT-VIS-1): in a live daemon with a mail.incoming hook that handle
 - TEST-TODO: add a hook on `probe`, then `agenthq script delete probe` must be refused naming the hook; remove the hook and the delete works. Not tried by hand with the real Lua engine over the wire `check` op (unit-tested with a fake engine; Lua check compiled but only built, not exercised).
 
 TEST-TODO: HOOK-DEPTH-1 (e5271b5d): a done-hook starts a worker; its finish minutes later must run the done hook (no loop guard refusal); a hook that re-triggers itself within attributionMs is still stopped at maxDepth.
+
+TEST-TODO: ROLE-NOTE-1 (bcdfcce6): set `context.includeFinishInstructions` false for a project, start a ticket worker: its brief has no 'WHEN YOU ARE FINISHED' / 'Report to' line and shows the role notes; default (unset) is unchanged. Role notes appear as name: description only; the worker must `memory show` the body.

@@ -32,7 +32,9 @@ class TicketContextComposer(
         val includeLinked = switches.includeLinkedTasksContext.value
         val sections = buildList {
             add("agenthq" to "You are running inside Infantry AI. Ticket: ${input.ticketId}. Project: ${input.projectId ?: "none"}. Infantry AI tickets, agents, mail and project knowledge live in the Infantry AI daemon and are reached with the `agenthq` CLI, never through files. See superiorSoftLibrary/agentHq/docs/AGENT-QUICKREF.md.\n" + ticketMoveLine(input.ticketId) + "\n" + MCP_LINE + "\n" + RELATED_TICKETS_LINE)
-            add("team" to ((input.reportTo?.let { TEAM_BLOCK + "\n" + reportToLine(it) } ?: TEAM_BLOCK) + "\n" + FINISH_LINE))
+            // ROLE-NOTE-1: the built-in report-by-mail text yields to the project (setting off = neither line; role notes govern).
+            val finish = settings.includeFinishInstructions() ?: true
+            add("team" to if (finish) ((input.reportTo?.let { TEAM_BLOCK + "\n" + reportToLine(it) } ?: TEAM_BLOCK) + "\n" + FINISH_LINE) else TEAM_BLOCK)
             input.instructions?.takeIf(String::isNotBlank)?.let { add("instructions" to it) }
             // The same persona -> identity -> task order [firstTurn] gives every other first turn.
             identityLine(input.role, input.agentId)?.let { add("identity" to it) }

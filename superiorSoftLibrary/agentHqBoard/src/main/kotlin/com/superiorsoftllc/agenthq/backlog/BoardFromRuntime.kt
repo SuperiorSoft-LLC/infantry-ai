@@ -36,6 +36,7 @@ object BoardFromRuntime {
             override fun includeLinkedTasksContext() = runtime.includeLinkedTasksContext()
             override fun includeSkillsContext() = runtime.includeSkillsContext()
             override fun skillIds() = runtime.skillIds()
+            override fun includeFinishInstructions() = runtime.includeFinishInstructions()
         },
         com.superiorsoftllc.agenthq.context.KnowledgeSection { runtime.host.context.knowledgeSection(it, null) },
         com.superiorsoftllc.agenthq.context.SkillsSection { ids, include -> runtime.host.context.skillsSection(ids, include) },

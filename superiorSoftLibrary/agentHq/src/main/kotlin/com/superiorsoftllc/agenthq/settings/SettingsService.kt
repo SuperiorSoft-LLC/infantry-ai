@@ -57,6 +57,7 @@ class SettingsService(
         mapOf(
             INCLUDE_LINKED_TASKS_CONTEXT to (storedBoolean(INCLUDE_LINKED_TASKS_CONTEXT) ?: JsonPrimitive(true)),
             INCLUDE_SKILLS_CONTEXT to (storedBoolean(INCLUDE_SKILLS_CONTEXT) ?: JsonPrimitive(true)),
+            INCLUDE_FINISH_INSTRUCTIONS to (storedBoolean(INCLUDE_FINISH_INSTRUCTIONS) ?: JsonPrimitive(true)),
             SKILL_IDS to JsonArray(skillIds().map(::JsonPrimitive)),
             KEEP_ALIVE_MINUTES to JsonPrimitive(keepAliveMinutes()),
             PROMPTS_TIMEOUT_SEC to JsonPrimitive(promptTimeoutSec()),
@@ -340,7 +341,7 @@ class SettingsService(
 
     override fun set(key: String, value: JsonElement): JsonObject {
         val stored: JsonElement = when (key) {
-            INCLUDE_LINKED_TASKS_CONTEXT, INCLUDE_SKILLS_CONTEXT -> JsonPrimitive(requireBoolean(key, value))
+            INCLUDE_LINKED_TASKS_CONTEXT, INCLUDE_SKILLS_CONTEXT, INCLUDE_FINISH_INSTRUCTIONS -> JsonPrimitive(requireBoolean(key, value))
             SKILL_IDS -> JsonArray(requireSkillIds(value).map(::JsonPrimitive))
             KEEP_ALIVE_MINUTES -> JsonPrimitive(requireKeepAliveMinutes(value))
             PROMPTS_TIMEOUT_SEC -> JsonPrimitive(requirePromptTimeoutSec(value))
@@ -509,6 +510,8 @@ class SettingsService(
     override fun includeLinkedTasksContext(): Boolean? = storedBoolean(INCLUDE_LINKED_TASKS_CONTEXT)?.booleanOrNull
 
     override fun includeSkillsContext(): Boolean? = storedBoolean(INCLUDE_SKILLS_CONTEXT)?.booleanOrNull
+
+    override fun includeFinishInstructions(): Boolean? = storedBoolean(INCLUDE_FINISH_INSTRUCTIONS)?.booleanOrNull
 
     /** Read on every launch decision, never cached (plan section 8). */
     fun keepAliveMinutes(): Int {
@@ -791,6 +794,7 @@ class SettingsService(
     companion object {
         const val INCLUDE_LINKED_TASKS_CONTEXT = "context.includeLinkedTasksContext"
         const val INCLUDE_SKILLS_CONTEXT = "context.includeSkillsContext"
+        const val INCLUDE_FINISH_INSTRUCTIONS = "context.includeFinishInstructions"
         const val SKILL_IDS = "context.skillIds"
         const val KEEP_ALIVE_MINUTES = "session.keepAliveMinutes"
         /** LIMITS: the environment layer of [KEEP_ALIVE_MINUTES] (the stored setting wins). */
