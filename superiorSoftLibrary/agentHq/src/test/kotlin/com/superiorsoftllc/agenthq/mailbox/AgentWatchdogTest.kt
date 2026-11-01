@@ -17,7 +17,7 @@ class AgentWatchdogTest {
         val manager = SessionManager(FakeAgentProvider(), runner, tempSessionStore(), killGraceMs = 50)
         val mailbox = Mailbox(MemMailStore(), MailLimits())
         val sent = mutableListOf<MailSendRequest>()
-        val attention = com.superiorsoftllc.agenthq.attention.MemAttention()
+        val attention = com.superiorsoftllc.agenthq.daemon.MemAttention()
         var offset = 0L
         var enabled = true
         val dog = AgentWatchdog(

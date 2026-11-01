@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.attention
+package com.superiorsoftllc.agenthq.daemon
 
 import com.superiorsoftllc.agenthq.daemon.api.attention.Attention
 import com.superiorsoftllc.agenthq.daemon.api.attention.AttentionEntry
@@ -10,7 +10,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** ATTN-1 / ATTN-2b: core only holds [FoundAttention]; the provider (store, service) is Infantry_Attention's. */
-class AttentionServiceTest {
+class FoundAttentionTest {
     private class Fake : Attention {
         val items = mutableListOf<AttentionEntry>()
         override fun raise(kind: String, triggerId: String?, ticketId: String?, podId: String?, sessionId: String?, outcome: String, detail: String): String? =

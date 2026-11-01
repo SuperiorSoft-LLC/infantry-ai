@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.attention
+package com.superiorsoftllc.agenthq.daemon
 
 import com.superiorsoftllc.agenthq.daemon.api.attention.Attention
 import com.superiorsoftllc.agenthq.daemon.api.attention.AttentionEntry

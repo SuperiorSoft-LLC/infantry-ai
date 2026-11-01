@@ -13,10 +13,15 @@
     "entry": "com.superiorsoftllc.agenthq.plugins.official.attention.daemon.AttentionDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Attention-daemon.jar",
     "apiAtLeast": "1.24.0",
-    "storage": { "adopt": ["attention"] },
+    "storage": { "adopt": ["attention", "owner_questions"] },
+    "hooks": ["connected"],
     "frames": [
       { "type": "attention_list", "action": "attention.read", "kind": "read" },
-      { "type": "attention_ack", "action": "attention.ack", "kind": "write" }
+      { "type": "attention_ack", "action": "attention.ack", "kind": "write" },
+      { "type": "question_ask", "action": "questions.ask", "kind": "write" },
+      { "type": "question_list", "action": "questions.read", "kind": "read" },
+      { "type": "question_answer", "action": "questions.answer", "kind": "write" },
+      { "type": "question_cancel", "action": "questions.answer", "kind": "write" }
     ],
     "routes": ["GET /attention"],
     "tools": [

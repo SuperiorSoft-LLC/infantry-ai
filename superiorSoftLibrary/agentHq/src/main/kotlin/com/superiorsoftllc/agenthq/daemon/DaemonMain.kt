@@ -449,8 +449,6 @@ class AgentHqDaemon(
     val pendingPrompts: com.superiorsoftllc.agenthq.prompts.PendingPrompts = com.superiorsoftllc.agenthq.prompts.PendingPrompts(),
     /** BUG-FLAKE-1: the port [build] chose, held bound until [server] starts (BUG-PORT-0b); null = nothing held. */
     private val portReservation: DaemonPort.Reservation? = null,
-    /** ASK-1 (contract 1.97.0): non-blocking owner questions; [start] sweeps their `defaultAfterMin` auto-picks. */
-    val ownerQuestions: com.superiorsoftllc.agenthq.questions.OwnerQuestions? = null,
     /** TICKET-HANDOVER: switches ticket workers across harnesses with a handoff turn; stopped first by [close]. */
     val handover: SessionHandover? = null,
     /** Ticket b785f383: [close] kills what ended or removed sessions left running (after the manager's own shutdown). */
@@ -470,7 +468,6 @@ class AgentHqDaemon(
 ) {
     @Volatile private var recordedPort: Int? = null
     /** ASK-1: the `defaultAfterMin` sweep, started by [start], stopped by [close]. */
-    @Volatile private var questionSweeper: AutoCloseable? = null
 
     /**
      * PORT-1: start the server WITHOUT blocking, wait until it has bound, record the bound port in [portFile],
@@ -481,13 +478,6 @@ class AgentHqDaemon(
      */
     fun start(): Int {
         server.start(wait = false)
-        // ASK-1: auto-picks are minute-grained; a 15 s sweep (and one at once, for questions due across a restart).
-        ownerQuestions?.let { questions ->
-            runCatching { questions.sweep() }
-            questionSweeper = scheduledTicker(QUESTION_SWEEP_MS) {
-                runCatching { questions.sweep() }.onFailure { System.err.println("[agentHq] question sweep failed: ${it.message}") }
-            }
-        }
         val bound = boundPort()
         portFile?.let { DaemonPort.write(it, bound) }
         recordedPort = bound
@@ -530,7 +520,6 @@ class AgentHqDaemon(
         // Triggers stop observing FIRST: the kills below must not read as trigger-run failures; a trigger
         // still running is tripped at the next boot instead ("daemon restarted mid-run").
         runCatching { triggers.close() }
-        runCatching { questionSweeper?.close() }
         background.forEach { runCatching { it.close() } }
         // PROMPT-1: nobody can answer after this; every suspended asker gets deny / no answer.
         runCatching { pendingPrompts.closeAll() }
@@ -919,7 +908,7 @@ class AgentHqDaemon(
                 emit = { env -> for (c in clients.toList()) c.trySend(env) },
                 settings = settings, locked = locked, keystore = keystore,
             )
-            val foundAttention = com.superiorsoftllc.agenthq.attention.FoundAttention { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.attention.Attention::class) }
+            val foundAttention = com.superiorsoftllc.agenthq.daemon.FoundAttention { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.attention.Attention::class) }
             val attentionSvc: com.superiorsoftllc.agenthq.daemon.api.attention.Attention = foundAttention
             // Ticket 66153313 (via `api.processes.raiseAlert`): the process-watch plugin reports agent CPU held above the limit.
             alertSink.set { outcome, detail ->
@@ -1234,14 +1223,6 @@ class AgentHqDaemon(
             )
             mail.reportCheck = { from, body -> orchestratorLink.reviewReport(from, body).refusalOrNull() }
 
-            // ASK-1 (contract 1.97.0): non-blocking owner questions, stored, pushed to every client, answered by mail.
-            val ownerQuestions = com.superiorsoftllc.agenthq.daemon.wiring.QuestionsWiring.build(store, mail::send, clock, settings, manager, clients, json)
-            // A session that is killed, removed or restarted can no longer read the answer: its open questions are orphaned.
-            val previousOnClosed = manager.onSessionClosed
-            manager.onSessionClosed = { c ->
-                previousOnClosed(c)
-                if (c.reason in ORPHANING_CLOSE_REASONS) ownerQuestions.orphanSession(c.sessionId, c.at)
-            }
             val streamSequencer = SessionFrameSequencer()
             // Contract 1.95.0 (1c24fdc4): each session's harness-neutral run activity, carried on `status` frames.
             val runActivity = com.superiorsoftllc.agenthq.protocol.RunActivityTracker()
@@ -1376,8 +1357,7 @@ class AgentHqDaemon(
                 ticketInProgress = { id -> store.transaction { store.tickets.get(id) }?.status == com.superiorsoftllc.agenthq.protocol.TicketStatus.IN_PROGRESS },
                 deliberateWait = { s ->
                     mailbox.waiting().any { it.session == s.id } ||
-                        ownerQuestions.list().any { it.sessionId == s.id && it.state == com.superiorsoftllc.agenthq.protocol.QuestionStates.OPEN } ||
-                        // ATTN-2a: the plugin that owns the questions, once it provides them.
+                        // ATTN-2c: the plugin that owns the questions (Infantry_Attention) answers; none = nobody has one.
                         (runCatching { pluginHost.get().serviceRegistry.find(com.superiorsoftllc.agenthq.daemon.api.attention.QuestionsOpen::class)?.hasOpen(s.id) }.getOrNull() ?: false)
                 },
                 lastJobEndedAt = bgNotifier::lastEndedAt,
@@ -1827,7 +1807,6 @@ class AgentHqDaemon(
                             harnessInstaller = harnessInstaller,
                             toolApproval = toolApproval,
                             pendingPrompts = pendingPrompts,
-                            ownerQuestions = ownerQuestions,
                             handover = handover,
                             boardPorts = boardPorts,
                             processHost = localProcesses,
@@ -1872,7 +1851,6 @@ class AgentHqDaemon(
                 restoreExecutables = { restoreToolApproval(); restoreExecutables() },
                 pendingPrompts = pendingPrompts,
                 portReservation = portReservation,
-                ownerQuestions = ownerQuestions,
                 handover = handover,
                 processHost = localProcesses,
                 background = listOf(AutoCloseable { usageRefresher.stop() }, workerSweepCloser, AutoCloseable { agentWatchdog.close() }, AutoCloseable { finishNotice.close() }, AutoCloseable { stallDetector.close() }, healthGate, plugins, AutoCloseable { harnessModulesRef.get()?.close() }),
@@ -2368,8 +2346,6 @@ private suspend fun handleConnection(
     toolApproval: com.superiorsoftllc.agenthq.session.ToolApprovalService? = null,
     /** PROMPT-1 (contract 1.77.0): open prompts replayed on connect, answered by `prompt_response`; null = none. */
     pendingPrompts: com.superiorsoftllc.agenthq.prompts.PendingPrompts? = null,
-    /** ASK-1 (contract 1.97.0): `question_*`; replayed on connect as `questions`; null = this daemon serves none. */
-    ownerQuestions: com.superiorsoftllc.agenthq.questions.OwnerQuestions? = null,
     /** TICKET-HANDOVER: a ticket worker's harness switch goes through a handoff turn; null = switched at once. */
     handover: SessionHandover? = null,
     /** DP-5h-3e-a: the roster titles come from the board through this port; no board = no titles. */
@@ -2589,12 +2565,6 @@ private suspend fun handleConnection(
                 request.sessionId,
             ),
         )
-    }
-    // ASK-1: every owner question (open and history), so a client that (re)connects shows the open ones at once.
-    ownerQuestions?.let { questions ->
-        runCatching { questionsEnvelope(questions.list()) }
-            .onSuccess { outgoing.trySend(it) }
-            .onFailure { System.err.println("[agentHq] questions replay failed: ${it.message}") }
     }
     // ATTN-2a: frames the plugins replay to a newly connected client (fail open).
     runCatching { plugins.connectedFrames(null) }
@@ -3333,61 +3303,7 @@ private suspend fun handleConnection(
                     Envelope(Envelope.ERROR, "prompt_ask failed: ${e.message ?: e::class.simpleName}")
                 }
 
-                // ASK-1 (1.97.0): a NON-BLOCKING owner question. Answered at once with its id; the pick arrives as mail.
-                Envelope.QUESTION_ASK -> try {
-                    val service = ownerQuestions ?: throw IllegalArgumentException("this daemon has no owner questions")
-                    val askerId = envelope.sessionId?.trim()?.takeIf { it.isNotEmpty() }
-                        ?: throw IllegalArgumentException("no session: the envelope's sessionId names the asking session")
-                    val record = manager.get(askerId) ?: throw IllegalArgumentException("unknown session '${askerId.take(80)}'")
-                    val asker = com.superiorsoftllc.agenthq.questions.Asker(askerId, record.agentId, record.role, record.projectId)
-                    val created = service.ask(asker, com.superiorsoftllc.agenthq.protocol.QuestionAsk.decode(envelope.data))
-                    Envelope(
-                        Envelope.QUESTION_ASKED,
-                        json.encodeToString(
-                            com.superiorsoftllc.agenthq.protocol.QuestionAsked.serializer(),
-                            com.superiorsoftllc.agenthq.protocol.QuestionAsked(created.id),
-                        ),
-                        askerId,
-                    )
-                } catch (e: IllegalArgumentException) {
-                    Envelope(Envelope.ERROR, "question_ask refused: ${e.message ?: "invalid request"}")
-                } catch (e: Exception) {
-                    Envelope(Envelope.ERROR, "question_ask failed: ${e.message ?: e::class.simpleName}")
-                }
-
-                Envelope.QUESTION_LIST -> try {
-                    val service = ownerQuestions ?: throw IllegalArgumentException("this daemon has no owner questions")
-                    questionsEnvelope(service.list())
-                } catch (e: IllegalArgumentException) {
-                    Envelope(Envelope.ERROR, "question_list refused: ${e.message ?: "invalid request"}")
-                } catch (e: Exception) {
-                    Envelope(Envelope.ERROR, "question_list failed: ${e.message ?: e::class.simpleName}")
-                }
-
-                // The owner's pick (or an override of an auto-pick). Only the owner answers: a frame naming a session
-                // (an agent) is refused. The change reaches every client, this one included, as a `question` push.
-                Envelope.QUESTION_ANSWER -> try {
-                    val service = ownerQuestions ?: throw IllegalArgumentException("this daemon has no owner questions")
-                    require(envelope.sessionId.isNullOrBlank()) { "only the owner answers a question; an agent cannot" }
-                    service.answer(com.superiorsoftllc.agenthq.protocol.QuestionAnswer.decode(envelope.data))
-                    null
-                } catch (e: IllegalArgumentException) {
-                    Envelope(Envelope.ERROR, "question_answer refused: ${e.message ?: "invalid request"}")
-                } catch (e: Exception) {
-                    Envelope(Envelope.ERROR, "question_answer failed: ${e.message ?: e::class.simpleName}")
-                }
-
-                // The owner (no sessionId) or the asking session itself withdraws an open question.
-                Envelope.QUESTION_CANCEL -> try {
-                    val service = ownerQuestions ?: throw IllegalArgumentException("this daemon has no owner questions")
-                    val request = com.superiorsoftllc.agenthq.protocol.QuestionCancel.decode(envelope.data)
-                    service.cancel(request.questionId, envelope.sessionId?.trim()?.takeIf { it.isNotEmpty() })
-                    null
-                } catch (e: IllegalArgumentException) {
-                    Envelope(Envelope.ERROR, "question_cancel refused: ${e.message ?: "invalid request"}")
-                } catch (e: Exception) {
-                    Envelope(Envelope.ERROR, "question_cancel failed: ${e.message ?: e::class.simpleName}")
-                }
+                // ATTN-2c: question_ask / question_list / question_answer / question_cancel are answered by Infantry_Attention (api.frames).
 
                 Envelope.SETTINGS_SET -> try {
                     val request = SettingsSet.decode(envelope.data)
@@ -3937,10 +3853,6 @@ private fun toolApprovalEnvelope(info: com.superiorsoftllc.agenthq.protocol.Tool
 )
 
 /** ASK-1: `questions`, every owner question oldest first (open ones and the history). */
-private fun questionsEnvelope(questions: List<com.superiorsoftllc.agenthq.protocol.OwnerQuestion>): Envelope = Envelope(
-    Envelope.QUESTIONS,
-    json.encodeToString(ListSerializer(com.superiorsoftllc.agenthq.protocol.OwnerQuestion.serializer()), questions),
-)
 
 /**
  * BUG-PERM-1: the chat notice for a harness denial, as an additive `stderr` line (UI-BOOT-1's `[agenthq]` convention, no
@@ -4101,7 +4013,6 @@ private fun podAnswer(orchestrator: Orchestrator, podId: String): Envelope {
 }
 
 /** ASK-1: how often the daemon sweeps owner questions for a `defaultAfterMin` auto-pick. */
-private const val QUESTION_SWEEP_MS = 15_000L
 
 /** A daemon thread running [task] every [intervalMillis] (first run one interval in) until the handle is closed (the owner-question sweeper). */
 private fun scheduledTicker(intervalMillis: Long, task: () -> Unit): AutoCloseable {
@@ -4109,8 +4020,6 @@ private fun scheduledTicker(intervalMillis: Long, task: () -> Unit): AutoCloseab
     executor.scheduleWithFixedDelay(task, intervalMillis, intervalMillis, java.util.concurrent.TimeUnit.MILLISECONDS)
     return AutoCloseable { executor.shutdownNow() }
 }
-/** The [SessionClosed.reason]s after which the session cannot read an answer any more (a failed turn is resumable and keeps its questions). */
-private val ORPHANING_CLOSE_REASONS = setOf("session killed", "session removed", "session restarted")
 
 /** DAEMON-PLUGINS-1: one HTTP request to a plugin route, answered by its plugin ([DaemonPluginHost.answerRoute]); 404 when none. */
 private suspend fun answerPluginRoute(call: io.ktor.server.application.ApplicationCall, plugins: com.superiorsoftllc.agenthq.daemon.plugins.DaemonPluginHost) {

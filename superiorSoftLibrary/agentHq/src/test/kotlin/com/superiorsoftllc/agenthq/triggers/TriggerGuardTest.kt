@@ -115,7 +115,7 @@ class TriggerGuardTest {
     @Test
     fun `trip report persists and publishes attention`() {
         var pushed: com.superiorsoftllc.agenthq.daemon.api.attention.AttentionEntry? = null
-        val attention = com.superiorsoftllc.agenthq.attention.MemAttention(clock = { 42L }).also { it.eventSink = { e -> pushed = e } }
+        val attention = com.superiorsoftllc.agenthq.daemon.MemAttention(clock = { 42L }).also { it.eventSink = { e -> pushed = e } }
         val trip = TriggerTrip("trigger-x", "trigger_tripped", "FAILED", "run failed")
 
         trip.reportTo(attention)

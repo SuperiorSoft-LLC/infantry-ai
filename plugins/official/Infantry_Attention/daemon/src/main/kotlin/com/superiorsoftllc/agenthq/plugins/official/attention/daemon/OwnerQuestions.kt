@@ -1,127 +1,6 @@
-package com.superiorsoftllc.agenthq.questions
+package com.superiorsoftllc.agenthq.plugins.official.attention.daemon
 
-import com.superiorsoftllc.agenthq.db.AgentHQDatabase
-import com.superiorsoftllc.agenthq.mailbox.MailResult
-import com.superiorsoftllc.agenthq.mailbox.MailSendRequest
-import com.superiorsoftllc.agenthq.persistence.AgentHqStore
-import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
-import com.superiorsoftllc.agenthq.protocol.OwnerQuestion
-import com.superiorsoftllc.agenthq.protocol.PromptOption
-import com.superiorsoftllc.agenthq.protocol.QuestionAnswer
-import com.superiorsoftllc.agenthq.protocol.QuestionAsk
-import com.superiorsoftllc.agenthq.protocol.QuestionResolvedBy
-import com.superiorsoftllc.agenthq.protocol.QuestionStates
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.Json
 import java.util.UUID
-
-/** ASK-1: the durable owner questions (41.sqm). Rows are never deleted: resolved ones are the history. */
-interface OwnerQuestionRepository {
-    fun insert(question: OwnerQuestion)
-    /** Writes the resolution columns of [question] (state, answer, otherText, resolvedBy, resolvedAt, overridden). */
-    fun update(question: OwnerQuestion)
-    fun get(id: String): OwnerQuestion?
-    /** Oldest first. */
-    fun all(): List<OwnerQuestion>
-
-    companion object {
-        /** The daemon's SQL table when [store] is the SQL store; an in-memory list otherwise (a test double store). */
-        fun forStore(store: AgentHqStore): OwnerQuestionRepository =
-            (store as? SqlAgentHqStore)?.let { SqlOwnerQuestionRepository(it.handle.database) } ?: InMemoryOwnerQuestionRepository()
-    }
-}
-
-class InMemoryOwnerQuestionRepository : OwnerQuestionRepository {
-    private val rows = LinkedHashMap<String, OwnerQuestion>()
-
-    @Synchronized override fun insert(question: OwnerQuestion) {
-        require(question.id !in rows) { "question '${question.id}' exists" }
-        rows[question.id] = question
-    }
-
-    @Synchronized override fun update(question: OwnerQuestion) {
-        if (question.id in rows) rows[question.id] = question
-    }
-
-    @Synchronized override fun get(id: String) = rows[id]
-
-    @Synchronized override fun all() = rows.values.sortedWith(compareBy({ it.createdAt }, { it.id }))
-}
-
-class SqlOwnerQuestionRepository(database: AgentHQDatabase) : OwnerQuestionRepository {
-    private val q = database.owner_questionsQueries
-
-    override fun insert(question: OwnerQuestion) {
-        q.insertOwnerQuestion(
-            id = question.id,
-            project_id = question.projectId,
-            session_id = question.sessionId,
-            agent_id = question.agentId,
-            role = question.role,
-            question = question.question,
-            options = json.encodeToString(OPTIONS, question.options),
-            recommended = question.recommended,
-            reason = question.reason,
-            allow_other = if (question.allowOther) 1 else 0,
-            default_after_min = question.defaultAfterMin?.toLong(),
-            state = question.state,
-            answer = question.answer,
-            other_text = question.otherText,
-            resolved_by = question.resolvedBy,
-            created_at = question.createdAt,
-            resolved_at = question.resolvedAt,
-            overridden = if (question.overridden) 1 else 0,
-        )
-    }
-
-    override fun update(question: OwnerQuestion) {
-        q.resolveOwnerQuestion(
-            state = question.state,
-            answer = question.answer,
-            otherText = question.otherText,
-            resolvedBy = question.resolvedBy,
-            resolvedAt = question.resolvedAt,
-            overridden = if (question.overridden) 1 else 0,
-            id = question.id,
-        )
-    }
-
-    override fun get(id: String) = q.getOwnerQuestionById(id).executeAsOneOrNull()?.toQuestion()
-
-    override fun all() = q.getAllOwnerQuestions().executeAsList().map { it.toQuestion() }
-
-    private fun com.superiorsoftllc.agenthq.db.Owner_questions.toQuestion() = OwnerQuestion(
-        id = id,
-        projectId = project_id,
-        sessionId = session_id,
-        agentId = agent_id,
-        role = role,
-        question = question,
-        options = json.decodeFromString(OPTIONS, options),
-        recommended = recommended,
-        reason = reason,
-        allowOther = true,
-        defaultAfterMin = default_after_min?.toInt(),
-        state = state,
-        answer = answer,
-        otherText = other_text,
-        resolvedBy = resolved_by,
-        createdAt = created_at,
-        resolvedAt = resolved_at,
-        overridden = overridden != 0L,
-    )
-
-    private companion object {
-        val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
-        val OPTIONS = ListSerializer(PromptOption.serializer())
-    }
-}
-
-/** ASK-1: who asks, frozen on the question so the owner sees it after the session is gone. */
-data class Asker(val sessionId: String, val agentId: String? = null, val role: String? = null, val projectId: String? = null) {
-    /** The rate-limit key and the mail address: the agent outlives its sessions, so its id wins. */
-    val address: String get() = agentId?.takeIf { it.isNotBlank() } ?: sessionId
-}
 
 /**
  * ASK-1 (contract 1.97.0): non-blocking owner questions.
@@ -138,7 +17,8 @@ data class Asker(val sessionId: String, val agentId: String? = null, val role: S
  */
 class OwnerQuestions(
     private val repository: OwnerQuestionRepository,
-    private val send: (MailSendRequest) -> MailResult,
+    /** Mails [subject] / [body] to the asking session (`api.sessionNotifier.notifySession`); false = not delivered. */
+    private val notify: (sessionId: String, subject: String, body: String) -> Boolean,
     private val clock: () -> Long = System::currentTimeMillis,
     private val newId: () -> String = { UUID.randomUUID().toString() },
     private val maxOpen: () -> Int = { DEFAULT_MAX_OPEN },
@@ -169,7 +49,7 @@ class OwnerQuestions(
         val question = request.question.trim()
         require(question.isNotEmpty()) { "a question is required" }
         require(question.length <= QuestionAsk.QUESTION_MAX) { "the question is longer than ${QuestionAsk.QUESTION_MAX} characters" }
-        val options = request.options.map { PromptOption(it.label.trim(), it.description.trim()) }
+        val options = request.options.map { QuestionOption(it.label.trim(), it.description.trim()) }
         require(options.size >= 2) { "at least two options are required (a question with one answer is not a choice)" }
         require(options.size <= QuestionAsk.OPTIONS_MAX) { "at most ${QuestionAsk.OPTIONS_MAX} options" }
         require(options.none { it.label.isEmpty() }) { "an option label cannot be blank" }
@@ -321,15 +201,9 @@ class OwnerQuestions(
 
     /** A mail failure never undoes the stored answer: it is logged, and the answer stays visible in the history. */
     private fun mail(question: OwnerQuestion, content: Pair<String, String>) {
-        val request = MailSendRequest(
-            from = OWNER,
-            to = Asker(question.sessionId, question.agentId).address,
-            subject = content.first,
-            body = content.second,
-            threadId = threadOf(question.id),
-        )
-        runCatching { send(request) }
-            .onSuccess { if (it is MailResult.Refused) System.err.println("[agentHq] question ${question.id} mail refused: ${it.reason}") }
+        // The notifier has no thread id: the thread name rides in the body so the asker can still correlate the mail.
+        runCatching { notify(question.sessionId, content.first, content.second + "\n(thread " + threadOf(question.id) + ")") }
+            .onSuccess { if (!it) System.err.println("[agentHq] question ${question.id} mail not delivered (the asking session is gone)") }
             .onFailure { System.err.println("[agentHq] question ${question.id} mail failed: ${it.message}") }
     }
 
