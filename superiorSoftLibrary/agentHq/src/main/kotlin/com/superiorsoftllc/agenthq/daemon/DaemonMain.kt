@@ -1611,6 +1611,11 @@ class AgentHqDaemon(
                 harnessModulesRef.set(harnessModules)
             }
             val plugins = pluginHost.get()
+            // SCRIPT-3: the daemon's own happenings as named events (api.events.subscribe / agenthq_event_emit share this bus).
+            val eventPublisher = com.superiorsoftllc.agenthq.daemon.plugins.DaemonEventPublisher { name, payload -> runCatching { plugins.publishEvent(name, payload) } }
+            mail.onSent = eventPublisher::mail
+            manager.addSessionEndedListener(eventPublisher::sessionEnded)
+            ticketEvents?.subscribe("core:named-events", eventPublisher::ticket)
             println("[agentHq] reconcile: ${manager.loadAndReconcile()}")
             worktrees.reconcile(manager.list().mapNotNull { it.toWorktreeRef() })
 
@@ -1662,7 +1667,10 @@ class AgentHqDaemon(
                         for (e in pluginEvents) {
                             plugins.broadcast(e)
                             // `sessions` hook: a session's status push, as the session it is now.
-                            if (e.type == Envelope.SESSION) e.sessionId?.let(manager::get)?.let { plugins.sessionChanged("status", com.superiorsoftllc.agenthq.daemon.plugins.CoreDaemonServices.info(it)) }
+                            if (e.type == Envelope.SESSION) e.sessionId?.let(manager::get)?.let {
+                                plugins.sessionChanged("status", com.superiorsoftllc.agenthq.daemon.plugins.CoreDaemonServices.info(it))
+                                eventPublisher.sessionStatus(it.id, it.state.name, it.role, it.projectId)
+                            }
                         }
                     }
                 }, "daemon-plugin-events").apply { isDaemon = true }.start()

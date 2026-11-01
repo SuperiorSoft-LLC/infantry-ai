@@ -111,6 +111,7 @@ interface DaemonApi {
     fun files(projectId: String): com.superiorsoftllc.agenthq.daemon.api.files.ProjectFiles = com.superiorsoftllc.agenthq.daemon.api.files.NoProjectFiles
 
     companion object {
+        // 1.26.0 (SCRIPT-3, additive): `events.publish` / `events.subscribe` (NamedEvent): generic named events any plugin / agent publishes.
         // 1.24.0 (TICKET-COMMENTS-4, additive): daemon.api.tickets.TicketReports (published by Infantry_Board); a new ticket carries the report line (setting board.ticket.reportLine).
         // 1.25.0 (SCRIPT-2, additive): `services.publishEndpoint` / `services.endpoints(prefix)` (ServiceEndpoint): name-keyed string contracts between plugins.
         // 1.24.0 (ATTN-2a, additive): `events.broadcast`, `hooks.connected` (ConnectedHook), daemon.api.attention.QuestionsOpen. The session-closed reason is `processes.onSessionClosed` (1.8.0).
@@ -136,7 +137,7 @@ interface DaemonApi {
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
-        const val VERSION = "1.25.0"
+        const val VERSION = "1.26.0"
     }
 }
 
@@ -234,7 +235,36 @@ interface Events {
      * daemon without clients ignores it.
      */
     fun broadcast(type: String, data: String) {}
+
+    /**
+     * SCRIPT-3 (1.26.0, additive): publishes the named event [name] (dotted, e.g. `ticket.moved`) with a JSON [payload]. [causeId] and
+     * [depth] are carried to every subscriber unchanged; core enforces no policy on them. A new event with no [causeId] gets its own
+     * id as the cause. The source defaults to the calling plugin's id. Returns the event as delivered.
+     */
+    fun publish(name: String, payload: String = "{}", causeId: String? = null, depth: Int = 0): NamedEvent =
+        throw IllegalStateException("this daemon has no named events")
+
+    /**
+     * SCRIPT-3 (1.26.0, additive): subscribes to named events. [pattern] is an exact name (`ticket.moved`), a prefix ending in `.*`
+     * or `.` (`ticket.*` = every event whose name starts with `ticket.`), or `*` (all). Delivery is off the publishing thread, in publish order.
+     */
+    fun subscribe(pattern: String, listener: (NamedEvent) -> Unit): AutoCloseable = AutoCloseable {}
 }
+
+/**
+ * SCRIPT-3 (1.26.0): one named event. [name] is dotted lower-case; [payload] a JSON text; [source] who published it (plugin id,
+ * `session:<id>`, `cli` or `daemon`); [id] is unique per event; [causeId] names the event chain this one belongs to (the root
+ * event's id) and [depth] counts the hops from the root. Core only carries [causeId] and [depth]; a loop guard is a plugin's job.
+ */
+data class NamedEvent(
+    val name: String,
+    val payload: String = "{}",
+    val source: String = "",
+    val id: String = "",
+    val causeId: String = "",
+    val depth: Int = 0,
+    val at: Long = 0,
+)
 
 // ---- tools ----------------------------------------------------------------------------------------------------------
 
