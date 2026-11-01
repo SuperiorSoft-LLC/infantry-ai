@@ -809,7 +809,7 @@ class DaemonPluginHost private constructor(
         }
         const val PLUGIN_TOOL_RESULT = "plugin_tool_result"
         const val PLUGIN_PREFIX = "/plugins/"
-        val HOOK_KINDS = setOf("frameGate", "httpGate", "admission", "mailGate", "spawnGate", "ready", "turns", "sessions", "policyProvider", "orchestratorBinding", "seats", "approvalRules")
+        val HOOK_KINDS = setOf("frameGate", "connected", "httpGate", "admission", "mailGate", "spawnGate", "ready", "turns", "sessions", "policyProvider", "orchestratorBinding", "seats", "approvalRules")
         private val METHODS = setOf("GET", "POST", "PUT", "DELETE", "PATCH")
         private val TOOL_NAME = Regex("^[a-z][a-z0-9_]{2,63}$")
         private val READY_KEY = Regex("^[a-zA-Z][a-zA-Z0-9_]{0,31}$")
