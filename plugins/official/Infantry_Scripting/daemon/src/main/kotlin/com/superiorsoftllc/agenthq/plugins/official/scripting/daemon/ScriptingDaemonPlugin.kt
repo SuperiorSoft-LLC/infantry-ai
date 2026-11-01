@@ -10,8 +10,9 @@ import java.io.File
 /** SCRIPT-2: owns the open ScriptEngine extension point (endpoints under the `scripting.engine/` prefix) and the limits settings. Later tickets add the callers. */
 class ScriptingDaemonPlugin : DaemonPlugin {
     private var subscription: AutoCloseable? = null
+    private var sessionWatch: AutoCloseable? = null
 
-    override fun stop() { runCatching { subscription?.close() }; subscription = null }
+    override fun stop() { runCatching { subscription?.close() }; subscription = null; runCatching { sessionWatch?.close() }; sessionWatch = null }
 
     override fun start(api: DaemonApi) {
         val engines = ScriptEngines({ api.services.endpoints(ScriptEngineWire.PREFIX) }, { api.config("scripting.defaultEngine")?.takeIf { it.isNotBlank() } ?: "lua" })
@@ -33,6 +34,8 @@ class ScriptingDaemonPlugin : DaemonPlugin {
             log = { api.log(it) },
         )
         api.hooks.incomingMail { hooks.incoming(it) }
+        // MAIL-HOOK-1b: a session's mail hooks go with the session.
+        sessionWatch = api.events.onSessionRemoved { id -> runCatching { hookStore.removeForSession(api.projects.list().map { it.id }, id).takeIf { it > 0 }?.let { api.log("hooks: removed $it mail hook(s) of ended session $id") } } }
         subscription = api.events.subscribe("*") { hooks.onEvent(it) }
         api.log("scripting ready: engines=${engines.ids()} limits=${limits.current()}")
     }

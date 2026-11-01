@@ -62,6 +62,7 @@ class ScriptHooks(
     private val runs = java.util.Collections.synchronizedList(ArrayList<Run>())
     private val fires = ConcurrentHashMap<String, ArrayDeque<Long>>()
     private val reported = ConcurrentHashMap<String, Long>()
+    private val ignoredMail = ConcurrentHashMap<String, Boolean>()
     private val unreadable = ConcurrentHashMap<String, Boolean>()
 
     /**
@@ -93,6 +94,9 @@ class ScriptHooks(
             val hooks = runCatching { store.list(p) }.getOrDefault(emptyList())
             for (hook in hooks) {
                 if (!hook.enabled || hook.on !is HookOn.Named || (hook.on as HookOn.Named).pattern != INCOMING_EVENT) continue
+                // MAIL-HOOK-1b: a mail hook is attached to exactly one session; a stored one without `to` is ignored (one log line).
+                if (hook.to == null) { if (ignoredMail.putIfAbsent("$p/${hook.id}", true) == null) log("hooks: mail.incoming hook ${hook.id} ($p) has no session (to), ignored; re-add it with to=<session id>"); continue }
+                if (hook.to != mail.recipientSessionId) continue
                 if (admit(p, hook, 0) != null) continue
                 val run = Run("$p/${hook.id}", 0, ConcurrentHashMap.newKeySet())
                 val v = runCatching { executeIncoming(p, hook, e, payload, run) }.getOrNull()
@@ -104,14 +108,14 @@ class ScriptHooks(
 
     private fun executeIncoming(project: String, hook: Hook, e: NamedEvent, payload: JsonObject, run: Run): MailVerdict? {
         try {
-            val script = scripts.read(project, hook.script) ?: return fail(project, hook, null, "no script '${hook.script}' in .agenthq/scripts/").let { null }
-            val engine = engines.byExtension(script.extension) ?: return fail(project, hook, null, "no engine loaded for .${script.extension}").let { null }
+            val script = scripts.read(project, hook.script) ?: return failQuiet(project, hook, "no script '${hook.script}' in .agenthq/scripts/").let { null }
+            val engine = engines.byExtension(script.extension) ?: return failQuiet(project, hook, "no engine loaded for .${script.extension}").let { null }
             val who = ScriptCaller(hook.ownerSession.orEmpty(), hook.ownerRole.orEmpty())
             val report = dispatcher.run(engine, script.source, scriptArgs(project, hook, e, payload, null, 0), limits(), who, invokerOf(project, hook), false)
-            if (!report.ok) { fail(project, hook, null, report.render(hook.script)); return null }
+            if (!report.ok) { failQuiet(project, hook, report.render(hook.script)); return null }
             return if (report.handled) MailVerdict(handled = true) else report.deliverText?.let { MailVerdict(text = it) }
         } catch (t: Throwable) {
-            fail(project, hook, null, "script crashed: ${t.javaClass.simpleName}: ${t.message?.take(300)}"); return null
+            failQuiet(project, hook, "script crashed: ${t.javaClass.simpleName}: ${t.message?.take(300)}"); return null
         } finally { run.endedAt = clock() }
     }
 
@@ -211,6 +215,13 @@ class ScriptHooks(
             run.endedAt = clock()
         }
     }
+
+    /** MAIL-HOOK-1b: a mail.incoming failure is logged once per hook and reason, never mailed or commented (a failure mail costs a turn). */
+    private fun failQuiet(project: String, hook: Hook, what: String) {
+        val line = "hook ${hook.id} ($project) FAILED: ${reasonLine(what)}".take(400)
+        if (quietSeen.put("$project/${hook.id}/$line", true) == null) log(line)
+    }
+    private val quietSeen = ConcurrentHashMap<String, Boolean>()
 
     private fun fail(project: String, hook: Hook, ticketId: String?, what: String) {
         log("hook ${hook.id} ($project) FAILED: ${reasonLine(what)}".take(400))

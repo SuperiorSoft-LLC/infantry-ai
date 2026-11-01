@@ -54,6 +54,8 @@ data class Hook(
     val ownerSession: String? = null,
     val ownerRole: String? = null,
     val ownerIsOwner: Boolean = false,
+    /** MAIL-HOOK-1b: a `mail.incoming` hook names exactly one session (the recipient it runs for); null for every other hook. */
+    val to: String? = null,
 ) {
     fun toJson(): JsonObject = buildJsonObject {
         put("id", id); put("on", on.toString()); put("script", script)
@@ -62,9 +64,10 @@ data class Hook(
         ownerSession?.let { put("ownerSession", it) }
         ownerRole?.let { put("ownerRole", it) }
         if (ownerIsOwner) put("ownerIsOwner", true)
+        to?.let { put("to", it) }
     }
 
-    fun line(): String = "$id  on $on -> $script${if (args.isEmpty()) "" else " $args"}${if (enabled) "" else "  [disabled]"}"
+    fun line(): String = "$id  on $on${to?.let { " to $it" } ?: ""} -> $script${ownerSession?.let { " (added by $it${ownerRole?.let { r -> "/$r" } ?: ""})" } ?: ""}${if (args.isEmpty()) "" else " $args"}${if (enabled) "" else "  [disabled]"}"
 }
 
 /**
@@ -92,6 +95,16 @@ class HookStore(private val files: (String) -> ProjectFiles) {
         var found = false
         mutate(projectId) { current -> current.filter { it.id != id }.also { found = it.size != current.size } }
         return found
+    }
+
+    /** MAIL-HOOK-1b: drops every `mail.incoming` hook attached to [session] (it ended), in each of [projects]. Returns how many went. */
+    fun removeForSession(projects: List<String>, session: String): Int {
+        var n = 0
+        for (p in projects) runCatching {
+            if (list(p).none { it.to == session }) return@runCatching
+            mutate(p) { cur -> cur.filter { it.to != session }.also { n += cur.size - it.size } }
+        }
+        return n
     }
 
     @Synchronized private fun mutate(projectId: String, change: (List<Hook>) -> List<Hook>) {
@@ -138,7 +151,7 @@ class HookStore(private val files: (String) -> ProjectFiles) {
                 val script = s("script") ?: throw IllegalArgumentException("hook '$id' names no script")
                 Hook(
                     id, HookOn.parse(s("on").orEmpty()), script, (o["args"] as? JsonObject) ?: JsonObject(emptyMap()),
-                    (o["enabled"] as? JsonPrimitive)?.booleanOrNull ?: true, s("ownerSession"), s("ownerRole"), (o["ownerIsOwner"] as? JsonPrimitive)?.booleanOrNull == true,
+                    (o["enabled"] as? JsonPrimitive)?.booleanOrNull ?: true, s("ownerSession"), s("ownerRole"), (o["ownerIsOwner"] as? JsonPrimitive)?.booleanOrNull == true, s("to"),
                 )
             }
         }
