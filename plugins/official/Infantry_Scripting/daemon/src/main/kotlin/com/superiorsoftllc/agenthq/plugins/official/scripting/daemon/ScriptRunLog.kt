@@ -123,7 +123,7 @@ class ScriptRunLog(private val limit: () -> Int = { 200 }, private val clock: ()
 
     data class WakeNote(val at: Long, val reason: String, val ref: String?)
 
-    fun record(project: String, script: String, trigger: String, session: String?, report: RunReport?, outcome: String, summary: String, error: String? = null, ref: String? = null): RunRecord {
+    fun record(project: String, script: String, trigger: String, session: String?, report: RunReport?, outcome: String, summary: String, error: String? = null, ref: String? = null, quiet: Boolean = false): RunRecord {
         val actions = report?.records?.map { RunAction(it.tool, it.ok, it.text) }.orEmpty()
         val rec = RunRecord(seq.incrementAndGet(), clock(), project, script, trigger, session, outcome, error == null && report?.ok != false, actions, report?.logs.orEmpty(), summary, error ?: report?.error, ref)
         session?.let { sessionProject[it] = project }
@@ -131,8 +131,35 @@ class ScriptRunLog(private val limit: () -> Int = { 200 }, private val clock: ()
         val q = runs.computeIfAbsent(project) { ArrayDeque() }
         synchronized(q) { q.addLast(rec); while (q.size > max) q.removeFirst() }
         runCatching { store?.save(rec); store?.trim(project, max) }
-        runCatching { onRecord?.invoke(rec) }
+        if (!quiet) runCatching { onRecord?.invoke(rec) }
         return rec
+    }
+
+    /** HOOK-LINE-1: the records of the mail hooks that ran for mail [ref], oldest first. */
+    fun byRef(ref: String): List<RunRecord> = runs.values.flatMap { q -> synchronized(q) { q.filter { it.ref == ref } } }.sortedBy { it.id }
+
+    /**
+     * HOOK-LINE-1: ONE chat line per mail with its final outcome; the per-hook records are its expandable details (they are recorded quiet).
+     * [verdict] is "handled", "rewritten" or "delivered". Never says "passed through" when a later hook handled the mail.
+     */
+    fun mailSummary(ref: String, subject: String, session: String, verdict: String) {
+        val recs = byRef(ref)
+        if (recs.isEmpty()) return
+        val last = recs.last()
+        val failed = recs.filter { !it.ok }
+        val text = when {
+            verdict == "handled" -> "mail $subject to $session: handled by ${last.script} (not delivered, no turn)"
+            verdict == "rewritten" -> "mail $subject to $session: delivered, rewritten by ${last.script}"
+            failed.isNotEmpty() -> "mail $subject to $session: hook ${failed.joinToString { it.script }} FAILED (${failed.first().error?.take(120) ?: "error"}) -> delivered, recipient woken"
+            else -> "mail $subject to $session: delivered (no hook handled it)"
+        }
+        val ok = failed.isEmpty()
+        val item = buildJsonObject {
+            put("id", "mail-$ref-${recs.first().project}"); put("sessionId", session); put("at", clock()); put("source", "automation")
+            put("label", "AUTOMATION · mail"); put("text", "AUTOMATION · $text${if (!ok) " · FAILED" else ""}"); put("ok", ok)
+            put("details", buildJsonArray { recs.forEach { add(JsonPrimitive("${it.script}: ${it.outcome} - ${it.summary}${it.error?.let { e -> " (${e.take(160)})" }.orEmpty()}")) } })
+        }
+        runCatching { onStats?.invoke(item) }
     }
 
     /**
