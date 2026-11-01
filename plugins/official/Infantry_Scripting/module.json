@@ -12,6 +12,9 @@
     "jar": "daemon/build/libs/Infantry_Scripting-daemon.jar",
     "apiAtLeast": "1.30.0",
     "hooks": ["incomingMail"],
+    "frames": [
+      { "type": "timeline_list", "action": "timeline.read", "kind": "read" }
+    ],
     "tools": [
       { "name": "agenthq_script_run", "action": "script.run", "kind": "write", "description": "Run a named project script as the caller (the daemon runs its queued tool calls), or plan it with dryRun." },
       { "name": "agenthq_script_api", "action": "script.api", "kind": "read", "description": "Every tool a script can call (live registry), the alias table and the engine bindings." },

@@ -50,6 +50,7 @@ import com.superiorsoftllc.agenthq.ui.protocol.WorktreeStatus
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -498,6 +499,22 @@ internal fun render(entries: List<TranscriptEntry>): List<OutputLine> {
 sealed interface ChatItem {
     data class Line(val line: OutputLine) : ChatItem
     data class Reasoning(val lines: List<OutputLine>) : ChatItem
+    /** SCRIPT-VIS-1b: a line a plugin contributed (e.g. an automation run); never the agent's own output. */
+    data class Contribution(val item: TimelineItem) : ChatItem
+}
+
+/** SCRIPT-VIS-1b: [rows] with the plugin-contributed [items] placed by time (before the first row that is later; trailing ones last). */
+fun withContributions(rows: List<ChatItem>, items: List<TimelineItem>): List<ChatItem> {
+    if (items.isEmpty()) return rows
+    fun ChatItem.at(): Long = when (this) { is ChatItem.Line -> line.at; is ChatItem.Reasoning -> lines.firstOrNull()?.at ?: 0L; is ChatItem.Contribution -> item.at }
+    val out = ArrayList<ChatItem>(rows.size + items.size)
+    val pending = items.sortedBy { it.at }.toMutableList()
+    for (r in rows) {
+        while (pending.isNotEmpty() && pending.first().at < r.at()) out += ChatItem.Contribution(pending.removeAt(0))
+        out += r
+    }
+    pending.forEach { out += ChatItem.Contribution(it) }
+    return out
 }
 
 /** Group consecutive reasoning lines into one [ChatItem.Reasoning]; every other line stands alone. */
@@ -698,6 +715,8 @@ data class AppState(
     val pickedEffort: String? = null,
     /** Contract 1.9.0: the durable attention history, oldest first as the daemon lists it. */
     val attention: List<AttentionItem> = emptyList(),
+    /** SCRIPT-VIS-1b: plugin-contributed chat lines per session id (newest last), from `timeline_item` / `timeline_items`. */
+    val timeline: Map<String, List<TimelineItem>> = emptyMap(),
     /** Contract 1.13.0: each provider's last observed limit state, in the daemon's order. */
     val providerStates: Map<String, ProviderState> = emptyMap(),
     /** Contract 1.59.0 (U1): the last `limits` answer, one entry per provider in the daemon's order; null = never answered. */
@@ -978,6 +997,7 @@ data class AppState(
         needsInput(a, waiting, openPrompts, openQuestionSessions) -> AgentGroup.NEEDS_YOU
         a.id in reviewSessions -> AgentGroup.TO_REVIEW
         a.session.state in WORKING -> AgentGroup.WORKING
+        a.session.automation != null -> AgentGroup.WORKING
         else -> AgentGroup.INACTIVE
     }
 
@@ -1478,6 +1498,9 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     Envelope.PROVIDERS -> s.copy(providers = json.decodeFromString(ListSerializer(ProviderInfo.serializer()), env.data))
 
     // Contract 1.9.0: history on request; every new item and every acknowledgement is pushed as `attention`.
+    // SCRIPT-VIS-1b: a plugin's chat line (no turn): one pushed, or the held history. Same id replaces; bounded per session.
+    Envelope.TIMELINE_ITEM -> s.withTimeline(listOf(json.decodeFromString(TimelineItem.serializer(), env.data)))
+    Envelope.TIMELINE_ITEMS -> s.withTimeline(json.decodeFromString(ListSerializer(TimelineItem.serializer()), env.data))
     Envelope.ATTENTION_ITEMS -> s.copy(attention = json.decodeFromString(ListSerializer(AttentionItem.serializer()), env.data))
     Envelope.ATTENTION -> {
         val item = json.decodeFromString(AttentionItem.serializer(), env.data)
@@ -2186,4 +2209,28 @@ internal fun declaredNotice(c: ConnectionInfo, data: String): Pair<String, Strin
     val code = data.substringBefore(' ')
     val message = data.substringAfter(' ', "").trim()
     return if (code in declared && message.isNotEmpty()) code to message else null
+}
+
+/**
+ * SCRIPT-VIS-1b: one line a plugin put into a session's chat without a turn (the generic contribution seam). [source] is the plugin's
+ * kind of contribution (`automation`), [label] its heading ("AUTOMATION · script"), [text] the one-line summary, [details] the expandable
+ * lines; [ok] false marks a failure. Never shown as the agent's own output.
+ */
+@Serializable
+data class TimelineItem(
+    val id: String, val sessionId: String, val at: Long, val source: String = "", val label: String = "", val text: String = "",
+    val details: List<String> = emptyList(), val ok: Boolean = true,
+)
+
+const val TIMELINE_MAX_PER_SESSION = 200
+
+/** Merges [items] into the per-session timeline: same id replaces, order by time, at most [TIMELINE_MAX_PER_SESSION] newest kept. */
+fun AppState.withTimeline(items: List<TimelineItem>): AppState {
+    if (items.isEmpty()) return this
+    var next = timeline
+    for ((sid, group) in items.groupBy { it.sessionId }) {
+        val have = next[sid].orEmpty().filter { o -> group.none { it.id == o.id } }
+        next = next + (sid to (have + group).sortedBy { it.at }.takeLast(TIMELINE_MAX_PER_SESSION))
+    }
+    return copy(timeline = next)
 }

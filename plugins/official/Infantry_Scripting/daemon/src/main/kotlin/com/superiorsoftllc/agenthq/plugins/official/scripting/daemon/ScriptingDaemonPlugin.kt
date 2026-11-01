@@ -1,6 +1,10 @@
 package com.superiorsoftllc.agenthq.plugins.official.scripting.daemon
 
 import com.superiorsoftllc.agenthq.daemon.api.DaemonApi
+import com.superiorsoftllc.agenthq.daemon.api.Frame
+import com.superiorsoftllc.agenthq.daemon.api.IncomingMail
+import com.superiorsoftllc.agenthq.daemon.api.IncomingMailHook
+import com.superiorsoftllc.agenthq.daemon.api.MailVerdict
 import com.superiorsoftllc.agenthq.daemon.api.DaemonPlugin
 import com.superiorsoftllc.agenthq.daemon.api.ServiceEndpoint
 import kotlinx.serialization.json.contentOrNull
@@ -9,6 +13,12 @@ import java.io.File
 
 /** SCRIPT-2: owns the open ScriptEngine extension point (endpoints under the `scripting.engine/` prefix) and the limits settings. Later tickets add the callers. */
 class ScriptingDaemonPlugin : DaemonPlugin {
+    private companion object {
+        const val TIMELINE_ITEM = "timeline_item"
+        const val TIMELINE_LIST = "timeline_list"
+        const val TIMELINE_ITEMS = "timeline_items"
+    }
+
     private var subscription: AutoCloseable? = null
     private var sessionWatch: AutoCloseable? = null
     private var wakeWatch: AutoCloseable? = null
@@ -21,7 +31,16 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         val store = ScriptStore({ api.files(it) }, { engines.extensions() })
         val aliases = { ScriptAliases.parse(api.config("scripting.aliases")) }
         val maxPhases = { api.config("scripting.maxPhases")?.trim()?.toIntOrNull() ?: 3 }
-        val runLog = ScriptRunLog({ api.settings.limit("limits.scripting.runLogMax")?.toInt() ?: 200 })
+        // SCRIPT-VIS-1b: the run log is stored in the plugin's own tables (a daemon without storage keeps it in memory only).
+        val runLog = ScriptRunLog({ api.settings.limit("limits.scripting.runLogMax")?.toInt() ?: 200 }, store = runCatching { StorageRunStore(api.storage) }.getOrNull())
+        // SCRIPT-VIS-1b: each run's AUTOMATION line goes to the chat of the session it ran for (a timeline_item push, no turn). Nothing here may
+        // fail a run: a throwing broadcast is dropped and the chat is exactly what it was.
+        runLog.onRecord = { rec -> rec.timelineJson()?.let { runCatching { api.events.broadcast(TIMELINE_ITEM, it.toString()) } } }
+        api.frames.handle(TIMELINE_LIST) { frame, _ ->
+            val wanted = frame.data.trim().takeIf { it.isNotEmpty() }
+            val items = runLog.timelineItems().filter { wanted == null || (it["sessionId"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull == wanted }
+            Frame(TIMELINE_ITEMS, kotlinx.serialization.json.JsonArray(items).toString(), frame.sessionId, frame.requestId)
+        }
         val tools = ScriptTools(api.tools, engines, store, limits, aliases, maxPhases, runLog)
         api.tools.register(runLog.tool())
         api.tools.register(tools.run)
@@ -35,6 +54,7 @@ class ScriptingDaemonPlugin : DaemonPlugin {
             guard = { HookSettings.guard { api.config(it) } }, enabled = { HookSettings.enabled { api.config(it) } },
             tip = { project, branch -> ScriptHooks.gitTip(File(api.files(project).absolutePath("x")).parentFile.parentFile, branch) },
             log = { api.log(it) }, runLog = runLog,
+            automation = { session, mark -> api.sessions.setAutomation(session, mark) },
         )
         // SCRIPT-VIS-1: why each session was woken (and mails a hook handled instead), from the daemon's session.woken event.
         wakeWatch = api.events.subscribe("session.woken") { e ->
@@ -44,7 +64,11 @@ class ScriptingDaemonPlugin : DaemonPlugin {
                 runLog.wake(s("sessionId") ?: return@runCatching, s("reason") ?: return@runCatching, s("ref"), s("projectId"))
             }
         }
-        api.hooks.incomingMail { hooks.incoming(it) }
+        api.hooks.incomingMail(object : IncomingMailHook {
+            override fun incoming(mail: IncomingMail): MailVerdict? = hooks.incoming(mail)
+            // SCRIPT-VIS-1b: the host dropped our verdict (timeout / limit / throw): the record must not claim a handled mail.
+            override fun lost(mailId: String, reason: String) = runLog.verdictLost(mailId, reason)
+        })
         // MAIL-HOOK-1b: a session's mail hooks go with the session.
         sessionWatch = api.events.onSessionRemoved { id -> runCatching { hookStore.removeForSession(api.projects.list().map { it.id }, id).takeIf { it > 0 }?.let { api.log("hooks: removed $it mail hook(s) of ended session $id") } } }
         subscription = api.events.subscribe("*") { hooks.onEvent(it) }

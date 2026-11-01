@@ -23,42 +23,139 @@ data class RunAction(val tool: String, val ok: Boolean?, val text: String?)
 data class RunRecord(
     val id: Long, val at: Long, val project: String, val script: String, val trigger: String, val session: String?,
     val outcome: String, val ok: Boolean, val actions: List<RunAction>, val log: List<String>, val summary: String, val error: String? = null,
+    /** The mail id a mail hook ran for (lets a lost verdict find its record), else null. */
+    val ref: String? = null,
 ) {
     /** The compact automation line a session view shows (never the agent's own output). */
     fun line(): String = "AUTOMATION · $script · $summary${if (!ok) " · FAILED" else ""}"
+
+    /** SCRIPT-VIS-1b: the chat contribution of this run (a timeline_item payload), or null when the run is not tied to a session. */
+    fun timelineJson(): JsonObject? {
+        val sid = session ?: return null
+        return buildJsonObject {
+            put("id", "run-$project-$id"); put("sessionId", sid); put("at", at); put("source", "automation")
+            put("label", "AUTOMATION · $script"); put("text", line()); put("ok", ok)
+            put("details", buildJsonArray {
+                add(JsonPrimitive("trigger: $trigger"))
+                actions.forEach { a -> add(JsonPrimitive("${a.tool} ${when (a.ok) { true -> "ok"; false -> "FAILED"; null -> "planned" }}${a.text?.let { ": ${it.take(160)}" }.orEmpty()}")) }
+                log.forEach { add(JsonPrimitive("log: ${it.take(200)}")) }
+                error?.let { add(JsonPrimitive("error: ${it.take(200)}")) }
+            })
+        }
+    }
 
     fun toJson(): JsonObject = buildJsonObject {
         put("id", id); put("at", at); put("project", project); put("script", script); put("trigger", trigger)
         session?.let { put("session", it) }
         put("outcome", outcome); put("ok", ok); put("line", line()); put("summary", summary)
         error?.let { put("error", it) }
+        ref?.let { put("ref", it) }
         put("actions", buildJsonArray { actions.forEach { a -> add(buildJsonObject { put("tool", a.tool); a.ok?.let { put("ok", it) }; a.text?.let { put("text", it.take(300)) } }) } })
         put("log", buildJsonArray { log.forEach { add(JsonPrimitive(it.take(300))) } })
     }
+}
+
+/** SCRIPT-VIS-1b: where run records survive a restart (the plugin's own storage; tests use a map). */
+interface RunStore {
+    fun save(rec: RunRecord)
+    /** Drops all but the newest [keep] records of [project]. */
+    fun trim(project: String, keep: Int)
+    fun load(): List<RunRecord>
+}
+
+/** [RunStore] over the daemon's plugin storage: one table, the record as its JSON. */
+class StorageRunStore(private val db: com.superiorsoftllc.agenthq.daemon.api.storage.PluginStorage) : RunStore {
+    init { db.migrate(1, listOf("CREATE TABLE IF NOT EXISTS infantry_scripting_runs (id INTEGER NOT NULL, project TEXT NOT NULL, at INTEGER NOT NULL, json TEXT NOT NULL, PRIMARY KEY (project, id))")) }
+    override fun save(rec: RunRecord) { db.execute("INSERT OR REPLACE INTO infantry_scripting_runs (id, project, at, json) VALUES (?, ?, ?, ?)", listOf(rec.id, rec.project, rec.at, RunRecords.encode(rec))) }
+    override fun trim(project: String, keep: Int) { db.execute("DELETE FROM infantry_scripting_runs WHERE project = ? AND id NOT IN (SELECT id FROM infantry_scripting_runs WHERE project = ? ORDER BY id DESC LIMIT ?)", listOf(project, project, keep.toLong())) }
+    override fun load(): List<RunRecord> = db.query("SELECT json FROM infantry_scripting_runs ORDER BY id").mapNotNull { RunRecords.decode(it["json"] as? String ?: return@mapNotNull null) }
+}
+
+/** The stored form of a [RunRecord] (the full log, unlike [RunRecord.toJson] which shortens text for the tool). */
+object RunRecords {
+    fun encode(r: RunRecord): String = buildJsonObject {
+        put("id", r.id); put("at", r.at); put("project", r.project); put("script", r.script); put("trigger", r.trigger)
+        r.session?.let { put("session", it) }; put("outcome", r.outcome); put("ok", r.ok); put("summary", r.summary)
+        r.error?.let { put("error", it) }; r.ref?.let { put("ref", it) }
+        put("actions", buildJsonArray { r.actions.forEach { a -> add(buildJsonObject { put("tool", a.tool); a.ok?.let { put("ok", it) }; a.text?.let { put("text", it.take(300)) } }) } })
+        put("log", buildJsonArray { r.log.forEach { add(JsonPrimitive(it.take(300))) } })
+    }.toString()
+
+    fun decode(text: String): RunRecord? = runCatching {
+        val o = Json.parseToJsonElement(text).jsonObject
+        fun s(k: String) = (o[k] as? JsonPrimitive)?.contentOrNull
+        RunRecord(
+            id = s("id")!!.toLong(), at = s("at")!!.toLong(), project = s("project")!!, script = s("script")!!, trigger = s("trigger").orEmpty(), session = s("session"),
+            outcome = s("outcome").orEmpty(), ok = s("ok") == "true", summary = s("summary").orEmpty(), error = s("error"), ref = s("ref"),
+            actions = (o["actions"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { e ->
+                val a = e as? JsonObject ?: return@mapNotNull null
+                RunAction((a["tool"] as? JsonPrimitive)?.contentOrNull.orEmpty(), (a["ok"] as? JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull(), (a["text"] as? JsonPrimitive)?.contentOrNull)
+            },
+            log = (o["log"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull },
+        )
+    }.getOrNull()
 }
 
 /**
  * SCRIPT-VIS-1: the newest [limit] run records per project, plus per-session wake and turns-saved counters, in memory (a restart clears
  * them). Wake reasons arrive from the daemon's `session.woken` event; `mail-handled` is a mail a hook handled with no wake = a turn saved.
  */
-class ScriptRunLog(private val limit: () -> Int = { 200 }, private val clock: () -> Long = System::currentTimeMillis) {
+class ScriptRunLog(private val limit: () -> Int = { 200 }, private val clock: () -> Long = System::currentTimeMillis, private val store: RunStore? = null) {
     private val seq = java.util.concurrent.atomic.AtomicLong()
     private val runs = ConcurrentHashMap<String, ArrayDeque<RunRecord>>()
     private val wakes = ConcurrentHashMap<String, ConcurrentHashMap<String, Int>>() // session -> reason -> count
     private val sessionProject = ConcurrentHashMap<String, String>()
     private val lastWake = ConcurrentHashMap<String, WakeNote>()
 
+    /** SCRIPT-VIS-1b: told every new or amended record (the plugin pushes it to the session's chat). A throwing listener is ignored. */
+    @Volatile var onRecord: ((RunRecord) -> Unit)? = null
+
+    init {
+        // SCRIPT-VIS-1b: records survive a restart; a store that cannot be read starts an empty log (the log is a display aid, never a gate).
+        runCatching { store?.load() }.getOrNull()?.forEach { r ->
+            runs.computeIfAbsent(r.project) { ArrayDeque() }.addLast(r)
+            r.session?.let { sessionProject[it] = r.project }
+            if (r.id > seq.get()) seq.set(r.id)
+        }
+        val max = limit().coerceAtLeast(0)
+        runs.values.forEach { q -> while (q.size > max) q.removeFirst() }
+    }
+
     data class WakeNote(val at: Long, val reason: String, val ref: String?)
 
-    fun record(project: String, script: String, trigger: String, session: String?, report: RunReport?, outcome: String, summary: String, error: String? = null): RunRecord {
+    fun record(project: String, script: String, trigger: String, session: String?, report: RunReport?, outcome: String, summary: String, error: String? = null, ref: String? = null): RunRecord {
         val actions = report?.records?.map { RunAction(it.tool, it.ok, it.text) }.orEmpty()
-        val rec = RunRecord(seq.incrementAndGet(), clock(), project, script, trigger, session, outcome, error == null && report?.ok != false, actions, report?.logs.orEmpty(), summary, error ?: report?.error)
+        val rec = RunRecord(seq.incrementAndGet(), clock(), project, script, trigger, session, outcome, error == null && report?.ok != false, actions, report?.logs.orEmpty(), summary, error ?: report?.error, ref)
         session?.let { sessionProject[it] = project }
         val max = limit().coerceAtLeast(0)
         val q = runs.computeIfAbsent(project) { ArrayDeque() }
         synchronized(q) { q.addLast(rec); while (q.size > max) q.removeFirst() }
+        runCatching { store?.save(rec); store?.trim(project, max) }
+        runCatching { onRecord?.invoke(rec) }
         return rec
     }
+
+    /**
+     * SCRIPT-VIS-1b: the host dropped the verdict of the mail hook run for mail [ref] (timeout, CPU limit, throw), so the mail was delivered
+     * although the script said it handled it. The record is amended to say so (outcome verdict-lost, failed); no turn was saved.
+     */
+    fun verdictLost(ref: String, reason: String) {
+        for ((_, q) in runs) {
+            val amended = synchronized(q) {
+                val i = q.indexOfLast { it.ref == ref }
+                if (i < 0) null else q[i].let { r ->
+                    r.copy(outcome = "verdict-lost", ok = false, summary = "verdict lost (${r.outcome}); the mail was delivered anyway", error = "host dropped the verdict: $reason").also { q[i] = it }
+                }
+            } ?: continue
+            runCatching { store?.save(amended) }
+            runCatching { onRecord?.invoke(amended) }
+            return
+        }
+    }
+
+    /** The newest contributions for the chat of every session (all projects), oldest first, at most [n]. */
+    fun timelineItems(n: Int = 500): List<JsonObject> =
+        runs.values.flatMap { q -> synchronized(q) { q.toList() } }.sortedBy { it.at }.mapNotNull { it.timelineJson() }.takeLast(n)
 
     /** [project] ties the session to a project for the project summary (the first sight wins); null when unknown. */
     fun wake(session: String, reason: String, ref: String?, project: String? = null) {
