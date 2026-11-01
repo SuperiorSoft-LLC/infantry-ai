@@ -305,7 +305,7 @@ class BgJobNotifier(
                 if (w.readError != null) w.errorSent = true
                 heartbeat(sid, job, w, now)
                 w.quietSent = true
-            } else if (watched(job) && job.logPaused == null && !finished.containsKey(job.id) &&
+            } else if (watched(job) && job.logPaused == null && !finished.containsKey(job.id) && alive(job) &&
                 quietMs().let { it != Long.MAX_VALUE && it > 0 && now - w.lastOutputAt >= it && now - w.lastHangAt >= it }
             ) {
                 // BG-WAKE-1: ONE line, repeated at most once per interval while the job stays silent.

@@ -49,7 +49,7 @@ object WatchHooks {
     val NATIVE_BG_HARNESSES = setOf("claude")
 
     /** BG-NATIVE-1: `limits.watch.bgNative`, set by the daemon (default native). */
-    @Volatile var nativeBackground: () -> Boolean = { true }
+    @Volatile var nativeBackground: () -> Boolean = { false }
 
     internal fun on(env: Map<String, String>) = env["AGENTHQ_WATCH"] == "on" && !env[AccessPolicy.MAIL_BASE_ENV].isNullOrBlank()
 

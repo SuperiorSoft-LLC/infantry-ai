@@ -280,8 +280,8 @@ object LimitRegistry {
     )
     /** BG-NATIVE-1: background mode for harnesses with native background tasks. */
     val WATCH_BG_NATIVE = LimitDef(
-        "limits.watch.bgNative", 1, "switch",
-        "BG-NATIVE-1: 1 = native (recommended): a harness with its own background tasks (Claude Code) runs `run_in_background` itself and adds its own one-line finished note; the daemon only observes the process, no mail. 0 = daemon: the hook rewrites backgrounded commands into the watched runner, which notes the end with one line.",
+        "limits.watch.bgNative", 0, "switch",
+        "BG-WAKE-1: 0 = daemon (default): the hook rewrites a backgrounded command into the watched runner, so its end reaches the daemon and the session gets ONE `task finished` line. 1 = native: Claude Code runs `run_in_background` itself; its finish never reaches a daemon-run session.",
         max = 1, zeroIsUnlimited = false,
     )
     val WATCH_HANG_GRACE_SECONDS = LimitDef(

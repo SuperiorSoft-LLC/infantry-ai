@@ -83,6 +83,16 @@ class StallWatchTest {
     }
 
     @Test
+    fun aGoneProcessGetsNoHangLine() {
+        val n = notifier()
+        live += "s" to job(log("a\n"))
+        n.scanned()
+        alive = false
+        min(10); n.scanned()
+        assertTrue(sent.none { it.body.startsWith("task hanging") }, sent.map { it.body }.toString())
+    }
+
+    @Test
     fun heartbeat_withAFrozenLogAndALiveProcess_growsToTheCap_thenTellsThePmOnce() {
         val n = notifier(quietMin = 0)
         live += "s" to job(log("only line\n"))
