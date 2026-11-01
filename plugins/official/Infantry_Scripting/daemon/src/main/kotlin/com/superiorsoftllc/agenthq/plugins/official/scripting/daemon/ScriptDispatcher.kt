@@ -56,6 +56,8 @@ class ScriptDispatcher(
     fun run(
         engine: ScriptEngine, source: String, args: Map<String, Any?>, limits: ScriptLimits, caller: ScriptCaller,
         invoker: ToolInvoker, dryRun: Boolean,
+        /** SCRIPT-5: told the resolved actions of each phase BEFORE any of them runs (the hook loop guard attributes the events they cause). */
+        onPlanned: (List<ActionRecord>) -> Unit = {},
     ): RunReport {
         val known = tools.catalog().map { it.name }.toSet()
         val table = aliases()
@@ -82,6 +84,7 @@ class ScriptDispatcher(
                     ?: return RunReport("ERROR", records + planned, logs, phase, dryRun, "unknown tool or alias '${a.name}' (see script_api)", records.size + planned.size + 1)
                 planned += ActionRecord(a.name, tool, a.args, phase)
             }
+            onPlanned(planned)
             if (dryRun) {
                 records += planned
                 return RunReport("OK", records, logs, phase, true)
