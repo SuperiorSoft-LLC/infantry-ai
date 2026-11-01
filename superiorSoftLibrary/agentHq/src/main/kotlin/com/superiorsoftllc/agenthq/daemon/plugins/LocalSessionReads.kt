@@ -21,7 +21,7 @@ object SessionViews {
     fun of(r: SessionRecord) = SessionView(
         id = r.id, agentId = r.agentId, role = r.role, provider = r.provider, model = r.model, projectId = r.projectId,
         state = r.state.name, runPhase = r.runPhase, live = r.live, lastAction = r.lastAction, lastOutputAt = r.lastOutputAt,
-        lastEventAt = r.lastEventAt, backgroundWork = r.backgroundWork?.label, progress = r.progress, runCount = r.runCount,
+        lastEventAt = r.lastEventAt, backgroundWork = r.backgroundWork?.label ?: r.bgJobs.firstOrNull()?.label, progress = r.progress, runCount = r.runCount,
         lastExitCode = r.lastExitCode, lastError = r.lastError, ticketId = r.ticketId, workingDir = r.workingDir,
         worktreePath = r.worktreePath, worktreeBranch = r.worktreeBranch, repoRoot = r.repoRoot, spawnerSessionId = r.spawnerSessionId,
         contextLimit = r.contextLimit, contextLimitSupport = r.contextLimitSupport, effort = r.effort, effortSupport = r.effortSupport, killOutcome = r.killOutcome?.name,
