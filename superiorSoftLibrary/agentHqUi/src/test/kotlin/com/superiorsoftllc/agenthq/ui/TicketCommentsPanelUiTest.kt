@@ -1,7 +1,8 @@
 package com.superiorsoftllc.agenthq.ui
 
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.assertDoesNotExist
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
@@ -45,7 +46,7 @@ class TicketCommentsPanelUiTest {
         onNodeWithTag(COMMENT_CREATED_BY_TAG).assertTextContains("agent-1", substring = true)
         onNodeWithTag(COMMENT_NOTIFY_TAG_PREFIX + "agent-1").assertExists()
         onNodeWithTag(COMMENT_NOTIFY_TAG_PREFIX + "agent-2").assertExists()
-        onNodeWithTag(COMMENT_NOTIFY_TAG_PREFIX + "agent-3").assertDoesNotExist()
+        onAllNodesWithTag(COMMENT_NOTIFY_TAG_PREFIX + "agent-3").assertCountEquals(0)
 
         onNodeWithTag(COMMENT_INPUT_TAG).performTextInput("hello there")
         onNodeWithTag(COMMENT_SEND_TAG).assertIsEnabled().performClick()
@@ -55,6 +56,6 @@ class TicketCommentsPanelUiTest {
         onNodeWithTag(COMMENT_RESOLVE_TAG_PREFIX + "c1").performClick()
         waitForIdle()
         onNodeWithTag(COMMENT_STATE_TAG_PREFIX + "c1").assertTextContains("resolved")
-        onNodeWithTag(COMMENT_RESOLVE_TAG_PREFIX + "c1").assertDoesNotExist()
+        onAllNodesWithTag(COMMENT_RESOLVE_TAG_PREFIX + "c1").assertCountEquals(0)
     }
 }
