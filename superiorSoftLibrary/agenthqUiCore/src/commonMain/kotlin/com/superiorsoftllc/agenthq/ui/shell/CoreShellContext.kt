@@ -458,6 +458,7 @@ class CoreTickets(private val state: AppState, private val controller: Controlle
     override suspend fun loadEpics(projectId: String) = controller.loadEpics(projectId)
     override suspend fun uploadImage(projectId: String?, fileName: String, mimeType: String, bytes: ByteArray) =
         controller.uploadTicketImage(projectId, fileName, mimeType, bytes)
+    override suspend fun pluginTool(name: String, arguments: kotlinx.serialization.json.JsonObject) = controller.pluginTool(name, arguments)
 }
 
 /** S4c: [state]'s traits and [controller]'s trait requests, for a pane drawn outside a shell. */

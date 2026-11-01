@@ -8,6 +8,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -45,10 +46,8 @@ fun TicketModal(ticketId: String, onClose: () -> Unit) {
             } else {
                 TicketEditForm(ticket, deps, onDone = onClose)
                 RelatedList(ticket)
-                // TICKET-COMMENTS-3 fills this area; no comment logic here.
-                Column(Modifier.fillMaxWidth().heightIn(min = 160.dp).testTag(TICKET_MODAL_COMMENTS_TAG)) {
-                    Text("Comments", color = Palette.Muted, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                }
+                val commentsApi = remember(ctx) { DaemonTicketCommentsApi(ctx.tickets) }
+                TicketCommentsPanel(ticket.id, commentsApi, Modifier.fillMaxWidth().heightIn(min = 160.dp).testTag(TICKET_MODAL_COMMENTS_TAG))
             }
         }
     }

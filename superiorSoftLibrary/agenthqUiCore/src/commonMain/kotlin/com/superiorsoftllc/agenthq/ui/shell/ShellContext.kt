@@ -864,6 +864,8 @@ interface TicketsContext {
     suspend fun loadEpics(projectId: String): CommandResult
     /** Stores an image (purpose ticket) under [projectId]'s directory (IMG-4). */
     suspend fun uploadImage(projectId: String?, fileName: String, mimeType: String, bytes: ByteArray): ImageUploadOutcome
+    /** TICKET-COMMENTS-3: one call of a daemon plugin's tool (the board's comment tools); success = its text, failure = why not. */
+    suspend fun pluginTool(name: String, arguments: kotlinx.serialization.json.JsonObject): Result<String> = Result.failure(IllegalStateException(SHELL_DOMAIN_MISSING))
 }
 
 /** S4d: the [ShellContext.tickets] of a shell without a backlog: none, every request refused. */
