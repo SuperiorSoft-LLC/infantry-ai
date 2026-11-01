@@ -149,3 +149,5 @@ TEST-TODO (SCRIPT-VIS-1): in a live daemon with a mail.incoming hook that handle
 ## SCRIPT-SAVE-1
 - TEST-TODO: from a real worker session run `agenthq script save probe --body -` (pipe `ih.log("hi")`), then `agenthq script list` (shows size, saver, hooks) and `agenthq_script_run name=probe` with no restart; a source with a syntax error must be refused with the Lua parse error and leave no file.
 - TEST-TODO: add a hook on `probe`, then `agenthq script delete probe` must be refused naming the hook; remove the hook and the delete works. Not tried by hand with the real Lua engine over the wire `check` op (unit-tested with a fake engine; Lua check compiled but only built, not exercised).
+
+TEST-TODO: HOOK-DEPTH-1 (e5271b5d): a done-hook starts a worker; its finish minutes later must run the done hook (no loop guard refusal); a hook that re-triggers itself within attributionMs is still stopped at maxDepth.

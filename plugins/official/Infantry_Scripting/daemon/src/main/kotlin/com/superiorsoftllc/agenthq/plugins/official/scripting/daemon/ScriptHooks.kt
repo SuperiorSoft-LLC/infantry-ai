@@ -62,7 +62,7 @@ class ScriptHooks(
     /** Where runs execute. Production: one daemon thread (events run in order); tests run inline. */
     private val executor: (() -> Unit) -> Unit = DEFAULT_EXECUTOR,
 ) {
-    private class Run(val hookKey: String, val depth: Int, val touched: MutableSet<String>) { @Volatile var endedAt: Long? = null }
+    private class Run(val hookKey: String, val depth: Int, val touched: MutableSet<String>, startedAt: Long = 0L) { @Volatile var endedAt: Long? = null; @Volatile var touchedAt: Long = startedAt }
 
     private val runs = java.util.Collections.synchronizedList(ArrayList<Run>())
     private val fires = ConcurrentHashMap<String, ArrayDeque<Long>>()
@@ -183,7 +183,7 @@ class ScriptHooks(
                 continue
             }
             val args = scriptArgs(p, hook, e, payload, ticket, depth)
-            val run = Run("$p/${hook.id}", depth, ConcurrentHashMap.newKeySet<String>().also { it.addAll(ids) })
+            val run = Run("$p/${hook.id}", depth, ConcurrentHashMap.newKeySet<String>().also { it.addAll(ids) }, clock())
             runs += run
             try { execute(p, hook, e, ticketId, args, run) } finally { tickKey?.let { inflight.remove(it) } }
         }
@@ -262,7 +262,7 @@ class ScriptHooks(
         var best = 0
         synchronized(runs) {
             runs.removeAll { r -> r.endedAt?.let { now - it > window } == true }
-            for (r in runs) if (r.touched.any { t -> ids.any { sameId(t, it) } }) best = maxOf(best, r.depth + 1)
+            for (r in runs) if (now - r.touchedAt <= window && r.touched.any { t -> ids.any { sameId(t, it) } }) best = maxOf(best, r.depth + 1)
         }
         return best
     }
@@ -281,6 +281,7 @@ class ScriptHooks(
             markedSession = (args["workerSession"] ?: args["sessionId"]) as? String
             markedSession?.let { mark(it, hook) }
             val report = dispatcher.run(engine, script.source, args, limits(), who, invoker, false, progressTo = hook.to) { planned ->
+                run.touchedAt = clock()
                 planned.forEach { a -> flatten(a.args).forEach { run.touched += it } }
             }
             val sess = (args["workerSession"] ?: args["sessionId"]) as? String
