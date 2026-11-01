@@ -60,11 +60,19 @@ class ScriptHooks(
     private val runs = java.util.Collections.synchronizedList(ArrayList<Run>())
     private val fires = ConcurrentHashMap<String, ArrayDeque<Long>>()
     private val reported = ConcurrentHashMap<String, Long>()
+    private val unreadable = ConcurrentHashMap<String, Boolean>()
 
     fun onEvent(e: NamedEvent) {
         if (!enabled()) return
         val payload = parse(e.payload)
-        val candidates = projects().flatMap { p -> store.list(p).filter { it.enabled && matches(it.on, e.name, payload) }.map { p to it } }
+        val candidates = projects().flatMap { p ->
+            // A project whose hooks cannot be read (no directory, bad file) is skipped with one warning; it never fails the plugin.
+            val hooks = try { store.list(p) } catch (x: Exception) {
+                if (unreadable.putIfAbsent(p, true) == null) log("hooks: project $p skipped, its hooks cannot be read: ${x.message}")
+                emptyList()
+            }
+            hooks.filter { it.enabled && matches(it.on, e.name, payload) }.map { p to it }
+        }
         if (candidates.isEmpty()) return
         val ticketId = str(payload, "ticketId")
         val ticket = ticketId?.let { readTicket(it) }
