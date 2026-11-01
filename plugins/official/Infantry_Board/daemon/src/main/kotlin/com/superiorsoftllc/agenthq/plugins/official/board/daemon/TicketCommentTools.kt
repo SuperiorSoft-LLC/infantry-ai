@@ -17,6 +17,9 @@ import java.time.Instant
 internal object CommentsWiring {
     private val dead = setOf("EXITED", "FAILED", "ORPHANED")
 
+    /** COMMENT-TOOL-1: what the comment tools answer when the store could not start (they stay listed, never vanish). */
+    const val UNAVAILABLE = "ticket comments are unavailable: the comment store did not start (see the daemon log 'ticket comments unavailable')"
+
     fun create(api: DaemonApi): TicketComments = TicketComments(
         db = api.storage,
         isRegistryAgent = { api.agents.get(it) != null },
@@ -71,7 +74,7 @@ internal object CommentsWiring {
 }
 
 /** `agenthq_ticket_comment`: add a comment to a ticket, or resolve one by its id. */
-class TicketCommentTool(private val api: DaemonApi, private val comments: TicketComments) : DaemonTool {
+class TicketCommentTool(private val api: DaemonApi, private val store: TicketComments?, private val unavailable: String = CommentsWiring.UNAVAILABLE) : DaemonTool {
     override val name = ADD
     override val description =
         "Comment on a ticket (the extra channel next to mail): every agent on the ticket's notify list gets ONE short mail line at once. " +
@@ -87,6 +90,7 @@ class TicketCommentTool(private val api: DaemonApi, private val comments: Ticket
     override val annotations = ToolArgs.annotations(readOnly = false)
 
     override fun call(call: ToolCall): ToolResult = try {
+        val comments = store ?: return TicketSave.refused("$ADD refused: $unavailable")
         val args = call.arguments
         val author = CommentsWiring.author(api, call)
         val commentId = ToolArgs.string(args, "commentId")
@@ -116,7 +120,7 @@ class TicketCommentTool(private val api: DaemonApi, private val comments: Ticket
 }
 
 /** `agenthq_ticket_comments`: read a ticket's comments, compact. */
-class TicketCommentsTool(private val api: DaemonApi, private val comments: TicketComments) : DaemonTool {
+class TicketCommentsTool(private val api: DaemonApi, private val store: TicketComments?, private val unavailable: String = CommentsWiring.UNAVAILABLE) : DaemonTool {
     override val name = READ
     override val description =
         "Read a ticket's comments, one compact line each (id, kind/state, author, time, text). which = latestOpen (default: the newest " +
@@ -130,6 +134,7 @@ class TicketCommentsTool(private val api: DaemonApi, private val comments: Ticke
     override val annotations = ToolArgs.annotations(readOnly = true)
 
     override fun call(call: ToolCall): ToolResult = try {
+        val comments = store ?: return TicketSave.refused("$READ refused: $unavailable")
         val args = call.arguments
         val requested = ToolArgs.string(args, "ticketId") ?: return TicketSave.refused("$READ needs a ticketId")
         val ticket = WireTickets.find(api, call, requested).getOrElse { return TicketSave.refused(it.message ?: "no ticket '$requested'") }
