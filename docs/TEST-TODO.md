@@ -113,3 +113,8 @@ TEST-TODO: install `on-mail-sent.lua` (plugins/official/Infantry_Scripting/proje
 
 ## MAIL-HOOK-1b (860c0da2)
 TEST-TODO: on a real daemon (port 8812, temp state dir): session A `agenthq script hook add --on mail.incoming --to <B> --script pong`, A mails B "PING n"; confirm B's reply and no wake. The in-process ping-pong (ScriptHooksTest) fakes the mailbox, not MailRouter. Also confirm a hook disappears from `script hook list` after its session is removed.
+
+## DISCONNECT-1 (0af901f2)
+TEST-TODO: on a TEST daemon only (port 8812, temp AGENTHQ_STATE_DIR; never the owner's 8797/8798/8787), connect a real app/client, then kill only the client's TCP connection (not the daemon): expect "reconnecting..." with a countdown, then back to connected with the same sessions and no second daemon; a relaunch of the app is still refused by the state-dir lock.
+TEST-TODO: with a long-running agenthq_session_remove / agenthq_prompt in flight, send a malformed frame on the same ws: expect an `error` frame for that frame (log "ws frame failed, connection kept") and the ws stays open.
+TEST-TODO: on a test daemon, close a session whose tree holds a `java.exe --add-opens ...` process from the app's own runtime: expect it untouched (TreeKillRule). Not exercised end to end: the owner's original trigger was never reproduced.

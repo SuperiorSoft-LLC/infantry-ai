@@ -44,6 +44,10 @@ kotlin {
         // S4: the loader, factory and shell-tree tests run against the real core modules, which live in the app UI.
         // Test-only: the shell's main code never sees :agenthqAppUi (it depends on this module, not the reverse).
         jvmTest.dependencies {
+            // DISCONNECT-1: DaemonClientDropTest runs a fake daemon (real Ktor server) to drop the client's socket.
+            implementation(libs.ktor.server.core)
+            implementation(libs.ktor.server.cio)
+            implementation(libs.ktor.server.websockets)
             implementation(project(":superiorSoftLibrary:agenthqAppUi"))
             // RUNTIME-4: the official Infantry_Agents (the left panel's agents section) is no longer in the desktop list.
             implementation(project(":plugins:official:Infantry_Agents"))

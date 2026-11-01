@@ -1,5 +1,7 @@
 package com.superiorsoftllc.agenthq.session.host
 
+import com.superiorsoftllc.agenthq.daemon.api.processes.ProcInfo
+import com.superiorsoftllc.agenthq.session.ProcessGuard
 import kotlinx.serialization.Serializable
 
 /*
@@ -55,7 +57,12 @@ object OsProcessTable : ProcessTable {
         // One handle for the check and the kill: an open handle keeps the OS from reusing the pid meanwhile.
         val handle = ProcessHandle.of(pid).orElse(null) ?: return
         if (handle.info().startInstant().map { it.toEpochMilli() }.orElse(null) != startedAt) return
-        handle.descendants().forEach { runCatching { it.destroyForcibly() } }
+        // DISCONNECT-1: only what is provably under the root dies with it; never the daemon, the app, or its own runtime.
+        handle.descendants().forEach { d ->
+            val member = ProcInfo(d.pid(), d.parent().map { it.pid() }.orElse(null), d.info().command().orElse(""), d.info().startInstant().map { it.toEpochMilli() }.orElse(null))
+            if (TreeKillRule.spare(member, startedAt)) return@forEach
+            runCatching { d.destroyForcibly() }
+        }
         runCatching { handle.destroyForcibly() }
     }
 
@@ -64,4 +71,14 @@ object OsProcessTable : ProcessTable {
         if (handle.info().startInstant().map { it.toEpochMilli() }.orElse(null) != startedAt) return
         runCatching { handle.destroyForcibly() }
     }
+}
+
+/**
+ * DISCONNECT-1: which members of a process tree a tree kill must NOT take. The root was proven by pid + start instant; a
+ * descendant is spared when it is the daemon or one of its ancestors (the app), runs from the app's own runtime
+ * (`java.home`: the CLI, MCP servers), or started before the root (it cannot be the root's child: a recycled or re-parented pid).
+ */
+object TreeKillRule {
+    fun spare(member: ProcInfo, rootStartedAt: Long): Boolean =
+        ProcessGuard.isProtected(member) || (member.startedAt != null && member.startedAt!! < rootStartedAt)
 }

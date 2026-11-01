@@ -15,6 +15,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -132,7 +134,15 @@ open class DaemonClient(private val scope: CoroutineScope) {
                     }
                 }
                 socket.value = current
-                val reason = receive(current)
+                // DISCONNECT-1: a session that ends by cancellation (the daemon's ws scope was cancelled, an abnormal close
+                // surfacing from `incoming`) is a DROP to retry, not the end of this loop. Rethrowing it killed the loop with
+                // the state frozen on CONNECTED, and only a relaunch of the app (refused by the state-dir lock) recovered.
+                val reason = try {
+                    receive(current)
+                } catch (e: CancellationException) {
+                    currentCoroutineContext().ensureActive()
+                    "daemon link cancelled (${e.message ?: e::class.simpleName})"
+                }
                 val wasReady = live.value
                 live.value = false
                 socket.value = null
@@ -141,6 +151,8 @@ open class DaemonClient(private val scope: CoroutineScope) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
+                // A session that had reached `ready` and then failed starts the backoff over; it is not a failing attempt.
+                if (live.value) attempt = 1
                 live.value = false
                 socket.value = null
                 when (val failure = ReconnectPolicy.classify(refusalStatus(e), generateSequence(e) { it.cause }.last())) {
