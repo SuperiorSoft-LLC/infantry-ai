@@ -32,15 +32,21 @@ class BoardDaemonPlugin : DaemonPlugin {
         registerPipeline(api)
         api.tools.register(PipelineTools.ShowTool)
         api.tools.register(PipelineTools.RecordTool)
-        api.tools.register(TicketGetTool(api))
+        // TICKET-COMMENTS-2: comments, createdBy and the notify list (plugin tables); without storage the board works as before.
+        val comments = runCatching { CommentsWiring.create(api) }.onFailure { api.log("ticket comments unavailable: ${it.message}") }.getOrNull()
+        api.tools.register(TicketGetTool(api, comments))
+        if (comments != null) {
+            api.tools.register(TicketCommentTool(api, comments))
+            api.tools.register(TicketCommentsTool(api, comments))
+        }
         api.tools.register(TicketFilesTools.Files)
         api.tools.register(TicketFilesTools.Related)
         // RUNTIME-LOAD-4 (F5): the board's write tools, moved out of the CLI's MCP server.
         api.tools.register(EpicBaseTool)
         api.tools.register(TicketMoveTool(api))
         api.tools.register(TicketDeleteTool(api))
-        api.tools.register(TicketCreateTool(api))
-        api.tools.register(TicketUpdateTool(api))
+        api.tools.register(TicketCreateTool(api, comments))
+        api.tools.register(TicketUpdateTool(api, comments))
         // RUNTIME-LOAD-5 (F5 remainder): the board summary, over the host's sessions read model.
         api.tools.register(BoardTool(api))
         // RUNTIME-LOAD-7 (F5 last): the ticket start, over the host spawn service.

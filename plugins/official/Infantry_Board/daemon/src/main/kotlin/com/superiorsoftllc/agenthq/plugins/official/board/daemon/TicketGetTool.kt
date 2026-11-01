@@ -22,7 +22,7 @@ import kotlinx.serialization.json.put
  * WHO is asking: the MCP process reports the session it runs for (`AGENTHQ_SESSION_ID`, [ToolCall.clientSessionId]); the host scopes
  * the read to that session's project exactly as the CLI-side `ProjectScope` did (a worker reads its own project, pm / owner reach all).
  */
-class TicketGetTool(private val api: DaemonApi) : DaemonTool {
+class TicketGetTool(private val api: DaemonApi, private val comments: TicketComments? = null) : DaemonTool {
     override val name = GET
     override val description =
         "Read ONE ticket back: title, verbatim description, status, project, role/agent, provider, model, " +
@@ -51,10 +51,24 @@ class TicketGetTool(private val api: DaemonApi) : DaemonTool {
             ?: return ToolResult("$GET needs a ticketId", isError = true)
         val by = call.caller.copy(activeSession = call.clientSessionId ?: call.caller.activeSession)
         return when (val r = api.tickets.get(requested, by)) {
-            is BoardResult.Ok -> ToolResult(Json.encodeToString(JsonObject.serializer(), summary(r.value, ToolArgs.flag(call.arguments, "related"))))
+            is BoardResult.Ok -> ToolResult(Json.encodeToString(JsonObject.serializer(), withComments(r.value, summary(r.value, ToolArgs.flag(call.arguments, "related")))))
             is BoardResult.Refused -> ToolResult(r.text, isError = true)
             is BoardResult.Unavailable -> ToolResult("$GET is unavailable: ${r.reason}", isError = true)
         }
+    }
+
+    /** TICKET-COMMENTS-2: createdBy, the notify list, the open comment count, the latest open comment's first line and who was not reached. */
+    private fun withComments(ticket: TicketInfo, base: JsonObject): JsonObject {
+        val c = comments ?: return base
+        val meta = c.meta(ticket.id)
+        val sum = c.summary(ticket.id)
+        return JsonObject(base + buildJsonObject {
+            put("createdBy", meta?.createdBy)
+            put("notify", buildJsonArray { meta?.notify.orEmpty().forEach { add(JsonPrimitive(it)) } })
+            put("openComments", sum.open)
+            sum.latestOpen?.let { put("latestOpenComment", CommentsWiring.line(it, full = false)) }
+            if (sum.undelivered.isNotEmpty()) put("undeliveredTo", buildJsonArray { sum.undelivered.forEach { add(JsonPrimitive(it)) } })
+        })
     }
 
     companion object {

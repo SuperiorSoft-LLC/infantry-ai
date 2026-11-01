@@ -12,7 +12,7 @@
   "daemon": {
     "entry": "com.superiorsoftllc.agenthq.plugins.official.board.daemon.BoardDaemonPlugin",
     "jar": "daemon/build/libs/Infantry_Board-daemon.jar",
-    "apiAtLeast": "1.9.0",
+    "apiAtLeast": "1.23.0",
     "tools": [
       { "name": "agenthq_ticket_get", "action": "board.read", "kind": "read", "description": "Read ONE ticket back." },
       { "name": "agenthq_ticket_files", "action": "board.files.read", "kind": "read", "description": "A ticket's changed files, or the tickets that changed a path." },
@@ -24,6 +24,8 @@
       { "name": "agenthq_ticket_update", "action": "board.ticket.save", "kind": "write", "description": "Edit ONE ticket (images from the caller's own files)." },
       { "name": "agenthq_board", "action": "board.read", "kind": "read", "description": "The board in one call: tickets by column with their workers." },
       { "name": "agenthq_ticket_start", "action": "board.ticket.move", "kind": "write", "description": "Start ONE ticket (the board's own start), under the caller's spawn limits." },
+      { "name": "agenthq_ticket_comment", "action": "board.ticket.save", "kind": "write", "description": "Comment on a ticket (mails its notify list), or resolve a comment." },
+      { "name": "agenthq_ticket_comments", "action": "board.read", "kind": "read", "description": "Read a ticket's comments." },
       { "name": "agenthq_pipeline", "action": "pipeline.read", "kind": "read", "description": "Read the project's verification pipeline." },
       { "name": "agenthq_pipeline_record", "action": "pipeline.save", "kind": "write", "description": "Move a commit to a pipeline stage, or start, ping or finish a check." }
     ],
