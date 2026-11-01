@@ -96,3 +96,8 @@ TEST-TODO: `events.broadcast` / `hooks.connected` / `QuestionsOpen` (DaemonPlugi
 ## ATTN-2c (77434467)
 - [ ] ask E2E on a real daemon: `agenthq ask --recommend ...` from a session -> `question` push and `questions` replay on connect reach a client -> `question_answer` mails the pick to the asking session (body carries `(thread question:<id>)`) -> an unanswered question with `--default-after` auto-picks via the 15 s `api.schedule` sweep -> killing the session orphans it. No daemon-level test covers the plugin path (only OwnerQuestionsTest on the service and the store).
 - [ ] per-session prompt-timer override no longer feeds the default auto-pick of a question (core state); only global `prompts.timeoutSec` does. Decide if a seam is wanted.
+
+## TRIG-1
+- TriggerPortsGuardTest `triggers imports nothing outside protocol and daemon api`: scans triggers/*.kt imports; expected only protocol, daemon.api, kotlin/java.
+- TriggerServiceTest `startNext is not called under the trigger lock`: startNext blocks; events() from another thread returns within 2 s.
+- Pre-existing (also on base): TriggerDaemonTest aPromptTriggerForAnUnknownAgentTripsAndStartsNothing, aFailedRunTripsTheTriggerRaisesAttentionAndSuppressesUntilArmed, aTriggerRunningWhenTheDaemonStopsComesBackTripped fail; unrelated to this change.

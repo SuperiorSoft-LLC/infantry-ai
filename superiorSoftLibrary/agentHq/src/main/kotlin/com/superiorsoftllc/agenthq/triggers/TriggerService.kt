@@ -4,15 +4,14 @@ import com.superiorsoftllc.agenthq.daemon.api.attention.AttentionKinds
 import com.superiorsoftllc.agenthq.daemon.api.attention.Attention
 import com.superiorsoftllc.agenthq.daemon.api.board.PromptStart
 import com.superiorsoftllc.agenthq.daemon.api.board.StartResult
-import com.superiorsoftllc.agenthq.persistence.TriggerRepository
+import com.superiorsoftllc.agenthq.daemon.api.triggers.TriggerRunEvent
+import com.superiorsoftllc.agenthq.daemon.api.triggers.TriggerSession
+import com.superiorsoftllc.agenthq.daemon.api.triggers.TriggerStore
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
 import com.superiorsoftllc.agenthq.protocol.TriggerAction
 import com.superiorsoftllc.agenthq.protocol.TriggerEventView
 import com.superiorsoftllc.agenthq.protocol.TriggerSave
 import com.superiorsoftllc.agenthq.protocol.TriggerView
-import com.superiorsoftllc.agenthq.session.SessionEvent
-import com.superiorsoftllc.agenthq.session.SessionRecord
-import com.superiorsoftllc.agenthq.session.SessionState
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
@@ -43,16 +42,16 @@ sealed interface PromptDelivery {
  * comes back TRIPPED, "daemon restarted mid-run", PHASE9-SPEC 5.5). Nothing is ever retried; only
  * [arm] re-arms a tripped trigger.
  *
- * LOCK ORDER, deliberately: session events arrive while the session manager holds its own lock, so this
+ * LOCK ORDER (TRIG-1, pinned by TriggerLockOrderTest), deliberately: session events arrive while the session manager holds its own lock, so this
  * class NEVER calls the board or the session manager while holding its lock. A launch runs on [launches],
  * a dedicated thread, and only takes this lock to wait for the call that released it and to record what
  * happened. A session that ends before its launch is recorded is caught by [exits].
  */
 class TriggerService(
-    private val repo: TriggerRepository,
+    private val repo: TriggerStore,
     private val attention: Attention,
     private val startNext: (agentFilter: String?) -> StartResult?,
-    private val sessions: (String) -> SessionRecord?,
+    private val sessions: (String) -> TriggerSession?,
     /** P9.5d: the `prompt` action's launch. The default refuses, so a service built without one cannot pretend to serve it. */
     private val startPrompt: (agentId: String, prompt: String) -> PromptStart = { _, _ -> PromptStart.Refused("prompt actions are not wired") },
     /**
@@ -296,14 +295,11 @@ class TriggerService(
     }
 
     /** A daemon arm: a trigger's run ends when its session's run does. */
-    fun onSessionEvent(event: SessionEvent) {
+    fun onRunEvent(event: TriggerRunEvent) {
         if (closing) return
         val (sessionId, outcome) = when (event) {
-            is SessionEvent.Exit -> event.sessionId to outcomeOf(event.sessionId, event.killOutcome != null)
-            is SessionEvent.Status -> if (event.session.state == SessionState.FAILED && event.session.runCount == 0) {
-                event.session.id to TriggerOutcome.START_REFUSED
-            } else return
-            else -> return
+            is TriggerRunEvent.Exit -> event.sessionId to outcomeOf(event.sessionId, event.killed)
+            is TriggerRunEvent.StartFailed -> event.sessionId to TriggerOutcome.START_REFUSED
         }
         synchronized(this) {
             if (closing) return
@@ -553,7 +549,7 @@ class TriggerService(
         val record = sessions(sessionId)
         return when {
             killed -> TriggerOutcome.KILLED
-            record?.state == SessionState.IDLE && record.lastExitCode == 0 -> TriggerOutcome.SUCCEEDED
+            record?.state == "IDLE" && record.lastExitCode == 0 -> TriggerOutcome.SUCCEEDED
             else -> TriggerOutcome.FAILED
         }
     }

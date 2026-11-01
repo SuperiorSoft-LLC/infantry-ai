@@ -9,7 +9,7 @@ import com.superiorsoftllc.agenthq.protocol.TicketStart
 import com.superiorsoftllc.agenthq.protocol.TriggerEventView
 import com.superiorsoftllc.agenthq.protocol.TriggerSave
 import com.superiorsoftllc.agenthq.protocol.TriggerView
-import com.superiorsoftllc.agenthq.session.SessionEvent
+import com.superiorsoftllc.agenthq.daemon.api.triggers.TriggerRunEvent
 import java.lang.management.ManagementFactory
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -665,12 +665,12 @@ class TriggerServiceTest {
             assertEquals("running", stateOf(service, a.id))
             assertEquals("running", stateOf(service, b.id))
 
-            service.onSessionEvent(SessionEvent.Exit(sessionId = "s-a", code = 1))
+            service.onRunEvent(TriggerRunEvent.Exit("s-a", killed = false))
 
             awaitTrue { stateOf(service, a.id) != "running" }
             assertEquals("running", stateOf(service, b.id), "trigger a's session ending settled trigger b's run")
 
-            service.onSessionEvent(SessionEvent.Exit(sessionId = "s-b", code = 1))
+            service.onRunEvent(TriggerRunEvent.Exit("s-b", killed = false))
             awaitTrue { stateOf(service, b.id) != "running" }
         } finally {
             service.close()
@@ -694,6 +694,31 @@ class TriggerServiceTest {
         val threads = ManagementFactory.getThreadMXBean()
         return threads.getThreadInfo(threads.allThreadIds, 0).any {
             it != null && it.threadName == "agenthq-trigger-launch" && it.threadState == Thread.State.BLOCKED && it.lockName == monitor
+        }
+    }
+
+    /**
+     * TRIG-1 LOCK ORDER: the service never calls the board (startNext) while holding its own lock. A board call that
+     * blocks must not stop another thread from reading the service (events() takes the same lock).
+     */
+    @Test
+    fun `startNext is not called under the trigger lock`() {
+        val inBoard = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val service = TriggerService(
+            repo = MemoryTriggers(), attention = com.superiorsoftllc.agenthq.daemon.MemAttention(),
+            startNext = { inBoard.countDown(); release.await(5, java.util.concurrent.TimeUnit.SECONDS); null },
+            sessions = { null }, pumpMs = 60_000, autoStart = false,
+        )
+        try {
+            val t = service.save(TriggerSave(name = "n", kind = "manual", coalesceMs = 0))
+            service.fire(t.id)
+            assertTrue(inBoard.await(5, java.util.concurrent.TimeUnit.SECONDS), "the launch never reached the board")
+            val read = java.util.concurrent.CountDownLatch(1)
+            Thread { service.events(t.id); read.countDown() }.start()
+            assertTrue(read.await(2, java.util.concurrent.TimeUnit.SECONDS), "events() blocked while the board call was in flight: the lock is held across the board")
+        } finally {
+            release.countDown(); service.close()
         }
     }
 }

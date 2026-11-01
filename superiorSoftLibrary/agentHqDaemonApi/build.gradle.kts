@@ -14,5 +14,6 @@ kotlin {
 dependencies {
     // The plugin SDK's data model (PolicyPreset, SeatsSpec, ...), already the UI plugins' contract.
     api(project(":superiorSoftLibrary:agenthqPlugins"))
+    api(project(":superiorSoftLibrary:agentHqProtocol"))
     api(libs.kotlinx.serialization.json)
 }

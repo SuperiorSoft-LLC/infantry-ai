@@ -1172,20 +1172,29 @@ class AgentHqDaemon(
             // DP-5b: triggers hand out through the Tickets API, bound once the board services exist (below).
             var triggerTickets: com.superiorsoftllc.agenthq.daemon.api.board.Tickets? = null
             val triggerCaller = com.superiorsoftllc.agenthq.daemon.api.Caller(owner = true)
-            val triggerNudges = TriggerNudges(
-                sessions = manager::list,
+            val triggerApi = com.superiorsoftllc.agenthq.daemon.wiring.LocalTriggerApi(
+                store = store.triggers,
+                getSession = manager::get,
+                listSessions = manager::list,
                 send = mail::send,
-                startSession = { agentId, prompt, projectId -> triggerPrompt(triggerTickets, agentId, prompt, projectId, triggerCaller) },
+                launch = { agentId, prompt, projectId -> triggerPrompt(triggerTickets, agentId, prompt, projectId, triggerCaller) },
+                pending = { mailId -> mailbox.message(mailId)?.state == MessageState.QUEUED },
+            )
+            val triggerNudges = TriggerNudges(
+                sessions = triggerApi::sessions,
+                send = triggerApi::sendMail,
+                startSession = triggerApi::startPrompt,
             )
             val triggers = com.superiorsoftllc.agenthq.daemon.wiring.TriggersWiring.build(
                 repo = store.triggers,
                 attention = attentionSvc,
                 startNext = { filter -> (triggerTickets?.startNext(filter, triggerCaller) as? com.superiorsoftllc.agenthq.daemon.api.board.BoardResult.Ok)?.value },
                 startPrompt = { agentId, prompt -> triggerPrompt(triggerTickets, agentId, prompt, null, triggerCaller) },
-                sessions = manager::get,
+                sessions = triggerApi::session,
                 deliverPrompt = triggerNudges::deliver,
-                mailPending = { mailId -> mailbox.message(mailId)?.state == MessageState.QUEUED },
+                mailPending = triggerApi::mailPending,
             )
+            triggerApi.onRunEvent(triggers::onRunEvent)
             triggers.eventSink = { view -> broadcastTrigger(clients, view) }
             // H12b: a committed move into done reaches the ship triggers, after the board commit has released.
             // BASICS-KILL-1 (contract 1.118.0): a project with autoRemoveDoneWorkers ends and removes a done ticket's worker.
@@ -1414,7 +1423,7 @@ class AgentHqDaemon(
                 // FOURTH ARM: ticket outcomes are durable, then a freed profile lane is drained.
                 boardSeam.emit(event)
                 // Story 9.5: a trigger's run ends with its session's run.
-                triggers.onSessionEvent(event)
+                triggerApi.dispatch(event)
                 // TRAITS-T6: LAST, so the board and the triggers have recorded the run's end before a re-prompt mail
                 // can start the session's next run.
                 reportBack.onSessionEvent(event)
