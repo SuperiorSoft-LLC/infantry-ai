@@ -54,7 +54,7 @@ class NamedEventBus(
         /** The names the daemon publishes itself (the one documented list). */
         val DAEMON_EVENTS = listOf(
             "ticket.created", "ticket.moved", "ticket.updated", "ticket.deleted", "ticket.commented",
-            "session.started", "session.idle", "session.ended", "mail.sent",
+            "session.started", "session.idle", "session.ended", "session.woken", "mail.sent",
         )
     }
 }

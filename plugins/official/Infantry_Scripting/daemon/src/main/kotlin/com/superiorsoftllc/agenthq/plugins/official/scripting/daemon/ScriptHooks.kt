@@ -53,6 +53,8 @@ class ScriptHooks(
     /** (project, branch) -> the branch's tip sha, or null. */
     private val tip: (String, String) -> String? = { _, _ -> null },
     private val log: (String) -> Unit = {},
+    /** SCRIPT-VIS-1: every run is recorded here. */
+    private val runLog: ScriptRunLog = ScriptRunLog(),
     private val clock: () -> Long = System::currentTimeMillis,
     /** Where runs execute. Production: one daemon thread (events run in order); tests run inline. */
     private val executor: (() -> Unit) -> Unit = DEFAULT_EXECUTOR,
@@ -112,9 +114,17 @@ class ScriptHooks(
             val engine = engines.byExtension(script.extension) ?: return failQuiet(project, hook, "no engine loaded for .${script.extension}").let { null }
             val who = ScriptCaller(hook.ownerSession.orEmpty(), hook.ownerRole.orEmpty())
             val report = dispatcher.run(engine, script.source, scriptArgs(project, hook, e, payload, null, 0), limits(), who, invokerOf(project, hook), false)
-            if (!report.ok) { failQuiet(project, hook, report.render(hook.script)); return null }
-            return if (report.handled) MailVerdict(handled = true) else report.deliverText?.let { MailVerdict(text = it) }
+            val from = (payload["from"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+            val subj = (payload["subject"] as? JsonPrimitive)?.contentOrNull?.takeIf { it.isNotBlank() } ?: "mail"
+            val trig = "${hook.id} ${e.name}"
+            if (!report.ok) { runLog.record(project, hook.script, trig, hook.to, report, "failed", "failed on $subj from $from", report.error); failQuiet(project, hook, report.render(hook.script)); return null }
+            if (report.handled) { runLog.record(project, hook.script, trig, hook.to, report, "handled", "handled $subj from $from"); return MailVerdict(handled = true) }
+            val text = report.deliverText
+            if (text != null) { runLog.record(project, hook.script, trig, hook.to, report, "delivered", "delivered rewritten $subj from $from"); return MailVerdict(text = text) }
+            runLog.record(project, hook.script, trig, hook.to, report, "passed", "passed $subj from $from through")
+            return null
         } catch (t: Throwable) {
+            runLog.record(project, hook.script, "${hook.id} ${e.name}", hook.to, null, "failed", "crashed", "${t.javaClass.simpleName}: ${t.message?.take(300)}")
             failQuiet(project, hook, "script crashed: ${t.javaClass.simpleName}: ${t.message?.take(300)}"); return null
         } finally { run.endedAt = clock() }
     }
@@ -207,9 +217,12 @@ class ScriptHooks(
             val report = dispatcher.run(engine, script.source, args, limits(), who, invoker, false) { planned ->
                 planned.forEach { a -> flatten(a.args).forEach { run.touched += it } }
             }
+            val sess = (args["workerSession"] ?: args["sessionId"]) as? String
+            runLog.record(project, hook.script, "${hook.id} ${hook.on}", sess, report, if (report.ok) "ok" else "failed", "ran for ${e.name}: ${report.records.size} action(s)", report.error)
             if (report.ok) log("hook ${hook.id} ($project) ran ${hook.script} for ${e.name}: ${report.outcome}, ${report.records.size} action(s)")
             else fail(project, hook, ticketId, report.render(hook.script))
         } catch (t: Throwable) {
+            runLog.record(project, hook.script, "${hook.id} ${hook.on}", null, null, "failed", "crashed", "${t.javaClass.simpleName}: ${t.message?.take(300)}")
             fail(project, hook, ticketId, "script crashed: ${t.javaClass.simpleName}: ${t.message?.take(300)}")
         } finally {
             run.endedAt = clock()

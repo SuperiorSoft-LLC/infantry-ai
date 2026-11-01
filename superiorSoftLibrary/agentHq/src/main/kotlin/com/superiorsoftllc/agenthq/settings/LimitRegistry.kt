@@ -558,6 +558,12 @@ object LimitRegistry {
         max = 100, zeroMeans = "one wake per message",
     )
 
+    /** SCRIPT-VIS-1: how many script run records the Scripting plugin keeps per project (newest win). */
+    val SCRIPT_RUN_LOG_MAX = LimitDef(
+        "limits.scripting.runLogMax", 200, "runs",
+        "Recommended 200. How many script run records (time, script, trigger, actions, log, outcome) are kept per project; the oldest are dropped. 0 = keep none.",
+        max = 100_000, zeroIsUnlimited = false,
+    )
     /** MAIL-TRUNC-1: per-body cap in mail.deliveryMode=truncate. */
     val MAIL_INJECT_MAX_CHARS = LimitDef(
         "limits.mail.injectMaxChars", 2000, "chars",
@@ -600,7 +606,7 @@ object LimitRegistry {
         RUN_MAX_SECRETS, KEYSTORE_MAX_FIELDS, KEYSTORE_MAX_SECRETS,
         SANDBOX_MODE,
         HEALTH_DB_TIMEOUT_SECONDS, HEALTH_WATCHDOG_FAILURES, HEALTH_WATCHDOG_INTERVAL_SECONDS, HEALTH_WATCHDOG_TIMEOUT_SECONDS,
-        MAIL_WAKE_DEBOUNCE_SECONDS, MAIL_COALESCE_MAX, WATCH_STALL_NUDGES,
+        MAIL_WAKE_DEBOUNCE_SECONDS, MAIL_COALESCE_MAX, WATCH_STALL_NUDGES, SCRIPT_RUN_LOG_MAX,
     )
 
     /** A minutes limit as milliseconds; 0 on an unlimited-capable one = [Long.MAX_VALUE] (never reached). */

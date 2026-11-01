@@ -20,6 +20,8 @@ class ScriptTools(
     private val limits: ScriptingLimits,
     private val aliases: () -> Map<String, String>,
     private val maxPhases: () -> Int,
+    /** SCRIPT-VIS-1: every manual run is recorded here. */
+    private val runLog: ScriptRunLog = ScriptRunLog(),
 ) {
     private val dispatcher = ScriptDispatcher(tools, aliases, maxPhases)
 
@@ -75,6 +77,7 @@ class ScriptTools(
         val who = ScriptCaller(call.clientSessionId.orEmpty(), call.clientRole.orEmpty())
         val invoker = ToolInvoker(call.caller, call.clientSessionId, call.clientRole, project, "script:$name")
         val report = dispatcher.run(engine, script.source, args, limits.current(), who, invoker, dry)
+        if (!dry) runLog.record(project, name, "manual", call.clientSessionId, report, if (report.ok) "ok" else "failed", "ran ${report.records.size} action(s)", report.error)
         return ToolResult(report.render(name), isError = !report.ok)
     }
 
