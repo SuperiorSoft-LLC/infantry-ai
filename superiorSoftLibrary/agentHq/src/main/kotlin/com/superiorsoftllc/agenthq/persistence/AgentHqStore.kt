@@ -11,7 +11,6 @@ import com.superiorsoftllc.agenthq.db.AgentHQDatabaseFactory
 import com.superiorsoftllc.agenthq.db.AgentHQDatabase
 import com.superiorsoftllc.agenthq.db.AgentHQDatabaseHandle
 import com.superiorsoftllc.agenthq.db.Agents
-import com.superiorsoftllc.agenthq.db.Attention
 import com.superiorsoftllc.agenthq.db.Events
 import com.superiorsoftllc.agenthq.db.Node_attempts
 import com.superiorsoftllc.agenthq.db.Pod_nodes
@@ -20,8 +19,6 @@ import com.superiorsoftllc.agenthq.db.Runs
 import com.superiorsoftllc.agenthq.db.Settings
 import com.superiorsoftllc.agenthq.db.Tickets
 import com.superiorsoftllc.agenthq.db.Ticket_runs
-import com.superiorsoftllc.agenthq.attention.AttentionItem
-import com.superiorsoftllc.agenthq.attention.AttentionKind
 import com.superiorsoftllc.agenthq.protocol.AgentProfile
 import com.superiorsoftllc.agenthq.role.RoleBinding
 import com.superiorsoftllc.agenthq.role.RoleIds
@@ -203,16 +200,6 @@ interface TicketRunRepository {
     fun byTicket(ticketId: String): List<TicketRunRow>
 }
 
-/** Story 9.4: durable attention records, ordered by their creation time. */
-interface AttentionRepository {
-    fun insert(item: AttentionItem)
-    fun get(id: String): AttentionItem?
-    fun all(): List<AttentionItem>
-    /** Returns the row after acknowledgement, or null when [id] does not exist. */
-    fun acknowledge(id: String, at: Long): AttentionItem?
-    fun openCount(): Long
-}
-
 /** Story 9.7b: one row per ended run (`run_usage`); token columns are null when the run reported none. */
 interface UsageRepository {
     fun insert(record: RunUsageRecord)
@@ -267,7 +254,6 @@ interface AgentHqStore : Closeable {
     val tickets: TicketRepository
     val settings: SettingsRepository
     val ticketRuns: TicketRunRepository
-    val attention: AttentionRepository
     val usage: UsageRepository
     val providerStates: ProviderStateRepository
     val triggers: TriggerRepository
@@ -742,34 +728,6 @@ class SqlAgentHqStore(val handle: AgentHQDatabaseHandle) : AgentHqStore {
             q.getTicketRunsByTicketId(ticketId).executeAsList().map { it.toRecord() }
     }
 
-    override val attention: AttentionRepository = object : AttentionRepository {
-        private val q = db.attentionQueries
-
-        override fun insert(item: AttentionItem) {
-            q.insertAttention(
-                id = item.id,
-                created_at = item.at,
-                kind = item.kind.wireName,
-                trigger_id = item.triggerId,
-                ticket_id = item.ticketId,
-                pod_id = item.podId,
-                session_id = item.sessionId,
-                outcome = item.outcome,
-                detail = item.detail,
-                acked_at = item.ackedAt,
-            )
-        }
-
-        override fun get(id: String) = q.getAttentionById(id).executeAsOneOrNull()?.toAttentionItem()
-        override fun all() = q.getAllAttention().executeAsList().map { it.toAttentionItem() }
-        override fun acknowledge(id: String, at: Long): AttentionItem? = tx.transactionWithResult {
-            val existing = q.getAttentionById(id).executeAsOneOrNull() ?: return@transactionWithResult null
-            if (existing.acked_at == null) q.acknowledgeAttention(at, id)
-            q.getAttentionById(id).executeAsOneOrNull()?.toAttentionItem()
-        }
-        override fun openCount() = q.countOpenAttention().executeAsOne()
-    }
-
     override val usage: UsageRepository = object : UsageRepository {
         private val q = db.usageQueries
 
@@ -970,19 +928,6 @@ class SqlAgentHqStore(val handle: AgentHQDatabaseHandle) : AgentHqStore {
             SqlAgentHqStore(AgentHQDatabaseFactory.open(path, holderLabel, busyTimeoutMs))
     }
 }
-
-private fun Attention.toAttentionItem() = AttentionItem(
-    id = id,
-    at = created_at,
-    kind = AttentionKind.fromWireName(kind),
-    triggerId = trigger_id,
-    ticketId = ticket_id,
-    podId = pod_id,
-    sessionId = session_id,
-    outcome = outcome,
-    detail = detail,
-    ackedAt = acked_at,
-)
 
 private fun Runs.toRecord() = RunRecord(
     id = id,

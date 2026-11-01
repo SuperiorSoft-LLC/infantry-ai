@@ -1,7 +1,7 @@
 package com.superiorsoftllc.agenthq.daemon
 
-import com.superiorsoftllc.agenthq.attention.AttentionItem
-import com.superiorsoftllc.agenthq.attention.AttentionKind
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import com.superiorsoftllc.agenthq.orchestration.GatedRunner
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.EventVocabulary
@@ -135,7 +135,7 @@ class UsageDaemonTest {
             fixture.send(Envelope.KILL, "${startedA.sessionId} force")
             val blocked = fixture.client.awaitWhere("the launch_blocked attention", 10_000) { frame ->
                 frame.type == Envelope.ATTENTION &&
-                    json.decodeFromString(AttentionItem.serializer(), frame.data).let { it.kind == AttentionKind.LAUNCH_BLOCKED && it.ticketId == b.id }
+                    kotlinx.serialization.json.Json.parseToJsonElement(frame.data).jsonObject.let { it["kind"]?.jsonPrimitive?.content == "launch_blocked" && it["ticketId"]?.jsonPrimitive?.content == b.id }
             }
             assertTrue(blocked.data.contains("budget"), blocked.data)
             assertEquals(1, fixture.daemon.manager.list().size, "the refused drain spawned nothing")
@@ -162,7 +162,7 @@ class UsageDaemonTest {
             assertTrue(warning.data.contains("starts anyway"), warning.data)
             fixture.client.await(Envelope.FINISHED, occurrence = 1)
             assertEquals(2, fixture.daemon.manager.list().size, "a human start is warned, never refused")
-            assertTrue(fixture.daemon.attention.list().none { it.kind == AttentionKind.LAUNCH_BLOCKED })
+            assertTrue(fixture.daemon.attention.list().none { it.kind == "launch_blocked" })
         } finally {
             fixture.stop()
             fixture.deleteState()

@@ -1,7 +1,7 @@
 package com.superiorsoftllc.agenthq.daemon
 
-import com.superiorsoftllc.agenthq.attention.AttentionItem
-import com.superiorsoftllc.agenthq.attention.AttentionKind
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import com.superiorsoftllc.agenthq.orchestration.GatedRunner
 import com.superiorsoftllc.agenthq.protocol.Envelope
 import com.superiorsoftllc.agenthq.protocol.TicketStatus
@@ -109,7 +109,7 @@ class TriggerDaemonTest {
         fixture.send(Envelope(Envelope.TRIGGER_FIRE, trigger.id))
         val tripped = fixture.client.awaitWhere("the trip attention", 10_000) { frame ->
             frame.type == Envelope.ATTENTION &&
-                json.decodeFromString(AttentionItem.serializer(), frame.data).let { it.kind == AttentionKind.TRIGGER_TRIPPED && it.triggerId == trigger.id }
+                kotlinx.serialization.json.Json.parseToJsonElement(frame.data).jsonObject.let { it["kind"]?.jsonPrimitive?.content == "trigger_tripped" && it["triggerId"]?.jsonPrimitive?.content == trigger.id }
         }
         assertNotNull(tripped)
         fixture.await(5_000, "the trigger tripped") { state(fixture, trigger.id) == "tripped" }
@@ -130,7 +130,7 @@ class TriggerDaemonTest {
         fixture.send(Envelope(Envelope.TRIGGER_FIRE, trigger.id))
         fixture.await(5_000, "the nothing_to_start disposition") { events(fixture, trigger.id).map { it.disposition } == listOf("nothing_to_start") }
         assertEquals("armed", state(fixture, trigger.id))
-        assertTrue(fixture.daemon.attention.list().none { it.kind == AttentionKind.TRIGGER_TRIPPED })
+        assertTrue(fixture.daemon.attention.list().none { it.kind == "trigger_tripped" })
     }
 
     @Test
@@ -155,7 +155,7 @@ class TriggerDaemonTest {
             val reloaded = triggers(second.client.await(Envelope.TRIGGERS)).single { it.id == triggerId }
             assertEquals("tripped", reloaded.state)
             assertTrue(reloaded.trippedReason!!.contains("restarted"), reloaded.trippedReason)
-            assertTrue(second.daemon.attention.list().any { it.kind == AttentionKind.TRIGGER_TRIPPED && it.triggerId == triggerId })
+            assertTrue(second.daemon.attention.list().any { it.kind == "trigger_tripped" && it.triggerId == triggerId })
         } finally {
             second.stop()
             second.deleteState()
@@ -266,7 +266,7 @@ class TriggerDaemonTest {
         fixture.send(Envelope(Envelope.TRIGGER_FIRE, trigger.id))
         fixture.await(10_000, "the trigger tripped") { state(fixture, trigger.id) == "tripped" }
         assertTrue(fixture.daemon.manager.list().isEmpty(), "a refused prompt launch creates no session")
-        assertTrue(fixture.daemon.attention.list().any { it.kind == AttentionKind.TRIGGER_TRIPPED && it.triggerId == trigger.id })
+        assertTrue(fixture.daemon.attention.list().any { it.kind == "trigger_tripped" && it.triggerId == trigger.id })
     }
 
     @Test

@@ -1,9 +1,5 @@
 package com.superiorsoftllc.agenthq.triggers
 
-import com.superiorsoftllc.agenthq.attention.AttentionKind
-import com.superiorsoftllc.agenthq.attention.AttentionStore
-import com.superiorsoftllc.agenthq.attention.AttentionItem
-import com.superiorsoftllc.agenthq.persistence.AttentionRepository
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -118,26 +114,17 @@ class TriggerGuardTest {
 
     @Test
     fun `trip report persists and publishes attention`() {
-        var persisted: AttentionItem? = null
-        var pushed: AttentionItem? = null
-        val repository = object : AttentionRepository {
-            override fun insert(item: AttentionItem) { persisted = item }
-            override fun get(id: String): AttentionItem? = persisted?.takeIf { it.id == id }
-            override fun all(): List<AttentionItem> = listOfNotNull(persisted)
-            override fun acknowledge(id: String, at: Long): AttentionItem? = null
-            override fun openCount(): Long = if (persisted?.ackedAt == null && persisted != null) 1 else 0
-        }
-        val attention = AttentionStore(repository, clock = { 42L }, idFactory = { "attention-1" }).also {
-            it.eventSink = { pushed = it }
-        }
+        var pushed: com.superiorsoftllc.agenthq.daemon.api.attention.AttentionEntry? = null
+        val attention = com.superiorsoftllc.agenthq.attention.MemAttention(clock = { 42L }).also { it.eventSink = { e -> pushed = e } }
         val trip = TriggerTrip("trigger-x", "trigger_tripped", "FAILED", "run failed")
 
-        trip.reportTo(com.superiorsoftllc.agenthq.attention.LocalAttention(attention))
+        trip.reportTo(attention)
 
+        val persisted = attention.rows.singleOrNull()
         assertEquals(persisted, pushed)
         assertNotNull(persisted)
-        assertEquals(AttentionKind.TRIGGER_TRIPPED, persisted?.kind)
-        assertEquals("trigger-x", persisted?.triggerId)
-        assertEquals("FAILED", persisted?.outcome)
+        assertEquals("trigger_tripped", persisted.kind)
+        assertEquals("trigger-x", persisted.triggerId)
+        assertEquals("FAILED", persisted.outcome)
     }
 }

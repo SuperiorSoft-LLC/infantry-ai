@@ -656,7 +656,7 @@ class DaemonPluginHost private constructor(
         private val READY_KEY = Regex("^[a-zA-Z][a-zA-Z0-9_]{0,31}$")
         /** Frames core handles before its catalog (never a plugin's). */
         private val CORE_FRAMES = setOf(PLUGIN_TOOLS, PLUGIN_TOOL_CALL, PLUGIN_TOOL_RESULT, "replay_request", "ready", "error")
-        private val CORE_ROUTES = setOf("/health", "/ws", "/plugins", "/attention", "/")
+        private val CORE_ROUTES = setOf("/health", "/ws", "/plugins", "/")
 
         private fun key(method: String, path: String) = "${method.uppercase()} $path"
 
