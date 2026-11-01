@@ -968,14 +968,21 @@ class SessionManager(
      * one could only fail, later and less clearly.
      */
     @Synchronized
-    fun resume(sessionId: String, prompt: String, origin: MessageOrigin = MessageOrigin.Owner): SessionRecord {
+    fun resume(sessionId: String, prompt: String, origin: MessageOrigin = MessageOrigin.Owner, wakeReason: String? = null, wakeRef: String? = null): SessionRecord {
         if (sessionId in held) throw RunInFlightException(sessionId, "session $sessionId is switching harness; send again once it has switched")
-        return resumeHeld(sessionId, prompt, origin)
+        return resumeHeld(sessionId, prompt, origin, wakeReason, wakeRef)
     }
+
+    /**
+     * SCRIPT-VIS-1: told every time a prompt wakes a session: (session id, reason, ref). Reason is the caller's [resume] `wakeReason`
+     * (mail, mail-hook-delivered, ...) or derived from the origin (owner, agent, external). Generic: the sink decides what to do with it.
+     */
+    @Volatile
+    var wakeSink: ((sessionId: String, reason: String, ref: String?) -> Unit)? = null
 
     /** TICKET-HANDOVER: [resume] for the switch that holds [sessionId] (the only caller allowed past the hold). */
     @Synchronized
-    fun resumeHeld(sessionId: String, prompt: String, origin: MessageOrigin = MessageOrigin.Owner): SessionRecord {
+    fun resumeHeld(sessionId: String, prompt: String, origin: MessageOrigin = MessageOrigin.Owner, wakeReason: String? = null, wakeRef: String? = null): SessionRecord {
         val session = sessions[sessionId] ?: error("unknown session $sessionId")
         if (runs.containsKey(sessionId)) throw RunInFlightException(sessionId, "session $sessionId already has a run in flight")
         busyTwin(sessionId, session.agentId, session.ticketId)?.let {
@@ -1012,7 +1019,11 @@ class SessionManager(
         sessions[sessionId] = revived
         persist(sessionId, force = true)
         eventSink?.invoke(SessionEvent.Status(revived))
-        if (delivered.isNotBlank()) startRun(sessionId, delivered, resuming = !firstTurn, origin = origin)
+        if (delivered.isNotBlank()) {
+            startRun(sessionId, delivered, resuming = !firstTurn, origin = origin)
+            val reason = wakeReason ?: when (origin) { is MessageOrigin.Owner -> "owner"; is MessageOrigin.Agent -> "agent"; else -> "external" }
+            runCatching { wakeSink?.invoke(sessionId, reason, wakeRef) }
+        }
         return sessions.getValue(sessionId)
     }
 

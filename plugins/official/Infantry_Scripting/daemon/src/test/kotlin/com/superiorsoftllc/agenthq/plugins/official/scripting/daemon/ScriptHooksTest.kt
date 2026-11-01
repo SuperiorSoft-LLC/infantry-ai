@@ -79,12 +79,12 @@ class ScriptHooksTest {
     private fun hooksJson(vararg hooks: String) = """{"version":1,"hooks":[${hooks.joinToString(",")}]}"""
     private val doneHook = """{"id":"done-hook","on":"lane enter done","script":"on-done","args":{"mode":"merge"},"ownerSession":"pm-1","ownerRole":"pm"}"""
 
-    private fun build(engine: FakeEngine, guard: HookGuardConfig = HookGuardConfig(), tip: (String, String) -> String? = { _, _ -> "abc123tip" }): ScriptHooks {
+    private fun build(engine: FakeEngine, guard: HookGuardConfig = HookGuardConfig(), tip: (String, String) -> String? = { _, _ -> "abc123tip" }, runLog: ScriptRunLog = ScriptRunLog()): ScriptHooks {
         val engines = ScriptEngines({ mapOf(ScriptEngineWire.PREFIX + "fake" to ScriptEngineWire.asEndpoint(engine)) })
         val store = ScriptStore({ files }, { engines.extensions() })
         return ScriptHooks(
             HookStore { files }, store, engines, tools, ScriptDispatcher(tools, { mapOf("move" to "t_move") }),
-            projects = { listOf("p1") }, limits = { ScriptLimits() }, guard = { guard }, tip = tip, clock = { now }, executor = { it() },
+            projects = { listOf("p1") }, limits = { ScriptLimits() }, guard = { guard }, tip = tip, clock = { now }, executor = { it() }, runLog = runLog,
         )
     }
 
@@ -119,6 +119,46 @@ class ScriptHooksTest {
         assertEquals(null, build(FakeEngine { error("boom") }).incoming(mail()))
         files.files.remove(HookStore.PATH)
         assertEquals(null, build(FakeEngine { listOf(QueuedAction("handled", emptyMap())) }).incoming(mail()))
+    }
+
+    @Test fun `SCRIPT-VIS-1 every hook run is recorded with trigger, session, outcome, actions and log, newest first, bounded`() {
+        putHooks(mailHook)
+        var max = 2
+        val log = ScriptRunLog({ max }, { now })
+        val h = build(FakeEngine { listOf(QueuedAction("handled", emptyMap())) }, runLog = log)
+        assertTrue(h.incoming(mail())!!.handled)
+        val r = log.runs("p1").single()
+        assertEquals("handled", r.outcome); assertEquals("m mail.incoming", r.trigger); assertEquals("pm-1", r.session); assertTrue(r.ok)
+        assertTrue(r.line().startsWith("AUTOMATION · on-done · handled subj from vc-1"), r.line())
+        build(FakeEngine { emptyList() }, runLog = log).incoming(mail())
+        assertEquals("passed", log.runs("p1").first().outcome)
+        build(FakeEngine { listOf(QueuedAction("deliver_text", mapOf("text" to "x"))) }, runLog = log).incoming(mail())
+        assertEquals(listOf("delivered", "passed"), log.runs("p1").map { it.outcome }, "limit 2 keeps the newest two")
+        build(FakeEngine { error("boom") }, runLog = log).incoming(mail())
+        val f = log.runs("p1").first()
+        assertEquals("failed", f.outcome); assertFalse(f.ok); assertTrue(f.line().endsWith("FAILED"))
+        assertEquals(1, log.runs("p1", session = "other-9").size + 1, "runs filter by session")
+        max = 0; build(FakeEngine { emptyList() }, runLog = log).incoming(mail())
+        assertTrue(log.runs("p1").isEmpty(), "limit 0 keeps none")
+    }
+
+    @Test fun `SCRIPT-VIS-1 a lane hook run is recorded and wake reasons count, mail-handled is a turn saved`() {
+        putHooks(doneHook)
+        val log = ScriptRunLog({ 50 }, { now })
+        build(FakeEngine { listOf(QueuedAction("move", mapOf("ticketId" to "ticket-bbbb2222", "to" to "todo"))) }, runLog = log).onEvent(moved())
+        val r = log.runs("p1").single()
+        assertEquals("ok", r.outcome); assertEquals("done-hook lane enter done", r.trigger); assertEquals("worker-7", r.session); assertEquals(1, r.actions.size)
+        log.wake("s1", "owner", null, "p1"); log.wake("s1", "mail", "m1", "p1"); log.wake("s1", "mail-handled", "m2", "p1"); log.wake("s1", "mail-handled", "m3")
+        val st = log.sessionStats("s1")
+        assertEquals("2", st["turnsSaved"].toString()); assertEquals("2", st["wakes"].toString())
+        assertEquals("""{"mail":1,"owner":1}""", st["wakesByReason"].toString())
+        assertEquals("2", log.projectStats("p1")["turnsSaved"].toString())
+        val out = log.tool().call(object : ToolCall {
+            override val arguments = Json.parseToJsonElement("""{"project":"p1"}""").jsonObject
+            override val caller = Caller(owner = true)
+            override fun request(type: String, data: String, sessionId: String?, timeoutMs: Long): Frame = error("no frames")
+        })
+        assertTrue(!out.isError && out.text.contains("turnsSaved") && out.text.contains("AUTOMATION"), out.text)
     }
 
     @Test fun `a redelivered event id, or the same transition re-published under a new id, runs the hook once`() {

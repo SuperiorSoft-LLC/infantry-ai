@@ -40,6 +40,11 @@ class DaemonEventPublisher(private val publish: (name: String, payload: String) 
         publish("session.ended", obj("sessionId" to sessionId))
     }
 
+    /** SCRIPT-VIS-1: a prompt woke a session (`reason`: owner, agent, external, mail, mail-hook-delivered), or a hook handled a mail with no wake (`mail-handled`). */
+    fun woken(sessionId: String, reason: String, ref: String?, projectId: String? = null) {
+        publish("session.woken", obj("sessionId" to sessionId, "reason" to reason, "ref" to ref, "projectId" to projectId))
+    }
+
     fun mail(m: Message) {
         publish("mail.sent", obj("id" to m.id, "from" to m.from, "to" to m.to, "subject" to m.subject, "threadId" to m.threadId))
     }

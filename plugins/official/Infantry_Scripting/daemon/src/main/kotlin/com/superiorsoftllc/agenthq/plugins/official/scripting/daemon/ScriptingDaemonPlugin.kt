@@ -11,8 +11,9 @@ import java.io.File
 class ScriptingDaemonPlugin : DaemonPlugin {
     private var subscription: AutoCloseable? = null
     private var sessionWatch: AutoCloseable? = null
+    private var wakeWatch: AutoCloseable? = null
 
-    override fun stop() { runCatching { subscription?.close() }; subscription = null; runCatching { sessionWatch?.close() }; sessionWatch = null }
+    override fun stop() { runCatching { subscription?.close() }; subscription = null; runCatching { sessionWatch?.close() }; sessionWatch = null; runCatching { wakeWatch?.close() }; wakeWatch = null }
 
     override fun start(api: DaemonApi) {
         val engines = ScriptEngines({ api.services.endpoints(ScriptEngineWire.PREFIX) }, { api.config("scripting.defaultEngine")?.takeIf { it.isNotBlank() } ?: "lua" })
@@ -20,7 +21,9 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         val store = ScriptStore({ api.files(it) }, { engines.extensions() })
         val aliases = { ScriptAliases.parse(api.config("scripting.aliases")) }
         val maxPhases = { api.config("scripting.maxPhases")?.trim()?.toIntOrNull() ?: 3 }
-        val tools = ScriptTools(api.tools, engines, store, limits, aliases, maxPhases)
+        val runLog = ScriptRunLog({ api.settings.limit("limits.scripting.runLogMax")?.toInt() ?: 200 })
+        val tools = ScriptTools(api.tools, engines, store, limits, aliases, maxPhases, runLog)
+        api.tools.register(runLog.tool())
         api.tools.register(tools.run)
         api.tools.register(tools.api)
         // SCRIPT-5: hooks are data (hooks.json); one subscription on the named-event bus runs them.
@@ -31,8 +34,16 @@ class ScriptingDaemonPlugin : DaemonPlugin {
             projects = { api.projects.list().map { it.id } }, limits = { limits.current() },
             guard = { HookSettings.guard { api.config(it) } }, enabled = { HookSettings.enabled { api.config(it) } },
             tip = { project, branch -> ScriptHooks.gitTip(File(api.files(project).absolutePath("x")).parentFile.parentFile, branch) },
-            log = { api.log(it) },
+            log = { api.log(it) }, runLog = runLog,
         )
+        // SCRIPT-VIS-1: why each session was woken (and mails a hook handled instead), from the daemon's session.woken event.
+        wakeWatch = api.events.subscribe("session.woken") { e ->
+            runCatching {
+                val o = kotlinx.serialization.json.Json.parseToJsonElement(e.payload).jsonObject
+                fun s(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull
+                runLog.wake(s("sessionId") ?: return@runCatching, s("reason") ?: return@runCatching, s("ref"), s("projectId"))
+            }
+        }
         api.hooks.incomingMail { hooks.incoming(it) }
         // MAIL-HOOK-1b: a session's mail hooks go with the session.
         sessionWatch = api.events.onSessionRemoved { id -> runCatching { hookStore.removeForSession(api.projects.list().map { it.id }, id).takeIf { it > 0 }?.let { api.log("hooks: removed $it mail hook(s) of ended session $id") } } }

@@ -210,7 +210,12 @@ class MailRouter(
             if (request.allowCrossProject) crossAllowed.add(result.message.id)
             val verdict = incomingVerdict(result.message)
             if (verdict != null && verdict.handled) {
-                if (mailbox.markHandled(result.message.id) != null) return result
+                if (mailbox.markHandled(result.message.id) != null) {
+                    // SCRIPT-VIS-1: a mail a hook handled saved the recipient a turn.
+                    (resolveRecipient(result.message.to, result.message.from, result.message.id in crossAllowed) as? RecipientResolution.Resolved)
+                        ?.let { r -> runCatching { manager.wakeSink?.invoke(r.sessionId, "mail-handled", result.message.id) } }
+                    return result
+                }
             } else if (verdict?.text != null) replacementText[result.message.id] = verdict.text
             // Pump by the ORIGINAL recipient address (session id, agent id, or role name), because
             // that is how the message is keyed in the mailbox. `deliver` resolves it to a session.
@@ -398,7 +403,7 @@ class MailRouter(
             } else {
                 text
             }
-            manager.resume(session.id, turn, source.origin)
+            manager.resume(session.id, turn, source.origin, if (replaced != null) "mail-hook-delivered" else "mail", group.joinToString(",") { it.id })
             DeliveryOutcome.Delivered("resumed ${session.id}", folded.map { it.id })
         } catch (e: Exception) {
             DeliveryOutcome.Failed("resume of '${session.id}' failed: ${e.message}")
