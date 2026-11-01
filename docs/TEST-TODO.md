@@ -107,3 +107,6 @@ TEST-TODO: `events.broadcast` / `hooks.connected` / `QuestionsOpen` (DaemonPlugi
 - TEST-TODO: a plugin `hooks.status` field appears under `pluginStatus` in GET /health.
 
 - TEST-TODO (TRIG-2b): run TriggerStoreContractTest (Infantry_Triggers/daemon) at the QA checkpoint; once TRIG-2c switches core over, check triggers survive a daemon restart through the plugin store (create, fire, restart, list, event pruning to 500).
+
+## MAIL-HOOK-1 (pre-delivery mail hook)
+TEST-TODO: install `on-mail-sent.lua` (plugins/official/Infantry_Scripting/project-scripts) with hook `on="mail.incoming"`, routeRoles ["pm"] and the vc-merged / vc-duplicate / stale-auto-failure / worker-done rules; send a routine VC mail to an idle PM: expect it READ, no PM turn, ticket comment written; send an unmatched mail: PM woken once (no second delivery). Break the script (syntax error): mail still delivered. Check why agenthq_prompt to an idle session waits 30 s (see report).

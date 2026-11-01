@@ -1,6 +1,8 @@
 package com.superiorsoftllc.agenthq.plugins.official.scripting.daemon
 
 import com.superiorsoftllc.agenthq.daemon.api.Caller
+import com.superiorsoftllc.agenthq.daemon.api.IncomingMail
+import com.superiorsoftllc.agenthq.daemon.api.MailVerdict
 import com.superiorsoftllc.agenthq.daemon.api.NamedEvent
 import com.superiorsoftllc.agenthq.daemon.api.ToolInvoker
 import com.superiorsoftllc.agenthq.daemon.api.Tools
@@ -71,6 +73,46 @@ class ScriptHooks(
         if (!enabled()) return
         if (!firstDelivery(e)) { log("hooks: event ${e.name} ${e.id} already handled, not re-run"); return }
         executor { runCatching { dispatch(e) }.onFailure { log("hooks: event ${e.name} failed: ${it.javaClass.simpleName}: ${it.message?.take(200)}") } }
+    }
+
+    /**
+     * MAIL-HOOK-1: the pre-delivery event `mail.incoming`, run SYNCHRONOUSLY on the caller (the mail send, before any wake) for every
+     * enabled hook on exactly that name in the recipient's project. The script gets the hook args overlaid with id, from, to, sessionId,
+     * role, subject, body, threadId. The first run that queues `ih.handled()` returns handled; one that queues `ih.deliver_text{text=..}`
+     * returns that text. Any failure, refusal or other result is null = deliver as today (the host's call timeout bounds this).
+     */
+    fun incoming(mail: IncomingMail): MailVerdict? {
+        if (!enabled()) return null
+        val payload = buildJsonObject {
+            put("id", mail.id); put("from", mail.from); put("to", mail.to); put("subject", mail.subject); put("body", mail.body)
+            mail.recipientSessionId?.let { put("sessionId", it) }; mail.recipientRole?.let { put("role", it) }
+            mail.threadId?.let { put("threadId", it) }; mail.projectId?.let { put("projectId", it) }
+        }
+        val e = NamedEvent(INCOMING_EVENT, payload.toString(), "daemon", "mail-incoming:${mail.id}")
+        for (p in projects().filter { mail.projectId == null || it == mail.projectId }) {
+            val hooks = runCatching { store.list(p) }.getOrDefault(emptyList())
+            for (hook in hooks) {
+                if (!hook.enabled || hook.on !is HookOn.Named || (hook.on as HookOn.Named).pattern != INCOMING_EVENT) continue
+                if (admit(p, hook, 0) != null) continue
+                val run = Run("$p/${hook.id}", 0, ConcurrentHashMap.newKeySet())
+                val v = runCatching { executeIncoming(p, hook, e, payload, run) }.getOrNull()
+                if (v != null) return v
+            }
+        }
+        return null
+    }
+
+    private fun executeIncoming(project: String, hook: Hook, e: NamedEvent, payload: JsonObject, run: Run): MailVerdict? {
+        try {
+            val script = scripts.read(project, hook.script) ?: return fail(project, hook, null, "no script '${hook.script}' in .agenthq/scripts/").let { null }
+            val engine = engines.byExtension(script.extension) ?: return fail(project, hook, null, "no engine loaded for .${script.extension}").let { null }
+            val who = ScriptCaller(hook.ownerSession.orEmpty(), hook.ownerRole.orEmpty())
+            val report = dispatcher.run(engine, script.source, scriptArgs(project, hook, e, payload, null, 0), limits(), who, invokerOf(project, hook), false)
+            if (!report.ok) { fail(project, hook, null, report.render(hook.script)); return null }
+            return if (report.handled) MailVerdict(handled = true) else report.deliverText?.let { MailVerdict(text = it) }
+        } catch (t: Throwable) {
+            fail(project, hook, null, "script crashed: ${t.javaClass.simpleName}: ${t.message?.take(300)}"); return null
+        } finally { run.endedAt = clock() }
     }
 
     /** HOOK-DUP-1: idempotency. An event id, or the same ticket transition (ticket, seq, from, to) re-published under a new id by a retried delivery, runs hooks once. */
@@ -240,6 +282,7 @@ class ScriptHooks(
     }
 
     companion object {
+        const val INCOMING_EVENT = "mail.incoming"
         private val pool by lazy { Executors.newSingleThreadExecutor { r -> Thread(r, "script-hooks").apply { isDaemon = true } } }
         val DEFAULT_EXECUTOR: (() -> Unit) -> Unit = { job -> pool.execute { runCatching { job() } } }
 

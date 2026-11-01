@@ -308,6 +308,26 @@ class Mailbox(
     // --- state transitions ----------------------------------------------------------------------
 
     /**
+     * MAIL-HOOK-1: a pre-delivery hook handled a QUEUED message: it goes straight to READ (delivered and read at once), so no
+     * wake or injection ever happens for it. Anything not QUEUED is left alone (null).
+     */
+    fun markHandled(messageId: String): Message? {
+        val (events, result) = synchronized(lock) {
+            val current = messages[messageId]
+            if (current == null || current.state != MessageState.QUEUED) emptyList<MailEvent>() to null
+            else {
+                val now = clock()
+                val next = current.copy(state = MessageState.READ, deliveredAt = now, readAt = now)
+                messages[messageId] = next
+                persistLocked()
+                listOf<MailEvent>(MailEvent.Changed(next)) to next
+            }
+        }
+        emit(events)
+        return result
+    }
+
+    /**
      * The recipient acknowledged a message it had been given: DELIVERED -> READ. Reading requires
      * delivery, so a QUEUED message (never handed over) or an UNDELIVERABLE one returns null;
      * re-acknowledging a READ/ANSWERED message returns it unchanged. Idempotent.

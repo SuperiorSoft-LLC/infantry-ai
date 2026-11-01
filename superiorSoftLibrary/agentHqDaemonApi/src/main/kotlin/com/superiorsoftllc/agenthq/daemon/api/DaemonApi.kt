@@ -114,6 +114,7 @@ interface DaemonApi {
     val triggerHost: com.superiorsoftllc.agenthq.daemon.api.triggers.TriggerHost? get() = null
 
     companion object {
+        // 1.30.0 (MAIL-HOOK-1, additive): `hooks.incomingMail` (IncomingMailHook, IncomingMail, MailVerdict): a pre-delivery look at each accepted mail.
         // 1.29.0 (TRIG-2a, additive): template routes (`{name}` segments, HttpCall.pathParams) and `hooks.status` (StatusHook).
         // 1.28.0 (TRIG-1, additive): `triggerHost` (daemon.api.triggers.TriggerHost): trigger store, sessions, mail, spawn-with-binding, run events.
         // 1.27.0 (SCRIPT-4, additive): `tools.catalog` / `tools.invoke` (ToolInfo, ToolInvoker): the live tool registry, reachable by an official plugin.
@@ -143,7 +144,7 @@ interface DaemonApi {
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
-        const val VERSION = "1.29.0"
+        const val VERSION = "1.30.0"
     }
 }
 
@@ -422,6 +423,20 @@ fun interface MailGateHook {
     fun refusal(from: String, to: String, allowCrossProject: Boolean): String?
 }
 
+/** 1.30.0 (MAIL-HOOK-1): a mail accepted for delivery, shown BEFORE the recipient is woken. [recipientSessionId] / [recipientRole] are null when the address does not resolve to a live session. */
+data class IncomingMail(
+    val id: String, val from: String, val to: String, val recipientSessionId: String?, val recipientRole: String?,
+    val subject: String, val body: String, val threadId: String?, val projectId: String? = null,
+)
+
+/** 1.30.0: what a hook decided for one mail. [handled] = marked read for the recipient, nobody woken. [text] (if not handled) replaces the delivered text for that mail. */
+data class MailVerdict(val handled: Boolean = false, val text: String? = null)
+
+/** 1.30.0 (MAIL-HOOK-1): runs before delivery; null = deliver as today. Fail open (a throwing or slow hook reads as null: a mail is never dropped); official / core only. */
+fun interface IncomingMailHook {
+    fun incoming(mail: IncomingMail): MailVerdict?
+}
+
 /** Every new session, whatever path creates it. Null = pass. Fail closed. */
 fun interface SpawnGateHook {
     fun refusal(role: String?, projectId: String?): String?
@@ -489,6 +504,8 @@ interface Hooks {
     fun httpGate(hook: HttpGateHook)
     fun admission(hook: AdmissionHook)
     fun mailGate(hook: MailGateHook)
+    /** MAIL-HOOK-1 (1.30.0): offer the pre-delivery mail hook; official / core only. Default: ignored. */
+    fun incomingMail(hook: IncomingMailHook) {}
     fun spawnGate(hook: SpawnGateHook)
     fun ready(hook: ReadyHook)
     fun turns(hook: TurnHook)

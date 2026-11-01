@@ -1628,6 +1628,11 @@ class AgentHqDaemon(
             // SCRIPT-3: the daemon's own happenings as named events (api.events.subscribe / agenthq_event_emit share this bus).
             val eventPublisher = com.superiorsoftllc.agenthq.daemon.plugins.DaemonEventPublisher { name, payload -> runCatching { plugins.publishEvent(name, payload) } }
             mail.onSent = eventPublisher::mail
+            mail.onIncoming = { i ->
+                val m = i.message
+                plugins.incomingMail(com.superiorsoftllc.agenthq.daemon.api.IncomingMail(m.id, m.from, m.to, i.recipientSessionId, i.recipientRole, m.subject, m.body, m.threadId, i.projectId))
+                    ?.let { v -> MailRouter.MailVerdictInfo(v.handled, v.text) }
+            }
             manager.addSessionEndedListener(eventPublisher::sessionEnded)
             ticketEvents?.subscribe("core:named-events", eventPublisher::ticket)
             println("[agentHq] reconcile: ${manager.loadAndReconcile()}")

@@ -32,6 +32,7 @@ class ScriptingDaemonPlugin : DaemonPlugin {
             tip = { project, branch -> ScriptHooks.gitTip(File(api.files(project).absolutePath("x")).parentFile.parentFile, branch) },
             log = { api.log(it) },
         )
+        api.hooks.incomingMail { hooks.incoming(it) }
         subscription = api.events.subscribe("*") { hooks.onEvent(it) }
         api.log("scripting ready: engines=${engines.ids()} limits=${limits.current()}")
     }

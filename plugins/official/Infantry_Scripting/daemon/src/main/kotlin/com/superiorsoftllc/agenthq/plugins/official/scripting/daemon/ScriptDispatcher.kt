@@ -18,6 +18,10 @@ data class RunReport(
     val error: String? = null,
     /** 1-based index in [records] of the action that failed (or could not be resolved), else null. */
     val failedAt: Int? = null,
+    /** MAIL-HOOK-1: the script queued the reserved action `handled` (Lua `ih.handled()`) in its final phase. */
+    val handled: Boolean = false,
+    /** MAIL-HOOK-1: the script queued `deliver_text{text=...}`: the text to deliver instead. */
+    val deliverText: String? = null,
 ) {
     val ok: Boolean get() = error == null
 
@@ -66,6 +70,8 @@ class ScriptDispatcher(
         val results = ArrayList<Map<String, Any?>>()
         val phases = if (dryRun) 1 else maxPhases().coerceIn(1, HARD_MAX_PHASES)
         var phase = 0
+        var handled = false
+        var deliverText: String? = null
         while (phase < phases) {
             phase++
             val input = buildMap<String, Any?> {
@@ -80,6 +86,8 @@ class ScriptDispatcher(
             val planned = ArrayList<ActionRecord>()
             for (a in r.actions) {
                 if (a.name == AGAIN) { again = true; continue }
+                if (a.name == HANDLED) { handled = true; continue }
+                if (a.name == DELIVER_TEXT) { deliverText = (a.args["text"] as? String)?.takeIf { it.isNotEmpty() }; continue }
                 val tool = if (a.name in known) a.name else table[a.name]?.takeIf { it in known }
                     ?: return RunReport("ERROR", records + planned, logs, phase, dryRun, "unknown tool or alias '${a.name}' (see script_api)", records.size + planned.size + 1)
                 planned += ActionRecord(a.name, tool, a.args, phase)
@@ -97,7 +105,7 @@ class ScriptDispatcher(
                 results += mapOf("name" to p.requested, "tool" to p.tool, "ok" to !res.isError, "text" to res.text, "json" to jsonOf(res.text))
                 if (res.isError && !optional) return RunReport("ACTION_FAILED", records, logs, phase, false, "action ${records.size} (${p.tool}) failed: ${res.text.take(300)}", records.size)
             }
-            if (!again) return RunReport("OK", records, logs, phase, false)
+            if (!again) return RunReport("OK", records, logs, phase, false, handled = handled, deliverText = deliverText)
         }
         return RunReport("PHASES_EXHAUSTED", records, logs, phase, dryRun, "ih.again() ignored: maxPhases ($phases) reached")
     }
@@ -113,6 +121,8 @@ class ScriptDispatcher(
     companion object {
         /** The reserved action name: re-run the script with the results so far. */
         const val AGAIN = "again"
+        const val HANDLED = "handled"
+        const val DELIVER_TEXT = "deliver_text"
         const val OPTIONAL = "_optional"
         const val HARD_MAX_PHASES = 10
     }

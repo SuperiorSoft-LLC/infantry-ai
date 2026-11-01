@@ -16,6 +16,9 @@ import com.superiorsoftllc.agenthq.daemon.api.HttpCall
 import com.superiorsoftllc.agenthq.daemon.api.HttpGateHook
 import com.superiorsoftllc.agenthq.daemon.api.HttpReply
 import com.superiorsoftllc.agenthq.daemon.api.MailGateHook
+import com.superiorsoftllc.agenthq.daemon.api.IncomingMailHook
+import com.superiorsoftllc.agenthq.daemon.api.IncomingMail
+import com.superiorsoftllc.agenthq.daemon.api.MailVerdict
 import com.superiorsoftllc.agenthq.daemon.api.Policy
 import com.superiorsoftllc.agenthq.daemon.api.PresetProviderHook
 import com.superiorsoftllc.agenthq.daemon.api.Projects
@@ -116,6 +119,7 @@ class DaemonPluginHost private constructor(
     private val httpGates = CopyOnWriteArrayList<Registered<HttpGateHook>>()
     private val admissions = CopyOnWriteArrayList<Registered<AdmissionHook>>()
     private val mailGates = CopyOnWriteArrayList<Registered<MailGateHook>>()
+    private val incomingMailHooks = CopyOnWriteArrayList<Registered<IncomingMailHook>>()
     private val spawnGates = CopyOnWriteArrayList<Registered<SpawnGateHook>>()
     private val connectedHooks = CopyOnWriteArrayList<Registered<com.superiorsoftllc.agenthq.daemon.api.ConnectedHook>>()
     private val statusHooks = CopyOnWriteArrayList<Registered<com.superiorsoftllc.agenthq.daemon.api.StatusHook>>()
@@ -188,6 +192,16 @@ class DaemonPluginHost private constructor(
             val r = g.owner.call("mailGate") { g.value.refusal(from, to, allowCrossProject) }
             if (r.isFailure) return failClosed(g.owner, "mail gate")
             r.getOrNull()?.let { return it }
+        }
+        return null
+    }
+
+    /** MAIL-HOOK-1: the first hook verdict that handles or rewrites the mail. Fail open: a disabled, throwing or timed-out hook reads as no verdict. */
+    fun incomingMail(mail: IncomingMail): MailVerdict? {
+        for (h in incomingMailHooks) {
+            if (h.owner.guard.disabled) continue
+            val v = h.owner.call("incomingMail") { h.value.incoming(mail) }.getOrNull()
+            if (v != null && (v.handled || v.text != null)) return v
         }
         return null
     }
@@ -798,6 +812,7 @@ class DaemonPluginHost private constructor(
             override fun httpGate(hook: HttpGateHook) { declare("httpGate"); httpGates += Registered(p, hook) }
             override fun admission(hook: AdmissionHook) { declare("admission"); check(!p.community) { "community modules may not admit tokens" }; admissions += Registered(p, hook) }
             override fun mailGate(hook: MailGateHook) { declare("mailGate"); mailGates += Registered(p, hook) }
+            override fun incomingMail(hook: IncomingMailHook) { declare("incomingMail"); incomingMailHooks += Registered(p, hook) }
             override fun spawnGate(hook: SpawnGateHook) { declare("spawnGate"); spawnGates += Registered(p, hook) }
             override fun connected(hook: com.superiorsoftllc.agenthq.daemon.api.ConnectedHook) { declare("connected"); check(!p.community) { "community modules may not replay frames to clients" }; connectedHooks += Registered(p, hook) }
             override fun status(hook: com.superiorsoftllc.agenthq.daemon.api.StatusHook) { check(!p.community) { "status hooks are official / core only" }; declare("status"); statusHooks += Registered(p, hook) }
@@ -845,7 +860,7 @@ class DaemonPluginHost private constructor(
             }
             return params
         }
-        val HOOK_KINDS = setOf("frameGate", "connected", "httpGate", "admission", "mailGate", "spawnGate", "ready", "turns", "sessions", "policyProvider", "orchestratorBinding", "seats", "approvalRules", "status")
+        val HOOK_KINDS = setOf("frameGate", "connected", "httpGate", "admission", "mailGate", "incomingMail", "spawnGate", "ready", "turns", "sessions", "policyProvider", "orchestratorBinding", "seats", "approvalRules", "status")
         private val METHODS = setOf("GET", "POST", "PUT", "DELETE", "PATCH")
         private val TOOL_NAME = Regex("^[a-z][a-z0-9_]{2,63}$")
         private val READY_KEY = Regex("^[a-zA-Z][a-zA-Z0-9_]{0,31}$")

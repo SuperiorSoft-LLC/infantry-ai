@@ -95,6 +95,30 @@ class ScriptHooksTest {
 
     private fun putHooks(vararg hooks: String) = files.put(HookStore.PATH, hooksJson(*hooks).toByteArray())
 
+    private val mailHook = """{"id":"m","on":"mail.incoming","script":"on-done","args":{"k":"v"},"ownerSession":"pm-1","ownerRole":"pm"}"""
+    private fun mail(body: String = "merged ok") = com.superiorsoftllc.agenthq.daemon.api.IncomingMail("mail-1", "vc-1", "pm", "pm-1", "pm", "subj", body, "t1", "p1")
+
+    @Test fun `MAIL-HOOK-1 a script that queues handled handles the mail, deliver_text replaces it, args carry the mail`() {
+        putHooks(mailHook, doneHook)
+        val engine = FakeEngine { listOf(QueuedAction("handled", emptyMap())) }
+        val v = build(engine).incoming(mail())!!
+        assertTrue(v.handled)
+        assertEquals(1, engine.inputs.size, "the lane hook does not run for a mail")
+        @Suppress("UNCHECKED_CAST") val args = engine.inputs[0]["args"] as Map<String, Any?>
+        assertEquals("merged ok", args["body"]); assertEquals("pm", args["role"]); assertEquals("pm-1", args["sessionId"]); assertEquals("v", args["k"]); assertEquals("vc-1", args["from"])
+        val text = build(FakeEngine { listOf(QueuedAction("deliver_text", mapOf("text" to "short"))) }).incoming(mail())!!
+        assertEquals("short", text.text); assertTrue(!text.handled)
+        assertEquals(null, build(FakeEngine { emptyList() }).incoming(mail()), "no verdict = deliver as today")
+    }
+
+    @Test fun `MAIL-HOOK-1 a failing or crashing script, an unknown tool, or no hook delivers as today`() {
+        putHooks(mailHook)
+        assertEquals(null, build(FakeEngine { listOf(QueuedAction("nope_tool", emptyMap())) }).incoming(mail()))
+        assertEquals(null, build(FakeEngine { error("boom") }).incoming(mail()))
+        files.files.remove(HookStore.PATH)
+        assertEquals(null, build(FakeEngine { listOf(QueuedAction("handled", emptyMap())) }).incoming(mail()))
+    }
+
     @Test fun `a redelivered event id, or the same transition re-published under a new id, runs the hook once`() {
         putHooks(doneHook)
         val engine = FakeEngine { emptyList() }
