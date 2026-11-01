@@ -112,6 +112,7 @@ interface DaemonApi {
 
     companion object {
         // 1.24.0 (TICKET-COMMENTS-4, additive): daemon.api.tickets.TicketReports (published by Infantry_Board); a new ticket carries the report line (setting board.ticket.reportLine).
+        // 1.25.0 (SCRIPT-2, additive): `services.publishEndpoint` / `services.endpoints(prefix)` (ServiceEndpoint): name-keyed string contracts between plugins.
         // 1.24.0 (ATTN-2a, additive): `events.broadcast`, `hooks.connected` (ConnectedHook), daemon.api.attention.QuestionsOpen. The session-closed reason is `processes.onSessionClosed` (1.8.0).
         // 1.23.0 (TICKET-COMMENTS-2, additive): no new member; Infantry_Board's daemon half gains agenthq_ticket_comment / agenthq_ticket_comments,
         // notify on ticket_create / ticket_update and createdBy / notify / openComments on ticket_get, over `storage`, `agents`, `sessionNotifier`.
@@ -135,7 +136,7 @@ interface DaemonApi {
         // 1.4.0 (RUNTIME-LOAD-4, additive): BOARD_API_VERSION 1.3.0 (daemon.api.board.TicketRefs / TicketPlacement).
         /** The DaemonApi version (semver). A module's `daemon.apiAtLeast` above it is refused. */
         // 1.14.0 (DP-5h-3e-b, additive): BoardRuntime.attachCore / detachCore and BoardCoreAccess (core consumers reach the plugin-built board).
-        const val VERSION = "1.24.0"
+        const val VERSION = "1.25.0"
     }
 }
 

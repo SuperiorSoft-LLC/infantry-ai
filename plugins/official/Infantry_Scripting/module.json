@@ -1,0 +1,27 @@
+{
+  "name": "Infantry_Scripting",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "description": "Owns the open script-engine extension point: engine plugins publish under scripting.engine/, this plugin finds them and holds the run limits.",
+  "tier": "official",
+  "sequence": [],
+  "buildOrder": 210,
+  "daemon": {
+    "entry": "com.superiorsoftllc.agenthq.plugins.official.scripting.daemon.ScriptingDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_Scripting-daemon.jar",
+    "apiAtLeast": "1.25.0",
+    "config": [
+      {
+        "node": "infantry.scripting", "group": "Scripting", "title": "Scripting", "tab": "Plugins", "order": 920,
+        "keywords": ["script", "lua", "limits", "engine"],
+        "fields": [
+          { "key": "scripting.defaultEngine", "type": "text", "label": "Default engine id", "default": "lua", "scope": "daemon", "order": 1 },
+          { "key": "scripting.maxSteps", "type": "number", "label": "Max steps per run", "default": 5000000, "min": 1000, "max": 1000000000, "step": 1000, "scope": "daemon", "order": 2 },
+          { "key": "scripting.timeoutMs", "type": "number", "label": "Timeout per run (ms)", "default": 2000, "min": 10, "max": 600000, "step": 10, "scope": "daemon", "order": 3 },
+          { "key": "scripting.maxAllocBytes", "type": "number", "label": "Max allocation per run (bytes)", "default": 67108864, "min": 65536, "max": 1073741824, "step": 65536, "scope": "daemon", "order": 4 }
+        ]
+      }
+    ]
+  }
+}

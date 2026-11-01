@@ -20,6 +20,18 @@ class ServiceRegistry {
 
     fun <T : Any> find(type: KClass<T>): T? = entries[type]?.impl?.let { type.javaObjectType.cast(it) }
 
+    private val endpoints = ConcurrentHashMap<String, Entry>()
+
+    fun publishEndpoint(owner: String, id: String, endpoint: com.superiorsoftllc.agenthq.daemon.api.ServiceEndpoint): AutoCloseable {
+        require(id.isNotBlank()) { "an endpoint id must not be blank" }
+        val e = Entry(owner, endpoint)
+        check(endpoints.putIfAbsent(id, e) == null) { "an endpoint $id is already published by ${endpoints[id]?.owner}" }
+        return AutoCloseable { endpoints.remove(id, e) }
+    }
+
+    fun endpoints(prefix: String): Map<String, com.superiorsoftllc.agenthq.daemon.api.ServiceEndpoint> =
+        endpoints.filterKeys { it.startsWith(prefix) }.mapValues { it.value.impl as com.superiorsoftllc.agenthq.daemon.api.ServiceEndpoint }.toSortedMap()
+
     /** Who provides [type] (diagnostics), or null. */
     fun ownerOf(type: KClass<*>): String? = entries[type]?.owner
 }
@@ -39,6 +51,11 @@ class ScopedServices(
         return registry.provide(owner, type, impl).also(track)
     }
     override fun <T : Any> find(type: KClass<T>): T? = registry.find(type)
+    override fun publishEndpoint(id: String, endpoint: com.superiorsoftllc.agenthq.daemon.api.ServiceEndpoint): AutoCloseable {
+        check(mayProvide()) { "a community plugin needs the grant ${GRANT} to publish a service" }
+        return registry.publishEndpoint(owner, id, endpoint).also(track)
+    }
+    override fun endpoints(prefix: String) = registry.endpoints(prefix)
 
     companion object { const val GRANT = "services.provide" }
 }
