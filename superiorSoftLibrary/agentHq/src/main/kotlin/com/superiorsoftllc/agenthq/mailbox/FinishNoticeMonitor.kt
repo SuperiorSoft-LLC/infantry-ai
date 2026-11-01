@@ -40,6 +40,8 @@ class FinishNoticeMonitor(
     private val clock: () -> Long = System::currentTimeMillis,
     /** How long a worker may wait at rest, with no mail either way, before its starter is told; [Long.MAX_VALUE] = never. */
     private val idleNoticeMs: () -> Long = { LimitRegistry.minutesMs(LimitRegistry.IDLE_NOTICE_MINUTES.default, LimitRegistry.IDLE_NOTICE_MINUTES) },
+    /** OVERNIGHT-1: idle time before the WORKER is prompted once ("report or continue"); [Long.MAX_VALUE] = no worker nudge. */
+    private val idleNudgeMs: () -> Long = { LimitRegistry.minutesMs(LimitRegistry.IDLE_NUDGE_MINUTES.default, LimitRegistry.IDLE_NUDGE_MINUTES) },
     /** STALL-5: `limits.watch.exemptWhenTicketDone`; off = a non-zero exit after done is a failure notice as before. */
     private val exemptWhenDone: () -> Boolean = { true },
     /** TICKET-COMMENTS-4: the board's comment port (null = no board loaded); `limits.watch.idleComment` off = no safety-net comment. */
@@ -53,6 +55,8 @@ class FinishNoticeMonitor(
     /** One stretch of a worker at rest with its ticket open: [since] is when it began (or its last sign of work). */
     private class IdlePeriod(@Volatile var since: Long) {
         @Volatile var noticed = false
+        /** OVERNIGHT-1: when the worker itself was prompted (0 = not yet). */
+        @Volatile var nudgedAt = 0L
     }
 
     private val tail = ConcurrentHashMap<String, ArrayDeque<String>>()
@@ -207,7 +211,24 @@ class FinishNoticeMonitor(
                 continue
             }
             val quietSince = maxOf(period.since, lastMailAt(session))
-            if (now - quietSince < limit) continue
+            // OVERNIGHT-1: the WORKER is prompted first (a worker wake is cheap); the starter only hears of it if the worker is
+            // still idle a full interval later. The nudge is from `system`, so it does not count as mail and never resets the clock.
+            val nudgeAfter = idleNudgeMs()
+            if (nudgeAfter != Long.MAX_VALUE && period.nudgedAt == 0L) {
+                if (now - quietSince < nudgeAfter) continue
+                period.nudgedAt = now
+                send(
+                    MailSendRequest(
+                        from = SYSTEM, to = session.id, threadId = "idle-nudge:${session.id}",
+                        subject = "[AUTOMATIC] ticket ${ticket.id} idle: report or continue",
+                        body = "You ended your turn with ticket ${ticket.id} still in progress and no report. Continue the work, or mail your report to your starter (commit sha, what you tested, Files read) and move the ticket.\n",
+                    ),
+                )
+                continue
+            }
+            if (period.nudgedAt != 0L) {
+                if (now - period.nudgedAt < limit) continue
+            } else if (now - quietSince < limit) continue
             period.noticed = true
             send(
                 MailSendRequest(

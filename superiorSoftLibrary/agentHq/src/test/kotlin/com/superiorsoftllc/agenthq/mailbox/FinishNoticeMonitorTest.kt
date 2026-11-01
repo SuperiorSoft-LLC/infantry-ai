@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
  * period after the idle limit. A real failure is sent once per window.
  */
 class FinishNoticeMonitorTest {
-    private class Rig(idleMinutes: Long = IDLE_MIN, exempt: Boolean = true) {
+    private class Rig(idleMinutes: Long = IDLE_MIN, exempt: Boolean = true, nudgeMinutes: Long? = null) {
         var now = System.currentTimeMillis() + 1_000
         val manager = SessionManager(FakeAgentProvider(), ScriptedRunner(autoExit = true), tempSessionStore(), killGraceMs = 50)
         val mailbox = Mailbox(MemMailStore(), MailLimits(), clock = { now })
@@ -29,6 +29,7 @@ class FinishNoticeMonitorTest {
             ticketOf = { TicketRow(id = "t1", title = "T", status = status, position = 0, createdAt = 1, updatedAt = 1, sessionId = owner, startedBy = "pm") },
             commitOf = { null }, clock = { now },
             idleNoticeMs = { if (idleMinutes == 0L) Long.MAX_VALUE else idleMinutes * 60_000L },
+            idleNudgeMs = { nudgeMinutes?.let { it * 60_000L } ?: Long.MAX_VALUE },
             exemptWhenDone = { exempt },
         )
         fun exit(code: Int, session: String = sessionId) = monitor.onSessionEvent(SessionEvent.Exit(session, code))
@@ -210,6 +211,28 @@ class FinishNoticeMonitorTest {
         assertEquals(0, r.sent.size + q.sent.size)
     }
 
+
+    @Test
+    fun overnight1_the_idle_worker_is_prompted_first_and_the_starter_only_after_another_interval() {
+        val r = Rig(nudgeMinutes = 10)
+        r.exit(0)
+        r.minutes(9)
+        r.monitor.sweep()
+        assertEquals(0, r.sent.size)
+        r.minutes(1)
+        r.monitor.sweep()
+        assertEquals(1, r.sent.size)
+        assertEquals(r.sessionId, r.sent[0].to, "the worker is prompted first")
+        r.minutes(IDLE_MIN - 1)
+        r.monitor.sweep()
+        assertEquals(1, r.sent.size, "the starter is not told before a full interval after the nudge")
+        r.minutes(1)
+        r.monitor.sweep()
+        assertEquals(2, r.sent.size)
+        assertEquals("pm", r.sent[1].to)
+        r.monitor.sweep()
+        assertEquals(2, r.sent.size, "told once")
+    }
     private companion object {
         const val IDLE_MIN = 60L
     }
