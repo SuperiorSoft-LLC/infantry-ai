@@ -48,6 +48,13 @@ class LuaScriptEngine : ScriptEngine {
                  else ih.comment{ticket=input.args.ticket, text="moved: "..input.results[1].text} end
     """.trimIndent()
 
+    override fun check(source: String): String? = try {
+        val g = Globals(); LoadState.install(g); LuaC.install(g)
+        g.load(source, "script", g); null
+    } catch (e: LuaError) {
+        (e.message ?: "does not parse").take(300)
+    }
+
     override fun run(source: String, input: Map<String, Any?>, limits: ScriptLimits, caller: ScriptCaller): ScriptResult {
         val actions = ArrayList<QueuedAction>()
         val logs = ArrayList<String>()

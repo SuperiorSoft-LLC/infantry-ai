@@ -145,3 +145,7 @@ TEST-TODO (SCRIPT-VIS-1): in a live daemon with a mail.incoming hook that handle
 - TEST-TODO: start `ih.exec{command=..., background=true}`, add an `exec.tick` hook (see docs/SCRIPT-TIMERS.md): the card shows steps parsed from the output and `fail` on a failing line; the hook stops being called after exec.done.
 - TEST-TODO: a deliberately slow tick script (longer than the period): one "skipped (never stacked)" log line, no pile-up. Not run by hand; unit-tested with a nested tick only.
 - TEST-TODO: progress with a `sessionId` of another project is refused (unit-tested; try it from a real second project).
+
+## SCRIPT-SAVE-1
+- TEST-TODO: from a real worker session run `agenthq script save probe --body -` (pipe `ih.log("hi")`), then `agenthq script list` (shows size, saver, hooks) and `agenthq_script_run name=probe` with no restart; a source with a syntax error must be refused with the Lua parse error and leave no file.
+- TEST-TODO: add a hook on `probe`, then `agenthq script delete probe` must be refused naming the hook; remove the hook and the delete works. Not tried by hand with the real Lua engine over the wire `check` op (unit-tested with a fake engine; Lua check compiled but only built, not exercised).

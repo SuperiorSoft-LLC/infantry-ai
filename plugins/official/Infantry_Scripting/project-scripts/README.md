@@ -38,3 +38,6 @@ Worked example (run a command, branch on the exit code, prompt the caller's sess
         ih.prompt{session=input.caller.id, text="command failed ("..r.exitCode.."): "..r.stderrTail}
       end
     end
+
+## Saving scripts at runtime (SCRIPT-SAVE-1)
+- `agenthq_script_save {name, source, engine?}` (CLI `agenthq script save <name> --file <path>|--body -`) parse-checks and writes `.agenthq/scripts/<name>.<ext>` (+ a `.meta.json` sidecar with who saved it); `agenthq_script_list` (`script list`) shows engine, size, time, saver and hooks; `agenthq_script_delete` (`script delete <name>`) is refused while a hook uses it. Saved scripts run/hook at once. Engine contract: additive `check` op (minor).

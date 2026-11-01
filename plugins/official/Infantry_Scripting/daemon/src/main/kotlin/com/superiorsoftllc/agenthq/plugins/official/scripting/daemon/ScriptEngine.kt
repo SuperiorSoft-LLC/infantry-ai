@@ -31,5 +31,7 @@ interface ScriptEngine {
     val extensions: List<String>
     /** SCRIPT-4: how this language binds `ih` (call, aliases, results), shown to agents by script_api. */
     val binding: String get() = ""
+    /** SCRIPT-SAVE-1: parse/compile [source] without running it; null when it loads, else the parse error. An engine that cannot check says nothing (null). */
+    fun check(source: String): String? = null
     fun run(source: String, input: Map<String, Any?> = emptyMap(), limits: ScriptLimits = ScriptLimits(), caller: ScriptCaller = ScriptCaller()): ScriptResult
 }
