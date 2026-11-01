@@ -293,6 +293,8 @@ class Controller(
                 client.send(Envelope(Envelope.PROVIDERS))
                 client.send(Envelope(Envelope.MODELS))
                 client.send(Envelope(Envelope.ATTENTION_LIST))
+                // SCRIPT-VIS-1c: plugin chat lines (automation runs, stats) from before this (re)connect; a daemon without one answers an error the model swallows.
+                client.send(Envelope(Envelope.TIMELINE_LIST))
                 client.send(Envelope(Envelope.PROVIDER_STATES))
                 _state.value.pods.keys.forEach { client.send(Envelope(Envelope.POD_QUERY, it)) }
             }

@@ -153,15 +153,41 @@ class ScriptRunLog(private val limit: () -> Int = { 200 }, private val clock: ()
         }
     }
 
-    /** The newest contributions for the chat of every session (all projects), oldest first, at most [n]. */
+    /** SCRIPT-VIS-1c: told with a session's stats item after each wake / handled mail (the plugin pushes it to the UI). A throwing listener is ignored. */
+    @Volatile var onStats: ((JsonObject) -> Unit)? = null
+
+    /**
+     * SCRIPT-VIS-1c: the session's stats as a timeline item (source `automation-stats`, never drawn as a chat row): meta carries turnsSaved,
+     * wakes, wakesByReason (`owner:1,mail:2`), lastWake, and the project's turnsSaved / wakes. Null when the session has no wake yet.
+     */
+    fun statsItem(session: String): JsonObject? {
+        val by = wakes[session] ?: return null
+        val mine = sessionStats(session)
+        val proj = sessionProject[session]?.let { projectStats(it) }
+        return buildJsonObject {
+            put("id", "stats-$session"); put("sessionId", session); put("at", lastWake[session]?.at ?: clock()); put("source", STATS_SOURCE)
+            put("label", "AUTOMATION stats")
+            put("text", "turns saved ${mine["turnsSaved"]} · wakes ${mine["wakes"]}")
+            put("meta", buildJsonObject {
+                put("turnsSaved", mine["turnsSaved"]!!.toString()); put("wakes", mine["wakes"]!!.toString())
+                put("wakesByReason", by.filterKeys { it != HANDLED }.toSortedMap().entries.joinToString(",") { "${it.key}:${it.value}" })
+                lastWake[session]?.let { put("lastWake", it.reason) }
+                proj?.let { put("projectTurnsSaved", it["turnsSaved"]!!.toString()); put("projectWakes", it["wakes"]!!.toString()) }
+            })
+        }
+    }
+
+    /** The newest contributions for the chat of every session (all projects), oldest first, at most [n]; the stats items come last. */
     fun timelineItems(n: Int = 500): List<JsonObject> =
-        runs.values.flatMap { q -> synchronized(q) { q.toList() } }.sortedBy { it.at }.mapNotNull { it.timelineJson() }.takeLast(n)
+        runs.values.flatMap { q -> synchronized(q) { q.toList() } }.sortedBy { it.at }.mapNotNull { it.timelineJson() }.takeLast(n) +
+            wakes.keys.sorted().mapNotNull { statsItem(it) }
 
     /** [project] ties the session to a project for the project summary (the first sight wins); null when unknown. */
     fun wake(session: String, reason: String, ref: String?, project: String? = null) {
         project?.let { sessionProject.putIfAbsent(session, it) }
         wakes.computeIfAbsent(session) { ConcurrentHashMap() }.merge(reason, 1, Int::plus)
         lastWake[session] = WakeNote(clock(), reason, ref)
+        runCatching { statsItem(session)?.let { onStats?.invoke(it) } }
     }
 
     fun runs(project: String, session: String? = null, n: Int = 20): List<RunRecord> {
@@ -211,6 +237,8 @@ class ScriptRunLog(private val limit: () -> Int = { 200 }, private val clock: ()
 
     companion object {
         const val STATS = "agenthq_script_stats"
+        /** SCRIPT-VIS-1c: the timeline item source of a session's stats (the UI reads it for the badge line and the panel). */
+        const val STATS_SOURCE = "automation-stats"
         /** The wake reason the daemon reports for a mail a hook handled (no wake happened = a turn saved). */
         const val HANDLED = "mail-handled"
     }

@@ -36,6 +36,7 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         // SCRIPT-VIS-1b: each run's AUTOMATION line goes to the chat of the session it ran for (a timeline_item push, no turn). Nothing here may
         // fail a run: a throwing broadcast is dropped and the chat is exactly what it was.
         runLog.onRecord = { rec -> rec.timelineJson()?.let { runCatching { api.events.broadcast(TIMELINE_ITEM, it.toString()) } } }
+        runLog.onStats = { item -> runCatching { api.events.broadcast(TIMELINE_ITEM, item.toString()) } }
         api.frames.handle(TIMELINE_LIST) { frame, _ ->
             val wanted = frame.data.trim().takeIf { it.isNotEmpty() }
             val items = runLog.timelineItems().filter { wanted == null || (it["sessionId"] as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull == wanted }

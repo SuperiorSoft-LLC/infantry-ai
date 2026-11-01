@@ -69,6 +69,7 @@ import com.superiorsoftllc.agenthq.ui.model.parseHexColor
 import com.superiorsoftllc.agenthq.ui.model.roleHue
 import com.superiorsoftllc.agenthq.ui.model.reportFlagOf
 import com.superiorsoftllc.agenthq.ui.model.watchFlagOf
+import com.superiorsoftllc.agenthq.ui.model.wakeLine
 import com.superiorsoftllc.agenthq.ui.model.AgentView
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.needsInput
@@ -301,6 +302,8 @@ fun AgentRow(a: AgentView, state: AppState, selected: Boolean, onClick: () -> Un
                 reportFlagOf(a.session.report)?.let { Spacer(Modifier.width(4.dp)); ReportFlagChip(it, Modifier.testTag("session-report-${a.id}")) }
                 // PIPELINE-WATCHDOG: stalled / quiet / unreported / waiting, from the daemon's own derivation.
                 watchFlagOf(a.session.watch)?.let { Spacer(Modifier.width(4.dp)); WatchFlagChip(it, Modifier.testTag("session-watch-${a.id}")) }
+                // SCRIPT-VIS-1c: a script hook works for this session (set only while it runs; display only).
+                a.session.automation?.let { Spacer(Modifier.width(4.dp)); AutomationBadge(it.script, Modifier.testTag(AUTOMATION_BADGE_TAG_PREFIX + a.id)) }
                 // PROMPT-2: a prompt card waits on this session.
                 if (state.hasOpenPrompt(a.id)) NeedsYouBadge(a.id)
                 // BUG-M2-15b: a session with no project is listed under every project; say so on the row.
@@ -331,7 +334,7 @@ fun AgentRow(a: AgentView, state: AppState, selected: Boolean, onClick: () -> Un
                 // M2-3: the session id stays visible as small secondary text.
                 state.agentSecondaryId(a)?.let { Text(it, color = Palette.Muted, fontFamily = Mono, fontSize = 9.sp, maxLines = 1, modifier = Modifier.testTag("agent-row-id-${a.id}")); Spacer(Modifier.width(5.dp)) }
                 Text(
-                    if (waiting) "waiting for you" else a.lastActivity,
+                    if (waiting) "waiting for you" else listOfNotNull(a.lastActivity.takeIf { it.isNotBlank() }, state.wakeLine(a.id)).joinToString(" · "),
                     color = if (waiting) Palette.Accent else Palette.Muted, fontSize = 11.sp, maxLines = 1,
                     softWrap = false, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).testTag("agent-row-snippet-${a.id}"),
                 )
@@ -345,6 +348,19 @@ fun AgentRow(a: AgentView, state: AppState, selected: Boolean, onClick: () -> Un
             AgentRowMenu(a, state, revealed = selected || hovered, onOpen = onClick, onRemove = onRemove, onAssign = onAssign)
         }
     }
+}
+
+/** SCRIPT-VIS-1c: test tag prefix of the automation badge on a session row. */
+const val AUTOMATION_BADGE_TAG_PREFIX = "session-automation-"
+
+/** SCRIPT-VIS-1c: the small "AUTO" chip on a session a script hook is working for; [script] is its tooltip-style text for screen readers. */
+@Composable
+fun AutomationBadge(script: String, modifier: Modifier = Modifier) {
+    Text(
+        "⚙ AUTO", color = Palette.Info, fontSize = 9.sp, maxLines = 1,
+        modifier = modifier.clip(RoundedCornerShape(4.dp)).border(1.dp, Palette.Info, RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 1.dp)
+            .semantics { contentDescription = "Automation running: $script" },
+    )
 }
 
 /** BUG-M2-15b: the "no project" marker on an unbound session's row, and its row-menu "Assign to <project>" item. */

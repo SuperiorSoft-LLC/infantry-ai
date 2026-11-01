@@ -53,4 +53,25 @@ class ScriptRunLogVisTest {
         log.onRecord = { error("boom") }
         assertNotNull(log.record("p", "pong", "mail", "s1", null, "handled", "x"))
     }
+
+    @Test fun statsItemCountsTurnsSavedAndWakesByReasonAndIsPushed() {
+        val log = ScriptRunLog()
+        val pushed = ArrayList<String>()
+        log.onStats = { pushed += it.toString() }
+        assertNull(log.statsItem("s1"), "no wake yet = no item")
+        log.record("p", "pong", "mail", "s1", null, "handled", "x")
+        log.wake("s1", ScriptRunLog.HANDLED, "m1", "p"); log.wake("s1", ScriptRunLog.HANDLED, "m2", "p"); log.wake("s1", "owner", null, "p")
+        val j = assertNotNull(log.statsItem("s1")).toString()
+        assertTrue(j.contains("\"source\":\"automation-stats\"") && j.contains("\"turnsSaved\":\"2\"") && j.contains("\"wakes\":\"1\"") && j.contains("owner:1") && j.contains("\"lastWake\":\"owner\""), j)
+        assertTrue(j.contains("\"projectTurnsSaved\":\"2\""), j)
+        assertEquals(3, pushed.size)
+        assertTrue(log.timelineItems().any { it.toString().contains("stats-s1") }, "a timeline_list after a reconnect carries the stats too")
+    }
+
+    @Test fun throwingStatsListenerNeverFailsAWake() {
+        val log = ScriptRunLog()
+        log.onStats = { error("boom") }
+        log.wake("s1", "owner", null)
+        assertEquals("1", log.sessionStats("s1")["wakes"].toString())
+    }
 }
