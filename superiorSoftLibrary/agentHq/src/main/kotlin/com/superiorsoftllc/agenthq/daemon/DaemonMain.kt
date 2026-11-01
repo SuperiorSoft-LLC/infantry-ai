@@ -700,6 +700,7 @@ class AgentHqDaemon(
             portChoice.note?.let { println("[agentHq] $it") }
             val boundPort = portChoice.port
             val mailBase = mailBaseUrl ?: "http://${AccessPolicy.agentReachableHost(host)}:$boundPort"
+            val loopbackHost = AccessPolicy.agentReachableHost(host)
             val commandStore = com.superiorsoftllc.agenthq.commands.CommandStore(commandsFile, repo)
             val worktrees = GitWorktreeManager()
             // Every agent this daemon spawns receives the token as AGENTHQ_TOKEN, so the curl a delivered
@@ -1597,6 +1598,8 @@ class AgentHqDaemon(
                     stateDir(),
                 )
                 pluginHost.set(host)
+                // SCRIPT-HOOK-3: a script's tool calls reach the core frames through the daemon's own /ws (see LoopbackFrames).
+                host.loopback = com.superiorsoftllc.agenthq.daemon.plugins.LoopbackFrames(loopbackHost, boundPort, token, ownerToken)
                 foundAttention.flush()
                 testKnowledge?.let { host.serviceRegistry.provide("core", com.superiorsoftllc.agenthq.daemon.api.knowledge.Knowledge::class, it) }
                 // HARNESS-PLUGIN-3 H4 (docs/HARNESS-PLUGINS.md 3.2): each loaded module's `harness` block, into the ONE registry,

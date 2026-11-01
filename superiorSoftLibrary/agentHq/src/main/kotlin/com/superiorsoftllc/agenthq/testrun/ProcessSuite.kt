@@ -6,9 +6,14 @@ import java.util.concurrent.TimeUnit
 
 /** FULLSUITE-2: runs the command through the shell at low priority (nice / start /low), no gating, output bounded. */
 class ProcessSuiteExec(private val windows: Boolean = System.getProperty("os.name").lowercase().contains("win")) : SuiteExec {
+    @Volatile private var current: Process? = null
+
+    override fun stop() { current?.let { p -> p.descendants().forEach { it.destroyForcibly() }; p.destroyForcibly() } }
+
     override fun run(command: String, dir: File, timeoutMinutes: Long): SuiteExec.Out {
-        val argv = if (windows) listOf("cmd", "/c", "start", "\"\"", "/LOW", "/WAIT", "/B", "cmd", "/c", command) else listOf("nice", "-n", "19", "sh", "-c", command)
+        val argv = argv(command, windows)
         val p = ProcessBuilder(argv).directory(dir).redirectErrorStream(true).start()
+        current = p
         val out = StringBuilder()
         val reader = Thread { p.inputStream.bufferedReader().useLines { ls -> ls.forEach { if (out.length < MAX_OUT) out.appendLine(it) } } }.apply { isDaemon = true; start() }
         val done = if (timeoutMinutes > 0) p.waitFor(timeoutMinutes, TimeUnit.MINUTES) else { p.waitFor(); true }
@@ -17,7 +22,13 @@ class ProcessSuiteExec(private val windows: Boolean = System.getProperty("os.nam
         return SuiteExec.Out(if (done) p.exitValue() else 124, if (done) out.toString() else out.toString() + "timed out after $timeoutMinutes min\n")
     }
 
-    private companion object { const val MAX_OUT = 200_000 }
+    companion object {
+        private const val MAX_OUT = 200_000
+
+        /** SCRIPT-HOOK-3: Windows runs `cmd /c` directly; the old `start /WAIT` wrapper reported 0 whatever the command returned. */
+        fun argv(command: String, windows: Boolean): List<String> =
+            if (windows) listOf("cmd", "/c", command) else listOf("nice", "-n", "19", "sh", "-c", command)
+    }
 }
 
 /** FULLSUITE-2: git-backed environment: the project's repo, a detached worktree of the branch under [workRoot]. */

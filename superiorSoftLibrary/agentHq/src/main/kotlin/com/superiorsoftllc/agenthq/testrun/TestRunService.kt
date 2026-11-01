@@ -95,6 +95,13 @@ class TestRunService(
         return "started: full suite on ${cfg.workingBranch} (runs in the background)"
     }
 
+    /** SCRIPT-HOOK-3 (TST-02): stops the run in flight for [projectId]; says so when none is. */
+    fun stop(projectId: String): String {
+        if (projectId !in active) return "no run in progress"
+        exec.stop()
+        return "stopping the running full suite"
+    }
+
     fun status(projectId: String): String {
         val l = ledgers.load(projectId)
         val shown = l.copy(running = projectId in active)
