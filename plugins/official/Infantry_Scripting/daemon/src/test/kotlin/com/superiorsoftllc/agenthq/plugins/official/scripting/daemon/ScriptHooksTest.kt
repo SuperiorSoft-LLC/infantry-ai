@@ -100,6 +100,17 @@ class ScriptHooksTest {
     private val mailHook = """{"id":"m","on":"mail.incoming","script":"on-done","to":"pm-1","args":{"k":"v"},"ownerSession":"pm-1","ownerRole":"pm"}"""
     private fun mail(body: String = "merged ok") = com.superiorsoftllc.agenthq.daemon.api.IncomingMail("mail-1", "vc-1", "pm", "pm-1", "pm", "subj", body, "t1", "p1")
 
+    @Test fun `MAIL-HOOK-INT-1 an interrupt of the sending thread does not cancel the hook, handled is honoured`() {
+        putHooks(mailHook, doneHook)
+        val sender = Thread.currentThread()
+        val engine = FakeEngine { Thread.sleep(150); listOf(QueuedAction("handled", emptyMap())) }
+        val t = Thread { Thread.sleep(50); sender.interrupt() }.also { it.start() }
+        val v = build(engine).incoming(mail())
+        t.join()
+        assertTrue(Thread.interrupted(), "the interrupt flag is preserved for the caller")
+        assertTrue(v!!.handled)
+    }
+
     @Test fun `MAIL-HOOK-1 a script that queues handled handles the mail, deliver_text replaces it, args carry the mail`() {
         putHooks(mailHook, doneHook)
         val engine = FakeEngine { listOf(QueuedAction("handled", emptyMap())) }
