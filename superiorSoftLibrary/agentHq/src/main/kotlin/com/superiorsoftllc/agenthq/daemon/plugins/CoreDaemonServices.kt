@@ -58,7 +58,10 @@ class CoreDaemonServices(
     private val notifier: com.superiorsoftllc.agenthq.daemon.api.sessions.SessionNotifier? = null,
     /** DAEMON-STORAGE-1: the database handle behind `api.storage`; null = no plugin storage. */
     override val storageHandle: com.superiorsoftllc.agenthq.db.AgentHQDatabaseHandle? = null,
+    /** ATTN-2a: sends one frame to every connected client; null = none. */
+    private val clientBroadcast: ((type: String, data: String) -> Unit)? = null,
 ) : DaemonServices {
+    override fun broadcast(type: String, data: String) { clientBroadcast?.invoke(type, data) }
     override val sessionNotifier get() = notifier ?: com.superiorsoftllc.agenthq.daemon.api.sessions.NoSessionNotifier
     override val boardRuntime get() = boardRuntimeService ?: com.superiorsoftllc.agenthq.daemon.api.board.NoBoardRuntime
     override val spawns get() = spawnService ?: com.superiorsoftllc.agenthq.daemon.api.spawns.NoSpawns

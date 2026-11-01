@@ -28,6 +28,15 @@ interface Attention {
     fun list(project: String? = null): List<AttentionEntry>
 }
 
+/**
+ * ATTN-2a (DaemonApi 1.24.0, additive): published by the plugin that owns the owner questions. Core (the stall detector) asks it
+ * whether a session has an open question, so a session waiting on the owner is not nudged. No provider = nobody has one.
+ */
+interface QuestionsOpen {
+    /** True when [sessionId] has at least one open owner question. */
+    fun hasOpen(sessionId: String): Boolean
+}
+
 /** One attention item as the service shows it ([kind] is an [AttentionKinds] wire name). */
 data class AttentionEntry(
     val id: String,

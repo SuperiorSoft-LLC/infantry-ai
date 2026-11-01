@@ -112,6 +112,7 @@ interface DaemonApi {
 
     companion object {
         // 1.24.0 (TICKET-COMMENTS-4, additive): daemon.api.tickets.TicketReports (published by Infantry_Board); a new ticket carries the report line (setting board.ticket.reportLine).
+        // 1.24.0 (ATTN-2a, additive): `events.broadcast`, `hooks.connected` (ConnectedHook), daemon.api.attention.QuestionsOpen. The session-closed reason is `processes.onSessionClosed` (1.8.0).
         // 1.23.0 (TICKET-COMMENTS-2, additive): no new member; Infantry_Board's daemon half gains agenthq_ticket_comment / agenthq_ticket_comments,
         // notify on ticket_create / ticket_update and createdBy / notify / openComments on ticket_get, over `storage`, `agents`, `sessionNotifier`.
         // 1.22.0 (DP-10b, additive): `hooks.approvalRules` (ApprovalRulesHook): the stored "allow always" rules of tool approval.
@@ -225,6 +226,13 @@ interface Events {
 
     /** DP-7d (1.18.0, additive): told with the session id once per session that is killed or removed (a plugin drops that session's own data). */
     fun onSessionRemoved(listener: (sessionId: String) -> Unit): AutoCloseable = AutoCloseable {}
+
+    /**
+     * ATTN-2a (1.24.0, additive): pushes one frame of [type] with payload [data] to every connected client (the way core pushes
+     * `attention` / `question`). Official / core only; a community plugin's call throws [IllegalStateException]. Best effort: a
+     * daemon without clients ignores it.
+     */
+    fun broadcast(type: String, data: String) {}
 }
 
 // ---- tools ----------------------------------------------------------------------------------------------------------
@@ -397,7 +405,17 @@ interface ApprovalRulesHook {
 /** The rule that matched: its [tool] and, for a shell tool, the command [prefix]. */
 data class ApprovalRuleMatch(val tool: String, val prefix: String? = null)
 
+/**
+ * ATTN-2a (1.24.0, additive): the frames a plugin replays to ONE client right after it connects (e.g. the open owner questions).
+ * [sessionId] is the connection's session when it has one. Fail open: a throwing hook sends nothing.
+ */
+fun interface ConnectedHook {
+    fun frames(sessionId: String?): List<Frame>
+}
+
 interface Hooks {
+    /** ATTN-2a (1.24.0): offer the connect-replay hook; official / core only. Default: ignored. */
+    fun connected(hook: ConnectedHook) {}
     /** DP-10b (1.22.0): offer the approval-rule store; official/core only. Default: ignored. */
     fun approvalRules(hook: ApprovalRulesHook) {}
 

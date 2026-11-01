@@ -107,6 +107,7 @@ class DaemonPluginHost private constructor(
     private val admissions = CopyOnWriteArrayList<Registered<AdmissionHook>>()
     private val mailGates = CopyOnWriteArrayList<Registered<MailGateHook>>()
     private val spawnGates = CopyOnWriteArrayList<Registered<SpawnGateHook>>()
+    private val connectedHooks = CopyOnWriteArrayList<Registered<com.superiorsoftllc.agenthq.daemon.api.ConnectedHook>>()
     private val readyHooks = CopyOnWriteArrayList<Registered<ReadyHook>>()
     private val turnHooks = CopyOnWriteArrayList<Registered<TurnHook>>()
     private val sessionHooks = CopyOnWriteArrayList<Registered<SessionHook>>()
@@ -193,6 +194,11 @@ class DaemonPluginHost private constructor(
         for (h in readyHooks) if (!h.owner.guard.disabled) h.owner.call("ready") { h.value.fields() }.getOrNull()?.forEach { (k, v) ->
             if (READY_KEY.matches(k) && v.none { it.isWhitespace() }) putIfAbsent(k, v)
         }
+    }
+
+    /** ATTN-2a: the frames the plugins replay to one newly connected client (fail open), in plugin order. */
+    fun connectedFrames(sessionId: String?): List<Frame> = connectedHooks.flatMap { h ->
+        if (h.owner.guard.disabled) emptyList() else h.owner.call("connected") { h.value.frames(sessionId) }.getOrNull().orEmpty()
     }
 
     /** The first pinned notice a plugin gives, or null. */
@@ -473,6 +479,12 @@ class DaemonPluginHost private constructor(
             override fun onSessionRemoved(listener: (String) -> Unit): AutoCloseable =
                 hostServices.onSessionRemoved { id -> if (!p.guard.disabled) p.call("events.onSessionRemoved") { listener(id) } }.also { p.closeables += it }
 
+            // ATTN-2a (1.24.0): a frame to every connected client; official / core only.
+            override fun broadcast(type: String, data: String) {
+                check(!p.community) { "community modules may not broadcast to clients" }
+                hostServices.broadcast(type, data)
+            }
+
             // DP-4b: the typed ticket events. A community plugin needs tickets.read (a throw here disables the plugin, as a bad declaration does).
             override fun onTicket(consumer: String, listener: (TicketEvent) -> Unit): AutoCloseable {
                 require(consumer.isNotBlank()) { "a ticket event consumer needs a name" }
@@ -611,6 +623,7 @@ class DaemonPluginHost private constructor(
             override fun admission(hook: AdmissionHook) { declare("admission"); check(!p.community) { "community modules may not admit tokens" }; admissions += Registered(p, hook) }
             override fun mailGate(hook: MailGateHook) { declare("mailGate"); mailGates += Registered(p, hook) }
             override fun spawnGate(hook: SpawnGateHook) { declare("spawnGate"); spawnGates += Registered(p, hook) }
+            override fun connected(hook: com.superiorsoftllc.agenthq.daemon.api.ConnectedHook) { declare("connected"); check(!p.community) { "community modules may not replay frames to clients" }; connectedHooks += Registered(p, hook) }
             override fun ready(hook: ReadyHook) { declare("ready"); readyHooks += Registered(p, hook) }
             override fun turns(hook: TurnHook) { declare("turns"); turnHooks += Registered(p, hook) }
             override fun sessions(hook: SessionHook) { declare("sessions"); sessionHooks += Registered(p, hook) }
