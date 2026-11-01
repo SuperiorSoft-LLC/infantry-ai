@@ -37,11 +37,14 @@ class BoardDaemonPlugin : DaemonPlugin {
         api.tools.register(PipelineTools.ShowTool)
         api.tools.register(PipelineTools.RecordTool)
         // TICKET-COMMENTS-2: comments, createdBy and the notify list (plugin tables); without storage the board works as before.
-        val comments = runCatching { CommentsWiring.create(api) }.onFailure { api.log("ticket comments unavailable: ${it.message}") }.getOrNull()
+        var commentsError: String? = null
+        val comments = runCatching { CommentsWiring.create(api) }.onFailure { commentsError = it.message; api.log("ticket comments unavailable: ${it.message}") }.getOrNull()
         api.tools.register(TicketGetTool(api, comments))
+        // COMMENT-TOOL-1: the comment tools are always listed; without the store they refuse with the reason instead of vanishing from every worker's tool list.
+        val why = commentsError?.let { "${CommentsWiring.UNAVAILABLE}: $it" } ?: CommentsWiring.UNAVAILABLE
+        api.tools.register(TicketCommentTool(api, comments, why))
+        api.tools.register(TicketCommentsTool(api, comments, why))
         if (comments != null) {
-            api.tools.register(TicketCommentTool(api, comments))
-            api.tools.register(TicketCommentsTool(api, comments))
             // TICKET-COMMENTS-4: the idle watch in core posts its safety-net comment through this port.
             runCatching { api.services.provide(com.superiorsoftllc.agenthq.daemon.api.tickets.TicketReports::class, TicketReportsService(api, comments)) }
                 .onFailure { api.log("ticket reports unavailable: ${it.message}") }
