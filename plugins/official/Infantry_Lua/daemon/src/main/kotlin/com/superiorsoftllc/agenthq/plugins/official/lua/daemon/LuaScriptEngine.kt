@@ -1,4 +1,11 @@
-package com.superiorsoftllc.agenthq.script
+package com.superiorsoftllc.agenthq.plugins.official.lua.daemon
+
+import com.superiorsoftllc.agenthq.plugins.official.scripting.daemon.QueuedAction
+import com.superiorsoftllc.agenthq.plugins.official.scripting.daemon.ScriptCaller
+import com.superiorsoftllc.agenthq.plugins.official.scripting.daemon.ScriptEngine
+import com.superiorsoftllc.agenthq.plugins.official.scripting.daemon.ScriptLimits
+import com.superiorsoftllc.agenthq.plugins.official.scripting.daemon.ScriptOutcome
+import com.superiorsoftllc.agenthq.plugins.official.scripting.daemon.ScriptResult
 
 import org.luaj.vm2.Globals
 import org.luaj.vm2.LoadState
@@ -25,8 +32,9 @@ import java.lang.management.ManagementFactory
  */
 class LuaScriptEngine : ScriptEngine {
     override val id = "lua"
+    override val extensions = listOf("lua")
 
-    override fun run(source: String, input: Map<String, Any?>, limits: ScriptLimits): ScriptResult {
+    override fun run(source: String, input: Map<String, Any?>, limits: ScriptLimits, caller: ScriptCaller): ScriptResult {
         val actions = ArrayList<QueuedAction>()
         val logs = ArrayList<String>()
         val box = arrayOfNulls<ScriptResult>(1)

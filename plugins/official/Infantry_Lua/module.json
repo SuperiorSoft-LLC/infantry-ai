@@ -1,0 +1,15 @@
+{
+  "name": "Infantry_Lua",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "description": "The Lua script engine (LuaJ 3.0.1, sandboxed) for the Scripting plugin's engine extension point.",
+  "tier": "official",
+  "sequence": [],
+  "buildOrder": 220,
+  "daemon": {
+    "entry": "com.superiorsoftllc.agenthq.plugins.official.lua.daemon.LuaDaemonPlugin",
+    "jar": "daemon/build/libs/Infantry_Lua-daemon.jar",
+    "apiAtLeast": "1.25.0"
+  }
+}

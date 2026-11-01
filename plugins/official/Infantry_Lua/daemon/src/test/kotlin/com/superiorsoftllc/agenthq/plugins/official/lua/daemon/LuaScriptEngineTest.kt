@@ -1,4 +1,6 @@
-package com.superiorsoftllc.agenthq.script
+package com.superiorsoftllc.agenthq.plugins.official.lua.daemon
+
+import com.superiorsoftllc.agenthq.plugins.official.scripting.daemon.*
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -47,7 +49,11 @@ class LuaScriptEngineTest {
         assertEquals(ScriptOutcome.ALLOC_EXCEEDED, engine.run("local s = string.rep('x', 1e9)", limits = small).outcome)
     }
 
-    @Test fun enginesSelectedById() {
-        assertTrue(ScriptEngines(listOf(engine)).get("lua") === engine)
+    @Test fun luaIsReachedThroughTheExtensionPoint() {
+        val r = ScriptEngines({ mapOf(ScriptEngineWire.PREFIX + "lua" to ScriptEngineWire.asEndpoint(engine)) })
+        assertTrue(r.byExtension("lua")?.id == "lua")
+        val res = r.default()!!.run("ih.call(\"go\", {n=input.n})", mapOf("n" to 3L), small, ScriptCaller("a", "qa"))
+        assertEquals(ScriptOutcome.OK, res.outcome, res.error)
+        assertEquals(QueuedAction("go", mapOf("n" to 3L)), res.actions.single())
     }
 }

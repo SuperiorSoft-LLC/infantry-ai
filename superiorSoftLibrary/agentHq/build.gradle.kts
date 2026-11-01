@@ -115,9 +115,6 @@ dependencies {
     // Pinned to 0.13.x: 0.14 needs kotlin-stdlib 2.4, this build is on 2.3.
     implementation("org.jetbrains.pty4j:pty4j:0.13.13")
 
-    // SCRIPT-2 (ticket 425883ef): in-process Lua for user scripts (D17). MIT.
-    implementation("org.luaj:luaj-jse:3.0.1")
-
     testImplementation(kotlin("test"))
     // BUILD-VB-1: VerifyBaseTaskTest runs preflight/verify-base.gradle.kts in a throwaway build.
     testImplementation(gradleTestKit())
