@@ -34,6 +34,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import com.superiorsoftllc.agenthq.ui.ActiveBorder
+import com.superiorsoftllc.agenthq.ui.ActiveBorderStyle
+import com.superiorsoftllc.agenthq.ui.activeBorder
+import com.superiorsoftllc.agenthq.ui.activeBorderStyle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -260,10 +265,16 @@ fun AgentRow(a: AgentView, state: AppState, selected: Boolean, onClick: () -> Un
     val shape = RoundedCornerShape(8.dp)
     val hoverSource = remember { MutableInteractionSource() }
     val hovered by hoverSource.collectIsHoveredAsState()
+    // BG-ACTIVE-2: a pulsing border while a turn or a background job runs; the clock is shared by every card.
+    val activeStyle = a.session.activeBorderStyle().takeIf { ActiveBorder.enabled } ?: ActiveBorderStyle.NONE
+    if (activeStyle != ActiveBorderStyle.NONE && ActiveBorder.animate) {
+        DisposableEffect(Unit) { ActiveBorder.acquire(); onDispose { ActiveBorder.release() } }
+    }
     Row(
         modifier.fillMaxWidth().hoverable(hoverSource).clip(shape)
             .background(if (selected) Palette.Raised else Palette.Bg)
-            .border(if (selected) 1.5.dp else 1.dp, if (selected) Palette.Accent else Palette.Border, shape)
+            .then(if (activeStyle != ActiveBorderStyle.NONE) Modifier.activeBorder(activeStyle, shape)
+                  else Modifier.border(if (selected) 1.5.dp else 1.dp, if (selected) Palette.Accent else Palette.Border, shape))
             .clickable(onClick = onClick).testTag("agent-row-${a.id}")
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
