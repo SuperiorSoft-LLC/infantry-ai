@@ -22,7 +22,7 @@ if input.phase == 1 then
       " --no-ff. No gate, no build. Reply only with the new dev head sha, or the conflicts. (ticket " .. ticket ..
       (a.title and (": " .. a.title) or "") .. ")",
   }
-  if a.workerSession then ih.close_session{sessionId = a.workerSession, force = true} end
+  if a.workerSession then ih.close_session{sessionId = a.workerSession, force = true, _optional = true} end
   ih.board{columns = "todo", limit = 200}
   ih.again()
 

@@ -171,9 +171,13 @@ class ScriptHooks(
     }
 
     private fun fail(project: String, hook: Hook, ticketId: String?, what: String) {
-        log("hook ${hook.id} ($project) FAILED: ${what.take(300)}")
-        report(project, hook, ticketId, "Hook '${hook.id}' (on ${hook.on}, script '${hook.script}') failed:\n${what.take(1500)}")
+        log("hook ${hook.id} ($project) FAILED: ${reasonLine(what)}".take(400))
+        report(project, hook, ticketId, "Hook '${hook.id}' (on ${hook.on}, script '${hook.script}') failed: ${reasonLine(what)}\n${what.take(1500)}")
     }
+
+    /** The one-line reason of a failure: the report's `error:` line (Lua error with line, or the refused tool and its error), else its first line. */
+    private fun reasonLine(what: String): String =
+        (what.lineSequence().firstOrNull { it.startsWith("error:") }?.removePrefix("error:") ?: what.lineSequence().first()).trim().take(300)
 
     private fun reportOnce(project: String, hook: Hook, ticketId: String?, reason: String, text: String) {
         val key = "$project/${hook.id}/$reason"
