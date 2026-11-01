@@ -34,6 +34,8 @@ interface DaemonServices {
     /** DP-4b: the typed ticket event stream (ordered, at-least-once, cursors kept across restarts). Default: none. */
     /** DP-7d (1.18.0): told once per session that is killed or removed (the session-scoped data of a plugin dies with it). */
     fun onSessionRemoved(listener: (String) -> Unit): AutoCloseable = AutoCloseable {}
+    /** ATTN-2a (1.24.0): push one frame to every connected client (behind `api.events.broadcast`); default: no clients. */
+    fun broadcast(type: String, data: String) {}
     val ticketEvents: com.superiorsoftllc.agenthq.daemon.api.board.TicketEvents get() = com.superiorsoftllc.agenthq.daemon.api.board.NoTicketEvents
 
     /** AGENT-REGISTRY-1: the daemon's agent registry; null = none (plugins see [com.superiorsoftllc.agenthq.daemon.api.agents.NoAgents]). */
