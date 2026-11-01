@@ -351,14 +351,15 @@ class DaemonPluginHost private constructor(
         return when (action) {
             "run" -> ToolResult(runCatching { testRun.run(pid) }.getOrElse { return ToolResult("$TESTS_TOOL refused: ${it.message}", isError = true) })
             "status" -> ToolResult(testRun.status(pid))
-            else -> ToolResult("usage: agenthq tests run|status [--project <id>]", isError = true)
+            "stop" -> ToolResult(testRun.stop(pid))
+            else -> ToolResult("usage: agenthq tests run|status|stop [--project <id>]", isError = true)
         }
     }
 
     private val testsDescriptor = JsonObject(mapOf(
         "name" to JsonPrimitive(TESTS_TOOL),
-        "description" to JsonPrimitive("Background full-suite runner: action run starts the project's configured suite (tests.* project data) without blocking; status shows the last result. New failures become tickets."),
-        "inputSchema" to Json.parseToJsonElement("""{"type":"object","properties":{"action":{"type":"string","enum":["run","status"]},"projectId":{"type":"string","description":"Default: the caller's project"}},"required":["action"]}"""),
+        "description" to JsonPrimitive("Background full-suite runner: action run starts the project's configured suite (tests.* project data) without blocking; status shows the last result; stop ends the run in flight. New failures become tickets."),
+        "inputSchema" to Json.parseToJsonElement("""{"type":"object","properties":{"action":{"type":"string","enum":["run","status","stop"]},"projectId":{"type":"string","description":"Default: the caller's project"}},"required":["action"]}"""),
         "module" to JsonPrimitive("core"),
         "action" to JsonPrimitive(TESTS_ACTION.id),
         "timeoutMs" to JsonPrimitive(30_000),
@@ -418,6 +419,9 @@ class DaemonPluginHost private constructor(
      * passes (the active policy preset's action refusal, then the plugin frame gates), then [callTool]. A tool that wants a frame on a
      * connection finds none and answers an error.
      */
+    /** SCRIPT-HOOK-3: how a daemon-run tool call gets the frames its tool sends; set by the daemon once it is listening. */
+    @Volatile var loopback: LoopbackFrames? = null
+
     fun invokeTool(name: String, arguments: JsonObject, by: ToolInvoker): ToolResult {
         val data = JsonObject(mapOf("name" to JsonPrimitive(name), "arguments" to arguments)).toString()
         val envelope = Envelope(PLUGIN_TOOL_CALL, data, by.sessionId)
@@ -426,7 +430,10 @@ class DaemonPluginHost private constructor(
         val client = JsonObject(listOfNotNull(
             by.sessionId?.let { "sessionId" to JsonPrimitive(it) }, by.role?.let { "role" to JsonPrimitive(it) }, by.projectId?.let { "projectId" to JsonPrimitive(it) },
         ).toMap())
-        return callTool(name, arguments, by.caller, client) { r, _ -> Envelope(Envelope.ERROR, "${r.type} is not available to ${by.label.ifBlank { "a daemon-run call" }}") }
+        return callTool(name, arguments, by.caller, client) { r, timeoutMs ->
+            val lb = loopback ?: return@callTool Envelope(Envelope.ERROR, "${r.type} is not available to ${by.label.ifBlank { "a daemon-run call" }}")
+            lb.request(r, by.caller.owner, timeoutMs)
+        }
     }
 
     // ---- routes -----------------------------------------------------------------------------------------------------

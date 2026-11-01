@@ -982,6 +982,15 @@ internal object BgCli {
                 if (p.verb != "stop") runCatching { send(stream, session, BgJobRequest("ack", jobId = p.id)) }
                 // A finished job's log stays at its well-known path, so `logs` still answers.
                 if (p.verb == "logs") return logsOf(File(logDir(), p.id + ".log"), out, err)
+                // SCRIPT-HOOK-3 (BG-04): status still answers for a finished job: its exit code is on disk next to the log.
+                if (p.verb == "status") {
+                    val log = File(logDir(), p.id + ".log")
+                    val code = File(logDir(), p.id + ".exit").takeIf { it.isFile }?.let { runCatching { it.readText().trim().toInt() }.getOrNull() }
+                    if (code != null || log.isFile) {
+                        out.appendLine("${p.id} finished | exit ${code ?: "unknown"} | log ${log.absolutePath}")
+                        return 0
+                    }
+                }
                 err.appendLine("error: no running bg job '${p.id}'")
                 return 1
             }

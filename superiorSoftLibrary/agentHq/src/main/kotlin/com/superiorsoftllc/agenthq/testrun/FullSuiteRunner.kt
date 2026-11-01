@@ -7,6 +7,9 @@ interface SuiteExec {
     data class Out(val exitCode: Int, val output: String)
 
     fun run(command: String, dir: File, timeoutMinutes: Long): Out
+
+    /** SCRIPT-HOOK-3 (TST-02): ends the command in flight, if any (its exit code then reports non-zero). */
+    fun stop() {}
 }
 
 /** Where failing tests go: tickets in todo/backlog, deduplicated by the runner. */
