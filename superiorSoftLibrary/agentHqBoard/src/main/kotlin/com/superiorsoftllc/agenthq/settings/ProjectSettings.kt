@@ -15,4 +15,7 @@ interface ProjectSettings {
 
     /** P10-K11: the project baseline skill ids, in attach order; empty when none was ever stored. */
     fun skillIds(): List<String> = emptyList()
+
+    /** ROLE-NOTE-1: the project's built-in report-instruction switch (WHEN YOU ARE FINISHED + Report to lines); null = never stored = on. */
+    fun includeFinishInstructions(): Boolean? = null
 }

@@ -60,6 +60,7 @@ interface BoardRuntime {
     fun includeLinkedTasksContext(): Boolean? = null
     fun includeSkillsContext(): Boolean? = null
     fun skillIds(): List<String> = emptyList()
+    fun includeFinishInstructions(): Boolean? = null
     fun roleNotes(projectId: String, role: String): List<Pair<String, String>> = emptyList()
     fun relatedBlock(ticketId: String, description: String): String? = null
 

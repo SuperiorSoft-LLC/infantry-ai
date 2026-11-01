@@ -64,6 +64,7 @@ class LocalBoardRuntime(
     override fun relatedDescription(draft: com.superiorsoftllc.agenthq.daemon.api.board.BoardRelatedDraft): String? = related(draft)
     override fun includeLinkedTasksContext(): Boolean? = settings.includeLinkedTasksContext()
     override fun includeSkillsContext(): Boolean? = settings.includeSkillsContext()
+    override fun includeFinishInstructions(): Boolean? = settings.includeFinishInstructions()
     override fun skillIds(): List<String> = settings.skillIds()
     override fun roleNotes(projectId: String, role: String) = roleNotesOf(projectId, role)
     override fun relatedBlock(ticketId: String, description: String) = relatedBlockOf(ticketId, description)

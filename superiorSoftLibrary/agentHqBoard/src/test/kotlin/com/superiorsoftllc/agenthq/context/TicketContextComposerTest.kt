@@ -292,6 +292,28 @@ class TicketContextComposerTest {
         }
     }
 
+    @Test
+    fun `a project that switches the built-in finish instructions off gets neither report line, and a role note is in the brief`() {
+        val off = object : ProjectSettings {
+            override fun all() = JsonObject(emptyMap())
+            override fun set(key: String, value: JsonElement): JsonObject = error("unused")
+            override fun includeLinkedTasksContext(): Boolean? = null
+            override fun includeFinishInstructions(): Boolean? = false
+        }
+        val notes = RoleNotesSource { _, _ -> listOf("Finish protocol" to "finish with the report-done script") }
+        val input = ContextInput(
+            instructions = null, title = "T", description = "D", links = emptyList(), includeLinkedOverride = null,
+            ticketId = "t-1", projectId = "p", role = "backend", reportTo = ReportTo(name = "PM", sessionId = "s1"),
+        )
+        val quiet = TicketContextComposer(off, roleNotes = notes).compose(input).prompt
+        assertFalse(quiet.contains("WHEN YOU ARE FINISHED"), quiet)
+        assertFalse(quiet.contains("Report to:"), quiet)
+        assertTrue(quiet.contains("- Finish protocol: finish with the report-done script"), quiet)
+        val dflt = TicketContextComposer(FixedProjectSettings(false), roleNotes = notes).compose(input).prompt
+        assertTrue(dflt.contains("WHEN YOU ARE FINISHED") && dflt.contains("Report to:"), dflt)
+        assertTrue(dflt.contains("- Finish protocol:"), dflt)
+    }
+
     private companion object {
         const val KEY = "context.includeLinkedTasksContext"
 
