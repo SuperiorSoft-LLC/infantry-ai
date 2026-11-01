@@ -1,0 +1,113 @@
+package com.superiorsoftllc.agenthq.plugins.official.scripting.daemon
+
+import com.superiorsoftllc.agenthq.daemon.api.ToolInvoker
+import com.superiorsoftllc.agenthq.daemon.api.Tools
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+
+/** One queued action as the dispatcher handled it. [tool] is the registry name after the alias table; [ok] is null when nothing ran (dry-run). */
+data class ActionRecord(val requested: String, val tool: String, val args: Map<String, Any?>, val phase: Int, val ok: Boolean? = null, val text: String? = null)
+
+data class RunReport(
+    val outcome: String,
+    val records: List<ActionRecord>,
+    val logs: List<String>,
+    val phases: Int,
+    val dryRun: Boolean,
+    val error: String? = null,
+    /** 1-based index in [records] of the action that failed (or could not be resolved), else null. */
+    val failedAt: Int? = null,
+) {
+    val ok: Boolean get() = error == null
+
+    /** The compact text a caller sees: the actions taken (or planned), each result, the log, and the failure if any. */
+    fun render(name: String): String = buildString {
+        append("script $name ${if (dryRun) "DRY-RUN " else ""}outcome=$outcome phases=$phases actions=${records.size}\n")
+        records.forEachIndexed { i, r ->
+            val shown = if (r.requested != r.tool) "${r.requested} (${r.tool})" else r.tool
+            val status = when (r.ok) { null -> "planned"; true -> "ok"; false -> "FAILED" }
+            append("${i + 1}. $shown ${ScriptEngineWire.toJson(r.args)} -> $status")
+            r.text?.let { append(": ").append(it.take(RESULT_SHOWN).replace('\n', ' ')) }
+            append('\n')
+        }
+        if (logs.isNotEmpty()) append("log:\n").append(logs.joinToString("\n") { "  $it" }).append('\n')
+        error?.let { append("error: $it\n") }
+    }.trimEnd()
+
+    private companion object { const val RESULT_SHOWN = 600 }
+}
+
+/**
+ * SCRIPT-4: runs a script's queued actions through the live tool registry ([Tools]), engine-agnostic (any [ScriptEngine]'s [QueuedAction]s).
+ *
+ * Results flow back TWO-PHASE: a run executes the actions the script queued, in order. A script that wants to read what they returned
+ * queues the reserved action `again` (Lua: `ih.again()`); the dispatcher then re-runs it with `input.phase` = 2.. and `input.results` =
+ * the list of every executed action's `{name, tool, ok, text, json}` so far. The re-run's own actions are the ones executed in that
+ * phase (a script branches on `input.phase`). At most [maxPhases] runs; a dry-run is one phase (nothing executes, so there are no
+ * results). An action's failure stops the run and the report names it.
+ */
+class ScriptDispatcher(
+    private val tools: Tools,
+    /** short name -> registry tool name, read at each run (data: the `scripting.aliases` setting). */
+    private val aliases: () -> Map<String, String>,
+    private val maxPhases: () -> Int = { 3 },
+) {
+    fun run(
+        engine: ScriptEngine, source: String, args: Map<String, Any?>, limits: ScriptLimits, caller: ScriptCaller,
+        invoker: ToolInvoker, dryRun: Boolean,
+    ): RunReport {
+        val known = tools.catalog().map { it.name }.toSet()
+        val table = aliases()
+        val records = ArrayList<ActionRecord>()
+        val logs = ArrayList<String>()
+        val results = ArrayList<Map<String, Any?>>()
+        val phases = if (dryRun) 1 else maxPhases().coerceIn(1, HARD_MAX_PHASES)
+        var phase = 0
+        while (phase < phases) {
+            phase++
+            val input = buildMap<String, Any?> {
+                put("args", args); put("phase", phase.toLong()); put("caller", mapOf("id" to caller.id, "role" to caller.role))
+                if (phase > 1) put("results", results.toList())
+            }
+            val r = engine.run(source, input, limits, caller)
+            logs += r.logs.map { if (phase > 1) "[phase $phase] $it" else it }
+            if (r.outcome != ScriptOutcome.OK) return RunReport(r.outcome.name, records, logs, phase, dryRun, r.error ?: r.outcome.name)
+            // Resolve every name first: an unknown tool fails the run before this phase executes anything.
+            var again = false
+            val planned = ArrayList<ActionRecord>()
+            for (a in r.actions) {
+                if (a.name == AGAIN) { again = true; continue }
+                val tool = if (a.name in known) a.name else table[a.name]?.takeIf { it in known }
+                    ?: return RunReport("ERROR", records + planned, logs, phase, dryRun, "unknown tool or alias '${a.name}' (see script_api)", records.size + planned.size + 1)
+                planned += ActionRecord(a.name, tool, a.args, phase)
+            }
+            if (dryRun) {
+                records += planned
+                return RunReport("OK", records, logs, phase, true)
+            }
+            for (p in planned) {
+                val res = tools.invoke(p.tool, toObject(p.args), invoker)
+                records += p.copy(ok = !res.isError, text = res.text)
+                results += mapOf("name" to p.requested, "tool" to p.tool, "ok" to !res.isError, "text" to res.text, "json" to jsonOf(res.text))
+                if (res.isError) return RunReport("ACTION_FAILED", records, logs, phase, false, "action ${records.size} (${p.tool}) failed: ${res.text.take(300)}", records.size)
+            }
+            if (!again) return RunReport("OK", records, logs, phase, false)
+        }
+        return RunReport("PHASES_EXHAUSTED", records, logs, phase, dryRun, "ih.again() ignored: maxPhases ($phases) reached")
+    }
+
+    private fun toObject(m: Map<String, Any?>): JsonObject = ScriptEngineWire.toJson(m) as JsonObject
+
+    private fun jsonOf(text: String): Any? {
+        val t = text.trim()
+        if (!(t.startsWith("{") || t.startsWith("["))) return null
+        return runCatching { Json.parseToJsonElement(t).let { if (it is JsonObject || it is JsonArray) ScriptEngineWire.fromJson(it) else null } }.getOrNull()
+    }
+
+    companion object {
+        /** The reserved action name: re-run the script with the results so far. */
+        const val AGAIN = "again"
+        const val HARD_MAX_PHASES = 10
+    }
+}

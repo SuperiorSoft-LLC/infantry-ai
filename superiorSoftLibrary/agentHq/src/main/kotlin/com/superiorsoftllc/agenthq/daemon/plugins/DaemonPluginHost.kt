@@ -26,6 +26,8 @@ import com.superiorsoftllc.agenthq.daemon.api.SessionInfo
 import com.superiorsoftllc.agenthq.daemon.api.Sessions
 import com.superiorsoftllc.agenthq.daemon.api.SpawnGateHook
 import com.superiorsoftllc.agenthq.daemon.api.ToolCall
+import com.superiorsoftllc.agenthq.daemon.api.ToolInfo
+import com.superiorsoftllc.agenthq.daemon.api.ToolInvoker
 import com.superiorsoftllc.agenthq.daemon.api.ToolResult
 import com.superiorsoftllc.agenthq.daemon.api.Tools
 import com.superiorsoftllc.agenthq.daemon.api.TurnHook
@@ -45,6 +47,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import com.superiorsoftllc.agenthq.daemon.api.NamedEvent
@@ -342,6 +345,22 @@ class DaemonPluginHost private constructor(
             .getOrElse { ToolResult("$name failed: ${it.message ?: it::class.simpleName}", isError = true) }
     }
 
+    /**
+     * SCRIPT-4: a tool call made by the daemon for an agent (a script's action): the same two gates a `plugin_tool_call` frame
+     * passes (the active policy preset's action refusal, then the plugin frame gates), then [callTool]. A tool that wants a frame on a
+     * connection finds none and answers an error.
+     */
+    fun invokeTool(name: String, arguments: JsonObject, by: ToolInvoker): ToolResult {
+        val data = JsonObject(mapOf("name" to JsonPrimitive(name), "arguments" to arguments)).toString()
+        val envelope = Envelope(PLUGIN_TOOL_CALL, data, by.sessionId)
+        services.policy().refusal(envelope.toFrame())?.let { return ToolResult(it, isError = true) }
+        frameRefusal(envelope, by.caller)?.let { return ToolResult(it, isError = true) }
+        val client = JsonObject(listOfNotNull(
+            by.sessionId?.let { "sessionId" to JsonPrimitive(it) }, by.role?.let { "role" to JsonPrimitive(it) }, by.projectId?.let { "projectId" to JsonPrimitive(it) },
+        ).toMap())
+        return callTool(name, arguments, by.caller, client) { r, _ -> Envelope(Envelope.ERROR, "${r.type} is not available to ${by.label.ifBlank { "a daemon-run call" }}") }
+    }
+
     // ---- routes -----------------------------------------------------------------------------------------------------
 
     /** The absolute routes plugins answer (`METHOD path`), registered on the server once. */
@@ -538,6 +557,19 @@ class DaemonPluginHost private constructor(
             }
         }
         override val tools: Tools = object : Tools {
+            override fun catalog(): List<ToolInfo> = toolDescriptors().mapNotNull { it as? JsonObject }.map { d ->
+                ToolInfo(
+                    (d["name"] as JsonPrimitive).content, (d["description"] as? JsonPrimitive)?.contentOrNull.orEmpty(),
+                    d["inputSchema"] as? JsonObject ?: JsonObject(emptyMap()),
+                    ((d["annotations"] as? JsonObject)?.get("readOnlyHint") as? JsonPrimitive)?.booleanOrNull == true,
+                )
+            }
+
+            override fun invoke(name: String, arguments: JsonObject, `as`: ToolInvoker): ToolResult {
+                check(!p.community) { "community modules may not invoke tools" }
+                return invokeTool(name, arguments, `as`)
+            }
+
             override fun register(tool: DaemonTool) {
                 val decl = d.tools.firstOrNull { it.name == tool.name } ?: error("tool '${tool.name}' is not declared in daemon.tools")
                 check(toolEntries[tool.name] == null) { "tool '${tool.name}' is already registered by ${toolEntries[tool.name]?.owner?.id}" }
