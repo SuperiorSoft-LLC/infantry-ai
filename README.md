@@ -40,7 +40,10 @@ on your machine or on your own server: your code, keys and agent output never pa
 
 <p align="center"><img src="assets/branding/infantry-ai-icon-512.png" alt="Infantry AI app icon" width="120"></p>
 
-<!-- SCREENSHOTS: none committed yet. Add real captures (board, session, Android) under assets/screenshots/ and link them here; do not use mock-ups. -->
+![board](docs/img/board.png)
+![session](docs/img/session.png)
+
+<!-- Screenshots still to capture from a real build (no mock-ups): see docs/img/README.md for the list of files. -->
 
 ## Features
 
@@ -71,6 +74,33 @@ You can see the whole loop without a paid subscription by using opencode with on
    models is decided by opencode, not by Infantry AI).
 4. Press **Start**, watch the session, answer any question the agent raises in the question panel, then review and merge the
    branch.
+
+## The board, scripts and plugins in short
+
+**The board.** Tickets move through To Do, In Progress, Pending and Done (plus Backlog). A ticket carries a role, a
+type, a weight and optionally a provider and model. Starting it cuts its own branch and worktree and runs the agent
+there; its report lands as a ticket comment. Pending is set by the daemon while a blocking ticket is open. Order in a
+column is priority.
+
+**Scripts.** Your process lives in Lua scripts in `<project>/.agenthq/scripts/`, not in anyone's memory: what happens
+when a ticket is done, when mail arrives, when a build ends. Hooks run a script on a lane change, on incoming mail, on
+a timer or on a named event, and a script can call every tool an agent has. See [Scripting](docs/wiki/Scripting.md).
+
+**Plugins.** The app is the OS, plugins are the programs: every tab, panel, board card and daemon tool, and every
+agent CLI harness, is a plugin with a `module.json`. Write your own in a few minutes. See
+[Plugins](docs/wiki/Plugins.md) and [Harnesses and providers](docs/wiki/Harnesses.md).
+
+![plugins](docs/img/plugins.png)
+
+## Documentation
+
+- [Wiki home](docs/wiki/Home.md)
+- [Plugins](docs/wiki/Plugins.md): `module.json`, UI and daemon halves, config, building, installing, signing, a hello plugin
+- [Scripting](docs/wiki/Scripting.md): the Lua API, hooks, exec, chat notes, progress, the session bridge
+- [Harnesses and providers](docs/wiki/Harnesses.md): the harness API, adding a harness or a provider
+- [Settings](docs/wiki/Settings.md): scopes and the cost-saving defaults
+
+Screenshots the docs link are listed in [docs/img/README.md](docs/img/README.md).
 
 ## Contents
 
@@ -315,8 +345,11 @@ Starring the repository and filing good bug reports help too.
 
 ## License
 
-> **[PLACEHOLDER] License not yet chosen.** Until a license is published in [LICENSE](LICENSE), all rights are reserved
-> by SuperiorSoft LLC: you may view the code here, but no permission to copy, modify or redistribute it is granted.
+The core is licensed under **MPL-2.0** and everything else (plugin API and SDK, plugins, examples) under
+**Apache-2.0**, split by directory; see [docs/LICENSE-MAP.md](docs/LICENSE-MAP.md) for which directory is which.
+
+> **Not yet in force.** The license texts are not published in this repository yet: [LICENSE](LICENSE) is still a
+> placeholder. Until it is replaced, all rights are reserved by SuperiorSoft LLC.
 
 ## Building from source
 
