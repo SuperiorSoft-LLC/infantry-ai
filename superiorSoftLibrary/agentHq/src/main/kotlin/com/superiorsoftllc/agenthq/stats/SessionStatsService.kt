@@ -59,7 +59,7 @@ class SessionStatsService(private val home: File = File(System.getProperty("user
             when (harness) {
                 // A harness id that is an OpenCode variant (`opencode-go`, ...) shares OpenCode's record (H8b-3: read by the opencode module).
                 else -> if (piStoreRoots.containsKey(harness)) piStoreRoots.getValue(harness).let { root -> resolve(harness, psid) { piFile(root, psid) }?.let { readPi(root, it, base) } }
-                else (pluginStats(harness) ?: if (harness.startsWith("$OPENCODE-")) pluginStats(OPENCODE) else null)?.read(psid)?.let { base.withPlugin(it) }
+                else (pluginStats(harness) ?: if (harness.startsWith("$OPENCODE-")) pluginStats(OPENCODE) else null)?.read(psid)?.let { r -> r.events?.let { base.withPluginEvents(it, ::anyCatalogLimit) } ?: base.withPlugin(r) }
             } ?: base
         } catch (e: Exception) {
             base

@@ -151,7 +151,7 @@ class ApiCliHarness(
         com.superiorsoftllc.agenthq.stats.PluginStatsSource { psid ->
             try {
                 src.read(psid)?.let {
-                    com.superiorsoftllc.agenthq.stats.PluginStatsRow(it.startedAt, it.endedAt, it.userPrompts, it.assistantTurns, it.toolUses, it.models, it.lastContextTokens, it.billedTokens, it.costTotal)
+                    com.superiorsoftllc.agenthq.stats.PluginStatsRow(it.startedAt, it.endedAt, it.userPrompts, it.assistantTurns, it.toolUses, it.models, it.lastContextTokens, it.billedTokens, it.costTotal, it.events)
                 }
             } catch (t: Throwable) {
                 onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); null

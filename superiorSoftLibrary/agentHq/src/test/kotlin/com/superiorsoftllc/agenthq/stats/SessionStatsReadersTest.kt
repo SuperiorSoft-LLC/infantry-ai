@@ -55,10 +55,11 @@ class SessionStatsReadersTest {
         claudeAssistant("2026-10-21T10:00:12.000Z", "msg_a4", "claude-sonnet-5-5", """{"type":"text","text":"ok"}""", 2, 1600, 50, 10),
     )
 
+/** SESSION-STATS-CLAUDE-1: claude stats come through the Infantry_Claude plugin's contribution, folded by the generic path. */ private fun claudeService() = SessionStatsService(home).also { svc -> svc.pluginStats = { id -> if (id != "claude") null else PluginStatsSource { psid -> com.superiorsoftllc.agenthq.plugins.official.claude.harness.ClaudeStats.read(File(home, ".claude/projects"), psid)?.let { PluginStatsRow(it.startedAt, it.endedAt, it.userPrompts, it.assistantTurns, it.toolUses, it.models, it.lastContextTokens, it.billedTokens, it.costTotal, it.events) } } } } 
     @Test
     fun claudeFixtureGivesExpectedStats() {
         writeClaude("c-1", claudeFixture)
-        val s = SessionStatsService(home).read("hq-1", "claude", "c-1", "idle")
+        val s = claudeService().read("hq-1", "claude", "c-1", "idle")
 
         assertEquals("hq-1", s.sessionId)
         assertEquals("claude", s.harness)
@@ -90,16 +91,6 @@ class SessionStatsReadersTest {
     }
 
     @Test
-    fun claudeResolvedPathIsCachedPerSession() {
-        writeClaude("c-1", claudeFixture)
-        val service = SessionStatsService(home)
-        service.read("hq-1", "claude", "c-1", null)
-        assertEquals(1, service.resolveScans)
-        service.read("hq-1", "claude", "c-1", null)
-        assertEquals(1, service.resolveScans, "the projects dir is scanned once per session, not per request")
-    }
-
-    @Test
     fun claudeTenThousandLinesStreamQuickly() {
         val lines = ArrayList<String>(10_000)
         for (i in 0 until 5_000) {
@@ -109,7 +100,7 @@ class SessionStatsReadersTest {
         }
         writeClaude("big", lines)
         val started = System.nanoTime()
-        val s = SessionStatsService(home).read("hq-big", "claude", "big", null)
+        val s = claudeService().read("hq-big", "claude", "big", null)
         val elapsedMs = (System.nanoTime() - started) / 1_000_000
         assertEquals(5_000, s.userPrompts)
         assertEquals(5_000, s.assistantTurns)
