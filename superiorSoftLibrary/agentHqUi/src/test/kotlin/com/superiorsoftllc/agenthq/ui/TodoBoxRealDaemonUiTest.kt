@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
 import com.superiorsoftllc.agenthq.plugins.official.chat.*
+import com.superiorsoftllc.agenthq.plugins.official.chatfeed.*
 
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier

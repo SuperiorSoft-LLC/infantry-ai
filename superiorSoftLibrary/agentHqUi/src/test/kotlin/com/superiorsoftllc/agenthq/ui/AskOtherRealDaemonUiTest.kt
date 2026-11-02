@@ -1,6 +1,7 @@
 package com.superiorsoftllc.agenthq.ui
 
 import com.superiorsoftllc.agenthq.plugins.official.chat.*
+import com.superiorsoftllc.agenthq.plugins.official.chatfeed.*
 
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasTestTag
@@ -100,7 +101,7 @@ class AskOtherRealDaemonUiTest {
         val port = boot()
         val c = Controller(scope)
         runDesktopComposeUiTest(1400, 900) {
-            setContent { App(c, "ws://127.0.0.1:$port/ws", null, tabs = com.superiorsoftllc.agenthq.ui.plugin.TabFactory(com.superiorsoftllc.agenthq.plugins.core.CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.InfantryAgents + com.superiorsoftllc.agenthq.plugins.official.InfantryCli + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat)) }
+            setContent { App(c, "ws://127.0.0.1:$port/ws", null, tabs = com.superiorsoftllc.agenthq.ui.plugin.TabFactory(com.superiorsoftllc.agenthq.plugins.core.CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.InfantryAgents + com.superiorsoftllc.agenthq.plugins.official.InfantryCli + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.chatfeed.InfantryChatFeed)) }
             waitUntil(timeoutMillis = waitMs) { c.state.value.connection.state == ConnState.CONNECTED }
             runBlocking { c.spawn("hello") }
             val sessionId = run {

@@ -37,6 +37,7 @@ class ChatPanelOneSourceTest {
     @Test fun `ChatPanel is the one place that composes the chat parts`() {
         val panel = src("ChatPanel.kt")
         assertEquals(1, Regex("""\bPromptBox\(""").findAll(panel).count())
-        assertTrue(panel.contains("OutputPane("))
+        // CHAT-FEED-SPLIT-1: the transcript is the feed child plugin in the chat.feed slot, not drawn by ChatPanel.
+        assertTrue(panel.contains("ChildSlot("))
     }
 }

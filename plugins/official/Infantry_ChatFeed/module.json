@@ -1,0 +1,26 @@
+{
+  "name": "Infantry_ChatFeed",
+  "version": "1.0.0",
+  "apiVersion": 2,
+  "author": "Infantry AI",
+  "description": "The chat feed: the session's messages, thinking, comms cards, finished lines and automation rows, drawn by kind.",
+  "tier": "official",
+  "sequence": [],
+  "entry": "com.superiorsoftllc.agenthq.plugins.official.chatfeed.ChatFeedPlugin",
+  "jar": "build/libs/Infantry_ChatFeed.jar",
+  "buildOrder": 210,
+  "panels": [
+    { "id": "infantry.chatfeed", "panel": "chat.feed" }
+  ],
+  "implementations": [
+    { "registry": "chat.feed.renderers", "key": "user" },
+    { "registry": "chat.feed.renderers", "key": "text" },
+    { "registry": "chat.feed.renderers", "key": "reasoning" },
+    { "registry": "chat.feed.renderers", "key": "status" },
+    { "registry": "chat.feed.renderers", "key": "error" },
+    { "registry": "chat.feed.renderers", "key": "finished" },
+    { "registry": "chat.feed.renderers", "key": "log" },
+    { "registry": "chat.feed.renderers", "key": "write" },
+    { "registry": "chat.feed.renderers", "key": "automation" }
+  ]
+}

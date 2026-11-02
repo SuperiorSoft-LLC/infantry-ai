@@ -107,7 +107,7 @@ class DropInUiTest {
         var full by mutableStateOf(false)
         setContent {
             CompositionLocalProvider(LocalPlatformHost provides host) {
-                key(full) { App(Controller(scope), noDaemon, null, tabs = if (full) TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat) else TabFactory(emptyList())) }
+                key(full) { App(Controller(scope), noDaemon, null, tabs = if (full) TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.chatfeed.InfantryChatFeed) else TabFactory(emptyList())) }
             }
         }
         onNodeWithTag(DROP_BOX_TAG).assertExists()
@@ -167,7 +167,7 @@ class DropInUiTest {
         val app = DropPreview("C:/drop/App_UI.ihq", "Infantry_AppUi", "1.0.0", "Infantry AI", "CN=infantry", core = true,
             asks = listOf(NodeAsk("infantry.shell.center", NodeAsk.Kind.FILL, locked = false)))
         val drop = FakeDropIn(check = DropCheck.Ready(app))
-        val host = Host(drop, first = TabFactory(emptyList()), next = TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat))
+        val host = Host(drop, first = TabFactory(emptyList()), next = TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.chatfeed.InfantryChatFeed))
         setContent { AgentHqShell(host, Controller(scope)) }
         onNodeWithTag(DROP_BOX_TAG).assertExists()
         onNodeWithTag(DROP_BOX_CHOOSE_TAG).performClick()
@@ -199,7 +199,7 @@ class DropInUiTest {
     }
 
     @Test fun `outside safe mode there is no banner`() = runDesktopComposeUiTest(1200, 800) {
-        window(Host(FakeDropIn()), TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat))
+        window(Host(FakeDropIn()), TabFactory(CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.chatfeed.InfantryChatFeed))
         onNodeWithTag(SAFE_MODE_BANNER_TAG).assertDoesNotExist()
     }
 

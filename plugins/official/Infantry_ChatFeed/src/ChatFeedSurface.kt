@@ -1,0 +1,549 @@
+package com.superiorsoftllc.agenthq.plugins.official.chatfeed
+import com.superiorsoftllc.agenthq.ui.*
+import com.superiorsoftllc.agenthq.ui.plugin.RowItem
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.foundation.draganddrop.dragAndDropTarget
+import androidx.compose.ui.draganddrop.DragAndDropEvent
+import androidx.compose.ui.draganddrop.DragAndDropTarget
+import com.superiorsoftllc.agenthq.ui.net.ImageUploadOutcome
+import com.superiorsoftllc.agenthq.ui.protocol.ImageUploadWire
+import com.superiorsoftllc.agenthq.ui.pair.applyPairing
+import com.superiorsoftllc.agenthq.ui.shell.LocalPlatformHost
+import com.superiorsoftllc.agenthq.ui.shell.ServerChoice
+import com.superiorsoftllc.agenthq.ui.shell.ServerSwitcher
+import com.superiorsoftllc.agenthq.ui.shell.PickedImage
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.testTag
+import com.superiorsoftllc.agenthq.ui.model.PickedModel
+import com.superiorsoftllc.agenthq.ui.model.chatRows
+import com.superiorsoftllc.agenthq.ui.model.NoticeKind
+import com.superiorsoftllc.agenthq.ui.model.noticesForSession
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import com.superiorsoftllc.agenthq.ui.model.AgentGroup
+import com.superiorsoftllc.agenthq.ui.model.parseHexColor
+import com.superiorsoftllc.agenthq.ui.model.roleHue
+import androidx.compose.foundation.horizontalScroll
+import com.superiorsoftllc.agenthq.ui.model.RightPanelWidth
+import com.superiorsoftllc.agenthq.ui.model.SidebarWidth
+import com.superiorsoftllc.agenthq.ui.model.CompactScreen
+import com.superiorsoftllc.agenthq.ui.model.PanelLayout
+import com.superiorsoftllc.agenthq.ui.model.PanelSide
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.TextLinkStyles
+import com.superiorsoftllc.agenthq.ui.model.isSafeChatUrl
+import com.superiorsoftllc.agenthq.ui.model.AgentScope
+import com.superiorsoftllc.agenthq.ui.model.SlashSuggestion
+import com.superiorsoftllc.agenthq.ui.model.isSlashCommand
+import com.superiorsoftllc.agenthq.ui.model.moveSlashSelection
+import com.superiorsoftllc.agenthq.ui.model.slashHeader
+import com.superiorsoftllc.agenthq.ui.model.HarnessSwitch
+import com.superiorsoftllc.agenthq.ui.model.switchChipText
+import com.superiorsoftllc.agenthq.ui.model.slashPick
+import com.superiorsoftllc.agenthq.ui.model.slashSubmitOnEnter
+import com.superiorsoftllc.agenthq.ui.model.slashSuggestions
+import com.superiorsoftllc.agenthq.ui.model.slashTyped
+import com.superiorsoftllc.agenthq.ui.model.branchLine
+import com.superiorsoftllc.agenthq.ui.model.changesView
+import com.superiorsoftllc.agenthq.ui.model.ticketBranchFor
+import com.superiorsoftllc.agenthq.ui.model.ticketTagFull
+import com.superiorsoftllc.agenthq.ui.model.ticketTagLabel
+import com.superiorsoftllc.agenthq.ui.model.reportFlagOf
+import com.superiorsoftllc.agenthq.ui.model.watchFlagOf
+import com.superiorsoftllc.agenthq.ui.model.UiFlags
+import com.superiorsoftllc.agenthq.ui.model.ChatBlock
+import com.superiorsoftllc.agenthq.ui.model.ChatItem
+import com.superiorsoftllc.agenthq.ui.model.TimelineItem
+import com.superiorsoftllc.agenthq.ui.model.withContributions
+import com.superiorsoftllc.agenthq.ui.model.wakeReasons
+import com.superiorsoftllc.agenthq.ui.model.ChatSpan
+import com.superiorsoftllc.agenthq.ui.model.ChatStatus
+import com.superiorsoftllc.agenthq.ui.model.OutputLine
+import com.superiorsoftllc.agenthq.ui.model.USER_AVATAR_ID
+import com.superiorsoftllc.agenthq.ui.model.UserPortrait
+import com.superiorsoftllc.agenthq.ui.model.contractAtLeast
+import com.superiorsoftllc.agenthq.ui.model.avatarFor
+import com.superiorsoftllc.agenthq.ui.model.chatItems
+import com.superiorsoftllc.agenthq.ui.model.chatLineBlocks
+import com.superiorsoftllc.agenthq.ui.model.parseChatInline
+import com.superiorsoftllc.agenthq.ui.model.AgentView
+import com.superiorsoftllc.agenthq.ui.model.SessionExecutor
+import com.superiorsoftllc.agenthq.ui.model.COMPACTING_LABEL
+import com.superiorsoftllc.agenthq.ui.model.AppState
+import com.superiorsoftllc.agenthq.ui.model.DiffTarget
+import com.superiorsoftllc.agenthq.ui.model.ConnState
+import com.superiorsoftllc.agenthq.ui.model.LineKind
+import com.superiorsoftllc.agenthq.ui.model.activityTimestamp
+import com.superiorsoftllc.agenthq.ui.model.isBusy
+import com.superiorsoftllc.agenthq.ui.model.QueuedPrompt
+import com.superiorsoftllc.agenthq.ui.model.interruptBlocker
+import com.superiorsoftllc.agenthq.ui.model.queuedFor
+import com.superiorsoftllc.agenthq.ui.model.isRunning
+import com.superiorsoftllc.agenthq.ui.model.needsInput
+import com.superiorsoftllc.agenthq.ui.model.insertIntoPrompt
+import com.superiorsoftllc.agenthq.ui.model.promptBlocker
+import com.superiorsoftllc.agenthq.ui.model.parseNodes
+import com.superiorsoftllc.agenthq.ui.model.stateLabel
+import com.superiorsoftllc.agenthq.ui.model.visibleAgents
+import com.superiorsoftllc.agenthq.ui.net.CommandResult
+import com.superiorsoftllc.agenthq.ui.net.Controller
+import com.superiorsoftllc.agenthq.ui.protocol.SessionState
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.time.Clock
+
+@Composable
+fun OutputPane(
+    a: AgentView?,
+    spawnMode: Boolean,
+    roleColor: String? = null,
+    onStartSession: (() -> Unit)?,
+    /** GAP-006b: Start session / Resume for the session shown when it has nothing on screen (null = none to offer). */
+    paneAction: com.superiorsoftllc.agenthq.ui.model.SessionPaneAction? = null,
+    onApplyStart: (com.superiorsoftllc.agenthq.ui.model.StartPlan) -> Unit = {},
+    onResume: (String) -> Unit = {},
+    /** SCRIPT-VIS-1b: lines plugins contributed to this session's chat (automation runs); empty = none. */
+    contributions: List<TimelineItem> = emptyList(),
+    questionSlot: @Composable () -> Unit = {},
+) {
+    if (a == null) {
+        Box(Modifier.fillMaxSize(), Alignment.Center) {
+            if (spawnMode) return@Box
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                BrandEmblem(72.dp)
+                Spacer(Modifier.height(10.dp))
+                Text("No live session. Start one to see its output here.", color = Palette.Muted, fontSize = 12.sp)
+                Spacer(Modifier.height(10.dp))
+                if (onStartSession != null) OutlinedButton(onClick = onStartSession) { Text("Start a session") }
+            }
+        }
+        return
+    }
+    if (a.output.isEmpty() && contributions.none { !it.isStats } && a.chatStatus(Clock.System.now().toEpochMilliseconds()) == null) {
+      Column(Modifier.fillMaxSize()) {
+        Box(Modifier.weight(1f).fillMaxWidth(), Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                BrandEmblem(72.dp)
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    if (a.session.global) "Ask the Assistant anything about Infantry AI: how a screen works, why something failed, or tell it what to do (create a ticket, start an agent, change a setting)."
+                    else "Nothing on screen for this session yet.\nThe daemon replays a session's recent output only while the process that ran it is up; older history is not kept.",
+                    color = Palette.Muted, fontSize = 12.sp,
+                )
+                Spacer(Modifier.height(10.dp))
+                // GAP-006b: a session on screen starts or resumes ITSELF; the New agent box would cut a second instance.
+                if (paneAction != null) SessionStartPane(paneAction, onApplyStart, onResume)
+                else if (onStartSession != null) OutlinedButton(onClick = onStartSession) { Text("Start a session") }
+            }
+        }
+        questionSlot()
+      }
+        return
+    }
+    AgentChat(a, roleColor = roleColor, questionSlot = questionSlot, contributions = contributions)
+}
+
+/** Test tag on the transient status row under the transcript (or in place of the empty state). */
+const val CHAT_STATUS_TAG = "chat-status"
+
+/** UI-ACT-2: test tag on the collapsible Activity box above the chat input. */
+const val ACTIVITY_BOX_TAG = "activity-box"
+
+/** UI-ACT-2: test tag on each activity line's label inside the box. */
+const val ACTIVITY_LINE_TAG = "activity-line"
+
+/**
+ * The chat transcript for one agent, plus [AgentView.chatStatus] when the latest turn has no answer yet.
+ * The status row sits under the last line and is absent once [AgentView.chatStatus] is null.
+ */
+@Composable
+fun AgentChat(agent: AgentView, nowProvider: () -> Long = { Clock.System.now().toEpochMilliseconds() }, roleColor: String? = null, questionSlot: @Composable () -> Unit = {}, contributions: List<TimelineItem> = emptyList()) {
+    val list = rememberLazyListState()
+    // The elapsed label must age on its own: no status frame may arrive for seconds while the agent
+    // works, so a one-second ticker keeps "Thinking... 3s" counting with the transcript otherwise still.
+    // [nowProvider] is the clock (injectable so a UI test can drive it with the Compose frame clock).
+    var now by remember { mutableStateOf(nowProvider()) }
+    LaunchedEffect(agent.id) { while (true) { delay(1_000); now = nowProvider() } }
+    val rows = withContributions(LocalReasoningPlacement.current.chatRows(chatItems(agent.output)), contributions)
+    val status = agent.chatStatus(now)
+    // Keyed on the status PRESENCE, not its value: the ticker changes it every second, and that must
+    // not restart the scroll effect.
+    LaunchedEffect(agent.id, rows.size, agent.output.lastOrNull()?.text?.length, status != null) {
+        val last = rows.size + (if (status != null) 1 else 0) - 1
+        if (last >= 0) list.requestScrollToItem(last)
+    }
+    val name = agent.session.worktreeBranch ?: agent.id.take(8)
+    val agentSide = agentSideOf(LocalTabFactory.current)
+    Column(Modifier.fillMaxSize()) {
+        SelectionContainer(Modifier.weight(1f)) {
+            LazyColumn(Modifier.fillMaxSize().padding(horizontal = 14.dp), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 10.dp)) {
+                items(rows.size) { i ->
+                    // M2-2: the agent's portrait opens each run of agent-side lines, like a chat. KINDS-1: the row is drawn by the renderer of its kind.
+                    FeedRow(RowItem(rows[i], agent.id, name, agent.role, roleColor), startsAgentRun(rows, i, agentSide))
+                }
+                // The live status row is agent-side too: it opens a run only when no agent line precedes it.
+                if (status != null) item {
+                    AgentSideRow(startsAgentRun(rows, rows.size, agentSide), agent.role, agent.id, roleColor) { ChatStatusRow(status) }
+                }
+            }
+        }
+        questionSlot()
+        ActivityBox(agent)
+    }
+}
+
+/**
+ * UI-ACT-2: the selected session's tool activity, newest first, above the chat input. Collapsible; it
+ * starts expanded while the session is running and collapsed once it is idle.
+ */
+@Composable
+fun ActivityBox(agent: AgentView) {
+    val entries = agent.activityLog
+    if (entries.isEmpty()) return
+    // UI-ACT-2: starts expanded while the session is running and collapsed once it is idle; the user
+    // can still toggle it. Keyed on the agent so switching sessions re-reads that session's run state.
+    var expanded by remember(agent.id) { mutableStateOf(isRunning(agent.session.state)) }
+    Column(Modifier.fillMaxWidth().background(Palette.Panel).testTag(ACTIVITY_BOX_TAG)) {
+        Text(
+            "Activity (${entries.size})",
+            color = Palette.Muted,
+            fontFamily = Mono,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(horizontal = 14.dp, vertical = 6.dp),
+        )
+        if (expanded) {
+            // Newest first, capped at ~160dp, scrollable, monospace.
+            Column(Modifier.fillMaxWidth().heightIn(max = 160.dp).verticalScroll(rememberScrollState())) {
+                entries.asReversed().forEach { e ->
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 1.dp)) {
+                        Text(activityTimestamp(e.at), color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp)
+                        Spacer(Modifier.width(8.dp))
+                        Text(e.label, color = Palette.Text, fontFamily = Mono, fontSize = 11.sp, modifier = Modifier.testTag(ACTIVITY_LINE_TAG))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Pulsing dot plus the status label. Cleared by the caller when [status] is no longer due. */
+@Composable
+fun ChatStatusRow(status: ChatStatus) {
+    val pulse = rememberInfiniteTransition(label = "chatStatus")
+    val alpha by pulse.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse),
+        label = "chatStatusPulse",
+    )
+    Row(Modifier.testTag(CHAT_STATUS_TAG).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(8.dp).alpha(alpha).clip(CircleShape).background(Palette.Accent))
+        Spacer(Modifier.width(8.dp))
+        Text(chatStatusLabel(status), color = Palette.Muted, fontFamily = Mono, fontSize = 12.sp)
+        status.elapsedSuffix()?.let { Text(it, color = Palette.Muted, fontFamily = Mono, fontSize = 12.sp) }
+        // AGENT-UX-12: a run past the stale threshold is shown as STALLED, in a distinct colour, so a
+        // silent run can never be mistaken for one that is producing activity.
+        (status as? ChatStatus.Thinking)?.stalledFor?.let {
+            Text("  no new activity for $it", color = Palette.Danger, fontFamily = Mono, fontSize = 12.sp)
+        }
+    }
+}
+
+private fun chatStatusLabel(status: ChatStatus): String = when (status) {
+    // AGENT-UX-12: when a tool is running, say WHAT it is doing ("Running bash: ls -la src"), not just
+    // "Thinking...". Falls back to the plain label before any tool call.
+    is ChatStatus.Thinking -> if (status.compacting) COMPACTING_LABEL else status.activity?.let { "Running $it" } ?: "Thinking..."
+    ChatStatus.Failure -> "Failed"
+    ChatStatus.Stopped -> "Stopped"
+}
+
+/** How long the agent has been working, shown beside the label: " 3s", or null when not yet known. */
+private fun ChatStatus.elapsedSuffix(): String? = (this as? ChatStatus.Thinking)?.elapsed?.takeIf { it.isNotBlank() }?.let { " $it" }
+
+/** Renders parsed assistant markdown through the active [ChatMarkdownConfig]; re-parsed by the caller on every streamed update. */
+@Composable
+internal fun ChatBlocks(blocks: List<ChatBlock>, renderers: ChatBlockRenderers) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (b in blocks) renderers.rendererFor(b).Render(b)
+    }
+}
+
+/** Test tag on the collapsible "Thinking" header of a reasoning block. */
+const val REASONING_HEADER_TAG = "reasoning-header"
+
+/**
+ * A run of consecutive reasoning lines as one block, collapsed by default. The header reads
+ * "Thinking (n)" where n is how many lines the block holds; clicking it toggles the block. Expanded,
+ * the lines are muted plain text -- no markdown, unlike the answer, because reasoning is the model's
+ * own working, not the reply.
+ */
+@Composable
+fun ReasoningBlock(lines: List<OutputLine>) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+        Text(
+            "Thinking (${lines.size})",
+            color = Palette.Muted,
+            fontFamily = Mono,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.testTag(REASONING_HEADER_TAG).clickable { expanded = !expanded },
+        )
+        if (expanded) {
+            Text(
+                lines.joinToString("\n") { it.text },
+                color = Palette.Muted,
+                fontFamily = Mono,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(start = 8.dp, top = 2.dp),
+            )
+        }
+    }
+}
+
+/** Test tag on the row of every chat message that carries a speaker avatar. */
+const val SPEAKER_ROW_TAG = "speaker-row"
+
+/** One chat message: its speaker's avatar on the left, the message body filling the rest of the row. */
+@Composable
+internal fun SpeakerRow(avatar: @Composable () -> Unit, content: @Composable () -> Unit) {
+    Row(Modifier.fillMaxWidth().testTag(SPEAKER_ROW_TAG), verticalAlignment = Alignment.Top) {
+        avatar()
+        Spacer(Modifier.width(8.dp))
+        Box(Modifier.weight(1f)) { content() }
+    }
+}
+
+/** Size of the agent's portrait on its chat lines, and of the indent its continuation lines keep. */
+internal const val CHAT_AVATAR_SIZE = 36
+
+/**
+ * M2-2: whether the agent-side item at [index] opens a run and so carries the agent's portrait. A run
+ * is a stretch of consecutive agent-side items ([agentSide], by the renderer of each item's kind); a user line ends it.
+ * [index] == rows.size asks about the live status row that follows the transcript.
+ */
+internal fun startsAgentRun(rows: List<ChatItem>, index: Int, agentSide: (ChatItem) -> Boolean): Boolean {
+    if (index < rows.size && !agentSide(rows[index])) return false
+    return index == 0 || !agentSide(rows[index - 1])
+}
+
+/**
+ * One agent-side chat row: the agent's [AgentAvatar] on the left when [showAvatar] (the row opens a
+ * run), otherwise an empty gap of the same width so the whole run keeps one left indent.
+ */
+@Composable
+fun AgentSideRow(showAvatar: Boolean, agentRole: String?, agentId: String, agentRoleColor: String?, content: @Composable () -> Unit) {
+    SpeakerRow({
+        if (showAvatar) AgentAvatar(agentRole, agentId, CHAT_AVATAR_SIZE, agentRoleColor)
+        else Spacer(Modifier.width(CHAT_AVATAR_SIZE.dp))
+    }, content)
+}
+
+/**
+ * One transcript line as the chat shows it, drawn by the renderer registered for its kind (an agent's markdown, the user's own
+ * echo, a status / error / finished / log marker). [showAvatar]: the agent's portrait when the line opens a run, else its indent.
+ */
+@Composable
+fun ChatLine(
+    line: OutputLine,
+    agentId: String,
+    agentName: String,
+    agentRole: String? = null,
+    agentRoleColor: String? = null,
+    showAvatar: Boolean = true,
+) {
+    FeedRow(RowItem(ChatItem.Line(line), agentId, agentName, agentRole, agentRoleColor), showAvatar)
+}
+
+/** KINDS-1: draws one row through the renderer registered for its kind; a kind nobody registered draws the generic row. */
+@Composable
+internal fun FeedRow(row: RowItem, showAvatar: Boolean) {
+    val renderer = feedRendererOf(LocalTabFactory.current, row.kind)
+    if (renderer.agentSide) AgentSideRow(showAvatar, row.agentRole, row.agentId, row.roleColor) { renderer.content(row) }
+    else renderer.content(row)
+}
+
+/** Test tag on the quiet send/response time at the top-right of a chat card. */
+const val CARD_TIMESTAMP_TAG = "card-timestamp"
+
+/** Test tag on the card header's title. */
+const val CARD_TITLE_TAG = "card-title"
+
+/**
+ * A chat card: a light header band (icon, bold title, muted time on one line) over the body, all tinted from
+ * [style]'s tone. Compact: one text line of header plus small padding; the body has the normal padding.
+ */
+@Composable
+fun CommsCard(style: CommsCardStyle, at: Long, body: @Composable () -> Unit) {
+    val shape = RoundedCornerShape(8.dp)
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(shape).background(style.tone.body)) {
+        Row(
+            Modifier.fillMaxWidth().background(style.tone.header).padding(horizontal = 8.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (style.showIcon) {
+                androidx.compose.material3.Icon(
+                    AhqIcons.Radio, contentDescription = null, tint = Palette.Text,
+                    modifier = Modifier.size(16.dp).testTag(CARD_COMMS_ICON_TAG),
+                )
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(
+                style.title, color = Palette.Text, fontWeight = FontWeight.Bold, fontSize = 11.sp,
+                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).testTag(CARD_TITLE_TAG),
+            )
+            if (style.showTime) {
+                Text(
+                    activityTimestamp(at), color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp,
+                    maxLines = 1, softWrap = false, textAlign = TextAlign.End,
+                    modifier = Modifier.padding(start = 8.dp).testTag(CARD_TIMESTAMP_TAG),
+                )
+            }
+        }
+        Column(Modifier.fillMaxWidth().padding(8.dp)) { body() }
+    }
+}
+
+const val CARD_COMMS_ICON_TAG = "card-comms-icon"
+
+/** SCRIPT-VIS-1b: test tag on a plugin-contributed (automation) chat row. */
+const val CONTRIBUTION_ROW_TAG = "contribution-row"
+
+/** SCRIPT-VIS-1b: test tag on the expanded details of a contributed row. */
+const val CONTRIBUTION_DETAILS_TAG = "contribution-details"
+
+/**
+ * SCRIPT-VIS-1b: a line a plugin put in the chat without a turn. Drawn as automation (a gear mark, its label, a muted panel), never as the
+ * agent's speech; click to expand its [TimelineItem.details] (the run's actions and log lines). A failure is drawn in the error colour.
+ */
+@Composable
+fun ContributionRow(item: TimelineItem) {
+    var open by remember(item.id) { mutableStateOf(false) }
+    val tint = if (item.ok) Palette.Muted else Palette.Danger
+    Column(Modifier.fillMaxWidth().padding(vertical = 3.dp).background(Palette.Panel).testTag(CONTRIBUTION_ROW_TAG)
+        .clickable(enabled = item.details.isNotEmpty()) { open = !open }.padding(horizontal = 10.dp, vertical = 5.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("⚙", color = tint, fontSize = 13.sp)
+            Spacer(Modifier.width(8.dp))
+            Text(item.text.ifBlank { item.label }, color = tint, fontFamily = Mono, fontSize = 12.sp, modifier = Modifier.weight(1f))
+            // SCRIPT-LINE-TS-1: the run's time, top right, same formatter/font as the message cards.
+            if (item.at > 0) Text(
+                activityTimestamp(item.at) + (item.meta["durationMs"]?.toLongOrNull()?.let { " · ${it / 1000}.${(it % 1000) / 100} s" } ?: ""),
+                color = Palette.Muted, fontFamily = Mono, fontSize = 10.sp,
+                maxLines = 1, softWrap = false, textAlign = TextAlign.End,
+                modifier = Modifier.padding(horizontal = 8.dp).testTag(CARD_TIMESTAMP_TAG),
+            )
+            if (item.details.isNotEmpty()) Text(if (open) "▴" else "▾", color = Palette.Muted, fontSize = 12.sp)
+        }
+        // CHAT-IMAGE-1: the same sent-image rendering as a ticket's images; remote clients use the inlined copy.
+        item.meta["image"]?.let { path ->
+            val data = remember(item.id) { item.meta["imageData"]?.let { runCatching { kotlin.io.encoding.Base64.decode(it) }.getOrNull() } }
+            Column(Modifier.padding(start = 21.dp, top = 4.dp)) { ChatSentImages(listOf(path), data) }
+        }
+        if (open) Column(Modifier.padding(start = 21.dp, top = 3.dp).testTag(CONTRIBUTION_DETAILS_TAG)) {
+            item.details.forEach { Text(it, color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp) }
+        }
+    }
+}
+

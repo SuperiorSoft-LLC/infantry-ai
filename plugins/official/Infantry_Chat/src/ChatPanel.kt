@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.chat
 
+import com.superiorsoftllc.agenthq.ui.plugin.ChildSlot
 import com.superiorsoftllc.agenthq.ui.*
 
 import com.superiorsoftllc.agenthq.ui.model.SessionPaneAction
@@ -292,30 +293,28 @@ internal fun ChatPanelHost.Header() {
     header(agent, agent?.let { a -> { chat.openSwitch(a.id) } })
 }
 
-/** The host's content (the transcript, or the tab that replaces it) and the to-do / reasoning side slot; [modifier] carries the weight. */
+/** The feed, then the to-do / reasoning side slot; [modifier] carries the weight. */
+/** The name of the child slot the chat draws its feed in (module.json `slots`). */
+private const val CHAT_FEED_SLOT = "chat.feed"
+
 @Composable
 internal fun ChatPanelHost.Transcript(modifier: Modifier) {
     Box(modifier.fillMaxWidth().testTag(transcriptTag)) {
         content {
-            androidx.compose.runtime.CompositionLocalProvider(LocalUserPortrait provides state.userPortrait) {
-                OutputPane(
-                    agent, chat.spawnMode, roleColor = state.role(agent?.role)?.color,
-                    contributions = agent?.let { state.timeline[it.id] }.orEmpty(),
-                    onStartSession = if (allowSpawn) ({ chat.spawnMode = true; chat.focus.requestFocus() }) else null,
-                    // GAP-006b: Start session (its own settings, Apply / Cancel) or Resume, for the session on screen.
-                    paneAction = agent?.takeIf { !it.session.global }?.let { com.superiorsoftllc.agenthq.ui.model.sessionPaneAction(it.session, state.tickets) },
-                    onApplyStart = { plan -> scope.launch { controller.startSession(plan, ComposerTags.toPrompt(chat.draft, chat.attachments).trim()).let { r -> if (r is CommandResult.Sent) chat.edit("") } } },
-                    onResume = { id -> scope.launch { controller.resume(id, ComposerTags.toPrompt(chat.draft, chat.attachments).trim()).let { r -> if (r is CommandResult.Sent) chat.edit("") } } },
-                ) {
-                    // ASK-1: this session's pending question, inline above the Activity box.
-                    QuestionPanel(
-                        shown = agent?.let { state.shownQuestionsFor(it.id) }.orEmpty(),
-                        enabled = com.superiorsoftllc.agenthq.ui.shell.rememberGate("questions.answer").allowed,
-                        onAnswer = { answer -> scope.launch { controller.answerQuestion(answer) } },
-                        onCancel = { id -> scope.launch { controller.cancelQuestion(id) } },
-                        onLater = { controller.dismissQuestions(); chat.focus.requestFocus() },
-                    )
-                }
+            Column(Modifier.fillMaxSize()) {
+                // SCRIPT-VIS-1c: the automation stats line above the feed (the frame's, not the feed's).
+                agent?.let { a -> state.timeline[a.id].orEmpty().lastOrNull { it.isStats } }?.let { AutomationStatsPanel(it) }
+                // CHAT-FEED-SPLIT-1: the feed is a child plugin in this named slot; the frame knows only the slot's name and its arguments.
+                ChildSlot(
+                    CHAT_FEED_SLOT, state, controller, Modifier.weight(1f).fillMaxWidth(),
+                    args = mapOf(
+                        "sessionId" to agent?.id, "spawnMode" to chat.spawnMode, "controller" to controller,
+                        "onStartSession" to if (allowSpawn) ({ chat.spawnMode = true; chat.focus.requestFocus() }) else null,
+                        "onApplyStart" to { plan: com.superiorsoftllc.agenthq.ui.model.StartPlan -> scope.launch { controller.startSession(plan, ComposerTags.toPrompt(chat.draft, chat.attachments).trim()).let { r -> if (r is CommandResult.Sent) chat.edit("") } }; Unit },
+                        "onResume" to { id: String -> scope.launch { controller.resume(id, ComposerTags.toPrompt(chat.draft, chat.attachments).trim()).let { r -> if (r is CommandResult.Sent) chat.edit("") } }; Unit },
+                        "onLater" to { chat.focus.requestFocus() },
+                    ),
+                )
             }
         }
         if (agent != null && !chat.spawnMode) {

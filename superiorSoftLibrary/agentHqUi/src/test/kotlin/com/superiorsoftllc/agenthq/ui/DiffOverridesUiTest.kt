@@ -4,6 +4,7 @@ import com.superiorsoftllc.agenthq.plugins.official.approvals.*
 import com.superiorsoftllc.agenthq.plugins.official.assistant.*
 import com.superiorsoftllc.agenthq.plugins.official.changes.*
 import com.superiorsoftllc.agenthq.plugins.official.chat.*
+import com.superiorsoftllc.agenthq.plugins.official.chatfeed.*
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material3.Text

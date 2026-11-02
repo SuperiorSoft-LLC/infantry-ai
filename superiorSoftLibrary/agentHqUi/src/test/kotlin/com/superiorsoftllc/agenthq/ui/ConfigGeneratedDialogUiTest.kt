@@ -105,7 +105,7 @@ class ConfigGeneratedDialogUiTest {
 
     private fun factory(): TabFactory {
         val all = CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.InfantryAgents +
-            com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + acme
+            com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.chatfeed.InfantryChatFeed + acme
         return TabFactory(all, statuses = all.map { ModuleStatus(it.manifest.name, it.tier, ModuleState.LOADED, manifest = it.manifest) }, configApi = api)
     }
 

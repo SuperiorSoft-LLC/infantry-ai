@@ -565,6 +565,7 @@ class TabFactory(
             }
         }
         // PLUGINS-3: panel sections bind the way tabs do.
+        val knownPanels = Panels.ALL + modules.flatMap { it.manifest.slots }
         val placed = LinkedHashMap<String, PanelProvider>()
         for (m in modules) for (p in m.panels) {
             val name = m.manifest.name
@@ -573,7 +574,7 @@ class TabFactory(
             when {
                 declared == null -> problems += "$name: panel section ${p.id} is not declared in its module.json; refused"
                 declared.panel != p.panel -> problems += "$name: panel section ${p.id} is declared in ${declared.panel}, not ${p.panel}; refused"
-                p.panel !in Panels.ALL -> problems += "$name: panel section ${p.id} names unknown panel ${p.panel}; refused"
+                p.panel !in knownPanels -> problems += "$name: panel section ${p.id} names unknown panel ${p.panel}; refused"
                 taken != null -> problems += "$name: panel section ${p.id} is already provided by ${taken.module}; skipped"
                 else -> placed[p.id] = p.copy(module = name)
             }
@@ -978,7 +979,7 @@ fun ColumnScope.PanelSections(factory: TabFactory, panel: String, context: TabCo
 }
 
 /** EXAMPLE-1: the factory and window context of the [PanelSections] being drawn, for a section that hosts a [PanelSlot]. */
-private class PanelHost(val factory: TabFactory, val context: TabContext)
+internal class PanelHost(val factory: TabFactory, val context: TabContext)
 
 private val LocalPanelHost = staticCompositionLocalOf<PanelHost?> { null }
 
@@ -993,7 +994,7 @@ fun ColumnScope.PanelSlot(panel: String) {
 }
 
 @Composable
-private fun ColumnScope.PanelSection(factory: TabFactory, section: PanelProvider, context: TabContext) {
+internal fun ColumnScope.PanelSection(factory: TabFactory, section: PanelProvider, context: TabContext) {
     val module = factory.panelModuleOf(section.id)
     val own = context.forModule(factory.servicesOf(section.module))
     Box(Modifier.fillMaxWidth().testTag(section.testTag).let { if (section.fill) it.weight(1f) else it }) {
