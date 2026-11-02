@@ -38,14 +38,8 @@ class ClaudeCodeProvider(
     override val commands: List<com.superiorsoftllc.agenthq.harness.HarnessCommand> =
         com.superiorsoftllc.agenthq.harness.claude.ClaudeCommands.catalog
 
-    override fun spec(request: RunRequest): ProcessSpec = ClaudeCommand.spec(
-        workingDir = request.workingDir,
-        resumeSessionId = request.resumeSessionId,
-        model = request.model,
-        effort = request.effort,
-        toolApproval = request.toolApproval,
-        contextLimit = request.contextLimit,
-    )
+    // H7a: argv, default model and model listing live in ClaudeHarness (one layer); this class only adapts them to AgentProvider.
+    override fun spec(request: RunRequest): ProcessSpec = com.superiorsoftllc.agenthq.harness.claude.ClaudeHarness.specFor(request)
 
     override fun contextLimit(): com.superiorsoftllc.agenthq.harness.ContextLimitCapability =
         com.superiorsoftllc.agenthq.claude.ClaudeContextLimit.CAPABILITY
@@ -55,17 +49,7 @@ class ClaudeCodeProvider(
 
     override fun sessionIdFromLine(line: String): String? = SessionId.fromLine(line)
 
-    /** `AGENTHQ_CLAUDE_MODEL`, or null: no `--model` flag, so the CLI's own configured model applies. */
-    override fun defaultModel(): String? = ClaudeCommand.model()
+    override fun defaultModel(): String? = com.superiorsoftllc.agenthq.harness.claude.ClaudeHarness.defaultModel()
 
-    /**
-     * The `--model` values the user's Claude configuration offers (the CLI has no listing command, so
-     * [ClaudeConfigReader] assembles them from the settings files). A listing that cannot be built is
-     * thrown, so the daemon reports the reason instead of showing a smaller list.
-     */
-    override fun models(): List<ProviderModels> {
-        val c = catalog()
-        val note = (c.notes + listOfNotNull("limited by your availableModels setting".takeIf { c.restricted })).joinToString("; ")
-        return listOf(ProviderModels(id, "anthropic", "Anthropic", c.models, note.takeIf { it.isNotEmpty() }))
-    }
+    override fun models(): List<ProviderModels> = com.superiorsoftllc.agenthq.harness.claude.ClaudeHarness.models(catalog())
 }

@@ -59,6 +59,25 @@ class ClaudeHarness(
     companion object {
         const val HARNESS_ID = "claude"
 
+        /** H7a: the provider-side argv, one place with [defaultSpec] (both end in [ClaudeCommand.spec]). */
+        fun specFor(request: com.superiorsoftllc.agenthq.provider.RunRequest): ProcessSpec = ClaudeCommand.spec(
+            workingDir = request.workingDir,
+            resumeSessionId = request.resumeSessionId,
+            model = request.model,
+            effort = request.effort,
+            toolApproval = request.toolApproval,
+            contextLimit = request.contextLimit,
+        )
+
+        /** H7a: `AGENTHQ_CLAUDE_MODEL`, or null (the CLI's own configured model applies). */
+        fun defaultModel(): String? = ClaudeCommand.model()
+
+        /** H7a: the `--model` values the user's Claude configuration offers; a listing that cannot be built is thrown. */
+        fun models(catalog: com.superiorsoftllc.agenthq.provider.providerconfig.ClaudeCatalog): List<com.superiorsoftllc.agenthq.protocol.ProviderModels> {
+            val note = (catalog.notes + listOfNotNull("limited by your availableModels setting".takeIf { catalog.restricted })).joinToString("; ")
+            return listOf(com.superiorsoftllc.agenthq.protocol.ProviderModels(HARNESS_ID, "anthropic", "Anthropic", catalog.models, note.takeIf { it.isNotEmpty() }))
+        }
+
         /** The real invocation for [request]: model and resume come from the request, never from a guess. */
         fun defaultSpec(
             request: HarnessRequest,
