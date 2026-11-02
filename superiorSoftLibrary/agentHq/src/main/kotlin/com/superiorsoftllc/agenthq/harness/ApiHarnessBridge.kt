@@ -5,6 +5,7 @@ import com.superiorsoftllc.agenthq.harness.api.HarnessHost
 import com.superiorsoftllc.agenthq.runner.PipedProcessRunner
 import com.superiorsoftllc.agenthq.runner.ProcessRunner
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
+import java.io.File
 import com.superiorsoftllc.agenthq.harness.api.Harness as ApiHarness
 import com.superiorsoftllc.agenthq.harness.api.HarnessEvent as ApiEvent
 import com.superiorsoftllc.agenthq.harness.api.HarnessPlugin as ApiPlugin
@@ -56,7 +57,7 @@ class ApiHarnessPluginBridge(
         api.register(object : ApiRegistrar {
             override val host: HarnessHost get() = this@ApiHarnessPluginBridge.host
             override fun register(harness: ApiHarness) {
-                val adapted = ApiCliHarness(id, harness, runner, onFailure, hookAllowed = { kind -> (host as? ModuleHarnessHost)?.hookAllowed(kind) ?: false })
+                val adapted = ApiCliHarness(id, harness, runner, onFailure, hookAllowed = { kind -> (host as? ModuleHarnessHost)?.hookAllowed(kind) ?: false }, host = host)
                 check(declaredIds == null || adapted.id in declaredIds) { "registers harness '${adapted.id.take(40)}', which module.json harness.ids does not declare (${declaredIds.orEmpty().sorted()})" }
                 registered += adapted.id
                 registrar.register(adapted)
@@ -80,6 +81,8 @@ class ApiCliHarness(
     /** H5c / H5d: whether hook [kind] is declared and granted for this plugin's module; the default refuses (no host to ask). */
     private val hookAllowed: (String) -> Boolean = { false },
     private val usageTimeoutMs: Long = USAGE_TIMEOUT_MS,
+    /** H5e: the module's host (its launcher and its own state folder); null = none, so no watch contribution. */
+    private val host: HarnessHost? = null,
 ) : CliHarness(
     runner,
     specFor = { request -> guarded(pluginId, onFailure) { api.process(request.toApi()) }.let { ProcessSpec(it.command, it.workingDir, it.env) } },
@@ -121,6 +124,27 @@ class ApiCliHarness(
                 onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); null
             }
         }
+    }
+
+    /**
+     * H5e: the plugin's watch contribution for a session with env [env], behind the `harness.hook.watch` grant and only when the host's
+     * launcher says watch is ON. Files are written under the module's own state folder; a path that leaves it is refused and skipped.
+     * A throw is attributed and yields no contribution.
+     */
+    override fun watchContribution(env: Map<String, String>): PluginWatch? {
+        if (!hookAllowed("watch")) return null
+        val h = host ?: return null
+        val launcher = h.watchLauncher(env) ?: return null
+        val c = try { api.watch(env, launcher) } catch (t: Throwable) { onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)); null } ?: return null
+        val root = h.stateDir.canonicalFile
+        for ((rel, text) in c.files) {
+            try {
+                val f = File(root, rel).canonicalFile
+                if (!f.path.startsWith(root.path + File.separator)) { h.log("refused watch file outside its data folder: ${rel.take(80)}"); continue }
+                f.parentFile.mkdirs(); f.writeText(text)
+            } catch (t: Throwable) { onFailure(PluginFailure(pluginId, PluginFailurePhase.RUN, t)) }
+        }
+        return PluginWatch(c.extraArgs, c.env)
     }
 
     /** H5d: the module's stats source behind the `harness.hook.stats` grant; a throw in `stats()` or `read` is attributed and yields no row. */

@@ -182,3 +182,6 @@ TEST-TODO: HarnessUsageSourceTest - a granted+declared usage source shows in Lim
 
 ## H5d (Harness.stats, API 2.5.0)
 TEST-TODO: HarnessStatsSourceTest - a granted+declared stats row (start 1000/end 4000, 2 prompts, 55 tokens) is read by SessionStatsService for an unknown harness id with no branch (duration 3000); ungranted/undeclared -> identity-only; throwing source -> identity-only + attributed PluginFailure. Manual: real plugin harness session, open its stats view.
+
+## H5e (Harness.watch, API 2.6.0)
+TEST-TODO: HarnessWatchContributionTest - a granted+declared watch contribution with launcher "L" gives HarnessRegistry.applyWatch argv `echo --runner L` and env W=L; file hook/a.js is written under plugin-data/<Module>/ and ../../evil.txt is refused; ungranted/undeclared/watch-off (launcher null) -> spec unchanged; throwing watch -> spec unchanged + attributed PluginFailure. Manual: real plugin harness with watch ON, check tool calls go through the watched runner.

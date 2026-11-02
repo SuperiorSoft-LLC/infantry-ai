@@ -40,8 +40,11 @@ import java.io.File
  *
  * 2.5.0 (HARNESS H5d, additive): [Harness.stats], the harness's own session store read into the daemon's session stats.
  * Needs module.json `harness.hooks` "stats" (and, for a community module, the `harness.hook.stats` grant).
+ *
+ * 2.6.0 (HARNESS H5e, additive): [Harness.watch], the extra argv / env a harness needs so its tool calls run through the watched runner,
+ * and files it writes in its own [HarnessHost.stateDir]. Needs module.json `harness.hooks` "watch" (and, for a community module, the `harness.hook.watch` grant).
  */
-const val HARNESS_API_VERSION: String = "2.5.0"
+const val HARNESS_API_VERSION: String = "2.6.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
@@ -98,7 +101,23 @@ interface Harness {
 
     /** 2.5.0: reads this harness's own session store for the daemon's session stats, or null (default). A throw is isolated and attributed. */
     fun stats(): HarnessStats? = null
+
+    /**
+     * 2.6.0: how this harness's tool calls are routed through the watched runner [launcher] for a session whose environment is [env]
+     * (called only when watch is ON for that session), or null (default). A throw is isolated and attributed.
+     */
+    fun watch(env: Map<String, String>, launcher: String): WatchContribution? = null
 }
+
+/**
+ * 2.6.0: [extraArgs] are appended to the harness argv, [env] is added to its environment, [files] are written by the host under the
+ * module's own [HarnessHost.stateDir] (relative path -> text; a path that leaves that folder is refused and not written).
+ */
+data class WatchContribution(
+    val extraArgs: List<String> = emptyList(),
+    val env: Map<String, String> = emptyMap(),
+    val files: Map<String, String> = emptyMap(),
+)
 
 /** 2.4.0: one harness's plan limits. [read] may block on I/O (the host bounds it with a timeout) and may throw. */
 fun interface HarnessUsageSource {
