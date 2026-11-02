@@ -46,7 +46,7 @@ object ActionCatalog {
         a("attention.read", READ, E.ATTENTION_LIST),
         a("timeline.read", READ, E.TIMELINE_LIST),
         a("prompts.read", READ, E.PROMPT_LIST, E.PROMPT_GET),
-        a("skills.read", READ, E.SKILL_LIST, E.SKILL_GET),
+        a("skills.read", READ, E.SKILL_LIST, E.SKILL_GET, E.LAYER_SKILL_LIST),
         a("pods.read", READ, E.POD_QUERY),
         a("worktrees.read", READ, E.WORKTREES),
         a("runs.read", READ, E.RUN_LIST),
@@ -106,8 +106,8 @@ object ActionCatalog {
         a("traits.delete", DESTRUCTIVE, E.TRAIT_DELETE),
         a("prompts.save", WRITE, E.PROMPT_SAVE),
         a("prompts.delete", DESTRUCTIVE, E.PROMPT_DELETE),
-        a("skills.save", WRITE, E.SKILL_SAVE),
-        a("skills.delete", DESTRUCTIVE, E.SKILL_DELETE),
+        a("skills.save", WRITE, E.SKILL_SAVE, E.LAYER_SKILL_SAVE),
+        a("skills.delete", DESTRUCTIVE, E.SKILL_DELETE, E.LAYER_SKILL_DELETE),
 
         // Board, triggers, epics, stories, knowledge.
         a("board.ticket.save", WRITE, E.TICKET_SAVE, E.TICKET_LINK, E.TICKET_UNLINK),

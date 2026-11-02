@@ -320,6 +320,18 @@ private fun ProjectConfigDialog(state: AppState, controller: Controller, project
                         error?.let { Text(it, color = Palette.Danger, fontSize = 11.sp) }
                     }
                     ProjectSettingsRegistry.LANES -> LanesTab(state, controller, project, canWrite)
+                    ProjectSettingsRegistry.SKILLS -> {
+                        // SKILLS-GLOBAL-1b: the project layer, plus each role's notes and role-layer skills below it.
+                        androidx.compose.foundation.layout.Column(
+                            Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            LayerSkillsPanel(state, controller, "project", project.id, canWrite = canWrite)
+                            state.roles.forEach { r ->
+                                LayerSkillsPanel(state, controller, "role", project.id, r.id, canWrite = canWrite, roleNotes = r.persona)
+                            }
+                        }
+                    }
                     else -> ToggleSection(state, controller, project, canWrite, tab)
                 }
             }

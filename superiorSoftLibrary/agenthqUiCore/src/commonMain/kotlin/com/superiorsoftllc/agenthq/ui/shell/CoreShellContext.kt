@@ -313,6 +313,8 @@ class CoreSkills(private val state: AppState, private val controller: Controller
     override suspend fun load() = controller.loadSkills()
     override suspend fun save(name: String, description: String, body: String, tagsCsv: String) = controller.saveSkill(name, description, body, tagsCsv)
     override suspend fun delete(id: String) = controller.deleteSkill(id)
+    override val appState: AppState get() = state
+    override val appController: Controller get() = controller
 }
 
 /** S4b: [state]'s worktrees and branch changes and [controller]'s Changes requests, for a pane drawn outside a shell. */

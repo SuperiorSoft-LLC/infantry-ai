@@ -48,7 +48,7 @@ object PiToolBridge {
     /** Big nested schemas or authority a cheap model should not hold (spike mail, point 5d). */
     private val MUTATING: List<String> = listOf(
         "agenthq_ticket_create", "agenthq_ticket_update", "agenthq_ticket_move", "agenthq_ticket_delete", "agenthq_ticket_start",
-        "agenthq_project_config_set", "agenthq_role_create", "agenthq_role_update", "agenthq_role_delete",
+        "agenthq_project_config_set", "agenthq_role_create", "agenthq_role_update", "agenthq_role_delete", "agenthq_skill_save", "agenthq_skill_delete",
         "agenthq_harness_install", "agenthq_pipeline_record", "agenthq_epic_base",
     )
     private val DESTRUCTIVE: List<String> = listOf(

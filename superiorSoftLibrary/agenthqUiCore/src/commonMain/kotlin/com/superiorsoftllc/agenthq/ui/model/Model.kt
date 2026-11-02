@@ -8,6 +8,8 @@ import com.superiorsoftllc.agenthq.ui.protocol.AttentionItem
 import com.superiorsoftllc.agenthq.ui.protocol.CommandCatalogAnswer
 import com.superiorsoftllc.agenthq.ui.protocol.CommandResultAnswer
 import com.superiorsoftllc.agenthq.ui.protocol.Envelope
+import com.superiorsoftllc.agenthq.ui.protocol.LayerSkillItem
+import com.superiorsoftllc.agenthq.ui.protocol.LayerSkillList
 import com.superiorsoftllc.agenthq.ui.protocol.Epic
 import com.superiorsoftllc.agenthq.ui.protocol.FinishedPayload
 import com.superiorsoftllc.agenthq.ui.protocol.MemoryHit
@@ -823,6 +825,8 @@ data class AppState(
     val promptsLoading: Boolean = false,
     /** P10-C: the daemon's last `prompt_*` refusal, shown inline; cleared by the next request or answer. */
     val promptError: String? = null,
+    /** SKILLS-GLOBAL-1b: layered skills by [layerSkillKey] (global / project / role), as the daemon last sent them. */
+    val layerSkills: Map<String, List<LayerSkillItem>> = emptyMap(),
     /** Contract 1.45.0 (P10-D): the saved skills library, ordered by name. */
     val skills: List<SkillView> = emptyList(),
     /** P10-D: a `skill_list` this window sent has not been answered yet. */
@@ -1715,6 +1719,11 @@ private fun apply(s: AppState, env: Envelope, now: Long): AppState = when (env.t
     Envelope.PROMPTS -> {
         val rows = json.decodeFromString(ListSerializer(PromptView.serializer()), env.data)
         s.copy(prompts = rows.sortedBy { it.name.lowercase() }, promptsLoading = false, promptError = null)
+    }
+
+    Envelope.LAYER_SKILLS -> {
+        val l = json.decodeFromString(LayerSkillList.serializer(), env.data)
+        s.copy(layerSkills = s.layerSkills + (l.key to l.skills.sortedBy { it.name.lowercase() }))
     }
 
     // Contract 1.45.0 (P10-D): `skills` is the whole library (a list answer or the post-delete push).

@@ -18,7 +18,10 @@
       { "name": "agenthq_role_get", "action": "roles.read", "kind": "read", "description": "One role in full, with its persona." },
       { "name": "agenthq_role_update", "action": "roles.save", "kind": "write", "description": "Update a role's persona and description." },
       { "name": "agenthq_role_create", "action": "roles.save", "kind": "write", "description": "Create a role (non-agent caller only)." },
-      { "name": "agenthq_role_delete", "action": "roles.delete", "kind": "destructive", "description": "Delete or reset a role (non-agent caller only)." }
+      { "name": "agenthq_role_delete", "action": "roles.delete", "kind": "destructive", "description": "Delete or reset a role (non-agent caller only)." },
+      { "name": "agenthq_skill_list", "action": "skills.read", "kind": "read", "description": "Skills of one layer (global/project/role)." },
+      { "name": "agenthq_skill_save", "action": "skills.save", "kind": "write", "description": "Create or replace a skill in one layer." },
+      { "name": "agenthq_skill_delete", "action": "skills.delete", "kind": "destructive", "description": "Delete a skill from one layer." }
     ]
   },
   "tabs": [
