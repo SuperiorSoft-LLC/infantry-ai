@@ -6196,13 +6196,23 @@ internal fun daemonReady(target: Target, timeoutMs: Long): ReadyInfo? {
     }
 }
 
-private fun openLink(target: Target): Link {
+/** DAEMON-LOG-1: a short stall must not read as "not reachable": connect with a timeout and retry once. */
+private fun openLink(target: Target): Link = try {
+    openLinkOnce(target)
+} catch (e: AuthRefused) {
+    throw e
+} catch (e: Exception) {
+    Thread.sleep(500)
+    openLinkOnce(target)
+}
+
+private fun openLinkOnce(target: Target): Link {
     val recorder = FrameRecorder()
-    val builder = HttpClient.newHttpClient().newWebSocketBuilder()
+    val builder = HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(10)).build().newWebSocketBuilder()
     target.token?.let { builder.header("Authorization", "Bearer $it") }
     val socket = try {
-        builder.buildAsync(URI.create(target.url), recorder).join()
-    } catch (e: CompletionException) {
+        builder.buildAsync(URI.create(target.url), recorder).get(15, java.util.concurrent.TimeUnit.SECONDS)
+    } catch (e: java.util.concurrent.ExecutionException) {
         val cause = e.cause ?: throw e
         if (cause is WebSocketHandshakeException) {
             val status = cause.response?.statusCode()

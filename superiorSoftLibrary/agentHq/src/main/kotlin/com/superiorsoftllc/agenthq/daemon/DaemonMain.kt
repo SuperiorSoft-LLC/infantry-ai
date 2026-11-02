@@ -342,6 +342,8 @@ fun main() {
         System.err.println("[agentHq] WARNING: ${it.message}")
         if (it.refuse) exitProcess(2)
     }
+    // DAEMON-LOG-1: rolling log file in the state dir (no-op when the desktop already installed its own).
+    DaemonLog.install(stateDir())?.also { System.err.println("[agentHq] log file: ${DaemonLog.path(stateDir())}") }
     // BUG-PORT-1-STATEDIR: one daemon per state dir, decided before anything opens the database.
     val stateLock = try {
         StateDirLock.acquire(stateDir())
@@ -1807,7 +1809,9 @@ class AgentHqDaemon(
                     // WEB-1: the browser client, one exact route per bundle file (no path resolution, nothing to traverse).
                     webBundleRoutes(webBundle)
                     webSocket("/ws") {
-                        handleConnection(
+                        val wsPeer = call.request.local.remoteHost
+                        System.err.println("[agentHq] ws connect from $wsPeer")
+                        try { handleConnection(
                             this,
                             manager,
                             worktrees,
@@ -1864,7 +1868,9 @@ class AgentHqDaemon(
                             daemonConfig = daemonConfig,
                             tier = call.attributes.getOrNull(ACCESS_TIER) ?: AccessTier.OWNER,
                             policies = policies,
-                        )
+                        ) } finally {
+                            System.err.println("[agentHq] ws close from $wsPeer: ${runCatching { closeReason.await() }.getOrNull() ?: "no reason"}")
+                        }
                     }
                 }
             }
