@@ -315,8 +315,14 @@ class LocalBoardHost(
             sessionManager()?.get(sessionId)?.let { TicketWorkerHealth.slowToBrief(it, now, graceMs) } ?: false
     }
 
+    private val layeredSkills = com.superiorsoftllc.agenthq.agents.LayeredSkillStore(store, clock)
+
     override val context: BoardContextSources = object : BoardContextSources {
-        override fun knowledgeSection(projectId: String?, role: String?) = knowledge.section(projectId, role)
+        override fun knowledgeSection(projectId: String?, role: String?) =
+            listOfNotNull(
+                knowledge.section(projectId, role),
+                com.superiorsoftllc.agenthq.agents.renderLayeredSkills(layeredSkills.resolve(projectId, role)),
+            ).joinToString("\n\n").ifEmpty { null }
         override fun skillsSection(skillIds: List<String>?, include: Boolean?) = skills.section(skillIds, include)
     }
 
