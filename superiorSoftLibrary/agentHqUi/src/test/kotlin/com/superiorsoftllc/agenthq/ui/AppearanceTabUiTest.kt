@@ -81,7 +81,7 @@ class AppearanceTabUiTest {
 
     private fun factory(withAppearance: Boolean): TabFactory {
         val all = CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.InfantryAgents +
-            com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + (if (withAppearance) listOf(InfantryAppearance) else emptyList())
+            com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.chatfeed.InfantryChatFeed + (if (withAppearance) listOf(InfantryAppearance) else emptyList())
         return TabFactory(all, statuses = all.map { ModuleStatus(it.manifest.name, it.tier, ModuleState.LOADED, manifest = it.manifest) }, configApi = api)
     }
 

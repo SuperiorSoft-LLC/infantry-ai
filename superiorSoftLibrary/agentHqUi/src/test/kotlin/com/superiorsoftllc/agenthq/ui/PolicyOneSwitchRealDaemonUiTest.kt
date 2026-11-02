@@ -116,7 +116,7 @@ class PolicyOneSwitchRealDaemonUiTest {
         val all = CoreModules.all + listOf(
             com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader,
             com.superiorsoftllc.agenthq.plugins.official.InfantryAgents,
-            com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat,
+            com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat, com.superiorsoftllc.agenthq.plugins.official.chatfeed.InfantryChatFeed,
         )
         return TabFactory(all, statuses = all.map { ModuleStatus(it.manifest.name, it.tier, ModuleState.LOADED, manifest = it.manifest) })
     }

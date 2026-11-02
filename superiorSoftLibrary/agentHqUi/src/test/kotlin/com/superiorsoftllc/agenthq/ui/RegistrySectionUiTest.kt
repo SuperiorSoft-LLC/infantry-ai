@@ -98,7 +98,7 @@ class RegistrySectionUiTest {
             return Result.success(stored.values.toList())
         }
     }
-    private val tabs = (CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.InfantryAgents + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.notes.InfantryNotes + InfantryGit + acme).let { all ->
+    private val tabs = (CoreModules.all + com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader + com.superiorsoftllc.agenthq.plugins.official.InfantryAgents + com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat + com.superiorsoftllc.agenthq.plugins.official.chatfeed.InfantryChatFeed + com.superiorsoftllc.agenthq.plugins.official.notes.InfantryNotes + InfantryGit + acme).let { all ->
         TabFactory(all, statuses = all.map { ModuleStatus(it.manifest.name, it.tier, ModuleState.LOADED, manifest = it.manifest) }, configApi = api)
     }
 

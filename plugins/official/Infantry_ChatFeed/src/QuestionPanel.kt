@@ -1,4 +1,4 @@
-package com.superiorsoftllc.agenthq.plugins.official.chat
+package com.superiorsoftllc.agenthq.plugins.official.chatfeed
 
 import com.superiorsoftllc.agenthq.ui.*
 

@@ -89,6 +89,7 @@ kotlin {
             implementation(project(":plugins:official:Infantry_Header"))
             // RUNTIME-22: and the official Infantry_Chat (the centre column: chat and New agent).
             implementation(project(":plugins:official:Infantry_Chat"))
+            implementation(project(":plugins:official:Infantry_ChatFeed"))
             // RUNTIME-23: and the official Infantry_Approvals (the questions pill).
             implementation(project(":plugins:official:Infantry_Approvals"))
             // RUNTIME-24: and the official Infantry_Assistant (the Assistant popup).

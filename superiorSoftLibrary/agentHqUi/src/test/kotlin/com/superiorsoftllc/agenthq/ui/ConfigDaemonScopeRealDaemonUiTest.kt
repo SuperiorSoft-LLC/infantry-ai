@@ -130,7 +130,7 @@ class ConfigDaemonScopeRealDaemonUiTest {
         val all = CoreModules.all + listOf(
             com.superiorsoftllc.agenthq.plugins.official.header.InfantryHeader,
             com.superiorsoftllc.agenthq.plugins.official.InfantryAgents,
-            com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat,
+            com.superiorsoftllc.agenthq.plugins.official.chat.InfantryChat, com.superiorsoftllc.agenthq.plugins.official.chatfeed.InfantryChatFeed,
             com.superiorsoftllc.agenthq.plugins.official.approvals.InfantryApprovals,
             com.superiorsoftllc.agenthq.plugins.official.appearance.InfantryAppearance,
             com.superiorsoftllc.agenthq.plugins.official.assistant.InfantryAssistant,

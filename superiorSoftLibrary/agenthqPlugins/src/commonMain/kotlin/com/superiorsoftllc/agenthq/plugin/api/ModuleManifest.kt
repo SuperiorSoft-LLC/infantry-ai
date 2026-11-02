@@ -66,6 +66,8 @@ data class ModuleManifest(
     val tabs: List<TabDeclaration> = emptyList(),
     /** PLUGINS-3: sections the module adds to the window's side panels (`left`, `right`). */
     val panels: List<PanelDeclaration> = emptyList(),
+    /** SLOTS-1: named child slots this module (the host) draws with `ChildSlot`; any module may add `panels` sections to one by name. */
+    val slots: List<String> = emptyList(),
     val preferences: List<PreferenceDeclaration> = emptyList(),
     val interceptors: List<InterceptorDeclaration> = emptyList(),
     val observers: List<ObserverDeclaration> = emptyList(),

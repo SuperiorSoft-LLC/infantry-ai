@@ -9,6 +9,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.runDesktopComposeUiTest
 import com.superiorsoftllc.agenthq.plugins.official.agents.*
 import com.superiorsoftllc.agenthq.plugins.official.chat.*
+import com.superiorsoftllc.agenthq.plugins.official.chatfeed.*
 import com.superiorsoftllc.agenthq.ui.model.AgentView
 import com.superiorsoftllc.agenthq.ui.model.AppState
 import com.superiorsoftllc.agenthq.ui.model.TimelineItem
@@ -51,7 +52,8 @@ class AutomationVisUiTest {
     }
 
     @Test fun thePanelShowsTurnsSavedAndWakeReasonsButNoRow() = runDesktopComposeUiTest(900, 600) {
-        setContent { AgentChat(agent(), contributions = listOf(stats)) }
+        // CHAT-FEED-SPLIT-1: the stats line is the chat frame's (above the feed slot); the feed draws no row for it.
+        setContent { androidx.compose.foundation.layout.Column { AutomationStatsPanel(stats); AgentChat(agent(), contributions = listOf(stats)) } }
         onNodeWithTag(AUTOMATION_STATS_TAG).assertExists()
         onNodeWithText("turns saved 2", substring = true).assertExists()
         onNodeWithText("owner 1", substring = true).assertExists()

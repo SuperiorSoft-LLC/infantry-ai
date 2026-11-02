@@ -15,6 +15,7 @@ val InfantryChat = AgentHqModule(
     ModuleManifest(
         name = "Infantry_Chat", version = "1.0.0", author = "Infantry AI",
         description = "The centre column: the agent chat, the centre tab strip and the New agent dialog.",
+        slots = listOf("chat.feed"),
         fills = listOf(FillDeclaration(CHAT_FILL_ID)),
         config = listOf(
             ConfigDeclaration(node = "infantry.shell.config.markdownEngine", group = "Markdown engine", tab = "Appearance", order = 40, title = "Markdown engine", keywords = listOf("markdown", "table", "chat", "format", "renderer"), block = "infantry.shell.config.markdownEngine"),

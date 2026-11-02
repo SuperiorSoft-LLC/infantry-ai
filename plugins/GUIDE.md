@@ -194,3 +194,12 @@ A module or seam that must leave the rest of the window as it was proves it with
 `./gradlew :superiorSoftLibrary:agentHqUi:diffTabShots`: every tab is rendered and compared pixel by pixel with the
 committed baseline, and the task fails on any difference. See "Proving pixel-identical" in
 `superiorSoftLibrary/agentHqUi/README.md`.
+
+## Wrapping an existing section in a slot (child plugins)
+
+To make part of a screen replaceable without changing how it looks, the host declares a named slot and draws it with `ChildSlot`; the current content becomes a child plugin's default section.
+
+1. Host: list the slot in module.json `"slots": ["host.part"]` (and `ModuleManifest.slots`), and draw `ChildSlot("host.part", state, controller, modifier, args = mapOf(...))` where the content used to be. The args reach the sections through `LocalSlotArgs`. With nothing installed the slot draws its generic empty state (`SLOT_EMPTY_TAG`); the host has no special case.
+2. Child: declare a section in module.json `panels` (`{"id": "vendor.part", "panel": "host.part"}`) and register a `PanelProvider(order = 0, ...)`. Keep the old node ids and config keys; the host's tree is unchanged.
+3. Anyone else, using only this API: add a section with a lower or higher `order` to draw before or after the default, or replace it with a `preferences` entry (`replace` the default's id `with` yours).
+4. Rows by kind: a list inside the child can be drawn by kind. The child owns a registry name (the feed uses `chat.feed.renderers`), registers `RowRenderer`s with `registrar.implementation(registry, kind, renderer)` and declares them under `implementations`. An unregistered kind draws a generic text row. Daemon-side items carry `kind` and a `meta` payload through the existing `timeline_item` push.

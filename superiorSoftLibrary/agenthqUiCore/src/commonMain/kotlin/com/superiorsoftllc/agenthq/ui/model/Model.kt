@@ -499,10 +499,12 @@ internal fun render(entries: List<TranscriptEntry>): List<OutputLine> {
  * line apart, so reasoning is never merged into the answer text.
  */
 sealed interface ChatItem {
-    data class Line(val line: OutputLine) : ChatItem
-    data class Reasoning(val lines: List<OutputLine>) : ChatItem
+    /** KINDS-1: the string a row renderer is registered under: a line's kind, `reasoning`, or a contribution's own kind (blank = `automation`). */
+    val kind: String
+    data class Line(val line: OutputLine) : ChatItem { override val kind: String get() = line.kind.name.lowercase() }
+    data class Reasoning(val lines: List<OutputLine>) : ChatItem { override val kind: String get() = "reasoning" }
     /** SCRIPT-VIS-1b: a line a plugin contributed (e.g. an automation run); never the agent's own output. */
-    data class Contribution(val item: TimelineItem) : ChatItem
+    data class Contribution(val item: TimelineItem) : ChatItem { override val kind: String get() = item.kind.ifBlank { "automation" } }
 }
 
 /** SCRIPT-VIS-1b: [rows] with the plugin-contributed [items] placed by time (before the first row that is later; trailing ones last). */
@@ -2232,6 +2234,8 @@ data class TimelineItem(
     val details: List<String> = emptyList(), val ok: Boolean = true,
     /** SCRIPT-VIS-1c: structured values of a non-row item (the stats item: turnsSaved, wakes, wakesByReason, lastWake, project*). */
     val meta: Map<String, String> = emptyMap(),
+    /** KINDS-1: which renderer draws this item in a session's feed (a string; blank = the automation row). Any plugin may push its own kind with a [meta] payload. */
+    val kind: String = "",
 ) {
     /** True for an item that is data for a badge / panel, not a chat row. */
     val isStats: Boolean get() = source == AUTOMATION_STATS_SOURCE

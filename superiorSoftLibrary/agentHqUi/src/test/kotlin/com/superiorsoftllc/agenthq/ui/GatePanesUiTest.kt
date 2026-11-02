@@ -19,8 +19,8 @@ import com.superiorsoftllc.agenthq.plugin.api.PolicyWire
 import com.superiorsoftllc.agenthq.plugins.official.attention.InfantryAttention
 import com.superiorsoftllc.agenthq.plugins.official.attention.QUESTION_HISTORY_DISMISS_TAG_PREFIX
 import com.superiorsoftllc.agenthq.plugins.official.board.TICKET_HANDLE_TAG_PREFIX
-import com.superiorsoftllc.agenthq.plugins.official.chat.RESUME_SESSION_TAG
-import com.superiorsoftllc.agenthq.plugins.official.chat.SessionStartPane
+import com.superiorsoftllc.agenthq.plugins.official.chatfeed.RESUME_SESSION_TAG
+import com.superiorsoftllc.agenthq.plugins.official.chatfeed.SessionStartPane
 import com.superiorsoftllc.agenthq.plugins.official.header.EDIT_PROJECT_BUTTON_TAG
 import com.superiorsoftllc.agenthq.plugins.official.header.PROJECT_CONFIG_DIALOG_TAG
 import com.superiorsoftllc.agenthq.plugins.official.header.PROJECT_DIRECTORY_CLEAR_TAG
