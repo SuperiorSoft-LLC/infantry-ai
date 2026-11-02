@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.plugins.official.claude.harness
 
+import com.superiorsoftllc.agenthq.harness.api.HarnessStatEvent
 import com.superiorsoftllc.agenthq.harness.api.HarnessStatsRow
 import com.superiorsoftllc.agenthq.harness.api.HarnessUsageReading
 import com.superiorsoftllc.agenthq.harness.api.HarnessUsageSource
@@ -37,27 +38,44 @@ object ClaudeStats {
         val seenTools = HashSet<String>()
         val models = LinkedHashSet<String>()
         var lastContext: Long? = null
+        val events = ArrayList<HarnessStatEvent>()
         file.bufferedReader().useLines { lines ->
             for (line in lines) {
-                if (line.isBlank() || ("\"user\"" !in line && "\"assistant\"" !in line)) continue
+                if (line.isBlank()) continue
+                // Only user/assistant lines are parsed; the rest (attachments, snapshots) only lend a timestamp.
+                if ("\"user\"" !in line && "\"assistant\"" !in line) {
+                    TIMESTAMP.find(line)?.let { m -> runCatching { Instant.parse(m.groupValues[1]).toEpochMilli() }.getOrNull() }?.let { events += HarnessStatEvent.Seen(it) }
+                    continue
+                }
                 val o = runCatching { json.parseToJsonElement(line) as? JsonObject }.getOrNull() ?: continue
                 val at = o.str("timestamp")?.let { runCatching { Instant.parse(it).toEpochMilli() }.getOrNull() }
                 if (at != null) { if (first == null || at < first!!) first = at; if (last == null || at > last!!) last = at }
+                events += HarnessStatEvent.Seen(at)
                 val message = o["message"] as? JsonObject ?: continue
                 when (o.str("type")) {
-                    "user" -> if (o.str("isMeta") != "true" && o.str("isCompactSummary") != "true" && o.str("isSidechain") != "true" && isPrompt(message["content"])) prompts++
+                    "user" -> {
+                        (message["content"] as? JsonArray)?.forEach { b ->
+                            val block = b as? JsonObject ?: return@forEach
+                            if (block.str("type") == "tool_result") events += HarnessStatEvent.ToolResult(textLength(block["content"]), at)
+                        }
+                        if (o.str("isMeta") != "true" && o.str("isCompactSummary") != "true" && o.str("isSidechain") != "true" && isPrompt(message["content"])) { prompts++; events += HarnessStatEvent.Prompt }
+                    }
                     "assistant" -> {
                         val id = message.str("id")
+                        events += HarnessStatEvent.AssistantAt(at)
                         if (id != null && seenMessages.add(id)) {
                             turns++
-                            message.str("model")?.let { models += it }
+                            val model = message.str("model")
+                            model?.let { models += it }
+                            events += HarnessStatEvent.Turn(model)
                             (message["usage"] as? JsonObject)?.let { u ->
                                 lastContext = listOf("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens").sumOf { u.long(it) }
+                                events += HarnessStatEvent.Request(at, model, u.long("input_tokens"), u.long("output_tokens"), u.long("cache_read_input_tokens"), u.long("cache_creation_input_tokens"))
                             }
                         }
                         (message["content"] as? JsonArray)?.forEach { b ->
                             val block = b as? JsonObject ?: return@forEach
-                            if (block.str("type") == "tool_use") { val tid = block.str("id"); if (tid == null || seenTools.add(tid)) tools++ }
+                            if (block.str("type") == "tool_use") { val tid = block.str("id"); if (tid == null || seenTools.add(tid)) { tools++; events += HarnessStatEvent.Tool(block.str("name") ?: "unknown", at) } }
                         }
                     }
                 }
@@ -65,13 +83,22 @@ object ClaudeStats {
         }
         return HarnessStatsRow(
             startedAt = first, endedAt = last, userPrompts = prompts, assistantTurns = turns, toolUses = tools,
-            models = models.toList(), lastContextTokens = lastContext,
+            models = models.toList(), lastContextTokens = lastContext, events = events,
         )
     }
 
+    private val TIMESTAMP = Regex("\"timestamp\":\"([^\"]+)\"")
+
+    private fun textLength(content: JsonElement?): Int = when (content) {
+        is JsonPrimitive -> content.content.length
+        is JsonArray -> content.sumOf { (it as? JsonObject)?.str("text")?.length ?: 0 }
+        else -> 0
+    }
+
+    /** A real prompt: plain string content, or text blocks with no tool_result (that is a tool's answer). */
     private fun isPrompt(content: JsonElement?): Boolean = when (content) {
-        is JsonPrimitive -> content.contentOrNull?.isNotBlank() == true
-        is JsonArray -> content.any { (it as? JsonObject)?.str("type") == "text" }
+        is JsonPrimitive -> content.isString
+        is JsonArray -> content.none { (it as? JsonObject)?.str("type") == "tool_result" } && content.any { (it as? JsonObject)?.str("type") == "text" }
         else -> false
     }
 

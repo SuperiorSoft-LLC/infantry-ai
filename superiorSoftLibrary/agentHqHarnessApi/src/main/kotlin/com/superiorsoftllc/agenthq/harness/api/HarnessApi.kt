@@ -317,7 +317,20 @@ data class HarnessStatsRow(
     val lastContextTokens: Long? = null,
     val billedTokens: Long? = null,
     val costTotal: Double? = null,
+    /** Ordered record of the session (null = only the totals above); the host folds it into requests, context growth and tool sources. */
+    val events: List<HarnessStatEvent>? = null,
 )
+
+/** One step of a session's record, in order. [Request.cost] only when the harness itself reports one. */
+sealed interface HarnessStatEvent {
+    data class Seen(val at: Long?) : HarnessStatEvent
+    data object Prompt : HarnessStatEvent
+    data class Turn(val model: String?) : HarnessStatEvent
+    data class Request(val at: Long?, val model: String?, val input: Long, val output: Long, val cacheRead: Long, val cacheWrite: Long, val cost: Double? = null) : HarnessStatEvent
+    data class AssistantAt(val at: Long?) : HarnessStatEvent
+    data class Tool(val name: String, val at: Long?) : HarnessStatEvent
+    data class ToolResult(val chars: Int, val at: Long?) : HarnessStatEvent
+}
 
 /**
  * 2.2.0 (EFFORT-1): how a harness honours a reasoning effort. Same states as [ContextLimitSupport].
