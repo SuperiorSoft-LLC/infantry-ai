@@ -69,6 +69,12 @@ const val BOARD_FILL_ID = BOARD_NODE
 /** AR-7: the id of the Board button panel section (module.json "panels"). */
 const val BOARD_BUTTON_PANEL = "infantry.board.button"
 
+/** AR-7 / ANDROID-BOARD-BTN-1: the Board button section; shared by the runtime registrar and the compiled-in module (web, Android). */
+val BoardButtonPanel = PanelProvider(id = BOARD_BUTTON_PANEL, panel = Panels.LEFT_BOARD, order = 0, testTag = "sidebar-board-slot") { ctx ->
+    val chat = LocalShellContext.current?.chat
+    SidebarBoardButton(ctx.state, onOpen = { chat?.showBoard() })
+}
+
 /**
  * NS2 (3b): Infantry_Board (official since RUNTIME-15), the scrum board: the overlay it fills (`infantry.shell.board`,
  * formerly filled by Infantry_AppUi) and its block types, so an exported composition can put a `board.pane` in any slot.
@@ -85,6 +91,7 @@ val InfantryBoard: AgentHqModule = AgentHqModule(
     fills = mapOf(BOARD_FILL_ID to ShellBoard),
     blockTypes = BoardTypes.all,
     sessionBadges = listOf(TicketBadge),
+    panels = listOf(BoardButtonPanel),
 )
 
 
@@ -100,10 +107,7 @@ class BoardPlugin : UiPlugin, ModuleSource {
         BoardTypes.all.forEach { (type, blockType) -> registrar.blockType(type, blockType) }
         registrar.sessionBadge(TicketBadge)
         // AR-7: the sidebar's Board button, in the left panel's left.board slot (first).
-        registrar.panel(PanelProvider(id = BOARD_BUTTON_PANEL, panel = Panels.LEFT_BOARD, order = 0, testTag = "sidebar-board-slot") { ctx ->
-            val chat = LocalShellContext.current?.chat
-            SidebarBoardButton(ctx.state, onOpen = { chat?.showBoard() })
-        })
+        registrar.panel(BoardButtonPanel)
     }
 
     override fun modules(): List<AgentHqModule> = listOf(InfantryBoard)
