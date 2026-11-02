@@ -140,6 +140,7 @@ import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -2525,7 +2526,16 @@ private suspend fun handleConnection(
         Envelope.SETTINGS_GET -> try {
             val all = settings.all()
             val key = envelope.data.trim()
-            val selected = if (key.isEmpty()) {
+            val selected: JsonObject = if (key.startsWith("{")) {
+                // SETTINGS-SCOPES-1: {"key","project"?,"role"?,"session"?,"explain"?}: the effective value, its scope and every layer.
+                val req = json.parseToJsonElement(key).jsonObject
+                fun str(k: String) = (req[k] as? JsonPrimitive)?.contentOrNull
+                val scoped = (settings as? SettingsService ?: throw IllegalArgumentException("this daemon has no scoped settings")).scoped
+                val ctx = com.superiorsoftllc.agenthq.settings.SettingContext(str("project"), str("role"), str("session"))
+                val k = str("key")?.trim().orEmpty().ifEmpty { throw IllegalArgumentException("settings_get needs a key") }
+                val resolved = scoped.resolve(k, ctx).toJson()
+                if (str("explain") == "true") JsonObject(resolved + ("explain" to JsonPrimitive(scoped.explain(k, ctx)))) else resolved
+            } else if (key.isEmpty()) {
                 all
             } else {
                 val value = all[key] ?: throw IllegalArgumentException("unknown setting '$key'")
@@ -3290,8 +3300,17 @@ private suspend fun handleConnection(
 
                 Envelope.SETTINGS_SET -> try {
                     val request = SettingsSet.decode(envelope.data)
-                    val updated = settings.set(request.key, request.value)
-                    Envelope(Envelope.SETTINGS, json.encodeToString(JsonObject.serializer(), updated))
+                    val scope = com.superiorsoftllc.agenthq.settings.SettingScope.parse(request.scope ?: "app")
+                    if (scope != com.superiorsoftllc.agenthq.settings.SettingScope.APP) {
+                        // SETTINGS-SCOPES-1: a scoped write answers with the resolved value, scope and layers of the key.
+                        val ctx = com.superiorsoftllc.agenthq.settings.SettingContext(request.project, request.role, request.session)
+                        val value = request.value.takeIf { it !is kotlinx.serialization.json.JsonNull }
+                        val resolved = (settings as? SettingsService ?: throw IllegalArgumentException("this daemon has no scoped settings")).scoped.set(request.key, value, scope, ctx)
+                        Envelope(Envelope.SETTINGS, json.encodeToString(JsonObject.serializer(), resolved.toJson()))
+                    } else {
+                        val updated = settings.set(request.key, request.value)
+                        Envelope(Envelope.SETTINGS, json.encodeToString(JsonObject.serializer(), updated))
+                    }
                 } catch (e: IllegalArgumentException) {
                     Envelope(Envelope.ERROR, "settings_set refused: ${e.message ?: "invalid request"}")
                 } catch (e: Exception) {

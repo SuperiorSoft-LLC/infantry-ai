@@ -521,6 +521,11 @@ data class TicketReorder(
 data class SettingsSet(
     val key: String,
     val value: JsonElement,
+    /** SETTINGS-SCOPES-1: `app` (default) | `project` | `role` | `session`; the ids below pick the target. A JSON null value clears the key at that scope. */
+    val scope: String? = null,
+    val project: String? = null,
+    val role: String? = null,
+    val session: String? = null,
 ) {
     companion object {
         fun decode(text: String): SettingsSet = StrictJson.decode(serializer(), text, "settings_set payload")

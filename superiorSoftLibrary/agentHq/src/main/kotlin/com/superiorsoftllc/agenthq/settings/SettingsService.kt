@@ -39,6 +39,9 @@ class SettingsService(
     @Volatile
     var onKeepAliveChanged: (() -> Unit)? = null
 
+    /** SETTINGS-SCOPES-1: the layered view (session > role > project > app > default) over this service. */
+    val scoped: ScopedSettings by lazy { ScopedSettings(store, this) }
+
     /**
      * CONFIG-8: the field a plugin declared for a flat settings [key] (`daemon.config`, `scope:"daemon"`); null = none. [set] falls
      * back to its validator for a key it has no `when` for. The daemon points it at its [com.superiorsoftllc.agenthq.daemon.DaemonConfig].
@@ -353,6 +356,20 @@ class SettingsService(
     }
 
     override fun set(key: String, value: JsonElement): JsonObject {
+        val stored = validated(key, value)
+        store.settings.put(
+            SettingRow(
+                key = key,
+                value = stored.toString(),
+                updatedAt = System.currentTimeMillis(),
+            ),
+        )
+        if (key == KEEP_ALIVE_MINUTES) runCatching { onKeepAliveChanged?.invoke() }
+        return all()
+    }
+
+    /** SETTINGS-SCOPES-1: [value] as it would be stored for [key]; refuses an unknown key or an invalid value. Shared by every scope. */
+    fun validated(key: String, value: JsonElement): JsonElement {
         val stored: JsonElement = when (key) {
             INCLUDE_LINKED_TASKS_CONTEXT, INCLUDE_SKILLS_CONTEXT, INCLUDE_FINISH_INSTRUCTIONS -> JsonPrimitive(requireBoolean(key, value))
             SKILL_IDS -> JsonArray(requireSkillIds(value).map(::JsonPrimitive))
@@ -413,15 +430,7 @@ class SettingsService(
                 ?: declaredField(key)?.let { com.superiorsoftllc.agenthq.plugin.api.ConfigFieldValidator.validate(it, value) }
                 ?: throw IllegalArgumentException("unknown setting '$key'")
         }
-        store.settings.put(
-            SettingRow(
-                key = key,
-                value = stored.toString(),
-                updatedAt = System.currentTimeMillis(),
-            ),
-        )
-        if (key == KEEP_ALIVE_MINUTES) runCatching { onKeepAliveChanged?.invoke() }
-        return all()
+        return stored
     }
 
     /**

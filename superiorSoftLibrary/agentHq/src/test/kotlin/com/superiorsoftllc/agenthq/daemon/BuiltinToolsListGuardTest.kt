@@ -53,7 +53,7 @@ class BuiltinToolsListGuardTest {
             "Infantry_Agents" to listOf("agenthq_progress", "agenthq_list_sessions", "agenthq_get_session", "agenthq_pod_state",
                 // RUNTIME-LOAD-7 (F5 last): the spawn family, over the host spawn service.
                 "agenthq_spawn", "agenthq_prompt", "agenthq_kill", "agenthq_session_restart", "agenthq_session_remove"),
-            "Infantry_Settings" to listOf("agenthq_project_config_get", "agenthq_project_config_set"),
+            "Infantry_Settings" to listOf("agenthq_project_config_get", "agenthq_project_config_set", "agenthq_settings_get", "agenthq_settings_set"),
             // RUNTIME-LOAD-8: the COMMS mail tools and the project pipeline tools.
             "Infantry_Chat" to listOf("agenthq_inbox", "agenthq_read", "agenthq_message"),
             // BOARD-API-2: the ticket read tools (the files pair moved earlier, with TICKET-FILES).
