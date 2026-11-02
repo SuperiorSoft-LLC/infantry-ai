@@ -321,7 +321,7 @@ class LocalBoardHost(
         override fun knowledgeSection(projectId: String?, role: String?) =
             listOfNotNull(
                 knowledge.section(projectId, role),
-                com.superiorsoftllc.agenthq.agents.renderLayeredSkills(layeredSkills.resolve(projectId, role)),
+                com.superiorsoftllc.agenthq.agents.renderLayeredSkills(layeredSkills.resolve(projectId, role), com.superiorsoftllc.agenthq.agents.LayerSkillWire.inlineMax(store)),
             ).joinToString("\n\n").ifEmpty { null }
         override fun skillsSection(skillIds: List<String>?, include: Boolean?) = skills.section(skillIds, include)
     }

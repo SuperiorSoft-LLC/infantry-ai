@@ -462,7 +462,7 @@ internal object Cli {
                 "script" -> ScriptCli.run(stream, parsed.args, parsed.body?.let { if (it == "-") input().use { r -> r.readText() } else it } ?: parsed.file?.let { f -> runCatching { File(f).readText() }.getOrNull() }, out, err, getenv)
                 "issue" -> issue(stream, parsed, out, err, getenv)
                 "trait" -> trait(stream, parsed, out, err, input)
-                "skill" -> skill(stream, parsed, out, err)
+                "skill" -> if (parsed.scope != null || parsed.args.first() in setOf("create", "update", "delete")) layerSkill(stream, parsed, out, err, getenv, input) else skill(stream, parsed, out, err)
                 "role" -> role(stream, parsed, out, err, getenv, input)
                 "ask" -> ask(stream, parsed, out, err, getenv)
                 "usage" -> runBlocking { UsageCli.run(stream, parsed.args, out, err) }
@@ -3991,6 +3991,59 @@ internal object Cli {
     // skills (P10-K14, docs/AGENTHQ-PHASE10-KNOWLEDGE.md section 6; frames of contract 1.45.0 / 1.56.0)
     // ------------------------------------------------------------------------
 
+    /**
+     * SKILLS-GLOBAL-1b: `skill list|create|update|delete --scope global|project|role`. Project and role take the project from
+     * `--project` or the caller's environment, a role from `--role` or AGENTHQ_ROLE. A body comes from `--body <text|->` or `--file`.
+     */
+    private fun layerSkill(
+        stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable,
+        getenv: (String) -> String?, input: () -> Reader,
+    ): Int = runBlocking {
+        checkContract(stream, err)
+        val sub = parsed.args.first()
+        val scope = parsed.scope!!.trim().lowercase()
+        val name = parsed.args.drop(1).joinToString(" ").trim()
+        val body = when {
+            parsed.body == "-" -> input().use { it.readText() }
+            parsed.body != null -> parsed.body
+            parsed.file != null -> try { File(parsed.file).readText() } catch (e: Exception) {
+                err.appendLine("error: cannot read --file ${parsed.file}: ${e.message}"); return@runBlocking 1
+            }
+            else -> null
+        }
+        val projectId = if (scope == "global") null else (parsed.project?.trim() ?: getenv(AccessPolicy.PROJECT_ID_ENV)?.takeIf { it.isNotBlank() })
+        val role = if (scope == "role") (parsed.role?.trim() ?: getenv("AGENTHQ_ROLE")?.takeIf { it.isNotBlank() }) else null
+        fun request(b: String?, d: String) = com.superiorsoftllc.agenthq.protocol.LayerSkillRequest(scope, projectId, role, name.ifEmpty { null }, d, b)
+        fun frame(type: String, r: com.superiorsoftllc.agenthq.protocol.LayerSkillRequest) =
+            Envelope(type, json.encodeToString(com.superiorsoftllc.agenthq.protocol.LayerSkillRequest.serializer(), r))
+        val ser = ListSerializer(com.superiorsoftllc.agenthq.protocol.LayerSkillView.serializer())
+        suspend fun listed(): List<com.superiorsoftllc.agenthq.protocol.LayerSkillView> =
+            json.decodeFromString(ser, stream.request(frame(Envelope.LAYER_SKILL_LIST, request(null, "")), answerType = Envelope.LAYER_SKILLS, what = "layer_skill_list", idempotent = true).data)
+        when (sub) {
+            "list" -> {
+                val all = listed()
+                if (all.isEmpty()) out.appendLine("No $scope skills.") else all.forEach { out.appendLine(if (it.description.isEmpty()) it.name else "${it.name}: ${it.description}") }
+            }
+            "show" -> {
+                val s = listed().firstOrNull { it.name == name }
+                if (s == null) { err.appendLine("error: unknown $scope skill '$name'"); return@runBlocking 1 }
+                out.appendLine("NAME: ${s.name}\nSCOPE: ${s.scope}\nDESCRIPTION: ${s.description.ifEmpty { "-" }}\n\n${s.body}")
+            }
+            "create", "update" -> {
+                val existing = listed().firstOrNull { it.name == name }
+                if (sub == "create" && existing != null) { err.appendLine("error: $scope skill '$name' exists: use skill update"); return@runBlocking 1 }
+                if (sub == "update" && existing == null) { err.appendLine("error: unknown $scope skill '$name': use skill create"); return@runBlocking 1 }
+                stream.request(frame(Envelope.LAYER_SKILL_SAVE, request(body ?: existing?.body, parsed.description ?: existing?.description.orEmpty())), answerType = Envelope.LAYER_SKILLS, what = "layer_skill_save", idempotent = true)
+                out.appendLine("saved $scope skill $name")
+            }
+            "delete" -> {
+                stream.request(frame(Envelope.LAYER_SKILL_DELETE, request(null, "")), answerType = Envelope.LAYER_SKILLS, what = "layer_skill_delete", idempotent = false)
+                out.appendLine("deleted $scope skill $name")
+            }
+        }
+        0
+    }
+
     /** `skill <list|show>`: [validateArgs] has refused a missing subcommand or name. Skills are daemon-wide, no project. */
     private fun skill(stream: FrameStream, parsed: ParsedArgs, out: Appendable, err: Appendable): Int = runBlocking {
         checkContract(stream, err)
@@ -4044,6 +4097,17 @@ internal object Cli {
     /** The usage error for a `skill` invocation, or null. Skills are daemon-wide: no project is needed. */
     private fun skillUsageError(parsed: ParsedArgs): String? {
         val args = parsed.args
+        if (parsed.scope != null || args.firstOrNull() in setOf("create", "update", "delete")) {
+            val scope = parsed.scope?.trim()?.lowercase()
+            val sub = args.firstOrNull()
+            return when {
+                scope !in setOf("global", "project", "role") -> "skill $sub needs --scope global|project|role"
+                sub !in setOf("list", "show", "create", "update", "delete") -> "skill --scope takes list | show <name> | create <name> | update <name> | delete <name>"
+                sub != "list" && args.drop(1).joinToString(" ").isBlank() -> "skill $sub requires a skill name"
+                sub == "create" && parsed.body == null && parsed.file == null -> "skill create requires --body <text|-> (or --file)"
+                else -> null
+            }
+        }
         return when (args.firstOrNull()) {
             "list" -> if (args.size > 1) "skill list takes no arguments: agenthq skill list" else null
             "show" -> if (args.drop(1).joinToString(" ").isBlank()) "skill show requires a skill name or id: agenthq skill show <name|id>" else null

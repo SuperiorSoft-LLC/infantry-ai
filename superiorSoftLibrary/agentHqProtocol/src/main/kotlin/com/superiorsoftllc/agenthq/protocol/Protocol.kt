@@ -324,6 +324,12 @@ data class Envelope(
         const val SKILL_ITEM = "skill_item"
         const val SKILLS = "skills"
 
+        // SKILLS-GLOBAL-1b: layered skills (global/project/role); data = LayerSkillRequest. save/delete -> `layer_skills` of that scope, pushed to all.
+        const val LAYER_SKILL_SAVE = "layer_skill_save"
+        const val LAYER_SKILL_LIST = "layer_skill_list"
+        const val LAYER_SKILL_DELETE = "layer_skill_delete"
+        const val LAYER_SKILLS = "layer_skills"
+
         // Contract 1.48.0 (TRAITS-T1): the trait library. `trait_save` (TraitSave, save-as-update by id) -> `trait_item`, pushed
         // to all; `trait_list` -> `traits`; `trait_get` (data = id) -> `trait_item`; `trait_delete` (data = id) -> `traits`, pushed to all.
         const val TRAIT_SAVE = "trait_save"

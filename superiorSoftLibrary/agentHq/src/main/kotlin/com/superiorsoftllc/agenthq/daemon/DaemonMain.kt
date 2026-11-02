@@ -1839,6 +1839,7 @@ class AgentHqDaemon(
                             knowledge,
                             modelCatalogs,
                             skillsSource,
+                            com.superiorsoftllc.agenthq.agents.LayeredSkillStore(store),
                             spawnGuard,
                             limits = limits,
                             usagePacing = usagePacing,
@@ -2383,6 +2384,8 @@ private suspend fun handleConnection(
     modelCatalogs: com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs = com.superiorsoftllc.agenthq.provider.HarnessModelCatalogs.EMPTY,
     /** P10-K15: the `skills` section every first turn renders after `knowledge`. */
     skillsSource: com.superiorsoftllc.agenthq.agents.SkillsSource = com.superiorsoftllc.agenthq.agents.SkillsSource.NONE,
+    /** SKILLS-GLOBAL-1b: the layered skill store behind `layer_skill_*` (null = those frames are refused). */
+    layerSkills: com.superiorsoftllc.agenthq.agents.LayeredSkillStore? = null,
     /** BUG-G2d: bounds the spawns a frame naming its session (`pod_submit` / `new`) may make. */
     spawnGuard: SpawnGuard = SpawnGuard(manager::get),
     /** U1: the plan-limit meters a `limits` request reads. */
@@ -2962,6 +2965,10 @@ private suspend fun handleConnection(
                 } catch (e: Exception) {
                     Envelope(Envelope.ERROR, "skill_save failed: ${e.message ?: e::class.simpleName}")
                 }
+                // SKILLS-GLOBAL-1b: the layered (global/project/role) skills.
+                Envelope.LAYER_SKILL_SAVE, Envelope.LAYER_SKILL_LIST, Envelope.LAYER_SKILL_DELETE ->
+                    layerSkills?.let { ls -> com.superiorsoftllc.agenthq.agents.LayerSkillWire(ls) { push -> for (client in clients) client.trySend(push) }.handle(envelope) }
+                        ?: Envelope(Envelope.ERROR, "${envelope.type} refused: layered skills are not available")
                 Envelope.SKILL_LIST -> Envelope(Envelope.SKILLS, json.encodeToString(ListSerializer(SkillView.serializer()), skills.list(envelope.data)))
                 // Contract 1.56.0 (P10-K12): data is an id OR an exact name (ids are tried first).
                 Envelope.SKILL_GET -> skills.find(envelope.data)

@@ -24,7 +24,7 @@ object AgentFrames {
         "memory_search", "memory_list", "memory_get", "memory_save", "decision_list", "decision_get", "decision_add",
         "issue_list", "issue_get", "issue_open", "issue_attempt", "issue_fix", "issue_precheck",
         "providers", "models", "settings_get", "limit_catalog", "limits", "usage_get", "role_list", "role_binding_list",
-        "role_binding_get", "skill_list", "skill_get", "trait_list", "trait_get", "role_traits_get", "role_traits_list",
+        "role_binding_get", "skill_list", "skill_get", "layer_skill_list", "trait_list", "trait_get", "role_traits_get", "role_traits_list",
         "pod_query", "agent_list", "agent_roster", "session_stats_get", "attention_list", "project_get", "project_list",
         "epic_list", "story_get", "story_list", "pipeline_show", "command_list", "prompt_list", "prompt_get",
     )
