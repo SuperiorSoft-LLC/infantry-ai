@@ -55,6 +55,7 @@ class NamedEventBus(
         val DAEMON_EVENTS = listOf(
             "ticket.created", "ticket.moved", "ticket.updated", "ticket.deleted", "ticket.commented",
             "session.started", "session.idle", "session.ended", "session.woken", "mail.sent",
+            "session.turn_started", "session.turn_ended", "session.tool_call", "session.output", "session.error",
         )
     }
 }

@@ -38,6 +38,8 @@ class CoreDaemonServices(
     /** A never-run session's first turn: persona, identity and notes around [prompt]. */
     private val firstTurn: (SessionRecord, String) -> String,
     private val limits: (com.superiorsoftllc.agenthq.settings.LimitDef) -> Long = { it.default },
+    /** SCRIPT-SESSION-1: marks a built-in notice (name, session or null, millis) as suppressed. */
+    private val noticeSuppressor: (String, String?, Long) -> Unit = { _, _, _ -> },
     /** DP-4a: the local binding of tickets / epics / board; null = a daemon without a board (every call Unavailable). */
     private val boardServices: LocalBoardServices? = null,
     /** DP-4b: the ticket event stream; null = none. */
@@ -101,6 +103,12 @@ class CoreDaemonServices(
             return info(manager.resume(id, turn))
         }
         override fun restart(id: String) { manager.restart(id) }
+        override fun status(id: String): com.superiorsoftllc.agenthq.daemon.api.SessionStatus? = manager.get(id)?.let { com.superiorsoftllc.agenthq.session.SessionActivityLog.overlay(it) }?.let {
+            com.superiorsoftllc.agenthq.daemon.api.SessionStatus(it.id, it.state.name, it.lastAction, it.lastOutputAt, it.lastEventAt)
+        }
+        override fun recentLines(id: String, max: Int): List<String> = com.superiorsoftllc.agenthq.session.SessionFeed.recent(id, max)
+        override fun interrupt(id: String): Boolean = manager.get(id)?.let { runCatching { manager.interrupt(id) }.isSuccess } ?: false
+        override fun suppressNotice(name: String, sessionId: String?, ms: Long) = noticeSuppressor(name, sessionId, ms)
         override fun setAutomation(id: String, mark: AutomationMark?) { manager.setAutomation(id, mark?.let { SessionAutomation(it.script, it.hookId, it.since) }) }
     }
 

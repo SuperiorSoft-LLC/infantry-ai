@@ -1519,6 +1519,7 @@ class AgentHqDaemon(
                         // STACK-NEUTRAL-2: api.processes / api.launchEnv / api.settings.
                         processHost = localProcesses, launchEnvHost = launchEnvHost,
                         pluginSettings = settings.forPlugins(),
+                        noticeSuppressor = { name, session, ms -> nudgeGate.suppress(name, session, ms) },
                         // PACE-TREND-1: api.meters, the current reading of every provider window (the cached live read).
                         meters = com.superiorsoftllc.agenthq.usage.PacingMeters(usagePacing, requestSource = { since -> usageMeter?.requestsSince(since).orEmpty() }),
                         // DP-7e: api.sessionNotifier, over the mail router.
@@ -1648,6 +1649,9 @@ class AgentHqDaemon(
                     ?.let { v -> MailRouter.MailVerdictInfo(v.handled, v.text) }
             }
             manager.addSessionEndedListener(eventPublisher::sessionEnded)
+            // SCRIPT-SESSION-1: tool calls, output and errors of every session as named events (rate limited), and a readable chat ring.
+            com.superiorsoftllc.agenthq.session.SessionFeed.sink = { name, payload -> runCatching { plugins.publishEvent(name, payload) } }
+            manager.addSessionEndedListener(com.superiorsoftllc.agenthq.session.SessionFeed::forget)
             ticketEvents?.subscribe("core:named-events", eventPublisher::ticket)
             println("[agentHq] reconcile: ${manager.loadAndReconcile()}")
             worktrees.reconcile(manager.list().mapNotNull { it.toWorktreeRef() })
@@ -2001,10 +2005,15 @@ private fun broadcast(
                 val moved = runActivity.line(event.sessionId, line)
                 when (line) {
                     is EventNormalizer.Line.Tool -> {
+                        com.superiorsoftllc.agenthq.session.SessionFeed.tool(event.sessionId, (if (line.activity.isNullOrBlank()) line.name else "${line.name}: ${line.activity}"))
                         onWait(event.sessionId, line.waitSeconds)
                         line.todos?.let { t -> onTodos(event.sessionId, t.map { it.text to it.status }) }
                     }
-                    EventNormalizer.Line.ToolEnd, is EventNormalizer.Line.Text, is EventNormalizer.Line.Reasoning -> onWait(event.sessionId, null)
+                    EventNormalizer.Line.ToolEnd, is EventNormalizer.Line.Text, is EventNormalizer.Line.Reasoning -> {
+                        if (line is EventNormalizer.Line.Text) com.superiorsoftllc.agenthq.session.SessionFeed.text(event.sessionId, line.delta)
+                        onWait(event.sessionId, null)
+                    }
+                    is EventNormalizer.Line.Failure -> com.superiorsoftllc.agenthq.session.SessionFeed.error(event.sessionId, line.message)
                     else -> Unit
                 }
                 com.superiorsoftllc.agenthq.session.SessionActivityLog.output(

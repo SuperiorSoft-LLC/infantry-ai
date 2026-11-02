@@ -60,7 +60,7 @@ class NamedEventsTest {
         pub.ticket(TicketEvent(3, "t2", TicketEvent.CREATED, null, "todo"))
         pub.sessionStatus("s1", "BUSY", "backend", "p"); pub.sessionStatus("s1", "IDLE", "backend", "p"); pub.sessionStatus("s1", "IDLE", "backend", "p")
         pub.sessionEnded("s1")
-        assertEquals(listOf("ticket.moved", "ticket.moved", "ticket.created", "session.started", "session.idle", "session.ended"), out.map { it.first })
+        assertEquals(listOf("ticket.moved", "ticket.moved", "ticket.created", "session.started", "session.turn_started", "session.idle", "session.turn_ended", "session.ended"), out.map { it.first })
         assertTrue("\"from\":\"todo\"" in out[0].second && "\"to\":\"in_progress\"" in out[0].second)
         assertTrue(out.map { it.first }.all { it in NamedEventBus.DAEMON_EVENTS })
     }

@@ -9,14 +9,37 @@ package com.superiorsoftllc.agenthq.mailbox
 class NudgeGate(
     private val emit: (name: String, payload: Map<String, String>) -> Unit,
     private val defers: (name: String) -> Boolean,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
+    private class Mute(val name: String, val sessionId: String?, val until: Long)
+    private val mutes = java.util.concurrent.CopyOnWriteArrayList<Mute>()
+
+    /**
+     * SCRIPT-SESSION-1: a hook marks notices of [name] (a nudge name, or `*`) as suppressed for [ms] millis, for one session or (null) any.
+     * The built-in sends nothing while the mark lasts; the event still fires. Marks are capped in number and expire by themselves.
+     */
+    fun suppress(name: String, sessionId: String?, ms: Long) {
+        val now = clock()
+        mutes.removeIf { it.until <= now }
+        if (mutes.size >= MAX_MUTES) mutes.removeAt(0)
+        mutes.add(Mute(name, sessionId?.takeIf { it.isNotBlank() }, now + ms.coerceIn(1_000L, MAX_MUTE_MS)))
+    }
+
+    fun suppressed(name: String, sessionId: String?): Boolean {
+        val now = clock()
+        return mutes.any { it.until > now && (it.name == "*" || it.name == name) && (it.sessionId == null || it.sessionId == sessionId) }
+    }
+
     /** True when the built-in must NOT send its own nudge: a hook owns it. Emit failures never block the default. */
     fun handled(name: String, payload: Map<String, String>): Boolean {
         runCatching { emit(name, payload) }
+        if (suppressed(name, payload["sessionId"])) return true
         return runCatching { defers(name) }.getOrDefault(false)
     }
 
     companion object {
+        const val MAX_MUTES = 100
+        const val MAX_MUTE_MS = 3_600_000L
         val NONE = NudgeGate({ _, _ -> }, { false })
         const val SETTING = "nudges.deferToHooks"
         const val TICKET_FINISHED = "notice.ticket_finished"

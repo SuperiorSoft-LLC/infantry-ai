@@ -50,6 +50,14 @@ class ScriptingDaemonPlugin : DaemonPlugin {
             { api.sessions.get(it)?.projectId }, { runCatching { api.events.broadcast(TIMELINE_ITEM, it.toString()) } }, runLog::addNote,
             { id, text -> api.sessions.resume(id, text) },
         ).tool)
+        // SCRIPT-SESSION-1: read a session's state/chat, act on its turn, suppress a built-in notice.
+        val sessionTools = SessionTools(
+            { api.sessions.get(it) }, { api.sessions.status(it) }, { id, n -> api.sessions.recentLines(id, n) }, { api.sessions.interrupt(it) },
+            { name, session, ms -> api.sessions.suppressNotice(name, session, ms) },
+        )
+        api.tools.register(sessionTools.read)
+        api.tools.register(sessionTools.act)
+        api.tools.register(sessionTools.suppressNotice)
         api.tools.register(tools.run)
         api.tools.register(tools.api)
         // SCRIPT-5: hooks are data (hooks.json); one subscription on the named-event bus runs them.
