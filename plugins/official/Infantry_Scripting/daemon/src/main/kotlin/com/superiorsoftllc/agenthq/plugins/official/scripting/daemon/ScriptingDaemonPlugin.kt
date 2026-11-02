@@ -49,6 +49,9 @@ class ScriptingDaemonPlugin : DaemonPlugin {
         api.tools.register(ChatNoteTools(
             { api.sessions.get(it)?.projectId }, { runCatching { api.events.broadcast(TIMELINE_ITEM, it.toString()) } }, runLog::addNote,
             { id, text -> api.sessions.resume(id, text) },
+            forwardImage = { args, call ->
+                api.tools.invoke("agenthq_chat_image", args, com.superiorsoftllc.agenthq.daemon.api.ToolInvoker(call.caller, call.clientSessionId, call.clientRole, call.clientProjectId, "chat_note"))
+            },
         ).tool)
         // SCRIPT-SESSION-1: read a session's state/chat, act on its turn, suppress a built-in notice.
         val sessionTools = SessionTools(

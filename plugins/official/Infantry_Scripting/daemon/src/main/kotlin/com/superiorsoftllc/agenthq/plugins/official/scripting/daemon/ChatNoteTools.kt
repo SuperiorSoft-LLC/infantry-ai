@@ -22,6 +22,8 @@ class ChatNoteTools(
     private val push: (JsonObject) -> Unit,
     private val store: (JsonObject) -> Unit,
     private val wakeSession: (String, String) -> Unit,
+    /** CHAT-IMAGE-1: a call carrying `image` is handed to agenthq_chat_image, which validates and stores it and posts back here with `storedImage`. */
+    private val forwardImage: ((JsonObject, com.superiorsoftllc.agenthq.daemon.api.ToolCall) -> ToolResult)? = null,
     private val clock: () -> Long = System::currentTimeMillis,
     private val maxChars: Int = 400,
     private val perMinute: Int = 20,
@@ -35,7 +37,7 @@ class ChatNoteTools(
             "No turn, no inbox entry, no mail unless wake=true (then the agent also gets the text as a short prompt: use it for real exceptions only). Same project only, " +
             "rate limited, text capped at $maxChars characters. Script: ih.chat_note{sessionId=..., text=..., level='ok'}."
         override val inputSchema: JsonObject = Json.parseToJsonElement(
-            """{"type":"object","properties":{"sessionId":{"type":"string","description":"target session (default: the caller's own)"},"text":{"type":"string","description":"the status line"},"level":{"type":"string","description":"info (default) | ok | fail"},"wake":{"type":"boolean","description":"also prompt the agent with the text (default false)"}},"required":["text"]}""",
+            """{"type":"object","properties":{"sessionId":{"type":"string","description":"target session (default: the caller's own)"},"text":{"type":"string","description":"the status line"},"level":{"type":"string","description":"info (default) | ok | fail"},"wake":{"type":"boolean","description":"also prompt the agent with the text (default false)"},"image":{"type":"string","description":"a file inside the project (or uploaded image id) shown inline with the line"}},"required":["text"]}""",
         ).jsonObject
         override fun call(call: ToolCall): ToolResult = handle(call)
     }
@@ -44,6 +46,7 @@ class ChatNoteTools(
         val a = call.arguments
         fun s(k: String) = (a[k] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
         val text = s("text") ?: return refuse("needs text")
+        s("image")?.let { img -> return (forwardImage ?: return refuse("images are not available here")).invoke(buildJsonObject { a.forEach { (k, v) -> if (k != "image") put(k, v) }; put("path", img); put("caption", text) }, call) }
         val level = (s("level") ?: "info").lowercase().also { if (it !in LEVELS) return refuse("level must be info, ok or fail (got '$it')") }
         val target = s("sessionId") ?: call.clientSessionId ?: return refuse("needs sessionId")
         val targetProject = projectOf(target) ?: return refuse("unknown session $target")
@@ -60,7 +63,12 @@ class ChatNoteTools(
         val item = buildJsonObject {
             put("id", "note-$callerProject-$now-${seq.incrementAndGet()}"); put("sessionId", target); put("at", now); put("source", "automation")
             put("label", "AUTOMATION · note"); put("text", "AUTOMATION · $shown${if (level == "fail") " · FAILED" else ""}"); put("ok", level != "fail")
-            put("meta", buildJsonObject { put("level", level) })
+            put("meta", buildJsonObject {
+                put("level", level)
+                // CHAT-IMAGE-1: set by agenthq_chat_image after it validated and stored the file; only a stored chat upload path is accepted.
+                s("storedImage")?.takeIf { it.replace("\\", "/").contains("/.agenthq/uploads/chat/") && !it.contains("..") }?.let { put("image", it) }
+                s("imageData")?.takeIf { it.length <= 2_100_000 }?.let { put("imageData", it) }
+            })
         }
         runCatching { store(item) }
         runCatching { push(item) }

@@ -610,7 +610,10 @@ fun ChatLine(
         when (line.kind) {
             LineKind.TEXT -> CommsCard(AgentReplyCardStyle, line.at) {
                 val md = LocalChatMarkdown.current
-                ChatBlocks(chatLineBlocks(line.kind, line.text, md.engine).orEmpty(), md.renderers)
+                val host = LocalPlatformHost.current
+                val (shown, images) = if ("![" in line.text) ChatMarkdownImages.split(line.text) { host.fileExists(it) == true } else line.text to emptyList()
+                if (shown.isNotBlank() || images.isEmpty()) ChatBlocks(chatLineBlocks(line.kind, shown, md.engine).orEmpty(), md.renderers)
+                ChatSentImages(images)
             }
             LineKind.REASONING -> ReasoningBlock(listOf(line))
             LineKind.STATUS -> Text("· ${line.text}", color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp)
@@ -1085,6 +1088,11 @@ fun ContributionRow(item: TimelineItem) {
                 modifier = Modifier.padding(horizontal = 8.dp).testTag(CARD_TIMESTAMP_TAG),
             )
             if (item.details.isNotEmpty()) Text(if (open) "▴" else "▾", color = Palette.Muted, fontSize = 12.sp)
+        }
+        // CHAT-IMAGE-1: the same sent-image rendering as a ticket's images; remote clients use the inlined copy.
+        item.meta["image"]?.let { path ->
+            val data = remember(item.id) { item.meta["imageData"]?.let { runCatching { kotlin.io.encoding.Base64.decode(it) }.getOrNull() } }
+            Column(Modifier.padding(start = 21.dp, top = 4.dp)) { ChatSentImages(listOf(path), data) }
         }
         if (open) Column(Modifier.padding(start = 21.dp, top = 3.dp).testTag(CONTRIBUTION_DETAILS_TAG)) {
             item.details.forEach { Text(it, color = Palette.Muted, fontFamily = Mono, fontSize = 11.sp) }

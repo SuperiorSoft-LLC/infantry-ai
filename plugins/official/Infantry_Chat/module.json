@@ -19,7 +19,8 @@
     "tools": [
       { "name": "agenthq_inbox", "action": "mail.read", "kind": "read", "description": "List the COMMS mail addressed to you." },
       { "name": "agenthq_read", "action": "mail.read", "kind": "read", "description": "Read one message in full and mark it read." },
-      { "name": "agenthq_message", "action": "mail.send", "kind": "write", "description": "Send COMMS mail to an agent, a role or a session." }
+      { "name": "agenthq_message", "action": "mail.send", "kind": "write", "description": "Send COMMS mail to an agent, a role or a session." },
+      { "name": "agenthq_chat_image", "action": "chat.image", "kind": "write", "description": "Show an image inline in a session's chat (a file inside the project, or an uploaded image id)." }
     ]
   },
   "fills": [
