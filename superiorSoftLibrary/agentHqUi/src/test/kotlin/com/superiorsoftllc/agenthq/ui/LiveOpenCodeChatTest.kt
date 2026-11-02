@@ -4,7 +4,6 @@ import com.superiorsoftllc.agenthq.daemon.AgentHqDaemon
 import com.superiorsoftllc.agenthq.mailbox.JsonMailStore
 import com.superiorsoftllc.agenthq.persistence.SqlAgentHqStore
 import com.superiorsoftllc.agenthq.harness.AgentProvider
-import com.superiorsoftllc.agenthq.provider.OpenCodeProvider
 import com.superiorsoftllc.agenthq.harness.RunRequest
 import com.superiorsoftllc.agenthq.runner.ProcessSpec
 import com.superiorsoftllc.agenthq.runner.RunnerFactory
@@ -100,8 +99,8 @@ class LiveOpenCodeChatTest {
     }
 
     /** OpenCode with this test's model as the default, so the spawn needs no model picker. */
-    private class ModelPinned(private val model: String) : AgentProvider by OpenCodeProvider() {
-        private val inner = OpenCodeProvider()
+    private class ModelPinned(private val model: String) : AgentProvider by TestOpenCodeProvider() {
+        private val inner = TestOpenCodeProvider()
         override fun spec(request: RunRequest): ProcessSpec = inner.spec(request.copy(model = request.model ?: model))
         override fun defaultModel(): String = model
     }
