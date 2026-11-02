@@ -34,8 +34,11 @@ import java.io.File
  *
  * 2.3.0 (HARNESS H5b, additive): [HarnessEvent.Denial], a tool the harness refused to run because the run's tool approval did not
  * allow it. The host shows it as the same chat notice a built-in harness's denial gets. A 2.0 - 2.2 plugin never emits it and is unaffected.
+ *
+ * 2.4.0 (HARNESS H5c, additive): [Harness.usageSource], a plan/quota poll whose rows join the daemon's usage frame tagged by the harness id.
+ * Needs module.json `harness.hooks` "usage" (and, for a community module, the `harness.hook.usage` grant).
  */
-const val HARNESS_API_VERSION: String = "2.3.0"
+const val HARNESS_API_VERSION: String = "2.4.0"
 
 /** What a harness jar ships: registers its harnesses, given the [HarnessHost] scoped to its module. */
 interface HarnessPlugin {
@@ -86,7 +89,21 @@ interface Harness {
      * the CLI applies (a flag, an env var).
      */
     val effort: EffortCapability get() = EffortCapability.UNSUPPORTED
+
+    /** 2.4.0: a plan/quota poll for this harness, or null (default). The host calls [HarnessUsageSource.read] off its own threads, with a timeout; a throw or a timeout is isolated and attributed to this plugin. */
+    fun usageSource(): HarnessUsageSource? = null
 }
+
+/** 2.4.0: one harness's plan limits. [read] may block on I/O (the host bounds it with a timeout) and may throw. */
+fun interface HarnessUsageSource {
+    fun read(nowMs: Long): HarnessUsageReading
+}
+
+/** [windows] empty = no signal (the host shows the harness as unknown, never 0%). [reason] is free text for logs only. */
+data class HarnessUsageReading(val windows: List<HarnessUsageWindow>, val reason: String? = null)
+
+/** One limit window: [percent] used (0-100, null = unknown), [resetsAt] epoch millis (null = unknown). */
+data class HarnessUsageWindow(val label: String, val windowMinutes: Int, val percent: Double?, val resetsAt: Long? = null)
 
 /**
  * 2.2.0 (EFFORT-1): how a harness honours a reasoning effort. Same states as [ContextLimitSupport].

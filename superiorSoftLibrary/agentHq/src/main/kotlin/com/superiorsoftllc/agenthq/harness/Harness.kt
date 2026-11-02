@@ -148,6 +148,9 @@ interface Harness {
         if (HarnessCapability.EFFORT_SELECTION in capabilities) EffortCapability(EffortSupport.SUPPORTED, "the harness declares EFFORT_SELECTION")
         else EffortCapability.UNSUPPORTED
 
+    /** HARNESS H5c (API 2.4.0): this harness's plan/quota poll for the usage frame; null = none. Calls into plugin code are isolated by the implementor. */
+    fun limitSource(): com.superiorsoftllc.agenthq.usage.LimitSource? = null
+
     /** Implementors produce the event stream here. Must emit incrementally, never only at completion. */
     fun events(request: HarnessRequest): Flow<HarnessEvent>
 

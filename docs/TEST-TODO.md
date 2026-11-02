@@ -176,3 +176,6 @@ TEST-TODO: Board button comes from Infantry_Board. Class NoBoardSidebarTest (wri
 
 ## H5b (HarnessEvent.Denial, API 2.3.0)
 TEST-TODO: HarnessDenialTest - a 2.3 plugin translator emitting Denial("shell") -> Denial.toLine("denier") == EventNormalizer.Line.Denial("denier","shell"); blank tool -> attributed Error; 2.0.0/2.2.0 plugins register on 2.3; a plugin Usage(100,20) via UsageMeter.eventTranslatorFor reaches the meter report (input 100, output 20). Manual: run a real plugin-harness session and confirm a usage row appears.
+
+## H5c (Harness.usageSource, API 2.4.0)
+TEST-TODO: HarnessUsageSourceTest - a granted+declared usage source shows in LimitService.snapshot tagged by harness id; undeclared/ungranted -> no source; throwing source -> unknown/source_failed + attributed PluginFailure; slow source (PluginLimitSource, 200 ms timeout) -> source_failed + "timed out"; empty reading -> unknown, never 0%. Manual: load a real plugin with a usage source and see its row in the usage frame.

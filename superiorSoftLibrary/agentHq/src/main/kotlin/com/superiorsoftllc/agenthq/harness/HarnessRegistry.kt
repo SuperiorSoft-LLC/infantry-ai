@@ -67,6 +67,12 @@ class HarnessRegistry(
 
     fun harnessIds(): List<String> = synchronized(lock) { owners.keys.toList() }
 
+    /** HARNESS H5c: every registered harness's usage source (a throwing `limitSource()` contributes none). */
+    fun limitSources(): List<com.superiorsoftllc.agenthq.usage.LimitSource> {
+        val all = synchronized(lock) { plugins.values.flatMap { it.harnesses.values } }
+        return all.mapNotNull { runCatching { it.limitSource() }.getOrNull() }
+    }
+
     fun pluginIds(): List<String> = synchronized(lock) { plugins.keys.toList() }
 
     fun resolve(harnessId: String): Harness? = synchronized(lock) {

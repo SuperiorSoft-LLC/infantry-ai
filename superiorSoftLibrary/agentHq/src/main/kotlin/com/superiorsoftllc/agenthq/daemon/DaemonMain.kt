@@ -624,7 +624,7 @@ class AgentHqDaemon(
             podSpawnCap: Int? = null,
             podSpawnDepth: Int? = null,
             /** U1 (contract 1.59.0): the plan-limit meters; `AGENTHQ_LIMITS_LIVE=false` turns the live HTTP reads off. */
-            limits: LimitService = LimitService.fromEnv(),
+            limits: LimitService = LimitService.fromEnv(extraSources = { harnesses.limitSources() }),
             /**
              * E1-a: the `stories.json` folded into the ticket board at startup ([StoryMigration]); null = no migration.
              * Only [fromEnv] (the real daemon) passes the state dir's file, so a test never migrates the operator's state.
