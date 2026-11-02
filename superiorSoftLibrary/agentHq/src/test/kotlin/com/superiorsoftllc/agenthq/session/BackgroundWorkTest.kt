@@ -24,6 +24,13 @@ class BackgroundWorkTest {
         assertNull(BackgroundWorkScanner.scan(source(), root, 1_000))
     }
 
+    @Test fun `a build whose path contains agenthq-standalone is background work`() {
+        val cmd = ProcInfo(400, root, "cmd.exe /c C:\\Users\\antho\\agenthq-standalone\\t\\gradlew.bat build", 60_000)
+        val java = ProcInfo(401, 400, "java -cp C:\\Users\\antho\\agenthq-standalone\\gradle-wrapper.jar Main", 61_000)
+        assertNotNull(BackgroundWorkScanner.scan(source(cmd, java), root, 1_000))
+        assertNull(BackgroundWorkScanner.scan(source(ProcInfo(402, root, "C:\\x\\agenthq.exe mail send", 60_000)), root, 1_000))
+    }
+
     @Test fun `launch helpers and console hosts are ignored with their subtree`() {
         val helper = ProcInfo(201, root, "node mcp-server.js", 2_000)
         val child = ProcInfo(202, 201, "python worker.py", 90_000)
