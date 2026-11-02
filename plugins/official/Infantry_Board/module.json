@@ -56,6 +56,9 @@
   "fills": [
     "infantry.shell.board"
   ],
+  "panels": [
+    { "id": "infantry.board.button", "panel": "left.board" }
+  ],
   "blockTypes": [
     {"type": "board.pane", "title": "Board", "takesChildren": true, "fields": [
       {"key": "columns", "type": "multiSelect", "label": "Columns", "default": ["backlog", "todo", "in_progress", "pending", "done"], "options": ["backlog", "todo", "in_progress", "pending", "done"]}

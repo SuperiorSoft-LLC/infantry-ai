@@ -11,6 +11,9 @@ import com.superiorsoftllc.agenthq.plugin.api.ModuleManifest
 import com.superiorsoftllc.agenthq.ui.plugin.AgentHqModule
 import com.superiorsoftllc.agenthq.ui.plugin.ModuleSource
 import com.superiorsoftllc.agenthq.ui.plugin.UiPlugin
+import com.superiorsoftllc.agenthq.ui.plugin.PanelProvider
+import com.superiorsoftllc.agenthq.ui.shell.LocalShellContext
+import com.superiorsoftllc.agenthq.ui.plugin.Panels
 import com.superiorsoftllc.agenthq.ui.plugin.UiRegistrar
 import com.superiorsoftllc.agenthq.ui.protocol.TicketColumns
 import kotlinx.serialization.json.JsonArray
@@ -51,6 +54,9 @@ val BoardBlockTypeDeclarations: List<BlockTypeDeclaration> = listOf(
 /** The board overlay's empty shell slot (opened from the sidebar's Board button), which this module fills itself. */
 const val BOARD_FILL_ID = BOARD_NODE
 
+/** AR-7: the id of the Board button panel section (module.json "panels"). */
+const val BOARD_BUTTON_PANEL = "infantry.board.button"
+
 /**
  * NS2 (3b): Infantry_Board (official since RUNTIME-15), the scrum board: the overlay it fills (`infantry.shell.board`,
  * formerly filled by Infantry_AppUi) and its block types, so an exported composition can put a `board.pane` in any slot.
@@ -61,6 +67,7 @@ val InfantryBoard: AgentHqModule = AgentHqModule(
         name = "Infantry_Board", version = "1.0.0", author = "Infantry AI",
         description = "The scrum board: the board overlay and its block types, board.pane and its sections, cards and card sections.",
         fills = listOf(FillDeclaration(BOARD_FILL_ID)),
+        panels = listOf(com.superiorsoftllc.agenthq.plugin.api.PanelDeclaration(BOARD_BUTTON_PANEL, Panels.LEFT_BOARD)),
         blockTypes = BoardBlockTypeDeclarations,
     ),
     fills = mapOf(BOARD_FILL_ID to ShellBoard),
@@ -77,6 +84,11 @@ class BoardPlugin : UiPlugin, ModuleSource {
     override fun register(registrar: UiRegistrar) {
         registrar.fill(BOARD_FILL_ID, ShellBoard)
         BoardTypes.all.forEach { (type, blockType) -> registrar.blockType(type, blockType) }
+        // AR-7: the sidebar's Board button, in the left panel's left.board slot (first).
+        registrar.panel(PanelProvider(id = BOARD_BUTTON_PANEL, panel = Panels.LEFT_BOARD, order = 0, testTag = "sidebar-board-slot") { ctx ->
+            val chat = LocalShellContext.current?.chat
+            SidebarBoardButton(ctx.state, onOpen = { chat?.showBoard() })
+        })
     }
 
     override fun modules(): List<AgentHqModule> = listOf(InfantryBoard)

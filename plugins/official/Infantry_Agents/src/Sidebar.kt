@@ -129,8 +129,6 @@ fun Sidebar(
     onRemove: (String) -> Unit,
     onAssign: (String, String) -> Unit,
     projects: @Composable () -> Unit,
-    /** RUNTIME-15: null when no module fills the board overlay (no Infantry_Board jar): no Board button. */
-    onOpenBoard: (() -> Unit)?,
     /** RUNTIME-16: whether the official Infantry_Review tab is loaded; without it there is no "To review" counter. */
     showReview: Boolean = true,
 ) {
@@ -141,9 +139,7 @@ fun Sidebar(
             if (showReview) Counter("To review", state.reviewQueue.size, Palette.Info)
             Counter("Working", state.workingCount, Palette.Ok)
         }
-        // M2-8: the Board button sits where the projects list was (M2-7 moved projects to the title bar).
-        onOpenBoard?.let { SidebarBoardButton(state, it) }
-        // EXAMPLE-1: the left.board slot; a module's panel section declared on it draws here, under the Board button.
+        // AR-7: the left.board slot; Infantry_Board's Board button (order 0) and any module's panel section draw here.
         PanelSlot(Panels.LEFT_BOARD)
         projects()
         // UX-POLISH-1: the Board row and the search are separate sections, a spacing token either side of the divider
@@ -449,7 +445,6 @@ fun AgentsSection() {
         onRemove = { id -> scope.launch { a.remove(id) } },
         onAssign = { id, projectId -> scope.launch { a.assign(id, projectId) } },
         projects = { ProjectsSidebar(state, onDismiss = a::dismissProjectRefusal) },
-        onOpenBoard = a.openBoard,
         showReview = a.reviewLoaded,
     )
 }

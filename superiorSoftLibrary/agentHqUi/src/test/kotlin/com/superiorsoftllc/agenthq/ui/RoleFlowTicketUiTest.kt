@@ -1,5 +1,6 @@
 package com.superiorsoftllc.agenthq.ui
 
+import com.superiorsoftllc.agenthq.plugins.official.board.*
 import com.superiorsoftllc.agenthq.plugins.official.agents.*
 
 import com.superiorsoftllc.agenthq.plugins.official.roles.*
